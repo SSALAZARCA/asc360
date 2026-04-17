@@ -22,7 +22,6 @@ node_modules/
 # Archivos de trabajo / documentos temporales
 *.xlsx
 *.diff
-*.txt
 
 # Logs
 *.log
