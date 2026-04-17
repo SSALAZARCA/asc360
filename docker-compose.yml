@@ -1,0 +1,157 @@
+version: '3.8'
+
+# Definimos una red interna segura (Orquestación Experta)
+networks:
+  um_backend_net:
+    driver: bridge
+
+services:
+  # Base de Datos Principal (PostgreSQL)
+  postgres:
+    image: postgres:16-alpine
+    container_name: um_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-umadmin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-umadmin123}
+      POSTGRES_DB: ${POSTGRES_DB:-um_service_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/alembic:/docker-entrypoint-initdb.d
+    networks:
+      - um_backend_net
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-umadmin}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Caché y Colas de Mensajes (Redis)
+  redis:
+    image: redis:7-alpine
+    container_name: um_redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - um_backend_net
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Almacenamiento S3 (MinIO)
+  minio:
+    image: minio/minio
+    container_name: um_minio
+    restart: always
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-umadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-umadmin123}
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    networks:
+      - um_backend_net
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Backend (FastAPI)
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: um_backend
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-umadmin}:${POSTGRES_PASSWORD:-umadmin123}@postgres:5432/${POSTGRES_DB:-um_service_db}
+      - REDIS_URL=redis://redis:6379/0
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=${MINIO_ROOT_USER:-umadmin}
+      - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:-umadmin123}
+      - MINIO_SECURE=false
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - um_backend_net
+    volumes:
+      - ./backend:/app
+    command: >
+      uvicorn app.main:app
+      --host 0.0.0.0
+      --port 8000
+      --reload
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  # Frontend (Next.js)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: um_frontend
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
+      - WATCHPACK_POLLING=true
+      - CHOKIDAR_USEPOLLING=true
+    depends_on:
+      - backend
+    networks:
+      - um_backend_net
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+
+  # Sonia Bot (Telegram)
+  sonia-bot:
+    build:
+      context: ./telegram-bot
+      dockerfile: Dockerfile
+    container_name: um_sonia_bot
+    restart: always
+    environment:
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - API_URL=http://backend:8000/api/v1
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - SONIA_BOT_SECRET=${SONIA_BOT_SECRET:-sonia-internal-secret-2024}
+      # Feature flags — cambiar a true para activar el clasificador unificado de voz+texto
+      - USE_UNIFIED_INTENT=${USE_UNIFIED_INTENT:-true}
+      - USER_CACHE_TTL_SECONDS=${USER_CACHE_TTL_SECONDS:-3600}
+      - OPENAI_MAX_RETRIES=${OPENAI_MAX_RETRIES:-3}
+    depends_on:
+      - backend
+    networks:
+      - um_backend_net
+    volumes:
+      - ./telegram-bot:/app
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:

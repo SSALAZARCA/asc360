@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;700&display=swap');
+    @page { size: Letter; margin: 0; }
+    body { font-family: 'Roboto', sans-serif; margin: 0; padding: 0; background: #f4f4f4; -webkit-print-color-adjust: exact; }
+    .page-container { width: 21.59cm; height: 27.94cm; margin: 0 auto; background: white; position: relative; padding: 1cm 1.5cm; page-break-after: always; overflow: hidden; box-sizing: border-box; }
+    @media print { body { background: white; } .page-container { margin: 0; border: none; } }
+    .watermark { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 65%; opacity: 0.06; z-index: 0; filter: grayscale(100%); }
+    .top-section { display: flex; justify-content: space-between; margin-bottom: 25px; position: relative; z-index: 1; }
+    .card-box { width: 48%; border: 2px solid #444; border-radius: 15px; font-size: 9px; overflow: hidden; background: white; }
+    .card-header { display: flex; align-items: center; border-bottom: 2px solid #444; padding: 8px; background: #f9f9f9; }
+    .card-header img { width: 35px; margin-right: 8px; }
+    .card-header div { text-align: center; font-weight: 700; width: 100%; color: #222; }
+    table { width: 100%; border-collapse: collapse; }
+    td, th { border: 1px solid #ccc; padding: 3px 5px; text-align: center; }
+    .spec-label { font-weight: bold; background-color: #eef2f5; color: #004080; font-size: 8.5px; text-transform: uppercase; }
+    .spec-value { font-weight: 400; color: #000; }
+    .middle-section { text-align: center; margin: 15px 0; position: relative; z-index: 1; }
+    .company-header { color: #e67e22; font-size: 18px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; }
+    .doc-title { color: #004080; font-size: 22px; font-weight: 700; text-transform: uppercase; margin: 10px 0; border-bottom: 2px solid #e67e22; display: inline-block; padding-bottom: 5px; }
+    .legal-text { font-size: 8px; text-align: justify; color: #555; line-height: 1.3; margin: 10px 0; }
+    .certifica-label { color: #004080; font-weight: bold; font-size: 14px; margin: 10px 0; letter-spacing: 2px; }
+    .vehicle-box { width: 100%; border: 2px solid #444; border-radius: 15px; background: transparent; padding: 10px; margin-top: 5px; box-sizing: border-box; position: relative; }
+    .vehicle-grid { width: 100%; border: none; font-size: 11px; border-collapse: collapse; }
+    .vehicle-grid td { border: none; padding: 4px 6px; text-align: left; }
+    .v-label { font-weight: 700; color: #444; width: 18%; }
+    .v-value { color: #000; width: 32%; }
+    .footer-header { text-align: center; font-weight: bold; color: #004080; font-size: 10px; margin-bottom: 5px; text-transform: uppercase; }
+    .footer-box { border: 2px solid #444; border-radius: 15px; padding: 15px; display: flex; justify-content: space-between; align-items: flex-start; position: relative; z-index: 1; background: #fff; }
+    .footer-left { width: 60%; font-size: 9px; padding-right: 10px; }
+    .footer-right { width: 35%; text-align: center; display: flex; flex-direction: column; justify-content: flex-end; height: 100%; position: relative; padding-bottom: 5px; }
+    .sig-line { border-top: 2px solid #333; width: 100%; margin: 5px 0; }
+    .security-qr { position: absolute; top: -10px; left: 0px; opacity: 0.8; width: 80px; height: 80px; }
+    .guilloche-bg { background-image: repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(0,0,0,0.03) 10px, rgba(0,0,0,0.03) 12px), repeating-linear-gradient(-45deg, transparent, transparent 10px, rgba(0,0,0,0.03) 10px, rgba(0,0,0,0.03) 12px); }
+    .firma-img { position: absolute; bottom: -10px; left: 50%; transform: translateX(-50%); width: 140px; z-index: 10; }
+</style>
+</head>
+<body>
+        <div class="page-container guilloche-bg">
+            {% if logo_b64 %}<img src="data:image/png;base64,{{ logo_b64 }}" class="watermark">{% endif %}
+            <div class="top-section">
+                <div class="card-box">
+                    <div class="card-header">
+                        {% if logo_b64 %}<img src="data:image/png;base64,{{ logo_b64 }}">{% endif %}
+                        <div>CERTIFICADO DE EMISIONES<br>DE GASES POR PRUEBA ESTÁTICA</div>
+                    </div>
+                    <table>
+                        <tr><td class="spec-label">MARCA</td><td class="spec-label">LÍNEA</td><td class="spec-label">CLASE</td></tr>
+                        <tr><td class="spec-value">{{ marca }}</td><td class="spec-value">{{ modelo }}</td><td class="spec-value">MOTOCICLETA</td></tr>
+                        <tr><td class="spec-label">CILINDRADA (cc)</td><td class="spec-label">TIEMPOS (T)</td><td class="spec-label">MODELO (AÑO)</td></tr>
+                        <tr><td class="spec-value">{{ cilindrada }}</td><td class="spec-value">4</td><td class="spec-value">{{ anio }}</td></tr>
+                        <tr><td class="spec-label">SERIAL No.</td><td class="spec-label">MOTOR No.</td><td class="spec-label">FECHA DE PRUEBA</td></tr>
+                        <tr><td class="spec-value">{{ vin }}</td><td class="spec-value">{{ motor }}</td><td class="spec-value">{{ today }}</td></tr>
+                        <tr><td class="spec-label">NOMBRE</td><td class="spec-label">NIT</td><td class="spec-label">DIRECCIÓN</td></tr>
+                        <tr><td class="spec-value">MOTORCOM S.A.S.</td><td class="spec-value">901.049.651-5</td><td class="spec-value" style="font-size:8px;">Carrera 7B # 123 - 51<br>BOGOTÁ</td></tr>
+                    </table>
+                    <div style="text-align:center; padding: 4px; font-size: 8px; font-weight: bold; color: #555;">SISTEMAS DE CONTROL INSTALADOS: {{ sistemas }}</div>
+                </div>
+
+                <div class="card-box">
+                    <div class="card-header">
+                        {% if logo_b64 %}<img src="data:image/png;base64,{{ logo_b64 }}">{% endif %}
+                        <div>CERTIFICADO DE EMISIONES<br>DE GASES POR PRUEBA ESTÁTICA</div>
+                    </div>
+                    <div style="text-align:center; font-weight:bold; padding:4px; font-size:9px; border-bottom:1px solid #ccc; background:#eef2f5;">CONDICIONES DE REGLAJE DEL VEHÍCULO</div>
+                    <table>
+                        <tr><td class="spec-label" style="width:50%;">VUELTAS DE AIRE</td><td class="spec-value" style="width:50%;">{{ vueltas }}</td></tr>
+                        <tr><td class="spec-label">POSICION CORTINA/INY</td><td class="spec-value">{{ cortina }}</td></tr>
+                        <tr><td class="spec-label">RALENTÍ</td><td class="spec-value">1500 +/- 100 rpm</td></tr>
+                    </table>
+                    <div style="font-size:7px; padding:6px; text-align:justify; color:#444;">ESTE CERTIFICADO TENDRÁ VIGENCIA DE DOS (2) AÑOS SIEMPRE Y CUANDO SEA REALIZADO EL MANTENIMIENTO DEL VEHÍCULO SIGUIENDO LAS RECOMENDACIONES ESTABLECIDAS POR EL FABRICANTE EN EL MANUAL DE USUARIO.<br><br>MOTORCOM S.A.S. CERTIFICA QUE EL DISEÑO DEL VEHÍCULO DETALLADO EN ESTE DOCUMENTO PERMITE EL CUMPLIMIENTO DE LOS NIVELES DE EMISIÓN ESTABLECIDOS EN LA RESOLUCIÓN 0762 DE 2022 DEL MINISTERIO DE AMBIENTE, Y DESARROLLO SOSTENIBLE Y DE LAS DEMÁS NORMAS QUE LA MODIFIQUEN.</div>
+                </div>
+            </div>
+
+            <div class="middle-section">
+                <div style="display:flex; align-items:center; justify-content:center; margin-bottom:10px;">
+                    <div style="text-align:center;">
+                        <div class="company-header">MOTORCOM S.A.S.</div>
+                        <div style="font-size:9px; color:#444; margin-top:2px;">Carrera 7B # 123 - 51 / Teléfono: 57 1 781 8566</div>
+                        <div style="font-size:11px; margin-top:2px; color:#555;">BOGOTÁ, {{ today }}</div>
+                    </div>
+                </div>
+                <div class="doc-title">CERTIFICADO INDIVIDUAL<br>DE ADUANAS</div>
+                {% if qr_b64 %}<img src="data:image/png;base64,{{ qr_b64 }}" class="security-qr">{% endif %}
+                <div style="position:absolute; right:0; top:-10px;">{% if logo_b64 %}<img src="data:image/png;base64,{{ logo_b64 }}" style="width:90px;">{% endif %}</div>
+                <div class="legal-text">MOTORCOM S.A.S. CON NIT. 901.049.651-5, OBRANDO EN SU CONDICIÓN DE IMPORTADORA Y ENSAMBLADORA DE MOTOCICLETAS Y MOTONETAS, E IMPORTADORA DE MOTOCARROS, DEBIDAMENTE AUTORIZADA PARA EL EFECTO MEDIANTE RESOLUCIÓN No. 151 DEL 10 DE MAYO DE 2010 DEL MINISTERIO DE COMERCIO, INDUSTRIA Y TURISMO, ADICIONADA EN SU ARTICULO 1º MEDIANTE RESOLUCIÓN 579 DE 20 DE DICIEMBRE DE 2011 DEL MINISTERIO DE COMERCIO, INDUSTRIA Y TURISMO; POR MEDIO DEL PRESENTE DOCUMENTO.</div>
+                <div class="certifica-label">CERTIFICA:</div>
+                <div style="font-size:10px; margin-bottom:10px;">QUE EL VEHÍCULO QUE SE DESCRIBE A CONTINUACIÓN FUE ENSAMBLADO/IMPORTADO POR LA EMPRESA Y NACIONALIZADO DE ACUERDO CON LOS SIGUIENTES DATOS:</div>
+
+                <div class="vehicle-box">
+                    <table class="vehicle-grid">
+                        <tr><td class="v-label">CLASE VEHICULO</td><td class="v-value">MOTOCICLETA</td><td class="v-label">CHASIS No.</td><td class="v-value">{{ vin }}</td></tr>
+                        <tr><td class="v-label">MARCA</td><td class="v-value">{{ marca }}</td><td class="v-label">SERIE No.</td><td class="v-value">{{ vin }}</td></tr>
+                        <tr><td class="v-label">LÍNEA</td><td class="v-value">{{ modelo }}</td><td class="v-label">MOTOR No.</td><td class="v-value">{{ motor }}</td></tr>
+                        <tr><td class="v-label">VIN No.</td><td class="v-value">{{ vin }}</td><td class="v-label">AÑO MODELO</td><td class="v-value">{{ anio }}</td></tr>
+                        <tr><td class="v-label">PESO (Kg)</td><td class="v-value">{{ peso }}</td><td class="v-label">CILINDRADA</td><td class="v-value">{{ cilindrada }}</td></tr>
+                        <tr><td class="v-label">SERVICIO</td><td class="v-value">PARTICULAR</td><td class="v-label">POTENCIA</td><td class="v-value">{{ potencia }}</td></tr>
+                        <tr><td class="v-label">PASAJEROS</td><td class="v-value">2</td><td class="v-label">COLOR</td><td class="v-value">{{ color }}</td></tr>
+                        <tr><td class="v-label">COMBUSTIBLE</td><td class="v-value">GASOLINA</td><td class="v-label">FECHA ACEP.</td><td class="v-value">{{ f_acep }}</td></tr>
+                        <tr><td class="v-label">NO. ACEPTACIÓN</td><td class="v-value">{{ no_acep }}</td><td class="v-label">FECHA LEV.</td><td class="v-value">{{ f_lev }}</td></tr>
+                        <tr><td class="v-label">NO. LEVANTE</td><td class="v-value">{{ no_lev }}</td><td></td><td></td></tr>
+                    </table>
+                </div>
+            </div>
+
+            <div class="footer-header"></div>
+            <div class="footer-box">
+                <div class="footer-left">
+                    <div style="font-weight:bold; margin-bottom:8px;">ESTE ES UN DOCUMENTO INDISPENSABLE PARA LA MATRÍCULA DEL VEHÍCULO ANTE LAS AUTORIDADES DE TRÁNSITO.</div>
+                    <div>1. DENUNCIA POR PÉRDIDA DEL CERTIFICADO.</div>
+                    <div>2. FOTOCOPIA AUTENTICADA DE LA FACTURA.</div>
+                    <div>3. CONSIGNACIÓN POR UN SEXTO DEL SALARIO MÍNIMO MENSUAL VIGENTE.</div>
+                    <div>4. IMPRONTAS CERTIFICADAS POR LA DIJÍN O POLICÍA NACIONAL.</div>
+                </div>
+                <div class="footer-right">
+                    {% if firma_b64 %}<img src="data:image/png;base64,{{ firma_b64 }}" class="firma-img">{% endif %}
+                    <div style="font-weight:bold; font-size:11px; margin-bottom:40px;">MOTORCOM S.A.S.</div>
+                    <div class="sig-line"></div>
+                    <div style="font-weight:bold; font-size:10px;">FIRMA AUTORIZADA</div>
+                </div>
+            </div>
+        </div>
+</body>
+</html>

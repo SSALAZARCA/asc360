@@ -1,0 +1,6734 @@
+[
+  {
+    "municipio": "MEDELLÍN",
+    "municipio_norm": "medellin",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "ABEJORRAL",
+    "municipio_norm": "abejorral",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "ABRIAQUÍ",
+    "municipio_norm": "abriaqui",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "ALEJANDRÍA",
+    "municipio_norm": "alejandria",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "AMAGÁ",
+    "municipio_norm": "amaga",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "AMALFI",
+    "municipio_norm": "amalfi",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "ANDES",
+    "municipio_norm": "andes",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "ANGELÓPOLIS",
+    "municipio_norm": "angelopolis",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "ANGOSTURA",
+    "municipio_norm": "angostura",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "ANORÍ",
+    "municipio_norm": "anori",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "SANTA FÉ DE ANTIOQUIA",
+    "municipio_norm": "santa fe de antioquia",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "ANZÁ",
+    "municipio_norm": "anza",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "APARTADÓ",
+    "municipio_norm": "apartado",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "ARBOLETES",
+    "municipio_norm": "arboletes",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "ARGELIA",
+    "municipio_norm": "argelia",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "ARMENIA",
+    "municipio_norm": "armenia",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "BARBOSA",
+    "municipio_norm": "barbosa",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "BELMIRA",
+    "municipio_norm": "belmira",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "BELLO",
+    "municipio_norm": "bello",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "BETANIA",
+    "municipio_norm": "betania",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "BETULIA",
+    "municipio_norm": "betulia",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "CIUDAD BOLÍVAR",
+    "municipio_norm": "ciudad bolivar",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "BRICEÑO",
+    "municipio_norm": "briceno",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "BURITICÁ",
+    "municipio_norm": "buritica",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "CÁCERES",
+    "municipio_norm": "caceres",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "CAICEDO",
+    "municipio_norm": "caicedo",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "CALDAS",
+    "municipio_norm": "caldas",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "CAMPAMENTO",
+    "municipio_norm": "campamento",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "CAÑASGORDAS",
+    "municipio_norm": "canasgordas",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "CARACOLÍ",
+    "municipio_norm": "caracoli",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "CARAMANTA",
+    "municipio_norm": "caramanta",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "CAREPA",
+    "municipio_norm": "carepa",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "EL CARMEN DE VIBORAL",
+    "municipio_norm": "el carmen de viboral",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "CAROLINA",
+    "municipio_norm": "carolina",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "CAUCASIA",
+    "municipio_norm": "caucasia",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "CHIGORODÓ",
+    "municipio_norm": "chigorodo",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "CISNEROS",
+    "municipio_norm": "cisneros",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "COCORNÁ",
+    "municipio_norm": "cocorna",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "CONCEPCIÓN",
+    "municipio_norm": "concepcion",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "CONCORDIA",
+    "municipio_norm": "concordia",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "COPACABANA",
+    "municipio_norm": "copacabana",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "DABEIBA",
+    "municipio_norm": "dabeiba",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "DONMATÍAS",
+    "municipio_norm": "donmatias",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "EBÉJICO",
+    "municipio_norm": "ebejico",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "EL BAGRE",
+    "municipio_norm": "el bagre",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "ENTRERRÍOS",
+    "municipio_norm": "entrerrios",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "ENVIGADO",
+    "municipio_norm": "envigado",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "FREDONIA",
+    "municipio_norm": "fredonia",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "FRONTINO",
+    "municipio_norm": "frontino",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "GIRALDO",
+    "municipio_norm": "giraldo",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "GIRARDOTA",
+    "municipio_norm": "girardota",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "GÓMEZ PLATA",
+    "municipio_norm": "gomez plata",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "GRANADA",
+    "municipio_norm": "granada",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "GUADALUPE",
+    "municipio_norm": "guadalupe",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "GUARNE",
+    "municipio_norm": "guarne",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "GUATAPÉ",
+    "municipio_norm": "guatape",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "HELICONIA",
+    "municipio_norm": "heliconia",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "HISPANIA",
+    "municipio_norm": "hispania",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "ITAGÜÍ",
+    "municipio_norm": "itagui",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "ITUANGO",
+    "municipio_norm": "ituango",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "JARDÍN",
+    "municipio_norm": "jardin",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "JERICÓ",
+    "municipio_norm": "jerico",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "LA CEJA",
+    "municipio_norm": "la ceja",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "LA ESTRELLA",
+    "municipio_norm": "la estrella",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "LA PINTADA",
+    "municipio_norm": "la pintada",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "LA UNIÓN",
+    "municipio_norm": "la union",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "LIBORINA",
+    "municipio_norm": "liborina",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "MACEO",
+    "municipio_norm": "maceo",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "MARINILLA",
+    "municipio_norm": "marinilla",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "MONTEBELLO",
+    "municipio_norm": "montebello",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "MURINDÓ",
+    "municipio_norm": "murindo",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "MUTATÁ",
+    "municipio_norm": "mutata",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "NARIÑO",
+    "municipio_norm": "narino",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "NECOCLÍ",
+    "municipio_norm": "necocli",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "NECHÍ",
+    "municipio_norm": "nechi",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "OLAYA",
+    "municipio_norm": "olaya",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "PEÑOL",
+    "municipio_norm": "penol",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "PEQUE",
+    "municipio_norm": "peque",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "PUEBLORRICO",
+    "municipio_norm": "pueblorrico",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "PUERTO BERRÍO",
+    "municipio_norm": "puerto berrio",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "PUERTO NARE",
+    "municipio_norm": "puerto nare",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "PUERTO TRIUNFO",
+    "municipio_norm": "puerto triunfo",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "REMEDIOS",
+    "municipio_norm": "remedios",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "RETIRO",
+    "municipio_norm": "retiro",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "RIONEGRO",
+    "municipio_norm": "rionegro",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "SABANALARGA",
+    "municipio_norm": "sabanalarga",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "SABANETA",
+    "municipio_norm": "sabaneta",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "SALGAR",
+    "municipio_norm": "salgar",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "SAN ANDRÉS DE CUERQUÍA",
+    "municipio_norm": "san andres de cuerquia",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "SAN CARLOS",
+    "municipio_norm": "san carlos",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "SAN FRANCISCO",
+    "municipio_norm": "san francisco",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "SAN JERÓNIMO",
+    "municipio_norm": "san jeronimo",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "SAN JOSÉ DE LA MONTAÑA",
+    "municipio_norm": "san jose de la montana",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "SAN JUAN DE URABÁ",
+    "municipio_norm": "san juan de uraba",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "SAN LUIS",
+    "municipio_norm": "san luis",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "SAN PEDRO DE LOS MILAGROS",
+    "municipio_norm": "san pedro de los milagros",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "SAN PEDRO DE URABÁ",
+    "municipio_norm": "san pedro de uraba",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "SAN RAFAEL",
+    "municipio_norm": "san rafael",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "SAN ROQUE",
+    "municipio_norm": "san roque",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "SAN VICENTE FERRER",
+    "municipio_norm": "san vicente ferrer",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "SANTA BÁRBARA",
+    "municipio_norm": "santa barbara",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "SANTA ROSA DE OSOS",
+    "municipio_norm": "santa rosa de osos",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "SANTO DOMINGO",
+    "municipio_norm": "santo domingo",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "EL SANTUARIO",
+    "municipio_norm": "el santuario",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "SEGOVIA",
+    "municipio_norm": "segovia",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "SONSÓN",
+    "municipio_norm": "sonson",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "SOPETRÁN",
+    "municipio_norm": "sopetran",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "TÁMESIS",
+    "municipio_norm": "tamesis",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "TARAZÁ",
+    "municipio_norm": "taraza",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "TARSO",
+    "municipio_norm": "tarso",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "TITIRIBÍ",
+    "municipio_norm": "titiribi",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "TOLEDO",
+    "municipio_norm": "toledo",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "TURBO",
+    "municipio_norm": "turbo",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "URAMITA",
+    "municipio_norm": "uramita",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "URRAO",
+    "municipio_norm": "urrao",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "VALDIVIA",
+    "municipio_norm": "valdivia",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "VALPARAÍSO",
+    "municipio_norm": "valparaiso",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "VEGACHÍ",
+    "municipio_norm": "vegachi",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "VENECIA",
+    "municipio_norm": "venecia",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "VIGÍA DEL FUERTE",
+    "municipio_norm": "vigia del fuerte",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "YALÍ",
+    "municipio_norm": "yali",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "YARUMAL",
+    "municipio_norm": "yarumal",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "YOLOMBÓ",
+    "municipio_norm": "yolombo",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "YONDÓ",
+    "municipio_norm": "yondo",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "ZARAGOZA",
+    "municipio_norm": "zaragoza",
+    "departamento": "ANTIOQUIA",
+    "departamento_norm": "antioquia"
+  },
+  {
+    "municipio": "BARRANQUILLA",
+    "municipio_norm": "barranquilla",
+    "departamento": "ATLÁNTICO",
+    "departamento_norm": "atlantico"
+  },
+  {
+    "municipio": "BARANOA",
+    "municipio_norm": "baranoa",
+    "departamento": "ATLÁNTICO",
+    "departamento_norm": "atlantico"
+  },
+  {
+    "municipio": "CAMPO DE LA CRUZ",
+    "municipio_norm": "campo de la cruz",
+    "departamento": "ATLÁNTICO",
+    "departamento_norm": "atlantico"
+  },
+  {
+    "municipio": "CANDELARIA",
+    "municipio_norm": "candelaria",
+    "departamento": "ATLÁNTICO",
+    "departamento_norm": "atlantico"
+  },
+  {
+    "municipio": "GALAPA",
+    "municipio_norm": "galapa",
+    "departamento": "ATLÁNTICO",
+    "departamento_norm": "atlantico"
+  },
+  {
+    "municipio": "JUAN DE ACOSTA",
+    "municipio_norm": "juan de acosta",
+    "departamento": "ATLÁNTICO",
+    "departamento_norm": "atlantico"
+  },
+  {
+    "municipio": "LURUACO",
+    "municipio_norm": "luruaco",
+    "departamento": "ATLÁNTICO",
+    "departamento_norm": "atlantico"
+  },
+  {
+    "municipio": "MALAMBO",
+    "municipio_norm": "malambo",
+    "departamento": "ATLÁNTICO",
+    "departamento_norm": "atlantico"
+  },
+  {
+    "municipio": "MANATÍ",
+    "municipio_norm": "manati",
+    "departamento": "ATLÁNTICO",
+    "departamento_norm": "atlantico"
+  },
+  {
+    "municipio": "PALMAR DE VARELA",
+    "municipio_norm": "palmar de varela",
+    "departamento": "ATLÁNTICO",
+    "departamento_norm": "atlantico"
+  },
+  {
+    "municipio": "PIOJÓ",
+    "municipio_norm": "piojo",
+    "departamento": "ATLÁNTICO",
+    "departamento_norm": "atlantico"
+  },
+  {
+    "municipio": "POLONUEVO",
+    "municipio_norm": "polonuevo",
+    "departamento": "ATLÁNTICO",
+    "departamento_norm": "atlantico"
+  },
+  {
+    "municipio": "PONEDERA",
+    "municipio_norm": "ponedera",
+    "departamento": "ATLÁNTICO",
+    "departamento_norm": "atlantico"
+  },
+  {
+    "municipio": "PUERTO COLOMBIA",
+    "municipio_norm": "puerto colombia",
+    "departamento": "ATLÁNTICO",
+    "departamento_norm": "atlantico"
+  },
+  {
+    "municipio": "REPELÓN",
+    "municipio_norm": "repelon",
+    "departamento": "ATLÁNTICO",
+    "departamento_norm": "atlantico"
+  },
+  {
+    "municipio": "SABANAGRANDE",
+    "municipio_norm": "sabanagrande",
+    "departamento": "ATLÁNTICO",
+    "departamento_norm": "atlantico"
+  },
+  {
+    "municipio": "SABANALARGA",
+    "municipio_norm": "sabanalarga",
+    "departamento": "ATLÁNTICO",
+    "departamento_norm": "atlantico"
+  },
+  {
+    "municipio": "SANTA LUCÍA",
+    "municipio_norm": "santa lucia",
+    "departamento": "ATLÁNTICO",
+    "departamento_norm": "atlantico"
+  },
+  {
+    "municipio": "SANTO TOMÁS",
+    "municipio_norm": "santo tomas",
+    "departamento": "ATLÁNTICO",
+    "departamento_norm": "atlantico"
+  },
+  {
+    "municipio": "SOLEDAD",
+    "municipio_norm": "soledad",
+    "departamento": "ATLÁNTICO",
+    "departamento_norm": "atlantico"
+  },
+  {
+    "municipio": "SUAN",
+    "municipio_norm": "suan",
+    "departamento": "ATLÁNTICO",
+    "departamento_norm": "atlantico"
+  },
+  {
+    "municipio": "TUBARÁ",
+    "municipio_norm": "tubara",
+    "departamento": "ATLÁNTICO",
+    "departamento_norm": "atlantico"
+  },
+  {
+    "municipio": "USIACURÍ",
+    "municipio_norm": "usiacuri",
+    "departamento": "ATLÁNTICO",
+    "departamento_norm": "atlantico"
+  },
+  {
+    "municipio": "BOGOTÁ, D.C.",
+    "municipio_norm": "bogota, d.c.",
+    "departamento": "BOGOTÁ, D.C.",
+    "departamento_norm": "bogota, d.c."
+  },
+  {
+    "municipio": "CARTAGENA",
+    "municipio_norm": "cartagena",
+    "departamento": "BOLÍVAR",
+    "departamento_norm": "bolivar"
+  },
+  {
+    "municipio": "ACHÍ",
+    "municipio_norm": "achi",
+    "departamento": "BOLÍVAR",
+    "departamento_norm": "bolivar"
+  },
+  {
+    "municipio": "ALTOS DEL ROSARIO",
+    "municipio_norm": "altos del rosario",
+    "departamento": "BOLÍVAR",
+    "departamento_norm": "bolivar"
+  },
+  {
+    "municipio": "ARENAL",
+    "municipio_norm": "arenal",
+    "departamento": "BOLÍVAR",
+    "departamento_norm": "bolivar"
+  },
+  {
+    "municipio": "ARJONA",
+    "municipio_norm": "arjona",
+    "departamento": "BOLÍVAR",
+    "departamento_norm": "bolivar"
+  },
+  {
+    "municipio": "ARROYOHONDO",
+    "municipio_norm": "arroyohondo",
+    "departamento": "BOLÍVAR",
+    "departamento_norm": "bolivar"
+  },
+  {
+    "municipio": "BARRANCO DE LOBA",
+    "municipio_norm": "barranco de loba",
+    "departamento": "BOLÍVAR",
+    "departamento_norm": "bolivar"
+  },
+  {
+    "municipio": "CALAMAR",
+    "municipio_norm": "calamar",
+    "departamento": "BOLÍVAR",
+    "departamento_norm": "bolivar"
+  },
+  {
+    "municipio": "CANTAGALLO",
+    "municipio_norm": "cantagallo",
+    "departamento": "BOLÍVAR",
+    "departamento_norm": "bolivar"
+  },
+  {
+    "municipio": "CICUCO",
+    "municipio_norm": "cicuco",
+    "departamento": "BOLÍVAR",
+    "departamento_norm": "bolivar"
+  },
+  {
+    "municipio": "CÓRDOBA",
+    "municipio_norm": "cordoba",
+    "departamento": "BOLÍVAR",
+    "departamento_norm": "bolivar"
+  },
+  {
+    "municipio": "CLEMENCIA",
+    "municipio_norm": "clemencia",
+    "departamento": "BOLÍVAR",
+    "departamento_norm": "bolivar"
+  },
+  {
+    "municipio": "EL CARMEN DE BOLÍVAR",
+    "municipio_norm": "el carmen de bolivar",
+    "departamento": "BOLÍVAR",
+    "departamento_norm": "bolivar"
+  },
+  {
+    "municipio": "EL GUAMO",
+    "municipio_norm": "el guamo",
+    "departamento": "BOLÍVAR",
+    "departamento_norm": "bolivar"
+  },
+  {
+    "municipio": "EL PEÑÓN",
+    "municipio_norm": "el penon",
+    "departamento": "BOLÍVAR",
+    "departamento_norm": "bolivar"
+  },
+  {
+    "municipio": "HATILLO DE LOBA",
+    "municipio_norm": "hatillo de loba",
+    "departamento": "BOLÍVAR",
+    "departamento_norm": "bolivar"
+  },
+  {
+    "municipio": "MAGANGUÉ",
+    "municipio_norm": "magangue",
+    "departamento": "BOLÍVAR",
+    "departamento_norm": "bolivar"
+  },
+  {
+    "municipio": "MAHATES",
+    "municipio_norm": "mahates",
+    "departamento": "BOLÍVAR",
+    "departamento_norm": "bolivar"
+  },
+  {
+    "municipio": "MARGARITA",
+    "municipio_norm": "margarita",
+    "departamento": "BOLÍVAR",
+    "departamento_norm": "bolivar"
+  },
+  {
+    "municipio": "MARÍA LA BAJA",
+    "municipio_norm": "maria la baja",
+    "departamento": "BOLÍVAR",
+    "departamento_norm": "bolivar"
+  },
+  {
+    "municipio": "MONTECRISTO",
+    "municipio_norm": "montecristo",
+    "departamento": "BOLÍVAR",
+    "departamento_norm": "bolivar"
+  },
+  {
+    "municipio": "SANTA CRUZ DE MOMPOX",
+    "municipio_norm": "santa cruz de mompox",
+    "departamento": "BOLÍVAR",
+    "departamento_norm": "bolivar"
+  },
+  {
+    "municipio": "MORALES",
+    "municipio_norm": "morales",
+    "departamento": "BOLÍVAR",
+    "departamento_norm": "bolivar"
+  },
+  {
+    "municipio": "NOROSÍ",
+    "municipio_norm": "norosi",
+    "departamento": "BOLÍVAR",
+    "departamento_norm": "bolivar"
+  },
+  {
+    "municipio": "PINILLOS",
+    "municipio_norm": "pinillos",
+    "departamento": "BOLÍVAR",
+    "departamento_norm": "bolivar"
+  },
+  {
+    "municipio": "REGIDOR",
+    "municipio_norm": "regidor",
+    "departamento": "BOLÍVAR",
+    "departamento_norm": "bolivar"
+  },
+  {
+    "municipio": "RÍO VIEJO",
+    "municipio_norm": "rio viejo",
+    "departamento": "BOLÍVAR",
+    "departamento_norm": "bolivar"
+  },
+  {
+    "municipio": "SAN CRISTÓBAL",
+    "municipio_norm": "san cristobal",
+    "departamento": "BOLÍVAR",
+    "departamento_norm": "bolivar"
+  },
+  {
+    "municipio": "SAN ESTANISLAO",
+    "municipio_norm": "san estanislao",
+    "departamento": "BOLÍVAR",
+    "departamento_norm": "bolivar"
+  },
+  {
+    "municipio": "SAN FERNANDO",
+    "municipio_norm": "san fernando",
+    "departamento": "BOLÍVAR",
+    "departamento_norm": "bolivar"
+  },
+  {
+    "municipio": "SAN JACINTO",
+    "municipio_norm": "san jacinto",
+    "departamento": "BOLÍVAR",
+    "departamento_norm": "bolivar"
+  },
+  {
+    "municipio": "SAN JACINTO DEL CAUCA",
+    "municipio_norm": "san jacinto del cauca",
+    "departamento": "BOLÍVAR",
+    "departamento_norm": "bolivar"
+  },
+  {
+    "municipio": "SAN JUAN NEPOMUCENO",
+    "municipio_norm": "san juan nepomuceno",
+    "departamento": "BOLÍVAR",
+    "departamento_norm": "bolivar"
+  },
+  {
+    "municipio": "SAN MARTÍN DE LOBA",
+    "municipio_norm": "san martin de loba",
+    "departamento": "BOLÍVAR",
+    "departamento_norm": "bolivar"
+  },
+  {
+    "municipio": "SAN PABLO",
+    "municipio_norm": "san pablo",
+    "departamento": "BOLÍVAR",
+    "departamento_norm": "bolivar"
+  },
+  {
+    "municipio": "SANTA CATALINA",
+    "municipio_norm": "santa catalina",
+    "departamento": "BOLÍVAR",
+    "departamento_norm": "bolivar"
+  },
+  {
+    "municipio": "SANTA ROSA",
+    "municipio_norm": "santa rosa",
+    "departamento": "BOLÍVAR",
+    "departamento_norm": "bolivar"
+  },
+  {
+    "municipio": "SANTA ROSA DEL SUR",
+    "municipio_norm": "santa rosa del sur",
+    "departamento": "BOLÍVAR",
+    "departamento_norm": "bolivar"
+  },
+  {
+    "municipio": "SIMITÍ",
+    "municipio_norm": "simiti",
+    "departamento": "BOLÍVAR",
+    "departamento_norm": "bolivar"
+  },
+  {
+    "municipio": "SOPLAVIENTO",
+    "municipio_norm": "soplaviento",
+    "departamento": "BOLÍVAR",
+    "departamento_norm": "bolivar"
+  },
+  {
+    "municipio": "TALAIGUA NUEVO",
+    "municipio_norm": "talaigua nuevo",
+    "departamento": "BOLÍVAR",
+    "departamento_norm": "bolivar"
+  },
+  {
+    "municipio": "TIQUISIO",
+    "municipio_norm": "tiquisio",
+    "departamento": "BOLÍVAR",
+    "departamento_norm": "bolivar"
+  },
+  {
+    "municipio": "TURBACO",
+    "municipio_norm": "turbaco",
+    "departamento": "BOLÍVAR",
+    "departamento_norm": "bolivar"
+  },
+  {
+    "municipio": "TURBANÁ",
+    "municipio_norm": "turbana",
+    "departamento": "BOLÍVAR",
+    "departamento_norm": "bolivar"
+  },
+  {
+    "municipio": "VILLANUEVA",
+    "municipio_norm": "villanueva",
+    "departamento": "BOLÍVAR",
+    "departamento_norm": "bolivar"
+  },
+  {
+    "municipio": "ZAMBRANO",
+    "municipio_norm": "zambrano",
+    "departamento": "BOLÍVAR",
+    "departamento_norm": "bolivar"
+  },
+  {
+    "municipio": "TUNJA",
+    "municipio_norm": "tunja",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "ALMEIDA",
+    "municipio_norm": "almeida",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "AQUITANIA",
+    "municipio_norm": "aquitania",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "ARCABUCO",
+    "municipio_norm": "arcabuco",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "BELÉN",
+    "municipio_norm": "belen",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "BERBEO",
+    "municipio_norm": "berbeo",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "BETÉITIVA",
+    "municipio_norm": "beteitiva",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "BOAVITA",
+    "municipio_norm": "boavita",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "BOYACÁ",
+    "municipio_norm": "boyaca",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "BRICEÑO",
+    "municipio_norm": "briceno",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "BUENAVISTA",
+    "municipio_norm": "buenavista",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "BUSBANZÁ",
+    "municipio_norm": "busbanza",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "CALDAS",
+    "municipio_norm": "caldas",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "CAMPOHERMOSO",
+    "municipio_norm": "campohermoso",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "CERINZA",
+    "municipio_norm": "cerinza",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "CHINAVITA",
+    "municipio_norm": "chinavita",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "CHIQUINQUIRÁ",
+    "municipio_norm": "chiquinquira",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "CHISCAS",
+    "municipio_norm": "chiscas",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "CHITA",
+    "municipio_norm": "chita",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "CHITARAQUE",
+    "municipio_norm": "chitaraque",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "CHIVATÁ",
+    "municipio_norm": "chivata",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "CIÉNEGA",
+    "municipio_norm": "cienega",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "CÓMBITA",
+    "municipio_norm": "combita",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "COPER",
+    "municipio_norm": "coper",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "CORRALES",
+    "municipio_norm": "corrales",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "COVARACHÍA",
+    "municipio_norm": "covarachia",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "CUBARÁ",
+    "municipio_norm": "cubara",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "CUCAITA",
+    "municipio_norm": "cucaita",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "CUÍTIVA",
+    "municipio_norm": "cuitiva",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "CHÍQUIZA",
+    "municipio_norm": "chiquiza",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "CHIVOR",
+    "municipio_norm": "chivor",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "DUITAMA",
+    "municipio_norm": "duitama",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "EL COCUY",
+    "municipio_norm": "el cocuy",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "EL ESPINO",
+    "municipio_norm": "el espino",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "FIRAVITOBA",
+    "municipio_norm": "firavitoba",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "FLORESTA",
+    "municipio_norm": "floresta",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "GACHANTIVÁ",
+    "municipio_norm": "gachantiva",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "GÁMEZA",
+    "municipio_norm": "gameza",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "GARAGOA",
+    "municipio_norm": "garagoa",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "GUACAMAYAS",
+    "municipio_norm": "guacamayas",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "GUATEQUE",
+    "municipio_norm": "guateque",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "GUAYATÁ",
+    "municipio_norm": "guayata",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "GÜICÁN DE LA SIERRA",
+    "municipio_norm": "guican de la sierra",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "IZA",
+    "municipio_norm": "iza",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "JENESANO",
+    "municipio_norm": "jenesano",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "JERICÓ",
+    "municipio_norm": "jerico",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "LABRANZAGRANDE",
+    "municipio_norm": "labranzagrande",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "LA CAPILLA",
+    "municipio_norm": "la capilla",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "LA VICTORIA",
+    "municipio_norm": "la victoria",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "LA UVITA",
+    "municipio_norm": "la uvita",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "VILLA DE LEYVA",
+    "municipio_norm": "villa de leyva",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "MACANAL",
+    "municipio_norm": "macanal",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "MARIPÍ",
+    "municipio_norm": "maripi",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "MIRAFLORES",
+    "municipio_norm": "miraflores",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "MONGUA",
+    "municipio_norm": "mongua",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "MONGUÍ",
+    "municipio_norm": "mongui",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "MONIQUIRÁ",
+    "municipio_norm": "moniquira",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "MOTAVITA",
+    "municipio_norm": "motavita",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "MUZO",
+    "municipio_norm": "muzo",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "NOBSA",
+    "municipio_norm": "nobsa",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "NUEVO COLÓN",
+    "municipio_norm": "nuevo colon",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "OICATÁ",
+    "municipio_norm": "oicata",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "OTANCHE",
+    "municipio_norm": "otanche",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "PACHAVITA",
+    "municipio_norm": "pachavita",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "PÁEZ",
+    "municipio_norm": "paez",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "PAIPA",
+    "municipio_norm": "paipa",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "PAJARITO",
+    "municipio_norm": "pajarito",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "PANQUEBA",
+    "municipio_norm": "panqueba",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "PAUNA",
+    "municipio_norm": "pauna",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "PAYA",
+    "municipio_norm": "paya",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "PAZ DE RÍO",
+    "municipio_norm": "paz de rio",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "PESCA",
+    "municipio_norm": "pesca",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "PISBA",
+    "municipio_norm": "pisba",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "PUERTO BOYACÁ",
+    "municipio_norm": "puerto boyaca",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "QUÍPAMA",
+    "municipio_norm": "quipama",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "RAMIRIQUÍ",
+    "municipio_norm": "ramiriqui",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "RÁQUIRA",
+    "municipio_norm": "raquira",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "RONDÓN",
+    "municipio_norm": "rondon",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "SABOYÁ",
+    "municipio_norm": "saboya",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "SÁCHICA",
+    "municipio_norm": "sachica",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "SAMACÁ",
+    "municipio_norm": "samaca",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "SAN EDUARDO",
+    "municipio_norm": "san eduardo",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "SAN JOSÉ DE PARE",
+    "municipio_norm": "san jose de pare",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "SAN LUIS DE GACENO",
+    "municipio_norm": "san luis de gaceno",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "SAN MATEO",
+    "municipio_norm": "san mateo",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "SAN MIGUEL DE SEMA",
+    "municipio_norm": "san miguel de sema",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "SAN PABLO DE BORBUR",
+    "municipio_norm": "san pablo de borbur",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "SANTANA",
+    "municipio_norm": "santana",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "SANTA MARÍA",
+    "municipio_norm": "santa maria",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "SANTA ROSA DE VITERBO",
+    "municipio_norm": "santa rosa de viterbo",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "SANTA SOFÍA",
+    "municipio_norm": "santa sofia",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "SATIVANORTE",
+    "municipio_norm": "sativanorte",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "SATIVASUR",
+    "municipio_norm": "sativasur",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "SIACHOQUE",
+    "municipio_norm": "siachoque",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "SOATÁ",
+    "municipio_norm": "soata",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "SOCOTÁ",
+    "municipio_norm": "socota",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "SOCHA",
+    "municipio_norm": "socha",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "SOGAMOSO",
+    "municipio_norm": "sogamoso",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "SOMONDOCO",
+    "municipio_norm": "somondoco",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "SORA",
+    "municipio_norm": "sora",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "SOTAQUIRÁ",
+    "municipio_norm": "sotaquira",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "SORACÁ",
+    "municipio_norm": "soraca",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "SUSACÓN",
+    "municipio_norm": "susacon",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "SUTAMARCHÁN",
+    "municipio_norm": "sutamarchan",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "SUTATENZA",
+    "municipio_norm": "sutatenza",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "TASCO",
+    "municipio_norm": "tasco",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "TENZA",
+    "municipio_norm": "tenza",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "TIBANÁ",
+    "municipio_norm": "tibana",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "TIBASOSA",
+    "municipio_norm": "tibasosa",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "TINJACÁ",
+    "municipio_norm": "tinjaca",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "TIPACOQUE",
+    "municipio_norm": "tipacoque",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "TOCA",
+    "municipio_norm": "toca",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "TOGÜÍ",
+    "municipio_norm": "togui",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "TÓPAGA",
+    "municipio_norm": "topaga",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "TOTA",
+    "municipio_norm": "tota",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "TUNUNGUÁ",
+    "municipio_norm": "tunungua",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "TURMEQUÉ",
+    "municipio_norm": "turmeque",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "TUTA",
+    "municipio_norm": "tuta",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "TUTAZÁ",
+    "municipio_norm": "tutaza",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "ÚMBITA",
+    "municipio_norm": "umbita",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "VENTAQUEMADA",
+    "municipio_norm": "ventaquemada",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "VIRACACHÁ",
+    "municipio_norm": "viracacha",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "ZETAQUIRA",
+    "municipio_norm": "zetaquira",
+    "departamento": "BOYACÁ",
+    "departamento_norm": "boyaca"
+  },
+  {
+    "municipio": "MANIZALES",
+    "municipio_norm": "manizales",
+    "departamento": "CALDAS",
+    "departamento_norm": "caldas"
+  },
+  {
+    "municipio": "AGUADAS",
+    "municipio_norm": "aguadas",
+    "departamento": "CALDAS",
+    "departamento_norm": "caldas"
+  },
+  {
+    "municipio": "ANSERMA",
+    "municipio_norm": "anserma",
+    "departamento": "CALDAS",
+    "departamento_norm": "caldas"
+  },
+  {
+    "municipio": "ARANZAZU",
+    "municipio_norm": "aranzazu",
+    "departamento": "CALDAS",
+    "departamento_norm": "caldas"
+  },
+  {
+    "municipio": "BELALCÁZAR",
+    "municipio_norm": "belalcazar",
+    "departamento": "CALDAS",
+    "departamento_norm": "caldas"
+  },
+  {
+    "municipio": "CHINCHINÁ",
+    "municipio_norm": "chinchina",
+    "departamento": "CALDAS",
+    "departamento_norm": "caldas"
+  },
+  {
+    "municipio": "FILADELFIA",
+    "municipio_norm": "filadelfia",
+    "departamento": "CALDAS",
+    "departamento_norm": "caldas"
+  },
+  {
+    "municipio": "LA DORADA",
+    "municipio_norm": "la dorada",
+    "departamento": "CALDAS",
+    "departamento_norm": "caldas"
+  },
+  {
+    "municipio": "LA MERCED",
+    "municipio_norm": "la merced",
+    "departamento": "CALDAS",
+    "departamento_norm": "caldas"
+  },
+  {
+    "municipio": "MANZANARES",
+    "municipio_norm": "manzanares",
+    "departamento": "CALDAS",
+    "departamento_norm": "caldas"
+  },
+  {
+    "municipio": "MARMATO",
+    "municipio_norm": "marmato",
+    "departamento": "CALDAS",
+    "departamento_norm": "caldas"
+  },
+  {
+    "municipio": "MARQUETALIA",
+    "municipio_norm": "marquetalia",
+    "departamento": "CALDAS",
+    "departamento_norm": "caldas"
+  },
+  {
+    "municipio": "MARULANDA",
+    "municipio_norm": "marulanda",
+    "departamento": "CALDAS",
+    "departamento_norm": "caldas"
+  },
+  {
+    "municipio": "NEIRA",
+    "municipio_norm": "neira",
+    "departamento": "CALDAS",
+    "departamento_norm": "caldas"
+  },
+  {
+    "municipio": "NORCASIA",
+    "municipio_norm": "norcasia",
+    "departamento": "CALDAS",
+    "departamento_norm": "caldas"
+  },
+  {
+    "municipio": "PÁCORA",
+    "municipio_norm": "pacora",
+    "departamento": "CALDAS",
+    "departamento_norm": "caldas"
+  },
+  {
+    "municipio": "PALESTINA",
+    "municipio_norm": "palestina",
+    "departamento": "CALDAS",
+    "departamento_norm": "caldas"
+  },
+  {
+    "municipio": "PENSILVANIA",
+    "municipio_norm": "pensilvania",
+    "departamento": "CALDAS",
+    "departamento_norm": "caldas"
+  },
+  {
+    "municipio": "RIOSUCIO",
+    "municipio_norm": "riosucio",
+    "departamento": "CALDAS",
+    "departamento_norm": "caldas"
+  },
+  {
+    "municipio": "RISARALDA",
+    "municipio_norm": "risaralda",
+    "departamento": "CALDAS",
+    "departamento_norm": "caldas"
+  },
+  {
+    "municipio": "SALAMINA",
+    "municipio_norm": "salamina",
+    "departamento": "CALDAS",
+    "departamento_norm": "caldas"
+  },
+  {
+    "municipio": "SAMANÁ",
+    "municipio_norm": "samana",
+    "departamento": "CALDAS",
+    "departamento_norm": "caldas"
+  },
+  {
+    "municipio": "SAN JOSÉ",
+    "municipio_norm": "san jose",
+    "departamento": "CALDAS",
+    "departamento_norm": "caldas"
+  },
+  {
+    "municipio": "SUPÍA",
+    "municipio_norm": "supia",
+    "departamento": "CALDAS",
+    "departamento_norm": "caldas"
+  },
+  {
+    "municipio": "VICTORIA",
+    "municipio_norm": "victoria",
+    "departamento": "CALDAS",
+    "departamento_norm": "caldas"
+  },
+  {
+    "municipio": "VILLAMARÍA",
+    "municipio_norm": "villamaria",
+    "departamento": "CALDAS",
+    "departamento_norm": "caldas"
+  },
+  {
+    "municipio": "VITERBO",
+    "municipio_norm": "viterbo",
+    "departamento": "CALDAS",
+    "departamento_norm": "caldas"
+  },
+  {
+    "municipio": "FLORENCIA",
+    "municipio_norm": "florencia",
+    "departamento": "CAQUETÁ",
+    "departamento_norm": "caqueta"
+  },
+  {
+    "municipio": "ALBANIA",
+    "municipio_norm": "albania",
+    "departamento": "CAQUETÁ",
+    "departamento_norm": "caqueta"
+  },
+  {
+    "municipio": "BELÉN DE LOS ANDAQUÍES",
+    "municipio_norm": "belen de los andaquies",
+    "departamento": "CAQUETÁ",
+    "departamento_norm": "caqueta"
+  },
+  {
+    "municipio": "CARTAGENA DEL CHAIRÁ",
+    "municipio_norm": "cartagena del chaira",
+    "departamento": "CAQUETÁ",
+    "departamento_norm": "caqueta"
+  },
+  {
+    "municipio": "CURILLO",
+    "municipio_norm": "curillo",
+    "departamento": "CAQUETÁ",
+    "departamento_norm": "caqueta"
+  },
+  {
+    "municipio": "EL DONCELLO",
+    "municipio_norm": "el doncello",
+    "departamento": "CAQUETÁ",
+    "departamento_norm": "caqueta"
+  },
+  {
+    "municipio": "EL PAUJÍL",
+    "municipio_norm": "el paujil",
+    "departamento": "CAQUETÁ",
+    "departamento_norm": "caqueta"
+  },
+  {
+    "municipio": "LA MONTAÑITA",
+    "municipio_norm": "la montanita",
+    "departamento": "CAQUETÁ",
+    "departamento_norm": "caqueta"
+  },
+  {
+    "municipio": "MILÁN",
+    "municipio_norm": "milan",
+    "departamento": "CAQUETÁ",
+    "departamento_norm": "caqueta"
+  },
+  {
+    "municipio": "MORELIA",
+    "municipio_norm": "morelia",
+    "departamento": "CAQUETÁ",
+    "departamento_norm": "caqueta"
+  },
+  {
+    "municipio": "PUERTO RICO",
+    "municipio_norm": "puerto rico",
+    "departamento": "CAQUETÁ",
+    "departamento_norm": "caqueta"
+  },
+  {
+    "municipio": "SAN JOSÉ DEL FRAGUA",
+    "municipio_norm": "san jose del fragua",
+    "departamento": "CAQUETÁ",
+    "departamento_norm": "caqueta"
+  },
+  {
+    "municipio": "SAN VICENTE DEL CAGUÁN",
+    "municipio_norm": "san vicente del caguan",
+    "departamento": "CAQUETÁ",
+    "departamento_norm": "caqueta"
+  },
+  {
+    "municipio": "SOLANO",
+    "municipio_norm": "solano",
+    "departamento": "CAQUETÁ",
+    "departamento_norm": "caqueta"
+  },
+  {
+    "municipio": "SOLITA",
+    "municipio_norm": "solita",
+    "departamento": "CAQUETÁ",
+    "departamento_norm": "caqueta"
+  },
+  {
+    "municipio": "VALPARAÍSO",
+    "municipio_norm": "valparaiso",
+    "departamento": "CAQUETÁ",
+    "departamento_norm": "caqueta"
+  },
+  {
+    "municipio": "POPAYÁN",
+    "municipio_norm": "popayan",
+    "departamento": "CAUCA",
+    "departamento_norm": "cauca"
+  },
+  {
+    "municipio": "ALMAGUER",
+    "municipio_norm": "almaguer",
+    "departamento": "CAUCA",
+    "departamento_norm": "cauca"
+  },
+  {
+    "municipio": "ARGELIA",
+    "municipio_norm": "argelia",
+    "departamento": "CAUCA",
+    "departamento_norm": "cauca"
+  },
+  {
+    "municipio": "BALBOA",
+    "municipio_norm": "balboa",
+    "departamento": "CAUCA",
+    "departamento_norm": "cauca"
+  },
+  {
+    "municipio": "BOLÍVAR",
+    "municipio_norm": "bolivar",
+    "departamento": "CAUCA",
+    "departamento_norm": "cauca"
+  },
+  {
+    "municipio": "BUENOS AIRES",
+    "municipio_norm": "buenos aires",
+    "departamento": "CAUCA",
+    "departamento_norm": "cauca"
+  },
+  {
+    "municipio": "CAJIBÍO",
+    "municipio_norm": "cajibio",
+    "departamento": "CAUCA",
+    "departamento_norm": "cauca"
+  },
+  {
+    "municipio": "CALDONO",
+    "municipio_norm": "caldono",
+    "departamento": "CAUCA",
+    "departamento_norm": "cauca"
+  },
+  {
+    "municipio": "CALOTO",
+    "municipio_norm": "caloto",
+    "departamento": "CAUCA",
+    "departamento_norm": "cauca"
+  },
+  {
+    "municipio": "CORINTO",
+    "municipio_norm": "corinto",
+    "departamento": "CAUCA",
+    "departamento_norm": "cauca"
+  },
+  {
+    "municipio": "EL TAMBO",
+    "municipio_norm": "el tambo",
+    "departamento": "CAUCA",
+    "departamento_norm": "cauca"
+  },
+  {
+    "municipio": "FLORENCIA",
+    "municipio_norm": "florencia",
+    "departamento": "CAUCA",
+    "departamento_norm": "cauca"
+  },
+  {
+    "municipio": "GUACHENÉ",
+    "municipio_norm": "guachene",
+    "departamento": "CAUCA",
+    "departamento_norm": "cauca"
+  },
+  {
+    "municipio": "GUAPI",
+    "municipio_norm": "guapi",
+    "departamento": "CAUCA",
+    "departamento_norm": "cauca"
+  },
+  {
+    "municipio": "INZÁ",
+    "municipio_norm": "inza",
+    "departamento": "CAUCA",
+    "departamento_norm": "cauca"
+  },
+  {
+    "municipio": "JAMBALÓ",
+    "municipio_norm": "jambalo",
+    "departamento": "CAUCA",
+    "departamento_norm": "cauca"
+  },
+  {
+    "municipio": "LA SIERRA",
+    "municipio_norm": "la sierra",
+    "departamento": "CAUCA",
+    "departamento_norm": "cauca"
+  },
+  {
+    "municipio": "LA VEGA",
+    "municipio_norm": "la vega",
+    "departamento": "CAUCA",
+    "departamento_norm": "cauca"
+  },
+  {
+    "municipio": "LÓPEZ DE MICAY",
+    "municipio_norm": "lopez de micay",
+    "departamento": "CAUCA",
+    "departamento_norm": "cauca"
+  },
+  {
+    "municipio": "MERCADERES",
+    "municipio_norm": "mercaderes",
+    "departamento": "CAUCA",
+    "departamento_norm": "cauca"
+  },
+  {
+    "municipio": "MIRANDA",
+    "municipio_norm": "miranda",
+    "departamento": "CAUCA",
+    "departamento_norm": "cauca"
+  },
+  {
+    "municipio": "MORALES",
+    "municipio_norm": "morales",
+    "departamento": "CAUCA",
+    "departamento_norm": "cauca"
+  },
+  {
+    "municipio": "PADILLA",
+    "municipio_norm": "padilla",
+    "departamento": "CAUCA",
+    "departamento_norm": "cauca"
+  },
+  {
+    "municipio": "PÁEZ",
+    "municipio_norm": "paez",
+    "departamento": "CAUCA",
+    "departamento_norm": "cauca"
+  },
+  {
+    "municipio": "PATÍA",
+    "municipio_norm": "patia",
+    "departamento": "CAUCA",
+    "departamento_norm": "cauca"
+  },
+  {
+    "municipio": "PIAMONTE",
+    "municipio_norm": "piamonte",
+    "departamento": "CAUCA",
+    "departamento_norm": "cauca"
+  },
+  {
+    "municipio": "PIENDAMÓ - TUNÍA",
+    "municipio_norm": "piendamo - tunia",
+    "departamento": "CAUCA",
+    "departamento_norm": "cauca"
+  },
+  {
+    "municipio": "PUERTO TEJADA",
+    "municipio_norm": "puerto tejada",
+    "departamento": "CAUCA",
+    "departamento_norm": "cauca"
+  },
+  {
+    "municipio": "PURACÉ",
+    "municipio_norm": "purace",
+    "departamento": "CAUCA",
+    "departamento_norm": "cauca"
+  },
+  {
+    "municipio": "ROSAS",
+    "municipio_norm": "rosas",
+    "departamento": "CAUCA",
+    "departamento_norm": "cauca"
+  },
+  {
+    "municipio": "SAN SEBASTIÁN",
+    "municipio_norm": "san sebastian",
+    "departamento": "CAUCA",
+    "departamento_norm": "cauca"
+  },
+  {
+    "municipio": "SANTANDER DE QUILICHAO",
+    "municipio_norm": "santander de quilichao",
+    "departamento": "CAUCA",
+    "departamento_norm": "cauca"
+  },
+  {
+    "municipio": "SANTA ROSA",
+    "municipio_norm": "santa rosa",
+    "departamento": "CAUCA",
+    "departamento_norm": "cauca"
+  },
+  {
+    "municipio": "SILVIA",
+    "municipio_norm": "silvia",
+    "departamento": "CAUCA",
+    "departamento_norm": "cauca"
+  },
+  {
+    "municipio": "SOTARÁ PAISPAMBA",
+    "municipio_norm": "sotara paispamba",
+    "departamento": "CAUCA",
+    "departamento_norm": "cauca"
+  },
+  {
+    "municipio": "SUÁREZ",
+    "municipio_norm": "suarez",
+    "departamento": "CAUCA",
+    "departamento_norm": "cauca"
+  },
+  {
+    "municipio": "SUCRE",
+    "municipio_norm": "sucre",
+    "departamento": "CAUCA",
+    "departamento_norm": "cauca"
+  },
+  {
+    "municipio": "TIMBÍO",
+    "municipio_norm": "timbio",
+    "departamento": "CAUCA",
+    "departamento_norm": "cauca"
+  },
+  {
+    "municipio": "TIMBIQUÍ",
+    "municipio_norm": "timbiqui",
+    "departamento": "CAUCA",
+    "departamento_norm": "cauca"
+  },
+  {
+    "municipio": "TORIBÍO",
+    "municipio_norm": "toribio",
+    "departamento": "CAUCA",
+    "departamento_norm": "cauca"
+  },
+  {
+    "municipio": "TOTORÓ",
+    "municipio_norm": "totoro",
+    "departamento": "CAUCA",
+    "departamento_norm": "cauca"
+  },
+  {
+    "municipio": "VILLA RICA",
+    "municipio_norm": "villa rica",
+    "departamento": "CAUCA",
+    "departamento_norm": "cauca"
+  },
+  {
+    "municipio": "VALLEDUPAR",
+    "municipio_norm": "valledupar",
+    "departamento": "CESAR",
+    "departamento_norm": "cesar"
+  },
+  {
+    "municipio": "AGUACHICA",
+    "municipio_norm": "aguachica",
+    "departamento": "CESAR",
+    "departamento_norm": "cesar"
+  },
+  {
+    "municipio": "AGUSTÍN CODAZZI",
+    "municipio_norm": "agustin codazzi",
+    "departamento": "CESAR",
+    "departamento_norm": "cesar"
+  },
+  {
+    "municipio": "ASTREA",
+    "municipio_norm": "astrea",
+    "departamento": "CESAR",
+    "departamento_norm": "cesar"
+  },
+  {
+    "municipio": "BECERRIL",
+    "municipio_norm": "becerril",
+    "departamento": "CESAR",
+    "departamento_norm": "cesar"
+  },
+  {
+    "municipio": "BOSCONIA",
+    "municipio_norm": "bosconia",
+    "departamento": "CESAR",
+    "departamento_norm": "cesar"
+  },
+  {
+    "municipio": "CHIMICHAGUA",
+    "municipio_norm": "chimichagua",
+    "departamento": "CESAR",
+    "departamento_norm": "cesar"
+  },
+  {
+    "municipio": "CHIRIGUANÁ",
+    "municipio_norm": "chiriguana",
+    "departamento": "CESAR",
+    "departamento_norm": "cesar"
+  },
+  {
+    "municipio": "CURUMANÍ",
+    "municipio_norm": "curumani",
+    "departamento": "CESAR",
+    "departamento_norm": "cesar"
+  },
+  {
+    "municipio": "EL COPEY",
+    "municipio_norm": "el copey",
+    "departamento": "CESAR",
+    "departamento_norm": "cesar"
+  },
+  {
+    "municipio": "EL PASO",
+    "municipio_norm": "el paso",
+    "departamento": "CESAR",
+    "departamento_norm": "cesar"
+  },
+  {
+    "municipio": "GAMARRA",
+    "municipio_norm": "gamarra",
+    "departamento": "CESAR",
+    "departamento_norm": "cesar"
+  },
+  {
+    "municipio": "GONZÁLEZ",
+    "municipio_norm": "gonzalez",
+    "departamento": "CESAR",
+    "departamento_norm": "cesar"
+  },
+  {
+    "municipio": "LA GLORIA",
+    "municipio_norm": "la gloria",
+    "departamento": "CESAR",
+    "departamento_norm": "cesar"
+  },
+  {
+    "municipio": "LA JAGUA DE IBIRICO",
+    "municipio_norm": "la jagua de ibirico",
+    "departamento": "CESAR",
+    "departamento_norm": "cesar"
+  },
+  {
+    "municipio": "MANAURE BALCÓN DEL CESAR",
+    "municipio_norm": "manaure balcon del cesar",
+    "departamento": "CESAR",
+    "departamento_norm": "cesar"
+  },
+  {
+    "municipio": "PAILITAS",
+    "municipio_norm": "pailitas",
+    "departamento": "CESAR",
+    "departamento_norm": "cesar"
+  },
+  {
+    "municipio": "PELAYA",
+    "municipio_norm": "pelaya",
+    "departamento": "CESAR",
+    "departamento_norm": "cesar"
+  },
+  {
+    "municipio": "PUEBLO BELLO",
+    "municipio_norm": "pueblo bello",
+    "departamento": "CESAR",
+    "departamento_norm": "cesar"
+  },
+  {
+    "municipio": "RÍO DE ORO",
+    "municipio_norm": "rio de oro",
+    "departamento": "CESAR",
+    "departamento_norm": "cesar"
+  },
+  {
+    "municipio": "LA PAZ",
+    "municipio_norm": "la paz",
+    "departamento": "CESAR",
+    "departamento_norm": "cesar"
+  },
+  {
+    "municipio": "SAN ALBERTO",
+    "municipio_norm": "san alberto",
+    "departamento": "CESAR",
+    "departamento_norm": "cesar"
+  },
+  {
+    "municipio": "SAN DIEGO",
+    "municipio_norm": "san diego",
+    "departamento": "CESAR",
+    "departamento_norm": "cesar"
+  },
+  {
+    "municipio": "SAN MARTÍN",
+    "municipio_norm": "san martin",
+    "departamento": "CESAR",
+    "departamento_norm": "cesar"
+  },
+  {
+    "municipio": "TAMALAMEQUE",
+    "municipio_norm": "tamalameque",
+    "departamento": "CESAR",
+    "departamento_norm": "cesar"
+  },
+  {
+    "municipio": "MONTERÍA",
+    "municipio_norm": "monteria",
+    "departamento": "CÓRDOBA",
+    "departamento_norm": "cordoba"
+  },
+  {
+    "municipio": "AYAPEL",
+    "municipio_norm": "ayapel",
+    "departamento": "CÓRDOBA",
+    "departamento_norm": "cordoba"
+  },
+  {
+    "municipio": "BUENAVISTA",
+    "municipio_norm": "buenavista",
+    "departamento": "CÓRDOBA",
+    "departamento_norm": "cordoba"
+  },
+  {
+    "municipio": "CANALETE",
+    "municipio_norm": "canalete",
+    "departamento": "CÓRDOBA",
+    "departamento_norm": "cordoba"
+  },
+  {
+    "municipio": "CERETÉ",
+    "municipio_norm": "cerete",
+    "departamento": "CÓRDOBA",
+    "departamento_norm": "cordoba"
+  },
+  {
+    "municipio": "CHIMÁ",
+    "municipio_norm": "chima",
+    "departamento": "CÓRDOBA",
+    "departamento_norm": "cordoba"
+  },
+  {
+    "municipio": "CHINÚ",
+    "municipio_norm": "chinu",
+    "departamento": "CÓRDOBA",
+    "departamento_norm": "cordoba"
+  },
+  {
+    "municipio": "CIÉNAGA DE ORO",
+    "municipio_norm": "cienaga de oro",
+    "departamento": "CÓRDOBA",
+    "departamento_norm": "cordoba"
+  },
+  {
+    "municipio": "COTORRA",
+    "municipio_norm": "cotorra",
+    "departamento": "CÓRDOBA",
+    "departamento_norm": "cordoba"
+  },
+  {
+    "municipio": "LA APARTADA",
+    "municipio_norm": "la apartada",
+    "departamento": "CÓRDOBA",
+    "departamento_norm": "cordoba"
+  },
+  {
+    "municipio": "LORICA",
+    "municipio_norm": "lorica",
+    "departamento": "CÓRDOBA",
+    "departamento_norm": "cordoba"
+  },
+  {
+    "municipio": "LOS CÓRDOBAS",
+    "municipio_norm": "los cordobas",
+    "departamento": "CÓRDOBA",
+    "departamento_norm": "cordoba"
+  },
+  {
+    "municipio": "MOMIL",
+    "municipio_norm": "momil",
+    "departamento": "CÓRDOBA",
+    "departamento_norm": "cordoba"
+  },
+  {
+    "municipio": "MONTELÍBANO",
+    "municipio_norm": "montelibano",
+    "departamento": "CÓRDOBA",
+    "departamento_norm": "cordoba"
+  },
+  {
+    "municipio": "MOÑITOS",
+    "municipio_norm": "monitos",
+    "departamento": "CÓRDOBA",
+    "departamento_norm": "cordoba"
+  },
+  {
+    "municipio": "PLANETA RICA",
+    "municipio_norm": "planeta rica",
+    "departamento": "CÓRDOBA",
+    "departamento_norm": "cordoba"
+  },
+  {
+    "municipio": "PUEBLO NUEVO",
+    "municipio_norm": "pueblo nuevo",
+    "departamento": "CÓRDOBA",
+    "departamento_norm": "cordoba"
+  },
+  {
+    "municipio": "PUERTO ESCONDIDO",
+    "municipio_norm": "puerto escondido",
+    "departamento": "CÓRDOBA",
+    "departamento_norm": "cordoba"
+  },
+  {
+    "municipio": "PUERTO LIBERTADOR",
+    "municipio_norm": "puerto libertador",
+    "departamento": "CÓRDOBA",
+    "departamento_norm": "cordoba"
+  },
+  {
+    "municipio": "PURÍSIMA DE LA CONCEPCIÓN",
+    "municipio_norm": "purisima de la concepcion",
+    "departamento": "CÓRDOBA",
+    "departamento_norm": "cordoba"
+  },
+  {
+    "municipio": "SAHAGÚN",
+    "municipio_norm": "sahagun",
+    "departamento": "CÓRDOBA",
+    "departamento_norm": "cordoba"
+  },
+  {
+    "municipio": "SAN ANDRÉS DE SOTAVENTO",
+    "municipio_norm": "san andres de sotavento",
+    "departamento": "CÓRDOBA",
+    "departamento_norm": "cordoba"
+  },
+  {
+    "municipio": "SAN ANTERO",
+    "municipio_norm": "san antero",
+    "departamento": "CÓRDOBA",
+    "departamento_norm": "cordoba"
+  },
+  {
+    "municipio": "SAN BERNARDO DEL VIENTO",
+    "municipio_norm": "san bernardo del viento",
+    "departamento": "CÓRDOBA",
+    "departamento_norm": "cordoba"
+  },
+  {
+    "municipio": "SAN CARLOS",
+    "municipio_norm": "san carlos",
+    "departamento": "CÓRDOBA",
+    "departamento_norm": "cordoba"
+  },
+  {
+    "municipio": "SAN JOSÉ DE URÉ",
+    "municipio_norm": "san jose de ure",
+    "departamento": "CÓRDOBA",
+    "departamento_norm": "cordoba"
+  },
+  {
+    "municipio": "SAN PELAYO",
+    "municipio_norm": "san pelayo",
+    "departamento": "CÓRDOBA",
+    "departamento_norm": "cordoba"
+  },
+  {
+    "municipio": "TIERRALTA",
+    "municipio_norm": "tierralta",
+    "departamento": "CÓRDOBA",
+    "departamento_norm": "cordoba"
+  },
+  {
+    "municipio": "TUCHÍN",
+    "municipio_norm": "tuchin",
+    "departamento": "CÓRDOBA",
+    "departamento_norm": "cordoba"
+  },
+  {
+    "municipio": "VALENCIA",
+    "municipio_norm": "valencia",
+    "departamento": "CÓRDOBA",
+    "departamento_norm": "cordoba"
+  },
+  {
+    "municipio": "AGUA DE DIOS",
+    "municipio_norm": "agua de dios",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "ALBÁN",
+    "municipio_norm": "alban",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "ANAPOIMA",
+    "municipio_norm": "anapoima",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "ANOLAIMA",
+    "municipio_norm": "anolaima",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "ARBELÁEZ",
+    "municipio_norm": "arbelaez",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "BELTRÁN",
+    "municipio_norm": "beltran",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "BITUIMA",
+    "municipio_norm": "bituima",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "BOJACÁ",
+    "municipio_norm": "bojaca",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "CABRERA",
+    "municipio_norm": "cabrera",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "CACHIPAY",
+    "municipio_norm": "cachipay",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "CAJICÁ",
+    "municipio_norm": "cajica",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "CAPARRAPÍ",
+    "municipio_norm": "caparrapi",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "CÁQUEZA",
+    "municipio_norm": "caqueza",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "CARMEN DE CARUPA",
+    "municipio_norm": "carmen de carupa",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "CHAGUANÍ",
+    "municipio_norm": "chaguani",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "CHÍA",
+    "municipio_norm": "chia",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "CHIPAQUE",
+    "municipio_norm": "chipaque",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "CHOACHÍ",
+    "municipio_norm": "choachi",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "CHOCONTÁ",
+    "municipio_norm": "choconta",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "COGUA",
+    "municipio_norm": "cogua",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "COTA",
+    "municipio_norm": "cota",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "CUCUNUBÁ",
+    "municipio_norm": "cucunuba",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "EL COLEGIO",
+    "municipio_norm": "el colegio",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "EL PEÑÓN",
+    "municipio_norm": "el penon",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "EL ROSAL",
+    "municipio_norm": "el rosal",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "FACATATIVÁ",
+    "municipio_norm": "facatativa",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "FÓMEQUE",
+    "municipio_norm": "fomeque",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "FOSCA",
+    "municipio_norm": "fosca",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "FUNZA",
+    "municipio_norm": "funza",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "FÚQUENE",
+    "municipio_norm": "fuquene",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "FUSAGASUGÁ",
+    "municipio_norm": "fusagasuga",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "GACHALÁ",
+    "municipio_norm": "gachala",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "GACHANCIPÁ",
+    "municipio_norm": "gachancipa",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "GACHETÁ",
+    "municipio_norm": "gacheta",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "GAMA",
+    "municipio_norm": "gama",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "GIRARDOT",
+    "municipio_norm": "girardot",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "GRANADA",
+    "municipio_norm": "granada",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "GUACHETÁ",
+    "municipio_norm": "guacheta",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "GUADUAS",
+    "municipio_norm": "guaduas",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "GUASCA",
+    "municipio_norm": "guasca",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "GUATAQUÍ",
+    "municipio_norm": "guataqui",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "GUATAVITA",
+    "municipio_norm": "guatavita",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "GUAYABAL DE SÍQUIMA",
+    "municipio_norm": "guayabal de siquima",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "GUAYABETAL",
+    "municipio_norm": "guayabetal",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "GUTIÉRREZ",
+    "municipio_norm": "gutierrez",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "JERUSALÉN",
+    "municipio_norm": "jerusalen",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "JUNÍN",
+    "municipio_norm": "junin",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "LA CALERA",
+    "municipio_norm": "la calera",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "LA MESA",
+    "municipio_norm": "la mesa",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "LA PALMA",
+    "municipio_norm": "la palma",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "LA PEÑA",
+    "municipio_norm": "la pena",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "LA VEGA",
+    "municipio_norm": "la vega",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "LENGUAZAQUE",
+    "municipio_norm": "lenguazaque",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "MACHETÁ",
+    "municipio_norm": "macheta",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "MADRID",
+    "municipio_norm": "madrid",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "MANTA",
+    "municipio_norm": "manta",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "MEDINA",
+    "municipio_norm": "medina",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "MOSQUERA",
+    "municipio_norm": "mosquera",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "NARIÑO",
+    "municipio_norm": "narino",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "NEMOCÓN",
+    "municipio_norm": "nemocon",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "NILO",
+    "municipio_norm": "nilo",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "NIMAIMA",
+    "municipio_norm": "nimaima",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "NOCAIMA",
+    "municipio_norm": "nocaima",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "VENECIA",
+    "municipio_norm": "venecia",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "PACHO",
+    "municipio_norm": "pacho",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "PAIME",
+    "municipio_norm": "paime",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "PANDI",
+    "municipio_norm": "pandi",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "PARATEBUENO",
+    "municipio_norm": "paratebueno",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "PASCA",
+    "municipio_norm": "pasca",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "PUERTO SALGAR",
+    "municipio_norm": "puerto salgar",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "PULÍ",
+    "municipio_norm": "puli",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "QUEBRADANEGRA",
+    "municipio_norm": "quebradanegra",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "QUETAME",
+    "municipio_norm": "quetame",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "QUIPILE",
+    "municipio_norm": "quipile",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "APULO",
+    "municipio_norm": "apulo",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "RICAURTE",
+    "municipio_norm": "ricaurte",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "SAN ANTONIO DEL TEQUENDAMA",
+    "municipio_norm": "san antonio del tequendama",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "SAN BERNARDO",
+    "municipio_norm": "san bernardo",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "SAN CAYETANO",
+    "municipio_norm": "san cayetano",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "SAN FRANCISCO",
+    "municipio_norm": "san francisco",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "SAN JUAN DE RIOSECO",
+    "municipio_norm": "san juan de rioseco",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "SASAIMA",
+    "municipio_norm": "sasaima",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "SESQUILÉ",
+    "municipio_norm": "sesquile",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "SIBATÉ",
+    "municipio_norm": "sibate",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "SILVANIA",
+    "municipio_norm": "silvania",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "SIMIJACA",
+    "municipio_norm": "simijaca",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "SOACHA",
+    "municipio_norm": "soacha",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "SOPÓ",
+    "municipio_norm": "sopo",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "SUBACHOQUE",
+    "municipio_norm": "subachoque",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "SUESCA",
+    "municipio_norm": "suesca",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "SUPATÁ",
+    "municipio_norm": "supata",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "SUSA",
+    "municipio_norm": "susa",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "SUTATAUSA",
+    "municipio_norm": "sutatausa",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "TABIO",
+    "municipio_norm": "tabio",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "TAUSA",
+    "municipio_norm": "tausa",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "TENA",
+    "municipio_norm": "tena",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "TENJO",
+    "municipio_norm": "tenjo",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "TIBACUY",
+    "municipio_norm": "tibacuy",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "TIBIRITA",
+    "municipio_norm": "tibirita",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "TOCAIMA",
+    "municipio_norm": "tocaima",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "TOCANCIPÁ",
+    "municipio_norm": "tocancipa",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "TOPAIPÍ",
+    "municipio_norm": "topaipi",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "UBALÁ",
+    "municipio_norm": "ubala",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "UBAQUE",
+    "municipio_norm": "ubaque",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "VILLA DE SAN DIEGO DE UBATÉ",
+    "municipio_norm": "villa de san diego de ubate",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "UNE",
+    "municipio_norm": "une",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "ÚTICA",
+    "municipio_norm": "utica",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "VERGARA",
+    "municipio_norm": "vergara",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "VIANÍ",
+    "municipio_norm": "viani",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "VILLAGÓMEZ",
+    "municipio_norm": "villagomez",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "VILLAPINZÓN",
+    "municipio_norm": "villapinzon",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "VILLETA",
+    "municipio_norm": "villeta",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "VIOTÁ",
+    "municipio_norm": "viota",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "YACOPÍ",
+    "municipio_norm": "yacopi",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "ZIPACÓN",
+    "municipio_norm": "zipacon",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "ZIPAQUIRÁ",
+    "municipio_norm": "zipaquira",
+    "departamento": "CUNDINAMARCA",
+    "departamento_norm": "cundinamarca"
+  },
+  {
+    "municipio": "QUIBDÓ",
+    "municipio_norm": "quibdo",
+    "departamento": "CHOCÓ",
+    "departamento_norm": "choco"
+  },
+  {
+    "municipio": "ACANDÍ",
+    "municipio_norm": "acandi",
+    "departamento": "CHOCÓ",
+    "departamento_norm": "choco"
+  },
+  {
+    "municipio": "ALTO BAUDÓ",
+    "municipio_norm": "alto baudo",
+    "departamento": "CHOCÓ",
+    "departamento_norm": "choco"
+  },
+  {
+    "municipio": "ATRATO",
+    "municipio_norm": "atrato",
+    "departamento": "CHOCÓ",
+    "departamento_norm": "choco"
+  },
+  {
+    "municipio": "BAGADÓ",
+    "municipio_norm": "bagado",
+    "departamento": "CHOCÓ",
+    "departamento_norm": "choco"
+  },
+  {
+    "municipio": "BAHÍA SOLANO",
+    "municipio_norm": "bahia solano",
+    "departamento": "CHOCÓ",
+    "departamento_norm": "choco"
+  },
+  {
+    "municipio": "BAJO BAUDÓ",
+    "municipio_norm": "bajo baudo",
+    "departamento": "CHOCÓ",
+    "departamento_norm": "choco"
+  },
+  {
+    "municipio": "BOJAYÁ",
+    "municipio_norm": "bojaya",
+    "departamento": "CHOCÓ",
+    "departamento_norm": "choco"
+  },
+  {
+    "municipio": "EL CANTÓN DEL SAN PABLO",
+    "municipio_norm": "el canton del san pablo",
+    "departamento": "CHOCÓ",
+    "departamento_norm": "choco"
+  },
+  {
+    "municipio": "CARMEN DEL DARIÉN",
+    "municipio_norm": "carmen del darien",
+    "departamento": "CHOCÓ",
+    "departamento_norm": "choco"
+  },
+  {
+    "municipio": "CÉRTEGUI",
+    "municipio_norm": "certegui",
+    "departamento": "CHOCÓ",
+    "departamento_norm": "choco"
+  },
+  {
+    "municipio": "CONDOTO",
+    "municipio_norm": "condoto",
+    "departamento": "CHOCÓ",
+    "departamento_norm": "choco"
+  },
+  {
+    "municipio": "EL CARMEN DE ATRATO",
+    "municipio_norm": "el carmen de atrato",
+    "departamento": "CHOCÓ",
+    "departamento_norm": "choco"
+  },
+  {
+    "municipio": "EL LITORAL DEL SAN JUAN",
+    "municipio_norm": "el litoral del san juan",
+    "departamento": "CHOCÓ",
+    "departamento_norm": "choco"
+  },
+  {
+    "municipio": "ISTMINA",
+    "municipio_norm": "istmina",
+    "departamento": "CHOCÓ",
+    "departamento_norm": "choco"
+  },
+  {
+    "municipio": "JURADÓ",
+    "municipio_norm": "jurado",
+    "departamento": "CHOCÓ",
+    "departamento_norm": "choco"
+  },
+  {
+    "municipio": "LLORÓ",
+    "municipio_norm": "lloro",
+    "departamento": "CHOCÓ",
+    "departamento_norm": "choco"
+  },
+  {
+    "municipio": "MEDIO ATRATO",
+    "municipio_norm": "medio atrato",
+    "departamento": "CHOCÓ",
+    "departamento_norm": "choco"
+  },
+  {
+    "municipio": "MEDIO BAUDÓ",
+    "municipio_norm": "medio baudo",
+    "departamento": "CHOCÓ",
+    "departamento_norm": "choco"
+  },
+  {
+    "municipio": "MEDIO SAN JUAN",
+    "municipio_norm": "medio san juan",
+    "departamento": "CHOCÓ",
+    "departamento_norm": "choco"
+  },
+  {
+    "municipio": "NÓVITA",
+    "municipio_norm": "novita",
+    "departamento": "CHOCÓ",
+    "departamento_norm": "choco"
+  },
+  {
+    "municipio": "NUEVO BELÉN DE BAJIRÁ",
+    "municipio_norm": "nuevo belen de bajira",
+    "departamento": "CHOCÓ",
+    "departamento_norm": "choco"
+  },
+  {
+    "municipio": "NUQUÍ",
+    "municipio_norm": "nuqui",
+    "departamento": "CHOCÓ",
+    "departamento_norm": "choco"
+  },
+  {
+    "municipio": "RÍO IRÓ",
+    "municipio_norm": "rio iro",
+    "departamento": "CHOCÓ",
+    "departamento_norm": "choco"
+  },
+  {
+    "municipio": "RÍO QUITO",
+    "municipio_norm": "rio quito",
+    "departamento": "CHOCÓ",
+    "departamento_norm": "choco"
+  },
+  {
+    "municipio": "RIOSUCIO",
+    "municipio_norm": "riosucio",
+    "departamento": "CHOCÓ",
+    "departamento_norm": "choco"
+  },
+  {
+    "municipio": "SAN JOSÉ DEL PALMAR",
+    "municipio_norm": "san jose del palmar",
+    "departamento": "CHOCÓ",
+    "departamento_norm": "choco"
+  },
+  {
+    "municipio": "SIPÍ",
+    "municipio_norm": "sipi",
+    "departamento": "CHOCÓ",
+    "departamento_norm": "choco"
+  },
+  {
+    "municipio": "TADÓ",
+    "municipio_norm": "tado",
+    "departamento": "CHOCÓ",
+    "departamento_norm": "choco"
+  },
+  {
+    "municipio": "UNGUÍA",
+    "municipio_norm": "unguia",
+    "departamento": "CHOCÓ",
+    "departamento_norm": "choco"
+  },
+  {
+    "municipio": "UNIÓN PANAMERICANA",
+    "municipio_norm": "union panamericana",
+    "departamento": "CHOCÓ",
+    "departamento_norm": "choco"
+  },
+  {
+    "municipio": "NEIVA",
+    "municipio_norm": "neiva",
+    "departamento": "HUILA",
+    "departamento_norm": "huila"
+  },
+  {
+    "municipio": "ACEVEDO",
+    "municipio_norm": "acevedo",
+    "departamento": "HUILA",
+    "departamento_norm": "huila"
+  },
+  {
+    "municipio": "AGRADO",
+    "municipio_norm": "agrado",
+    "departamento": "HUILA",
+    "departamento_norm": "huila"
+  },
+  {
+    "municipio": "AIPE",
+    "municipio_norm": "aipe",
+    "departamento": "HUILA",
+    "departamento_norm": "huila"
+  },
+  {
+    "municipio": "ALGECIRAS",
+    "municipio_norm": "algeciras",
+    "departamento": "HUILA",
+    "departamento_norm": "huila"
+  },
+  {
+    "municipio": "ALTAMIRA",
+    "municipio_norm": "altamira",
+    "departamento": "HUILA",
+    "departamento_norm": "huila"
+  },
+  {
+    "municipio": "BARAYA",
+    "municipio_norm": "baraya",
+    "departamento": "HUILA",
+    "departamento_norm": "huila"
+  },
+  {
+    "municipio": "CAMPOALEGRE",
+    "municipio_norm": "campoalegre",
+    "departamento": "HUILA",
+    "departamento_norm": "huila"
+  },
+  {
+    "municipio": "COLOMBIA",
+    "municipio_norm": "colombia",
+    "departamento": "HUILA",
+    "departamento_norm": "huila"
+  },
+  {
+    "municipio": "ELÍAS",
+    "municipio_norm": "elias",
+    "departamento": "HUILA",
+    "departamento_norm": "huila"
+  },
+  {
+    "municipio": "GARZÓN",
+    "municipio_norm": "garzon",
+    "departamento": "HUILA",
+    "departamento_norm": "huila"
+  },
+  {
+    "municipio": "GIGANTE",
+    "municipio_norm": "gigante",
+    "departamento": "HUILA",
+    "departamento_norm": "huila"
+  },
+  {
+    "municipio": "GUADALUPE",
+    "municipio_norm": "guadalupe",
+    "departamento": "HUILA",
+    "departamento_norm": "huila"
+  },
+  {
+    "municipio": "HOBO",
+    "municipio_norm": "hobo",
+    "departamento": "HUILA",
+    "departamento_norm": "huila"
+  },
+  {
+    "municipio": "ÍQUIRA",
+    "municipio_norm": "iquira",
+    "departamento": "HUILA",
+    "departamento_norm": "huila"
+  },
+  {
+    "municipio": "ISNOS",
+    "municipio_norm": "isnos",
+    "departamento": "HUILA",
+    "departamento_norm": "huila"
+  },
+  {
+    "municipio": "LA ARGENTINA",
+    "municipio_norm": "la argentina",
+    "departamento": "HUILA",
+    "departamento_norm": "huila"
+  },
+  {
+    "municipio": "LA PLATA",
+    "municipio_norm": "la plata",
+    "departamento": "HUILA",
+    "departamento_norm": "huila"
+  },
+  {
+    "municipio": "NÁTAGA",
+    "municipio_norm": "nataga",
+    "departamento": "HUILA",
+    "departamento_norm": "huila"
+  },
+  {
+    "municipio": "OPORAPA",
+    "municipio_norm": "oporapa",
+    "departamento": "HUILA",
+    "departamento_norm": "huila"
+  },
+  {
+    "municipio": "PAICOL",
+    "municipio_norm": "paicol",
+    "departamento": "HUILA",
+    "departamento_norm": "huila"
+  },
+  {
+    "municipio": "PALERMO",
+    "municipio_norm": "palermo",
+    "departamento": "HUILA",
+    "departamento_norm": "huila"
+  },
+  {
+    "municipio": "PALESTINA",
+    "municipio_norm": "palestina",
+    "departamento": "HUILA",
+    "departamento_norm": "huila"
+  },
+  {
+    "municipio": "PITAL",
+    "municipio_norm": "pital",
+    "departamento": "HUILA",
+    "departamento_norm": "huila"
+  },
+  {
+    "municipio": "PITALITO",
+    "municipio_norm": "pitalito",
+    "departamento": "HUILA",
+    "departamento_norm": "huila"
+  },
+  {
+    "municipio": "RIVERA",
+    "municipio_norm": "rivera",
+    "departamento": "HUILA",
+    "departamento_norm": "huila"
+  },
+  {
+    "municipio": "SALADOBLANCO",
+    "municipio_norm": "saladoblanco",
+    "departamento": "HUILA",
+    "departamento_norm": "huila"
+  },
+  {
+    "municipio": "SAN AGUSTÍN",
+    "municipio_norm": "san agustin",
+    "departamento": "HUILA",
+    "departamento_norm": "huila"
+  },
+  {
+    "municipio": "SANTA MARÍA",
+    "municipio_norm": "santa maria",
+    "departamento": "HUILA",
+    "departamento_norm": "huila"
+  },
+  {
+    "municipio": "SUAZA",
+    "municipio_norm": "suaza",
+    "departamento": "HUILA",
+    "departamento_norm": "huila"
+  },
+  {
+    "municipio": "TARQUI",
+    "municipio_norm": "tarqui",
+    "departamento": "HUILA",
+    "departamento_norm": "huila"
+  },
+  {
+    "municipio": "TESALIA",
+    "municipio_norm": "tesalia",
+    "departamento": "HUILA",
+    "departamento_norm": "huila"
+  },
+  {
+    "municipio": "TELLO",
+    "municipio_norm": "tello",
+    "departamento": "HUILA",
+    "departamento_norm": "huila"
+  },
+  {
+    "municipio": "TERUEL",
+    "municipio_norm": "teruel",
+    "departamento": "HUILA",
+    "departamento_norm": "huila"
+  },
+  {
+    "municipio": "TIMANÁ",
+    "municipio_norm": "timana",
+    "departamento": "HUILA",
+    "departamento_norm": "huila"
+  },
+  {
+    "municipio": "VILLAVIEJA",
+    "municipio_norm": "villavieja",
+    "departamento": "HUILA",
+    "departamento_norm": "huila"
+  },
+  {
+    "municipio": "YAGUARÁ",
+    "municipio_norm": "yaguara",
+    "departamento": "HUILA",
+    "departamento_norm": "huila"
+  },
+  {
+    "municipio": "RIOHACHA",
+    "municipio_norm": "riohacha",
+    "departamento": "LA GUAJIRA",
+    "departamento_norm": "la guajira"
+  },
+  {
+    "municipio": "ALBANIA",
+    "municipio_norm": "albania",
+    "departamento": "LA GUAJIRA",
+    "departamento_norm": "la guajira"
+  },
+  {
+    "municipio": "BARRANCAS",
+    "municipio_norm": "barrancas",
+    "departamento": "LA GUAJIRA",
+    "departamento_norm": "la guajira"
+  },
+  {
+    "municipio": "DIBULLA",
+    "municipio_norm": "dibulla",
+    "departamento": "LA GUAJIRA",
+    "departamento_norm": "la guajira"
+  },
+  {
+    "municipio": "DISTRACCIÓN",
+    "municipio_norm": "distraccion",
+    "departamento": "LA GUAJIRA",
+    "departamento_norm": "la guajira"
+  },
+  {
+    "municipio": "EL MOLINO",
+    "municipio_norm": "el molino",
+    "departamento": "LA GUAJIRA",
+    "departamento_norm": "la guajira"
+  },
+  {
+    "municipio": "FONSECA",
+    "municipio_norm": "fonseca",
+    "departamento": "LA GUAJIRA",
+    "departamento_norm": "la guajira"
+  },
+  {
+    "municipio": "HATONUEVO",
+    "municipio_norm": "hatonuevo",
+    "departamento": "LA GUAJIRA",
+    "departamento_norm": "la guajira"
+  },
+  {
+    "municipio": "LA JAGUA DEL PILAR",
+    "municipio_norm": "la jagua del pilar",
+    "departamento": "LA GUAJIRA",
+    "departamento_norm": "la guajira"
+  },
+  {
+    "municipio": "MAICAO",
+    "municipio_norm": "maicao",
+    "departamento": "LA GUAJIRA",
+    "departamento_norm": "la guajira"
+  },
+  {
+    "municipio": "MANAURE",
+    "municipio_norm": "manaure",
+    "departamento": "LA GUAJIRA",
+    "departamento_norm": "la guajira"
+  },
+  {
+    "municipio": "SAN JUAN DEL CESAR",
+    "municipio_norm": "san juan del cesar",
+    "departamento": "LA GUAJIRA",
+    "departamento_norm": "la guajira"
+  },
+  {
+    "municipio": "URIBIA",
+    "municipio_norm": "uribia",
+    "departamento": "LA GUAJIRA",
+    "departamento_norm": "la guajira"
+  },
+  {
+    "municipio": "URUMITA",
+    "municipio_norm": "urumita",
+    "departamento": "LA GUAJIRA",
+    "departamento_norm": "la guajira"
+  },
+  {
+    "municipio": "VILLANUEVA",
+    "municipio_norm": "villanueva",
+    "departamento": "LA GUAJIRA",
+    "departamento_norm": "la guajira"
+  },
+  {
+    "municipio": "SANTA MARTA",
+    "municipio_norm": "santa marta",
+    "departamento": "MAGDALENA",
+    "departamento_norm": "magdalena"
+  },
+  {
+    "municipio": "ALGARROBO",
+    "municipio_norm": "algarrobo",
+    "departamento": "MAGDALENA",
+    "departamento_norm": "magdalena"
+  },
+  {
+    "municipio": "ARACATACA",
+    "municipio_norm": "aracataca",
+    "departamento": "MAGDALENA",
+    "departamento_norm": "magdalena"
+  },
+  {
+    "municipio": "ARIGUANÍ",
+    "municipio_norm": "ariguani",
+    "departamento": "MAGDALENA",
+    "departamento_norm": "magdalena"
+  },
+  {
+    "municipio": "CERRO DE SAN ANTONIO",
+    "municipio_norm": "cerro de san antonio",
+    "departamento": "MAGDALENA",
+    "departamento_norm": "magdalena"
+  },
+  {
+    "municipio": "CHIVOLO",
+    "municipio_norm": "chivolo",
+    "departamento": "MAGDALENA",
+    "departamento_norm": "magdalena"
+  },
+  {
+    "municipio": "CIÉNAGA",
+    "municipio_norm": "cienaga",
+    "departamento": "MAGDALENA",
+    "departamento_norm": "magdalena"
+  },
+  {
+    "municipio": "CONCORDIA",
+    "municipio_norm": "concordia",
+    "departamento": "MAGDALENA",
+    "departamento_norm": "magdalena"
+  },
+  {
+    "municipio": "EL BANCO",
+    "municipio_norm": "el banco",
+    "departamento": "MAGDALENA",
+    "departamento_norm": "magdalena"
+  },
+  {
+    "municipio": "EL PIÑÓN",
+    "municipio_norm": "el pinon",
+    "departamento": "MAGDALENA",
+    "departamento_norm": "magdalena"
+  },
+  {
+    "municipio": "EL RETÉN",
+    "municipio_norm": "el reten",
+    "departamento": "MAGDALENA",
+    "departamento_norm": "magdalena"
+  },
+  {
+    "municipio": "FUNDACIÓN",
+    "municipio_norm": "fundacion",
+    "departamento": "MAGDALENA",
+    "departamento_norm": "magdalena"
+  },
+  {
+    "municipio": "GUAMAL",
+    "municipio_norm": "guamal",
+    "departamento": "MAGDALENA",
+    "departamento_norm": "magdalena"
+  },
+  {
+    "municipio": "NUEVA GRANADA",
+    "municipio_norm": "nueva granada",
+    "departamento": "MAGDALENA",
+    "departamento_norm": "magdalena"
+  },
+  {
+    "municipio": "PEDRAZA",
+    "municipio_norm": "pedraza",
+    "departamento": "MAGDALENA",
+    "departamento_norm": "magdalena"
+  },
+  {
+    "municipio": "PIJIÑO DEL CARMEN",
+    "municipio_norm": "pijino del carmen",
+    "departamento": "MAGDALENA",
+    "departamento_norm": "magdalena"
+  },
+  {
+    "municipio": "PIVIJAY",
+    "municipio_norm": "pivijay",
+    "departamento": "MAGDALENA",
+    "departamento_norm": "magdalena"
+  },
+  {
+    "municipio": "PLATO",
+    "municipio_norm": "plato",
+    "departamento": "MAGDALENA",
+    "departamento_norm": "magdalena"
+  },
+  {
+    "municipio": "PUEBLOVIEJO",
+    "municipio_norm": "puebloviejo",
+    "departamento": "MAGDALENA",
+    "departamento_norm": "magdalena"
+  },
+  {
+    "municipio": "REMOLINO",
+    "municipio_norm": "remolino",
+    "departamento": "MAGDALENA",
+    "departamento_norm": "magdalena"
+  },
+  {
+    "municipio": "SABANAS DE SAN ÁNGEL",
+    "municipio_norm": "sabanas de san angel",
+    "departamento": "MAGDALENA",
+    "departamento_norm": "magdalena"
+  },
+  {
+    "municipio": "SALAMINA",
+    "municipio_norm": "salamina",
+    "departamento": "MAGDALENA",
+    "departamento_norm": "magdalena"
+  },
+  {
+    "municipio": "SAN SEBASTIÁN DE BUENAVISTA",
+    "municipio_norm": "san sebastian de buenavista",
+    "departamento": "MAGDALENA",
+    "departamento_norm": "magdalena"
+  },
+  {
+    "municipio": "SAN ZENÓN",
+    "municipio_norm": "san zenon",
+    "departamento": "MAGDALENA",
+    "departamento_norm": "magdalena"
+  },
+  {
+    "municipio": "SANTA ANA",
+    "municipio_norm": "santa ana",
+    "departamento": "MAGDALENA",
+    "departamento_norm": "magdalena"
+  },
+  {
+    "municipio": "SANTA BÁRBARA DE PINTO",
+    "municipio_norm": "santa barbara de pinto",
+    "departamento": "MAGDALENA",
+    "departamento_norm": "magdalena"
+  },
+  {
+    "municipio": "SITIONUEVO",
+    "municipio_norm": "sitionuevo",
+    "departamento": "MAGDALENA",
+    "departamento_norm": "magdalena"
+  },
+  {
+    "municipio": "TENERIFE",
+    "municipio_norm": "tenerife",
+    "departamento": "MAGDALENA",
+    "departamento_norm": "magdalena"
+  },
+  {
+    "municipio": "ZAPAYÁN",
+    "municipio_norm": "zapayan",
+    "departamento": "MAGDALENA",
+    "departamento_norm": "magdalena"
+  },
+  {
+    "municipio": "ZONA BANANERA",
+    "municipio_norm": "zona bananera",
+    "departamento": "MAGDALENA",
+    "departamento_norm": "magdalena"
+  },
+  {
+    "municipio": "VILLAVICENCIO",
+    "municipio_norm": "villavicencio",
+    "departamento": "META",
+    "departamento_norm": "meta"
+  },
+  {
+    "municipio": "ACACÍAS",
+    "municipio_norm": "acacias",
+    "departamento": "META",
+    "departamento_norm": "meta"
+  },
+  {
+    "municipio": "BARRANCA DE UPÍA",
+    "municipio_norm": "barranca de upia",
+    "departamento": "META",
+    "departamento_norm": "meta"
+  },
+  {
+    "municipio": "CABUYARO",
+    "municipio_norm": "cabuyaro",
+    "departamento": "META",
+    "departamento_norm": "meta"
+  },
+  {
+    "municipio": "CASTILLA LA NUEVA",
+    "municipio_norm": "castilla la nueva",
+    "departamento": "META",
+    "departamento_norm": "meta"
+  },
+  {
+    "municipio": "CUBARRAL",
+    "municipio_norm": "cubarral",
+    "departamento": "META",
+    "departamento_norm": "meta"
+  },
+  {
+    "municipio": "CUMARAL",
+    "municipio_norm": "cumaral",
+    "departamento": "META",
+    "departamento_norm": "meta"
+  },
+  {
+    "municipio": "EL CALVARIO",
+    "municipio_norm": "el calvario",
+    "departamento": "META",
+    "departamento_norm": "meta"
+  },
+  {
+    "municipio": "EL CASTILLO",
+    "municipio_norm": "el castillo",
+    "departamento": "META",
+    "departamento_norm": "meta"
+  },
+  {
+    "municipio": "EL DORADO",
+    "municipio_norm": "el dorado",
+    "departamento": "META",
+    "departamento_norm": "meta"
+  },
+  {
+    "municipio": "FUENTE DE ORO",
+    "municipio_norm": "fuente de oro",
+    "departamento": "META",
+    "departamento_norm": "meta"
+  },
+  {
+    "municipio": "GRANADA",
+    "municipio_norm": "granada",
+    "departamento": "META",
+    "departamento_norm": "meta"
+  },
+  {
+    "municipio": "GUAMAL",
+    "municipio_norm": "guamal",
+    "departamento": "META",
+    "departamento_norm": "meta"
+  },
+  {
+    "municipio": "MAPIRIPÁN",
+    "municipio_norm": "mapiripan",
+    "departamento": "META",
+    "departamento_norm": "meta"
+  },
+  {
+    "municipio": "MESETAS",
+    "municipio_norm": "mesetas",
+    "departamento": "META",
+    "departamento_norm": "meta"
+  },
+  {
+    "municipio": "LA MACARENA",
+    "municipio_norm": "la macarena",
+    "departamento": "META",
+    "departamento_norm": "meta"
+  },
+  {
+    "municipio": "URIBE",
+    "municipio_norm": "uribe",
+    "departamento": "META",
+    "departamento_norm": "meta"
+  },
+  {
+    "municipio": "LEJANÍAS",
+    "municipio_norm": "lejanias",
+    "departamento": "META",
+    "departamento_norm": "meta"
+  },
+  {
+    "municipio": "PUERTO CONCORDIA",
+    "municipio_norm": "puerto concordia",
+    "departamento": "META",
+    "departamento_norm": "meta"
+  },
+  {
+    "municipio": "PUERTO GAITÁN",
+    "municipio_norm": "puerto gaitan",
+    "departamento": "META",
+    "departamento_norm": "meta"
+  },
+  {
+    "municipio": "PUERTO LÓPEZ",
+    "municipio_norm": "puerto lopez",
+    "departamento": "META",
+    "departamento_norm": "meta"
+  },
+  {
+    "municipio": "PUERTO LLERAS",
+    "municipio_norm": "puerto lleras",
+    "departamento": "META",
+    "departamento_norm": "meta"
+  },
+  {
+    "municipio": "PUERTO RICO",
+    "municipio_norm": "puerto rico",
+    "departamento": "META",
+    "departamento_norm": "meta"
+  },
+  {
+    "municipio": "RESTREPO",
+    "municipio_norm": "restrepo",
+    "departamento": "META",
+    "departamento_norm": "meta"
+  },
+  {
+    "municipio": "SAN CARLOS DE GUAROA",
+    "municipio_norm": "san carlos de guaroa",
+    "departamento": "META",
+    "departamento_norm": "meta"
+  },
+  {
+    "municipio": "SAN JUAN DE ARAMA",
+    "municipio_norm": "san juan de arama",
+    "departamento": "META",
+    "departamento_norm": "meta"
+  },
+  {
+    "municipio": "SAN JUANITO",
+    "municipio_norm": "san juanito",
+    "departamento": "META",
+    "departamento_norm": "meta"
+  },
+  {
+    "municipio": "SAN MARTÍN",
+    "municipio_norm": "san martin",
+    "departamento": "META",
+    "departamento_norm": "meta"
+  },
+  {
+    "municipio": "VISTAHERMOSA",
+    "municipio_norm": "vistahermosa",
+    "departamento": "META",
+    "departamento_norm": "meta"
+  },
+  {
+    "municipio": "PASTO",
+    "municipio_norm": "pasto",
+    "departamento": "NARIÑO",
+    "departamento_norm": "narino"
+  },
+  {
+    "municipio": "ALBÁN",
+    "municipio_norm": "alban",
+    "departamento": "NARIÑO",
+    "departamento_norm": "narino"
+  },
+  {
+    "municipio": "ALDANA",
+    "municipio_norm": "aldana",
+    "departamento": "NARIÑO",
+    "departamento_norm": "narino"
+  },
+  {
+    "municipio": "ANCUYA",
+    "municipio_norm": "ancuya",
+    "departamento": "NARIÑO",
+    "departamento_norm": "narino"
+  },
+  {
+    "municipio": "ARBOLEDA",
+    "municipio_norm": "arboleda",
+    "departamento": "NARIÑO",
+    "departamento_norm": "narino"
+  },
+  {
+    "municipio": "BARBACOAS",
+    "municipio_norm": "barbacoas",
+    "departamento": "NARIÑO",
+    "departamento_norm": "narino"
+  },
+  {
+    "municipio": "BELÉN",
+    "municipio_norm": "belen",
+    "departamento": "NARIÑO",
+    "departamento_norm": "narino"
+  },
+  {
+    "municipio": "BUESACO",
+    "municipio_norm": "buesaco",
+    "departamento": "NARIÑO",
+    "departamento_norm": "narino"
+  },
+  {
+    "municipio": "COLÓN",
+    "municipio_norm": "colon",
+    "departamento": "NARIÑO",
+    "departamento_norm": "narino"
+  },
+  {
+    "municipio": "CONSACÁ",
+    "municipio_norm": "consaca",
+    "departamento": "NARIÑO",
+    "departamento_norm": "narino"
+  },
+  {
+    "municipio": "CONTADERO",
+    "municipio_norm": "contadero",
+    "departamento": "NARIÑO",
+    "departamento_norm": "narino"
+  },
+  {
+    "municipio": "CÓRDOBA",
+    "municipio_norm": "cordoba",
+    "departamento": "NARIÑO",
+    "departamento_norm": "narino"
+  },
+  {
+    "municipio": "CUASPUD CARLOSAMA",
+    "municipio_norm": "cuaspud carlosama",
+    "departamento": "NARIÑO",
+    "departamento_norm": "narino"
+  },
+  {
+    "municipio": "CUMBAL",
+    "municipio_norm": "cumbal",
+    "departamento": "NARIÑO",
+    "departamento_norm": "narino"
+  },
+  {
+    "municipio": "CUMBITARA",
+    "municipio_norm": "cumbitara",
+    "departamento": "NARIÑO",
+    "departamento_norm": "narino"
+  },
+  {
+    "municipio": "CHACHAGÜÍ",
+    "municipio_norm": "chachagui",
+    "departamento": "NARIÑO",
+    "departamento_norm": "narino"
+  },
+  {
+    "municipio": "EL CHARCO",
+    "municipio_norm": "el charco",
+    "departamento": "NARIÑO",
+    "departamento_norm": "narino"
+  },
+  {
+    "municipio": "EL PEÑOL",
+    "municipio_norm": "el penol",
+    "departamento": "NARIÑO",
+    "departamento_norm": "narino"
+  },
+  {
+    "municipio": "EL ROSARIO",
+    "municipio_norm": "el rosario",
+    "departamento": "NARIÑO",
+    "departamento_norm": "narino"
+  },
+  {
+    "municipio": "EL TABLÓN DE GÓMEZ",
+    "municipio_norm": "el tablon de gomez",
+    "departamento": "NARIÑO",
+    "departamento_norm": "narino"
+  },
+  {
+    "municipio": "EL TAMBO",
+    "municipio_norm": "el tambo",
+    "departamento": "NARIÑO",
+    "departamento_norm": "narino"
+  },
+  {
+    "municipio": "FUNES",
+    "municipio_norm": "funes",
+    "departamento": "NARIÑO",
+    "departamento_norm": "narino"
+  },
+  {
+    "municipio": "GUACHUCAL",
+    "municipio_norm": "guachucal",
+    "departamento": "NARIÑO",
+    "departamento_norm": "narino"
+  },
+  {
+    "municipio": "GUAITARILLA",
+    "municipio_norm": "guaitarilla",
+    "departamento": "NARIÑO",
+    "departamento_norm": "narino"
+  },
+  {
+    "municipio": "GUALMATÁN",
+    "municipio_norm": "gualmatan",
+    "departamento": "NARIÑO",
+    "departamento_norm": "narino"
+  },
+  {
+    "municipio": "ILES",
+    "municipio_norm": "iles",
+    "departamento": "NARIÑO",
+    "departamento_norm": "narino"
+  },
+  {
+    "municipio": "IMUÉS",
+    "municipio_norm": "imues",
+    "departamento": "NARIÑO",
+    "departamento_norm": "narino"
+  },
+  {
+    "municipio": "IPIALES",
+    "municipio_norm": "ipiales",
+    "departamento": "NARIÑO",
+    "departamento_norm": "narino"
+  },
+  {
+    "municipio": "LA CRUZ",
+    "municipio_norm": "la cruz",
+    "departamento": "NARIÑO",
+    "departamento_norm": "narino"
+  },
+  {
+    "municipio": "LA FLORIDA",
+    "municipio_norm": "la florida",
+    "departamento": "NARIÑO",
+    "departamento_norm": "narino"
+  },
+  {
+    "municipio": "LA LLANADA",
+    "municipio_norm": "la llanada",
+    "departamento": "NARIÑO",
+    "departamento_norm": "narino"
+  },
+  {
+    "municipio": "LA TOLA",
+    "municipio_norm": "la tola",
+    "departamento": "NARIÑO",
+    "departamento_norm": "narino"
+  },
+  {
+    "municipio": "LA UNIÓN",
+    "municipio_norm": "la union",
+    "departamento": "NARIÑO",
+    "departamento_norm": "narino"
+  },
+  {
+    "municipio": "LEIVA",
+    "municipio_norm": "leiva",
+    "departamento": "NARIÑO",
+    "departamento_norm": "narino"
+  },
+  {
+    "municipio": "LINARES",
+    "municipio_norm": "linares",
+    "departamento": "NARIÑO",
+    "departamento_norm": "narino"
+  },
+  {
+    "municipio": "LOS ANDES",
+    "municipio_norm": "los andes",
+    "departamento": "NARIÑO",
+    "departamento_norm": "narino"
+  },
+  {
+    "municipio": "MAGÜÍ",
+    "municipio_norm": "magui",
+    "departamento": "NARIÑO",
+    "departamento_norm": "narino"
+  },
+  {
+    "municipio": "MALLAMA",
+    "municipio_norm": "mallama",
+    "departamento": "NARIÑO",
+    "departamento_norm": "narino"
+  },
+  {
+    "municipio": "MOSQUERA",
+    "municipio_norm": "mosquera",
+    "departamento": "NARIÑO",
+    "departamento_norm": "narino"
+  },
+  {
+    "municipio": "NARIÑO",
+    "municipio_norm": "narino",
+    "departamento": "NARIÑO",
+    "departamento_norm": "narino"
+  },
+  {
+    "municipio": "OLAYA HERRERA",
+    "municipio_norm": "olaya herrera",
+    "departamento": "NARIÑO",
+    "departamento_norm": "narino"
+  },
+  {
+    "municipio": "OSPINA",
+    "municipio_norm": "ospina",
+    "departamento": "NARIÑO",
+    "departamento_norm": "narino"
+  },
+  {
+    "municipio": "FRANCISCO PIZARRO",
+    "municipio_norm": "francisco pizarro",
+    "departamento": "NARIÑO",
+    "departamento_norm": "narino"
+  },
+  {
+    "municipio": "POLICARPA",
+    "municipio_norm": "policarpa",
+    "departamento": "NARIÑO",
+    "departamento_norm": "narino"
+  },
+  {
+    "municipio": "POTOSÍ",
+    "municipio_norm": "potosi",
+    "departamento": "NARIÑO",
+    "departamento_norm": "narino"
+  },
+  {
+    "municipio": "PROVIDENCIA",
+    "municipio_norm": "providencia",
+    "departamento": "NARIÑO",
+    "departamento_norm": "narino"
+  },
+  {
+    "municipio": "PUERRES",
+    "municipio_norm": "puerres",
+    "departamento": "NARIÑO",
+    "departamento_norm": "narino"
+  },
+  {
+    "municipio": "PUPIALES",
+    "municipio_norm": "pupiales",
+    "departamento": "NARIÑO",
+    "departamento_norm": "narino"
+  },
+  {
+    "municipio": "RICAURTE",
+    "municipio_norm": "ricaurte",
+    "departamento": "NARIÑO",
+    "departamento_norm": "narino"
+  },
+  {
+    "municipio": "ROBERTO PAYÁN",
+    "municipio_norm": "roberto payan",
+    "departamento": "NARIÑO",
+    "departamento_norm": "narino"
+  },
+  {
+    "municipio": "SAMANIEGO",
+    "municipio_norm": "samaniego",
+    "departamento": "NARIÑO",
+    "departamento_norm": "narino"
+  },
+  {
+    "municipio": "SANDONÁ",
+    "municipio_norm": "sandona",
+    "departamento": "NARIÑO",
+    "departamento_norm": "narino"
+  },
+  {
+    "municipio": "SAN BERNARDO",
+    "municipio_norm": "san bernardo",
+    "departamento": "NARIÑO",
+    "departamento_norm": "narino"
+  },
+  {
+    "municipio": "SAN LORENZO",
+    "municipio_norm": "san lorenzo",
+    "departamento": "NARIÑO",
+    "departamento_norm": "narino"
+  },
+  {
+    "municipio": "SAN PABLO",
+    "municipio_norm": "san pablo",
+    "departamento": "NARIÑO",
+    "departamento_norm": "narino"
+  },
+  {
+    "municipio": "SAN PEDRO DE CARTAGO",
+    "municipio_norm": "san pedro de cartago",
+    "departamento": "NARIÑO",
+    "departamento_norm": "narino"
+  },
+  {
+    "municipio": "SANTA BÁRBARA",
+    "municipio_norm": "santa barbara",
+    "departamento": "NARIÑO",
+    "departamento_norm": "narino"
+  },
+  {
+    "municipio": "SANTACRUZ",
+    "municipio_norm": "santacruz",
+    "departamento": "NARIÑO",
+    "departamento_norm": "narino"
+  },
+  {
+    "municipio": "SAPUYES",
+    "municipio_norm": "sapuyes",
+    "departamento": "NARIÑO",
+    "departamento_norm": "narino"
+  },
+  {
+    "municipio": "TAMINANGO",
+    "municipio_norm": "taminango",
+    "departamento": "NARIÑO",
+    "departamento_norm": "narino"
+  },
+  {
+    "municipio": "TANGUA",
+    "municipio_norm": "tangua",
+    "departamento": "NARIÑO",
+    "departamento_norm": "narino"
+  },
+  {
+    "municipio": "SAN ANDRÉS DE TUMACO",
+    "municipio_norm": "san andres de tumaco",
+    "departamento": "NARIÑO",
+    "departamento_norm": "narino"
+  },
+  {
+    "municipio": "TÚQUERRES",
+    "municipio_norm": "tuquerres",
+    "departamento": "NARIÑO",
+    "departamento_norm": "narino"
+  },
+  {
+    "municipio": "YACUANQUER",
+    "municipio_norm": "yacuanquer",
+    "departamento": "NARIÑO",
+    "departamento_norm": "narino"
+  },
+  {
+    "municipio": "CÚCUTA",
+    "municipio_norm": "cucuta",
+    "departamento": "NORTE DE SANTANDER",
+    "departamento_norm": "norte de santander"
+  },
+  {
+    "municipio": "ÁBREGO",
+    "municipio_norm": "abrego",
+    "departamento": "NORTE DE SANTANDER",
+    "departamento_norm": "norte de santander"
+  },
+  {
+    "municipio": "ARBOLEDAS",
+    "municipio_norm": "arboledas",
+    "departamento": "NORTE DE SANTANDER",
+    "departamento_norm": "norte de santander"
+  },
+  {
+    "municipio": "BOCHALEMA",
+    "municipio_norm": "bochalema",
+    "departamento": "NORTE DE SANTANDER",
+    "departamento_norm": "norte de santander"
+  },
+  {
+    "municipio": "BUCARASICA",
+    "municipio_norm": "bucarasica",
+    "departamento": "NORTE DE SANTANDER",
+    "departamento_norm": "norte de santander"
+  },
+  {
+    "municipio": "CÁCOTA",
+    "municipio_norm": "cacota",
+    "departamento": "NORTE DE SANTANDER",
+    "departamento_norm": "norte de santander"
+  },
+  {
+    "municipio": "CÁCHIRA",
+    "municipio_norm": "cachira",
+    "departamento": "NORTE DE SANTANDER",
+    "departamento_norm": "norte de santander"
+  },
+  {
+    "municipio": "CHINÁCOTA",
+    "municipio_norm": "chinacota",
+    "departamento": "NORTE DE SANTANDER",
+    "departamento_norm": "norte de santander"
+  },
+  {
+    "municipio": "CHITAGÁ",
+    "municipio_norm": "chitaga",
+    "departamento": "NORTE DE SANTANDER",
+    "departamento_norm": "norte de santander"
+  },
+  {
+    "municipio": "CONVENCIÓN",
+    "municipio_norm": "convencion",
+    "departamento": "NORTE DE SANTANDER",
+    "departamento_norm": "norte de santander"
+  },
+  {
+    "municipio": "CUCUTILLA",
+    "municipio_norm": "cucutilla",
+    "departamento": "NORTE DE SANTANDER",
+    "departamento_norm": "norte de santander"
+  },
+  {
+    "municipio": "DURANIA",
+    "municipio_norm": "durania",
+    "departamento": "NORTE DE SANTANDER",
+    "departamento_norm": "norte de santander"
+  },
+  {
+    "municipio": "EL CARMEN",
+    "municipio_norm": "el carmen",
+    "departamento": "NORTE DE SANTANDER",
+    "departamento_norm": "norte de santander"
+  },
+  {
+    "municipio": "EL TARRA",
+    "municipio_norm": "el tarra",
+    "departamento": "NORTE DE SANTANDER",
+    "departamento_norm": "norte de santander"
+  },
+  {
+    "municipio": "EL ZULIA",
+    "municipio_norm": "el zulia",
+    "departamento": "NORTE DE SANTANDER",
+    "departamento_norm": "norte de santander"
+  },
+  {
+    "municipio": "GRAMALOTE",
+    "municipio_norm": "gramalote",
+    "departamento": "NORTE DE SANTANDER",
+    "departamento_norm": "norte de santander"
+  },
+  {
+    "municipio": "HACARÍ",
+    "municipio_norm": "hacari",
+    "departamento": "NORTE DE SANTANDER",
+    "departamento_norm": "norte de santander"
+  },
+  {
+    "municipio": "HERRÁN",
+    "municipio_norm": "herran",
+    "departamento": "NORTE DE SANTANDER",
+    "departamento_norm": "norte de santander"
+  },
+  {
+    "municipio": "LABATECA",
+    "municipio_norm": "labateca",
+    "departamento": "NORTE DE SANTANDER",
+    "departamento_norm": "norte de santander"
+  },
+  {
+    "municipio": "LA ESPERANZA",
+    "municipio_norm": "la esperanza",
+    "departamento": "NORTE DE SANTANDER",
+    "departamento_norm": "norte de santander"
+  },
+  {
+    "municipio": "LA PLAYA",
+    "municipio_norm": "la playa",
+    "departamento": "NORTE DE SANTANDER",
+    "departamento_norm": "norte de santander"
+  },
+  {
+    "municipio": "LOS PATIOS",
+    "municipio_norm": "los patios",
+    "departamento": "NORTE DE SANTANDER",
+    "departamento_norm": "norte de santander"
+  },
+  {
+    "municipio": "LOURDES",
+    "municipio_norm": "lourdes",
+    "departamento": "NORTE DE SANTANDER",
+    "departamento_norm": "norte de santander"
+  },
+  {
+    "municipio": "MUTISCUA",
+    "municipio_norm": "mutiscua",
+    "departamento": "NORTE DE SANTANDER",
+    "departamento_norm": "norte de santander"
+  },
+  {
+    "municipio": "OCAÑA",
+    "municipio_norm": "ocana",
+    "departamento": "NORTE DE SANTANDER",
+    "departamento_norm": "norte de santander"
+  },
+  {
+    "municipio": "PAMPLONA",
+    "municipio_norm": "pamplona",
+    "departamento": "NORTE DE SANTANDER",
+    "departamento_norm": "norte de santander"
+  },
+  {
+    "municipio": "PAMPLONITA",
+    "municipio_norm": "pamplonita",
+    "departamento": "NORTE DE SANTANDER",
+    "departamento_norm": "norte de santander"
+  },
+  {
+    "municipio": "PUERTO SANTANDER",
+    "municipio_norm": "puerto santander",
+    "departamento": "NORTE DE SANTANDER",
+    "departamento_norm": "norte de santander"
+  },
+  {
+    "municipio": "RAGONVALIA",
+    "municipio_norm": "ragonvalia",
+    "departamento": "NORTE DE SANTANDER",
+    "departamento_norm": "norte de santander"
+  },
+  {
+    "municipio": "SALAZAR",
+    "municipio_norm": "salazar",
+    "departamento": "NORTE DE SANTANDER",
+    "departamento_norm": "norte de santander"
+  },
+  {
+    "municipio": "SAN CALIXTO",
+    "municipio_norm": "san calixto",
+    "departamento": "NORTE DE SANTANDER",
+    "departamento_norm": "norte de santander"
+  },
+  {
+    "municipio": "SAN CAYETANO",
+    "municipio_norm": "san cayetano",
+    "departamento": "NORTE DE SANTANDER",
+    "departamento_norm": "norte de santander"
+  },
+  {
+    "municipio": "SANTIAGO",
+    "municipio_norm": "santiago",
+    "departamento": "NORTE DE SANTANDER",
+    "departamento_norm": "norte de santander"
+  },
+  {
+    "municipio": "SARDINATA",
+    "municipio_norm": "sardinata",
+    "departamento": "NORTE DE SANTANDER",
+    "departamento_norm": "norte de santander"
+  },
+  {
+    "municipio": "SILOS",
+    "municipio_norm": "silos",
+    "departamento": "NORTE DE SANTANDER",
+    "departamento_norm": "norte de santander"
+  },
+  {
+    "municipio": "TEORAMA",
+    "municipio_norm": "teorama",
+    "departamento": "NORTE DE SANTANDER",
+    "departamento_norm": "norte de santander"
+  },
+  {
+    "municipio": "TIBÚ",
+    "municipio_norm": "tibu",
+    "departamento": "NORTE DE SANTANDER",
+    "departamento_norm": "norte de santander"
+  },
+  {
+    "municipio": "TOLEDO",
+    "municipio_norm": "toledo",
+    "departamento": "NORTE DE SANTANDER",
+    "departamento_norm": "norte de santander"
+  },
+  {
+    "municipio": "VILLA CARO",
+    "municipio_norm": "villa caro",
+    "departamento": "NORTE DE SANTANDER",
+    "departamento_norm": "norte de santander"
+  },
+  {
+    "municipio": "VILLA DEL ROSARIO",
+    "municipio_norm": "villa del rosario",
+    "departamento": "NORTE DE SANTANDER",
+    "departamento_norm": "norte de santander"
+  },
+  {
+    "municipio": "ARMENIA",
+    "municipio_norm": "armenia",
+    "departamento": "QUINDÍO",
+    "departamento_norm": "quindio"
+  },
+  {
+    "municipio": "BUENAVISTA",
+    "municipio_norm": "buenavista",
+    "departamento": "QUINDÍO",
+    "departamento_norm": "quindio"
+  },
+  {
+    "municipio": "CALARCÁ",
+    "municipio_norm": "calarca",
+    "departamento": "QUINDÍO",
+    "departamento_norm": "quindio"
+  },
+  {
+    "municipio": "CIRCASIA",
+    "municipio_norm": "circasia",
+    "departamento": "QUINDÍO",
+    "departamento_norm": "quindio"
+  },
+  {
+    "municipio": "CÓRDOBA",
+    "municipio_norm": "cordoba",
+    "departamento": "QUINDÍO",
+    "departamento_norm": "quindio"
+  },
+  {
+    "municipio": "FILANDIA",
+    "municipio_norm": "filandia",
+    "departamento": "QUINDÍO",
+    "departamento_norm": "quindio"
+  },
+  {
+    "municipio": "GÉNOVA",
+    "municipio_norm": "genova",
+    "departamento": "QUINDÍO",
+    "departamento_norm": "quindio"
+  },
+  {
+    "municipio": "LA TEBAIDA",
+    "municipio_norm": "la tebaida",
+    "departamento": "QUINDÍO",
+    "departamento_norm": "quindio"
+  },
+  {
+    "municipio": "MONTENEGRO",
+    "municipio_norm": "montenegro",
+    "departamento": "QUINDÍO",
+    "departamento_norm": "quindio"
+  },
+  {
+    "municipio": "PIJAO",
+    "municipio_norm": "pijao",
+    "departamento": "QUINDÍO",
+    "departamento_norm": "quindio"
+  },
+  {
+    "municipio": "QUIMBAYA",
+    "municipio_norm": "quimbaya",
+    "departamento": "QUINDÍO",
+    "departamento_norm": "quindio"
+  },
+  {
+    "municipio": "SALENTO",
+    "municipio_norm": "salento",
+    "departamento": "QUINDÍO",
+    "departamento_norm": "quindio"
+  },
+  {
+    "municipio": "PEREIRA",
+    "municipio_norm": "pereira",
+    "departamento": "RISARALDA",
+    "departamento_norm": "risaralda"
+  },
+  {
+    "municipio": "APÍA",
+    "municipio_norm": "apia",
+    "departamento": "RISARALDA",
+    "departamento_norm": "risaralda"
+  },
+  {
+    "municipio": "BALBOA",
+    "municipio_norm": "balboa",
+    "departamento": "RISARALDA",
+    "departamento_norm": "risaralda"
+  },
+  {
+    "municipio": "BELÉN DE UMBRÍA",
+    "municipio_norm": "belen de umbria",
+    "departamento": "RISARALDA",
+    "departamento_norm": "risaralda"
+  },
+  {
+    "municipio": "DOSQUEBRADAS",
+    "municipio_norm": "dosquebradas",
+    "departamento": "RISARALDA",
+    "departamento_norm": "risaralda"
+  },
+  {
+    "municipio": "GUÁTICA",
+    "municipio_norm": "guatica",
+    "departamento": "RISARALDA",
+    "departamento_norm": "risaralda"
+  },
+  {
+    "municipio": "LA CELIA",
+    "municipio_norm": "la celia",
+    "departamento": "RISARALDA",
+    "departamento_norm": "risaralda"
+  },
+  {
+    "municipio": "LA VIRGINIA",
+    "municipio_norm": "la virginia",
+    "departamento": "RISARALDA",
+    "departamento_norm": "risaralda"
+  },
+  {
+    "municipio": "MARSELLA",
+    "municipio_norm": "marsella",
+    "departamento": "RISARALDA",
+    "departamento_norm": "risaralda"
+  },
+  {
+    "municipio": "MISTRATÓ",
+    "municipio_norm": "mistrato",
+    "departamento": "RISARALDA",
+    "departamento_norm": "risaralda"
+  },
+  {
+    "municipio": "PUEBLO RICO",
+    "municipio_norm": "pueblo rico",
+    "departamento": "RISARALDA",
+    "departamento_norm": "risaralda"
+  },
+  {
+    "municipio": "QUINCHÍA",
+    "municipio_norm": "quinchia",
+    "departamento": "RISARALDA",
+    "departamento_norm": "risaralda"
+  },
+  {
+    "municipio": "SANTA ROSA DE CABAL",
+    "municipio_norm": "santa rosa de cabal",
+    "departamento": "RISARALDA",
+    "departamento_norm": "risaralda"
+  },
+  {
+    "municipio": "SANTUARIO",
+    "municipio_norm": "santuario",
+    "departamento": "RISARALDA",
+    "departamento_norm": "risaralda"
+  },
+  {
+    "municipio": "BUCARAMANGA",
+    "municipio_norm": "bucaramanga",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "AGUADA",
+    "municipio_norm": "aguada",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "ALBANIA",
+    "municipio_norm": "albania",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "ARATOCA",
+    "municipio_norm": "aratoca",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "BARBOSA",
+    "municipio_norm": "barbosa",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "BARICHARA",
+    "municipio_norm": "barichara",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "BARRANCABERMEJA",
+    "municipio_norm": "barrancabermeja",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "BETULIA",
+    "municipio_norm": "betulia",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "BOLÍVAR",
+    "municipio_norm": "bolivar",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "CABRERA",
+    "municipio_norm": "cabrera",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "CALIFORNIA",
+    "municipio_norm": "california",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "CAPITANEJO",
+    "municipio_norm": "capitanejo",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "CARCASÍ",
+    "municipio_norm": "carcasi",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "CEPITÁ",
+    "municipio_norm": "cepita",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "CERRITO",
+    "municipio_norm": "cerrito",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "CHARALÁ",
+    "municipio_norm": "charala",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "CHARTA",
+    "municipio_norm": "charta",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "CHIMA",
+    "municipio_norm": "chima",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "CHIPATÁ",
+    "municipio_norm": "chipata",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "CIMITARRA",
+    "municipio_norm": "cimitarra",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "CONCEPCIÓN",
+    "municipio_norm": "concepcion",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "CONFINES",
+    "municipio_norm": "confines",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "CONTRATACIÓN",
+    "municipio_norm": "contratacion",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "COROMORO",
+    "municipio_norm": "coromoro",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "CURITÍ",
+    "municipio_norm": "curiti",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "EL CARMEN DE CHUCURÍ",
+    "municipio_norm": "el carmen de chucuri",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "EL GUACAMAYO",
+    "municipio_norm": "el guacamayo",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "EL PEÑÓN",
+    "municipio_norm": "el penon",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "EL PLAYÓN",
+    "municipio_norm": "el playon",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "ENCINO",
+    "municipio_norm": "encino",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "ENCISO",
+    "municipio_norm": "enciso",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "FLORIÁN",
+    "municipio_norm": "florian",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "FLORIDABLANCA",
+    "municipio_norm": "floridablanca",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "GALÁN",
+    "municipio_norm": "galan",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "GÁMBITA",
+    "municipio_norm": "gambita",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "GIRÓN",
+    "municipio_norm": "giron",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "GUACA",
+    "municipio_norm": "guaca",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "GUADALUPE",
+    "municipio_norm": "guadalupe",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "GUAPOTÁ",
+    "municipio_norm": "guapota",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "GUAVATÁ",
+    "municipio_norm": "guavata",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "GÜEPSA",
+    "municipio_norm": "guepsa",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "HATO",
+    "municipio_norm": "hato",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "JESÚS MARÍA",
+    "municipio_norm": "jesus maria",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "JORDÁN",
+    "municipio_norm": "jordan",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "LA BELLEZA",
+    "municipio_norm": "la belleza",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "LANDÁZURI",
+    "municipio_norm": "landazuri",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "LA PAZ",
+    "municipio_norm": "la paz",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "LEBRIJA",
+    "municipio_norm": "lebrija",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "LOS SANTOS",
+    "municipio_norm": "los santos",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "MACARAVITA",
+    "municipio_norm": "macaravita",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "MÁLAGA",
+    "municipio_norm": "malaga",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "MATANZA",
+    "municipio_norm": "matanza",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "MOGOTES",
+    "municipio_norm": "mogotes",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "MOLAGAVITA",
+    "municipio_norm": "molagavita",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "OCAMONTE",
+    "municipio_norm": "ocamonte",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "OIBA",
+    "municipio_norm": "oiba",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "ONZAGA",
+    "municipio_norm": "onzaga",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "PALMAR",
+    "municipio_norm": "palmar",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "PALMAS DEL SOCORRO",
+    "municipio_norm": "palmas del socorro",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "PÁRAMO",
+    "municipio_norm": "paramo",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "PIEDECUESTA",
+    "municipio_norm": "piedecuesta",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "PINCHOTE",
+    "municipio_norm": "pinchote",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "PUENTE NACIONAL",
+    "municipio_norm": "puente nacional",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "PUERTO PARRA",
+    "municipio_norm": "puerto parra",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "PUERTO WILCHES",
+    "municipio_norm": "puerto wilches",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "RIONEGRO",
+    "municipio_norm": "rionegro",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "SABANA DE TORRES",
+    "municipio_norm": "sabana de torres",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "SAN ANDRÉS",
+    "municipio_norm": "san andres",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "SAN BENITO",
+    "municipio_norm": "san benito",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "SAN GIL",
+    "municipio_norm": "san gil",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "SAN JOAQUÍN",
+    "municipio_norm": "san joaquin",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "SAN JOSÉ DE MIRANDA",
+    "municipio_norm": "san jose de miranda",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "SAN MIGUEL",
+    "municipio_norm": "san miguel",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "SAN VICENTE DE CHUCURÍ",
+    "municipio_norm": "san vicente de chucuri",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "SANTA BÁRBARA",
+    "municipio_norm": "santa barbara",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "SANTA HELENA DEL OPÓN",
+    "municipio_norm": "santa helena del opon",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "SIMACOTA",
+    "municipio_norm": "simacota",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "SOCORRO",
+    "municipio_norm": "socorro",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "SUAITA",
+    "municipio_norm": "suaita",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "SUCRE",
+    "municipio_norm": "sucre",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "SURATÁ",
+    "municipio_norm": "surata",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "TONA",
+    "municipio_norm": "tona",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "VALLE DE SAN JOSÉ",
+    "municipio_norm": "valle de san jose",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "VÉLEZ",
+    "municipio_norm": "velez",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "VETAS",
+    "municipio_norm": "vetas",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "VILLANUEVA",
+    "municipio_norm": "villanueva",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "ZAPATOCA",
+    "municipio_norm": "zapatoca",
+    "departamento": "SANTANDER",
+    "departamento_norm": "santander"
+  },
+  {
+    "municipio": "SINCELEJO",
+    "municipio_norm": "sincelejo",
+    "departamento": "SUCRE",
+    "departamento_norm": "sucre"
+  },
+  {
+    "municipio": "BUENAVISTA",
+    "municipio_norm": "buenavista",
+    "departamento": "SUCRE",
+    "departamento_norm": "sucre"
+  },
+  {
+    "municipio": "CAIMITO",
+    "municipio_norm": "caimito",
+    "departamento": "SUCRE",
+    "departamento_norm": "sucre"
+  },
+  {
+    "municipio": "COLOSÓ",
+    "municipio_norm": "coloso",
+    "departamento": "SUCRE",
+    "departamento_norm": "sucre"
+  },
+  {
+    "municipio": "COROZAL",
+    "municipio_norm": "corozal",
+    "departamento": "SUCRE",
+    "departamento_norm": "sucre"
+  },
+  {
+    "municipio": "COVEÑAS",
+    "municipio_norm": "covenas",
+    "departamento": "SUCRE",
+    "departamento_norm": "sucre"
+  },
+  {
+    "municipio": "CHALÁN",
+    "municipio_norm": "chalan",
+    "departamento": "SUCRE",
+    "departamento_norm": "sucre"
+  },
+  {
+    "municipio": "EL ROBLE",
+    "municipio_norm": "el roble",
+    "departamento": "SUCRE",
+    "departamento_norm": "sucre"
+  },
+  {
+    "municipio": "GALERAS",
+    "municipio_norm": "galeras",
+    "departamento": "SUCRE",
+    "departamento_norm": "sucre"
+  },
+  {
+    "municipio": "GUARANDA",
+    "municipio_norm": "guaranda",
+    "departamento": "SUCRE",
+    "departamento_norm": "sucre"
+  },
+  {
+    "municipio": "LA UNIÓN",
+    "municipio_norm": "la union",
+    "departamento": "SUCRE",
+    "departamento_norm": "sucre"
+  },
+  {
+    "municipio": "LOS PALMITOS",
+    "municipio_norm": "los palmitos",
+    "departamento": "SUCRE",
+    "departamento_norm": "sucre"
+  },
+  {
+    "municipio": "MAJAGUAL",
+    "municipio_norm": "majagual",
+    "departamento": "SUCRE",
+    "departamento_norm": "sucre"
+  },
+  {
+    "municipio": "MORROA",
+    "municipio_norm": "morroa",
+    "departamento": "SUCRE",
+    "departamento_norm": "sucre"
+  },
+  {
+    "municipio": "OVEJAS",
+    "municipio_norm": "ovejas",
+    "departamento": "SUCRE",
+    "departamento_norm": "sucre"
+  },
+  {
+    "municipio": "PALMITO",
+    "municipio_norm": "palmito",
+    "departamento": "SUCRE",
+    "departamento_norm": "sucre"
+  },
+  {
+    "municipio": "SAMPUÉS",
+    "municipio_norm": "sampues",
+    "departamento": "SUCRE",
+    "departamento_norm": "sucre"
+  },
+  {
+    "municipio": "SAN BENITO ABAD",
+    "municipio_norm": "san benito abad",
+    "departamento": "SUCRE",
+    "departamento_norm": "sucre"
+  },
+  {
+    "municipio": "SAN JUAN DE BETULIA",
+    "municipio_norm": "san juan de betulia",
+    "departamento": "SUCRE",
+    "departamento_norm": "sucre"
+  },
+  {
+    "municipio": "SAN MARCOS",
+    "municipio_norm": "san marcos",
+    "departamento": "SUCRE",
+    "departamento_norm": "sucre"
+  },
+  {
+    "municipio": "SAN ONOFRE",
+    "municipio_norm": "san onofre",
+    "departamento": "SUCRE",
+    "departamento_norm": "sucre"
+  },
+  {
+    "municipio": "SAN PEDRO",
+    "municipio_norm": "san pedro",
+    "departamento": "SUCRE",
+    "departamento_norm": "sucre"
+  },
+  {
+    "municipio": "SAN LUIS DE SINCÉ",
+    "municipio_norm": "san luis de since",
+    "departamento": "SUCRE",
+    "departamento_norm": "sucre"
+  },
+  {
+    "municipio": "SUCRE",
+    "municipio_norm": "sucre",
+    "departamento": "SUCRE",
+    "departamento_norm": "sucre"
+  },
+  {
+    "municipio": "SANTIAGO DE TOLÚ",
+    "municipio_norm": "santiago de tolu",
+    "departamento": "SUCRE",
+    "departamento_norm": "sucre"
+  },
+  {
+    "municipio": "SAN JOSÉ DE TOLUVIEJO",
+    "municipio_norm": "san jose de toluviejo",
+    "departamento": "SUCRE",
+    "departamento_norm": "sucre"
+  },
+  {
+    "municipio": "IBAGUÉ",
+    "municipio_norm": "ibague",
+    "departamento": "TOLIMA",
+    "departamento_norm": "tolima"
+  },
+  {
+    "municipio": "ALPUJARRA",
+    "municipio_norm": "alpujarra",
+    "departamento": "TOLIMA",
+    "departamento_norm": "tolima"
+  },
+  {
+    "municipio": "ALVARADO",
+    "municipio_norm": "alvarado",
+    "departamento": "TOLIMA",
+    "departamento_norm": "tolima"
+  },
+  {
+    "municipio": "AMBALEMA",
+    "municipio_norm": "ambalema",
+    "departamento": "TOLIMA",
+    "departamento_norm": "tolima"
+  },
+  {
+    "municipio": "ANZOÁTEGUI",
+    "municipio_norm": "anzoategui",
+    "departamento": "TOLIMA",
+    "departamento_norm": "tolima"
+  },
+  {
+    "municipio": "ARMERO",
+    "municipio_norm": "armero",
+    "departamento": "TOLIMA",
+    "departamento_norm": "tolima"
+  },
+  {
+    "municipio": "ATACO",
+    "municipio_norm": "ataco",
+    "departamento": "TOLIMA",
+    "departamento_norm": "tolima"
+  },
+  {
+    "municipio": "CAJAMARCA",
+    "municipio_norm": "cajamarca",
+    "departamento": "TOLIMA",
+    "departamento_norm": "tolima"
+  },
+  {
+    "municipio": "CARMEN DE APICALÁ",
+    "municipio_norm": "carmen de apicala",
+    "departamento": "TOLIMA",
+    "departamento_norm": "tolima"
+  },
+  {
+    "municipio": "CASABIANCA",
+    "municipio_norm": "casabianca",
+    "departamento": "TOLIMA",
+    "departamento_norm": "tolima"
+  },
+  {
+    "municipio": "CHAPARRAL",
+    "municipio_norm": "chaparral",
+    "departamento": "TOLIMA",
+    "departamento_norm": "tolima"
+  },
+  {
+    "municipio": "COELLO",
+    "municipio_norm": "coello",
+    "departamento": "TOLIMA",
+    "departamento_norm": "tolima"
+  },
+  {
+    "municipio": "COYAIMA",
+    "municipio_norm": "coyaima",
+    "departamento": "TOLIMA",
+    "departamento_norm": "tolima"
+  },
+  {
+    "municipio": "CUNDAY",
+    "municipio_norm": "cunday",
+    "departamento": "TOLIMA",
+    "departamento_norm": "tolima"
+  },
+  {
+    "municipio": "DOLORES",
+    "municipio_norm": "dolores",
+    "departamento": "TOLIMA",
+    "departamento_norm": "tolima"
+  },
+  {
+    "municipio": "ESPINAL",
+    "municipio_norm": "espinal",
+    "departamento": "TOLIMA",
+    "departamento_norm": "tolima"
+  },
+  {
+    "municipio": "FALAN",
+    "municipio_norm": "falan",
+    "departamento": "TOLIMA",
+    "departamento_norm": "tolima"
+  },
+  {
+    "municipio": "FLANDES",
+    "municipio_norm": "flandes",
+    "departamento": "TOLIMA",
+    "departamento_norm": "tolima"
+  },
+  {
+    "municipio": "FRESNO",
+    "municipio_norm": "fresno",
+    "departamento": "TOLIMA",
+    "departamento_norm": "tolima"
+  },
+  {
+    "municipio": "GUAMO",
+    "municipio_norm": "guamo",
+    "departamento": "TOLIMA",
+    "departamento_norm": "tolima"
+  },
+  {
+    "municipio": "HERVEO",
+    "municipio_norm": "herveo",
+    "departamento": "TOLIMA",
+    "departamento_norm": "tolima"
+  },
+  {
+    "municipio": "HONDA",
+    "municipio_norm": "honda",
+    "departamento": "TOLIMA",
+    "departamento_norm": "tolima"
+  },
+  {
+    "municipio": "ICONONZO",
+    "municipio_norm": "icononzo",
+    "departamento": "TOLIMA",
+    "departamento_norm": "tolima"
+  },
+  {
+    "municipio": "LÉRIDA",
+    "municipio_norm": "lerida",
+    "departamento": "TOLIMA",
+    "departamento_norm": "tolima"
+  },
+  {
+    "municipio": "LÍBANO",
+    "municipio_norm": "libano",
+    "departamento": "TOLIMA",
+    "departamento_norm": "tolima"
+  },
+  {
+    "municipio": "SAN SEBASTIÁN DE MARIQUITA",
+    "municipio_norm": "san sebastian de mariquita",
+    "departamento": "TOLIMA",
+    "departamento_norm": "tolima"
+  },
+  {
+    "municipio": "MELGAR",
+    "municipio_norm": "melgar",
+    "departamento": "TOLIMA",
+    "departamento_norm": "tolima"
+  },
+  {
+    "municipio": "MURILLO",
+    "municipio_norm": "murillo",
+    "departamento": "TOLIMA",
+    "departamento_norm": "tolima"
+  },
+  {
+    "municipio": "NATAGAIMA",
+    "municipio_norm": "natagaima",
+    "departamento": "TOLIMA",
+    "departamento_norm": "tolima"
+  },
+  {
+    "municipio": "ORTEGA",
+    "municipio_norm": "ortega",
+    "departamento": "TOLIMA",
+    "departamento_norm": "tolima"
+  },
+  {
+    "municipio": "PALOCABILDO",
+    "municipio_norm": "palocabildo",
+    "departamento": "TOLIMA",
+    "departamento_norm": "tolima"
+  },
+  {
+    "municipio": "PIEDRAS",
+    "municipio_norm": "piedras",
+    "departamento": "TOLIMA",
+    "departamento_norm": "tolima"
+  },
+  {
+    "municipio": "PLANADAS",
+    "municipio_norm": "planadas",
+    "departamento": "TOLIMA",
+    "departamento_norm": "tolima"
+  },
+  {
+    "municipio": "PRADO",
+    "municipio_norm": "prado",
+    "departamento": "TOLIMA",
+    "departamento_norm": "tolima"
+  },
+  {
+    "municipio": "PURIFICACIÓN",
+    "municipio_norm": "purificacion",
+    "departamento": "TOLIMA",
+    "departamento_norm": "tolima"
+  },
+  {
+    "municipio": "RIOBLANCO",
+    "municipio_norm": "rioblanco",
+    "departamento": "TOLIMA",
+    "departamento_norm": "tolima"
+  },
+  {
+    "municipio": "RONCESVALLES",
+    "municipio_norm": "roncesvalles",
+    "departamento": "TOLIMA",
+    "departamento_norm": "tolima"
+  },
+  {
+    "municipio": "ROVIRA",
+    "municipio_norm": "rovira",
+    "departamento": "TOLIMA",
+    "departamento_norm": "tolima"
+  },
+  {
+    "municipio": "SALDAÑA",
+    "municipio_norm": "saldana",
+    "departamento": "TOLIMA",
+    "departamento_norm": "tolima"
+  },
+  {
+    "municipio": "SAN ANTONIO",
+    "municipio_norm": "san antonio",
+    "departamento": "TOLIMA",
+    "departamento_norm": "tolima"
+  },
+  {
+    "municipio": "SAN LUIS",
+    "municipio_norm": "san luis",
+    "departamento": "TOLIMA",
+    "departamento_norm": "tolima"
+  },
+  {
+    "municipio": "SANTA ISABEL",
+    "municipio_norm": "santa isabel",
+    "departamento": "TOLIMA",
+    "departamento_norm": "tolima"
+  },
+  {
+    "municipio": "SUÁREZ",
+    "municipio_norm": "suarez",
+    "departamento": "TOLIMA",
+    "departamento_norm": "tolima"
+  },
+  {
+    "municipio": "VALLE DE SAN JUAN",
+    "municipio_norm": "valle de san juan",
+    "departamento": "TOLIMA",
+    "departamento_norm": "tolima"
+  },
+  {
+    "municipio": "VENADILLO",
+    "municipio_norm": "venadillo",
+    "departamento": "TOLIMA",
+    "departamento_norm": "tolima"
+  },
+  {
+    "municipio": "VILLAHERMOSA",
+    "municipio_norm": "villahermosa",
+    "departamento": "TOLIMA",
+    "departamento_norm": "tolima"
+  },
+  {
+    "municipio": "VILLARRICA",
+    "municipio_norm": "villarrica",
+    "departamento": "TOLIMA",
+    "departamento_norm": "tolima"
+  },
+  {
+    "municipio": "CALI",
+    "municipio_norm": "cali",
+    "departamento": "VALLE DEL CAUCA",
+    "departamento_norm": "valle del cauca"
+  },
+  {
+    "municipio": "ALCALÁ",
+    "municipio_norm": "alcala",
+    "departamento": "VALLE DEL CAUCA",
+    "departamento_norm": "valle del cauca"
+  },
+  {
+    "municipio": "ANDALUCÍA",
+    "municipio_norm": "andalucia",
+    "departamento": "VALLE DEL CAUCA",
+    "departamento_norm": "valle del cauca"
+  },
+  {
+    "municipio": "ANSERMANUEVO",
+    "municipio_norm": "ansermanuevo",
+    "departamento": "VALLE DEL CAUCA",
+    "departamento_norm": "valle del cauca"
+  },
+  {
+    "municipio": "ARGELIA",
+    "municipio_norm": "argelia",
+    "departamento": "VALLE DEL CAUCA",
+    "departamento_norm": "valle del cauca"
+  },
+  {
+    "municipio": "BOLÍVAR",
+    "municipio_norm": "bolivar",
+    "departamento": "VALLE DEL CAUCA",
+    "departamento_norm": "valle del cauca"
+  },
+  {
+    "municipio": "BUENAVENTURA",
+    "municipio_norm": "buenaventura",
+    "departamento": "VALLE DEL CAUCA",
+    "departamento_norm": "valle del cauca"
+  },
+  {
+    "municipio": "GUADALAJARA DE BUGA",
+    "municipio_norm": "guadalajara de buga",
+    "departamento": "VALLE DEL CAUCA",
+    "departamento_norm": "valle del cauca"
+  },
+  {
+    "municipio": "BUGALAGRANDE",
+    "municipio_norm": "bugalagrande",
+    "departamento": "VALLE DEL CAUCA",
+    "departamento_norm": "valle del cauca"
+  },
+  {
+    "municipio": "CAICEDONIA",
+    "municipio_norm": "caicedonia",
+    "departamento": "VALLE DEL CAUCA",
+    "departamento_norm": "valle del cauca"
+  },
+  {
+    "municipio": "CALIMA",
+    "municipio_norm": "calima",
+    "departamento": "VALLE DEL CAUCA",
+    "departamento_norm": "valle del cauca"
+  },
+  {
+    "municipio": "CANDELARIA",
+    "municipio_norm": "candelaria",
+    "departamento": "VALLE DEL CAUCA",
+    "departamento_norm": "valle del cauca"
+  },
+  {
+    "municipio": "CARTAGO",
+    "municipio_norm": "cartago",
+    "departamento": "VALLE DEL CAUCA",
+    "departamento_norm": "valle del cauca"
+  },
+  {
+    "municipio": "DAGUA",
+    "municipio_norm": "dagua",
+    "departamento": "VALLE DEL CAUCA",
+    "departamento_norm": "valle del cauca"
+  },
+  {
+    "municipio": "EL ÁGUILA",
+    "municipio_norm": "el aguila",
+    "departamento": "VALLE DEL CAUCA",
+    "departamento_norm": "valle del cauca"
+  },
+  {
+    "municipio": "EL CAIRO",
+    "municipio_norm": "el cairo",
+    "departamento": "VALLE DEL CAUCA",
+    "departamento_norm": "valle del cauca"
+  },
+  {
+    "municipio": "EL CERRITO",
+    "municipio_norm": "el cerrito",
+    "departamento": "VALLE DEL CAUCA",
+    "departamento_norm": "valle del cauca"
+  },
+  {
+    "municipio": "EL DOVIO",
+    "municipio_norm": "el dovio",
+    "departamento": "VALLE DEL CAUCA",
+    "departamento_norm": "valle del cauca"
+  },
+  {
+    "municipio": "FLORIDA",
+    "municipio_norm": "florida",
+    "departamento": "VALLE DEL CAUCA",
+    "departamento_norm": "valle del cauca"
+  },
+  {
+    "municipio": "GINEBRA",
+    "municipio_norm": "ginebra",
+    "departamento": "VALLE DEL CAUCA",
+    "departamento_norm": "valle del cauca"
+  },
+  {
+    "municipio": "GUACARÍ",
+    "municipio_norm": "guacari",
+    "departamento": "VALLE DEL CAUCA",
+    "departamento_norm": "valle del cauca"
+  },
+  {
+    "municipio": "JAMUNDÍ",
+    "municipio_norm": "jamundi",
+    "departamento": "VALLE DEL CAUCA",
+    "departamento_norm": "valle del cauca"
+  },
+  {
+    "municipio": "LA CUMBRE",
+    "municipio_norm": "la cumbre",
+    "departamento": "VALLE DEL CAUCA",
+    "departamento_norm": "valle del cauca"
+  },
+  {
+    "municipio": "LA UNIÓN",
+    "municipio_norm": "la union",
+    "departamento": "VALLE DEL CAUCA",
+    "departamento_norm": "valle del cauca"
+  },
+  {
+    "municipio": "LA VICTORIA",
+    "municipio_norm": "la victoria",
+    "departamento": "VALLE DEL CAUCA",
+    "departamento_norm": "valle del cauca"
+  },
+  {
+    "municipio": "OBANDO",
+    "municipio_norm": "obando",
+    "departamento": "VALLE DEL CAUCA",
+    "departamento_norm": "valle del cauca"
+  },
+  {
+    "municipio": "PALMIRA",
+    "municipio_norm": "palmira",
+    "departamento": "VALLE DEL CAUCA",
+    "departamento_norm": "valle del cauca"
+  },
+  {
+    "municipio": "PRADERA",
+    "municipio_norm": "pradera",
+    "departamento": "VALLE DEL CAUCA",
+    "departamento_norm": "valle del cauca"
+  },
+  {
+    "municipio": "RESTREPO",
+    "municipio_norm": "restrepo",
+    "departamento": "VALLE DEL CAUCA",
+    "departamento_norm": "valle del cauca"
+  },
+  {
+    "municipio": "RIOFRÍO",
+    "municipio_norm": "riofrio",
+    "departamento": "VALLE DEL CAUCA",
+    "departamento_norm": "valle del cauca"
+  },
+  {
+    "municipio": "ROLDANILLO",
+    "municipio_norm": "roldanillo",
+    "departamento": "VALLE DEL CAUCA",
+    "departamento_norm": "valle del cauca"
+  },
+  {
+    "municipio": "SAN PEDRO",
+    "municipio_norm": "san pedro",
+    "departamento": "VALLE DEL CAUCA",
+    "departamento_norm": "valle del cauca"
+  },
+  {
+    "municipio": "SEVILLA",
+    "municipio_norm": "sevilla",
+    "departamento": "VALLE DEL CAUCA",
+    "departamento_norm": "valle del cauca"
+  },
+  {
+    "municipio": "TORO",
+    "municipio_norm": "toro",
+    "departamento": "VALLE DEL CAUCA",
+    "departamento_norm": "valle del cauca"
+  },
+  {
+    "municipio": "TRUJILLO",
+    "municipio_norm": "trujillo",
+    "departamento": "VALLE DEL CAUCA",
+    "departamento_norm": "valle del cauca"
+  },
+  {
+    "municipio": "TULUÁ",
+    "municipio_norm": "tulua",
+    "departamento": "VALLE DEL CAUCA",
+    "departamento_norm": "valle del cauca"
+  },
+  {
+    "municipio": "ULLOA",
+    "municipio_norm": "ulloa",
+    "departamento": "VALLE DEL CAUCA",
+    "departamento_norm": "valle del cauca"
+  },
+  {
+    "municipio": "VERSALLES",
+    "municipio_norm": "versalles",
+    "departamento": "VALLE DEL CAUCA",
+    "departamento_norm": "valle del cauca"
+  },
+  {
+    "municipio": "VIJES",
+    "municipio_norm": "vijes",
+    "departamento": "VALLE DEL CAUCA",
+    "departamento_norm": "valle del cauca"
+  },
+  {
+    "municipio": "YOTOCO",
+    "municipio_norm": "yotoco",
+    "departamento": "VALLE DEL CAUCA",
+    "departamento_norm": "valle del cauca"
+  },
+  {
+    "municipio": "YUMBO",
+    "municipio_norm": "yumbo",
+    "departamento": "VALLE DEL CAUCA",
+    "departamento_norm": "valle del cauca"
+  },
+  {
+    "municipio": "ZARZAL",
+    "municipio_norm": "zarzal",
+    "departamento": "VALLE DEL CAUCA",
+    "departamento_norm": "valle del cauca"
+  },
+  {
+    "municipio": "ARAUCA",
+    "municipio_norm": "arauca",
+    "departamento": "ARAUCA",
+    "departamento_norm": "arauca"
+  },
+  {
+    "municipio": "ARAUQUITA",
+    "municipio_norm": "arauquita",
+    "departamento": "ARAUCA",
+    "departamento_norm": "arauca"
+  },
+  {
+    "municipio": "CRAVO NORTE",
+    "municipio_norm": "cravo norte",
+    "departamento": "ARAUCA",
+    "departamento_norm": "arauca"
+  },
+  {
+    "municipio": "FORTUL",
+    "municipio_norm": "fortul",
+    "departamento": "ARAUCA",
+    "departamento_norm": "arauca"
+  },
+  {
+    "municipio": "PUERTO RONDÓN",
+    "municipio_norm": "puerto rondon",
+    "departamento": "ARAUCA",
+    "departamento_norm": "arauca"
+  },
+  {
+    "municipio": "SARAVENA",
+    "municipio_norm": "saravena",
+    "departamento": "ARAUCA",
+    "departamento_norm": "arauca"
+  },
+  {
+    "municipio": "TAME",
+    "municipio_norm": "tame",
+    "departamento": "ARAUCA",
+    "departamento_norm": "arauca"
+  },
+  {
+    "municipio": "YOPAL",
+    "municipio_norm": "yopal",
+    "departamento": "CASANARE",
+    "departamento_norm": "casanare"
+  },
+  {
+    "municipio": "AGUAZUL",
+    "municipio_norm": "aguazul",
+    "departamento": "CASANARE",
+    "departamento_norm": "casanare"
+  },
+  {
+    "municipio": "CHÁMEZA",
+    "municipio_norm": "chameza",
+    "departamento": "CASANARE",
+    "departamento_norm": "casanare"
+  },
+  {
+    "municipio": "HATO COROZAL",
+    "municipio_norm": "hato corozal",
+    "departamento": "CASANARE",
+    "departamento_norm": "casanare"
+  },
+  {
+    "municipio": "LA SALINA",
+    "municipio_norm": "la salina",
+    "departamento": "CASANARE",
+    "departamento_norm": "casanare"
+  },
+  {
+    "municipio": "MANÍ",
+    "municipio_norm": "mani",
+    "departamento": "CASANARE",
+    "departamento_norm": "casanare"
+  },
+  {
+    "municipio": "MONTERREY",
+    "municipio_norm": "monterrey",
+    "departamento": "CASANARE",
+    "departamento_norm": "casanare"
+  },
+  {
+    "municipio": "NUNCHÍA",
+    "municipio_norm": "nunchia",
+    "departamento": "CASANARE",
+    "departamento_norm": "casanare"
+  },
+  {
+    "municipio": "OROCUÉ",
+    "municipio_norm": "orocue",
+    "departamento": "CASANARE",
+    "departamento_norm": "casanare"
+  },
+  {
+    "municipio": "PAZ DE ARIPORO",
+    "municipio_norm": "paz de ariporo",
+    "departamento": "CASANARE",
+    "departamento_norm": "casanare"
+  },
+  {
+    "municipio": "PORE",
+    "municipio_norm": "pore",
+    "departamento": "CASANARE",
+    "departamento_norm": "casanare"
+  },
+  {
+    "municipio": "RECETOR",
+    "municipio_norm": "recetor",
+    "departamento": "CASANARE",
+    "departamento_norm": "casanare"
+  },
+  {
+    "municipio": "SABANALARGA",
+    "municipio_norm": "sabanalarga",
+    "departamento": "CASANARE",
+    "departamento_norm": "casanare"
+  },
+  {
+    "municipio": "SÁCAMA",
+    "municipio_norm": "sacama",
+    "departamento": "CASANARE",
+    "departamento_norm": "casanare"
+  },
+  {
+    "municipio": "SAN LUIS DE PALENQUE",
+    "municipio_norm": "san luis de palenque",
+    "departamento": "CASANARE",
+    "departamento_norm": "casanare"
+  },
+  {
+    "municipio": "TÁMARA",
+    "municipio_norm": "tamara",
+    "departamento": "CASANARE",
+    "departamento_norm": "casanare"
+  },
+  {
+    "municipio": "TAURAMENA",
+    "municipio_norm": "tauramena",
+    "departamento": "CASANARE",
+    "departamento_norm": "casanare"
+  },
+  {
+    "municipio": "TRINIDAD",
+    "municipio_norm": "trinidad",
+    "departamento": "CASANARE",
+    "departamento_norm": "casanare"
+  },
+  {
+    "municipio": "VILLANUEVA",
+    "municipio_norm": "villanueva",
+    "departamento": "CASANARE",
+    "departamento_norm": "casanare"
+  },
+  {
+    "municipio": "MOCOA",
+    "municipio_norm": "mocoa",
+    "departamento": "PUTUMAYO",
+    "departamento_norm": "putumayo"
+  },
+  {
+    "municipio": "COLÓN",
+    "municipio_norm": "colon",
+    "departamento": "PUTUMAYO",
+    "departamento_norm": "putumayo"
+  },
+  {
+    "municipio": "ORITO",
+    "municipio_norm": "orito",
+    "departamento": "PUTUMAYO",
+    "departamento_norm": "putumayo"
+  },
+  {
+    "municipio": "PUERTO ASÍS",
+    "municipio_norm": "puerto asis",
+    "departamento": "PUTUMAYO",
+    "departamento_norm": "putumayo"
+  },
+  {
+    "municipio": "PUERTO CAICEDO",
+    "municipio_norm": "puerto caicedo",
+    "departamento": "PUTUMAYO",
+    "departamento_norm": "putumayo"
+  },
+  {
+    "municipio": "PUERTO GUZMÁN",
+    "municipio_norm": "puerto guzman",
+    "departamento": "PUTUMAYO",
+    "departamento_norm": "putumayo"
+  },
+  {
+    "municipio": "PUERTO LEGUÍZAMO",
+    "municipio_norm": "puerto leguizamo",
+    "departamento": "PUTUMAYO",
+    "departamento_norm": "putumayo"
+  },
+  {
+    "municipio": "SIBUNDOY",
+    "municipio_norm": "sibundoy",
+    "departamento": "PUTUMAYO",
+    "departamento_norm": "putumayo"
+  },
+  {
+    "municipio": "SAN FRANCISCO",
+    "municipio_norm": "san francisco",
+    "departamento": "PUTUMAYO",
+    "departamento_norm": "putumayo"
+  },
+  {
+    "municipio": "SAN MIGUEL",
+    "municipio_norm": "san miguel",
+    "departamento": "PUTUMAYO",
+    "departamento_norm": "putumayo"
+  },
+  {
+    "municipio": "SANTIAGO",
+    "municipio_norm": "santiago",
+    "departamento": "PUTUMAYO",
+    "departamento_norm": "putumayo"
+  },
+  {
+    "municipio": "VALLE DEL GUAMUEZ",
+    "municipio_norm": "valle del guamuez",
+    "departamento": "PUTUMAYO",
+    "departamento_norm": "putumayo"
+  },
+  {
+    "municipio": "VILLAGARZÓN",
+    "municipio_norm": "villagarzon",
+    "departamento": "PUTUMAYO",
+    "departamento_norm": "putumayo"
+  },
+  {
+    "municipio": "SAN ANDRÉS",
+    "municipio_norm": "san andres",
+    "departamento": "ARCHIPIÉLAGO DE SAN ANDRÉS, PROVIDENCIA Y SANTA CATALINA",
+    "departamento_norm": "archipielago de san andres, providencia y santa catalina"
+  },
+  {
+    "municipio": "PROVIDENCIA",
+    "municipio_norm": "providencia",
+    "departamento": "ARCHIPIÉLAGO DE SAN ANDRÉS, PROVIDENCIA Y SANTA CATALINA",
+    "departamento_norm": "archipielago de san andres, providencia y santa catalina"
+  },
+  {
+    "municipio": "LETICIA",
+    "municipio_norm": "leticia",
+    "departamento": "AMAZONAS",
+    "departamento_norm": "amazonas"
+  },
+  {
+    "municipio": "EL ENCANTO",
+    "municipio_norm": "el encanto",
+    "departamento": "AMAZONAS",
+    "departamento_norm": "amazonas"
+  },
+  {
+    "municipio": "LA CHORRERA",
+    "municipio_norm": "la chorrera",
+    "departamento": "AMAZONAS",
+    "departamento_norm": "amazonas"
+  },
+  {
+    "municipio": "LA PEDRERA",
+    "municipio_norm": "la pedrera",
+    "departamento": "AMAZONAS",
+    "departamento_norm": "amazonas"
+  },
+  {
+    "municipio": "LA VICTORIA",
+    "municipio_norm": "la victoria",
+    "departamento": "AMAZONAS",
+    "departamento_norm": "amazonas"
+  },
+  {
+    "municipio": "MIRITÍ - PARANÁ",
+    "municipio_norm": "miriti - parana",
+    "departamento": "AMAZONAS",
+    "departamento_norm": "amazonas"
+  },
+  {
+    "municipio": "PUERTO ALEGRÍA",
+    "municipio_norm": "puerto alegria",
+    "departamento": "AMAZONAS",
+    "departamento_norm": "amazonas"
+  },
+  {
+    "municipio": "PUERTO ARICA",
+    "municipio_norm": "puerto arica",
+    "departamento": "AMAZONAS",
+    "departamento_norm": "amazonas"
+  },
+  {
+    "municipio": "PUERTO NARIÑO",
+    "municipio_norm": "puerto narino",
+    "departamento": "AMAZONAS",
+    "departamento_norm": "amazonas"
+  },
+  {
+    "municipio": "PUERTO SANTANDER",
+    "municipio_norm": "puerto santander",
+    "departamento": "AMAZONAS",
+    "departamento_norm": "amazonas"
+  },
+  {
+    "municipio": "TARAPACÁ",
+    "municipio_norm": "tarapaca",
+    "departamento": "AMAZONAS",
+    "departamento_norm": "amazonas"
+  },
+  {
+    "municipio": "INÍRIDA",
+    "municipio_norm": "inirida",
+    "departamento": "GUAINÍA",
+    "departamento_norm": "guainia"
+  },
+  {
+    "municipio": "BARRANCOMINAS",
+    "municipio_norm": "barrancominas",
+    "departamento": "GUAINÍA",
+    "departamento_norm": "guainia"
+  },
+  {
+    "municipio": "SAN FELIPE",
+    "municipio_norm": "san felipe",
+    "departamento": "GUAINÍA",
+    "departamento_norm": "guainia"
+  },
+  {
+    "municipio": "PUERTO COLOMBIA",
+    "municipio_norm": "puerto colombia",
+    "departamento": "GUAINÍA",
+    "departamento_norm": "guainia"
+  },
+  {
+    "municipio": "LA GUADALUPE",
+    "municipio_norm": "la guadalupe",
+    "departamento": "GUAINÍA",
+    "departamento_norm": "guainia"
+  },
+  {
+    "municipio": "CACAHUAL",
+    "municipio_norm": "cacahual",
+    "departamento": "GUAINÍA",
+    "departamento_norm": "guainia"
+  },
+  {
+    "municipio": "PANA PANA",
+    "municipio_norm": "pana pana",
+    "departamento": "GUAINÍA",
+    "departamento_norm": "guainia"
+  },
+  {
+    "municipio": "MORICHAL",
+    "municipio_norm": "morichal",
+    "departamento": "GUAINÍA",
+    "departamento_norm": "guainia"
+  },
+  {
+    "municipio": "SAN JOSÉ DEL GUAVIARE",
+    "municipio_norm": "san jose del guaviare",
+    "departamento": "GUAVIARE",
+    "departamento_norm": "guaviare"
+  },
+  {
+    "municipio": "CALAMAR",
+    "municipio_norm": "calamar",
+    "departamento": "GUAVIARE",
+    "departamento_norm": "guaviare"
+  },
+  {
+    "municipio": "EL RETORNO",
+    "municipio_norm": "el retorno",
+    "departamento": "GUAVIARE",
+    "departamento_norm": "guaviare"
+  },
+  {
+    "municipio": "MIRAFLORES",
+    "municipio_norm": "miraflores",
+    "departamento": "GUAVIARE",
+    "departamento_norm": "guaviare"
+  },
+  {
+    "municipio": "MITÚ",
+    "municipio_norm": "mitu",
+    "departamento": "VAUPÉS",
+    "departamento_norm": "vaupes"
+  },
+  {
+    "municipio": "CARURÚ",
+    "municipio_norm": "caruru",
+    "departamento": "VAUPÉS",
+    "departamento_norm": "vaupes"
+  },
+  {
+    "municipio": "PACOA",
+    "municipio_norm": "pacoa",
+    "departamento": "VAUPÉS",
+    "departamento_norm": "vaupes"
+  },
+  {
+    "municipio": "TARAIRA",
+    "municipio_norm": "taraira",
+    "departamento": "VAUPÉS",
+    "departamento_norm": "vaupes"
+  },
+  {
+    "municipio": "PAPUNAHUA",
+    "municipio_norm": "papunahua",
+    "departamento": "VAUPÉS",
+    "departamento_norm": "vaupes"
+  },
+  {
+    "municipio": "YAVARATÉ",
+    "municipio_norm": "yavarate",
+    "departamento": "VAUPÉS",
+    "departamento_norm": "vaupes"
+  },
+  {
+    "municipio": "PUERTO CARREÑO",
+    "municipio_norm": "puerto carreno",
+    "departamento": "VICHADA",
+    "departamento_norm": "vichada"
+  },
+  {
+    "municipio": "LA PRIMAVERA",
+    "municipio_norm": "la primavera",
+    "departamento": "VICHADA",
+    "departamento_norm": "vichada"
+  },
+  {
+    "municipio": "SANTA ROSALÍA",
+    "municipio_norm": "santa rosalia",
+    "departamento": "VICHADA",
+    "departamento_norm": "vichada"
+  },
+  {
+    "municipio": "CUMARIBO",
+    "municipio_norm": "cumaribo",
+    "departamento": "VICHADA",
+    "departamento_norm": "vichada"
+  }
+]

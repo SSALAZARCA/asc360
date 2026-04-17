@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Entorno
+.env
+*.env
+
+# Node
+node_modules/
+**/node_modules/
+.next/
+**/.next/
+
+# Agentes y herramientas internas
+.agents/
+.atl/
+
+# Archivos de trabajo / documentos temporales
+*.xlsx
+*.diff
+*.txt
+
+# Logs
+*.log
