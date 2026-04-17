@@ -69,6 +69,14 @@ services:
     networks:
       - default
       - coolify
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.https-asc360-backend.entryPoints=https
+      - "traefik.http.routers.https-asc360-backend.rule=Host(`asc360.online`) && PathPrefix(`/api`)"
+      - traefik.http.routers.https-asc360-backend.tls=true
+      - traefik.http.routers.https-asc360-backend.tls.certresolver=letsencrypt
+      - traefik.http.routers.https-asc360-backend.priority=10
+      - traefik.http.services.https-asc360-backend.loadbalancer.server.port=8000
 
   frontend:
     build:
@@ -87,6 +95,20 @@ services:
     networks:
       - default
       - coolify
+    labels:
+      - traefik.enable=true
+      - traefik.http.middlewares.gzip.compress=true
+      - traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https
+      - traefik.http.routers.http-asc360-frontend.entryPoints=http
+      - "traefik.http.routers.http-asc360-frontend.rule=Host(`asc360.online`) || Host(`www.asc360.online`)"
+      - traefik.http.routers.http-asc360-frontend.middlewares=redirect-to-https
+      - traefik.http.routers.https-asc360-frontend.entryPoints=https
+      - "traefik.http.routers.https-asc360-frontend.rule=Host(`asc360.online`) || Host(`www.asc360.online`)"
+      - traefik.http.routers.https-asc360-frontend.middlewares=gzip
+      - traefik.http.routers.https-asc360-frontend.tls=true
+      - traefik.http.routers.https-asc360-frontend.tls.certresolver=letsencrypt
+      - traefik.http.routers.https-asc360-frontend.priority=1
+      - traefik.http.services.https-asc360-frontend.loadbalancer.server.port=3000
 
   sonia-bot:
     build:
