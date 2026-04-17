@@ -1,6 +1,4 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import field_validator
-from typing import List
 
 class Settings(BaseSettings):
     # Base de datos
@@ -22,19 +20,16 @@ class Settings(BaseSettings):
     SOFTWAY_API_URL: str = ""
     SONIA_BOT_SECRET: str
 
-    # CORS — acepta cadena separada por comas o lista JSON
+    # CORS — cadena separada por comas
     # Ejemplo: ALLOWED_ORIGINS=https://tudominio.com,https://www.tudominio.com
-    ALLOWED_ORIGINS: List[str] = ["http://localhost:3000"]
+    ALLOWED_ORIGINS: str = "http://localhost:3000"
 
     # Entorno — controla comportamiento de docs y debug
     ENVIRONMENT: str = "development"
 
-    @field_validator("ALLOWED_ORIGINS", mode="before")
-    @classmethod
-    def parse_allowed_origins(cls, v):
-        if isinstance(v, str):
-            return [origin.strip() for origin in v.split(",") if origin.strip()]
-        return v
+    @property
+    def allowed_origins_list(self) -> list:
+        return [o.strip() for o in self.ALLOWED_ORIGINS.split(",") if o.strip()]
 
     model_config = SettingsConfigDict(env_file="../.env", env_file_encoding="utf-8", extra="ignore")
 
