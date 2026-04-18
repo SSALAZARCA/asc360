@@ -7,11 +7,10 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_HOST_AUTH_METHOD: trust
-    command: postgres -c hba_file=/etc/postgresql/pg_hba.conf
+    entrypoint: >-
+      sh -c "printf 'local all all trust\nhost all all 0.0.0.0/0 trust\nhost all all ::/0 trust\n' > /tmp/pg_hba.conf && exec docker-entrypoint.sh postgres -c hba_file=/tmp/pg_hba.conf"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./postgres/pg_hba.conf:/etc/postgresql/pg_hba.conf
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 10s
