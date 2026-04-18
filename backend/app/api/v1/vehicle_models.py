@@ -35,6 +35,14 @@ async def list_vehicle_models(
 # POST /vehicle-models — crear, solo superadmin
 # ---------------------------------------------------------------------------
 
+_SCHEMA_TO_MODEL = {
+    "modelo": "model_name",
+    "marca": "brand",
+    "combustible": "fuel_system",
+    "anio_modelo": "model_year",
+}
+
+
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_vehicle_model(
     payload: VehicleModelCreate,
@@ -44,16 +52,16 @@ async def create_vehicle_model(
     _require_superadmin(current_user)
 
     record = VehicleModel(
-        model_name=payload.model_name,
-        brand=payload.brand,
+        model_name=payload.modelo,
+        brand=payload.marca,
         cilindrada=payload.cilindrada,
         potencia=payload.potencia,
         peso=payload.peso,
         vueltas_aire=payload.vueltas_aire,
         posicion_cortina=payload.posicion_cortina,
         sistemas_control=payload.sistemas_control,
-        fuel_system=payload.fuel_system,
-        model_year=payload.model_year,
+        fuel_system=payload.combustible,
+        model_year=payload.anio_modelo,
     )
     db.add(record)
     try:
@@ -88,7 +96,7 @@ async def update_vehicle_model(
 
     update_data = payload.model_dump(exclude_none=True)
     for field, value in update_data.items():
-        setattr(record, field, value)
+        setattr(record, _SCHEMA_TO_MODEL.get(field, field), value)
 
     await db.commit()
     await db.refresh(record)
