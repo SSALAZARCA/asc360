@@ -5,7 +5,7 @@ import AdminLayout from '../admin-layout';
 import { UploadCloud, Image as ImageIcon, Save, Trash2, Clock, Bike, Plus, Pencil, X, AlertCircle } from 'lucide-react';
 import { authFetch } from '../../lib/authFetch';
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+const BACKEND_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1').replace(/^http://(?!localhost)/, 'https://');
 
 const VM_FORM_DEFAULTS = {
   modelo: '',

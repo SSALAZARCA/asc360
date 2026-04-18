@@ -10,7 +10,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const API = () => process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+  const API = () => (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1').replace(/^http://(?!localhost)/, 'https://');
 
   const handleLogin = async (e) => {
     e.preventDefault();

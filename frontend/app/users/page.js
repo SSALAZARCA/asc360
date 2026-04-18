@@ -49,7 +49,7 @@ export default function UsersPage() {
   const saveUser = async () => {
     // Aquí idealmente haces un POST o PUT a /users
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+      const apiUrl = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1').replace(/^http:\/\/(?!localhost)/, 'https://');
       alert('Endpoint de creación de usuarios por integrar en Backend. (Requiere actualización API)');
       setShowModal(false);
     } catch (e) {

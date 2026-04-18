@@ -40,7 +40,7 @@ const TYPE_CFG = {
 };
 
 const colById = Object.fromEntries(COLUMNS.map(c => [c.id, c]));
-const API     = () => process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+const API     = () => (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1').replace(/^http://(?!localhost)/, 'https://');
 
 function dayColor(d) { return d > 5 ? '#ef4444' : d > 2 ? '#fbbf24' : '#10b981'; }
 function fmtDate(iso) {

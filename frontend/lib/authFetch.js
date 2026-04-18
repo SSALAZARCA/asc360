@@ -7,7 +7,10 @@
  *      const res = await authFetch('/orders/analytics/kpis')
  */
 
-const API = () => process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+const API = () => {
+  const url = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+  return url.replace(/^http:\/\/(?!localhost)/, 'https://');
+};
 
 export async function authFetch(path, options = {}) {
   const token = typeof window !== 'undefined' ? localStorage.getItem('um_token') : null;

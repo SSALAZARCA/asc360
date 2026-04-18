@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { X, Save, Plus } from 'lucide-react';
 import { authFetch } from '../../lib/authFetch';
 
-const API = () => process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+const API = () => (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1').replace(/^http://(?!localhost)/, 'https://');
 
 const STATUS_OPTIONS = [
   { value: 'en_preparacion', label: 'En Preparación' },

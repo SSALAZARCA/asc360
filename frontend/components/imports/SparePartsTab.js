@@ -6,7 +6,7 @@ import ExcelUploadModal from './ExcelUploadModal';
 import ReconciliationModal from './ReconciliationModal';
 
 function API() {
-  return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+  return (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1').replace(/^http://(?!localhost)/, 'https://');
 }
 
 // ---------------------------------------------------------------------------

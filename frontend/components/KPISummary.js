@@ -9,7 +9,7 @@ import {
 import { authFetch } from '../lib/authFetch';
 
 // ─── Utilidades ────────────────────────────────────────────────────────────
-const API = () => process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+const API = () => (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1').replace(/^http://(?!localhost)/, 'https://');
 
 const STATES = [
   { id: 'received',       name: 'Recibido',        color: '#3b82f6', icon: ClipboardList },

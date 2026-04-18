@@ -4,7 +4,7 @@ import { authFetch } from '../../lib/authFetch';
 import { FileUp, Download, RefreshCw, Search, CheckCircle, Clock, Bike, X, AlertCircle, Pencil, Send, FileText } from 'lucide-react';
 
 function API() {
-  return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+  return (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1').replace(/^http://(?!localhost)/, 'https://');
 }
 
 // ---------------------------------------------------------------------------
