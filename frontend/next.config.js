@@ -1,7 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Requerido para el Dockerfile de producción (multi-stage standalone build)
   output: 'standalone',
+  env: {
+    NEXT_PUBLIC_API_URL: 'https://asc360.online/api/v1',
+  },
   async rewrites() {
     return [
       {
