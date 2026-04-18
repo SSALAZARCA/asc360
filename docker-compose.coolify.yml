@@ -1,5 +1,5 @@
 services:
-  postgres:
+  asc360-db:
     build:
       context: ./postgres
       dockerfile: Dockerfile
@@ -50,7 +50,7 @@ services:
       dockerfile: Dockerfile
     restart: always
     environment:
-      - DATABASE_URL=postgresql+asyncpg://umadmin:UmAdmin2024Secure@postgres:5432/um_service_db
+      - DATABASE_URL=postgresql+asyncpg://umadmin:UmAdmin2024Secure@asc360-db:5432/um_service_db
       - REDIS_URL=redis://:Redis2024Secure@redis:6379/0
       - MINIO_ENDPOINT=minio:9000
       - MINIO_ACCESS_KEY=umadmin
@@ -61,7 +61,7 @@ services:
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
       - ENVIRONMENT=production
     depends_on:
-      postgres:
+      asc360-db:
         condition: service_healthy
       redis:
         condition: service_healthy
