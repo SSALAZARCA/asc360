@@ -1,3 +1,5 @@
 FROM postgres:16-alpine
-COPY pg_hba.conf /etc/postgresql/pg_hba.conf
-CMD ["postgres", "-c", "hba_file=/etc/postgresql/pg_hba.conf"]
+COPY entrypoint.sh /usr/local/bin/pg-entrypoint.sh
+RUN chmod +x /usr/local/bin/pg-entrypoint.sh
+ENTRYPOINT ["pg-entrypoint.sh"]
+CMD ["postgres"]
