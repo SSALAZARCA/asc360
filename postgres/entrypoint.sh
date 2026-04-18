@@ -25,6 +25,8 @@ PGEOF
     su-exec postgres pg_ctl -D "$PGDATA" -w stop
 
     echo "==> Credenciales reseteadas exitosamente."
+    echo "==> pg_hba.conf actual:"
+    cat "$PGDATA/pg_hba.conf"
 fi
 
 exec docker-entrypoint.sh "$@"
