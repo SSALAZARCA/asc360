@@ -1,6 +1,7 @@
 #!/bin/bash
 set -e
 
+echo "==> DATABASE_URL: $DATABASE_URL"
 echo "==> Corriendo migraciones de Alembic..."
 alembic upgrade head
 
