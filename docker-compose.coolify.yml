@@ -8,7 +8,7 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-um_service_db}
       POSTGRES_HOST_AUTH_METHOD: trust
     volumes:
-      - postgres_data_v4:/var/lib/postgresql/data
+      - postgres_data_v5:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-umadmin} -d ${POSTGRES_DB:-um_service_db}"]
       interval: 10s
@@ -20,7 +20,7 @@ services:
     restart: always
     command: redis-server --requirepass ${REDIS_PASSWORD}
     volumes:
-      - redis_data_v4:/data
+      - redis_data_v5:/data
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
       interval: 10s
@@ -35,7 +35,7 @@ services:
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
     command: server /data --console-address ":9001"
     volumes:
-      - minio_data_v4:/data
+      - minio_data_v5:/data
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
       interval: 30s
@@ -48,11 +48,11 @@ services:
       dockerfile: Dockerfile
     restart: always
     environment:
-      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-umadmin}:${POSTGRES_PASSWORD:-UmAdmin2024Secure}@postgres:5432/${POSTGRES_DB:-um_service_db}
-      - REDIS_URL=redis://:${REDIS_PASSWORD:-Redis2024Secure}@redis:6379/0
+      - DATABASE_URL=postgresql+asyncpg://umadmin:UmAdmin2024Secure@postgres:5432/um_service_db
+      - REDIS_URL=redis://:Redis2024Secure@redis:6379/0
       - MINIO_ENDPOINT=minio:9000
-      - MINIO_ACCESS_KEY=${MINIO_ROOT_USER}
-      - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD}
+      - MINIO_ACCESS_KEY=umadmin
+      - MINIO_SECRET_KEY=Minio2024Secure
       - MINIO_SECURE=false
       - SECRET_KEY=${SECRET_KEY}
       - SONIA_BOT_SECRET=${SONIA_BOT_SECRET}
@@ -127,6 +127,6 @@ networks:
     external: true
 
 volumes:
-  postgres_data_v4:
-  redis_data_v4:
-  minio_data_v4:
+  postgres_data_v5:
+  redis_data_v5:
+  minio_data_v5:
