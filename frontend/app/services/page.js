@@ -11,7 +11,7 @@ import {
 import SoftwayHelperModal from '../../components/SoftwayHelperModal';
 import { authFetch } from '../../lib/authFetch';
 
-const API = () => (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1').replace(/^http://(?!localhost)/, 'https://');
+const API = () => (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1').replace('http://', 'https://');
 
 // ─── Configuraciones visuales ───────────────────────────────────────────────
 const STATES = {

@@ -2,7 +2,7 @@
 import { useState, useRef } from 'react';
 import { X, FileSpreadsheet, Upload, CheckCircle, AlertCircle, Package, Bike } from 'lucide-react';
 
-const API = () => (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1').replace(/^http://(?!localhost)/, 'https://');
+const API = () => (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1').replace('http://', 'https://');
 
 const inputStyle = {
   padding: '9px 12px', borderRadius: '8px',

@@ -4,7 +4,7 @@ import { authFetch } from '../../lib/authFetch';
 import { X, CheckCircle, AlertCircle, XCircle, Plus, Upload, RefreshCw } from 'lucide-react';
 
 function API() {
-  return (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1').replace(/^http://(?!localhost)/, 'https://');
+  return (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1').replace('http://', 'https://');
 }
 
 const RESULT_CFG = {
