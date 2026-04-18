@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "skills": {
+    "animated-component-libraries": {
+      "source": "freshtechbro/claudedesignskills",
+      "sourceType": "github",
+      "computedHash": "d3b545d0de1747e76f71fe165cfc3428d2f1b17cff6fc9c4ce744bbe2ff36fd8"
+    },
+    "better-auth-best-practices": {
+      "source": "better-auth/skills",
+      "sourceType": "github",
+      "computedHash": "9ab075b5061be2a5f299c10505667345cc1ec76e8de4120901cfd586643e776f"
+    },
+    "data-visualization": {
+      "source": "inferen-sh/skills",
+      "sourceType": "github",
+      "computedHash": "534108e78e6035a6b5a899db2bf7ee8a83461edd51d24f527ce4c1bcde0fd0ae"
+    },
+    "docker-expert": {
+      "source": "sickn33/antigravity-awesome-skills",
+      "sourceType": "github",
+      "computedHash": "e862a5e8dd5d7613622a3a40fc0ab6f642df500200fbc331da79ad7f063d1a3c"
+    },
+    "implementing-drag-drop": {
+      "source": "ancoleman/ai-design-components",
+      "sourceType": "github",
+      "computedHash": "861ba06673879b5f79dd95c3d3643be20f4e9608ed86140d9ab8f74492eed507"
+    },
+    "kpi-dashboard-design": {
+      "source": "wshobson/agents",
+      "sourceType": "github",
+      "computedHash": "c96d61d0bda097169ce286e10f2aee576832b17f12a04067c77de8f47847f854"
+    },
+    "motion-design-patterns": {
+      "source": "dylanfeltus/skills",
+      "sourceType": "github",
+      "computedHash": "80b6b2b96e2ef522f223d5e57438a832b2ff0b365a6e5189e0cf346c5d937aa6"
+    },
+    "nextjs-performance": {
+      "source": "giuseppe-trisciuoglio/developer-kit",
+      "sourceType": "github",
+      "computedHash": "e7aacb7a0f57077fd7494a5c3b633cbc6a351463142acb1101a7f85570e20ace"
+    }
+  }
+}

@@ -1,0 +1,620 @@
+--- PAGE 1 ---
+MANUAL
+PROGRAMACIÓN
+TALLER 
+ 
+PROGRAMA: KANBANFLOW. 
+VERSÓN: 2.0 
+
+--- PAGE 2 ---
+OBJETIVO
+Sincronizar todas las áreas
+involucradas con el taller por
+medio de un tablero de control
+para gestionar oportunamente
+cada 
+incidencia 
+que 
+se
+presenta durante el proceso
+con cada uno de nuestros
+clientes.
+¿CON QUÉ FIN?
+Disminuir los tiempo de
+respuesta.
+Agilizar 
+la 
+entrega 
+de
+motocicletas.
+Satisfacer continuamente al
+cliente 
+con 
+el 
+servicio
+postventa.
+Optimizar el trabajo de los
+técnicos. 
+RESPONSABLES
+DEL PROCESO 
+Jefe de taller.
+Coordinador taller
+Coordinador repuestos
+Técnico motocicleta
+Jefes de repuestos
+Auxiliares de repuestos 
+Auxiliares de garantías  
+Centro de atención
+telefónica.
+Asesor de servicio 
+
+--- PAGE 3 ---
+ETAPAS DEL PROCESO 
+PRÓXIMOS
+ TRABAJOS 
+EN 
+PROCESO
+PENDIENTES
+POR
+REPUESTOS
+REPROGRAMACI
+ÓN
+AUTORIZACIÓN
+CLIENTE
+TRABAJO
+EXTERNO
+FINALIZADO
+ENTREGA 
+AL CLIENTE
+¿QUÉ ES?
+Trabajos
+programados
+para el día en
+curso.
+(Deben
+programarse
+desde el día
+anterior)
+Motocicleta
+que 
+se
+encuentra en
+el banco de
+trabajo siendo
+intervenida 
+(Sólo 1 moto
+por técnico en
+la columna)
+Motocicletas que
+no 
+pueden 
+ser
+finalizadas 
+por
+falta de repuestos
+o autorización de
+garantías  
+Motocicletas que
+estaban
+pendientes 
+por
+repuestos 
+o
+autorización 
+de
+garantías 
+y 
+ya
+están disponibles
+Mano de obra
+y/o 
+Repuestos
+pendientes 
+por
+autorización del
+cliente
+Pendientes
+por trabajos
+externos
+Motocicletas
+cuyo 
+trabajo
+de 
+taller
+finalizó 
+y
+pueden 
+ser
+entregadas al
+cliente
+Motocicletas
+que ya fueron
+recibidas por
+el 
+cliente 
+ después de
+su
+intervención
+en el taller 
+ENCARGADOS 
+Coordinador
+taller 
+Técnico
+motocicletas 
+Jefe de
+repuestos
+Coordinador
+repuestos
+Auxiliares
+repuestos
+Auxiliares
+garantías
+Coordinador taller
+Centro de
+atención
+telefónica.
+Coordinador
+taller 
+Asesor de
+servicio
+Centro de
+atención
+telefónica 
+Técnico
+Asesor de
+servicio
+Centro de
+atención
+telefónica
+Tabla 1.
+
+--- PAGE 4 ---
+AGREGAR TAREA 
+EDITAR TAREA
+ 
+MOVER TAREA 
+BORRA TAREA 
+COMENTAR TAREA 
+BORRAR COMENTARIO 
+TAREA * 
+AGREGAR MIEMBROS
+AL TABLERO 
+Jefe de taller.                  (Todas las PÁG.)
+Coordinador taller.        (2,3,4,5,6,7,8,9,10,11,14,15)
+Coordinador repuestos. (PÁG. 2,3,4,7,8,9,14,15,16)
+Técnico motocicleta.      (PÁG. 2,3,7,8,12,13)
+Asesor de servicio.         (PÁG. 2,3,6,7,8,10,16)
+Jefes de repuestos.                    (PÁG. 2,3,4,7,8,9,13,14,15)
+Auxiliares de repuestos             (PÁG. 2,3,4,7,8,9,13,14,15)
+Auxiliares de garantías              (PÁG. 2,3,4,7,8,9,13,14,15)
+Centro de atención telefónica.  (PÁG. 2,3,7,9,13,16,17)
+INSTRUCTIVO TABLERO
+ROLES Y PERMISOS 
+*La opción de borrar comentarios solo la
+podrán 
+usar 
+para 
+borrar 
+sus 
+propios
+comentarios en cualquiera de los roles.
+* *El visualizador solo tendrá la opción de
+divisar. 
+Tabla 2.
+ADMINISTRADOR
+JEFE
+COORDINADOR
+TÉCNICO
+VISUALIZADOR **
+PERMISOS PARA CADA ROL
+PÁGINAS DIRIGIDAS A
+CADA RESPONSABLE
+
+--- PAGE 5 ---
+CREACIÓN TABLERO
+Inicia sesión en KanbanFlow y selecciona la opción de
+"tableros"(Boards)
+Crea un tablero nuevo dando
+click en la siguiente opción.
+Selecciona"Copiar
+tablero existente" 
+2/3 No incluyas las tareas del tablero
+copiado, selecciona "próximo"
+Luego, sigue los 3 sub-
+pasos 
+para 
+crear 
+tu
+tablero personalizado.
+1/3 Se debe copiar el tablero inicial
+"Programación KTM macrocentro". 
+Crea el nombre de tu tablero copia. 
+3/3 Selecciona los usuarios que quiere
+agregar al tablero y sus permisos.
+Procede a "hacer copia". 
+INSTRUCTIVO TABLERO
+
+--- PAGE 6 ---
+Cuando eliges la opción de
+editar el nombre, se abre este
+recuadro donde sólo debes
+colocar el nombre completo del
+técnico en letra MAYÚSCULA. y
+luego, clic en el recuadro verde
+para actualizar.
+Lo más importante en esta parte es editar y agregar los nombres de los
+técnicos que realizarán el proceso en dicho tablero.
+NOTA: puede crear los tableros que se consideren según las pantallas por zona del
+taller, así se podra dividir de manera más práctica
+Selecciona el símbolo del lápiz
+Clic en los 3 puntos y luego editar para
+cambiar el nombre de los existentes.
+Al 
+final 
+de 
+la 
+columna
+encontrarás este botón para
+agregar un nuevo nombre.
+¿CÓMO EDITAR EL TABLERO?
+También puedes editarlo dando doble clic
+sobre el nombre que vas a editar.
+El tablero se visualizará de esta forma.
+Al finalizar cualquier edición
+dale "done" en la parte superior
+izquierda 
+del 
+tablero, 
+para
+guardar todos los cambios.
+Agrega aqui el nombre del
+técnico en MAYÚSCULA y clic en
+Add.
+
+--- PAGE 7 ---
+TRASLADA ETIQUETAS DE PROCESO EN PROCESO
+¿CÓMO CREAR UNA ETIQUETA?
+Una vez creada la etiqueta, se procede a editar su información
+colocando primeramente la placa de la motocicleta y el tipo de trabajo. 
+ETIQUETAS 
+¿CÓMO EDITARLAS?
+Con la acción anterior se abre en la etiqueta una barra lateral derecha que
+permite una variedad de opciones. Selecciona "agregar"(Add).
+para mover una etiqueta debe dar clic sostenido y arrastrar directamente a
+la columna del proceso requerido. 
+Sólo puede haber una etiqueta en la columna "En proceso" por cada
+técnico
+Cada 
+rol 
+tendrá 
+diferentes
+columnas a su cargo para mover
+las etiqueta. 
+INSTRUCTIVO TABLERO
+Las identificamos cómo etiquetas, tareas o motos dentro del tablero.
+Se  agregan haciendo clic en el
+signo"+"
+Elegir opción "Guardar y abrir
+detalles" (Save & open details).
+En caso de no necesitar colocar los
+detalles 
+inmediatamente, 
+solo
+seleccionar guardar y cerrar. 
+Se despliega un listado
+de campos, selecciona
+solo los requeridos.
+
+--- PAGE 8 ---
+TAREAS 
+CLASIFICACIÓN POR TIPO DE TAREA
+Son los diferentes trabajos que se realizan en el taller. Se encuentran
+clasificadas por colores para facilitar la visualización del trabajo por
+hacer. 
+Reclamos de garantía de fabrica.
+Mantenimientos preventivos
+programados.
+Trabajos pagos por el cliente.
+Garantía por mano de obra.
+Verificación previa antes de la
+solicitud de repuestos.
+Puesta a punto motocicletas
+nuevas para entrega.
+PUNTOS A TENER EN CUENTA:
+La programación de las tareas se debe hacer mínimamente
+desde el día ANTERIOR. 
+La barra de tipos de tarea se muestra en el tablero, una vez se
+activa en el menú.
+INSTRUCTIVO TABLERO
+
+--- PAGE 9 ---
+Son alarmas dentro de las columnas y etiquetas del tablero que
+indican atrasos y problemas en la gestión del taller cuando una
+tarea o requerimiento no se cumple. Estas aparecen en color rojo.
+ALERTAS
+INSTRUCTIVO TABLERO
+Lo primero es tener en cuenta que las alertas son muy
+importantes dentro de la gestión ya que permiten al
+coordinador 
+visualizar 
+que 
+zona 
+o 
+técnico 
+presenta
+inconvenientes. Por consiguiente, él se encargará de ir a dicha
+zona y determinar de que manera ayudar para corregir el
+proceso que genera la alerta. 
+¿QUÉ HACER CUANDO HAY ALERTAS?
+TIPOS DE ALERTAS
+Cuando se sobrepasa la cantidad de horas programadas.
+Cuando sobrepasa la cantidad de etiquetas permitidas en la
+columna.
+Cuando se retrasa o supera las horas estimadas en la etiqueta
+para el proceso.
+1.
+2.
+3.
+¿QUÉ HACER EN CADA TIPO DE
+ALERTAS?
+Las horas estimadas
+se encuentran dentro
+de la etiqueta y se
+visualiza así:
+Modificar la programación para que no sobrepase el límite
+de 7 horas por técnico.
+Realizar gestión para los límites de control en cada Área y
+proceso. 
+Indagar a cada técnico que tenga esta alerta para
+identificar el problema y darle solución. 
+NOTA: El tablero ya tiene parametrizado los límites para cada alarma. 
+
+--- PAGE 10 ---
+¿CÓMO IMPLEMENTARLO?
+RECEPCIÓN
+La motocicleta ingresa al centro de servicio y su proceso inicia
+en la recepción donde el/la asesor(a) de servicio comienza la
+etiqueta en un tablero designado "Ingreso de Motocicletas".
+Crea la etiqueta como se indica en el instructivo plataforma 
+ "etiquetas" con la siguiente información:
+Placa 
+Línea de la
+motocicleta
+Tipo de servicio 
+A continuación el coordinador ingresa al tablero "ingreso de
+Motocicletas" para revisar y programar el trabajo de los
+técnicos de acuerdo a las motocicletas registradas. 
+1. Se abre cada etiqueta y se
+mueve 
+mediante 
+la 
+opción
+señalada.  
+2. Asignar la tarea o etiqueta al
+tablero, proceso y técnico que
+corresponda.
+NOTA: Si entra una moto y el cliente está esperando para el turno, pero
+decide irse sin ser atendido, no se elimina, sino que se coloca una
+etiqueta de “anulado” para a final de mes hacer estadísticas de motos
+anuladas.  
+Solo las personas del área de recepción podrán crear estas etiquetas. 
+
+--- PAGE 11 ---
+EDICIÓN DE LA ETIQUETA 
+EL COORDINADOR MODIFICA LA ETIQUETA YA
+CREADA DENTRO DEL TABLERO ASIGNADO CON
+LA SIGUIENTE INFORMACIÓN:
+PRÓXIMOS TRABAJOS
+NOTA : Dejará las etiquetas en el orden de trabajo según la prioridad y el tiempo
+estimado.
+*Número de orden
+*Cédula cliente
+*Kilometraje
+Tiempo establecido
+para la operación
+Cedula cliente
+Número de
+orden de
+trabajo
+Kilometraje
+Fecha y hora de
+inicio de trabajo
+Fecha y hora
+finalización
+*Tiempo estimado (establecido según  tempario).
+*Fecha y hora de inicio
+*Fecha y hora de finalización 
+En esta columna se encuentran las etiquetas con la
+tarea asignada al técnico. Cada tarea debe estar
+programada desde el día anterior.  
+¿CÓMO IMPLEMENTARLO?
+Se debe dar prioridad según el orden de antigüedad
+en tablero de ingresos.
+
+--- PAGE 12 ---
+3° REALIZAR TRABAJO SEGÚN
+ESPECIFICA LA OT.
+2° SI DEBE PARAR POR ALGÚN
+MOTIVO, PASAR ETIQUETA A LA
+COLUMNA "EN ESPERA"
+EN PROCESO
+1° TRASLADA LA ETIQUETA A LA
+COLUMNA "EN PROCESO"
+Es importante que siempre se contabilice el
+tiempo en esta columna ya que si no se
+registra, la tarea no será tenida en cuenta
+para medir la productividad del técnico.
+ETIQUETA EN PROCESO.
+En esta columna debe estar la etiqueta de la
+motocicleta 
+que 
+actualmente 
+está 
+siendo
+trabajada por el técnico en su puesto de trabajo.
+Solo puede haber una etiqueta por técnico en
+este estado.  
+¿CÓMO IMPLEMENTARLO?
+ETIQUETA EN ESPERA.
+
+--- PAGE 13 ---
+NOTA:Cuando hay reasignación debe reiniciar el
+cronometro hasta terminar la intervención de la
+motocicleta. Dejar la etiqueta en el estado “finalizada”.
+° EN CASO DE TERMINAR
+INTERVENCIÓN
+Dejar etiqueta en: "FINALIZADO"
+° SI ES UNA GARANTÍA
+Debe pasar a estado: "PENDIENTE POR
+REPUESTO"
+° DE TENER REPUESTO      
+ PENDIENTE POR LLEGAR
+Dejar en estado: "PENDIENTE POR REPUESTO"
+° CUANDO ES REPARACIÓN
+PERSONAL
+Debe estar en: "AUTORIZACIÓN CLIENTE"
+4° CARGAR REPUESTOS Y REFERENCIAS 
+Colocar en la etiqueta los repuestos y referencias necesarias para la reparación
+de la motocicleta dando clic en la opción de subtareas para que quede en forma
+de check list.
+IMPORTANTE: Especificar si es pedido o cotización  
+Si el repuesto es por
+garantía debe anotarse
+de la siguiente manera:
+referencia, (cantidad),
+(G). de no ser garantía
+se omite la (G).
+cuando es  una cotización, el técnico debe
+colocar 
+un 
+comentario 
+en 
+la 
+etiqueta
+especificando que es cotización y abajo de
+este el valor de la mano de obra para que
+repuestos haga la cotización completa. 
+
+--- PAGE 14 ---
+Cuando el repuesto es por garantía, verificar si se encuentra
+disponible en la bodega o en otro centro de servicio.  
+PENDIENTE POR REPUESTOS
+Los responsables de esta columna deben verificar las
+etiquetas que aparecen en pendiente por repuesto e
+identificar las prioridades según tipo de servicio y fecha de
+ingreso.
+GARANTÍAS 
+Editar la etiqueta en la opción "Consecución RP" por Auteco.
+Agregar número de pedido. 
+Dejar la etiqueta en pendiente por repuestos. 
+Identificar el estado de la garantía y alimentar la etiqueta.
+CUANDO NO ESTAN DISPONIBLES 
+¿CÓMO IMPLEMENTARLO?
+El coordinador de taller decide si puede continuar con los
+repuestos disponibles:
+SI: Agregar una etiqueta dentro de la tarea llamada "parcial" y
+Colocar etiqueta en Reprogramación.
+NO: dejar etiqueta en Pendiente por repuestos.
+CUANDO SI ESTAN DISPONIBLES
+Marcar con un chulo el repuesto que está disponible.
+Editar la etiqueta en la opción "Consecución RP" por Dismerca.
+Agregar número de TX. 
+Colocar etiqueta en Reprogramación.
+Cuando hay disponibles algunos repuestos y otros no:
+
+--- PAGE 15 ---
+REPROGRAMACIÓN
+Verificar las etiquetas existentes en esta columna. 
+Programar la intervención de la motocicleta. 
+Trasladar cada etiqueta al estado “Próximos trabajos”
+al técnico que corresponda. 
+REPUESTOS POR OTROS SERVICIOS
+Cuando el repuesto es por otro tipo de servicio, verificar si
+el repuesto se encuentra disponible en la bodega o en otro
+centro de servicio.  
+SI
+Chulear lista en etiqueta. 
+Trasladar etiqueta a
+“Reprogramación” cuando el RP
+este en las instalaciones del taller. 
+Gestionar repuesto.
+Comentar etiqueta. 
+NO
+CUANDO ES COTIZACIÓN
+El encargado en repuestos debe realizar una cotización en
+formato pdf donde debe agregar los repuestos requeridos
+y  la mano de obra del técnico. Luego adjuntarla en la
+etiqueta y pasarla a la columna de autorización cliente. 
+Cuando la etiqueta llega a esta columna, el
+coordinador deberá: 
+
+--- PAGE 16 ---
+Llamar al cliente con la información de la etiqueta y
+cotización de los costos que adjunta repuestos para
+pedirle autorización. 
+Resaltar en el pdf las partes que autoriza y
+adjuntar otra vez el documento, comentando
+que está autorizado. además eliminar de la
+etiqueta los repuestos no autorizados.
+Trasladar 
+cada 
+etiqueta 
+al 
+estado
+“Reprogramación” al técnico que corresponda.
+AUTORIZACIÓN CLIENTE
+¿CÓMO IMPLEMENTARLO?
+Los responsables de esta columna son el call center, quienes se
+encargarán de verificar las etiquetas, pedir autorizaciones,
+informar al cliente y atender sus necesidades. Luego pasar a
+reprogramación la etiqueta.
+CUANDO ES COTIZACIÓN
+CASOS ESPECIALES
+Se puede presentar que una motocicleta sea entregada al
+cliente pero aun le falten repuestos que están pendientes.
+El call center se encargara de llamar al cliente una vez estén
+listos  los repuestos y agendarle una cita con fecha y hora
+para la recepción de su vehículo. 
+Debe dejar plasmado en un comentario la fecha acordada y
+pasar la etiqueta a reprgramación para que el coordinador
+pueda programar según dicha información. 
+
+--- PAGE 17 ---
+FINALIZADO
+Cuando la etiqueta se encuentra en esta columna, el centro de
+atención telefónica debe notificar al cliente que su motocicleta
+se encuentra terminada
+Si el cliente no viene por la moto:
+Si el cliente viene por la moto:
+Hacer 
+seguimiento 
+para 
+presionar 
+al 
+cliente 
+la
+recolección de la motocicleta.   
+Realizar entrega de la motocicleta al propietario.
+Una vez verificado que la motocicleta tiene estado
+"Entregada al cliente" mover la etiqueta de tablero a
+"Terminadas".
+TRABAJO EXTERNO
+Aquí se encuentran las tareas que por tener un trabajo externo
+no pudieron ser finalizadas por los técnicos.
+Una vez se resuelve, se mueve la etiqueta a reprogramación
+para ser terminada. 
+ENTREGADA AL CLIENTE
+Una vez el cliente viene por la moto, es tarea de la recepción
+hacer la entrega de esta. 
+En caso de ser una moto parcialmente arreglada (es decir
+que aun le faltan repuestos que están pendientes, con la
+etiqueta "parcial") debe colocar otra etiqueta que dice
+"entregada al cliente" y pasar la etiqueta a pendiente por
+repuestos. 
+En caso de estar totalmente lista, se debe pasar a la
+columna de entregada al cliente y quitar las etiquetas
+puestas dentro.
+
+--- PAGE 18 ---
+GRACIAS 
+

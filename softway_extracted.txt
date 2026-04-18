@@ -1,0 +1,1050 @@
+ 
+ 
+ 
+ 
+EDITADO POR: 
+ 
+MANUAL DE USO 
+ 
+ 
+ 
+ 
+ 
+ 
+2 
+ 
+ÍNDICE 
+PREMISA 
+5 
+ACCESO AL PORTAL 
+6 
+PESTAÑA SUPPORT 
+7 
+APLICACIONES 
+8 
+ACTIVACIONES DE GARANTÍA 
+10 
+NUEVA ACTIVACIÓN 
+12 
+CAMBIAR/CORREGIR ACTIVACIÓN 
+16 
+ANULACIÓN DE LA ACTIVACIÓN 
+17 
+CONFIRMACIÓN DE ACTIVACIÓN (INTRO) 
+17 
+VERIFICACIÓN DEL ESTADO DE ACTIVACIÓN 
+19 
+GESTIÓN DE APLICACIONES DE GARANTÍA 
+20 
+NUEVA SOLICITUD DE GARANTÍA 
+21 
+GESTIÓN DE ARCHIVOS ADJUNTOS 
+30 
+ENVÍO DE LA SOLICITUD DE GARANTÍA 
+32 
+MODIFICACIÓN DE LA SOLICITUD DE GARANTÍA 
+33 
+SOLICITUD DE GARANTÍA QUE DEBE CORREGIRSE 
+34 
+CANCELACIÓN DE LA GARANTÍA 
+35 
+VERIFICACIÓN DEL ESTADO DE LA GARANTÍA 
+35 
+SOLICITUDES DE GARANTÍA DENEGADAS 
+37 
+PEDIDOS 
+38 
+NUEVO PEDIDO 
+39 
+CAMBIO DE ORDEN 
+44 
+ANULACIÓN DEL PEDIDO 
+46 
+ 
+3 
+ 
+CONFIRMACIÓN DEL PEDIDO (ENVIAR) 
+46 
+COMPROBACIÓN DEL ESTADO DEL PEDIDO 
+47 
+IMPORTAR UN PEDIDO DESDE UN ARCHIVO DE TEXTO O CSV 
+48 
+TABLERO 
+53 
+CATÁLOGO 
+55 
+CÓDIGOS DE ARTÍCULOS SOSTITUTORIOS 
+62 
+LISTA DE PRECIOS - BÚSQUEDA DE ARTÍCULOS 
+63 
+LA APLICABILIDAD EN EL CATÁLOGO (FILTRO DE APLICACIONES) 
+67 
+ 
+ 
+ 
+ 
+4 
+ 
+ 
+ 
+ 
+5 
+ 
+PREMISA 
+Este manual describe el uso de las aplicaciones disponibles dentro del portal UM 
+Motorcycles desarrollado por Soft Way s.r.l. en todas sus partes. 
+No obstante, algunas funciones están sujetas a las autorizaciones atribuidas a su 
+usuario y, por lo tanto, pueden no ser visibles. 
+Incluso las imágenes mostradas en las páginas siguientes pueden ser ligeramente 
+diferentes de las que encontrará en el portal, de hecho se insertan con fines puramente 
+demostrativos. 
+ 
+ 
+ 
+6 
+ 
+ACCESO AL PORTAL 
+Para accedar al portal de srvicio de UM MOTORCYCLES, primero tendrá que asegurarse 
+de que su conexión a internet está activa y de que el navegador que está utilizando es 
+compatible con HTML5, por ejemplo, Google Chrome, Mozilla Firefox o Microsoft Edge. 
+ 
+Vaya a la dirección que se le ha facilitando e introduzca sus credencialesa. Proceda a 
+través del botón “Inciar sesión”. 
+ 
+ 
+ 
+La primera vez que te conectes, el sistema te pedirá que cambies la contraseña que te 
+ha sido asignada, permitiéndote personalizarla. 
+ 
+ 
+Como usuario autorizado por el fabricante del vehículo, así como propietario del servicio, 
+para acceder al portal, la parte de registro como operador independiente no le concierne. 
+Su usuario ya tiene acceso a todas las secciones del portal.  
+ 
+7 
+ 
+PESTAÑA SUPPORT 
+La pestaña “Support” de la parte derecha de la pantalla muestra los datos de contacto del 
+servicio de asistencia y un enlace a los manuales. 
+ 
+ 
+ 
+ 
+8 
+ 
+APLICACIONES 
+Dentro de la “Dealer Area” se encuentra la entrada “Aplicaciones”, que contiene las 
+funciones operativas para el concesionario. 
+ 
+ 
+Las aplicaciones disponibles para UM Motorcycles son: 
+ Activaciones de Garantía 
+ Garantías 
+ Pedidos 
+ Tablero 
+ Catálogo 
+ Lista de Precios 
+ 
+ 
+ 
+9 
+ 
+ 
+ 
+Cada icono muestra un contador numérico de notificaciones que resume la cantidad de 
+documentos “Abiertos” en los distintos elementos del menú: 
+ el contador de las aplicaciones cuenta el total de notificaciones; 
+ el contador de las aplicaciones individuales cuenta el número de notificaciones de la  
+propia función. 
+ 
+ 
+ 
+ADVERTENCIA: 
+Tenga en cuenta que el acceso a “Aplicaciones” está sujeto a los permisos 
+asignados a su usuario. Por este motivo, es posible que algunas entradas de 
+este manual no sean visibles. 
+ 
+10 
+ 
+ACTIVACIONES DE GARANTÍA 
+Accediendo a esta sección es posible introducir, modificar y corregir nuevas activaciones y 
+cambios de titularidad, así como consultar el historial de activaciones de garantía ya 
+comunicadas a la Cámara. 
+ 
+ 
+Al hacer clic en “Activaciones de Garantía” se le dirigirá automáticamente a la sección 
+“Por confirmar”, donde se gestionan las solicitudes con un estado incompleto, por 
+confirmar o por corregir. 
+ 
+El estado se indica mediante un icono que aparece en la columna “Estado”. 
+ 
+ 
+ 
+11 
+ 
+Si hace clic en el signo de interrogación situado junto a la cabecera de la columna, 
+aparecerá una leyenda con los posibles estados de activación. 
+ 
+ 
+ 
+ 
+ 
+12 
+ 
+Nueva activación 
+Para introducir una nueva activación o un cambio de titularidad, haga clic en el botón 
+“Nueva Activación”. 
+ 
+ 
+Introduzca el número de bastidor y, a continuación, haga clic en “Buscar”: el sistema 
+verifica automáticamente la corrección y muestra los datos del vehículo. A continuación, 
+continúe haciendo clic en “Continuar”. 
+ 
+ 
+A la izquierda de la pantalla de entrada se encuentran los pasos necesarios para completar 
+la activación de la garantía o el cambio de titularidad:  
+ Datos Activación 
+ Datos Propietario 
+ 
+ 
+ 
+13 
+ 
+Datos Activación 
+Rellene los datos requeridos, teniendo en cuenta que los campos en rojo son obligatorios 
+para poder guardar el documento. 
+ 
+ 
+El campo “Fecha Matriculación” se puede rellenarse con el botón 
+. 
+En función del marco introducido (nuevo o vendido), el sistema propone el tipo de 
+activación correcto. 
+Una vez introducida la información, haga clic en “Siguiente”. 
+ 
+ 
+ 
+14 
+ 
+Datos Propietario 
+Una vez más, rellene los datos requeridos, teniendo en cuenta que los campos 
+subrayados son necesarios para poder enviar la activación, mientras que los campos 
+en rojo son obligatorios para poder guardar el documento. 
+ 
+ 
+Elija el “Género” en el menú desplegable (Femenino, Masculino o no aplicable) y rellene los 
+campos restantes.  
+El campo “Provincia” sólo es obligatorio si el país del cliente es Italia. 
+La empresa matriz solicita el consentimiento del cliente para el tratamiento de sus datos 
+personales, tanto para fines legales como para actividades de marketing, pidiendo al 
+usuario del portal que marque las casillas correspondientes para dar su consentimiento. 
+La política de privacidad de UM Motorcycles puede descargarse haciendo clic en 
+“Descargar Información sobre el procesamiento de datos personales”. 
+ 
+15 
+ 
+Una vez cumplimentados todos los datos, pulse en “Guardar Activación” para continuar. 
+La activación pasa a la lista de “Por confirmar”. 
+ 
+ 
+Sólo las activaciones completas, marcadas con el símbolo 
+ en la columna “Estado”, 
+pueden enviarse a UM Motorcycles. 
+ 
+ 
+ 
+16 
+ 
+Cambiar/corregir activación 
+Para editar, completar o corregir la activación o el cambio de titularidad, pulse el botón 
+ 
+para volver a la fase de entrada. 
+ 
+ 
+Una vez que se hayan añadido todas las correcciones o cambios a la activación, haga clic 
+en “Guardar Activación” para guardar los cambios. 
+ 
+ 
+En caso de que la activación esté incompleta para su presentación, al hacer clic en el 
+símbolo 
+ de la columna “Estado” aparecerá la lista de datos que faltan. 
+ 
+ 
+Las activaciones de garantía o los cambios de titularidad se pueden corregir o cancelar 
+hasta que se hayan enviado a UM Motorcycles. 
+ 
+17 
+ 
+Anulación de la activación 
+Para eliminar una o varias activaciones o cambios de titularidad que aún no se han 
+confirmado, vaya a la función “Activación de Garantía” y, en la sección “Por confirmar”, 
+marque los documentos deseados y haga clic en el botón “Eliminar Activaciones 
+Seleccionadas”. 
+ 
+ 
+Confirmación de activación (Intro) 
+Para enviar una o varias activaciones o cambios de titularidad que aún no hayan sido 
+confirmados, vaya a la función “Activaciones de Garantía”, en la sección “Por 
+confirmar” marque los documentos deseados y haga clic en el botón “ENVIAR 
+activaciones seleccionadas”. 
+ 
+Sólo pueden enviarse activaciones o cambios de titularidad completos. 
+ 
+ 
+18 
+ 
+ 
+Las activaciones o cambios de titularidad enviados desaparecerán de la sección “Por 
+confirmar” y se mostrarán en la sección “Historial” con el estado “Activación aceptada”. 
+ 
+ 
+Un contador, situado junto al nombre de la sección, indica el número de documentos 
+presentes. 
+Pulsando sobre 
+ tendrá la posibilidad de cambiar la ordenación de las columnas según 
+sus preferencias. 
+Los cambios en el estado de la solicitud de activación o el cambio de titularidad se 
+notificarán con distintos iconos. 
+Haciendo clic en “Imprimir Activaciones Seleccionadas” tendrá la posibilidad de imprimir 
+sus activaciones. 
+ 
+ 
+ 
+ 
+19 
+ 
+Verificación del estado de activación 
+Al hacer clic en el signo de interrogación de la columna “Estado”, verá una leyenda con 
+los distintos estados posibles de las activaciones. 
+ 
+ 
+ 
+ 
+El estatus varía en función de las decisiones tomadas por la casa. 
+ 
+ 
+ 
+20 
+ 
+GESTIÓN DE APLICACIONES DE GARANTÍA 
+Accediendo a esta sección es posible introducir, editar y corregir nuevas reclamaciones de 
+garantía, así como consultar el historial ya enviado. 
+ 
+ 
+Al hacer clic en “Garantías” accederá automáticamente a la sección “Por confirmar”, 
+donde se gestionan las solicitudes con estado “Garantía incompleta” y “Garantía lista por 
+el invío”.  
+El estado se indica mediante un icono que aparece en la columna “Estado”. Haciendo clic 
+en el signo de interrogación de la columna, verá una leyenda con los distintos estados 
+posibles de la garantía. 
+ 
+ 
+ 
+ 
+21 
+ 
+Nueva solicitud de garantía 
+Para crear una nueva solicitud de garantía, pulse el botón “Nueva garantía”. 
+ 
+ 
+Introduzca el número de bastidor y haga clic en “Buscar”: el sistema comprobará que es 
+correcto y mostrará los datos del vehículo. A continuación, continúe haciendo clic en 
+“Continuar”. 
+ 
+ 
+En la parte izquierda de la pantalla de entrada figuran los pasos necesarios para completar 
+la solicitud: 
+ Datos Intervención 
+ Datos Defecto 
+ Datos Propietario 
+ Datos Mano de Obra 
+ 
+ 
+ 
+22 
+ 
+Datos Intervención 
+Rellene los datos requeridos, teniendo en cuenta que los campos subrayados son los 
+obligatorios para poder presentar una solicitud de garantía; los que aparecen en rojo 
+son imprescindibles para guardar el documento. 
+ 
+ 
+Elija primero “Tipo de Garantía” entre las opciones disponibles en el menú desplegable. 
+ 
+Las entradas proporcionadas por UM Motorcycles son: 
+Para vehículos NUEVOS (no matriculados y no vendidos) 
+ GT: Embalaje 
+ GP: PDI 
+ GX: Garantía comercial 
+ CR: Campaña de retirada/restauración 
+Para vehículos VENDIDOS (matriculados con garantía activa) 
+ GN: Garantía contractual 
+ CR: Campaña de llamada a revisión/recuperación 
+ GX: Garantía comercial 
+ 
+ 
+ 
+23 
+ 
+Para vehículos VENDIDOS/MATRICULADOS con garantía caducada 
+ CR: Campaña de llamada a revisión/recuperación 
+ GX: Garantía comercial 
+Introduzca los datos solicitados, prestando especial atención a la descripción de la 
+incidencia, que debe ser suficientemente clara y precisa, y a la exactitud del kilometraje. 
+Si es necesario, seleccione también la dirección de envío correcta para recibir las piezas de 
+entre las disponibles para su empresa. 
+A menos que se especifique lo contrario, los partes se enviarán a la dirección por defecto. 
+Una vez introducida esta información, seleccione el botón “Siguiente” para pasar a la 
+siguiente sección. 
+ 
+Datos propietario 
+ 
+Si el vehículo ya ha sido matriculado, se mostrarán automáticamente los datos del 
+propietario actual. 
+Si los datos mostrados cambian, será necesario realizar un cambio de titularidad (para más 
+información, consulte el capítulo “Activaciones de garantía”). 
+Haga clic en “Siguiente” para pasar a la siguiente sección. 
+ 
+ 
+24 
+ 
+Datos Defecto 
+ 
+Seleccione el "Código Problema" de los de la lista. Haga clic en "Siguiente" para pasar a 
+la siguiente sección. 
+ 
+ 
+ 
+25 
+ 
+Datos Mano de Obra 
+ 
+ 
+En esta sección, todos los datos son obligatorios y su combinación determina el tiempo 
+previsto para la operación, que se reconoce al procesar la solicitud. 
+Tenga en cuenta que sólo después de haber seleccionado toda esta información el sistema 
+muestra, si está disponible, el tiempo asociado a la operación seleccionada.  
+Haga clic en “Guardar Garantía” para confirmar los datos de la cabecera y continuar con la 
+introducción de líneas. 
+ 
+ 
+ 
+26 
+ 
+Insertar líneas 
+Ahora será necesario introducir los artículos sustituidos durante la intervención: haga clic en 
+“Nuevo Artículos”. 
+ 
+ 
+Introduzca el código o la descripción del artículo (incluso parcial) y pulse el botón “Buscar”. 
+ 
+ 
+Se accederá automáticamente a la “Búsqueda Artículos”, que mostrará los códigos de 
+artículos (o códigos individuales) que cumplan los criterios de búsqueda establecidos. 
+ 
+ 
+ 
+27 
+ 
+Puede modificar los criterios de búsqueda en la sección “Filtros”. 
+ 
+ 
+Debe elegir al menos un artículo de la lista propuesta utilizando el campo de selección de la 
+columna “Tag” y confirmar la selección con el botón “Añadir líneas marcadas”. 
+Introduzca la cantidad deseada en el campo “Cantidad” y confirme la inserción en la 
+garantía pulsando “Añadir” o “Añadir y continuar” si es necesario insertar más líneas. 
+La pieza de recambio subyacente a la reclamación de garantía debe marcarse como 
+“Causa defecto” de la avería. 
+ 
+ 
+28 
+ 
+También se pueden añadir artículos a la solicitud a través de la cesta de la compra de los 
+seleccionados en el catálogo ilustrado (véase el capítulo “Catálogo”). Haga clic en el botón 
+“Cesta de la compra” situado en la parte superior izquierda de la máscara de detalle de la 
+garantía. 
+ 
+ 
+Marque las filas que desea importar en la garantía. Las filas pueden marcarse 
+individualmente haciendo clic en el cuadro de selección de la columna “Tag” o utilizando los 
+botones “Marcar Todos” y “Quitar marcas”. 
+ 
+ 
+Para añadir los artículos seleccionados, haga clic en el botón “Importar referencias 
+seleccionadas en Garantía”. 
+ 
+ 
+ 
+29 
+ 
+Editar línea 
+Para editar una línea, haga clic en el botón “
+” situado junto a la línea. 
+ 
+ 
+Eliminación de líneas 
+Los partes introducidos por error pueden suprimirse, siempre que no se haya enviado la 
+garantía, seleccionando las filas que deben suprimirse y haciendo clic en “Eliminar 
+Referencias marcadas”. 
+ 
+ 
+ 
+ 
+30 
+ 
+Gestión de archivos adjuntos 
+Si lo desea, puede añadir fotografías de los daños sufridos por su vehículo en la sección 
+“Adjuntos”. 
+ 
+ 
+Puedes insertar cualquier tipo de archivo (Excel, imágenes, PDF, vídeos de cualquier 
+tipo...) 
+Haz clic en “Añadir archivo adjunto” para insertar lo que necesites. 
+ 
+ 
+ 
+ 
+31 
+ 
+En la nueva máscara, puede añadir los archivos adjuntos necesarios, una vez insertados 
+haga clic en “Guardar archivo adjunto” para guardarlos. 
+ 
+ 
+Todas las fotos introducidas serán visibles al seleccionar la opción “Adjuntos” y podrán 
+descargarse o eliminarse pulsando los botones correspondientes que aparecen al 
+pasar el ratón por encima del archivo adjunto. 
+ 
+ 
+ 
+ 
+ 
+32 
+ 
+Envío de la solicitud de garantía 
+Para presentar una solicitud de garantía, vaya a la función “Garantías”, en la sección “Por 
+Confirmar” seleccione el documento deseado utilizando el botón 
+ y haga clic en el botón 
+“ENVIAR Garantía”. 
+ 
+ 
+Si desea enviar la solicitud de garantía más adelante, cierre la solicitud haciendo clic en 
+“Atrás” para volver a la lista de solicitudes pendientes de confirmación. 
+Sólo se podrán enviar a UM Motorcycles las solicitudes de garantía completas, marcadas 
+con el símbolo 
+ en la columna “Estado”. 
+Las solicitudes con el símbolo 
+ están incompletas; pulse sobre este icono para 
+comprobar qué datos faltan. 
+ 
+ 
+ 
+ 
+ 
+33 
+ 
+Modificación de la solicitud de garantía 
+Para editar o completar la solicitud de garantía, haga clic en el botón 
+ para los 
+datos de cabecera, o en 
+ para las filas. 
+Las preguntas de garantía introducidas podrán editarse o borrarse hasta que se 
+envíen. 
+ 
+ 
+ 
+ 
+ 
+34 
+ 
+Solicitud de garantía que debe corregirse 
+El personal de UM Motorcycles que comprueba las reclamaciones de garantía puede 
+rechazarlas y pedirle que corrija cualquier error. 
+Las reclamaciones que deban corregirse acabarán en la sección “Por corregir”. 
+ 
+ 
+El estado “Garantías por corregir” se identifica mediante el símbolo 
+. 
+Al hacer clic en el icono se mostrará el error. 
+ 
+ 
+Proceda como se ha descrito anteriormente para editar la solicitud, corrija el problema y 
+vuelva a enviarla. 
+ 
+ 
+ 
+35 
+ 
+Cancelación de la garantía 
+Para suprimir una o varias solicitudes de garantía que aún no han sido confirmadas, 
+vaya a la función “Garantías”, en la sección “Por confirmar” marque los documentos 
+deseados y pulse el botón “Eliminar Garantías Seleccionadas”. 
+ 
+ 
+Verificación del estado de la garantía 
+Las solicitudes de garantía transmitidas son visibles en la zona “Confirmadas / En 
+proceso”. 
+ 
+ 
+ 
+ 
+ 
+36 
+ 
+El estado cambiará al cabo de un tiempo en función de la respuesta de UM 
+Motorcycles; al hacer clic en el signo de interrogación de la columna de estado 
+aparecerá esta leyenda. 
+ 
+ 
+ 
+ 
+37 
+ 
+Solicitudes de garantía denegadas 
+Las reclamaciones de garantía rechazadas definitivamente por UM Motorcycles se 
+muestran en la sección “Rechazadas”. 
+ 
+ 
+Haciendo clic en el icono de la columna “Estado” de cada solicitud, se podrá ver el 
+motivo del rechazo. 
+ 
+ 
+ 
+ 
+38 
+ 
+PEDIDOS 
+Accediendo a esta sección se pueden gestionar los pedidos. 
+ 
+ 
+Al hacer clic en “Pedidos”, el sistema le dirige automáticamente a la sección “Pedidos 
+por enviar”, donde podrá ver los que se han creado, pero aún no se han transmitido a 
+UM Motorcycles. 
+ 
+ 
+39 
+ 
+Nuevo pedido 
+Para hacer un nuevo pedido, pulse el botón “Nuevo pedido”. 
+ 
+ 
+Los campos disponibles son los siguientes 
+ Ref. Cliente 
+ Comentario al pedido 
+ Tipo de Pedido: por defecto está configurado como “Pedido de stock”; 
+Para pasar a la inserción de filas, haga clic en “Continuar”. 
+ 
+ 
+ 
+ 
+ 
+40 
+ 
+Para insertar una nueva línea a pedir, haga clic en “Nuevo Artículo”. 
+ 
+ 
+Introduzca el código o la descripción del artículo (incluso parcial) y pulse el botón 
+“Buscar”. 
+ 
+ 
+La pantalla presenta la “Búsqueda de artículos”, que muestra los códigos de artículos (o 
+códigos individuales) que cumplen los criterios de búsqueda establecidos.  
+ 
+41 
+ 
+Puede modificar los criterios de búsqueda en la sección “Filtros”. 
+Quitando la marca del campo “Mostrar no suministrables”, es posible buscar sólo entre 
+los códigos ordenables. 
+ 
+ 
+Elija al menos un artículo de la lista propuesta utilizando el campo de selección de la 
+columna “Tag” y confirme su selección con el botón “Añadir líneas marcadas”. 
+ 
+42 
+ 
+ 
+ 
+Introduzca la cantidad deseada en el campo “Cantidad” y confirme la entrada del pedido 
+pulsando “Añadir” o “Añadir y continuar” si necesita más líneas. 
+ 
+ 
+ 
+43 
+ 
+El botón “Aplicaciones” tiene la misma función que en el catálogo ilustrado (véase el 
+capítulo “Catálogo”). 
+ 
+ 
+Una vez añadidas las líneas de artículos, el pedido aparece en la sección “Pedidos por 
+enviar” con el estado “Abierto”. 
+ 
+ 
+44 
+ 
+Cambio de orden 
+Para editar o completar el pedido, haga clic en el botón 
+ para los datos de cabecera, o 
+en 
+ para las filas. 
+ 
+ 
+Para eliminar una o varias filas, selecciónelas haciendo clic en la columna “Tag” o, en su 
+caso, con ayuda de los botones “Marcar Todos” y “Quitar Marcas” y, a continuación, haga 
+clic en “Eliminar Referencias marcadas”. 
+ 
+Si desea modificar la cantidad o las notas de un artículo, utilice el botón 
+ situado a la 
+izquierda de cada línea y, una vez realizados los cambios, guárdelos utilizando el botón 
+“Guardar” situado en la parte inferior derecha de la pantalla de selección de artículos. 
+ 
+ 
+ 
+45 
+ 
+Utilice “Nuevo Artículos” para añadir códigos a su pedido. 
+El botón “Cesta de compra”, situado en la parte superior izquierda de la pantalla, le 
+permitirá importar del catálogo la lista de artículos seleccionados (véase el capítulo 
+“Catálogo”). 
+Cuando haya terminado de realizar cambios, puede volver a la sección “Pedidos por 
+enviar” mediante el botón “Atrás”. 
+Los pedidos pueden corregirse o borrarse hasta que se hayan enviado a UM 
+Motorcycles. 
+ 
+ 
+ 
+46 
+ 
+Anulación del pedido 
+Para eliminar uno o varios pedidos aún no confirmados, vaya a la función “Pedidos”, en la 
+sección “Pedidos por enviar” marque los documentos deseados y haga clic en el botón 
+“Eliminar pedidos seleccionados”. 
+ 
+ 
+Confirmación del pedido (Enviar) 
+Para enviar el pedido, abra los detalles del documento deseado mediante el botón 
+ y 
+haga clic en el botón “ENVIAR pedido”. 
+ 
+ 
+Si el documento ha sido confirmado/transmitido, pasará automáticamente a la sección 
+“Historial”, donde podrá utilizar el botón 
+ para ver sus detalles. 
+ 
+47 
+ 
+Comprobación del estado del pedido 
+El estado de tramitación del pedido cambiará pasado un tiempo dependiendo de la 
+respuesta de UM Motorcycles y puede llegar a ser: 
+ 
+ 
+Para los estados “Enviado”, “Recibido y confirmado”, “En proceso”, “Enviado 
+parcialmente”, “Cancelado”, los pedidos serán visibles en la sección “Historial”. 
+ 
+ 
+ 
+48 
+ 
+Importar un pedido desde un archivo de texto o CSV 
+Será posible importar las líneas de un pedido desde un fichero en formato TXT o CSV. 
+Para realizar esta operación, seleccione “Aplicaciones” y, a continuación, “Pedidos”. 
+ 
+ 
+ 
+ 
+ 
+49 
+ 
+Haga clic en “Nuevo pedido” o en el botón 
+ para añadir filas a un pedido ya 
+creado. 
+ 
+ 
+Cuando haya terminado de insertar las líneas de artículos, haga clic en el botón 
+“Importar pedido”. 
+ 
+ 
+Compruebe que la estructura del fichero a importar coincide con la del ejemplo. 
+ 
+ 
+ 
+50 
+ 
+El fichero debe constar de una lista simple de códigos, seguida de la cantidad deseada y la 
+abreviatura del proveedor (para UM Motorcycles la abreviatura es UM), todo ello separado 
+por un ";" (punto y coma). 
+En caso de que la lista de códigos a importar pertenezca a la misma marca, se puede omitir 
+la abreviatura del proveedor. 
+En el caso de códigos alfanuméricos, las letras deben ir siempre en mayúscula, al igual que 
+la abreviatura. 
+Para importar el archivo creado, pulse el botón “Scegli file”, selecciónelo navegando por 
+las carpetas disponibles y pulsando el botón “Abrir”, tras lo cual aparecerá el nombre del 
+archivo seleccionado junto al botón “Elegir archivo”. Confirme la importación pulsando el 
+botón “Importar”. 
+ 
+ 
+ 
+ 
+ 
+51 
+ 
+El sistema informa de cualquier error en el archivo. 
+ 
+ 
+ 
+ 
+ 
+52 
+ 
+Si el fichero consta de varias líneas, se pedirá confirmación para cada línea individual si la 
+hay: 
+ La cantidad introducida es inferior a la cantidad mínima de pedido 
+ La cantidad introducida no es múltiplo de la cantidad por paquete 
+ El artículo introducido ha sido sustituido en la lista de precios. 
+Confirme la introducción de cada línea pulsando el botón “Añadir”. 
+ 
+ 
+ 
+53 
+ 
+TABLERO 
+El cuadro de mandos del vehículo es una función que permite consultar todo el historial 
+de activaciones, garantías y cupones de un chasis concreto. 
+La función también permite acceder directamente al modelo técnico correcto en el 
+catálogo ilustrado. 
+ 
+ 
+ 
+ 
+ 
+54 
+ 
+Al acceder a la función “Tablero”, debe introducirse un número de chasis. Mediante el 
+botón “Buscar”, el programa validará el valor introducido y mostrará toda la información 
+relacionada con él. 
+ 
+ 
+Haga clic en cada uno de los iconos siguientes para acceder al historial documental del 
+vehículo seleccionado o al catálogo ilustrado de ese modelo (EPC). 
+El número de bastidor permanecerá almacenado en la memoria; al salir y volver a entrar en 
+la función “Tablero”, se volverán a proponer automáticamente los datos del vehículo 
+examinado. 
+Para cambiar el chasis que debe examinarse, utilice el botón “Bastidor” situado en la parte 
+superior de la pantalla. 
+ 
+ 
+55 
+ 
+CATÁLOGO 
+En el menú “Aplicaciones”, seleccione el icono “Catálogo” para acceder al catálogo de 
+piezas de recambio. 
+ 
+ 
+ 
+ 
+ 
+56 
+ 
+Al iniciar sesión, aparece la lista de modelos disponibles. 
+ 
+ 
+Puede buscar el modelo deseado utilizando los siguientes criterios: 
+ Número de chasis o de motor 
+ Código de modelo 
+ Aplicaciones 
+ Descripción 
+ Cilindrada 
+ Año de fabricación 
+ ID de catálogo 
+ Color 
+Estos campos son accesibles desde la sección “Filtros” y “Filtros avanzados”. 
+Los filtros de búsqueda también pueden combinarse entre sí. 
+ 
+57 
+ 
+Haciendo clic en la cabecera de cada columna cambiará el orden de visualización, 
+ascendente o descendente, según su contenido. 
+Al hacer clic en el botón 
+ situado a la izquierda del nombre del modelo, se mostrará la 
+foto correspondiente (si está disponible), así como las variantes del mismo. 
+ 
+ 
+Utilizando el botón correspondiente de la columna “Bastidor”, será posible ver la lista de 
+marcos que hacen referencia al modelo. 
+ 
+ 
+ 
+ 
+58 
+ 
+En los campos de búsqueda libre (por ejemplo, “Descripción Modelo”) es posible realizar 
+una búsqueda parcial, es decir, introduciendo sólo una parte del texto; a medida que 
+escriba, el filtro se aplicará automáticamente, un resalte amarillo indicará el texto buscado. 
+Si un filtro está activo, el color de fondo de la lista de plantillas cambia. 
+ 
+ 
+Haga clic en la descripción del producto para acceder a las tablas del catálogo. 
+Aparecerá una lista de las tablas disponibles, divididas en grupos (Motor y Chasis); mueva 
+el cursor hacia los lados para desplazarse por la vista previa. 
+ 
+ 
+Selecciona una vista previa con un clic para verla a pantalla completa. 
+ 
+59 
+ 
+Cada detalle se indicará mediante un punto interactivo de color. 
+El significado de los distintos colores (resumido en el botón "Leyenda") es el siguiente: 
+1. Amarillo, elementos estándar; 
+2. Azul claro, el ártico está presente varias veces en la tabla; 
+3. Verde, artículos con variaciones (en color, tamaño, especificaciones para 
+distintos mercados, etc.). 
+ 
+ 
+Al situar el puntero del ratón sobre un punto interactivo, se mostrarán los detalles básicos 
+del artículo 
+ 
+ 
+60 
+ 
+ 
+A la derecha de la tabla hay botones para ampliar (Zoom in), reducir (Zoom out) o 
+devolver la imagen a su tamaño inicial (Centrar). 
+Si hace clic en un punto interactivo, accederá a la máscara de selección, donde podrá ver 
+los detalles de un artículo. 
+ 
+ 
+Seleccione el botón "Añadir" en la esquina inferior derecha para añadir el artículo a la cesta 
+o "Cerrar" para salir de la pantalla. 
+ 
+ 
+ 
+61 
+ 
+Todos los artículos seleccionados se añadirán a la "Cesta de la compra" y se resaltarán 
+con un círculo rojo alrededor del punto interactivo hasta que se eliminen de la cesta. 
+ 
+ 
+ 
+ 
+62 
+ 
+Códigos de artículos sostitutorios 
+Al situar el ratón sobre un punto interactivo de un artículo que ha sido sustituido, aparece una 
+etiqueta determinada: 
+ 
+ 
+Haciendo clic en el punto, aparece la máscara que resume el historial de sustituciones de 
+artículos.  
+El código que ha sido sustituido, y que por tanto ya no puede pedirse, aparece en la primera 
+línea precedido del símbolo .  
+El botón "Seleccionar" sólo se activa cuando se selecciona el código que se puede pedir. 
+ 
+ 
+Haga clic en la línea correspondiente al código que puede pedir y pulse el botón 
+"Seleccionar" para confirmar su elección.  
+ 
+ 
+ 
+63 
+ 
+LISTA DE PRECIOS - BÚSQUEDA DE ARTÍCULOS 
+Para buscar un artículo directamente desde la lista de precios, seleccione la función "Lista de 
+Precios" en el menú "Aplicaciones". 
+ 
+ 
+ 
+ 
+ 
+64 
+ 
+El enlace a la función "Lista de precios" también está presente en el catálogo. 
+ 
+ 
+Dentro de la lista de precios se puede buscar el código de artículo deseado utilizando los 
+siguientes criterios: 
+ Código 
+ Ver no Ordenables (Check S/N) 
+ Descripción Artículo 
+ Buscar en 1 
+ Buscar en 2 
+ Dto 
+ 
+ 
+ 
+65 
+ 
+Estos campos son accesibles desde la sección "Filtros" 
+ 
+ 
+Los filtros de búsqueda también se pueden combinar entre sí. 
+En los campos de búsqueda libre (ej. "Descripción Artículo") es posible realizar la 
+búsqueda parcial, es decir, introduciendo solo una parte del texto; El filtro se aplicará 
+automáticamente a medida que lo escriba. 
+ 
+ 
+ 
+66 
+ 
+Haga clic en el botón 
+, a la izquierda de cada fila, para abrir la máscara de selección. 
+Desde aquí se puede ver toda la información sobre el artículo y añadirlo, si lo desea, a la 
+cesta de la compra mediante el botón "Añadir" o compruebe en qué modelos está montado 
+gracias al botón "Aplicaciones". 
+ 
+ 
+ 
+ 
+ 
+ 
+67 
+ 
+La aplicabilidad en el catálogo (filtro de aplicaciones) 
+Para saber en qué modelos está montado un determinado artículo, puede realizar una 
+búsqueda a través del filtro "Aplicaciones". 
+El filtro se activa desde dos puntos del portal: 
+1. En la máscara de búsqueda principal del catálogo, dentro de la sección "Filtros", 
+escriba el código de artículo deseado en el campo "Aplicaciones". 
+ 
+ 
+2. Desde cualquier lugar se puede acceder a la máscara de selección de artículos 
+haciendo clic en el botón "Aplicaciones". 
+ 
+ 
+68 
+ 
+El programa mostrará la lista de modelos en los que se ha montado la pieza. 
+ 
+ 
+Seleccionando el modelo deseado, el programa propondrá solo la tabla (o las tablas) en que 
+está presente la pieza. 
+ 
+ 
+Si eliges una tabla, el código se resaltará con flechas rojas para identificarla más fácilmente. 
+ 
+ 
+ 
+69 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+Soft Way s.r.l. 
+ 
+Via G. Mazzocchi n. 1/3 
+20089 Rozzano (MI) – ITALIA 
+Tel +39 0322 550005 
+Código de identificación fiscal. y IVA 01468590037 
+Sociedad Unipersonal 
+ 
+Tel +39 0322 550005 
+ 
+Reg. Imprese N. 01468590037 R.E.A. MI-2589261 
+ 
+Página Web: www.softway.it 
+E-mail: commerciale@softway.it - assistenza@softway.it 
+ 
+Empresa sujeta a la dirección y coordinación de Editoriale Domus S.p.a. 
+ 
+ 
+ 
+ 

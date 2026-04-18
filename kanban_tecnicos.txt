@@ -1,0 +1,224 @@
+MANUAL
+PROGRAMACIÓN
+TALLER 
+OBJETIVO
+Sincronizar el proceso de taller
+con área de repuestos para
+gestionar oportunamente cada
+incidencia que se presenta
+durante el proceso con cada
+uno de nuestros clientes. 
+¿CON QUÉ FIN?
+Disminuir los tiempos de
+respuesta.
+agilizar 
+la 
+entrega 
+de
+motocicletas.
+satisfacer continuamente al
+cliente 
+con 
+el 
+servicio
+postventa.
+optimizar el trabajo de los
+técnicos.
+RESPONSABLES DEL
+PROCESO 
+Jefe de taller
+Coordinador de área
+Coordinador de servicio
+Técnico motocicleta
+Jefes de repuestos
+Auxiliares de repuestos 
+Auxiliares de garantías  
+Centro de atención
+telefónica.
+Asesor de servicio 
+TÉCNICOS
+INSTRUCTIVO PLATAFORMA
+PASO A PASO 
+Inicia sesión de acuerdo al usuario y
+contraseña que creaste al ingresar a
+la invitación.
+Solo podrá visualizar los tableros a
+los que esta invitado 
+Revisa tu programación en la columna  
+"próximos trabajos " e inicia la tarea
+según 
+la 
+programación 
+del
+coordinador. 
+La etiqueta o tarea tendrá la siguiente
+información: 
+Placa de motocicleta
+Tipo de trabajo 
+Fecha y hora de
+inicio de trabajo
+Fecha y hora
+finalización
+Cedula cliente
+Asignación técnico 
+Tiempo establecido
+para la operación
+Numero de orden
+de trabajo
+¿CÓMO EDITARLAS?
+Ingresa a la etiqueta y
+selecciona "Add " 
+se 
+desplegará 
+un
+listado 
+de 
+campos,
+selecciona 
+solo 
+los
+requeridos.  
+CLASIFICACIÓN POR
+TIPO DE TAREA
+las 
+etiquetas 
+se 
+encuentran
+clasificadas por colores para facilitar la
+visualización del trabajo por hacer. 
+PERMISOS 
+Editar tarea
+Mover tarea
+Comentar tarea
+Borrar comentario 
+Kilometraje
+Línea motocicleta
+ETAPAS DEL PROCESO 
+EN
+PROCESO
+PRÓXIMOS
+ TRABAJOS 
+EN 
+PROCESO
+PENDIENTES
+POR
+REPUESTOS
+REPROGRAMACIÓ
+N
+AUTORIZACIÓN
+CLIENTE
+TRABAJO
+EXTERNO
+FINALIZADO
+ENTREGA 
+AL
+CLIENTE
+¿QUÉ ES?
+Trabajos
+programa
+dos para
+el día en
+curso
+Motocicleta
+que
+actualmente
+se encuentra
+en el banco
+de trabajo
+siendo
+intervenida 
+Motocicletas
+que no
+pueden ser
+finalizadas
+por falta de
+repuestos o
+autorización
+de garantías  
+Motocicletas que
+estaban
+pendientes por
+repuestos o
+autorización de
+garantías y ya
+están
+disponibles
+Mano de obra
+y/o Repuestos
+pendientes por
+autorización
+del cliente
+Pendient
+es por
+trabajos
+externos
+Motocicleta
+s cuyo
+trabajo de
+taller
+finalizó y
+pueden ser
+entregadas
+al cliente
+Motocicletas
+que ya
+fueron
+recibidas
+por el cliente  
+después de
+su
+intervención
+en el taller 
+Tabla 1.
+TRASLADA ETIQUETAS DE PROCESO EN PROCESO
+Para mover una etiqueta debe seleccionar
+y arrastrar directamente a la columna del
+proceso requerido. 
+Solo puede haber una etiqueta en la
+columna "En proceso" por cada técnico.
+Cada rol tendrá diferentes columnas a su
+cargo para mover las etiquetas. (ver tabla 1).
+PODRÁ MOVERSE ENTRE LAS COLUMNAS SELECCIONADAS 
+3° REALIZAR TRABAJO SEGÚN
+ESPECIFICA LA OT.
+ 4° 
+CARGAR 
+REPUESTOS 
+Y
+REFERENCIAS 
+Comentar en la etiqueta los repuestos y referencias
+necesarias para la reparación de la motocicleta. 
+IMPORTANTE: Especificar si es pedido o cotización  
+2° 
+DAR 
+INICIO 
+AL
+TEMPORIZADOR EN LA
+ETIQUETA.
+° EN CASO DE TERMINAR
+INTERVENCIÓN
+Dejar etiqueta en: "FINALIZADO"
+¿CÓMO IMPLEMENTARLO?
+EN PROCESO
+° SI ES UNA GARANTÍA
+Debe pasar a estado: "PENDIENTE POR
+REPUESTO"
+° DE TENER REPUESTO      
+ PENDIENTE POR LLEGAR
+Dejar en estado: "PENDIENTE POR REPUESTO"
+° CUANDO ES REPARACIÓN
+PERSONAL
+Debe estar en: "AUTORIZACIÓN CLIENTE"
+NOTA:Cuando hay reasignación debe reiniciar el cronometro hasta terminar la
+intervención de la motocicleta. Dejar la etiqueta en el estado “finalizada”. 
+Detenerlo en caso de que
+no 
+pueda 
+seguir
+interviniendo la moto y
+dejar 
+especificado 
+en
+razón de paro. 
+1° TRASLADA LA ETIQUETA A LA COLUMNA "EN PROCESO"
+GRACIAS 

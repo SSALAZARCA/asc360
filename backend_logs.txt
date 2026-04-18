@@ -1,0 +1,999 @@
+INFO:     Started server process [1]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     127.0.0.1:46474 - "GET /health HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [1]
+INFO:     Started server process [1]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     127.0.0.1:58532 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46756 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44162 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:48282 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.21.0.1:60054 - "GET /api/v1/vehicles/NO182G HTTP/1.1" 500 Internal Server Error
+ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py", line 526, in _prepare_and_execute
+    prepared_stmt, attributes = await adapt_connection._prepare(
+                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py", line 773, in _prepare
+    prepared_stmt = await self._connection.prepare(
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/asyncpg/connection.py", line 638, in prepare
+    return await self._prepare(
+           ^^^^^^^^^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/asyncpg/connection.py", line 657, in _prepare
+    stmt = await self._get_statement(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/asyncpg/connection.py", line 443, in _get_statement
+    statement = await self._protocol.prepare(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "asyncpg/protocol/protocol.pyx", line 165, in prepare
+asyncpg.exceptions.UndefinedTableError: relation "vehicles" does not exist
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/engine/base.py", line 1967, in _exec_single_context
+    self.dialect.do_execute(
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/engine/default.py", line 952, in do_execute
+    cursor.execute(statement, parameters)
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py", line 585, in execute
+    self._adapt_connection.await_(
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/util/_concurrency_py3k.py", line 132, in await_only
+    return current.parent.switch(awaitable)  # type: ignore[no-any-return,attr-defined] # noqa: E501
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/util/_concurrency_py3k.py", line 196, in greenlet_spawn
+    value = await result
+            ^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py", line 563, in _prepare_and_execute
+    self._handle_exception(error)
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py", line 513, in _handle_exception
+    self._adapt_connection._handle_exception(error)
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py", line 797, in _handle_exception
+    raise translated_error from error
+sqlalchemy.dialects.postgresql.asyncpg.AsyncAdapt_asyncpg_dbapi.ProgrammingError: <class 'asyncpg.exceptions.UndefinedTableError'>: relation "vehicles" does not exist
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/appuser/.local/lib/python3.11/site-packages/uvicorn/protocols/http/httptools_impl.py", line 416, in run_asgi
+    result = await app(  # type: ignore[func-returns-value]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/uvicorn/middleware/proxy_headers.py", line 60, in __call__
+    return await self.app(scope, receive, send)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/fastapi/applications.py", line 1160, in __call__
+    await super().__call__(scope, receive, send)
+  File "/home/appuser/.local/lib/python3.11/site-packages/starlette/applications.py", line 107, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/home/appuser/.local/lib/python3.11/site-packages/starlette/middleware/errors.py", line 186, in __call__
+    raise exc
+  File "/home/appuser/.local/lib/python3.11/site-packages/starlette/middleware/errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "/home/appuser/.local/lib/python3.11/site-packages/starlette/middleware/cors.py", line 87, in __call__
+    await self.app(scope, receive, send)
+  File "/home/appuser/.local/lib/python3.11/site-packages/starlette/middleware/exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "/home/appuser/.local/lib/python3.11/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "/home/appuser/.local/lib/python3.11/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "/home/appuser/.local/lib/python3.11/site-packages/fastapi/middleware/asyncexitstack.py", line 18, in __call__
+    await self.app(scope, receive, send)
+  File "/home/appuser/.local/lib/python3.11/site-packages/starlette/routing.py", line 716, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/home/appuser/.local/lib/python3.11/site-packages/starlette/routing.py", line 736, in app
+    await route.handle(scope, receive, send)
+  File "/home/appuser/.local/lib/python3.11/site-packages/starlette/routing.py", line 290, in handle
+    await self.app(scope, receive, send)
+  File "/home/appuser/.local/lib/python3.11/site-packages/fastapi/routing.py", line 130, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "/home/appuser/.local/lib/python3.11/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "/home/appuser/.local/lib/python3.11/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "/home/appuser/.local/lib/python3.11/site-packages/fastapi/routing.py", line 116, in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/fastapi/routing.py", line 670, in app
+    raw_response = await run_endpoint_function(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/fastapi/routing.py", line 324, in run_endpoint_function
+    return await dependant.call(**values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/app/api/v1/endpoints/vehicles.py", line 32, in get_vehicle_by_plate
+    vehicle = await vehicle_service.get_vehicle_by_plate(db, plate, tenant_id)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/app/services/vehicle_service.py", line 53, in get_vehicle_by_plate
+    return await self.repository.get_by_plate(db, clean_plate, tenant_id)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/app/repositories/vehicle_repository.py", line 15, in get_by_plate
+    result = await db.execute(
+             ^^^^^^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/ext/asyncio/session.py", line 449, in execute
+    result = await greenlet_spawn(
+             ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/util/_concurrency_py3k.py", line 201, in greenlet_spawn
+    result = context.throw(*sys.exc_info())
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/orm/session.py", line 2351, in execute
+    return self._execute_internal(
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/orm/session.py", line 2249, in _execute_internal
+    result: Result[Any] = compile_state_cls.orm_execute_statement(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/orm/context.py", line 306, in orm_execute_statement
+    result = conn.execute(
+             ^^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/engine/base.py", line 1419, in execute
+    return meth(
+           ^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/sql/elements.py", line 527, in _execute_on_connection
+    return connection._execute_clauseelement(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/engine/base.py", line 1641, in _execute_clauseelement
+    ret = self._execute_context(
+          ^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/engine/base.py", line 1846, in _execute_context
+    return self._exec_single_context(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/engine/base.py", line 1986, in _exec_single_context
+    self._handle_dbapi_exception(
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/engine/base.py", line 2363, in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/engine/base.py", line 1967, in _exec_single_context
+    self.dialect.do_execute(
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/engine/default.py", line 952, in do_execute
+    cursor.execute(statement, parameters)
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py", line 585, in execute
+    self._adapt_connection.await_(
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/util/_concurrency_py3k.py", line 132, in await_only
+    return current.parent.switch(awaitable)  # type: ignore[no-any-return,attr-defined] # noqa: E501
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/util/_concurrency_py3k.py", line 196, in greenlet_spawn
+    value = await result
+            ^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py", line 563, in _prepare_and_execute
+    self._handle_exception(error)
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py", line 513, in _handle_exception
+    self._adapt_connection._handle_exception(error)
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py", line 797, in _handle_exception
+    raise translated_error from error
+sqlalchemy.exc.ProgrammingError: (sqlalchemy.dialects.postgresql.asyncpg.ProgrammingError) <class 'asyncpg.exceptions.UndefinedTableError'>: relation "vehicles" does not exist
+[SQL: SELECT vehicles.id, vehicles.tenant_id, vehicles.plate, vehicles.vin, vehicles.brand, vehicles.model, vehicles.year, vehicles.color, vehicles.mileage 
+FROM vehicles 
+WHERE vehicles.plate = $1::VARCHAR AND vehicles.tenant_id = $2::UUID]
+[parameters: ('NO182G', '9c2c248e-fe13-4138-aecd-edfa5e37a537')]
+(Background on this error at: https://sqlalche.me/e/20/f405)
+INFO:     172.21.0.1:60064 - "GET /api/v1/vehicles/vin/NO182G HTTP/1.1" 404 Not Found
+INFO:     172.21.0.1:60076 - "POST /api/v1/users/ HTTP/1.1" 500 Internal Server Error
+ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py", line 526, in _prepare_and_execute
+    prepared_stmt, attributes = await adapt_connection._prepare(
+                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py", line 773, in _prepare
+    prepared_stmt = await self._connection.prepare(
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/asyncpg/connection.py", line 638, in prepare
+    return await self._prepare(
+           ^^^^^^^^^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/asyncpg/connection.py", line 657, in _prepare
+    stmt = await self._get_statement(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/asyncpg/connection.py", line 443, in _get_statement
+    statement = await self._protocol.prepare(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "asyncpg/protocol/protocol.pyx", line 165, in prepare
+asyncpg.exceptions.UndefinedTableError: relation "users" does not exist
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/engine/base.py", line 1967, in _exec_single_context
+    self.dialect.do_execute(
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/engine/default.py", line 952, in do_execute
+    cursor.execute(statement, parameters)
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py", line 585, in execute
+    self._adapt_connection.await_(
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/util/_concurrency_py3k.py", line 132, in await_only
+    return current.parent.switch(awaitable)  # type: ignore[no-any-return,attr-defined] # noqa: E501
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/util/_concurrency_py3k.py", line 196, in greenlet_spawn
+    value = await result
+            ^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py", line 563, in _prepare_and_execute
+    self._handle_exception(error)
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py", line 513, in _handle_exception
+    self._adapt_connection._handle_exception(error)
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py", line 797, in _handle_exception
+    raise translated_error from error
+sqlalchemy.dialects.postgresql.asyncpg.AsyncAdapt_asyncpg_dbapi.ProgrammingError: <class 'asyncpg.exceptions.UndefinedTableError'>: relation "users" does not exist
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/appuser/.local/lib/python3.11/site-packages/uvicorn/protocols/http/httptools_impl.py", line 416, in run_asgi
+    result = await app(  # type: ignore[func-returns-value]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/uvicorn/middleware/proxy_headers.py", line 60, in __call__
+    return await self.app(scope, receive, send)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/fastapi/applications.py", line 1160, in __call__
+    await super().__call__(scope, receive, send)
+  File "/home/appuser/.local/lib/python3.11/site-packages/starlette/applications.py", line 107, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/home/appuser/.local/lib/python3.11/site-packages/starlette/middleware/errors.py", line 186, in __call__
+    raise exc
+  File "/home/appuser/.local/lib/python3.11/site-packages/starlette/middleware/errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "/home/appuser/.local/lib/python3.11/site-packages/starlette/middleware/cors.py", line 87, in __call__
+    await self.app(scope, receive, send)
+  File "/home/appuser/.local/lib/python3.11/site-packages/starlette/middleware/exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "/home/appuser/.local/lib/python3.11/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "/home/appuser/.local/lib/python3.11/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "/home/appuser/.local/lib/python3.11/site-packages/fastapi/middleware/asyncexitstack.py", line 18, in __call__
+    await self.app(scope, receive, send)
+  File "/home/appuser/.local/lib/python3.11/site-packages/starlette/routing.py", line 716, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/home/appuser/.local/lib/python3.11/site-packages/starlette/routing.py", line 736, in app
+    await route.handle(scope, receive, send)
+  File "/home/appuser/.local/lib/python3.11/site-packages/starlette/routing.py", line 290, in handle
+    await self.app(scope, receive, send)
+  File "/home/appuser/.local/lib/python3.11/site-packages/fastapi/routing.py", line 130, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "/home/appuser/.local/lib/python3.11/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "/home/appuser/.local/lib/python3.11/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "/home/appuser/.local/lib/python3.11/site-packages/fastapi/routing.py", line 116, in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/fastapi/routing.py", line 670, in app
+    raw_response = await run_endpoint_function(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/fastapi/routing.py", line 324, in run_endpoint_function
+    return await dependant.call(**values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/app/api/v1/endpoints/users.py", line 16, in create_user
+    existing_user = (await db.execute(stmt)).scalar_one_or_none()
+                     ^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/ext/asyncio/session.py", line 449, in execute
+    result = await greenlet_spawn(
+             ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/util/_concurrency_py3k.py", line 201, in greenlet_spawn
+    result = context.throw(*sys.exc_info())
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/orm/session.py", line 2351, in execute
+    return self._execute_internal(
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/orm/session.py", line 2249, in _execute_internal
+    result: Result[Any] = compile_state_cls.orm_execute_statement(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/orm/context.py", line 306, in orm_execute_statement
+    result = conn.execute(
+             ^^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/engine/base.py", line 1419, in execute
+    return meth(
+           ^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/sql/elements.py", line 527, in _execute_on_connection
+    return connection._execute_clauseelement(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/engine/base.py", line 1641, in _execute_clauseelement
+    ret = self._execute_context(
+          ^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/engine/base.py", line 1846, in _execute_context
+    return self._exec_single_context(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/engine/base.py", line 1986, in _exec_single_context
+    self._handle_dbapi_exception(
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/engine/base.py", line 2363, in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/engine/base.py", line 1967, in _exec_single_context
+    self.dialect.do_execute(
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/engine/default.py", line 952, in do_execute
+    cursor.execute(statement, parameters)
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py", line 585, in execute
+    self._adapt_connection.await_(
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/util/_concurrency_py3k.py", line 132, in await_only
+    return current.parent.switch(awaitable)  # type: ignore[no-any-return,attr-defined] # noqa: E501
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/util/_concurrency_py3k.py", line 196, in greenlet_spawn
+    value = await result
+            ^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py", line 563, in _prepare_and_execute
+    self._handle_exception(error)
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py", line 513, in _handle_exception
+    self._adapt_connection._handle_exception(error)
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py", line 797, in _handle_exception
+    raise translated_error from error
+sqlalchemy.exc.ProgrammingError: (sqlalchemy.dialects.postgresql.asyncpg.ProgrammingError) <class 'asyncpg.exceptions.UndefinedTableError'>: relation "users" does not exist
+[SQL: SELECT users.id, users.tenant_id, users.name, users.telegram_id, users.role 
+FROM users 
+WHERE users.telegram_id = $1::VARCHAR]
+[parameters: ('1152683368',)]
+(Background on this error at: https://sqlalche.me/e/20/f405)
+INFO:     172.21.0.1:60082 - "POST /api/v1/vehicles/ HTTP/1.1" 400 Bad Request
+INFO:     127.0.0.1:34270 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57528 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54164 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:33778 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44068 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44958 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.21.0.1:38734 - "GET /api/v1/health HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:43756 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45786 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55754 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50532 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41920 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43424 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.21.0.1:34188 - "GET /api/v1/vehicles/NUEVA%20RECEPCI%C3%93N HTTP/1.1" 404 Not Found
+INFO:     172.21.0.1:34188 - "GET /api/v1/vehicles/vin/NUEVA%20RECEPCI%C3%93N HTTP/1.1" 404 Not Found
+INFO:     172.21.0.1:34196 - "GET /api/v1/vehicles/NUEVA%20RECEPCI%C3%93N HTTP/1.1" 404 Not Found
+INFO:     172.21.0.1:34196 - "GET /api/v1/vehicles/vin/NUEVA%20RECEPCI%C3%93N HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:60158 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.21.0.1:51828 - "GET /api/v1/vehicles/NOI82G HTTP/1.1" 404 Not Found
+INFO:     172.21.0.1:51828 - "GET /api/v1/vehicles/vin/NOI82G HTTP/1.1" 404 Not Found
+INFO:     172.21.0.1:51838 - "POST /api/v1/users/ HTTP/1.1" 201 Created
+/home/appuser/.local/lib/python3.11/site-packages/pydantic/main.py:464: UserWarning: Pydantic serializer warnings:
+  PydanticSerializationUnexpectedValue(Expected `uuid` - serialized value may not be as expected [field_name='tenant_id', input_value='9c2c248e-fe13-4138-aecd-edfa5e37a537', input_type=str])
+  return self.__pydantic_serializer__.to_python(
+INFO:     172.21.0.1:51838 - "POST /api/v1/vehicles/ HTTP/1.1" 201 Created
+INFO:     127.0.0.1:55396 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53272 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46072 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46244 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.21.0.1:53214 - "POST /api/v1/orders/ HTTP/1.1" 500 Internal Server Error
+ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py", line 550, in _prepare_and_execute
+    self._rows = deque(await prepared_stmt.fetch(*parameters))
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/asyncpg/prepared_stmt.py", line 177, in fetch
+    data = await self.__bind_execute(args, 0, timeout)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/asyncpg/prepared_stmt.py", line 268, in __bind_execute
+    data, status, _ = await self.__do_execute(
+                      ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/asyncpg/prepared_stmt.py", line 257, in __do_execute
+    return await executor(protocol)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "asyncpg/protocol/protocol.pyx", line 205, in bind_execute
+asyncpg.exceptions.ForeignKeyViolationError: insert or update on table "service_orders" violates foreign key constraint "service_orders_vehicle_id_fkey"
+DETAIL:  Key (vehicle_id)=(e347ed77-5343-4245-98c3-8528d9ceba63) is not present in table "vehicles".
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/engine/base.py", line 1967, in _exec_single_context
+    self.dialect.do_execute(
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/engine/default.py", line 952, in do_execute
+    cursor.execute(statement, parameters)
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py", line 585, in execute
+    self._adapt_connection.await_(
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/util/_concurrency_py3k.py", line 132, in await_only
+    return current.parent.switch(awaitable)  # type: ignore[no-any-return,attr-defined] # noqa: E501
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/util/_concurrency_py3k.py", line 196, in greenlet_spawn
+    value = await result
+            ^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py", line 563, in _prepare_and_execute
+    self._handle_exception(error)
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py", line 513, in _handle_exception
+    self._adapt_connection._handle_exception(error)
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py", line 797, in _handle_exception
+    raise translated_error from error
+sqlalchemy.dialects.postgresql.asyncpg.AsyncAdapt_asyncpg_dbapi.IntegrityError: <class 'asyncpg.exceptions.ForeignKeyViolationError'>: insert or update on table "service_orders" violates foreign key constraint "service_orders_vehicle_id_fkey"
+DETAIL:  Key (vehicle_id)=(e347ed77-5343-4245-98c3-8528d9ceba63) is not present in table "vehicles".
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/appuser/.local/lib/python3.11/site-packages/uvicorn/protocols/http/httptools_impl.py", line 416, in run_asgi
+    result = await app(  # type: ignore[func-returns-value]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/uvicorn/middleware/proxy_headers.py", line 60, in __call__
+    return await self.app(scope, receive, send)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/fastapi/applications.py", line 1160, in __call__
+    await super().__call__(scope, receive, send)
+  File "/home/appuser/.local/lib/python3.11/site-packages/starlette/applications.py", line 107, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/home/appuser/.local/lib/python3.11/site-packages/starlette/middleware/errors.py", line 186, in __call__
+    raise exc
+  File "/home/appuser/.local/lib/python3.11/site-packages/starlette/middleware/errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "/home/appuser/.local/lib/python3.11/site-packages/starlette/middleware/cors.py", line 87, in __call__
+    await self.app(scope, receive, send)
+  File "/home/appuser/.local/lib/python3.11/site-packages/starlette/middleware/exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "/home/appuser/.local/lib/python3.11/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "/home/appuser/.local/lib/python3.11/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "/home/appuser/.local/lib/python3.11/site-packages/fastapi/middleware/asyncexitstack.py", line 18, in __call__
+    await self.app(scope, receive, send)
+  File "/home/appuser/.local/lib/python3.11/site-packages/starlette/routing.py", line 716, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/home/appuser/.local/lib/python3.11/site-packages/starlette/routing.py", line 736, in app
+    await route.handle(scope, receive, send)
+  File "/home/appuser/.local/lib/python3.11/site-packages/starlette/routing.py", line 290, in handle
+    await self.app(scope, receive, send)
+  File "/home/appuser/.local/lib/python3.11/site-packages/fastapi/routing.py", line 130, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "/home/appuser/.local/lib/python3.11/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "/home/appuser/.local/lib/python3.11/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "/home/appuser/.local/lib/python3.11/site-packages/fastapi/routing.py", line 116, in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/fastapi/routing.py", line 670, in app
+    raw_response = await run_endpoint_function(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/fastapi/routing.py", line 324, in run_endpoint_function
+    return await dependant.call(**values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/app/api/v1/orders.py", line 34, in create_service_order
+    await db.flush() # Para obtener el new_order.id
+    ^^^^^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/ext/asyncio/session.py", line 787, in flush
+    await greenlet_spawn(self.sync_session.flush, objects=objects)
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/util/_concurrency_py3k.py", line 203, in greenlet_spawn
+    result = context.switch(value)
+             ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/orm/session.py", line 4331, in flush
+    self._flush(objects)
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/orm/session.py", line 4466, in _flush
+    with util.safe_reraise():
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/util/langhelpers.py", line 121, in __exit__
+    raise exc_value.with_traceback(exc_tb)
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/orm/session.py", line 4427, in _flush
+    flush_context.execute()
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/orm/unitofwork.py", line 466, in execute
+    rec.execute(self)
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/orm/unitofwork.py", line 642, in execute
+    util.preloaded.orm_persistence.save_obj(
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/orm/persistence.py", line 93, in save_obj
+    _emit_insert_statements(
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/orm/persistence.py", line 1233, in _emit_insert_statements
+    result = connection.execute(
+             ^^^^^^^^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/engine/base.py", line 1419, in execute
+    return meth(
+           ^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/sql/elements.py", line 527, in _execute_on_connection
+    return connection._execute_clauseelement(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/engine/base.py", line 1641, in _execute_clauseelement
+    ret = self._execute_context(
+          ^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/engine/base.py", line 1846, in _execute_context
+    return self._exec_single_context(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/engine/base.py", line 1986, in _exec_single_context
+    self._handle_dbapi_exception(
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/engine/base.py", line 2363, in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/engine/base.py", line 1967, in _exec_single_context
+    self.dialect.do_execute(
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/engine/default.py", line 952, in do_execute
+    cursor.execute(statement, parameters)
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py", line 585, in execute
+    self._adapt_connection.await_(
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/util/_concurrency_py3k.py", line 132, in await_only
+    return current.parent.switch(awaitable)  # type: ignore[no-any-return,attr-defined] # noqa: E501
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/util/_concurrency_py3k.py", line 196, in greenlet_spawn
+    value = await result
+            ^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py", line 563, in _prepare_and_execute
+    self._handle_exception(error)
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py", line 513, in _handle_exception
+    self._adapt_connection._handle_exception(error)
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py", line 797, in _handle_exception
+    raise translated_error from error
+sqlalchemy.exc.IntegrityError: (sqlalchemy.dialects.postgresql.asyncpg.IntegrityError) <class 'asyncpg.exceptions.ForeignKeyViolationError'>: insert or update on table "service_orders" violates foreign key constraint "service_orders_vehicle_id_fkey"
+DETAIL:  Key (vehicle_id)=(e347ed77-5343-4245-98c3-8528d9ceba63) is not present in table "vehicles".
+[SQL: INSERT INTO service_orders (id, tenant_id, vehicle_id, client_id, technician_id, status, service_type, created_at, completed_at) VALUES ($1::UUID, $2::UUID, $3::UUID, $4::UUID, $5::UUID, $6::servicestatus, $7::servicetype, $8::TIMESTAMP WITHOUT TIME ZONE, $9::TIMESTAMP WITHOUT TIME ZONE)]
+[parameters: (UUID('7b8c083c-9229-4ecb-adc8-a69ff3421ae8'), UUID('9c2c248e-fe13-4138-aecd-edfa5e37a537'), UUID('e347ed77-5343-4245-98c3-8528d9ceba63'), UUID('32b34ae9-809f-4826-8c5e-5e689368d54a'), None, 'scheduled', 'regular', datetime.datetime(2026, 3, 7, 19, 49, 8, 857045), None)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+INFO:     127.0.0.1:49858 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60194 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41488 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43428 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53912 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57404 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:38976 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60568 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54814 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43854 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55512 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45186 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42778 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51056 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35296 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57722 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56694 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:40392 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:39650 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53916 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35536 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44652 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52092 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:33850 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:32832 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:37196 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45656 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:37132 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59930 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53204 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52444 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43786 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46862 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:33354 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57670 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:33578 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60664 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49738 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54790 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:40576 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58022 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59970 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:34102 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:33940 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55088 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42774 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60670 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:34400 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54364 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56390 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:47970 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60130 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50028 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45132 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59476 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58370 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:47378 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:39562 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59450 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:48804 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:34244 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:36714 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41450 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53094 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55490 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56186 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44992 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46766 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54776 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55408 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35078 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45622 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53146 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52844 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54508 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:36824 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43156 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56238 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:40292 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45798 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:33802 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:34336 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:39432 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60670 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:40660 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55558 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:37100 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42606 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44922 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:47868 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44364 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44076 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60960 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58084 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56582 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59530 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58866 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46578 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42148 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:40174 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41668 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58046 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:37708 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49312 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:36598 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45736 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41068 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45306 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49346 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:36752 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57816 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59796 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49394 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58370 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41212 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42658 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35750 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57412 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56898 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51268 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44130 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49682 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:37402 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49866 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42296 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51414 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41322 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:36480 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44464 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59650 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59422 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46878 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:36078 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49524 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:38258 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55828 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59950 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43932 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:37276 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44954 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:38154 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42268 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54876 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54370 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45440 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42232 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:39578 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59714 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:39848 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44202 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44396 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50570 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60276 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:37160 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42524 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:37150 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60030 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52892 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45986 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:47860 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35596 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58686 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50450 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50592 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54126 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55380 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43320 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43526 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58262 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:48028 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:33534 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57560 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46172 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45690 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49258 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53700 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58696 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43582 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43106 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49002 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59106 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53682 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:48636 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:40842 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53482 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:32956 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43146 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59940 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46324 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:36630 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43336 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:39606 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45194 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35874 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:34752 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:36368 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56532 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45350 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59100 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59332 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:40810 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:40038 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52042 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54642 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53888 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49158 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:39748 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51526 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:38066 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42216 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54632 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:36136 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:48238 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46016 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:39964 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:37750 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:48862 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:39284 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43778 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55962 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59542 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:34904 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:36142 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58548 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35496 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60136 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57988 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49154 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54594 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:47438 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52458 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56804 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:37022 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55620 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55932 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46584 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59130 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51750 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45502 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:48408 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:36542 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:38242 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43590 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58188 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41394 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:48838 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45712 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60308 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:40404 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60678 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:39938 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:34476 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:39560 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52422 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41276 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58622 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:37638 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:34448 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46358 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53600 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:38620 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45724 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42022 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:39050 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:34044 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50666 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56586 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43838 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51218 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43604 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56800 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:48596 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49140 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60772 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:48190 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:40192 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46860 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:40572 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:36404 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42292 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59222 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46382 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:38762 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35162 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:38646 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57008 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57662 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54756 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57350 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49990 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:37120 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35652 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:34194 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:38144 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45766 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:34970 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46662 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58120 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51106 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56558 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:37208 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:34458 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42088 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:36034 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45208 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44760 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43894 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58280 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51922 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57458 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:47494 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:48422 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53856 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43590 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58968 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57196 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43840 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50162 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52570 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:33292 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57092 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:37834 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:40036 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42836 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46504 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.21.0.1:60150 - "GET /api/v1/vehicles/NOI82G HTTP/1.1" 404 Not Found
+INFO:     172.21.0.1:60150 - "GET /api/v1/vehicles/vin/NOI82G HTTP/1.1" 404 Not Found
+INFO:     172.21.0.1:60156 - "POST /api/v1/users/ HTTP/1.1" 201 Created
+INFO:     172.21.0.1:60156 - "POST /api/v1/vehicles/ HTTP/1.1" 201 Created
+INFO:     127.0.0.1:53448 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60164 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:39016 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.21.0.1:59352 - "POST /api/v1/orders/ HTTP/1.1" 500 Internal Server Error
+ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py", line 550, in _prepare_and_execute
+    self._rows = deque(await prepared_stmt.fetch(*parameters))
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/asyncpg/prepared_stmt.py", line 177, in fetch
+    data = await self.__bind_execute(args, 0, timeout)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/asyncpg/prepared_stmt.py", line 268, in __bind_execute
+    data, status, _ = await self.__do_execute(
+                      ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/asyncpg/prepared_stmt.py", line 257, in __do_execute
+    return await executor(protocol)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "asyncpg/protocol/protocol.pyx", line 205, in bind_execute
+asyncpg.exceptions.ForeignKeyViolationError: insert or update on table "service_orders" violates foreign key constraint "service_orders_vehicle_id_fkey"
+DETAIL:  Key (vehicle_id)=(e9a44a58-bb56-423c-bbfa-fb1382942c79) is not present in table "vehicles".
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/engine/base.py", line 1967, in _exec_single_context
+    self.dialect.do_execute(
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/engine/default.py", line 952, in do_execute
+    cursor.execute(statement, parameters)
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py", line 585, in execute
+    self._adapt_connection.await_(
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/util/_concurrency_py3k.py", line 132, in await_only
+    return current.parent.switch(awaitable)  # type: ignore[no-any-return,attr-defined] # noqa: E501
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/util/_concurrency_py3k.py", line 196, in greenlet_spawn
+    value = await result
+            ^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py", line 563, in _prepare_and_execute
+    self._handle_exception(error)
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py", line 513, in _handle_exception
+    self._adapt_connection._handle_exception(error)
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py", line 797, in _handle_exception
+    raise translated_error from error
+sqlalchemy.dialects.postgresql.asyncpg.AsyncAdapt_asyncpg_dbapi.IntegrityError: <class 'asyncpg.exceptions.ForeignKeyViolationError'>: insert or update on table "service_orders" violates foreign key constraint "service_orders_vehicle_id_fkey"
+DETAIL:  Key (vehicle_id)=(e9a44a58-bb56-423c-bbfa-fb1382942c79) is not present in table "vehicles".
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/appuser/.local/lib/python3.11/site-packages/uvicorn/protocols/http/httptools_impl.py", line 416, in run_asgi
+    result = await app(  # type: ignore[func-returns-value]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/uvicorn/middleware/proxy_headers.py", line 60, in __call__
+    return await self.app(scope, receive, send)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/fastapi/applications.py", line 1160, in __call__
+    await super().__call__(scope, receive, send)
+  File "/home/appuser/.local/lib/python3.11/site-packages/starlette/applications.py", line 107, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/home/appuser/.local/lib/python3.11/site-packages/starlette/middleware/errors.py", line 186, in __call__
+    raise exc
+  File "/home/appuser/.local/lib/python3.11/site-packages/starlette/middleware/errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "/home/appuser/.local/lib/python3.11/site-packages/starlette/middleware/cors.py", line 87, in __call__
+    await self.app(scope, receive, send)
+  File "/home/appuser/.local/lib/python3.11/site-packages/starlette/middleware/exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "/home/appuser/.local/lib/python3.11/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "/home/appuser/.local/lib/python3.11/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "/home/appuser/.local/lib/python3.11/site-packages/fastapi/middleware/asyncexitstack.py", line 18, in __call__
+    await self.app(scope, receive, send)
+  File "/home/appuser/.local/lib/python3.11/site-packages/starlette/routing.py", line 716, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/home/appuser/.local/lib/python3.11/site-packages/starlette/routing.py", line 736, in app
+    await route.handle(scope, receive, send)
+  File "/home/appuser/.local/lib/python3.11/site-packages/starlette/routing.py", line 290, in handle
+    await self.app(scope, receive, send)
+  File "/home/appuser/.local/lib/python3.11/site-packages/fastapi/routing.py", line 130, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "/home/appuser/.local/lib/python3.11/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "/home/appuser/.local/lib/python3.11/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "/home/appuser/.local/lib/python3.11/site-packages/fastapi/routing.py", line 116, in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/fastapi/routing.py", line 670, in app
+    raw_response = await run_endpoint_function(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/fastapi/routing.py", line 324, in run_endpoint_function
+    return await dependant.call(**values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/app/api/v1/orders.py", line 34, in create_service_order
+    await db.flush() # Para obtener el new_order.id
+    ^^^^^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/ext/asyncio/session.py", line 787, in flush
+    await greenlet_spawn(self.sync_session.flush, objects=objects)
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/util/_concurrency_py3k.py", line 203, in greenlet_spawn
+    result = context.switch(value)
+             ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/orm/session.py", line 4331, in flush
+    self._flush(objects)
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/orm/session.py", line 4466, in _flush
+    with util.safe_reraise():
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/util/langhelpers.py", line 121, in __exit__
+    raise exc_value.with_traceback(exc_tb)
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/orm/session.py", line 4427, in _flush
+    flush_context.execute()
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/orm/unitofwork.py", line 466, in execute
+    rec.execute(self)
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/orm/unitofwork.py", line 642, in execute
+    util.preloaded.orm_persistence.save_obj(
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/orm/persistence.py", line 93, in save_obj
+    _emit_insert_statements(
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/orm/persistence.py", line 1233, in _emit_insert_statements
+    result = connection.execute(
+             ^^^^^^^^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/engine/base.py", line 1419, in execute
+    return meth(
+           ^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/sql/elements.py", line 527, in _execute_on_connection
+    return connection._execute_clauseelement(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/engine/base.py", line 1641, in _execute_clauseelement
+    ret = self._execute_context(
+          ^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/engine/base.py", line 1846, in _execute_context
+    return self._exec_single_context(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/engine/base.py", line 1986, in _exec_single_context
+    self._handle_dbapi_exception(
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/engine/base.py", line 2363, in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/engine/base.py", line 1967, in _exec_single_context
+    self.dialect.do_execute(
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/engine/default.py", line 952, in do_execute
+    cursor.execute(statement, parameters)
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py", line 585, in execute
+    self._adapt_connection.await_(
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/util/_concurrency_py3k.py", line 132, in await_only
+    return current.parent.switch(awaitable)  # type: ignore[no-any-return,attr-defined] # noqa: E501
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/util/_concurrency_py3k.py", line 196, in greenlet_spawn
+    value = await result
+            ^^^^^^^^^^^^
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py", line 563, in _prepare_and_execute
+    self._handle_exception(error)
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py", line 513, in _handle_exception
+    self._adapt_connection._handle_exception(error)
+  File "/home/appuser/.local/lib/python3.11/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py", line 797, in _handle_exception
+    raise translated_error from error
+sqlalchemy.exc.IntegrityError: (sqlalchemy.dialects.postgresql.asyncpg.IntegrityError) <class 'asyncpg.exceptions.ForeignKeyViolationError'>: insert or update on table "service_orders" violates foreign key constraint "service_orders_vehicle_id_fkey"
+DETAIL:  Key (vehicle_id)=(e9a44a58-bb56-423c-bbfa-fb1382942c79) is not present in table "vehicles".
+[SQL: INSERT INTO service_orders (id, tenant_id, vehicle_id, client_id, technician_id, status, service_type, created_at, completed_at) VALUES ($1::UUID, $2::UUID, $3::UUID, $4::UUID, $5::UUID, $6::servicestatus, $7::servicetype, $8::TIMESTAMP WITHOUT TIME ZONE, $9::TIMESTAMP WITHOUT TIME ZONE)]
+[parameters: (UUID('f541d544-c67e-4336-a789-c011c013e3ff'), UUID('9c2c248e-fe13-4138-aecd-edfa5e37a537'), UUID('e9a44a58-bb56-423c-bbfa-fb1382942c79'), UUID('01b7c0e2-178d-42f8-bbf9-1edb55dfed97'), None, 'scheduled', 'regular', datetime.datetime(2026, 3, 7, 22, 33, 8, 723932), None)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+INFO:     127.0.0.1:56322 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:47598 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56800 - "GET /health HTTP/1.1" 200 OK
