@@ -7,8 +7,10 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-UmAdmin2024Secure}
       POSTGRES_DB: ${POSTGRES_DB:-um_service_db}
       POSTGRES_HOST_AUTH_METHOD: trust
+    command: postgres -c hba_file=/etc/postgresql/pg_hba.conf
     volumes:
       - postgres_data_v5:/var/lib/postgresql/data
+      - ./postgres/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-umadmin} -d ${POSTGRES_DB:-um_service_db}"]
       interval: 10s
