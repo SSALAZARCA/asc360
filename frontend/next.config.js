@@ -1,9 +1,15 @@
 /** @type {import('next').NextConfig} */
+
+// Force HTTPS for the API URL before Next.js inlines it into the bundle
+if (process.env.NEXT_PUBLIC_API_URL) {
+  process.env.NEXT_PUBLIC_API_URL = process.env.NEXT_PUBLIC_API_URL.replace(
+    /^http:\/\/(?!localhost)/,
+    'https://'
+  );
+}
+
 const nextConfig = {
   output: 'standalone',
-  env: {
-    NEXT_PUBLIC_API_URL: 'https://asc360.online/api/v1',
-  },
   async rewrites() {
     return [
       {
