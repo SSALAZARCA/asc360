@@ -17,7 +17,6 @@ const VM_FORM_DEFAULTS = {
   posicion_cortina: '',
   sistemas_control: '',
   combustible: 'CARBURADOR',
-  anio_modelo: '',
 };
 
 export default function SettingsPage() {
@@ -59,10 +58,7 @@ export default function SettingsPage() {
     setVmSaving(true);
     setVmError('');
     try {
-      const payload = {
-        ...vmForm,
-        anio_modelo: vmForm.anio_modelo !== '' ? Number(vmForm.anio_modelo) : null,
-      };
+      const payload = { ...vmForm };
       const url = editingVM
         ? `${BACKEND_URL}/vehicle-models/${editingVM.id}`
         : `${BACKEND_URL}/vehicle-models`;
@@ -117,7 +113,6 @@ export default function SettingsPage() {
       posicion_cortina: vm.posicion_cortina || '',
       sistemas_control: vm.sistemas_control || '',
       combustible: vm.combustible || 'CARBURADOR',
-      anio_modelo: vm.anio_modelo != null ? String(vm.anio_modelo) : '',
     });
     setVmError('');
     setShowVMModal(true);
@@ -411,7 +406,7 @@ export default function SettingsPage() {
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
                 <thead>
                   <tr style={{ background: 'rgba(0,0,0,0.3)' }}>
-                    {['Modelo', 'Marca', 'Cilindrada', 'Potencia', 'Combustible', 'Año', ''].map(h => (
+                    {['Modelo', 'Marca', 'Cilindrada', 'Potencia', 'Combustible', ''].map(h => (
                       <th key={h} style={{
                         padding: '9px 14px', textAlign: 'left',
                         fontSize: '9px', fontWeight: 700, color: '#606075',
@@ -447,7 +442,6 @@ export default function SettingsPage() {
                         )}
                         {!vm.combustible && <span style={{ color: '#606075' }}>—</span>}
                       </td>
-                      <td style={{ padding: '10px 14px', color: '#606075' }}>{vm.anio_modelo || '—'}</td>
                       {userRole === 'superadmin' ? (
                         <td style={{ padding: '10px 14px' }}>
                           <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
@@ -673,25 +667,6 @@ export default function SettingsPage() {
                 </select>
               </div>
 
-              {/* Año Modelo */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                <label style={{ fontSize: '11px', fontWeight: 600, color: '#9ca3af' }}>Año Modelo</label>
-                <input
-                  type="number"
-                  value={vmForm.anio_modelo}
-                  onChange={e => setVmForm(f => ({ ...f, anio_modelo: e.target.value }))}
-                  placeholder="2024"
-                  min={1990}
-                  max={2100}
-                  style={{
-                    padding: '8px 12px', borderRadius: '8px', fontSize: '13px',
-                    background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
-                    color: '#fff', outline: 'none',
-                  }}
-                  onFocus={e => e.target.style.borderColor = '#60a5fa'}
-                  onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.1)'}
-                />
-              </div>
             </div>
 
             {/* Error */}

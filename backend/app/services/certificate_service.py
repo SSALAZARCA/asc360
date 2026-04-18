@@ -229,7 +229,7 @@ def generate_certificado_bytes(unit, order, vehicle_model) -> bytes:
         color=color_es,
         modelo=modelo_str,
         marca='UNITED MOTORS (UM)',
-        anio=unit.model_year or order.model_year or 2026,
+        anio=unit.model_year,
         cilindrada=specs['cilindrada'],
         potencia=specs['potencia'],
         peso=specs['peso'],

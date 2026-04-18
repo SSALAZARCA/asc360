@@ -57,7 +57,6 @@ class VehicleModelCreate(BaseModel):
     posicion_cortina: Optional[str] = None
     sistemas_control: Optional[str] = None
     combustible: Optional[str] = "CARBURADOR"
-    anio_modelo: Optional[int] = None
 
 
 class VehicleModelUpdate(BaseModel):
@@ -70,7 +69,6 @@ class VehicleModelUpdate(BaseModel):
     posicion_cortina: Optional[str] = None
     sistemas_control: Optional[str] = None
     combustible: Optional[str] = None
-    anio_modelo: Optional[int] = None
 
 
 class VehicleModelRead(BaseModel):
@@ -86,7 +84,6 @@ class VehicleModelRead(BaseModel):
     posicion_cortina: Optional[str] = None
     sistemas_control: Optional[str] = None
     combustible: Optional[str] = Field(None, alias="fuel_system")
-    anio_modelo: Optional[int] = Field(None, alias="model_year")
     created_at: datetime
     updated_at: Optional[datetime] = None
 

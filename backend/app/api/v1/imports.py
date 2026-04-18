@@ -1257,6 +1257,12 @@ async def download_certificado(
                 self.fuel_system = d.get("fuel_system")
         vm_obj = _SpecsProxy(matched_vm)
 
+    if not unit.model_year:
+        raise HTTPException(
+            status_code=422,
+            detail="La moto no tiene año modelo registrado. Completá ese campo antes de generar el empadronamiento.",
+        )
+
     pdf_bytes = certificate_service.generate_certificado_bytes(unit, order, vm_obj)
 
     return StreamingResponse(

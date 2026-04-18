@@ -39,7 +39,6 @@ _SCHEMA_TO_MODEL = {
     "modelo": "model_name",
     "marca": "brand",
     "combustible": "fuel_system",
-    "anio_modelo": "model_year",
 }
 
 
@@ -61,7 +60,6 @@ async def create_vehicle_model(
         posicion_cortina=payload.posicion_cortina,
         sistemas_control=payload.sistemas_control,
         fuel_system=payload.combustible,
-        model_year=payload.anio_modelo,
     )
     db.add(record)
     try:

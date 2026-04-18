@@ -375,6 +375,5 @@ class VehicleModel(Base):
     posicion_cortina = Column(String(100), nullable=True)
     sistemas_control = Column(String(500), nullable=True)
     fuel_system = Column(String(50), nullable=True, default="CARBURADOR")
-    model_year = Column(Integer, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
