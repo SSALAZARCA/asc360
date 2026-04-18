@@ -6,6 +6,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-umadmin}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-UmAdmin2024Secure}
       POSTGRES_DB: ${POSTGRES_DB:-um_service_db}
+      POSTGRES_HOST_AUTH_METHOD: trust
     volumes:
       - postgres_data_v3:/var/lib/postgresql/data
     healthcheck:
