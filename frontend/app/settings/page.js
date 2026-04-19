@@ -17,6 +17,16 @@ const VM_FORM_DEFAULTS = {
   posicion_cortina: '',
   sistemas_control: '',
   combustible: 'CARBURADOR',
+  largo_total: '',
+  ancho_total: '',
+  altura_total: '',
+  altura_silla: '',
+  distancia_suelo: '',
+  distancia_ejes: '',
+  tanque_combustible: '',
+  relacion_compresion: '',
+  llanta_delantera: '',
+  llanta_trasera: '',
 };
 
 export default function SettingsPage() {
@@ -113,6 +123,16 @@ export default function SettingsPage() {
       posicion_cortina: vm.posicion_cortina || '',
       sistemas_control: vm.sistemas_control || '',
       combustible: vm.combustible || 'CARBURADOR',
+      largo_total: vm.largo_total || '',
+      ancho_total: vm.ancho_total || '',
+      altura_total: vm.altura_total || '',
+      altura_silla: vm.altura_silla || '',
+      distancia_suelo: vm.distancia_suelo || '',
+      distancia_ejes: vm.distancia_ejes || '',
+      tanque_combustible: vm.tanque_combustible || '',
+      relacion_compresion: vm.relacion_compresion || '',
+      llanta_delantera: vm.llanta_delantera || '',
+      llanta_trasera: vm.llanta_trasera || '',
     });
     setVmError('');
     setShowVMModal(true);
@@ -666,6 +686,35 @@ export default function SettingsPage() {
                   <option value="INYECCION">INYECCION</option>
                 </select>
               </div>
+
+              {/* Dimensiones */}
+              {[
+                ['largo_total', 'Largo Total (mm)'],
+                ['ancho_total', 'Ancho Total (mm)'],
+                ['altura_total', 'Altura Total (mm)'],
+                ['altura_silla', 'Altura de la Silla (mm)'],
+                ['distancia_suelo', 'Distancia al Suelo (mm)'],
+                ['distancia_ejes', 'Distancia entre Ejes (mm)'],
+                ['tanque_combustible', 'Tanque de Combustible (Gal)'],
+                ['relacion_compresion', 'Relación de Compresión'],
+                ['llanta_delantera', 'Llanta Delantera'],
+                ['llanta_trasera', 'Llanta Trasera'],
+              ].map(([field, label]) => (
+                <div key={field} style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                  <label style={{ fontSize: '11px', fontWeight: 600, color: '#9ca3af' }}>{label}</label>
+                  <input
+                    value={vmForm[field]}
+                    onChange={e => setVmForm(f => ({ ...f, [field]: e.target.value }))}
+                    style={{
+                      padding: '8px 12px', borderRadius: '8px', fontSize: '13px',
+                      background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
+                      color: '#fff', outline: 'none',
+                    }}
+                    onFocus={e => e.target.style.borderColor = '#60a5fa'}
+                    onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.1)'}
+                  />
+                </div>
+              ))}
 
             </div>
 

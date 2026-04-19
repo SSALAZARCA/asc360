@@ -57,6 +57,16 @@ class VehicleModelCreate(BaseModel):
     posicion_cortina: Optional[str] = None
     sistemas_control: Optional[str] = None
     combustible: Optional[str] = "CARBURADOR"
+    largo_total: Optional[str] = None
+    ancho_total: Optional[str] = None
+    altura_total: Optional[str] = None
+    altura_silla: Optional[str] = None
+    distancia_suelo: Optional[str] = None
+    distancia_ejes: Optional[str] = None
+    tanque_combustible: Optional[str] = None
+    relacion_compresion: Optional[str] = None
+    llanta_delantera: Optional[str] = None
+    llanta_trasera: Optional[str] = None
 
 
 class VehicleModelUpdate(BaseModel):
@@ -69,6 +79,16 @@ class VehicleModelUpdate(BaseModel):
     posicion_cortina: Optional[str] = None
     sistemas_control: Optional[str] = None
     combustible: Optional[str] = None
+    largo_total: Optional[str] = None
+    ancho_total: Optional[str] = None
+    altura_total: Optional[str] = None
+    altura_silla: Optional[str] = None
+    distancia_suelo: Optional[str] = None
+    distancia_ejes: Optional[str] = None
+    tanque_combustible: Optional[str] = None
+    relacion_compresion: Optional[str] = None
+    llanta_delantera: Optional[str] = None
+    llanta_trasera: Optional[str] = None
 
 
 class VehicleModelRead(BaseModel):
@@ -84,6 +104,16 @@ class VehicleModelRead(BaseModel):
     posicion_cortina: Optional[str] = None
     sistemas_control: Optional[str] = None
     combustible: Optional[str] = Field(None, alias="fuel_system")
+    largo_total: Optional[str] = None
+    ancho_total: Optional[str] = None
+    altura_total: Optional[str] = None
+    altura_silla: Optional[str] = None
+    distancia_suelo: Optional[str] = None
+    distancia_ejes: Optional[str] = None
+    tanque_combustible: Optional[str] = None
+    relacion_compresion: Optional[str] = None
+    llanta_delantera: Optional[str] = None
+    llanta_trasera: Optional[str] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
 
