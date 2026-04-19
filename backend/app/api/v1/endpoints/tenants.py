@@ -31,7 +31,7 @@ class TenantOut(BaseModel):
 
 class TenantCreate(BaseModel):
     name: str
-    subdomain: str
+    subdomain: Optional[str] = None
     nit: Optional[str] = None
     phone: Optional[str] = None
     tenant_type: str = "service_center"
@@ -111,8 +111,9 @@ async def create_tenant(
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=409, detail=f"Ya existe un tenant con ese nombre o NIT: {data.name}")
 
-    # Asegurar subdominio único
-    base_sub = data.subdomain
+    # Asegurar subdominio único — auto-generar desde name si no se provee
+    import re
+    base_sub = data.subdomain or re.sub(r'[^a-z0-9]+', '-', data.name.lower()).strip('-')
     subdomain = base_sub
     counter = 1
     while True:
