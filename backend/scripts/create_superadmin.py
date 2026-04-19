@@ -13,16 +13,16 @@ from app.core.security import get_password_hash
 
 async def create_superadmin():
     async with async_session_maker() as session:
-        # Verificar si ya existe
-        stmt = select(User).where(User.email == "admin@umcolombia.co")
+        # Si ya existe CUALQUIER superadmin activo, no crear nada
+        stmt = select(User).where(User.role == Role.superadmin, User.status == UserStatus.active)
         res = await session.execute(stmt)
         existing_admin = res.scalar_one_or_none()
 
         if existing_admin:
-            print("El superadmin ya existe. No se modifica.")
+            print("Ya existe un superadmin activo. No se modifica.")
             return
 
-        # Crear nuevo admin
+        # Solo crear si no hay ningún superadmin en el sistema
         admin = User(
             name="Super Admin UM",
             email="admin@umcolombia.co",
