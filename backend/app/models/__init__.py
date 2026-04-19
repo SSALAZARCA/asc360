@@ -3,6 +3,7 @@
 
 from app.database import Base
 
+from .system_config import SystemConfig
 from .tenant import Tenant, TenantType
 from .user import User, Role
 from .vehicle import Vehicle
@@ -23,7 +24,7 @@ from .imports import (
 
 # Esto exporta todo correctamente.
 __all__ = [
-    "Base", "Tenant", "TenantType", "User", "Role", "Vehicle",
+    "Base", "SystemConfig", "Tenant", "TenantType", "User", "Role", "Vehicle",
     "ServiceOrder", "OrderHistory", "ServiceStatus", "ServiceType",
     "PartCatalog", "PartsOrder", "PartsOrderItem", "PartsOrderStatus",
     "PurchaseOrder", "PurchaseOrderItem", "PurchaseOrderStatus", "PurchaseOrderItemStatus",

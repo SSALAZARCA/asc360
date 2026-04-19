@@ -41,25 +41,19 @@ export default function Sidebar() {
     checkAuth();
     window.addEventListener('storage', checkAuth);
 
-    // Cargar logo fresco desde la API (cross-browser)
-    const tenantId = localStorage.getItem('um_tenant_id');
-    const token = localStorage.getItem('um_token');
-    if (tenantId && token) {
-      fetch(`${API_URL()}/tenants/${tenantId}/config`, {
-        headers: { Authorization: `Bearer ${token}` },
+    // Logo global de la marca — sin asociación a taller
+    fetch(`${API_URL()}/settings/logo`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data?.logo_base64) {
+          setCompanyLogo(data.logo_base64);
+          localStorage.setItem('um_logo', data.logo_base64);
+        } else {
+          setCompanyLogo(null);
+          localStorage.removeItem('um_logo');
+        }
       })
-        .then(r => r.ok ? r.json() : null)
-        .then(data => {
-          if (data?.logo_base64) {
-            setCompanyLogo(data.logo_base64);
-            localStorage.setItem('um_logo', data.logo_base64);
-          } else {
-            setCompanyLogo(null);
-            localStorage.removeItem('um_logo');
-          }
-        })
-        .catch(() => {});
-    }
+      .catch(() => {});
 
     return () => window.removeEventListener('storage', checkAuth);
   }, []);

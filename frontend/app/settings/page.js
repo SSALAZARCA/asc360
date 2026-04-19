@@ -148,20 +148,25 @@ export default function SettingsPage() {
       setUserRole(user.role || null);
     } catch { setUserRole(null); }
 
-    // Cargar config del taller (incluye logo)
+    // Cargar logo global de la marca
+    fetch(`${BACKEND_URL}/settings/logo`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data?.logo_base64) {
+          setLogoBase64(data.logo_base64);
+          localStorage.setItem('um_logo', data.logo_base64);
+        }
+      })
+      .catch(() => {});
+
+    // Cargar config del taller
     const tenantId = localStorage.getItem('um_tenant_id');
     if (tenantId) {
       fetch(`${BACKEND_URL}/tenants/${tenantId}/config`, {
         headers: { Authorization: `Bearer ${localStorage.getItem('um_token') || ''}` }
       })
         .then(r => r.ok ? r.json() : null)
-        .then(data => {
-          if (data?.diagnosis_reminder_minutes) setReminderMinutes(data.diagnosis_reminder_minutes);
-          if (data?.logo_base64) {
-            setLogoBase64(data.logo_base64);
-            localStorage.setItem('um_logo', data.logo_base64);
-          }
-        })
+        .then(data => { if (data?.diagnosis_reminder_minutes) setReminderMinutes(data.diagnosis_reminder_minutes); })
         .catch(() => {});
     }
   }, []);
@@ -186,10 +191,8 @@ export default function SettingsPage() {
 
   const handleSaveLogo = async () => {
     if (!logoBase64) return;
-    const tenantId = localStorage.getItem('um_tenant_id');
-    if (!tenantId) { setSuccessMsg('⚠️ No se encontró el taller activo.'); return; }
     try {
-      const res = await fetch(`${BACKEND_URL}/tenants/${tenantId}/config`, {
+      const res = await fetch(`${BACKEND_URL}/settings/logo`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('um_token') || ''}` },
         body: JSON.stringify({ logo_base64: logoBase64 }),
@@ -239,14 +242,11 @@ export default function SettingsPage() {
   };
 
   const handleRemoveLogo = async () => {
-    const tenantId = localStorage.getItem('um_tenant_id');
-    if (tenantId) {
-      await fetch(`${BACKEND_URL}/tenants/${tenantId}/config`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('um_token') || ''}` },
-        body: JSON.stringify({ logo_base64: null }),
-      }).catch(() => {});
-    }
+    await fetch(`${BACKEND_URL}/settings/logo`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('um_token') || ''}` },
+      body: JSON.stringify({ logo_base64: null }),
+    }).catch(() => {});
     setLogoBase64(null);
     localStorage.removeItem('um_logo');
     window.dispatchEvent(new Event('storage'));
