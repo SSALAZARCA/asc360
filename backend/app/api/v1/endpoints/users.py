@@ -177,6 +177,26 @@ class PasswordReset(BaseModel):
     password: str
 
 
+@router.delete("/{user_id}", status_code=204)
+async def delete_user(
+    user_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Elimina un usuario. Solo superadmin. No puede eliminarse a sí mismo."""
+    if not current_user.is_superadmin:
+        raise HTTPException(status_code=403, detail="Sin permisos")
+    if current_user.id == user_id:
+        raise HTTPException(status_code=400, detail="No podés eliminarte a vos mismo")
+
+    user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+    await db.delete(user)
+    await db.commit()
+
+
 @router.patch("/{user_id}/password", status_code=204)
 async def reset_user_password(
     user_id: UUID,

@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import AdminLayout from '../admin-layout';
-import { UserCheck, UserX, Shield, Briefcase, Mail, Phone, Send, Plus, Users as UsersIcon, Edit, X } from 'lucide-react';
+import { UserCheck, UserX, Shield, Briefcase, Mail, Phone, Send, Plus, Users as UsersIcon, Edit, X, Trash2 } from 'lucide-react';
 import { authFetch } from '../../lib/authFetch';
 
 export default function UsersPage() {
@@ -9,6 +9,12 @@ export default function UsersPage() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editForm, setEditForm] = useState(null);
+  const [currentUserId, setCurrentUserId] = useState(null);
+
+  useEffect(() => {
+    const stored = localStorage.getItem('um_user');
+    if (stored) setCurrentUserId(JSON.parse(stored).id);
+  }, []);
 
   const fetchUsers = async () => {
     try {
@@ -23,6 +29,16 @@ export default function UsersPage() {
   };
 
   useEffect(() => { fetchUsers(); }, []);
+
+  const deleteUser = async (userId, userName) => {
+    if (!confirm(`¿Eliminar a ${userName}? Esta acción no se puede deshacer.`)) return;
+    try {
+      await authFetch(`/users/${userId}`, { method: 'DELETE' });
+      fetchUsers();
+    } catch (e) {
+      alert('Error al eliminar el usuario');
+    }
+  };
 
   const updateStatus = async (userId, newStatus) => {
     try {
@@ -161,6 +177,11 @@ export default function UsersPage() {
                     {(u.status === 'active' || u.status === 'pending') && (
                       <button onClick={() => updateStatus(u.id, 'rejected')} className="action-btn text-red-500 bg-red-500/10 hover:bg-red-500/20" title="Revocar Acceso">
                         <UserX size={14} />
+                      </button>
+                    )}
+                    {u.id !== currentUserId && (
+                      <button onClick={() => deleteUser(u.id, u.name)} className="action-btn text-red-700 bg-red-900/20 hover:bg-red-900/40" title="Eliminar Usuario">
+                        <Trash2 size={14} />
                       </button>
                     )}
                   </div>
