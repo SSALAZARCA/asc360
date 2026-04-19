@@ -1,10 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Header
+from pydantic import BaseModel
 from typing import List, Optional
 from sqlalchemy.future import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.models.user import User, UserStatus, Role
 from app.schemas.user import UserCreate, UserOut, UserStatusUpdate, UserUpdate
+from app.core.security import get_password_hash
 from app.api.deps import get_current_user, get_optional_user, CurrentUser
 from uuid import UUID
 from app.config import settings
@@ -39,7 +41,10 @@ async def create_user(
         if existing_user:
             return existing_user
 
-    new_user = User(**user_in.model_dump())
+    user_data = user_in.model_dump(exclude={"password"})
+    new_user = User(**user_data)
+    if user_in.password:
+        new_user.hashed_password = get_password_hash(user_in.password)
 
     # Si viene via JWT de un Admin (no superadmin), forzar su tenant
     if not is_bot_call and current_user and not current_user.is_superadmin:
@@ -166,6 +171,30 @@ async def update_user(
     await db.commit()
     await db.refresh(user)
     return user
+
+
+class PasswordReset(BaseModel):
+    password: str
+
+
+@router.patch("/{user_id}/password", status_code=204)
+async def reset_user_password(
+    user_id: UUID,
+    payload: PasswordReset,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Resetea la contraseña web de un usuario. Solo superadmin."""
+    if not current_user.is_superadmin:
+        raise HTTPException(status_code=403, detail="Sin permisos")
+
+    stmt = select(User).where(User.id == user_id)
+    user = (await db.execute(stmt)).scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+    user.hashed_password = get_password_hash(payload.password)
+    await db.commit()
 
 
 @router.patch("/{user_id}/status", response_model=UserOut)

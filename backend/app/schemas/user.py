@@ -17,7 +17,7 @@ class UserBase(BaseModel):
 # Para crear
 class UserCreate(UserBase):
     tenant_id: Optional[UUID] = None
-    # password si lo vamos a requerir o logeo por telegram directo
+    password: Optional[str] = None
 
 # Para actualizar
 class UserUpdate(BaseModel):

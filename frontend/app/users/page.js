@@ -37,12 +37,12 @@ export default function UsersPage() {
   };
 
   const openNew = () => {
-    setEditForm({ name: '', role: 'technician', email: '', phone: '', status: 'active', telegram_id: '' });
+    setEditForm({ name: '', role: 'technician', email: '', phone: '', status: 'active', telegram_id: '', password: '' });
     setShowModal(true);
   };
 
   const openEdit = (u) => {
-    setEditForm(u);
+    setEditForm({ ...u, password: '' });
     setShowModal(true);
   };
 
@@ -59,6 +59,12 @@ export default function UsersPage() {
             telegram_id: editForm.telegram_id || null,
           })
         });
+        if (editForm.password) {
+          await authFetch(`/users/${editForm.id}/password`, {
+            method: 'PATCH',
+            body: JSON.stringify({ password: editForm.password })
+          });
+        }
       } else {
         await authFetch('/users', {
           method: 'POST',
@@ -69,6 +75,7 @@ export default function UsersPage() {
             role: editForm.role,
             telegram_id: editForm.telegram_id || null,
             status: 'active',
+            password: editForm.password || null,
           })
         });
       }
@@ -197,6 +204,10 @@ export default function UsersPage() {
                 <div>
                   <label>Teléfono Móvil</label>
                   <input value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})} placeholder="+57 300 000 0000" />
+                </div>
+                <div className="col-span-2">
+                  <label>{editForm.id ? 'Nueva Contraseña (dejar vacío para no cambiar)' : 'Contraseña de Acceso Web'}</label>
+                  <input value={editForm.password} onChange={e => setEditForm({...editForm, password: e.target.value})} type="password" placeholder={editForm.id ? '••••••••' : 'Mínimo 8 caracteres'} />
                 </div>
               </div>
             </div>
