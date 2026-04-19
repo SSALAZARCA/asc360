@@ -441,7 +441,7 @@ export default function MotocicletasTab({ userRole }) {
   };
 
   const handleOpenDim = (unit) => {
-    const token = localStorage.getItem('um_token');
+    const token = sessionStorage.getItem('um_token');
     const url = `${API()}/imports/moto-units/${unit.id}/dim-url?token=${token}`;
     window.open(url, '_blank', 'noopener,noreferrer');
   };

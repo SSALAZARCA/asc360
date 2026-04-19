@@ -13,7 +13,7 @@ export default function UsersPage() {
   const [confirmDelete, setConfirmDelete] = useState(null);
 
   useEffect(() => {
-    const stored = localStorage.getItem('um_user');
+    const stored = sessionStorage.getItem('um_user');
     if (stored) setCurrentUserId(JSON.parse(stored).id);
   }, []);
 

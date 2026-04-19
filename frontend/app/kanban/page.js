@@ -290,7 +290,7 @@ function OrderModal({ order, onClose }) {
 
                 {detail.recepcion.reception_pdf_url && (
                   <a
-                    href={`${API()}/orders/${order.order_id}/pdf?token=${typeof window !== 'undefined' ? localStorage.getItem('um_token') : ''}`}
+                    href={`${API()}/orders/${order.order_id}/pdf?token=${typeof window !== 'undefined' ? sessionStorage.getItem('um_token') : ''}`}
                     target="_blank"
                     rel="noreferrer"
                     className="mpdf-btn"

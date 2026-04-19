@@ -29,7 +29,7 @@ export default function ExcelUploadModal({ isOpen, onClose, onSuccess, uploadUrl
     setLoading(true);
     setError(null);
     try {
-      const token = typeof window !== 'undefined' ? localStorage.getItem('um_token') : null;
+      const token = typeof window !== 'undefined' ? sessionStorage.getItem('um_token') : null;
       const formData = new FormData();
       formData.append('file', file);
       // Fetch directo — NO usar authFetch para evitar que inyecte Content-Type: application/json

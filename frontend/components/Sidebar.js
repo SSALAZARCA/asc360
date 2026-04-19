@@ -37,7 +37,7 @@ export default function Sidebar() {
 
   useEffect(() => {
     const checkAuth = () => {
-      const stored = localStorage.getItem('um_user');
+      const stored = sessionStorage.getItem('um_user');
       if (stored) setUser(JSON.parse(stored));
       const cached = localStorage.getItem('um_logo');
       setCompanyLogo(cached || null);
@@ -67,7 +67,7 @@ export default function Sidebar() {
     if (pwdForm.next.length < 6) { setPwdError('Mínimo 6 caracteres'); return; }
     setPwdLoading(true); setPwdError('');
     try {
-      const token = localStorage.getItem('um_token');
+      const token = sessionStorage.getItem('um_token');
       const res = await fetch(`${API_URL()}/auth/change-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
@@ -85,7 +85,7 @@ export default function Sidebar() {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('um_user');
+    sessionStorage.removeItem('um_user');
     window.dispatchEvent(new Event('storage'));
     router.push('/login');
   };

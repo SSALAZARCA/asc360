@@ -169,7 +169,7 @@ function OrderModal({ order, onClose }) {
                 )}
 
                 {detail.recepcion.reception_pdf_url && (
-                  <a href={`${API()}/orders/${order.order_id}/pdf?token=${typeof window !== 'undefined' ? localStorage.getItem('um_token') : ''}`} target="_blank" rel="noreferrer" className="mpdf-btn">
+                  <a href={`${API()}/orders/${order.order_id}/pdf?token=${typeof window !== 'undefined' ? sessionStorage.getItem('um_token') : ''}`} target="_blank" rel="noreferrer" className="mpdf-btn">
                     <FileDown size={14} /> Ver Acta de Recepción PDF
                   </a>
                 )}
@@ -387,7 +387,7 @@ export default function ServicesPage() {
                     <td className="td-dim" style={{ textAlign:'center', color: (s.g_totales||0) > 1 ? '#eab308' : undefined }}>{s.g_totales ?? '-'}</td>
                     <td onClick={e => e.stopPropagation()}>
                       {s.pdf_url ? (
-                        <a href={`${API()}/orders/${s.order_id}/pdf?token=${typeof window !== 'undefined' ? localStorage.getItem('um_token') : ''}`} target="_blank" className="btn-pdf">
+                        <a href={`${API()}/orders/${s.order_id}/pdf?token=${typeof window !== 'undefined' ? sessionStorage.getItem('um_token') : ''}`} target="_blank" className="btn-pdf">
                           <FileDown size={14} />
                         </a>
                       ) : <span className="td-dim text-[0.6rem]">Sin PDF</span>}

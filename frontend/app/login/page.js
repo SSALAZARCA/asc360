@@ -31,8 +31,8 @@ export default function LoginPage() {
       }
 
       // Guardar token y datos del usuario
-      localStorage.setItem('um_token', data.access_token);
-      localStorage.setItem('um_user', JSON.stringify(data.user));
+      sessionStorage.setItem('um_token', data.access_token);
+      sessionStorage.setItem('um_user', JSON.stringify(data.user));
       
       // Actualizar el contexto en la app
       window.dispatchEvent(new Event('storage'));

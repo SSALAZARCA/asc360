@@ -7,7 +7,7 @@ export default function ImportsPage() {
   const [userRole, setUserRole] = useState(null);
 
   useEffect(() => {
-    const stored = localStorage.getItem('um_user');
+    const stored = sessionStorage.getItem('um_user');
     if (stored) {
       const u = JSON.parse(stored);
       setUserRole(u.role);

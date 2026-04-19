@@ -144,7 +144,7 @@ export default function SettingsPage() {
 
     // Detectar rol
     try {
-      const user = JSON.parse(localStorage.getItem('um_user') || '{}');
+      const user = JSON.parse(sessionStorage.getItem('um_user') || '{}');
       setUserRole(user.role || null);
     } catch { setUserRole(null); }
 
@@ -160,10 +160,10 @@ export default function SettingsPage() {
       .catch(() => {});
 
     // Cargar config del taller
-    const tenantId = localStorage.getItem('um_tenant_id');
+    const tenantId = sessionStorage.getItem('um_tenant_id');
     if (tenantId) {
       fetch(`${BACKEND_URL}/tenants/${tenantId}/config`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('um_token') || ''}` }
+        headers: { Authorization: `Bearer ${sessionStorage.getItem('um_token') || ''}` }
       })
         .then(r => r.ok ? r.json() : null)
         .then(data => { if (data?.diagnosis_reminder_minutes) setReminderMinutes(data.diagnosis_reminder_minutes); })
@@ -194,7 +194,7 @@ export default function SettingsPage() {
     try {
       const res = await fetch(`${BACKEND_URL}/settings/logo`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('um_token') || ''}` },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sessionStorage.getItem('um_token') || ''}` },
         body: JSON.stringify({ logo_base64: logoBase64 }),
       });
       if (res.ok) {
@@ -215,7 +215,7 @@ export default function SettingsPage() {
       setReminderMsg('El valor mínimo es 5 minutos.');
       return;
     }
-    const tenantId = localStorage.getItem('um_tenant_id');
+    const tenantId = sessionStorage.getItem('um_tenant_id');
     if (!tenantId) { setReminderMsg('No se encontró el taller activo.'); return; }
 
     setReminderSaving(true);
@@ -224,7 +224,7 @@ export default function SettingsPage() {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('um_token') || ''}`
+          Authorization: `Bearer ${sessionStorage.getItem('um_token') || ''}`
         },
         body: JSON.stringify({ diagnosis_reminder_minutes: Number(reminderMinutes) })
       });
@@ -244,7 +244,7 @@ export default function SettingsPage() {
   const handleRemoveLogo = async () => {
     await fetch(`${BACKEND_URL}/settings/logo`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('um_token') || ''}` },
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sessionStorage.getItem('um_token') || ''}` },
       body: JSON.stringify({ logo_base64: null }),
     }).catch(() => {});
     setLogoBase64(null);

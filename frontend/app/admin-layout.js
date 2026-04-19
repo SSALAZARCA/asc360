@@ -17,7 +17,7 @@ export default function AdminLayout({ children, fullWidth = false }) {
   useEffect(() => {
     const checkAuth = () => {
       const r = routerRef.current;
-      const stored = localStorage.getItem('um_user');
+      const stored = sessionStorage.getItem('um_user');
       if (!stored) {
         if (pathname !== '/login') r.push('/login');
         return;

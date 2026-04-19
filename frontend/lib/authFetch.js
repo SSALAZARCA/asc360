@@ -13,7 +13,7 @@ const API = () => {
 };
 
 export async function authFetch(path, options = {}) {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('um_token') : null;
+  const token = typeof window !== 'undefined' ? sessionStorage.getItem('um_token') : null;
 
   // Si el body es FormData el browser debe setear el Content-Type con el boundary,
   // no lo forzamos nosotros o el multipart queda malformado y FastAPI devuelve 422.
@@ -35,8 +35,8 @@ export async function authFetch(path, options = {}) {
   // Si el servidor responde con 401 (token vencido o inválido), limpiar sesión
   if (response.status === 401) {
     if (typeof window !== 'undefined') {
-      localStorage.removeItem('um_token');
-      localStorage.removeItem('um_user');
+      sessionStorage.removeItem('um_token');
+      sessionStorage.removeItem('um_user');
       window.dispatchEvent(new Event('storage'));
     }
   }
