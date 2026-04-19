@@ -13,6 +13,7 @@ class Role(enum.Enum):
     client = "client"
     parts_dealer = "parts_dealer"
     proveedor = "proveedor"
+    administrativo = "administrativo"
 
 class UserStatus(enum.Enum):
     pending = "pending"

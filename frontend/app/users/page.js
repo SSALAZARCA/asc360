@@ -182,6 +182,7 @@ export default function UsersPage() {
                   <select value={editForm.role} onChange={e => setEditForm({...editForm, role: e.target.value})}>
                     <option value="technician">Técnico Mecánico</option>
                     <option value="jefe_taller">Jefe / Coordinador de Taller</option>
+                    <option value="administrativo">Administrativo</option>
                     <option value="superadmin">Super Admin (Global)</option>
                   </select>
                 </div>

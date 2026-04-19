@@ -65,10 +65,16 @@ export default function Sidebar() {
   };
 
   const isProveedor = user?.role === 'proveedor';
+  const isAdministrativo = user?.role === 'administrativo';
 
   const menuItems = ALL_ITEMS.filter(item => {
-    // proveedor solo ve items de imports
+    // proveedor solo ve imports
     if (isProveedor) return !!item.importsOnly;
+    // administrativo: dashboard, services e imports — sin adminOnly (tenants/users/settings)
+    if (isAdministrativo) {
+      if (item.adminOnly) return false;
+      return true;
+    }
     // items exclusivos de imports: superadmin y proveedor
     if (item.importsOnly && user?.role !== 'superadmin') return false;
     // items adminOnly: solo superadmin
