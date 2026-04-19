@@ -29,7 +29,7 @@ class CurrentUser:
 
     @property
     def is_imports_editor(self) -> bool:
-        return self.role in ("superadmin", "proveedor")
+        return self.role in ("superadmin", "proveedor", "administrativo")
 
 
 async def get_current_user(
