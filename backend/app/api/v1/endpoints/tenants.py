@@ -136,8 +136,8 @@ async def create_tenant(
             resultado = validate_ciudad_dpto(data.ciudad, data.departamento or "")
             ciudad_oficial = resultado["municipio"]
             dpto_oficial = resultado["departamento"]
-        except ValueError as ve:
-            raise HTTPException(status_code=422, detail=str(ve))
+        except ValueError:
+            pass  # DIVIPOLA no reconoció la ciudad — usar valor ingresado sin normalizar
 
     # Normalizar tipo_servicio
     tipo_srv = data.tipo_servicio.strip() if data.tipo_servicio else None
