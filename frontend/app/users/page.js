@@ -34,11 +34,16 @@ export default function UsersPage() {
   const deleteUser = async () => {
     if (!confirmDelete) return;
     try {
-      await authFetch(`/users/${confirmDelete.id}`, { method: 'DELETE' });
+      const res = await authFetch(`/users/${confirmDelete.id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        alert(body.detail || `Error ${res.status} al eliminar`);
+        return;
+      }
       setConfirmDelete(null);
-      fetchUsers();
+      await fetchUsers();
     } catch (e) {
-      alert('Error al eliminar el usuario');
+      alert('Error de conexión al eliminar');
     }
   };
 
