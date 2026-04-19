@@ -187,7 +187,7 @@ async def delete_user(
     """Elimina un usuario. Solo superadmin. No puede eliminarse a sí mismo."""
     if not current_user.is_superadmin:
         raise HTTPException(status_code=403, detail="Sin permisos")
-    if current_user.id == user_id:
+    if str(current_user.user_id) == str(user_id):
         raise HTTPException(status_code=400, detail="No podés eliminarte a vos mismo")
 
     user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
@@ -216,7 +216,7 @@ async def delete_user(
     await db.execute(
         sql_update(PartsOrder)
         .where(PartsOrder.created_by == user_id)
-        .values({"created_by": current_user.id})
+        .values({"created_by": uuid.UUID(current_user.user_id)})
     )
 
     await db.delete(user)
