@@ -10,6 +10,7 @@ export default function UsersPage() {
   const [showModal, setShowModal] = useState(false);
   const [editForm, setEditForm] = useState(null);
   const [currentUserId, setCurrentUserId] = useState(null);
+  const [confirmDelete, setConfirmDelete] = useState(null);
 
   useEffect(() => {
     const stored = localStorage.getItem('um_user');
@@ -30,10 +31,11 @@ export default function UsersPage() {
 
   useEffect(() => { fetchUsers(); }, []);
 
-  const deleteUser = async (userId, userName) => {
-    if (!confirm(`¿Eliminar a ${userName}? Esta acción no se puede deshacer.`)) return;
+  const deleteUser = async () => {
+    if (!confirmDelete) return;
     try {
-      await authFetch(`/users/${userId}`, { method: 'DELETE' });
+      await authFetch(`/users/${confirmDelete.id}`, { method: 'DELETE' });
+      setConfirmDelete(null);
       fetchUsers();
     } catch (e) {
       alert('Error al eliminar el usuario');
@@ -180,7 +182,7 @@ export default function UsersPage() {
                       </button>
                     )}
                     {u.id !== currentUserId && (
-                      <button onClick={() => deleteUser(u.id, u.name)} className="action-btn text-red-700 bg-red-900/20 hover:bg-red-900/40" title="Eliminar Usuario">
+                      <button onClick={() => setConfirmDelete({ id: u.id, name: u.name })} className="action-btn text-red-700 bg-red-900/20 hover:bg-red-900/40" title="Eliminar Usuario">
                         <Trash2 size={14} />
                       </button>
                     )}
@@ -235,6 +237,29 @@ export default function UsersPage() {
             <div className="modal-foot">
               <button onClick={() => setShowModal(false)} className="btn-secondary">Cancelar</button>
               <button onClick={saveUser} className="btn-primary">Generar Acceso</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmDelete && (
+        <div className="modal-backdrop">
+          <div className="modal-box" style={{ maxWidth: '420px' }}>
+            <div className="modal-head">
+              <h2 className="text-lg font-black uppercase text-white tracking-tight">Eliminar Usuario</h2>
+              <button onClick={() => setConfirmDelete(null)} className="close-btn"><X size={16}/></button>
+            </div>
+            <div className="modal-body">
+              <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.85rem', lineHeight: '1.6' }}>
+                Estás por eliminar a <span style={{ color: '#fff', fontWeight: 900 }}>{confirmDelete.name}</span>.<br/>
+                Esta acción no se puede deshacer.
+              </p>
+            </div>
+            <div className="modal-foot">
+              <button onClick={() => setConfirmDelete(null)} className="btn-secondary">Cancelar</button>
+              <button onClick={deleteUser} style={{ background: '#ef4444', color: '#fff', border: 'none', padding: '0.75rem 1.25rem', borderRadius: '10px', fontWeight: 900, fontSize: '0.75rem', textTransform: 'uppercase', cursor: 'pointer' }}>
+                Eliminar
+              </button>
             </div>
           </div>
         </div>
