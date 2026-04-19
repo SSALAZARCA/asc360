@@ -4,7 +4,7 @@ from sqlalchemy.future import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.models.user import User, UserStatus, Role
-from app.schemas.user import UserCreate, UserOut, UserStatusUpdate
+from app.schemas.user import UserCreate, UserOut, UserStatusUpdate, UserUpdate
 from app.api.deps import get_current_user, get_optional_user, CurrentUser
 from uuid import UUID
 from app.config import settings
@@ -146,12 +146,11 @@ async def get_pending_users(
 @router.patch("/{user_id}", response_model=UserOut)
 async def update_user(
     user_id: UUID,
-    user_in: "UserUpdate",
+    user_in: UserUpdate,
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
     """Actualiza campos de un usuario. Solo superadmin."""
-    from app.schemas.user import UserUpdate
     if not current_user.is_superadmin:
         raise HTTPException(status_code=403, detail="Sin permisos")
 

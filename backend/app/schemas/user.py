@@ -22,6 +22,7 @@ class UserCreate(UserBase):
 # Para actualizar
 class UserUpdate(BaseModel):
     name: Optional[str] = None
+    email: Optional[str] = None
     telegram_id: Optional[str] = None
     phone: Optional[str] = None
     role: Optional[Role] = None
