@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Header
+import uuid
 from app.api.deps import get_current_user, CurrentUser
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_
@@ -255,7 +256,7 @@ async def change_own_password(
     current_user: CurrentUser = Depends(get_current_user),
 ):
     """El usuario autenticado cambia su propia contraseña."""
-    stmt = select(User).where(User.id == current_user.id)
+    stmt = select(User).where(User.id == uuid.UUID(current_user.user_id))
     user = (await db.execute(stmt)).scalar_one_or_none()
 
     if not user or not user.hashed_password:

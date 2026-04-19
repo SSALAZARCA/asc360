@@ -16,7 +16,7 @@ async def create_superadmin():
         # Si ya existe CUALQUIER superadmin activo, no crear nada
         stmt = select(User).where(User.role == Role.superadmin, User.status == UserStatus.active)
         res = await session.execute(stmt)
-        existing_admin = res.scalar_one_or_none()
+        existing_admin = res.scalars().first()
 
         if existing_admin:
             print("Ya existe un superadmin activo. No se modifica.")
