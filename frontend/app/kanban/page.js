@@ -21,16 +21,15 @@ import { authFetch } from '../../lib/authFetch';
 
 // ─── Estados reales del modelo ServiceStatus ───────────────────────────────
 const COLUMNS = [
-  { id: 'pending_signature', name: 'Pendiente Firma', color: '#f59e0b', icon: AlertTriangle },
-  { id: 'received',          name: 'Recibido',        color: '#3b82f6', icon: ClipboardList },
-  { id: 'scheduled',         name: 'Agendado',        color: '#8b5cf6', icon: CalendarDays },
-  { id: 'in_progress',       name: 'En Proceso',      color: '#f59e0b', icon: Wrench },
-  { id: 'on_hold_parts',     name: 'Espera Repuestos',color: '#ef4444', icon: Hourglass },
-  { id: 'on_hold_client',    name: 'Espera Cliente',  color: '#f97316', icon: CircleHelp },
-  { id: 'external_work',     name: 'Trabajo Externo', color: '#06b6d4', icon: Factory },
-  { id: 'rescheduled',       name: 'Reagendado',      color: '#6366f1', icon: RefreshCw },
-  { id: 'completed',         name: 'Finalizado',      color: '#10b981', icon: CheckCircle2 },
-  { id: 'delivered',         name: 'Entregado',       color: '#22c55e', icon: Handshake },
+  { id: 'received',       name: 'Recibido',        color: '#3b82f6', icon: ClipboardList },
+  { id: 'scheduled',      name: 'Agendado',         color: '#8b5cf6', icon: CalendarDays },
+  { id: 'in_progress',    name: 'En Proceso',       color: '#f59e0b', icon: Wrench },
+  { id: 'on_hold_parts',  name: 'Espera Repuestos', color: '#ef4444', icon: Hourglass },
+  { id: 'on_hold_client', name: 'Espera Cliente',   color: '#f97316', icon: CircleHelp },
+  { id: 'external_work',  name: 'Trabajo Externo',  color: '#06b6d4', icon: Factory },
+  { id: 'rescheduled',    name: 'Reagendado',       color: '#6366f1', icon: RefreshCw },
+  { id: 'completed',      name: 'Finalizado',       color: '#10b981', icon: CheckCircle2 },
+  { id: 'delivered',      name: 'Entregado',        color: '#22c55e', icon: Handshake },
 ];
 
 const TYPE_CFG = {
@@ -53,11 +52,29 @@ function colName(id) { return colById[id]?.name ?? id ?? '-'; }
 
 // ─── Tarjeta draggable (toda la superficie) ────────────────────────────────
 function KanbanCard({ order, onOpen }) {
+  const [otpSending, setOtpSending] = useState(false);
+  const [otpSent,    setOtpSent]    = useState(false);
+  const [otpError,   setOtpError]   = useState('');
+
+  const pending = order.estado === 'pending_signature';
+
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: order.order_id, data: { colId: order.estado } });
   const tc = TYPE_CFG[order.tipo_trabajo] || TYPE_CFG.regular;
   const d  = order.tiempo_taller_dias ?? 0;
   const dc = dayColor(d);
+
+  const handleSendOtp = async (e) => {
+    e.stopPropagation();
+    setOtpSending(true); setOtpError('');
+    try {
+      const res = await authFetch(`/orders/${order.order_id}/otp/send`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) { setOtpError(data.detail || 'Error'); return; }
+      setOtpSent(true);
+    } catch { setOtpError('Error de conexión'); }
+    finally { setOtpSending(false); }
+  };
 
   return (
     <div
@@ -65,15 +82,23 @@ function KanbanCard({ order, onOpen }) {
       {...attributes}
       {...listeners}
       style={{
-        transform: CSS.Transform.toString(transform),
+        transform:  CSS.Transform.toString(transform),
         transition,
         opacity:    isDragging ? 0 : 1,
-        borderLeft: `3px solid ${tc.color}`,
-        cursor:     isDragging ? 'grabbing' : 'grab',
+        borderLeft: `3px solid ${pending ? '#f59e0b' : tc.color}`,
+        cursor:     pending ? 'default' : isDragging ? 'grabbing' : 'grab',
       }}
       className="kcard"
       onClick={() => !isDragging && onOpen(order)}
     >
+      {/* Distintivo pendiente de firma */}
+      {pending && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4, padding: '2px 4px', background: 'rgba(245,158,11,0.12)', borderRadius: 4, border: '1px solid rgba(245,158,11,0.25)' }}>
+          <AlertTriangle size={8} color="#f59e0b" />
+          <span style={{ fontSize: '0.55rem', fontWeight: 800, color: '#f59e0b', textTransform: 'uppercase' }}>Sin firma</span>
+        </div>
+      )}
+
       <div className="kcard-top">
         <span className="kcard-plate">{order.placa}</span>
         <span className="kcard-type" style={{ color: tc.color, background: tc.bg }}>{tc.letter}</span>
@@ -85,6 +110,28 @@ function KanbanCard({ order, onOpen }) {
         </span>
         <span className="kcard-km">{(order.kilometraje || 0).toLocaleString()} km</span>
       </div>
+
+      {/* Botón OTP inline — solo para pending_signature */}
+      {pending && (
+        <div onClick={e => e.stopPropagation()} style={{ marginTop: 6 }}>
+          <button
+            onClick={handleSendOtp}
+            disabled={otpSending || otpSent}
+            style={{
+              width: '100%', padding: '3px 0',
+              background: otpSent ? 'rgba(16,185,129,0.1)' : 'rgba(245,158,11,0.15)',
+              color: otpSent ? '#10b981' : '#f59e0b',
+              border: `1px solid ${otpSent ? 'rgba(16,185,129,0.3)' : 'rgba(245,158,11,0.3)'}`,
+              borderRadius: 4, fontSize: '0.55rem', fontWeight: 800,
+              cursor: otpSent || otpSending ? 'default' : 'pointer',
+              textTransform: 'uppercase',
+            }}
+          >
+            {otpSending ? 'Enviando...' : otpSent ? '✓ OTP enviado' : 'Enviar OTP'}
+          </button>
+          {otpError && <p style={{ fontSize: '0.5rem', color: '#ef4444', margin: '2px 0 0' }}>{otpError}</p>}
+        </div>
+      )}
     </div>
   );
 }
@@ -477,7 +524,14 @@ export default function KanbanPage() {
     })();
   }, []);
 
-  const getCards = useCallback(colId => orders.filter(o => o.estado === colId), [orders]);
+  const getCards = useCallback(
+    colId => orders.filter(o =>
+      colId === 'received'
+        ? (o.estado === 'received' || o.estado === 'pending_signature')
+        : o.estado === colId
+    ),
+    [orders]
+  );
   const activeOrder = orders.find(o => o.order_id === activeId);
 
   const resolveDestCol = ovId => {
