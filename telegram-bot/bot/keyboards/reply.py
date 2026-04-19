@@ -5,17 +5,17 @@ def get_main_keyboard(role: str) -> ReplyKeyboardMarkup:
     if role == "superadmin":
         keys = [
             [KeyboardButton("Nueva Recepción"), KeyboardButton("Consultar Hoja de Vida")],
-            [KeyboardButton("Mis Órdenes Activas 🛠️")],
+            [KeyboardButton("Mis Órdenes Activas 🛠️"), KeyboardButton("Ingresar OTP 🔑")],
             [KeyboardButton("Panel Super Admin 👑")]
         ]
     elif role == "jefe_taller":
         keys = [
             [KeyboardButton("Nueva Recepción"), KeyboardButton("Consultar Hoja de Vida")],
-            [KeyboardButton("Mis Órdenes Activas 🛠️")]
+            [KeyboardButton("Mis Órdenes Activas 🛠️"), KeyboardButton("Ingresar OTP 🔑")]
         ]
     elif role == "technician":
         keys = [
-            [KeyboardButton("Nueva Recepción")],
+            [KeyboardButton("Nueva Recepción"), KeyboardButton("Ingresar OTP 🔑")],
             [KeyboardButton("Mis Órdenes Activas 🛠️")]
         ]
     else:

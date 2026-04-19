@@ -958,12 +958,78 @@ async def send_otp(
     return {"message": f"OTP enviado a {masked}", "expires_in_minutes": OTP_EXPIRE_MINUTES}
 
 
+@router.get("/pending-otp", status_code=status.HTTP_200_OK)
+async def get_pending_otp_orders(
+    db: AsyncSession = Depends(get_db),
+    current_user: Optional[CurrentUser] = Depends(get_optional_user),
+    x_sonia_secret: Optional[str] = Header(None),
+):
+    """Lista todas las órdenes pendientes de firma OTP. Acepta JWT o X-Sonia-Secret."""
+    from app.config import settings
+    is_bot_call = x_sonia_secret == settings.SONIA_BOT_SECRET
+    if not is_bot_call and current_user is None:
+        raise HTTPException(status_code=401, detail="No autenticado")
+
+    stmt = (
+        select(ServiceOrder)
+        .options(selectinload(ServiceOrder.vehicle), selectinload(ServiceOrder.client))
+        .where(ServiceOrder.status == ServiceStatus.pending_signature)
+    )
+    if not is_bot_call and current_user and not current_user.is_superadmin:
+        stmt = stmt.where(ServiceOrder.tenant_id == current_user.tenant_id)
+
+    res = await db.execute(stmt)
+    orders = res.scalars().all()
+
+    return [
+        {
+            "order_id": str(o.id),
+            "placa": o.vehicle.plate if o.vehicle else "N/D",
+            "cliente": o.client.name if o.client else "N/D",
+            "created_at": o.created_at.isoformat() if o.created_at else None,
+        }
+        for o in orders
+    ]
+
+
+@router.get("/pending-otp/plate/{plate}", status_code=status.HTTP_200_OK)
+async def get_pending_otp_by_plate(
+    plate: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: Optional[CurrentUser] = Depends(get_optional_user),
+    x_sonia_secret: Optional[str] = Header(None),
+):
+    """Retorna la orden pending_signature para una placa específica."""
+    from app.config import settings
+    from app.models.vehicle import Vehicle
+    is_bot_call = x_sonia_secret == settings.SONIA_BOT_SECRET
+    if not is_bot_call and current_user is None:
+        raise HTTPException(status_code=401, detail="No autenticado")
+
+    stmt = (
+        select(ServiceOrder)
+        .join(Vehicle, ServiceOrder.vehicle_id == Vehicle.id)
+        .where(Vehicle.plate == plate.upper())
+        .where(ServiceOrder.status == ServiceStatus.pending_signature)
+        .order_by(ServiceOrder.created_at.desc())
+        .limit(1)
+    )
+    res = await db.execute(stmt)
+    order = res.scalar_one_or_none()
+
+    if not order:
+        raise HTTPException(status_code=404, detail="No hay orden pendiente de firma para esta placa")
+
+    return {"order_id": str(order.id), "placa": plate.upper()}
+
+
 @router.post("/{order_id}/otp/verify", status_code=status.HTTP_200_OK)
 async def verify_otp(
     order_id: uuid.UUID,
     body: dict,
     db: AsyncSession = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: Optional[CurrentUser] = Depends(get_optional_user),
+    x_sonia_secret: Optional[str] = Header(None),
 ):
     """
     Valida el OTP ingresado por el asesor.
@@ -971,6 +1037,11 @@ async def verify_otp(
     y el PDF es regenerado con el sello de aceptación.
     """
     from app.models.order import OrderOTP, OrderHistory
+
+    from app.config import settings
+    is_bot_call = x_sonia_secret == settings.SONIA_BOT_SECRET
+    if not is_bot_call and current_user is None:
+        raise HTTPException(status_code=401, detail="No autenticado")
 
     code_input = str(body.get("code", "")).strip()
     if not code_input:
@@ -990,7 +1061,7 @@ async def verify_otp(
 
     if not order:
         raise HTTPException(status_code=404, detail="Orden no encontrada")
-    if not current_user.is_superadmin and order.tenant_id != current_user.tenant_id:
+    if not is_bot_call and current_user and not current_user.is_superadmin and order.tenant_id != current_user.tenant_id:
         raise HTTPException(status_code=403, detail="Sin permiso")
     if order.status != ServiceStatus.pending_signature:
         raise HTTPException(status_code=409, detail="La orden no está pendiente de firma")

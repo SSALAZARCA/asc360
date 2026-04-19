@@ -10,7 +10,8 @@ from core.constants import (
     CONFIRMING_CLIENT, ASKING_PHONE, ASKING_KM,
     ASKING_PHOTOS, ASKING_MOTIVE, CONFIRMING_MOTIVE, CORRECTING_MOTIVE,
     L_ASKING_PLATE, SELECTING_TENANT,
-    O_NAME, O_PHONE, O_ROLE, O_TENANT, O_CONFIRM
+    O_NAME, O_PHONE, O_ROLE, O_TENANT, O_CONFIRM,
+    OTP_ASKING_PLATE, OTP_ASKING_CODE, OTP_CONFIRMING
 )
 from core.decorators import role_required, check_cancel_intent, CANCEL_PATTERN
 from keyboards.reply import get_main_keyboard
@@ -30,6 +31,9 @@ from handlers.reception import (
     handle_phone, handle_km_and_photos, handle_photos, handle_photos_done,
     handle_motive, handle_motive_confirmation, handle_motive_correction,
     handle_data_correction
+)
+from handlers.otp import (
+    start_otp_flow, otp_handle_plate, otp_handle_code, otp_handle_confirm
 )
 # Handlers de carga excel no migrados aun en bloque de refactor 1
 
@@ -168,6 +172,28 @@ def main() -> None:
         allow_reentry=True,
     )
     application.add_handler(reg_conv)
+
+    # Flujo OTP — debe registrarse ANTES de master_conv
+    otp_conv = ConversationHandler(
+        entry_points=[
+            MessageHandler(filters.Regex(r'^Ingresar OTP'), start_otp_flow),
+        ],
+        states={
+            OTP_ASKING_PLATE: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND | filters.VOICE, otp_handle_plate)
+            ],
+            OTP_ASKING_CODE: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND | filters.VOICE, otp_handle_code)
+            ],
+            OTP_CONFIRMING: [
+                CallbackQueryHandler(otp_handle_confirm, pattern="^otp_confirm_")
+            ],
+        },
+        fallbacks=[CommandHandler("cancel", cancel_command)],
+        allow_reentry=True,
+        conversation_timeout=300,
+    )
+    application.add_handler(otp_conv)
 
     # Handler de escape para botones
     btn_escape = MessageHandler(filters.Regex(r'^(Nueva Recepción|Consultar Hoja de Vida|Mis Órdenes Activas|Panel Super Admin)'), handle_general_text)

@@ -34,3 +34,8 @@ CONFIRMING_KM = 11
 AWAITING_DIAGNOSIS = 50       # Esperando diagnóstico del técnico (diferido)
 AWAITING_PARTS = 51           # Esperando info del repuesto requerido
 AWAITING_EXTERNAL_DEST = 52   # Esperando destino del trabajo externo
+
+# ----- Estados del flujo OTP -----
+OTP_ASKING_PLATE = 60         # Esperando placa para ingresar OTP
+OTP_ASKING_CODE  = 61         # Esperando código de 6 dígitos
+OTP_CONFIRMING   = 62         # Esperando confirmación antes de registrar
