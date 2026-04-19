@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 
 const ALL_ITEMS = [
-  { id: 'dashboard', name: 'Centro de Comando', icon: BarChart4, path: '/', adminOnly: true },
+  { id: 'dashboard', name: 'Centro de Comando', icon: BarChart4, path: '/', adminOnly: true, allowAdministrativo: true },
   { id: 'kanban', name: 'Tablero Operativo', icon: LayoutDashboard, path: '/kanban' },
   { id: 'services', name: 'Gestión de Órdenes', icon: Wrench, path: '/services' },
   { id: 'imports', name: 'Estado Pedidos', icon: Ship, path: '/imports', importsOnly: true },
@@ -98,7 +98,8 @@ export default function Sidebar() {
     if (isProveedor) return !!item.importsOnly;
     // administrativo: dashboard, services e imports — sin adminOnly (tenants/users/settings)
     if (isAdministrativo) {
-      if (item.adminOnly) return false;
+      if (item.adminOnly && !item.allowAdministrativo) return false;
+      if (item.id === 'kanban') return false;
       return true;
     }
     // items exclusivos de imports: superadmin y proveedor
