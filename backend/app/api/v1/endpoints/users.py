@@ -194,17 +194,18 @@ async def delete_user(
     if not user:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
-    from app.models.order import Order, OrderStatusHistory
-    from app.models.imports import ShipmentOrder, MotoUnit, ImportEvent
+    from app.models.order import ServiceOrder, OrderHistory
+    from app.models.imports import PackingList, ReconciliationResult, ImportAttachment, ImportAuditLog
     from app.models.logistics import PartsOrder
 
     # Nullificar FKs nullable antes de eliminar
     for model, cols in [
-        (Order, ["client_id", "technician_id"]),
-        (OrderStatusHistory, ["changed_by"]),
-        (ShipmentOrder, ["uploaded_by", "confirmed_by"]),
-        (MotoUnit, ["uploaded_by"]),
-        (ImportEvent, ["actor_id"]),
+        (ServiceOrder, ["client_id", "technician_id"]),
+        (OrderHistory, ["changed_by"]),
+        (PackingList, ["uploaded_by"]),
+        (ReconciliationResult, ["confirmed_by"]),
+        (ImportAttachment, ["uploaded_by"]),
+        (ImportAuditLog, ["actor_id"]),
     ]:
         for col in cols:
             await db.execute(
