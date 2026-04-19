@@ -67,10 +67,10 @@ export default function Sidebar() {
     if (pwdForm.next.length < 6) { setPwdError('Mínimo 6 caracteres'); return; }
     setPwdLoading(true); setPwdError('');
     try {
-      const stored = JSON.parse(localStorage.getItem('um_user') || '{}');
+      const token = localStorage.getItem('um_token');
       const res = await fetch(`${API_URL()}/auth/change-password`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${stored.token}` },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ current_password: pwdForm.current, new_password: pwdForm.next })
       });
       if (res.status === 204) {
