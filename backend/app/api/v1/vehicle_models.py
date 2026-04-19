@@ -50,17 +50,8 @@ async def create_vehicle_model(
 ):
     _require_superadmin(current_user)
 
-    record = VehicleModel(
-        model_name=payload.modelo,
-        brand=payload.marca,
-        cilindrada=payload.cilindrada,
-        potencia=payload.potencia,
-        peso=payload.peso,
-        vueltas_aire=payload.vueltas_aire,
-        posicion_cortina=payload.posicion_cortina,
-        sistemas_control=payload.sistemas_control,
-        fuel_system=payload.combustible,
-    )
+    data = {_SCHEMA_TO_MODEL.get(k, k): v for k, v in payload.model_dump().items()}
+    record = VehicleModel(**data)
     db.add(record)
     try:
         await db.commit()
