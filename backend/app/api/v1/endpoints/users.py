@@ -143,6 +143,32 @@ async def get_pending_users(
     result = await db.execute(stmt)
     return result.scalars().all()
 
+@router.patch("/{user_id}", response_model=UserOut)
+async def update_user(
+    user_id: UUID,
+    user_in: "UserUpdate",
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Actualiza campos de un usuario. Solo superadmin."""
+    from app.schemas.user import UserUpdate
+    if not current_user.is_superadmin:
+        raise HTTPException(status_code=403, detail="Sin permisos")
+
+    stmt = select(User).where(User.id == user_id)
+    res = await db.execute(stmt)
+    user = res.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+    for field, value in user_in.model_dump(exclude_unset=True).items():
+        setattr(user, field, value)
+
+    await db.commit()
+    await db.refresh(user)
+    return user
+
+
 @router.patch("/{user_id}/status", response_model=UserOut)
 async def update_user_status(
     user_id: UUID,
