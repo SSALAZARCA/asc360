@@ -1192,3 +1192,118 @@ async def resend_otp(
         current_user = _BotUser()
 
     return await send_otp(order_id, db, current_user)
+
+
+@router.post("/{order_id}/otp/bypass", status_code=status.HTTP_200_OK)
+async def bypass_otp(
+    order_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: Optional[CurrentUser] = Depends(get_optional_user),
+    x_sonia_secret: Optional[str] = Header(None),
+):
+    """
+    Autoriza una orden pendiente de firma sin OTP.
+    Solo disponible para jefe_taller y superadmin.
+    Queda registrado en OrderHistory y en ServiceOrderReception quién autorizó y cuándo.
+    """
+    from app.models.order import OrderHistory
+    from app.config import settings
+    from app.models.user import Role
+
+    is_bot_call = x_sonia_secret == settings.SONIA_BOT_SECRET
+    if not is_bot_call and current_user is None:
+        raise HTTPException(status_code=401, detail="No autenticado")
+
+    # Validar rol — solo jefe_taller y superadmin
+    if not is_bot_call:
+        allowed_roles = [Role.jefe_taller, Role.superadmin]
+        if current_user.role not in allowed_roles:
+            raise HTTPException(status_code=403, detail="Solo el jefe de taller o superadmin puede autorizar sin OTP")
+
+    stmt = (
+        select(ServiceOrder)
+        .options(
+            selectinload(ServiceOrder.reception),
+            selectinload(ServiceOrder.vehicle),
+            selectinload(ServiceOrder.client),
+        )
+        .where(ServiceOrder.id == order_id)
+    )
+    res = await db.execute(stmt)
+    order = res.scalar_one_or_none()
+
+    if not order:
+        raise HTTPException(status_code=404, detail="Orden no encontrada")
+    if not is_bot_call and not current_user.is_superadmin and order.tenant_id != current_user.tenant_id:
+        raise HTTPException(status_code=403, detail="Sin permiso para esta orden")
+    if order.status != ServiceStatus.pending_signature:
+        raise HTTPException(status_code=409, detail="La orden no está pendiente de firma")
+
+    now = datetime.utcnow()
+    authorizer_name = current_user.name if not is_bot_call else "Sonia (Bot)"
+    authorizer_id   = current_user.id   if not is_bot_call else None
+
+    # Registrar bypass en reception
+    reception = order.reception
+    if reception:
+        reception.bypass_at      = now
+        reception.bypass_by_id   = authorizer_id
+        reception.bypass_by_name = authorizer_name
+        db.add(reception)
+
+    # Registrar en historial con log completo
+    history_entry = OrderHistory(
+        order_id=order.id,
+        from_status=ServiceStatus.pending_signature,
+        to_status=ServiceStatus.received,
+        changed_at=now,
+        changed_by=authorizer_id,
+        comments=f"Autorizado sin OTP por {authorizer_name}",
+    )
+    db.add(history_entry)
+    order.status = ServiceStatus.received
+    db.add(order)
+    await db.commit()
+
+    # Regenerar PDF con sello de autorización manual
+    try:
+        vehicle = order.vehicle
+        client  = order.client
+        order_data = {
+            "id": str(order.id),
+            "service_type": order.service_type.value,
+            "bypass_at": now.strftime("%Y-%m-%d %H:%M"),
+            "bypass_by_name": authorizer_name,
+        }
+        reception_data = {
+            "mileage_km": float(reception.mileage_km) if reception else 0,
+            "gas_level": reception.gas_level if reception else "",
+            "customer_notes": reception.customer_notes if reception else "",
+            "warranty_warnings": reception.warranty_warnings if reception else "",
+        }
+        vehicle_data = {
+            "model": vehicle.model if vehicle else "Desconocido",
+            "plate": vehicle.plate if vehicle else "N/A",
+            "vin": vehicle.vin if vehicle else "N/A",
+        }
+        client_data = {
+            "full_name": client.name if client else "N/A",
+            "identification": client.telegram_id if client else "N/A",
+        }
+        new_pdf_url = await generate_and_upload_reception_pdf(
+            order_data, reception_data, vehicle_data, client_data
+        )
+        if new_pdf_url and reception:
+            reception.reception_pdf_url = new_pdf_url
+            db.add(reception)
+            await db.commit()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"Error regenerando PDF tras bypass OTP: {e}")
+
+    return {
+        "message": f"Orden autorizada sin OTP por {authorizer_name}",
+        "bypass_at": now.isoformat(),
+        "bypass_by_name": authorizer_name,
+        "new_status": "received",
+    }

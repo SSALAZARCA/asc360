@@ -91,6 +91,13 @@
             Aceptado el {{ accepted_at }} mediante código OTP enviado al número {{ accepted_phone }}.
         </p>
     </div>
+    {% elif bypass_at %}
+    <div style="margin-top: 20px; background-color: #fff3cd; color: #856404; padding: 15px; border-radius: 4px; border: 1px solid #ffeeba;">
+        <div style="font-weight: bold; margin-bottom: 5px;">⚠️ Autorizado sin firma OTP</div>
+        <p style="margin: 0; font-size: 9pt;">
+            Autorizado el {{ bypass_at }} por {{ bypass_by_name }}. Sin validación de código OTP por parte del cliente.
+        </p>
+    </div>
     {% else %}
     <!-- SIGNATURES -->
     <div class="signatures">

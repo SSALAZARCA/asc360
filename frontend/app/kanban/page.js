@@ -178,13 +178,19 @@ function KanbanColumn({ col, cards, onOpen, isOver, animIdx }) {
 }
 
 // ─── Sección OTP ──────────────────────────────────────────────────────────
-function OtpSection({ orderId, onAccepted }) {
+function OtpSection({ orderId, onAccepted, onBypassed }) {
   const [otpSent,    setOtpSent]    = useState(false);
   const [code,       setCode]       = useState('');
   const [error,      setError]      = useState('');
   const [sending,    setSending]    = useState(false);
   const [verifying,  setVerifying]  = useState(false);
+  const [bypassing,  setBypassing]  = useState(false);
   const [cooldown,   setCooldown]   = useState(0);
+
+  const currentUser = typeof window !== 'undefined'
+    ? JSON.parse(sessionStorage.getItem('um_user') || '{}')
+    : {};
+  const canBypass = ['superadmin', 'jefe_taller'].includes(currentUser.role);
 
   useEffect(() => {
     if (cooldown <= 0) return;
@@ -267,6 +273,32 @@ function OtpSection({ orderId, onAccepted }) {
       {error && (
         <p style={{ marginTop: '0.5rem', fontSize: '0.65rem', color: '#ef4444' }}>{error}</p>
       )}
+
+      {/* Bypass — solo jefe_taller y superadmin */}
+      {canBypass && (
+        <div style={{ marginTop: '0.8rem', paddingTop: '0.8rem', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+          <button
+            onClick={async () => {
+              if (!window.confirm('¿Confirmás que querés autorizar esta orden sin OTP? Quedará registrado con tu usuario.')) return;
+              setBypassing(true);
+              try {
+                const res = await authFetch(`/orders/${orderId}/otp/bypass`, { method: 'POST' });
+                const data = await res.json();
+                if (!res.ok) { setError(data.detail || 'Error al autorizar'); return; }
+                onBypassed(data);
+              } catch { setError('Error de conexión'); }
+              finally { setBypassing(false); }
+            }}
+            disabled={bypassing}
+            style={{ width: '100%', padding: '0.5rem', background: 'rgba(249,115,22,0.1)', color: '#f97316', border: '1px solid rgba(249,115,22,0.3)', borderRadius: 6, fontSize: '0.65rem', fontWeight: 800, cursor: bypassing ? 'not-allowed' : 'pointer', textTransform: 'uppercase' }}
+          >
+            {bypassing ? 'Autorizando...' : '⚠️ Autorizar sin OTP'}
+          </button>
+          <p style={{ marginTop: 4, fontSize: '0.55rem', color: 'rgba(255,255,255,0.25)', textAlign: 'center' }}>
+            Solo jefe de taller / superadmin · Queda registrado
+          </p>
+        </div>
+      )}
     </div>
   );
 }
@@ -335,6 +367,7 @@ function OrderModal({ order, onClose, onOrderAccepted }) {
               <OtpSection
                 orderId={order.order_id}
                 onAccepted={(data) => { onOrderAccepted(order.order_id); onClose(); }}
+                onBypassed={(data) => { onOrderAccepted(order.order_id); onClose(); }}
               />
             )}
 

@@ -151,6 +151,11 @@ class ServiceOrderReception(Base):
     accepted_at = Column(DateTime, nullable=True)
     accepted_phone = Column(String(20), nullable=True)  # Enmascarado: ***1234
 
+    # Autorización manual sin OTP (solo jefe_taller / superadmin)
+    bypass_at = Column(DateTime, nullable=True)
+    bypass_by_id = Column(UUID(as_uuid=True), nullable=True)
+    bypass_by_name = Column(String(200), nullable=True)
+
     created_at = Column(DateTime, default=datetime.utcnow)
 
     order = relationship("ServiceOrder", back_populates="reception")

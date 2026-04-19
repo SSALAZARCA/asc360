@@ -55,6 +55,8 @@ async def generate_and_upload_reception_pdf(order_data: dict, reception_data: di
         "warranty_warnings": reception_data.get("warranty_warnings", ""),
         "accepted_at": order_data.get("accepted_at"),
         "accepted_phone": order_data.get("accepted_phone"),
+        "bypass_at": order_data.get("bypass_at"),
+        "bypass_by_name": order_data.get("bypass_by_name"),
     }
 
     # Renderizar HTML a String
