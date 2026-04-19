@@ -19,10 +19,7 @@ async def create_superadmin():
         existing_admin = res.scalar_one_or_none()
 
         if existing_admin:
-            print("El superadmin ya existe. Actualizando contraseña...")
-            existing_admin.hashed_password = get_password_hash("admin123")
-            await session.commit()
-            print("Contraseña actualizada exitosamente.")
+            print("El superadmin ya existe. No se modifica.")
             return
 
         # Crear nuevo admin
