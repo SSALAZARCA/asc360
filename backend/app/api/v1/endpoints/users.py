@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Header
 from pydantic import BaseModel
 from typing import List, Optional
 from sqlalchemy.future import select
+from sqlalchemy import update as sql_update
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.models.user import User, UserStatus, Role
@@ -192,6 +193,30 @@ async def delete_user(
     user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+    from app.models.order import Order, OrderStatusHistory
+    from app.models.imports import ShipmentOrder, MotoUnit, ImportEvent
+    from app.models.logistics import PartsOrder
+
+    # Nullificar FKs nullable antes de eliminar
+    for model, cols in [
+        (Order, ["client_id", "technician_id"]),
+        (OrderStatusHistory, ["changed_by"]),
+        (ShipmentOrder, ["uploaded_by", "confirmed_by"]),
+        (MotoUnit, ["uploaded_by"]),
+        (ImportEvent, ["actor_id"]),
+    ]:
+        for col in cols:
+            await db.execute(
+                sql_update(model).where(getattr(model, col) == user_id).values({col: None})
+            )
+
+    # parts_orders.created_by es NOT NULL — reasignar al superadmin que ejecuta la acción
+    await db.execute(
+        sql_update(PartsOrder)
+        .where(PartsOrder.created_by == user_id)
+        .values({"created_by": current_user.id})
+    )
 
     await db.delete(user)
     await db.commit()
