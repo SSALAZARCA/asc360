@@ -2,6 +2,8 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
+
+const API_URL = () => (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1').replace(/^http:\/\/(?!localhost)/, 'https://');
 import {
   BarChart4,
   Wrench,
@@ -32,19 +34,33 @@ export default function Sidebar() {
   useEffect(() => {
     const checkAuth = () => {
       const stored = localStorage.getItem('um_user');
-      if (stored) {
-        setUser(JSON.parse(stored));
-      }
-      
-      const logo = localStorage.getItem('um_logo');
-      if (logo) {
-        setCompanyLogo(logo);
-      } else {
-        setCompanyLogo(null);
-      }
+      if (stored) setUser(JSON.parse(stored));
+      const cached = localStorage.getItem('um_logo');
+      setCompanyLogo(cached || null);
     };
     checkAuth();
     window.addEventListener('storage', checkAuth);
+
+    // Cargar logo fresco desde la API (cross-browser)
+    const tenantId = localStorage.getItem('um_tenant_id');
+    const token = localStorage.getItem('um_token');
+    if (tenantId && token) {
+      fetch(`${API_URL()}/tenants/${tenantId}/config`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+          if (data?.logo_base64) {
+            setCompanyLogo(data.logo_base64);
+            localStorage.setItem('um_logo', data.logo_base64);
+          } else {
+            setCompanyLogo(null);
+            localStorage.removeItem('um_logo');
+          }
+        })
+        .catch(() => {});
+    }
+
     return () => window.removeEventListener('storage', checkAuth);
   }, []);
 

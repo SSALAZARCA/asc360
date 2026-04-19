@@ -189,6 +189,7 @@ async def get_cities(departamento: str = Query(...)):
 
 class TenantConfigUpdate(BaseModel):
     diagnosis_reminder_minutes: Optional[int] = None
+    logo_base64: Optional[str] = None
 
     def model_post_init(self, __context):
         if self.diagnosis_reminder_minutes is not None and self.diagnosis_reminder_minutes < 5:
@@ -213,6 +214,7 @@ async def get_tenant_config(
     return {
         "tenant_id": str(tenant_id),
         "diagnosis_reminder_minutes": config.get("diagnosis_reminder_minutes", 60),
+        "logo_base64": config.get("logo_base64"),
     }
 
 
@@ -234,6 +236,11 @@ async def update_tenant_config(
     config = dict(tenant.config or {})
     if config_update.diagnosis_reminder_minutes is not None:
         config["diagnosis_reminder_minutes"] = config_update.diagnosis_reminder_minutes
+    if "logo_base64" in config_update.model_fields_set:
+        if config_update.logo_base64:
+            config["logo_base64"] = config_update.logo_base64
+        else:
+            config.pop("logo_base64", None)
 
     tenant.config = config
     db.add(tenant)
@@ -242,5 +249,6 @@ async def update_tenant_config(
     return {
         "tenant_id": str(tenant_id),
         "diagnosis_reminder_minutes": config.get("diagnosis_reminder_minutes", 60),
+        "logo_base64": config.get("logo_base64"),
     }
 
