@@ -170,6 +170,23 @@ async def divipola_search(q: str = Query(..., min_length=2)):
     return search_municipios(q)
 
 
+@router.get("/divipola/departments")
+async def get_departments():
+    """Retorna la lista de los 33 departamentos de Colombia."""
+    from app.services.divipola_service import _load_divipola
+    municipios = _load_divipola()
+    return sorted(set(m["departamento"] for m in municipios))
+
+
+@router.get("/divipola/cities")
+async def get_cities(departamento: str = Query(...)):
+    """Retorna los municipios de un departamento dado."""
+    from app.services.divipola_service import _load_divipola, normalize
+    municipios = _load_divipola()
+    dpto_norm = normalize(departamento)
+    return sorted(m["municipio"] for m in municipios if m["departamento_norm"] == dpto_norm)
+
+
 class TenantConfigUpdate(BaseModel):
     diagnosis_reminder_minutes: Optional[int] = None
 

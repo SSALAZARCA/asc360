@@ -4,11 +4,15 @@ import AdminLayout from '../admin-layout';
 import { Building2, Edit, Save, X, Phone, MapPin, Hash, Plus, CheckCircle, XCircle } from 'lucide-react';
 import { authFetch } from '../../lib/authFetch';
 
+const API = () => (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1').replace(/^http:\/\/(?!localhost)/, 'https://');
+
 export default function TenantsPage() {
   const [tenants, setTenants] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editForm, setEditForm] = useState(null);
+  const [departments, setDepartments] = useState([]);
+  const [cities, setCities] = useState([]);
 
   const fetchTenants = async () => {
     try {
@@ -22,16 +26,45 @@ export default function TenantsPage() {
     }
   };
 
-  useEffect(() => { fetchTenants(); }, []);
+  const fetchDepartments = async () => {
+    try {
+      const res = await fetch(`${API()}/tenants/divipola/departments`);
+      const data = await res.json();
+      setDepartments(data);
+    } catch (e) {
+      console.error('Error cargando departamentos', e);
+    }
+  };
+
+  const fetchCities = async (departamento) => {
+    if (!departamento) { setCities([]); return; }
+    try {
+      const res = await fetch(`${API()}/tenants/divipola/cities?departamento=${encodeURIComponent(departamento)}`);
+      const data = await res.json();
+      setCities(data);
+    } catch (e) {
+      console.error('Error cargando ciudades', e);
+    }
+  };
+
+  useEffect(() => { fetchTenants(); fetchDepartments(); }, []);
 
   const openNew = () => {
+    setCities([]);
     setEditForm({ name: '', tenant_type: 'workshop', nit: '', phone: '', address: '', ciudad: '', departamento: '', status: 'active' });
     setShowModal(true);
   };
 
   const openEdit = (t) => {
+    if (t.departamento) fetchCities(t.departamento);
+    else setCities([]);
     setEditForm(t);
     setShowModal(true);
+  };
+
+  const handleDepartamentoChange = (value) => {
+    setEditForm(f => ({ ...f, departamento: value, ciudad: '' }));
+    fetchCities(value);
   };
 
   const saveTenant = async () => {
@@ -133,12 +166,18 @@ export default function TenantsPage() {
                   <input value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})} placeholder="Ej: 300 123 4567" />
                 </div>
                 <div>
-                  <label>Ciudad</label>
-                  <input value={editForm.ciudad} onChange={e => setEditForm({...editForm, ciudad: e.target.value})} placeholder="Ej: Bogotá" />
+                  <label>Departamento</label>
+                  <select value={editForm.departamento} onChange={e => handleDepartamentoChange(e.target.value)}>
+                    <option value="">— Seleccionar —</option>
+                    {departments.map(d => <option key={d} value={d}>{d}</option>)}
+                  </select>
                 </div>
                 <div>
-                  <label>Departamento</label>
-                  <input value={editForm.departamento} onChange={e => setEditForm({...editForm, departamento: e.target.value})} placeholder="Ej: Cundinamarca" />
+                  <label>Ciudad / Municipio</label>
+                  <select value={editForm.ciudad} onChange={e => setEditForm({...editForm, ciudad: e.target.value})} disabled={!editForm.departamento}>
+                    <option value="">— Seleccionar —</option>
+                    {cities.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
                 </div>
                 <div className="col-span-2">
                   <label>Dirección Física</label>
