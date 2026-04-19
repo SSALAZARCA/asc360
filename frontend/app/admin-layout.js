@@ -19,10 +19,15 @@ export default function AdminLayout({ children, fullWidth = false }) {
         setUser(u);
         
         // Bloquear acceso a páginas exclusivas según rol
-        const superadminOnly = ['/tenants', '/users', '/', '/settings'];
+        const superadminOnly = ['/tenants', '/users', '/settings'];
+        const dashboardRoles = ['superadmin', 'administrativo'];
         if (u.role !== 'superadmin' && superadminOnly.includes(pathname)) {
-           router.push('/kanban');
-           return;
+          router.push('/kanban');
+          return;
+        }
+        if (pathname === '/' && !dashboardRoles.includes(u.role)) {
+          router.push('/kanban');
+          return;
         }
 
         // proveedor solo puede estar en /imports
