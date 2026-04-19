@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Header
+from app.api.deps import get_current_user, CurrentUser
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_
 from sqlalchemy.orm import selectinload
@@ -33,6 +34,10 @@ class TelegramLinkRequest(BaseModel):
     """Para vincular manualmente un telegram_id a un usuario web existente."""
     user_id: str
     telegram_id: str
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
 
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -239,3 +244,25 @@ async def get_user_by_telegram(
         "status": user.status.value,
         "tenant_id": str(user.tenant_id) if user.tenant_id else None,
     }
+
+
+# ─── Endpoint 5: Cambio de contraseña propia ─────────────────────────────────
+
+@router.post("/change-password", status_code=204)
+async def change_own_password(
+    payload: ChangePasswordRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """El usuario autenticado cambia su propia contraseña."""
+    stmt = select(User).where(User.id == current_user.id)
+    user = (await db.execute(stmt)).scalar_one_or_none()
+
+    if not user or not user.hashed_password:
+        raise HTTPException(status_code=400, detail="Este usuario no tiene contraseña web configurada")
+
+    if not verify_password(payload.current_password, user.hashed_password):
+        raise HTTPException(status_code=400, detail="La contraseña actual es incorrecta")
+
+    user.hashed_password = get_password_hash(payload.new_password)
+    await db.commit()

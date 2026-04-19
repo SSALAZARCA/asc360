@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 
@@ -30,6 +30,10 @@ export default function Sidebar() {
   const pathname = usePathname();
   const [user, setUser] = useState(null);
   const [companyLogo, setCompanyLogo] = useState(null);
+  const [showPwdModal, setShowPwdModal] = useState(false);
+  const [pwdForm, setPwdForm] = useState({ current: '', next: '' });
+  const [pwdError, setPwdError] = useState('');
+  const [pwdLoading, setPwdLoading] = useState(false);
 
   useEffect(() => {
     const checkAuth = () => {
@@ -57,6 +61,28 @@ export default function Sidebar() {
 
     return () => window.removeEventListener('storage', checkAuth);
   }, []);
+
+  const handleChangePassword = async () => {
+    if (!pwdForm.current || !pwdForm.next) { setPwdError('Completá ambos campos'); return; }
+    if (pwdForm.next.length < 6) { setPwdError('Mínimo 6 caracteres'); return; }
+    setPwdLoading(true); setPwdError('');
+    try {
+      const stored = JSON.parse(localStorage.getItem('um_user') || '{}');
+      const res = await fetch(`${API_URL()}/auth/change-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${stored.token}` },
+        body: JSON.stringify({ current_password: pwdForm.current, new_password: pwdForm.next })
+      });
+      if (res.status === 204) {
+        setShowPwdModal(false);
+        setPwdForm({ current: '', next: '' });
+      } else {
+        const data = await res.json();
+        setPwdError(data.detail || 'Error al cambiar contraseña');
+      }
+    } catch { setPwdError('Error de conexión'); }
+    finally { setPwdLoading(false); }
+  };
 
   const handleLogout = () => {
     localStorage.removeItem('um_user');
@@ -145,7 +171,11 @@ export default function Sidebar() {
 
       {/* Bottom Profile */}
       <div className="p-4 mt-auto">
-        <div className="p-4 rounded-3xl bg-white/5 flex items-center space-x-3" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)' }}>
+        <div
+          onClick={() => { setPwdForm({ current: '', next: '' }); setPwdError(''); setShowPwdModal(true); }}
+          className="p-4 rounded-3xl flex items-center space-x-3 cursor-pointer transition-all hover:bg-white/5"
+          style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)' }}
+        >
            <div className="w-10 h-10 rounded-full bg-orange-500 flex items-center justify-center font-black text-xs text-white" style={{ color: '#fff' }}>
              {user ? user.name.substring(0, 2).toUpperCase() : 'UM'}
            </div>
@@ -155,11 +185,47 @@ export default function Sidebar() {
                 {user?.role === 'superadmin' ? 'Central HQ' : user?.role === 'proveedor' ? 'Proveedor Externo' : (user?.email || 'Taller Local')}
               </p>
            </div>
-           <button onClick={handleLogout} className="cursor-pointer text-white/40 hover:text-red-500 transition-colors bg-transparent border-none">
+           <button onClick={(e) => { e.stopPropagation(); handleLogout(); }} className="cursor-pointer text-white/40 hover:text-red-500 transition-colors bg-transparent border-none">
              <LogOut size={16} />
            </button>
         </div>
       </div>
+
+      {/* Modal cambio de contraseña */}
+      {showPwdModal && (
+        <div
+          onClick={() => setShowPwdModal(false)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+        >
+          <div onClick={e => e.stopPropagation()} style={{ background: '#0c0c0e', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '16px', padding: '2rem', width: '100%', maxWidth: '360px', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+            <p style={{ color: '#fff', fontWeight: 900, fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>Cambiar contraseña</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              <input
+                type="password"
+                placeholder="Contraseña actual"
+                value={pwdForm.current}
+                onChange={e => setPwdForm({ ...pwdForm, current: e.target.value })}
+                style={{ background: '#151518', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '10px', padding: '0.75rem 1rem', color: '#fff', fontSize: '0.85rem', outline: 'none' }}
+              />
+              <input
+                type="password"
+                placeholder="Nueva contraseña"
+                value={pwdForm.next}
+                onChange={e => setPwdForm({ ...pwdForm, next: e.target.value })}
+                style={{ background: '#151518', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '10px', padding: '0.75rem 1rem', color: '#fff', fontSize: '0.85rem', outline: 'none' }}
+              />
+            </div>
+            {pwdError && <p style={{ color: '#ef4444', fontSize: '0.75rem', margin: 0 }}>{pwdError}</p>}
+            <button
+              onClick={handleChangePassword}
+              disabled={pwdLoading}
+              style={{ background: '#ff5f33', color: '#fff', border: 'none', borderRadius: '10px', padding: '0.75rem', fontWeight: 900, fontSize: '0.75rem', textTransform: 'uppercase', cursor: 'pointer', opacity: pwdLoading ? 0.6 : 1 }}
+            >
+              {pwdLoading ? 'Guardando...' : 'Guardar'}
+            </button>
+          </div>
+        </div>
+      )}
     </aside>
   );
 }
