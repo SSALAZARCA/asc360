@@ -52,7 +52,9 @@ async def generate_and_upload_reception_pdf(order_data: dict, reception_data: di
         "gas_level": reception_data.get("gas_level", "Unknown"),
         "service_type": order_data.get("service_type", "Regular"),
         "customer_notes": reception_data.get("customer_notes", ""),
-        "warranty_warnings": reception_data.get("warranty_warnings", "")
+        "warranty_warnings": reception_data.get("warranty_warnings", ""),
+        "accepted_at": order_data.get("accepted_at"),
+        "accepted_phone": order_data.get("accepted_phone"),
     }
 
     # Renderizar HTML a String

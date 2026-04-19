@@ -21,15 +21,16 @@ import { authFetch } from '../../lib/authFetch';
 
 // ─── Estados reales del modelo ServiceStatus ───────────────────────────────
 const COLUMNS = [
-  { id: 'received',       name: 'Recibido',        color: '#3b82f6', icon: ClipboardList },
-  { id: 'scheduled',      name: 'Agendado',         color: '#8b5cf6', icon: CalendarDays },
-  { id: 'in_progress',    name: 'En Proceso',       color: '#f59e0b', icon: Wrench },
-  { id: 'on_hold_parts',  name: 'Espera Repuestos', color: '#ef4444', icon: Hourglass },
-  { id: 'on_hold_client', name: 'Espera Cliente',   color: '#f97316', icon: CircleHelp },
-  { id: 'external_work',  name: 'Trabajo Externo',  color: '#06b6d4', icon: Factory },
-  { id: 'rescheduled',    name: 'Reagendado',       color: '#6366f1', icon: RefreshCw },
-  { id: 'completed',      name: 'Finalizado',       color: '#10b981', icon: CheckCircle2 },
-  { id: 'delivered',      name: 'Entregado',        color: '#22c55e', icon: Handshake },
+  { id: 'pending_signature', name: 'Pendiente Firma', color: '#f59e0b', icon: AlertTriangle },
+  { id: 'received',          name: 'Recibido',        color: '#3b82f6', icon: ClipboardList },
+  { id: 'scheduled',         name: 'Agendado',        color: '#8b5cf6', icon: CalendarDays },
+  { id: 'in_progress',       name: 'En Proceso',      color: '#f59e0b', icon: Wrench },
+  { id: 'on_hold_parts',     name: 'Espera Repuestos',color: '#ef4444', icon: Hourglass },
+  { id: 'on_hold_client',    name: 'Espera Cliente',  color: '#f97316', icon: CircleHelp },
+  { id: 'external_work',     name: 'Trabajo Externo', color: '#06b6d4', icon: Factory },
+  { id: 'rescheduled',       name: 'Reagendado',      color: '#6366f1', icon: RefreshCw },
+  { id: 'completed',         name: 'Finalizado',      color: '#10b981', icon: CheckCircle2 },
+  { id: 'delivered',         name: 'Entregado',       color: '#22c55e', icon: Handshake },
 ];
 
 const TYPE_CFG = {
@@ -129,8 +130,102 @@ function KanbanColumn({ col, cards, onOpen, isOver, animIdx }) {
   );
 }
 
+// ─── Sección OTP ──────────────────────────────────────────────────────────
+function OtpSection({ orderId, onAccepted }) {
+  const [otpSent,    setOtpSent]    = useState(false);
+  const [code,       setCode]       = useState('');
+  const [error,      setError]      = useState('');
+  const [sending,    setSending]    = useState(false);
+  const [verifying,  setVerifying]  = useState(false);
+  const [cooldown,   setCooldown]   = useState(0);
+
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const t = setTimeout(() => setCooldown(c => c - 1), 1000);
+    return () => clearTimeout(t);
+  }, [cooldown]);
+
+  const handleSend = async () => {
+    setSending(true); setError('');
+    try {
+      const res = await authFetch(`/orders/${orderId}/otp/send`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) { setError(data.detail || 'Error enviando OTP'); return; }
+      setOtpSent(true);
+      setCooldown(60);
+    } catch { setError('Error de conexión'); }
+    finally { setSending(false); }
+  };
+
+  const handleVerify = async () => {
+    if (code.length !== 6) { setError('El código debe tener 6 dígitos'); return; }
+    setVerifying(true); setError('');
+    try {
+      const res = await authFetch(`/orders/${orderId}/otp/verify`, {
+        method: 'POST',
+        body: JSON.stringify({ code }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setError(data.detail || 'Código incorrecto'); return; }
+      onAccepted(data);
+    } catch { setError('Error de conexión'); }
+    finally { setVerifying(false); }
+  };
+
+  return (
+    <div style={{ margin: '0.8rem 0', padding: '1rem', background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.8rem' }}>
+        <AlertTriangle size={14} color="#f59e0b" />
+        <span style={{ fontSize: '0.7rem', fontWeight: 800, color: '#f59e0b', textTransform: 'uppercase' }}>
+          Pendiente firma del cliente
+        </span>
+      </div>
+
+      {!otpSent ? (
+        <button
+          onClick={handleSend}
+          disabled={sending}
+          style={{ width: '100%', padding: '0.6rem', background: 'rgba(245,158,11,0.2)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.4)', borderRadius: 6, fontSize: '0.7rem', fontWeight: 800, cursor: sending ? 'not-allowed' : 'pointer' }}
+        >
+          {sending ? 'Enviando SMS...' : 'Enviar OTP al cliente'}
+        </button>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+          <input
+            type="text"
+            inputMode="numeric"
+            maxLength={6}
+            placeholder="Código de 6 dígitos"
+            value={code}
+            onChange={e => setCode(e.target.value.replace(/\D/g, ''))}
+            style={{ padding: '0.6rem', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, color: 'white', fontSize: '1rem', letterSpacing: '0.3rem', textAlign: 'center' }}
+          />
+          <button
+            onClick={handleVerify}
+            disabled={verifying || code.length !== 6}
+            style={{ padding: '0.6rem', background: code.length === 6 ? 'rgba(16,185,129,0.2)' : 'rgba(255,255,255,0.04)', color: code.length === 6 ? '#10b981' : 'rgba(255,255,255,0.3)', border: `1px solid ${code.length === 6 ? 'rgba(16,185,129,0.4)' : 'rgba(255,255,255,0.1)'}`, borderRadius: 6, fontSize: '0.7rem', fontWeight: 800, cursor: code.length === 6 && !verifying ? 'pointer' : 'not-allowed' }}
+          >
+            {verifying ? 'Verificando...' : 'Verificar OTP'}
+          </button>
+          <button
+            onClick={handleSend}
+            disabled={cooldown > 0 || sending}
+            style={{ padding: '0.4rem', background: 'transparent', color: cooldown > 0 ? 'rgba(255,255,255,0.2)' : 'rgba(245,158,11,0.7)', border: 'none', fontSize: '0.65rem', cursor: cooldown > 0 ? 'not-allowed' : 'pointer' }}
+          >
+            {cooldown > 0 ? `Reenviar en ${cooldown}s` : 'Reenviar SMS'}
+          </button>
+        </div>
+      )}
+
+      {error && (
+        <p style={{ marginTop: '0.5rem', fontSize: '0.65rem', color: '#ef4444' }}>{error}</p>
+      )}
+    </div>
+  );
+}
+
 // ─── Modal de detalle con datos reales de BD ──────────────────────────────
-function OrderModal({ order, onClose }) {
+function OrderModal({ order, onClose, onOrderAccepted }) {
   const [detail,  setDetail]  = useState(null);
   const [loading, setLoading] = useState(true);
   const [showSoftwayMode, setShowSoftwayMode] = useState(false);
@@ -187,6 +282,14 @@ function OrderModal({ order, onClose }) {
           <SoftwayHelperModal detail={detail} order={order} onClose={() => setShowSoftwayMode(false)} />
         ) : (
           <div className="mbody">
+
+            {/* OTP — solo visible cuando la orden está pendiente de firma */}
+            {order.estado === 'pending_signature' && (
+              <OtpSection
+                orderId={order.order_id}
+                onAccepted={(data) => { onOrderAccepted(order.order_id); onClose(); }}
+              />
+            )}
 
             {/* Semaforo */}
             <div className="msemaphore" style={{ borderColor: dc }}>
@@ -392,6 +495,7 @@ export default function KanbanPage() {
     const destCol  = resolveDestCol(over.id);
     const srcOrder = orders.find(o => o.order_id === active.id);
     if (!destCol || !srcOrder || destCol === srcOrder.estado) return;
+    if (srcOrder.estado === 'pending_signature') return; // Bloqueado hasta validar OTP
 
     setOrders(prev => prev.map(o => o.order_id === active.id ? { ...o, estado: destCol } : o));
 
@@ -465,7 +569,17 @@ export default function KanbanPage() {
         </DndContext>
       )}
 
-      {selected && <OrderModal order={selected} onClose={() => setSelected(null)} />}
+      {selected && (
+        <OrderModal
+          order={selected}
+          onClose={() => setSelected(null)}
+          onOrderAccepted={(orderId) =>
+            setOrders(prev => prev.map(o =>
+              o.order_id === orderId ? { ...o, estado: 'received' } : o
+            ))
+          }
+        />
+      )}
 
       <style jsx global>{`
         @keyframes colIn {

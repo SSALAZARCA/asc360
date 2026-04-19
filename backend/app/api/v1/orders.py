@@ -34,7 +34,7 @@ async def create_service_order(
         client_id=order_in.client_id,
         service_type=order_in.service_type,
         technician_id=order_in.technician_id,
-        status=ServiceStatus.received
+        status=ServiceStatus.pending_signature
     )
     db.add(new_order)
     await db.flush() # Para obtener el new_order.id
@@ -55,7 +55,7 @@ async def create_service_order(
     initial_history = OrderHistory(
         order_id=new_order.id,
         from_status=None,
-        to_status=ServiceStatus.received,
+        to_status=ServiceStatus.pending_signature,
         changed_at=datetime.utcnow()
     )
     db.add(initial_history)
@@ -875,3 +875,249 @@ async def get_services_analytics(
 
     return services_data
 
+
+# ─── OTP Endpoints ────────────────────────────────────────────────────────────
+
+import random
+import string
+from datetime import timedelta
+
+OTP_EXPIRE_MINUTES = 10
+OTP_MAX_ATTEMPTS   = 3
+OTP_MAX_RESENDS    = 3
+
+
+@router.post("/{order_id}/otp/send", status_code=status.HTTP_200_OK)
+async def send_otp(
+    order_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """
+    Genera y envía un OTP SMS al teléfono del cliente.
+    Solo disponible para órdenes en estado pending_signature.
+    Máximo 3 reenvíos por orden.
+    """
+    from app.models.order import OrderOTP
+    from app.services.sms_service import send_otp_sms
+    from sqlalchemy import func
+
+    stmt = (
+        select(ServiceOrder)
+        .options(selectinload(ServiceOrder.client))
+        .where(ServiceOrder.id == order_id)
+    )
+    res = await db.execute(stmt)
+    order = res.scalar_one_or_none()
+
+    if not order:
+        raise HTTPException(status_code=404, detail="Orden no encontrada")
+    if not current_user.is_superadmin and order.tenant_id != current_user.tenant_id:
+        raise HTTPException(status_code=403, detail="Sin permiso")
+    if order.status != ServiceStatus.pending_signature:
+        raise HTTPException(status_code=409, detail="La orden no está pendiente de firma")
+
+    phone = order.client.phone if order.client else None
+    if not phone:
+        raise HTTPException(status_code=422, detail="El cliente no tiene teléfono registrado")
+
+    # Verificar límite de reenvíos (contar OTPs ya generados para esta orden)
+    count_stmt = select(func.count()).where(OrderOTP.order_id == order_id)
+    count_res = await db.execute(count_stmt)
+    total_sent = count_res.scalar()
+    if total_sent >= OTP_MAX_RESENDS:
+        raise HTTPException(status_code=429, detail="Se alcanzó el límite de reenvíos para esta orden")
+
+    # Invalidar OTPs anteriores marcándolos como usados
+    prev_stmt = (
+        select(OrderOTP)
+        .where(OrderOTP.order_id == order_id)
+        .where(OrderOTP.used_at.is_(None))
+    )
+    prev_res = await db.execute(prev_stmt)
+    for prev in prev_res.scalars().all():
+        prev.used_at = datetime.utcnow()
+        db.add(prev)
+
+    # Generar nuevo código
+    code = ''.join(random.choices(string.digits, k=6))
+    now  = datetime.utcnow()
+    otp  = OrderOTP(
+        order_id=order_id,
+        phone=phone,
+        code=code,
+        created_at=now,
+        expires_at=now + timedelta(minutes=OTP_EXPIRE_MINUTES),
+    )
+    db.add(otp)
+    await db.commit()
+
+    await send_otp_sms(phone, code)
+
+    masked = f"***{phone[-4:]}" if len(phone) >= 4 else "****"
+    return {"message": f"OTP enviado a {masked}", "expires_in_minutes": OTP_EXPIRE_MINUTES}
+
+
+@router.post("/{order_id}/otp/verify", status_code=status.HTTP_200_OK)
+async def verify_otp(
+    order_id: uuid.UUID,
+    body: dict,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """
+    Valida el OTP ingresado por el asesor.
+    Si es correcto: orden pasa a received, recepción queda marcada con accepted_at,
+    y el PDF es regenerado con el sello de aceptación.
+    """
+    from app.models.order import OrderOTP, OrderHistory
+
+    code_input = str(body.get("code", "")).strip()
+    if not code_input:
+        raise HTTPException(status_code=422, detail="Debe ingresar el código OTP")
+
+    stmt = (
+        select(ServiceOrder)
+        .options(
+            selectinload(ServiceOrder.reception),
+            selectinload(ServiceOrder.client),
+            selectinload(ServiceOrder.vehicle),
+        )
+        .where(ServiceOrder.id == order_id)
+    )
+    res = await db.execute(stmt)
+    order = res.scalar_one_or_none()
+
+    if not order:
+        raise HTTPException(status_code=404, detail="Orden no encontrada")
+    if not current_user.is_superadmin and order.tenant_id != current_user.tenant_id:
+        raise HTTPException(status_code=403, detail="Sin permiso")
+    if order.status != ServiceStatus.pending_signature:
+        raise HTTPException(status_code=409, detail="La orden no está pendiente de firma")
+
+    # Buscar OTP activo (no usado, no expirado)
+    now = datetime.utcnow()
+    otp_stmt = (
+        select(OrderOTP)
+        .where(OrderOTP.order_id == order_id)
+        .where(OrderOTP.used_at.is_(None))
+        .where(OrderOTP.expires_at > now)
+        .order_by(OrderOTP.created_at.desc())
+        .limit(1)
+    )
+    otp_res = await db.execute(otp_stmt)
+    otp = otp_res.scalar_one_or_none()
+
+    if not otp:
+        raise HTTPException(status_code=404, detail="No hay un OTP activo para esta orden. Solicitá uno nuevo.")
+
+    # Registrar intento
+    otp.attempts += 1
+    db.add(otp)
+
+    if otp.attempts > OTP_MAX_ATTEMPTS:
+        otp.used_at = now  # Invalidar
+        await db.commit()
+        raise HTTPException(status_code=429, detail="Se superó el máximo de intentos. Solicitá un nuevo OTP.")
+
+    if otp.code != code_input:
+        await db.commit()
+        remaining = OTP_MAX_ATTEMPTS - otp.attempts
+        raise HTTPException(
+            status_code=400,
+            detail=f"Código incorrecto. Intentos restantes: {remaining}"
+        )
+
+    # OTP correcto — invalidar y registrar aceptación
+    otp.used_at = now
+    db.add(otp)
+
+    masked_phone = f"***{otp.phone[-4:]}" if len(otp.phone) >= 4 else "****"
+
+    reception = order.reception
+    if reception:
+        reception.accepted_at = now
+        reception.accepted_phone = masked_phone
+        db.add(reception)
+
+    # Transición: pending_signature → received
+    history_entry = OrderHistory(
+        order_id=order.id,
+        from_status=ServiceStatus.pending_signature,
+        to_status=ServiceStatus.received,
+        changed_at=now,
+        comments="Acta aceptada por OTP",
+    )
+    db.add(history_entry)
+    order.status = ServiceStatus.received
+    db.add(order)
+    await db.commit()
+
+    # Regenerar PDF con sello de aceptación
+    try:
+        vehicle = order.vehicle
+        client  = order.client
+        order_data = {
+            "id": str(order.id),
+            "service_type": order.service_type.value,
+            "accepted_at": now.strftime("%Y-%m-%d %H:%M"),
+            "accepted_phone": masked_phone,
+        }
+        reception_data = {
+            "mileage_km": float(reception.mileage_km) if reception else 0,
+            "gas_level": reception.gas_level if reception else "",
+            "customer_notes": reception.customer_notes if reception else "",
+            "warranty_warnings": reception.warranty_warnings if reception else "",
+        }
+        vehicle_data = {
+            "model": vehicle.model if vehicle else "Desconocido",
+            "plate": vehicle.plate if vehicle else "N/A",
+            "vin": vehicle.vin if vehicle else "N/A",
+        }
+        client_data = {
+            "full_name": client.name if client else "N/A",
+            "identification": client.telegram_id if client else "N/A",
+        }
+        new_pdf_url = await generate_and_upload_reception_pdf(
+            order_data, reception_data, vehicle_data, client_data
+        )
+        if new_pdf_url and reception:
+            reception.reception_pdf_url = new_pdf_url
+            db.add(reception)
+            await db.commit()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"Error regenerando PDF tras OTP: {e}")
+
+    return {
+        "message": "Acta aceptada correctamente",
+        "accepted_at": now.isoformat(),
+        "accepted_phone": masked_phone,
+        "new_status": "received",
+    }
+
+
+@router.post("/{order_id}/otp/resend", status_code=status.HTTP_200_OK)
+async def resend_otp(
+    order_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: Optional[CurrentUser] = Depends(get_optional_user),
+    x_sonia_secret: Optional[str] = Header(None),
+):
+    """
+    Reenvía el OTP. Acepta JWT (asesor desde Kanban) o X-Sonia-Secret (bot Sonia).
+    Delega internamente al endpoint send_otp.
+    """
+    from app.config import settings
+    is_bot_call = x_sonia_secret == settings.SONIA_BOT_SECRET
+    if not is_bot_call and current_user is None:
+        raise HTTPException(status_code=401, detail="No autenticado")
+
+    if current_user is None:
+        # Llamada desde Sonia — construir usuario mock con permisos de superadmin
+        class _BotUser:
+            is_superadmin = True
+            tenant_id = None
+        current_user = _BotUser()
+
+    return await send_otp(order_id, db, current_user)

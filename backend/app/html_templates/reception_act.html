@@ -83,6 +83,15 @@
     </div>
     {% endif %}
 
+    <!-- ACEPTACIÓN OTP -->
+    {% if accepted_at %}
+    <div style="margin-top: 20px; background-color: #d4edda; color: #155724; padding: 15px; border-radius: 4px; border: 1px solid #c3e6cb;">
+        <div style="font-weight: bold; margin-bottom: 5px;">✅ Documento aceptado por el cliente</div>
+        <p style="margin: 0; font-size: 9pt;">
+            Aceptado el {{ accepted_at }} mediante código OTP enviado al número {{ accepted_phone }}.
+        </p>
+    </div>
+    {% else %}
     <!-- SIGNATURES -->
     <div class="signatures">
         <div class="signature-box">
@@ -93,5 +102,6 @@
             <p>Firma del Asesor de Servicio</p>
         </div>
     </div>
+    {% endif %}
 </body>
 </html>
