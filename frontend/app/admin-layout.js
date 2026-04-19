@@ -1,48 +1,52 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Sidebar from '../components/Sidebar';
 
 export default function AdminLayout({ children, fullWidth = false }) {
   const router = useRouter();
+  const routerRef = useRef(router);
   const pathname = usePathname();
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    routerRef.current = router;
+  }, [router]);
+
+  useEffect(() => {
     const checkAuth = () => {
+      const r = routerRef.current;
       const stored = localStorage.getItem('um_user');
       if (!stored) {
-        if (pathname !== '/login') router.push('/login');
-      } else {
-        const u = JSON.parse(stored);
-        setUser(u);
-        
-        // Bloquear acceso a páginas exclusivas según rol
-        const superadminOnly = ['/tenants', '/users', '/settings'];
-        const dashboardRoles = ['superadmin', 'administrativo'];
-        if (u.role !== 'superadmin' && superadminOnly.includes(pathname)) {
-          router.push('/kanban');
-          return;
-        }
-        if (pathname === '/' && !dashboardRoles.includes(u.role)) {
-          router.push('/kanban');
-          return;
-        }
+        if (pathname !== '/login') r.push('/login');
+        return;
+      }
+      const u = JSON.parse(stored);
+      setUser(u);
 
-        // proveedor solo puede estar en /imports
-        if (u.role === 'proveedor' && pathname !== '/imports') {
-          router.push('/imports');
-          return;
-        }
+      const superadminOnly = ['/tenants', '/users', '/settings'];
+      const dashboardRoles = ['superadmin', 'administrativo'];
+
+      if (u.role !== 'superadmin' && superadminOnly.includes(pathname)) {
+        r.push('/kanban');
+        return;
+      }
+      if (pathname === '/' && !dashboardRoles.includes(u.role)) {
+        r.push('/kanban');
+        return;
+      }
+      if (u.role === 'proveedor' && pathname !== '/imports') {
+        r.push('/imports');
+        return;
       }
       setLoading(false);
     };
-    
+
     checkAuth();
     window.addEventListener('storage', checkAuth);
     return () => window.removeEventListener('storage', checkAuth);
-  }, [pathname, router]);
+  }, [pathname]);
 
   if (loading) return null; // Prevenir un flash rápido de contenido no autorizado
   if (!user && pathname !== '/login') return null;
