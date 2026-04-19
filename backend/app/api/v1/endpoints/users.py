@@ -10,6 +10,7 @@ from app.schemas.user import UserCreate, UserOut, UserStatusUpdate, UserUpdate
 from app.core.security import get_password_hash
 from app.api.deps import get_current_user, get_optional_user, CurrentUser
 from uuid import UUID
+import uuid
 from app.config import settings
 
 router = APIRouter()
