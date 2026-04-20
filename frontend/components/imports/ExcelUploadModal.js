@@ -117,7 +117,7 @@ export default function ExcelUploadModal({ isOpen, onClose, onSuccess, uploadUrl
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
               {[
                 { label: 'Creados', value: result.inserted ?? result.result?.moto_units_added ?? 0, color: '#22c55e' },
-                { label: 'Actualizados', value: result.updated ?? result.result?.sp_items_updated ?? 0, color: '#60a5fa' },
+                { label: 'Actualizados', value: result.updated ?? result.result?.moto_units_updated ?? result.result?.sp_items_updated ?? 0, color: '#60a5fa' },
                 { label: 'Sin cambios', value: result.skipped ?? 0, color: '#606075' },
               ].map(({ label, value, color }) => (
                 <div key={label} style={{ textAlign: 'center' }}>

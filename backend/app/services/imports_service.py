@@ -353,7 +353,7 @@ async def import_shipping_doc_excel(
     Las hojas de repuestos (sp_packing_list, sp_invoice) se ignoran.
     """
     wb = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True)
-    summary = {"moto_units_added": 0, "sheets_processed": 0, "sheets_skipped": 0, "errors": [], "duplicates_skipped": []}
+    summary = {"moto_units_added": 0, "moto_units_updated": 0, "sheets_processed": 0, "sheets_skipped": 0, "errors": [], "duplicates_skipped": []}
 
     for sheet_name in wb.sheetnames:
         sheet = wb[sheet_name]
@@ -362,8 +362,9 @@ async def import_shipping_doc_excel(
 
         if sheet_type == "moto_packing_list":
             try:
-                n, dups = await _process_moto_packing_list(db, sheet, actor)
-                summary["moto_units_added"] += n
+                added, upd, dups = await _process_moto_packing_list(db, sheet, actor)
+                summary["moto_units_added"] += added
+                summary["moto_units_updated"] += upd
                 summary["sheets_processed"] += 1
                 summary["duplicates_skipped"].extend(dups)
             except ValueError as e:
@@ -440,16 +441,30 @@ async def _process_moto_packing_list(db: AsyncSession, sheet, actor: CurrentUser
             f"Cargá primero el Shipment Status para registrar el pedido antes de subir el Packing List."
         )
 
-    # VINs ya existentes en la DB
-    existing_vins_db = set(
+    # Mapa VIN → unidad existente en la DB (solo de este pedido para upsert)
+    existing_units_map: dict = {
+        u.vin_number: u
+        for u in (await db.execute(
+            select(ShipmentMotoUnit).where(
+                ShipmentMotoUnit.vin_number.isnot(None),
+                ShipmentMotoUnit.shipment_order_id == order.id,
+            )
+        )).scalars().all()
+    }
+    # VINs de OTROS pedidos — no se tocan, solo se avisa si hay colisión
+    other_order_vins = set(
         row[0] for row in (await db.execute(
-            select(ShipmentMotoUnit.vin_number).where(ShipmentMotoUnit.vin_number.isnot(None))
+            select(ShipmentMotoUnit.vin_number).where(
+                ShipmentMotoUnit.vin_number.isnot(None),
+                ShipmentMotoUnit.shipment_order_id != order.id,
+            )
         )).all()
     )
 
-    count = 0
-    duplicates = []          # VINs omitidos con motivo
-    seen_in_file = set()     # VINs ya vistos en este mismo archivo
+    added = 0
+    updated = 0
+    duplicates = []
+    seen_in_file = set()
 
     for row_idx in range(header_row + 1, sheet.max_row + 1):
         vin = _cell(sheet, row_idx, col_map, "vin no.", "vin no", "vin")
@@ -462,8 +477,8 @@ async def _process_moto_packing_list(db: AsyncSession, sheet, actor: CurrentUser
             duplicates.append({"vin": vin_clean, "row": row_idx, "reason": "duplicado en el archivo"})
             continue
 
-        if vin_clean in existing_vins_db:
-            duplicates.append({"vin": vin_clean, "row": row_idx, "reason": "ya existe en el sistema"})
+        if vin_clean in other_order_vins:
+            duplicates.append({"vin": vin_clean, "row": row_idx, "reason": "ya existe en otro pedido"})
             continue
 
         seen_in_file.add(vin_clean)
@@ -476,21 +491,35 @@ async def _process_moto_packing_list(db: AsyncSession, sheet, actor: CurrentUser
             except (ValueError, TypeError):
                 parsed_year = None
 
-        unit = ShipmentMotoUnit(
-            shipment_order_id=order.id,
-            item_no=_cell(sheet, row_idx, col_map, "item no", "item no."),
-            vin_number=vin_clean,
-            engine_number=str(_cell(sheet, row_idx, col_map, "engine no.", "engine no") or "").strip() or None,
-            color=str(_cell(sheet, row_idx, col_map, "color") or "").strip() or None,
-            model_year=parsed_year,
-            source_pi=source_pi,
-            created_at=datetime.utcnow(),
-        )
-        db.add(unit)
-        count += 1
+        engine = str(_cell(sheet, row_idx, col_map, "engine no.", "engine no") or "").strip() or None
+        color = str(_cell(sheet, row_idx, col_map, "color") or "").strip() or None
+        item_no = _cell(sheet, row_idx, col_map, "item no", "item no.")
+
+        if vin_clean in existing_units_map:
+            # Upsert: actualizar campos del archivo, sin tocar datos de aduana/DIM
+            unit = existing_units_map[vin_clean]
+            unit.item_no = item_no
+            unit.engine_number = engine
+            unit.color = color
+            if parsed_year is not None:
+                unit.model_year = parsed_year
+            updated += 1
+        else:
+            unit = ShipmentMotoUnit(
+                shipment_order_id=order.id,
+                item_no=item_no,
+                vin_number=vin_clean,
+                engine_number=engine,
+                color=color,
+                model_year=parsed_year,
+                source_pi=source_pi,
+                created_at=datetime.utcnow(),
+            )
+            db.add(unit)
+            added += 1
 
     await db.flush()
-    return count, duplicates
+    return added, updated, duplicates
 
 
 async def _process_sp_packing_list(db: AsyncSession, sheet, actor: CurrentUser) -> int:
