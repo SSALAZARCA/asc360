@@ -21,6 +21,7 @@ from app.schemas.imports import (
     ReconciliationResultRead, ReconciliationResultUpdate, BackorderRead, BackorderUpdate,
 )
 from app.services import imports_service
+from app.services.imports_service import compute_status
 from app.services import storage_service
 from app.services import dim_parser_service, certificate_service
 
@@ -144,6 +145,17 @@ async def list_shipment_orders(
     stmt = stmt.offset(skip).limit(page_size)
 
     orders = (await db.execute(stmt)).scalars().all()
+
+    # Recalcular status en tiempo real — el valor guardado puede estar desactualizado
+    # si las fechas ETD/ETA ya pasaron desde la última importación.
+    stale = []
+    for o in orders:
+        fresh = compute_status(o.etr_raw, o.etl_raw, o.etd, o.eta)
+        if fresh != o.computed_status:
+            o.computed_status = fresh
+            stale.append(o)
+    if stale:
+        await db.commit()
 
     return ShipmentOrderListResponse(
         items=[ShipmentOrderRead.model_validate(o) for o in orders],
