@@ -265,153 +265,93 @@ export default function SettingsPage() {
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
         
-        {/* Sección: Identidad Visual */}
-        <section className="glass p-6">
-          <div className="flex items-center space-x-3 mb-6 border-b border-white/5 pb-4">
-            <ImageIcon size={20} className="text-orange-500" />
-            <h2 className="text-lg font-bold">Identidad Visual de la Plataforma</h2>
-          </div>
+        {/* Fila: Identidad Visual + Variables del Sistema */}
+        <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'stretch', flexWrap: 'wrap' }}>
 
-          <div className="grid md:grid-cols-2 gap-8 items-start">
-            
-            {/* Control de subida */}
-            <div className="space-y-4">
-              <p className="text-sm text-muted">
-                Carga el logotipo de la empresa. Este reemplazará el sello estático "UM" en el menú de navegación lateral.
-                Se recomienda usar formato PNG con fondo transparente con un ratio preferiblemente horizontal o cuadrado.
-              </p>
+          {/* Identidad Visual — compacto */}
+          <section className="glass p-6" style={{ flex: '1 1 320px', minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '1rem', paddingBottom: '0.75rem', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+              <ImageIcon size={16} style={{ color: '#ff5f33', flexShrink: 0 }} />
+              <h2 style={{ fontSize: '0.8rem', fontWeight: 700, color: '#fff', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Identidad Visual</h2>
+            </div>
 
-              <label 
-                className="btn flex items-center justify-center space-x-2 w-full transition-all"
-                style={{
-                  padding: '1rem',
-                  border: '1px dashed rgba(255, 255, 255, 0.2)',
-                  borderRadius: '1rem',
-                  cursor: 'pointer',
-                  backgroundColor: 'rgba(255, 255, 255, 0.02)'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = '#ff5f33';
-                  e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)';
-                  e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.02)';
-                }}
-              >
-                <UploadCloud size={18} />
-                <span>Seleccionar nueva imagen</span>
-                <input 
-                  type="file" 
-                  style={{ display: 'none' }}
-                  accept="image/png, image/jpeg, image/svg+xml, image/webp" 
-                  onChange={handleLogoUpload}
-                />
-              </label>
-
-              <div className="flex space-x-3 pt-4">
-                <button 
-                  className="btn-primary flex-1 flex justify-center items-center space-x-2" 
-                  onClick={handleSaveLogo}
-                  disabled={!logoBase64}
+            <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
+              {/* Controles */}
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.6rem', minWidth: 0 }}>
+                <label
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', padding: '0.65rem 1rem', border: '1px dashed rgba(255,255,255,0.2)', borderRadius: '0.75rem', cursor: 'pointer', background: 'rgba(255,255,255,0.02)', fontSize: '0.72rem', fontWeight: 700, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '0.05em' }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = '#ff5f33'; e.currentTarget.style.color = '#ff5f33'; }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)'; e.currentTarget.style.color = 'rgba(255,255,255,0.5)'; }}
                 >
-                  <Save size={16} />
-                  <span>Guardar Cambios</span>
-                </button>
-                <button 
-                  className="btn flex-1 flex justify-center items-center space-x-2" 
-                  onClick={handleRemoveLogo}
-                  disabled={!logoBase64}
-                  style={{ borderColor: 'rgba(239, 68, 68, 0.2)', color: '#ef4444' }}
-                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.2)'}
-                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)'}
-                >
-                  <Trash2 size={16} />
-                  <span>Restaurar Default</span>
-                </button>
+                  <UploadCloud size={15} />
+                  <span>Seleccionar imagen</span>
+                  <input type="file" style={{ display: 'none' }} accept="image/png, image/jpeg, image/svg+xml, image/webp" onChange={handleLogoUpload} />
+                </label>
+
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button className="btn-primary" onClick={handleSaveLogo} disabled={!logoBase64} style={{ flex: 1, padding: '0.45rem 0.75rem', fontSize: '0.68rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem' }}>
+                    <Save size={13} /> Guardar
+                  </button>
+                  <button className="btn" onClick={handleRemoveLogo} disabled={!logoBase64} style={{ flex: 1, padding: '0.45rem 0.75rem', fontSize: '0.68rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem', borderColor: 'rgba(239,68,68,0.25)', color: '#ef4444' }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(239,68,68,0.1)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
+                  >
+                    <Trash2 size={13} /> Restaurar
+                  </button>
+                </div>
+
+                {successMsg && <p style={{ color: '#4ade80', fontSize: '0.68rem', margin: 0 }}>{successMsg}</p>}
               </div>
 
-              {successMsg && (
-                <div className="p-3 bg-green-500/10 border border-green-500/20 text-green-400 text-sm rounded-lg">
-                  {successMsg}
-                </div>
-              )}
+              {/* Preview */}
+              <div style={{ width: '110px', height: '72px', background: 'rgba(0,0,0,0.35)', borderRadius: '0.75rem', border: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                {logoBase64 ? (
+                  <img src={logoBase64} alt="preview" style={{ maxHeight: '52px', maxWidth: '90px', objectFit: 'contain' }} />
+                ) : (
+                  <div style={{ opacity: 0.25, display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                    <div style={{ width: '26px', height: '26px', background: '#ff5f33', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <span style={{ color: '#fff', fontWeight: 900, fontSize: '0.6rem', fontStyle: 'italic' }}>UM</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </section>
+
+          {/* Variables del Sistema */}
+          <section className="glass p-6" style={{ flex: '1 1 280px', minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '1rem', paddingBottom: '0.75rem', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+              <Clock size={16} style={{ color: '#ff5f33', flexShrink: 0 }} />
+              <h2 style={{ fontSize: '0.8rem', fontWeight: 700, color: '#fff', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Variables del Sistema</h2>
             </div>
 
-            {/* Preview visual */}
-            <div className="bg-black/40 rounded-2xl p-6 border border-white/5 flex flex-col items-center justify-center min-h-[200px]">
-              <h3 className="text-xs uppercase tracking-widest text-muted mb-4 w-full text-left">Vista Previa</h3>
-              
-              {logoBase64 ? (
-                <img 
-                  src={logoBase64} 
-                  alt="Vista previa del logo" 
-                  className="max-h-[120px] max-w-[200px] object-contain drop-shadow-2xl" 
-                />
-              ) : (
-                <div className="flex items-center space-x-3 opacity-50 grayscale">
-                  <div className="w-11 h-11 bg-orange-500 rounded-2xl flex items-center justify-center shadow-xl shadow-orange-500/20" style={{ boxShadow: '0 10px 30px rgba(255, 95, 51, 0.3)' }}>
-                     <span className="text-white font-black text-xl italic" style={{ transform: 'skewX(-10deg)' }}>UM</span>
-                  </div>
-                  <div>
-                    <h1 className="text-lg font-black tracking-tighter text-white uppercase" style={{ lineHeight: '1' }}>MASTER-DATA</h1>
-                    <p className="text-[9px] font-black uppercase tracking-widest text-orange-500">
-                      WorkShop Terminal
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              <p className="text-[10px] text-muted mt-6 text-center">
-                El logo será escalado automáticamente para encajar en el menú lateral.
-              </p>
-            </div>
-
-          </div>
-        </section>
-
-        {/* Sección: Variables del Sistema */}
-        <section className="glass p-6">
-          <div className="flex items-center space-x-3 mb-6 border-b border-white/5 pb-4">
-            <Clock size={20} className="text-orange-500" />
-            <h2 className="text-lg font-bold">Variables del Sistema</h2>
-          </div>
-
-          <div className="space-y-6">
-            {/* Recordatorio de diagnóstico */}
-            <div className="space-y-2">
-              <label className="block text-sm font-semibold text-white">
-                Tiempo de recordatorio de diagnóstico (minutos)
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+              <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#fff' }}>
+                Recordatorio de diagnóstico
               </label>
-              <p className="text-xs text-muted">
-                Cuando un técnico arranca con una moto, Sonia esperará este tiempo antes de preguntarle qué encontró.
-                Si no responde, le vuelve a preguntar cada vez que se cumpla el intervalo. Mínimo: 5 minutos.
+              <p style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.3)', margin: 0, lineHeight: 1.6 }}>
+                Tiempo que espera Sonia antes de preguntarle al técnico qué encontró. Mínimo 5 min.
               </p>
-              <div className="flex items-center space-x-3 pt-1">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginTop: '0.25rem', flexWrap: 'wrap' }}>
                 <input
                   type="number"
                   min={5}
                   max={480}
                   value={reminderMinutes}
                   onChange={e => setReminderMinutes(Number(e.target.value))}
-                  className="w-28 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm focus:outline-none focus:border-orange-500"
+                  style={{ width: '72px', padding: '0.45rem 0.65rem', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', fontSize: '0.85rem', outline: 'none' }}
                 />
-                <span className="text-sm text-muted">minutos</span>
-                <button
-                  className="btn-primary flex items-center space-x-2 px-4 py-2"
-                  onClick={handleSaveReminder}
-                  disabled={reminderSaving}
-                >
-                  <Save size={14} />
-                  <span>{reminderSaving ? 'Guardando...' : 'Guardar'}</span>
+                <span style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.35)' }}>minutos</span>
+                <button className="btn-primary" onClick={handleSaveReminder} disabled={reminderSaving} style={{ padding: '0.45rem 1rem', fontSize: '0.68rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                  <Save size={13} />
+                  {reminderSaving ? 'Guardando...' : 'Guardar'}
                 </button>
               </div>
-              {reminderMsg && (
-                <p className="text-xs mt-1 text-green-400">{reminderMsg}</p>
-              )}
+              {reminderMsg && <p style={{ color: '#4ade80', fontSize: '0.68rem', margin: 0 }}>{reminderMsg}</p>}
             </div>
-          </div>
-        </section>
+          </section>
+
+        </div>
 
         {/* Sección: Modelos de Vehículos */}
         <section className="glass p-6">
