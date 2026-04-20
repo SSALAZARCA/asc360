@@ -122,7 +122,7 @@ export default function UsersPage() {
         </button>
       </header>
 
-      <div className="glass overflow-hidden rounded-2xl border border-white/5 shadow-2xl">
+      <div className="glass table-scroll-wrapper rounded-2xl border border-white/5 shadow-2xl">
         <table className="master-table">
           <thead>
             <tr>

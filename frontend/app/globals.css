@@ -354,8 +354,13 @@ select {
   cursor: not-allowed;
 }
 
+.table-scroll-wrapper { overflow: hidden; }
+
 /* 10. TABLET RESPONSIVE (768px – 1024px) */
 @media (max-width: 1024px) {
+  .table-scroll-wrapper {
+    overflow-x: auto !important;
+  }
   .page-title {
     font-size: 1.5rem !important;
     letter-spacing: -0.03em !important;
