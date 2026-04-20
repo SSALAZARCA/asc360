@@ -35,6 +35,64 @@ function SummaryCard({ label, count, result }) {
   );
 }
 
+function EditableReconciliationCell({ resultId, field, current, type = 'text', align = 'left', cellStyle = {}, onSaved }) {
+  const [editing, setEditing] = useState(false);
+  const [hover, setHover] = useState(false);
+  const [value, setValue] = useState(current ?? '');
+
+  const save = async () => {
+    setEditing(false);
+    const parsed = type === 'number' ? (value === '' ? null : parseInt(value, 10)) : (String(value).trim() || null);
+    if (parsed === (current ?? null)) return;
+    try {
+      await authFetch(`${API()}/imports/reconciliation-results/${resultId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [field]: parsed }),
+      });
+      onSaved?.();
+    } catch { setValue(current ?? ''); }
+  };
+
+  if (editing) {
+    return (
+      <input
+        autoFocus
+        type={type}
+        value={value}
+        onChange={e => setValue(e.target.value)}
+        onBlur={save}
+        onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') { setValue(current ?? ''); setEditing(false); } }}
+        style={{
+          width: type === 'number' ? 65 : '100%', minWidth: type === 'text' ? 80 : undefined,
+          fontSize: '11px', padding: '2px 6px', borderRadius: '6px',
+          background: '#1a1a24', border: '1px solid #60a5fa', color: '#fff', outline: 'none',
+          textAlign: align, ...cellStyle,
+        }}
+      />
+    );
+  }
+
+  return (
+    <span
+      onClick={() => { setEditing(true); setValue(current ?? ''); }}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      title="Click para editar"
+      style={{
+        cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4,
+        padding: '2px 5px', borderRadius: 5, textAlign: align,
+        background: hover ? 'rgba(96,165,250,0.1)' : 'transparent',
+        border: hover ? '1px solid rgba(96,165,250,0.3)' : '1px solid transparent',
+        transition: 'all 0.15s', ...cellStyle,
+      }}
+    >
+      {current != null && current !== '' ? current : <span style={{ color: '#3f3f55' }}>—</span>}
+      {hover && <span style={{ fontSize: 9, opacity: 0.6 }}>✏</span>}
+    </span>
+  );
+}
+
 export default function ReconciliationModal({ lot, onClose, onConfirmed }) {
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -233,20 +291,19 @@ export default function ReconciliationModal({ lot, onClose, onConfirmed }) {
                         <tr key={r.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}
                           onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
                           onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                          <td style={{ padding: '8px 12px', color: '#60a5fa', fontWeight: 700, fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{r.part_number}</td>
-                          <td style={{ padding: '8px 12px', color: '#9ca3af', fontSize: '10px', maxWidth: 180 }}>
-                            <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                              {r.description_es || '—'}
-                            </span>
+                          <td style={{ padding: '8px 12px', whiteSpace: 'nowrap' }}>
+                            <EditableReconciliationCell resultId={r.id} field="part_number" current={r.part_number} onSaved={fetchResults} cellStyle={{ color: '#60a5fa', fontWeight: 700, fontFamily: 'monospace' }} />
+                          </td>
+                          <td style={{ padding: '8px 12px', fontSize: '10px', maxWidth: 180 }}>
+                            <EditableReconciliationCell resultId={r.id} field="description_es" current={r.description_es} onSaved={fetchResults} cellStyle={{ color: '#9ca3af', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} />
                           </td>
                           <td style={{ padding: '8px 12px', whiteSpace: 'nowrap' }}>
-                            {r.model_applicable
-                              ? <span style={{ fontSize: '9px', fontWeight: 700, padding: '2px 6px', borderRadius: '4px', background: 'rgba(96,165,250,0.1)', color: '#60a5fa' }}>{r.model_applicable}</span>
-                              : <span style={{ color: '#606075' }}>—</span>
-                            }
+                            <EditableReconciliationCell resultId={r.id} field="model_applicable" current={r.model_applicable} onSaved={fetchResults} cellStyle={{ fontSize: '9px', fontWeight: 700, color: '#60a5fa' }} />
                           </td>
                           <td style={{ padding: '8px 12px', color: '#d1d5db', textAlign: 'right' }}>{r.qty_ordered ?? '—'}</td>
-                          <td style={{ padding: '8px 12px', color: '#d1d5db', textAlign: 'right' }}>{r.qty_in_packing ?? 0}</td>
+                          <td style={{ padding: '8px 12px', textAlign: 'right' }}>
+                            <EditableReconciliationCell resultId={r.id} field="qty_in_packing" current={r.qty_in_packing ?? 0} type="number" align="right" onSaved={fetchResults} cellStyle={{ color: '#d1d5db' }} />
+                          </td>
                           <td style={{ padding: '8px 12px', color: diffColor, textAlign: 'right', fontWeight: 700 }}>
                             {r.qty_ordered != null ? (diff > 0 ? `+${diff}` : diff) : '—'}
                           </td>

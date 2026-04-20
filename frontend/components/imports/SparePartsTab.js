@@ -32,6 +32,67 @@ function ItemStatusBadge({ status }) {
 }
 
 // ---------------------------------------------------------------------------
+// Inline editable cell genérica para texto y números
+// ---------------------------------------------------------------------------
+function EditableCell({ itemId, field, current, type = 'text', align = 'left', cellStyle = {}, onSaved }) {
+  const [editing, setEditing] = useState(false);
+  const [hover, setHover] = useState(false);
+  const [value, setValue] = useState(current ?? '');
+
+  const save = async () => {
+    setEditing(false);
+    const parsed = type === 'number' ? (value === '' ? null : parseFloat(value)) : (String(value).trim() || null);
+    if (parsed === (current ?? null)) return;
+    try {
+      await authFetch(`${API()}/imports/spare-part-items/${itemId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [field]: parsed }),
+      });
+      onSaved?.();
+    } catch { setValue(current ?? ''); }
+  };
+
+  if (editing) {
+    return (
+      <input
+        autoFocus
+        type={type}
+        value={value}
+        onChange={e => setValue(e.target.value)}
+        onBlur={save}
+        onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') { setValue(current ?? ''); setEditing(false); } }}
+        style={{
+          width: type === 'number' ? 70 : '100%', minWidth: type === 'text' ? 80 : undefined,
+          fontSize: '11px', padding: '2px 6px', borderRadius: '6px',
+          background: '#1a1a24', border: '1px solid #60a5fa', color: '#fff', outline: 'none',
+          textAlign: align, ...cellStyle,
+        }}
+      />
+    );
+  }
+
+  return (
+    <span
+      onClick={() => { setEditing(true); setValue(current ?? ''); }}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      title="Click para editar"
+      style={{
+        cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4,
+        padding: '2px 5px', borderRadius: 5, textAlign: align,
+        background: hover ? 'rgba(96,165,250,0.1)' : 'transparent',
+        border: hover ? '1px solid rgba(96,165,250,0.3)' : '1px solid transparent',
+        transition: 'all 0.15s', ...cellStyle,
+      }}
+    >
+      {current != null && current !== '' ? current : <span style={{ color: '#3f3f55' }}>—</span>}
+      {hover && <span style={{ fontSize: 9, opacity: 0.6 }}>✏</span>}
+    </span>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Inline editable cell para qty_received y status
 // ---------------------------------------------------------------------------
 function EditableStatus({ itemId, current, onSaved }) {
@@ -197,19 +258,37 @@ function LotItemsTable({ lotId, userRole }) {
                 <tr key={item.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}
                   onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
                   onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                  <td style={{ padding: '8px 10px', color: '#60a5fa', fontWeight: 700, fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{item.part_number}</td>
+                  <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>
+                    {canEdit
+                      ? <EditableCell itemId={item.id} field="part_number" current={item.part_number} onSaved={fetch} cellStyle={{ color: '#60a5fa', fontWeight: 700, fontFamily: 'monospace' }} />
+                      : <span style={{ color: '#60a5fa', fontWeight: 700, fontFamily: 'monospace' }}>{item.part_number}</span>
+                    }
+                  </td>
                   <td style={{ padding: '8px 10px', color: '#d1d5db', maxWidth: 220 }}>
-                    <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={item.description || ''}>
-                      {item.description || '—'}
-                    </span>
-                    {item.description_es && (
-                      <span style={{ display: 'block', fontSize: '9px', color: '#606075', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={item.description_es}>
-                        {item.description_es}
-                      </span>
+                    {canEdit ? (
+                      <>
+                        <EditableCell itemId={item.id} field="description" current={item.description} onSaved={fetch} cellStyle={{ display: 'block' }} />
+                        <EditableCell itemId={item.id} field="description_es" current={item.description_es} onSaved={fetch} cellStyle={{ display: 'block', fontSize: '9px', color: '#606075', marginTop: 2 }} />
+                      </>
+                    ) : (
+                      <>
+                        <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={item.description || ''}>{item.description || '—'}</span>
+                        {item.description_es && <span style={{ display: 'block', fontSize: '9px', color: '#606075', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.description_es}</span>}
+                      </>
                     )}
                   </td>
-                  <td style={{ padding: '8px 10px', color: '#9ca3af', whiteSpace: 'nowrap' }}>{item.model_applicable || '—'}</td>
-                  <td style={{ padding: '8px 10px', color: '#d1d5db', textAlign: 'right' }}>{item.qty_ordered}</td>
+                  <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>
+                    {canEdit
+                      ? <EditableCell itemId={item.id} field="model_applicable" current={item.model_applicable} onSaved={fetch} cellStyle={{ color: '#9ca3af' }} />
+                      : <span style={{ color: '#9ca3af' }}>{item.model_applicable || '—'}</span>
+                    }
+                  </td>
+                  <td style={{ padding: '8px 10px', textAlign: 'right' }}>
+                    {canEdit
+                      ? <EditableCell itemId={item.id} field="qty_ordered" current={item.qty_ordered} type="number" align="right" onSaved={fetch} cellStyle={{ color: '#d1d5db' }} />
+                      : <span style={{ color: '#d1d5db' }}>{item.qty_ordered}</span>
+                    }
+                  </td>
                   <td style={{ padding: '8px 10px', textAlign: 'right' }}>
                     {canEdit
                       ? <EditableQty itemId={item.id} current={item.qty_received} max={item.qty_ordered} onSaved={fetch} />
@@ -219,11 +298,17 @@ function LotItemsTable({ lotId, userRole }) {
                   <td style={{ padding: '8px 10px', color: (item.qty_pending ?? 0) > 0 ? '#f97316' : '#606075', textAlign: 'right', fontWeight: 700 }}>
                     {item.qty_pending ?? Math.max(0, item.qty_ordered - item.qty_received)}
                   </td>
-                  <td style={{ padding: '8px 10px', color: '#d1d5db', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                    {item.unit_price != null ? `$${parseFloat(item.unit_price).toFixed(2)}` : '—'}
+                  <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    {canEdit
+                      ? <EditableCell itemId={item.id} field="unit_price" current={item.unit_price != null ? parseFloat(item.unit_price).toFixed(2) : null} type="number" align="right" onSaved={fetch} cellStyle={{ color: '#d1d5db' }} />
+                      : <span style={{ color: '#d1d5db' }}>{item.unit_price != null ? `$${parseFloat(item.unit_price).toFixed(2)}` : '—'}</span>
+                    }
                   </td>
-                  <td style={{ padding: '8px 10px', color: '#a78bfa', textAlign: 'right', fontWeight: 700, whiteSpace: 'nowrap' }}>
-                    {item.amount != null ? `$${parseFloat(item.amount).toFixed(2)}` : '—'}
+                  <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    {canEdit
+                      ? <EditableCell itemId={item.id} field="amount" current={item.amount != null ? parseFloat(item.amount).toFixed(2) : null} type="number" align="right" onSaved={fetch} cellStyle={{ color: '#a78bfa', fontWeight: 700 }} />
+                      : <span style={{ color: '#a78bfa', fontWeight: 700 }}>{item.amount != null ? `$${parseFloat(item.amount).toFixed(2)}` : '—'}</span>
+                    }
                   </td>
                   <td style={{ padding: '8px 10px' }}>
                     {canEdit

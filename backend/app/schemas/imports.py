@@ -268,10 +268,24 @@ class SparePartItemRead(BaseModel):
 
 
 class SparePartItemUpdate(BaseModel):
+    part_number: Optional[str] = None
+    description: Optional[str] = None
+    description_es: Optional[str] = None
+    model_applicable: Optional[str] = None
+    qty_ordered: Optional[int] = None
     qty_received: Optional[int] = None
+    unit_price: Optional[float] = None
+    amount: Optional[float] = None
     status: Optional[str] = None
     backorder_pi: Optional[str] = None
     notes: Optional[str] = None
+
+
+class ReconciliationResultUpdate(BaseModel):
+    part_number: Optional[str] = None
+    description_es: Optional[str] = None
+    model_applicable: Optional[str] = None
+    qty_in_packing: Optional[int] = None
 
 
 # ---------------------------------------------------------------------------

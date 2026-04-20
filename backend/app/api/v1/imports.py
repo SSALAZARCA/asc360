@@ -18,7 +18,7 @@ from app.schemas.imports import (
     ShipmentOrderRead, ShipmentOrderCreate, ShipmentOrderUpdate, ShipmentOrderListResponse,
     ImportExcelResult, MotoUnitRead, MotoUnitUpdate, ImportAttachmentRead,
     SparePartLotRead, SparePartItemRead, SparePartItemUpdate,
-    ReconciliationResultRead, BackorderRead, BackorderUpdate,
+    ReconciliationResultRead, ReconciliationResultUpdate, BackorderRead, BackorderUpdate,
 )
 from app.services import imports_service
 from app.services import storage_service
@@ -621,6 +621,17 @@ async def list_spare_part_items(
     return [SparePartItemRead.model_validate(i) for i in items]
 
 
+def _compute_reconciliation_result(qty_ordered, qty_in_packing) -> str:
+    if qty_ordered is None:
+        return "EXTRA"
+    qty_pl = qty_in_packing or 0
+    if qty_pl == 0:
+        return "MISSING"
+    if qty_pl >= qty_ordered:
+        return "COMPLETE"
+    return "PARTIAL"
+
+
 @router.patch("/spare-part-items/{item_id}", response_model=SparePartItemRead)
 async def update_spare_part_item(
     item_id: uuid.UUID,
@@ -638,14 +649,73 @@ async def update_spare_part_item(
     for field, value in update_data.items():
         setattr(item, field, value)
 
-    # Recalcular qty_pending si cambió qty_received
-    if "qty_received" in update_data:
+    if "qty_received" in update_data or "qty_ordered" in update_data:
         item.qty_pending = max(0, item.qty_ordered - item.qty_received)
+
+    # Propagar cambios a ReconciliationResult vinculado
+    propagate_fields = {"qty_ordered", "part_number"}
+    if propagate_fields & set(update_data.keys()):
+        rr = (await db.execute(
+            select(ReconciliationResult).where(ReconciliationResult.spare_part_item_id == item.id)
+        )).scalar_one_or_none()
+        if rr:
+            if "qty_ordered" in update_data:
+                rr.qty_ordered = item.qty_ordered
+                rr.result = _compute_reconciliation_result(rr.qty_ordered, rr.qty_in_packing)
+            if "part_number" in update_data:
+                rr.part_number = item.part_number
 
     item.updated_at = datetime.utcnow()
     await db.commit()
     await db.refresh(item)
     return SparePartItemRead.model_validate(item)
+
+
+@router.patch("/reconciliation-results/{result_id}")
+async def update_reconciliation_result(
+    result_id: uuid.UUID,
+    payload: ReconciliationResultUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    _require_imports_editor(current_user)
+
+    rr = await db.get(ReconciliationResult, result_id)
+    if not rr:
+        raise HTTPException(status_code=404, detail={"detail": "Resultado no encontrado", "code": "NOT_FOUND"})
+
+    update_data = payload.model_dump(exclude_none=True)
+
+    if "qty_in_packing" in update_data:
+        rr.qty_in_packing = update_data["qty_in_packing"]
+        rr.result = _compute_reconciliation_result(rr.qty_ordered, rr.qty_in_packing)
+        if rr.spare_part_item_id:
+            item = await db.get(SparePartItem, rr.spare_part_item_id)
+            if item:
+                item.qty_received = rr.qty_in_packing
+                item.qty_pending = max(0, item.qty_ordered - item.qty_received)
+                item.updated_at = datetime.utcnow()
+
+    # Campos que viven en SparePartItem pero se muestran en reconciliación
+    item_fields = {"part_number", "description_es", "model_applicable"}
+    if item_fields & set(update_data.keys()):
+        if rr.spare_part_item_id:
+            item = await db.get(SparePartItem, rr.spare_part_item_id)
+            if item:
+                for field in item_fields & set(update_data.keys()):
+                    setattr(item, field, update_data[field])
+                item.updated_at = datetime.utcnow()
+        if "part_number" in update_data:
+            rr.part_number = update_data["part_number"]
+
+    await db.commit()
+    await db.refresh(rr)
+    return {
+        "id": str(rr.id),
+        "result": rr.result,
+        "qty_in_packing": rr.qty_in_packing,
+        "part_number": rr.part_number,
+    }
 
 
 # ---------------------------------------------------------------------------
