@@ -18,9 +18,7 @@ export default function ImportsPage() {
     <AdminLayout fullWidth>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', paddingBottom: '2rem' }}>
         <div>
-          <h1 style={{ color: '#fff', fontWeight: 800, fontSize: '20px', margin: 0, letterSpacing: '-0.02em' }}>
-            Estado de Pedidos
-          </h1>
+          <h1 className="page-title">Estado de <span style={{ fontStyle: 'italic', color: 'var(--accent-orange)', WebkitTextFillColor: 'var(--accent-orange)' }}>Pedidos</span></h1>
           <p style={{ color: '#606075', fontSize: '12px', margin: '4px 0 0' }}>
             Seguimiento de importaciones — motos y repuestos
           </p>

@@ -599,7 +599,7 @@ export default function KanbanPage() {
       {/* Header compacto */}
       <div className="kb-header">
         <div>
-          <h1 className="page-title">Tablero Kanban Operativo</h1>
+          <h1 className="page-title">Tablero Kanban <span style={{ fontStyle: 'italic', color: 'var(--accent-orange)', WebkitTextFillColor: 'var(--accent-orange)' }}>Operativo</span></h1>
           <p className="kb-subtitle">
             {loading ? 'Sincronizando...'
               : `${orders.length} motos activas — arrastra y suelta en la columna para cambiar estado`}

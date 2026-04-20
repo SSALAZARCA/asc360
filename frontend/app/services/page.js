@@ -291,7 +291,7 @@ export default function ServicesPage() {
         {/* Header Premium */}
         <header className="page-header">
           <div>
-            <h1 className="page-title">Gestión <span style={{ fontStyle: 'italic', WebkitTextFillColor: 'var(--accent-orange)' }}>Maestra</span></h1>
+            <h1 className="page-title">Gestión <span style={{ fontStyle: 'italic', color: 'var(--accent-orange)', WebkitTextFillColor: 'var(--accent-orange)' }}>Maestra</span></h1>
             <p className="subtitle">Repositorio centralizado de expedientes y órdenes en red</p>
           </div>
           <div className="stats-pill">
