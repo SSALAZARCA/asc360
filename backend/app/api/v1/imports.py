@@ -1150,7 +1150,7 @@ async def update_moto_unit(
     current_user: CurrentUser = Depends(get_current_user),
 ):
     _require_superadmin(current_user)
-    unit = await db.get(ShipmentMotoUnit, unit_id)
+    unit = (await db.execute(select(ShipmentMotoUnit).where(ShipmentMotoUnit.id == unit_id))).scalar_one_or_none()
     if not unit:
         raise HTTPException(status_code=404, detail="Unidad no encontrada")
     update_data = payload.model_dump(exclude_unset=True)
