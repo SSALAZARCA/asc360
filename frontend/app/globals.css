@@ -353,3 +353,29 @@ select {
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* 10. TABLET RESPONSIVE (768px – 1024px) */
+@media (max-width: 1024px) {
+  .page-title {
+    font-size: 1.5rem !important;
+    letter-spacing: -0.03em !important;
+  }
+
+  .page-header {
+    padding-bottom: 0.65rem !important;
+    margin-bottom: 1rem !important;
+    gap: 0.5rem !important;
+  }
+
+  .admin-main {
+    padding: 1rem 1rem 0 !important;
+    overflow-x: auto !important;
+    overflow-y: auto !important;
+  }
+
+  .kb-board {
+    grid-template-columns: repeat(9, minmax(175px, 1fr)) !important;
+    overflow-x: auto !important;
+    height: calc(100vh - 120px) !important;
+  }
+}

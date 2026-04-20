@@ -11,15 +11,27 @@ export default function AdminLayout({ children, fullWidth = false }) {
   const [loading, setLoading] = useState(true);
   const [collapsed, setCollapsed] = useState(() => {
     if (typeof window !== 'undefined') {
-      return localStorage.getItem('sidebar_collapsed') === 'true';
+      const saved = localStorage.getItem('sidebar_collapsed');
+      if (saved !== null) return saved === 'true';
+      return window.innerWidth <= 1024;
     }
     return false;
   });
 
   const handleToggle = (val) => {
     setCollapsed(val);
-    localStorage.setItem('sidebar_collapsed', val);
+    localStorage.setItem('sidebar_collapsed', String(val));
   };
+
+  useEffect(() => {
+    const onResize = () => {
+      const isTablet = window.innerWidth <= 1024;
+      const saved = localStorage.getItem('sidebar_collapsed');
+      if (saved === null) setCollapsed(isTablet);
+    };
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   useEffect(() => {
     routerRef.current = router;
@@ -68,16 +80,19 @@ export default function AdminLayout({ children, fullWidth = false }) {
   return (
     <div style={{ display: 'flex', minHeight: '100vh' }}>
       <Sidebar collapsed={collapsed} onToggle={handleToggle} />
-      <main style={{
-        marginLeft: `${marginLeft}px`,
-        flex: 1,
-        padding: fullWidth ? '1.25rem 1.25rem 0' : '1.5rem 2rem',
-        overflow: 'hidden',
-        minWidth: 0,
-        display: 'flex',
-        flexDirection: 'column',
-        transition: 'margin-left 0.25s ease',
-      }}>
+      <main
+        className="admin-main"
+        style={{
+          marginLeft: `${marginLeft}px`,
+          flex: 1,
+          padding: fullWidth ? '1.25rem 1.25rem 0' : '1.5rem 2rem',
+          overflow: 'auto',
+          minWidth: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          transition: 'margin-left 0.25s ease',
+        }}
+      >
         {children}
       </main>
     </div>
