@@ -83,7 +83,17 @@ export default function ImportsTabs({ userRole }) {
   };
 
   const handleUploadSuccess = () => {
+    // No cerrar el modal aquí — el usuario necesita ver el resultado.
+    // El fetch se hace cuando el usuario cierra el modal manualmente.
+    fetchOrders();
+  };
+
+  const handleShipmentUploadClose = () => {
     setShowShipmentUpload(false);
+    fetchOrders();
+  };
+
+  const handleShippingDocUploadClose = () => {
     setShowShippingDocUpload(false);
     fetchOrders();
   };
@@ -313,14 +323,14 @@ export default function ImportsTabs({ userRole }) {
       {/* Modals de upload */}
       <ExcelUploadModal
         isOpen={showShipmentUpload}
-        onClose={() => setShowShipmentUpload(false)}
+        onClose={handleShipmentUploadClose}
         onSuccess={handleUploadSuccess}
         uploadUrl={`${API()}/imports/shipment-excel`}
         title="Importar Shipment Status"
       />
       <ExcelUploadModal
         isOpen={showShippingDocUpload}
-        onClose={() => setShowShippingDocUpload(false)}
+        onClose={handleShippingDocUploadClose}
         onSuccess={handleUploadSuccess}
         uploadUrl={`${API()}/imports/shipping-doc-excel`}
         title="Importar Packing List de Motos (VINs)"
