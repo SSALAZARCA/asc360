@@ -8,17 +8,7 @@ export default function Dashboard() {
     <AdminLayout fullWidth>
       <div style={{ maxWidth: '100%' }}>
 
-        {/* Header compacto */}
-        <header style={{
-          display: 'flex',
-          alignItems: 'flex-end',
-          justifyContent: 'space-between',
-          gap: '1rem',
-          marginBottom: '1rem',
-          paddingBottom: '0.75rem',
-          borderBottom: '1px solid rgba(255,255,255,0.05)',
-          flexWrap: 'wrap',
-        }}>
+        <header className="page-header">
           <div>
             <h1 className="page-title">
               Centro de <span style={{ fontStyle: 'italic', color: 'var(--accent-orange)', WebkitTextFillColor: 'var(--accent-orange)' }}>Comando</span>

@@ -681,7 +681,9 @@ export default function KanbanPage() {
           justify-content: space-between;
           flex-wrap: wrap;
           gap: 0.6rem;
-          margin-bottom: 0.7rem;
+          border-bottom: 1px solid rgba(255,255,255,0.05);
+          padding-bottom: 1rem;
+          margin-bottom: 1.5rem;
           flex-shrink: 0;
         }
         .kb-title {

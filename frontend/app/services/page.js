@@ -418,10 +418,6 @@ export default function ServicesPage() {
           animation: fadeIn 0.4s ease;
         }
 
-        .page-header {
-          display: flex; justify-content: space-between; align-items: flex-end;
-          border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 0.8rem; flex-shrink: 0; margin-bottom: 1rem;
-        }
         .title-gradient { font-size:1.6rem; font-weight:900; background:linear-gradient(135deg, #fff 40%, #ff8c5a); -webkit-background-clip:text; -webkit-text-fill-color:transparent; margin:0; text-transform:uppercase; letter-spacing:-0.02em; line-height:1; }
         .stats-pill { display:flex; align-items:center; gap:0.5rem; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); padding:0.4rem 0.8rem; border-radius:10px; }
         .stats-num { font-size:1rem; font-weight:900; color:#3b82f6; }

@@ -256,7 +256,7 @@ export default function SettingsPage() {
 
   return (
     <AdminLayout>
-      <header className="page-header mb-8 flex justify-between items-end border-b border-white/5 pb-6">
+      <header className="page-header">
         <div>
           <h1 className="page-title">Configuración del <span style={{ fontStyle: 'italic', color: 'var(--accent-orange)', WebkitTextFillColor: 'var(--accent-orange)' }}>Sistema</span></h1>
           <p className="page-subtitle">Personalización visual y parametrización de variables del sistema</p>

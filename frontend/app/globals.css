@@ -178,6 +178,22 @@ a, a:visited, a:hover, a:active {
   margin: 0.25rem 0 0 !important;
 }
 
+.page-header {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: flex-end !important;
+  flex-wrap: wrap !important;
+  gap: 1rem !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
+  padding-bottom: 1rem !important;
+  margin-bottom: 1.5rem !important;
+  flex-shrink: 0 !important;
+}
+
+.max-w-4xl { max-width: 56rem !important; }
+.mx-auto { margin-left: auto !important; margin-right: auto !important; }
+.space-y-8 > * + * { margin-top: 2rem !important; }
+
 .text-5xl { font-size: 3rem !important; line-height: 1 !important; }
 .text-4xl { font-size: 2.25rem !important; }
 .text-2xl { font-size: 1.5rem !important; }

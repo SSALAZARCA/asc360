@@ -17,9 +17,11 @@ export default function ImportsPage() {
   return (
     <AdminLayout fullWidth>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', paddingBottom: '2rem' }}>
-        <div>
-          <h1 className="page-title">Estado de <span style={{ fontStyle: 'italic', color: 'var(--accent-orange)', WebkitTextFillColor: 'var(--accent-orange)' }}>Pedidos</span></h1>
-          <p className="page-subtitle">Seguimiento de importaciones — motos y repuestos</p>
+        <div className="page-header">
+          <div>
+            <h1 className="page-title">Estado de <span style={{ fontStyle: 'italic', color: 'var(--accent-orange)', WebkitTextFillColor: 'var(--accent-orange)' }}>Pedidos</span></h1>
+            <p className="page-subtitle">Seguimiento de importaciones — motos y repuestos</p>
+          </div>
         </div>
         <ImportsTabs userRole={userRole} />
       </div>

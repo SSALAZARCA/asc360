@@ -112,7 +112,7 @@ export default function UsersPage() {
 
   return (
     <AdminLayout>
-      <header className="page-header mb-8 flex justify-between items-end border-b border-white/5 pb-6">
+      <header className="page-header">
         <div>
           <h1 className="page-title">Personal y <span style={{ fontStyle: 'italic', color: 'var(--accent-orange)', WebkitTextFillColor: 'var(--accent-orange)' }}>Acceso</span></h1>
           <p className="page-subtitle">Gestión de identidad, roles de seguridad y acceso web/telegram</p>
