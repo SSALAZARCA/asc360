@@ -267,13 +267,13 @@ function LotItemsTable({ lotId, userRole }) {
                   <td style={{ padding: '8px 10px', color: '#d1d5db', maxWidth: 220 }}>
                     {canEdit ? (
                       <>
-                        <EditableCell itemId={item.id} field="description" current={item.description} onSaved={fetch} cellStyle={{ display: 'block' }} />
-                        <EditableCell itemId={item.id} field="description_es" current={item.description_es} onSaved={fetch} cellStyle={{ display: 'block', fontSize: '9px', color: '#606075', marginTop: 2 }} />
+                        <EditableCell itemId={item.id} field="description_es" current={item.description_es} onSaved={fetch} cellStyle={{ display: 'block' }} />
+                        <EditableCell itemId={item.id} field="description" current={item.description} onSaved={fetch} cellStyle={{ display: 'block', fontSize: '9px', color: '#606075', marginTop: 2 }} />
                       </>
                     ) : (
                       <>
-                        <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={item.description || ''}>{item.description || '—'}</span>
-                        {item.description_es && <span style={{ display: 'block', fontSize: '9px', color: '#606075', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.description_es}</span>}
+                        <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={item.description_es || ''}>{item.description_es || '—'}</span>
+                        {item.description && <span style={{ display: 'block', fontSize: '9px', color: '#606075', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.description}</span>}
                       </>
                     )}
                   </td>
