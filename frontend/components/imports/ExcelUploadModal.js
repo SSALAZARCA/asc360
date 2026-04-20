@@ -131,6 +131,20 @@ export default function ExcelUploadModal({ isOpen, onClose, onSuccess, uploadUrl
                 {result.errors.length} fila(s) con errores
               </p>
             )}
+            {result.result?.duplicates_skipped?.length > 0 && (
+              <div style={{ marginTop: '12px', background: 'rgba(251,191,36,0.06)', border: '1px solid rgba(251,191,36,0.2)', borderRadius: '8px', padding: '10px' }}>
+                <p style={{ color: '#fbbf24', fontWeight: 700, fontSize: '11px', margin: '0 0 6px' }}>
+                  ⚠ {result.result.duplicates_skipped.length} VIN(s) omitidos por duplicado
+                </p>
+                <div style={{ maxHeight: '100px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                  {result.result.duplicates_skipped.map((d, i) => (
+                    <p key={i} style={{ color: '#fbbf24', fontSize: '10px', margin: 0, opacity: 0.85 }}>
+                      Fila {d.row}: <strong>{d.vin}</strong> — {d.reason}
+                    </p>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
