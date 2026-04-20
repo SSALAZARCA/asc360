@@ -267,6 +267,20 @@ async def import_shipment_excel(
                 else:
                     result.skipped += 1
 
+                # Garantizar que exista el lote SP aunque la orden sea un update
+                if is_spare:
+                    existing_lot = (await db.execute(
+                        select(SparePartLot).where(SparePartLot.lot_identifier == pi_number)
+                    )).scalar_one_or_none()
+                    if not existing_lot:
+                        lot = SparePartLot(
+                            shipment_order_id=existing.id,
+                            lot_identifier=pi_number,
+                            created_at=datetime.utcnow(),
+                        )
+                        db.add(lot)
+                        await db.flush()
+
             else:
                 new_order = ShipmentOrder(
                     cycle=cycle,
