@@ -408,24 +408,33 @@ async def _process_moto_packing_list(db: AsyncSession, sheet, actor: CurrentUser
 
     col_map = _build_col_map(sheet, header_row)
 
-    # Detectar PI del nombre de la hoja o de la metadata de la hoja
+    # Cargar todos los PI numbers de pedidos de motos registrados en la DB
+    all_pi_numbers = [
+        row[0] for row in (await db.execute(
+            select(ShipmentOrder.pi_number).where(ShipmentOrder.is_spare_part == False)
+        )).all()
+    ]
+    # Ordenar de mayor a menor longitud para evitar matches parciales
+    all_pi_numbers.sort(key=len, reverse=True)
+
+    # Buscar en las filas de encabezado cualquier PI number registrado
     source_pi = None
     for r in range(1, header_row):
         for c in range(1, sheet.max_column + 1):
-            val = str(sheet.cell(row=r, column=c).value or "")
-            if "INV-" in val.upper() or "E000" in val.upper():
-                import re
-                match = re.search(r'E\d{7}', val, re.IGNORECASE)
-                if match:
-                    source_pi = match.group(0).upper()
+            val = str(sheet.cell(row=r, column=c).value or "").strip().upper()
+            if not val:
+                continue
+            for pi in all_pi_numbers:
+                if pi.upper() in val:
+                    source_pi = pi
                     break
         if source_pi:
             break
 
-    # Buscar ShipmentOrder para este PI (modelo de moto genérico)
+    # Buscar ShipmentOrder para este PI
     if not source_pi:
         raise ValueError(
-            "No se encontró número de PI (ej. E0000574) en las filas de encabezado de la hoja. "
+            "No se encontró ningún PI number registrado en las filas de encabezado de la hoja. "
             "El archivo debe contener el PI number antes del encabezado de columnas."
         )
 
