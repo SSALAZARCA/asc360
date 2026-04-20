@@ -263,7 +263,7 @@ export default function SettingsPage() {
         </div>
       </header>
 
-      <div className="max-w-4xl mx-auto space-y-8">
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
         
         {/* Sección: Identidad Visual */}
         <section className="glass p-6">

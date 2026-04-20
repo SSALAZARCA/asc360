@@ -190,8 +190,6 @@ a, a:visited, a:hover, a:active {
   flex-shrink: 0 !important;
 }
 
-.max-w-4xl { max-width: 56rem !important; }
-.mx-auto { margin-left: auto !important; margin-right: auto !important; }
 .space-y-8 > * + * { margin-top: 2rem !important; }
 
 .text-5xl { font-size: 3rem !important; line-height: 1 !important; }
