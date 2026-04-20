@@ -679,6 +679,16 @@ async def create_sp_order_from_excel(
         lot = (await db.execute(
             select(SparePartLot).where(SparePartLot.shipment_order_id == order.id)
         )).scalar_one_or_none()
+        if not lot:
+            lot = SparePartLot(
+                shipment_order_id=order.id,
+                lot_identifier=ref,
+                detail_loaded=False,
+                packing_list_received=False,
+                created_at=datetime.utcnow(),
+            )
+            db.add(lot)
+            await db.flush()
     else:
         order = ShipmentOrder(
             pi_number=ref,
