@@ -115,7 +115,7 @@ export default function UsersPage() {
       <header className="page-header mb-8 flex justify-between items-end border-b border-white/5 pb-6">
         <div>
           <h1 className="page-title">Personal y <span style={{ fontStyle: 'italic', color: 'var(--accent-orange)', WebkitTextFillColor: 'var(--accent-orange)' }}>Acceso</span></h1>
-          <p className="text-muted text-sm tracking-wide mt-1">Gestión de identidad, roles de seguridad y acceso web/telegram</p>
+          <p className="page-subtitle">Gestión de identidad, roles de seguridad y acceso web/telegram</p>
         </div>
         <button className="btn-primary" onClick={openNew}>
           <Plus size={16} /> Invitar Personal

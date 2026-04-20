@@ -19,9 +19,7 @@ export default function ImportsPage() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', paddingBottom: '2rem' }}>
         <div>
           <h1 className="page-title">Estado de <span style={{ fontStyle: 'italic', color: 'var(--accent-orange)', WebkitTextFillColor: 'var(--accent-orange)' }}>Pedidos</span></h1>
-          <p style={{ color: '#606075', fontSize: '12px', margin: '4px 0 0' }}>
-            Seguimiento de importaciones — motos y repuestos
-          </p>
+          <p className="page-subtitle">Seguimiento de importaciones — motos y repuestos</p>
         </div>
         <ImportsTabs userRole={userRole} />
       </div>

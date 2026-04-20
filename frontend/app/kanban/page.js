@@ -600,7 +600,7 @@ export default function KanbanPage() {
       <div className="kb-header">
         <div>
           <h1 className="page-title">Tablero Kanban <span style={{ fontStyle: 'italic', color: 'var(--accent-orange)', WebkitTextFillColor: 'var(--accent-orange)' }}>Operativo</span></h1>
-          <p className="kb-subtitle">
+          <p className="page-subtitle">
             {loading ? 'Sincronizando...'
               : `${orders.length} motos activas — arrastra y suelta en la columna para cambiar estado`}
           </p>
@@ -692,7 +692,6 @@ export default function KanbanPage() {
           -webkit-text-fill-color: transparent;
           margin: 0;
         }
-        .kb-subtitle { font-size:0.68rem; color:rgba(255,255,255,0.38); margin:0.15rem 0 0; font-weight:500; }
         .kb-legend { display:flex; gap:0.4rem; flex-wrap:wrap; align-items:center; }
         .kb-legend-item { font-size:0.57rem; font-weight:800; padding:2px 7px; border-radius:6px; text-transform:uppercase; letter-spacing:0.06em; }
 

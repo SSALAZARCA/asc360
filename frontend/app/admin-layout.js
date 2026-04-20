@@ -9,6 +9,17 @@ export default function AdminLayout({ children, fullWidth = false }) {
   const pathname = usePathname();
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [collapsed, setCollapsed] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('sidebar_collapsed') === 'true';
+    }
+    return false;
+  });
+
+  const handleToggle = (val) => {
+    setCollapsed(val);
+    localStorage.setItem('sidebar_collapsed', val);
+  };
 
   useEffect(() => {
     routerRef.current = router;
@@ -51,20 +62,21 @@ export default function AdminLayout({ children, fullWidth = false }) {
   if (loading) return null; // Prevenir un flash rápido de contenido no autorizado
   if (!user && pathname !== '/login') return null;
 
+  const sidebarWidth = collapsed ? 72 : 280;
+  const marginLeft = sidebarWidth + 28; // 24px left-6 + 4px gap
+
   return (
-    <div style={{
-      display: 'flex',
-      minHeight: '100vh',
-    }}>
-      <Sidebar />
+    <div style={{ display: 'flex', minHeight: '100vh' }}>
+      <Sidebar collapsed={collapsed} onToggle={handleToggle} />
       <main style={{
-        marginLeft: '308px',   /* 280px sidebar + 28px gap */
+        marginLeft: `${marginLeft}px`,
         flex: 1,
         padding: fullWidth ? '1.25rem 1.25rem 0' : '1.5rem 2rem',
         overflow: 'hidden',
         minWidth: 0,
         display: 'flex',
         flexDirection: 'column',
+        transition: 'margin-left 0.25s ease',
       }}>
         {children}
       </main>

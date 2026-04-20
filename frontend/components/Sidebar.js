@@ -12,7 +12,9 @@ import {
   LogOut,
   LayoutDashboard,
   Settings,
-  Ship
+  Ship,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 
 const ALL_ITEMS = [
@@ -25,7 +27,7 @@ const ALL_ITEMS = [
   { id: 'settings', name: 'Configuración', icon: Settings, path: '/settings', adminOnly: true },
 ];
 
-export default function Sidebar() {
+export default function Sidebar({ collapsed = false, onToggle }) {
   const router = useRouter();
   const pathname = usePathname();
   const [user, setUser] = useState(null);
@@ -110,59 +112,97 @@ export default function Sidebar() {
   });
 
   return (
-    <aside className="fixed left-6 top-6 bottom-6 w-[280px] glass flex flex-col z-50 overflow-hidden">
+    <aside
+      className="fixed left-6 top-6 bottom-6 glass flex flex-col z-50 overflow-hidden"
+      style={{ width: collapsed ? '72px' : '280px', transition: 'width 0.25s ease' }}
+    >
       {/* Brand Header */}
-      <div className="p-8 pb-10">
-        {companyLogo ? (
+      <div style={{
+        padding: collapsed ? '1.25rem 0' : '2rem 2rem 2.5rem',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: collapsed ? 'center' : 'flex-start',
+        minHeight: collapsed ? '64px' : 'auto',
+        transition: 'padding 0.25s ease',
+      }}>
+        {!collapsed && (companyLogo ? (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '4.5rem' }}>
-            <img 
-              src={companyLogo} 
-              alt="Company Logo" 
-              style={{ 
-                maxHeight: '100%', 
-                maxWidth: '100%', 
-                objectFit: 'contain', 
-                filter: 'drop-shadow(0 10px 15px rgba(0,0,0,0.5))' 
-              }}
+            <img
+              src={companyLogo}
+              alt="Company Logo"
+              style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain', filter: 'drop-shadow(0 10px 15px rgba(0,0,0,0.5))' }}
             />
           </div>
         ) : (
           <div className="flex items-center space-x-3">
-            <div className="w-11 h-11 bg-orange-500 rounded-2xl flex items-center justify-center shadow-xl shadow-orange-500/20" style={{ boxShadow: '0 10px 30px rgba(255, 95, 51, 0.3)' }}>
-               <span className="text-white font-black text-xl italic" style={{ transform: 'skewX(-10deg)', color: '#fff' }}>UM</span>
+            <div className="w-11 h-11 bg-orange-500 rounded-2xl flex items-center justify-center" style={{ boxShadow: '0 10px 30px rgba(255, 95, 51, 0.3)', flexShrink: 0 }}>
+              <span className="text-white font-black text-xl italic" style={{ transform: 'skewX(-10deg)', color: '#fff' }}>UM</span>
             </div>
             <div>
               <h1 className="text-lg font-black tracking-tighter text-white uppercase" style={{ lineHeight: '1', color: '#fff' }}>MASTER-DATA</h1>
-              <p className="text-[9px] font-black uppercase tracking-widest text-orange-500" style={{ color: '#ff5f33' }}>
+              <p className="text-[9px] font-black uppercase tracking-widest" style={{ color: '#ff5f33' }}>
                 {user?.role === 'superadmin' ? 'Network Admin' : 'WorkShop Terminal'}
               </p>
             </div>
           </div>
-        )}
+        ))}
       </div>
 
+      {/* Toggle button */}
+      <button
+        onClick={() => onToggle?.(!collapsed)}
+        style={{
+          position: 'absolute',
+          top: '1.1rem',
+          right: '0.6rem',
+          background: 'rgba(255,255,255,0.05)',
+          border: '1px solid rgba(255,255,255,0.08)',
+          borderRadius: '8px',
+          width: '26px',
+          height: '26px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          cursor: 'pointer',
+          color: 'rgba(255,255,255,0.35)',
+          flexShrink: 0,
+          transition: 'color 0.2s, background 0.2s',
+        }}
+        onMouseEnter={e => { e.currentTarget.style.color = '#ff5f33'; e.currentTarget.style.background = 'rgba(255,95,51,0.1)'; }}
+        onMouseLeave={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.35)'; e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; }}
+      >
+        {collapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
+      </button>
+
       {/* Main Navigation */}
-      <nav className="flex-1 px-4 space-y-2">
+      <nav style={{ flex: 1, padding: collapsed ? '0 8px' : '0 1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
         {menuItems.map((item) => {
           const Icon = item.icon;
           const isActive = pathname === item.path;
           return (
             <Link key={item.id} href={item.path} style={{ display: 'block', textDecoration: 'none' }}>
-              <div className={`
-                flex items-center justify-between px-5 py-3.5 rounded-2xl transition-all duration-300
-                ${isActive ? 'bg-white/5' : ''}
-              `} style={{ 
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: collapsed ? 'center' : 'space-between',
+                  padding: collapsed ? '0.75rem 0' : '0.875rem 1.25rem',
+                  borderRadius: '1rem',
                   color: isActive ? '#fff' : '#606075',
-                  backgroundColor: isActive ? 'rgba(255,255,255,0.05)' : 'transparent'
-              }}>
-                <div className="flex items-center space-x-4">
-                  <Icon size={18} style={{ strokeWidth: isActive ? '3px' : '2px', color: isActive ? '#ff5f33' : 'inherit' }} />
-                  <span className={`text-[11px] font-bold uppercase tracking-widest`} style={{ color: 'inherit' }}>
-                    {item.name}
-                  </span>
+                  backgroundColor: isActive ? 'rgba(255,255,255,0.05)' : 'transparent',
+                  transition: 'background 0.2s, color 0.2s',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : '1rem' }}>
+                  <Icon size={18} style={{ strokeWidth: isActive ? '2.5px' : '2px', color: isActive ? '#ff5f33' : 'inherit', flexShrink: 0 }} />
+                  {!collapsed && (
+                    <span style={{ fontSize: '0.6875rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'inherit' }}>
+                      {item.name}
+                    </span>
+                  )}
                 </div>
-                {isActive && (
-                   <div className="w-1.5 h-1.5 bg-orange-500 rounded-full shadow-lg" style={{ boxShadow: '0 0 10px #ff5f33' }} />
+                {!collapsed && isActive && (
+                  <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#ff5f33', boxShadow: '0 0 10px #ff5f33' }} />
                 )}
               </div>
             </Link>
@@ -171,24 +211,37 @@ export default function Sidebar() {
       </nav>
 
       {/* Bottom Profile */}
-      <div className="p-4 mt-auto">
+      <div style={{ padding: collapsed ? '1rem 8px' : '1rem', marginTop: 'auto' }}>
         <div
           onClick={() => { setPwdForm({ current: '', next: '' }); setPwdError(''); setShowPwdModal(true); }}
-          className="p-4 rounded-3xl flex items-center space-x-3 cursor-pointer transition-all hover:bg-white/5"
-          style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)' }}
+          style={{
+            padding: collapsed ? '0.75rem 0' : '1rem',
+            borderRadius: '1.5rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: collapsed ? 'center' : 'flex-start',
+            gap: '0.75rem',
+            cursor: 'pointer',
+            background: 'rgba(255,255,255,0.03)',
+            border: '1px solid rgba(255,255,255,0.05)',
+          }}
         >
-           <div className="w-10 h-10 rounded-full bg-orange-500 flex items-center justify-center font-black text-xs text-white" style={{ color: '#fff' }}>
-             {user ? user.name.substring(0, 2).toUpperCase() : 'UM'}
-           </div>
-           <div className="flex-1 overflow-hidden">
-              <p className="text-[11px] font-black text-white uppercase truncate" style={{ color: '#fff' }}>{user?.name || 'Invitado'}</p>
-              <p className="text-[9px] font-bold text-dim uppercase truncate" style={{ color: '#606075' }}>
-                {user?.role === 'superadmin' ? 'Central HQ' : user?.role === 'proveedor' ? 'Proveedor Externo' : (user?.email || 'Taller Local')}
-              </p>
-           </div>
-           <button onClick={(e) => { e.stopPropagation(); handleLogout(); }} className="cursor-pointer text-white/40 hover:text-red-500 transition-colors bg-transparent border-none">
-             <LogOut size={16} />
-           </button>
+          <div style={{ width: '2.5rem', height: '2.5rem', borderRadius: '50%', background: '#ff5f33', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: '0.75rem', color: '#fff', flexShrink: 0 }}>
+            {user ? user.name.substring(0, 2).toUpperCase() : 'UM'}
+          </div>
+          {!collapsed && (
+            <>
+              <div style={{ flex: 1, overflow: 'hidden' }}>
+                <p style={{ fontSize: '0.6875rem', fontWeight: 900, color: '#fff', textTransform: 'uppercase', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', margin: 0 }}>{user?.name || 'Invitado'}</p>
+                <p style={{ fontSize: '0.5625rem', fontWeight: 700, color: '#606075', textTransform: 'uppercase', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', margin: 0 }}>
+                  {user?.role === 'superadmin' ? 'Central HQ' : user?.role === 'proveedor' ? 'Proveedor Externo' : (user?.email || 'Taller Local')}
+                </p>
+              </div>
+              <button onClick={(e) => { e.stopPropagation(); handleLogout(); }} style={{ cursor: 'pointer', color: 'rgba(255,255,255,0.4)', background: 'transparent', border: 'none', display: 'flex', alignItems: 'center' }}>
+                <LogOut size={16} />
+              </button>
+            </>
+          )}
         </div>
       </div>
 

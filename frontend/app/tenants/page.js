@@ -93,7 +93,7 @@ export default function TenantsPage() {
       <header className="page-header mb-8 flex justify-between items-end border-b border-white/5 pb-6">
         <div>
           <h1 className="page-title">Red de <span style={{ fontStyle: 'italic', color: 'var(--accent-orange)', WebkitTextFillColor: 'var(--accent-orange)' }}>Talleres</span></h1>
-          <p className="text-muted text-sm tracking-wide mt-1">Administración logística de la red nacional UM Colombia</p>
+          <p className="page-subtitle">Administración logística de la red nacional UM Colombia</p>
         </div>
         <button className="btn-primary" onClick={openNew}>
           <Plus size={16} /> Agregar Taller

@@ -169,6 +169,15 @@ a, a:visited, a:hover, a:active {
   display: inline-block !important;
 }
 
+.page-subtitle {
+  font-size: 0.62rem !important;
+  font-weight: 700 !important;
+  color: rgba(255, 255, 255, 0.3) !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.12em !important;
+  margin: 0.25rem 0 0 !important;
+}
+
 .text-5xl { font-size: 3rem !important; line-height: 1 !important; }
 .text-4xl { font-size: 2.25rem !important; }
 .text-2xl { font-size: 1.5rem !important; }

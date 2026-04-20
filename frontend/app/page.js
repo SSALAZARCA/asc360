@@ -23,16 +23,7 @@ export default function Dashboard() {
             <h1 className="page-title">
               Centro de <span style={{ fontStyle: 'italic', color: 'var(--accent-orange)', WebkitTextFillColor: 'var(--accent-orange)' }}>Comando</span>
             </h1>
-            <p style={{
-              fontSize: '0.62rem',
-              fontWeight: 700,
-              color: 'rgba(255,255,255,0.3)',
-              textTransform: 'uppercase',
-              letterSpacing: '0.12em',
-              margin: '0.2rem 0 0',
-            }}>
-              Inteligencia Operativa · Red UM Colombia
-            </p>
+            <p className="page-subtitle">Inteligencia Operativa · Red UM Colombia</p>
           </div>
         </header>
 
