@@ -1020,6 +1020,8 @@ async def list_all_moto_units(
     page_size: int = 50,
     pi_number: Optional[str] = None,
     model: Optional[str] = None,
+    vin: Optional[str] = None,
+    engine: Optional[str] = None,
     certificado_generado: Optional[bool] = None,
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
@@ -1037,6 +1039,10 @@ async def list_all_moto_units(
         base_filters.append(ShipmentOrder.pi_number.ilike(f"%{pi_number}%"))
     if model:
         base_filters.append(ShipmentOrder.model.ilike(f"%{model}%"))
+    if vin:
+        base_filters.append(ShipmentMotoUnit.vin_number.ilike(f"%{vin}%"))
+    if engine:
+        base_filters.append(ShipmentMotoUnit.engine_number.ilike(f"%{engine}%"))
 
     # Filtros completos (con certificado si aplica) para la paginación
     filters = list(base_filters)

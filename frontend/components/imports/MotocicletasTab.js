@@ -299,6 +299,8 @@ export default function MotocicletasTab({ userRole }) {
   // Filtros
   const [filterPI, setFilterPI] = useState('');
   const [filterModel, setFilterModel] = useState('');
+  const [filterVIN, setFilterVIN] = useState('');
+  const [filterEngine, setFilterEngine] = useState('');
   const [filterCertificado, setFilterCertificado] = useState(''); // '', 'true', 'false'
 
   // DIM upload
@@ -321,6 +323,8 @@ export default function MotocicletasTab({ userRole }) {
       const params = new URLSearchParams({ page, page_size: PAGE_SIZE });
       if (filterPI) params.append('pi_number', filterPI);
       if (filterModel) params.append('model', filterModel);
+      if (filterVIN) params.append('vin', filterVIN);
+      if (filterEngine) params.append('engine', filterEngine);
       if (filterCertificado !== '') params.append('certificado_generado', filterCertificado);
       const res = await authFetch(`${API()}/imports/moto-units?${params}`);
       const data = await res.json();
@@ -334,7 +338,7 @@ export default function MotocicletasTab({ userRole }) {
     } finally {
       setLoading(false);
     }
-  }, [page, filterPI, filterModel, filterCertificado]);
+  }, [page, filterPI, filterModel, filterVIN, filterEngine, filterCertificado]);
 
   useEffect(() => { fetchUnits(); }, [fetchUnits]);
 
@@ -493,6 +497,38 @@ export default function MotocicletasTab({ userRole }) {
             placeholder="Buscar modelo..."
             value={filterModel}
             onChange={e => { setFilterModel(e.target.value); setPage(1); }}
+            style={{ background: 'none', border: 'none', color: '#fff', fontSize: '11px', outline: 'none', flex: 1 }}
+          />
+        </div>
+
+        {/* VIN */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: '6px',
+          padding: '6px 10px', borderRadius: '8px',
+          background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)',
+          minWidth: 150,
+        }}>
+          <Search size={11} color="#606075" />
+          <input
+            placeholder="Buscar VIN..."
+            value={filterVIN}
+            onChange={e => { setFilterVIN(e.target.value); setPage(1); }}
+            style={{ background: 'none', border: 'none', color: '#fff', fontSize: '11px', outline: 'none', flex: 1 }}
+          />
+        </div>
+
+        {/* Motor */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: '6px',
+          padding: '6px 10px', borderRadius: '8px',
+          background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)',
+          minWidth: 150,
+        }}>
+          <Search size={11} color="#606075" />
+          <input
+            placeholder="Buscar No. Motor..."
+            value={filterEngine}
+            onChange={e => { setFilterEngine(e.target.value); setPage(1); }}
             style={{ background: 'none', border: 'none', color: '#fff', fontSize: '11px', outline: 'none', flex: 1 }}
           />
         </div>
