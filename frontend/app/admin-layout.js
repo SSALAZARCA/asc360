@@ -86,7 +86,7 @@ export default function AdminLayout({ children, fullWidth = false }) {
           marginLeft: `${marginLeft}px`,
           flex: 1,
           padding: fullWidth ? '1.25rem 1.25rem 0' : '1.5rem 2rem',
-          overflow: 'auto',
+          overflow: 'hidden',
           minWidth: 0,
           display: 'flex',
           flexDirection: 'column',

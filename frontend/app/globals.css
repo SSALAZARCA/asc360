@@ -374,8 +374,6 @@ select {
 
   .admin-main {
     padding: 1rem 1rem 0 !important;
-    overflow-x: auto !important;
-    overflow-y: auto !important;
   }
 
   .kb-board {
