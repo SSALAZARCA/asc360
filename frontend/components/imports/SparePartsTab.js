@@ -199,7 +199,7 @@ function LotItemsTable({ lotId, userRole }) {
       if (filterStatus) params.append('item_status', filterStatus);
       const res = await authFetch(`${API()}/imports/spare-part-lots/${lotId}/items?${params}`);
       const data = await res.json();
-      setItems(Array.isArray(data) ? data : []);
+      setItems(Array.isArray(data) ? data.filter(i => i.status !== 'CANCELLED') : []);
     } catch {
       setItems([]);
     } finally {
