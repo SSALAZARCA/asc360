@@ -52,7 +52,7 @@ export default function AdminLayout({ children, fullWidth = false }) {
       const dashboardRoles = ['superadmin', 'administrativo'];
 
       if (u.role !== 'superadmin' && superadminOnly.includes(pathname)) {
-        r.push('/kanban');
+        r.push(u.role === 'administrativo' ? '/' : '/kanban');
         return;
       }
       if (pathname === '/' && !dashboardRoles.includes(u.role)) {

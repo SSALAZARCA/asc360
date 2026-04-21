@@ -38,8 +38,10 @@ export default function LoginPage() {
       window.dispatchEvent(new Event('storage'));
 
       // Redirigir según rol
-      if (data.user.role === 'superadmin') {
+      if (data.user.role === 'superadmin' || data.user.role === 'administrativo') {
         router.push('/');
+      } else if (data.user.role === 'proveedor') {
+        router.push('/imports');
       } else {
         router.push('/kanban');
       }
