@@ -651,7 +651,7 @@ async def cancel_pending_backorder(
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
-    if current_user.role not in ("superadmin", "administrador"):
+    if current_user.role not in ("superadmin", "administrativo"):
         raise HTTPException(status_code=403, detail="Solo superadmin o administrador pueden cancelar pendientes")
 
     item = await db.get(SparePartItem, item_id)
@@ -1262,7 +1262,7 @@ async def upload_dim_pdf(
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
-    if current_user.role not in ("superadmin", "administrador"):
+    if current_user.role not in ("superadmin", "administrativo"):
         raise HTTPException(status_code=403, detail="Sin permisos para cargar DIM")
 
     if not file.filename.lower().endswith(".pdf"):

@@ -558,7 +558,7 @@ export default function MotocicletasTab({ userRole }) {
         </button>
 
         {/* Cargar DIM — superadmin y administrador */}
-        {(userRole === 'superadmin' || userRole === 'administrador') && (
+        {(userRole === 'superadmin' || userRole === 'administrativo') && (
           <button
             onClick={() => { setDimResult(null); setShowDimUpload(true); }}
             style={{

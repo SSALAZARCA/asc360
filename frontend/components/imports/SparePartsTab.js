@@ -210,7 +210,7 @@ function LotItemsTable({ lotId, userRole }) {
   useEffect(() => { fetch(); }, [fetch]);
 
   const canEdit = userRole === 'superadmin' || userRole === 'proveedor';
-  const canCancel = userRole === 'superadmin' || userRole === 'administrador';
+  const canCancel = userRole === 'superadmin' || userRole === 'administrativo';
 
   return (
     <div style={{ padding: '12px 16px 16px', background: 'rgba(0,0,0,0.2)' }}>
