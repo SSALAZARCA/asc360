@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { authFetch } from '../../lib/authFetch';
 import { RefreshCw, TrendingUp, Package, FileText, Ship, Loader } from 'lucide-react';
 
@@ -114,7 +114,7 @@ function useOrdersCache() {
 
   const clear = useCallback(() => { cache.current = {}; }, []);
 
-  return { fetch, clear };
+  return useMemo(() => ({ fetch, clear }), [fetch, clear]);
 }
 
 // ---------------------------------------------------------------------------
