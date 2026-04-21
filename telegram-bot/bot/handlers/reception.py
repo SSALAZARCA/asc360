@@ -28,7 +28,8 @@ from core.constants import (
     ASKING_PLATE, CONFIRMING_OCR, CORRECTING_DATA,
     CONFIRMING_CLIENT, ASKING_PHONE, ASKING_KM,
     ASKING_PHOTOS, ASKING_MOTIVE, CONFIRMING_MOTIVE,
-    CORRECTING_MOTIVE, CONFIRMING_KM, SELECTING_TENANT
+    CORRECTING_MOTIVE, CONFIRMING_KM, SELECTING_TENANT,
+    CONFIRMING_SERVICE_TYPE
 )
 from core.decorators import role_required, check_cancel_intent
 from keyboards.reply import get_main_keyboard
@@ -716,15 +717,30 @@ async def handle_motive(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         return ASKING_MOTIVE
 
     await update.message.reply_text("Dejame organizar eso...")
-    motivos = await extract_motive_data(text)
+    result = await extract_motive_data(text)
+    motivos = result["motivos"]
+    service_type = result["service_type"]
     context.user_data['motives'] = motivos
+    context.user_data['service_type'] = service_type
+
+    SERVICE_TYPE_LABELS = {
+        "warranty":  "🔴 Garantía",
+        "km_review": "🟢 Revisión de kilometraje",
+        "regular":   "🔵 Mecánica general",
+        "quick":     "🟣 Mecánica rápida",
+    }
+    type_label = SERVICE_TYPE_LABELS.get(service_type, "🔵 Mecánica general")
 
     msg = "*Motivos Identificados:*\n"
     for m in motivos:
         msg += f"• {m}\n"
-    msg += "\n¿Está correcto y procedemos a emitir la Orden?"
-    
-    kb = [[InlineKeyboardButton("✅ Sí, crear Orden", callback_data="motive_yes"), InlineKeyboardButton("❌ No, corregir motivo", callback_data="motive_no")]]
+    msg += f"\n*Tipo de servicio detectado:* {type_label}\n\n¿Está correcto?"
+
+    kb = [
+        [InlineKeyboardButton("✅ Sí, crear Orden", callback_data="motive_yes"),
+         InlineKeyboardButton("✏️ Cambiar tipo", callback_data="change_service_type")],
+        [InlineKeyboardButton("❌ Corregir motivo", callback_data="motive_no")],
+    ]
     await update.message.reply_text(msg, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(kb))
     return CONFIRMING_MOTIVE
 
@@ -816,7 +832,7 @@ async def handle_motive_confirmation(update: Update, context: ContextTypes.DEFAU
             "client_id": context.user_data.get("client_id"),
             "client_phone": client_phone,
             "technician_id": tech_id,
-            "service_type": "regular",
+            "service_type": context.user_data.get("service_type", "regular"),
             "reception": {
                 "mileage_km": km,
                 "gas_level": gas,
@@ -838,6 +854,19 @@ async def handle_motive_confirmation(update: Update, context: ContextTypes.DEFAU
         )
         return ConversationHandler.END
         
+    elif query.data == "change_service_type":
+        kb = [
+            [InlineKeyboardButton("🔴 Garantía",              callback_data="stype_warranty")],
+            [InlineKeyboardButton("🟢 Revisión de kilometraje", callback_data="stype_km_review")],
+            [InlineKeyboardButton("🔵 Mecánica general",       callback_data="stype_regular")],
+            [InlineKeyboardButton("🟣 Mecánica rápida",        callback_data="stype_quick")],
+        ]
+        await query.edit_message_text(
+            "Seleccioná el tipo de servicio correcto:",
+            reply_markup=InlineKeyboardMarkup(kb)
+        )
+        return CONFIRMING_SERVICE_TYPE
+
     elif query.data == "motive_no":
         await query.edit_message_text("Ok, por favor escríbeme el motivo correcto para reemplazarlo.")
         return CORRECTING_MOTIVE
@@ -845,6 +874,35 @@ async def handle_motive_confirmation(update: Update, context: ContextTypes.DEFAU
 @role_required()
 async def handle_motive_correction(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     return await handle_motive(update, context)
+
+
+STYPE_MAP = {
+    "stype_warranty":  ("warranty",  "🔴 Garantía"),
+    "stype_km_review": ("km_review", "🟢 Revisión de kilometraje"),
+    "stype_regular":   ("regular",   "🔵 Mecánica general"),
+    "stype_quick":     ("quick",     "🟣 Mecánica rápida"),
+}
+
+@role_required()
+async def handle_service_type_selection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+
+    stype, label = STYPE_MAP.get(query.data, ("regular", "🔵 Mecánica general"))
+    context.user_data['service_type'] = stype
+
+    motivos = context.user_data.get('motives', [])
+    msg = "*Motivos Identificados:*\n"
+    for m in motivos:
+        msg += f"• {m}\n"
+    msg += f"\n*Tipo de servicio:* {label}\n\n¿Confirmamos y creamos la Orden?"
+
+    kb = [
+        [InlineKeyboardButton("✅ Sí, crear Orden", callback_data="motive_yes"),
+         InlineKeyboardButton("❌ Corregir motivo", callback_data="motive_no")],
+    ]
+    await query.edit_message_text(msg, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(kb))
+    return CONFIRMING_MOTIVE
 
 
 # -------------------------------------------------------------

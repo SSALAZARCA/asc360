@@ -25,6 +25,7 @@ class ServiceType(enum.Enum):
     regular = "regular"
     warranty = "warranty"
     km_review = "km_review"
+    quick = "quick"
     pdi = "pdi"
 
 class ServiceOrder(Base):

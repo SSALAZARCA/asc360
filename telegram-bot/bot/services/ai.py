@@ -305,24 +305,46 @@ async def transcribe_voice(voice_path: str, prompt: str = "") -> str:
         logger.error(f"Error Whisper API: {e}")
         return ""
 
-async def extract_motive_data(text: str) -> list:
-    """Estructura el motivo narrado en viñetas puntuales."""
+async def extract_motive_data(text: str) -> dict:
+    """Estructura el motivo narrado en viñetas y clasifica el tipo de servicio."""
+    system_prompt = """Eres el asistente de recepción de un taller de motocicletas UM Colombia.
+
+El usuario describirá los problemas o mantenimientos requeridos para su moto.
+Tu tarea es:
+1. Sintetizar su petición en una lista bajo la clave "motivos".
+2. Clasificar el tipo de servicio bajo la clave "service_type".
+
+TIPOS DE SERVICIO (aplica el de MAYOR prioridad si hay varios):
+- "warranty": Fallas cubiertas por garantía de fábrica, defectos de fabricación, problemas que el cliente atribuye a garantía.
+- "km_review": Mantenimientos periódicos por kilometraje (1000km, 3000km, 6000km, 12000km, etc.), servicios programados, revisiones de intervalo.
+- "regular": Reparaciones mecánicas, eléctricas, diagnósticos, trabajos que NO son garantía ni revisión de km ni cambio de partes de desgaste.
+- "quick": Cambios de partes de desgaste: aceite, filtro de aceite, filtro de aire, pastas de freno, cadena, piñón, corona, guayas, cables de embrague o freno, bujía, bombillos/luces, llantas/neumáticos, batería, rodamientos de rueda, líquido de frenos, refrigerante, correa de transmisión, empuñaduras, espejos.
+
+PRIORIDAD: warranty > km_review > regular > quick
+Si el motivo encaja en varios tipos, elige el de mayor prioridad.
+
+Responde ÚNICAMENTE con JSON válido:
+{"motivos": ["motivo 1", "motivo 2"], "service_type": "regular"}"""
+
     try:
         response = await aclient.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
-                {"role": "system", "content": "El usuario describirá los problemas o mantenimientos requeridos para su motocicleta. Sintetiza su petición en una lista en formato JSON bajo la clave 'motivos'. Omite saludos. Ejemplo: {\"motivos\": [\"Cambio de aceite\", \"Revisión frenos\"]}"},
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": text}
             ],
             response_format={"type": "json_object"},
-            max_tokens=150,
+            max_tokens=250,
             temperature=0
         )
         data = json.loads(response.choices[0].message.content)
-        return data.get("motivos", [])
+        return {
+            "motivos": data.get("motivos", [text]),
+            "service_type": data.get("service_type", "regular"),
+        }
     except Exception as e:
         logger.error(f"Error AI Motive Extractor: {e}")
-        return [text]
+        return {"motivos": [text], "service_type": "regular"}
 
 async def classify_admin_intent(text: str) -> dict:
     """Clasifica la orden de un administrador general (Dashboard, Pending, etc)."""

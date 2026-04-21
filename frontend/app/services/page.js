@@ -27,10 +27,11 @@ const STATES = {
 };
 
 const TYPE_CFG = {
-  warranty:  { label: 'Garantía',     color: '#eab308', bg: 'rgba(234,179,8,0.15)',  letter: 'G' },
-  km_review: { label: 'Rev. KM',      color: '#22c55e', bg: 'rgba(34,197,94,0.15)',  letter: 'R' },
-  regular:   { label: 'Mecánica',     color: '#3b82f6', bg: 'rgba(59,130,246,0.15)', letter: 'M' },
-  pdi:       { label: 'Alistamiento', color: '#f97316', bg: 'rgba(249,115,22,0.15)', letter: 'A' },
+  warranty:  { label: 'Garantía',      color: '#eab308', bg: 'rgba(234,179,8,0.15)',  letter: 'G' },
+  km_review: { label: 'Rev. KM',       color: '#22c55e', bg: 'rgba(34,197,94,0.15)',  letter: 'R' },
+  regular:   { label: 'Mec. General',  color: '#3b82f6', bg: 'rgba(59,130,246,0.15)', letter: 'M' },
+  quick:     { label: 'Mec. Rápida',   color: '#a855f7', bg: 'rgba(168,85,247,0.15)', letter: 'Q' },
+  pdi:       { label: 'Alistamiento',  color: '#f97316', bg: 'rgba(249,115,22,0.15)', letter: 'A' },
 };
 
 function dayColor(d) { return d > 5 ? '#ef4444' : d > 2 ? '#fbbf24' : '#10b981'; }
