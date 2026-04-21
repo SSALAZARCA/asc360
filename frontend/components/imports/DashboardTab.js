@@ -33,15 +33,20 @@ function KPICard({ label, value, sub, color = '#9ca3af', accent = false }) {
 // ---------------------------------------------------------------------------
 // Orders Popover — lista compacta de pedidos al hacer hover
 // ---------------------------------------------------------------------------
-function OrdersPopover({ orders, loading, title, color }) {
+function OrdersPopover({ orders, loading, title, color, side = 'right' }) {
   if (!loading && (!orders || orders.length === 0)) return null;
-  const MAX = 12;
+  const MAX = 16;
   const visible = orders ? orders.slice(0, MAX) : [];
   const extra = orders ? orders.length - MAX : 0;
 
+  const isLeft = side === 'left';
+
   return (
     <div style={{
-      position: 'absolute', right: 0, top: '50%', transform: 'translate(calc(100% + 12px), -50%)',
+      position: 'absolute',
+      ...(isLeft
+        ? { right: 0, top: '50%', transform: 'translate(calc(-100% - 12px), -50%)' }
+        : { left: 0, top: '50%', transform: 'translate(calc(100% + 12px), -50%)' }),
       zIndex: 100, width: 240,
       background: '#14141c', border: `1px solid ${color}40`,
       borderRadius: 10, boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
@@ -49,9 +54,15 @@ function OrdersPopover({ orders, loading, title, color }) {
     }}>
       {/* Flecha */}
       <div style={{
-        position: 'absolute', left: -5, top: '50%', transform: 'translateY(-50%)',
+        position: 'absolute',
+        ...(isLeft ? { right: -5 } : { left: -5 }),
+        top: '50%',
         width: 8, height: 8, background: '#14141c',
-        border: `1px solid ${color}40`, borderRight: 'none', borderTop: 'none',
+        border: `1px solid ${color}40`,
+        borderRight: isLeft ? undefined : 'none',
+        borderTop: isLeft ? undefined : 'none',
+        borderLeft: isLeft ? 'none' : undefined,
+        borderBottom: isLeft ? 'none' : undefined,
         transform: 'translateY(-50%) rotate(45deg)',
       }} />
 
@@ -245,6 +256,7 @@ function CycleChart({ cycles, ordersCache }) {
                 loading={loading[cycle]}
                 title={`Ciclo ${cycle}`}
                 color="#ff5f33"
+                side="left"
               />
             )}
           </div>
