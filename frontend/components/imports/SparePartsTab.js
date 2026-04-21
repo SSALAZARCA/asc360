@@ -210,6 +210,7 @@ function LotItemsTable({ lotId, userRole }) {
   useEffect(() => { fetch(); }, [fetch]);
 
   const canEdit = userRole === 'superadmin' || userRole === 'proveedor';
+  const canCancel = userRole === 'superadmin' || userRole === 'administrador';
 
   return (
     <div style={{ padding: '12px 16px 16px', background: 'rgba(0,0,0,0.2)' }}>
@@ -318,7 +319,7 @@ function LotItemsTable({ lotId, userRole }) {
                     }
                   </td>
                   <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                    {canEdit && (item.status === 'BACKORDER' || (item.status === 'PARTIAL' && (item.qty_pending ?? 0) > 0)) && (
+                    {canCancel && (item.status === 'BACKORDER' || (item.status === 'PARTIAL' && (item.qty_pending ?? 0) > 0)) && (
                       <button
                         onClick={async () => {
                           const qty = item.qty_pending ?? 0;

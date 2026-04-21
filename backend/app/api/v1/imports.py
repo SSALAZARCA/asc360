@@ -651,7 +651,8 @@ async def cancel_pending_backorder(
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
-    _require_imports_editor(current_user)
+    if current_user.role not in ("superadmin", "administrador"):
+        raise HTTPException(status_code=403, detail="Solo superadmin o administrador pueden cancelar pendientes")
 
     item = await db.get(SparePartItem, item_id)
     if not item:
