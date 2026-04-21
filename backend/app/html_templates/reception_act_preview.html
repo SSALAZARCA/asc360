@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Preview — Acta de Ingreso UM</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Inter', 'Helvetica Neue', Arial, sans-serif;
+      background: #d4d4d4;
+      padding: 2rem;
+      color: #1a1a1a;
+    }
+
+    .page {
+      width: 794px;
+      margin: 0 auto;
+      background: #ffffff;
+      box-shadow: 0 8px 40px rgba(0,0,0,0.18);
+      overflow: hidden;
+    }
+
+    /* ── HEADER ── */
+    .doc-header {
+      background: #111827;
+      display: flex;
+      align-items: stretch;
+      min-height: 80px;
+    }
+
+    .header-accent {
+      width: 5px;
+      background: #ff5f33;
+      flex-shrink: 0;
+    }
+
+    .header-brand {
+      padding: 16px 22px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      flex: 1;
+      border-right: 1px solid rgba(255,255,255,0.06);
+    }
+
+    .brand-row {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      margin-bottom: 3px;
+    }
+
+    .brand-badge {
+      background: #ff5f33;
+      color: #fff;
+      font-size: 10px;
+      font-weight: 900;
+      padding: 3px 8px;
+      border-radius: 3px;
+      letter-spacing: 0.06em;
+      font-style: italic;
+    }
+
+    .brand-name {
+      color: #ffffff;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+
+    .brand-sub {
+      color: rgba(255,255,255,0.28);
+      font-size: 7.5px;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+    }
+
+    .header-order {
+      padding: 16px 24px;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      justify-content: center;
+      min-width: 180px;
+    }
+
+    .order-label {
+      color: rgba(255,255,255,0.28);
+      font-size: 7px;
+      font-weight: 700;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      margin-bottom: 2px;
+    }
+
+    .order-number {
+      color: #ffffff;
+      font-size: 24px;
+      font-weight: 900;
+      letter-spacing: -0.02em;
+      line-height: 1;
+    }
+
+    .order-meta {
+      color: rgba(255,255,255,0.35);
+      font-size: 8px;
+      margin-top: 4px;
+      text-align: right;
+      line-height: 1.5;
+    }
+
+    .service-type-label {
+      margin-top: 5px;
+      font-size: 7.5px;
+      font-weight: 700;
+      color: #ff5f33;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      text-align: right;
+    }
+
+    /* ── BODY ── */
+    .doc-body {
+      padding: 22px 26px;
+    }
+
+    /* Divisor de sección */
+    .section-label {
+      font-size: 7px;
+      font-weight: 800;
+      color: #ff5f33;
+      text-transform: uppercase;
+      letter-spacing: 0.22em;
+      margin-bottom: 10px;
+      margin-top: 18px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .section-label:first-child { margin-top: 0; }
+
+    .section-label::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: #e5e7eb;
+    }
+
+    /* ── CARDS CLIENTE / VEHÍCULO ── */
+    .identity-row {
+      display: flex;
+      gap: 10px;
+    }
+
+    .identity-card {
+      flex: 1;
+      border: 1px solid #e5e7eb;
+      border-radius: 5px;
+      padding: 13px 15px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .identity-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      background: #e5e7eb;
+    }
+
+    .identity-card.accent::before {
+      background: #ff5f33;
+    }
+
+    .card-field-label {
+      font-size: 6.5px;
+      font-weight: 700;
+      color: #9ca3af;
+      text-transform: uppercase;
+      letter-spacing: 0.15em;
+      margin-bottom: 5px;
+    }
+
+    .card-main {
+      font-size: 14px;
+      font-weight: 800;
+      color: #111827;
+      line-height: 1.2;
+      margin-bottom: 4px;
+    }
+
+    .card-sub {
+      font-size: 8.5px;
+      color: #6b7280;
+      line-height: 1.5;
+    }
+
+    .plate-tag {
+      display: inline-block;
+      background: #111827;
+      color: #ffffff;
+      font-size: 18px;
+      font-weight: 900;
+      padding: 4px 12px;
+      border-radius: 4px;
+      letter-spacing: 0.1em;
+      margin-bottom: 5px;
+      border-bottom: 2px solid #ff5f33;
+    }
+
+    /* ── INDICADORES ── */
+    .indicators-row {
+      display: flex;
+      gap: 8px;
+    }
+
+    .indicator-chip {
+      flex: 1;
+      border: 1px solid #e5e7eb;
+      border-radius: 5px;
+      padding: 10px 12px;
+    }
+
+    .chip-label {
+      font-size: 6.5px;
+      font-weight: 700;
+      color: #9ca3af;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      margin-bottom: 5px;
+    }
+
+    .chip-value {
+      font-size: 13px;
+      font-weight: 800;
+      color: #111827;
+      line-height: 1;
+    }
+
+    .chip-unit {
+      font-size: 8.5px;
+      font-weight: 500;
+      color: #9ca3af;
+    }
+
+    /* Barra combustible */
+    .fuel-bar-track {
+      height: 5px;
+      background: #f3f4f6;
+      border-radius: 3px;
+      margin-top: 7px;
+      overflow: hidden;
+      border: 1px solid #e5e7eb;
+    }
+
+    .fuel-bar-fill {
+      height: 100%;
+      border-radius: 2px;
+      background: #374151;
+    }
+
+    .fuel-ticks {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 3px;
+    }
+
+    .fuel-ticks span {
+      font-size: 5.5px;
+      color: #d1d5db;
+      font-weight: 600;
+    }
+
+    /* ── MOTIVO ── */
+    .notes-card {
+      border: 1px solid #e5e7eb;
+      border-left: 3px solid #374151;
+      border-radius: 5px;
+      padding: 12px 14px;
+      background: #fafafa;
+    }
+
+    .notes-label {
+      font-size: 6.5px;
+      font-weight: 700;
+      color: #9ca3af;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      margin-bottom: 6px;
+    }
+
+    .notes-text {
+      font-size: 9px;
+      color: #374151;
+      line-height: 1.8;
+    }
+
+    /* ── PREGUNTAS COMPLEMENTARIAS ── */
+    .intake-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      border: 1px solid #e5e7eb;
+      border-radius: 5px;
+      overflow: hidden;
+    }
+
+    .intake-row {
+      display: flex;
+      border-bottom: 1px solid #f3f4f6;
+    }
+
+    .intake-row:last-child { border-bottom: none; }
+
+    .intake-row:nth-child(even) { background: #fafafa; }
+
+    .intake-q {
+      width: 46%;
+      padding: 8px 12px;
+      font-size: 7.5px;
+      font-weight: 700;
+      color: #6b7280;
+      border-right: 1px solid #f3f4f6;
+      line-height: 1.5;
+      display: flex;
+      align-items: center;
+    }
+
+    .intake-a {
+      flex: 1;
+      padding: 8px 12px;
+      font-size: 8.5px;
+      color: #111827;
+      font-weight: 500;
+      line-height: 1.5;
+      display: flex;
+      align-items: center;
+    }
+
+    /* ── ALERTA GARANTÍA ── */
+    .warranty-box {
+      border: 1px solid #e5e7eb;
+      border-left: 3px solid #ff5f33;
+      border-radius: 5px;
+      padding: 11px 14px;
+      background: #fffaf8;
+    }
+
+    .warranty-title {
+      font-size: 7px;
+      font-weight: 800;
+      color: #ff5f33;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      margin-bottom: 5px;
+    }
+
+    .warranty-text {
+      font-size: 8.5px;
+      color: #4b5563;
+      line-height: 1.7;
+    }
+
+    /* ── SELLO OTP ── */
+    .stamp-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+      border: 1px solid #e5e7eb;
+      border-radius: 5px;
+      padding: 13px 16px;
+    }
+
+    .stamp-indicator {
+      width: 8px;
+      align-self: stretch;
+      border-radius: 3px;
+      flex-shrink: 0;
+    }
+
+    .stamp-indicator.green  { background: #22c55e; }
+    .stamp-indicator.orange { background: #f59e0b; }
+
+    .stamp-title {
+      font-size: 8.5px;
+      font-weight: 800;
+      color: #111827;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 4px;
+    }
+
+    .stamp-detail {
+      font-size: 8px;
+      color: #6b7280;
+      line-height: 1.6;
+    }
+
+    /* ── FIRMAS ── */
+    .signatures {
+      display: flex;
+      gap: 40px;
+      margin-top: 14px;
+      padding-top: 10px;
+    }
+
+    .sig-box {
+      flex: 1;
+      text-align: center;
+    }
+
+    .sig-space { height: 44px; }
+
+    .sig-line {
+      border-top: 1px solid #374151;
+      padding-top: 7px;
+    }
+
+    .sig-name {
+      font-size: 7.5px;
+      font-weight: 700;
+      color: #374151;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .sig-sub {
+      font-size: 7px;
+      color: #9ca3af;
+      margin-top: 2px;
+      line-height: 1.5;
+    }
+
+    /* ── FOOTER ── */
+    .doc-footer {
+      background: #f9fafb;
+      border-top: 1px solid #e5e7eb;
+      padding: 9px 26px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .footer-legal {
+      font-size: 6px;
+      color: #9ca3af;
+      line-height: 1.6;
+      max-width: 68%;
+    }
+
+    .footer-ref {
+      font-size: 7px;
+      color: #d1d5db;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-align: right;
+      line-height: 1.6;
+    }
+
+    .footer-ref span {
+      color: #ff5f33;
+      opacity: 0.7;
+    }
+  </style>
+</head>
+<body>
+
+<div class="page">
+
+  <!-- HEADER -->
+  <div class="doc-header">
+    <div class="header-accent"></div>
+    <div class="header-brand">
+      <div class="brand-row">
+        <span class="brand-badge">UM</span>
+        <span class="brand-name">Red de Servicio</span>
+      </div>
+      <span class="brand-sub">Acta de Ingreso a Taller · Documento Oficial</span>
+    </div>
+    <div class="header-order">
+      <span class="order-label">Orden de Servicio</span>
+      <span class="order-number">#00847</span>
+      <span class="order-meta">12 Abr 2026 · 09:34 a.m.<br>Taller UM Medellín Centro</span>
+      <span class="service-type-label">🔴 Garantía</span>
+    </div>
+  </div>
+
+  <!-- BODY -->
+  <div class="doc-body">
+
+    <!-- IDENTIFICACIÓN -->
+    <div class="section-label">Identificación</div>
+    <div class="identity-row">
+
+      <div class="identity-card">
+        <div class="card-field-label">Propietario del Vehículo</div>
+        <div class="card-main">Carlos Andrés Mejía Ríos</div>
+        <div class="card-sub">CC 1.045.789.321<br>Cel: +57 311 456 7890</div>
+      </div>
+
+      <div class="identity-card accent">
+        <div class="card-field-label">Motocicleta</div>
+        <div class="plate-tag">ABC 123</div>
+        <div class="card-sub">Honda CB 190R · 2023<br>VIN: 9C2KD1540R0012345</div>
+      </div>
+
+    </div>
+
+    <!-- CONDICIÓN DE INGRESO -->
+    <div class="section-label">Condición de Ingreso</div>
+    <div class="indicators-row">
+
+      <div class="indicator-chip">
+        <div class="chip-label">Kilometraje</div>
+        <div class="chip-value">12.450 <span class="chip-unit">km</span></div>
+      </div>
+
+      <div class="indicator-chip" style="flex: 1.6">
+        <div class="chip-label">Nivel de Combustible — 3/4</div>
+        <div class="fuel-bar-track">
+          <div class="fuel-bar-fill" style="width: 75%"></div>
+        </div>
+        <div class="fuel-ticks">
+          <span>E</span><span>1/4</span><span>1/2</span><span>3/4</span><span>F</span>
+        </div>
+      </div>
+
+      <div class="indicator-chip">
+        <div class="chip-label">Tipo de Servicio</div>
+        <div class="chip-value" style="font-size: 10px; font-weight: 700; color: #ff5f33;">Garantía</div>
+      </div>
+
+      <div class="indicator-chip">
+        <div class="chip-label">Asesor Receptor</div>
+        <div class="chip-value" style="font-size: 10px; font-weight: 700;">Juan Pérez</div>
+      </div>
+
+    </div>
+
+    <!-- MOTIVO -->
+    <div class="section-label">Motivo de Ingreso</div>
+    <div class="notes-card">
+      <div class="notes-label">Descripción referida por el cliente</div>
+      <div class="notes-text">"La moto hace un ruido extraño al frenar, especialmente en descensos. Además el cambio de aceite está pendiente hace 2.000 km y el piloto trasero parpadea intermitentemente desde hace una semana."</div>
+    </div>
+
+    <!-- PREGUNTAS COMPLEMENTARIAS -->
+    <div class="section-label">Preguntas Complementarias de Ingreso</div>
+    <div class="intake-grid">
+      <div class="intake-row">
+        <div class="intake-q">¿Tipo de terreno por donde habitualmente conduce?</div>
+        <div class="intake-a">Zona urbana principalmente, algunas veces vías destapadas los fines de semana</div>
+      </div>
+      <div class="intake-row">
+        <div class="intake-q">¿Conduce habitualmente con acompañante?</div>
+        <div class="intake-a">Sí, frecuentemente con parrillero</div>
+      </div>
+      <div class="intake-row">
+        <div class="intake-q">¿Estimado de peso aproximado del conductor?</div>
+        <div class="intake-a">Conductor aproximadamente 80 kg, parrillero 65 kg</div>
+      </div>
+      <div class="intake-row">
+        <div class="intake-q">¿Cuál es la velocidad promedio a la que conduce?</div>
+        <div class="intake-a">Entre 60 y 80 km/h en ciudad</div>
+      </div>
+      <div class="intake-row">
+        <div class="intake-q">¿El lugar de parqueo es abierto o cerrado?</div>
+        <div class="intake-a">Parqueadero abierto, a la intemperie</div>
+      </div>
+      <div class="intake-row">
+        <div class="intake-q">¿El vehículo ha sido intervenido en un centro de servicio distinto a un autorizado?</div>
+        <div class="intake-a">No, siempre se ha revisado en centros autorizados UM</div>
+      </div>
+    </div>
+
+    <!-- OBSERVACIONES GARANTÍA -->
+    <div class="section-label">Observaciones de Garantía</div>
+    <div class="warranty-box">
+      <div class="warranty-title">Generadas automáticamente por sistema IA</div>
+      <div class="warranty-text">El vehículo registra 12.450 km con garantía vigente hasta 20.000 km. Se detectó que el servicio solicitado (frenos) podría estar cubierto bajo garantía de fábrica. Se recomienda verificar cobertura antes de proceder con el cobro al cliente.</div>
+    </div>
+
+    <!-- ACEPTACIÓN -->
+    <div class="section-label">Estado de Aceptación</div>
+
+    <!-- Variante A: OTP validado -->
+    <div class="stamp-row">
+      <div class="stamp-indicator green"></div>
+      <div>
+        <div class="stamp-title">Documento aceptado por el cliente vía OTP</div>
+        <div class="stamp-detail">
+          Código de 6 dígitos validado el <strong>12 Abr 2026 a las 09:41 a.m.</strong><br>
+          Enviado y confirmado desde el número <strong>+57 311 456 7890</strong>
+        </div>
+      </div>
+    </div>
+
+    <!-- Variante B: bypass (descomentar para ver) -->
+    <!--
+    <div class="stamp-row">
+      <div class="stamp-indicator orange"></div>
+      <div>
+        <div class="stamp-title">Autorizado sin código OTP</div>
+        <div class="stamp-detail">
+          Autorizado el <strong>12 Abr 2026 a las 10:15 a.m.</strong>
+          por <strong>Jorge Ramírez — Jefe de Taller</strong><br>
+          El cliente no se encontraba presente. Orden habilitada por autorización manual.
+        </div>
+      </div>
+    </div>
+    -->
+
+    <!-- Variante C: firma física (descomentar para ver) -->
+    <!--
+    <div class="section-label">Firmas y Autorización</div>
+    <div class="signatures">
+      <div class="sig-box">
+        <div class="sig-space"></div>
+        <div class="sig-line">
+          <div class="sig-name">Firma del Propietario / Cliente</div>
+          <div class="sig-sub">Autorizo los trabajos descritos y acepto<br>las políticas de servicio UM Colombia.</div>
+        </div>
+      </div>
+      <div class="sig-box">
+        <div class="sig-space"></div>
+        <div class="sig-line">
+          <div class="sig-name">Firma del Asesor de Servicio</div>
+          <div class="sig-sub">Nombre: ___________________________</div>
+        </div>
+      </div>
+    </div>
+    -->
+
+  </div>
+
+  <!-- FOOTER -->
+  <div class="doc-footer">
+    <div class="footer-legal">
+      Este documento es constancia oficial de recepción del vehículo en talleres UM Colombia. No nos hacemos responsables por objetos personales
+      dejados en el vehículo. Trabajos adicionales no incluidos en esta orden serán consultados previamente con el propietario.
+    </div>
+    <div class="footer-ref">
+      <span>ORD-2026-00847</span><br>
+      Sistema UM · Generado automáticamente
+    </div>
+  </div>
+
+</div>
+
+<p style="text-align:center; margin-top:1.5rem; font-family:Inter,sans-serif; font-size:11px; color:#888;">
+  Para ver el sello de bypass o las firmas físicas, descomentá los bloques en el HTML
+</p>
+
+</body>
+</html>
