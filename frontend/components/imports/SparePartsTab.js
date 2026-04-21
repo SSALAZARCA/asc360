@@ -318,7 +318,7 @@ function LotItemsTable({ lotId, userRole }) {
                       : <ItemStatusBadge status={item.status} />
                     }
                   </td>
-                  <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                  <td style={{ padding: '8px 10px', textAlign: 'center', width: 32 }}>
                     {canCancel && (item.status === 'BACKORDER' || (item.status === 'PARTIAL' && (item.qty_pending ?? 0) > 0)) && (
                       <button
                         onClick={async () => {
@@ -330,10 +330,11 @@ function LotItemsTable({ lotId, userRole }) {
                           } catch { alert('Error al cancelar pendiente'); }
                         }}
                         title="Cancelar unidades pendientes"
-                        style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 9px', borderRadius: '6px', border: 'none', background: 'rgba(107,114,128,0.12)', color: '#6b7280', fontSize: '10px', fontWeight: 700, cursor: 'pointer' }}
+                        style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '4px', borderRadius: '5px', border: 'none', background: 'transparent', color: '#6b7280', cursor: 'pointer' }}
+                        onMouseEnter={e => e.currentTarget.style.color = '#f87171'}
+                        onMouseLeave={e => e.currentTarget.style.color = '#6b7280'}
                       >
-                        <XCircle size={10} />
-                        Cancelar pendiente
+                        <XCircle size={13} />
                       </button>
                     )}
                   </td>
