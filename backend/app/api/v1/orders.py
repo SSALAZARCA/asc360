@@ -46,7 +46,8 @@ async def create_service_order(
         gas_level=order_in.reception.gas_level,
         customer_notes=order_in.reception.customer_notes,
         warranty_warnings=order_in.reception.warranty_warnings,
-        damage_photos_urls=order_in.reception.damage_photos_urls
+        damage_photos_urls=order_in.reception.damage_photos_urls,
+        intake_answers=order_in.reception.intake_answers or [],
     )
     db.add(new_reception)
     
@@ -75,7 +76,8 @@ async def create_service_order(
         "mileage_km": order_in.reception.mileage_km,
         "gas_level": order_in.reception.gas_level,
         "customer_notes": order_in.reception.customer_notes,
-        "warranty_warnings": order_in.reception.warranty_warnings
+        "warranty_warnings": order_in.reception.warranty_warnings,
+        "intake_answers": order_in.reception.intake_answers or [],
     }
     vehicle_data = {
         "model": vehicle_obj.model if vehicle_obj else "Desconocido",
@@ -272,6 +274,7 @@ async def get_order_detail(
             "customer_notes": r.customer_notes,
             "warranty_warnings": r.warranty_warnings,
             "damage_photos_urls": r.damage_photos_urls or [],
+            "intake_answers": r.intake_answers or [],
             "reception_pdf_url": r.reception_pdf_url,
             "signature_url": r.signature_url,
             "created_at": r.created_at.isoformat() if r.created_at else None,

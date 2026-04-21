@@ -152,6 +152,18 @@ function OrderModal({ order, onClose }) {
                   ? <div className="mtext-block">{detail.recepcion.customer_notes}</div>
                   : <p style={{ fontSize:'0.7rem', color:'rgba(255,255,255,0.3)' }}>Sin notas registradas</p>}
                 
+                {detail.recepcion.intake_answers?.length > 0 && (
+                  <div style={{ marginTop: '10px' }}>
+                    <p style={{ fontSize: '0.65rem', fontWeight: 700, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 6px' }}>Preguntas de Ingreso</p>
+                    {detail.recepcion.intake_answers.map((item, i) => (
+                      <div key={i} style={{ marginBottom: '6px', padding: '8px 10px', background: 'rgba(255,255,255,0.04)', borderRadius: '6px', borderLeft: '2px solid rgba(255,255,255,0.12)' }}>
+                        <p style={{ margin: '0 0 2px', fontSize: '0.65rem', color: 'rgba(255,255,255,0.45)', fontWeight: 600 }}>{item.pregunta}</p>
+                        <p style={{ margin: 0, fontSize: '0.72rem', color: 'rgba(255,255,255,0.85)' }}>{item.respuesta}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 {detail.recepcion.warranty_warnings && (
                   <div className="mwarning">
                     <AlertTriangle size={11} color="#eab308" />

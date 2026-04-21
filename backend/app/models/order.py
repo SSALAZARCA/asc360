@@ -139,6 +139,9 @@ class ServiceOrderReception(Base):
     # Soft Warnings de las garantías para que queden perpetuas en la DB
     warranty_warnings = Column(String(2000), nullable=True) 
 
+    # Respuestas a preguntas complementarias según tipo de servicio
+    intake_answers = Column(JSONB, nullable=True, default=[])
+
     # URLs a MinIO (Fotos subidas en telegram)
     damage_photos_urls = Column(JSONB, nullable=True, default=[])
     

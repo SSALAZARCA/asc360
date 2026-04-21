@@ -29,7 +29,7 @@ from core.constants import (
     CONFIRMING_CLIENT, ASKING_PHONE, ASKING_KM,
     ASKING_PHOTOS, ASKING_MOTIVE, CONFIRMING_MOTIVE,
     CORRECTING_MOTIVE, CONFIRMING_KM, SELECTING_TENANT,
-    CONFIRMING_SERVICE_TYPE
+    CONFIRMING_SERVICE_TYPE, ASKING_INTAKE_QUESTION
 )
 from core.decorators import role_required, check_cancel_intent
 from keyboards.reply import get_main_keyboard
@@ -324,6 +324,117 @@ async def background_create_order(payload: dict, tenant_id: str, media_files: li
                 text="❌ Ocurrió un error de conexión al crear la orden. Intentá de nuevo.",
                 reply_markup=get_main_keyboard(user_role)
             )
+
+
+# -------------------------------------------------------------
+# Preguntas complementarias por tipo de servicio
+# -------------------------------------------------------------
+INTAKE_QUESTIONS = {
+    "warranty": [
+        "¿Tipo de terreno por donde habitualmente conduce?",
+        "¿Conduce habitualmente con acompañante?",
+        "¿Estimado de peso aproximado del conductor?",
+        "¿Cuál es la velocidad promedio a la que conduce?",
+        "¿El lugar de parqueo es abierto o cerrado?",
+        "¿El vehículo ha sido intervenido en un centro de servicio distinto a un autorizado?",
+    ],
+    "km_review": [
+        "¿Tipo de terreno por donde habitualmente conduce?",
+        "¿Conduce habitualmente con acompañante?",
+        "¿Estimado de peso aproximado del conductor?",
+        "¿Su vehículo funciona correctamente?",
+    ],
+    "regular": [
+        "¿Tipo de terreno por donde habitualmente conduce?",
+    ],
+    "quick": [
+        "¿Tipo de terreno por donde habitualmente conduce?",
+        "¿Su vehículo funciona correctamente?",
+    ],
+}
+
+
+async def _build_and_dispatch_order(context: ContextTypes.DEFAULT_TYPE, bot, chat_id: int) -> bool:
+    """Construye el payload y despacha background_create_order. Retorna False si hay error crítico."""
+    plate          = context.user_data.get('ocr_plate', '')
+    ocr_data       = context.user_data.get('ocr_data', {})
+    km             = context.user_data.get('km', 0)
+    gas            = context.user_data.get('gas_level', 'No Registrado')
+    motives        = context.user_data.get('motives', [])
+    vid            = context.user_data.get('vehicle_id')
+    media_files    = context.user_data.get('media_files', [])
+    client_phone   = context.user_data.get('client_phone')
+    tech_id        = context.user_data.get("logged_in_user", {}).get("id")
+    intake_answers = context.user_data.get('intake_answers', [])
+
+    try: km = int("".join(filter(str.isdigit, str(km))))
+    except: km = 0
+
+    motive_text = "\n".join([f"- {m}" for m in motives])
+    logged_in_user = context.user_data.get("logged_in_user", {})
+    tenant_id = logged_in_user.get("tenant_id")
+    user_role = logged_in_user.get("role", "none")
+
+    if not tenant_id:
+        if user_role == "superadmin":
+            tenant_id = context.user_data.get("active_tenant_id") or FAKE_TENANT
+        else:
+            await bot.send_message(chat_id=chat_id, text="No pude identificar tu taller. Verificá tu sesión con /start.")
+            return False
+
+    datos_faltantes = []
+    if not plate:          datos_faltantes.append("placa de la moto")
+    if km == 0:            datos_faltantes.append("kilometraje")
+    if not motives:        datos_faltantes.append("motivo de ingreso")
+    if not vid and not client_phone: datos_faltantes.append("teléfono del cliente")
+
+    if datos_faltantes:
+        faltantes_txt = "\n".join([f"• {d}" for d in datos_faltantes])
+        logger.warning(f"[RECEPCIÓN] Abortado — datos incompletos para {plate}: {datos_faltantes}")
+        await bot.send_message(
+            chat_id=chat_id,
+            text=f"⛔ *Recepción abortada.*\n\nFaltan los siguientes datos obligatorios:\n{faltantes_txt}\n\nIniciá el proceso nuevamente con /start.",
+            parse_mode="Markdown"
+        )
+        return False
+
+    if not vid:
+        logger.info(f"[RECEPCIÓN] Moto nueva {plate} — creando usuario y vehículo con teléfono {client_phone}")
+        new_veh = await create_user_and_vehicle(ocr_data, plate, tenant_id=tenant_id, phone=client_phone)
+        if new_veh:
+            vid = new_veh["id"]
+            context.user_data['vehicle_id'] = vid
+        else:
+            await bot.send_message(
+                chat_id=chat_id,
+                text="⚠️ No pude registrar el vehículo en el sistema. Verificá que el taller esté correctamente configurado e intentá de nuevo."
+            )
+            return False
+
+    payload = {
+        "tenant_id": tenant_id,
+        "vehicle_id": vid,
+        "client_id": context.user_data.get("client_id"),
+        "client_phone": client_phone,
+        "technician_id": tech_id,
+        "service_type": context.user_data.get("service_type", "regular"),
+        "reception": {
+            "mileage_km": km,
+            "gas_level": gas,
+            "customer_notes": motive_text,
+            "damage_photos_urls": [],
+            "intake_answers": intake_answers,
+        }
+    }
+
+    context.user_data.pop('ocr_data', None)
+    context.user_data.pop('ocr_plate', None)
+    context.user_data.pop('media_files', None)
+
+    context.application.create_task(
+        background_create_order(payload, tenant_id, media_files, bot, chat_id, user_role, plate=plate)
+    )
+    return True
 
 
 # -------------------------------------------------------------
@@ -750,108 +861,25 @@ async def handle_motive_confirmation(update: Update, context: ContextTypes.DEFAU
     await query.answer()
 
     if query.data == "motive_yes":
-        await query.edit_message_text("📝 *Procesando recepción...* Dame un segundo.", parse_mode="Markdown")
+        service_type = context.user_data.get('service_type', 'regular')
+        questions = INTAKE_QUESTIONS.get(service_type, [])
 
-        # --- Recuperar todos los datos recolectados en el flujo ---
-        plate        = context.user_data.get('ocr_plate', '')
-        ocr_data     = context.user_data.get('ocr_data', {})
-        km           = context.user_data.get('km', 0)
-        gas          = context.user_data.get('gas_level', 'No Registrado')
-        motives      = context.user_data.get('motives', [])
-        vid          = context.user_data.get('vehicle_id')
-        media_files  = context.user_data.get('media_files', [])
-        client_phone = context.user_data.get('client_phone')
-        tech_id      = context.user_data.get("logged_in_user", {}).get("id")
-
-        try: km = int("".join(filter(str.isdigit, str(km))))
-        except: km = 0
-
-        motive_text = "\n".join([f"- {m}" for m in motives])
-
-        logged_in_user = context.user_data.get("logged_in_user", {})
-        tenant_id = logged_in_user.get("tenant_id")
-        user_role = logged_in_user.get("role", "none")
-
-        # Superadmin no tiene tenant propio — usa el taller activo elegido en sesión
-        if not tenant_id:
-            if user_role == "superadmin":
-                tenant_id = context.user_data.get("active_tenant_id") or FAKE_TENANT
-            else:
-                await query.message.reply_text(
-                    "No pude identificar tu taller. Verificá tu sesión con /start."
-                )
-                return ConversationHandler.END
-
-        # ─────────────────────────────────────────────────────────────
-        # VALIDACIÓN DE INTEGRIDAD — Ningún dato se persiste si falta
-        # información obligatoria. La regla es simple y no tiene excepciones.
-        # ─────────────────────────────────────────────────────────────
-        datos_faltantes = []
-        if not plate:
-            datos_faltantes.append("placa de la moto")
-        if km == 0:
-            datos_faltantes.append("kilometraje")
-        if not motives:
-            datos_faltantes.append("motivo de ingreso")
-        # Para motos nuevas (vid es None) el teléfono del cliente es obligatorio
-        if not vid and not client_phone:
-            datos_faltantes.append("teléfono del cliente")
-
-        if datos_faltantes:
-            faltantes_txt = "\n".join([f"• {d}" for d in datos_faltantes])
-            logger.warning(f"[RECEPCIÓN] Abortado — datos incompletos para {plate}: {datos_faltantes}")
-            await query.message.reply_text(
-                f"⛔ *Recepción abortada.*\n\n"
-                f"Faltan los siguientes datos obligatorios:\n{faltantes_txt}\n\n"
-                f"Iniciá el proceso nuevamente con /start para cargar la moto correctamente.",
+        if questions:
+            context.user_data['intake_questions'] = questions
+            context.user_data['intake_answers'] = []
+            context.user_data['intake_idx'] = 0
+            total = len(questions)
+            await query.edit_message_text(
+                f"Perfecto. Antes de crear la orden tengo *{total} pregunta(s) complementaria(s)*.\n\n"
+                f"*1/{total}* — {questions[0]}",
                 parse_mode="Markdown"
             )
-            return ConversationHandler.END
-        # ─────────────────────────────────────────────────────────────
+            return ASKING_INTAKE_QUESTION
 
-        # --- PASO 1: Crear vehículo/cliente si es moto nueva (se hace acá con todos los datos) ---
-        if not vid:
-            logger.info(f"[RECEPCIÓN] Moto nueva {plate} — creando usuario y vehículo con teléfono {client_phone}")
-            new_veh = await create_user_and_vehicle(
-                ocr_data, plate, tenant_id=tenant_id, phone=client_phone
-            )
-            if new_veh:
-                vid = new_veh["id"]
-                context.user_data['vehicle_id'] = vid
-            else:
-                await query.message.reply_text(
-                    "⚠️ No pude registrar el vehículo en el sistema. "
-                    "Verificá que el taller esté correctamente configurado e intentá de nuevo."
-                )
-                return ConversationHandler.END
-
-        # --- PASO 2: Construir payload de la Orden ---
-        payload = {
-            "tenant_id": tenant_id,
-            "vehicle_id": vid,
-            "client_id": context.user_data.get("client_id"),
-            "client_phone": client_phone,
-            "technician_id": tech_id,
-            "service_type": context.user_data.get("service_type", "regular"),
-            "reception": {
-                "mileage_km": km,
-                "gas_level": gas,
-                "customer_notes": motive_text,
-                "damage_photos_urls": [],
-            }
-        }
-        bot = context.bot
-        chat_id = query.message.chat_id
-
-        # Limpiar contexto temporal antes de lanzar la tarea background
-        context.user_data.pop('ocr_data', None)
-        context.user_data.pop('ocr_plate', None)
-        context.user_data.pop('media_files', None)
-
-        # --- PASO 3: Crear orden y PDF en background (no bloquea al usuario) ---
-        context.application.create_task(
-            background_create_order(payload, tenant_id, media_files, bot, chat_id, user_role, plate=plate)
-        )
+        # Sin preguntas → crear orden directamente
+        await query.edit_message_text("📝 *Procesando recepción...* Dame un segundo.", parse_mode="Markdown")
+        context.user_data.setdefault('intake_answers', [])
+        await _build_and_dispatch_order(context, context.bot, query.message.chat_id)
         return ConversationHandler.END
         
     elif query.data == "change_service_type":
@@ -905,8 +933,55 @@ async def handle_service_type_selection(update: Update, context: ContextTypes.DE
     return CONFIRMING_MOTIVE
 
 
+@role_required()
+async def handle_intake_question(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Recibe la respuesta a una pregunta complementaria y avanza al siguiente o crea la orden."""
+    text = ""
+    if update.message.voice:
+        await update.message.reply_text("Escuchando... 🎧")
+        voice_file = await update.message.voice.get_file()
+        fd, path = tempfile.mkstemp(suffix=".ogg")
+        os.close(fd)
+        await voice_file.download_to_drive(path)
+        transcript = await transcribe_voice(path)
+        os.remove(path)
+        text = transcript or ""
+    elif update.message.text:
+        text = update.message.text
+
+    if await check_cancel_intent(update, context, text):
+        return ConversationHandler.END
+
+    if not text:
+        await update.message.reply_text("Por favor respondé la pregunta.")
+        return ASKING_INTAKE_QUESTION
+
+    questions = context.user_data.get('intake_questions', [])
+    answers   = context.user_data.get('intake_answers', [])
+    idx       = context.user_data.get('intake_idx', 0)
+
+    answers.append({"pregunta": questions[idx], "respuesta": text})
+    context.user_data['intake_answers'] = answers
+
+    next_idx = idx + 1
+    context.user_data['intake_idx'] = next_idx
+
+    if next_idx < len(questions):
+        total = len(questions)
+        await update.message.reply_text(
+            f"*{next_idx + 1}/{total}* — {questions[next_idx]}",
+            parse_mode="Markdown"
+        )
+        return ASKING_INTAKE_QUESTION
+
+    # Todas las preguntas respondidas → crear orden
+    await update.message.reply_text("📝 *Procesando recepción...* Dame un segundo.", parse_mode="Markdown")
+    await _build_and_dispatch_order(context, context.bot, update.message.chat_id)
+    return ConversationHandler.END
+
+
 # -------------------------------------------------------------
-# Funciones Extra / Legacy Lifecycle 
+# Funciones Extra / Legacy Lifecycle
 # -------------------------------------------------------------
 async def send_vehicle_lifecycle(update: Update, context: ContextTypes.DEFAULT_TYPE, plate: str) -> None:
     """Envía la bitácora historica de la motocileta enriquecida."""

@@ -9,7 +9,7 @@ from core.constants import (
     ASKING_PLATE, CONFIRMING_OCR, CORRECTING_DATA,
     CONFIRMING_CLIENT, ASKING_PHONE, ASKING_KM,
     ASKING_PHOTOS, ASKING_MOTIVE, CONFIRMING_MOTIVE, CORRECTING_MOTIVE,
-    CONFIRMING_SERVICE_TYPE, L_ASKING_PLATE, SELECTING_TENANT,
+    CONFIRMING_SERVICE_TYPE, ASKING_INTAKE_QUESTION, L_ASKING_PLATE, SELECTING_TENANT,
     O_NAME, O_PHONE, O_ROLE, O_TENANT, O_CONFIRM,
     OTP_ASKING_PLATE, OTP_ASKING_CODE, OTP_CONFIRMING
 )
@@ -30,7 +30,8 @@ from handlers.reception import (
     apply_correction_to_data, handle_client_confirmation,
     handle_phone, handle_km_and_photos, handle_photos, handle_photos_done,
     handle_motive, handle_motive_confirmation, handle_motive_correction,
-    handle_service_type_selection, handle_data_correction
+    handle_service_type_selection, handle_data_correction,
+    handle_intake_question
 )
 from handlers.otp import (
     start_otp_flow, otp_handle_plate, otp_handle_code, otp_handle_confirm
@@ -257,6 +258,10 @@ def main() -> None:
             CONFIRMING_SERVICE_TYPE: [
                 cancel_text,
                 CallbackQueryHandler(handle_service_type_selection, pattern="^stype_"),
+            ],
+            ASKING_INTAKE_QUESTION: [
+                btn_escape,
+                MessageHandler(filters.TEXT | filters.VOICE, handle_intake_question),
             ],
             CORRECTING_MOTIVE: [
                 btn_escape,

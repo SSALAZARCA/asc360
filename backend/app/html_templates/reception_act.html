@@ -74,6 +74,21 @@
         </table>
     </div>
 
+    <!-- PREGUNTAS COMPLEMENTARIAS -->
+    {% if intake_answers %}
+    <div class="section">
+        <div class="section-title">Preguntas Complementarias de Ingreso</div>
+        <table>
+            {% for item in intake_answers %}
+            <tr>
+                <th>{{ item.pregunta }}</th>
+                <td>{{ item.respuesta }}</td>
+            </tr>
+            {% endfor %}
+        </table>
+    </div>
+    {% endif %}
+
     <!-- SOFT WARNINGS AI -->
     <!-- jinja IF warranty_warnings exists -->
     {% if warranty_warnings %}
