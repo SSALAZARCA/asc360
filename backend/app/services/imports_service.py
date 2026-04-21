@@ -1372,10 +1372,72 @@ async def confirm_reconciliation(
         item.updated_at = datetime.utcnow()
         updated += 1
 
+    # Cruzar EXTRAs contra backorders abiertos (FIFO por fecha de creación)
+    backorders_resolved_by_extra = 0
+    for rr in results:
+        if rr.result != "EXTRA":
+            continue
+        surplus_qty = rr.qty_in_packing or 0
+        if surplus_qty <= 0:
+            continue
+
+        open_bos = (await db.execute(
+            select(Backorder)
+            .where(Backorder.part_number == rr.part_number, Backorder.resolved == False)
+            .order_by(Backorder.created_at.asc())
+        )).scalars().all()
+
+        now = datetime.utcnow()
+        applied_any = False
+
+        for bo in open_bos:
+            if surplus_qty <= 0:
+                break
+            apply_qty = min(surplus_qty, bo.qty_pending)
+            surplus_qty -= apply_qty
+            bo.qty_pending -= apply_qty
+
+            history = list(bo.history or [])
+            history.append({
+                "date": now.isoformat(),
+                "event": "FILLED_BY_EXTRA",
+                "pi": origin_pi,
+                "qty_applied": apply_qty,
+            })
+
+            sp_item = await db.get(SparePartItem, bo.spare_part_item_id)
+            if bo.qty_pending == 0:
+                bo.resolved = True
+                bo.resolved_at = now
+                history.append({"date": now.isoformat(), "event": "RESOLVED", "resolved_in_pi": origin_pi})
+                backorders_resolved_by_extra += 1
+                if sp_item:
+                    sp_item.qty_received = sp_item.qty_ordered
+                    sp_item.qty_pending = 0
+                    sp_item.status = "RECEIVED"
+                    sp_item.updated_at = now
+            else:
+                if sp_item:
+                    sp_item.qty_received = (sp_item.qty_received or 0) + apply_qty
+                    sp_item.qty_pending = max(0, sp_item.qty_ordered - sp_item.qty_received)
+                    sp_item.updated_at = now
+
+            bo.history = history
+            bo.updated_at = now
+            applied_any = True
+
+        if applied_any:
+            rr.result = "EXTRA_APPLIED"
+
     lot.packing_list_received = True
     await db.commit()
 
-    return {"confirmed": updated, "backorders_created": backorders_created, "lot_id": str(lot.id)}
+    return {
+        "confirmed": updated,
+        "backorders_created": backorders_created,
+        "backorders_resolved_by_extra": backorders_resolved_by_extra,
+        "lot_id": str(lot.id),
+    }
 
 
 async def _upsert_backorder(

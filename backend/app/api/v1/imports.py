@@ -19,6 +19,7 @@ from app.schemas.imports import (
     ImportExcelResult, MotoUnitRead, MotoUnitUpdate, ImportAttachmentRead,
     SparePartLotRead, SparePartItemRead, SparePartItemUpdate,
     ReconciliationResultRead, ReconciliationResultUpdate, BackorderRead, BackorderUpdate,
+    BackorderBulkUpdatePI,
 )
 from app.services import imports_service
 from app.services.imports_service import compute_status
@@ -895,6 +896,13 @@ async def update_backorder(
         bo.resolved = True
         bo.resolved_at = now
         history.append({"date": now.isoformat(), "event": "RESOLVED_MANUAL", "actor": current_user.role})
+        # Actualizar SparePartItem vinculado
+        item = await db.get(SparePartItem, bo.spare_part_item_id)
+        if item:
+            item.qty_received = item.qty_ordered
+            item.qty_pending = 0
+            item.status = "RECEIVED"
+            item.updated_at = now
 
     if "qty_pending" in update_data:
         history.append({"date": now.isoformat(), "event": "QTY_UPDATE", "qty_pending": update_data["qty_pending"]})
@@ -905,6 +913,29 @@ async def update_backorder(
     await db.commit()
     await db.refresh(bo)
     return BackorderRead.model_validate(bo)
+
+
+@router.post("/backorders/bulk-expected-pi")
+async def bulk_update_expected_pi(
+    payload: BackorderBulkUpdatePI,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    _require_imports_editor(current_user)
+    now = datetime.utcnow()
+    updated = 0
+    for bo_id in payload.ids:
+        bo = await db.get(Backorder, bo_id)
+        if not bo or bo.resolved:
+            continue
+        bo.expected_in_pi = payload.expected_in_pi
+        history = list(bo.history or [])
+        history.append({"date": now.isoformat(), "event": "SET_EXPECTED_PI", "expected_in_pi": payload.expected_in_pi})
+        bo.history = history
+        bo.updated_at = now
+        updated += 1
+    await db.commit()
+    return {"updated": updated}
 
 
 # ---------------------------------------------------------------------------

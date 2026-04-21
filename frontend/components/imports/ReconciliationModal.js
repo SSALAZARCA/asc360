@@ -8,10 +8,11 @@ function API() {
 }
 
 const RESULT_CFG = {
-  COMPLETE: { label: 'Completo',  color: '#22c55e', bg: 'rgba(34,197,94,0.1)',    border: 'rgba(34,197,94,0.25)',   icon: CheckCircle },
-  PARTIAL:  { label: 'Parcial',   color: '#fb923c', bg: 'rgba(251,146,60,0.1)',   border: 'rgba(251,146,60,0.25)',  icon: AlertCircle },
-  MISSING:  { label: 'Faltante',  color: '#f87171', bg: 'rgba(248,113,113,0.1)',  border: 'rgba(248,113,113,0.25)', icon: XCircle },
-  EXTRA:    { label: 'Extra',     color: '#a78bfa', bg: 'rgba(167,139,250,0.1)',  border: 'rgba(167,139,250,0.25)', icon: Plus },
+  COMPLETE:      { label: 'Completo',       color: '#22c55e', bg: 'rgba(34,197,94,0.1)',    border: 'rgba(34,197,94,0.25)',   icon: CheckCircle },
+  PARTIAL:       { label: 'Parcial',        color: '#fb923c', bg: 'rgba(251,146,60,0.1)',   border: 'rgba(251,146,60,0.25)',  icon: AlertCircle },
+  MISSING:       { label: 'Faltante',       color: '#f87171', bg: 'rgba(248,113,113,0.1)',  border: 'rgba(248,113,113,0.25)', icon: XCircle },
+  EXTRA:         { label: 'Extra',          color: '#a78bfa', bg: 'rgba(167,139,250,0.1)',  border: 'rgba(167,139,250,0.25)', icon: Plus },
+  EXTRA_APPLIED: { label: 'Extra → BO',    color: '#34d399', bg: 'rgba(52,211,153,0.1)',   border: 'rgba(52,211,153,0.25)',  icon: CheckCircle },
 };
 
 function ResultBadge({ result }) {
@@ -161,7 +162,7 @@ export default function ReconciliationModal({ lot, onClose, onConfirmed }) {
   };
 
   // Conteos
-  const counts = { COMPLETE: 0, PARTIAL: 0, MISSING: 0, EXTRA: 0 };
+  const counts = { COMPLETE: 0, PARTIAL: 0, MISSING: 0, EXTRA: 0, EXTRA_APPLIED: 0 };
   results.forEach(r => { if (counts[r.result] !== undefined) counts[r.result]++; });
 
   const filtered = filterResult ? results.filter(r => r.result === filterResult) : results;
@@ -244,16 +245,17 @@ export default function ReconciliationModal({ lot, onClose, onConfirmed }) {
           ) : (
             <>
               {/* KPI cards */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', marginBottom: '20px' }}>
-                <SummaryCard label="Completo" count={counts.COMPLETE} result="COMPLETE" />
-                <SummaryCard label="Parcial"  count={counts.PARTIAL}  result="PARTIAL"  />
-                <SummaryCard label="Faltante" count={counts.MISSING}  result="MISSING"  />
-                <SummaryCard label="Extra"    count={counts.EXTRA}    result="EXTRA"    />
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '10px', marginBottom: '20px' }}>
+                <SummaryCard label="Completo"    count={counts.COMPLETE}      result="COMPLETE"      />
+                <SummaryCard label="Parcial"     count={counts.PARTIAL}       result="PARTIAL"       />
+                <SummaryCard label="Faltante"    count={counts.MISSING}       result="MISSING"       />
+                <SummaryCard label="Extra"       count={counts.EXTRA}         result="EXTRA"         />
+                <SummaryCard label="Extra→BO"   count={counts.EXTRA_APPLIED} result="EXTRA_APPLIED" />
               </div>
 
               {/* Filtro */}
               <div style={{ display: 'flex', gap: '6px', marginBottom: '12px', flexWrap: 'wrap' }}>
-                {['', 'COMPLETE', 'PARTIAL', 'MISSING', 'EXTRA'].map(r => (
+                {['', 'COMPLETE', 'PARTIAL', 'MISSING', 'EXTRA', 'EXTRA_APPLIED'].map(r => (
                   <button
                     key={r || 'all'}
                     onClick={() => setFilterResult(r)}

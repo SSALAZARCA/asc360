@@ -354,6 +354,11 @@ class BackorderUpdate(BaseModel):
     resolved: Optional[bool] = None
 
 
+class BackorderBulkUpdatePI(BaseModel):
+    ids: list[uuid.UUID]
+    expected_in_pi: Optional[str] = None
+
+
 # ---------------------------------------------------------------------------
 # Import Audit Log
 # ---------------------------------------------------------------------------
