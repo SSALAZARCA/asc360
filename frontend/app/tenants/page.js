@@ -155,24 +155,25 @@ export default function TenantsPage() {
         ) : tenants.map(t => {
           const estado = ESTADO_CFG[t.estado_red] || ESTADO_CFG.activo;
           return (
-            <div key={t.id} className="tenant-card relative group">
-              <div style={{ height: 4, background: estado.color, position: 'absolute', top: 0, left: 0, right: 0, borderRadius: '16px 16px 0 0' }} />
+            <div key={t.id} className="tenant-card group">
+              {/* Franja de estado — bloque normal, no absoluto */}
+              <div style={{ height: 4, background: estado.color }} />
               <div className="p-5">
-                <div className="flex justify-between items-start">
-                  <div className="flex items-center gap-3">
-                    <div style={{ width: 42, height: 42, borderRadius: 12, background: 'rgba(251,146,60,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(251,146,60,0.2)', flexShrink: 0 }}>
-                      <Building2 size={20} color="#fb923c" />
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, minWidth: 0 }}>
+                    <div style={{ width: 38, height: 38, borderRadius: 10, background: 'rgba(251,146,60,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(251,146,60,0.2)', flexShrink: 0 }}>
+                      <Building2 size={18} color="#fb923c" />
                     </div>
-                    <div>
-                      <h3 style={{ fontWeight: 900, fontSize: 14, color: '#fff', lineHeight: 1.2, textTransform: 'uppercase', letterSpacing: '-0.01em' }}>{t.name}</h3>
-                      <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 4 }}>
+                    <div style={{ minWidth: 0 }}>
+                      <h3 style={{ fontWeight: 900, fontSize: 13, color: '#fff', lineHeight: 1.3, textTransform: 'uppercase', letterSpacing: '-0.01em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</h3>
+                      <div style={{ display: 'flex', gap: 5, alignItems: 'center', marginTop: 4, flexWrap: 'wrap' }}>
                         <NivelBadge nivel={t.nivel_red} />
                         <span style={{ fontSize: 9, color: estado.color, fontWeight: 700, textTransform: 'uppercase' }}>{estado.label}</span>
                         {t.categoria && <span style={{ fontSize: 9, color: '#9ca3af', fontWeight: 700 }}>Cat. {t.categoria}</span>}
                       </div>
                     </div>
                   </div>
-                  <button onClick={() => openEdit(t)} className="edit-btn"><Edit size={14} /></button>
+                  <button onClick={() => openEdit(t)} className="edit-btn" style={{ flexShrink: 0 }}><Edit size={13} /></button>
                 </div>
 
                 {/* Capacidades */}
@@ -187,9 +188,9 @@ export default function TenantsPage() {
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   {t.nit && <div style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 11, color: 'rgba(255,255,255,0.6)' }}><Hash size={11} color="rgba(255,255,255,0.2)" /><span style={{ fontFamily: 'monospace' }}>{t.nit}</span></div>}
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 11, color: 'rgba(255,255,255,0.6)' }}><MapPin size={11} color="rgba(255,255,255,0.2)" /><span>{[t.ciudad, t.departamento].filter(Boolean).join(', ') || 'Sin ubicación'}</span></div>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 11, color: 'rgba(255,255,255,0.6)' }}><MapPin size={11} color="rgba(255,255,255,0.2)" /><span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.direccion || [t.ciudad, t.departamento].filter(Boolean).join(', ') || 'Sin ubicación'}</span></div>
                   {t.phone && <div style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 11, color: 'rgba(255,255,255,0.6)' }}><Phone size={11} color="rgba(255,255,255,0.2)" /><span style={{ fontFamily: 'monospace' }}>{t.phone}</span></div>}
-                  {t.representante_legal && <div style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 11, color: 'rgba(255,255,255,0.6)' }}><User size={11} color="rgba(255,255,255,0.2)" /><span>{t.representante_legal}</span></div>}
+                  {t.representante_legal && <div style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 11, color: 'rgba(255,255,255,0.6)' }}><User size={11} color="rgba(255,255,255,0.2)" /><span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.representante_legal}</span></div>}
                 </div>
               </div>
             </div>
@@ -320,7 +321,7 @@ export default function TenantsPage() {
 
       <style jsx>{`
         .tenants-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 1.25rem; }
-        .tenant-card { background: #111114; border: 1px solid rgba(255,255,255,0.05); border-radius: 16px; overflow: hidden; transition: all 0.25s; }
+        .tenant-card { background: #111114; border: 1px solid rgba(255,255,255,0.05); border-radius: 16px; overflow: hidden; transition: all 0.25s; position: relative; }
         .tenant-card:hover { transform: translateY(-3px); border-color: rgba(251,146,60,0.25); box-shadow: 0 10px 24px -8px rgba(0,0,0,0.5), 0 0 24px -8px rgba(251,146,60,0.12); }
         .edit-btn { width: 30px; height: 30px; border-radius: 8px; background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.4); display: flex; align-items: center; justify-content: center; border: 1px solid rgba(255,255,255,0.08); cursor: pointer; transition: all 0.2s; flex-shrink: 0; }
         .edit-btn:hover { background: #fb923c; color: white; border-color: #fb923c; }
