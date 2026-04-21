@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { authFetch } from '../../lib/authFetch';
-import { ChevronDown, ChevronRight, Search, RefreshCw, Package, ClipboardCheck } from 'lucide-react';
+import { ChevronDown, ChevronRight, Search, RefreshCw, Package, ClipboardCheck, XCircle } from 'lucide-react';
 import ExcelUploadModal from './ExcelUploadModal';
 import ReconciliationModal from './ReconciliationModal';
 
@@ -13,10 +13,11 @@ function API() {
 // Status badge para spare part items
 // ---------------------------------------------------------------------------
 const ITEM_STATUS = {
-  PENDING:   { label: 'Pendiente', color: '#9ca3af', bg: 'rgba(156,163,175,0.12)', border: 'rgba(156,163,175,0.3)' },
-  PARTIAL:   { label: 'Parcial',   color: '#fb923c', bg: 'rgba(251,146,60,0.12)',  border: 'rgba(251,146,60,0.3)' },
-  RECEIVED:  { label: 'Recibido',  color: '#22c55e', bg: 'rgba(34,197,94,0.12)',   border: 'rgba(34,197,94,0.3)' },
-  BACKORDER: { label: 'Backorder', color: '#f87171', bg: 'rgba(248,113,113,0.12)', border: 'rgba(248,113,113,0.3)' },
+  PENDING:   { label: 'Pendiente',  color: '#9ca3af', bg: 'rgba(156,163,175,0.12)', border: 'rgba(156,163,175,0.3)' },
+  PARTIAL:   { label: 'Parcial',    color: '#fb923c', bg: 'rgba(251,146,60,0.12)',  border: 'rgba(251,146,60,0.3)' },
+  RECEIVED:  { label: 'Recibido',   color: '#22c55e', bg: 'rgba(34,197,94,0.12)',   border: 'rgba(34,197,94,0.3)' },
+  BACKORDER: { label: 'Backorder',  color: '#f87171', bg: 'rgba(248,113,113,0.12)', border: 'rgba(248,113,113,0.3)' },
+  CANCELLED: { label: 'Cancelado',  color: '#6b7280', bg: 'rgba(107,114,128,0.12)', border: 'rgba(107,114,128,0.3)' },
 };
 
 function ItemStatusBadge({ status }) {
@@ -248,7 +249,7 @@ function LotItemsTable({ lotId, userRole }) {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
             <thead>
               <tr style={{ background: '#0e0e14' }}>
-                {['Parte #', 'Descripción', 'Modelo', 'Pcs Ord.', 'Pcs Rec.', 'Pendiente', 'Unit Price', 'Amount', 'Estado'].map(h => (
+                {['Parte #', 'Descripción', 'Modelo', 'Pcs Ord.', 'Pcs Rec.', 'Pendiente', 'Unit Price', 'Amount', 'Estado', ''].map(h => (
                   <th key={h} style={{ padding: '8px 10px', textAlign: 'left', fontSize: '9px', fontWeight: 700, color: '#606075', textTransform: 'uppercase', letterSpacing: '0.07em', borderBottom: '1px solid rgba(255,255,255,0.06)', whiteSpace: 'nowrap' }}>{h}</th>
                 ))}
               </tr>
@@ -315,6 +316,25 @@ function LotItemsTable({ lotId, userRole }) {
                       ? <EditableStatus itemId={item.id} current={item.status} onSaved={fetch} />
                       : <ItemStatusBadge status={item.status} />
                     }
+                  </td>
+                  <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    {canEdit && (item.status === 'BACKORDER' || (item.status === 'PARTIAL' && (item.qty_pending ?? 0) > 0)) && (
+                      <button
+                        onClick={async () => {
+                          const qty = item.qty_pending ?? 0;
+                          if (!confirm(`¿Cancelar las ${qty} unidades pendientes de ${item.part_number}? Esta acción cerrará el backorder.`)) return;
+                          try {
+                            await authFetch(`${API()}/imports/spare-part-items/${item.id}/cancel-pending`, { method: 'POST' });
+                            fetch();
+                          } catch { alert('Error al cancelar pendiente'); }
+                        }}
+                        title="Cancelar unidades pendientes"
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 9px', borderRadius: '6px', border: 'none', background: 'rgba(107,114,128,0.12)', color: '#6b7280', fontSize: '10px', fontWeight: 700, cursor: 'pointer' }}
+                      >
+                        <XCircle size={10} />
+                        Cancelar pendiente
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}

@@ -645,6 +645,43 @@ def _compute_reconciliation_result(qty_ordered, qty_in_packing) -> str:
     return "PARTIAL"
 
 
+@router.post("/spare-part-items/{item_id}/cancel-pending")
+async def cancel_pending_backorder(
+    item_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    _require_imports_editor(current_user)
+
+    item = await db.get(SparePartItem, item_id)
+    if not item:
+        raise HTTPException(status_code=404, detail={"detail": "Ítem no encontrado", "code": "ITEM_NOT_FOUND"})
+
+    if (item.qty_pending or 0) == 0:
+        raise HTTPException(status_code=400, detail={"detail": "El ítem no tiene unidades pendientes", "code": "NO_PENDING"})
+
+    now = datetime.utcnow()
+    open_bos = (await db.execute(
+        select(Backorder).where(Backorder.spare_part_item_id == item.id, Backorder.resolved == False)
+    )).scalars().all()
+
+    for bo in open_bos:
+        bo.resolved = True
+        bo.resolved_at = now
+        history = list(bo.history or [])
+        history.append({"date": now.isoformat(), "event": "CANCELLED", "actor": current_user.role})
+        bo.history = history
+        bo.updated_at = now
+
+    new_status = "CANCELLED" if item.status == "BACKORDER" else item.status
+    item.qty_pending = 0
+    item.status = new_status
+    item.updated_at = now
+
+    await db.commit()
+    return {"cancelled": len(open_bos), "item_status": new_status}
+
+
 @router.patch("/spare-part-items/{item_id}", response_model=SparePartItemRead)
 async def update_spare_part_item(
     item_id: uuid.UUID,
