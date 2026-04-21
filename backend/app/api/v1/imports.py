@@ -1076,14 +1076,13 @@ async def list_all_moto_units(
     )
     total = (await db.execute(count_stmt)).scalar_one()
 
-    # KPIs globales — sin ningún filtro, siempre reflejan el universo completo
-    global_only_motos = [ShipmentOrder.is_spare_part == False]
-
+    # KPIs — respetan los filtros activos (pi_number, model, vin, engine)
+    # pero NO el filtro de certificado_generado para mostrar el universo completo del filtro
     total_empadronados = (await db.execute(
         select(func.count()).select_from(
             select(ShipmentMotoUnit)
             .join(ShipmentOrder, ShipmentMotoUnit.shipment_order_id == ShipmentOrder.id)
-            .where(*global_only_motos, ShipmentMotoUnit.certificado_generado == True)
+            .where(*base_filters, ShipmentMotoUnit.certificado_generado == True)
             .subquery()
         )
     )).scalar_one()
@@ -1092,7 +1091,7 @@ async def list_all_moto_units(
         select(func.count()).select_from(
             select(ShipmentMotoUnit)
             .join(ShipmentOrder, ShipmentMotoUnit.shipment_order_id == ShipmentOrder.id)
-            .where(*global_only_motos)
+            .where(*base_filters)
             .subquery()
         )
     )).scalar_one()
