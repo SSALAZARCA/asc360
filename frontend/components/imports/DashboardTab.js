@@ -1,7 +1,7 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { authFetch } from '../../lib/authFetch';
-import { RefreshCw, TrendingUp, Package, AlertTriangle, FileText, DollarSign, Ship } from 'lucide-react';
+import { RefreshCw, TrendingUp, Package, FileText, Ship, Loader } from 'lucide-react';
 
 function API() {
   return (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1').replace('http://', 'https://');
@@ -31,10 +31,97 @@ function KPICard({ label, value, sub, color = '#9ca3af', accent = false }) {
 }
 
 // ---------------------------------------------------------------------------
-// Status pipeline (barra horizontal de estados)
+// Orders Popover — lista compacta de pedidos al hacer hover
+// ---------------------------------------------------------------------------
+function OrdersPopover({ orders, loading, title, color }) {
+  if (!loading && (!orders || orders.length === 0)) return null;
+  const MAX = 12;
+  const visible = orders ? orders.slice(0, MAX) : [];
+  const extra = orders ? orders.length - MAX : 0;
+
+  return (
+    <div style={{
+      position: 'absolute', right: 0, top: '50%', transform: 'translate(calc(100% + 12px), -50%)',
+      zIndex: 100, width: 240,
+      background: '#14141c', border: `1px solid ${color}40`,
+      borderRadius: 10, boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
+      padding: '10px 0', pointerEvents: 'none',
+    }}>
+      {/* Flecha */}
+      <div style={{
+        position: 'absolute', left: -5, top: '50%', transform: 'translateY(-50%)',
+        width: 8, height: 8, background: '#14141c',
+        border: `1px solid ${color}40`, borderRight: 'none', borderTop: 'none',
+        transform: 'translateY(-50%) rotate(45deg)',
+      }} />
+
+      <p style={{ margin: '0 10px 8px', fontSize: '9px', fontWeight: 800, color, textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+        {title}
+      </p>
+
+      {loading ? (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '12px 0', gap: 6, color: '#606075', fontSize: 11 }}>
+          <Loader size={11} style={{ animation: 'spin 1s linear infinite' }} /> Cargando...
+        </div>
+      ) : (
+        <>
+          {visible.map((o, i) => (
+            <div key={o.id || i} style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              padding: '5px 10px',
+              borderTop: i > 0 ? '1px solid rgba(255,255,255,0.04)' : 'none',
+            }}>
+              <span style={{ fontSize: 10, fontWeight: 800, color: '#fff', fontFamily: 'monospace', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {o.pi_number}
+              </span>
+              {o.is_spare_part && (
+                <span style={{ fontSize: 8, fontWeight: 800, padding: '1px 4px', borderRadius: 3, background: 'rgba(251,146,60,0.15)', color: '#fb923c', flexShrink: 0 }}>SP</span>
+              )}
+              {o.cycle && (
+                <span style={{ fontSize: 9, color: '#606075', flexShrink: 0, marginLeft: 'auto' }}>C{o.cycle}</span>
+              )}
+              {o.qty_motos != null && (
+                <span style={{ fontSize: 9, color: '#9ca3af', flexShrink: 0, marginLeft: 'auto' }}>{o.qty_motos} u.</span>
+              )}
+            </div>
+          ))}
+          {extra > 0 && (
+            <p style={{ margin: '6px 10px 0', fontSize: 9, color: '#606075', fontStyle: 'italic' }}>y {extra} más...</p>
+          )}
+        </>
+      )}
+
+      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Hook: lazy fetch con cache por clave
+// ---------------------------------------------------------------------------
+function useOrdersCache() {
+  const cache = useRef({});
+
+  const fetch = useCallback(async (key, params) => {
+    if (cache.current[key]) return cache.current[key];
+    const qs = new URLSearchParams({ ...params, limit: 50 }).toString();
+    const res = await authFetch(`${API()}/imports/shipment-orders?${qs}`);
+    const json = await res.json();
+    const orders = Array.isArray(json) ? json : (json.items || []);
+    cache.current[key] = orders;
+    return orders;
+  }, []);
+
+  const clear = useCallback(() => { cache.current = {}; }, []);
+
+  return { fetch, clear };
+}
+
+// ---------------------------------------------------------------------------
+// Status Pipeline — barra horizontal de estados con hover popover
 // ---------------------------------------------------------------------------
 const STATUS_PIPELINE = [
-  { key: 'en_preparacion', label: 'En Preparación', color: '#60a5fa' },
+  { key: 'en_preparacion', label: 'En Preparación', color: '#60a5fa', noPopover: true },
   { key: 'listo_fabrica',  label: 'Listo Fábrica',  color: '#a78bfa' },
   { key: 'en_transito',    label: 'En Tránsito',    color: '#fb923c' },
   { key: 'en_destino',     label: 'En Destino',     color: '#fbbf24' },
@@ -42,20 +129,60 @@ const STATUS_PIPELINE = [
   { key: 'backorder',      label: 'Backorder',      color: '#f87171' },
 ];
 
-function StatusPipeline({ data }) {
+function StatusPipeline({ data, ordersCache }) {
+  const [hovered, setHovered] = useState(null);
+  const [orders, setOrders] = useState({});
+  const [loading, setLoading] = useState({});
+  const hideTimer = useRef(null);
+
   const total = STATUS_PIPELINE.reduce((s, st) => s + (data[st.key] || 0), 0) || 1;
+
+  const handleEnter = async (st) => {
+    if (st.noPopover) return;
+    clearTimeout(hideTimer.current);
+    setHovered(st.key);
+    if (!orders[st.key]) {
+      setLoading(l => ({ ...l, [st.key]: true }));
+      try {
+        const result = await ordersCache.fetch(`status_${st.key}`, { computed_status: st.key });
+        setOrders(o => ({ ...o, [st.key]: result }));
+      } finally {
+        setLoading(l => ({ ...l, [st.key]: false }));
+      }
+    }
+  };
+
+  const handleLeave = () => {
+    hideTimer.current = setTimeout(() => setHovered(null), 200);
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
       {STATUS_PIPELINE.map(st => {
         const count = data[st.key] || 0;
         const pct = Math.round((count / total) * 100);
+        const isHovered = hovered === st.key;
         return (
-          <div key={st.key} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span style={{ fontSize: '10px', color: '#9ca3af', width: 110, flexShrink: 0, textAlign: 'right' }}>{st.label}</span>
+          <div
+            key={st.key}
+            style={{ display: 'flex', alignItems: 'center', gap: '10px', position: 'relative', cursor: st.noPopover || count === 0 ? 'default' : 'pointer' }}
+            onMouseEnter={() => handleEnter(st)}
+            onMouseLeave={handleLeave}
+          >
+            <span style={{ fontSize: '10px', color: isHovered ? st.color : '#9ca3af', width: 110, flexShrink: 0, textAlign: 'right', transition: 'color 0.15s' }}>{st.label}</span>
             <div style={{ flex: 1, height: 8, borderRadius: 4, background: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}>
-              <div style={{ height: '100%', width: `${pct}%`, background: st.color, borderRadius: 4, transition: 'width 0.6s ease', minWidth: count > 0 ? 4 : 0 }} />
+              <div style={{ height: '100%', width: `${pct}%`, background: st.color, borderRadius: 4, transition: 'width 0.6s ease', minWidth: count > 0 ? 4 : 0, opacity: isHovered ? 1 : 0.75 }} />
             </div>
             <span style={{ fontSize: '11px', fontWeight: 700, color: st.color, width: 28, textAlign: 'right', flexShrink: 0 }}>{count}</span>
+
+            {isHovered && !st.noPopover && count > 0 && (
+              <OrdersPopover
+                orders={orders[st.key]}
+                loading={loading[st.key]}
+                title={st.label}
+                color={st.color}
+              />
+            )}
           </div>
         );
       })}
@@ -64,24 +191,65 @@ function StatusPipeline({ data }) {
 }
 
 // ---------------------------------------------------------------------------
-// Ciclos bar chart (horizontal)
+// Ciclos bar chart con hover popover
 // ---------------------------------------------------------------------------
-function CycleChart({ cycles }) {
+function CycleChart({ cycles, ordersCache }) {
+  const [hovered, setHovered] = useState(null);
+  const [orders, setOrders] = useState({});
+  const [loading, setLoading] = useState({});
+  const hideTimer = useRef(null);
+
   if (!cycles || cycles.length === 0) {
     return <p style={{ color: '#606075', fontSize: '11px', textAlign: 'center', margin: '20px 0' }}>Sin datos de ciclos</p>;
   }
   const max = Math.max(...cycles.map(c => c.count)) || 1;
+
+  const handleEnter = async (cycle) => {
+    clearTimeout(hideTimer.current);
+    setHovered(cycle);
+    if (!orders[cycle]) {
+      setLoading(l => ({ ...l, [cycle]: true }));
+      try {
+        const result = await ordersCache.fetch(`cycle_${cycle}`, { cycle });
+        setOrders(o => ({ ...o, [cycle]: result }));
+      } finally {
+        setLoading(l => ({ ...l, [cycle]: false }));
+      }
+    }
+  };
+
+  const handleLeave = () => {
+    hideTimer.current = setTimeout(() => setHovered(null), 200);
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-      {cycles.map(({ cycle, count }) => (
-        <div key={cycle} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <span style={{ fontSize: '10px', color: '#9ca3af', width: 56, flexShrink: 0, textAlign: 'right', fontFamily: 'monospace' }}>Ciclo {cycle}</span>
-          <div style={{ flex: 1, height: 10, borderRadius: 5, background: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}>
-            <div style={{ height: '100%', width: `${(count / max) * 100}%`, background: 'linear-gradient(90deg, #ff5f33, #ff8a65)', borderRadius: 5, transition: 'width 0.6s ease' }} />
+      {cycles.map(({ cycle, count }) => {
+        const isHovered = hovered === cycle;
+        return (
+          <div
+            key={cycle}
+            style={{ display: 'flex', alignItems: 'center', gap: '10px', position: 'relative', cursor: 'pointer' }}
+            onMouseEnter={() => handleEnter(cycle)}
+            onMouseLeave={handleLeave}
+          >
+            <span style={{ fontSize: '10px', color: isHovered ? '#ff5f33' : '#9ca3af', width: 56, flexShrink: 0, textAlign: 'right', fontFamily: 'monospace', transition: 'color 0.15s' }}>Ciclo {cycle}</span>
+            <div style={{ flex: 1, height: 10, borderRadius: 5, background: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: `${(count / max) * 100}%`, background: 'linear-gradient(90deg, #ff5f33, #ff8a65)', borderRadius: 5, transition: 'width 0.6s ease', opacity: isHovered ? 1 : 0.75 }} />
+            </div>
+            <span style={{ fontSize: '11px', fontWeight: 700, color: '#d1d5db', width: 24, textAlign: 'right', flexShrink: 0 }}>{count}</span>
+
+            {isHovered && (
+              <OrdersPopover
+                orders={orders[cycle]}
+                loading={loading[cycle]}
+                title={`Ciclo ${cycle}`}
+                color="#ff5f33"
+              />
+            )}
           </div>
-          <span style={{ fontSize: '11px', fontWeight: 700, color: '#d1d5db', width: 24, textAlign: 'right', flexShrink: 0 }}>{count}</span>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -110,13 +278,10 @@ function UpcomingEtas({ etas }) {
             display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 12px',
             borderRadius: '8px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)',
           }}>
-            {/* Días chip */}
             <div style={{ textAlign: 'center', minWidth: 44, flexShrink: 0 }}>
               <p style={{ margin: 0, fontSize: '15px', fontWeight: 800, color: urgency, lineHeight: 1 }}>{days}</p>
               <p style={{ margin: 0, fontSize: '8px', color: urgency, fontWeight: 700 }}>días</p>
             </div>
-
-            {/* Info */}
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <span style={{ fontSize: '11px', fontWeight: 700, color: o.is_spare_part ? '#60a5fa' : '#fff', fontFamily: 'monospace' }}>{o.pi_number}</span>
@@ -127,14 +292,10 @@ function UpcomingEtas({ etas }) {
               </div>
               <p style={{ margin: '1px 0 0', fontSize: '10px', color: '#9ca3af', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.model}</p>
             </div>
-
-            {/* Qty */}
             <div style={{ flexShrink: 0, textAlign: 'right' }}>
               <p style={{ margin: 0, fontSize: '11px', fontWeight: 700, color: '#d1d5db' }}>{o.qty || '—'}</p>
               <p style={{ margin: 0, fontSize: '9px', color: '#606075' }}>{o.eta_raw || o.eta?.split('T')[0]}</p>
             </div>
-
-            {/* Urgency bar */}
             <div style={{ width: 4, height: 36, borderRadius: 2, background: urgency, flexShrink: 0 }} />
           </div>
         );
@@ -150,9 +311,11 @@ export default function DashboardTab() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState(null);
+  const ordersCache = useOrdersCache();
 
   const fetchDashboard = useCallback(async () => {
     setLoading(true);
+    ordersCache.clear();
     try {
       const res = await authFetch(`${API()}/imports/dashboard`);
       const json = await res.json();
@@ -163,7 +326,7 @@ export default function DashboardTab() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [ordersCache]);
 
   useEffect(() => { fetchDashboard(); }, [fetchDashboard]);
 
@@ -199,25 +362,25 @@ export default function DashboardTab() {
         />
       </div>
 
-      {/* Row 2: Estado + Ciclos */}
+      {/* Row 2: Pipeline + Ciclos — con overflow visible para los popovers */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
 
-        {/* Pipeline de estados */}
-        <div style={{ padding: '18px', borderRadius: '12px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
+        <div style={{ padding: '18px', borderRadius: '12px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', overflow: 'visible' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
             <TrendingUp size={14} color="#ff5f33" />
             <h3 style={{ margin: 0, fontSize: '11px', fontWeight: 700, color: '#fff', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Pipeline de pedidos</h3>
+            <span style={{ marginLeft: 'auto', fontSize: '9px', color: '#404050' }}>hover para ver detalle</span>
           </div>
-          <StatusPipeline data={data} />
+          <StatusPipeline data={data} ordersCache={ordersCache} />
         </div>
 
-        {/* Pedidos por ciclo */}
-        <div style={{ padding: '18px', borderRadius: '12px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
+        <div style={{ padding: '18px', borderRadius: '12px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', overflow: 'visible' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
             <Package size={14} color="#ff5f33" />
             <h3 style={{ margin: 0, fontSize: '11px', fontWeight: 700, color: '#fff', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Pedidos por ciclo</h3>
+            <span style={{ marginLeft: 'auto', fontSize: '9px', color: '#404050' }}>hover para ver detalle</span>
           </div>
-          <CycleChart cycles={data.by_cycle} />
+          <CycleChart cycles={data.by_cycle} ordersCache={ordersCache} />
         </div>
       </div>
 
