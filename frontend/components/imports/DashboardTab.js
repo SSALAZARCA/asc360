@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { authFetch } from '../../lib/authFetch';
-import { RefreshCw, TrendingUp, Package, FileText, Ship, Loader } from 'lucide-react';
+import { RefreshCw, TrendingUp, Package, Ship, Loader } from 'lucide-react';
 
 function API() {
   return (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1').replace('http://', 'https://');
@@ -140,11 +140,13 @@ const STATUS_PIPELINE = [
   { key: 'backorder',      label: 'Backorder',      color: '#f87171' },
 ];
 
-function StatusPipeline({ data, ordersCache }) {
+function StatusPipeline({ data, ordersCache, isSparePartFilter }) {
   const [hovered, setHovered] = useState(null);
   const [orders, setOrders] = useState({});
   const [loading, setLoading] = useState({});
   const hideTimer = useRef(null);
+
+  useEffect(() => { setOrders({}); setHovered(null); }, [isSparePartFilter]);
 
   const total = STATUS_PIPELINE.reduce((s, st) => s + (data[st.key] || 0), 0) || 1;
 
@@ -152,10 +154,13 @@ function StatusPipeline({ data, ordersCache }) {
     if (st.noPopover) return;
     clearTimeout(hideTimer.current);
     setHovered(st.key);
+    const cacheKey = `status_${st.key}_${isSparePartFilter}`;
     if (!orders[st.key]) {
       setLoading(l => ({ ...l, [st.key]: true }));
       try {
-        const result = await ordersCache.fetch(`status_${st.key}`, { computed_status: st.key });
+        const params = { computed_status: st.key };
+        if (isSparePartFilter !== null && isSparePartFilter !== undefined) params.is_spare_part = isSparePartFilter;
+        const result = await ordersCache.fetch(cacheKey, params);
         setOrders(o => ({ ...o, [st.key]: result }));
       } finally {
         setLoading(l => ({ ...l, [st.key]: false }));
@@ -204,11 +209,13 @@ function StatusPipeline({ data, ordersCache }) {
 // ---------------------------------------------------------------------------
 // Ciclos bar chart con hover popover
 // ---------------------------------------------------------------------------
-function CycleChart({ cycles, ordersCache }) {
+function CycleChart({ cycles, ordersCache, isSparePartFilter }) {
   const [hovered, setHovered] = useState(null);
   const [orders, setOrders] = useState({});
   const [loading, setLoading] = useState({});
   const hideTimer = useRef(null);
+
+  useEffect(() => { setOrders({}); setHovered(null); }, [isSparePartFilter]);
 
   if (!cycles || cycles.length === 0) {
     return <p style={{ color: '#606075', fontSize: '11px', textAlign: 'center', margin: '20px 0' }}>Sin datos de ciclos</p>;
@@ -218,10 +225,13 @@ function CycleChart({ cycles, ordersCache }) {
   const handleEnter = async (cycle) => {
     clearTimeout(hideTimer.current);
     setHovered(cycle);
+    const cacheKey = `cycle_${cycle}_${isSparePartFilter}`;
     if (!orders[cycle]) {
       setLoading(l => ({ ...l, [cycle]: true }));
       try {
-        const result = await ordersCache.fetch(`cycle_${cycle}`, { cycle });
+        const params = { cycle };
+        if (isSparePartFilter !== null && isSparePartFilter !== undefined) params.is_spare_part = isSparePartFilter;
+        const result = await ordersCache.fetch(cacheKey, params);
         setOrders(o => ({ ...o, [cycle]: result }));
       } finally {
         setLoading(l => ({ ...l, [cycle]: false }));
@@ -319,17 +329,26 @@ function UpcomingEtas({ etas }) {
 // ---------------------------------------------------------------------------
 // Main DashboardTab
 // ---------------------------------------------------------------------------
+const FILTER_OPTS = [
+  { key: 'all',       label: 'Ambos',      param: null  },
+  { key: 'motos',     label: 'Motos',      param: false },
+  { key: 'repuestos', label: 'Repuestos',  param: true  },
+];
+
 export default function DashboardTab() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState(null);
+  const [filter, setFilter] = useState('all');
   const ordersCache = useOrdersCache();
 
-  const fetchDashboard = useCallback(async () => {
+  const fetchDashboard = useCallback(async (f = filter) => {
     setLoading(true);
     ordersCache.clear();
     try {
-      const res = await authFetch(`${API()}/imports/dashboard`);
+      const opt = FILTER_OPTS.find(o => o.key === f);
+      const qs = opt?.param !== null && opt?.param !== undefined ? `?is_spare_part=${opt.param}` : '';
+      const res = await authFetch(`${API()}/imports/dashboard${qs}`);
       const json = await res.json();
       setData(json);
       setLastUpdated(new Date().toLocaleTimeString('es-CO'));
@@ -338,9 +357,14 @@ export default function DashboardTab() {
     } finally {
       setLoading(false);
     }
-  }, [ordersCache]);
+  }, [ordersCache, filter]);
 
-  useEffect(() => { fetchDashboard(); }, [fetchDashboard]);
+  useEffect(() => { fetchDashboard(filter); }, [filter]); // eslint-disable-line
+
+  const handleFilter = (key) => {
+    if (key !== filter) setFilter(key);
+    else fetchDashboard(key);
+  };
 
   if (loading) {
     return <p style={{ color: '#606075', fontSize: '12px', textAlign: 'center', margin: '60px 0' }}>Cargando dashboard...</p>;
@@ -350,13 +374,36 @@ export default function DashboardTab() {
     return <p style={{ color: '#f87171', fontSize: '12px', textAlign: 'center', margin: '60px 0' }}>Error cargando datos del dashboard</p>;
   }
 
+  const activeFilter = FILTER_OPTS.find(o => o.key === filter);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
 
-      {/* Header refresh */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '10px' }}>
+      {/* Header: filtro + refresh */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <div style={{ display: 'flex', gap: '4px', padding: '3px', borderRadius: '10px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}>
+          {FILTER_OPTS.map(opt => {
+            const active = filter === opt.key;
+            return (
+              <button
+                key={opt.key}
+                onClick={() => handleFilter(opt.key)}
+                style={{
+                  padding: '5px 14px', borderRadius: '7px', border: 'none', cursor: 'pointer',
+                  fontSize: '11px', fontWeight: active ? 700 : 500,
+                  background: active ? '#ff5f33' : 'transparent',
+                  color: active ? '#fff' : '#606075',
+                  transition: 'all 0.15s',
+                }}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>
+        <div style={{ flex: 1 }} />
         {lastUpdated && <span style={{ fontSize: '10px', color: '#606075' }}>Actualizado: {lastUpdated}</span>}
-        <button onClick={fetchDashboard} style={{ padding: '6px 8px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)', cursor: 'pointer', color: '#9ca3af' }}>
+        <button onClick={() => fetchDashboard(filter)} style={{ padding: '6px 8px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)', cursor: 'pointer', color: '#9ca3af' }}>
           <RefreshCw size={12} />
         </button>
       </div>
@@ -374,7 +421,7 @@ export default function DashboardTab() {
         />
       </div>
 
-      {/* Row 2: Pipeline + Ciclos — con overflow visible para los popovers */}
+      {/* Row 2: Pipeline + Ciclos */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
 
         <div style={{ padding: '18px', borderRadius: '12px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', overflow: 'visible' }}>
@@ -383,7 +430,7 @@ export default function DashboardTab() {
             <h3 style={{ margin: 0, fontSize: '11px', fontWeight: 700, color: '#fff', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Pipeline de pedidos</h3>
             <span style={{ marginLeft: 'auto', fontSize: '9px', color: '#404050' }}>hover para ver detalle</span>
           </div>
-          <StatusPipeline data={data} ordersCache={ordersCache} />
+          <StatusPipeline data={data} ordersCache={ordersCache} isSparePartFilter={activeFilter?.param} />
         </div>
 
         <div style={{ padding: '18px', borderRadius: '12px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', overflow: 'visible' }}>
@@ -392,29 +439,11 @@ export default function DashboardTab() {
             <h3 style={{ margin: 0, fontSize: '11px', fontWeight: 700, color: '#fff', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Pedidos por ciclo</h3>
             <span style={{ marginLeft: 'auto', fontSize: '9px', color: '#404050' }}>hover para ver detalle</span>
           </div>
-          <CycleChart cycles={data.by_cycle} ordersCache={ordersCache} />
+          <CycleChart cycles={data.by_cycle} ordersCache={ordersCache} isSparePartFilter={activeFilter?.param} />
         </div>
       </div>
 
-      {/* Row 3: Documentación pendiente */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px' }}>
-        <div style={{ padding: '14px 16px', borderRadius: '10px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', gap: '14px' }}>
-          <FileText size={20} color="#60a5fa" style={{ flexShrink: 0 }} />
-          <div>
-            <p style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: data.pending_docs_digital > 0 ? '#60a5fa' : '#22c55e' }}>{data.pending_docs_digital}</p>
-            <p style={{ margin: '2px 0 0', fontSize: '10px', color: '#606075', fontWeight: 600 }}>Docs digitales pendientes</p>
-          </div>
-        </div>
-        <div style={{ padding: '14px 16px', borderRadius: '10px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', gap: '14px' }}>
-          <FileText size={20} color="#a78bfa" style={{ flexShrink: 0 }} />
-          <div>
-            <p style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: data.pending_docs_original > 0 ? '#a78bfa' : '#22c55e' }}>{data.pending_docs_original}</p>
-            <p style={{ margin: '2px 0 0', fontSize: '10px', color: '#606075', fontWeight: 600 }}>Docs originales pendientes</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Row 4: Próximas ETAs */}
+      {/* Row 3: Próximas ETAs */}
       <div style={{ padding: '18px', borderRadius: '12px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
           <Ship size={14} color="#ff5f33" />

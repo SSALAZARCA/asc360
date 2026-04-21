@@ -984,6 +984,7 @@ async def bulk_update_expected_pi(
 async def get_imports_dashboard(
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
+    is_spare_part: Optional[bool] = Query(None),
 ):
     _require_imports_editor(current_user)
 
@@ -994,9 +995,15 @@ async def get_imports_dashboard(
     now = datetime.utcnow()
     in_60_days = now + timedelta(days=60)
 
+    def _sp_filter():
+        if is_spare_part is None:
+            return []
+        return [ShipmentOrder.is_spare_part == is_spare_part]
+
     # Conteos por estado
     status_rows = (await db.execute(
         select(ShipmentOrder.computed_status, func.count().label("cnt"))
+        .where(*_sp_filter())
         .group_by(ShipmentOrder.computed_status)
     )).all()
     status_map = {r.computed_status: r.cnt for r in status_rows}
@@ -1004,39 +1011,35 @@ async def get_imports_dashboard(
     # Tipo moto vs SP
     type_rows = (await db.execute(
         select(ShipmentOrder.is_spare_part, func.count().label("cnt"))
+        .where(*_sp_filter())
         .group_by(ShipmentOrder.is_spare_part)
     )).all()
     moto_count = next((r.cnt for r in type_rows if not r.is_spare_part), 0)
     sp_count   = next((r.cnt for r in type_rows if r.is_spare_part), 0)
 
-    # Docs pendientes
-    pending_digital  = (await db.execute(
-        select(func.count()).where(ShipmentOrder.digital_docs_status != "UPLOADED")
-    )).scalar_one()
-    pending_original = (await db.execute(
-        select(func.count()).where(ShipmentOrder.original_docs_status != "UPLOADED")
-    )).scalar_one()
-
-    # Backorders activos
+    # Backorders activos (solo aplica a repuestos)
     from app.models.imports import Backorder, SparePartLot
-    bo_count = (await db.execute(
-        select(func.count()).select_from(Backorder).where(Backorder.resolved == False)
-    )).scalar_one()
-    bo_units = (await db.execute(
-        select(func.coalesce(func.sum(Backorder.qty_pending), 0))
-        .where(Backorder.resolved == False)
-    )).scalar_one()
-
-    # Valor declarado total de lotes SP
-    from sqlalchemy import Numeric as SaNumeric
-    total_value = (await db.execute(
-        select(func.coalesce(func.sum(SparePartLot.total_declared_value), 0))
-    )).scalar_one()
+    if is_spare_part is False:
+        bo_count = 0
+        bo_units = 0
+        total_value = 0.0
+    else:
+        bo_count = (await db.execute(
+            select(func.count()).select_from(Backorder).where(Backorder.resolved == False)
+        )).scalar_one()
+        bo_units = (await db.execute(
+            select(func.coalesce(func.sum(Backorder.qty_pending), 0))
+            .where(Backorder.resolved == False)
+        )).scalar_one()
+        from sqlalchemy import Numeric as SaNumeric
+        total_value = (await db.execute(
+            select(func.coalesce(func.sum(SparePartLot.total_declared_value), 0))
+        )).scalar_one()
 
     # Por ciclo
     cycle_rows = (await db.execute(
         select(ShipmentOrder.cycle, func.count().label("cnt"))
-        .where(ShipmentOrder.cycle.isnot(None))
+        .where(ShipmentOrder.cycle.isnot(None), *_sp_filter())
         .group_by(ShipmentOrder.cycle)
         .order_by(ShipmentOrder.cycle.desc())
         .limit(8)
@@ -1051,6 +1054,7 @@ async def get_imports_dashboard(
             ShipmentOrder.eta >= now,
             ShipmentOrder.eta <= in_60_days,
             ShipmentOrder.computed_status.notin_(["completado"]),
+            *_sp_filter(),
         )
         .order_by(ShipmentOrder.eta.asc())
         .limit(10)
@@ -1081,8 +1085,8 @@ async def get_imports_dashboard(
         total_active=sum(v for k, v in status_map.items() if k != "completado"),
         moto_orders=moto_count,
         sp_orders=sp_count,
-        pending_docs_digital=pending_digital,
-        pending_docs_original=pending_original,
+        pending_docs_digital=0,
+        pending_docs_original=0,
         active_backorders=bo_count,
         total_backorder_units=int(bo_units),
         total_declared_value_usd=float(total_value),
