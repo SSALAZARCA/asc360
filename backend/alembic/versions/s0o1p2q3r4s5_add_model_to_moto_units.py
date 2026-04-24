@@ -8,6 +8,11 @@ Depends On: None
 from alembic import op
 import sqlalchemy as sa
 
+revision = 's0o1p2q3r4s5'
+down_revision = 'r8n0o1p2q3r4'
+branch_labels = None
+depends_on = None
+
 
 def upgrade():
     op.add_column(
