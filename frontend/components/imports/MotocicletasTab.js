@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { authFetch } from '../../lib/authFetch';
-import { FileUp, Download, RefreshCw, Search, CheckCircle, Clock, Bike, X, AlertCircle, Pencil, Send, FileText } from 'lucide-react';
+import { FileUp, Download, RefreshCw, Search, CheckCircle, Clock, Bike, X, AlertCircle, Pencil, Send, FileText, Trash2 } from 'lucide-react';
 
 function API() {
   return (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1').replace('http://', 'https://');
@@ -444,6 +444,23 @@ export default function MotocicletasTab({ userRole }) {
     }
   };
 
+  const handleDeleteCertificado = async (unit) => {
+    if (!confirm(`¿Anular el empadronamiento de VIN ${unit.vin_number || unit.id}? Esta acción no se puede deshacer.`)) return;
+    try {
+      const res = await authFetch(`${API()}/imports/moto-units/${unit.id}/certificado`, { method: 'DELETE' });
+      if (!res.ok) {
+        const err = await res.json();
+        alert(err.detail || 'Error al anular el empadronamiento');
+        return;
+      }
+      setUnits(prev => prev.map(u =>
+        u.id === unit.id ? { ...u, certificado_generado: false, certificado_fecha: null } : u
+      ));
+    } catch {
+      alert('Error de conexión');
+    }
+  };
+
   const handleOpenDim = (unit) => {
     const token = sessionStorage.getItem('um_token');
     const url = `${API()}/imports/moto-units/${unit.id}/dim-url?token=${token}`;
@@ -652,6 +669,20 @@ export default function MotocicletasTab({ userRole }) {
                           }}
                         >
                           <Download size={11} />
+                        </button>
+                      )}
+                      {unit.certificado_generado && (userRole === 'superadmin' || userRole === 'administrativo') && (
+                        <button
+                          onClick={() => handleDeleteCertificado(unit)}
+                          title="Anular empadronamiento"
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: '4px',
+                            padding: '3px 8px', borderRadius: '6px', border: 'none',
+                            background: 'rgba(248,113,113,0.1)', color: '#f87171',
+                            fontSize: '10px', fontWeight: 700, cursor: 'pointer',
+                          }}
+                        >
+                          <Trash2 size={11} />
                         </button>
                       )}
                       {unit.dim_pdf_object_name && (

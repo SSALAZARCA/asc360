@@ -1432,3 +1432,26 @@ async def download_certificado(
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="Certificado_{unit.vin_number}.pdf"'},
     )
+
+
+# ---------------------------------------------------------------------------
+# DELETE /moto-units/{unit_id}/certificado — anular empadronamiento
+# ---------------------------------------------------------------------------
+
+@router.delete("/moto-units/{unit_id}/certificado", status_code=200)
+async def delete_certificado(
+    unit_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    if current_user.role not in ("superadmin", "administrativo"):
+        raise HTTPException(status_code=403, detail="Sin permisos para anular el empadronamiento")
+    unit = await db.get(ShipmentMotoUnit, unit_id)
+    if not unit:
+        raise HTTPException(status_code=404, detail="Unidad no encontrada")
+    if not unit.certificado_generado:
+        raise HTTPException(status_code=400, detail="La unidad no tiene empadronamiento generado")
+    unit.certificado_generado = False
+    unit.certificado_fecha = None
+    await db.commit()
+    return {"ok": True, "id": str(unit.id)}
