@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 # Moto Units
 # ---------------------------------------------------------------------------
 class MotoUnitUpdate(BaseModel):
+    model: Optional[str] = None
     vin_number: Optional[str] = None
     engine_number: Optional[str] = None
     color: Optional[str] = None

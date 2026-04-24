@@ -185,6 +185,7 @@ function DimUploadModal({ onUpload, onClose, uploading, result }) {
 // ---------------------------------------------------------------------------
 function EditUnitModal({ unit, onSave, onClose, saving }) {
   const [form, setForm] = useState({
+    model: unit.model || '',
     vin_number: unit.vin_number || '',
     engine_number: unit.engine_number || '',
     color: unit.color || '',
@@ -228,6 +229,10 @@ function EditUnitModal({ unit, onSave, onClose, saving }) {
 
         {/* Campos */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          <div>
+            <label style={labelStyle}>Modelo</label>
+            <input style={inputStyle} value={form.model} onChange={e => handleChange('model', e.target.value)} placeholder="Ej: Xpeed 150" />
+          </div>
           <div>
             <label style={labelStyle}>VIN No.</label>
             <input style={inputStyle} value={form.vin_number} onChange={e => handleChange('vin_number', e.target.value)} />
@@ -370,6 +375,7 @@ export default function MotocicletasTab({ userRole }) {
     setEditSaving(true);
     try {
       const payload = {};
+      if (form.model.trim()) payload.model = form.model.trim();
       if (form.vin_number.trim()) payload.vin_number = form.vin_number.trim();
       if (form.engine_number.trim()) payload.engine_number = form.engine_number.trim();
       if (form.color.trim()) payload.color = form.color.trim();

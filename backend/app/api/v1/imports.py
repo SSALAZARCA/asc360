@@ -1206,7 +1206,7 @@ async def list_all_moto_units(
             "created_at": u.created_at.isoformat(),
             # Fields from the related order
             "pi_number": o.pi_number if o else None,
-            "model": o.model if o else None,
+            "model": u.model or (o.model if o else None),
             # unit.model_year tiene prioridad sobre el de la orden
             "model_year": u.model_year or (o.model_year if o else None),
         })
@@ -1248,6 +1248,7 @@ async def update_moto_unit(
     await db.refresh(unit)
     return {
         "id": str(unit.id),
+        "model": unit.model,
         "vin_number": unit.vin_number,
         "engine_number": unit.engine_number,
         "color": unit.color,

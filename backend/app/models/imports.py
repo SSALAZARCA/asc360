@@ -89,6 +89,7 @@ class ShipmentMotoUnit(Base):
     vin_number = Column(String(100), nullable=True)    # Número de chasis (VIN)
     engine_number = Column(String(100), nullable=True)
     color = Column(String(100), nullable=True)
+    model = Column(String(255), nullable=True)          # Modelo propio de la unidad (sobreescribe el del pedido)
     model_year = Column(Integer, nullable=True)        # Año modelo de la moto
     container_no = Column(String(100), nullable=True)
     seal_no = Column(String(100), nullable=True)
