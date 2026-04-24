@@ -1233,7 +1233,8 @@ async def update_moto_unit(
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
-    _require_superadmin(current_user)
+    if current_user.role not in ("superadmin", "administrativo"):
+        raise HTTPException(status_code=403, detail="Sin permisos para editar unidades")
     unit = (await db.execute(select(ShipmentMotoUnit).where(ShipmentMotoUnit.id == unit_id))).scalar_one_or_none()
     if not unit:
         raise HTTPException(status_code=404, detail="Unidad no encontrada")
