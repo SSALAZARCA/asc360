@@ -31,7 +31,8 @@ from core.constants import (
     CORRECTING_MOTIVE, CONFIRMING_KM, SELECTING_TENANT,
     CONFIRMING_SERVICE_TYPE, ASKING_INTAKE_QUESTION,
     ASKING_PHOTO_DESCRIPTION,
-    ASKING_ACCESSORIES
+    ASKING_ACCESSORIES,
+    ASKING_GENERAL_OBSERVATIONS
 )
 from core.decorators import role_required, check_cancel_intent
 from keyboards.reply import get_main_keyboard
@@ -393,9 +394,10 @@ async def _build_and_dispatch_order(context: ContextTypes.DEFAULT_TYPE, bot, cha
     gas            = context.user_data.get('gas_level', 'No Registrado')
     motives        = context.user_data.get('motives', [])
     vid            = context.user_data.get('vehicle_id')
-    evidence_items = context.user_data.get('evidence_items', [])
-    accessories    = context.user_data.get('accessories', [])
-    client_phone   = context.user_data.get('client_phone')
+    evidence_items        = context.user_data.get('evidence_items', [])
+    accessories           = context.user_data.get('accessories', [])
+    general_observations  = context.user_data.get('general_observations')
+    client_phone          = context.user_data.get('client_phone')
     tech_id        = context.user_data.get("logged_in_user", {}).get("id")
     intake_answers = context.user_data.get('intake_answers', [])
 
@@ -457,6 +459,7 @@ async def _build_and_dispatch_order(context: ContextTypes.DEFAULT_TYPE, bot, cha
             "damage_photos_urls": [],
             "intake_answers": intake_answers,
             "accessories": accessories,
+            "general_observations": general_observations,
         }
     }
 
@@ -466,6 +469,7 @@ async def _build_and_dispatch_order(context: ContextTypes.DEFAULT_TYPE, bot, cha
     context.user_data.pop('pending_photo_bytes', None)
     context.user_data.pop('accessories', None)
     context.user_data.pop('accessories_pending', None)
+    context.user_data.pop('general_observations', None)
 
     context.application.create_task(
         background_create_order(payload, tenant_id, evidence_items, bot, chat_id, user_role, plate=plate)
@@ -1113,11 +1117,17 @@ async def handle_motive_confirmation(update: Update, context: ContextTypes.DEFAU
             )
             return ASKING_INTAKE_QUESTION
 
-        # Sin preguntas → crear orden directamente
-        await query.edit_message_text("📝 *Procesando recepción...* Dame un segundo.", parse_mode="Markdown")
+        # Sin preguntas → pasar a observaciones generales
         context.user_data.setdefault('intake_answers', [])
-        await _build_and_dispatch_order(context, context.bot, query.message.chat_id)
-        return ConversationHandler.END
+        kb = [[InlineKeyboardButton("Sin observaciones / Continuar", callback_data="obs_none")]]
+        await query.edit_message_text(
+            "¿Tenés alguna *observación general o acuerdo* para agregar al acta?\n\n"
+            "Precios acordados, tiempo de entrega, notas importantes... Podés escribirlo o mandarme un audio.\n\n"
+            "Si no hay nada extra, presioná *Continuar*.",
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup(kb)
+        )
+        return ASKING_GENERAL_OBSERVATIONS
         
     elif query.data == "change_service_type":
         kb = [
@@ -1211,9 +1221,55 @@ async def handle_intake_question(update: Update, context: ContextTypes.DEFAULT_T
         )
         return ASKING_INTAKE_QUESTION
 
-    # Todas las preguntas respondidas → crear orden
-    await update.message.reply_text("📝 *Procesando recepción...* Dame un segundo.", parse_mode="Markdown")
+    # Todas las preguntas respondidas → pasar a observaciones generales
+    kb = [[InlineKeyboardButton("Sin observaciones / Continuar", callback_data="obs_none")]]
+    await update.message.reply_text(
+        "¿Tenés alguna *observación general o acuerdo* para agregar al acta?\n\n"
+        "Precios acordados, tiempo de entrega, notas importantes... Podés escribirlo o mandarme un audio.\n\n"
+        "Si no hay nada extra, presioná *Continuar*.",
+        parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup(kb)
+    )
+    return ASKING_GENERAL_OBSERVATIONS
+
+
+@role_required()
+async def handle_general_observations(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Recibe observaciones generales / acuerdos por texto o voz, luego crea la orden."""
+    text = ""
+    if update.message.voice:
+        await update.message.reply_text("Escuchando... 🎧")
+        voice_file = await update.message.voice.get_file()
+        fd, path = tempfile.mkstemp(suffix=".ogg")
+        os.close(fd)
+        await voice_file.download_to_drive(path)
+        transcript = await transcribe_voice(path, prompt="Precio acordado $80.000, entrega el viernes.")
+        os.remove(path)
+        text = transcript or ""
+    elif update.message.text:
+        text = update.message.text
+
+    if await check_cancel_intent(update, context, text):
+        return ConversationHandler.END
+
+    if not text.strip():
+        await update.message.reply_text("Por favor escribí la observación o usá el botón para continuar sin agregar nada.")
+        return ASKING_GENERAL_OBSERVATIONS
+
+    context.user_data['general_observations'] = text.strip()
+    await update.message.reply_text("Observación registrada ✅\n\n📝 *Procesando recepción...* Dame un segundo.", parse_mode="Markdown")
     await _build_and_dispatch_order(context, context.bot, update.message.chat_id)
+    return ConversationHandler.END
+
+
+@role_required()
+async def handle_general_observations_skip(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Omite las observaciones generales y crea la orden directamente."""
+    query = update.callback_query
+    await query.answer()
+    context.user_data.pop('general_observations', None)
+    await query.edit_message_text("📝 *Procesando recepción...* Dame un segundo.", parse_mode="Markdown")
+    await _build_and_dispatch_order(context, context.bot, query.message.chat_id)
     return ConversationHandler.END
 
 

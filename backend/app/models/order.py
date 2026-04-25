@@ -1,6 +1,6 @@
 import uuid
 import enum
-from sqlalchemy import Column, String, Integer, Enum, ForeignKey, Numeric, DateTime
+from sqlalchemy import Column, String, Integer, Enum, ForeignKey, Numeric, DateTime, Text
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import relationship
@@ -147,6 +147,9 @@ class ServiceOrderReception(Base):
 
     # Accesorios u objetos que el cliente deja con la moto al ingresar
     accessories = Column(JSONB, nullable=True, default=[])
+
+    # Observaciones generales o acuerdos libres (precios, tiempos, notas del asesor)
+    general_observations = Column(Text, nullable=True)
     
     # URL al PDF generado por WeasyPrint (Acta finalizada)
     reception_pdf_url = Column(String(500), nullable=True)

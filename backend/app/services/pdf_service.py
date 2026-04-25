@@ -34,29 +34,47 @@ def ensure_bucket_exists():
 TEMPLATE_DIR = os.path.join(os.path.dirname(__file__), '..', 'html_templates')
 jinja_env = Environment(loader=FileSystemLoader(TEMPLATE_DIR))
 
-async def generate_and_upload_reception_pdf(order_data: dict, reception_data: dict, vehicle_data: dict, client_data: dict) -> str:
+async def generate_and_upload_reception_pdf(
+    order_data: dict,
+    reception_data: dict,
+    vehicle_data: dict,
+    client_data: dict,
+    tenant_data: dict = None,
+) -> str:
     ensure_bucket_exists()
-    
+
     template = jinja_env.get_template("reception_act.html")
-    
-    # Preparar el contexto de variables
+    tenant_data = tenant_data or {}
+
     context = {
         "order_id": order_data.get("id", "PENDING"),
         "date": datetime.now().strftime("%Y-%m-%d %H:%M"),
-        "owner_name": client_data.get("full_name", "N/A"),
-        "owner_id": client_data.get("identification", "N/A"),
+        # Taller
+        "tenant_name":  tenant_data.get("name", "UM Colombia"),
+        "tenant_nit":   tenant_data.get("nit", ""),
+        "tenant_phone": tenant_data.get("phone", ""),
+        "tenant_city":  tenant_data.get("city", ""),
+        # Cliente / Vehículo
+        "owner_name":    client_data.get("full_name", "N/A"),
+        "owner_id":      client_data.get("identification", "N/A"),
         "vehicle_model": vehicle_data.get("model", "N/A"),
         "vehicle_plate": vehicle_data.get("plate", "N/A"),
-        "vehicle_vin": vehicle_data.get("vin", "N/A"),
-        "mileage_km": reception_data.get("mileage_km", 0),
-        "gas_level": reception_data.get("gas_level", "Unknown"),
-        "service_type": order_data.get("service_type", "Regular"),
-        "customer_notes": reception_data.get("customer_notes", ""),
-        "warranty_warnings": reception_data.get("warranty_warnings", ""),
-        "intake_answers": reception_data.get("intake_answers", []),
-        "accepted_at": order_data.get("accepted_at"),
+        "vehicle_vin":   vehicle_data.get("vin", "N/A"),
+        "vehicle_motor": vehicle_data.get("motor", ""),
+        "vehicle_color": vehicle_data.get("color", ""),
+        # Recepción
+        "mileage_km":    reception_data.get("mileage_km", 0),
+        "gas_level":     reception_data.get("gas_level", "Unknown"),
+        "service_type":  order_data.get("service_type", "Regular"),
+        "customer_notes":       reception_data.get("customer_notes", ""),
+        "warranty_warnings":    reception_data.get("warranty_warnings", ""),
+        "intake_answers":       reception_data.get("intake_answers", []),
+        "accessories":          reception_data.get("accessories", []),
+        "general_observations": reception_data.get("general_observations"),
+        # Firma
+        "accepted_at":    order_data.get("accepted_at"),
         "accepted_phone": order_data.get("accepted_phone"),
-        "bypass_at": order_data.get("bypass_at"),
+        "bypass_at":      order_data.get("bypass_at"),
         "bypass_by_name": order_data.get("bypass_by_name"),
     }
 

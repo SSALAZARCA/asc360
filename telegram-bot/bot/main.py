@@ -10,7 +10,7 @@ from core.constants import (
     CONFIRMING_CLIENT, ASKING_PHONE, ASKING_KM,
     ASKING_PHOTOS, ASKING_MOTIVE, CONFIRMING_MOTIVE, CORRECTING_MOTIVE,
     CONFIRMING_SERVICE_TYPE, ASKING_INTAKE_QUESTION, ASKING_PHOTO_DESCRIPTION,
-    ASKING_ACCESSORIES, L_ASKING_PLATE, SELECTING_TENANT,
+    ASKING_ACCESSORIES, ASKING_GENERAL_OBSERVATIONS, L_ASKING_PLATE, SELECTING_TENANT,
     O_NAME, O_PHONE, O_ROLE, O_TENANT, O_CONFIRM,
     OTP_ASKING_PLATE, OTP_ASKING_CODE, OTP_CONFIRMING
 )
@@ -32,6 +32,7 @@ from handlers.reception import (
     handle_phone, handle_km_and_photos, handle_photos, handle_photos_done,
     handle_photo_description, handle_photo_desc_skip, handle_obs_text_only,
     handle_accessories, handle_accessories_confirm, handle_accessories_retry,
+    handle_general_observations, handle_general_observations_skip,
     handle_motive, handle_motive_confirmation, handle_motive_correction,
     handle_service_type_selection, handle_data_correction,
     handle_intake_question
@@ -260,6 +261,11 @@ def main() -> None:
                 CallbackQueryHandler(handle_accessories_confirm, pattern="^acc_confirm$"),
                 CallbackQueryHandler(handle_accessories_confirm, pattern="^acc_none$"),
                 CallbackQueryHandler(handle_accessories_retry,   pattern="^acc_retry$"),
+            ],
+            ASKING_GENERAL_OBSERVATIONS: [
+                btn_escape,
+                MessageHandler(filters.TEXT | filters.VOICE, handle_general_observations),
+                CallbackQueryHandler(handle_general_observations_skip, pattern="^obs_none$"),
             ],
             ASKING_MOTIVE: [
                 btn_escape,

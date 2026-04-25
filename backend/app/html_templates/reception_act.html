@@ -5,34 +5,46 @@
     <title>Acta de Ingreso a Taller</title>
     <style>
         body { font-family: 'Helvetica', 'Arial', sans-serif; font-size: 11pt; color: #333; margin: 0; padding: 20px; }
+
         .header { text-align: center; border-bottom: 2px solid #D32F2F; padding-bottom: 10px; margin-bottom: 20px; }
         .header h1 { margin: 0; color: #D32F2F; font-size: 20pt; text-transform: uppercase; }
-        .header p { margin: 5px 0 0 0; font-size: 10pt; color: #666; }
-        
+        .header .header-sub { margin: 6px 0 0 0; font-size: 10pt; color: #555; }
+        .header .header-meta { margin: 4px 0 0 0; font-size: 9pt; color: #888; }
+
         .section { margin-bottom: 20px; }
         .section-title { background-color: #f4f4f4; padding: 8px; font-weight: bold; border-left: 4px solid #D32F2F; margin-bottom: 10px; }
-        
+
         table { width: 100%; border-collapse: collapse; margin-bottom: 15px; }
         th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
         th { background-color: #fafafa; width: 30%; color: #555; }
-        
+
         .warning-box { background-color: #fff3cd; color: #856404; padding: 15px; border-radius: 4px; border: 1px solid #ffeeba; margin-top: 15px; }
         .warning-title { font-weight: bold; margin-bottom: 5px; }
-        
-        .images-grid { display: flex; flex-wrap: wrap; gap: 10px; }
-        .damage-img { width: 48%; border: 1px solid #ccc; max-height: 250px; object-fit: cover; }
-        
+
+        /* Accesorios */
+        .accessories-wrap { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 0; }
+        .acc-tag { background: #f3f4f6; border: 1px solid #e0e0e0; border-radius: 20px; padding: 3px 12px; font-size: 9pt; }
+
+        /* Observaciones generales */
+        .obs-box { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 4px; padding: 12px 14px; font-size: 9.5pt; white-space: pre-line; line-height: 1.6; }
+
         .signatures { margin-top: 50px; display: flex; justify-content: space-between; }
         .signature-box { width: 45%; border-top: 1px solid #333; text-align: center; padding-top: 10px; margin-top: 50px; }
     </style>
 </head>
 <body>
     <div class="header">
-        <h1>Acta de Ingreso a Taller UM</h1>
-        <p>Orden de Servicio #{{ order_id }} | Fecha: {{ date }}</p>
+        <h1>{{ tenant_name }}</h1>
+        <div class="header-sub">
+            {% if tenant_nit %}NIT: {{ tenant_nit }}{% endif %}
+            {% if tenant_nit and tenant_phone %} &nbsp;·&nbsp; {% endif %}
+            {% if tenant_phone %}Tel: {{ tenant_phone }}{% endif %}
+            {% if tenant_city %} &nbsp;·&nbsp; {{ tenant_city }}{% endif %}
+        </div>
+        <div class="header-meta">Acta de Ingreso a Taller &nbsp;|&nbsp; Orden #{{ order_id }} &nbsp;|&nbsp; {{ date }}</div>
     </div>
 
-    <!-- VEHICLE & CLIENT SUMMARY -->
+    <!-- CLIENTE Y MOTOCICLETA -->
     <div class="section">
         <div class="section-title">Información del Cliente y Motocicleta</div>
         <table>
@@ -42,16 +54,24 @@
             </tr>
             <tr>
                 <th>Vehículo</th>
-                <td>{{ vehicle_model }} | Placa: <strong>{{ vehicle_plate }}</strong></td>
+                <td>{{ vehicle_model }} &nbsp;|&nbsp; Placa: <strong>{{ vehicle_plate }}</strong>
+                    {% if vehicle_color %} &nbsp;|&nbsp; Color: {{ vehicle_color }}{% endif %}
+                </td>
             </tr>
             <tr>
-                <th>VIN</th>
+                <th>VIN / Chasis</th>
                 <td>{{ vehicle_vin }}</td>
             </tr>
+            {% if vehicle_motor %}
+            <tr>
+                <th>N° Motor</th>
+                <td>{{ vehicle_motor }}</td>
+            </tr>
+            {% endif %}
         </table>
     </div>
 
-    <!-- RECEPTION DETAILS -->
+    <!-- DETALLES DE RECEPCIÓN -->
     <div class="section">
         <div class="section-title">Detalles de Recepción</div>
         <table>
@@ -69,7 +89,7 @@
             </tr>
             <tr>
                 <th>Motivos del Cliente</th>
-                <td>{{ customer_notes }}</td>
+                <td style="white-space: pre-line;">{{ customer_notes }}</td>
             </tr>
         </table>
     </div>
@@ -89,11 +109,30 @@
     </div>
     {% endif %}
 
+    <!-- ACCESORIOS -->
+    {% if accessories %}
+    <div class="section">
+        <div class="section-title">Accesorios e Inventario del Cliente</div>
+        <div class="accessories-wrap">
+            {% for item in accessories %}
+            <span class="acc-tag">{{ item }}</span>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- OBSERVACIONES GENERALES / ACUERDOS -->
+    {% if general_observations %}
+    <div class="section">
+        <div class="section-title">Observaciones Generales y Acuerdos</div>
+        <div class="obs-box">{{ general_observations }}</div>
+    </div>
+    {% endif %}
+
     <!-- SOFT WARNINGS AI -->
-    <!-- jinja IF warranty_warnings exists -->
     {% if warranty_warnings %}
     <div class="section warning-box">
-        <div class="warning-title">🚨 Observaciones de Garantía (Generadas Automáticamente)</div>
+        <div class="warning-title">Observaciones de Garantía (Generadas Automáticamente)</div>
         <p style="white-space: pre-line; margin: 0;">{{ warranty_warnings }}</p>
     </div>
     {% endif %}
@@ -114,11 +153,11 @@
         </p>
     </div>
     {% else %}
-    <!-- SIGNATURES -->
+    <!-- FIRMAS -->
     <div class="signatures">
         <div class="signature-box">
             <p>Firma del Propietario / Cliente</p>
-            <p style="font-size: 8pt; color: #777;">Autorizo los trabajos descritos y declaro aceptar las políticas de servicio UM.</p>
+            <p style="font-size: 8pt; color: #777;">Autorizo los trabajos descritos y declaro aceptar las condiciones de servicio.</p>
         </div>
         <div class="signature-box">
             <p>Firma del Asesor de Servicio</p>

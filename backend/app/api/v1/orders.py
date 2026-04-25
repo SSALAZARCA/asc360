@@ -9,6 +9,7 @@ from app.database import get_db
 from app.models.order import ServiceOrder, ServiceOrderReception, ServiceType, ServiceStatus
 from app.models.user import User, Role
 from app.models.vehicle import Vehicle
+from app.models.tenant import Tenant
 from app.schemas.order import OrderCreate, OrderRead, WorkLogCreate, PartCreate
 from app.services.pdf_service import generate_and_upload_reception_pdf
 from app.api.deps import get_current_user, get_optional_user, CurrentUser
@@ -49,9 +50,10 @@ async def create_service_order(
         damage_photos_urls=order_in.reception.damage_photos_urls,
         intake_answers=order_in.reception.intake_answers or [],
         accessories=order_in.reception.accessories or [],
+        general_observations=order_in.reception.general_observations,
     )
     db.add(new_reception)
-    
+
     # 2.1 Registrar estado inicial en el Historial para KPIs
     from app.models.order import OrderHistory
     initial_history = OrderHistory(
@@ -62,15 +64,16 @@ async def create_service_order(
     )
     db.add(initial_history)
     
-    # 3. Obtener metadatos del Cliente y Vehículo para poblar el PDF
+    # 3. Obtener metadatos del Cliente, Vehículo y Taller para poblar el PDF
     vehicle_obj = await db.get(Vehicle, order_in.vehicle_id)
-    client_obj = await db.get(User, order_in.client_id) if order_in.client_id else None
-    
+    client_obj  = await db.get(User, order_in.client_id) if order_in.client_id else None
+    tenant_obj  = await db.get(Tenant, order_in.tenant_id)
+
     # 3.1 Actualizar teléfono del cliente si se provee en la orden
     if client_obj and order_in.client_phone and order_in.client_phone != "Registrado en BD":
         client_obj.phone = order_in.client_phone
         db.add(client_obj)
-    
+
     # Pre-empacar datos como diccionarios simulando el DTO interno
     order_data = {"id": str(new_order.id), "service_type": order_in.service_type.value}
     reception_data = {
@@ -79,19 +82,29 @@ async def create_service_order(
         "customer_notes": order_in.reception.customer_notes,
         "warranty_warnings": order_in.reception.warranty_warnings,
         "intake_answers": order_in.reception.intake_answers or [],
+        "accessories": order_in.reception.accessories or [],
+        "general_observations": order_in.reception.general_observations,
     }
     vehicle_data = {
         "model": vehicle_obj.model if vehicle_obj else "Desconocido",
         "plate": vehicle_obj.plate if vehicle_obj else "N/A",
-        "vin": vehicle_obj.vin if vehicle_obj else "N/A"
+        "vin": vehicle_obj.vin if vehicle_obj else "N/A",
+        "motor": getattr(vehicle_obj, "engine_number", None),
+        "color": vehicle_obj.color if vehicle_obj else None,
     }
     client_data = {
         "full_name": client_obj.name if client_obj else "Cliente Pendiente",
-        "identification": client_obj.telegram_id if client_obj else "N/A" # TODO: Identificacion civil
+        "identification": client_obj.telegram_id if client_obj else "N/A",
+    }
+    tenant_data = {
+        "name": tenant_obj.name if tenant_obj else "UM Colombia",
+        "nit": tenant_obj.nit if tenant_obj else "",
+        "phone": tenant_obj.phone if tenant_obj else "",
+        "city": tenant_obj.ciudad if tenant_obj else "",
     }
 
     # 4. Generación asíncrona del PDF con WeasyPrint subida a MinIO
-    pdf_url = await generate_and_upload_reception_pdf(order_data, reception_data, vehicle_data, client_data)
+    pdf_url = await generate_and_upload_reception_pdf(order_data, reception_data, vehicle_data, client_data, tenant_data)
     new_reception.reception_pdf_url = pdf_url
 
     await db.commit()
@@ -277,6 +290,7 @@ async def get_order_detail(
             "damage_photos_urls": r.damage_photos_urls or [],
             "intake_answers": r.intake_answers or [],
             "accessories": r.accessories or [],
+            "general_observations": r.general_observations,
             "reception_pdf_url": r.reception_pdf_url,
             "signature_url": r.signature_url,
             "created_at": r.created_at.isoformat() if r.created_at else None,
@@ -1133,6 +1147,7 @@ async def verify_otp(
     try:
         vehicle = order.vehicle
         client  = order.client
+        tenant_otp = await db.get(Tenant, order.tenant_id)
         order_data = {
             "id": str(order.id),
             "service_type": order.service_type.value,
@@ -1144,18 +1159,29 @@ async def verify_otp(
             "gas_level": reception.gas_level if reception else "",
             "customer_notes": reception.customer_notes if reception else "",
             "warranty_warnings": reception.warranty_warnings if reception else "",
+            "intake_answers": reception.intake_answers or [] if reception else [],
+            "accessories": reception.accessories or [] if reception else [],
+            "general_observations": reception.general_observations if reception else None,
         }
         vehicle_data = {
             "model": vehicle.model if vehicle else "Desconocido",
             "plate": vehicle.plate if vehicle else "N/A",
             "vin": vehicle.vin if vehicle else "N/A",
+            "motor": getattr(vehicle, "engine_number", None),
+            "color": vehicle.color if vehicle else None,
         }
         client_data = {
             "full_name": client.name if client else "N/A",
             "identification": client.telegram_id if client else "N/A",
         }
+        tenant_data_otp = {
+            "name": tenant_otp.name if tenant_otp else "UM Colombia",
+            "nit": tenant_otp.nit if tenant_otp else "",
+            "phone": tenant_otp.phone if tenant_otp else "",
+            "city": tenant_otp.ciudad if tenant_otp else "",
+        }
         new_pdf_url = await generate_and_upload_reception_pdf(
-            order_data, reception_data, vehicle_data, client_data
+            order_data, reception_data, vehicle_data, client_data, tenant_data_otp
         )
         if new_pdf_url and reception:
             reception.reception_pdf_url = new_pdf_url
@@ -1274,6 +1300,7 @@ async def bypass_otp(
     try:
         vehicle = order.vehicle
         client  = order.client
+        tenant_bypass = await db.get(Tenant, order.tenant_id)
         order_data = {
             "id": str(order.id),
             "service_type": order.service_type.value,
@@ -1285,18 +1312,29 @@ async def bypass_otp(
             "gas_level": reception.gas_level if reception else "",
             "customer_notes": reception.customer_notes if reception else "",
             "warranty_warnings": reception.warranty_warnings if reception else "",
+            "intake_answers": reception.intake_answers or [] if reception else [],
+            "accessories": reception.accessories or [] if reception else [],
+            "general_observations": reception.general_observations if reception else None,
         }
         vehicle_data = {
             "model": vehicle.model if vehicle else "Desconocido",
             "plate": vehicle.plate if vehicle else "N/A",
             "vin": vehicle.vin if vehicle else "N/A",
+            "motor": getattr(vehicle, "engine_number", None),
+            "color": vehicle.color if vehicle else None,
         }
         client_data = {
             "full_name": client.name if client else "N/A",
             "identification": client.telegram_id if client else "N/A",
         }
+        tenant_data_bypass = {
+            "name": tenant_bypass.name if tenant_bypass else "UM Colombia",
+            "nit": tenant_bypass.nit if tenant_bypass else "",
+            "phone": tenant_bypass.phone if tenant_bypass else "",
+            "city": tenant_bypass.ciudad if tenant_bypass else "",
+        }
         new_pdf_url = await generate_and_upload_reception_pdf(
-            order_data, reception_data, vehicle_data, client_data
+            order_data, reception_data, vehicle_data, client_data, tenant_data_bypass
         )
         if new_pdf_url and reception:
             reception.reception_pdf_url = new_pdf_url
