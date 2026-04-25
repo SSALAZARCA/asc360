@@ -50,7 +50,10 @@
         <table>
             <tr>
                 <th>Propietario</th>
-                <td>{{ owner_name }} ({{ owner_id }})</td>
+                <td>{{ owner_name }} ({{ owner_id }})
+                    {% if owner_phone %} &nbsp;·&nbsp; Tel: {{ owner_phone }}{% endif %}
+                    {% if owner_email %} &nbsp;·&nbsp; {{ owner_email }}{% endif %}
+                </td>
             </tr>
             <tr>
                 <th>Vehículo</th>

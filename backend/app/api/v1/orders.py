@@ -95,6 +95,8 @@ async def create_service_order(
     client_data = {
         "full_name": client_obj.name if client_obj else "Cliente Pendiente",
         "identification": client_obj.telegram_id if client_obj else "N/A",
+        "email": client_obj.email if client_obj else None,
+        "phone": client_obj.phone if client_obj else None,
     }
     tenant_data = {
         "name": tenant_obj.name if tenant_obj else "UM Colombia",
@@ -1173,6 +1175,8 @@ async def verify_otp(
         client_data = {
             "full_name": client.name if client else "N/A",
             "identification": client.telegram_id if client else "N/A",
+            "email": client.email if client else None,
+            "phone": client.phone if client else None,
         }
         tenant_data_otp = {
             "name": tenant_otp.name if tenant_otp else "UM Colombia",
@@ -1326,6 +1330,8 @@ async def bypass_otp(
         client_data = {
             "full_name": client.name if client else "N/A",
             "identification": client.telegram_id if client else "N/A",
+            "email": client.email if client else None,
+            "phone": client.phone if client else None,
         }
         tenant_data_bypass = {
             "name": tenant_bypass.name if tenant_bypass else "UM Colombia",

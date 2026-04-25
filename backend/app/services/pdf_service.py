@@ -57,6 +57,8 @@ async def generate_and_upload_reception_pdf(
         # Cliente / Vehículo
         "owner_name":    client_data.get("full_name", "N/A"),
         "owner_id":      client_data.get("identification", "N/A"),
+        "owner_email":   client_data.get("email") or "",
+        "owner_phone":   client_data.get("phone") or "",
         "vehicle_model": vehicle_data.get("model", "N/A"),
         "vehicle_plate": vehicle_data.get("plate", "N/A"),
         "vehicle_vin":   vehicle_data.get("vin", "N/A"),
