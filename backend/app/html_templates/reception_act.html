@@ -24,6 +24,19 @@
         
         .signatures { margin-top: 50px; display: flex; justify-content: space-between; }
         .signature-box { width: 45%; border-top: 1px solid #333; text-align: center; padding-top: 10px; margin-top: 50px; }
+
+        .notes-list { list-style: none; padding: 0; margin: 0; }
+        .notes-list li { padding: 2px 0 2px 12px; position: relative; font-size: 10pt; color: #333; line-height: 1.6; }
+        .notes-list li::before { content: '—'; position: absolute; left: 0; color: #999; }
+
+        .legal-section { margin-top: 24px; border: 1px solid #ddd; border-radius: 4px; overflow: hidden; }
+        .legal-section-title { background: #f4f4f4; padding: 7px 12px; font-size: 7.5pt; font-weight: bold; color: #555; text-transform: uppercase; letter-spacing: 0.1em; border-bottom: 1px solid #ddd; }
+        .legal-grid { display: grid; grid-template-columns: 1fr 1fr; }
+        .legal-item { padding: 8px 12px; border-right: 1px solid #f0f0f0; border-bottom: 1px solid #f0f0f0; }
+        .legal-item:nth-child(even) { border-right: none; }
+        .legal-item:last-child { grid-column: span 2; border-bottom: none; border-right: none; }
+        .legal-item-title { font-size: 7pt; font-weight: bold; color: #374151; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 2px; }
+        .legal-item-text { font-size: 7.5pt; color: #6b7280; line-height: 1.55; }
     </style>
 </head>
 <body>
@@ -69,7 +82,13 @@
             </tr>
             <tr>
                 <th>Motivos del Cliente</th>
-                <td>{{ customer_notes }}</td>
+                <td>
+                    <ul class="notes-list">
+                    {% for line in customer_notes.split('\n') %}{% if line.strip() %}
+                        <li>{{ line.strip().lstrip('•\\-*· ') }}</li>
+                    {% endif %}{% endfor %}
+                    </ul>
+                </td>
             </tr>
         </table>
     </div>
@@ -125,5 +144,33 @@
         </div>
     </div>
     {% endif %}
+
+    <!-- CONDICIONES LEGALES -->
+    <div class="legal-section">
+        <div class="legal-section-title">Condiciones Legales de Ingreso</div>
+        <div class="legal-grid">
+            <div class="legal-item">
+                <div class="legal-item-title">Garantía</div>
+                <div class="legal-item-text">Cubre exclusivamente las partes intervenidas por [X] meses o [X] km (lo que ocurra primero) desde la entrega. No aplica por mal uso, desgaste natural o repuestos suministrados por el cliente.</div>
+            </div>
+            <div class="legal-item">
+                <div class="legal-item-title">Habeas Data</div>
+                <div class="legal-item-text">El cliente autoriza el tratamiento de sus datos personales (Ley 1581 de 2012) para la gestión del servicio, seguimiento postventa y envío de información comercial.</div>
+            </div>
+            <div class="legal-item">
+                <div class="legal-item-title">Entregas y Repuestos</div>
+                <div class="legal-item-text">Las fechas son estimadas y dependen de la disponibilidad de stock o trámites de importación. El taller se exonera de responsabilidad por lucro cesante derivado del tiempo de reparación.</div>
+            </div>
+            <div class="legal-item">
+                <div class="legal-item-title">Declaratoria de Abandono</div>
+                <div class="legal-item-text">Según el Art. 18 de la Ley 1480, si pasado un mes del aviso de entrega el vehículo no es retirado, se requerirá al cliente. Tras dos meses adicionales sin retiro, el bien se considerará abandonado.</div>
+            </div>
+            <div class="legal-item">
+                <div class="legal-item-title">Responsabilidad e Inventario</div>
+                <div class="legal-item-text">El taller responde únicamente por el estado del vehículo y los objetos registrados expresamente en el inventario de esta orden. No se asume custodia sobre valores no declarados.</div>
+            </div>
+        </div>
+    </div>
+
 </body>
 </html>

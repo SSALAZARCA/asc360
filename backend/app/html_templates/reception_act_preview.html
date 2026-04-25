@@ -293,13 +293,82 @@
       color: #9ca3af;
       text-transform: uppercase;
       letter-spacing: 0.14em;
-      margin-bottom: 6px;
+      margin-bottom: 8px;
     }
 
-    .notes-text {
-      font-size: 9px;
+    .notes-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .notes-list li {
+      display: flex;
+      align-items: flex-start;
+      gap: 7px;
+      font-size: 8.5px;
       color: #374151;
-      line-height: 1.8;
+      line-height: 1.6;
+    }
+
+    .notes-list li::before {
+      content: '—';
+      color: #9ca3af;
+      font-weight: 700;
+      flex-shrink: 0;
+      font-size: 8px;
+      margin-top: 1px;
+    }
+
+    /* ── CONDICIONES LEGALES ── */
+    .legal-block {
+      border: 1px solid #e5e7eb;
+      border-radius: 5px;
+      overflow: hidden;
+    }
+
+    .legal-block-header {
+      background: #f3f4f6;
+      border-bottom: 1px solid #e5e7eb;
+      padding: 6px 14px;
+      font-size: 6.5px;
+      font-weight: 800;
+      color: #6b7280;
+      text-transform: uppercase;
+      letter-spacing: 0.2em;
+    }
+
+    .legal-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .legal-item {
+      padding: 8px 12px;
+      border-right: 1px solid #f3f4f6;
+      border-bottom: 1px solid #f3f4f6;
+    }
+
+    .legal-item:nth-child(even) { border-right: none; }
+    .legal-item:nth-last-child(1) { grid-column: span 2; border-bottom: none; border-right: none; }
+    .legal-item:nth-last-child(2):nth-child(odd) { border-bottom: none; }
+
+    .legal-item-title {
+      font-size: 6.5px;
+      font-weight: 800;
+      color: #374151;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 3px;
+    }
+
+    .legal-item-text {
+      font-size: 7px;
+      color: #6b7280;
+      line-height: 1.65;
     }
 
     /* ── PREGUNTAS COMPLEMENTARIAS ── */
@@ -548,7 +617,11 @@
     <div class="section-label">Motivo de Ingreso</div>
     <div class="notes-card">
       <div class="notes-label">Descripción referida por el cliente</div>
-      <div class="notes-text">"La moto hace un ruido extraño al frenar, especialmente en descensos. Además el cambio de aceite está pendiente hace 2.000 km y el piloto trasero parpadea intermitentemente desde hace una semana."</div>
+      <ul class="notes-list">
+        <li>Ruido extraño al frenar, especialmente en descensos</li>
+        <li>Cambio de aceite pendiente hace 2.000 km</li>
+        <li>Piloto trasero parpadea intermitentemente desde hace una semana</li>
+      </ul>
     </div>
 
     <!-- PREGUNTAS COMPLEMENTARIAS -->
@@ -637,6 +710,39 @@
       </div>
     </div>
     -->
+
+    <!-- CONDICIONES LEGALES -->
+    <div class="section-label" style="margin-top: 18px;">Condiciones Legales de Ingreso</div>
+    <div class="legal-block">
+      <div class="legal-grid">
+
+        <div class="legal-item">
+          <div class="legal-item-title">Garantía</div>
+          <div class="legal-item-text">Cubre exclusivamente las partes intervenidas por [X] meses o [X] km (lo que ocurra primero) desde la entrega. No aplica por mal uso, desgaste natural o repuestos suministrados por el cliente.</div>
+        </div>
+
+        <div class="legal-item">
+          <div class="legal-item-title">Habeas Data</div>
+          <div class="legal-item-text">El cliente autoriza el tratamiento de sus datos personales (Ley 1581 de 2012) para la gestión del servicio, seguimiento postventa y envío de información comercial.</div>
+        </div>
+
+        <div class="legal-item">
+          <div class="legal-item-title">Entregas y Repuestos</div>
+          <div class="legal-item-text">Las fechas son estimadas y dependen de la disponibilidad de stock o trámites de importación. El taller se exonera de responsabilidad por lucro cesante derivado del tiempo de reparación.</div>
+        </div>
+
+        <div class="legal-item">
+          <div class="legal-item-title">Declaratoria de Abandono</div>
+          <div class="legal-item-text">Según el Art. 18 de la Ley 1480, si pasado un mes del aviso de entrega el vehículo no es retirado, se requerirá al cliente. Tras dos meses adicionales sin retiro, el bien se considerará abandonado.</div>
+        </div>
+
+        <div class="legal-item">
+          <div class="legal-item-title">Responsabilidad e Inventario</div>
+          <div class="legal-item-text">El taller responde únicamente por el estado del vehículo y los objetos registrados expresamente en el inventario de esta orden. No se asume custodia sobre valores no declarados.</div>
+        </div>
+
+      </div>
+    </div>
 
   </div>
 
