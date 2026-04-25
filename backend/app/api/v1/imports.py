@@ -14,6 +14,7 @@ from starlette.responses import StreamingResponse
 from app.database import get_db
 from app.api.deps import get_current_user, CurrentUser
 from app.models.imports import ShipmentOrder, SparePartLot, ShipmentMotoUnit, ImportAttachment, SparePartItem, ReconciliationResult, Backorder, VehicleModel
+from app.models.tenant import Tenant, EstadoRed
 from app.schemas.imports import (
     ShipmentOrderRead, ShipmentOrderCreate, ShipmentOrderUpdate, ShipmentOrderListResponse,
     ImportExcelResult, MotoUnitRead, MotoUnitUpdate, ImportAttachmentRead,
@@ -1202,6 +1203,8 @@ async def list_all_moto_units(
             "certificado_fecha": u.certificado_fecha.isoformat() if u.certificado_fecha else None,
             "empadronamiento_fisico_enviado": u.empadronamiento_fisico_enviado,
             "empadronamiento_fisico_fecha": u.empadronamiento_fisico_fecha.isoformat() if u.empadronamiento_fisico_fecha else None,
+            "empadronamiento_fisico_distribuidor_id": str(u.empadronamiento_fisico_distribuidor_id) if u.empadronamiento_fisico_distribuidor_id else None,
+            "empadronamiento_fisico_distribuidor_nombre": u.empadronamiento_fisico_distribuidor_nombre,
             "dim_pdf_object_name": u.dim_pdf_object_name,
             "created_at": u.created_at.isoformat(),
             # Fields from the related order
@@ -1239,11 +1242,29 @@ async def update_moto_unit(
     if not unit:
         raise HTTPException(status_code=404, detail="Unidad no encontrada")
     update_data = payload.model_dump(exclude_unset=True)
+
+    distribuidor_id = update_data.pop("empadronamiento_fisico_distribuidor_id", None)
+
     for field, value in update_data.items():
         setattr(unit, field, value)
-    # Si se marca el envío físico, registrar la fecha automáticamente
-    if update_data.get("empadronamiento_fisico_enviado") is True and unit.empadronamiento_fisico_fecha is None:
-        unit.empadronamiento_fisico_fecha = datetime.utcnow()
+
+    # Si se marca el envío físico, registrar fecha y distribuidor
+    if update_data.get("empadronamiento_fisico_enviado") is True:
+        if unit.empadronamiento_fisico_fecha is None:
+            unit.empadronamiento_fisico_fecha = datetime.utcnow()
+        if distribuidor_id is not None:
+            tenant = (await db.execute(select(Tenant).where(Tenant.id == distribuidor_id))).scalar_one_or_none()
+            if tenant is None:
+                raise HTTPException(status_code=404, detail="Distribuidor no encontrado")
+            unit.empadronamiento_fisico_distribuidor_id = distribuidor_id
+            unit.empadronamiento_fisico_distribuidor_nombre = tenant.name
+
+    # Si se desmarca el envío físico, limpiar distribuidor y fecha
+    if update_data.get("empadronamiento_fisico_enviado") is False:
+        unit.empadronamiento_fisico_fecha = None
+        unit.empadronamiento_fisico_distribuidor_id = None
+        unit.empadronamiento_fisico_distribuidor_nombre = None
+
     await db.commit()
     await db.refresh(unit)
     return {
@@ -1255,7 +1276,37 @@ async def update_moto_unit(
         "model_year": unit.model_year,
         "empadronamiento_fisico_enviado": unit.empadronamiento_fisico_enviado,
         "empadronamiento_fisico_fecha": unit.empadronamiento_fisico_fecha.isoformat() if unit.empadronamiento_fisico_fecha else None,
+        "empadronamiento_fisico_distribuidor_id": str(unit.empadronamiento_fisico_distribuidor_id) if unit.empadronamiento_fisico_distribuidor_id else None,
+        "empadronamiento_fisico_distribuidor_nombre": unit.empadronamiento_fisico_distribuidor_nombre,
     }
+
+
+# ---------------------------------------------------------------------------
+# GET /distribuidores-venta — tenants con venta de motos activos
+# ---------------------------------------------------------------------------
+
+@router.get("/distribuidores-venta", status_code=200)
+async def list_distribuidores_venta(
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    _require_imports_editor(current_user)
+    stmt = (
+        select(Tenant)
+        .where(Tenant.has_sales == True, Tenant.estado_red == EstadoRed.activo)
+        .order_by(Tenant.name.asc())
+    )
+    tenants = (await db.execute(stmt)).scalars().all()
+    return [
+        {
+            "id": str(t.id),
+            "name": t.name,
+            "ciudad": t.ciudad,
+            "departamento": t.departamento,
+            "nit": t.nit,
+        }
+        for t in tenants
+    ]
 
 
 # ---------------------------------------------------------------------------

@@ -14,6 +14,7 @@ class MotoUnitUpdate(BaseModel):
     color: Optional[str] = None
     model_year: Optional[int] = None
     empadronamiento_fisico_enviado: Optional[bool] = None
+    empadronamiento_fisico_distribuidor_id: Optional[uuid.UUID] = None
 
 
 class MotoUnitRead(BaseModel):
@@ -40,6 +41,8 @@ class MotoUnitRead(BaseModel):
     # Seguimiento: empadronamiento físico enviado al distribuidor
     empadronamiento_fisico_enviado: bool = False
     empadronamiento_fisico_fecha: Optional[datetime] = None
+    empadronamiento_fisico_distribuidor_id: Optional[uuid.UUID] = None
+    empadronamiento_fisico_distribuidor_nombre: Optional[str] = None
     # DIM PDF
     dim_pdf_object_name: Optional[str] = None
     created_at: datetime

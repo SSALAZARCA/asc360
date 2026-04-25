@@ -108,6 +108,8 @@ class ShipmentMotoUnit(Base):
     # Seguimiento: empadronamiento físico enviado al distribuidor
     empadronamiento_fisico_enviado = Column(Boolean, nullable=False, default=False)
     empadronamiento_fisico_fecha = Column(DateTime, nullable=True)
+    empadronamiento_fisico_distribuidor_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="SET NULL"), nullable=True)
+    empadronamiento_fisico_distribuidor_nombre = Column(String(255), nullable=True)
 
     # DIM PDF original subido a MinIO
     dim_pdf_object_name = Column(String(500), nullable=True)

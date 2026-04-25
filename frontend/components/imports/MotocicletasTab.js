@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { authFetch } from '../../lib/authFetch';
-import { FileUp, Download, RefreshCw, Search, CheckCircle, Clock, Bike, X, AlertCircle, Pencil, Send, FileText, Trash2 } from 'lucide-react';
+import { FileUp, Download, RefreshCw, Search, CheckCircle, Clock, Bike, X, AlertCircle, Pencil, Send, FileText, Trash2, MapPin } from 'lucide-react';
 
 function API() {
   return (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1').replace('http://', 'https://');
@@ -290,6 +290,168 @@ function EditUnitModal({ unit, onSave, onClose, saving }) {
 }
 
 // ---------------------------------------------------------------------------
+// Modal de selección de distribuidor para envío físico
+// ---------------------------------------------------------------------------
+function SeleccionarDistribuidorModal({ onConfirm, onClose }) {
+  const [distribuidores, setDistribuidores] = useState([]);
+  const [selected, setSelected] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await authFetch(`${API()}/imports/distribuidores-venta`);
+        const data = await res.json();
+        setDistribuidores(data || []);
+      } catch {
+        setDistribuidores([]);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  const filtrados = distribuidores.filter(d =>
+    d.name.toLowerCase().includes(search.toLowerCase()) ||
+    (d.ciudad || '').toLowerCase().includes(search.toLowerCase())
+  );
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 1200,
+      background: 'rgba(0,0,0,0.80)', backdropFilter: 'blur(4px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+    }}>
+      <div style={{
+        background: '#13131a', border: '1px solid rgba(255,255,255,0.08)',
+        borderRadius: '16px', padding: '28px', width: '480px', maxWidth: '94vw',
+        display: 'flex', flexDirection: 'column', gap: '18px', maxHeight: '85vh',
+      }}>
+        {/* Header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <h3 style={{ color: '#fff', fontWeight: 700, fontSize: '15px', margin: '0 0 3px' }}>
+              Seleccionar distribuidor destino
+            </h3>
+            <p style={{ color: '#606075', fontSize: '11px', margin: 0 }}>
+              ¿A qué punto de venta se envía el empadronamiento físico?
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#606075', padding: '4px' }}
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Buscador */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: '8px',
+          padding: '8px 12px', borderRadius: '8px',
+          background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
+        }}>
+          <Search size={13} color="#606075" />
+          <input
+            placeholder="Buscar distribuidor o ciudad..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            autoFocus
+            style={{ background: 'none', border: 'none', color: '#fff', fontSize: '12px', outline: 'none', flex: 1 }}
+          />
+        </div>
+
+        {/* Lista */}
+        <div style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px', flex: 1 }}>
+          {loading ? (
+            <p style={{ color: '#606075', fontSize: '12px', textAlign: 'center', margin: '24px 0' }}>
+              Cargando distribuidores...
+            </p>
+          ) : filtrados.length === 0 ? (
+            <p style={{ color: '#606075', fontSize: '12px', textAlign: 'center', margin: '24px 0' }}>
+              No hay distribuidores con venta de motos activos
+            </p>
+          ) : filtrados.map(d => (
+            <button
+              key={d.id}
+              onClick={() => setSelected(d)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '12px',
+                padding: '10px 14px', borderRadius: '10px', border: 'none', cursor: 'pointer',
+                textAlign: 'left', transition: 'all 0.15s',
+                background: selected?.id === d.id
+                  ? 'rgba(96,165,250,0.15)'
+                  : 'rgba(255,255,255,0.03)',
+                outline: selected?.id === d.id
+                  ? '1.5px solid rgba(96,165,250,0.5)'
+                  : '1px solid rgba(255,255,255,0.06)',
+              }}
+            >
+              <div style={{
+                width: 32, height: 32, borderRadius: '8px', flexShrink: 0,
+                background: selected?.id === d.id ? 'rgba(96,165,250,0.2)' : 'rgba(255,255,255,0.05)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                <Send size={14} color={selected?.id === d.id ? '#60a5fa' : '#606075'} />
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{
+                  margin: 0, fontSize: '12px', fontWeight: 700,
+                  color: selected?.id === d.id ? '#60a5fa' : '#e2e8f0',
+                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                }}>
+                  {d.name}
+                </p>
+                {(d.ciudad || d.departamento) && (
+                  <p style={{ margin: '2px 0 0', fontSize: '10px', color: '#606075', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                    <MapPin size={9} />
+                    {[d.ciudad, d.departamento].filter(Boolean).join(', ')}
+                  </p>
+                )}
+              </div>
+              {selected?.id === d.id && (
+                <CheckCircle size={15} color="#60a5fa" style={{ flexShrink: 0 }} />
+              )}
+            </button>
+          ))}
+        </div>
+
+        {/* Acciones */}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '16px' }}>
+          <button
+            onClick={onClose}
+            style={{
+              padding: '8px 16px', borderRadius: '8px',
+              border: '1px solid rgba(255,255,255,0.08)',
+              background: 'transparent', color: '#606075',
+              cursor: 'pointer', fontSize: '12px', fontWeight: 600,
+            }}
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={() => selected && onConfirm(selected)}
+            disabled={!selected}
+            style={{
+              padding: '8px 20px', borderRadius: '8px', border: 'none',
+              background: selected ? '#60a5fa' : 'rgba(96,165,250,0.2)',
+              color: selected ? '#0d0d14' : '#404060',
+              fontSize: '12px', fontWeight: 700,
+              cursor: selected ? 'pointer' : 'not-allowed',
+              transition: 'all 0.15s',
+            }}
+          >
+            Confirmar envío
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+// ---------------------------------------------------------------------------
 // MotocicletasTab — componente principal
 // ---------------------------------------------------------------------------
 export default function MotocicletasTab({ userRole }) {
@@ -319,6 +481,7 @@ export default function MotocicletasTab({ userRole }) {
 
   // Toggle empadronamiento físico
   const [toggling, setToggling] = useState(null); // id de la unidad en proceso
+  const [unitPendienteEnvio, setUnitPendienteEnvio] = useState(null); // unidad esperando selección de distribuidor
 
   const PAGE_SIZE = 50;
 
@@ -402,28 +565,53 @@ export default function MotocicletasTab({ userRole }) {
     }
   };
 
-  const handleToggleEmpadronamiento = async (unit) => {
+  const handleToggleEmpadronamiento = (unit) => {
     if (toggling) return;
-    setToggling(unit.id);
+    if (!unit.empadronamiento_fisico_enviado) {
+      // Abre el popup para seleccionar distribuidor
+      setUnitPendienteEnvio(unit);
+    } else {
+      // Ya está enviado → desmarcar directo
+      _patchEmpadronamiento(unit.id, { empadronamiento_fisico_enviado: false });
+    }
+  };
+
+  const handleConfirmarEnvio = async (distribuidor) => {
+    if (!unitPendienteEnvio) return;
+    const unitId = unitPendienteEnvio.id;
+    setUnitPendienteEnvio(null);
+    await _patchEmpadronamiento(unitId, {
+      empadronamiento_fisico_enviado: true,
+      empadronamiento_fisico_distribuidor_id: distribuidor.id,
+    });
+  };
+
+  const _patchEmpadronamiento = async (unitId, payload) => {
+    setToggling(unitId);
     try {
-      const nuevoValor = !unit.empadronamiento_fisico_enviado;
-      const res = await authFetch(`${API()}/imports/moto-units/${unit.id}`, {
+      const res = await authFetch(`${API()}/imports/moto-units/${unitId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ empadronamiento_fisico_enviado: nuevoValor }),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) {
         const err = await res.json();
         alert(err.detail || 'Error al actualizar');
         return;
       }
-      // Actualizar localmente sin refetch completo
+      const data = await res.json();
       setUnits(prev => prev.map(u =>
-        u.id === unit.id
-          ? { ...u, empadronamiento_fisico_enviado: nuevoValor, empadronamiento_fisico_fecha: nuevoValor ? new Date().toISOString() : null }
+        u.id === unitId
+          ? {
+              ...u,
+              empadronamiento_fisico_enviado: data.empadronamiento_fisico_enviado,
+              empadronamiento_fisico_fecha: data.empadronamiento_fisico_fecha,
+              empadronamiento_fisico_distribuidor_id: data.empadronamiento_fisico_distribuidor_id,
+              empadronamiento_fisico_distribuidor_nombre: data.empadronamiento_fisico_distribuidor_nombre,
+            }
           : u
       ));
-    } catch (e) {
+    } catch {
       alert('Error de conexión');
     } finally {
       setToggling(null);
@@ -707,46 +895,60 @@ export default function MotocicletasTab({ userRole }) {
                       )}
                     </div>
                   </td>
-                  <td style={{ padding: '9px 12px', whiteSpace: 'nowrap' }}>
-                    {userRole === 'superadmin' ? (
-                      <button
-                        onClick={() => handleToggleEmpadronamiento(unit)}
-                        disabled={toggling === unit.id}
-                        title={unit.empadronamiento_fisico_enviado
-                          ? `Enviado${unit.empadronamiento_fisico_fecha ? ' el ' + new Date(unit.empadronamiento_fisico_fecha).toLocaleDateString('es-CO') : ''}`
-                          : 'Marcar como enviado al distribuidor'}
-                        style={{
-                          display: 'inline-flex', alignItems: 'center', gap: '5px',
-                          padding: '3px 10px', borderRadius: '20px', border: 'none',
-                          cursor: toggling === unit.id ? 'not-allowed' : 'pointer',
-                          fontSize: '9px', fontWeight: 700, letterSpacing: '0.04em',
-                          transition: 'all 0.15s',
+                  <td style={{ padding: '9px 12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '7px', flexWrap: 'wrap' }}>
+                      {userRole === 'superadmin' ? (
+                        <button
+                          onClick={() => handleToggleEmpadronamiento(unit)}
+                          disabled={toggling === unit.id}
+                          title={unit.empadronamiento_fisico_enviado
+                            ? `Enviado${unit.empadronamiento_fisico_fecha ? ' el ' + new Date(unit.empadronamiento_fisico_fecha).toLocaleDateString('es-CO') : ''}${unit.empadronamiento_fisico_distribuidor_nombre ? ' a ' + unit.empadronamiento_fisico_distribuidor_nombre : ''} — click para desmarcar`
+                            : 'Seleccionar distribuidor y marcar como enviado'}
+                          style={{
+                            display: 'inline-flex', alignItems: 'center', gap: '5px',
+                            padding: '3px 10px', borderRadius: '20px', border: 'none',
+                            cursor: toggling === unit.id ? 'not-allowed' : 'pointer',
+                            fontSize: '9px', fontWeight: 700, letterSpacing: '0.04em',
+                            transition: 'all 0.15s', whiteSpace: 'nowrap',
+                            ...(unit.empadronamiento_fisico_enviado
+                              ? { background: 'rgba(34,197,94,0.12)', color: '#22c55e', border: '1px solid rgba(34,197,94,0.3)' }
+                              : { background: 'rgba(96,96,117,0.12)', color: '#606075', border: '1px solid rgba(96,96,117,0.25)' }
+                            ),
+                          }}
+                        >
+                          {toggling === unit.id
+                            ? '...'
+                            : unit.empadronamiento_fisico_enviado
+                              ? <><Send size={9} /> ENVIADO</>
+                              : <><Send size={9} /> PENDIENTE</>
+                          }
+                        </button>
+                      ) : (
+                        <span style={{
+                          display: 'inline-flex', alignItems: 'center', gap: '4px',
+                          fontSize: '9px', fontWeight: 700, padding: '2px 8px', borderRadius: '20px',
+                          whiteSpace: 'nowrap',
                           ...(unit.empadronamiento_fisico_enviado
-                            ? { background: 'rgba(34,197,94,0.12)', color: '#22c55e', border: '1px solid rgba(34,197,94,0.3)' }
-                            : { background: 'rgba(96,96,117,0.12)', color: '#606075', border: '1px solid rgba(96,96,117,0.25)' }
+                            ? { background: 'rgba(34,197,94,0.1)', color: '#22c55e', border: '1px solid rgba(34,197,94,0.25)' }
+                            : { background: 'rgba(96,96,117,0.1)', color: '#606075', border: '1px solid rgba(96,96,117,0.2)' }
                           ),
+                        }}>
+                          <Send size={9} />
+                          {unit.empadronamiento_fisico_enviado ? 'ENVIADO' : 'PENDIENTE'}
+                        </span>
+                      )}
+                      {unit.empadronamiento_fisico_enviado && unit.empadronamiento_fisico_distribuidor_nombre && (
+                        <span style={{
+                          fontSize: '9px', color: '#9ca3af', fontWeight: 600,
+                          maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap', display: 'inline-block',
                         }}
-                      >
-                        {toggling === unit.id
-                          ? '...'
-                          : unit.empadronamiento_fisico_enviado
-                            ? <><Send size={9} /> ENVIADO</>
-                            : <><Send size={9} /> PENDIENTE</>
-                        }
-                      </button>
-                    ) : (
-                      <span style={{
-                        display: 'inline-flex', alignItems: 'center', gap: '4px',
-                        fontSize: '9px', fontWeight: 700, padding: '2px 8px', borderRadius: '20px',
-                        ...(unit.empadronamiento_fisico_enviado
-                          ? { background: 'rgba(34,197,94,0.1)', color: '#22c55e', border: '1px solid rgba(34,197,94,0.25)' }
-                          : { background: 'rgba(96,96,117,0.1)', color: '#606075', border: '1px solid rgba(96,96,117,0.2)' }
-                        ),
-                      }}>
-                        <Send size={9} />
-                        {unit.empadronamiento_fisico_enviado ? 'ENVIADO' : 'PENDIENTE'}
-                      </span>
-                    )}
+                          title={unit.empadronamiento_fisico_distribuidor_nombre}
+                        >
+                          {unit.empadronamiento_fisico_distribuidor_nombre}
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td style={{ padding: '9px 12px', whiteSpace: 'nowrap' }}>
                     <button
@@ -819,6 +1021,14 @@ export default function MotocicletasTab({ userRole }) {
           onSave={handleEditSave}
           onClose={() => setEditUnit(null)}
           saving={editSaving}
+        />
+      )}
+
+      {/* Modal selección de distribuidor para envío físico */}
+      {unitPendienteEnvio && (
+        <SeleccionarDistribuidorModal
+          onConfirm={handleConfirmarEnvio}
+          onClose={() => setUnitPendienteEnvio(null)}
         />
       )}
     </div>
