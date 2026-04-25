@@ -29,7 +29,8 @@ from core.constants import (
     CONFIRMING_CLIENT, ASKING_PHONE, ASKING_KM,
     ASKING_PHOTOS, ASKING_MOTIVE, CONFIRMING_MOTIVE,
     CORRECTING_MOTIVE, CONFIRMING_KM, SELECTING_TENANT,
-    CONFIRMING_SERVICE_TYPE, ASKING_INTAKE_QUESTION
+    CONFIRMING_SERVICE_TYPE, ASKING_INTAKE_QUESTION,
+    ASKING_PHOTO_DESCRIPTION
 )
 from core.decorators import role_required, check_cancel_intent
 from keyboards.reply import get_main_keyboard
@@ -212,18 +213,46 @@ async def create_user_and_vehicle(ocr_data: dict, plate: str, tenant_id: str = N
 
     return None
 
-async def bg_upload_media_to_order(media_files, order_id: str, tenant_id: str):
-    """Sube fotos pasivamente al backend."""
-    headers = {"X-Tenant-ID": tenant_id}
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        for file_bytes in media_files:
-            try:
-                files = {"file": ("reception_photo.jpg", file_bytes, "image/jpeg")}
-                await client.post(f"{BACKEND_URL}/media/upload/?order_id={order_id}", files=files, headers=headers)
-            except Exception as e:
-                logger.error(f"Fallo carga foto a MinIO: {e}")
+async def bg_upload_media_to_order(evidence_items: list, order_id: str, tenant_id: str):
+    """Sube fotos y observaciones de evidencia al backend (POST /orders/{id}/photos)."""
+    if not evidence_items:
+        return
 
-async def background_create_order(payload: dict, tenant_id: str, media_files: list, bot, chat_id: int, user_role: str, plate: str = ""):
+    photo_items = [item for item in evidence_items if item.get("type") == "photo" and item.get("bytes")]
+    text_items  = [item for item in evidence_items if item.get("type") == "text"]
+
+    if not photo_items and not text_items:
+        return
+
+    headers = {"X-Tenant-ID": tenant_id, "x-sonia-secret": SONIA_BOT_SECRET}
+
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        try:
+            files = [
+                ("files", (f"reception_photo_{i}.jpg", bytes(item["bytes"]), "image/jpeg"))
+                for i, item in enumerate(photo_items)
+            ]
+            data: dict = {}
+            if photo_items:
+                data["descriptions"] = json.dumps([item.get("desc", "") for item in photo_items])
+            if text_items:
+                data["text_observations"] = json.dumps([item.get("desc", "") for item in text_items])
+
+            res = await client.post(
+                f"{BACKEND_URL}/orders/{order_id}/photos",
+                files=files if files else None,
+                data=data,
+                headers=headers,
+            )
+            if res.status_code != 200:
+                logger.error(f"[EVIDENCIA] Error {res.status_code}: {res.text[:200]}")
+            else:
+                result = res.json()
+                logger.info(f"[EVIDENCIA] Subida OK — {result.get('total_evidence', 0)} elementos guardados.")
+        except Exception as e:
+            logger.error(f"[EVIDENCIA] Excepción subiendo evidencia: {e}")
+
+async def background_create_order(payload: dict, tenant_id: str, evidence_items: list, bot, chat_id: int, user_role: str, plate: str = ""):
     """Tarea no bloqueante que crea la orden y genera el PDF de Recepción."""
     headers = {
         "X-Tenant-ID": str(tenant_id),
@@ -242,9 +271,9 @@ async def background_create_order(payload: dict, tenant_id: str, media_files: li
                 order = res_order.json()
                 order_id = order["id"]
 
-                # 2. Subir Fotos asíncronamente a MinIO
-                if media_files:
-                    await bg_upload_media_to_order(media_files, order_id, tenant_id)
+                # 2. Subir evidencia (fotos + observaciones) a MinIO / DB
+                if evidence_items:
+                    await bg_upload_media_to_order(evidence_items, order_id, tenant_id)
 
                 # 3. El backend ya nos devolvió la URL del PDF al crear la orden
                 pdf_url = None
@@ -362,7 +391,7 @@ async def _build_and_dispatch_order(context: ContextTypes.DEFAULT_TYPE, bot, cha
     gas            = context.user_data.get('gas_level', 'No Registrado')
     motives        = context.user_data.get('motives', [])
     vid            = context.user_data.get('vehicle_id')
-    media_files    = context.user_data.get('media_files', [])
+    evidence_items = context.user_data.get('evidence_items', [])
     client_phone   = context.user_data.get('client_phone')
     tech_id        = context.user_data.get("logged_in_user", {}).get("id")
     intake_answers = context.user_data.get('intake_answers', [])
@@ -429,10 +458,11 @@ async def _build_and_dispatch_order(context: ContextTypes.DEFAULT_TYPE, bot, cha
 
     context.user_data.pop('ocr_data', None)
     context.user_data.pop('ocr_plate', None)
-    context.user_data.pop('media_files', None)
+    context.user_data.pop('evidence_items', None)
+    context.user_data.pop('pending_photo_bytes', None)
 
     context.application.create_task(
-        background_create_order(payload, tenant_id, media_files, bot, chat_id, user_role, plate=plate)
+        background_create_order(payload, tenant_id, evidence_items, bot, chat_id, user_role, plate=plate)
     )
     return True
 
@@ -694,7 +724,7 @@ async def handle_client_confirmation(update: Update, context: ContextTypes.DEFAU
             "Perfecto, vamos con la recepción.\n\n"
             "Primero, *¿cuántos kilómetros tiene la moto?* Escribilo, mandame audio o una foto del tablero."
         )
-        context.user_data['media_files'] = []
+        context.user_data['evidence_items'] = []
         return ASKING_KM
 
 @role_required()
@@ -727,7 +757,7 @@ async def handle_phone(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
         "Escribilo, mandame un audio o una foto del tablero.",
         parse_mode="Markdown"
     )
-    context.user_data['media_files'] = []
+    context.user_data['evidence_items'] = []
     return ASKING_KM
 
 @role_required()
@@ -762,14 +792,18 @@ async def handle_km_and_photos(update: Update, context: ContextTypes.DEFAULT_TYP
 
     km = context.user_data.get('km', 'No registrado')
     gas = context.user_data.get('gas_level', 'No registrado')
-    context.user_data.setdefault('media_files', [])
+    context.user_data.setdefault('evidence_items', [])
 
-    kb = [[InlineKeyboardButton("✅ Continuar sin fotos", callback_data="photos_done")]]
+    kb = [
+        [InlineKeyboardButton("📝 Solo observación (sin foto)", callback_data="obs_text_only")],
+        [InlineKeyboardButton("✅ Continuar sin evidencia", callback_data="photos_done")],
+    ]
     await update.message.reply_text(
         f"*KM:* {km}  |  *Gasolina:* {gas} ✅\n\n"
-        "Ahora mandame las *fotos de evidencia* del estado actual de la moto: "
-        "golpes, rayones, detalles importantes.\n\n"
-        "Cuando termines (o si no hay nada que registrar), presioná *Continuar*.",
+        "Ahora mandame *fotos del estado actual de la moto*: golpes, rayones, detalles a registrar. "
+        "A cada foto le voy a pedir una breve descripción.\n\n"
+        "También podés agregar solo una observación de texto sin foto. "
+        "Cuando termines, presioná *Continuar*.",
         parse_mode="Markdown",
         reply_markup=InlineKeyboardMarkup(kb)
     )
@@ -778,15 +812,66 @@ async def handle_km_and_photos(update: Update, context: ContextTypes.DEFAULT_TYP
 
 @role_required()
 async def handle_photos(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Paso 2: Recibe fotos de evidencia del estado del vehículo al ingreso."""
+    """Recibe una foto de evidencia y pide descripción del daño."""
     photo_file = await update.message.photo[-1].get_file()
     file_bytes = await photo_file.download_as_bytearray()
-    context.user_data.setdefault('media_files', []).append(file_bytes)
-    count = len(context.user_data['media_files'])
+    context.user_data['pending_photo_bytes'] = file_bytes
 
-    kb = [[InlineKeyboardButton("✅ Continuar", callback_data="photos_done")]]
+    kb = [[InlineKeyboardButton("⏭️ Sin descripción", callback_data="photo_desc_skip")]]
     await update.message.reply_text(
-        f"Foto {count} guardada ✅\n\nMandame más si querés, o presioná *Continuar* cuando estés listo.",
+        "Foto recibida 📸\n\n¿Qué muestra esta foto? Escribí una breve descripción del daño o detalle que querés registrar.",
+        reply_markup=InlineKeyboardMarkup(kb)
+    )
+    return ASKING_PHOTO_DESCRIPTION
+
+
+@role_required()
+async def handle_photo_description(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Recibe la descripción de la foto pendiente o de una observación de texto puro."""
+    text = ""
+    if update.message.voice:
+        await update.message.reply_text("Escuchando... 🎧")
+        voice_file = await update.message.voice.get_file()
+        fd, path = tempfile.mkstemp(suffix=".ogg")
+        os.close(fd)
+        await voice_file.download_to_drive(path)
+        transcript = await transcribe_voice(path)
+        os.remove(path)
+        text = transcript or ""
+    elif update.message.text:
+        text = update.message.text
+
+    if await check_cancel_intent(update, context, text):
+        return ConversationHandler.END
+
+    evidence_items = context.user_data.setdefault('evidence_items', [])
+    pending_bytes = context.user_data.pop('pending_photo_bytes', None)
+
+    if pending_bytes is not None:
+        evidence_items.append({"type": "photo", "bytes": pending_bytes, "desc": text.strip()})
+        added_txt = f"Foto guardada 📸"
+        if text.strip():
+            added_txt += f"\n_Descripción:_ {text.strip()}"
+    else:
+        if not text.strip():
+            await update.message.reply_text("Por favor escribí la observación.")
+            return ASKING_PHOTO_DESCRIPTION
+        evidence_items.append({"type": "text", "desc": text.strip()})
+        added_txt = f"Observación guardada 📝\n_{text.strip()}_"
+
+    photos_count = sum(1 for i in evidence_items if i["type"] == "photo")
+    text_count   = sum(1 for i in evidence_items if i["type"] == "text")
+    resumen = f"{photos_count} foto(s)" if photos_count else ""
+    if text_count:
+        resumen += f"{' · ' if resumen else ''}{text_count} nota(s)"
+
+    kb = [
+        [InlineKeyboardButton("📝 Agregar observación de texto", callback_data="obs_text_only")],
+        [InlineKeyboardButton("✅ Continuar", callback_data="photos_done")],
+    ]
+    await update.message.reply_text(
+        f"{added_txt} ✅\n\n*Evidencia registrada:* {resumen or 'ninguna aún'}\n\n"
+        "Mandame más fotos, agregá una observación o presioná *Continuar*.",
         parse_mode="Markdown",
         reply_markup=InlineKeyboardMarkup(kb)
     )
@@ -794,14 +879,68 @@ async def handle_photos(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 
 
 @role_required()
-async def handle_photos_done(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Cierra el paso de fotos y pasa al motivo de ingreso."""
+async def handle_photo_desc_skip(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Guarda la foto pendiente sin descripción y vuelve al estado de fotos."""
     query = update.callback_query
     await query.answer()
-    count = len(context.user_data.get('media_files', []))
-    fotos_txt = f"{count} foto(s) de evidencia guardadas." if count > 0 else "Sin fotos de evidencia."
+
+    evidence_items = context.user_data.setdefault('evidence_items', [])
+    pending_bytes = context.user_data.pop('pending_photo_bytes', None)
+    if pending_bytes is not None:
+        evidence_items.append({"type": "photo", "bytes": pending_bytes, "desc": ""})
+
+    photos_count = sum(1 for i in evidence_items if i["type"] == "photo")
+    text_count   = sum(1 for i in evidence_items if i["type"] == "text")
+    resumen = f"{photos_count} foto(s)" if photos_count else ""
+    if text_count:
+        resumen += f"{' · ' if resumen else ''}{text_count} nota(s)"
+
+    kb = [
+        [InlineKeyboardButton("📝 Agregar observación de texto", callback_data="obs_text_only")],
+        [InlineKeyboardButton("✅ Continuar", callback_data="photos_done")],
+    ]
     await query.edit_message_text(
-        f"{fotos_txt}\n\nAhora describime el *motivo de ingreso*: ¿qué le pasa a la moto o qué necesita? "
+        f"Foto guardada sin descripción ✅\n\n*Evidencia registrada:* {resumen or 'ninguna aún'}\n\n"
+        "Mandame más fotos, agregá una observación o presioná *Continuar*.",
+        parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup(kb)
+    )
+    return ASKING_PHOTOS
+
+
+@role_required()
+async def handle_obs_text_only(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Pide una observación de texto sin foto."""
+    query = update.callback_query
+    await query.answer()
+    context.user_data.pop('pending_photo_bytes', None)
+    await query.edit_message_text(
+        "Escribí la observación o detalle que querés registrar (sin foto).\n"
+        "Podés mandarme un audio también 🎧"
+    )
+    return ASKING_PHOTO_DESCRIPTION
+
+
+@role_required()
+async def handle_photos_done(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Cierra el paso de evidencia y pasa al motivo de ingreso."""
+    query = update.callback_query
+    await query.answer()
+
+    evidence_items = context.user_data.get('evidence_items', [])
+    photos_count = sum(1 for i in evidence_items if i["type"] == "photo")
+    text_count   = sum(1 for i in evidence_items if i["type"] == "text")
+
+    if photos_count or text_count:
+        partes = []
+        if photos_count: partes.append(f"{photos_count} foto(s)")
+        if text_count:   partes.append(f"{text_count} observación(es) de texto")
+        evidencia_txt = " y ".join(partes) + " de evidencia registradas."
+    else:
+        evidencia_txt = "Sin evidencia del estado del vehículo."
+
+    await query.edit_message_text(
+        f"{evidencia_txt}\n\nAhora describime el *motivo de ingreso*: ¿qué le pasa a la moto o qué necesita? "
         "Podés escribirlo o mandarme un audio.",
         parse_mode="Markdown"
     )

@@ -31,6 +31,7 @@ CORRECTING_MOTIVE = 10
 CONFIRMING_KM = 11
 CONFIRMING_SERVICE_TYPE = 12
 ASKING_INTAKE_QUESTION = 13
+ASKING_PHOTO_DESCRIPTION = 14
 
 # ----- Estados post-recepción (ciclo de vida del técnico) -----
 AWAITING_DIAGNOSIS = 50       # Esperando diagnóstico del técnico (diferido)
