@@ -303,6 +303,7 @@
       display: flex;
       flex-direction: column;
       gap: 5px;
+      counter-reset: notes-counter;
     }
 
     .notes-list li {
@@ -312,63 +313,39 @@
       font-size: 8.5px;
       color: #374151;
       line-height: 1.6;
+      counter-increment: notes-counter;
     }
 
     .notes-list li::before {
-      content: '—';
-      color: #9ca3af;
-      font-weight: 700;
+      content: counter(notes-counter) '.';
+      color: #374151;
+      font-weight: 800;
       flex-shrink: 0;
       font-size: 8px;
+      min-width: 13px;
       margin-top: 1px;
     }
 
     /* ── CONDICIONES LEGALES ── */
-    .legal-block {
+    .legal-prose {
       border: 1px solid #e5e7eb;
       border-radius: 5px;
-      overflow: hidden;
+      padding: 11px 14px;
+      background: #fafafa;
     }
 
-    .legal-block-header {
-      background: #f3f4f6;
-      border-bottom: 1px solid #e5e7eb;
-      padding: 6px 14px;
-      font-size: 6.5px;
-      font-weight: 800;
-      color: #6b7280;
-      text-transform: uppercase;
-      letter-spacing: 0.2em;
-    }
-
-    .legal-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-    }
-
-    .legal-item {
-      padding: 8px 12px;
-      border-right: 1px solid #f3f4f6;
-      border-bottom: 1px solid #f3f4f6;
-    }
-
-    .legal-item:nth-child(even) { border-right: none; }
-    .legal-item:nth-last-child(1) { grid-column: span 2; border-bottom: none; border-right: none; }
-    .legal-item:nth-last-child(2):nth-child(odd) { border-bottom: none; }
-
-    .legal-item-title {
-      font-size: 6.5px;
-      font-weight: 800;
-      color: #374151;
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
-      margin-bottom: 3px;
-    }
-
-    .legal-item-text {
+    .legal-prose p {
       font-size: 7px;
       color: #6b7280;
-      line-height: 1.65;
+      line-height: 1.75;
+      margin-bottom: 5px;
+    }
+
+    .legal-prose p:last-child { margin-bottom: 0; }
+
+    .legal-prose strong {
+      color: #374151;
+      font-weight: 800;
     }
 
     /* ── PREGUNTAS COMPLEMENTARIAS ── */
@@ -411,30 +388,6 @@
       line-height: 1.5;
       display: flex;
       align-items: center;
-    }
-
-    /* ── ALERTA GARANTÍA ── */
-    .warranty-box {
-      border: 1px solid #e5e7eb;
-      border-left: 3px solid #ff5f33;
-      border-radius: 5px;
-      padding: 11px 14px;
-      background: #fffaf8;
-    }
-
-    .warranty-title {
-      font-size: 7px;
-      font-weight: 800;
-      color: #ff5f33;
-      text-transform: uppercase;
-      letter-spacing: 0.14em;
-      margin-bottom: 5px;
-    }
-
-    .warranty-text {
-      font-size: 8.5px;
-      color: #4b5563;
-      line-height: 1.7;
     }
 
     /* ── SELLO OTP ── */
@@ -577,7 +530,7 @@
       <div class="identity-card accent">
         <div class="card-field-label">Motocicleta</div>
         <div class="plate-tag">ABC 123</div>
-        <div class="card-sub">Honda CB 190R · 2023<br>VIN: 9C2KD1540R0012345</div>
+        <div class="card-sub">Honda CB 190R · 2023<br>VIN: 9C2KD1540R0012345<br>Motor: K540R0012345 · Color: Rojo Perla</div>
       </div>
 
     </div>
@@ -653,11 +606,14 @@
       </div>
     </div>
 
-    <!-- OBSERVACIONES GARANTÍA -->
-    <div class="section-label">Observaciones de Garantía</div>
-    <div class="warranty-box">
-      <div class="warranty-title">Generadas automáticamente por sistema IA</div>
-      <div class="warranty-text">El vehículo registra 12.450 km con garantía vigente hasta 20.000 km. Se detectó que el servicio solicitado (frenos) podría estar cubierto bajo garantía de fábrica. Se recomienda verificar cobertura antes de proceder con el cobro al cliente.</div>
+    <!-- CONDICIONES LEGALES -->
+    <div class="section-label">Condiciones Legales de Ingreso</div>
+    <div class="legal-prose">
+      <p><strong>1. Garantía.</strong> Cubre exclusivamente las partes intervenidas por [X] meses o [X] km (lo que ocurra primero) desde la entrega. No aplica por mal uso, desgaste natural o repuestos suministrados por el cliente.</p>
+      <p><strong>2. Habeas Data.</strong> El cliente autoriza el tratamiento de sus datos personales (Ley 1581 de 2012) para la gestión del servicio, seguimiento postventa y envío de información comercial.</p>
+      <p><strong>3. Entregas y Repuestos.</strong> Las fechas son estimadas y dependen de la disponibilidad de stock o trámites de importación. El taller se exonera de responsabilidad por lucro cesante derivado del tiempo de reparación.</p>
+      <p><strong>4. Declaratoria de Abandono.</strong> Según el Art. 18 de la Ley 1480, si pasado un mes del aviso de entrega el vehículo no es retirado, se requerirá al cliente. Tras dos meses adicionales sin retiro, el bien se considerará abandonado.</p>
+      <p><strong>5. Responsabilidad e Inventario.</strong> El taller responde únicamente por el estado del vehículo y los objetos registrados expresamente en el inventario de esta orden. No se asume custodia sobre valores no declarados.</p>
     </div>
 
     <!-- ACEPTACIÓN -->
@@ -710,39 +666,6 @@
       </div>
     </div>
     -->
-
-    <!-- CONDICIONES LEGALES -->
-    <div class="section-label" style="margin-top: 18px;">Condiciones Legales de Ingreso</div>
-    <div class="legal-block">
-      <div class="legal-grid">
-
-        <div class="legal-item">
-          <div class="legal-item-title">Garantía</div>
-          <div class="legal-item-text">Cubre exclusivamente las partes intervenidas por [X] meses o [X] km (lo que ocurra primero) desde la entrega. No aplica por mal uso, desgaste natural o repuestos suministrados por el cliente.</div>
-        </div>
-
-        <div class="legal-item">
-          <div class="legal-item-title">Habeas Data</div>
-          <div class="legal-item-text">El cliente autoriza el tratamiento de sus datos personales (Ley 1581 de 2012) para la gestión del servicio, seguimiento postventa y envío de información comercial.</div>
-        </div>
-
-        <div class="legal-item">
-          <div class="legal-item-title">Entregas y Repuestos</div>
-          <div class="legal-item-text">Las fechas son estimadas y dependen de la disponibilidad de stock o trámites de importación. El taller se exonera de responsabilidad por lucro cesante derivado del tiempo de reparación.</div>
-        </div>
-
-        <div class="legal-item">
-          <div class="legal-item-title">Declaratoria de Abandono</div>
-          <div class="legal-item-text">Según el Art. 18 de la Ley 1480, si pasado un mes del aviso de entrega el vehículo no es retirado, se requerirá al cliente. Tras dos meses adicionales sin retiro, el bien se considerará abandonado.</div>
-        </div>
-
-        <div class="legal-item">
-          <div class="legal-item-title">Responsabilidad e Inventario</div>
-          <div class="legal-item-text">El taller responde únicamente por el estado del vehículo y los objetos registrados expresamente en el inventario de esta orden. No se asume custodia sobre valores no declarados.</div>
-        </div>
-
-      </div>
-    </div>
 
   </div>
 
