@@ -10,7 +10,7 @@ from core.constants import (
     CONFIRMING_CLIENT, ASKING_PHONE, ASKING_KM,
     ASKING_PHOTOS, ASKING_MOTIVE, CONFIRMING_MOTIVE, CORRECTING_MOTIVE,
     CONFIRMING_SERVICE_TYPE, ASKING_INTAKE_QUESTION, ASKING_PHOTO_DESCRIPTION,
-    ASKING_ACCESSORIES, ASKING_GENERAL_OBSERVATIONS, L_ASKING_PLATE, SELECTING_TENANT,
+    ASKING_ACCESSORIES, ASKING_GENERAL_OBSERVATIONS, ASKING_GAS, L_ASKING_PLATE, SELECTING_TENANT,
     O_NAME, O_PHONE, O_ROLE, O_TENANT, O_CONFIRM,
     OTP_ASKING_PLATE, OTP_ASKING_CODE, OTP_CONFIRMING
 )
@@ -29,7 +29,7 @@ from handlers.registration import (
 from handlers.reception import (
     prompt_plate, process_plate, handle_ocr_confirmation,
     apply_correction_to_data, handle_client_confirmation,
-    handle_phone, handle_km_and_photos, handle_photos, handle_photos_done,
+    handle_phone, handle_km, handle_gas, handle_photos, handle_photos_done,
     handle_photo_description, handle_photo_desc_skip, handle_obs_text_only,
     handle_accessories, handle_accessories_confirm, handle_accessories_retry,
     handle_general_observations, handle_general_observations_skip,
@@ -242,7 +242,12 @@ def main() -> None:
             ],
             ASKING_KM: [
                 btn_escape,
-                MessageHandler(filters.PHOTO | filters.TEXT | filters.VOICE, handle_km_and_photos),
+                MessageHandler(filters.PHOTO | filters.TEXT | filters.VOICE, handle_km),
+            ],
+            ASKING_GAS: [
+                cancel_text,
+                MessageHandler(filters.VOICE, cancel_voice_handler),
+                CallbackQueryHandler(handle_gas, pattern="^gas_"),
             ],
             ASKING_PHOTOS: [
                 btn_escape,

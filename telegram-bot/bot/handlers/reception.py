@@ -32,7 +32,8 @@ from core.constants import (
     CONFIRMING_SERVICE_TYPE, ASKING_INTAKE_QUESTION,
     ASKING_PHOTO_DESCRIPTION,
     ASKING_ACCESSORIES,
-    ASKING_GENERAL_OBSERVATIONS
+    ASKING_GENERAL_OBSERVATIONS,
+    ASKING_GAS
 )
 from core.decorators import role_required, check_cancel_intent
 from keyboards.reply import get_main_keyboard
@@ -732,7 +733,7 @@ async def handle_client_confirmation(update: Update, context: ContextTypes.DEFAU
     if query.data == "client_yes":
         await query.edit_message_text(
             "Perfecto, vamos con la recepción.\n\n"
-            "Primero, *¿cuántos kilómetros tiene la moto?* Escribilo, mandame audio o una foto del tablero."
+            "*¿Cuántos kilómetros tiene la moto?* Escribilo, mandame un audio o una foto del tablero."
         )
         context.user_data['evidence_items'] = []
         return ASKING_KM
@@ -763,22 +764,35 @@ async def handle_phone(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     context.user_data['client_phone'] = phone
     await update.message.reply_text(
         f"Teléfono *{phone}* registrado. ✅\n\n"
-        "Ahora, *¿cuántos kilómetros tiene la moto?* También podés decirme el nivel de gasolina. "
-        "Escribilo, mandame un audio o una foto del tablero.",
+        "*¿Cuántos kilómetros tiene la moto?* Escribilo, mandame un audio o una foto del tablero.",
         parse_mode="Markdown"
     )
     context.user_data['evidence_items'] = []
     return ASKING_KM
 
+GAS_OPTIONS = [
+    ("🟢 Lleno",   "Lleno"),
+    ("🔵 3/4",     "3/4"),
+    ("🟡 Medio",   "Medio"),
+    ("🟠 1/4",     "1/4"),
+    ("🔴 Reserva", "Reserva"),
+]
+
+def _gas_keyboard():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton(label, callback_data=f"gas_{value}")]
+        for label, value in GAS_OPTIONS
+    ])
+
 @role_required()
-async def handle_km_and_photos(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Paso 1: Solo captura KM y nivel de gasolina. Las fotos de evidencia van en el paso siguiente."""
+async def handle_km(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Captura solo el kilometraje y luego pregunta el nivel de combustible con botones."""
     if update.message.photo:
         await update.message.reply_text("Revisando el tablero... 🔍")
         photo_file = await update.message.photo[-1].get_file()
         extracted = await extract_reception_data_from_image(photo_file.file_path)
-        if extracted.get("kilometraje"): context.user_data['km'] = extracted["kilometraje"]
-        if extracted.get("gasolina"): context.user_data['gas_level'] = extracted["gasolina"]
+        if extracted.get("kilometraje"):
+            context.user_data['km'] = extracted["kilometraje"]
 
     elif update.message.voice:
         await update.message.reply_text("Escuchando... 🎧")
@@ -786,30 +800,52 @@ async def handle_km_and_photos(update: Update, context: ContextTypes.DEFAULT_TYP
         fd, path = tempfile.mkstemp(suffix=".ogg")
         os.close(fd)
         await voice_file.download_to_drive(path)
-        transcript = await transcribe_voice(path, prompt="Tiene 5000 km y está medio de gasolina.")
+        transcript = await transcribe_voice(path, prompt="Tiene 5000 km.")
         os.remove(path)
         if transcript:
+            if await check_cancel_intent(update, context, transcript): return ConversationHandler.END
             extracted = await extract_reception_data(transcript)
-            if extracted.get("kilometraje"): context.user_data['km'] = extracted["kilometraje"]
-            if extracted.get("gasolina"): context.user_data['gas_level'] = extracted["gasolina"]
+            if extracted.get("kilometraje"):
+                context.user_data['km'] = extracted["kilometraje"]
 
     elif update.message.text:
         txt = update.message.text
         if await check_cancel_intent(update, context, txt): return ConversationHandler.END
         extracted = await extract_reception_data(txt)
-        if extracted.get("kilometraje"): context.user_data['km'] = extracted["kilometraje"]
-        if extracted.get("gasolina"): context.user_data['gas_level'] = extracted["gasolina"]
+        if extracted.get("kilometraje"):
+            context.user_data['km'] = extracted["kilometraje"]
 
-    km = context.user_data.get('km', 'No registrado')
-    gas = context.user_data.get('gas_level', 'No registrado')
+    km = context.user_data.get('km')
+    if not km:
+        await update.message.reply_text(
+            "No logré leer el kilometraje. ¿Me lo escribís o mandás una foto del tablero?"
+        )
+        return ASKING_KM
+
+    await update.message.reply_text(
+        f"*{km} km* registrado ✅\n\n¿Cuál es el *nivel de combustible*?",
+        parse_mode="Markdown",
+        reply_markup=_gas_keyboard()
+    )
+    return ASKING_GAS
+
+
+@role_required()
+async def handle_gas(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Recibe la selección del nivel de combustible y avanza a las fotos de evidencia."""
+    query = update.callback_query
+    await query.answer()
+
+    gas_value = query.data.replace("gas_", "")
+    context.user_data['gas_level'] = gas_value
     context.user_data.setdefault('evidence_items', [])
 
     kb = [
         [InlineKeyboardButton("📝 Solo observación (sin foto)", callback_data="obs_text_only")],
         [InlineKeyboardButton("✅ Continuar sin evidencia", callback_data="photos_done")],
     ]
-    await update.message.reply_text(
-        f"*KM:* {km}  |  *Gasolina:* {gas} ✅\n\n"
+    await query.edit_message_text(
+        f"*Combustible:* {gas_value} ✅\n\n"
         "Ahora mandame *fotos del estado actual de la moto*: golpes, rayones, detalles a registrar. "
         "A cada foto le voy a pedir una breve descripción.\n\n"
         "También podés agregar solo una observación de texto sin foto. "

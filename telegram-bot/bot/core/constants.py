@@ -34,6 +34,7 @@ ASKING_INTAKE_QUESTION = 13
 ASKING_PHOTO_DESCRIPTION = 14
 ASKING_ACCESSORIES = 15
 ASKING_GENERAL_OBSERVATIONS = 16
+ASKING_GAS = 17
 
 # ----- Estados post-recepción (ciclo de vida del técnico) -----
 AWAITING_DIAGNOSIS = 50       # Esperando diagnóstico del técnico (diferido)
