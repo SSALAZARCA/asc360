@@ -488,6 +488,45 @@ async def extract_part_data(text: str) -> dict:
         return {"reference": None, "qty": 1, "part_type": "paid"}
 
 
+async def extract_accessories(text: str) -> list:
+    """
+    Extrae la lista de accesorios u objetos que el cliente deja con la moto.
+    Recibe descripción libre de voz/texto y devuelve una lista limpia de ítems.
+    """
+    system_prompt = (
+        "Eres el asistente de recepción de un taller de motocicletas UM Colombia. "
+        "El asesor te describe verbalmente los accesorios u objetos que el cliente deja junto con su moto. "
+        "Tu tarea es separar esa descripción en una lista de ítems puntuales, uno por elemento. "
+        "Cada ítem debe ser conciso (máximo 6 palabras). "
+        "No incluyas la moto misma ni partes de ella. "
+        "Si el texto dice que no hay nada, devuelve una lista vacía. "
+        "Responde ÚNICAMENTE con JSON válido: {\"items\": [\"item 1\", \"item 2\"]}"
+    )
+    try:
+        response = await _call_openai_with_retry(
+            lambda: aclient.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": text}
+                ],
+                response_format={"type": "json_object"},
+                max_tokens=200,
+                temperature=0
+            ),
+            max_retries=2
+        )
+        data = json.loads(response.choices[0].message.content)
+        items = data.get("items", [])
+        return [str(i).strip() for i in items if str(i).strip()]
+    except AIServiceError:
+        logger.error("extract_accessories: OpenAI agotó reintentos")
+        return [text]
+    except Exception as e:
+        logger.error(f"extract_accessories error: {e}")
+        return [text]
+
+
 async def extract_reception_data_from_image(image_url: str) -> dict:
     prompt = """
     Eres Sonia, una experta asesora de servicio técnico para motocicletas.

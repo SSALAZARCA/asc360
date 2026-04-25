@@ -144,6 +144,9 @@ class ServiceOrderReception(Base):
 
     # URLs a MinIO (Fotos subidas en telegram)
     damage_photos_urls = Column(JSONB, nullable=True, default=[])
+
+    # Accesorios u objetos que el cliente deja con la moto al ingresar
+    accessories = Column(JSONB, nullable=True, default=[])
     
     # URL al PDF generado por WeasyPrint (Acta finalizada)
     reception_pdf_url = Column(String(500), nullable=True)

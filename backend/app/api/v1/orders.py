@@ -48,6 +48,7 @@ async def create_service_order(
         warranty_warnings=order_in.reception.warranty_warnings,
         damage_photos_urls=order_in.reception.damage_photos_urls,
         intake_answers=order_in.reception.intake_answers or [],
+        accessories=order_in.reception.accessories or [],
     )
     db.add(new_reception)
     
@@ -275,6 +276,7 @@ async def get_order_detail(
             "warranty_warnings": r.warranty_warnings,
             "damage_photos_urls": r.damage_photos_urls or [],
             "intake_answers": r.intake_answers or [],
+            "accessories": r.accessories or [],
             "reception_pdf_url": r.reception_pdf_url,
             "signature_url": r.signature_url,
             "created_at": r.created_at.isoformat() if r.created_at else None,

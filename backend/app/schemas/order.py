@@ -38,6 +38,7 @@ class ReceptionBase(BaseModel):
     warranty_warnings: Optional[str] = Field(None, max_length=2000, description="Soft warnings generados por Sonia")
     damage_photos_urls: Optional[List[str]] = Field(default=[], description="URLs de MinIO de las fotos de estado")
     intake_answers: Optional[List[dict]] = Field(default=[], description="Respuestas a preguntas según tipo de servicio")
+    accessories: Optional[List[str]] = Field(default=[], description="Accesorios u objetos que el cliente deja con la moto")
 
 class OrderCreate(BaseModel):
     tenant_id: UUID = Field(..., description="ID del taller")

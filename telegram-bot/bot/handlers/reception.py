@@ -30,16 +30,18 @@ from core.constants import (
     ASKING_PHOTOS, ASKING_MOTIVE, CONFIRMING_MOTIVE,
     CORRECTING_MOTIVE, CONFIRMING_KM, SELECTING_TENANT,
     CONFIRMING_SERVICE_TYPE, ASKING_INTAKE_QUESTION,
-    ASKING_PHOTO_DESCRIPTION
+    ASKING_PHOTO_DESCRIPTION,
+    ASKING_ACCESSORIES
 )
 from core.decorators import role_required, check_cancel_intent
 from keyboards.reply import get_main_keyboard
 from services.ai import (
-    extract_data_from_image, 
+    extract_data_from_image,
     extract_data_from_text,
     extract_reception_data,
     extract_reception_data_from_image,
     extract_motive_data,
+    extract_accessories,
     transcribe_voice
 )
 
@@ -392,6 +394,7 @@ async def _build_and_dispatch_order(context: ContextTypes.DEFAULT_TYPE, bot, cha
     motives        = context.user_data.get('motives', [])
     vid            = context.user_data.get('vehicle_id')
     evidence_items = context.user_data.get('evidence_items', [])
+    accessories    = context.user_data.get('accessories', [])
     client_phone   = context.user_data.get('client_phone')
     tech_id        = context.user_data.get("logged_in_user", {}).get("id")
     intake_answers = context.user_data.get('intake_answers', [])
@@ -453,6 +456,7 @@ async def _build_and_dispatch_order(context: ContextTypes.DEFAULT_TYPE, bot, cha
             "customer_notes": motive_text,
             "damage_photos_urls": [],
             "intake_answers": intake_answers,
+            "accessories": accessories,
         }
     }
 
@@ -460,6 +464,8 @@ async def _build_and_dispatch_order(context: ContextTypes.DEFAULT_TYPE, bot, cha
     context.user_data.pop('ocr_plate', None)
     context.user_data.pop('evidence_items', None)
     context.user_data.pop('pending_photo_bytes', None)
+    context.user_data.pop('accessories', None)
+    context.user_data.pop('accessories_pending', None)
 
     context.application.create_task(
         background_create_order(payload, tenant_id, evidence_items, bot, chat_id, user_role, plate=plate)
@@ -923,7 +929,7 @@ async def handle_obs_text_only(update: Update, context: ContextTypes.DEFAULT_TYP
 
 @role_required()
 async def handle_photos_done(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Cierra el paso de evidencia y pasa al motivo de ingreso."""
+    """Cierra el paso de evidencia y pasa a la pregunta de accesorios."""
     query = update.callback_query
     await query.answer()
 
@@ -934,17 +940,109 @@ async def handle_photos_done(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if photos_count or text_count:
         partes = []
         if photos_count: partes.append(f"{photos_count} foto(s)")
-        if text_count:   partes.append(f"{text_count} observación(es) de texto")
-        evidencia_txt = " y ".join(partes) + " de evidencia registradas."
+        if text_count:   partes.append(f"{text_count} obs.")
+        evidencia_txt = " y ".join(partes) + " registradas ✅"
     else:
-        evidencia_txt = "Sin evidencia del estado del vehículo."
+        evidencia_txt = "Sin evidencia visual ✅"
+
+    kb = [[InlineKeyboardButton("Ninguno / Sin accesorios", callback_data="acc_none")]]
+    await query.edit_message_text(
+        f"{evidencia_txt}\n\n"
+        "*¿El cliente deja algún accesorio u objeto con la moto?*\n"
+        "Casco, alforjas, candado, herramientas, documentos... Describílos o mandame un audio.\n\n"
+        "Si no deja nada, presioná el botón.",
+        parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup(kb)
+    )
+    return ASKING_ACCESSORIES
+
+
+@role_required()
+async def handle_accessories(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Recibe descripción de accesorios por voz o texto y pide confirmación."""
+    text = ""
+    if update.message.voice:
+        await update.message.reply_text("Escuchando... 🎧")
+        voice_file = await update.message.voice.get_file()
+        fd, path = tempfile.mkstemp(suffix=".ogg")
+        os.close(fd)
+        await voice_file.download_to_drive(path)
+        transcript = await transcribe_voice(path, prompt="Casco negro, alforjas, candado.")
+        os.remove(path)
+        text = transcript or ""
+    elif update.message.text:
+        text = update.message.text
+
+    if await check_cancel_intent(update, context, text):
+        return ConversationHandler.END
+
+    if not text.strip():
+        await update.message.reply_text("Por favor describí los accesorios o presioná *Ninguno*.", parse_mode="Markdown")
+        return ASKING_ACCESSORIES
+
+    await update.message.reply_text("Un momento... 🔍")
+    items = await extract_accessories(text)
+
+    if not items:
+        context.user_data['accessories'] = []
+        await update.message.reply_text(
+            "No encontré accesorios en esa descripción. Si querés volvé a intentar o continuamos sin registrar nada.",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("✏️ Reintentar", callback_data="acc_retry")],
+                [InlineKeyboardButton("Continuar sin accesorios", callback_data="acc_none")],
+            ])
+        )
+        return ASKING_ACCESSORIES
+
+    context.user_data['accessories_pending'] = items
+    lista_txt = "\n".join(f"  {i+1}. {item}" for i, item in enumerate(items))
+    kb = [
+        [InlineKeyboardButton("✅ Correcto", callback_data="acc_confirm")],
+        [InlineKeyboardButton("✏️ Volver a describir", callback_data="acc_retry")],
+    ]
+    await update.message.reply_text(
+        f"Registré estos accesorios:\n\n{lista_txt}\n\n¿Está bien?",
+        reply_markup=InlineKeyboardMarkup(kb)
+    )
+    return ASKING_ACCESSORIES
+
+
+@role_required()
+async def handle_accessories_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Confirma la lista de accesorios y avanza al motivo de ingreso."""
+    query = update.callback_query
+    await query.answer()
+
+    if query.data == "acc_confirm":
+        items = context.user_data.pop('accessories_pending', [])
+        context.user_data['accessories'] = items
+        count = len(items)
+        txt = f"{count} accesorio(s) registrado(s) ✅"
+    else:
+        context.user_data['accessories'] = []
+        txt = "Sin accesorios registrados ✅"
 
     await query.edit_message_text(
-        f"{evidencia_txt}\n\nAhora describime el *motivo de ingreso*: ¿qué le pasa a la moto o qué necesita? "
+        f"{txt}\n\nAhora describime el *motivo de ingreso*: ¿qué le pasa a la moto o qué necesita? "
         "Podés escribirlo o mandarme un audio.",
         parse_mode="Markdown"
     )
     return ASKING_MOTIVE
+
+
+@role_required()
+async def handle_accessories_retry(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Descarta la lista pendiente y pide que describan los accesorios de nuevo."""
+    query = update.callback_query
+    await query.answer()
+    context.user_data.pop('accessories_pending', None)
+    kb = [[InlineKeyboardButton("Ninguno / Sin accesorios", callback_data="acc_none")]]
+    await query.edit_message_text(
+        "*¿Cuáles son los accesorios?* Describílos de nuevo, con más detalle si querés.",
+        parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup(kb)
+    )
+    return ASKING_ACCESSORIES
 
 @role_required()
 async def handle_motive(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
