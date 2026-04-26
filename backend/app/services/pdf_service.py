@@ -9,6 +9,23 @@ from minio import Minio
 
 logger = logging.getLogger(__name__)
 
+_GAS_BAR_WIDTHS = {"Lleno": 100, "3/4": 75, "Medio": 50, "1/4": 25, "Reserva": 10}
+
+def _gas_to_percent(gas_level: str) -> int:
+    return _GAS_BAR_WIDTHS.get(gas_level, 50)
+
+def _fix_photo_urls_for_weasyprint(photos: list) -> list:
+    """Reemplaza localhost:9000 por minio:9000 para que WeasyPrint dentro de Docker pueda cargar las imágenes."""
+    result = []
+    for p in photos:
+        if isinstance(p, dict) and p.get("url"):
+            fixed = dict(p)
+            fixed["url"] = fixed["url"].replace("http://localhost:9000", f"http://{MINIO_ENDPOINT}")
+            result.append(fixed)
+        else:
+            result.append(p)
+    return result
+
 # Configuración de S3 / MinIO
 MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "minio:9000")
 MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY", "umadmin")
@@ -46,6 +63,9 @@ async def generate_and_upload_reception_pdf(
     template = jinja_env.get_template("reception_act.html")
     tenant_data = tenant_data or {}
 
+    gas_level = reception_data.get("gas_level", "")
+    raw_photos = reception_data.get("damage_photos_urls", []) or []
+
     context = {
         "order_id": order_data.get("id", "PENDING"),
         "date": datetime.now().strftime("%Y-%m-%d %H:%M"),
@@ -66,13 +86,17 @@ async def generate_and_upload_reception_pdf(
         "vehicle_color": vehicle_data.get("color", ""),
         # Recepción
         "mileage_km":    reception_data.get("mileage_km", 0),
-        "gas_level":     reception_data.get("gas_level", "Unknown"),
-        "service_type":  order_data.get("service_type", "Regular"),
+        "gas_level":     gas_level,
+        "fuel_bar_width": _gas_to_percent(gas_level),
+        "service_type":  order_data.get("service_type", "regular"),
         "customer_notes":       reception_data.get("customer_notes", ""),
         "warranty_warnings":    reception_data.get("warranty_warnings", ""),
         "intake_answers":       reception_data.get("intake_answers", []),
         "accessories":          reception_data.get("accessories", []),
         "general_observations": reception_data.get("general_observations"),
+        "damage_photos_urls":   _fix_photo_urls_for_weasyprint(raw_photos),
+        # Técnico (opcional)
+        "technician_name": order_data.get("technician_name", ""),
         # Firma
         "accepted_at":    order_data.get("accepted_at"),
         "accepted_phone": order_data.get("accepted_phone"),

@@ -1,171 +1,519 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <title>Acta de Ingreso a Taller</title>
-    <style>
-        body { font-family: 'Helvetica', 'Arial', sans-serif; font-size: 11pt; color: #333; margin: 0; padding: 20px; }
+  <meta charset="UTF-8">
+  <title>Acta de Ingreso — {{ tenant_name }}</title>
+  <style>
+    @page { size: A4; margin: 0; }
 
-        .header { text-align: center; border-bottom: 2px solid #D32F2F; padding-bottom: 10px; margin-bottom: 20px; }
-        .header h1 { margin: 0; color: #D32F2F; font-size: 20pt; text-transform: uppercase; }
-        .header .header-sub { margin: 6px 0 0 0; font-size: 10pt; color: #555; }
-        .header .header-meta { margin: 4px 0 0 0; font-size: 9pt; color: #888; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
 
-        .section { margin-bottom: 20px; }
-        .section-title { background-color: #f4f4f4; padding: 8px; font-weight: bold; border-left: 4px solid #D32F2F; margin-bottom: 10px; }
+    body {
+      font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+      color: #1a1a1a;
+    }
 
-        table { width: 100%; border-collapse: collapse; margin-bottom: 15px; }
-        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-        th { background-color: #fafafa; width: 30%; color: #555; }
+    .page { width: 100%; background: #ffffff; }
 
-        .warning-box { background-color: #fff3cd; color: #856404; padding: 15px; border-radius: 4px; border: 1px solid #ffeeba; margin-top: 15px; }
-        .warning-title { font-weight: bold; margin-bottom: 5px; }
+    /* ── HEADER ── */
+    .doc-header {
+      background: #111827;
+      display: flex;
+      align-items: stretch;
+      min-height: 80px;
+    }
+    .header-accent { width: 5px; background: #ff5f33; flex-shrink: 0; }
+    .header-brand {
+      padding: 16px 22px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      flex: 1;
+      border-right: 1px solid rgba(255,255,255,0.06);
+    }
+    .brand-row { display: flex; align-items: center; gap: 9px; margin-bottom: 3px; }
+    .brand-badge {
+      background: #ff5f33; color: #fff; font-size: 10px; font-weight: 900;
+      padding: 3px 8px; border-radius: 3px; letter-spacing: 0.06em; font-style: italic;
+    }
+    .brand-name {
+      color: #fff; font-size: 12px; font-weight: 700;
+      letter-spacing: 0.14em; text-transform: uppercase;
+    }
+    .brand-sub {
+      color: rgba(255,255,255,0.28); font-size: 7.5px;
+      font-weight: 500; letter-spacing: 0.18em; text-transform: uppercase;
+    }
+    .header-order {
+      padding: 16px 24px;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      justify-content: center;
+      min-width: 180px;
+    }
+    .order-label {
+      color: rgba(255,255,255,0.28); font-size: 7px;
+      font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase; margin-bottom: 2px;
+    }
+    .order-number {
+      color: #fff; font-size: 24px; font-weight: 900;
+      letter-spacing: -0.02em; line-height: 1;
+    }
+    .order-meta {
+      color: rgba(255,255,255,0.35); font-size: 8px;
+      margin-top: 4px; text-align: right; line-height: 1.5;
+    }
+    .service-type-label {
+      margin-top: 5px; font-size: 7.5px; font-weight: 700;
+      color: #ff5f33; text-transform: uppercase; letter-spacing: 0.12em; text-align: right;
+    }
 
-        /* Accesorios */
-        .accessories-wrap { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 0; }
-        .acc-tag { background: #f3f4f6; border: 1px solid #e0e0e0; border-radius: 20px; padding: 3px 12px; font-size: 9pt; }
+    /* ── BODY ── */
+    .doc-body { padding: 22px 26px; }
 
-        /* Observaciones generales */
-        .obs-box { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 4px; padding: 12px 14px; font-size: 9.5pt; white-space: pre-line; line-height: 1.6; }
+    .section-label {
+      font-size: 7px; font-weight: 800; color: #ff5f33;
+      text-transform: uppercase; letter-spacing: 0.22em;
+      margin-bottom: 10px; margin-top: 18px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .section-label:first-child { margin-top: 0; }
+    .section-label::after { content: ''; flex: 1; height: 1px; background: #e5e7eb; }
 
-        .signatures { margin-top: 50px; display: flex; justify-content: space-between; }
-        .signature-box { width: 45%; border-top: 1px solid #333; text-align: center; padding-top: 10px; margin-top: 50px; }
-    </style>
+    /* ── IDENTITY CARDS ── */
+    .identity-row { display: flex; gap: 10px; }
+    .identity-card {
+      flex: 1; border: 1px solid #e5e7eb; border-radius: 5px;
+      padding: 13px 15px; position: relative; overflow: hidden;
+    }
+    .identity-card::before {
+      content: ''; position: absolute; top: 0; left: 0; right: 0;
+      height: 2px; background: #e5e7eb;
+    }
+    .identity-card.accent::before { background: #ff5f33; }
+    .card-field-label {
+      font-size: 6.5px; font-weight: 700; color: #9ca3af;
+      text-transform: uppercase; letter-spacing: 0.15em; margin-bottom: 5px;
+    }
+    .card-main { font-size: 14px; font-weight: 800; color: #111827; line-height: 1.2; margin-bottom: 4px; }
+    .card-sub { font-size: 8.5px; color: #6b7280; line-height: 1.5; }
+    .plate-tag {
+      display: inline-block; background: #111827; color: #fff;
+      font-size: 18px; font-weight: 900; padding: 4px 12px;
+      border-radius: 4px; letter-spacing: 0.1em; margin-bottom: 5px;
+      border-bottom: 2px solid #ff5f33;
+    }
+
+    /* ── INDICATORS ── */
+    .indicators-row { display: flex; gap: 8px; }
+    .indicator-chip { flex: 1; border: 1px solid #e5e7eb; border-radius: 5px; padding: 10px 12px; }
+    .chip-label {
+      font-size: 6.5px; font-weight: 700; color: #9ca3af;
+      text-transform: uppercase; letter-spacing: 0.14em; margin-bottom: 5px;
+    }
+    .chip-value { font-size: 13px; font-weight: 800; color: #111827; line-height: 1; }
+    .chip-unit { font-size: 8.5px; font-weight: 500; color: #9ca3af; }
+    .fuel-bar-track {
+      height: 5px; background: #f3f4f6; border-radius: 3px;
+      margin-top: 7px; overflow: hidden; border: 1px solid #e5e7eb;
+    }
+    .fuel-bar-fill { height: 100%; border-radius: 2px; background: #374151; }
+    .fuel-ticks { display: flex; justify-content: space-between; margin-top: 3px; }
+    .fuel-ticks span { font-size: 5.5px; color: #d1d5db; font-weight: 600; }
+
+    /* ── NOTES / MOTIVO ── */
+    .notes-card {
+      border: 1px solid #e5e7eb; border-left: 3px solid #374151;
+      border-radius: 5px; padding: 12px 14px; background: #fafafa;
+    }
+    .notes-label {
+      font-size: 6.5px; font-weight: 700; color: #9ca3af;
+      text-transform: uppercase; letter-spacing: 0.14em; margin-bottom: 8px;
+    }
+    .notes-list {
+      list-style: none; padding: 0; margin: 0;
+      display: flex; flex-direction: column; gap: 5px;
+      counter-reset: notes-counter;
+    }
+    .notes-list li {
+      display: flex; align-items: flex-start; gap: 7px;
+      font-size: 8.5px; color: #374151; line-height: 1.6;
+      counter-increment: notes-counter;
+    }
+    .notes-list li::before {
+      content: counter(notes-counter) '.';
+      color: #374151; font-weight: 800; flex-shrink: 0;
+      font-size: 8px; min-width: 13px; margin-top: 1px;
+    }
+
+    /* ── INTAKE QUESTIONS ── */
+    .intake-grid {
+      display: flex; flex-direction: column; gap: 0;
+      border: 1px solid #e5e7eb; border-radius: 5px; overflow: hidden;
+    }
+    .intake-row { display: flex; border-bottom: 1px solid #f3f4f6; }
+    .intake-row:last-child { border-bottom: none; }
+    .intake-row:nth-child(even) { background: #fafafa; }
+    .intake-q {
+      width: 46%; padding: 8px 12px; font-size: 7.5px; font-weight: 700;
+      color: #6b7280; border-right: 1px solid #f3f4f6; line-height: 1.5;
+      display: flex; align-items: center;
+    }
+    .intake-a {
+      flex: 1; padding: 8px 12px; font-size: 8.5px; color: #111827;
+      font-weight: 500; line-height: 1.5; display: flex; align-items: center;
+    }
+
+    /* ── EVIDENCE ── */
+    .evidence-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;
+    }
+    .evidence-item { border: 1px solid #e5e7eb; border-radius: 5px; overflow: hidden; }
+    .evidence-photo { width: 100%; height: 90px; object-fit: cover; display: block; }
+    .evidence-photo-placeholder {
+      width: 100%; height: 90px; background: #f3f4f6;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .evidence-caption { padding: 5px 7px; border-top: 1px solid #f3f4f6; background: #fff; }
+    .evidence-caption-text { font-size: 6.5px; color: #374151; line-height: 1.45; }
+    .evidence-notes { margin-top: 6px; display: flex; flex-direction: column; gap: 4px; }
+    .evidence-note-item {
+      display: flex; align-items: flex-start; gap: 6px;
+      padding: 5px 9px; border: 1px solid #e5e7eb; border-left: 2px solid #9ca3af;
+      border-radius: 4px; background: #fafafa; font-size: 7px; color: #374151; line-height: 1.55;
+    }
+    .evidence-note-label {
+      font-size: 6px; font-weight: 700; color: #9ca3af;
+      text-transform: uppercase; letter-spacing: 0.1em; flex-shrink: 0; margin-top: 1px;
+    }
+
+    /* ── ACCESSORIES ── */
+    .accessories-list { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 4px; }
+    .accessory-tag {
+      background: #f3f4f6; border: 1px solid #e5e7eb; border-radius: 20px;
+      padding: 3px 10px; font-size: 7.5px; color: #374151; white-space: nowrap;
+    }
+
+    /* ── OBSERVATIONS ── */
+    .obs-box {
+      background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 5px;
+      padding: 10px 13px; font-size: 8px; color: #374151; line-height: 1.7; white-space: pre-line;
+    }
+
+    /* ── WARRANTY WARNINGS ── */
+    .warning-box {
+      background: #fff3cd; color: #856404; padding: 12px 14px;
+      border-radius: 4px; border: 1px solid #ffeeba; font-size: 8px; line-height: 1.6; white-space: pre-line;
+    }
+
+    /* ── LEGAL ── */
+    .legal-prose {
+      border: 1px solid #e5e7eb; border-radius: 5px; padding: 11px 14px;
+      background: #fafafa; font-size: 7px; color: #6b7280; line-height: 1.75;
+    }
+    .legal-prose strong { color: #374151; font-weight: 800; }
+
+    /* ── OTP / ACCEPTANCE ── */
+    .stamp-row {
+      display: flex; align-items: flex-start; gap: 14px;
+      border: 1px solid #e5e7eb; border-radius: 5px; padding: 13px 16px;
+    }
+    .stamp-indicator { width: 8px; align-self: stretch; border-radius: 3px; flex-shrink: 0; }
+    .stamp-indicator.green  { background: #22c55e; }
+    .stamp-indicator.orange { background: #f59e0b; }
+    .stamp-title {
+      font-size: 8.5px; font-weight: 800; color: #111827;
+      text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px;
+    }
+    .stamp-detail { font-size: 8px; color: #6b7280; line-height: 1.6; }
+
+    /* ── SIGNATURES ── */
+    .signatures { display: flex; gap: 40px; margin-top: 14px; padding-top: 10px; }
+    .sig-box { flex: 1; text-align: center; }
+    .sig-space { height: 44px; }
+    .sig-line { border-top: 1px solid #374151; padding-top: 7px; }
+    .sig-name {
+      font-size: 7.5px; font-weight: 700; color: #374151;
+      text-transform: uppercase; letter-spacing: 0.08em;
+    }
+    .sig-sub { font-size: 7px; color: #9ca3af; margin-top: 2px; line-height: 1.5; }
+
+    /* ── FOOTER ── */
+    .doc-footer {
+      background: #f9fafb; border-top: 1px solid #e5e7eb;
+      padding: 9px 26px; display: flex; justify-content: space-between; align-items: center;
+    }
+    .footer-legal { font-size: 6px; color: #9ca3af; line-height: 1.6; max-width: 68%; }
+    .footer-ref {
+      font-size: 7px; color: #d1d5db; font-weight: 600;
+      letter-spacing: 0.08em; text-align: right; line-height: 1.6;
+    }
+    .footer-ref span { color: #ff5f33; }
+  </style>
 </head>
 <body>
-    <div class="header">
-        <h1>{{ tenant_name }}</h1>
-        <div class="header-sub">
-            {% if tenant_nit %}NIT: {{ tenant_nit }}{% endif %}
-            {% if tenant_nit and tenant_phone %} &nbsp;·&nbsp; {% endif %}
-            {% if tenant_phone %}Tel: {{ tenant_phone }}{% endif %}
-            {% if tenant_city %} &nbsp;·&nbsp; {{ tenant_city }}{% endif %}
+<div class="page">
+
+  <!-- HEADER -->
+  <div class="doc-header">
+    <div class="header-accent"></div>
+    <div class="header-brand">
+      <div class="brand-row">
+        <span class="brand-badge">UM</span>
+        <span class="brand-name">{{ tenant_name }}</span>
+      </div>
+      <span class="brand-sub">Acta de Ingreso a Taller &nbsp;·&nbsp; Documento Oficial</span>
+      <span class="brand-sub" style="margin-top:3px; color:rgba(255,255,255,0.40);">
+        {% if tenant_nit %}NIT: {{ tenant_nit }}{% endif %}
+        {% if tenant_nit and tenant_phone %} &nbsp;·&nbsp; {% endif %}
+        {% if tenant_phone %}Tel: {{ tenant_phone }}{% endif %}
+        {% if tenant_city %} &nbsp;·&nbsp; {{ tenant_city }}{% endif %}
+      </span>
+    </div>
+    <div class="header-order">
+      <span class="order-label">Orden de Servicio</span>
+      <span class="order-number">#{{ order_id[:8].upper() if order_id and order_id|length > 8 else order_id }}</span>
+      <span class="order-meta">{{ date }}<br>{{ tenant_name }}</span>
+      {% if service_type == "warranty" %}
+      <span class="service-type-label">Garantia</span>
+      {% elif service_type == "km_review" %}
+      <span class="service-type-label">Revision KM</span>
+      {% elif service_type == "repair" %}
+      <span class="service-type-label">Reparacion</span>
+      {% else %}
+      <span class="service-type-label">{{ service_type }}</span>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- BODY -->
+  <div class="doc-body">
+
+    <!-- IDENTIFICACIÓN -->
+    <div class="section-label">Identificacion</div>
+    <div class="identity-row">
+
+      <div class="identity-card">
+        <div class="card-field-label">Propietario del Vehiculo</div>
+        <div class="card-main">{{ owner_name }}</div>
+        <div class="card-sub">
+          CC {{ owner_id }}
+          {% if owner_phone %}<br>Cel: {{ owner_phone }}{% endif %}
+          {% if owner_email %}<br>{{ owner_email }}{% endif %}
         </div>
-        <div class="header-meta">Acta de Ingreso a Taller &nbsp;|&nbsp; Orden #{{ order_id }} &nbsp;|&nbsp; {{ date }}</div>
+      </div>
+
+      <div class="identity-card accent">
+        <div class="card-field-label">Motocicleta</div>
+        <div class="plate-tag">{{ vehicle_plate }}</div>
+        <div class="card-sub">
+          {{ vehicle_model }}
+          {% if vehicle_color %} &middot; Color: {{ vehicle_color }}{% endif %}
+          {% if vehicle_vin %}<br>VIN: {{ vehicle_vin }}{% endif %}
+          {% if vehicle_motor %}<br>Motor: {{ vehicle_motor }}{% endif %}
+        </div>
+      </div>
+
     </div>
 
-    <!-- CLIENTE Y MOTOCICLETA -->
-    <div class="section">
-        <div class="section-title">Información del Cliente y Motocicleta</div>
-        <table>
-            <tr>
-                <th>Propietario</th>
-                <td>{{ owner_name }} ({{ owner_id }})
-                    {% if owner_phone %} &nbsp;·&nbsp; Tel: {{ owner_phone }}{% endif %}
-                    {% if owner_email %} &nbsp;·&nbsp; {{ owner_email }}{% endif %}
-                </td>
-            </tr>
-            <tr>
-                <th>Vehículo</th>
-                <td>{{ vehicle_model }} &nbsp;|&nbsp; Placa: <strong>{{ vehicle_plate }}</strong>
-                    {% if vehicle_color %} &nbsp;|&nbsp; Color: {{ vehicle_color }}{% endif %}
-                </td>
-            </tr>
-            <tr>
-                <th>VIN / Chasis</th>
-                <td>{{ vehicle_vin }}</td>
-            </tr>
-            {% if vehicle_motor %}
-            <tr>
-                <th>N° Motor</th>
-                <td>{{ vehicle_motor }}</td>
-            </tr>
-            {% endif %}
-        </table>
+    <!-- CONDICIÓN DE INGRESO -->
+    <div class="section-label">Condicion de Ingreso</div>
+    <div class="indicators-row">
+
+      <div class="indicator-chip">
+        <div class="chip-label">Kilometraje</div>
+        <div class="chip-value">{{ "{:,.0f}".format(mileage_km or 0) }} <span class="chip-unit">km</span></div>
+      </div>
+
+      <div class="indicator-chip" style="flex: 1.6">
+        <div class="chip-label">Nivel de Combustible &mdash; {{ gas_level }}</div>
+        <div class="fuel-bar-track">
+          <div class="fuel-bar-fill" style="width: {{ fuel_bar_width }}%"></div>
+        </div>
+        <div class="fuel-ticks">
+          <span>E</span><span>1/4</span><span>1/2</span><span>3/4</span><span>F</span>
+        </div>
+      </div>
+
+      <div class="indicator-chip">
+        <div class="chip-label">Tipo de Servicio</div>
+        {% if service_type == "warranty" %}
+        <div class="chip-value" style="font-size:10px; font-weight:700; color:#dc2626;">Garantia</div>
+        {% elif service_type == "km_review" %}
+        <div class="chip-value" style="font-size:10px; font-weight:700; color:#2563eb;">Revision KM</div>
+        {% elif service_type == "repair" %}
+        <div class="chip-value" style="font-size:10px; font-weight:700; color:#d97706;">Reparacion</div>
+        {% else %}
+        <div class="chip-value" style="font-size:10px; font-weight:700;">{{ service_type }}</div>
+        {% endif %}
+      </div>
+
+      {% if technician_name %}
+      <div class="indicator-chip">
+        <div class="chip-label">Asesor Receptor</div>
+        <div class="chip-value" style="font-size:10px; font-weight:700;">{{ technician_name }}</div>
+      </div>
+      {% endif %}
+
     </div>
 
-    <!-- DETALLES DE RECEPCIÓN -->
-    <div class="section">
-        <div class="section-title">Detalles de Recepción</div>
-        <table>
-            <tr>
-                <th>Kilometraje de Ingreso</th>
-                <td>{{ mileage_km }} km</td>
-            </tr>
-            <tr>
-                <th>Nivel de Combustible</th>
-                <td>{{ gas_level }}</td>
-            </tr>
-            <tr>
-                <th>Tipo de Servicio</th>
-                <td>{{ service_type }}</td>
-            </tr>
-            <tr>
-                <th>Motivos del Cliente</th>
-                <td style="white-space: pre-line;">{{ customer_notes }}</td>
-            </tr>
-        </table>
+    <!-- MOTIVO DE INGRESO -->
+    <div class="section-label">Motivo de Ingreso</div>
+    <div class="notes-card">
+      <div class="notes-label">Descripcion referida por el cliente</div>
+      <ul class="notes-list">
+        {% for note in (customer_notes or '').split('\n') %}
+        {% if note.strip() %}
+        <li>{{ note.strip() }}</li>
+        {% endif %}
+        {% endfor %}
+      </ul>
     </div>
 
     <!-- PREGUNTAS COMPLEMENTARIAS -->
     {% if intake_answers %}
-    <div class="section">
-        <div class="section-title">Preguntas Complementarias de Ingreso</div>
-        <table>
-            {% for item in intake_answers %}
-            <tr>
-                <th>{{ item.pregunta }}</th>
-                <td>{{ item.respuesta }}</td>
-            </tr>
-            {% endfor %}
-        </table>
+    <div class="section-label">Preguntas Complementarias de Ingreso</div>
+    <div class="intake-grid">
+      {% for item in intake_answers %}
+      <div class="intake-row">
+        <div class="intake-q">{{ item.pregunta }}</div>
+        <div class="intake-a">{{ item.respuesta }}</div>
+      </div>
+      {% endfor %}
     </div>
+    {% endif %}
+
+    <!-- EVIDENCIAS VISUALES -->
+    {% if damage_photos_urls %}
+    {% set photo_items = damage_photos_urls | rejectattr('type', 'equalto', 'text') | list %}
+    {% set text_items  = damage_photos_urls | selectattr('type', 'equalto', 'text')  | list %}
+    {% if photo_items %}
+    <div class="section-label">Estado Visual al Ingreso</div>
+    <div class="evidence-grid">
+      {% for item in photo_items %}
+      <div class="evidence-item">
+        {% if item.url %}
+        <img class="evidence-photo" src="{{ item.url }}" alt="Evidencia {{ loop.index }}">
+        {% else %}
+        <div class="evidence-photo-placeholder">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" stroke-width="1.5">
+            <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/>
+            <polyline points="21 15 16 10 5 21"/>
+          </svg>
+        </div>
+        {% endif %}
+        {% if item.desc %}
+        <div class="evidence-caption">
+          <div class="evidence-caption-text">{{ item.desc }}</div>
+        </div>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% if text_items %}
+    <div class="evidence-notes" {% if not photo_items %}style="margin-top:0"{% endif %}>
+      {% for item in text_items %}
+      <div class="evidence-note-item">
+        <span class="evidence-note-label">Obs.</span>
+        {{ item.desc }}
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
     {% endif %}
 
     <!-- ACCESORIOS -->
     {% if accessories %}
-    <div class="section">
-        <div class="section-title">Accesorios e Inventario del Cliente</div>
-        <div class="accessories-wrap">
-            {% for item in accessories %}
-            <span class="acc-tag">{{ item }}</span>
-            {% endfor %}
-        </div>
+    <div class="section-label">Accesorios e Inventario del Cliente</div>
+    <div class="accessories-list">
+      {% for item in accessories %}
+      <span class="accessory-tag">{{ item }}</span>
+      {% endfor %}
     </div>
     {% endif %}
 
-    <!-- OBSERVACIONES GENERALES / ACUERDOS -->
+    <!-- OBSERVACIONES GENERALES -->
     {% if general_observations %}
-    <div class="section">
-        <div class="section-title">Observaciones Generales y Acuerdos</div>
-        <div class="obs-box">{{ general_observations }}</div>
-    </div>
+    <div class="section-label">Observaciones Generales y Acuerdos</div>
+    <div class="obs-box">{{ general_observations }}</div>
     {% endif %}
 
-    <!-- SOFT WARNINGS AI -->
+    <!-- WARRANTY WARNINGS -->
     {% if warranty_warnings %}
-    <div class="section warning-box">
-        <div class="warning-title">Observaciones de Garantía (Generadas Automáticamente)</div>
-        <p style="white-space: pre-line; margin: 0;">{{ warranty_warnings }}</p>
-    </div>
+    <div class="section-label">Observaciones de Garantia</div>
+    <div class="warning-box">{{ warranty_warnings }}</div>
     {% endif %}
 
-    <!-- ACEPTACIÓN OTP -->
+    <!-- CONDICIONES LEGALES -->
+    <div class="section-label">Condiciones Legales de Ingreso</div>
+    <div class="legal-prose">
+      <strong>1. Garantia:</strong> Cubre exclusivamente las partes intervenidas durante el tiempo y kilometraje acordado (lo que ocurra primero) desde la entrega. No aplica por mal uso, desgaste natural o repuestos suministrados por el cliente. &mdash;
+      <strong>2. Habeas Data:</strong> El cliente autoriza el tratamiento de sus datos personales (Ley 1581 de 2012) para la gestion del servicio, seguimiento postventa y envio de informacion comercial. &mdash;
+      <strong>3. Entregas y Repuestos:</strong> Las fechas son estimadas y dependen de la disponibilidad de stock. El taller se exonera de responsabilidad por lucro cesante derivado del tiempo de reparacion. &mdash;
+      <strong>4. Declaratoria de Abandono:</strong> Si pasado un mes del aviso de entrega el vehiculo no es retirado, se requerira al cliente. Tras dos meses adicionales sin retiro, el bien se considerara abandonado. &mdash;
+      <strong>5. Responsabilidad e Inventario:</strong> El taller responde unicamente por el estado del vehiculo y los objetos registrados expresamente en el inventario de esta orden.
+    </div>
+
+    <!-- ESTADO DE ACEPTACIÓN -->
+    <div class="section-label">Estado de Aceptacion</div>
     {% if accepted_at %}
-    <div style="margin-top: 20px; background-color: #d4edda; color: #155724; padding: 15px; border-radius: 4px; border: 1px solid #c3e6cb;">
-        <div style="font-weight: bold; margin-bottom: 5px;">✅ Documento aceptado por el cliente</div>
-        <p style="margin: 0; font-size: 9pt;">
-            Aceptado el {{ accepted_at }} mediante código OTP enviado al número {{ accepted_phone }}.
-        </p>
+    <div class="stamp-row">
+      <div class="stamp-indicator green"></div>
+      <div>
+        <div class="stamp-title">Documento aceptado por el cliente via OTP</div>
+        <div class="stamp-detail">
+          Codigo de 6 digitos validado el <strong>{{ accepted_at }}</strong><br>
+          Enviado y confirmado desde el numero <strong>{{ accepted_phone }}</strong>
+        </div>
+      </div>
     </div>
     {% elif bypass_at %}
-    <div style="margin-top: 20px; background-color: #fff3cd; color: #856404; padding: 15px; border-radius: 4px; border: 1px solid #ffeeba;">
-        <div style="font-weight: bold; margin-bottom: 5px;">⚠️ Autorizado sin firma OTP</div>
-        <p style="margin: 0; font-size: 9pt;">
-            Autorizado el {{ bypass_at }} por {{ bypass_by_name }}. Sin validación de código OTP por parte del cliente.
-        </p>
+    <div class="stamp-row">
+      <div class="stamp-indicator orange"></div>
+      <div>
+        <div class="stamp-title">Autorizado sin codigo OTP</div>
+        <div class="stamp-detail">
+          Autorizado el <strong>{{ bypass_at }}</strong>
+          por <strong>{{ bypass_by_name }}</strong><br>
+          El cliente no se encontraba presente. Orden habilitada por autorizacion manual.
+        </div>
+      </div>
     </div>
     {% else %}
-    <!-- FIRMAS -->
     <div class="signatures">
-        <div class="signature-box">
-            <p>Firma del Propietario / Cliente</p>
-            <p style="font-size: 8pt; color: #777;">Autorizo los trabajos descritos y declaro aceptar las condiciones de servicio.</p>
+      <div class="sig-box">
+        <div class="sig-space"></div>
+        <div class="sig-line">
+          <div class="sig-name">Firma del Propietario / Cliente</div>
+          <div class="sig-sub">Autorizo los trabajos descritos y acepto<br>las politicas de servicio UM Colombia.</div>
         </div>
-        <div class="signature-box">
-            <p>Firma del Asesor de Servicio</p>
+      </div>
+      <div class="sig-box">
+        <div class="sig-space"></div>
+        <div class="sig-line">
+          <div class="sig-name">Firma del Asesor de Servicio</div>
+          <div class="sig-sub">Nombre: ___________________________</div>
         </div>
+      </div>
     </div>
     {% endif %}
+
+  </div>
+
+  <!-- FOOTER -->
+  <div class="doc-footer">
+    <div class="footer-legal">
+      Este documento es constancia oficial de recepcion del vehiculo en talleres UM Colombia. No nos hacemos responsables por objetos personales
+      dejados en el vehiculo. Trabajos adicionales no incluidos en esta orden seran consultados previamente con el propietario.
+    </div>
+    <div class="footer-ref">
+      <span>ORD-{{ order_id[:12].upper() if order_id and order_id|length > 12 else order_id }}</span><br>
+      Sistema UM &middot; Generado automaticamente
+    </div>
+  </div>
+
+</div>
 </body>
 </html>

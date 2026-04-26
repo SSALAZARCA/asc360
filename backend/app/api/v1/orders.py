@@ -84,6 +84,7 @@ async def create_service_order(
         "intake_answers": order_in.reception.intake_answers or [],
         "accessories": order_in.reception.accessories or [],
         "general_observations": order_in.reception.general_observations,
+        "damage_photos_urls": order_in.reception.damage_photos_urls or [],
     }
     vehicle_data = {
         "model": vehicle_obj.model if vehicle_obj else "Desconocido",
@@ -1164,6 +1165,7 @@ async def verify_otp(
             "intake_answers": reception.intake_answers or [] if reception else [],
             "accessories": reception.accessories or [] if reception else [],
             "general_observations": reception.general_observations if reception else None,
+            "damage_photos_urls": reception.damage_photos_urls or [] if reception else [],
         }
         vehicle_data = {
             "model": vehicle.model if vehicle else "Desconocido",
@@ -1319,6 +1321,7 @@ async def bypass_otp(
             "intake_answers": reception.intake_answers or [] if reception else [],
             "accessories": reception.accessories or [] if reception else [],
             "general_observations": reception.general_observations if reception else None,
+            "damage_photos_urls": reception.damage_photos_urls or [] if reception else [],
         }
         vehicle_data = {
             "model": vehicle.model if vehicle else "Desconocido",
