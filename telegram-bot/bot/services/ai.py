@@ -576,3 +576,90 @@ async def extract_reception_data_from_image(image_url: str) -> dict:
     except Exception as e:
         logger.error(f"Error OpenAI Reception Image: {e}")
         return {}
+
+
+async def correlate_work_to_complaints(customer_notes: str, work_logs: list[str]) -> list[dict]:
+    """
+    Correlaciona cada queja/solicitud del cliente con el trabajo realizado por el técnico.
+
+    Garantiza que TODA solicitud del cliente tenga una respuesta asignada.
+    Si no hay trabajo que responda a una solicitud, marca addressed=false para
+    que el asesor lo detecte antes de imprimir la orden de salida.
+
+    Args:
+        customer_notes: Texto con los motivos de ingreso (puede tener saltos de línea o viñetas).
+        work_logs: Lista de strings con los diagnósticos/trabajos narrados por el técnico.
+
+    Returns:
+        Lista de dicts:
+        [
+          {
+            "cliente": "Solicitud del cliente",
+            "tecnico": "Trabajo realizado que responde a esa solicitud, o vacío si no hay",
+            "addressed": true | false
+          },
+          ...
+        ]
+    """
+    if not customer_notes or not customer_notes.strip():
+        return []
+
+    work_text = "\n".join(f"- {log}" for log in work_logs) if work_logs else "(sin registros de trabajo)"
+
+    system_prompt = """Eres el asistente de cierre de órdenes de servicio de un taller de motocicletas UM Colombia.
+
+Tu tarea es correlacionar CADA solicitud del cliente con el trabajo que realizó el técnico.
+
+REGLAS CRÍTICAS:
+1. Toda solicitud del cliente DEBE aparecer en el resultado, sin excepción.
+2. Para cada solicitud, busca en los work_logs el trabajo que la resuelve o atiende.
+3. Si una solicitud no tiene respuesta en los work_logs, devuelve "tecnico": "" y "addressed": false.
+4. Si una solicitud tiene respuesta parcial, igualmente asignala y marca "addressed": true.
+5. Un mismo log del técnico puede responder a varias solicitudes del cliente.
+6. Sintetiza el texto del técnico: claro, conciso, máximo 2 líneas por ítem.
+7. No inventes trabajo que no esté en los logs del técnico.
+
+Responde ÚNICAMENTE con JSON válido:
+{"correlations": [{"cliente": "...", "tecnico": "...", "addressed": true}]}"""
+
+    user_content = f"""SOLICITUDES DEL CLIENTE:
+{customer_notes.strip()}
+
+TRABAJO REALIZADO POR EL TÉCNICO:
+{work_text}"""
+
+    try:
+        response = await _call_openai_with_retry(
+            lambda: aclient.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_content},
+                ],
+                response_format={"type": "json_object"},
+                max_tokens=800,
+                temperature=0,
+            ),
+            max_retries=2,
+        )
+        data = json.loads(response.choices[0].message.content)
+        correlations = data.get("correlations", [])
+
+        # Normalizar estructura por si GPT devuelve campos faltantes
+        result = []
+        for item in correlations:
+            result.append({
+                "cliente":    str(item.get("cliente", "")).strip(),
+                "tecnico":    str(item.get("tecnico", "")).strip(),
+                "addressed":  bool(item.get("addressed", False)),
+            })
+        return result
+
+    except AIServiceError:
+        logger.error("correlate_work_to_complaints: OpenAI agotó reintentos")
+        return [{"cliente": c.strip(), "tecnico": "", "addressed": False}
+                for c in customer_notes.splitlines() if c.strip()]
+    except Exception as e:
+        logger.error(f"correlate_work_to_complaints error: {e}")
+        return [{"cliente": c.strip(), "tecnico": "", "addressed": False}
+                for c in customer_notes.splitlines() if c.strip()]

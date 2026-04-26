@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Orden de Salida — Preview</title>
+  <style>
+    @page { size: A4; margin: 0; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+      color: #1a1a1a;
+      background: #e5e7eb;
+      padding: 32px 0;
+    }
+
+    .page {
+      width: 794px;
+      background: #ffffff;
+      margin: 0 auto;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+    }
+
+    /* ── HEADER ── */
+    .doc-header {
+      background: #111827;
+      display: flex;
+      align-items: stretch;
+      min-height: 80px;
+    }
+    .header-accent { width: 5px; background: #10b981; flex-shrink: 0; }
+    .header-brand {
+      padding: 16px 22px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      flex: 1;
+      border-right: 1px solid rgba(255,255,255,0.06);
+    }
+    .brand-row { display: flex; align-items: center; gap: 9px; margin-bottom: 3px; }
+    .brand-badge {
+      background: #10b981; color: #fff; font-size: 10px; font-weight: 900;
+      padding: 3px 8px; border-radius: 3px; letter-spacing: 0.06em; font-style: italic;
+    }
+    .brand-name {
+      color: #fff; font-size: 12px; font-weight: 700;
+      letter-spacing: 0.14em; text-transform: uppercase;
+    }
+    .brand-sub {
+      color: rgba(255,255,255,0.28); font-size: 7.5px;
+      font-weight: 500; letter-spacing: 0.18em; text-transform: uppercase;
+    }
+    .header-order {
+      padding: 16px 24px;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      justify-content: center;
+      min-width: 180px;
+    }
+    .order-label {
+      color: rgba(255,255,255,0.28); font-size: 7px;
+      font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase; margin-bottom: 2px;
+    }
+    .order-number {
+      color: #fff; font-size: 24px; font-weight: 900;
+      letter-spacing: -0.02em; line-height: 1;
+    }
+    .order-meta {
+      color: rgba(255,255,255,0.35); font-size: 8px;
+      margin-top: 4px; text-align: right; line-height: 1.5;
+    }
+    .service-type-label {
+      margin-top: 5px; font-size: 7.5px; font-weight: 700;
+      color: #10b981; text-transform: uppercase; letter-spacing: 0.12em; text-align: right;
+    }
+
+    /* ── DELIVERY BANNER ── */
+    .delivery-banner {
+      background: #ecfdf5;
+      border-bottom: 2px solid #10b981;
+      padding: 10px 26px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .delivery-banner-icon {
+      width: 28px; height: 28px; background: #10b981; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .delivery-banner-text { font-size: 8.5px; color: #065f46; line-height: 1.6; }
+    .delivery-banner-text strong { font-weight: 800; font-size: 9px; }
+
+    /* ── BODY ── */
+    .doc-body { padding: 22px 26px; }
+
+    .section-label {
+      font-size: 7px; font-weight: 800; color: #10b981;
+      text-transform: uppercase; letter-spacing: 0.22em;
+      margin-bottom: 10px; margin-top: 18px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .section-label:first-child { margin-top: 0; }
+    .section-label::after { content: ''; flex: 1; height: 1px; background: #e5e7eb; }
+
+    /* ── IDENTITY CARDS ── */
+    .identity-row { display: flex; gap: 10px; }
+    .identity-card {
+      flex: 1; border: 1px solid #e5e7eb; border-radius: 5px;
+      padding: 13px 15px; position: relative; overflow: hidden;
+    }
+    .identity-card::before {
+      content: ''; position: absolute; top: 0; left: 0; right: 0;
+      height: 2px; background: #e5e7eb;
+    }
+    .identity-card.accent::before { background: #10b981; }
+    .card-field-label {
+      font-size: 6.5px; font-weight: 700; color: #9ca3af;
+      text-transform: uppercase; letter-spacing: 0.15em; margin-bottom: 5px;
+    }
+    .card-main { font-size: 14px; font-weight: 800; color: #111827; line-height: 1.2; margin-bottom: 4px; }
+    .card-sub { font-size: 8.5px; color: #6b7280; line-height: 1.5; }
+    .plate-tag {
+      display: inline-block; background: #111827; color: #fff;
+      font-size: 18px; font-weight: 900; padding: 4px 12px;
+      border-radius: 4px; letter-spacing: 0.1em; margin-bottom: 5px;
+      border-bottom: 2px solid #10b981;
+    }
+
+    /* ── COMPARE CHIPS ── */
+    .compare-row { display: flex; gap: 8px; align-items: stretch; }
+    .compare-block {
+      flex: 1; border: 1px solid #e5e7eb; border-radius: 5px; overflow: hidden;
+    }
+    .compare-header {
+      padding: 5px 10px; font-size: 6.5px; font-weight: 800;
+      letter-spacing: 0.14em; text-transform: uppercase;
+    }
+    .compare-header.entrada { background: #f3f4f6; color: #6b7280; }
+    .compare-header.salida  { background: #ecfdf5; color: #065f46; }
+    .compare-body { padding: 10px 12px; }
+    .chip-value { font-size: 13px; font-weight: 800; color: #111827; line-height: 1; }
+    .chip-unit  { font-size: 8.5px; font-weight: 500; color: #9ca3af; }
+    .chip-label {
+      font-size: 6.5px; font-weight: 700; color: #9ca3af;
+      text-transform: uppercase; letter-spacing: 0.14em; margin-bottom: 5px;
+    }
+    .fuel-bar-track {
+      height: 5px; background: #f3f4f6; border-radius: 3px;
+      margin-top: 7px; overflow: hidden; border: 1px solid #e5e7eb;
+    }
+    .fuel-bar-fill { height: 100%; border-radius: 2px; }
+    .fuel-bar-fill.entrada { background: #374151; }
+    .fuel-bar-fill.salida  { background: #10b981; }
+    .fuel-ticks { display: flex; justify-content: space-between; margin-top: 3px; }
+    .fuel-ticks span { font-size: 5.5px; color: #d1d5db; font-weight: 600; }
+
+    .indicator-chip { flex: 1; border: 1px solid #e5e7eb; border-radius: 5px; padding: 10px 12px; }
+
+    /* ── WORK TABLE ── */
+    .work-table {
+      width: 100%; border-collapse: collapse;
+      border: 1px solid #e5e7eb; border-radius: 5px; overflow: hidden;
+      font-size: 8px;
+    }
+    .work-table thead tr { background: #f9fafb; }
+    .work-table th {
+      padding: 7px 10px; text-align: left;
+      font-size: 6.5px; font-weight: 800; color: #6b7280;
+      text-transform: uppercase; letter-spacing: 0.14em;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    .work-table td {
+      padding: 8px 10px; border-bottom: 1px solid #f3f4f6;
+      color: #374151; vertical-align: top; line-height: 1.5;
+    }
+    .work-table tr:last-child td { border-bottom: none; }
+    .work-table tr:nth-child(even) td { background: #fafafa; }
+    .tag-warranty {
+      display: inline-block; background: #dbeafe; color: #1d4ed8;
+      font-size: 6px; font-weight: 800; padding: 2px 6px;
+      border-radius: 10px; text-transform: uppercase; letter-spacing: 0.08em;
+    }
+    .tag-paid {
+      display: inline-block; background: #fef9c3; color: #854d0e;
+      font-size: 6px; font-weight: 800; padding: 2px 6px;
+      border-radius: 10px; text-transform: uppercase; letter-spacing: 0.08em;
+    }
+
+    /* ── DIAGNOSIS ── */
+    .diagnosis-card {
+      border: 1px solid #e5e7eb; border-left: 3px solid #374151;
+      border-radius: 5px; padding: 12px 14px; background: #fafafa; margin-bottom: 8px;
+    }
+    .diagnosis-card:last-child { margin-bottom: 0; }
+    .diagnosis-tech {
+      font-size: 6.5px; font-weight: 800; color: #9ca3af;
+      text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 5px;
+    }
+    .diagnosis-text { font-size: 8.5px; color: #374151; line-height: 1.7; }
+
+    /* ── FINANCIAL ── */
+    .financial-table { width: 100%; border-collapse: collapse; }
+    .financial-table td { padding: 5px 0; font-size: 8.5px; color: #374151; }
+    .financial-table td:last-child { text-align: right; font-weight: 600; }
+    .financial-table .divider td { border-top: 1px solid #e5e7eb; padding-top: 8px; }
+    .financial-total td { font-size: 11px; font-weight: 900; color: #111827; padding-top: 6px; }
+    .financial-total td:last-child { color: #10b981; }
+    .financial-box {
+      border: 1px solid #e5e7eb; border-radius: 5px; padding: 13px 16px;
+      display: flex; gap: 20px;
+    }
+    .financial-main { flex: 1; }
+    .financial-qr {
+      width: 70px; display: flex; flex-direction: column; align-items: center;
+      justify-content: center; gap: 5px;
+    }
+    .qr-placeholder {
+      width: 58px; height: 58px; background: #f3f4f6;
+      border: 1px solid #e5e7eb; border-radius: 4px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .qr-label { font-size: 6px; color: #9ca3af; text-align: center; line-height: 1.4; }
+
+    /* ── ACCESSORIES RETURNED ── */
+    .accessories-list { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 4px; }
+    .accessory-tag {
+      background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 20px;
+      padding: 3px 10px; font-size: 7.5px; color: #065f46; white-space: nowrap;
+      display: flex; align-items: center; gap: 4px;
+    }
+    .accessory-check { color: #10b981; font-size: 9px; font-weight: 900; }
+
+    /* ── NEXT SERVICE ── */
+    .next-service-box {
+      background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 5px;
+      padding: 11px 14px; display: flex; align-items: flex-start; gap: 10px;
+    }
+    .next-service-icon {
+      font-size: 18px; flex-shrink: 0; margin-top: 1px;
+    }
+    .next-service-label {
+      font-size: 6.5px; font-weight: 800; color: #065f46;
+      text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 4px;
+    }
+    .next-service-text { font-size: 8.5px; color: #374151; line-height: 1.6; }
+
+    /* ── OBS ── */
+    .obs-box {
+      background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 5px;
+      padding: 10px 13px; font-size: 8px; color: #374151; line-height: 1.7; white-space: pre-line;
+    }
+
+    /* ── LEGAL ── */
+    .legal-prose {
+      border: 1px solid #e5e7eb; border-radius: 5px; padding: 11px 14px;
+      background: #fafafa; font-size: 7px; color: #6b7280; line-height: 1.75;
+    }
+    .legal-prose strong { color: #374151; font-weight: 800; }
+
+    /* ── DELIVERY STAMP ── */
+    .stamp-row {
+      display: flex; align-items: flex-start; gap: 14px;
+      border: 1px solid #e5e7eb; border-radius: 5px; padding: 13px 16px;
+    }
+    .stamp-indicator { width: 8px; align-self: stretch; border-radius: 3px; flex-shrink: 0; }
+    .stamp-indicator.green  { background: #22c55e; }
+    .stamp-title {
+      font-size: 8.5px; font-weight: 800; color: #111827;
+      text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px;
+    }
+    .stamp-detail { font-size: 8px; color: #6b7280; line-height: 1.6; }
+
+    /* ── SIGNATURES ── */
+    .signatures { display: flex; gap: 40px; margin-top: 14px; padding-top: 10px; }
+    .sig-box { flex: 1; text-align: center; }
+    .sig-space { height: 44px; }
+    .sig-line { border-top: 1px solid #374151; padding-top: 7px; }
+    .sig-name {
+      font-size: 7.5px; font-weight: 700; color: #374151;
+      text-transform: uppercase; letter-spacing: 0.08em;
+    }
+    .sig-sub { font-size: 7px; color: #9ca3af; margin-top: 2px; line-height: 1.5; }
+
+    /* ── FOOTER ── */
+    .doc-footer {
+      background: #f9fafb; border-top: 1px solid #e5e7eb;
+      padding: 9px 26px; display: flex; justify-content: space-between; align-items: center;
+    }
+    .footer-legal { font-size: 6px; color: #9ca3af; line-height: 1.6; max-width: 68%; }
+    .footer-ref {
+      font-size: 7px; color: #d1d5db; font-weight: 600;
+      letter-spacing: 0.08em; text-align: right; line-height: 1.6;
+    }
+    .footer-ref span { color: #10b981; }
+  </style>
+</head>
+<body>
+<div class="page">
+
+  <!-- HEADER -->
+  <div class="doc-header">
+    <div class="header-accent"></div>
+    <div class="header-brand">
+      <div class="brand-row">
+        <span class="brand-badge">UM</span>
+        <span class="brand-name">UM Colombia — Red de Servicio</span>
+      </div>
+      <span class="brand-sub">Orden de Salida &nbsp;·&nbsp; Documento Oficial de Entrega</span>
+      <span class="brand-sub" style="margin-top:3px; color:rgba(255,255,255,0.40);">
+        NIT: 900.123.456-7 &nbsp;·&nbsp; Tel: 310 800 1234 &nbsp;·&nbsp; Bogotá, Colombia
+      </span>
+    </div>
+    <div class="header-order">
+      <span class="order-label">Orden de Servicio</span>
+      <span class="order-number">#A3F9C1D2</span>
+      <span class="order-meta">26/04/2026 14:35<br>UM Colombia</span>
+      <span class="service-type-label">Revision KM</span>
+    </div>
+  </div>
+
+  <!-- BODY -->
+  <div class="doc-body">
+
+    <!-- IDENTIFICACIÓN -->
+    <div class="section-label">Identificacion</div>
+    <div class="identity-row">
+
+      <div class="identity-card">
+        <div class="card-field-label">Propietario del Vehículo</div>
+        <div class="card-main">Carlos Andrés Pérez</div>
+        <div class="card-sub">
+          CC 80.456.789<br>
+          Cel: 312 456 7890<br>
+          carlosperez@email.com
+        </div>
+      </div>
+
+      <div class="identity-card accent">
+        <div class="card-field-label">Motocicleta</div>
+        <div class="plate-tag">ABC 123</div>
+        <div class="card-sub">
+          UM DS 150S · Color: Rojo<br>
+          VIN: 9BWZZZ377VT004251<br>
+          Motor: 2VT004251
+        </div>
+      </div>
+
+    </div>
+
+    <!-- CONDICION DE INGRESO -->
+    <div class="section-label">Condicion de Ingreso</div>
+    <div class="compare-row">
+
+      <div class="indicator-chip">
+        <div class="chip-label">Kilometraje al Ingreso</div>
+        <div class="chip-value">12.450 <span class="chip-unit">km</span></div>
+      </div>
+
+      <div class="indicator-chip" style="flex: 1.8">
+        <div class="chip-label">Nivel de Combustible al Ingreso &mdash; Medio</div>
+        <div class="fuel-bar-track">
+          <div class="fuel-bar-fill entrada" style="width: 50%"></div>
+        </div>
+        <div class="fuel-ticks">
+          <span>E</span><span>1/4</span><span>1/2</span><span>3/4</span><span>F</span>
+        </div>
+      </div>
+
+      <div class="indicator-chip">
+        <div class="chip-label">Tipo de Servicio</div>
+        <div class="chip-value" style="font-size:10px; font-weight:700; color:#2563eb;">Revision KM</div>
+      </div>
+
+      <div class="indicator-chip">
+        <div class="chip-label">Asesor Tecnico</div>
+        <div class="chip-value" style="font-size:10px; font-weight:700;">Juan Ríos</div>
+      </div>
+
+    </div>
+
+    <!-- TRABAJO REALIZADO -->
+    <div class="section-label">Trabajo Realizado</div>
+    <table class="work-table">
+      <thead>
+        <tr>
+          <th style="width:42%">Referido por el Cliente</th>
+          <th style="width:58%">Diagnóstico / Trabajo Realizado</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td style="color:#6b7280; font-style:italic;">Moto hace ruido al encender en frío</td>
+          <td>Verificación de sistema de arranque. Se detectó bujía con desgaste avanzado. Se realizó cambio preventivo de bujía NGK CR7HSA. Ruido eliminado.</td>
+        </tr>
+        <tr>
+          <td style="color:#6b7280; font-style:italic;">Revisión de los 12.000 km</td>
+          <td>Cambio de aceite motor 10W40 semi-sintético (4 unidades) y filtro de aceite. Filtro de aire con alto nivel de suciedad — reemplazado. Cadena de transmisión con tensión correcta.</td>
+        </tr>
+        <tr>
+          <td style="color:#6b7280; font-style:italic;">Siente que los frenos no responden igual</td>
+          <td>Frenos delantero y trasero revisados. Pastillas al 60%, dentro del rango operativo. Se ajustó tensión de cable de freno trasero. Funcionamiento correcto.</td>
+        </tr>
+        <tr>
+          <td style="color:#6b7280; font-style:italic;">&mdash;</td>
+          <td>Calibración de carburador realizada. Sincronización de válvulas verificada dentro de parámetros. Prueba de ruta completada sin novedades. Moto entregada limpia.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- REPUESTOS UTILIZADOS -->
+    <div class="section-label">Repuestos y Materiales Utilizados</div>
+    <table class="work-table">
+      <thead>
+        <tr>
+          <th style="width:40%">Referencia</th>
+          <th style="width:10%">Cant.</th>
+          <th style="width:20%">Tipo</th>
+          <th style="width:15%">Estado</th>
+          <th style="width:15%; text-align:right">Valor</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Aceite Motor 10W40 Semi-Sintético 800ml</td>
+          <td>4</td>
+          <td><span class="tag-paid">Cliente</span></td>
+          <td>Aplicado</td>
+          <td style="text-align:right">$ 72.000</td>
+        </tr>
+        <tr>
+          <td>Filtro de Aceite UM DS 150</td>
+          <td>1</td>
+          <td><span class="tag-paid">Cliente</span></td>
+          <td>Aplicado</td>
+          <td style="text-align:right">$ 28.000</td>
+        </tr>
+        <tr>
+          <td>Filtro de Aire UM DS 150S</td>
+          <td>1</td>
+          <td><span class="tag-paid">Cliente</span></td>
+          <td>Aplicado</td>
+          <td style="text-align:right">$ 35.000</td>
+        </tr>
+        <tr>
+          <td>Bujía NGK CR7HSA</td>
+          <td>1</td>
+          <td><span class="tag-warranty">Garantía</span></td>
+          <td>Aplicado</td>
+          <td style="text-align:right">$ 0</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- RESUMEN FINANCIERO -->
+    <div class="section-label">Resumen Financiero</div>
+    <div class="financial-box">
+      <div class="financial-main">
+        <table class="financial-table">
+          <tr>
+            <td>Repuestos (cliente)</td>
+            <td>$ 135.000</td>
+          </tr>
+          <tr>
+            <td>Repuestos en garantía</td>
+            <td>$ 0</td>
+          </tr>
+          <tr>
+            <td>Mano de obra — Revisión 12.000 km</td>
+            <td>$ 65.000</td>
+          </tr>
+          <tr class="divider">
+            <td style="font-size:7px; color:#9ca3af; padding-bottom:2px">Subtotal antes de impuestos</td>
+            <td style="font-size:7px; color:#9ca3af">$ 200.000</td>
+          </tr>
+          <tr>
+            <td style="font-size:7px; color:#9ca3af">IVA (19%)</td>
+            <td style="font-size:7px; color:#9ca3af">$ 38.000</td>
+          </tr>
+          <tr class="financial-total divider">
+            <td>TOTAL A PAGAR</td>
+            <td>$ 238.000</td>
+          </tr>
+        </table>
+      </div>
+    </div>
+
+    <!-- ACCESORIOS DEVUELTOS -->
+    <div class="section-label">Accesorios e Inventario Devuelto</div>
+    <div class="accessories-list">
+      <span class="accessory-tag"><span class="accessory-check">✓</span> Casco integral negro</span>
+      <span class="accessory-tag"><span class="accessory-check">✓</span> Candado de disco</span>
+      <span class="accessory-tag"><span class="accessory-check">✓</span> Chaleco reflectivo</span>
+      <span class="accessory-tag"><span class="accessory-check">✓</span> Documentos en porta-documentos</span>
+    </div>
+
+    <!-- OBSERVACIONES DE SALIDA -->
+    <div class="section-label">Observaciones de Salida</div>
+    <div class="obs-box">Se entregó moto limpia y en correcto funcionamiento. Se informó al cliente sobre el estado de las pastillas de freno (60%) y se recomendó cambio en la próxima revisión. Cliente conforme con el servicio.</div>
+
+    <!-- CONDICIONES LEGALES DE ENTREGA -->
+    <div class="section-label">Condiciones Legales de Entrega</div>
+    <div class="legal-prose">
+      <strong>1. Garantía de Servicio:</strong> Los trabajos realizados tienen garantía de 3 meses o 3.000 km (lo que ocurra primero), cubriendo exclusivamente las partes intervenidas y la mano de obra ejecutada. No aplica por mal uso o desgaste natural. &mdash;
+      <strong>2. Conformidad de Entrega:</strong> La firma o aceptación de este documento certifica que el propietario recibió el vehículo en las condiciones descritas y está conforme con los trabajos realizados. &mdash;
+      <strong>3. Repuestos y Materiales:</strong> Los repuestos utilizados son originales o de calidad equivalente certificada. Las piezas reemplazadas quedan a disposición del cliente durante 30 días. &mdash;
+      <strong>4. Reclamaciones:</strong> Cualquier reclamación sobre el servicio debe realizarse dentro de los 15 días calendario siguientes a la entrega, presentando este documento. &mdash;
+      <strong>5. Datos Personales:</strong> El taller podrá contactar al cliente para seguimiento post-venta conforme a la Ley 1581 de 2012.
+    </div>
+
+    <!-- ESTADO DE ENTREGA -->
+    <div class="section-label">Estado de Entrega</div>
+    <div class="stamp-row">
+      <div class="stamp-indicator green"></div>
+      <div>
+        <div class="stamp-title">Vehículo entregado — Aceptado via OTP</div>
+        <div class="stamp-detail">
+          Código de 6 dígitos validado el <strong>26/04/2026 a las 14:35</strong><br>
+          Enviado y confirmado desde el número <strong>***7890</strong>
+        </div>
+      </div>
+    </div>
+
+    <!-- FIRMAS (se muestra si no hay OTP - aquí solo como referencia) -->
+    <!--
+    <div class="signatures">
+      <div class="sig-box">
+        <div class="sig-space"></div>
+        <div class="sig-line">
+          <div class="sig-name">Firma del Propietario / Cliente</div>
+          <div class="sig-sub">Confirmo haber recibido mi vehículo<br>en las condiciones descritas.</div>
+        </div>
+      </div>
+      <div class="sig-box">
+        <div class="sig-space"></div>
+        <div class="sig-line">
+          <div class="sig-name">Firma del Asesor de Entrega</div>
+          <div class="sig-sub">Nombre: ___________________________</div>
+        </div>
+      </div>
+    </div>
+    -->
+
+  </div>
+
+  <!-- FOOTER -->
+  <div class="doc-footer">
+    <div class="footer-legal">
+      Este documento es constancia oficial de entrega del vehículo en talleres UM Colombia. La firma o aceptación OTP del cliente
+      certifica conformidad con los trabajos realizados. Conserve este documento para reclamaciones de garantía.
+    </div>
+    <div class="footer-ref">
+      <span>SAL-A3F9C1D2B5E6</span><br>
+      Sistema UM &middot; Generado automáticamente
+    </div>
+  </div>
+
+</div>
+</body>
+</html>
