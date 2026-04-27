@@ -16,7 +16,7 @@ from core.constants import (
 )
 from core.decorators import role_required, check_cancel_intent, CANCEL_PATTERN
 from keyboards.reply import get_main_keyboard
-from handlers.general import handle_general_text, handle_general_voice, process_lifecycle_plate, handle_status_confirm
+from handlers.general import handle_general_text, handle_general_voice, process_lifecycle_plate, handle_status_confirm, handle_parts_callback
 from handlers.admin import (
     start_command, show_admin_panel, handle_admin_menu,
     show_pending_users, handle_status_change, handle_tenant_selection
@@ -325,6 +325,7 @@ def main() -> None:
     from handlers.technician import handle_order_status_change
     application.add_handler(CallbackQueryHandler(handle_order_status_change, pattern="^ord_stat_"))
     application.add_handler(CallbackQueryHandler(handle_status_confirm, pattern="^status_confirm_"))
+    application.add_handler(CallbackQueryHandler(handle_parts_callback, pattern="^parts_"))
 
     logger.info("🤖 Iniciando Master Bot Sonia...")
     application.run_polling()

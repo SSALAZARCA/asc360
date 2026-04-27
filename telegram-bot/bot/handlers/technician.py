@@ -188,11 +188,15 @@ async def handle_order_status_change(update: Update, context: ContextTypes.DEFAU
         )
 
     elif nuevo_estado == "on_hold_parts":
-        context.user_data["awaiting_part_info"] = {"order_id": order_id, "plate": plate}
+        context.user_data["awaiting_parts_action"] = {"order_id": order_id, "plate": plate}
+        kb = [[
+            InlineKeyboardButton("🔍 Buscar en catálogo", callback_data=f"parts_search_{order_id}"),
+            InlineKeyboardButton("📝 Tengo la referencia", callback_data=f"parts_manual_{order_id}"),
+        ]]
         await query.message.reply_text(
-            f"⏳ Anotado. ¿Qué repuesto necesitás para la *{plate}*?\n"
-            "Decime la referencia, cantidad y si es por garantía, pago o cotización.",
-            parse_mode="Markdown"
+            f"⏳ Anotado. ¿Cómo querés registrar el repuesto para la *{plate}*?",
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup(kb)
         )
 
     elif nuevo_estado == "external_work":

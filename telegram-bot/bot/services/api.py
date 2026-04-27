@@ -219,6 +219,59 @@ async def get_superadmin_telegram_ids() -> list:
             return []
 
 
+async def search_parts_catalog(order_id: str, description: str) -> list:
+    """Busca secciones del catálogo de despiece según descripción del técnico."""
+    async with httpx.AsyncClient() as client:
+        try:
+            res = await client.post(
+                f"{BACKEND_URL}/parts/search",
+                json={"order_id": order_id, "description": description},
+                headers={"x-sonia-secret": SONIA_BOT_SECRET},
+                timeout=20.0,
+            )
+            if res.status_code == 200:
+                return res.json()
+            logger.warning(f"search_parts_catalog: {res.status_code} — {res.text}")
+            return []
+        except Exception as e:
+            logger.error(f"Error search_parts_catalog: {e}")
+            return []
+
+
+async def get_part_by_number(section_id: str, order_num: str) -> dict:
+    """Obtiene una parte por su número de posición en el diagrama."""
+    async with httpx.AsyncClient() as client:
+        try:
+            res = await client.get(
+                f"{BACKEND_URL}/parts/section/{section_id}/item/{order_num}",
+                headers={"x-sonia-secret": SONIA_BOT_SECRET},
+                timeout=10.0,
+            )
+            if res.status_code == 200:
+                return res.json()
+            return None
+        except Exception as e:
+            logger.error(f"Error get_part_by_number: {e}")
+            return None
+
+
+async def get_part_by_factory_code(factory_code: str) -> dict:
+    """Busca una parte por su código de fábrica (fallback cuando no se encuentra en diagrama)."""
+    async with httpx.AsyncClient() as client:
+        try:
+            res = await client.get(
+                f"{BACKEND_URL}/parts/factory/{factory_code}",
+                headers={"x-sonia-secret": SONIA_BOT_SECRET},
+                timeout=10.0,
+            )
+            if res.status_code == 200:
+                return res.json()
+            return None
+        except Exception as e:
+            logger.error(f"Error get_part_by_factory_code: {e}")
+            return None
+
+
 async def get_tenant_config(tenant_id: str) -> dict:
     """Obtiene la configuración del taller (diagnosis_reminder_minutes, etc.)."""
     async with httpx.AsyncClient() as client:
