@@ -99,11 +99,24 @@ async def _classify_sections(description: str, sections: list[dict]) -> list[str
 
 
 def _parse_section_filename(filename: str) -> tuple[str, str]:
-    """'B01_BODY COMP FRAME_FLOOR STEP.pdf' → ('B01', 'BODY COMP FRAME / FLOOR STEP')"""
+    """
+    'RENEGADE 200 SPORT_B1_FRAME.pdf'        → ('B1',  'FRAME')
+    'RENEGADE 200 SPORT_B12_REAR FENDER_REAR TURN SIGNAL.pdf' → ('B12', 'REAR FENDER / REAR TURN SIGNAL')
+    'B01_BODY COMP FRAME.pdf'                → ('B01', 'BODY COMP FRAME')
+    """
     stem = Path(filename).stem
-    parts = stem.split("_", 1)
-    code = parts[0].strip()
-    name = parts[1].replace("_", " / ").strip() if len(parts) > 1 else stem
+    parts = [p.strip() for p in stem.split("_") if p.strip()]
+    if len(parts) >= 3:
+        # Formato: MODELO_CODIGO_DESCRIPCION[_DESCRIPCION...]
+        code = parts[1]
+        name = " / ".join(parts[2:])
+    elif len(parts) == 2:
+        # Formato simple: CODIGO_DESCRIPCION
+        code = parts[0]
+        name = parts[1]
+    else:
+        code = stem
+        name = stem
     return code, name
 
 
