@@ -20,7 +20,7 @@ from app.api.deps import get_current_user
 from app.config import settings
 from app.database import get_db
 from app.models.order import ServiceOrder
-from app.models.imports import VehicleModel
+from app.models.imports import VehicleModel, SparePartItem
 from app.models.logistics import PartCatalog
 from app.models.parts_manual import (
     PartsManualItem, PartsManualSection, PartsReference, VehicleCatalogMap,
@@ -385,12 +385,26 @@ async def list_catalog(
 
     from sqlalchemy import func, or_
 
+    # Subquery: última descripción ES por part_number — gana el más reciente si cambia entre cargues
+    spi_latest = (
+        select(
+            SparePartItem.part_number.label("part_number"),
+            SparePartItem.description_es.label("description_es"),
+        )
+        .where(SparePartItem.description_es.isnot(None))
+        .where(SparePartItem.description_es != "")
+        .distinct(SparePartItem.part_number)
+        .order_by(SparePartItem.part_number, SparePartItem.created_at.desc())
+        .subquery("spi_latest")
+    )
+
     # JOIN base — filtra por modelo y búsqueda antes de deduplicar
     joins_q = (
         select(PartsReference.factory_part_number)
         .join(PartsManualItem, PartsManualItem.factory_part_number == PartsReference.factory_part_number)
         .join(PartsManualSection, PartsManualSection.id == PartsManualItem.section_id)
         .outerjoin(PartCatalog, PartCatalog.part_code == PartsReference.factory_part_number)
+        .outerjoin(spi_latest, spi_latest.c.part_number == PartsReference.factory_part_number)
     )
 
     if model_code:
@@ -402,7 +416,7 @@ async def list_catalog(
             or_(
                 PartsReference.factory_part_number.ilike(term),
                 PartsReference.description.ilike(term),
-                PartCatalog.description.ilike(term),
+                spi_latest.c.description_es.ilike(term),
             )
         )
 
@@ -417,7 +431,7 @@ async def list_catalog(
         select(
             PartsReference.factory_part_number,
             PartsReference.description,
-            PartCatalog.description.label("description_es"),
+            spi_latest.c.description_es.label("description_es"),
             PartCatalog.public_price,
             PartsManualSection.section_code,
             PartsManualSection.section_name,
@@ -428,6 +442,7 @@ async def list_catalog(
         .join(PartsManualItem, PartsManualItem.factory_part_number == PartsReference.factory_part_number)
         .join(PartsManualSection, PartsManualSection.id == PartsManualItem.section_id)
         .outerjoin(PartCatalog, PartCatalog.part_code == PartsReference.factory_part_number)
+        .outerjoin(spi_latest, spi_latest.c.part_number == PartsReference.factory_part_number)
         .outerjoin(VehicleCatalogMap, VehicleCatalogMap.catalog_model_code == PartsManualSection.model_code)
     )
 
@@ -440,7 +455,7 @@ async def list_catalog(
             or_(
                 PartsReference.factory_part_number.ilike(term),
                 PartsReference.description.ilike(term),
-                PartCatalog.description.ilike(term),
+                spi_latest.c.description_es.ilike(term),
             )
         )
 
