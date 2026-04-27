@@ -120,27 +120,42 @@ export default function PartsCatalogPage() {
           </p>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
 
-            {/* Dropdown modelo del vehículo */}
+            {/* Dropdown o input de modelo del vehículo */}
             <div>
-              <label style={labelStyle}>Modelo del vehículo *</label>
-              <div style={{ position: 'relative' }}>
-                <select
+              <label style={labelStyle}>
+                Modelo del vehículo *
+                {!loadingModels && vehicleModels.length === 0 && (
+                  <span style={{ marginLeft: '0.5rem', fontSize: '0.55rem', color: '#f59e0b', fontWeight: 700 }}>MANUAL</span>
+                )}
+              </label>
+              {loadingModels ? (
+                <input disabled placeholder="Cargando modelos..." style={{ ...inputStyle, opacity: 0.5 }} />
+              ) : vehicleModels.length > 0 ? (
+                <div style={{ position: 'relative' }}>
+                  <select
+                    value={vehicleModel}
+                    onChange={e => handleVehicleModelChange(e.target.value)}
+                    disabled={loading}
+                    style={{ ...inputStyle, appearance: 'none', paddingRight: '2.5rem', cursor: 'pointer' }}
+                  >
+                    <option value="">— Seleccioná un modelo —</option>
+                    {vehicleModels.map(m => (
+                      <option key={m.vehicle_model} value={m.vehicle_model}>
+                        {m.vehicle_model}{m.catalog_model_code ? ' ✓' : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown size={14} color="#606075" style={{ position: 'absolute', right: '0.875rem', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+                </div>
+              ) : (
+                <input
                   value={vehicleModel}
                   onChange={e => handleVehicleModelChange(e.target.value)}
-                  disabled={loading || loadingModels}
-                  style={{ ...inputStyle, appearance: 'none', paddingRight: '2.5rem', cursor: loadingModels ? 'wait' : 'pointer' }}
-                >
-                  <option value="">
-                    {loadingModels ? 'Cargando modelos...' : '— Seleccioná un modelo —'}
-                  </option>
-                  {vehicleModels.map(m => (
-                    <option key={m.vehicle_model} value={m.vehicle_model}>
-                      {m.vehicle_model}{m.catalog_model_code ? ' ✓' : ''}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown size={14} color="#606075" style={{ position: 'absolute', right: '0.875rem', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
-              </div>
+                  placeholder="Ej: Renegade Sport 200S"
+                  disabled={loading}
+                  style={inputStyle}
+                />
+              )}
               {vehicleModel && (
                 <p style={{ margin: '0.4rem 0 0', fontSize: '0.6rem', color: '#606075' }}>
                   {vehicleModels.find(m => m.vehicle_model === vehicleModel)?.catalog_model_code
