@@ -109,9 +109,7 @@ export default function PartsCatalogPage() {
             <tr>
               <th>#</th>
               <th>Ref. Fábrica</th>
-              <th>Ref. UM</th>
               <th>Descripción</th>
-              <th>Unidad</th>
               <th>Sección</th>
               <th>Modelo</th>
             </tr>
@@ -119,13 +117,13 @@ export default function PartsCatalogPage() {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan="7" style={{ textAlign: 'center', padding: '3rem', color: 'rgba(255,255,255,0.3)', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                <td colSpan="5" style={{ textAlign: 'center', padding: '3rem', color: 'rgba(255,255,255,0.3)', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
                   Cargando repuestos...
                 </td>
               </tr>
             ) : items.length === 0 ? (
               <tr>
-                <td colSpan="7" style={{ textAlign: 'center', padding: '4rem', color: 'rgba(255,255,255,0.2)', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                <td colSpan="5" style={{ textAlign: 'center', padding: '4rem', color: 'rgba(255,255,255,0.2)', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
                   {!search && !modelCode ? 'Sin repuestos cargados — subí los PDFs desde Configuración' : 'Sin resultados para la búsqueda'}
                 </td>
               </tr>
@@ -133,11 +131,9 @@ export default function PartsCatalogPage() {
               <tr key={`${item.factory_part_number}-${item.section_code}-${i}`} className="hover:bg-white/5 transition-colors border-b border-white/5">
                 <td style={{ color: 'rgba(255,255,255,0.35)', fontWeight: 700 }}>{item.order_num}</td>
                 <td><span style={{ fontFamily: 'monospace', fontSize: '0.78rem', fontWeight: 700, color: '#ff5f33' }}>{item.factory_part_number}</span></td>
-                <td><span style={{ fontFamily: 'monospace', fontSize: '0.78rem', fontWeight: 600, color: '#60a5fa' }}>{item.um_part_number || '—'}</span></td>
-                <td style={{ color: 'rgba(255,255,255,0.85)', maxWidth: '320px' }}>
+                <td style={{ color: 'rgba(255,255,255,0.85)', maxWidth: '380px' }}>
                   <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.description || '—'}</span>
                 </td>
-                <td style={{ color: 'rgba(255,255,255,0.4)', fontWeight: 600 }}>{item.unit || '—'}</td>
                 <td>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                     <span style={{ fontSize: '0.6rem', fontWeight: 800, padding: '2px 8px', borderRadius: '20px', background: 'rgba(99,102,241,0.12)', color: '#818cf8', border: '1px solid rgba(99,102,241,0.2)', whiteSpace: 'nowrap' }}>
