@@ -394,7 +394,7 @@ async def list_catalog(
         .where(SparePartItem.description_es.isnot(None))
         .where(SparePartItem.description_es != "")
         .distinct(SparePartItem.part_number)
-        .order_by(SparePartItem.part_number, SparePartItem.created_at.desc())
+        .order_by(SparePartItem.part_number, SparePartItem.created_at.asc())
         .subquery("spi_latest")
     )
 
