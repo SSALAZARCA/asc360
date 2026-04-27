@@ -1,7 +1,7 @@
 'use client';
 import { useState, useRef } from 'react';
 import AdminLayout from '../admin-layout';
-import { authFetch } from '@/lib/authFetch';
+import { authFetch } from '../../lib/authFetch';
 import { Upload, CheckCircle2, XCircle, Loader2, BookOpen, FileText, Trash2 } from 'lucide-react';
 
 export default function PartsCatalogPage() {
