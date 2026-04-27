@@ -205,6 +205,30 @@ def _diagram_public_url(object_name: str) -> str:
     return f"{public_base}/{PARTS_BUCKET}/{object_name}"
 
 
+# ── Endpoint de administración — listado de modelos ───────────────────────────
+
+@router.get("/admin/vehicle-models")
+async def list_vehicle_models(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Devuelve los modelos de vehículos distintos con su catalog_model_code si ya existe."""
+    if not current_user.is_superadmin:
+        raise HTTPException(status_code=403, detail="Solo superadmin")
+
+    result = await db.execute(
+        select(Vehicle.model, VehicleCatalogMap.catalog_model_code)
+        .outerjoin(VehicleCatalogMap, Vehicle.model == VehicleCatalogMap.vehicle_model_pattern)
+        .distinct(Vehicle.model)
+        .order_by(Vehicle.model)
+    )
+    rows = result.all()
+    return [
+        {"vehicle_model": r[0], "catalog_model_code": r[1]}
+        for r in rows if r[0]
+    ]
+
+
 # ── Endpoints de búsqueda (bot) ────────────────────────────────────────────────
 
 @router.post("/search", response_model=list[PartLookupResult])

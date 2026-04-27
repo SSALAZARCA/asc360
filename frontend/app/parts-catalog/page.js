@@ -1,17 +1,43 @@
 'use client';
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import AdminLayout from '../admin-layout';
 import { authFetch } from '../../lib/authFetch';
-import { Upload, CheckCircle2, XCircle, Loader2, BookOpen, FileText, Trash2 } from 'lucide-react';
+import { Upload, Loader2, BookOpen, FileText, Trash2, ChevronDown } from 'lucide-react';
 
 export default function PartsCatalogPage() {
-  const [modelCode, setModelCode]       = useState('');
+  const [vehicleModels, setVehicleModels] = useState([]);
+  const [loadingModels, setLoadingModels]  = useState(true);
+
   const [vehicleModel, setVehicleModel] = useState('');
-  const [files, setFiles]               = useState([]);
-  const [results, setResults]           = useState([]);
-  const [loading, setLoading]           = useState(false);
-  const [progress, setProgress]         = useState({ done: 0, total: 0 });
+  const [modelCode, setModelCode]       = useState('');
+  const [codeAutoFilled, setCodeAutoFilled] = useState(false);
+
+  const [files, setFiles]     = useState([]);
+  const [results, setResults] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState({ done: 0, total: 0 });
   const fileRef = useRef();
+
+  useEffect(() => {
+    authFetch('/parts/admin/vehicle-models')
+      .then(r => r.ok ? r.json() : [])
+      .then(data => { setVehicleModels(Array.isArray(data) ? data : []); })
+      .catch(() => {})
+      .finally(() => setLoadingModels(false));
+  }, []);
+
+  const handleVehicleModelChange = (value) => {
+    setVehicleModel(value);
+    setResults([]);
+    const match = vehicleModels.find(m => m.vehicle_model === value);
+    if (match?.catalog_model_code) {
+      setModelCode(match.catalog_model_code);
+      setCodeAutoFilled(true);
+    } else {
+      setModelCode('');
+      setCodeAutoFilled(false);
+    }
+  };
 
   const handleFiles = (e) => {
     const selected = Array.from(e.target.files).filter(f => f.name.endsWith('.pdf'));
@@ -29,20 +55,18 @@ export default function PartsCatalogPage() {
   const removeFile = (idx) => setFiles(f => f.filter((_, i) => i !== idx));
 
   const handleUpload = async () => {
-    if (!modelCode.trim() || !vehicleModel.trim() || files.length === 0) return;
-
+    if (!modelCode.trim() || !vehicleModel || files.length === 0) return;
     setLoading(true);
     setResults([]);
     setProgress({ done: 0, total: files.length });
 
     const newResults = [];
-
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       const fd = new FormData();
       fd.append('pdf_file', file);
       fd.append('model_code', modelCode.trim());
-      fd.append('vehicle_model', vehicleModel.trim());
+      fd.append('vehicle_model', vehicleModel);
 
       try {
         const res = await authFetch('/parts/admin/load-section', { method: 'POST', body: fd });
@@ -60,15 +84,15 @@ export default function PartsCatalogPage() {
       setProgress({ done: i + 1, total: files.length });
       setResults([...newResults]);
     }
-
     setLoading(false);
   };
 
-  const totalParts    = results.filter(r => r.status === 'ok').reduce((s, r) => s + (r.parts_loaded || 0), 0);
-  const totalRefs     = results.filter(r => r.status === 'ok').reduce((s, r) => s + (r.references_new || 0), 0);
-  const successCount  = results.filter(r => r.status === 'ok').length;
-  const errorCount    = results.filter(r => r.status === 'error').length;
-  const pct           = progress.total > 0 ? Math.round((progress.done / progress.total) * 100) : 0;
+  const totalParts   = results.filter(r => r.status === 'ok').reduce((s, r) => s + (r.parts_loaded || 0), 0);
+  const totalRefs    = results.filter(r => r.status === 'ok').reduce((s, r) => s + (r.references_new || 0), 0);
+  const successCount = results.filter(r => r.status === 'ok').length;
+  const errorCount   = results.filter(r => r.status === 'error').length;
+  const pct          = progress.total > 0 ? Math.round((progress.done / progress.total) * 100) : 0;
+  const canUpload    = !loading && modelCode.trim() && vehicleModel && files.length > 0;
 
   return (
     <AdminLayout>
@@ -95,34 +119,59 @@ export default function PartsCatalogPage() {
             Información del modelo
           </p>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+
+            {/* Dropdown modelo del vehículo */}
             <div>
-              <label style={{ display: 'block', fontSize: '0.65rem', fontWeight: 700, color: '#606075', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.5rem' }}>
+              <label style={labelStyle}>Modelo del vehículo *</label>
+              <div style={{ position: 'relative' }}>
+                <select
+                  value={vehicleModel}
+                  onChange={e => handleVehicleModelChange(e.target.value)}
+                  disabled={loading || loadingModels}
+                  style={{ ...inputStyle, appearance: 'none', paddingRight: '2.5rem', cursor: loadingModels ? 'wait' : 'pointer' }}
+                >
+                  <option value="">
+                    {loadingModels ? 'Cargando modelos...' : '— Seleccioná un modelo —'}
+                  </option>
+                  {vehicleModels.map(m => (
+                    <option key={m.vehicle_model} value={m.vehicle_model}>
+                      {m.vehicle_model}{m.catalog_model_code ? ' ✓' : ''}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown size={14} color="#606075" style={{ position: 'absolute', right: '0.875rem', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+              </div>
+              {vehicleModel && (
+                <p style={{ margin: '0.4rem 0 0', fontSize: '0.6rem', color: '#606075' }}>
+                  {vehicleModels.find(m => m.vehicle_model === vehicleModel)?.catalog_model_code
+                    ? '✓ Ya tiene catálogo — se reemplazarán las secciones que subas'
+                    : '⚡ Modelo nuevo — se creará el catálogo'}
+                </p>
+              )}
+            </div>
+
+            {/* Código interno del modelo */}
+            <div>
+              <label style={labelStyle}>
                 Código interno del modelo *
+                {codeAutoFilled && (
+                  <span style={{ marginLeft: '0.5rem', fontSize: '0.55rem', color: '#10b981', fontWeight: 700 }}>AUTO</span>
+                )}
               </label>
               <input
                 value={modelCode}
-                onChange={e => setModelCode(e.target.value)}
+                onChange={e => { setModelCode(e.target.value); setCodeAutoFilled(false); }}
                 placeholder="ej: renegade_200_sport"
                 disabled={loading}
                 style={inputStyle}
               />
-            </div>
-            <div>
-              <label style={{ display: 'block', fontSize: '0.65rem', fontWeight: 700, color: '#606075', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.5rem' }}>
-                Modelo del vehículo en sistema *
-              </label>
-              <input
-                value={vehicleModel}
-                onChange={e => setVehicleModel(e.target.value)}
-                placeholder="ej: Renegade Sport 200S"
-                disabled={loading}
-                style={inputStyle}
-              />
+              <p style={{ margin: '0.4rem 0 0', fontSize: '0.6rem', color: '#606075' }}>
+                {codeAutoFilled
+                  ? 'Completado automáticamente desde el catálogo existente'
+                  : 'Usá minúsculas y guiones bajos. Ej: renegade_200_sport'}
+              </p>
             </div>
           </div>
-          <p style={{ margin: '0.75rem 0 0', fontSize: '0.65rem', color: '#404055' }}>
-            El "modelo del vehículo" debe coincidir exactamente con el campo <code style={{ color: '#ff5f33' }}>vehicle.model</code> en la base de datos.
-          </p>
         </div>
 
         {/* Drop zone */}
@@ -161,24 +210,25 @@ export default function PartsCatalogPage() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '220px', overflowY: 'auto' }}>
               {files.map((f, i) => {
                 const result = results.find(r => r.filename === f.name);
+                const isProcessing = loading && !result && progress.done <= i;
                 return (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.625rem 0.875rem', borderRadius: '10px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)' }}>
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.625rem 0.875rem', borderRadius: '10px', background: 'rgba(255,255,255,0.03)', border: `1px solid ${result?.status === 'ok' ? 'rgba(16,185,129,0.15)' : result?.status === 'error' ? 'rgba(239,68,68,0.15)' : 'rgba(255,255,255,0.05)'}` }}>
                     <FileText size={14} color={result?.status === 'ok' ? '#10b981' : result?.status === 'error' ? '#ef4444' : '#606075'} />
                     <span style={{ flex: 1, fontSize: '0.72rem', color: '#ccc', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {f.name}
                     </span>
                     {result?.status === 'ok' && (
                       <span style={{ fontSize: '0.6rem', color: '#10b981', fontWeight: 700, whiteSpace: 'nowrap' }}>
-                        ✓ {result.parts_loaded} repuestos
+                        ✓ {result.parts_loaded} repuestos · {result.references_new} refs nuevas
                       </span>
                     )}
                     {result?.status === 'error' && (
-                      <span style={{ fontSize: '0.6rem', color: '#ef4444', fontWeight: 700, whiteSpace: 'nowrap', maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      <span style={{ fontSize: '0.6rem', color: '#ef4444', fontWeight: 700, whiteSpace: 'nowrap', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         ✗ {result.error}
                       </span>
                     )}
-                    {!result && loading && progress.done > i && (
-                      <Loader2 size={13} color="#ff5f33" style={{ animation: 'spin 1s linear infinite' }} />
+                    {isProcessing && (
+                      <Loader2 size={13} color="#ff5f33" style={{ animation: 'spin 1s linear infinite', flexShrink: 0 }} />
                     )}
                     {!result && !loading && (
                       <button onClick={() => removeFile(i)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#404055', padding: '2px', display: 'flex' }}>
@@ -207,28 +257,32 @@ export default function PartsCatalogPage() {
           </div>
         )}
 
-        {/* Action button */}
+        {/* Botón */}
         <button
           onClick={handleUpload}
-          disabled={loading || !modelCode.trim() || !vehicleModel.trim() || files.length === 0}
+          disabled={!canUpload}
           style={{
-            width: '100%', padding: '0.9rem', borderRadius: '12px', border: 'none', cursor: loading || !modelCode.trim() || !vehicleModel.trim() || files.length === 0 ? 'not-allowed' : 'pointer',
-            background: loading || !modelCode.trim() || !vehicleModel.trim() || files.length === 0 ? 'rgba(255,95,51,0.2)' : '#ff5f33',
+            width: '100%', padding: '0.9rem', borderRadius: '12px', border: 'none',
+            cursor: canUpload ? 'pointer' : 'not-allowed',
+            background: canUpload ? '#ff5f33' : 'rgba(255,95,51,0.2)',
             color: '#fff', fontWeight: 900, fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.08em',
             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem',
             transition: 'background 0.2s', marginBottom: '1.5rem',
           }}
         >
-          {loading ? <><Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> Cargando...</> : <><Upload size={15} /> Cargar {files.length > 0 ? `${files.length} archivo${files.length !== 1 ? 's' : ''}` : 'archivos'}</>}
+          {loading
+            ? <><Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> Cargando...</>
+            : <><Upload size={15} /> Cargar {files.length > 0 ? `${files.length} archivo${files.length !== 1 ? 's' : ''}` : 'archivos'}</>
+          }
         </button>
 
-        {/* Summary */}
+        {/* Resumen */}
         {results.length > 0 && !loading && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${errorCount > 0 ? 4 : 3}, 1fr)`, gap: '1rem' }}>
             {[
               { label: 'Secciones cargadas', value: successCount, color: '#10b981' },
-              { label: 'Referencias nuevas', value: totalRefs, color: '#ff5f33' },
-              { label: 'Repuestos en diagrama', value: totalParts, color: '#6366f1' },
+              { label: 'Referencias nuevas', value: totalRefs,    color: '#ff5f33' },
+              { label: 'Items en diagramas', value: totalParts,   color: '#6366f1' },
               ...(errorCount > 0 ? [{ label: 'Con errores', value: errorCount, color: '#ef4444' }] : []),
             ].map((s, i) => (
               <div key={i} className="glass" style={{ borderRadius: '12px', padding: '1.25rem', textAlign: 'center' }}>
@@ -242,10 +296,21 @@ export default function PartsCatalogPage() {
 
       <style jsx global>{`
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        select option { background: #0c0c0e; color: #fff; }
       `}</style>
     </AdminLayout>
   );
 }
+
+const labelStyle = {
+  display: 'block',
+  fontSize: '0.65rem',
+  fontWeight: 700,
+  color: '#606075',
+  textTransform: 'uppercase',
+  letterSpacing: '0.06em',
+  marginBottom: '0.5rem',
+};
 
 const inputStyle = {
   width: '100%',
