@@ -441,6 +441,12 @@ class CatalogItemUpdate(BaseModel):
     description_es_manual: Optional[str] = None
     public_price: Optional[float] = None
 
+class ReplaceCodeRequest(BaseModel):
+    new_code: str
+    description: Optional[str] = None
+    description_es_manual: Optional[str] = None
+    public_price: Optional[float] = None
+
 class CatalogListResult(BaseModel):
     total: int
     items: list[CatalogItemResult]
@@ -615,6 +621,86 @@ async def update_catalog_item(
 
     await db.commit()
     return {"ok": True}
+
+
+@router.post("/admin/catalog/{factory_part_number}/replace-code", status_code=200)
+async def replace_catalog_code(
+    factory_part_number: str,
+    payload: ReplaceCodeRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Reemplaza manualmente el código de fábrica de un repuesto. Solo superadmin."""
+    if not current_user.is_superadmin:
+        raise HTTPException(status_code=403, detail="Solo superadmin")
+
+    new_code = payload.new_code.strip()
+    if not new_code:
+        raise HTTPException(status_code=422, detail="El nuevo código no puede estar vacío")
+    if new_code == factory_part_number:
+        raise HTTPException(status_code=422, detail="El nuevo código es igual al actual")
+
+    existing_ref = await db.get(PartsReference, factory_part_number)
+    if not existing_ref:
+        raise HTTPException(status_code=404, detail="Referencia no encontrada")
+
+    # Si el nuevo código ya existe en el catálogo, no permitir — evitar colisión de PK
+    conflict = await db.get(PartsReference, new_code)
+    if conflict is not None:
+        raise HTTPException(
+            status_code=409,
+            detail=f"El código '{new_code}' ya existe en el catálogo. Usá el flujo de Verificar si querés unificar dos entradas."
+        )
+
+    # Construir prev_codes: el código que sale entra al historial, máx 2
+    new_prev = ([factory_part_number] + list(existing_ref.prev_codes or []))[:2]
+
+    new_ref = PartsReference(
+        factory_part_number=new_code,
+        um_part_number=existing_ref.um_part_number,
+        description=payload.description.strip() if payload.description else existing_ref.description,
+        description_es_manual=payload.description_es_manual,
+        unit=existing_ref.unit,
+        prev_codes=new_prev,
+    )
+    db.add(new_ref)
+    await db.flush()
+
+    # Redirigir todos los ítems del catálogo al nuevo código
+    await db.execute(
+        sa_update(PartsManualItem)
+        .where(PartsManualItem.factory_part_number == factory_part_number)
+        .values(factory_part_number=new_code)
+    )
+    await db.flush()
+
+    # Migrar entrada de PartCatalog si existe
+    old_catalog = await db.get(PartCatalog, factory_part_number)
+    if old_catalog:
+        new_price = payload.public_price if payload.public_price is not None else float(old_catalog.public_price)
+        new_desc  = (payload.description.strip() if payload.description else None) or old_catalog.description
+        db.add(PartCatalog(part_code=new_code, description=new_desc, public_price=new_price))
+        await db.delete(old_catalog)
+        await db.flush()
+    elif payload.public_price is not None:
+        desc = (payload.description.strip() if payload.description else None) or new_ref.description
+        db.add(PartCatalog(part_code=new_code, description=desc, public_price=payload.public_price))
+
+    # Eliminar la referencia vieja
+    await db.delete(existing_ref)
+
+    # Cerrar tareas pendientes de revisión que involucren el código viejo
+    await db.execute(
+        sa_update(PartsCodeReviewTask)
+        .where(
+            PartsCodeReviewTask.existing_code == factory_part_number,
+            PartsCodeReviewTask.status == "pending",
+        )
+        .values(status="rejected", resolved_at=datetime.utcnow())
+    )
+
+    await db.commit()
+    return {"ok": True, "new_code": new_code}
 
 
 # ── Detección manual y revisión de cambios de código ─────────────────────────

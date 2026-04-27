@@ -126,6 +126,7 @@ export default function PartsCatalogPage() {
       description: item.description || '',
       description_es_manual: item.description_es || '',
       public_price: item.public_price != null ? String(item.public_price) : '',
+      new_code: '',
     });
     setEditItem(item);
   };
@@ -134,23 +135,46 @@ export default function PartsCatalogPage() {
     if (!editItem) return;
     setEditLoading(true);
     setEditMsg('');
-    const body = {};
-    if (editForm.description.trim()) body.description = editForm.description.trim();
-    body.description_es_manual = editForm.description_es_manual.trim() || null;
-    const price = parseFloat(editForm.public_price);
-    if (!isNaN(price) && price > 0) body.public_price = price;
+    const newCode = editForm.new_code.trim();
     try {
-      const res = await authFetch(`/parts/admin/catalog/${encodeURIComponent(editItem.factory_part_number)}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      if (res.ok) {
-        setEditMsg('✅ Guardado.');
-        setTimeout(() => { setEditItem(null); fetchData(); }, 900);
+      if (newCode) {
+        // Reemplazo de código — un solo endpoint que hace todo
+        const body = { new_code: newCode };
+        if (editForm.description.trim()) body.description = editForm.description.trim();
+        body.description_es_manual = editForm.description_es_manual.trim() || null;
+        const price = parseFloat(editForm.public_price);
+        if (!isNaN(price) && price > 0) body.public_price = price;
+        const res = await authFetch(`/parts/admin/catalog/${encodeURIComponent(editItem.factory_part_number)}/replace-code`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        if (res.ok) {
+          setEditMsg('✅ Código reemplazado.');
+          setTimeout(() => { setEditItem(null); fetchData(); }, 900);
+        } else {
+          const err = await res.json().catch(() => ({}));
+          setEditMsg(`⚠️ ${err.detail || 'Error al reemplazar el código.'}`);
+        }
       } else {
-        const err = await res.json().catch(() => ({}));
-        setEditMsg(`⚠️ ${err.detail || 'Error al guardar.'}`);
+        // Solo actualización de campos — PATCH normal
+        const body = {};
+        if (editForm.description.trim()) body.description = editForm.description.trim();
+        body.description_es_manual = editForm.description_es_manual.trim() || null;
+        const price = parseFloat(editForm.public_price);
+        if (!isNaN(price) && price > 0) body.public_price = price;
+        const res = await authFetch(`/parts/admin/catalog/${encodeURIComponent(editItem.factory_part_number)}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        if (res.ok) {
+          setEditMsg('✅ Guardado.');
+          setTimeout(() => { setEditItem(null); fetchData(); }, 900);
+        } else {
+          const err = await res.json().catch(() => ({}));
+          setEditMsg(`⚠️ ${err.detail || 'Error al guardar.'}`);
+        }
       }
     } catch { setEditMsg('⚠️ Error de conexión.'); }
     finally { setEditLoading(false); }
@@ -357,6 +381,23 @@ export default function PartsCatalogPage() {
                   placeholder="0"
                   style={{ width: '100%', padding: '0.6rem 0.85rem', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: '#fff', fontSize: '0.78rem', outline: 'none', boxSizing: 'border-box' }}
                 />
+              </div>
+
+              <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '1rem', marginTop: '0.25rem' }}>
+                <label style={{ display: 'block', fontSize: '0.62rem', fontWeight: 800, color: 'rgba(251,146,60,0.6)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.4rem' }}>
+                  Nuevo código de fábrica <span style={{ fontWeight: 400, color: 'rgba(255,255,255,0.25)', textTransform: 'none', letterSpacing: 0 }}>— dejar vacío si no cambia</span>
+                </label>
+                <input
+                  value={editForm.new_code}
+                  onChange={e => setEditForm(f => ({ ...f, new_code: e.target.value }))}
+                  placeholder={editItem?.factory_part_number}
+                  style={{ width: '100%', padding: '0.6rem 0.85rem', background: editForm.new_code ? 'rgba(251,146,60,0.06)' : 'rgba(255,255,255,0.04)', border: `1px solid ${editForm.new_code ? 'rgba(251,146,60,0.35)' : 'rgba(255,255,255,0.1)'}`, borderRadius: '8px', color: editForm.new_code ? '#fb923c' : '#fff', fontSize: '0.78rem', fontFamily: 'monospace', outline: 'none', boxSizing: 'border-box', transition: 'all 0.2s' }}
+                />
+                {editForm.new_code && (
+                  <p style={{ fontSize: '0.62rem', color: 'rgba(251,146,60,0.7)', margin: '0.35rem 0 0', lineHeight: 1.5 }}>
+                    Se reemplazará <strong style={{ fontFamily: 'monospace' }}>{editItem?.factory_part_number}</strong> → <strong style={{ fontFamily: 'monospace' }}>{editForm.new_code.trim()}</strong> y se actualizará el historial de códigos.
+                  </p>
+                )}
               </div>
             </div>
 
