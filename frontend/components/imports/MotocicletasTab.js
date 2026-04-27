@@ -141,20 +141,20 @@ function DimUploadModal({ onUpload, onClose, uploading, result }) {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                 <div style={{ textAlign: 'center', padding: '10px', background: 'rgba(34,197,94,0.06)', borderRadius: '8px' }}>
                   <p style={{ color: '#22c55e', fontWeight: 800, fontSize: '22px', margin: 0 }}>
-                    {result.certificados_generados ?? result.generated ?? 0}
+                    {result.matched ?? 0}
                   </p>
                   <p style={{ color: '#606075', fontSize: '10px', margin: '2px 0 0', fontWeight: 600 }}>Certificados generados</p>
                 </div>
                 <div style={{ textAlign: 'center', padding: '10px', background: 'rgba(249,115,22,0.06)', borderRadius: '8px' }}>
                   <p style={{ color: '#f97316', fontWeight: 800, fontSize: '22px', margin: 0 }}>
-                    {result.vins_no_encontrados ?? result.not_found ?? 0}
+                    {result.unmatched ?? 0}
                   </p>
                   <p style={{ color: '#606075', fontSize: '10px', margin: '2px 0 0', fontWeight: 600 }}>VINs no encontrados</p>
                 </div>
               </div>
-              {result.errors?.length > 0 && (
+              {result.vins_not_found?.length > 0 && (
                 <p style={{ color: '#f87171', fontSize: '11px', margin: '10px 0 0' }}>
-                  {result.errors.length} fila(s) con errores
+                  {result.vins_not_found.length} VIN(s) sin match: {result.vins_not_found.join(', ')}
                 </p>
               )}
             </div>
