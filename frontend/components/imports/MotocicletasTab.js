@@ -897,7 +897,7 @@ export default function MotocicletasTab({ userRole }) {
                   </td>
                   <td style={{ padding: '9px 12px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '7px', flexWrap: 'wrap' }}>
-                      {userRole === 'superadmin' ? (
+                      {(userRole === 'superadmin' || userRole === 'administrativo') ? (
                         <button
                           onClick={() => handleToggleEmpadronamiento(unit)}
                           disabled={toggling === unit.id}
