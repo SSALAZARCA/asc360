@@ -6,7 +6,15 @@
     @page { size: Letter; margin: 0; }
     body { font-family: 'Roboto', sans-serif; margin: 0; padding: 0; background: #f4f4f4; -webkit-print-color-adjust: exact; }
     .page-container { width: 21.59cm; height: 27.94cm; margin: 0 auto; background: white; position: relative; padding: 1cm 1.5cm; page-break-after: always; overflow: hidden; box-sizing: border-box; }
-    @media print { body { background: white; } .page-container { margin: 0; border: none; } }
+    @media print {
+        body { background: white; }
+        .page-container { margin: 0; border: none; }
+        .guilloche-bg {
+            background-color: white !important;
+            background-image: repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(0,0,0,0.03) 10px, rgba(0,0,0,0.03) 12px),
+                              repeating-linear-gradient(-45deg, transparent, transparent 10px, rgba(0,0,0,0.03) 10px, rgba(0,0,0,0.03) 12px) !important;
+        }
+    }
     .watermark { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 65%; opacity: 0.06; z-index: 0; filter: grayscale(100%); }
     .top-section { display: flex; justify-content: space-between; margin-bottom: 25px; position: relative; z-index: 1; }
     .card-box { width: 48%; border: 2px solid #444; border-radius: 15px; font-size: 9px; overflow: hidden; background: white; }
@@ -33,12 +41,24 @@
     .footer-right { width: 35%; text-align: center; display: flex; flex-direction: column; justify-content: flex-end; height: 100%; position: relative; padding-bottom: 5px; }
     .sig-line { border-top: 2px solid #333; width: 100%; margin: 5px 0; }
     .security-qr { position: absolute; top: -10px; left: 0px; opacity: 0.8; width: 80px; height: 80px; }
-    .guilloche-bg { background-image: repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(0,0,0,0.03) 10px, rgba(0,0,0,0.03) 12px), repeating-linear-gradient(-45deg, transparent, transparent 10px, rgba(0,0,0,0.03) 10px, rgba(0,0,0,0.03) 12px); }
+    .guilloche-bg {
+        background-color: white !important;
+        background-image: repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(0,0,0,0.03) 10px, rgba(0,0,0,0.03) 12px),
+                          repeating-linear-gradient(-45deg, transparent, transparent 10px, rgba(0,0,0,0.03) 10px, rgba(0,0,0,0.03) 12px) !important;
+        width: 100%;
+        height: 100%;
+        position: absolute;
+        top: 0;
+        left: 0;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
     .firma-img { position: absolute; bottom: -10px; left: 50%; transform: translateX(-50%); width: 140px; z-index: 10; }
 </style>
 </head>
 <body>
-        <div class="page-container guilloche-bg">
+        <div class="page-container">
+            <div class="guilloche-bg"></div>
             {% if logo_b64 %}<img src="data:image/png;base64,{{ logo_b64 }}" class="watermark">{% endif %}
             <div class="top-section">
                 <div class="card-box">
