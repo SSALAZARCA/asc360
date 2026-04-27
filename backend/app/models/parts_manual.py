@@ -15,7 +15,8 @@ class PartsReference(Base):
     um_part_number      = Column(String(100), nullable=False, index=True)
     description         = Column(String(255), nullable=False)
     unit                = Column(String(20),  nullable=True)
-    prev_codes          = Column(JSONB, nullable=False, server_default='[]')
+    prev_codes            = Column(JSONB, nullable=False, server_default='[]')
+    description_es_manual = Column(String(500), nullable=True)
 
     items = relationship("PartsManualItem", back_populates="reference")
 

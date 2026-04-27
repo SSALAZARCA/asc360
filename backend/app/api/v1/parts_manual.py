@@ -436,6 +436,11 @@ class CatalogItemResult(BaseModel):
     pending_candidate_code: Optional[str] = None
     pending_score: Optional[float] = None
 
+class CatalogItemUpdate(BaseModel):
+    description: Optional[str] = None
+    description_es_manual: Optional[str] = None
+    public_price: Optional[float] = None
+
 class CatalogListResult(BaseModel):
     total: int
     items: list[CatalogItemResult]
@@ -516,7 +521,7 @@ async def list_catalog(
         select(
             PartsReference.factory_part_number,   # 0
             PartsReference.description,            # 1
-            spi_latest.c.description_es,           # 2
+            func.coalesce(PartsReference.description_es_manual, spi_latest.c.description_es).label("description_es"),  # 2
             PartCatalog.public_price,              # 3
             PartsManualSection.section_code,       # 4
             PartsManualSection.section_name,       # 5
@@ -571,6 +576,45 @@ async def delete_catalog(
         sa_delete(PartsManualSection).where(PartsManualSection.model_code == model_code)
     )
     await db.commit()
+
+
+# ── Edición inline de un repuesto del catálogo ───────────────────────────────
+
+@router.patch("/admin/catalog/{factory_part_number}", status_code=200)
+async def update_catalog_item(
+    factory_part_number: str,
+    payload: CatalogItemUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Actualiza descripción, descripción ES manual y/o precio público. Solo superadmin."""
+    if not current_user.is_superadmin:
+        raise HTTPException(status_code=403, detail="Solo superadmin")
+
+    ref = await db.get(PartsReference, factory_part_number)
+    if not ref:
+        raise HTTPException(status_code=404, detail="Referencia no encontrada")
+
+    if payload.description is not None:
+        ref.description = payload.description
+    if payload.description_es_manual is not None:
+        ref.description_es_manual = payload.description_es_manual
+
+    if payload.public_price is not None:
+        catalog = await db.get(PartCatalog, factory_part_number)
+        if catalog:
+            catalog.public_price = payload.public_price
+            if payload.description is not None:
+                catalog.description = payload.description
+        else:
+            db.add(PartCatalog(
+                part_code=factory_part_number,
+                description=payload.description or ref.description,
+                public_price=payload.public_price,
+            ))
+
+    await db.commit()
+    return {"ok": True}
 
 
 # ── Detección manual y revisión de cambios de código ─────────────────────────

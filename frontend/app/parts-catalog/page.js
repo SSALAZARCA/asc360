@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import AdminLayout from '../admin-layout';
 import { authFetch } from '../../lib/authFetch';
-import { Search, ChevronLeft, ChevronRight, X, ArrowUpRight, ArrowDownRight, AlertTriangle, CheckCircle2, ShieldX } from 'lucide-react';
+import { Search, ChevronLeft, ChevronRight, X, ArrowUpRight, ArrowDownRight, AlertTriangle, CheckCircle2, ShieldX, Pencil } from 'lucide-react';
 
 const PAGE_SIZE = 50;
 
@@ -25,6 +25,12 @@ export default function PartsCatalogPage() {
   const [reviewTask, setReviewTask] = useState(null); // { taskId, existingCode, candidateCode, score }
   const [reviewLoading, setReviewLoading] = useState(false);
   const [reviewMsg, setReviewMsg] = useState('');
+
+  // Modal de edición
+  const [editItem, setEditItem] = useState(null);
+  const [editForm, setEditForm] = useState({ description: '', description_es_manual: '', public_price: '' });
+  const [editLoading, setEditLoading] = useState(false);
+  const [editMsg, setEditMsg] = useState('');
 
   useEffect(() => {
     authFetch('/parts/admin/vehicle-models')
@@ -114,6 +120,42 @@ export default function PartsCatalogPage() {
     finally { setReviewLoading(false); }
   };
 
+  const openEdit = (item) => {
+    setEditMsg('');
+    setEditForm({
+      description: item.description || '',
+      description_es_manual: item.description_es || '',
+      public_price: item.public_price != null ? String(item.public_price) : '',
+    });
+    setEditItem(item);
+  };
+
+  const handleEditSave = async () => {
+    if (!editItem) return;
+    setEditLoading(true);
+    setEditMsg('');
+    const body = {};
+    if (editForm.description.trim()) body.description = editForm.description.trim();
+    body.description_es_manual = editForm.description_es_manual.trim() || null;
+    const price = parseFloat(editForm.public_price);
+    if (!isNaN(price) && price > 0) body.public_price = price;
+    try {
+      const res = await authFetch(`/parts/admin/catalog/${encodeURIComponent(editItem.factory_part_number)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (res.ok) {
+        setEditMsg('✅ Guardado.');
+        setTimeout(() => { setEditItem(null); fetchData(); }, 900);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        setEditMsg(`⚠️ ${err.detail || 'Error al guardar.'}`);
+      }
+    } catch { setEditMsg('⚠️ Error de conexión.'); }
+    finally { setEditLoading(false); }
+  };
+
   return (
     <AdminLayout>
       <header className="page-header">
@@ -190,30 +232,20 @@ export default function PartsCatalogPage() {
                   {lbl} <SortIcon col={col} />
                 </th>
               ))}
+              <th className="sort-head" style={{ width: '90px', textAlign: 'center' }}>Acciones</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan="6" style={{ textAlign: 'center', padding: '3rem', color: 'rgba(255,255,255,0.3)', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Cargando repuestos...</td></tr>
+              <tr><td colSpan="7" style={{ textAlign: 'center', padding: '3rem', color: 'rgba(255,255,255,0.3)', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Cargando repuestos...</td></tr>
             ) : sortedItems.length === 0 ? (
-              <tr><td colSpan="6" style={{ textAlign: 'center', padding: '4rem', color: 'rgba(255,255,255,0.2)', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+              <tr><td colSpan="7" style={{ textAlign: 'center', padding: '4rem', color: 'rgba(255,255,255,0.2)', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
                 {!search && !modelCode && !onlyPending ? 'Sin repuestos cargados — subí los PDFs desde Configuración' : 'Sin resultados para la búsqueda'}
               </td></tr>
             ) : sortedItems.map((item, i) => (
               <tr key={`${item.factory_part_number}-${item.section_code}-${i}`} className="hover:bg-white/5 transition-colors border-b border-white/5">
                 <td>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <span style={{ fontFamily: 'monospace', fontSize: '0.78rem', fontWeight: 700, color: '#ff5f33' }}>{item.factory_part_number}</span>
-                    {item.pending_task_id && (
-                      <button
-                        onClick={() => openReview(item)}
-                        title="Verificar posible cambio de código"
-                        style={{ display: 'flex', alignItems: 'center', gap: '3px', fontSize: '0.6rem', fontWeight: 800, padding: '2px 8px', borderRadius: '20px', background: 'rgba(251,146,60,0.15)', color: '#fb923c', border: '1px solid rgba(251,146,60,0.35)', cursor: 'pointer', whiteSpace: 'nowrap', lineHeight: 1.4 }}
-                      >
-                        <AlertTriangle size={9} /> Verificar
-                      </button>
-                    )}
-                  </div>
+                  <span style={{ fontFamily: 'monospace', fontSize: '0.78rem', fontWeight: 700, color: '#ff5f33' }}>{item.factory_part_number}</span>
                 </td>
                 <td style={{ color: 'rgba(255,255,255,0.85)', maxWidth: '280px' }}>
                   <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.description || '—'}</span>
@@ -237,6 +269,28 @@ export default function PartsCatalogPage() {
                   </div>
                 </td>
                 <td><span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.7)', fontWeight: 600 }}>{item.vehicle_model_name || '—'}</span></td>
+                <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}>
+                    {item.pending_task_id && (
+                      <button
+                        onClick={() => openReview(item)}
+                        title="Verificar posible cambio de código"
+                        style={{ display: 'flex', alignItems: 'center', gap: '3px', fontSize: '0.6rem', fontWeight: 800, padding: '2px 8px', borderRadius: '20px', background: 'rgba(251,146,60,0.15)', color: '#fb923c', border: '1px solid rgba(251,146,60,0.35)', cursor: 'pointer', whiteSpace: 'nowrap', lineHeight: 1.4 }}
+                      >
+                        <AlertTriangle size={9} /> Verificar
+                      </button>
+                    )}
+                    <button
+                      onClick={() => openEdit(item)}
+                      title="Editar repuesto"
+                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '26px', height: '26px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', transition: 'all 0.15s' }}
+                      onMouseEnter={e => { e.currentTarget.style.background = 'rgba(99,102,241,0.15)'; e.currentTarget.style.color = '#818cf8'; e.currentTarget.style.borderColor = 'rgba(99,102,241,0.3)'; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; e.currentTarget.style.color = 'rgba(255,255,255,0.4)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)'; }}
+                    >
+                      <Pencil size={11} />
+                    </button>
+                  </div>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -262,6 +316,73 @@ export default function PartsCatalogPage() {
           </div>
         )}
       </div>
+
+      {/* Modal de edición de repuesto */}
+      {editItem && (
+        <div onClick={() => !editLoading && setEditItem(null)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ background: '#0c0c0e', border: '1px solid rgba(99,102,241,0.25)', borderRadius: '16px', padding: '2rem', width: '100%', maxWidth: '480px', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <Pencil size={16} color="#818cf8" />
+              <p style={{ color: '#fff', fontWeight: 900, fontSize: '0.82rem', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>Editar repuesto</p>
+              <span style={{ marginLeft: 'auto', fontFamily: 'monospace', fontSize: '0.72rem', color: '#ff5f33', fontWeight: 700 }}>{editItem.factory_part_number}</span>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.62rem', fontWeight: 800, color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.4rem' }}>Descripción (inglés)</label>
+                <input
+                  value={editForm.description}
+                  onChange={e => setEditForm(f => ({ ...f, description: e.target.value }))}
+                  style={{ width: '100%', padding: '0.6rem 0.85rem', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: '#fff', fontSize: '0.78rem', outline: 'none', boxSizing: 'border-box' }}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.62rem', fontWeight: 800, color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.4rem' }}>Descripción ES</label>
+                <input
+                  value={editForm.description_es_manual}
+                  onChange={e => setEditForm(f => ({ ...f, description_es_manual: e.target.value }))}
+                  placeholder="Dejar vacío para usar la descripción de pedidos"
+                  style={{ width: '100%', padding: '0.6rem 0.85rem', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: '#fff', fontSize: '0.78rem', outline: 'none', boxSizing: 'border-box' }}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.62rem', fontWeight: 800, color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.4rem' }}>Precio Público (COP)</label>
+                <input
+                  type="number"
+                  value={editForm.public_price}
+                  onChange={e => setEditForm(f => ({ ...f, public_price: e.target.value }))}
+                  placeholder="0"
+                  style={{ width: '100%', padding: '0.6rem 0.85rem', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: '#fff', fontSize: '0.78rem', outline: 'none', boxSizing: 'border-box' }}
+                />
+              </div>
+            </div>
+
+            {editMsg && (
+              <p style={{ fontSize: '0.72rem', color: editMsg.startsWith('✅') ? '#4ade80' : '#ef4444', margin: 0, textAlign: 'center' }}>{editMsg}</p>
+            )}
+
+            <div style={{ display: 'flex', gap: '0.75rem' }}>
+              <button
+                onClick={handleEditSave}
+                disabled={editLoading}
+                style={{ flex: 1, background: 'rgba(99,102,241,0.15)', color: '#818cf8', border: '1px solid rgba(99,102,241,0.3)', borderRadius: '10px', padding: '0.7rem', fontWeight: 900, fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.06em', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', opacity: editLoading ? 0.5 : 1 }}
+              >
+                <CheckCircle2 size={14} /> Guardar
+              </button>
+              <button
+                onClick={() => setEditItem(null)}
+                disabled={editLoading}
+                style={{ flex: 1, background: 'rgba(255,255,255,0.03)', color: 'rgba(255,255,255,0.4)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px', padding: '0.7rem', fontWeight: 900, fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.06em', cursor: 'pointer', opacity: editLoading ? 0.5 : 1 }}
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal de verificación de cambio de código */}
       {reviewTask && (
