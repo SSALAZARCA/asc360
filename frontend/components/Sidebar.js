@@ -13,6 +13,7 @@ import {
   LayoutDashboard,
   Settings,
   Ship,
+  BookOpen,
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
@@ -24,6 +25,7 @@ const ALL_ITEMS = [
   { id: 'imports', name: 'Estado Pedidos', icon: Ship, path: '/imports', importsOnly: true },
   { id: 'tenants', name: 'Red de Talleres', icon: Building2, path: '/tenants', adminOnly: true },
   { id: 'users', name: 'Personal & Acceso', icon: Users, path: '/users', adminOnly: true },
+  { id: 'parts-catalog', name: 'Catálogo de Partes', icon: BookOpen, path: '/parts-catalog', adminOnly: true },
   { id: 'settings', name: 'Configuración', icon: Settings, path: '/settings', adminOnly: true },
 ];
 

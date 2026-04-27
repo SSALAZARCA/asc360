@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     MINIO_ACCESS_KEY: str = "umadmin"
     MINIO_SECRET_KEY: str = "minio_secret_admin"
     MINIO_SECURE: bool = False
+    MINIO_PUBLIC_URL: str = ""   # URL pública de MinIO (ej: https://minio.dominio.com). Si vacío, usa MINIO_ENDPOINT.
 
     # Secretos y tokens — OBLIGATORIO sobrescribir en producción via .env
     SECRET_KEY: str
