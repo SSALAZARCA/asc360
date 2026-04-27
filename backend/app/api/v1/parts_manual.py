@@ -634,7 +634,7 @@ async def approve_review_task(
     # Resolver tarea
     task.status = "approved"
     task.resolved_at = datetime.utcnow()
-    task.resolved_by = current_user.id
+    task.resolved_by = current_user.user_id
 
     # Rechazar automáticamente otras tareas pendientes para el mismo código existente
     await db.execute(
@@ -667,7 +667,7 @@ async def reject_review_task(
 
     task.status = "rejected"
     task.resolved_at = datetime.utcnow()
-    task.resolved_by = current_user.id
+    task.resolved_by = current_user.user_id
     await db.commit()
     return {"ok": True}
 
