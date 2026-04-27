@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import AdminLayout from '../admin-layout';
-import { UploadCloud, Image as ImageIcon, Save, Trash2, Clock, Bike, Plus, Pencil, X, AlertCircle, BookOpen, Upload, FileText, Loader2, ChevronDown } from 'lucide-react';
+import { UploadCloud, Image as ImageIcon, Save, Trash2, Clock, Bike, Plus, Pencil, X, AlertCircle, BookOpen, Upload, FileText, Loader2, ChevronDown, ScanSearch } from 'lucide-react';
 import { authFetch } from '../../lib/authFetch';
 
 const BACKEND_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1').replace('http://', 'https://');
@@ -74,6 +74,25 @@ export default function SettingsPage() {
 
   const [catCleaning, setCatCleaning]         = useState(false);
   const [showCleanConfirm, setShowCleanConfirm] = useState(false);
+  const [detecting, setDetecting]             = useState(false);
+  const [detectMsg, setDetectMsg]             = useState('');
+
+  const handleDetectCodeChanges = async () => {
+    setDetecting(true);
+    setDetectMsg('');
+    try {
+      const res = await authFetch('/parts/admin/detect-code-changes', { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        setDetectMsg(data.tasks_created > 0
+          ? `✅ ${data.tasks_created} sugerencia${data.tasks_created > 1 ? 's' : ''} nueva${data.tasks_created > 1 ? 's' : ''} encontrada${data.tasks_created > 1 ? 's' : ''}.`
+          : '✅ Sin cambios de código detectados.');
+      } else {
+        setDetectMsg('⚠️ Error al ejecutar la detección.');
+      }
+    } catch { setDetectMsg('⚠️ Error de conexión.'); }
+    finally { setDetecting(false); setTimeout(() => setDetectMsg(''), 5000); }
+  };
 
   const handleCatClean = async () => {
     if (!catModelCode.trim()) return;
@@ -706,6 +725,12 @@ export default function SettingsPage() {
                 <Trash2 size={13} /> {catCleaning ? 'Limpiando...' : 'Limpiar catálogo'}
               </button>
             )}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+              <button onClick={handleDetectCodeChanges} disabled={detecting} style={{ padding: '0.65rem 1.25rem', borderRadius: '10px', border: '1px solid rgba(99,102,241,0.3)', background: 'rgba(99,102,241,0.08)', color: '#818cf8', fontWeight: 700, fontSize: '0.68rem', textTransform: 'uppercase', letterSpacing: '0.06em', cursor: detecting ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem', opacity: detecting ? 0.6 : 1 }}>
+                <ScanSearch size={13} /> {detecting ? 'Analizando...' : 'Buscar cambios de código'}
+              </button>
+              {detectMsg && <span style={{ fontSize: '0.65rem', color: detectMsg.startsWith('✅') ? '#4ade80' : '#ef4444', fontWeight: 600 }}>{detectMsg}</span>}
+            </div>
             {catResults.length > 0 && !catLoading && (
               <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
                 <span style={{ fontSize: '0.68rem', color: '#10b981', fontWeight: 700 }}>✓ {catSuccess} secciones</span>
