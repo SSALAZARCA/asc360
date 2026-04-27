@@ -415,20 +415,23 @@ async def load_section(
 
     # 5. Upsert references + insertar items
     refs_new = 0
+    seen_refs: set[str] = set()
     for p in parts:
         factory = p.get("factory_part_number", "").strip()
         if not factory:
             continue
 
-        existing_ref = await db.get(PartsReference, factory)
-        if not existing_ref:
-            db.add(PartsReference(
-                factory_part_number=factory,
-                um_part_number=p.get("um_part_number", ""),
-                description=p.get("description", ""),
-                unit=p.get("unit"),
-            ))
-            refs_new += 1
+        if factory not in seen_refs:
+            existing_ref = await db.get(PartsReference, factory)
+            if not existing_ref:
+                db.add(PartsReference(
+                    factory_part_number=factory,
+                    um_part_number=p.get("um_part_number", ""),
+                    description=p.get("description", ""),
+                    unit=p.get("unit"),
+                ))
+                refs_new += 1
+            seen_refs.add(factory)
 
         db.add(PartsManualItem(
             section_id=section.id,
