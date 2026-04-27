@@ -383,9 +383,37 @@ async def list_catalog(
     if not current_user.is_superadmin:
         raise HTTPException(status_code=403, detail="Solo superadmin")
 
-    from sqlalchemy import func, or_, outerjoin
+    from sqlalchemy import func, or_
 
-    base_q = (
+    # JOIN base — filtra por modelo y búsqueda antes de deduplicar
+    joins_q = (
+        select(PartsReference.factory_part_number)
+        .join(PartsManualItem, PartsManualItem.factory_part_number == PartsReference.factory_part_number)
+        .join(PartsManualSection, PartsManualSection.id == PartsManualItem.section_id)
+        .outerjoin(PartCatalog, PartCatalog.part_code == PartsReference.um_part_number)
+    )
+
+    if model_code:
+        joins_q = joins_q.where(PartsManualSection.model_code == model_code)
+
+    if search:
+        term = f"%{search}%"
+        joins_q = joins_q.where(
+            or_(
+                PartsReference.factory_part_number.ilike(term),
+                PartsReference.description.ilike(term),
+                PartCatalog.description.ilike(term),
+            )
+        )
+
+    # Total de códigos únicos
+    count_q = select(func.count()).select_from(
+        joins_q.distinct().subquery()
+    )
+    total = (await db.execute(count_q)).scalar_one()
+
+    # DISTINCT ON factory_part_number — una fila por código aunque aparezca en varias secciones
+    rows_q = (
         select(
             PartsReference.factory_part_number,
             PartsReference.description,
@@ -396,6 +424,7 @@ async def list_catalog(
             PartsManualSection.model_code,
             VehicleCatalogMap.vehicle_model_pattern,
         )
+        .distinct(PartsReference.factory_part_number)
         .join(PartsManualItem, PartsManualItem.factory_part_number == PartsReference.factory_part_number)
         .join(PartsManualSection, PartsManualSection.id == PartsManualItem.section_id)
         .outerjoin(PartCatalog, PartCatalog.part_code == PartsReference.um_part_number)
@@ -403,11 +432,11 @@ async def list_catalog(
     )
 
     if model_code:
-        base_q = base_q.where(PartsManualSection.model_code == model_code)
+        rows_q = rows_q.where(PartsManualSection.model_code == model_code)
 
     if search:
         term = f"%{search}%"
-        base_q = base_q.where(
+        rows_q = rows_q.where(
             or_(
                 PartsReference.factory_part_number.ilike(term),
                 PartsReference.description.ilike(term),
@@ -415,10 +444,11 @@ async def list_catalog(
             )
         )
 
-    count_q = select(func.count()).select_from(base_q.subquery())
-    total = (await db.execute(count_q)).scalar_one()
-
-    rows_q = base_q.order_by(PartsManualSection.model_code, PartsManualSection.section_code)
+    rows_q = rows_q.order_by(
+        PartsReference.factory_part_number,
+        PartsManualSection.model_code,
+        PartsManualSection.section_code,
+    )
     rows_q = rows_q.offset((page - 1) * page_size).limit(page_size)
     rows = (await db.execute(rows_q)).all()
 
