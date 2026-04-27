@@ -72,12 +72,13 @@ export default function SettingsPage() {
     setCatResults([]);
   };
 
-  const [catCleaning, setCatCleaning] = useState(false);
+  const [catCleaning, setCatCleaning]         = useState(false);
+  const [showCleanConfirm, setShowCleanConfirm] = useState(false);
 
   const handleCatClean = async () => {
     if (!catModelCode.trim()) return;
-    if (!confirm(`¿Eliminar TODAS las secciones cargadas para el modelo "${catModelCode}"? Esta acción no se puede deshacer.`)) return;
     setCatCleaning(true);
+    setShowCleanConfirm(false);
     try {
       await authFetch(`/parts/admin/catalog/${catModelCode.trim()}`, { method: 'DELETE' });
       setCatFiles([]);
@@ -649,7 +650,7 @@ export default function SettingsPage() {
               {catLoading ? <><Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> Cargando...</> : <><Upload size={13} /> Cargar {catFiles.length > 0 ? `${catFiles.length} PDF${catFiles.length !== 1 ? 's' : ''}` : 'PDFs'}</>}
             </button>
             {catModelCode.trim() && (
-              <button onClick={handleCatClean} disabled={catCleaning || catLoading} style={{ padding: '0.65rem 1.25rem', borderRadius: '10px', border: '1px solid rgba(239,68,68,0.25)', background: 'transparent', color: '#ef4444', fontWeight: 700, fontSize: '0.68rem', textTransform: 'uppercase', letterSpacing: '0.06em', cursor: catCleaning ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem', opacity: catCleaning ? 0.6 : 1 }}>
+              <button onClick={() => setShowCleanConfirm(true)} disabled={catCleaning || catLoading} style={{ padding: '0.65rem 1.25rem', borderRadius: '10px', border: '1px solid rgba(239,68,68,0.25)', background: 'transparent', color: '#ef4444', fontWeight: 700, fontSize: '0.68rem', textTransform: 'uppercase', letterSpacing: '0.06em', cursor: catCleaning ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem', opacity: catCleaning ? 0.6 : 1 }}>
                 <Trash2 size={13} /> {catCleaning ? 'Limpiando...' : 'Limpiar catálogo'}
               </button>
             )}
@@ -926,9 +927,44 @@ export default function SettingsPage() {
         </div>
       )}
 
+      {/* Modal confirmación limpiar catálogo */}
+      {showCleanConfirm && (
+        <div className="cat-modal-backdrop" onClick={() => setShowCleanConfirm(false)}>
+          <div className="cat-modal-box" onClick={e => e.stopPropagation()}>
+            <div className="cat-modal-head">
+              <h2 className="cat-modal-title">Limpiar catálogo</h2>
+              <button onClick={() => setShowCleanConfirm(false)} className="cat-close-btn"><X size={16} /></button>
+            </div>
+            <div style={{ padding: '1.5rem' }}>
+              <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.85rem', lineHeight: '1.7', margin: 0 }}>
+                Estás por eliminar <span style={{ color: '#fff', fontWeight: 900 }}>todas las secciones</span> del modelo{' '}
+                <span style={{ color: '#ff5f33', fontWeight: 900 }}>{catModelCode}</span>.<br />
+                Esta acción no se puede deshacer.
+              </p>
+            </div>
+            <div className="cat-modal-foot">
+              <button onClick={() => setShowCleanConfirm(false)} className="cat-btn-secondary">Cancelar</button>
+              <button onClick={handleCatClean} style={{ background: '#ef4444', color: '#fff', border: 'none', padding: '0.75rem 1.25rem', borderRadius: '10px', fontWeight: 900, fontSize: '0.75rem', textTransform: 'uppercase', cursor: 'pointer', letterSpacing: '0.04em' }}>
+                Sí, limpiar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <style jsx global>{`
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        @keyframes cat-fade { from { opacity: 0; } to { opacity: 1; } }
         select option { background: #0c0c0e; color: #fff; }
+        .cat-modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.8); backdrop-filter: blur(4px); z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 2rem; animation: cat-fade 0.2s ease; }
+        .cat-modal-box { background: #0c0c0e; border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; width: 100%; max-width: 420px; box-shadow: 0 25px 50px rgba(0,0,0,0.8); overflow: hidden; }
+        .cat-modal-head { display: flex; justify-content: space-between; align-items: center; padding: 1.25rem 1.5rem; border-bottom: 1px solid rgba(255,255,255,0.05); background: rgba(255,255,255,0.02); }
+        .cat-modal-title { font-size: 0.85rem; font-weight: 900; text-transform: uppercase; color: #fff; letter-spacing: 0.05em; margin: 0; }
+        .cat-modal-foot { display: flex; justify-content: flex-end; gap: 0.75rem; padding: 1.25rem 1.5rem; border-top: 1px solid rgba(255,255,255,0.05); }
+        .cat-close-btn { width: 28px; height: 28px; border-radius: 8px; background: rgba(255,255,255,0.08); border: none; color: rgba(255,255,255,0.5); display: flex; justify-content: center; align-items: center; cursor: pointer; }
+        .cat-close-btn:hover { background: #ef4444; color: #fff; }
+        .cat-btn-secondary { background: transparent; border: 1px solid rgba(255,255,255,0.15); color: rgba(255,255,255,0.6); padding: 0.75rem 1.25rem; border-radius: 10px; font-weight: 800; font-size: 0.75rem; text-transform: uppercase; cursor: pointer; }
+        .cat-btn-secondary:hover { background: rgba(255,255,255,0.08); }
       `}</style>
     </AdminLayout>
   );
