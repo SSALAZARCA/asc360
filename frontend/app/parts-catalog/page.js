@@ -1,8 +1,8 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import AdminLayout from '../admin-layout';
 import { authFetch } from '../../lib/authFetch';
-import { Search, ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { Search, ChevronLeft, ChevronRight, X, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 
 const PAGE_SIZE = 50;
 
@@ -16,6 +16,9 @@ export default function PartsCatalogPage() {
   const [searchInput, setSearchInput] = useState('');
   const [modelCode, setModelCode]   = useState('');
   const [models, setModels]         = useState([]);
+
+  const [sortCol, setSortCol] = useState('section_code');
+  const [sortDir, setSortDir] = useState('asc');
 
   useEffect(() => {
     authFetch('/parts/admin/vehicle-models')
@@ -56,6 +59,28 @@ export default function PartsCatalogPage() {
     setSearch('');
     setPage(1);
   };
+
+  const toggleSort = (col) => {
+    if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSortCol(col); setSortDir('asc'); }
+  };
+
+  const SortIcon = ({ col }) => sortCol === col
+    ? (sortDir === 'asc' ? <ArrowUpRight size={10} /> : <ArrowDownRight size={10} />)
+    : null;
+
+  const sortedItems = useMemo(() => {
+    const arr = [...items];
+    arr.sort((a, b) => {
+      const va = a[sortCol] ?? '';
+      const vb = b[sortCol] ?? '';
+      const cmp = typeof va === 'number'
+        ? va - vb
+        : String(va).localeCompare(String(vb), 'es', { numeric: true });
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+    return arr;
+  }, [items, sortCol, sortDir]);
 
   return (
     <AdminLayout>
@@ -107,12 +132,18 @@ export default function PartsCatalogPage() {
         <table className="master-table">
           <thead>
             <tr>
-              <th>Ref. Fábrica</th>
-              <th>Descripción</th>
-              <th>Descripción ES</th>
-              <th>Precio Público</th>
-              <th>Sección</th>
-              <th>Modelo</th>
+              {[
+                ['factory_part_number', 'Ref. Fábrica'],
+                ['description',         'Descripción'],
+                ['description_es',      'Descripción ES'],
+                ['public_price',        'Precio Público'],
+                ['section_code',        'Sección'],
+                ['vehicle_model_name',  'Modelo'],
+              ].map(([col, lbl]) => (
+                <th key={col} onClick={() => toggleSort(col)} className="sort-head">
+                  {lbl} <SortIcon col={col} />
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
@@ -122,13 +153,13 @@ export default function PartsCatalogPage() {
                   Cargando repuestos...
                 </td>
               </tr>
-            ) : items.length === 0 ? (
+            ) : sortedItems.length === 0 ? (
               <tr>
                 <td colSpan="6" style={{ textAlign: 'center', padding: '4rem', color: 'rgba(255,255,255,0.2)', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
                   {!search && !modelCode ? 'Sin repuestos cargados — subí los PDFs desde Configuración' : 'Sin resultados para la búsqueda'}
                 </td>
               </tr>
-            ) : items.map((item, i) => (
+            ) : sortedItems.map((item, i) => (
               <tr key={`${item.factory_part_number}-${item.section_code}-${i}`} className="hover:bg-white/5 transition-colors border-b border-white/5">
                 <td><span style={{ fontFamily: 'monospace', fontSize: '0.78rem', fontWeight: 700, color: '#ff5f33' }}>{item.factory_part_number}</span></td>
                 <td style={{ color: 'rgba(255,255,255,0.85)', maxWidth: '280px' }}>
@@ -162,16 +193,25 @@ export default function PartsCatalogPage() {
 
         {/* Paginación */}
         {totalPages > 1 && (
-          <div style={{ padding: '1rem 1.5rem', borderTop: '1px solid rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.3)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Página {page} de {totalPages} · {total.toLocaleString()} resultados
+          <div style={{ padding: '0.875rem 1.5rem', borderTop: '1px solid rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: '0.68rem', color: '#9ca3af' }}>
+              {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} de {total.toLocaleString()} repuestos
             </span>
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="btn" style={{ padding: '0.4rem 0.875rem', fontSize: '0.68rem', display: 'flex', alignItems: 'center', gap: '0.3rem', opacity: page === 1 ? 0.4 : 1 }}>
-                <ChevronLeft size={13} /> Anterior
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <button
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={page === 1}
+                style={{ background: 'rgba(255,255,255,0.05)', border: 'none', borderRadius: '6px', padding: '5px 8px', cursor: page === 1 ? 'not-allowed' : 'pointer', color: page === 1 ? '#606075' : '#fff', display: 'flex', alignItems: 'center' }}
+              >
+                <ChevronLeft size={14} />
               </button>
-              <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages} className="btn" style={{ padding: '0.4rem 0.875rem', fontSize: '0.68rem', display: 'flex', alignItems: 'center', gap: '0.3rem', opacity: page === totalPages ? 0.4 : 1 }}>
-                Siguiente <ChevronRight size={13} />
+              <span style={{ fontSize: '11px', color: '#9ca3af', padding: '5px 8px' }}>{page} / {totalPages}</span>
+              <button
+                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                disabled={page >= totalPages}
+                style={{ background: 'rgba(255,255,255,0.05)', border: 'none', borderRadius: '6px', padding: '5px 8px', cursor: page >= totalPages ? 'not-allowed' : 'pointer', color: page >= totalPages ? '#606075' : '#fff', display: 'flex', alignItems: 'center' }}
+              >
+                <ChevronRight size={14} />
               </button>
             </div>
           </div>
@@ -180,8 +220,9 @@ export default function PartsCatalogPage() {
 
       <style jsx>{`
         .master-table { width: 100%; border-collapse: collapse; }
-        .master-table th { text-align: left; padding: 1.25rem 1.5rem; color: rgba(255,255,255,0.4); font-weight: 800; border-bottom: 1px solid rgba(255,255,255,0.05); text-transform: uppercase; font-size: 0.65rem; letter-spacing: 0.05em; background: rgba(0,0,0,0.2); }
         .master-table td { padding: 0.875rem 1.5rem; }
+        .sort-head { padding: 0.7rem 1.5rem; font-size: 0.62rem; font-weight: 800; color: rgba(255,255,255,0.4); text-transform: uppercase; letter-spacing: 0.08em; border-bottom: 1px solid rgba(255,255,255,0.05); background: rgba(0,0,0,0.2); cursor: pointer; white-space: nowrap; text-align: left; user-select: none; }
+        .sort-head:hover { color: #fff; }
         select option { background: #0c0c0e; color: #fff; }
       `}</style>
     </AdminLayout>
