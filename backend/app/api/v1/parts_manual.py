@@ -20,10 +20,10 @@ from app.api.deps import get_current_user
 from app.config import settings
 from app.database import get_db
 from app.models.order import ServiceOrder
+from app.models.imports import VehicleModel
 from app.models.parts_manual import (
     PartsManualItem, PartsManualSection, PartsReference, VehicleCatalogMap,
 )
-from app.models.vehicle import Vehicle
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/parts", tags=["Parts Manual"])
@@ -212,15 +212,14 @@ async def list_vehicle_models(
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """Devuelve los modelos de vehículos distintos con su catalog_model_code si ya existe."""
+    """Devuelve el catálogo de modelos UM con su catalog_model_code si ya tiene secciones cargadas."""
     if not current_user.is_superadmin:
         raise HTTPException(status_code=403, detail="Solo superadmin")
 
     result = await db.execute(
-        select(Vehicle.model, VehicleCatalogMap.catalog_model_code)
-        .outerjoin(VehicleCatalogMap, Vehicle.model == VehicleCatalogMap.vehicle_model_pattern)
-        .distinct(Vehicle.model)
-        .order_by(Vehicle.model)
+        select(VehicleModel.model_name, VehicleCatalogMap.catalog_model_code)
+        .outerjoin(VehicleCatalogMap, VehicleModel.model_name == VehicleCatalogMap.vehicle_model_pattern)
+        .order_by(VehicleModel.model_name)
     )
     rows = result.all()
     return [
