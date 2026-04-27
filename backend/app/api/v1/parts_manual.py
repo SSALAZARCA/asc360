@@ -439,6 +439,24 @@ async def list_catalog(
     )
 
 
+# ── Limpiar catálogo completo de un modelo ────────────────────────────────────
+
+@router.delete("/admin/catalog/{model_code}", status_code=204)
+async def delete_catalog(
+    model_code: str,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Elimina todas las secciones (y sus ítems vía CASCADE) de un model_code. Solo superadmin."""
+    if not current_user.is_superadmin:
+        raise HTTPException(status_code=403, detail="Solo superadmin")
+
+    await db.execute(
+        sa_delete(PartsManualSection).where(PartsManualSection.model_code == model_code)
+    )
+    await db.commit()
+
+
 # ── Endpoint de administración (frontend) ──────────────────────────────────────
 
 @router.post("/admin/load-section", response_model=LoadSectionResult)

@@ -72,6 +72,23 @@ export default function SettingsPage() {
     setCatResults([]);
   };
 
+  const [catCleaning, setCatCleaning] = useState(false);
+
+  const handleCatClean = async () => {
+    if (!catModelCode.trim()) return;
+    if (!confirm(`¿Eliminar TODAS las secciones cargadas para el modelo "${catModelCode}"? Esta acción no se puede deshacer.`)) return;
+    setCatCleaning(true);
+    try {
+      await authFetch(`/parts/admin/catalog/${catModelCode.trim()}`, { method: 'DELETE' });
+      setCatFiles([]);
+      setCatResults([]);
+    } catch (e) {
+      alert('Error al limpiar el catálogo.');
+    } finally {
+      setCatCleaning(false);
+    }
+  };
+
   const handleCatUpload = async () => {
     if (!catModelCode.trim() || !catVehicleModel || catFiles.length === 0) return;
     setCatLoading(true);
@@ -631,6 +648,11 @@ export default function SettingsPage() {
             <button onClick={handleCatUpload} disabled={!catCanUpload} style={{ padding: '0.65rem 1.5rem', borderRadius: '10px', border: 'none', cursor: catCanUpload ? 'pointer' : 'not-allowed', background: catCanUpload ? '#ff5f33' : 'rgba(255,95,51,0.2)', color: '#fff', fontWeight: 900, fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
               {catLoading ? <><Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> Cargando...</> : <><Upload size={13} /> Cargar {catFiles.length > 0 ? `${catFiles.length} PDF${catFiles.length !== 1 ? 's' : ''}` : 'PDFs'}</>}
             </button>
+            {catModelCode.trim() && (
+              <button onClick={handleCatClean} disabled={catCleaning || catLoading} style={{ padding: '0.65rem 1.25rem', borderRadius: '10px', border: '1px solid rgba(239,68,68,0.25)', background: 'transparent', color: '#ef4444', fontWeight: 700, fontSize: '0.68rem', textTransform: 'uppercase', letterSpacing: '0.06em', cursor: catCleaning ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem', opacity: catCleaning ? 0.6 : 1 }}>
+                <Trash2 size={13} /> {catCleaning ? 'Limpiando...' : 'Limpiar catálogo'}
+              </button>
+            )}
             {catResults.length > 0 && !catLoading && (
               <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
                 <span style={{ fontSize: '0.68rem', color: '#10b981', fontWeight: 700 }}>✓ {catSuccess} secciones</span>
