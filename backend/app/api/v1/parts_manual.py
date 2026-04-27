@@ -21,6 +21,7 @@ from app.config import settings
 from app.database import get_db
 from app.models.order import ServiceOrder
 from app.models.imports import VehicleModel
+from app.models.logistics import PartCatalog
 from app.models.parts_manual import (
     PartsManualItem, PartsManualSection, PartsReference, VehicleCatalogMap,
 )
@@ -357,13 +358,12 @@ async def get_part_by_factory_code(
 
 class CatalogItemResult(BaseModel):
     factory_part_number: str
-    um_part_number: str
     description: str
-    unit: Optional[str]
-    order_num: str
+    description_es: Optional[str]
+    public_price: Optional[float]
     section_code: str
     section_name: str
-    model_code: str
+    vehicle_model_name: Optional[str]
 
 class CatalogListResult(BaseModel):
     total: int
@@ -379,25 +379,27 @@ async def list_catalog(
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """Devuelve todos los repuestos cargados con su sección y modelo. Solo superadmin."""
+    """Devuelve todos los repuestos cargados con su sección, modelo y datos del catálogo interno."""
     if not current_user.is_superadmin:
         raise HTTPException(status_code=403, detail="Solo superadmin")
 
-    from sqlalchemy import func, or_
+    from sqlalchemy import func, or_, outerjoin
 
     base_q = (
         select(
             PartsReference.factory_part_number,
-            PartsReference.um_part_number,
             PartsReference.description,
-            PartsReference.unit,
-            PartsManualItem.order_num,
+            PartCatalog.description.label("description_es"),
+            PartCatalog.public_price,
             PartsManualSection.section_code,
             PartsManualSection.section_name,
             PartsManualSection.model_code,
+            VehicleCatalogMap.vehicle_model_pattern,
         )
         .join(PartsManualItem, PartsManualItem.factory_part_number == PartsReference.factory_part_number)
         .join(PartsManualSection, PartsManualSection.id == PartsManualItem.section_id)
+        .outerjoin(PartCatalog, PartCatalog.part_code == PartsReference.um_part_number)
+        .outerjoin(VehicleCatalogMap, VehicleCatalogMap.catalog_model_code == PartsManualSection.model_code)
     )
 
     if model_code:
@@ -408,15 +410,15 @@ async def list_catalog(
         base_q = base_q.where(
             or_(
                 PartsReference.factory_part_number.ilike(term),
-                PartsReference.um_part_number.ilike(term),
                 PartsReference.description.ilike(term),
+                PartCatalog.description.ilike(term),
             )
         )
 
     count_q = select(func.count()).select_from(base_q.subquery())
     total = (await db.execute(count_q)).scalar_one()
 
-    rows_q = base_q.order_by(PartsManualSection.model_code, PartsManualSection.section_code, PartsManualItem.order_num)
+    rows_q = base_q.order_by(PartsManualSection.model_code, PartsManualSection.section_code)
     rows_q = rows_q.offset((page - 1) * page_size).limit(page_size)
     rows = (await db.execute(rows_q)).all()
 
@@ -425,13 +427,12 @@ async def list_catalog(
         items=[
             CatalogItemResult(
                 factory_part_number=r[0],
-                um_part_number=r[1],
-                description=r[2],
-                unit=r[3],
-                order_num=r[4],
-                section_code=r[5],
-                section_name=r[6],
-                model_code=r[7],
+                description=r[1],
+                description_es=r[2],
+                public_price=float(r[3]) if r[3] is not None else None,
+                section_code=r[4],
+                section_name=r[5],
+                vehicle_model_name=r[7],
             )
             for r in rows
         ],

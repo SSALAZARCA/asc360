@@ -107,9 +107,10 @@ export default function PartsCatalogPage() {
         <table className="master-table">
           <thead>
             <tr>
-              <th>#</th>
               <th>Ref. Fábrica</th>
               <th>Descripción</th>
+              <th>Descripción ES</th>
+              <th>Precio Público</th>
               <th>Sección</th>
               <th>Modelo</th>
             </tr>
@@ -117,32 +118,43 @@ export default function PartsCatalogPage() {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan="5" style={{ textAlign: 'center', padding: '3rem', color: 'rgba(255,255,255,0.3)', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                <td colSpan="6" style={{ textAlign: 'center', padding: '3rem', color: 'rgba(255,255,255,0.3)', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
                   Cargando repuestos...
                 </td>
               </tr>
             ) : items.length === 0 ? (
               <tr>
-                <td colSpan="5" style={{ textAlign: 'center', padding: '4rem', color: 'rgba(255,255,255,0.2)', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                <td colSpan="6" style={{ textAlign: 'center', padding: '4rem', color: 'rgba(255,255,255,0.2)', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
                   {!search && !modelCode ? 'Sin repuestos cargados — subí los PDFs desde Configuración' : 'Sin resultados para la búsqueda'}
                 </td>
               </tr>
             ) : items.map((item, i) => (
               <tr key={`${item.factory_part_number}-${item.section_code}-${i}`} className="hover:bg-white/5 transition-colors border-b border-white/5">
-                <td style={{ color: 'rgba(255,255,255,0.35)', fontWeight: 700 }}>{item.order_num}</td>
                 <td><span style={{ fontFamily: 'monospace', fontSize: '0.78rem', fontWeight: 700, color: '#ff5f33' }}>{item.factory_part_number}</span></td>
-                <td style={{ color: 'rgba(255,255,255,0.85)', maxWidth: '380px' }}>
+                <td style={{ color: 'rgba(255,255,255,0.85)', maxWidth: '280px' }}>
                   <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.description || '—'}</span>
+                </td>
+                <td style={{ maxWidth: '240px' }}>
+                  {item.description_es
+                    ? <span style={{ color: '#4ade80', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.description_es}</span>
+                    : <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: '0.68rem' }}>—</span>
+                  }
+                </td>
+                <td>
+                  {item.public_price != null
+                    ? <span style={{ fontWeight: 700, color: '#10b981' }}>${Number(item.public_price).toLocaleString('es-CO')}</span>
+                    : <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: '0.68rem' }}>—</span>
+                  }
                 </td>
                 <td>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                     <span style={{ fontSize: '0.6rem', fontWeight: 800, padding: '2px 8px', borderRadius: '20px', background: 'rgba(99,102,241,0.12)', color: '#818cf8', border: '1px solid rgba(99,102,241,0.2)', whiteSpace: 'nowrap' }}>
                       {item.section_code}
                     </span>
-                    <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '160px' }}>{item.section_name}</span>
+                    <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '140px' }}>{item.section_name}</span>
                   </div>
                 </td>
-                <td><span style={{ fontFamily: 'monospace', fontSize: '0.68rem', color: 'rgba(255,255,255,0.3)', fontWeight: 600 }}>{item.model_code}</span></td>
+                <td><span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.7)', fontWeight: 600 }}>{item.vehicle_model_name || '—'}</span></td>
               </tr>
             ))}
           </tbody>
