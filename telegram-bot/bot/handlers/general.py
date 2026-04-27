@@ -21,15 +21,20 @@ from .technician import handle_active_orders
 from .reception import process_plate, send_vehicle_lifecycle, apply_correction_to_data
 
 
-async def _send_diagram(message, diagram_url: str, caption: str) -> None:
-    """Descarga la imagen de MinIO internamente y la manda como bytes a Telegram."""
+async def _send_diagram(message, section_id: str, caption: str) -> None:
+    """Pide la imagen al backend (que la sirve desde MinIO) y la manda a Telegram."""
+    from core.config import BACKEND_URL, SONIA_BOT_SECRET
     try:
         async with httpx.AsyncClient() as client:
-            res = await client.get(diagram_url, timeout=15.0)
+            res = await client.get(
+                f"{BACKEND_URL}/parts/section/{section_id}/diagram-image",
+                headers={"x-sonia-secret": SONIA_BOT_SECRET},
+                timeout=15.0,
+            )
             res.raise_for_status()
         await message.reply_photo(photo=res.content, caption=caption, parse_mode="Markdown")
     except Exception as e:
-        logger.warning(f"_send_diagram error ({diagram_url}): {e}")
+        logger.warning(f"_send_diagram error (section {section_id}): {e}")
         await message.reply_text(caption + "\n_(diagrama no disponible)_", parse_mode="Markdown")
 
 
@@ -368,7 +373,7 @@ async def _check_awaiting_states(update: Update, context: ContextTypes.DEFAULT_T
         for s in sections:
             await _send_diagram(
                 update.message,
-                s.get("diagram_url", ""),
+                s["section_id"],
                 f"📋 *{s['section_code']}: {s['section_name']}*",
             )
 
@@ -402,7 +407,7 @@ async def _check_awaiting_states(update: Update, context: ContextTypes.DEFAULT_T
         for s in sections:
             await _send_diagram(
                 update.message,
-                s.get("diagram_url", ""),
+                s["section_id"],
                 f"📋 *{s['section_code']}: {s['section_name']}*",
             )
 

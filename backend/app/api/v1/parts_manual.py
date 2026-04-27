@@ -11,6 +11,7 @@ from typing import Optional
 import fitz  # PyMuPDF
 import pdfplumber
 from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, UploadFile
+from fastapi.responses import Response
 from minio import Minio
 from pydantic import BaseModel
 from sqlalchemy import delete as sa_delete, update as sa_update, text, exists
@@ -402,6 +403,43 @@ async def get_part_by_model_and_code(
         section_name=section.section_name,
         order_num=item.order_num,
     )
+
+
+@router.get("/section/{section_id}/diagram-image")
+async def get_diagram_image(
+    section_id: str,
+    db: AsyncSession = Depends(get_db),
+    x_sonia_secret: str = Header(default=""),
+):
+    """Proxy: descarga la imagen de diagrama desde MinIO y la devuelve al bot."""
+    if x_sonia_secret != settings.SONIA_BOT_SECRET:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    try:
+        section_uuid = _uuid.UUID(section_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="section_id inválido")
+
+    section = await db.get(PartsManualSection, section_uuid)
+    if not section or not section.diagram_url:
+        raise HTTPException(status_code=404, detail="Diagrama no encontrado")
+
+    public_base = f"{settings.MINIO_PUBLIC_URL}/{PARTS_BUCKET}/"
+    if not section.diagram_url.startswith(public_base):
+        raise HTTPException(status_code=404, detail="URL de diagrama no reconocida")
+
+    object_name = section.diagram_url[len(public_base):]
+    try:
+        client = _minio_client()
+        minio_response = client.get_object(PARTS_BUCKET, object_name)
+        data = minio_response.read()
+        minio_response.close()
+    except Exception as e:
+        logger.error(f"get_diagram_image MinIO error: {e}")
+        raise HTTPException(status_code=502, detail="No se pudo obtener el diagrama")
+
+    content_type = "image/png" if object_name.lower().endswith(".png") else "image/jpeg"
+    return Response(content=data, media_type=content_type)
 
 
 @router.get("/section/{section_id}/item/{order_num}", response_model=PartItemResult)
