@@ -370,7 +370,7 @@ async def _detect_code_changes(db: AsyncSession) -> int:
         INSERT INTO parts_code_review_tasks
             (id, existing_code, candidate_code, existing_description, candidate_description,
              similarity_score, status, created_at)
-        SELECT
+        SELECT DISTINCT ON (spi.part_number, pr.factory_part_number)
             gen_random_uuid(),
             pr.factory_part_number,
             spi.part_number,
@@ -380,12 +380,17 @@ async def _detect_code_changes(db: AsyncSession) -> int:
             'pending',
             now()
         FROM (
-            SELECT DISTINCT ON (part_number) part_number, description
+            SELECT DISTINCT ON (part_number) part_number, description, model_applicable
             FROM spare_part_items
             WHERE description IS NOT NULL AND description != ''
+              AND model_applicable IS NOT NULL AND model_applicable != ''
             ORDER BY part_number, created_at DESC
         ) spi
-        CROSS JOIN parts_references pr
+        -- Restringir la comparación al mismo modelo de moto
+        JOIN vehicle_catalog_map vcm ON vcm.vehicle_model_pattern = spi.model_applicable
+        JOIN parts_manual_sections pms ON pms.model_code = vcm.catalog_model_code
+        JOIN parts_manual_items pmi ON pmi.section_id = pms.id
+        JOIN parts_references pr ON pr.factory_part_number = pmi.factory_part_number
         WHERE similarity(spi.description, pr.description) >= :threshold
           AND spi.part_number != pr.factory_part_number
           -- El candidato no existe ya como código activo
@@ -402,6 +407,7 @@ async def _detect_code_changes(db: AsyncSession) -> int:
                 AND t.existing_code = pr.factory_part_number
                 AND t.status IN ('pending', 'approved')
           )
+        ORDER BY spi.part_number, pr.factory_part_number
     """), {"threshold": threshold})
     await db.commit()
     return result.rowcount
