@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import AdminLayout from '../admin-layout';
-import { UploadCloud, Image as ImageIcon, Save, Trash2, Clock, Bike, Plus, Pencil, X, AlertCircle } from 'lucide-react';
+import { UploadCloud, Image as ImageIcon, Save, Trash2, Clock, Bike, Plus, Pencil, X, AlertCircle, BookOpen, Upload, FileText, Loader2, ChevronDown } from 'lucide-react';
 import { authFetch } from '../../lib/authFetch';
 
 const BACKEND_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1').replace('http://', 'https://');
@@ -33,6 +33,81 @@ export default function SettingsPage() {
   const [logoBase64, setLogoBase64] = useState(null);
   const [successMsg, setSuccessMsg] = useState('');
   const [userRole, setUserRole] = useState(null);
+
+  // Catálogo de partes — carga de PDFs
+  const [catalogModels, setCatalogModels]       = useState([]);
+  const [catalogModelsLoading, setCatalogModelsLoading] = useState(true);
+  const [catVehicleModel, setCatVehicleModel]   = useState('');
+  const [catModelCode, setCatModelCode]         = useState('');
+  const [catCodeAutoFilled, setCatCodeAutoFilled] = useState(false);
+  const [catFiles, setCatFiles]                 = useState([]);
+  const [catResults, setCatResults]             = useState([]);
+  const [catLoading, setCatLoading]             = useState(false);
+  const [catProgress, setCatProgress]           = useState({ done: 0, total: 0 });
+  const catFileRef = useRef();
+
+  const handleCatVehicleModelChange = (value) => {
+    setCatVehicleModel(value);
+    setCatResults([]);
+    const match = catalogModels.find(m => m.vehicle_model === value);
+    if (match?.catalog_model_code) {
+      setCatModelCode(match.catalog_model_code);
+      setCatCodeAutoFilled(true);
+    } else {
+      setCatModelCode('');
+      setCatCodeAutoFilled(false);
+    }
+  };
+
+  const handleCatFiles = (e) => {
+    const selected = Array.from(e.target.files).filter(f => f.name.endsWith('.pdf'));
+    setCatFiles(selected);
+    setCatResults([]);
+  };
+
+  const handleCatDrop = (e) => {
+    e.preventDefault();
+    const dropped = Array.from(e.dataTransfer.files).filter(f => f.name.endsWith('.pdf'));
+    setCatFiles(dropped);
+    setCatResults([]);
+  };
+
+  const handleCatUpload = async () => {
+    if (!catModelCode.trim() || !catVehicleModel || catFiles.length === 0) return;
+    setCatLoading(true);
+    setCatResults([]);
+    setCatProgress({ done: 0, total: catFiles.length });
+    const newResults = [];
+    for (let i = 0; i < catFiles.length; i++) {
+      const file = catFiles[i];
+      const fd = new FormData();
+      fd.append('pdf_file', file);
+      fd.append('model_code', catModelCode.trim());
+      fd.append('vehicle_model', catVehicleModel);
+      try {
+        const res = await authFetch('/parts/admin/load-section', { method: 'POST', body: fd });
+        if (res.ok) {
+          const data = await res.json();
+          newResults.push({ filename: file.name, status: 'ok', ...data });
+        } else {
+          const err = await res.json().catch(() => ({ detail: 'Error desconocido' }));
+          newResults.push({ filename: file.name, status: 'error', error: err.detail });
+        }
+      } catch (e) {
+        newResults.push({ filename: file.name, status: 'error', error: e.message });
+      }
+      setCatProgress({ done: i + 1, total: catFiles.length });
+      setCatResults([...newResults]);
+    }
+    setCatLoading(false);
+  };
+
+  const catPct = catProgress.total > 0 ? Math.round((catProgress.done / catProgress.total) * 100) : 0;
+  const catCanUpload = !catLoading && catModelCode.trim() && catVehicleModel && catFiles.length > 0;
+  const catSuccess = catResults.filter(r => r.status === 'ok').length;
+  const catErrors  = catResults.filter(r => r.status === 'error').length;
+  const catTotalParts = catResults.filter(r => r.status === 'ok').reduce((s, r) => s + (r.parts_loaded || 0), 0);
+  const catTotalRefs  = catResults.filter(r => r.status === 'ok').reduce((s, r) => s + (r.references_new || 0), 0);
 
   // Variables del sistema
   const [reminderMinutes, setReminderMinutes] = useState(60);
@@ -172,6 +247,14 @@ export default function SettingsPage() {
   }, []);
 
   useEffect(() => { fetchVehicleModels(); }, [fetchVehicleModels]);
+
+  useEffect(() => {
+    authFetch('/parts/admin/vehicle-models')
+      .then(r => r.ok ? r.json() : [])
+      .then(data => setCatalogModels(Array.isArray(data) ? data : []))
+      .catch(() => {})
+      .finally(() => setCatalogModelsLoading(false));
+  }, []);
 
   const handleLogoUpload = (e) => {
     const file = e.target.files[0];
@@ -462,6 +545,103 @@ export default function SettingsPage() {
           )}
         </section>
 
+        {/* Sección: Carga de Catálogo de Partes */}
+        <section className="glass p-6">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '1.25rem', paddingBottom: '0.75rem', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+            <BookOpen size={16} style={{ color: '#ff5f33', flexShrink: 0 }} />
+            <h2 style={{ fontSize: '0.8rem', fontWeight: 700, color: '#fff', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Carga de Catálogo de Partes</h2>
+          </div>
+
+          {/* Modelo + Código */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+            <div>
+              <label style={catLabel}>Modelo del vehículo *</label>
+              {catalogModelsLoading ? (
+                <input disabled placeholder="Cargando..." style={{ ...catInput, opacity: 0.5 }} />
+              ) : catalogModels.length > 0 ? (
+                <div style={{ position: 'relative' }}>
+                  <select value={catVehicleModel} onChange={e => handleCatVehicleModelChange(e.target.value)} disabled={catLoading} style={{ ...catInput, appearance: 'none', paddingRight: '2.5rem', cursor: 'pointer' }}>
+                    <option value="">— Seleccioná un modelo —</option>
+                    {catalogModels.map(m => (
+                      <option key={m.vehicle_model} value={m.vehicle_model}>{m.vehicle_model}{m.catalog_model_code ? ' ✓' : ''}</option>
+                    ))}
+                  </select>
+                  <ChevronDown size={13} color="#606075" style={{ position: 'absolute', right: '0.75rem', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+                </div>
+              ) : (
+                <input value={catVehicleModel} onChange={e => handleCatVehicleModelChange(e.target.value)} placeholder="Ej: Renegade Sport 200S" disabled={catLoading} style={catInput} />
+              )}
+            </div>
+            <div>
+              <label style={catLabel}>
+                Código interno *
+                {catCodeAutoFilled && <span style={{ marginLeft: '0.4rem', fontSize: '0.55rem', color: '#10b981', fontWeight: 700 }}>AUTO</span>}
+              </label>
+              <input value={catModelCode} onChange={e => { setCatModelCode(e.target.value); setCatCodeAutoFilled(false); }} placeholder="ej: renegade_200_sport" disabled={catLoading} style={catInput} />
+            </div>
+          </div>
+
+          {/* Drop zone */}
+          <div
+            onDragOver={e => e.preventDefault()} onDrop={handleCatDrop}
+            onClick={() => !catLoading && catFileRef.current?.click()}
+            style={{ borderRadius: '12px', padding: '1.5rem', marginBottom: '1rem', border: '2px dashed rgba(255,255,255,0.08)', textAlign: 'center', cursor: catLoading ? 'default' : 'pointer', transition: 'border-color 0.2s' }}
+            onMouseEnter={e => { if (!catLoading) e.currentTarget.style.borderColor = 'rgba(255,95,51,0.3)'; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)'; }}
+          >
+            <Upload size={22} color="#606075" style={{ marginBottom: '0.5rem' }} />
+            <p style={{ margin: '0 0 0.2rem', fontSize: '0.75rem', fontWeight: 700, color: '#fff' }}>Arrastrá los PDFs acá o hacé click</p>
+            <p style={{ margin: 0, fontSize: '0.62rem', color: '#606075' }}>Múltiples archivos · Solo .pdf</p>
+            <input ref={catFileRef} type="file" multiple accept=".pdf" onChange={handleCatFiles} style={{ display: 'none' }} />
+          </div>
+
+          {/* Lista archivos */}
+          {catFiles.length > 0 && (
+            <div style={{ marginBottom: '1rem', display: 'flex', flexDirection: 'column', gap: '0.4rem', maxHeight: '180px', overflowY: 'auto' }}>
+              {catFiles.map((f, i) => {
+                const result = catResults.find(r => r.filename === f.name);
+                return (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.5rem 0.75rem', borderRadius: '8px', background: 'rgba(255,255,255,0.03)', border: `1px solid ${result?.status === 'ok' ? 'rgba(16,185,129,0.15)' : result?.status === 'error' ? 'rgba(239,68,68,0.15)' : 'rgba(255,255,255,0.05)'}` }}>
+                    <FileText size={13} color={result?.status === 'ok' ? '#10b981' : result?.status === 'error' ? '#ef4444' : '#606075'} />
+                    <span style={{ flex: 1, fontSize: '0.7rem', color: '#ccc', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</span>
+                    {result?.status === 'ok' && <span style={{ fontSize: '0.58rem', color: '#10b981', fontWeight: 700 }}>✓ {result.parts_loaded} items</span>}
+                    {result?.status === 'error' && <span style={{ fontSize: '0.58rem', color: '#ef4444', fontWeight: 700 }}>✗ {result.error}</span>}
+                    {catLoading && !result && <Loader2 size={12} color="#ff5f33" style={{ animation: 'spin 1s linear infinite', flexShrink: 0 }} />}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Progress */}
+          {catLoading && (
+            <div style={{ marginBottom: '1rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
+                <span style={{ fontSize: '0.68rem', color: '#fff', fontWeight: 700 }}>Procesando {catProgress.done} de {catProgress.total}...</span>
+                <span style={{ fontSize: '0.68rem', color: '#ff5f33', fontWeight: 700 }}>{catPct}%</span>
+              </div>
+              <div style={{ height: '5px', borderRadius: '99px', background: 'rgba(255,255,255,0.06)' }}>
+                <div style={{ height: '100%', width: `${catPct}%`, borderRadius: '99px', background: '#ff5f33', transition: 'width 0.3s ease' }} />
+              </div>
+            </div>
+          )}
+
+          {/* Botón + Resumen */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+            <button onClick={handleCatUpload} disabled={!catCanUpload} style={{ padding: '0.65rem 1.5rem', borderRadius: '10px', border: 'none', cursor: catCanUpload ? 'pointer' : 'not-allowed', background: catCanUpload ? '#ff5f33' : 'rgba(255,95,51,0.2)', color: '#fff', fontWeight: 900, fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              {catLoading ? <><Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> Cargando...</> : <><Upload size={13} /> Cargar {catFiles.length > 0 ? `${catFiles.length} PDF${catFiles.length !== 1 ? 's' : ''}` : 'PDFs'}</>}
+            </button>
+            {catResults.length > 0 && !catLoading && (
+              <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '0.68rem', color: '#10b981', fontWeight: 700 }}>✓ {catSuccess} secciones</span>
+                <span style={{ fontSize: '0.68rem', color: '#ff5f33', fontWeight: 700 }}>{catTotalRefs} refs nuevas</span>
+                <span style={{ fontSize: '0.68rem', color: '#6366f1', fontWeight: 700 }}>{catTotalParts} items</span>
+                {catErrors > 0 && <span style={{ fontSize: '0.68rem', color: '#ef4444', fontWeight: 700 }}>✗ {catErrors} errores</span>}
+              </div>
+            )}
+          </div>
+        </section>
+
       </div>
 
       {/* Modal Crear / Editar Modelo de Vehículo */}
@@ -723,6 +903,21 @@ export default function SettingsPage() {
           </div>
         </div>
       )}
+
+      <style jsx global>{`
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        select option { background: #0c0c0e; color: #fff; }
+      `}</style>
     </AdminLayout>
   );
 }
+
+const catLabel = {
+  display: 'block', fontSize: '0.62rem', fontWeight: 700, color: '#606075',
+  textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.4rem',
+};
+const catInput = {
+  width: '100%', padding: '0.6rem 0.875rem',
+  background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
+  borderRadius: '8px', color: '#fff', fontSize: '0.78rem', outline: 'none', boxSizing: 'border-box',
+};
