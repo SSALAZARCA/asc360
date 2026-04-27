@@ -390,7 +390,7 @@ async def list_catalog(
         select(PartsReference.factory_part_number)
         .join(PartsManualItem, PartsManualItem.factory_part_number == PartsReference.factory_part_number)
         .join(PartsManualSection, PartsManualSection.id == PartsManualItem.section_id)
-        .outerjoin(PartCatalog, PartCatalog.part_code == PartsReference.um_part_number)
+        .outerjoin(PartCatalog, PartCatalog.part_code == PartsReference.factory_part_number)
     )
 
     if model_code:
@@ -427,7 +427,7 @@ async def list_catalog(
         .distinct(PartsReference.factory_part_number)
         .join(PartsManualItem, PartsManualItem.factory_part_number == PartsReference.factory_part_number)
         .join(PartsManualSection, PartsManualSection.id == PartsManualItem.section_id)
-        .outerjoin(PartCatalog, PartCatalog.part_code == PartsReference.um_part_number)
+        .outerjoin(PartCatalog, PartCatalog.part_code == PartsReference.factory_part_number)
         .outerjoin(VehicleCatalogMap, VehicleCatalogMap.catalog_model_code == PartsManualSection.model_code)
     )
 
