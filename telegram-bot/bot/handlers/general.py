@@ -1,6 +1,7 @@
 import re
 import os
 import tempfile
+import httpx
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
 
@@ -18,6 +19,18 @@ from .technician import handle_active_orders
 
 # Placeholder para functions de Recepción
 from .reception import process_plate, send_vehicle_lifecycle, apply_correction_to_data
+
+
+async def _send_diagram(message, diagram_url: str, caption: str) -> None:
+    """Descarga la imagen de MinIO internamente y la manda como bytes a Telegram."""
+    try:
+        async with httpx.AsyncClient() as client:
+            res = await client.get(diagram_url, timeout=15.0)
+            res.raise_for_status()
+        await message.reply_photo(photo=res.content, caption=caption, parse_mode="Markdown")
+    except Exception as e:
+        logger.warning(f"_send_diagram error ({diagram_url}): {e}")
+        await message.reply_text(caption + "\n_(diagrama no disponible)_", parse_mode="Markdown")
 
 
 async def _start_reception(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -353,12 +366,11 @@ async def _check_awaiting_states(update: Update, context: ContextTypes.DEFAULT_T
 
         model_code = sections[0].get("model_code") if sections else None
         for s in sections:
-            if s.get("diagram_url"):
-                await update.message.reply_photo(
-                    photo=s["diagram_url"],
-                    caption=f"📋 *{s['section_code']}: {s['section_name']}*",
-                    parse_mode="Markdown",
-                )
+            await _send_diagram(
+                update.message,
+                s.get("diagram_url", ""),
+                f"📋 *{s['section_code']}: {s['section_name']}*",
+            )
 
         await update.message.reply_text(
             "Revisá los diagramas e ingresá el código de posición de la parte (ej: *B1-3*).",
@@ -388,12 +400,11 @@ async def _check_awaiting_states(update: Update, context: ContextTypes.DEFAULT_T
             return True
 
         for s in sections:
-            if s.get("diagram_url"):
-                await update.message.reply_photo(
-                    photo=s["diagram_url"],
-                    caption=f"📋 *{s['section_code']}: {s['section_name']}*",
-                    parse_mode="Markdown",
-                )
+            await _send_diagram(
+                update.message,
+                s.get("diagram_url", ""),
+                f"📋 *{s['section_code']}: {s['section_name']}*",
+            )
 
         await update.message.reply_text(
             "Revisá los diagramas e ingresá el código de posición de la parte (ej: *B1-3*).",
