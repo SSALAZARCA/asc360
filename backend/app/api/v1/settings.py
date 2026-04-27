@@ -10,6 +10,7 @@ from app.models.system_config import SystemConfig
 router = APIRouter(prefix="/settings", tags=["settings"])
 
 LOGO_KEY = "logo_base64"
+PARTS_SIM_KEY = "parts_similarity_threshold"
 
 
 class LogoPayload(BaseModel):
@@ -47,3 +48,31 @@ async def save_logo(
 
     await db.commit()
     return {"ok": True}
+
+
+class SimilarityThresholdPayload(BaseModel):
+    threshold: float
+
+
+@router.get("/parts-similarity-threshold")
+async def get_parts_similarity_threshold(db: AsyncSession = Depends(get_db)):
+    record = await db.get(SystemConfig, PARTS_SIM_KEY)
+    return {"threshold": float(record.value) if record else 0.9}
+
+
+@router.put("/parts-similarity-threshold")
+async def save_parts_similarity_threshold(
+    payload: SimilarityThresholdPayload,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    if not current_user.is_superadmin:
+        raise HTTPException(status_code=403, detail="Solo superadmin")
+    value = round(max(0.1, min(1.0, payload.threshold)), 2)
+    record = await db.get(SystemConfig, PARTS_SIM_KEY)
+    if record:
+        record.value = str(value)
+    else:
+        db.add(SystemConfig(key=PARTS_SIM_KEY, value=str(value)))
+    await db.commit()
+    return {"threshold": value}

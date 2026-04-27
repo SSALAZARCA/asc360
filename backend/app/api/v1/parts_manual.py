@@ -3,6 +3,8 @@ import json
 import logging
 import os
 import tempfile
+import uuid as _uuid
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -11,20 +13,22 @@ import pdfplumber
 from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, UploadFile
 from minio import Minio
 from pydantic import BaseModel
-from sqlalchemy import delete as sa_delete
+from sqlalchemy import delete as sa_delete, update as sa_update, text, exists
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from openai import AsyncOpenAI
 
 from app.api.deps import get_current_user
 from app.config import settings
-from app.database import get_db
+from app.database import get_db, async_session_maker
 from app.models.order import ServiceOrder
 from app.models.imports import VehicleModel, SparePartItem
 from app.models.logistics import PartCatalog
 from app.models.parts_manual import (
     PartsManualItem, PartsManualSection, PartsReference, VehicleCatalogMap,
+    PartsCodeReviewTask,
 )
+from app.models.system_config import SystemConfig
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/parts", tags=["Parts Manual"])
@@ -354,6 +358,64 @@ async def get_part_by_factory_code(
     )
 
 
+# ── Detección de cambios de código ────────────────────────────────────────────
+
+async def _detect_code_changes(db: AsyncSession) -> int:
+    """Detecta posibles cambios de código de fábrica usando similitud de descripción (pg_trgm).
+    Crea tareas pendientes en parts_code_review_tasks. Inocuo si se ejecuta varias veces."""
+    threshold_record = await db.get(SystemConfig, "parts_similarity_threshold")
+    threshold = float(threshold_record.value) if threshold_record else 0.9
+
+    result = await db.execute(text("""
+        INSERT INTO parts_code_review_tasks
+            (id, existing_code, candidate_code, existing_description, candidate_description,
+             similarity_score, status, created_at)
+        SELECT
+            gen_random_uuid(),
+            pr.factory_part_number,
+            spi.part_number,
+            pr.description,
+            spi.description,
+            similarity(spi.description, pr.description),
+            'pending',
+            now()
+        FROM (
+            SELECT DISTINCT ON (part_number) part_number, description
+            FROM spare_part_items
+            WHERE description IS NOT NULL AND description != ''
+            ORDER BY part_number, created_at DESC
+        ) spi
+        CROSS JOIN parts_references pr
+        WHERE similarity(spi.description, pr.description) >= :threshold
+          AND spi.part_number != pr.factory_part_number
+          -- El candidato no existe ya como código activo
+          AND NOT EXISTS (
+              SELECT 1 FROM parts_references pr2
+              WHERE pr2.factory_part_number = spi.part_number
+          )
+          -- El candidato no es un código previo ya conocido de esta parte
+          AND NOT (pr.prev_codes @> to_jsonb(spi.part_number::text))
+          -- No hay ya una tarea pendiente o aprobada para este par
+          AND NOT EXISTS (
+              SELECT 1 FROM parts_code_review_tasks t
+              WHERE t.candidate_code = spi.part_number
+                AND t.existing_code = pr.factory_part_number
+                AND t.status IN ('pending', 'approved')
+          )
+    """), {"threshold": threshold})
+    await db.commit()
+    return result.rowcount
+
+
+async def run_detection_bg() -> None:
+    """Wrapper para ejecutar detección en segundo plano con sesión propia."""
+    async with async_session_maker() as db:
+        try:
+            await _detect_code_changes(db)
+        except Exception as e:
+            logger.error(f"run_detection_bg error: {e}")
+
+
 # ── Endpoint de consulta — tabla de repuestos cargados ────────────────────────
 
 class CatalogItemResult(BaseModel):
@@ -364,6 +426,9 @@ class CatalogItemResult(BaseModel):
     section_code: str
     section_name: str
     vehicle_model_name: Optional[str]
+    pending_task_id: Optional[str] = None
+    pending_candidate_code: Optional[str] = None
+    pending_score: Optional[float] = None
 
 class CatalogListResult(BaseModel):
     total: int
@@ -374,6 +439,7 @@ class CatalogListResult(BaseModel):
 async def list_catalog(
     search: str = "",
     model_code: str = "",
+    only_pending: bool = False,
     page: int = 1,
     page_size: int = 50,
     db: AsyncSession = Depends(get_db),
@@ -385,7 +451,7 @@ async def list_catalog(
 
     from sqlalchemy import func, or_
 
-    # Subquery: última descripción ES por part_number — gana el más reciente si cambia entre cargues
+    # Subquery: primera descripción ES por part_number — la primera que llegó queda fija
     spi_latest = (
         select(
             SparePartItem.part_number.label("part_number"),
@@ -398,73 +464,69 @@ async def list_catalog(
         .subquery("spi_latest")
     )
 
-    # JOIN base — filtra por modelo y búsqueda antes de deduplicar
-    joins_q = (
-        select(PartsReference.factory_part_number)
-        .join(PartsManualItem, PartsManualItem.factory_part_number == PartsReference.factory_part_number)
-        .join(PartsManualSection, PartsManualSection.id == PartsManualItem.section_id)
-        .outerjoin(PartCatalog, PartCatalog.part_code == PartsReference.factory_part_number)
-        .outerjoin(spi_latest, spi_latest.c.part_number == PartsReference.factory_part_number)
+    # Subquery: tarea pendiente más reciente por existing_code
+    pending_sq = (
+        select(
+            PartsCodeReviewTask.existing_code.label("existing_code"),
+            PartsCodeReviewTask.id.label("task_id"),
+            PartsCodeReviewTask.candidate_code.label("candidate_code"),
+            PartsCodeReviewTask.similarity_score.label("score"),
+        )
+        .where(PartsCodeReviewTask.status == "pending")
+        .distinct(PartsCodeReviewTask.existing_code)
+        .order_by(PartsCodeReviewTask.existing_code, PartsCodeReviewTask.created_at.desc())
+        .subquery("pending_sq")
     )
 
-    if model_code:
-        joins_q = joins_q.where(PartsManualSection.model_code == model_code)
-
-    if search:
-        term = f"%{search}%"
-        joins_q = joins_q.where(
-            or_(
+    def _base_joins(q):
+        q = (q
+            .join(PartsManualItem, PartsManualItem.factory_part_number == PartsReference.factory_part_number)
+            .join(PartsManualSection, PartsManualSection.id == PartsManualItem.section_id)
+            .outerjoin(PartCatalog, PartCatalog.part_code == PartsReference.factory_part_number)
+            .outerjoin(spi_latest, spi_latest.c.part_number == PartsReference.factory_part_number)
+            .outerjoin(pending_sq, pending_sq.c.existing_code == PartsReference.factory_part_number)
+        )
+        if model_code:
+            q = q.where(PartsManualSection.model_code == model_code)
+        if search:
+            term = f"%{search}%"
+            q = q.where(or_(
                 PartsReference.factory_part_number.ilike(term),
                 PartsReference.description.ilike(term),
                 spi_latest.c.description_es.ilike(term),
-            )
-        )
+            ))
+        if only_pending:
+            q = q.where(pending_sq.c.task_id.isnot(None))
+        return q
 
-    # Total de códigos únicos
+    # Total
     count_q = select(func.count()).select_from(
-        joins_q.distinct().subquery()
+        _base_joins(select(PartsReference.factory_part_number)).distinct().subquery()
     )
     total = (await db.execute(count_q)).scalar_one()
 
-    # DISTINCT ON factory_part_number — una fila por código aunque aparezca en varias secciones
-    rows_q = (
+    # Filas
+    rows_q = _base_joins(
         select(
-            PartsReference.factory_part_number,
-            PartsReference.description,
-            spi_latest.c.description_es.label("description_es"),
-            PartCatalog.public_price,
-            PartsManualSection.section_code,
-            PartsManualSection.section_name,
-            PartsManualSection.model_code,
-            VehicleCatalogMap.vehicle_model_pattern,
+            PartsReference.factory_part_number,   # 0
+            PartsReference.description,            # 1
+            spi_latest.c.description_es,           # 2
+            PartCatalog.public_price,              # 3
+            PartsManualSection.section_code,       # 4
+            PartsManualSection.section_name,       # 5
+            PartsManualSection.model_code,         # 6
+            VehicleCatalogMap.vehicle_model_pattern,  # 7
+            pending_sq.c.task_id,                  # 8
+            pending_sq.c.candidate_code,           # 9
+            pending_sq.c.score,                    # 10
         )
         .distinct(PartsReference.factory_part_number)
-        .join(PartsManualItem, PartsManualItem.factory_part_number == PartsReference.factory_part_number)
-        .join(PartsManualSection, PartsManualSection.id == PartsManualItem.section_id)
-        .outerjoin(PartCatalog, PartCatalog.part_code == PartsReference.factory_part_number)
-        .outerjoin(spi_latest, spi_latest.c.part_number == PartsReference.factory_part_number)
-        .outerjoin(VehicleCatalogMap, VehicleCatalogMap.catalog_model_code == PartsManualSection.model_code)
     )
-
-    if model_code:
-        rows_q = rows_q.where(PartsManualSection.model_code == model_code)
-
-    if search:
-        term = f"%{search}%"
-        rows_q = rows_q.where(
-            or_(
-                PartsReference.factory_part_number.ilike(term),
-                PartsReference.description.ilike(term),
-                spi_latest.c.description_es.ilike(term),
-            )
-        )
-
     rows_q = rows_q.order_by(
         PartsReference.factory_part_number,
         PartsManualSection.model_code,
         PartsManualSection.section_code,
-    )
-    rows_q = rows_q.offset((page - 1) * page_size).limit(page_size)
+    ).offset((page - 1) * page_size).limit(page_size)
     rows = (await db.execute(rows_q)).all()
 
     return CatalogListResult(
@@ -478,6 +540,9 @@ async def list_catalog(
                 section_code=r[4],
                 section_name=r[5],
                 vehicle_model_name=r[7],
+                pending_task_id=str(r[8]) if r[8] else None,
+                pending_candidate_code=r[9],
+                pending_score=float(r[10]) if r[10] is not None else None,
             )
             for r in rows
         ],
@@ -500,6 +565,111 @@ async def delete_catalog(
         sa_delete(PartsManualSection).where(PartsManualSection.model_code == model_code)
     )
     await db.commit()
+
+
+# ── Detección manual y revisión de cambios de código ─────────────────────────
+
+@router.post("/admin/detect-code-changes")
+async def detect_code_changes(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Lanza la detección de posibles cambios de código por similitud de descripción. Solo superadmin."""
+    if not current_user.is_superadmin:
+        raise HTTPException(status_code=403, detail="Solo superadmin")
+    created = await _detect_code_changes(db)
+    return {"tasks_created": created}
+
+
+@router.post("/admin/review-tasks/{task_id}/approve", status_code=200)
+async def approve_review_task(
+    task_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Aprueba la sustitución de código: el candidato pasa a ser el código activo. Solo superadmin."""
+    if not current_user.is_superadmin:
+        raise HTTPException(status_code=403, detail="Solo superadmin")
+
+    task = await db.get(PartsCodeReviewTask, _uuid.UUID(task_id))
+    if not task or task.status != "pending":
+        raise HTTPException(status_code=404, detail="Tarea no encontrada o ya resuelta")
+
+    existing_ref = await db.get(PartsReference, task.existing_code)
+    if not existing_ref:
+        raise HTTPException(status_code=404, detail="Código existente no encontrado en el catálogo")
+
+    # El candidato podría ya existir (cargado por otro camino)
+    candidate_ref = await db.get(PartsReference, task.candidate_code)
+
+    if candidate_ref is None:
+        # Construir nuevo prev_codes: [código que sale] + prev anteriores, máx 2
+        new_prev = ([task.existing_code] + list(existing_ref.prev_codes or []))[:2]
+        candidate_ref = PartsReference(
+            factory_part_number=task.candidate_code,
+            um_part_number=existing_ref.um_part_number,
+            description=existing_ref.description,
+            unit=existing_ref.unit,
+            prev_codes=new_prev,
+        )
+        db.add(candidate_ref)
+        await db.flush()
+    else:
+        # El candidato ya existe — solo actualizar prev_codes si hace falta
+        existing_in_prev = task.existing_code in (candidate_ref.prev_codes or [])
+        if not existing_in_prev:
+            candidate_ref.prev_codes = ([task.existing_code] + list(candidate_ref.prev_codes or []))[:2]
+
+    # Redirigir todos los items del catálogo al nuevo código
+    await db.execute(
+        sa_update(PartsManualItem)
+        .where(PartsManualItem.factory_part_number == task.existing_code)
+        .values(factory_part_number=task.candidate_code)
+    )
+    await db.flush()
+
+    # Eliminar la referencia vieja (ya no tiene items apuntando a ella)
+    await db.delete(existing_ref)
+
+    # Resolver tarea
+    task.status = "approved"
+    task.resolved_at = datetime.utcnow()
+    task.resolved_by = current_user.id
+
+    # Rechazar automáticamente otras tareas pendientes para el mismo código existente
+    await db.execute(
+        sa_update(PartsCodeReviewTask)
+        .where(
+            PartsCodeReviewTask.existing_code == task.existing_code,
+            PartsCodeReviewTask.id != task.id,
+            PartsCodeReviewTask.status == "pending",
+        )
+        .values(status="rejected", resolved_at=datetime.utcnow())
+    )
+
+    await db.commit()
+    return {"ok": True, "new_code": task.candidate_code}
+
+
+@router.post("/admin/review-tasks/{task_id}/reject", status_code=200)
+async def reject_review_task(
+    task_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Descarta la sugerencia de cambio de código. Solo superadmin."""
+    if not current_user.is_superadmin:
+        raise HTTPException(status_code=403, detail="Solo superadmin")
+
+    task = await db.get(PartsCodeReviewTask, _uuid.UUID(task_id))
+    if not task or task.status != "pending":
+        raise HTTPException(status_code=404, detail="Tarea no encontrada o ya resuelta")
+
+    task.status = "rejected"
+    task.resolved_at = datetime.utcnow()
+    task.resolved_by = current_user.id
+    await db.commit()
+    return {"ok": True}
 
 
 # ── Endpoint de administración (frontend) ──────────────────────────────────────

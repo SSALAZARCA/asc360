@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, DateTime, ForeignKey
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Column, String, DateTime, ForeignKey, Numeric
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 
 from app.database import Base
@@ -15,6 +15,7 @@ class PartsReference(Base):
     um_part_number      = Column(String(100), nullable=False, index=True)
     description         = Column(String(255), nullable=False)
     unit                = Column(String(20),  nullable=True)
+    prev_codes          = Column(JSONB, nullable=False, server_default='[]')
 
     items = relationship("PartsManualItem", back_populates="reference")
 
@@ -50,3 +51,19 @@ class VehicleCatalogMap(Base):
 
     vehicle_model_pattern = Column(String(200), primary_key=True)
     catalog_model_code    = Column(String(100), nullable=False, index=True)
+
+
+class PartsCodeReviewTask(Base):
+    """Tarea de verificación cuando un nuevo pedido trae un código diferente para la misma parte."""
+    __tablename__ = "parts_code_review_tasks"
+
+    id                   = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    existing_code        = Column(String(100), nullable=False, index=True)
+    candidate_code       = Column(String(100), nullable=False, index=True)
+    existing_description = Column(String(500), nullable=True)
+    candidate_description = Column(String(500), nullable=True)
+    similarity_score     = Column(Numeric(5, 4), nullable=True)
+    status               = Column(String(20), nullable=False, default="pending", index=True)
+    created_at           = Column(DateTime, default=datetime.utcnow)
+    resolved_at          = Column(DateTime, nullable=True)
+    resolved_by          = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)

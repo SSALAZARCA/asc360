@@ -4,7 +4,7 @@ import mimetypes
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, UploadFile, File, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import func
@@ -778,6 +778,7 @@ async def update_reconciliation_result(
 async def upload_lot_order_detail(
     lot_id: uuid.UUID,
     file: UploadFile = File(...),
+    background_tasks: BackgroundTasks = None,
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
@@ -793,6 +794,12 @@ async def upload_lot_order_detail(
     file_bytes = await file.read()
     result = await imports_service.load_order_detail_excel(db, lot, file_bytes, current_user)
     await db.commit()
+
+    # Detectar posibles cambios de código en segundo plano sin bloquear la respuesta
+    if background_tasks is not None:
+        from app.api.v1.parts_manual import run_detection_bg
+        background_tasks.add_task(run_detection_bg)
+
     return result
 
 

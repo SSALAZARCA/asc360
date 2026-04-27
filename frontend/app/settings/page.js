@@ -132,6 +132,11 @@ export default function SettingsPage() {
   const [reminderSaving, setReminderSaving] = useState(false);
   const [reminderMsg, setReminderMsg] = useState('');
 
+  // Umbral de similitud para detección de cambio de código
+  const [simThreshold, setSimThreshold] = useState(0.9);
+  const [simSaving, setSimSaving]       = useState(false);
+  const [simMsg, setSimMsg]             = useState('');
+
   // Modelos de Vehículos
   const [vehicleModels, setVehicleModels] = useState([]);
   const [vmLoading, setVmLoading] = useState(false);
@@ -262,6 +267,12 @@ export default function SettingsPage() {
         .then(data => { if (data?.diagnosis_reminder_minutes) setReminderMinutes(data.diagnosis_reminder_minutes); })
         .catch(() => {});
     }
+
+    // Cargar umbral de similitud de códigos
+    authFetch('/settings/parts-similarity-threshold')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data?.threshold != null) setSimThreshold(data.threshold); })
+      .catch(() => {});
   }, []);
 
   useEffect(() => { fetchVehicleModels(); }, [fetchVehicleModels]);
@@ -340,6 +351,21 @@ export default function SettingsPage() {
       setReminderSaving(false);
       setTimeout(() => setReminderMsg(''), 4000);
     }
+  };
+
+  const handleSaveSimThreshold = async () => {
+    const val = parseFloat(simThreshold);
+    if (isNaN(val) || val < 0.1 || val > 1.0) { setSimMsg('El valor debe estar entre 0.10 y 1.00.'); return; }
+    setSimSaving(true);
+    try {
+      const res = await authFetch('/settings/parts-similarity-threshold', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ threshold: val }),
+      });
+      setSimMsg(res.ok ? '✅ Guardado.' : '⚠️ Error al guardar.');
+    } catch { setSimMsg('⚠️ Error de conexión.'); }
+    finally { setSimSaving(false); setTimeout(() => setSimMsg(''), 4000); }
   };
 
   const handleRemoveLogo = async () => {
@@ -449,6 +475,32 @@ export default function SettingsPage() {
                 </button>
               </div>
               {reminderMsg && <p style={{ color: '#4ade80', fontSize: '0.68rem', margin: 0 }}>{reminderMsg}</p>}
+            </div>
+
+            {/* Umbral de similitud para verificación de códigos */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+              <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#fff' }}>
+                Umbral de similitud — Verificación de códigos
+              </label>
+              <p style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.3)', margin: 0, lineHeight: 1.6 }}>
+                Qué tan parecida debe ser la descripción en inglés para generar una alerta de cambio de código. 0.90 = 90% similitud. Rango: 0.10 – 1.00.
+              </p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <input
+                  type="number"
+                  min={0.1}
+                  max={1.0}
+                  step={0.01}
+                  value={simThreshold}
+                  onChange={e => setSimThreshold(e.target.value)}
+                  style={{ width: '80px', padding: '0.45rem 0.65rem', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', fontSize: '0.85rem', outline: 'none' }}
+                />
+                <button className="btn-primary" onClick={handleSaveSimThreshold} disabled={simSaving} style={{ padding: '0.45rem 1rem', fontSize: '0.68rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                  <Save size={13} />
+                  {simSaving ? 'Guardando...' : 'Guardar'}
+                </button>
+              </div>
+              {simMsg && <p style={{ color: '#4ade80', fontSize: '0.68rem', margin: 0 }}>{simMsg}</p>}
             </div>
           </section>
 
