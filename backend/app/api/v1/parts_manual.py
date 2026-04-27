@@ -49,6 +49,21 @@ class PartLookupResult(BaseModel):
     section_code: str
     section_name: str
     diagram_url: Optional[str]
+    model_code: Optional[str] = None
+
+
+class PartsByModelRequest(BaseModel):
+    model_code: str
+    description: str
+
+
+class PartItemByCodeResult(BaseModel):
+    factory_part_number: str
+    description: str
+    description_es: Optional[str] = None
+    section_code: str
+    section_name: str
+    order_num: str
 
 class PartItemResult(BaseModel):
     id: str
@@ -295,9 +310,98 @@ async def search_parts(
             section_code=s.section_code,
             section_name=s.section_name,
             diagram_url=s.diagram_url,
+            model_code=catalog_map.catalog_model_code,
         )
         for s in matched
     ]
+
+
+# ── Endpoints de catálogo para bot (superadmin) ───────────────────────────────
+
+@router.get("/bot/catalog-models")
+async def bot_catalog_models(
+    db: AsyncSession = Depends(get_db),
+    x_sonia_secret: str = Header(default=""),
+):
+    if x_sonia_secret != settings.SONIA_BOT_SECRET:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    result = await db.execute(
+        select(VehicleModel.model_name, VehicleCatalogMap.catalog_model_code)
+        .join(VehicleCatalogMap, VehicleModel.model_name == VehicleCatalogMap.vehicle_model_pattern)
+        .where(VehicleCatalogMap.catalog_model_code.isnot(None))
+        .order_by(VehicleModel.model_name)
+    )
+    return [
+        {"vehicle_model": r[0], "catalog_model_code": r[1]}
+        for r in result.all() if r[0]
+    ]
+
+
+@router.post("/search-by-model", response_model=list[PartLookupResult])
+async def search_parts_by_model(
+    body: PartsByModelRequest,
+    db: AsyncSession = Depends(get_db),
+    x_sonia_secret: str = Header(default=""),
+):
+    if x_sonia_secret != settings.SONIA_BOT_SECRET:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    sections_result = await db.execute(
+        select(PartsManualSection).where(PartsManualSection.model_code == body.model_code)
+    )
+    all_sections = sections_result.scalars().all()
+    if not all_sections:
+        raise HTTPException(status_code=404, detail="Sin secciones cargadas para este modelo")
+
+    sections_list = [{"section_code": s.section_code, "section_name": s.section_name} for s in all_sections]
+    matched_codes = await _classify_sections(body.description, sections_list)
+    matched = [s for s in all_sections if s.section_code in matched_codes] or list(all_sections[:3])
+
+    return [
+        PartLookupResult(
+            section_id=str(s.id),
+            section_code=s.section_code,
+            section_name=s.section_name,
+            diagram_url=s.diagram_url,
+            model_code=body.model_code,
+        )
+        for s in matched
+    ]
+
+
+@router.get("/model/{model_code}/item/{order_num}", response_model=PartItemByCodeResult)
+async def get_part_by_model_and_code(
+    model_code: str,
+    order_num: str,
+    db: AsyncSession = Depends(get_db),
+    x_sonia_secret: str = Header(default=""),
+):
+    if x_sonia_secret != settings.SONIA_BOT_SECRET:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    result = await db.execute(
+        select(PartsManualItem, PartsManualSection, PartsReference)
+        .join(PartsManualSection, PartsManualItem.section_id == PartsManualSection.id)
+        .join(PartsReference, PartsManualItem.factory_part_number == PartsReference.factory_part_number)
+        .where(
+            PartsManualSection.model_code == model_code,
+            PartsManualItem.order_num == order_num,
+        )
+    )
+    row = result.first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Parte no encontrada")
+
+    item, section, ref = row
+    return PartItemByCodeResult(
+        factory_part_number=item.factory_part_number,
+        description=ref.description,
+        description_es=ref.description_es_manual,
+        section_code=section.section_code,
+        section_name=section.section_name,
+        order_num=item.order_num,
+    )
 
 
 @router.get("/section/{section_id}/item/{order_num}", response_model=PartItemResult)

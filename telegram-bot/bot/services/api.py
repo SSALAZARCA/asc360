@@ -272,6 +272,60 @@ async def get_part_by_factory_code(factory_code: str) -> dict:
             return None
 
 
+async def get_catalog_models_for_bot() -> list:
+    """Modelos UM que ya tienen catálogo de despiece cargado."""
+    async with httpx.AsyncClient() as client:
+        try:
+            res = await client.get(
+                f"{BACKEND_URL}/parts/bot/catalog-models",
+                headers={"x-sonia-secret": SONIA_BOT_SECRET},
+                timeout=10.0,
+            )
+            if res.status_code == 200:
+                return res.json()
+            logger.warning(f"get_catalog_models_for_bot: {res.status_code} — {res.text}")
+            return []
+        except Exception as e:
+            logger.error(f"Error get_catalog_models_for_bot: {e}")
+            return []
+
+
+async def search_parts_by_model(model_code: str, description: str) -> list:
+    """Busca secciones del catálogo usando model_code directamente (sin order_id)."""
+    async with httpx.AsyncClient() as client:
+        try:
+            res = await client.post(
+                f"{BACKEND_URL}/parts/search-by-model",
+                json={"model_code": model_code, "description": description},
+                headers={"x-sonia-secret": SONIA_BOT_SECRET},
+                timeout=20.0,
+            )
+            if res.status_code == 200:
+                return res.json()
+            logger.warning(f"search_parts_by_model: {res.status_code} — {res.text}")
+            return []
+        except Exception as e:
+            logger.error(f"Error search_parts_by_model: {e}")
+            return []
+
+
+async def get_part_by_code(model_code: str, order_num: str) -> dict:
+    """Busca una parte por modelo y código de posición del diagrama (ej: B1-3)."""
+    async with httpx.AsyncClient() as client:
+        try:
+            res = await client.get(
+                f"{BACKEND_URL}/parts/model/{model_code}/item/{order_num}",
+                headers={"x-sonia-secret": SONIA_BOT_SECRET},
+                timeout=10.0,
+            )
+            if res.status_code == 200:
+                return res.json()
+            return None
+        except Exception as e:
+            logger.error(f"Error get_part_by_code: {e}")
+            return None
+
+
 async def get_tenant_config(tenant_id: str) -> dict:
     """Obtiene la configuración del taller (diagnosis_reminder_minutes, etc.)."""
     async with httpx.AsyncClient() as client:

@@ -6,7 +6,7 @@ def get_main_keyboard(role: str) -> ReplyKeyboardMarkup:
         keys = [
             [KeyboardButton("Nueva Recepción"), KeyboardButton("Consultar Hoja de Vida")],
             [KeyboardButton("Mis Órdenes Activas 🛠️"), KeyboardButton("Ingresar OTP 🔑")],
-            [KeyboardButton("Panel Super Admin 👑")]
+            [KeyboardButton("Buscar Repuesto 🔍"), KeyboardButton("Panel Super Admin 👑")],
         ]
     elif role == "jefe_taller":
         keys = [

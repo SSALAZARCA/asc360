@@ -16,7 +16,11 @@ from core.constants import (
 )
 from core.decorators import role_required, check_cancel_intent, CANCEL_PATTERN
 from keyboards.reply import get_main_keyboard
-from handlers.general import handle_general_text, handle_general_voice, process_lifecycle_plate, handle_status_confirm, handle_parts_callback
+from handlers.general import (
+    handle_general_text, handle_general_voice, process_lifecycle_plate,
+    handle_status_confirm, handle_parts_callback,
+    handle_catalog_model_callback, handle_buscar_repuesto,
+)
 from handlers.admin import (
     start_command, show_admin_panel, handle_admin_menu,
     show_pending_users, handle_status_change, handle_tenant_selection
@@ -201,7 +205,7 @@ def main() -> None:
     application.add_handler(otp_conv)
 
     # Handler de escape para botones
-    btn_escape = MessageHandler(filters.Regex(r'^(Nueva Recepción|Consultar Hoja de Vida|Mis Órdenes Activas|Panel Super Admin)'), handle_general_text)
+    btn_escape = MessageHandler(filters.Regex(r'^(Nueva Recepción|Consultar Hoja de Vida|Mis Órdenes Activas|Panel Super Admin|Buscar Repuesto)'), handle_general_text)
 
     # Handler de cancelación universal — texto natural en cualquier estado
     cancel_text = MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(CANCEL_PATTERN), cancel_command)
@@ -326,6 +330,8 @@ def main() -> None:
     application.add_handler(CallbackQueryHandler(handle_order_status_change, pattern="^ord_stat_"))
     application.add_handler(CallbackQueryHandler(handle_status_confirm, pattern="^status_confirm_"))
     application.add_handler(CallbackQueryHandler(handle_parts_callback, pattern="^parts_"))
+    application.add_handler(CallbackQueryHandler(handle_catalog_model_callback, pattern="^catalog_model_"))
+    application.add_handler(MessageHandler(filters.Regex(r'^Buscar Repuesto'), handle_buscar_repuesto))
 
     logger.info("🤖 Iniciando Master Bot Sonia...")
     application.run_polling()
