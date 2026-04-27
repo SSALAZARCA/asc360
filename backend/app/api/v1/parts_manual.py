@@ -457,6 +457,8 @@ async def list_catalog(
     search: str = "",
     model_code: str = "",
     only_pending: bool = False,
+    sort_col: str = "section_code",
+    sort_dir: str = "asc",
     page: int = 1,
     page_size: int = 50,
     db: AsyncSession = Depends(get_db),
@@ -522,28 +524,47 @@ async def list_catalog(
     )
     total = (await db.execute(count_q)).scalar_one()
 
-    # Filas
-    rows_q = _base_joins(
+    # Filas — inner subquery con DISTINCT ON (requerido por PostgreSQL: primer ORDER BY = DISTINCT ON col)
+    from sqlalchemy import nullslast
+    inner_sq = _base_joins(
         select(
-            PartsReference.factory_part_number,   # 0
-            PartsReference.description,            # 1
-            func.coalesce(PartsReference.description_es_manual, spi_latest.c.description_es).label("description_es"),  # 2
-            PartCatalog.public_price,              # 3
-            PartsManualSection.section_code,       # 4
-            PartsManualSection.section_name,       # 5
-            PartsManualSection.model_code,         # 6
-            VehicleCatalogMap.vehicle_model_pattern,  # 7
-            pending_sq.c.task_id,                  # 8
-            pending_sq.c.candidate_code,           # 9
-            pending_sq.c.score,                    # 10
+            PartsReference.factory_part_number.label("fpn"),
+            PartsReference.description.label("description"),
+            func.coalesce(PartsReference.description_es_manual, spi_latest.c.description_es).label("description_es"),
+            PartCatalog.public_price.label("public_price"),
+            PartsManualSection.section_code.label("section_code"),
+            PartsManualSection.section_name.label("section_name"),
+            PartsManualSection.model_code.label("model_code"),
+            VehicleCatalogMap.vehicle_model_pattern.label("vehicle_model_pattern"),
+            pending_sq.c.task_id.label("task_id"),
+            pending_sq.c.candidate_code.label("candidate_code"),
+            pending_sq.c.score.label("score"),
         )
         .distinct(PartsReference.factory_part_number)
-    )
-    rows_q = rows_q.order_by(
+    ).order_by(
         PartsReference.factory_part_number,
         PartsManualSection.model_code,
         PartsManualSection.section_code,
-    ).offset((page - 1) * page_size).limit(page_size)
+    ).subquery("inner_catalog")
+
+    # Outer query — ORDER BY libre sobre el subquery
+    _SORT_MAP = {
+        "factory_part_number": inner_sq.c.fpn,
+        "description":         inner_sq.c.description,
+        "description_es":      inner_sq.c.description_es,
+        "public_price":        inner_sq.c.public_price,
+        "section_code":        inner_sq.c.section_code,
+        "vehicle_model_name":  inner_sq.c.vehicle_model_pattern,
+    }
+    sort_expr = _SORT_MAP.get(sort_col, inner_sq.c.section_code)
+    order_expr = nullslast(sort_expr.asc() if sort_dir == "asc" else sort_expr.desc())
+
+    rows_q = (
+        select(inner_sq)
+        .order_by(order_expr, inner_sq.c.fpn)
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    )
     rows = (await db.execute(rows_q)).all()
 
     return CatalogListResult(

@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import AdminLayout from '../admin-layout';
 import { authFetch } from '../../lib/authFetch';
 import { Search, ChevronLeft, ChevronRight, X, ArrowUpRight, ArrowDownRight, AlertTriangle, CheckCircle2, ShieldX, Pencil } from 'lucide-react';
@@ -48,6 +48,8 @@ export default function PartsCatalogPage() {
         search,
         model_code: modelCode,
         only_pending: String(onlyPending),
+        sort_col: sortCol,
+        sort_dir: sortDir,
       });
       const res = await authFetch(`/parts/admin/catalog?${params}`);
       if (res.ok) {
@@ -60,7 +62,7 @@ export default function PartsCatalogPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, search, modelCode, onlyPending]);
+  }, [page, search, modelCode, onlyPending, sortCol, sortDir]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -72,23 +74,14 @@ export default function PartsCatalogPage() {
   const toggleSort = (col) => {
     if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
     else { setSortCol(col); setSortDir('asc'); }
+    setPage(1);
   };
   const SortIcon = ({ col }) => sortCol === col
     ? (sortDir === 'asc' ? <ArrowUpRight size={10} /> : <ArrowDownRight size={10} />)
     : null;
 
-  const sortedItems = useMemo(() => {
-    const arr = [...items];
-    arr.sort((a, b) => {
-      const va = a[sortCol] ?? '';
-      const vb = b[sortCol] ?? '';
-      const cmp = typeof va === 'number'
-        ? va - vb
-        : String(va).localeCompare(String(vb), 'es', { numeric: true });
-      return sortDir === 'asc' ? cmp : -cmp;
-    });
-    return arr;
-  }, [items, sortCol, sortDir]);
+  // Sort is server-side — items already arrive ordered from the backend
+  const sortedItems = items;
 
   const pendingCount = items.filter(i => i.pending_task_id).length;
 
