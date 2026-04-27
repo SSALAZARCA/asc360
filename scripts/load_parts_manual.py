@@ -2,7 +2,7 @@
 """
 Carga el manual de partes desde PDFs a PostgreSQL + MinIO.
 
-Uso (desde el directorio raíz del backend dentro del contenedor):
+Uso (dentro del contenedor backend, o localmente con las env vars configuradas):
     python scripts/load_parts_manual.py \
         --pdf-dir "Renegade 200 Sport" \
         --model-code "renegade_200_sport" \
@@ -37,6 +37,7 @@ except ImportError as e:
     sys.exit(1)
 
 BUCKET_DEFAULT = "parts-manuals"
+
 
 # ---------------------------------------------------------------------------
 # Renderizado de imagen
@@ -100,7 +101,6 @@ HEADER_KEYWORDS = {
     "um":          ["um part", "um no"],
     "description": ["description", "descrip"],
     "unit":        ["unit"],
-    "qty":         ["qty", "quantity", "q'ty"],
 }
 
 
@@ -165,19 +165,12 @@ def parse_parts_table(pdf_path: Path) -> list[dict]:
                     if order_num.lower() in ("page", "no.", "no", "item", "pos", ""):
                         continue
 
-                    try:
-                        qty_raw = get("qty")
-                        qty = int(re.sub(r"[^\d]", "", qty_raw)) if qty_raw else None
-                    except (ValueError, TypeError):
-                        qty = None
-
                     parts.append({
                         "order_num":           order_num,
-                        "factory_part_number": factory or "",
+                        "factory_part_number": factory,
                         "um_part_number":      get("um") or "",
                         "description":         get("description") or "",
                         "unit":                get("unit"),
-                        "qty":                 qty,
                     })
     return parts
 
@@ -219,7 +212,7 @@ async def load(pdf_dir: str, model_code: str, vehicle_model: str, bucket: str):
         secure=minio_secure,
     )
     ensure_bucket_public(minio_client, bucket)
-    print(f"✅ Bucket '{bucket}' listo (público)")
+    print(f"✅ Bucket '{bucket}' listo (público)\n")
 
     conn = await asyncpg.connect(db_url)
 
@@ -229,32 +222,31 @@ async def load(pdf_dir: str, model_code: str, vehicle_model: str, bucket: str):
         await conn.close()
         return
 
-    print(f"📂 {len(pdf_files)} PDFs encontrados para modelo '{model_code}'\n")
+    print(f"📂 {len(pdf_files)} PDFs — modelo '{model_code}'\n")
 
     for pdf_path in pdf_files:
         section_code, section_name = parse_filename(pdf_path.name)
-        print(f"→ {pdf_path.name}")
-        print(f"  [{section_code}] {section_name}")
+        print(f"→ [{section_code}] {section_name}")
 
-        # Renderizar imagen
+        # 1. Renderizar y subir imagen
         diagram_url = None
         try:
             png_bytes = render_page_png(pdf_path)
             object_name = f"{model_code}/{section_code}.png"
             diagram_url = upload_png(minio_client, bucket, object_name, png_bytes)
-            print(f"  📸 {diagram_url}")
+            print(f"   📸 {diagram_url}")
         except Exception as e:
-            print(f"  ⚠️  Error imagen: {e}")
+            print(f"   ⚠️  Imagen: {e}")
 
-        # Parsear tabla
+        # 2. Parsear tabla
         try:
             parts = parse_parts_table(pdf_path)
-            print(f"  📋 {len(parts)} repuestos")
+            print(f"   📋 {len(parts)} repuestos")
         except Exception as e:
-            print(f"  ⚠️  Error tabla: {e}")
+            print(f"   ⚠️  Tabla: {e}")
             parts = []
 
-        # Eliminar sección existente y reinsertar
+        # 3. Eliminar sección anterior y reinsertar
         await conn.execute(
             "DELETE FROM parts_manual_sections WHERE model_code=$1 AND section_code=$2",
             model_code, section_code,
@@ -270,27 +262,42 @@ async def load(pdf_dir: str, model_code: str, vehicle_model: str, bucket: str):
             section_id, model_code, section_code, section_name, diagram_url,
         )
 
+        # 4. Upsert referencias únicas + insertar posiciones en diagrama
         for p in parts:
+            factory = p["factory_part_number"]
+            if not factory:
+                continue
+
+            # Upsert en parts_references (ON CONFLICT DO NOTHING — primera ocurrencia gana)
+            await conn.execute(
+                """
+                INSERT INTO parts_references
+                    (factory_part_number, um_part_number, description, unit)
+                VALUES ($1, $2, $3, $4)
+                ON CONFLICT (factory_part_number) DO NOTHING
+                """,
+                factory,
+                p["um_part_number"],
+                p["description"],
+                p["unit"],
+            )
+
+            # Posición en el diagrama
             await conn.execute(
                 """
                 INSERT INTO parts_manual_items
-                    (id, section_id, order_num, factory_part_number,
-                     um_part_number, description, unit, qty)
-                VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+                    (id, section_id, order_num, factory_part_number)
+                VALUES ($1, $2, $3, $4)
                 """,
                 str(uuid.uuid4()),
                 section_id,
                 p["order_num"],
-                p["factory_part_number"],
-                p["um_part_number"],
-                p["description"],
-                p["unit"],
-                p["qty"],
+                factory,
             )
 
-        print(f"  ✅ Insertado\n")
+        print(f"   ✅ Listo\n")
 
-    # Upsert mapa de catálogo
+    # 5. Upsert mapa de catálogo
     await conn.execute(
         """
         INSERT INTO vehicle_catalog_map (vehicle_model_pattern, catalog_model_code)
@@ -307,10 +314,10 @@ async def load(pdf_dir: str, model_code: str, vehicle_model: str, bucket: str):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Carga PDFs del manual de partes al sistema.")
-    parser.add_argument("--pdf-dir",       required=True, help="Directorio con los PDFs")
-    parser.add_argument("--model-code",    required=True, help="Código interno del modelo (ej: renegade_200_sport)")
-    parser.add_argument("--vehicle-model", required=True, help="Valor exacto de vehicle.model en la base de datos")
-    parser.add_argument("--bucket",        default=BUCKET_DEFAULT, help=f"Bucket MinIO (default: {BUCKET_DEFAULT})")
+    parser.add_argument("--pdf-dir",        required=True, help="Directorio con los PDFs")
+    parser.add_argument("--model-code",     required=True, help="Código interno del modelo (ej: renegade_200_sport)")
+    parser.add_argument("--vehicle-model",  required=True, help="Valor exacto de vehicle.model en la base de datos")
+    parser.add_argument("--bucket",         default=BUCKET_DEFAULT, help=f"Bucket MinIO (default: {BUCKET_DEFAULT})")
     args = parser.parse_args()
 
     asyncio.run(load(args.pdf_dir, args.model_code, args.vehicle_model, args.bucket))

@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from openai import AsyncOpenAI
 
 from app.database import get_db
-from app.models.parts_manual import PartsManualSection, PartsManualItem, VehicleCatalogMap
+from app.models.parts_manual import PartsReference, PartsManualSection, PartsManualItem, VehicleCatalogMap
 from app.models.order import ServiceOrder
 from app.models.vehicle import Vehicle
 from app.config import settings
@@ -32,6 +32,7 @@ class PartLookupResult(BaseModel):
     diagram_url: Optional[str]
 
 class PartItemResult(BaseModel):
+    """Parte encontrada a través del diagrama (section + order_num)."""
     id: str
     section_id: str
     section_code: str
@@ -41,13 +42,19 @@ class PartItemResult(BaseModel):
     um_part_number: str
     description: str
     unit: Optional[str]
-    qty: Optional[int]
+
+class PartReferenceResult(BaseModel):
+    """Parte encontrada directamente por factory_part_number."""
+    factory_part_number: str
+    um_part_number: str
+    description: str
+    unit: Optional[str]
 
 
 # ── AI helper ─────────────────────────────────────────────────────────────────
 
 async def _classify_sections(description: str, sections: list[dict]) -> list[str]:
-    """GPT-4o-mini classifica cuáles secciones del catálogo corresponden a la descripción."""
+    """GPT-4o-mini clasifica cuáles secciones del catálogo corresponden a la descripción."""
     sections_block = "\n".join(
         f"- {s['section_code']}: {s['section_name']}" for s in sections
     )
@@ -103,7 +110,6 @@ async def search_parts(
         )
     )
     catalog_map = map_result.scalar_one_or_none()
-
     if not catalog_map:
         raise HTTPException(
             status_code=404,
@@ -118,7 +124,6 @@ async def search_parts(
         select(PartsManualSection).where(PartsManualSection.model_code == model_code)
     )
     all_sections = sections_result.scalars().all()
-
     if not all_sections:
         raise HTTPException(status_code=404, detail="Sin secciones cargadas para este modelo")
 
@@ -130,12 +135,7 @@ async def search_parts(
     # 4. Clasificar con IA
     matched_codes = await _classify_sections(body.description, sections_list)
 
-    # 5. Retornar secciones coincidentes
-    matched = [
-        s for s in all_sections if s.section_code in matched_codes
-    ]
-
-    # Fallback: si GPT no devolvió nada válido, retornar las primeras 2 secciones
+    matched = [s for s in all_sections if s.section_code in matched_codes]
     if not matched:
         matched = list(all_sections[:2])
 
@@ -161,8 +161,9 @@ async def get_part_by_number(
         raise HTTPException(status_code=403, detail="Forbidden")
 
     result = await db.execute(
-        select(PartsManualItem, PartsManualSection)
+        select(PartsManualItem, PartsManualSection, PartsReference)
         .join(PartsManualSection, PartsManualItem.section_id == PartsManualSection.id)
+        .join(PartsReference, PartsManualItem.factory_part_number == PartsReference.factory_part_number)
         .where(
             PartsManualItem.section_id == section_id,
             PartsManualItem.order_num == order_num,
@@ -172,7 +173,7 @@ async def get_part_by_number(
     if not row:
         raise HTTPException(status_code=404, detail="Parte no encontrada")
 
-    item, section = row
+    item, section, ref = row
     return PartItemResult(
         id=str(item.id),
         section_id=str(section.id),
@@ -180,46 +181,31 @@ async def get_part_by_number(
         section_name=section.section_name,
         order_num=item.order_num,
         factory_part_number=item.factory_part_number,
-        um_part_number=item.um_part_number,
-        description=item.description,
-        unit=item.unit,
-        qty=item.qty,
+        um_part_number=ref.um_part_number,
+        description=ref.description,
+        unit=ref.unit,
     )
 
 
-@router.get("/factory/{factory_code}", response_model=PartItemResult)
+@router.get("/factory/{factory_code}", response_model=PartReferenceResult)
 async def get_part_by_factory_code(
     factory_code: str,
-    model_code: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
     x_sonia_secret: str = Header(default=""),
 ):
     if x_sonia_secret != settings.SONIA_BOT_SECRET:
         raise HTTPException(status_code=403, detail="Forbidden")
 
-    query = (
-        select(PartsManualItem, PartsManualSection)
-        .join(PartsManualSection, PartsManualItem.section_id == PartsManualSection.id)
-        .where(PartsManualItem.factory_part_number == factory_code)
+    result = await db.execute(
+        select(PartsReference).where(PartsReference.factory_part_number == factory_code)
     )
-    if model_code:
-        query = query.where(PartsManualSection.model_code == model_code)
-
-    result = await db.execute(query)
-    row = result.first()
-    if not row:
+    ref = result.scalar_one_or_none()
+    if not ref:
         raise HTTPException(status_code=404, detail="Código de fábrica no encontrado en el catálogo")
 
-    item, section = row
-    return PartItemResult(
-        id=str(item.id),
-        section_id=str(section.id),
-        section_code=section.section_code,
-        section_name=section.section_name,
-        order_num=item.order_num,
-        factory_part_number=item.factory_part_number,
-        um_part_number=item.um_part_number,
-        description=item.description,
-        unit=item.unit,
-        qty=item.qty,
+    return PartReferenceResult(
+        factory_part_number=ref.factory_part_number,
+        um_part_number=ref.um_part_number,
+        description=ref.description,
+        unit=ref.unit,
     )
