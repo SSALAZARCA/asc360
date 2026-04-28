@@ -6,6 +6,17 @@ import { Search, ChevronLeft, ChevronRight, X, ArrowUpRight, ArrowDownRight, Ale
 
 const PAGE_SIZE = 50;
 
+const computeImpliedProviderMargin = (priceCOP, costoCOP, factors) => {
+  if (!priceCOP || !costoCOP || !factors) return null;
+  const K = (1 + factors.distributor_margin) * (1 + factors.iva_rate);
+  const impliedDist = priceCOP / K;
+  const margin = (impliedDist / (costoCOP * (1 + factors.iva_rate))) - 1;
+  return margin;
+};
+
+const marginColor = (m) =>
+  m == null ? null : m >= 0.30 ? '#4ade80' : m >= 0.10 ? '#facc15' : m >= 0 ? '#fb923c' : '#ef4444';
+
 export default function PartsCatalogPage() {
   const [items, setItems]     = useState([]);
   const [total, setTotal]     = useState(0);
@@ -32,10 +43,19 @@ export default function PartsCatalogPage() {
   const [editLoading, setEditLoading] = useState(false);
   const [editMsg, setEditMsg] = useState('');
 
+  const [pricingFactors, setPricingFactors] = useState(null);
+
   useEffect(() => {
     authFetch('/parts/admin/vehicle-models')
       .then(r => r.ok ? r.json() : [])
       .then(data => setModels((Array.isArray(data) ? data : []).filter(m => m.catalog_model_code)))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    authFetch('/settings/pricing-factors')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data) setPricingFactors(data); })
       .catch(() => {});
   }, []);
 
@@ -303,12 +323,25 @@ export default function PartsCatalogPage() {
                     : <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: '0.68rem' }}>—</span>}
                 </td>
                 <td>
-                  {item.public_price != null
-                    ? <span style={{ fontFamily: 'monospace', fontWeight: 800, fontSize: '0.8rem', color: '#fff' }}>${Number(item.public_price).toLocaleString('es-CO')}</span>
-                    : item.precio_publico_calculado != null
-                      ? <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '0.78rem', color: 'rgba(74,222,128,0.6)', fontStyle: 'italic' }}>${Number(item.precio_publico_calculado).toLocaleString('es-CO', { maximumFractionDigits: 0 })}</span>
-                      : <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: '0.68rem' }}>—</span>
-                  }
+                  {(() => {
+                    const effectivePrice = item.public_price ?? item.precio_publico_calculado;
+                    const isManual = item.public_price != null;
+                    if (effectivePrice == null) return <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: '0.68rem' }}>—</span>;
+                    const m = computeImpliedProviderMargin(effectivePrice, item.costo_importado, pricingFactors);
+                    const mc = marginColor(m);
+                    return (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                        <span style={{ fontFamily: 'monospace', fontWeight: isManual ? 800 : 700, fontSize: '0.78rem', color: isManual ? '#fff' : 'rgba(74,222,128,0.6)', fontStyle: isManual ? 'normal' : 'italic' }}>
+                          ${Number(effectivePrice).toLocaleString('es-CO', { maximumFractionDigits: 0 })}
+                        </span>
+                        {m != null && (
+                          <span style={{ fontSize: '0.58rem', fontWeight: 700, color: mc, letterSpacing: '0.02em' }}>
+                            M.Prov {m >= 0 ? '+' : ''}{(m * 100).toFixed(1)}%
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </td>
                 <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}>
@@ -398,6 +431,25 @@ export default function PartsCatalogPage() {
                   placeholder="0"
                   style={{ width: '100%', padding: '0.6rem 0.85rem', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: '#fff', fontSize: '0.78rem', outline: 'none', boxSizing: 'border-box' }}
                 />
+                {(() => {
+                  if (!pricingFactors || !editItem?.costo_importado) return null;
+                  const price = parseFloat(editForm.public_price);
+                  if (isNaN(price) || price <= 0) return null;
+                  const m = computeImpliedProviderMargin(price, editItem.costo_importado, pricingFactors);
+                  if (m == null) return null;
+                  const mc = marginColor(m);
+                  const isNeg = m < 0;
+                  return (
+                    <div style={{ marginTop: '0.4rem', padding: '0.4rem 0.65rem', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: isNeg ? 'rgba(239,68,68,0.06)' : 'rgba(74,222,128,0.05)', border: `1px solid ${isNeg ? 'rgba(239,68,68,0.2)' : 'rgba(255,255,255,0.07)'}` }}>
+                      <span style={{ fontSize: '0.62rem', color: 'rgba(255,255,255,0.35)', fontWeight: 600 }}>
+                        {isNeg ? '⚠ Margen proveedor NEGATIVO' : 'Margen proveedor implícito'}
+                      </span>
+                      <span style={{ fontSize: '0.75rem', fontWeight: 900, color: mc, fontFamily: 'monospace' }}>
+                        {m >= 0 ? '+' : ''}{(m * 100).toFixed(1)}%
+                      </span>
+                    </div>
+                  );
+                })()}
               </div>
 
               <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '1rem', marginTop: '0.25rem' }}>
