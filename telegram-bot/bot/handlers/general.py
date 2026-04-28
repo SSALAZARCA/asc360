@@ -49,7 +49,7 @@ async def _show_diagrams_with_nav(message, sections: list, catalog_ctx: dict, us
         )
     kb = [
         [InlineKeyboardButton("❌ No está en estos diagramas", callback_data="cat_not_here")],
-        [InlineKeyboardButton("🔄 Buscar otra parte", callback_data="cat_new_search")],
+        [InlineKeyboardButton("🔄 Buscar en otros diagramas", callback_data="cat_new_search")],
     ]
     await message.reply_text(
         "Revisá los diagramas e ingresá el código de posición de la parte (ej: *B1-3*).",
@@ -67,9 +67,9 @@ async def _show_diagrams_with_nav(message, sections: list, catalog_ctx: dict, us
 async def _after_catalog_result_kb() -> list:
     """Teclado inline que aparece después de mostrar un resultado o registrar un repuesto."""
     return [
-        [InlineKeyboardButton("🔍 Buscar otro en estos diagramas", callback_data="cat_same_diagrams")],
-        [InlineKeyboardButton("🔄 Buscar otra parte", callback_data="cat_new_search")],
-        [InlineKeyboardButton("✅ Listo", callback_data="cat_done")],
+        [InlineKeyboardButton("🔍 Continuar registrando de este diagrama", callback_data="cat_same_diagrams")],
+        [InlineKeyboardButton("🔄 Buscar en otros diagramas", callback_data="cat_new_search")],
+        [InlineKeyboardButton("✅ Finalizar búsqueda", callback_data="cat_done")],
     ]
 
 
@@ -830,7 +830,7 @@ async def handle_catalog_nav_callback(update, context):
         kb = [
             [InlineKeyboardButton("📝 Ampliar descripción", callback_data="cat_new_desc")],
             [InlineKeyboardButton("📄 Ver más secciones",   callback_data="cat_more_sections")],
-            [InlineKeyboardButton("🔄 Buscar otra parte",   callback_data="cat_new_search")],
+            [InlineKeyboardButton("🔄 Buscar en otros diagramas",   callback_data="cat_new_search")],
         ]
         await query.edit_message_text("¿Qué querés hacer?", reply_markup=InlineKeyboardMarkup(kb))
 
