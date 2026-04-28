@@ -800,10 +800,12 @@ async def handle_catalog_model_callback(update, context):
     await query.answer()
     model_code = query.data[len("catalog_model_"):]
     context.user_data["awaiting_catalog_search"] = {"model_code": model_code}
+    kb = [[InlineKeyboardButton("✅ Finalizar búsqueda", callback_data="cat_done")]]
     await query.edit_message_text(
         f"Modelo seleccionado. ¿Qué parte necesitás?\n"
         f"Describila en español (ej: *carenaje izquierdo*, *filtro de aceite*).",
         parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup(kb),
     )
 
 
