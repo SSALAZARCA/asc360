@@ -249,14 +249,18 @@ export default function PartsCatalogPage() {
                   {lbl} <SortIcon col={col} />
                 </th>
               ))}
+              <th className="sort-head" style={{ whiteSpace: 'nowrap' }}>FOB Prom. <span style={{ fontWeight: 400, opacity: 0.5 }}>USD</span></th>
+              <th className="sort-head" style={{ whiteSpace: 'nowrap' }}>C. Importado <span style={{ fontWeight: 400, opacity: 0.5 }}>USD</span></th>
+              <th className="sort-head" style={{ whiteSpace: 'nowrap' }}>P. Distribuidor <span style={{ fontWeight: 400, opacity: 0.5 }}>USD</span></th>
+              <th className="sort-head" style={{ whiteSpace: 'nowrap' }}>P. Público Calc. <span style={{ fontWeight: 400, opacity: 0.5 }}>USD</span></th>
               <th className="sort-head" style={{ width: '90px', textAlign: 'center' }}>Acciones</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan="7" style={{ textAlign: 'center', padding: '3rem', color: 'rgba(255,255,255,0.3)', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Cargando repuestos...</td></tr>
+              <tr><td colSpan="11" style={{ textAlign: 'center', padding: '3rem', color: 'rgba(255,255,255,0.3)', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Cargando repuestos...</td></tr>
             ) : sortedItems.length === 0 ? (
-              <tr><td colSpan="7" style={{ textAlign: 'center', padding: '4rem', color: 'rgba(255,255,255,0.2)', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+              <tr><td colSpan="11" style={{ textAlign: 'center', padding: '4rem', color: 'rgba(255,255,255,0.2)', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
                 {!search && !modelCode && !onlyPending ? 'Sin repuestos cargados — subí los PDFs desde Configuración' : 'Sin resultados para la búsqueda'}
               </td></tr>
             ) : sortedItems.map((item, i) => (
@@ -286,6 +290,26 @@ export default function PartsCatalogPage() {
                   </div>
                 </td>
                 <td><span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.7)', fontWeight: 600 }}>{item.vehicle_model_name || '—'}</span></td>
+                <td>
+                  {item.avg_fob_cost != null
+                    ? <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '0.78rem', color: '#38bdf8' }}>${Number(item.avg_fob_cost).toFixed(2)}</span>
+                    : <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: '0.68rem' }}>—</span>}
+                </td>
+                <td>
+                  {item.costo_importado != null
+                    ? <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '0.78rem', color: '#fb923c' }}>${Number(item.costo_importado).toFixed(2)}</span>
+                    : <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: '0.68rem' }}>—</span>}
+                </td>
+                <td>
+                  {item.precio_distribuidor != null
+                    ? <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '0.78rem', color: '#facc15' }}>${Number(item.precio_distribuidor).toFixed(2)}</span>
+                    : <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: '0.68rem' }}>—</span>}
+                </td>
+                <td>
+                  {item.precio_publico_calculado != null
+                    ? <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '0.78rem', color: '#4ade80' }}>${Number(item.precio_publico_calculado).toFixed(2)}</span>
+                    : <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: '0.68rem' }}>—</span>}
+                </td>
                 <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}>
                     {item.pending_task_id && (
