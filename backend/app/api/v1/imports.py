@@ -641,7 +641,9 @@ def _compute_reconciliation_result(qty_ordered, qty_in_packing) -> str:
     qty_pl = qty_in_packing or 0
     if qty_pl == 0:
         return "MISSING"
-    if qty_pl >= qty_ordered:
+    if qty_pl > qty_ordered:
+        return "EXTRA"
+    if qty_pl == qty_ordered:
         return "COMPLETE"
     return "PARTIAL"
 
@@ -771,7 +773,7 @@ async def update_reconciliation_result(
         rr.qty_physical = update_data["qty_physical"]
         await imports_service.apply_physical_inspection(db, rr, update_data["qty_physical"])
 
-    # Campos que viven en SparePartItem pero se muestran en reconciliación
+    # Campos de descripción y modelo: en SparePartItem para no-EXTRAs, en RR para EXTRAs
     item_fields = {"part_number", "description_es", "model_applicable"}
     if item_fields & set(update_data.keys()):
         if rr.spare_part_item_id:
@@ -780,6 +782,10 @@ async def update_reconciliation_result(
                 for field in item_fields & set(update_data.keys()):
                     setattr(item, field, update_data[field])
                 item.updated_at = datetime.utcnow()
+        else:
+            # EXTRA puro: guardar directamente en ReconciliationResult
+            for field in {"description_es", "model_applicable"} & set(update_data.keys()):
+                setattr(rr, field, update_data[field])
         if "part_number" in update_data:
             rr.part_number = update_data["part_number"]
 
@@ -895,11 +901,14 @@ async def get_reconciliation_results(
     enriched = []
     for r in results:
         sp = items_map.get(r.spare_part_item_id)
+        # Para EXTRAs puros (sin SparePartItem), usar los valores guardados en el propio resultado
+        description_es = sp.description_es if sp else r.description_es
+        model_applicable = sp.model_applicable if sp else r.model_applicable
         data = {
             "id": r.id, "lot_id": r.lot_id, "packing_list_id": r.packing_list_id,
             "spare_part_item_id": r.spare_part_item_id, "part_number": r.part_number,
-            "description_es": sp.description_es if sp else None,
-            "model_applicable": sp.model_applicable if sp else None,
+            "description_es": description_es,
+            "model_applicable": model_applicable,
             "qty_ordered": r.qty_ordered, "qty_in_packing": r.qty_in_packing,
             "qty_physical": r.qty_physical,
             "result": r.result, "confirmed_by": r.confirmed_by,

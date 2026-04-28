@@ -1256,13 +1256,21 @@ async def reconcile_lot_packing_list(
         reconciled_parts.add(part_number)
         sp_item = lot_items.get(part_number)
 
+        # Descripción y modelo desde el PL (invoice) si están disponibles
+        pl_desc_es = None
+        pl_model = None
+        if is_invoice and part_number in pl_prices:
+            _, _, _, pl_desc_es, pl_model = pl_prices[part_number]
+
         if sp_item is None:
-            # EXTRA: está en el packing list pero no en la orden
+            # EXTRA puro: está en el packing list pero no en la orden
             rr = ReconciliationResult(
                 lot_id=lot.id,
                 packing_list_id=pl_record.id,
                 spare_part_item_id=None,
                 part_number=part_number,
+                description_es=pl_desc_es,
+                model_applicable=pl_model,
                 qty_ordered=None,
                 qty_in_packing=qty_in_pl,
                 result="EXTRA",
@@ -1271,7 +1279,11 @@ async def reconcile_lot_packing_list(
             counts["extra"] += 1
         else:
             qty_ordered = sp_item.qty_ordered
-            if qty_in_pl >= qty_ordered:
+            if qty_in_pl > qty_ordered:
+                # Llegaron más unidades de las pedidas
+                result_code = "EXTRA"
+                counts["extra"] += 1
+            elif qty_in_pl == qty_ordered:
                 result_code = "COMPLETE"
                 counts["complete"] += 1
             else:

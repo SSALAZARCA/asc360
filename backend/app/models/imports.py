@@ -263,6 +263,8 @@ class ReconciliationResult(Base):
     spare_part_item_id = Column(UUID(as_uuid=True), ForeignKey("spare_part_items.id"), nullable=True)  # NULL para EXTRA
 
     part_number = Column(String(100), nullable=False)  # Desnormalizado para consulta rápida
+    description_es = Column(Text, nullable=True)       # Poblado desde PL para EXTRAs
+    model_applicable = Column(String(255), nullable=True)
     qty_ordered = Column(Integer, nullable=True)
     qty_in_packing = Column(Integer, nullable=True)
     qty_physical = Column(Integer, nullable=True)   # NULL = no inspeccionado aún
