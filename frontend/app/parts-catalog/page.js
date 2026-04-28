@@ -258,9 +258,9 @@ export default function PartsCatalogPage() {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan="11" style={{ textAlign: 'center', padding: '3rem', color: 'rgba(255,255,255,0.3)', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Cargando repuestos...</td></tr>
+              <tr><td colSpan="11" style={{ textAlign: 'center', padding: '3rem', color: 'rgba(255,255,255,0.3)', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Cargando repuestos...</td></tr>
             ) : sortedItems.length === 0 ? (
-              <tr><td colSpan="11" style={{ textAlign: 'center', padding: '4rem', color: 'rgba(255,255,255,0.2)', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+              <tr><td colSpan="11" style={{ textAlign: 'center', padding: '4rem', color: 'rgba(255,255,255,0.2)', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
                 {!search && !modelCode && !onlyPending ? 'Sin repuestos cargados — subí los PDFs desde Configuración' : 'Sin resultados para la búsqueda'}
               </td></tr>
             ) : sortedItems.map((item, i) => (
@@ -499,8 +499,8 @@ export default function PartsCatalogPage() {
 
       <style jsx>{`
         .master-table { width: 100%; border-collapse: collapse; }
-        .master-table td { padding: 0.875rem 1.5rem; }
-        .sort-head { padding: 0.7rem 1.5rem; font-size: 0.62rem; font-weight: 800; color: rgba(255,255,255,0.4); text-transform: uppercase; letter-spacing: 0.08em; border-bottom: 1px solid rgba(255,255,255,0.05); background: rgba(0,0,0,0.2); cursor: pointer; white-space: nowrap; text-align: left; user-select: none; }
+        .master-table td { padding: 0.7rem 1rem; font-size: 0.68rem; }
+        .sort-head { padding: 0.7rem 1rem; font-size: 0.58rem; font-weight: 800; color: rgba(255,255,255,0.4); text-transform: uppercase; letter-spacing: 0.1em; border-bottom: 1px solid rgba(255,255,255,0.05); background: rgba(0,0,0,0.2); cursor: pointer; white-space: nowrap; text-align: left; user-select: none; }
         .sort-head:hover { color: #fff; }
         select option { background: #0c0c0e; color: #fff; }
       `}</style>
