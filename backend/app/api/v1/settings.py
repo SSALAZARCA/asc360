@@ -57,6 +57,7 @@ class PricingFactorsPayload(BaseModel):
     provider_margin:    float
     distributor_margin: float
     iva_rate:           float
+    trm:                float
 
 
 @router.get("/pricing-factors")
@@ -81,6 +82,7 @@ async def save_pricing_factors(
         "pricing.provider_margin":    str(round(payload.provider_margin, 4)),
         "pricing.distributor_margin": str(round(payload.distributor_margin, 4)),
         "pricing.iva_rate":           str(round(payload.iva_rate, 4)),
+        "pricing.trm":                str(round(payload.trm, 2)),
     }
     for key, value in updates.items():
         record = await db.get(SystemConfig, key)
@@ -95,6 +97,7 @@ async def save_pricing_factors(
         "provider_margin":    float(updates["pricing.provider_margin"]),
         "distributor_margin": float(updates["pricing.distributor_margin"]),
         "iva_rate":           float(updates["pricing.iva_rate"]),
+        "trm":                float(updates["pricing.trm"]),
     }
 
 

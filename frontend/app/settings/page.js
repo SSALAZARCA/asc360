@@ -157,7 +157,7 @@ export default function SettingsPage() {
   const [simMsg, setSimMsg]             = useState('');
 
   // Factores de pricing
-  const [pricing, setPricing]         = useState({ import_factor: 1.42, provider_margin: 0.35, distributor_margin: 0.35, iva_rate: 0.19 });
+  const [pricing, setPricing]         = useState({ import_factor: 1.42, provider_margin: 0.35, distributor_margin: 0.35, iva_rate: 0.19, trm: 3800 });
   const [pricingSaving, setPricingSaving] = useState(false);
   const [pricingMsg, setPricingMsg]   = useState('');
 
@@ -409,6 +409,7 @@ export default function SettingsPage() {
       provider_margin:    parseFloat(pricing.provider_margin),
       distributor_margin: parseFloat(pricing.distributor_margin),
       iva_rate:           parseFloat(pricing.iva_rate),
+      trm:                parseFloat(pricing.trm),
     };
     if (Object.values(vals).some(v => isNaN(v) || v <= 0)) {
       setPricingMsg('Todos los valores deben ser números positivos.');
@@ -595,6 +596,7 @@ export default function SettingsPage() {
               { key: 'provider_margin',    label: 'Margen proveedor',        hint: 'Ej: 0.35 = 35%' },
               { key: 'distributor_margin', label: 'Margen distribuidor',     hint: 'Ej: 0.35 = 35%' },
               { key: 'iva_rate',           label: 'Tasa IVA',                hint: 'Ej: 0.19 = 19%' },
+              { key: 'trm',               label: 'Valor Dólar / TRM',       hint: 'Ej: 4200 = $4.200 COP por USD' },
             ].map(({ key, label, hint }) => (
               <div key={key} style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
                 <label style={{ fontSize: '0.62rem', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{label}</label>

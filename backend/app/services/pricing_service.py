@@ -15,6 +15,7 @@ _PRICING_KEYS = (
     "pricing.provider_margin",
     "pricing.distributor_margin",
     "pricing.iva_rate",
+    "pricing.trm",
 )
 
 _PRICING_DEFAULTS = {
@@ -22,6 +23,7 @@ _PRICING_DEFAULTS = {
     "pricing.provider_margin":    0.35,
     "pricing.distributor_margin": 0.35,
     "pricing.iva_rate":           0.19,
+    "pricing.trm":                3800.0,
 }
 
 
@@ -117,12 +119,14 @@ async def get_pricing_factors(db: AsyncSession) -> dict:
         "provider_margin":     factors.get("pricing.provider_margin",    _PRICING_DEFAULTS["pricing.provider_margin"]),
         "distributor_margin":  factors.get("pricing.distributor_margin", _PRICING_DEFAULTS["pricing.distributor_margin"]),
         "iva_rate":            factors.get("pricing.iva_rate",           _PRICING_DEFAULTS["pricing.iva_rate"]),
+        "trm":                 factors.get("pricing.trm",                _PRICING_DEFAULTS["pricing.trm"]),
     }
 
 
 def compute_prices(avg_fob_cost: float | None, factors: dict) -> dict:
     """
-    Calcula la cadena de precios a partir del FOB promedio y los factores.
+    Calcula la cadena de precios en COP a partir del FOB promedio (USD) y los factores.
+    La conversión USD → COP se aplica con el TRM configurado.
     Ningún precio se almacena — se deriva on-the-fly.
     """
     if avg_fob_cost is None:
@@ -131,12 +135,13 @@ def compute_prices(avg_fob_cost: float | None, factors: dict) -> dict:
             "precio_distribuidor": None,
             "precio_publico":      None,
         }
-    f = factors
-    costo_importado     = round(float(avg_fob_cost) * f["import_factor"], 2)
-    precio_distribuidor = round(costo_importado * (1 + f["provider_margin"]) * (1 + f["iva_rate"]), 2)
-    precio_publico      = round(precio_distribuidor * (1 + f["distributor_margin"]) * (1 + f["iva_rate"]), 2)
+    f   = factors
+    trm = f["trm"]
+    costo_importado_usd  = float(avg_fob_cost) * f["import_factor"]
+    precio_dist_usd      = costo_importado_usd * (1 + f["provider_margin"]) * (1 + f["iva_rate"])
+    precio_publico_usd   = precio_dist_usd     * (1 + f["distributor_margin"]) * (1 + f["iva_rate"])
     return {
-        "costo_importado":     costo_importado,
-        "precio_distribuidor": precio_distribuidor,
-        "precio_publico":      precio_publico,
+        "costo_importado":     round(costo_importado_usd * trm, 0),
+        "precio_distribuidor": round(precio_dist_usd     * trm, 0),
+        "precio_publico":      round(precio_publico_usd  * trm, 0),
     }

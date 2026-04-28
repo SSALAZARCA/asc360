@@ -118,7 +118,7 @@ export default function PartsCatalogPage() {
     const defaultPrice = item.public_price != null
       ? String(item.public_price)
       : item.precio_publico_calculado != null
-        ? String(Number(item.precio_publico_calculado).toFixed(2))
+        ? String(Math.round(Number(item.precio_publico_calculado)))
         : '';
     setEditForm({
       description: item.description || '',
@@ -253,9 +253,9 @@ export default function PartsCatalogPage() {
                 </th>
               ))}
               <th className="sort-head" style={{ whiteSpace: 'nowrap' }}>FOB Prom. <span style={{ fontWeight: 400, opacity: 0.5 }}>USD</span></th>
-              <th className="sort-head" style={{ whiteSpace: 'nowrap' }}>C. Importado <span style={{ fontWeight: 400, opacity: 0.5 }}>USD</span></th>
-              <th className="sort-head" style={{ whiteSpace: 'nowrap' }}>P. Distribuidor <span style={{ fontWeight: 400, opacity: 0.5 }}>USD</span></th>
-              <th className="sort-head" style={{ whiteSpace: 'nowrap' }}>P. Público Calc. <span style={{ fontWeight: 400, opacity: 0.5 }}>USD</span></th>
+              <th className="sort-head" style={{ whiteSpace: 'nowrap' }}>C. Importado <span style={{ fontWeight: 400, opacity: 0.5 }}>COP</span></th>
+              <th className="sort-head" style={{ whiteSpace: 'nowrap' }}>P. Distribuidor <span style={{ fontWeight: 400, opacity: 0.5 }}>COP</span></th>
+              <th className="sort-head" style={{ whiteSpace: 'nowrap' }}>P. Público Calc. <span style={{ fontWeight: 400, opacity: 0.5 }}>COP</span></th>
               <th className="sort-head" onClick={() => toggleSort('public_price')} style={{ whiteSpace: 'nowrap', cursor: 'pointer' }}>Precio Final <SortIcon col="public_price" /></th>
               <th className="sort-head" style={{ width: '90px', textAlign: 'center' }}>Acciones</th>
             </tr>
@@ -289,17 +289,17 @@ export default function PartsCatalogPage() {
                 </td>
                 <td>
                   {item.costo_importado != null
-                    ? <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '0.78rem', color: '#fb923c' }}>${Number(item.costo_importado).toFixed(2)}</span>
+                    ? <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '0.78rem', color: '#fb923c' }}>${Number(item.costo_importado).toLocaleString('es-CO', { maximumFractionDigits: 0 })}</span>
                     : <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: '0.68rem' }}>—</span>}
                 </td>
                 <td>
                   {item.precio_distribuidor != null
-                    ? <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '0.78rem', color: '#facc15' }}>${Number(item.precio_distribuidor).toFixed(2)}</span>
+                    ? <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '0.78rem', color: '#facc15' }}>${Number(item.precio_distribuidor).toLocaleString('es-CO', { maximumFractionDigits: 0 })}</span>
                     : <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: '0.68rem' }}>—</span>}
                 </td>
                 <td>
                   {item.precio_publico_calculado != null
-                    ? <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '0.78rem', color: '#4ade80' }}>${Number(item.precio_publico_calculado).toFixed(2)}</span>
+                    ? <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '0.78rem', color: '#4ade80' }}>${Number(item.precio_publico_calculado).toLocaleString('es-CO', { maximumFractionDigits: 0 })}</span>
                     : <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: '0.68rem' }}>—</span>}
                 </td>
                 <td>
