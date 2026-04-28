@@ -259,6 +259,7 @@ class SparePartItemRead(BaseModel):
     qty_ordered: int
     qty_received: int
     qty_pending: Optional[int] = None
+    qty_physical: Optional[int] = None
     net_weight_kg: Optional[float] = None
     gross_weight_kg: Optional[float] = None
     cbm: Optional[float] = None
@@ -278,6 +279,7 @@ class SparePartItemUpdate(BaseModel):
     model_applicable: Optional[str] = None
     qty_ordered: Optional[int] = None
     qty_received: Optional[int] = None
+    qty_physical: Optional[int] = None
     unit_price: Optional[float] = None
     amount: Optional[float] = None
     status: Optional[str] = None

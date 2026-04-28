@@ -175,6 +175,7 @@ class SparePartItem(Base):
     qty_ordered = Column(Integer, nullable=False, default=0)
     qty_received = Column(Integer, nullable=False, default=0)
     qty_pending = Column(Integer, nullable=True)  # Calculado: qty_ordered - qty_received
+    qty_physical = Column(Integer, nullable=True)  # Inspección física posterior: NULL = no inspeccionado
 
     # Datos físicos (del packing list)
     net_weight_kg = Column(Numeric(10, 2), nullable=True)

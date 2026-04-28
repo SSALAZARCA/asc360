@@ -698,11 +698,24 @@ async def update_spare_part_item(
         raise HTTPException(status_code=404, detail={"detail": "Ítem no encontrado", "code": "ITEM_NOT_FOUND"})
 
     update_data = payload.model_dump(exclude_none=True)
+
+    # qty_physical se maneja aparte — requiere cruce confirmado y dispara lógica de backorder
+    qty_physical = update_data.pop("qty_physical", None)
+
     for field, value in update_data.items():
         setattr(item, field, value)
 
     if "qty_received" in update_data or "qty_ordered" in update_data:
         item.qty_pending = max(0, item.qty_ordered - item.qty_received)
+
+    if qty_physical is not None:
+        lot = await db.get(SparePartLot, item.lot_id)
+        if not lot or not lot.packing_list_received:
+            raise HTTPException(
+                status_code=400,
+                detail={"detail": "El inventario físico solo puede registrarse después de confirmar el cruce", "code": "RECONCILIATION_NOT_CONFIRMED"},
+            )
+        await imports_service.apply_physical_inspection(db, item, qty_physical)
 
     # Propagar cambios a ReconciliationResult vinculado
     propagate_fields = {"qty_ordered", "part_number"}

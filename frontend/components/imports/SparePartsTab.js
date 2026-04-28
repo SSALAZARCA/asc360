@@ -185,7 +185,7 @@ function EditableQty({ itemId, current, max, onSaved }) {
 // ---------------------------------------------------------------------------
 // Items table dentro de un lote expandido
 // ---------------------------------------------------------------------------
-function LotItemsTable({ lotId, userRole }) {
+function LotItemsTable({ lotId, userRole, isConfirmed }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -250,8 +250,8 @@ function LotItemsTable({ lotId, userRole }) {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
             <thead>
               <tr style={{ background: '#0e0e14' }}>
-                {['Parte #', 'Descripción', 'Modelo', 'Pcs Ord.', 'Pcs Rec.', 'Pendiente', 'Unit Price', 'Amount', 'Estado', ''].map(h => (
-                  <th key={h} style={{ padding: '8px 10px', textAlign: 'left', fontSize: '9px', fontWeight: 700, color: '#606075', textTransform: 'uppercase', letterSpacing: '0.07em', borderBottom: '1px solid rgba(255,255,255,0.06)', whiteSpace: 'nowrap' }}>{h}</th>
+                {['Parte #', 'Descripción', 'Modelo', 'Pcs Ord.', 'Pcs Rec.', 'Inv. Físico', 'Pendiente', 'Unit Price', 'Amount', 'Estado', ''].map(h => (
+                  <th key={h} style={{ padding: '8px 10px', textAlign: 'left', fontSize: '9px', fontWeight: 700, color: h === 'Inv. Físico' ? '#fb923c' : '#606075', textTransform: 'uppercase', letterSpacing: '0.07em', borderBottom: '1px solid rgba(255,255,255,0.06)', whiteSpace: 'nowrap' }}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -296,6 +296,25 @@ function LotItemsTable({ lotId, userRole }) {
                       ? <EditableQty itemId={item.id} current={item.qty_received} max={item.qty_ordered} onSaved={fetch} />
                       : <span style={{ color: item.qty_received > 0 ? '#22c55e' : '#9ca3af', fontWeight: 700 }}>{item.qty_received}</span>
                     }
+                  </td>
+                  <td style={{ padding: '8px 10px', textAlign: 'right' }}>
+                    {isConfirmed && canEdit ? (
+                      <EditableCell
+                        itemId={item.id}
+                        field="qty_physical"
+                        current={item.qty_physical ?? item.qty_received}
+                        type="number"
+                        align="right"
+                        onSaved={fetch}
+                        cellStyle={{
+                          color: item.qty_physical != null && item.qty_physical !== item.qty_received ? '#f87171' : '#9ca3af',
+                          fontStyle: item.qty_physical == null ? 'italic' : 'normal',
+                          opacity: item.qty_physical == null ? 0.6 : 1,
+                        }}
+                      />
+                    ) : (
+                      <span style={{ color: '#3f3f55', fontSize: '10px' }}>—</span>
+                    )}
                   </td>
                   <td style={{ padding: '8px 10px', color: (item.qty_pending ?? 0) > 0 ? '#f97316' : '#606075', textAlign: 'right', fontWeight: 700 }}>
                     {item.qty_pending ?? Math.max(0, item.qty_ordered - item.qty_received)}
@@ -438,7 +457,7 @@ function LotRow({ lot, userRole, onReconcile }) {
       </div>
 
       {/* Contenido expandido */}
-      {expanded && <LotItemsTable lotId={lot.id} userRole={userRole} />}
+      {expanded && <LotItemsTable lotId={lot.id} userRole={userRole} isConfirmed={!!lot.packing_list_received} />}
     </div>
   );
 }

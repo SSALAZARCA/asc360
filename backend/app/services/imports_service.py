@@ -1513,32 +1513,24 @@ async def _upsert_backorder(
 
 async def apply_physical_inspection(
     db: AsyncSession,
-    rr: "ReconciliationResult",
+    item: SparePartItem,
     qty_physical: int,
 ) -> None:
     """
-    Aplica el resultado de la inspección física sobre un ReconciliationResult confirmado.
-    - Calcula el faltante físico (lo cobrado y no llegó) = max(0, qty_in_packing - qty_physical)
-    - Recalcula el status del SparePartItem comparando qty_physical vs qty_ordered
+    Aplica el resultado de la inspección física sobre un SparePartItem ya reconciliado.
+    - physical_shortage = max(0, qty_received - qty_physical)  (cobrado y no llegó)
+    - Recalcula status comparando qty_physical vs qty_ordered
     - Upsertea/resuelve el backorder de tipo physical_inspection
     """
-    if rr.spare_part_item_id is None:
-        return
-
-    item = await db.get(SparePartItem, rr.spare_part_item_id)
-    if not item:
-        return
-
-    lot       = await db.get(SparePartLot, rr.lot_id)
+    lot       = await db.get(SparePartLot, item.lot_id)
     origin_pi = lot.lot_identifier if lot else ''
 
-    qty_in_pl   = rr.qty_in_packing or 0
-    qty_ordered = rr.qty_ordered or item.qty_ordered or 0
+    qty_received = item.qty_received or 0
+    qty_ordered  = item.qty_ordered  or 0
 
-    physical_shortage = max(0, qty_in_pl - qty_physical)
+    physical_shortage = max(0, qty_received - qty_physical)
 
-    # Actualizar qty_received final con lo físicamente contado
-    item.qty_received = qty_physical
+    item.qty_physical = qty_physical
     item.qty_pending  = max(0, qty_ordered - qty_physical)
     item.status       = 'RECEIVED' if qty_physical >= qty_ordered else 'BACKORDER'
     item.updated_at   = datetime.utcnow()
@@ -1549,7 +1541,6 @@ async def apply_physical_inspection(
             source='physical_inspection', already_charged=True,
         )
     else:
-        # Si el usuario corrigió y ya no hay faltante, resolver backorder físico previo
         existing = (await db.execute(
             select(Backorder).where(
                 Backorder.spare_part_item_id == item.id,
