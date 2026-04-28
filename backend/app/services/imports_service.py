@@ -811,8 +811,8 @@ async def create_sp_order_from_excel(
     inserted = updated = skipped = 0
     errors = []
 
-    # --- Primer pase: agregar filas por part_number (suma cantidades de duplicados) ---
-    aggregated: dict[str, dict] = {}  # part_number → {qty, nombre, modelo_moto}
+    # --- Primer pase: agregar por (part_number, modelo) — misma ref en distintos modelos = filas separadas ---
+    aggregated: dict[tuple, dict] = {}  # (part_number, modelo) → {qty, nombre, modelo_moto}
     for row_idx in range(header_row + 1, sheet.max_row + 1):
         try:
             part_raw = _cell(sheet, row_idx, col_map,
@@ -834,20 +834,22 @@ async def create_sp_order_from_excel(
 
             nombre = _cell(sheet, row_idx, col_map, "nombre", "descripcion", "descripción", "nombre es", "description")
             modelo_moto = _cell(sheet, row_idx, col_map, "moto aplica", "moto", "modelo moto", "modelo", "aplica")
+            modelo_str = str(modelo_moto).strip() if modelo_moto else None
 
-            if part_number in aggregated:
-                aggregated[part_number]["qty"] += qty  # sumar duplicados
+            agg_key = (part_number, modelo_str)
+            if agg_key in aggregated:
+                aggregated[agg_key]["qty"] += qty  # sumar solo si misma referencia Y mismo modelo
             else:
-                aggregated[part_number] = {
+                aggregated[agg_key] = {
                     "qty": qty,
                     "nombre": str(nombre).strip() if nombre else None,
-                    "modelo_moto": str(modelo_moto).strip() if modelo_moto else None,
+                    "modelo_moto": modelo_str,
                 }
         except Exception as e:
             errors.append({"row": row_idx, "reason": str(e)})
 
-    # --- Segundo pase: crear o actualizar SparePartItems con cantidades agregadas ---
-    for part_number, data in aggregated.items():
+    # --- Segundo pase: crear SparePartItems — una fila por (part_number, modelo) ---
+    for (part_number, _modelo_key), data in aggregated.items():
         qty = data["qty"]
         nombre = data["nombre"]
         modelo_moto = data["modelo_moto"]
@@ -1253,14 +1255,18 @@ async def reconcile_lot_packing_list(
         select(SparePartItem).where(SparePartItem.lot_id == lot.id)
     )).scalars().all()
 
-    lot_items_by_pn: dict[str, SparePartItem] = {i.part_number: i for i in lot_items_list}
-    # Índice por (part_number, model_applicable) para partes con modelo asignado en la orden
+    # Índice exacto por (part_number, model_applicable)
     lot_items_by_model: dict[tuple, SparePartItem] = {
         (i.part_number, i.model_applicable): i
         for i in lot_items_list
         if i.model_applicable
     }
     parts_with_model_in_order: set[str] = {pn for (pn, _) in lot_items_by_model}
+
+    # Índice por part_number → lista ordenada (fallback para PL sin modelo)
+    lot_items_by_pn: dict[str, list[SparePartItem]] = {}
+    for i in lot_items_list:
+        lot_items_by_pn.setdefault(i.part_number, []).append(i)
 
     # Cruzar
     counts = {"complete": 0, "partial": 0, "missing": 0, "extra": 0}
@@ -1275,14 +1281,15 @@ async def reconcile_lot_packing_list(
 
         # Buscar SparePartItem:
         # 1. Si el PL trae modelo Y la orden tiene ese part con modelo → cruce exacto por (part, model)
-        # 2. Si no → cruce por part_number solo, siempre que no haya sido ya cruzado
+        # 2. Fallback: primer SparePartItem no cruzado para ese part_number
         sp_item = None
         if pl_model and part_number in parts_with_model_in_order:
             sp_item = lot_items_by_model.get((part_number, pl_model))
         if sp_item is None:
-            candidate = lot_items_by_pn.get(part_number)
-            if candidate and candidate.id not in matched_item_ids:
-                sp_item = candidate
+            for candidate in lot_items_by_pn.get(part_number, []):
+                if candidate.id not in matched_item_ids:
+                    sp_item = candidate
+                    break
 
         if sp_item is None:
             # EXTRA puro: en el PL pero no en la orden
@@ -1345,8 +1352,11 @@ async def reconcile_lot_packing_list(
         for (part_number, model_key), (unit_price, amount, desc_en, desc_es, model_val) in pl_prices.items():
             if amount is not None:
                 total_declared += amount
-            # Buscar SparePartItem por (part, model) primero, luego por part solo
-            sp_item = lot_items_by_model.get((part_number, model_key)) or lot_items_by_pn.get(part_number)
+            # Buscar SparePartItem por (part, model) primero, luego primer item de la lista
+            sp_item = lot_items_by_model.get((part_number, model_key))
+            if sp_item is None:
+                candidates = lot_items_by_pn.get(part_number, [])
+                sp_item = candidates[0] if candidates else None
             if sp_item is None:
                 continue
             if unit_price is not None:
