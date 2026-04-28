@@ -115,10 +115,15 @@ export default function PartsCatalogPage() {
 
   const openEdit = (item) => {
     setEditMsg('');
+    const defaultPrice = item.public_price != null
+      ? String(item.public_price)
+      : item.precio_publico_calculado != null
+        ? String(Number(item.precio_publico_calculado).toFixed(2))
+        : '';
     setEditForm({
       description: item.description || '',
       description_es_manual: item.description_es || '',
-      public_price: item.public_price != null ? String(item.public_price) : '',
+      public_price: defaultPrice,
       new_code: '',
     });
     setEditItem(item);
@@ -241,8 +246,6 @@ export default function PartsCatalogPage() {
                 ['factory_part_number', 'Ref. Fábrica'],
                 ['description',         'Descripción'],
                 ['description_es',      'Descripción ES'],
-                ['public_price',        'Precio Público'],
-                ['section_code',        'Sección'],
                 ['vehicle_model_name',  'Modelo'],
               ].map(([col, lbl]) => (
                 <th key={col} onClick={() => toggleSort(col)} className="sort-head">
@@ -253,41 +256,30 @@ export default function PartsCatalogPage() {
               <th className="sort-head" style={{ whiteSpace: 'nowrap' }}>C. Importado <span style={{ fontWeight: 400, opacity: 0.5 }}>USD</span></th>
               <th className="sort-head" style={{ whiteSpace: 'nowrap' }}>P. Distribuidor <span style={{ fontWeight: 400, opacity: 0.5 }}>USD</span></th>
               <th className="sort-head" style={{ whiteSpace: 'nowrap' }}>P. Público Calc. <span style={{ fontWeight: 400, opacity: 0.5 }}>USD</span></th>
+              <th className="sort-head" onClick={() => toggleSort('public_price')} style={{ whiteSpace: 'nowrap', cursor: 'pointer' }}>Precio Final <SortIcon col="public_price" /></th>
               <th className="sort-head" style={{ width: '90px', textAlign: 'center' }}>Acciones</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan="11" style={{ textAlign: 'center', padding: '3rem', color: 'rgba(255,255,255,0.3)', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Cargando repuestos...</td></tr>
+              <tr><td colSpan="10" style={{ textAlign: 'center', padding: '3rem', color: 'rgba(255,255,255,0.3)', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Cargando repuestos...</td></tr>
             ) : sortedItems.length === 0 ? (
-              <tr><td colSpan="11" style={{ textAlign: 'center', padding: '4rem', color: 'rgba(255,255,255,0.2)', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+              <tr><td colSpan="10" style={{ textAlign: 'center', padding: '4rem', color: 'rgba(255,255,255,0.2)', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
                 {!search && !modelCode && !onlyPending ? 'Sin repuestos cargados — subí los PDFs desde Configuración' : 'Sin resultados para la búsqueda'}
               </td></tr>
             ) : sortedItems.map((item, i) => (
               <tr key={`${item.factory_part_number}-${item.section_code}-${i}`} className="hover:bg-white/5 transition-colors border-b border-white/5">
-                <td>
+                <td style={{ whiteSpace: 'nowrap' }}>
                   <span style={{ fontFamily: 'monospace', fontSize: '0.78rem', fontWeight: 700, color: '#ff5f33' }}>{item.factory_part_number}</span>
                 </td>
-                <td style={{ color: 'rgba(255,255,255,0.85)', maxWidth: '280px' }}>
+                <td style={{ color: 'rgba(255,255,255,0.85)', maxWidth: '260px' }}>
                   <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.description || '—'}</span>
                 </td>
-                <td style={{ maxWidth: '240px' }}>
+                <td style={{ maxWidth: '220px' }}>
                   {item.description_es
                     ? <span style={{ color: '#4ade80', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.description_es}</span>
                     : <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: '0.68rem' }}>—</span>
                   }
-                </td>
-                <td>
-                  {item.public_price != null
-                    ? <span style={{ fontWeight: 700, color: '#10b981' }}>${Number(item.public_price).toLocaleString('es-CO')}</span>
-                    : <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: '0.68rem' }}>—</span>
-                  }
-                </td>
-                <td>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <span style={{ fontSize: '0.6rem', fontWeight: 800, padding: '2px 8px', borderRadius: '20px', background: 'rgba(99,102,241,0.12)', color: '#818cf8', border: '1px solid rgba(99,102,241,0.2)', whiteSpace: 'nowrap' }}>{item.section_code}</span>
-                    <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '140px' }}>{item.section_name}</span>
-                  </div>
                 </td>
                 <td><span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.7)', fontWeight: 600 }}>{item.vehicle_model_name || '—'}</span></td>
                 <td>
@@ -309,6 +301,12 @@ export default function PartsCatalogPage() {
                   {item.precio_publico_calculado != null
                     ? <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '0.78rem', color: '#4ade80' }}>${Number(item.precio_publico_calculado).toFixed(2)}</span>
                     : <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: '0.68rem' }}>—</span>}
+                </td>
+                <td>
+                  {item.public_price != null
+                    ? <span style={{ fontFamily: 'monospace', fontWeight: 800, fontSize: '0.8rem', color: '#fff' }}>${Number(item.public_price).toLocaleString('es-CO')}</span>
+                    : <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: '0.68rem' }}>—</span>
+                  }
                 </td>
                 <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}>
@@ -390,7 +388,7 @@ export default function PartsCatalogPage() {
                 />
               </div>
               <div>
-                <label style={{ display: 'block', fontSize: '0.62rem', fontWeight: 800, color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.4rem' }}>Precio Público (COP)</label>
+                <label style={{ display: 'block', fontSize: '0.62rem', fontWeight: 800, color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.4rem' }}>Precio Final (COP)</label>
                 <input
                   type="number"
                   value={editForm.public_price}
