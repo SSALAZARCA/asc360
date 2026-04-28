@@ -1528,6 +1528,9 @@ async def apply_physical_inspection(
     qty_received = item.qty_received or 0
     qty_ordered  = item.qty_ordered  or 0
 
+    # Faltante no cobrado: estaba en la orden pero el proveedor nunca lo puso en el PL
+    not_charged_qty   = max(0, qty_ordered - qty_received)
+    # Faltante cobrado: estaba en el PL (cobrado) pero no llegó físicamente
     physical_shortage = max(0, qty_received - qty_physical)
 
     item.qty_physical = qty_physical
@@ -1535,6 +1538,15 @@ async def apply_physical_inspection(
     item.status       = 'RECEIVED' if qty_physical >= qty_ordered else 'BACKORDER'
     item.updated_at   = datetime.utcnow()
 
+    # Garantizar que el BO de reconciliación siempre refleje el faltante no cobrado.
+    # Si fue resuelto o nunca existió, lo recrea con el valor correcto.
+    if not_charged_qty > 0:
+        await _upsert_backorder(
+            db, item, origin_pi, not_charged_qty,
+            source='reconciliation', already_charged=False,
+        )
+
+    # BO de inspección física: cobrado pero no llegó
     if physical_shortage > 0:
         await _upsert_backorder(
             db, item, origin_pi, physical_shortage,
