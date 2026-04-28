@@ -251,7 +251,7 @@ function LotItemsTable({ lotId, userRole, isConfirmed }) {
             <thead>
               <tr style={{ background: '#0e0e14' }}>
                 {['Parte #', 'Descripción', 'Modelo', 'Pcs Ord.', 'Pcs Rec.', 'Inv. Físico', 'Pendiente', 'Unit Price', 'Amount', 'Estado', ''].map(h => (
-                  <th key={h} style={{ padding: '8px 10px', textAlign: 'left', fontSize: '9px', fontWeight: 700, color: h === 'Inv. Físico' ? '#fb923c' : '#606075', textTransform: 'uppercase', letterSpacing: '0.07em', borderBottom: '1px solid rgba(255,255,255,0.06)', whiteSpace: 'nowrap' }}>{h}</th>
+                  <th key={h} style={{ padding: '8px 10px', textAlign: h === 'Inv. Físico' ? 'center' : 'left', fontSize: '9px', fontWeight: 700, color: h === 'Inv. Físico' ? '#fb923c' : '#606075', textTransform: 'uppercase', letterSpacing: '0.07em', borderBottom: '1px solid rgba(255,255,255,0.06)', whiteSpace: 'nowrap' }}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -297,14 +297,14 @@ function LotItemsTable({ lotId, userRole, isConfirmed }) {
                       : <span style={{ color: item.qty_received > 0 ? '#22c55e' : '#9ca3af', fontWeight: 700 }}>{item.qty_received}</span>
                     }
                   </td>
-                  <td style={{ padding: '8px 10px', textAlign: 'right' }}>
+                  <td style={{ padding: '8px 10px', textAlign: 'center' }}>
                     {isConfirmed && canEdit ? (
                       <EditableCell
                         itemId={item.id}
                         field="qty_physical"
                         current={item.qty_physical ?? item.qty_received}
                         type="number"
-                        align="right"
+                        align="center"
                         onSaved={fetch}
                         cellStyle={{
                           color: item.qty_physical != null && item.qty_physical !== item.qty_received ? '#f87171' : '#9ca3af',
