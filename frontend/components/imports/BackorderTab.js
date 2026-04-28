@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { authFetch } from '../../lib/authFetch';
 import { RefreshCw, Search, CheckCircle, Clock, AlertTriangle, Tag } from 'lucide-react';
 
@@ -151,7 +151,8 @@ export default function BackorderTab({ userRole }) {
   useEffect(() => { fetchBackorders(); }, [fetchBackorders]);
 
   const handleResolve = async (bo) => {
-    if (!confirm(`¿Marcar como resuelto el backorder de ${bo.part_number}?`)) return;
+    const label = bo.source === 'physical_inspection' ? 'cobrado (faltante físico)' : 'no cobrado (no enviado)';
+    if (!confirm(`¿Marcar como resuelto el backorder ${label} de ${bo.part_number}?`)) return;
     try {
       await authFetch(`${API()}/imports/backorders/${bo.id}`, {
         method: 'PATCH',
@@ -162,7 +163,7 @@ export default function BackorderTab({ userRole }) {
     } catch { alert('Error al resolver backorder'); }
   };
 
-  // Filtro local por texto
+  // Filtro local
   const filtered = search
     ? backorders.filter(b =>
         b.part_number?.toLowerCase().includes(search.toLowerCase()) ||
@@ -173,17 +174,40 @@ export default function BackorderTab({ userRole }) {
       )
     : backorders;
 
-  // Selección
-  const activeFiltered = filtered.filter(b => !b.resolved);
-  const allSelected = activeFiltered.length > 0 && activeFiltered.every(b => selected.has(b.id));
-  const someSelected = activeFiltered.some(b => selected.has(b.id));
+  // Agrupar por (part_number, origin_pi) para mostrar una fila consolidada
+  const groupedFiltered = useMemo(() => {
+    const groups = {};
+    filtered.forEach(bo => {
+      const key = `${bo.part_number}__${bo.origin_pi}`;
+      if (!groups[key]) {
+        groups[key] = {
+          key,
+          part_number: bo.part_number,
+          origin_pi: bo.origin_pi,
+          description_es: bo.description_es,
+          model_applicable: bo.model_applicable,
+          spare_part_item_id: bo.spare_part_item_id,
+          reconciliation: null,
+          physical_inspection: null,
+        };
+      }
+      if (bo.source === 'physical_inspection') {
+        groups[key].physical_inspection = bo;
+      } else {
+        groups[key].reconciliation = bo;
+      }
+    });
+    return Object.values(groups);
+  }, [filtered]);
+
+  // Selección solo sobre backorders de reconciliación (los que necesitan asignación de PI)
+  const selectableGroups = groupedFiltered.filter(g => g.reconciliation && !g.reconciliation.resolved);
+  const allSelected = selectableGroups.length > 0 && selectableGroups.every(g => selected.has(g.reconciliation.id));
+  const someSelected = selectableGroups.some(g => selected.has(g.reconciliation.id));
 
   const toggleSelectAll = () => {
-    if (allSelected) {
-      setSelected(new Set());
-    } else {
-      setSelected(new Set(activeFiltered.map(b => b.id)));
-    }
+    if (allSelected) setSelected(new Set());
+    else setSelected(new Set(selectableGroups.map(g => g.reconciliation.id)));
   };
 
   const toggleSelect = (id) => {
@@ -217,7 +241,10 @@ export default function BackorderTab({ userRole }) {
   const oldestDays = active.length
     ? Math.max(...active.map(b => daysSince(b.created_at) || 0))
     : 0;
-  const withoutPI = active.filter(b => !b.expected_in_pi).length;
+  // "Sin PI" solo cuenta grupos de reconciliación sin PI asignado
+  const withoutPI = groupedFiltered.filter(g =>
+    g.reconciliation && !g.reconciliation.resolved && !g.reconciliation.expected_in_pi
+  ).length;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -233,7 +260,11 @@ export default function BackorderTab({ userRole }) {
       {/* KPIs */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px' }}>
         {[
-          { label: 'Backorders activos', value: active.length, color: '#f87171' },
+          { label: 'Partes en backorder', value: groupedFiltered.filter(g => {
+            const rec = g.reconciliation;
+            const phy = g.physical_inspection;
+            return (!rec || !rec.resolved) || (!phy || !phy.resolved);
+          }).length, color: '#f87171' },
           { label: 'Unidades pendientes', value: totalPending, color: '#fb923c' },
           { label: 'Sin PI asignado', value: withoutPI, color: '#9ca3af' },
           { label: 'Más antiguo (días)', value: oldestDays > 0 ? `${oldestDays}d` : '—', color: oldestDays > 60 ? '#f87171' : '#606075' },
@@ -275,7 +306,6 @@ export default function BackorderTab({ userRole }) {
           <RefreshCw size={13} />
         </button>
 
-        {/* Acción bulk — aparece solo cuando hay selección */}
         {selected.size > 0 && canEdit && (
           <button
             onClick={() => setShowBulkModal(true)}
@@ -288,14 +318,25 @@ export default function BackorderTab({ userRole }) {
         )}
 
         <span style={{ fontSize: '11px', color: '#606075', marginLeft: 'auto' }}>
-          {filtered.length} backorder{filtered.length !== 1 ? 's' : ''}
+          {groupedFiltered.length} parte{groupedFiltered.length !== 1 ? 's' : ''} en backorder
         </span>
+      </div>
+
+      {/* Leyenda de columnas */}
+      <div style={{ display: 'flex', gap: '16px', alignItems: 'center', padding: '6px 12px', borderRadius: '8px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)' }}>
+        <span style={{ fontSize: '9px', color: '#606075', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Referencias:</span>
+        <span style={{ fontSize: '9px', fontWeight: 700, padding: '2px 8px', borderRadius: '4px', background: 'rgba(250,204,21,0.1)', color: '#facc15', border: '1px solid rgba(250,204,21,0.25)' }}>Sin Cobrar</span>
+        <span style={{ fontSize: '9px', color: '#606075' }}>No enviado por proveedor (no cobrado)</span>
+        <span style={{ fontSize: '9px', fontWeight: 700, padding: '2px 8px', borderRadius: '4px', background: 'rgba(239,68,68,0.1)', color: '#f87171', border: '1px solid rgba(239,68,68,0.25)' }}>Cobrado</span>
+        <span style={{ fontSize: '9px', color: '#606075' }}>Cobrado en invoice pero no llegó físicamente</span>
+        <span style={{ fontSize: '9px', fontWeight: 700, padding: '2px 8px', borderRadius: '4px', background: 'rgba(251,146,60,0.1)', color: '#fb923c', border: '1px solid rgba(251,146,60,0.25)' }}>Total</span>
+        <span style={{ fontSize: '9px', color: '#606075' }}>Total pendiente contra la orden</span>
       </div>
 
       {/* Tabla */}
       {loading ? (
         <p style={{ color: '#606075', fontSize: '12px', textAlign: 'center', margin: '40px 0' }}>Cargando backorders...</p>
-      ) : filtered.length === 0 ? (
+      ) : groupedFiltered.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '60px 0', color: '#606075' }}>
           <CheckCircle size={36} style={{ margin: '0 auto 12px', display: 'block', opacity: 0.3 }} />
           <p style={{ fontSize: '13px', margin: 0 }}>
@@ -321,83 +362,133 @@ export default function BackorderTab({ userRole }) {
                     />
                   </th>
                 )}
-                {['Parte #', 'Descripción', 'Moto', 'Tipo', 'PI Origen', 'PI Esperado', 'Uds. Pendientes', 'Días abierto', 'Estado', ''].map(h => (
-                  <th key={h} style={{ padding: '9px 12px', textAlign: 'left', fontSize: '9px', fontWeight: 700, color: '#606075', textTransform: 'uppercase', letterSpacing: '0.07em', borderBottom: '1px solid rgba(255,255,255,0.06)', whiteSpace: 'nowrap' }}>{h}</th>
+                {['Parte #', 'Descripción', 'Moto', 'PI Origen', 'PI Esperado',
+                  'Sin Cobrar', 'Cobrado', 'Total', 'Días', 'Estado', ''].map(h => (
+                  <th key={h} style={{
+                    padding: '9px 12px', textAlign: 'center', fontSize: '9px', fontWeight: 700,
+                    color: h === 'Sin Cobrar' ? '#facc15' : h === 'Cobrado' ? '#f87171' : h === 'Total' ? '#fb923c' : '#606075',
+                    textTransform: 'uppercase', letterSpacing: '0.07em',
+                    borderBottom: '1px solid rgba(255,255,255,0.06)', whiteSpace: 'nowrap',
+                  }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {filtered.map(bo => {
-                const days = daysSince(bo.created_at);
-                const isResolved = bo.resolved;
-                const isSelected = selected.has(bo.id);
+              {groupedFiltered.map(group => {
+                const rec = group.reconciliation;
+                const phy = group.physical_inspection;
+
+                // Cantidades activas (no resueltas) por tipo
+                const qtyNotCharged = rec && !rec.resolved ? rec.qty_pending : 0;
+                const qtyCobrado = phy && !phy.resolved ? phy.qty_pending : 0;
+                const qtyTotal = qtyNotCharged + qtyCobrado;
+
+                const isFullyResolved = (!rec || rec.resolved) && (!phy || phy.resolved);
+
+                // Checkbox: solo para el BO de reconciliación (el que necesita PI)
+                const selectableId = rec?.id;
+                const isSelected = !!(selectableId && selected.has(selectableId));
+
+                // Días abierto: el más antiguo entre los no resueltos
+                const unresolvedDates = [rec, phy]
+                  .filter(b => b && !b.resolved)
+                  .map(b => b.created_at)
+                  .sort();
+                const days = daysSince(unresolvedDates[0] || null);
+
                 return (
                   <tr
-                    key={bo.id}
-                    style={{ borderBottom: '1px solid rgba(255,255,255,0.03)', opacity: isResolved ? 0.5 : 1, background: isSelected ? 'rgba(37,99,235,0.07)' : 'transparent' }}
+                    key={group.key}
+                    style={{
+                      borderBottom: '1px solid rgba(255,255,255,0.03)',
+                      opacity: isFullyResolved ? 0.5 : 1,
+                      background: isSelected ? 'rgba(37,99,235,0.07)' : 'transparent',
+                    }}
                     onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = 'rgba(255,255,255,0.02)'; }}
                     onMouseLeave={e => { e.currentTarget.style.background = isSelected ? 'rgba(37,99,235,0.07)' : 'transparent'; }}
                   >
                     {canEdit && (
                       <td style={{ padding: '9px 12px' }}>
-                        {!isResolved && (
+                        {selectableId && rec && !rec.resolved && (
                           <input
                             type="checkbox"
                             checked={isSelected}
-                            onChange={() => toggleSelect(bo.id)}
+                            onChange={() => toggleSelect(selectableId)}
                             style={{ accentColor: '#2563eb', cursor: 'pointer' }}
                           />
                         )}
                       </td>
                     )}
+
+                    {/* Parte # */}
                     <td style={{ padding: '9px 12px', whiteSpace: 'nowrap' }}>
-                      <span style={{ color: '#f87171', fontWeight: 700, fontFamily: 'monospace' }}>{bo.part_number}</span>
+                      <span style={{ color: '#f87171', fontWeight: 700, fontFamily: 'monospace' }}>{group.part_number}</span>
                     </td>
+
+                    {/* Descripción */}
                     <td style={{ padding: '9px 12px', color: '#d1d5db', fontSize: '11px', maxWidth: 200 }}>
                       <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {bo.description_es || '—'}
+                        {group.description_es || '—'}
                       </span>
                     </td>
+
+                    {/* Moto */}
                     <td style={{ padding: '9px 12px', whiteSpace: 'nowrap' }}>
-                      {bo.model_applicable
-                        ? <span style={{ fontSize: '9px', fontWeight: 700, padding: '2px 7px', borderRadius: '4px', background: 'rgba(96,165,250,0.1)', color: '#60a5fa', border: '1px solid rgba(96,165,250,0.2)' }}>{bo.model_applicable}</span>
-                        : <span style={{ color: '#606075', fontSize: '11px' }}>—</span>
+                      {group.model_applicable
+                        ? <span style={{ fontSize: '9px', fontWeight: 700, padding: '2px 7px', borderRadius: '4px', background: 'rgba(96,165,250,0.1)', color: '#60a5fa', border: '1px solid rgba(96,165,250,0.2)' }}>{group.model_applicable}</span>
+                        : <span style={{ color: '#606075' }}>—</span>
                       }
                     </td>
-                    <td style={{ padding: '9px 12px', whiteSpace: 'nowrap' }}>
-                      {bo.source === 'physical_inspection' ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                          <span style={{ fontSize: '8px', fontWeight: 700, padding: '2px 6px', borderRadius: '4px', background: 'rgba(239,68,68,0.15)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)' }}>FALTANTE FÍSICO</span>
-                          <span style={{ fontSize: '8px', fontWeight: 700, padding: '2px 6px', borderRadius: '4px', background: 'rgba(251,146,60,0.15)', color: '#fb923c', border: '1px solid rgba(251,146,60,0.3)' }}>COBRADO</span>
-                        </div>
-                      ) : (
-                        <span style={{ fontSize: '8px', fontWeight: 700, padding: '2px 6px', borderRadius: '4px', background: 'rgba(250,204,21,0.12)', color: '#facc15', border: '1px solid rgba(250,204,21,0.3)' }}>NO ENVIADO</span>
-                      )}
-                    </td>
+
+                    {/* PI Origen */}
                     <td style={{ padding: '9px 12px', color: '#9ca3af', fontFamily: 'monospace', fontSize: '10px', whiteSpace: 'nowrap' }}>
-                      {bo.origin_pi}
+                      {group.origin_pi}
                     </td>
+
+                    {/* PI Esperado — solo aplica al BO de reconciliación */}
                     <td style={{ padding: '9px 12px' }}>
-                      {bo.source === 'physical_inspection' ? (
+                      {rec && !rec.resolved && canEdit ? (
+                        <EditableExpectedPI boId={rec.id} current={rec.expected_in_pi} onSaved={fetchBackorders} />
+                      ) : rec?.expected_in_pi ? (
+                        <span style={{ fontSize: '11px', fontFamily: 'monospace', color: '#60a5fa' }}>{rec.expected_in_pi}</span>
+                      ) : phy && !phy.resolved ? (
                         <span style={{ fontSize: '9px', color: '#606075', fontStyle: 'italic' }}>Reclamo proveedor</span>
-                      ) : !isResolved && canEdit ? (
-                        <EditableExpectedPI boId={bo.id} current={bo.expected_in_pi} onSaved={fetchBackorders} />
                       ) : (
-                        <span style={{ fontSize: '11px', fontFamily: 'monospace', color: bo.expected_in_pi ? '#60a5fa' : '#606075' }}>
-                          {bo.expected_in_pi || '—'}
-                        </span>
+                        <span style={{ color: '#606075' }}>—</span>
                       )}
                     </td>
-                    <td style={{ padding: '9px 12px', textAlign: 'right' }}>
-                      <span style={{ fontWeight: 800, color: bo.qty_pending > 0 ? '#fb923c' : '#606075', fontSize: '13px' }}>
-                        {bo.qty_pending}
+
+                    {/* Sin Cobrar */}
+                    <td style={{ padding: '9px 12px', textAlign: 'center' }}>
+                      {qtyNotCharged > 0
+                        ? <span style={{ fontWeight: 700, color: '#facc15', fontSize: '13px' }}>{qtyNotCharged}</span>
+                        : <span style={{ color: '#3f3f55', fontSize: '11px' }}>—</span>
+                      }
+                    </td>
+
+                    {/* Cobrado */}
+                    <td style={{ padding: '9px 12px', textAlign: 'center' }}>
+                      {qtyCobrado > 0
+                        ? <span style={{ fontWeight: 700, color: '#f87171', fontSize: '13px' }}>{qtyCobrado}</span>
+                        : <span style={{ color: '#3f3f55', fontSize: '11px' }}>—</span>
+                      }
+                    </td>
+
+                    {/* Total */}
+                    <td style={{ padding: '9px 12px', textAlign: 'center' }}>
+                      <span style={{ fontWeight: 800, color: qtyTotal > 0 ? '#fb923c' : '#606075', fontSize: '14px' }}>
+                        {qtyTotal}
                       </span>
                     </td>
+
+                    {/* Días */}
                     <td style={{ padding: '9px 12px' }}>
                       <DaysChip days={days} />
                     </td>
+
+                    {/* Estado */}
                     <td style={{ padding: '9px 12px' }}>
-                      {isResolved ? (
+                      {isFullyResolved ? (
                         <span style={{ fontSize: '9px', fontWeight: 700, padding: '2px 7px', borderRadius: '20px', background: 'rgba(34,197,94,0.1)', color: '#22c55e', border: '1px solid rgba(34,197,94,0.25)' }}>
                           RESUELTO
                         </span>
@@ -407,16 +498,32 @@ export default function BackorderTab({ userRole }) {
                         </span>
                       )}
                     </td>
+
+                    {/* Acciones */}
                     <td style={{ padding: '9px 12px', textAlign: 'right' }}>
-                      {!isResolved && canEdit && (
-                        <button
-                          onClick={() => handleResolve(bo)}
-                          title="Marcar como resuelto"
-                          style={{ padding: '4px 10px', borderRadius: '7px', border: 'none', background: 'rgba(34,197,94,0.1)', color: '#22c55e', fontSize: '10px', fontWeight: 700, cursor: 'pointer' }}
-                        >
-                          <CheckCircle size={11} style={{ display: 'inline', marginRight: 4 }} />
-                          Resolver
-                        </button>
+                      {!isFullyResolved && canEdit && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', alignItems: 'flex-end' }}>
+                          {rec && !rec.resolved && (
+                            <button
+                              onClick={() => handleResolve(rec)}
+                              title="Resolver pendiente no cobrado"
+                              style={{ padding: '3px 8px', borderRadius: '6px', border: 'none', background: 'rgba(250,204,21,0.1)', color: '#facc15', fontSize: '9px', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                            >
+                              <CheckCircle size={9} style={{ display: 'inline', marginRight: 3 }} />
+                              No cobrado
+                            </button>
+                          )}
+                          {phy && !phy.resolved && (
+                            <button
+                              onClick={() => handleResolve(phy)}
+                              title="Resolver faltante físico cobrado"
+                              style={{ padding: '3px 8px', borderRadius: '6px', border: 'none', background: 'rgba(239,68,68,0.1)', color: '#f87171', fontSize: '9px', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                            >
+                              <CheckCircle size={9} style={{ display: 'inline', marginRight: 3 }} />
+                              Cobrado
+                            </button>
+                          )}
+                        </div>
                       )}
                     </td>
                   </tr>

@@ -1621,6 +1621,8 @@ async def list_backorders(
             "origin_pi": bo.origin_pi,
             "expected_in_pi": bo.expected_in_pi,
             "qty_pending": bo.qty_pending,
+            "source": bo.source,
+            "already_charged": bo.already_charged,
             "resolved": bo.resolved,
             "resolved_at": bo.resolved_at,
             "history": bo.history,
