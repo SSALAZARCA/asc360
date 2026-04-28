@@ -730,6 +730,7 @@ async def list_catalog(
         "public_price":        inner_sq.c.public_price,
         "section_code":        inner_sq.c.section_code,
         "vehicle_model_name":  inner_sq.c.vehicle_model_pattern,
+        "avg_fob_cost":        inner_sq.c.avg_fob_cost,
     }
     sort_expr = _SORT_MAP.get(sort_col, inner_sq.c.section_code)
     order_expr = nullslast(sort_expr.asc() if sort_dir == "asc" else sort_expr.desc())

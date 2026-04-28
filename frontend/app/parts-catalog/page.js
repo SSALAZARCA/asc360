@@ -272,11 +272,11 @@ export default function PartsCatalogPage() {
                   {lbl} <SortIcon col={col} />
                 </th>
               ))}
-              <th className="sort-head" style={{ whiteSpace: 'nowrap' }}>FOB Prom. <span style={{ fontWeight: 400, opacity: 0.5 }}>USD</span></th>
-              <th className="sort-head" style={{ whiteSpace: 'nowrap' }}>C. Importado <span style={{ fontWeight: 400, opacity: 0.5 }}>COP</span></th>
-              <th className="sort-head" style={{ whiteSpace: 'nowrap' }}>P. Distribuidor <span style={{ fontWeight: 400, opacity: 0.5 }}>COP</span></th>
-              <th className="sort-head" style={{ whiteSpace: 'nowrap' }}>P. Público Calc. <span style={{ fontWeight: 400, opacity: 0.5 }}>COP</span></th>
-              <th className="sort-head" onClick={() => toggleSort('public_price')} style={{ whiteSpace: 'nowrap', cursor: 'pointer' }}>Precio Final <SortIcon col="public_price" /></th>
+              <th className="sort-head" onClick={() => toggleSort('avg_fob_cost')} style={{ whiteSpace: 'nowrap' }}>FOB Prom. <span style={{ fontWeight: 400, opacity: 0.5 }}>USD</span> <SortIcon col="avg_fob_cost" /></th>
+              <th className="sort-head" onClick={() => toggleSort('avg_fob_cost')} style={{ whiteSpace: 'nowrap' }}>C. Importado <span style={{ fontWeight: 400, opacity: 0.5 }}>COP</span> <SortIcon col="avg_fob_cost" /></th>
+              <th className="sort-head" onClick={() => toggleSort('avg_fob_cost')} style={{ whiteSpace: 'nowrap' }}>P. Distribuidor <span style={{ fontWeight: 400, opacity: 0.5 }}>COP</span> <SortIcon col="avg_fob_cost" /></th>
+              <th className="sort-head" onClick={() => toggleSort('avg_fob_cost')} style={{ whiteSpace: 'nowrap' }}>P. Público Calc. <span style={{ fontWeight: 400, opacity: 0.5 }}>COP</span> <SortIcon col="avg_fob_cost" /></th>
+              <th className="sort-head" onClick={() => toggleSort('public_price')} style={{ whiteSpace: 'nowrap' }}>Precio Final <SortIcon col="public_price" /></th>
               <th className="sort-head" style={{ width: '90px', textAlign: 'center' }}>Acciones</th>
             </tr>
           </thead>
@@ -552,8 +552,8 @@ export default function PartsCatalogPage() {
       <style jsx>{`
         .master-table { width: 100%; border-collapse: collapse; }
         .master-table td { padding: 0.7rem 1rem; font-size: 0.68rem; }
-        .sort-head { padding: 0.7rem 1rem; font-size: 0.58rem; font-weight: 800; color: rgba(255,255,255,0.4); text-transform: uppercase; letter-spacing: 0.1em; border-bottom: 1px solid rgba(255,255,255,0.05); background: rgba(0,0,0,0.2); cursor: pointer; white-space: nowrap; text-align: left; user-select: none; }
-        .sort-head:hover { color: #fff; }
+        .sort-head { padding: 0.7rem 1rem; font-size: 0.58rem; font-weight: 800; color: rgba(255,255,255,0.4); text-transform: uppercase; letter-spacing: 0.1em; border-bottom: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.015); backdrop-filter: blur(10px); cursor: pointer; white-space: nowrap; text-align: left; user-select: none; position: sticky; top: 0; z-index: 10; }
+        .sort-head:hover { color: #fff; background: rgba(255,255,255,0.03); }
         select option { background: #0c0c0e; color: #fff; }
       `}</style>
     </AdminLayout>
