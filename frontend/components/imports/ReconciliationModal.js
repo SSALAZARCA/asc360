@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { authFetch } from '../../lib/authFetch';
-import { X, CheckCircle, AlertCircle, XCircle, Plus, Upload, RefreshCw } from 'lucide-react';
+import { X, CheckCircle, AlertCircle, XCircle, Plus, Upload, RefreshCw, Search } from 'lucide-react';
 
 function API() {
   return (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1').replace('http://', 'https://');
@@ -102,6 +102,7 @@ export default function ReconciliationModal({ lot, onClose, onConfirmed }) {
   const [uploading, setUploading] = useState(false);
   const [uploadResult, setUploadResult] = useState(null);
   const [filterResult, setFilterResult] = useState('');
+  const [search, setSearch] = useState('');
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
 
   const fetchResults = async () => {
@@ -165,7 +166,18 @@ export default function ReconciliationModal({ lot, onClose, onConfirmed }) {
   const counts = { COMPLETE: 0, PARTIAL: 0, MISSING: 0, EXTRA: 0, EXTRA_APPLIED: 0 };
   results.forEach(r => { if (counts[r.result] !== undefined) counts[r.result]++; });
 
-  const filtered = filterResult ? results.filter(r => r.result === filterResult) : results;
+  const filtered = results.filter(r => {
+    if (filterResult && r.result !== filterResult) return false;
+    if (search) {
+      const q = search.toLowerCase();
+      return (
+        r.part_number?.toLowerCase().includes(q) ||
+        r.description_es?.toLowerCase().includes(q) ||
+        r.model_applicable?.toLowerCase().includes(q)
+      );
+    }
+    return true;
+  });
   const hasResults = results.length > 0;
 
   return (
@@ -253,7 +265,21 @@ export default function ReconciliationModal({ lot, onClose, onConfirmed }) {
                 <SummaryCard label="Extra→BO"   count={counts.EXTRA_APPLIED} result="EXTRA_APPLIED" />
               </div>
 
-              {/* Filtro */}
+              {/* Buscador */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '10px', padding: '6px 10px', borderRadius: '8px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}>
+                <Search size={11} color="#606075" />
+                <input
+                  placeholder="Buscar por parte, descripción o moto..."
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  style={{ background: 'none', border: 'none', color: '#fff', fontSize: '11px', outline: 'none', flex: 1 }}
+                />
+                {search && (
+                  <button onClick={() => setSearch('')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#606075', padding: '0 2px', fontSize: '12px', lineHeight: 1 }}>✕</button>
+                )}
+              </div>
+
+              {/* Filtro por resultado */}
               <div style={{ display: 'flex', gap: '6px', marginBottom: '12px', flexWrap: 'wrap' }}>
                 {['', 'COMPLETE', 'PARTIAL', 'MISSING', 'EXTRA', 'EXTRA_APPLIED'].map(r => (
                   <button
