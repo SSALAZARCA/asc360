@@ -759,13 +759,13 @@ async def create_sp_order_from_excel(
     # Verificar si ya existe un pedido con esta referencia
     existing_order = (await db.execute(
         select(ShipmentOrder).where(ShipmentOrder.pi_number == ref)
-    )).scalar_one_or_none()
+    )).scalars().first()
 
     if existing_order:
         order = existing_order
         lot = (await db.execute(
             select(SparePartLot).where(SparePartLot.shipment_order_id == order.id)
-        )).scalar_one_or_none()
+        )).scalars().first()
         if not lot:
             lot = SparePartLot(
                 shipment_order_id=order.id,
