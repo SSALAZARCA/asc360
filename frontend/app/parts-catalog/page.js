@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import AdminLayout from '../admin-layout';
 import { authFetch } from '../../lib/authFetch';
-import { Search, ChevronLeft, ChevronRight, X, ArrowUpRight, ArrowDownRight, AlertTriangle, CheckCircle2, ShieldX, Pencil } from 'lucide-react';
+import { Search, ChevronLeft, ChevronRight, X, ArrowUp, ArrowDown, ChevronsUpDown, AlertTriangle, CheckCircle2, ShieldX, Pencil } from 'lucide-react';
 
 const PAGE_SIZE = 50;
 
@@ -97,8 +97,10 @@ export default function PartsCatalogPage() {
     setPage(1);
   };
   const SortIcon = ({ col }) => sortCol === col
-    ? (sortDir === 'asc' ? <ArrowUpRight size={10} /> : <ArrowDownRight size={10} />)
-    : null;
+    ? (sortDir === 'asc'
+        ? <ArrowUp size={10} style={{ color: '#ff5f33', marginLeft: '3px', flexShrink: 0 }} />
+        : <ArrowDown size={10} style={{ color: '#ff5f33', marginLeft: '3px', flexShrink: 0 }} />)
+    : <ChevronsUpDown size={10} style={{ opacity: 0.25, marginLeft: '3px', flexShrink: 0 }} />;
 
   // Sort is server-side — items already arrive ordered from the backend
   const sortedItems = items;

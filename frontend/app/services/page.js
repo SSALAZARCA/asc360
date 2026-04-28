@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom';
 import AdminLayout from '../admin-layout';
 import {
   Search, Filter, MapPin, Wrench, Clock, X, AlertTriangle,
-  CheckCircle2, ArrowUpRight, ArrowDownRight, FolderOpen,
+  CheckCircle2, ArrowUp, ArrowDown, ChevronsUpDown, FolderOpen,
   Calendar, FileDown, Activity, Info, Link as LinkIcon,
   ClipboardList, CalendarDays, Hourglass, CircleHelp, Factory, RefreshCw, Handshake
 } from 'lucide-react';
@@ -294,8 +294,10 @@ export default function ServicesPage() {
   }, [services, filterQuery, filterType, filterState, filterCenter, sortCol, sortDir]);
 
   const SortIcon = ({ col }) => sortCol === col
-    ? (sortDir === 'asc' ? <ArrowUpRight size={10} /> : <ArrowDownRight size={10} />)
-    : null;
+    ? (sortDir === 'asc'
+        ? <ArrowUp size={10} style={{ color: '#ff5f33', marginLeft: '3px', flexShrink: 0 }} />
+        : <ArrowDown size={10} style={{ color: '#ff5f33', marginLeft: '3px', flexShrink: 0 }} />)
+    : <ChevronsUpDown size={10} style={{ opacity: 0.25, marginLeft: '3px', flexShrink: 0 }} />;
 
   return (
     <AdminLayout fullWidth>
