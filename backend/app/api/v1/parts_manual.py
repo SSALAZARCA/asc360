@@ -601,6 +601,11 @@ class CatalogItemResult(BaseModel):
     pending_task_id: Optional[str] = None
     pending_candidate_code: Optional[str] = None
     pending_score: Optional[float] = None
+    # Cadena de precios derivada del costo FOB promedio ponderado
+    avg_fob_cost: Optional[float] = None
+    costo_importado: Optional[float] = None
+    precio_distribuidor: Optional[float] = None
+    precio_publico_calculado: Optional[float] = None
 
 class CatalogItemUpdate(BaseModel):
     description: Optional[str] = None
@@ -633,6 +638,9 @@ async def list_catalog(
     """Devuelve todos los repuestos cargados con su sección, modelo y datos del catálogo interno."""
     if not current_user.is_superadmin:
         raise HTTPException(status_code=403, detail="Solo superadmin")
+
+    from app.services.pricing_service import get_pricing_factors, compute_prices
+    pricing_factors = await get_pricing_factors(db)
 
     from sqlalchemy import func, or_
 
@@ -705,6 +713,7 @@ async def list_catalog(
             pending_sq.c.task_id.label("task_id"),
             pending_sq.c.candidate_code.label("candidate_code"),
             pending_sq.c.score.label("score"),
+            PartsReference.avg_fob_cost.label("avg_fob_cost"),  # r[11]
         )
         .distinct(PartsReference.factory_part_number)
     ).order_by(
@@ -733,23 +742,29 @@ async def list_catalog(
     )
     rows = (await db.execute(rows_q)).all()
 
+    def _build_item(r) -> CatalogItemResult:
+        avg_fob = float(r[11]) if r[11] is not None else None
+        prices  = compute_prices(avg_fob, pricing_factors)
+        return CatalogItemResult(
+            factory_part_number=r[0],
+            description=r[1],
+            description_es=r[2],
+            public_price=float(r[3]) if r[3] is not None else None,
+            section_code=r[4],
+            section_name=r[5],
+            vehicle_model_name=r[7],
+            pending_task_id=str(r[8]) if r[8] else None,
+            pending_candidate_code=r[9],
+            pending_score=float(r[10]) if r[10] is not None else None,
+            avg_fob_cost=avg_fob,
+            costo_importado=prices["costo_importado"],
+            precio_distribuidor=prices["precio_distribuidor"],
+            precio_publico_calculado=prices["precio_publico"],
+        )
+
     return CatalogListResult(
         total=total,
-        items=[
-            CatalogItemResult(
-                factory_part_number=r[0],
-                description=r[1],
-                description_es=r[2],
-                public_price=float(r[3]) if r[3] is not None else None,
-                section_code=r[4],
-                section_name=r[5],
-                vehicle_model_name=r[7],
-                pending_task_id=str(r[8]) if r[8] else None,
-                pending_candidate_code=r[9],
-                pending_score=float(r[10]) if r[10] is not None else None,
-            )
-            for r in rows
-        ],
+        items=[_build_item(r) for r in rows],
     )
 
 

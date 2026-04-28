@@ -4,7 +4,7 @@
 from app.database import Base
 
 from .system_config import SystemConfig
-from .parts_manual import PartsReference, PartsManualSection, PartsManualItem, VehicleCatalogMap
+from .parts_manual import PartsReference, PartsManualSection, PartsManualItem, VehicleCatalogMap, PartCostHistory, PartsCodeReviewTask
 from .tenant import Tenant, TenantType
 from .user import User, Role
 from .vehicle import Vehicle
@@ -35,4 +35,5 @@ __all__ = [
     "PackingList", "PackingListItem", "ReconciliationResult",
     "Backorder", "ImportAttachment", "ImportAuditLog", "VehicleModel",
     "PartsReference", "PartsManualSection", "PartsManualItem", "VehicleCatalogMap",
+    "PartCostHistory", "PartsCodeReviewTask",
 ]

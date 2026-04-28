@@ -667,6 +667,7 @@ async def _process_sp_invoice(db: AsyncSession, sheet, actor: CurrentUser) -> in
 
     col_map = _build_col_map(sheet, header_row)
     count = 0
+    parts_with_price: set[str] = set()
 
     for row_idx in range(header_row + 1, sheet.max_row + 1):
         part_raw = _cell(sheet, row_idx, col_map, "part #", "part#")
@@ -693,15 +694,26 @@ async def _process_sp_invoice(db: AsyncSession, sheet, actor: CurrentUser) -> in
         stmt = select(SparePartItem).where(SparePartItem.part_number == part_number)
         items = (await db.execute(stmt)).scalars().all()
 
+        price_updated = False
         for item in items:
             if unit_price is not None:
                 item.unit_price = unit_price
+                price_updated = True
             if amount is not None:
                 item.amount = amount
             item.updated_at = datetime.utcnow()
             count += 1
 
+        if price_updated:
+            parts_with_price.add(part_number)
+
     await db.flush()
+
+    if parts_with_price:
+        from app.services.pricing_service import recalculate_part_cost
+        for pn in parts_with_price:
+            await recalculate_part_cost(db, pn)
+
     return count
 
 
@@ -1007,6 +1019,7 @@ async def load_order_detail_excel(
 
     inserted = updated = skipped = 0
     errors = []
+    parts_with_price: set[str] = set()  # part_numbers que tuvieron unit_price en esta carga
 
     for row_idx in range(header_row + 1, target_sheet.max_row + 1):
         try:
@@ -1051,6 +1064,7 @@ async def load_order_detail_excel(
                 if unit_price is not None:
                     item.unit_price = unit_price
                     item.amount = round(unit_price * qty_ordered, 4)
+                    parts_with_price.add(part_number)
                 item.updated_at = datetime.utcnow()
                 updated += 1
             else:
@@ -1071,6 +1085,8 @@ async def load_order_detail_excel(
                 )
                 db.add(item)
                 existing_items[part_number] = item
+                if unit_price is not None:
+                    parts_with_price.add(part_number)
                 inserted += 1
 
         except Exception as e:
@@ -1082,6 +1098,13 @@ async def load_order_detail_excel(
         lot.updated_at = datetime.utcnow()
 
     await db.flush()
+
+    # Recalcular costo promedio FOB para cada parte con precio en este lote
+    if parts_with_price:
+        from app.services.pricing_service import recalculate_part_cost
+        for pn in parts_with_price:
+            await recalculate_part_cost(db, pn, lot_identifier=lot.lot_identifier)
+
     return {"inserted": inserted, "updated": updated, "skipped": skipped, "errors": errors}
 
 
@@ -1283,6 +1306,7 @@ async def reconcile_lot_packing_list(
 
     # Si es invoice, actualizar precios y descripciones en los SparePartItems
     # y calcular total_declared_value del lote sumando los amounts del invoice
+    invoice_parts_with_price: set[str] = set()
     if is_invoice and pl_prices:
         total_declared = 0.0
         for part_number, (unit_price, amount, desc_en, desc_es, model_val) in pl_prices.items():
@@ -1293,6 +1317,7 @@ async def reconcile_lot_packing_list(
                 continue
             if unit_price is not None:
                 sp_item.unit_price = unit_price
+                invoice_parts_with_price.add(part_number)
             if amount is not None:
                 sp_item.amount = amount
             if desc_en:
@@ -1308,6 +1333,11 @@ async def reconcile_lot_packing_list(
     pl_record.processed = True
     lot.packing_list_received = True
     await db.flush()
+
+    if invoice_parts_with_price:
+        from app.services.pricing_service import recalculate_part_cost
+        for pn in invoice_parts_with_price:
+            await recalculate_part_cost(db, pn, lot_identifier=lot.lot_identifier)
 
     return {**counts, "pl_id": str(pl_record.id), "total_parts_in_pl": len(pl_items), "is_invoice": is_invoice}
 
