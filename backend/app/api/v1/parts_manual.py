@@ -700,7 +700,8 @@ async def list_catalog(
     total = (await db.execute(count_q)).scalar_one()
 
     # Filas — inner subquery con DISTINCT ON (requerido por PostgreSQL: primer ORDER BY = DISTINCT ON col)
-    from sqlalchemy import nullslast
+    from sqlalchemy import nullslast, cast
+    from sqlalchemy import Numeric as SANumeric
     inner_sq = _base_joins(
         select(
             PartsReference.factory_part_number.label("fpn"),
@@ -724,14 +725,29 @@ async def list_catalog(
     ).subquery("inner_catalog")
 
     # Outer query — ORDER BY libre sobre el subquery
+    # k_publico: multiplicador para precio_publico desde avg_fob_cost (USD → COP)
+    # permite COALESCE(public_price, avg_fob_cost * k) para ordenar Precio Final
+    # con fallback a precio calculado cuando no hay precio manual
+    _pf = pricing_factors
+    k_publico = (
+        _pf["import_factor"]
+        * (1 + _pf["provider_margin"])
+        * (1 + _pf["iva_rate"])
+        * (1 + _pf["distributor_margin"])
+        * (1 + _pf["iva_rate"])
+        * _pf["trm"]
+    )
     _SORT_MAP = {
         "factory_part_number": inner_sq.c.fpn,
         "description":         inner_sq.c.description,
         "description_es":      inner_sq.c.description_es,
-        "public_price":        inner_sq.c.public_price,
+        "public_price":        func.coalesce(
+            cast(inner_sq.c.public_price,  SANumeric(15, 2)),
+            cast(inner_sq.c.avg_fob_cost * k_publico, SANumeric(15, 2)),
+        ),
         "section_code":        inner_sq.c.section_code,
         "vehicle_model_name":  inner_sq.c.vehicle_model_pattern,
-        "avg_fob_cost":        inner_sq.c.avg_fob_cost,
+        "avg_fob_cost":        cast(inner_sq.c.avg_fob_cost, SANumeric(12, 4)),
     }
     sort_expr = _SORT_MAP.get(sort_col, inner_sq.c.section_code)
     order_expr = nullslast(sort_expr.asc() if sort_dir == "asc" else sort_expr.desc())
