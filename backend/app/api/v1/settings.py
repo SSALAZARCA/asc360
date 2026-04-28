@@ -9,6 +9,8 @@ from app.models.system_config import SystemConfig
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
+from sqlalchemy.future import select
+
 LOGO_KEY = "logo_base64"
 PARTS_SIM_KEY = "parts_similarity_threshold"
 
@@ -122,3 +124,37 @@ async def save_parts_similarity_threshold(
         db.add(SystemConfig(key=PARTS_SIM_KEY, value=str(value)))
     await db.commit()
     return {"threshold": value}
+
+
+@router.post("/backfill-part-costs")
+async def backfill_part_costs(
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """
+    Calcula el avg_fob_cost para todas las partes del catálogo usando los
+    SparePartItems históricos que ya tienen unit_price cargado.
+    Ejecutar una sola vez después de activar la feature de pricing.
+    Solo superadmin.
+    """
+    if not current_user.is_superadmin:
+        raise HTTPException(status_code=403, detail="Solo superadmin")
+
+    from app.models.parts_manual import PartsReference
+    from app.services.pricing_service import recalculate_part_cost
+
+    refs = (await db.execute(select(PartsReference.factory_part_number))).scalars().all()
+
+    updated = 0
+    skipped = 0
+    for fpn in refs:
+        await recalculate_part_cost(db, fpn)
+        # Verificar si quedó con costo
+        ref = await db.get(PartsReference, fpn)
+        if ref and ref.avg_fob_cost is not None:
+            updated += 1
+        else:
+            skipped += 1
+
+    await db.commit()
+    return {"updated": updated, "skipped": skipped, "total": len(refs)}

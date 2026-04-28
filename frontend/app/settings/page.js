@@ -161,6 +161,10 @@ export default function SettingsPage() {
   const [pricingSaving, setPricingSaving] = useState(false);
   const [pricingMsg, setPricingMsg]   = useState('');
 
+  // Backfill de costos históricos
+  const [backfilling, setBackfilling] = useState(false);
+  const [backfillMsg, setBackfillMsg] = useState('');
+
   // Modelos de Vehículos
   const [vehicleModels, setVehicleModels] = useState([]);
   const [vmLoading, setVmLoading] = useState(false);
@@ -383,6 +387,22 @@ export default function SettingsPage() {
     }
   };
 
+  const handleBackfill = async () => {
+    if (!confirm('¿Calcular el costo promedio FOB para todas las partes del catálogo con pedidos históricos? Esto puede tomar unos segundos.')) return;
+    setBackfilling(true);
+    setBackfillMsg('');
+    try {
+      const res = await authFetch('/settings/backfill-part-costs', { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        setBackfillMsg(`✅ ${data.updated} partes actualizadas, ${data.skipped} sin datos de costo (total: ${data.total}).`);
+      } else {
+        setBackfillMsg('⚠️ Error al ejecutar el backfill.');
+      }
+    } catch { setBackfillMsg('⚠️ Error de conexión.'); }
+    finally { setBackfilling(false); }
+  };
+
   const handleSavePricing = async () => {
     const vals = {
       import_factor:      parseFloat(pricing.import_factor),
@@ -590,11 +610,27 @@ export default function SettingsPage() {
               </div>
             ))}
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
             <button className="btn-primary" onClick={handleSavePricing} disabled={pricingSaving} style={{ padding: '0.5rem 1.25rem', fontSize: '0.68rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
               <Save size={13} /> {pricingSaving ? 'Guardando...' : 'Guardar factores'}
             </button>
             {pricingMsg && <span style={{ fontSize: '0.68rem', color: pricingMsg.startsWith('✅') ? '#4ade80' : '#ef4444', fontWeight: 600 }}>{pricingMsg}</span>}
+          </div>
+
+          <div style={{ marginTop: '1.25rem', paddingTop: '1.25rem', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+            <p style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.3)', margin: '0 0 0.75rem', lineHeight: 1.6 }}>
+              <strong style={{ color: 'rgba(255,255,255,0.5)' }}>Calcular costos históricos</strong> — Recorre todos los pedidos de repuestos ya cargados y calcula el costo FOB promedio para cada parte del catálogo. Ejecutar una sola vez después de activar esta funcionalidad.
+            </p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+              <button
+                onClick={handleBackfill}
+                disabled={backfilling}
+                style={{ padding: '0.5rem 1.25rem', borderRadius: '10px', border: '1px solid rgba(99,102,241,0.3)', background: 'rgba(99,102,241,0.08)', color: '#818cf8', fontWeight: 700, fontSize: '0.68rem', textTransform: 'uppercase', letterSpacing: '0.06em', cursor: backfilling ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem', opacity: backfilling ? 0.6 : 1 }}
+              >
+                <Save size={13} /> {backfilling ? 'Calculando...' : 'Calcular costos históricos'}
+              </button>
+              {backfillMsg && <span style={{ fontSize: '0.68rem', color: backfillMsg.startsWith('✅') ? '#4ade80' : '#ef4444', fontWeight: 600 }}>{backfillMsg}</span>}
+            </div>
           </div>
         </section>
 
