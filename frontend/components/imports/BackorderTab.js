@@ -350,8 +350,18 @@ export default function BackorderTab({ userRole }) {
                         )}
                       </td>
                     )}
-                    <td style={{ padding: '9px 12px', color: '#f87171', fontWeight: 700, fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
-                      {bo.part_number}
+                    <td style={{ padding: '9px 12px', whiteSpace: 'nowrap' }}>
+                      <span style={{ color: '#f87171', fontWeight: 700, fontFamily: 'monospace' }}>{bo.part_number}</span>
+                      {bo.source === 'physical_inspection' && (
+                        <div style={{ display: 'flex', gap: '4px', marginTop: '3px' }}>
+                          <span style={{ fontSize: '8px', fontWeight: 700, padding: '1px 5px', borderRadius: '4px', background: 'rgba(239,68,68,0.15)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)', whiteSpace: 'nowrap' }}>
+                            FALTANTE FÍSICO
+                          </span>
+                          <span style={{ fontSize: '8px', fontWeight: 700, padding: '1px 5px', borderRadius: '4px', background: 'rgba(251,146,60,0.15)', color: '#fb923c', border: '1px solid rgba(251,146,60,0.3)', whiteSpace: 'nowrap' }}>
+                            COBRADO
+                          </span>
+                        </div>
+                      )}
                     </td>
                     <td style={{ padding: '9px 12px', color: '#d1d5db', fontSize: '11px', maxWidth: 200 }}>
                       <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -368,12 +378,15 @@ export default function BackorderTab({ userRole }) {
                       {bo.origin_pi}
                     </td>
                     <td style={{ padding: '9px 12px' }}>
-                      {!isResolved && canEdit
-                        ? <EditableExpectedPI boId={bo.id} current={bo.expected_in_pi} onSaved={fetchBackorders} />
-                        : <span style={{ fontSize: '11px', fontFamily: 'monospace', color: bo.expected_in_pi ? '#60a5fa' : '#606075' }}>
-                            {bo.expected_in_pi || '—'}
-                          </span>
-                      }
+                      {bo.source === 'physical_inspection' ? (
+                        <span style={{ fontSize: '9px', color: '#606075', fontStyle: 'italic' }}>Reclamo proveedor</span>
+                      ) : !isResolved && canEdit ? (
+                        <EditableExpectedPI boId={bo.id} current={bo.expected_in_pi} onSaved={fetchBackorders} />
+                      ) : (
+                        <span style={{ fontSize: '11px', fontFamily: 'monospace', color: bo.expected_in_pi ? '#60a5fa' : '#606075' }}>
+                          {bo.expected_in_pi || '—'}
+                        </span>
+                      )}
                     </td>
                     <td style={{ padding: '9px 12px', textAlign: 'right' }}>
                       <span style={{ fontWeight: 800, color: bo.qty_pending > 0 ? '#fb923c' : '#606075', fontSize: '13px' }}>

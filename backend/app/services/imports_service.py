@@ -1475,12 +1475,15 @@ async def _upsert_backorder(
     item: SparePartItem,
     origin_pi: str,
     qty_pending: int,
+    source: str = 'reconciliation',
+    already_charged: bool = False,
 ) -> Optional["Backorder"]:
-    """Crea o actualiza un backorder para un item. Evita duplicados."""
+    """Crea o actualiza un backorder para un item. Evita duplicados por (item, origin_pi, source)."""
     existing = (await db.execute(
         select(Backorder).where(
             Backorder.spare_part_item_id == item.id,
             Backorder.origin_pi == origin_pi,
+            Backorder.source == source,
             Backorder.resolved == False,
         )
     )).scalar_one_or_none()
@@ -1498,12 +1501,70 @@ async def _upsert_backorder(
         part_number=item.part_number,
         origin_pi=origin_pi,
         qty_pending=qty_pending,
+        source=source,
+        already_charged=already_charged,
         resolved=False,
-        history=[{"date": datetime.utcnow().isoformat(), "event": "CREATED", "qty_pending": qty_pending}],
+        history=[{"date": datetime.utcnow().isoformat(), "event": "CREATED", "qty_pending": qty_pending, "source": source}],
     )
     db.add(bo)
     await db.flush()
     return bo
+
+
+async def apply_physical_inspection(
+    db: AsyncSession,
+    rr: "ReconciliationResult",
+    qty_physical: int,
+) -> None:
+    """
+    Aplica el resultado de la inspección física sobre un ReconciliationResult confirmado.
+    - Calcula el faltante físico (lo cobrado y no llegó) = max(0, qty_in_packing - qty_physical)
+    - Recalcula el status del SparePartItem comparando qty_physical vs qty_ordered
+    - Upsertea/resuelve el backorder de tipo physical_inspection
+    """
+    if rr.spare_part_item_id is None:
+        return
+
+    item = await db.get(SparePartItem, rr.spare_part_item_id)
+    if not item:
+        return
+
+    lot       = await db.get(SparePartLot, rr.lot_id)
+    origin_pi = lot.lot_identifier if lot else ''
+
+    qty_in_pl   = rr.qty_in_packing or 0
+    qty_ordered = rr.qty_ordered or item.qty_ordered or 0
+
+    physical_shortage = max(0, qty_in_pl - qty_physical)
+
+    # Actualizar qty_received final con lo físicamente contado
+    item.qty_received = qty_physical
+    item.qty_pending  = max(0, qty_ordered - qty_physical)
+    item.status       = 'RECEIVED' if qty_physical >= qty_ordered else 'BACKORDER'
+    item.updated_at   = datetime.utcnow()
+
+    if physical_shortage > 0:
+        await _upsert_backorder(
+            db, item, origin_pi, physical_shortage,
+            source='physical_inspection', already_charged=True,
+        )
+    else:
+        # Si el usuario corrigió y ya no hay faltante, resolver backorder físico previo
+        existing = (await db.execute(
+            select(Backorder).where(
+                Backorder.spare_part_item_id == item.id,
+                Backorder.source == 'physical_inspection',
+                Backorder.resolved == False,
+            )
+        )).scalar_one_or_none()
+        if existing:
+            now = datetime.utcnow()
+            existing.resolved    = True
+            existing.resolved_at = now
+            existing.updated_at  = now
+            history = list(existing.history or [])
+            history.append({"date": now.isoformat(), "event": "RESOLVED_BY_CORRECTION"})
+            existing.history = history
 
 
 async def _resolve_backorders_for_item(

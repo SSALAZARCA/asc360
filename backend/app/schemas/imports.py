@@ -290,6 +290,7 @@ class ReconciliationResultUpdate(BaseModel):
     description_es: Optional[str] = None
     model_applicable: Optional[str] = None
     qty_in_packing: Optional[int] = None
+    qty_physical: Optional[int] = None
 
 
 # ---------------------------------------------------------------------------
@@ -325,6 +326,7 @@ class ReconciliationResultRead(BaseModel):
     model_applicable: Optional[str] = None
     qty_ordered: Optional[int] = None
     qty_in_packing: Optional[int] = None
+    qty_physical: Optional[int] = None
     result: str
     confirmed_by: Optional[uuid.UUID] = None
     confirmed_at: Optional[datetime] = None
@@ -347,6 +349,8 @@ class BackorderRead(BaseModel):
     qty_pending: int
     resolved: bool
     resolved_at: Optional[datetime] = None
+    source: str = 'reconciliation'
+    already_charged: bool = False
     history: Optional[Any] = None
     created_at: datetime
     updated_at: Optional[datetime] = None

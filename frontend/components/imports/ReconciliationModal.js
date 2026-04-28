@@ -280,8 +280,8 @@ export default function ReconciliationModal({ lot, onClose, onConfirmed }) {
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
                   <thead>
                     <tr style={{ background: '#0e0e14' }}>
-                      {['Parte #', 'Descripción', 'Moto', 'Qty Ord.', 'Qty PL', 'Dif.', 'Resultado'].map(h => (
-                        <th key={h} style={{ padding: '8px 12px', textAlign: 'left', fontSize: '9px', fontWeight: 700, color: '#606075', textTransform: 'uppercase', letterSpacing: '0.07em', borderBottom: '1px solid rgba(255,255,255,0.06)', whiteSpace: 'nowrap' }}>{h}</th>
+                      {['Parte #', 'Descripción', 'Moto', 'Qty Ord.', 'Qty PL', 'Inv. Físico', 'Dif.', 'Resultado'].map(h => (
+                        <th key={h} style={{ padding: '8px 12px', textAlign: h === 'Inv. Físico' ? 'right' : 'left', fontSize: '9px', fontWeight: 700, color: h === 'Inv. Físico' ? '#fb923c' : '#606075', textTransform: 'uppercase', letterSpacing: '0.07em', borderBottom: '1px solid rgba(255,255,255,0.06)', whiteSpace: 'nowrap' }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
@@ -305,6 +305,25 @@ export default function ReconciliationModal({ lot, onClose, onConfirmed }) {
                           <td style={{ padding: '8px 12px', color: '#d1d5db', textAlign: 'right' }}>{r.qty_ordered ?? '—'}</td>
                           <td style={{ padding: '8px 12px', textAlign: 'right' }}>
                             <EditableReconciliationCell resultId={r.id} field="qty_in_packing" current={r.qty_in_packing ?? 0} type="number" align="right" onSaved={fetchResults} cellStyle={{ color: '#d1d5db' }} />
+                          </td>
+                          <td style={{ padding: '8px 12px', textAlign: 'right' }}>
+                            {lot.packing_list_received ? (
+                              <EditableReconciliationCell
+                                resultId={r.id}
+                                field="qty_physical"
+                                current={r.qty_physical ?? r.qty_in_packing ?? 0}
+                                type="number"
+                                align="right"
+                                onSaved={fetchResults}
+                                cellStyle={{
+                                  color: r.qty_physical != null && r.qty_physical !== r.qty_in_packing ? '#f87171' : '#9ca3af',
+                                  fontStyle: r.qty_physical == null ? 'italic' : 'normal',
+                                  opacity: r.qty_physical == null ? 0.5 : 1,
+                                }}
+                              />
+                            ) : (
+                              <span style={{ color: '#3f3f55', fontSize: '10px' }}>—</span>
+                            )}
                           </td>
                           <td style={{ padding: '8px 12px', color: diffColor, textAlign: 'right', fontWeight: 700 }}>
                             {r.qty_ordered != null ? (diff > 0 ? `+${diff}` : diff) : '—'}

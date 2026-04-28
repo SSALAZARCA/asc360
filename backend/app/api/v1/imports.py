@@ -748,6 +748,16 @@ async def update_reconciliation_result(
                 item.qty_pending = max(0, item.qty_ordered - item.qty_received)
                 item.updated_at = datetime.utcnow()
 
+    if "qty_physical" in update_data:
+        lot = await db.get(SparePartLot, rr.lot_id)
+        if not lot or not lot.packing_list_received:
+            raise HTTPException(
+                status_code=400,
+                detail={"detail": "El inventario físico solo puede registrarse después de confirmar el cruce", "code": "RECONCILIATION_NOT_CONFIRMED"},
+            )
+        rr.qty_physical = update_data["qty_physical"]
+        await imports_service.apply_physical_inspection(db, rr, update_data["qty_physical"])
+
     # Campos que viven en SparePartItem pero se muestran en reconciliación
     item_fields = {"part_number", "description_es", "model_applicable"}
     if item_fields & set(update_data.keys()):
@@ -766,6 +776,7 @@ async def update_reconciliation_result(
         "id": str(rr.id),
         "result": rr.result,
         "qty_in_packing": rr.qty_in_packing,
+        "qty_physical": rr.qty_physical,
         "part_number": rr.part_number,
     }
 

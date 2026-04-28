@@ -265,6 +265,7 @@ class ReconciliationResult(Base):
     part_number = Column(String(100), nullable=False)  # Desnormalizado para consulta rápida
     qty_ordered = Column(Integer, nullable=True)
     qty_in_packing = Column(Integer, nullable=True)
+    qty_physical = Column(Integer, nullable=True)   # NULL = no inspeccionado aún
     result = Column(String(20), nullable=False)  # COMPLETE / PARTIAL / MISSING / EXTRA
 
     confirmed_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
@@ -299,6 +300,10 @@ class Backorder(Base):
     qty_pending = Column(Integer, nullable=False)
     resolved = Column(Boolean, default=False, nullable=False)
     resolved_at = Column(DateTime, nullable=True)
+
+    # 'reconciliation' = no enviado/parcial del cruce | 'physical_inspection' = cobrado y no llegó físicamente
+    source = Column(String(30), nullable=False, default='reconciliation')
+    already_charged = Column(Boolean, nullable=False, default=False)
 
     # Historial de movimientos: [{date, event, qty, pi}]
     history = Column(JSONB, nullable=True, default=list)
