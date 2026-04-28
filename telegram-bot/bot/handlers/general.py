@@ -13,6 +13,7 @@ from services.api import (
     update_order_status, post_work_log, post_order_parts,
     search_parts_catalog, get_part_by_number, get_part_by_factory_code,
     get_catalog_models_for_bot, search_parts_by_model, get_part_by_code,
+    get_all_sections_for_model,
 )
 from .admin import send_welcome, show_pending_users_inner, _show_tenant_selector
 from .technician import handle_active_orders
@@ -36,6 +37,40 @@ async def _send_diagram(message, section_id: str, caption: str) -> None:
     except Exception as e:
         logger.warning(f"_send_diagram error (section {section_id}): {e}")
         await message.reply_text(caption + "\n_(diagrama no disponible)_", parse_mode="Markdown")
+
+
+async def _show_diagrams_with_nav(message, sections: list, catalog_ctx: dict, user_data: dict) -> None:
+    """Manda los diagramas y el menú de navegación. Activa awaiting_part_code."""
+    for s in sections:
+        await _send_diagram(
+            message,
+            s["section_id"],
+            f"📋 *{s['section_code']}: {s['section_name']}*",
+        )
+    kb = [
+        [InlineKeyboardButton("❌ No está en estos diagramas", callback_data="cat_not_here")],
+        [InlineKeyboardButton("🔄 Buscar otra parte", callback_data="cat_new_search")],
+    ]
+    await message.reply_text(
+        "Revisá los diagramas e ingresá el código de posición de la parte (ej: *B1-3*).",
+        parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup(kb),
+    )
+    user_data["awaiting_part_code"] = {
+        "model_code": catalog_ctx["model_code"],
+        "order_id": catalog_ctx.get("order_id"),
+        "plate": catalog_ctx.get("plate"),
+        "catalog_mode": catalog_ctx["catalog_mode"],
+    }
+
+
+async def _after_catalog_result_kb() -> list:
+    """Teclado inline que aparece después de mostrar un resultado o registrar un repuesto."""
+    return [
+        [InlineKeyboardButton("🔍 Buscar otro en estos diagramas", callback_data="cat_same_diagrams")],
+        [InlineKeyboardButton("🔄 Buscar otra parte", callback_data="cat_new_search")],
+        [InlineKeyboardButton("✅ Listo", callback_data="cat_done")],
+    ]
 
 
 async def _start_reception(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -370,22 +405,17 @@ async def _check_awaiting_states(update: Update, context: ContextTypes.DEFAULT_T
             return True
 
         model_code = sections[0].get("model_code") if sections else None
-        for s in sections:
-            await _send_diagram(
-                update.message,
-                s["section_id"],
-                f"📋 *{s['section_code']}: {s['section_name']}*",
-            )
-
-        await update.message.reply_text(
-            "Revisá los diagramas e ingresá el código de posición de la parte (ej: *B1-3*).",
-            parse_mode="Markdown",
-        )
-        user_data["awaiting_part_code"] = {
+        catalog_ctx = {
+            "model_code": model_code,
             "order_id": order_id,
             "plate": plate,
-            "model_code": model_code,
+            "catalog_mode": False,
+            "sections_shown": [s["section_id"] for s in sections],
+            "current_sections": sections,
+            "description": text,
         }
+        user_data["catalog_context"] = catalog_ctx
+        await _show_diagrams_with_nav(update.message, sections, catalog_ctx, user_data)
         return True
 
     # ── awaiting_catalog_search (superadmin busca sin order_id) ──────────────
@@ -404,21 +434,17 @@ async def _check_awaiting_states(update: Update, context: ContextTypes.DEFAULT_T
             )
             return True
 
-        for s in sections:
-            await _send_diagram(
-                update.message,
-                s["section_id"],
-                f"📋 *{s['section_code']}: {s['section_name']}*",
-            )
-
-        await update.message.reply_text(
-            "Revisá los diagramas e ingresá el código de posición de la parte (ej: *B1-3*).",
-            parse_mode="Markdown",
-        )
-        user_data["awaiting_part_code"] = {
+        catalog_ctx = {
             "model_code": model_code,
+            "order_id": None,
+            "plate": None,
             "catalog_mode": True,
+            "sections_shown": [s["section_id"] for s in sections],
+            "current_sections": sections,
+            "description": text,
         }
+        user_data["catalog_context"] = catalog_ctx
+        await _show_diagrams_with_nav(update.message, sections, catalog_ctx, user_data)
         return True
 
     # ── awaiting_part_code (ingresa código de posición del diagrama, ej: B1-3) ─
@@ -453,7 +479,8 @@ async def _check_awaiting_states(update: Update, context: ContextTypes.DEFAULT_T
 
         if catalog_mode:
             user_data.pop("awaiting_part_code", None)
-            await update.message.reply_text(msg, parse_mode="Markdown")
+            kb = await _after_catalog_result_kb()
+            await update.message.reply_text(msg, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(kb))
             return True
 
         user_data.pop("awaiting_part_code", None)
@@ -532,9 +559,11 @@ async def _check_awaiting_states(update: Update, context: ContextTypes.DEFAULT_T
 
         tipo = {"warranty": "garantía", "paid": "pago", "quote": "cotización"}.get(part_type, part_type)
         if success:
+            kb = await _after_catalog_result_kb()
             await update.message.reply_text(
-                f"✅ Repuesto *{reference}* (x{qty}, {tipo}) registrado para la *{plate}*.",
-                parse_mode="Markdown"
+                f"✅ *{reference}* (x{qty}, {tipo}) registrado para la *{plate}*.",
+                parse_mode="Markdown",
+                reply_markup=InlineKeyboardMarkup(kb),
             )
         else:
             await update.message.reply_text("⚠️ No pude registrar el repuesto. Intentá de nuevo.")
@@ -775,6 +804,104 @@ async def handle_catalog_model_callback(update, context):
         f"Describila en español (ej: *carenaje izquierdo*, *filtro de aceite*).",
         parse_mode="Markdown",
     )
+
+
+async def handle_catalog_nav_callback(update, context):
+    """Maneja la navegación del catálogo de despiece (pattern: ^cat_)."""
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+    user_data = context.user_data
+    catalog_ctx = user_data.get("catalog_context", {})
+
+    if data == "cat_same_diagrams":
+        user_data["awaiting_part_code"] = {
+            "model_code": catalog_ctx.get("model_code"),
+            "order_id": catalog_ctx.get("order_id"),
+            "plate": catalog_ctx.get("plate"),
+            "catalog_mode": catalog_ctx.get("catalog_mode", True),
+        }
+        await query.edit_message_text(
+            "Ingresá el código de posición de la parte en los diagramas (ej: *B1-3*).",
+            parse_mode="Markdown",
+        )
+
+    elif data == "cat_not_here":
+        kb = [
+            [InlineKeyboardButton("📝 Ampliar descripción", callback_data="cat_new_desc")],
+            [InlineKeyboardButton("📄 Ver más secciones",   callback_data="cat_more_sections")],
+            [InlineKeyboardButton("🔄 Buscar otra parte",   callback_data="cat_new_search")],
+        ]
+        await query.edit_message_text("¿Qué querés hacer?", reply_markup=InlineKeyboardMarkup(kb))
+
+    elif data == "cat_new_desc":
+        catalog_mode = catalog_ctx.get("catalog_mode", True)
+        if catalog_mode:
+            user_data["awaiting_catalog_search"] = {"model_code": catalog_ctx.get("model_code")}
+        else:
+            user_data["awaiting_part_search"] = {
+                "order_id": catalog_ctx.get("order_id"),
+                "plate": catalog_ctx.get("plate", "la moto"),
+            }
+        await query.edit_message_text(
+            "Describí la parte con más detalle para afinar la búsqueda:",
+            parse_mode="Markdown",
+        )
+
+    elif data == "cat_more_sections":
+        model_code = catalog_ctx.get("model_code")
+        already_shown = catalog_ctx.get("sections_shown", [])
+
+        all_sections = await get_all_sections_for_model(model_code)
+        remaining = [s for s in all_sections if s["section_id"] not in already_shown]
+
+        if not remaining:
+            await query.edit_message_text(
+                "Ya revisaste todas las secciones disponibles para este modelo.\n"
+                "Probá ampliar la descripción o iniciá una nueva búsqueda.",
+            )
+            return
+
+        next_sections = remaining[:3]
+        catalog_ctx["sections_shown"] = already_shown + [s["section_id"] for s in next_sections]
+        catalog_ctx["current_sections"] = next_sections
+        user_data["catalog_context"] = catalog_ctx
+
+        await query.edit_message_reply_markup(reply_markup=None)
+        await _show_diagrams_with_nav(query.message, next_sections, catalog_ctx, user_data)
+
+    elif data == "cat_new_search":
+        catalog_mode = catalog_ctx.get("catalog_mode", True)
+        order_id = catalog_ctx.get("order_id")
+        plate = catalog_ctx.get("plate", "la moto")
+        user_data.pop("catalog_context", None)
+        user_data.pop("awaiting_part_code", None)
+
+        if catalog_mode:
+            models = await get_catalog_models_for_bot()
+            if not models:
+                await query.edit_message_text("⚠️ No hay catálogos disponibles.")
+                return
+            kb = [
+                [InlineKeyboardButton(m["vehicle_model"], callback_data=f"catalog_model_{m['catalog_model_code']}")]
+                for m in models
+            ]
+            await query.edit_message_text(
+                "🔍 *Nueva búsqueda*\n\n¿Para qué modelo?",
+                parse_mode="Markdown",
+                reply_markup=InlineKeyboardMarkup(kb),
+            )
+        else:
+            user_data["awaiting_part_search"] = {"order_id": order_id, "plate": plate}
+            await query.edit_message_text(
+                f"¿Qué repuesto necesitás para la *{plate}*? Describilo.",
+                parse_mode="Markdown",
+            )
+
+    elif data == "cat_done":
+        user_data.pop("catalog_context", None)
+        user_data.pop("awaiting_part_code", None)
+        await query.edit_message_text("✅ Búsqueda cerrada.")
 
 
 async def handle_buscar_repuesto(update, context):

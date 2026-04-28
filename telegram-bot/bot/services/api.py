@@ -309,6 +309,23 @@ async def search_parts_by_model(model_code: str, description: str) -> list:
             return []
 
 
+async def get_all_sections_for_model(model_code: str) -> list:
+    """Todas las secciones de un modelo, ordenadas por section_code."""
+    async with httpx.AsyncClient() as client:
+        try:
+            res = await client.get(
+                f"{BACKEND_URL}/parts/model/{model_code}/all-sections",
+                headers={"x-sonia-secret": SONIA_BOT_SECRET},
+                timeout=10.0,
+            )
+            if res.status_code == 200:
+                return res.json()
+            return []
+        except Exception as e:
+            logger.error(f"Error get_all_sections_for_model: {e}")
+            return []
+
+
 async def get_part_by_code(model_code: str, order_num: str) -> dict:
     """Busca una parte por modelo y código de posición del diagrama (ej: B1-3)."""
     async with httpx.AsyncClient() as client:

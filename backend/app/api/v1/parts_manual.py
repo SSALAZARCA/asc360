@@ -371,6 +371,30 @@ async def search_parts_by_model(
     ]
 
 
+@router.get("/model/{model_code}/all-sections")
+async def get_all_sections_for_model(
+    model_code: str,
+    db: AsyncSession = Depends(get_db),
+    x_sonia_secret: str = Header(default=""),
+):
+    if x_sonia_secret != settings.SONIA_BOT_SECRET:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    result = await db.execute(
+        select(PartsManualSection)
+        .where(PartsManualSection.model_code == model_code)
+        .order_by(PartsManualSection.section_code)
+    )
+    return [
+        {
+            "section_id": str(s.id),
+            "section_code": s.section_code,
+            "section_name": s.section_name,
+        }
+        for s in result.scalars().all()
+    ]
+
+
 @router.get("/model/{model_code}/item/{order_num}", response_model=PartItemByCodeResult)
 async def get_part_by_model_and_code(
     model_code: str,

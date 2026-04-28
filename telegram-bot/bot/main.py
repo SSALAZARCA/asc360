@@ -19,7 +19,7 @@ from keyboards.reply import get_main_keyboard
 from handlers.general import (
     handle_general_text, handle_general_voice, process_lifecycle_plate,
     handle_status_confirm, handle_parts_callback,
-    handle_catalog_model_callback, handle_buscar_repuesto,
+    handle_catalog_model_callback, handle_catalog_nav_callback, handle_buscar_repuesto,
 )
 from handlers.admin import (
     start_command, show_admin_panel, handle_admin_menu,
@@ -331,6 +331,7 @@ def main() -> None:
     application.add_handler(CallbackQueryHandler(handle_status_confirm, pattern="^status_confirm_"))
     application.add_handler(CallbackQueryHandler(handle_parts_callback, pattern="^parts_"))
     application.add_handler(CallbackQueryHandler(handle_catalog_model_callback, pattern="^catalog_model_"))
+    application.add_handler(CallbackQueryHandler(handle_catalog_nav_callback, pattern="^cat_"))
     application.add_handler(MessageHandler(filters.Regex(r'^Buscar Repuesto'), handle_buscar_repuesto))
 
     logger.info("🤖 Iniciando Master Bot Sonia...")
