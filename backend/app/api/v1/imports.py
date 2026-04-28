@@ -888,6 +888,7 @@ async def get_reconciliation_results(
             "description_es": sp.description_es if sp else None,
             "model_applicable": sp.model_applicable if sp else None,
             "qty_ordered": r.qty_ordered, "qty_in_packing": r.qty_in_packing,
+            "qty_physical": r.qty_physical,
             "result": r.result, "confirmed_by": r.confirmed_by,
             "confirmed_at": r.confirmed_at, "created_at": r.created_at,
         }

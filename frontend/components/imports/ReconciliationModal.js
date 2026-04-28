@@ -275,6 +275,13 @@ export default function ReconciliationModal({ lot, onClose, onConfirmed }) {
                 ))}
               </div>
 
+              {/* Aviso inventario físico */}
+              {!lot.packing_list_received && (
+                <p style={{ margin: '0 0 10px', fontSize: '10px', color: '#fb923c', opacity: 0.7 }}>
+                  ⚠ La columna <strong>Inv. Físico</strong> se habilita después de confirmar el cruce.
+                </p>
+              )}
+
               {/* Tabla */}
               <div style={{ overflowX: 'auto', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.06)' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
