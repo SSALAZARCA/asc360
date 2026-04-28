@@ -354,6 +354,8 @@ select {
   cursor: not-allowed;
 }
 
+table th, table td { text-align: center !important; }
+
 .table-scroll-wrapper { overflow: hidden; }
 
 /* 10. TABLET RESPONSIVE (768px – 1024px) */
