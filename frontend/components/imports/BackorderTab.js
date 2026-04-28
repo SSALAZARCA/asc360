@@ -403,10 +403,25 @@ export default function BackorderTab({ userRole }) {
                 const rec = group.reconciliation;
                 const phy = group.physical_inspection;
 
-                // Cantidades activas (no resueltas) por tipo
-                const qtyNotCharged = rec && !rec.resolved ? rec.qty_pending : 0;
-                const qtyCobrado = phy && !phy.resolved ? phy.qty_pending : 0;
-                const qtyTotal = qtyNotCharged + qtyCobrado;
+                // Fuente de verdad: datos del SparePartItem (vienen en cualquier BO del grupo)
+                const primaryBo = rec || phy;
+                const spOrdered   = primaryBo?.sp_qty_ordered  ?? 0;
+                const spReceived  = primaryBo?.sp_qty_received ?? 0;
+                const spPhysical  = primaryBo?.sp_qty_physical ?? null;
+                const spPending   = primaryBo?.sp_qty_pending  ?? 0;
+
+                // Sin Cobrar: estaba en la orden pero el proveedor no lo incluyó en el PL
+                // = qty_ordered - qty_received (calculado desde el item, no del BO)
+                const qtyNotCharged = Math.max(0, spOrdered - spReceived);
+
+                // Cobrado: el proveedor lo incluyó en el PL (cobró) pero no llegó físicamente
+                // = qty_received - qty_physical (solo aplica cuando hay inspección física)
+                const qtyCobrado = spPhysical != null
+                  ? Math.max(0, spReceived - spPhysical)
+                  : (phy && !phy.resolved ? phy.qty_pending : 0);
+
+                // Total: siempre igual a item.qty_pending (fuente de verdad)
+                const qtyTotal = spPending;
 
                 const isFullyResolved = (!rec || rec.resolved) && (!phy || phy.resolved);
 

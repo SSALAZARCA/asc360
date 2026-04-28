@@ -1640,6 +1640,11 @@ async def list_backorders(
             "history": bo.history,
             "created_at": bo.created_at,
             "updated_at": bo.updated_at,
+            # Fuente de verdad: datos del SparePartItem
+            "sp_qty_ordered":   sp.qty_ordered   if sp else None,
+            "sp_qty_received":  sp.qty_received  if sp else None,
+            "sp_qty_physical":  sp.qty_physical  if sp else None,
+            "sp_qty_pending":   sp.qty_pending   if sp else None,
         }
         result.append(d)
 

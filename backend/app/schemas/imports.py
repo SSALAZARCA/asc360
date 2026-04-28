@@ -356,6 +356,11 @@ class BackorderRead(BaseModel):
     history: Optional[Any] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
+    # Datos del SparePartItem — fuente de verdad para cálculos de cantidad
+    sp_qty_ordered: Optional[int] = None
+    sp_qty_received: Optional[int] = None
+    sp_qty_physical: Optional[int] = None
+    sp_qty_pending: Optional[int] = None
 
 
 class BackorderUpdate(BaseModel):
