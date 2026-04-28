@@ -132,7 +132,7 @@ class ShipmentOrderRead(BaseModel):
     cycle: Optional[int] = None
     pi_number: str
     invoice_number: Optional[str] = None
-    model: str
+    model: Optional[str] = None
     model_year: Optional[int] = None
     qty: Optional[str] = None
     qty_numeric: Optional[int] = None
@@ -173,7 +173,7 @@ class ShipmentOrderCreate(BaseModel):
     order_date: Optional[str] = None
     pi_number: str
     invoice_number: Optional[str] = None
-    model: str
+    model: Optional[str] = None
     model_year: Optional[int] = None
     qty: Optional[str] = None
     containers: Optional[int] = None

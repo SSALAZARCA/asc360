@@ -12,12 +12,11 @@ from app.database import Base
 
 
 # ---------------------------------------------------------------------------
-# Shipment Orders — una fila por PI_NUMBER + MODEL
+# Shipment Orders — una fila por PI_NUMBER
 # ---------------------------------------------------------------------------
 class ShipmentOrder(Base):
     __tablename__ = "shipment_orders"
     __table_args__ = (
-        UniqueConstraint("pi_number", "model", name="uq_shipment_pi_model"),
         Index("ix_shipment_cycle", "cycle"),
         Index("ix_shipment_is_spare", "is_spare_part"),
         Index("ix_shipment_status", "computed_status"),
@@ -28,7 +27,7 @@ class ShipmentOrder(Base):
     cycle = Column(Integer, nullable=True)
     pi_number = Column(String(100), nullable=False)
     invoice_number = Column(String(100), nullable=True)
-    model = Column(String(255), nullable=False)
+    model = Column(String(255), nullable=True)
     model_year = Column(Integer, nullable=True)
 
     # QTY como string porque puede ser "1 LOT"; qty_numeric es el valor numérico si aplica
