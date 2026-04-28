@@ -50,6 +50,7 @@ async def _show_diagrams_with_nav(message, sections: list, catalog_ctx: dict, us
     kb = [
         [InlineKeyboardButton("❌ No está en estos diagramas", callback_data="cat_not_here")],
         [InlineKeyboardButton("🔄 Buscar en otros diagramas", callback_data="cat_new_search")],
+        [InlineKeyboardButton("✅ Finalizar búsqueda",        callback_data="cat_done")],
     ]
     await message.reply_text(
         "Revisá los diagramas e ingresá el código de posición de la parte (ej: *B1-3*).",
@@ -828,9 +829,10 @@ async def handle_catalog_nav_callback(update, context):
 
     elif data == "cat_not_here":
         kb = [
-            [InlineKeyboardButton("📝 Ampliar descripción", callback_data="cat_new_desc")],
-            [InlineKeyboardButton("📄 Ver más secciones",   callback_data="cat_more_sections")],
-            [InlineKeyboardButton("🔄 Buscar en otros diagramas",   callback_data="cat_new_search")],
+            [InlineKeyboardButton("📝 Ampliar descripción",          callback_data="cat_new_desc")],
+            [InlineKeyboardButton("📄 Ver más secciones",             callback_data="cat_more_sections")],
+            [InlineKeyboardButton("🔄 Buscar en otros diagramas",    callback_data="cat_new_search")],
+            [InlineKeyboardButton("✅ Finalizar búsqueda",            callback_data="cat_done")],
         ]
         await query.edit_message_text("¿Qué querés hacer?", reply_markup=InlineKeyboardMarkup(kb))
 
