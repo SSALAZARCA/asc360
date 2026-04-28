@@ -50,6 +50,52 @@ async def save_logo(
     return {"ok": True}
 
 
+class PricingFactorsPayload(BaseModel):
+    import_factor:      float
+    provider_margin:    float
+    distributor_margin: float
+    iva_rate:           float
+
+
+@router.get("/pricing-factors")
+async def get_pricing_factors(db: AsyncSession = Depends(get_db)):
+    """Retorna los factores de pricing del catálogo de partes."""
+    from app.services.pricing_service import get_pricing_factors
+    return await get_pricing_factors(db)
+
+
+@router.put("/pricing-factors")
+async def save_pricing_factors(
+    payload: PricingFactorsPayload,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Actualiza los factores de pricing. Solo superadmin."""
+    if not current_user.is_superadmin:
+        raise HTTPException(status_code=403, detail="Solo superadmin")
+
+    updates = {
+        "pricing.import_factor":      str(round(payload.import_factor, 4)),
+        "pricing.provider_margin":    str(round(payload.provider_margin, 4)),
+        "pricing.distributor_margin": str(round(payload.distributor_margin, 4)),
+        "pricing.iva_rate":           str(round(payload.iva_rate, 4)),
+    }
+    for key, value in updates.items():
+        record = await db.get(SystemConfig, key)
+        if record:
+            record.value = value
+        else:
+            db.add(SystemConfig(key=key, value=value))
+
+    await db.commit()
+    return {
+        "import_factor":      float(updates["pricing.import_factor"]),
+        "provider_margin":    float(updates["pricing.provider_margin"]),
+        "distributor_margin": float(updates["pricing.distributor_margin"]),
+        "iva_rate":           float(updates["pricing.iva_rate"]),
+    }
+
+
 class SimilarityThresholdPayload(BaseModel):
     threshold: float
 

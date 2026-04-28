@@ -156,6 +156,11 @@ export default function SettingsPage() {
   const [simSaving, setSimSaving]       = useState(false);
   const [simMsg, setSimMsg]             = useState('');
 
+  // Factores de pricing
+  const [pricing, setPricing]         = useState({ import_factor: 1.42, provider_margin: 0.35, distributor_margin: 0.35, iva_rate: 0.19 });
+  const [pricingSaving, setPricingSaving] = useState(false);
+  const [pricingMsg, setPricingMsg]   = useState('');
+
   // Modelos de Vehículos
   const [vehicleModels, setVehicleModels] = useState([]);
   const [vmLoading, setVmLoading] = useState(false);
@@ -292,6 +297,12 @@ export default function SettingsPage() {
       .then(r => r.ok ? r.json() : null)
       .then(data => { if (data?.threshold != null) setSimThreshold(data.threshold); })
       .catch(() => {});
+
+    // Cargar factores de pricing
+    authFetch('/settings/pricing-factors')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data) setPricing(data); })
+      .catch(() => {});
   }, []);
 
   useEffect(() => { fetchVehicleModels(); }, [fetchVehicleModels]);
@@ -370,6 +381,29 @@ export default function SettingsPage() {
       setReminderSaving(false);
       setTimeout(() => setReminderMsg(''), 4000);
     }
+  };
+
+  const handleSavePricing = async () => {
+    const vals = {
+      import_factor:      parseFloat(pricing.import_factor),
+      provider_margin:    parseFloat(pricing.provider_margin),
+      distributor_margin: parseFloat(pricing.distributor_margin),
+      iva_rate:           parseFloat(pricing.iva_rate),
+    };
+    if (Object.values(vals).some(v => isNaN(v) || v <= 0)) {
+      setPricingMsg('Todos los valores deben ser números positivos.');
+      return;
+    }
+    setPricingSaving(true);
+    try {
+      const res = await authFetch('/settings/pricing-factors', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(vals),
+      });
+      setPricingMsg(res.ok ? '✅ Factores guardados.' : '⚠️ Error al guardar.');
+    } catch { setPricingMsg('⚠️ Error de conexión.'); }
+    finally { setPricingSaving(false); setTimeout(() => setPricingMsg(''), 4000); }
   };
 
   const handleSaveSimThreshold = async () => {
@@ -524,6 +558,45 @@ export default function SettingsPage() {
           </section>
 
         </div>
+
+        {/* Factores de Pricing del Catálogo */}
+        <section className="glass p-6">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '1.25rem', paddingBottom: '0.75rem', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+            <Save size={16} style={{ color: '#ff5f33', flexShrink: 0 }} />
+            <h2 style={{ fontSize: '0.8rem', fontWeight: 700, color: '#fff', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Factores de Pricing — Catálogo de Partes</h2>
+          </div>
+          <p style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.3)', margin: '0 0 1.25rem', lineHeight: 1.7 }}>
+            Estos factores se aplican al costo FOB promedio de cada parte para calcular la cadena de precios.<br />
+            <span style={{ color: 'rgba(255,255,255,0.2)' }}>C. Importado = FOB × Factor importación &nbsp;·&nbsp; P. Distribuidor = C. Importado × (1 + Margen proveedor) × (1 + IVA) &nbsp;·&nbsp; P. Público = P. Distribuidor × (1 + Margen distribuidor) × (1 + IVA)</span>
+          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1rem' }}>
+            {[
+              { key: 'import_factor',      label: 'Factor de importación',  hint: 'Ej: 1.42  (incluye aranceles, flete, etc.)' },
+              { key: 'provider_margin',    label: 'Margen proveedor',        hint: 'Ej: 0.35 = 35%' },
+              { key: 'distributor_margin', label: 'Margen distribuidor',     hint: 'Ej: 0.35 = 35%' },
+              { key: 'iva_rate',           label: 'Tasa IVA',                hint: 'Ej: 0.19 = 19%' },
+            ].map(({ key, label, hint }) => (
+              <div key={key} style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                <label style={{ fontSize: '0.62rem', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{label}</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  value={pricing[key]}
+                  onChange={e => setPricing(p => ({ ...p, [key]: e.target.value }))}
+                  style={{ padding: '0.55rem 0.75rem', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', fontSize: '0.85rem', outline: 'none', width: '100%', boxSizing: 'border-box' }}
+                />
+                <span style={{ fontSize: '0.58rem', color: 'rgba(255,255,255,0.2)' }}>{hint}</span>
+              </div>
+            ))}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            <button className="btn-primary" onClick={handleSavePricing} disabled={pricingSaving} style={{ padding: '0.5rem 1.25rem', fontSize: '0.68rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+              <Save size={13} /> {pricingSaving ? 'Guardando...' : 'Guardar factores'}
+            </button>
+            {pricingMsg && <span style={{ fontSize: '0.68rem', color: pricingMsg.startsWith('✅') ? '#4ade80' : '#ef4444', fontWeight: 600 }}>{pricingMsg}</span>}
+          </div>
+        </section>
 
         {/* Sección: Modelos de Vehículos */}
         <section className="glass p-6">
