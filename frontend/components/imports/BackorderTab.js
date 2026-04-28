@@ -128,8 +128,22 @@ export default function BackorderTab({ userRole }) {
   const [selected, setSelected] = useState(new Set());
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [bulkLoading, setBulkLoading] = useState(false);
+  const [repairing, setRepairing] = useState(false);
 
   const canEdit = userRole === 'superadmin' || userRole === 'proveedor';
+  const isSuperadmin = userRole === 'superadmin';
+
+  const handleRepair = async () => {
+    if (!confirm('Esto re-calculará todos los backorders de inspección física. ¿Continuar?')) return;
+    setRepairing(true);
+    try {
+      const res = await authFetch(`${API()}/imports/backorders/repair-physical-inspection`, { method: 'POST' });
+      const data = await res.json();
+      alert(`Reparación completa: ${data.fixed} ítems procesados${data.errors?.length ? `, ${data.errors.length} errores` : ''}`);
+      fetchBackorders();
+    } catch { alert('Error en la reparación'); }
+    finally { setRepairing(false); }
+  };
 
   const fetchBackorders = useCallback(async () => {
     setLoading(true);
@@ -314,6 +328,17 @@ export default function BackorderTab({ userRole }) {
           >
             <Tag size={11} />
             Asignar PI a {selected.size} seleccionado{selected.size !== 1 ? 's' : ''}
+          </button>
+        )}
+
+        {isSuperadmin && (
+          <button
+            onClick={handleRepair}
+            disabled={repairing}
+            title="Recalcula los backorders de faltante físico para corregir datos inconsistentes"
+            style={{ padding: '7px 12px', borderRadius: '8px', border: '1px solid rgba(251,146,60,0.3)', background: 'rgba(251,146,60,0.08)', color: repairing ? '#606075' : '#fb923c', fontSize: '10px', fontWeight: 700, cursor: repairing ? 'default' : 'pointer', whiteSpace: 'nowrap' }}
+          >
+            {repairing ? 'Reparando...' : '⚙ Reparar backorders'}
           </button>
         )}
 

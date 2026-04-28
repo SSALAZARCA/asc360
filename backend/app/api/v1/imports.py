@@ -929,6 +929,36 @@ async def confirm_lot_reconciliation(
 # Backorders
 # ---------------------------------------------------------------------------
 
+@router.post("/backorders/repair-physical-inspection")
+async def repair_physical_inspection_backorders(
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """
+    Re-ejecuta apply_physical_inspection para todos los SparePartItems que ya
+    tienen qty_physical cargado. Corrige casos donde el BO de reconciliación
+    (faltante no cobrado) está ausente o fue resuelto erróneamente.
+    Solo superadmin.
+    """
+    if current_user.role != "superadmin":
+        raise HTTPException(status_code=403, detail="Solo superadmin puede ejecutar reparación")
+
+    stmt = select(SparePartItem).where(SparePartItem.qty_physical.isnot(None))
+    items = (await db.execute(stmt)).scalars().all()
+
+    fixed = 0
+    errors = []
+    for item in items:
+        try:
+            await imports_service.apply_physical_inspection(db, item, item.qty_physical)
+            fixed += 1
+        except Exception as e:
+            errors.append({"item_id": str(item.id), "part_number": item.part_number, "error": str(e)})
+
+    await db.commit()
+    return {"fixed": fixed, "errors": errors}
+
+
 @router.get("/backorders", response_model=list[BackorderRead])
 async def list_backorders(
     resolved: Optional[bool] = None,
