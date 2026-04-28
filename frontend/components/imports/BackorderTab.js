@@ -321,7 +321,7 @@ export default function BackorderTab({ userRole }) {
                     />
                   </th>
                 )}
-                {['Parte #', 'Descripción', 'Moto', 'PI Origen', 'PI Esperado', 'Uds. Pendientes', 'Días abierto', 'Estado', ''].map(h => (
+                {['Parte #', 'Descripción', 'Moto', 'Tipo', 'PI Origen', 'PI Esperado', 'Uds. Pendientes', 'Días abierto', 'Estado', ''].map(h => (
                   <th key={h} style={{ padding: '9px 12px', textAlign: 'left', fontSize: '9px', fontWeight: 700, color: '#606075', textTransform: 'uppercase', letterSpacing: '0.07em', borderBottom: '1px solid rgba(255,255,255,0.06)', whiteSpace: 'nowrap' }}>{h}</th>
                 ))}
               </tr>
@@ -352,16 +352,6 @@ export default function BackorderTab({ userRole }) {
                     )}
                     <td style={{ padding: '9px 12px', whiteSpace: 'nowrap' }}>
                       <span style={{ color: '#f87171', fontWeight: 700, fontFamily: 'monospace' }}>{bo.part_number}</span>
-                      {bo.source === 'physical_inspection' && (
-                        <div style={{ display: 'flex', gap: '4px', marginTop: '3px' }}>
-                          <span style={{ fontSize: '8px', fontWeight: 700, padding: '1px 5px', borderRadius: '4px', background: 'rgba(239,68,68,0.15)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)', whiteSpace: 'nowrap' }}>
-                            FALTANTE FÍSICO
-                          </span>
-                          <span style={{ fontSize: '8px', fontWeight: 700, padding: '1px 5px', borderRadius: '4px', background: 'rgba(251,146,60,0.15)', color: '#fb923c', border: '1px solid rgba(251,146,60,0.3)', whiteSpace: 'nowrap' }}>
-                            COBRADO
-                          </span>
-                        </div>
-                      )}
                     </td>
                     <td style={{ padding: '9px 12px', color: '#d1d5db', fontSize: '11px', maxWidth: 200 }}>
                       <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -373,6 +363,16 @@ export default function BackorderTab({ userRole }) {
                         ? <span style={{ fontSize: '9px', fontWeight: 700, padding: '2px 7px', borderRadius: '4px', background: 'rgba(96,165,250,0.1)', color: '#60a5fa', border: '1px solid rgba(96,165,250,0.2)' }}>{bo.model_applicable}</span>
                         : <span style={{ color: '#606075', fontSize: '11px' }}>—</span>
                       }
+                    </td>
+                    <td style={{ padding: '9px 12px', whiteSpace: 'nowrap' }}>
+                      {bo.source === 'physical_inspection' ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                          <span style={{ fontSize: '8px', fontWeight: 700, padding: '2px 6px', borderRadius: '4px', background: 'rgba(239,68,68,0.15)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)' }}>FALTANTE FÍSICO</span>
+                          <span style={{ fontSize: '8px', fontWeight: 700, padding: '2px 6px', borderRadius: '4px', background: 'rgba(251,146,60,0.15)', color: '#fb923c', border: '1px solid rgba(251,146,60,0.3)' }}>COBRADO</span>
+                        </div>
+                      ) : (
+                        <span style={{ fontSize: '8px', fontWeight: 700, padding: '2px 6px', borderRadius: '4px', background: 'rgba(250,204,21,0.12)', color: '#facc15', border: '1px solid rgba(250,204,21,0.3)' }}>NO ENVIADO</span>
+                      )}
                     </td>
                     <td style={{ padding: '9px 12px', color: '#9ca3af', fontFamily: 'monospace', fontSize: '10px', whiteSpace: 'nowrap' }}>
                       {bo.origin_pi}
