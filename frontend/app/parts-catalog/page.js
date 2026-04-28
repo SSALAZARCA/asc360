@@ -305,7 +305,9 @@ export default function PartsCatalogPage() {
                 <td>
                   {item.public_price != null
                     ? <span style={{ fontFamily: 'monospace', fontWeight: 800, fontSize: '0.8rem', color: '#fff' }}>${Number(item.public_price).toLocaleString('es-CO')}</span>
-                    : <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: '0.68rem' }}>—</span>
+                    : item.precio_publico_calculado != null
+                      ? <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '0.78rem', color: 'rgba(74,222,128,0.6)', fontStyle: 'italic' }}>${Number(item.precio_publico_calculado).toLocaleString('es-CO', { maximumFractionDigits: 0 })}</span>
+                      : <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: '0.68rem' }}>—</span>
                   }
                 </td>
                 <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
