@@ -91,9 +91,10 @@ export default function PartsCatalogPage() {
   const handleSearch = (e) => { e.preventDefault(); setSearch(searchInput); setPage(1); };
   const clearSearch  = ()    => { setSearchInput(''); setSearch(''); setPage(1); };
 
+  const PRICE_COLS = ['avg_fob_cost', 'public_price'];
   const toggleSort = (col) => {
     if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
-    else { setSortCol(col); setSortDir('asc'); }
+    else { setSortCol(col); setSortDir(PRICE_COLS.includes(col) ? 'desc' : 'asc'); }
     setPage(1);
   };
   const SortIcon = ({ col }) => sortCol === col

@@ -675,6 +675,7 @@ async def list_catalog(
         q = (q
             .join(PartsManualItem, PartsManualItem.factory_part_number == PartsReference.factory_part_number)
             .join(PartsManualSection, PartsManualSection.id == PartsManualItem.section_id)
+            .outerjoin(VehicleCatalogMap, VehicleCatalogMap.catalog_model_code == PartsManualSection.model_code)
             .outerjoin(PartCatalog, PartCatalog.part_code == PartsReference.factory_part_number)
             .outerjoin(spi_latest, spi_latest.c.part_number == PartsReference.factory_part_number)
             .outerjoin(pending_sq, pending_sq.c.existing_code == PartsReference.factory_part_number)
