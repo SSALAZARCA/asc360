@@ -25,6 +25,11 @@ export default function PartsCatalogPage() {
 
   const [search, setSearch]           = useState('');
   const [searchInput, setSearchInput] = useState('');
+
+  useEffect(() => {
+    const t = setTimeout(() => { setSearch(searchInput); setPage(1); }, 350);
+    return () => clearTimeout(t);
+  }, [searchInput]);
   const [modelCode, setModelCode]     = useState('');
   const [models, setModels]           = useState([]);
   const [onlyPending, setOnlyPending] = useState(false);
@@ -88,8 +93,7 @@ export default function PartsCatalogPage() {
 
   const totalPages = Math.ceil(total / PAGE_SIZE);
 
-  const handleSearch = (e) => { e.preventDefault(); setSearch(searchInput); setPage(1); };
-  const clearSearch  = ()    => { setSearchInput(''); setSearch(''); setPage(1); };
+  const clearSearch = () => { setSearchInput(''); setPage(1); };
 
   const PRICE_COLS = ['avg_fob_cost', 'public_price'];
   const toggleSort = (col) => {
@@ -220,7 +224,7 @@ export default function PartsCatalogPage() {
 
       {/* Barra de filtros */}
       <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.25rem', flexWrap: 'wrap', alignItems: 'center' }}>
-        <form onSubmit={handleSearch} style={{ display: 'flex', gap: '0.5rem', flex: '1 1 280px', minWidth: 0 }}>
+        <div style={{ display: 'flex', gap: '0.5rem', flex: '1 1 280px', minWidth: 0 }}>
           <div style={{ flex: 1, position: 'relative', minWidth: 0 }}>
             <Search size={14} color="rgba(255,255,255,0.25)" style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
             <input
@@ -235,8 +239,7 @@ export default function PartsCatalogPage() {
               </button>
             )}
           </div>
-          <button type="submit" className="btn-primary" style={{ padding: '0.625rem 1.25rem', fontSize: '0.7rem' }}>Buscar</button>
-        </form>
+        </div>
 
         <select
           value={modelCode}
