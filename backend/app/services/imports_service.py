@@ -1179,9 +1179,9 @@ async def reconcile_lot_packing_list(
     db.add(pl_record)
     await db.flush()
 
-    # Parsear filas → {part_number: qty_in_pl}
-    pl_items: dict[str, int] = {}
-    pl_prices: dict[str, tuple] = {}   # part_number → (unit_price, amount, desc_en, desc_es, model)
+    # Parsear filas → clave (part_number, model_or_none) para separar misma referencia en distintos modelos
+    pl_items: dict[tuple, int] = {}        # (part_number, model_or_none) → qty
+    pl_prices: dict[tuple, tuple] = {}    # (part_number, model_or_none) → (unit_price, amount, desc_en, desc_es, model)
     pl_item_records: list[PackingListItem] = []
 
     for row_idx in range(header_row + 1, target_sheet.max_row + 1):
@@ -1201,15 +1201,18 @@ async def reconcile_lot_packing_list(
         desc_raw = _cell(target_sheet, row_idx, col_map, "complete description", "description")
         desc = str(desc_raw).strip() if desc_raw else None
 
-        pl_items[part_number] = pl_items.get(part_number, 0) + qty
+        # Extraer modelo de fila (solo disponible en invoice)
+        model_val = None
+        desc_es = None
+        unit_price = None
+        amount = None
 
-        # Si es invoice, extraer datos de precio y descripción adicional
         if is_invoice:
-            desc_es_raw = _cell(target_sheet, row_idx, col_map, "spanish description", "descripcion")
-            desc_es = str(desc_es_raw).strip() if desc_es_raw else None
-
             model_raw = _cell(target_sheet, row_idx, col_map, "model", "modelo")
             model_val = str(model_raw).strip() if model_raw else None
+
+            desc_es_raw = _cell(target_sheet, row_idx, col_map, "spanish description", "descripcion")
+            desc_es = str(desc_es_raw).strip() if desc_es_raw else None
 
             price_raw = _cell(target_sheet, row_idx, col_map, "unit price", "unit_price", "price")
             try:
@@ -1223,13 +1226,16 @@ async def reconcile_lot_packing_list(
             except (ValueError, TypeError):
                 amount = None
 
-            if part_number in pl_prices:
-                # Sumar amount para duplicados; mantener unit_price y textos del primer registro
-                prev = pl_prices[part_number]
+        pl_key = (part_number, model_val)
+        pl_items[pl_key] = pl_items.get(pl_key, 0) + qty
+
+        if is_invoice:
+            if pl_key in pl_prices:
+                prev = pl_prices[pl_key]
                 new_amount = (prev[1] or 0) + (amount or 0) if (prev[1] is not None or amount is not None) else None
-                pl_prices[part_number] = (prev[0] or unit_price, new_amount, prev[2] or desc, prev[3] or desc_es, prev[4] or model_val)
+                pl_prices[pl_key] = (prev[0] or unit_price, new_amount, prev[2] or desc, prev[3] or desc_es, model_val)
             else:
-                pl_prices[part_number] = (unit_price, amount, desc, desc_es, model_val)
+                pl_prices[pl_key] = (unit_price, amount, desc, desc_es, model_val)
 
         pl_item_records.append(PackingListItem(
             packing_list_id=pl_record.id,
@@ -1242,35 +1248,51 @@ async def reconcile_lot_packing_list(
         db.add(pli)
     await db.flush()
 
-    # Obtener SparePartItems del lote
-    lot_items_result = await db.execute(
+    # Obtener SparePartItems del lote — dos índices para el cruce
+    lot_items_list = (await db.execute(
         select(SparePartItem).where(SparePartItem.lot_id == lot.id)
-    )
-    lot_items: dict[str, SparePartItem] = {i.part_number: i for i in lot_items_result.scalars().all()}
+    )).scalars().all()
+
+    lot_items_by_pn: dict[str, SparePartItem] = {i.part_number: i for i in lot_items_list}
+    # Índice por (part_number, model_applicable) para partes con modelo asignado en la orden
+    lot_items_by_model: dict[tuple, SparePartItem] = {
+        (i.part_number, i.model_applicable): i
+        for i in lot_items_list
+        if i.model_applicable
+    }
+    parts_with_model_in_order: set[str] = {pn for (pn, _) in lot_items_by_model}
 
     # Cruzar
     counts = {"complete": 0, "partial": 0, "missing": 0, "extra": 0}
-    reconciled_parts: set[str] = set()
+    matched_item_ids: set = set()  # IDs de SparePartItems ya cruzados (evita doble-match)
 
-    for part_number, qty_in_pl in pl_items.items():
-        reconciled_parts.add(part_number)
-        sp_item = lot_items.get(part_number)
-
-        # Descripción y modelo desde el PL (invoice) si están disponibles
+    for (part_number, pl_model), qty_in_pl in pl_items.items():
+        # Datos de descripción/modelo desde la invoice si están disponibles
         pl_desc_es = None
-        pl_model = None
-        if is_invoice and part_number in pl_prices:
-            _, _, _, pl_desc_es, pl_model = pl_prices[part_number]
+        pl_model_display = pl_model
+        if is_invoice and (part_number, pl_model) in pl_prices:
+            _, _, _, pl_desc_es, pl_model_display = pl_prices[(part_number, pl_model)]
+
+        # Buscar SparePartItem:
+        # 1. Si el PL trae modelo Y la orden tiene ese part con modelo → cruce exacto por (part, model)
+        # 2. Si no → cruce por part_number solo, siempre que no haya sido ya cruzado
+        sp_item = None
+        if pl_model and part_number in parts_with_model_in_order:
+            sp_item = lot_items_by_model.get((part_number, pl_model))
+        if sp_item is None:
+            candidate = lot_items_by_pn.get(part_number)
+            if candidate and candidate.id not in matched_item_ids:
+                sp_item = candidate
 
         if sp_item is None:
-            # EXTRA puro: está en el packing list pero no en la orden
+            # EXTRA puro: en el PL pero no en la orden
             rr = ReconciliationResult(
                 lot_id=lot.id,
                 packing_list_id=pl_record.id,
                 spare_part_item_id=None,
                 part_number=part_number,
                 description_es=pl_desc_es,
-                model_applicable=pl_model,
+                model_applicable=pl_model_display,
                 qty_ordered=None,
                 qty_in_packing=qty_in_pl,
                 result="EXTRA",
@@ -1278,9 +1300,9 @@ async def reconcile_lot_packing_list(
             db.add(rr)
             counts["extra"] += 1
         else:
+            matched_item_ids.add(sp_item.id)
             qty_ordered = sp_item.qty_ordered
             if qty_in_pl > qty_ordered:
-                # Llegaron más unidades de las pedidas
                 result_code = "EXTRA"
                 counts["extra"] += 1
             elif qty_in_pl == qty_ordered:
@@ -1301,14 +1323,14 @@ async def reconcile_lot_packing_list(
             )
             db.add(rr)
 
-    # MISSING: en la orden pero no en el packing list
-    for part_number, sp_item in lot_items.items():
-        if part_number not in reconciled_parts:
+    # MISSING: en la orden pero no cruzado con ninguna fila del PL
+    for sp_item in lot_items_list:
+        if sp_item.id not in matched_item_ids:
             rr = ReconciliationResult(
                 lot_id=lot.id,
                 packing_list_id=pl_record.id,
                 spare_part_item_id=sp_item.id,
-                part_number=part_number,
+                part_number=sp_item.part_number,
                 qty_ordered=sp_item.qty_ordered,
                 qty_in_packing=0,
                 result="MISSING",
@@ -1316,15 +1338,15 @@ async def reconcile_lot_packing_list(
             db.add(rr)
             counts["missing"] += 1
 
-    # Si es invoice, actualizar precios y descripciones en los SparePartItems
-    # y calcular total_declared_value del lote sumando los amounts del invoice
+    # Si es invoice: actualizar precios y descripciones en SparePartItems + total declarado del lote
     invoice_parts_with_price: set[str] = set()
     if is_invoice and pl_prices:
         total_declared = 0.0
-        for part_number, (unit_price, amount, desc_en, desc_es, model_val) in pl_prices.items():
+        for (part_number, model_key), (unit_price, amount, desc_en, desc_es, model_val) in pl_prices.items():
             if amount is not None:
                 total_declared += amount
-            sp_item = lot_items.get(part_number)
+            # Buscar SparePartItem por (part, model) primero, luego por part solo
+            sp_item = lot_items_by_model.get((part_number, model_key)) or lot_items_by_pn.get(part_number)
             if sp_item is None:
                 continue
             if unit_price is not None:
