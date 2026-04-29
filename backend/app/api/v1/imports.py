@@ -1493,7 +1493,10 @@ async def list_all_moto_units(
     if pi_number:
         base_filters.append(ShipmentOrder.pi_number.ilike(f"%{pi_number}%"))
     if model:
-        base_filters.append(ShipmentOrder.model.ilike(f"%{model}%"))
+        base_filters.append(
+            ShipmentMotoUnit.model.ilike(f"%{model}%") |
+            ShipmentOrder.model.ilike(f"%{model}%")
+        )
     if vin:
         base_filters.append(ShipmentMotoUnit.vin_number.ilike(f"%{vin}%"))
     if engine:
