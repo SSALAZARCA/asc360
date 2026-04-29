@@ -798,15 +798,23 @@ async def create_sp_order_from_excel(
         db.add(lot)
         await db.flush()
 
-    # Borrar ítems previos del lote (re-carga limpia)
+    # Cargar ítems previos del lote y clasificarlos según si tienen backorders
     old_items = (await db.execute(
         select(SparePartItem).where(SparePartItem.lot_id == lot.id)
     )).scalars().all()
-    for old in old_items:
-        await db.delete(old)
-    await db.flush()
 
-    existing_items: dict[str, SparePartItem] = {}
+    # Ítems con backorders: no se pueden borrar (FK NOT NULL) → se actualizan in-place
+    # Ítems sin backorders: se borran para que el nuevo Excel reconstruya la estructura limpia
+    items_with_backorders: dict[tuple, SparePartItem] = {}
+    for old in old_items:
+        has_bo = (await db.execute(
+            select(Backorder.id).where(Backorder.spare_part_item_id == old.id).limit(1)
+        )).first() is not None
+        if has_bo:
+            items_with_backorders[(old.part_number, old.model_applicable)] = old
+        else:
+            await db.delete(old)
+    await db.flush()
 
     inserted = updated = skipped = 0
     errors = []
@@ -848,27 +856,36 @@ async def create_sp_order_from_excel(
         except Exception as e:
             errors.append({"row": row_idx, "reason": str(e)})
 
-    # --- Segundo pase: crear SparePartItems — una fila por (part_number, modelo) ---
+    # --- Segundo pase: crear/actualizar SparePartItems — una fila por (part_number, modelo) ---
     for (part_number, _modelo_key), data in aggregated.items():
         qty = data["qty"]
         nombre = data["nombre"]
         modelo_moto = data["modelo_moto"]
 
-        item = SparePartItem(
-            lot_id=lot.id,
-            part_number=part_number,
-            description_es=nombre,
-            model_applicable=modelo_moto,
-            qty_ordered=qty,
-            qty_received=0,
-            qty_pending=qty,
-            status="PENDING",
-            created_at=datetime.utcnow(),
-        )
-        db.add(item)
-        inserted += 1
+        existing = items_with_backorders.get((part_number, modelo_moto))
+        if existing:
+            # Actualizar in-place: preserva la FK de los backorders existentes
+            existing.qty_ordered = qty
+            if nombre:
+                existing.description_es = nombre
+            existing.updated_at = datetime.utcnow()
+            updated += 1
+        else:
+            item = SparePartItem(
+                lot_id=lot.id,
+                part_number=part_number,
+                description_es=nombre,
+                model_applicable=modelo_moto,
+                qty_ordered=qty,
+                qty_received=0,
+                qty_pending=qty,
+                status="PENDING",
+                created_at=datetime.utcnow(),
+            )
+            db.add(item)
+            inserted += 1
 
-    if inserted > 0:
+    if inserted > 0 or updated > 0:
         lot.detail_loaded = True
         lot.updated_at = datetime.utcnow() if hasattr(lot, 'updated_at') else None
 
