@@ -250,18 +250,44 @@ export default function PartsCatalogPage() {
           {models.map(m => <option key={m.vehicle_model} value={m.catalog_model_code}>{m.vehicle_model}</option>)}
         </select>
 
-        <button
-          onClick={() => { setOnlyPending(p => !p); setPage(1); }}
-          title="Muestra solo las partes con una revisión de código pendiente — el sistema detectó que podrían tener un código duplicado o un código UM equivalente sin verificar"
-          style={{ padding: '0.625rem 1rem', borderRadius: '10px', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', cursor: 'pointer', border: '1px solid', transition: 'all 0.2s',
-            background: onlyPending ? 'rgba(251,146,60,0.15)' : 'rgba(255,255,255,0.04)',
-            borderColor: onlyPending ? 'rgba(251,146,60,0.4)' : 'rgba(255,255,255,0.08)',
-            color: onlyPending ? '#fb923c' : 'rgba(255,255,255,0.5)',
-          }}
+        <div style={{ position: 'relative', display: 'inline-block' }}
+          onMouseEnter={e => { const t = e.currentTarget.querySelector('[data-tip]'); if (t) t.style.opacity = '1'; }}
+          onMouseLeave={e => { const t = e.currentTarget.querySelector('[data-tip]'); if (t) t.style.opacity = '0'; }}
         >
-          <AlertTriangle size={12} style={{ display: 'inline', marginRight: '0.4rem', verticalAlign: 'middle' }} />
-          {onlyPending ? 'Mostrando pendientes' : 'Solo pendientes'}
-        </button>
+          <button
+            onClick={() => { setOnlyPending(p => !p); setPage(1); }}
+            style={{ padding: '0.625rem 1rem', borderRadius: '10px', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', cursor: 'pointer', border: '1px solid', transition: 'all 0.2s',
+              background: onlyPending ? 'rgba(251,146,60,0.15)' : 'rgba(255,255,255,0.04)',
+              borderColor: onlyPending ? 'rgba(251,146,60,0.4)' : 'rgba(255,255,255,0.08)',
+              color: onlyPending ? '#fb923c' : 'rgba(255,255,255,0.5)',
+            }}
+          >
+            <AlertTriangle size={12} style={{ display: 'inline', marginRight: '0.4rem', verticalAlign: 'middle' }} />
+            {onlyPending ? 'Mostrando pendientes' : 'Solo pendientes'}
+          </button>
+          <div data-tip style={{
+            position: 'absolute', bottom: 'calc(100% + 8px)', right: 0,
+            background: '#16161f', border: '1px solid rgba(251,146,60,0.25)',
+            borderRadius: '8px', padding: '7px 11px', width: 230,
+            fontSize: '10px', lineHeight: '1.5', color: '#9ca3af',
+            pointerEvents: 'none', opacity: 0, transition: 'opacity 0.15s',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+            zIndex: 50,
+          }}>
+            <span style={{ color: '#fb923c', fontWeight: 700, display: 'block', marginBottom: 3 }}>
+              <AlertTriangle size={10} style={{ display: 'inline', marginRight: 4, verticalAlign: 'middle' }} />
+              Revisión de código pendiente
+            </span>
+            Partes donde el sistema detectó un posible código duplicado o equivalente sin verificar.
+            <div style={{
+              position: 'absolute', bottom: -5, right: 18,
+              width: 8, height: 8, background: '#16161f',
+              border: '1px solid rgba(251,146,60,0.25)',
+              borderTop: 'none', borderLeft: 'none',
+              transform: 'rotate(45deg)',
+            }} />
+          </div>
+        </div>
       </div>
 
       {/* Tabla */}
