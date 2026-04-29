@@ -503,6 +503,8 @@ async def _process_moto_packing_list(db: AsyncSession, sheet, actor: CurrentUser
         engine = str(_cell(sheet, row_idx, col_map, "engine no.", "engine no") or "").strip() or None
         color = str(_cell(sheet, row_idx, col_map, "color") or "").strip() or None
         item_no = _cell(sheet, row_idx, col_map, "item no", "item no.")
+        model_raw = _cell(sheet, row_idx, col_map, "model", "model name", "item description", "description")
+        model = str(model_raw).strip() if model_raw else None
 
         if vin_clean in existing_units_map:
             # Upsert: actualizar campos del archivo, sin tocar datos de aduana/DIM
@@ -512,6 +514,8 @@ async def _process_moto_packing_list(db: AsyncSession, sheet, actor: CurrentUser
             unit.color = color
             if parsed_year is not None:
                 unit.model_year = parsed_year
+            if model:
+                unit.model = model
             updated += 1
         else:
             unit = ShipmentMotoUnit(
@@ -520,6 +524,7 @@ async def _process_moto_packing_list(db: AsyncSession, sheet, actor: CurrentUser
                 vin_number=vin_clean,
                 engine_number=engine,
                 color=color,
+                model=model,
                 model_year=parsed_year,
                 source_pi=source_pi,
                 created_at=datetime.utcnow(),
