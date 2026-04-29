@@ -968,6 +968,50 @@ async def repair_physical_inspection_backorders(
     return {"fixed": fixed, "errors": errors}
 
 
+@router.post("/spare-parts/repair-deduplicate")
+async def repair_deduplicate_spare_part_items(
+    pi_number: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """TEMPORAL: borra los SparePartItems sin backorders de un lote cuando el
+    re-cargue generó duplicados por nombre de modelo distinto al original."""
+    if current_user.role != "superadmin":
+        raise HTTPException(status_code=403, detail="Solo superadmin")
+
+    pi = pi_number.strip().upper()
+    order = (await db.execute(
+        select(ShipmentOrder).where(ShipmentOrder.pi_number == pi)
+    )).scalars().first()
+    if not order:
+        raise HTTPException(status_code=404, detail=f"Pedido {pi} no encontrado")
+
+    lot = (await db.execute(
+        select(SparePartLot).where(SparePartLot.shipment_order_id == order.id)
+    )).scalars().first()
+    if not lot:
+        raise HTTPException(status_code=404, detail=f"Lote para {pi} no encontrado")
+
+    all_items = (await db.execute(
+        select(SparePartItem).where(SparePartItem.lot_id == lot.id)
+    )).scalars().all()
+
+    deleted = 0
+    kept = 0
+    for item in all_items:
+        has_bo = (await db.execute(
+            select(Backorder.id).where(Backorder.spare_part_item_id == item.id).limit(1)
+        )).first() is not None
+        if has_bo:
+            kept += 1
+        else:
+            await db.delete(item)
+            deleted += 1
+
+    await db.commit()
+    return {"pi_number": pi, "deleted": deleted, "kept": kept}
+
+
 @router.get("/backorders", response_model=list[BackorderRead])
 async def list_backorders(
     resolved: Optional[bool] = None,
