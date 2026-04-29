@@ -252,6 +252,7 @@ export default function PartsCatalogPage() {
 
         <button
           onClick={() => { setOnlyPending(p => !p); setPage(1); }}
+          title="Muestra solo las partes con una revisión de código pendiente — el sistema detectó que podrían tener un código duplicado o un código UM equivalente sin verificar"
           style={{ padding: '0.625rem 1rem', borderRadius: '10px', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', cursor: 'pointer', border: '1px solid', transition: 'all 0.2s',
             background: onlyPending ? 'rgba(251,146,60,0.15)' : 'rgba(255,255,255,0.04)',
             borderColor: onlyPending ? 'rgba(251,146,60,0.4)' : 'rgba(255,255,255,0.08)',
