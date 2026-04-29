@@ -375,6 +375,18 @@ class BackorderBulkUpdatePI(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Physical Inspection Upload
+# ---------------------------------------------------------------------------
+class PhysicalInspectionApplyEntry(BaseModel):
+    item_id: uuid.UUID
+    qty_physical: int
+
+
+class PhysicalInspectionApplyPayload(BaseModel):
+    items: list[PhysicalInspectionApplyEntry]
+
+
+# ---------------------------------------------------------------------------
 # Import Audit Log
 # ---------------------------------------------------------------------------
 class ImportAuditLogRead(BaseModel):

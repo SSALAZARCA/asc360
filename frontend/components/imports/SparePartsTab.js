@@ -1,9 +1,10 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { authFetch } from '../../lib/authFetch';
-import { ChevronDown, ChevronRight, Search, RefreshCw, Package, ClipboardCheck, XCircle } from 'lucide-react';
+import { ChevronDown, ChevronRight, Search, RefreshCw, Package, ClipboardCheck, XCircle, UploadCloud } from 'lucide-react';
 import ExcelUploadModal from './ExcelUploadModal';
 import ReconciliationModal from './ReconciliationModal';
+import PhysicalInventoryUploadModal from './PhysicalInventoryUploadModal';
 
 function API() {
   return (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1').replace('http://', 'https://');
@@ -190,6 +191,7 @@ function LotItemsTable({ lotId, userRole, isConfirmed }) {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
+  const [showPhysicalUpload, setShowPhysicalUpload] = useState(false);
 
   const fetch = useCallback(async () => {
     setLoading(true);
@@ -214,6 +216,14 @@ function LotItemsTable({ lotId, userRole, isConfirmed }) {
 
   return (
     <div style={{ padding: '12px 16px 16px', background: 'rgba(0,0,0,0.2)' }}>
+      {showPhysicalUpload && (
+        <PhysicalInventoryUploadModal
+          lotId={lotId}
+          onClose={() => setShowPhysicalUpload(false)}
+          onApplied={() => fetch()}
+        />
+      )}
+
       {/* Toolbar */}
       <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: 1, minWidth: 180, padding: '6px 10px', borderRadius: '8px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}>
@@ -236,6 +246,20 @@ function LotItemsTable({ lotId, userRole, isConfirmed }) {
         <button onClick={fetch} style={{ padding: '6px 8px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)', cursor: 'pointer', color: '#9ca3af' }}>
           <RefreshCw size={12} />
         </button>
+        {isConfirmed && canEdit && (
+          <button
+            onClick={() => setShowPhysicalUpload(true)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '5px',
+              padding: '6px 12px', borderRadius: '8px', border: '1px solid rgba(251,146,60,0.3)',
+              background: 'rgba(251,146,60,0.08)', color: '#fb923c',
+              fontSize: '11px', fontWeight: 600, cursor: 'pointer',
+            }}
+          >
+            <UploadCloud size={12} />
+            Inv. Físico Excel
+          </button>
+        )}
       </div>
 
       {loading ? (

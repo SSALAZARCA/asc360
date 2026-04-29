@@ -3,6 +3,7 @@ import io
 import mimetypes
 from datetime import datetime
 from typing import Optional
+import openpyxl
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, UploadFile, File, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,7 +21,7 @@ from app.schemas.imports import (
     ImportExcelResult, MotoUnitRead, MotoUnitUpdate, ImportAttachmentRead,
     SparePartLotRead, SparePartItemRead, SparePartItemUpdate,
     ReconciliationResultRead, ReconciliationResultUpdate, BackorderRead, BackorderUpdate,
-    BackorderBulkUpdatePI,
+    BackorderBulkUpdatePI, PhysicalInspectionApplyPayload,
 )
 from app.services import imports_service
 from app.services.imports_service import compute_status
@@ -932,6 +933,115 @@ async def confirm_lot_reconciliation(
 
     result = await imports_service.confirm_reconciliation(db, lot, current_user)
     return result
+
+
+# ---------------------------------------------------------------------------
+# Physical Inspection — Upload masivo desde Excel
+# ---------------------------------------------------------------------------
+
+_HEADER_KEYWORDS = {'part number', 'parte', 'codigo', 'code', 'part_number', 'part #', 'part#', 'quantity', 'qty', 'cantidad', 'inv', 'inventario'}
+
+def _normalize_code(raw: str) -> str:
+    return str(raw).strip().upper().replace(" ", "")
+
+def _parse_physical_inspection_excel(content: bytes) -> dict[str, int]:
+    """Parsea Excel y devuelve {normalized_part_number: qty}. Ignora header automáticamente."""
+    wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+    ws = wb.active
+    result: dict[str, int] = {}
+    for row in ws.iter_rows(values_only=True):
+        if not row or row[0] is None:
+            continue
+        code_raw = str(row[0]).strip()
+        if not code_raw or code_raw.lower() in _HEADER_KEYWORDS:
+            continue
+        qty_raw = row[1] if len(row) > 1 else None
+        try:
+            qty = int(float(str(qty_raw))) if qty_raw is not None else 0
+        except (ValueError, TypeError):
+            continue
+        normalized = _normalize_code(code_raw)
+        if normalized:
+            result[normalized] = qty
+    return result
+
+
+@router.post("/lots/{lot_id}/physical-inspection-preview")
+async def physical_inspection_preview(
+    lot_id: uuid.UUID,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    _require_imports_editor(current_user)
+    lot = await db.get(SparePartLot, lot_id)
+    if not lot:
+        raise HTTPException(status_code=404, detail="Lote no encontrado")
+    if not lot.packing_list_received:
+        raise HTTPException(
+            status_code=400,
+            detail={"detail": "El inventario físico solo puede cargarse después de confirmar el cruce", "code": "RECONCILIATION_NOT_CONFIRMED"},
+        )
+
+    content = await file.read()
+    excel_map = _parse_physical_inspection_excel(content)
+
+    items = (await db.execute(
+        select(SparePartItem).where(
+            SparePartItem.lot_id == lot_id,
+            SparePartItem.status != 'CANCELLED',
+        )
+    )).scalars().all()
+
+    matched = []
+    zeroed = []
+    for item in items:
+        key = _normalize_code(item.part_number or '')
+        if key in excel_map:
+            matched.append({
+                "item_id": str(item.id),
+                "part_number": item.part_number,
+                "description_es": item.description_es,
+                "qty_physical": excel_map.pop(key),
+            })
+        else:
+            zeroed.append({
+                "item_id": str(item.id),
+                "part_number": item.part_number,
+                "description_es": item.description_es,
+            })
+
+    ignored = [{"code": k, "qty": v} for k, v in excel_map.items()]
+    return {"matched": matched, "zeroed": zeroed, "ignored": ignored}
+
+
+@router.post("/lots/{lot_id}/physical-inspection-apply")
+async def physical_inspection_apply(
+    lot_id: uuid.UUID,
+    payload: PhysicalInspectionApplyPayload,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    _require_imports_editor(current_user)
+    lot = await db.get(SparePartLot, lot_id)
+    if not lot:
+        raise HTTPException(status_code=404, detail="Lote no encontrado")
+    if not lot.packing_list_received:
+        raise HTTPException(
+            status_code=400,
+            detail={"detail": "El inventario físico solo puede cargarse después de confirmar el cruce", "code": "RECONCILIATION_NOT_CONFIRMED"},
+        )
+
+    applied = 0
+    for entry in payload.items:
+        item = await db.get(SparePartItem, entry.item_id)
+        if not item or item.lot_id != lot_id:
+            continue
+        await imports_service.apply_physical_inspection(db, item, entry.qty_physical)
+        applied += 1
+
+    await db.commit()
+    return {"applied": applied}
 
 
 # ---------------------------------------------------------------------------
