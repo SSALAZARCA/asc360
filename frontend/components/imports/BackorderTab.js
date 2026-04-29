@@ -129,6 +129,7 @@ export default function BackorderTab({ userRole }) {
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [bulkLoading, setBulkLoading] = useState(false);
   const [repairing, setRepairing] = useState(false);
+  const [repairingExtras, setRepairingExtras] = useState(false);
 
   const canEdit = userRole === 'superadmin' || userRole === 'proveedor';
   const isSuperadmin = userRole === 'superadmin';
@@ -143,6 +144,17 @@ export default function BackorderTab({ userRole }) {
       fetchBackorders();
     } catch { alert('Error en la reparación'); }
     finally { setRepairing(false); }
+  };
+
+  const handleRepairExtras = async () => {
+    if (!confirm('Esto actualizará las Pcs Rec. de todos los ítems EXTRA que quedaron sin registrar. ¿Continuar?')) return;
+    setRepairingExtras(true);
+    try {
+      const res = await authFetch(`${API()}/imports/backorders/repair-extra-received`, { method: 'POST' });
+      const data = await res.json();
+      alert(`Reparación completa: ${data.fixed} ítems actualizados${data.errors?.length ? `, ${data.errors.length} errores` : ''}`);
+    } catch { alert('Error en la reparación'); }
+    finally { setRepairingExtras(false); }
   };
 
   const fetchBackorders = useCallback(async () => {
@@ -340,6 +352,17 @@ export default function BackorderTab({ userRole }) {
             style={{ padding: '7px 12px', borderRadius: '8px', border: '1px solid rgba(251,146,60,0.3)', background: 'rgba(251,146,60,0.08)', color: repairing ? '#606075' : '#fb923c', fontSize: '10px', fontWeight: 700, cursor: repairing ? 'default' : 'pointer', whiteSpace: 'nowrap' }}
           >
             {repairing ? 'Reparando...' : '⚙ Reparar backorders'}
+          </button>
+        )}
+
+        {isSuperadmin && (
+          <button
+            onClick={handleRepairExtras}
+            disabled={repairingExtras}
+            title="Actualiza las Pcs Rec. de ítems EXTRA que quedaron en 0 antes del fix"
+            style={{ padding: '7px 12px', borderRadius: '8px', border: '1px solid rgba(52,211,153,0.3)', background: 'rgba(52,211,153,0.08)', color: repairingExtras ? '#606075' : '#34d399', fontSize: '10px', fontWeight: 700, cursor: repairingExtras ? 'default' : 'pointer', whiteSpace: 'nowrap' }}
+          >
+            {repairingExtras ? 'Reparando...' : '⚙ Reparar Pcs Rec. extras'}
           </button>
         )}
 

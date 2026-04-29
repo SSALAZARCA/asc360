@@ -1078,6 +1078,51 @@ async def repair_physical_inspection_backorders(
     return {"fixed": fixed, "errors": errors}
 
 
+@router.post("/backorders/repair-extra-received")
+async def repair_extra_received(
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """
+    Retroactivo: actualiza qty_received en SparePartItems vinculados a
+    ReconciliationResults EXTRA/EXTRA_APPLIED que quedaron sin actualizar
+    antes del fix. Solo superadmin.
+    """
+    if current_user.role != "superadmin":
+        raise HTTPException(status_code=403, detail="Solo superadmin puede ejecutar reparación")
+
+    stmt = (
+        select(ReconciliationResult)
+        .where(
+            ReconciliationResult.result.in_(["EXTRA", "EXTRA_APPLIED"]),
+            ReconciliationResult.spare_part_item_id.isnot(None),
+        )
+    )
+    rrs = (await db.execute(stmt)).scalars().all()
+
+    fixed = 0
+    errors = []
+    now = datetime.utcnow()
+    for rr in rrs:
+        try:
+            item = await db.get(SparePartItem, rr.spare_part_item_id)
+            if not item:
+                continue
+            item.qty_received = rr.qty_in_packing or 0
+            item.qty_pending = 0
+            item.status = "RECEIVED"
+            item.updated_at = now
+            lot = await db.get(SparePartLot, item.lot_id)
+            origin_pi = lot.lot_identifier if lot else ""
+            await imports_service._resolve_backorders_for_item(db, item, origin_pi)
+            fixed += 1
+        except Exception as e:
+            errors.append({"rr_id": str(rr.id), "part_number": rr.part_number, "error": str(e)})
+
+    await db.commit()
+    return {"fixed": fixed, "errors": errors}
+
+
 @router.post("/spare-parts/rollback-lot")
 async def rollback_lot(
     pi_number: str,
