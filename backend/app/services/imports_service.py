@@ -1462,6 +1462,13 @@ async def confirm_reconciliation(
                 if bo:
                     backorders_created += 1
 
+        elif rr.result in ("EXTRA", "EXTRA_APPLIED"):
+            # Vino más de lo ordenado: registrar lo recibido real y cerrar pendientes
+            item.qty_received = rr.qty_in_packing or 0
+            item.qty_pending = 0
+            item.status = "RECEIVED"
+            await _resolve_backorders_for_item(db, item, origin_pi)
+
         item.updated_at = datetime.utcnow()
         updated += 1
 
