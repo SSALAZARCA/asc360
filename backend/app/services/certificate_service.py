@@ -215,7 +215,7 @@ def generate_certificado_bytes(unit, order, vehicle_model) -> bytes:
 
     # 4. Generar QR
     today = datetime.date.today().strftime("%Y-%m-%d")
-    modelo_str = order.model or ''
+    modelo_str = unit.model or order.model or ''
     qr_data = f"MOTORCOM|{unit.vin_number}|{unit.engine_number}|{modelo_str}|{today}|VALIDO"
     qr_b64 = generate_qr(qr_data)
 

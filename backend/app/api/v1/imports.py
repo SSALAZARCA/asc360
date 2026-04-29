@@ -1874,5 +1874,9 @@ async def delete_certificado(
         raise HTTPException(status_code=400, detail="La unidad no tiene empadronamiento generado")
     unit.certificado_generado = False
     unit.certificado_fecha = None
+    unit.empadronamiento_fisico_enviado = False
+    unit.empadronamiento_fisico_fecha = None
+    unit.empadronamiento_fisico_distribuidor_id = None
+    unit.empadronamiento_fisico_distribuidor_nombre = None
     await db.commit()
     return {"ok": True, "id": str(unit.id)}
