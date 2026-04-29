@@ -333,7 +333,9 @@ export default function ReconciliationModal({ lot, onClose, onConfirmed }) {
                             <EditableReconciliationCell resultId={r.id} field="qty_in_packing" current={r.qty_in_packing ?? 0} type="number" align="right" onSaved={fetchResults} cellStyle={{ color: '#d1d5db' }} />
                           </td>
                           <td style={{ padding: '8px 12px', color: diffColor, textAlign: 'right', fontWeight: 700 }}>
-                            {r.qty_ordered != null ? (diff > 0 ? `+${diff}` : diff) : '—'}
+                            {r.qty_ordered == null
+                              ? `+${r.qty_in_packing ?? 0}`
+                              : (diff > 0 ? `+${diff}` : diff)}
                           </td>
                           <td style={{ padding: '8px 12px' }}><ResultBadge result={r.result} /></td>
                         </tr>
