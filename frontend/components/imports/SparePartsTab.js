@@ -575,6 +575,19 @@ export default function SparePartsTab({ userRole }) {
   const [filterBL, setFilterBL] = useState(true);
   const [reconcileLot, setReconcileLot] = useState(null);
   const [resetting, setResetting] = useState(false);
+  const [repairingExtras, setRepairingExtras] = useState(false);
+
+  const handleRepairExtras = async () => {
+    if (!confirm('Actualiza las Pcs Rec. de todos los ítems EXTRA que quedaron en 0. ¿Continuar?')) return;
+    setRepairingExtras(true);
+    try {
+      const res = await authFetch(`${API()}/imports/backorders/repair-extra-received`, { method: 'POST' });
+      const data = await res.json();
+      alert(`Reparación completa: ${data.fixed} ítems actualizados${data.errors?.length ? `, ${data.errors.length} errores` : ''}`);
+      fetchLots();
+    } catch { alert('Error en la reparación'); }
+    finally { setRepairingExtras(false); }
+  };
 
   const handleResetDetail = async () => {
     if (!confirm('⚠️ ATENCIÓN: Esto borrará TODOS los lotes, ítems, backorders, packing lists y reconciliaciones de repuestos. Los pedidos (shipment orders) se conservan.\n\n¿Estás seguro?')) return;
@@ -659,6 +672,17 @@ export default function SparePartsTab({ userRole }) {
         <span style={{ fontSize: '11px', color: '#606075', marginLeft: 'auto' }}>
           {totalLots} lote{totalLots !== 1 ? 's' : ''} encontrado{totalLots !== 1 ? 's' : ''}
         </span>
+
+        {userRole === 'superadmin' && (
+          <button
+            onClick={handleRepairExtras}
+            disabled={repairingExtras}
+            title="Actualiza las Pcs Rec. de ítems EXTRA que quedaron en 0 antes del fix"
+            style={{ padding: '7px 12px', borderRadius: '8px', border: '1px solid rgba(52,211,153,0.3)', background: 'rgba(52,211,153,0.08)', color: repairingExtras ? '#606075' : '#34d399', fontSize: '11px', fontWeight: 700, cursor: repairingExtras ? 'not-allowed' : 'pointer' }}
+          >
+            {repairingExtras ? 'Reparando...' : '⚙ Reparar Pcs Rec. extras'}
+          </button>
+        )}
 
         {/* TEMPORAL: reset completo — solo superadmin (oculto, cambiar false→true para activar) */}
         {false && userRole === 'superadmin' && (
