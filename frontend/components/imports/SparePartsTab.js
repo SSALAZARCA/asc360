@@ -372,8 +372,27 @@ function LotItemsTable({ lotId, userRole, isConfirmed }) {
 // ---------------------------------------------------------------------------
 function LotRow({ lot, userRole, onReconcile }) {
   const [expanded, setExpanded] = useState(false);
+  const [deduplicating, setDeduplicating] = useState(false);
 
   const pctColor = lot.pct_received >= 100 ? '#22c55e' : lot.pct_received > 0 ? '#fb923c' : '#606075';
+
+  const handleDeduplicate = async (e) => {
+    e.stopPropagation();
+    if (!confirm(`¿Eliminar ítems duplicados sin backorders del lote ${lot.lot_identifier}? Esta acción no se puede deshacer.`)) return;
+    setDeduplicating(true);
+    try {
+      const res = await authFetch(
+        `${API()}/imports/spare-parts/repair-deduplicate?pi_number=${encodeURIComponent(lot.lot_identifier)}`,
+        { method: 'POST' }
+      );
+      const data = await res.json();
+      alert(`Limpieza completa: ${data.deleted} duplicados eliminados, ${data.kept} ítems conservados.`);
+    } catch {
+      alert('Error al limpiar duplicados');
+    } finally {
+      setDeduplicating(false);
+    }
+  };
 
   return (
     <div style={{ border: '1px solid rgba(255,255,255,0.06)', borderRadius: '10px', overflow: 'hidden' }}>
@@ -453,6 +472,27 @@ function LotRow({ lot, userRole, onReconcile }) {
           <ClipboardCheck size={12} />
           {lot.packing_list_received ? 'Ver PL' : 'Packing List'}
         </button>
+
+        {/* TEMPORAL: botón deduplicar — solo superadmin */}
+        {userRole === 'superadmin' && (
+          <button
+            onClick={handleDeduplicate}
+            disabled={deduplicating}
+            title="Eliminar ítems duplicados sin backorders"
+            style={{
+              display: 'flex', alignItems: 'center', gap: '5px',
+              padding: '5px 10px', borderRadius: '7px', border: 'none',
+              background: 'rgba(248,113,113,0.1)',
+              color: deduplicating ? '#606075' : '#f87171',
+              fontSize: '10px', fontWeight: 700,
+              cursor: deduplicating ? 'not-allowed' : 'pointer', flexShrink: 0,
+            }}
+          >
+            <XCircle size={12} />
+            {deduplicating ? 'Limpiando...' : 'Fix duplic.'}
+          </button>
+        )}
+
 
       </div>
 
