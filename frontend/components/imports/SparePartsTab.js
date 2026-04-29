@@ -511,6 +511,24 @@ export default function SparePartsTab({ userRole }) {
   const [filterLoaded, setFilterLoaded] = useState('');
   const [filterBL, setFilterBL] = useState(true);
   const [reconcileLot, setReconcileLot] = useState(null);
+  const [resetting, setResetting] = useState(false);
+
+  const handleResetDetail = async () => {
+    if (!confirm('⚠️ ATENCIÓN: Esto borrará TODOS los lotes, ítems, backorders, packing lists y reconciliaciones de repuestos. Los pedidos (shipment orders) se conservan.\n\n¿Estás seguro?')) return;
+    if (!confirm('Segunda confirmación: esta acción NO se puede deshacer. ¿Continuar?')) return;
+    setResetting(true);
+    try {
+      const res = await authFetch(`${API()}/imports/spare-parts/reset-detail`, { method: 'POST' });
+      const data = await res.json();
+      const msg = Object.entries(data.deleted).map(([k, v]) => `${k}: ${v}`).join(', ');
+      alert(`Reset completo. Eliminados → ${msg}`);
+      fetchLots();
+    } catch {
+      alert('Error al ejecutar el reset');
+    } finally {
+      setResetting(false);
+    }
+  };
 
   const fetchLots = useCallback(async () => {
     setLoading(true);
@@ -578,6 +596,21 @@ export default function SparePartsTab({ userRole }) {
         <span style={{ fontSize: '11px', color: '#606075', marginLeft: 'auto' }}>
           {totalLots} lote{totalLots !== 1 ? 's' : ''} encontrado{totalLots !== 1 ? 's' : ''}
         </span>
+
+        {/* TEMPORAL: reset completo — solo superadmin */}
+        {userRole === 'superadmin' && (
+          <button
+            onClick={handleResetDetail}
+            disabled={resetting}
+            style={{
+              padding: '7px 12px', borderRadius: '8px', border: '1px solid rgba(248,113,113,0.3)',
+              background: 'rgba(248,113,113,0.08)', color: resetting ? '#606075' : '#f87171',
+              fontSize: '11px', fontWeight: 700, cursor: resetting ? 'not-allowed' : 'pointer',
+            }}
+          >
+            {resetting ? 'Reseteando...' : '⚠ Reset detalle'}
+          </button>
+        )}
       </div>
 
       {/* Lista de lotes */}

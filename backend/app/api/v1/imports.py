@@ -7,7 +7,7 @@ from typing import Optional
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, UploadFile, File, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy import func
+from sqlalchemy import func, text
 from sqlalchemy.orm import selectinload
 from starlette.responses import StreamingResponse
 
@@ -966,6 +966,43 @@ async def repair_physical_inspection_backorders(
 
     await db.commit()
     return {"fixed": fixed, "errors": errors}
+
+
+@router.post("/spare-parts/reset-detail")
+async def reset_spare_parts_detail(
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """TEMPORAL: borra todos los datos de detalle de repuestos (lotes, ítems,
+    backorders, reconciliaciones, packing lists) conservando los shipment_orders.
+    Solo superadmin."""
+    if current_user.role != "superadmin":
+        raise HTTPException(status_code=403, detail="Solo superadmin")
+
+    counts = {}
+
+    r = await db.execute(text("DELETE FROM backorders WHERE spare_part_item_id IN (SELECT id FROM spare_part_items)"))
+    counts["backorders"] = r.rowcount
+
+    r = await db.execute(text("DELETE FROM reconciliation_results"))
+    counts["reconciliation_results"] = r.rowcount
+
+    r = await db.execute(text("DELETE FROM packing_list_items"))
+    counts["packing_list_items"] = r.rowcount
+
+    r = await db.execute(text("DELETE FROM spare_part_items"))
+    counts["spare_part_items"] = r.rowcount
+
+    r = await db.execute(text("DELETE FROM packing_lists"))
+    counts["packing_lists"] = r.rowcount
+
+    await db.execute(text("UPDATE import_attachments SET lot_id = NULL WHERE lot_id IS NOT NULL"))
+
+    r = await db.execute(text("DELETE FROM spare_part_lots"))
+    counts["spare_part_lots"] = r.rowcount
+
+    await db.commit()
+    return {"status": "ok", "deleted": counts}
 
 
 @router.post("/spare-parts/repair-deduplicate")
