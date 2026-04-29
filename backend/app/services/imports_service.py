@@ -1284,8 +1284,10 @@ async def reconcile_lot_packing_list(
         # 2. Fallback: primer SparePartItem no cruzado para ese part_number
         sp_item = None
         if pl_model and part_number in parts_with_model_in_order:
+            # Cruce exacto por (part, model) — si no hay coincidencia es EXTRA puro, sin fallback
             sp_item = lot_items_by_model.get((part_number, pl_model))
-        if sp_item is None:
+        else:
+            # PL sin modelo O la orden no tiene ese part con modelo → fallback por part_number
             for candidate in lot_items_by_pn.get(part_number, []):
                 if candidate.id not in matched_item_ids:
                     sp_item = candidate
