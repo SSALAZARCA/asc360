@@ -473,8 +473,8 @@ function LotRow({ lot, userRole, onReconcile }) {
           {lot.packing_list_received ? 'Ver PL' : 'Packing List'}
         </button>
 
-        {/* TEMPORAL: botón deduplicar — solo superadmin */}
-        {userRole === 'superadmin' && (
+        {/* TEMPORAL: botón deduplicar — solo superadmin (oculto, cambiar false→true para activar) */}
+        {false && userRole === 'superadmin' && (
           <button
             onClick={handleDeduplicate}
             disabled={deduplicating}
@@ -597,8 +597,8 @@ export default function SparePartsTab({ userRole }) {
           {totalLots} lote{totalLots !== 1 ? 's' : ''} encontrado{totalLots !== 1 ? 's' : ''}
         </span>
 
-        {/* TEMPORAL: reset completo — solo superadmin */}
-        {userRole === 'superadmin' && (
+        {/* TEMPORAL: reset completo — solo superadmin (oculto, cambiar false→true para activar) */}
+        {false && userRole === 'superadmin' && (
           <button
             onClick={handleResetDetail}
             disabled={resetting}

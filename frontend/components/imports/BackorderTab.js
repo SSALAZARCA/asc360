@@ -331,7 +331,8 @@ export default function BackorderTab({ userRole }) {
           </button>
         )}
 
-        {isSuperadmin && (
+        {/* TEMPORAL: reparar backorders físicos (oculto, cambiar false→true para activar) */}
+        {false && isSuperadmin && (
           <button
             onClick={handleRepair}
             disabled={repairing}
