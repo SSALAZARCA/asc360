@@ -968,6 +968,68 @@ async def repair_physical_inspection_backorders(
     return {"fixed": fixed, "errors": errors}
 
 
+@router.post("/spare-parts/rollback-lot")
+async def rollback_lot(
+    pi_number: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """TEMPORAL: revierte un lote completo — borra ítems, backorders, reconciliación
+    y packing list, dejando el lote vacío para re-cargar desde cero. Solo superadmin."""
+    if current_user.role != "superadmin":
+        raise HTTPException(status_code=403, detail="Solo superadmin")
+
+    pi = pi_number.strip().upper()
+    order = (await db.execute(
+        select(ShipmentOrder).where(ShipmentOrder.pi_number == pi)
+    )).scalars().first()
+    if not order:
+        raise HTTPException(status_code=404, detail=f"Pedido {pi} no encontrado")
+
+    lot = (await db.execute(
+        select(SparePartLot).where(SparePartLot.shipment_order_id == order.id)
+    )).scalars().first()
+    if not lot:
+        raise HTTPException(status_code=404, detail=f"Lote para {pi} no encontrado")
+
+    counts = {}
+
+    r = await db.execute(text(
+        "DELETE FROM backorders WHERE spare_part_item_id IN "
+        "(SELECT id FROM spare_part_items WHERE lot_id = :lot_id)"
+    ), {"lot_id": lot.id})
+    counts["backorders"] = r.rowcount
+
+    r = await db.execute(text(
+        "DELETE FROM reconciliation_results WHERE lot_id = :lot_id"
+    ), {"lot_id": lot.id})
+    counts["reconciliation_results"] = r.rowcount
+
+    r = await db.execute(text(
+        "DELETE FROM packing_list_items WHERE packing_list_id IN "
+        "(SELECT id FROM packing_lists WHERE lot_id = :lot_id)"
+    ), {"lot_id": lot.id})
+    counts["packing_list_items"] = r.rowcount
+
+    r = await db.execute(text(
+        "DELETE FROM packing_lists WHERE lot_id = :lot_id"
+    ), {"lot_id": lot.id})
+    counts["packing_lists"] = r.rowcount
+
+    r = await db.execute(text(
+        "DELETE FROM spare_part_items WHERE lot_id = :lot_id"
+    ), {"lot_id": lot.id})
+    counts["spare_part_items"] = r.rowcount
+
+    lot.packing_list_received = False
+    lot.detail_loaded = False
+    lot.total_declared_value = None
+    lot.updated_at = datetime.utcnow()
+
+    await db.commit()
+    return {"pi_number": pi, "lot_id": str(lot.id), "deleted": counts}
+
+
 @router.post("/spare-parts/reset-detail")
 async def reset_spare_parts_detail(
     db: AsyncSession = Depends(get_db),

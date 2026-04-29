@@ -376,6 +376,25 @@ function LotRow({ lot, userRole, onReconcile }) {
 
   const pctColor = lot.pct_received >= 100 ? '#22c55e' : lot.pct_received > 0 ? '#fb923c' : '#606075';
 
+  const handleRollback = async (e) => {
+    e.stopPropagation();
+    if (!confirm(`¿Revertir COMPLETAMENTE el lote ${lot.lot_identifier}?\n\nSe borrarán: ítems, backorders, reconciliación y packing list.\nEl lote quedará vacío para re-cargar desde cero.\n\nEsta acción no se puede deshacer.`)) return;
+    setDeduplicating(true);
+    try {
+      const res = await authFetch(
+        `${API()}/imports/spare-parts/rollback-lot?pi_number=${encodeURIComponent(lot.lot_identifier)}`,
+        { method: 'POST' }
+      );
+      const data = await res.json();
+      const msg = Object.entries(data.deleted).map(([k, v]) => `${k}: ${v}`).join(', ');
+      alert(`Rollback completo. Eliminados → ${msg}`);
+    } catch {
+      alert('Error al ejecutar el rollback');
+    } finally {
+      setDeduplicating(false);
+    }
+  };
+
   const handleDeduplicate = async (e) => {
     e.stopPropagation();
     if (!confirm(`¿Eliminar ítems duplicados sin backorders del lote ${lot.lot_identifier}? Esta acción no se puede deshacer.`)) return;
@@ -472,6 +491,26 @@ function LotRow({ lot, userRole, onReconcile }) {
           <ClipboardCheck size={12} />
           {lot.packing_list_received ? 'Ver PL' : 'Packing List'}
         </button>
+
+        {/* TEMPORAL: rollback de lote — solo superadmin */}
+        {userRole === 'superadmin' && (
+          <button
+            onClick={handleRollback}
+            disabled={deduplicating}
+            title="Revertir lote completo para re-cargar desde cero"
+            style={{
+              display: 'flex', alignItems: 'center', gap: '5px',
+              padding: '5px 10px', borderRadius: '7px', border: 'none',
+              background: 'rgba(248,113,113,0.1)',
+              color: deduplicating ? '#606075' : '#f87171',
+              fontSize: '10px', fontWeight: 700,
+              cursor: deduplicating ? 'not-allowed' : 'pointer', flexShrink: 0,
+            }}
+          >
+            <XCircle size={12} />
+            {deduplicating ? 'Revirtiendo...' : 'Rollback'}
+          </button>
+        )}
 
         {/* TEMPORAL: botón deduplicar — solo superadmin (oculto, cambiar false→true para activar) */}
         {false && userRole === 'superadmin' && (
