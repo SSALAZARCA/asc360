@@ -274,8 +274,8 @@ function LotItemsTable({ lotId, userRole, isConfirmed }) {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
             <thead>
               <tr style={{ background: '#0e0e14' }}>
-                {['Parte #', 'Descripción', 'Modelo', 'Pcs Ord.', 'Pcs Rec.', 'Inv. Físico', 'Pendiente', 'Unit Price', 'Amount', 'Estado', ''].map(h => (
-                  <th key={h} style={{ padding: '8px 10px', textAlign: 'center', fontSize: '9px', fontWeight: 700, color: h === 'Inv. Físico' ? '#fb923c' : '#606075', textTransform: 'uppercase', letterSpacing: '0.07em', borderBottom: '1px solid rgba(255,255,255,0.06)', whiteSpace: 'nowrap' }}>{h}</th>
+                {['Parte #', 'Descripción', 'Modelo', 'Pcs Ord.', 'Pcs Rec.', 'Inv. Físico', 'Diferencia', 'Unit Price', 'Amount', 'Estado', ''].map(h => (
+                  <th key={h} style={{ padding: '8px 10px', textAlign: 'center', fontSize: '9px', fontWeight: 700, color: h === 'Inv. Físico' ? '#fb923c' : h === 'Diferencia' ? '#a78bfa' : '#606075', textTransform: 'uppercase', letterSpacing: '0.07em', borderBottom: '1px solid rgba(255,255,255,0.06)', whiteSpace: 'nowrap' }}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -340,8 +340,13 @@ function LotItemsTable({ lotId, userRole, isConfirmed }) {
                       <span style={{ color: '#3f3f55', fontSize: '10px' }}>—</span>
                     )}
                   </td>
-                  <td style={{ padding: '8px 10px', textAlign: 'center', color: (item.qty_pending ?? 0) > 0 ? '#f97316' : '#606075', fontWeight: 700 }}>
-                    {item.qty_pending ?? Math.max(0, item.qty_ordered - item.qty_received)}
+                  <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 700 }}>
+                    {(() => {
+                      const diff = (item.qty_received ?? 0) - (item.qty_ordered ?? 0);
+                      if (diff > 0) return <span style={{ color: '#34d399' }}>+{diff}</span>;
+                      if (diff < 0) return <span style={{ color: '#f87171' }}>{diff}</span>;
+                      return <span style={{ color: '#3f3f55' }}>—</span>;
+                    })()}
                   </td>
                   <td style={{ padding: '8px 10px', textAlign: 'center', whiteSpace: 'nowrap' }}>
                     {canEdit
