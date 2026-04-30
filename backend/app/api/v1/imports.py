@@ -21,7 +21,7 @@ from app.schemas.imports import (
     ImportExcelResult, MotoUnitRead, MotoUnitUpdate, ImportAttachmentRead,
     SparePartLotRead, SparePartItemRead, SparePartItemUpdate,
     ReconciliationResultRead, ReconciliationResultUpdate, BackorderRead, BackorderUpdate,
-    BackorderBulkUpdatePI, PhysicalInspectionApplyPayload,
+    BackorderBulkUpdatePI, BackorderBulkRollbackRequest, PhysicalInspectionApplyPayload,
 )
 from app.services import imports_service
 from app.services.imports_service import compute_status
@@ -1344,6 +1344,96 @@ async def bulk_update_expected_pi(
         updated += 1
     await db.commit()
     return {"updated": updated}
+
+
+# ---------------------------------------------------------------------------
+# Backorder bulk resolve (Excel)
+# ---------------------------------------------------------------------------
+
+_BO_BULK_HEADER_KEYS = {"part", "cod", "cantidad", "qty", "origen", "nuevo", "notas"}
+
+
+def _parse_backorder_bulk_excel(content: bytes) -> list[dict]:
+    wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+    ws = wb.active
+    rows = []
+    for row in ws.iter_rows(values_only=True):
+        if not row or row[0] is None:
+            continue
+        first = str(row[0]).strip().lower()
+        if any(kw in first for kw in _BO_BULK_HEADER_KEYS):
+            continue
+        pn_raw = str(row[0]).strip()
+        if not pn_raw:
+            continue
+        qty_raw = row[1] if len(row) > 1 else None
+        origin_pi_raw = row[2] if len(row) > 2 else None
+        pi_nuevo_raw = row[3] if len(row) > 3 else None
+        notas_raw = row[4] if len(row) > 4 else None
+        try:
+            qty = int(float(str(qty_raw))) if qty_raw is not None else 0
+        except (ValueError, TypeError):
+            continue
+        origin_pi = str(origin_pi_raw).strip() if origin_pi_raw else ""
+        pi_nuevo = str(pi_nuevo_raw).strip() if pi_nuevo_raw else ""
+        if not origin_pi or not pi_nuevo or qty <= 0:
+            continue
+        normalized = _normalize_code(pn_raw)
+        if not normalized:
+            continue
+        rows.append({
+            "part_number": normalized,
+            "qty": qty,
+            "origin_pi": origin_pi,
+            "pi_nuevo": pi_nuevo,
+            "notas": str(notas_raw).strip() if notas_raw and str(notas_raw).strip() else None,
+        })
+    return rows
+
+
+@router.post("/backorders/bulk-resolve-preview")
+async def backorder_bulk_resolve_preview(
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    _require_imports_editor(current_user)
+    content = await file.read()
+    rows = _parse_backorder_bulk_excel(content)
+    if not rows:
+        raise HTTPException(status_code=422, detail="El Excel no contiene filas válidas. Verificá el formato: Part Number | Cantidad | PI Origen | PI Nuevo.")
+    return await imports_service.bulk_resolve_compute(db, rows, apply=False)
+
+
+@router.post("/backorders/bulk-resolve-apply")
+async def backorder_bulk_resolve_apply(
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    _require_imports_editor(current_user)
+    content = await file.read()
+    rows = _parse_backorder_bulk_excel(content)
+    if not rows:
+        raise HTTPException(status_code=422, detail="El Excel no contiene filas válidas.")
+    result = await imports_service.bulk_resolve_compute(db, rows, apply=True)
+    await db.commit()
+    return result
+
+
+@router.post("/backorders/bulk-resolve-rollback")
+async def backorder_bulk_resolve_rollback(
+    payload: BackorderBulkRollbackRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    if current_user.role != "superadmin":
+        raise HTTPException(status_code=403, detail="Solo superadmin puede revertir una carga masiva.")
+    result = await imports_service.bulk_resolve_rollback(db, payload.pi_nuevo)
+    await db.commit()
+    if result["rolled_back"] == 0:
+        raise HTTPException(status_code=404, detail=f"No se encontraron operaciones de carga masiva para PI Nuevo '{payload.pi_nuevo}'.")
+    return result
 
 
 # ---------------------------------------------------------------------------

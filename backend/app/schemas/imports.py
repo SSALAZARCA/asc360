@@ -374,6 +374,10 @@ class BackorderBulkUpdatePI(BaseModel):
     expected_in_pi: Optional[str] = None
 
 
+class BackorderBulkRollbackRequest(BaseModel):
+    pi_nuevo: str
+
+
 # ---------------------------------------------------------------------------
 # Physical Inspection Upload
 # ---------------------------------------------------------------------------

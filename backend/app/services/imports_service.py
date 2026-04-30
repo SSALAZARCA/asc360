@@ -1670,6 +1670,206 @@ async def _resolve_backorders_for_item(
     return len(open_bos)
 
 
+async def bulk_resolve_compute(
+    db: AsyncSession,
+    rows: list[dict],
+    apply: bool = False,
+) -> dict:
+    now = datetime.utcnow()
+    resolved_group: list = []
+    partial_group: list = []
+    excess_group: list = []
+    no_bo_group: list = []
+
+    for row in rows:
+        part_number = row["part_number"]
+        qty_remaining = row["qty"]
+        origin_pi = row["origin_pi"]
+        pi_nuevo = row["pi_nuevo"]
+        matches: list = []
+
+        # Priority: BO with exact origin_pi match
+        origin_bos = (await db.execute(
+            select(Backorder).where(
+                Backorder.part_number == part_number,
+                Backorder.origin_pi == origin_pi,
+                Backorder.resolved == False,
+            ).order_by(Backorder.created_at.asc())
+        )).scalars().all()
+
+        for bo in origin_bos:
+            if qty_remaining <= 0:
+                break
+            apply_qty = min(qty_remaining, bo.qty_pending)
+            qty_before = bo.qty_pending
+            qty_after = qty_before - apply_qty
+            qty_remaining -= apply_qty
+            matches.append({
+                "backorder_id": str(bo.id),
+                "origin_pi": bo.origin_pi,
+                "qty_before": qty_before,
+                "qty_applied": apply_qty,
+                "qty_after": qty_after,
+                "spillover": False,
+                "_bo": bo,
+                "_item_id": bo.spare_part_item_id,
+            })
+
+        # Spillover: FIFO across other open BOs of same part_number
+        if qty_remaining > 0:
+            other_bos = (await db.execute(
+                select(Backorder).where(
+                    Backorder.part_number == part_number,
+                    Backorder.origin_pi != origin_pi,
+                    Backorder.resolved == False,
+                ).order_by(Backorder.created_at.asc())
+            )).scalars().all()
+
+            for bo in other_bos:
+                if qty_remaining <= 0:
+                    break
+                apply_qty = min(qty_remaining, bo.qty_pending)
+                qty_before = bo.qty_pending
+                qty_after = qty_before - apply_qty
+                qty_remaining -= apply_qty
+                matches.append({
+                    "backorder_id": str(bo.id),
+                    "origin_pi": bo.origin_pi,
+                    "qty_before": qty_before,
+                    "qty_applied": apply_qty,
+                    "qty_after": qty_after,
+                    "spillover": True,
+                    "_bo": bo,
+                    "_item_id": bo.spare_part_item_id,
+                })
+
+        if not matches:
+            no_bo_group.append({
+                "part_number": part_number,
+                "qty_excel": row["qty"],
+                "origin_pi": origin_pi,
+                "pi_nuevo": pi_nuevo,
+                "matches": [],
+                "group": "NO_BACKORDER",
+            })
+            continue
+
+        if apply:
+            for m in matches:
+                bo = m["_bo"]
+                item = await db.get(SparePartItem, m["_item_id"])
+                event_name = "RESOLVED_BY_BULK_IMPORT" if m["qty_after"] == 0 else "PARTIAL_FILL"
+                history = list(bo.history or [])
+                history.append({
+                    "date": now.isoformat(),
+                    "event": event_name,
+                    "pi_nuevo": pi_nuevo,
+                    "qty_applied": m["qty_applied"],
+                    "qty_before": m["qty_before"],
+                    "qty_after": m["qty_after"],
+                })
+                bo.history = history
+                bo.updated_at = now
+                if m["qty_after"] == 0:
+                    bo.resolved = True
+                    bo.resolved_at = now
+                    if item:
+                        item.qty_received = item.qty_ordered
+                        item.qty_pending = 0
+                        item.status = "RECEIVED"
+                        item.updated_at = now
+                else:
+                    bo.qty_pending = m["qty_after"]
+                    if item:
+                        item.qty_received = (item.qty_received or 0) + m["qty_applied"]
+                        item.qty_pending = max(0, item.qty_ordered - item.qty_received)
+                        item.status = "PARTIAL" if item.qty_pending > 0 else "RECEIVED"
+                        item.updated_at = now
+
+        clean_matches = [{k: v for k, v in m.items() if not k.startswith("_")} for m in matches]
+        preview_item = {
+            "part_number": part_number,
+            "qty_excel": row["qty"],
+            "origin_pi": origin_pi,
+            "pi_nuevo": pi_nuevo,
+            "matches": clean_matches,
+        }
+
+        if qty_remaining > 0:
+            preview_item["excess_qty"] = qty_remaining
+            preview_item["group"] = "EXCESS"
+            excess_group.append(preview_item)
+        elif any(m["qty_after"] > 0 for m in matches):
+            preview_item["group"] = "PARTIAL"
+            partial_group.append(preview_item)
+        else:
+            preview_item["group"] = "RESOLVED"
+            resolved_group.append(preview_item)
+
+    return {
+        "resolved": resolved_group,
+        "partial": partial_group,
+        "excess": excess_group,
+        "no_backorder": no_bo_group,
+        "total_rows": len(rows),
+    }
+
+
+async def bulk_resolve_rollback(
+    db: AsyncSession,
+    pi_nuevo: str,
+) -> dict:
+    from sqlalchemy import cast, Text
+    now = datetime.utcnow()
+
+    candidates = (await db.execute(
+        select(Backorder).where(
+            cast(Backorder.history, Text).contains(pi_nuevo)
+        )
+    )).scalars().all()
+
+    rolled_back = 0
+    for bo in candidates:
+        history = list(bo.history or [])
+        bulk_entry = next(
+            (e for e in history if e.get("pi_nuevo") == pi_nuevo and e.get("event") in ("RESOLVED_BY_BULK_IMPORT", "PARTIAL_FILL")),
+            None,
+        )
+        if not bulk_entry:
+            continue
+
+        qty_applied = bulk_entry.get("qty_applied", 0)
+        qty_before = bulk_entry.get("qty_before", 0)
+
+        bo.qty_pending = qty_before
+        bo.resolved = False
+        bo.resolved_at = None
+        bo.updated_at = now
+        history.append({
+            "date": now.isoformat(),
+            "event": "ROLLBACK",
+            "pi_nuevo_reversed": pi_nuevo,
+            "qty_restored": qty_before,
+        })
+        bo.history = history
+
+        item = await db.get(SparePartItem, bo.spare_part_item_id)
+        if item:
+            item.qty_received = max(0, (item.qty_received or 0) - qty_applied)
+            item.qty_pending = max(0, item.qty_ordered - item.qty_received)
+            if item.qty_received <= 0:
+                item.status = "BACKORDER"
+            elif item.qty_pending > 0:
+                item.status = "PARTIAL"
+            else:
+                item.status = "RECEIVED"
+            item.updated_at = now
+
+        rolled_back += 1
+
+    return {"rolled_back": rolled_back, "pi_nuevo": pi_nuevo}
+
+
 async def list_backorders(
     db: AsyncSession,
     resolved: Optional[bool] = None,
