@@ -1820,16 +1820,29 @@ async def download_certificado(
 
     if not unit.certificado_generado:
         raise HTTPException(
-            status_code=404,
-            detail="Certificado no generado aún. Cargá primero la DIM.",
+            status_code=422,
+            detail="La DIM no ha sido cargada para esta unidad. Cargá primero el PDF de la DIM.",
         )
 
-    # Load all VehicleModel records for spec matching
-    vehicle_models = (await db.execute(select(VehicleModel))).scalars().all()
-    matched_vm = certificate_service.encontrar_specs_para_modelo(list(vehicle_models), order.model)
+    missing = []
+    if not unit.model:
+        missing.append("modelo de la motocicleta")
+    if not unit.model_year:
+        missing.append("año modelo")
+    if not unit.engine_number:
+        missing.append("número de motor")
+    if not unit.vin_number:
+        missing.append("número de chasis (VIN)")
+    if missing:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Faltan datos obligatorios para generar el empadronamiento: {', '.join(missing)}.",
+        )
 
-    # encontrar_specs_para_modelo returns a dict of specs, not a VehicleModel ORM object.
-    # generate_certificado_bytes expects an ORM object or None; build a simple namespace.
+    # Load all VehicleModel records for spec matching using unit's own model
+    vehicle_models = (await db.execute(select(VehicleModel))).scalars().all()
+    matched_vm = certificate_service.encontrar_specs_para_modelo(list(vehicle_models), unit.model)
+
     vm_obj = None
     if matched_vm and matched_vm.get("cilindrada") != "N/A":
         class _SpecsProxy:
@@ -1842,12 +1855,6 @@ async def download_certificado(
                 self.sistemas_control = d.get("sistemas_control")
                 self.fuel_system = d.get("fuel_system")
         vm_obj = _SpecsProxy(matched_vm)
-
-    if not unit.model_year:
-        raise HTTPException(
-            status_code=422,
-            detail="La moto no tiene año modelo registrado. Completá ese campo antes de generar el empadronamiento.",
-        )
 
     pdf_bytes = certificate_service.generate_certificado_bytes(unit, order, vm_obj)
 

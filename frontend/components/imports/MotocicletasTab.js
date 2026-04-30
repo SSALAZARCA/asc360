@@ -1,10 +1,60 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { authFetch } from '../../lib/authFetch';
-import { FileUp, Download, RefreshCw, Search, CheckCircle, Clock, Bike, X, AlertCircle, Pencil, Send, FileText, Trash2, MapPin } from 'lucide-react';
+import { FileUp, Download, RefreshCw, Search, CheckCircle, Clock, Bike, X, AlertCircle, Pencil, Send, FileText, Trash2, MapPin, AlertTriangle } from 'lucide-react';
 
 function API() {
   return (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1').replace('http://', 'https://');
+}
+
+// ---------------------------------------------------------------------------
+// Error modal estilizado
+// ---------------------------------------------------------------------------
+function ErrorModal({ message, onClose }) {
+  if (!message) return null;
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 9999,
+      background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+    }}>
+      <div style={{
+        background: '#16161f', border: '1px solid rgba(248,113,113,0.3)',
+        borderRadius: '14px', padding: '24px', width: 400, maxWidth: '90vw',
+        display: 'flex', flexDirection: 'column', gap: '14px',
+        boxShadow: '0 16px 48px rgba(0,0,0,0.6)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+          <div style={{ padding: '6px', borderRadius: '8px', background: 'rgba(248,113,113,0.1)', flexShrink: 0 }}>
+            <AlertTriangle size={16} color="#f87171" />
+          </div>
+          <div style={{ flex: 1 }}>
+            <p style={{ margin: '0 0 4px', fontSize: '12px', fontWeight: 700, color: '#f87171' }}>
+              No se puede generar el empadronamiento
+            </p>
+            <p style={{ margin: 0, fontSize: '11px', color: '#9ca3af', lineHeight: 1.6 }}>
+              {message}
+            </p>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#606075', cursor: 'pointer', padding: 0, flexShrink: 0 }}>
+            <X size={14} />
+          </button>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <button
+            onClick={onClose}
+            style={{
+              padding: '7px 20px', borderRadius: '8px',
+              border: '1px solid rgba(248,113,113,0.3)',
+              background: 'rgba(248,113,113,0.08)',
+              color: '#f87171', fontSize: '11px', fontWeight: 700, cursor: 'pointer',
+            }}
+          >
+            Entendido
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -479,6 +529,9 @@ export default function MotocicletasTab({ userRole }) {
   const [editUnit, setEditUnit] = useState(null);
   const [editSaving, setEditSaving] = useState(false);
 
+  // Error modal para certificado
+  const [certError, setCertError] = useState('');
+
   // Toggle empadronamiento físico
   const [toggling, setToggling] = useState(null); // id de la unidad en proceso
   const [unitPendienteEnvio, setUnitPendienteEnvio] = useState(null); // unidad esperando selección de distribuidor
@@ -623,7 +676,7 @@ export default function MotocicletasTab({ userRole }) {
       const res = await authFetch(`${API()}/imports/moto-units/${unit.id}/certificado`);
       if (!res.ok) {
         const err = await res.json();
-        alert(err.detail || 'Error al generar certificado');
+        setCertError(err.detail || 'Error al generar el certificado.');
         return;
       }
       const blob = await res.blob();
@@ -634,7 +687,7 @@ export default function MotocicletasTab({ userRole }) {
       a.click();
       URL.revokeObjectURL(url);
     } catch (e) {
-      alert('Error al descargar el certificado');
+      setCertError('Error de conexión al descargar el certificado.');
     }
   };
 
@@ -663,6 +716,8 @@ export default function MotocicletasTab({ userRole }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+
+      <ErrorModal message={certError} onClose={() => setCertError('')} />
 
       {/* KPIs — totales globales del backend */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
