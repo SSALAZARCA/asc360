@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { authFetch } from '../../lib/authFetch';
-import { RefreshCw, Search, CheckCircle, Clock, AlertTriangle, Tag } from 'lucide-react';
+import { RefreshCw, Search, CheckCircle, Clock, AlertTriangle, Tag, FileUp, X, RotateCcw } from 'lucide-react';
 
 function API() {
   return (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1').replace('http://', 'https://');
@@ -119,6 +119,110 @@ function BulkPIModal({ count, onConfirm, onCancel }) {
   );
 }
 
+const GROUP_LABELS = {
+  resolved:     { label: 'Se resuelven completamente', color: '#22c55e', bg: 'rgba(34,197,94,0.08)',  border: 'rgba(34,197,94,0.25)'  },
+  partial:      { label: 'Quedan con saldo abierto',   color: '#fb923c', bg: 'rgba(251,146,60,0.08)', border: 'rgba(251,146,60,0.25)' },
+  excess:       { label: 'Exceso (sobra mercadería)',  color: '#60a5fa', bg: 'rgba(96,165,250,0.08)',  border: 'rgba(96,165,250,0.25)' },
+  no_backorder: { label: 'Sin backorder abierto',      color: '#f87171', bg: 'rgba(248,113,113,0.08)', border: 'rgba(248,113,113,0.25)' },
+};
+
+function BulkResolveModal({ preview, onConfirm, onCancel, loading }) {
+  const total = (preview?.resolved?.length || 0) + (preview?.partial?.length || 0) +
+                (preview?.excess?.length || 0) + (preview?.no_backorder?.length || 0);
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ background: '#16161f', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '14px', padding: '24px', width: 520, maxWidth: '92vw', maxHeight: '82vh', display: 'flex', flexDirection: 'column', gap: '16px', overflowY: 'auto' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <p style={{ margin: 0, fontSize: '13px', fontWeight: 700, color: '#fff' }}>
+            Preview — {total} fila{total !== 1 ? 's' : ''} en el Excel
+          </p>
+          <button onClick={onCancel} style={{ background: 'none', border: 'none', color: '#606075', cursor: 'pointer', padding: 0 }}><X size={14} /></button>
+        </div>
+
+        {Object.entries(GROUP_LABELS).map(([key, cfg]) => {
+          const items = preview?.[key] || [];
+          if (!items.length) return null;
+          return (
+            <div key={key}>
+              <p style={{ margin: '0 0 8px', fontSize: '10px', fontWeight: 700, color: cfg.color, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                {cfg.label} — {items.length}
+              </p>
+              {items.map((item, i) => (
+                <div key={i} style={{ padding: '8px 10px', borderRadius: '8px', background: cfg.bg, border: `1px solid ${cfg.border}`, marginBottom: 6 }}>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
+                    <span style={{ fontFamily: 'monospace', fontSize: '11px', fontWeight: 700, color: '#fff' }}>{item.part_number}</span>
+                    <span style={{ fontSize: '10px', color: '#9ca3af' }}>{item.qty_excel} uds · origen: {item.origin_pi} · nuevo: {item.pi_nuevo}</span>
+                    {item.excess_qty > 0 && <span style={{ fontSize: '10px', color: '#60a5fa' }}>+{item.excess_qty} exceso</span>}
+                  </div>
+                  {item.matches?.map((m, j) => (
+                    <div key={j} style={{ fontSize: '9px', color: '#9ca3af', marginTop: 3, paddingLeft: 4 }}>
+                      {m.spillover ? '↪ spillover' : '→'} {m.origin_pi}: {m.qty_applied} aplicadas
+                      {m.qty_after > 0 ? ` · quedan ${m.qty_after}` : ' · cerrado'}
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          );
+        })}
+
+        <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', paddingTop: 4 }}>
+          <button onClick={onCancel} style={{ padding: '7px 16px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: '#9ca3af', fontSize: '11px', cursor: 'pointer' }}>
+            Cancelar
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={loading || !(preview?.resolved?.length || preview?.partial?.length || preview?.excess?.length)}
+            style={{ padding: '7px 16px', borderRadius: '8px', border: 'none', background: '#2563eb', color: '#fff', fontSize: '11px', fontWeight: 700, cursor: 'pointer', opacity: loading ? 0.6 : 1 }}
+          >
+            {loading ? 'Aplicando...' : 'Confirmar y aplicar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RollbackModal({ onConfirm, onCancel, loading }) {
+  const [piNuevo, setPiNuevo] = useState('');
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ background: '#16161f', border: '1px solid rgba(248,113,113,0.3)', borderRadius: '14px', padding: '24px', width: 380, display: 'flex', flexDirection: 'column', gap: '14px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ padding: '6px', borderRadius: '8px', background: 'rgba(248,113,113,0.1)', flexShrink: 0 }}>
+            <RotateCcw size={14} color="#f87171" />
+          </div>
+          <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: '#f87171' }}>Revertir carga masiva</p>
+          <button onClick={onCancel} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#606075', cursor: 'pointer', padding: 0 }}><X size={13} /></button>
+        </div>
+        <p style={{ margin: 0, fontSize: '11px', color: '#9ca3af', lineHeight: 1.5 }}>
+          Ingresá el <strong style={{ color: '#fff' }}>PI Nuevo</strong> que fue cargado para revertir todos los backorders que resolvió esa importación.
+        </p>
+        <input
+          autoFocus
+          value={piNuevo}
+          onChange={e => setPiNuevo(e.target.value.toUpperCase())}
+          onKeyDown={e => { if (e.key === 'Enter' && piNuevo) onConfirm(piNuevo); if (e.key === 'Escape') onCancel(); }}
+          placeholder="Ej: E0000590-SP-1"
+          style={{ padding: '9px 12px', borderRadius: '8px', fontSize: '12px', fontFamily: 'monospace', background: '#1a1a24', border: '1px solid rgba(255,255,255,0.15)', color: '#fff', outline: 'none', width: '100%', boxSizing: 'border-box' }}
+        />
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <button onClick={onCancel} style={{ padding: '7px 16px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: '#9ca3af', fontSize: '11px', cursor: 'pointer' }}>
+            Cancelar
+          </button>
+          <button
+            onClick={() => piNuevo && onConfirm(piNuevo)}
+            disabled={!piNuevo || loading}
+            style={{ padding: '7px 16px', borderRadius: '8px', border: '1px solid rgba(248,113,113,0.3)', background: 'rgba(248,113,113,0.1)', color: '#f87171', fontSize: '11px', fontWeight: 700, cursor: piNuevo ? 'pointer' : 'default', opacity: loading ? 0.6 : 1 }}
+          >
+            {loading ? 'Revirtiendo...' : 'Revertir'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function BackorderTab({ userRole }) {
   const [backorders, setBackorders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -132,6 +236,73 @@ export default function BackorderTab({ userRole }) {
 
   const canEdit = userRole === 'superadmin' || userRole === 'proveedor';
   const isSuperadmin = userRole === 'superadmin';
+
+  // Bulk resolve state
+  const [bulkResolvePreview, setBulkResolvePreview] = useState(null);
+  const [bulkResolveLoading, setBulkResolveLoading] = useState(false);
+  const [pendingFile, setPendingFile] = useState(null);
+  const [showRollbackModal, setShowRollbackModal] = useState(false);
+  const [rollbackLoading, setRollbackLoading] = useState(false);
+
+  const handleBulkResolveUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    setBulkResolveLoading(true);
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      const res = await authFetch(`${API()}/imports/backorders/bulk-resolve-preview`, { method: 'POST', body: form });
+      if (!res.ok) {
+        const err = await res.json();
+        alert(err.detail || 'Error al procesar el Excel');
+        return;
+      }
+      const preview = await res.json();
+      setPendingFile(file);
+      setBulkResolvePreview(preview);
+    } catch { alert('Error de conexión al procesar el Excel'); }
+    finally { setBulkResolveLoading(false); }
+  };
+
+  const handleBulkResolveApply = async () => {
+    if (!pendingFile) return;
+    setBulkResolveLoading(true);
+    try {
+      const form = new FormData();
+      form.append('file', pendingFile);
+      const res = await authFetch(`${API()}/imports/backorders/bulk-resolve-apply`, { method: 'POST', body: form });
+      if (!res.ok) {
+        const err = await res.json();
+        alert(err.detail || 'Error al aplicar');
+        return;
+      }
+      setBulkResolvePreview(null);
+      setPendingFile(null);
+      fetchBackorders();
+    } catch { alert('Error de conexión al aplicar'); }
+    finally { setBulkResolveLoading(false); }
+  };
+
+  const handleRollback = async (piNuevo) => {
+    setRollbackLoading(true);
+    try {
+      const res = await authFetch(`${API()}/imports/backorders/bulk-resolve-rollback`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pi_nuevo: piNuevo }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.detail || 'Error al revertir');
+        return;
+      }
+      setShowRollbackModal(false);
+      alert(`Revertidos ${data.rolled_back} backorder${data.rolled_back !== 1 ? 's' : ''} del PI ${piNuevo}`);
+      fetchBackorders();
+    } catch { alert('Error de conexión al revertir'); }
+    finally { setRollbackLoading(false); }
+  };
 
   const handleRepair = async () => {
     if (!confirm('Esto re-calculará todos los backorders de inspección física. ¿Continuar?')) return;
@@ -271,6 +442,23 @@ export default function BackorderTab({ userRole }) {
         />
       )}
 
+      {bulkResolvePreview && (
+        <BulkResolveModal
+          preview={bulkResolvePreview}
+          onConfirm={handleBulkResolveApply}
+          onCancel={() => { setBulkResolvePreview(null); setPendingFile(null); }}
+          loading={bulkResolveLoading}
+        />
+      )}
+
+      {showRollbackModal && (
+        <RollbackModal
+          onConfirm={handleRollback}
+          onCancel={() => setShowRollbackModal(false)}
+          loading={rollbackLoading}
+        />
+      )}
+
       {/* KPIs */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px' }}>
         {[
@@ -319,6 +507,25 @@ export default function BackorderTab({ userRole }) {
         <button onClick={fetchBackorders} style={{ padding: '7px 9px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)', cursor: 'pointer', color: '#9ca3af' }}>
           <RefreshCw size={13} />
         </button>
+
+        {canEdit && (
+          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '7px 14px', borderRadius: '8px', border: '1px solid rgba(96,165,250,0.3)', background: 'rgba(96,165,250,0.08)', color: bulkResolveLoading ? '#606075' : '#60a5fa', fontSize: '11px', fontWeight: 700, cursor: bulkResolveLoading ? 'default' : 'pointer', whiteSpace: 'nowrap' }}>
+            <FileUp size={12} />
+            {bulkResolveLoading ? 'Procesando...' : 'Cargar Excel'}
+            <input type="file" accept=".xlsx,.xls" onChange={handleBulkResolveUpload} style={{ display: 'none' }} disabled={bulkResolveLoading} />
+          </label>
+        )}
+
+        {isSuperadmin && (
+          <button
+            onClick={() => setShowRollbackModal(true)}
+            title="Revertir una carga masiva por PI Nuevo"
+            style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '7px 12px', borderRadius: '8px', border: '1px solid rgba(248,113,113,0.25)', background: 'rgba(248,113,113,0.06)', color: '#f87171', fontSize: '10px', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}
+          >
+            <RotateCcw size={11} />
+            Revertir carga
+          </button>
+        )}
 
         {selected.size > 0 && canEdit && (
           <button
