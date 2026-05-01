@@ -1444,9 +1444,7 @@ async def confirm_reconciliation(
         if rr.result == "COMPLETE":
             item.qty_received = item.qty_ordered
             item.qty_pending = 0
-            item.status = "RECEIVED"
-            # Resolver backorders previos de esta parte en este lote
-            await _resolve_backorders_for_item(db, item, origin_pi)
+            item.status = "DECLARED"
 
         elif rr.result == "PARTIAL":
             item.qty_received = rr.qty_in_packing or 0
@@ -1468,11 +1466,10 @@ async def confirm_reconciliation(
                     backorders_created += 1
 
         elif rr.result in ("EXTRA", "EXTRA_APPLIED"):
-            # Vino más de lo ordenado: registrar lo recibido real y cerrar pendientes
+            # Vino más de lo ordenado: registrar lo declarado, sin confirmar aún
             item.qty_received = rr.qty_in_packing or 0
             item.qty_pending = 0
-            item.status = "RECEIVED"
-            await _resolve_backorders_for_item(db, item, origin_pi)
+            item.status = "DECLARED"
 
         item.updated_at = datetime.utcnow()
         updated += 1
@@ -1510,22 +1507,9 @@ async def confirm_reconciliation(
                 "qty_applied": apply_qty,
             })
 
-            sp_item = await db.get(SparePartItem, bo.spare_part_item_id)
-            if bo.qty_pending == 0:
-                bo.resolved = True
-                bo.resolved_at = now
-                history.append({"date": now.isoformat(), "event": "RESOLVED", "resolved_in_pi": origin_pi})
-                backorders_resolved_by_extra += 1
-                if sp_item:
-                    sp_item.qty_received = sp_item.qty_ordered
-                    sp_item.qty_pending = 0
-                    sp_item.status = "RECEIVED"
-                    sp_item.updated_at = now
-            else:
-                if sp_item:
-                    sp_item.qty_received = (sp_item.qty_received or 0) + apply_qty
-                    sp_item.qty_pending = max(0, sp_item.qty_ordered - sp_item.qty_received)
-                    sp_item.updated_at = now
+            bo.expected_in_pi = origin_pi
+            event_name = "ASSIGNED_TO_PI_BY_EXTRA" if bo.qty_pending == 0 else "PARTIAL_ASSIGNMENT_BY_EXTRA"
+            history.append({"date": now.isoformat(), "event": event_name, "pi": origin_pi, "qty_assigned": apply_qty})
 
             bo.history = history
             bo.updated_at = now
@@ -1540,7 +1524,7 @@ async def confirm_reconciliation(
     return {
         "confirmed": updated,
         "backorders_created": backorders_created,
-        "backorders_resolved_by_extra": backorders_resolved_by_extra,
+        "backorders_assigned_by_extra": backorders_resolved_by_extra,
         "lot_id": str(lot.id),
     }
 
@@ -1608,10 +1592,33 @@ async def apply_physical_inspection(
     # Faltante cobrado: estaba en el PL (cobrado) pero no llegó físicamente
     physical_shortage = max(0, qty_received - qty_physical)
 
+    now = datetime.utcnow()
     item.qty_physical = qty_physical
     item.qty_pending  = max(0, qty_ordered - qty_physical)
     item.status       = 'RECEIVED' if qty_physical >= qty_ordered else 'BACKORDER'
-    item.updated_at   = datetime.utcnow()
+    item.updated_at   = now
+
+    # Resolver BOs de otros lotes asignados a este PI via bulk-resolve o EXTRA
+    assigned_bos = (await db.execute(
+        select(Backorder).where(
+            Backorder.part_number == item.part_number,
+            Backorder.expected_in_pi == origin_pi,
+            Backorder.resolved == False,
+        )
+    )).scalars().all()
+    for bo in assigned_bos:
+        bo.resolved    = True
+        bo.resolved_at = now
+        bo.updated_at  = now
+        h = list(bo.history or [])
+        h.append({"date": now.isoformat(), "event": "RESOLVED_BY_PHYSICAL_INSPECTION", "pi": origin_pi, "qty_physical": qty_physical})
+        bo.history = h
+        sp = await db.get(SparePartItem, bo.spare_part_item_id)
+        if sp:
+            sp.qty_received = sp.qty_ordered
+            sp.qty_pending  = 0
+            sp.status       = 'RECEIVED'
+            sp.updated_at   = now
 
     # Garantizar que el BO de reconciliación siempre refleje el faltante no cobrado.
     # Si fue resuelto o nunca existió, lo recrea con el valor correcto.
@@ -1757,8 +1764,7 @@ async def bulk_resolve_compute(
         if apply:
             for m in matches:
                 bo = m["_bo"]
-                item = await db.get(SparePartItem, m["_item_id"])
-                event_name = "RESOLVED_BY_BULK_IMPORT" if m["qty_after"] == 0 else "PARTIAL_FILL"
+                event_name = "ASSIGNED_TO_PI" if m["qty_after"] == 0 else "PARTIAL_FILL"
                 history = list(bo.history or [])
                 history.append({
                     "date": now.isoformat(),
@@ -1768,23 +1774,11 @@ async def bulk_resolve_compute(
                     "qty_before": m["qty_before"],
                     "qty_after": m["qty_after"],
                 })
+                bo.expected_in_pi = pi_nuevo
+                if m["qty_after"] > 0:
+                    bo.qty_pending = m["qty_after"]
                 bo.history = history
                 bo.updated_at = now
-                if m["qty_after"] == 0:
-                    bo.resolved = True
-                    bo.resolved_at = now
-                    if item:
-                        item.qty_received = item.qty_ordered
-                        item.qty_pending = 0
-                        item.status = "RECEIVED"
-                        item.updated_at = now
-                else:
-                    bo.qty_pending = m["qty_after"]
-                    if item:
-                        item.qty_received = (item.qty_received or 0) + m["qty_applied"]
-                        item.qty_pending = max(0, item.qty_ordered - item.qty_received)
-                        item.status = "PARTIAL" if item.qty_pending > 0 else "RECEIVED"
-                        item.updated_at = now
 
         clean_matches = [{k: v for k, v in m.items() if not k.startswith("_")} for m in matches]
         preview_item = {
@@ -1832,18 +1826,16 @@ async def bulk_resolve_rollback(
     for bo in candidates:
         history = list(bo.history or [])
         bulk_entry = next(
-            (e for e in history if e.get("pi_nuevo") == pi_nuevo and e.get("event") in ("RESOLVED_BY_BULK_IMPORT", "PARTIAL_FILL")),
+            (e for e in history if e.get("pi_nuevo") == pi_nuevo and e.get("event") in ("ASSIGNED_TO_PI", "PARTIAL_FILL")),
             None,
         )
         if not bulk_entry:
             continue
 
-        qty_applied = bulk_entry.get("qty_applied", 0)
         qty_before = bulk_entry.get("qty_before", 0)
 
         bo.qty_pending = qty_before
-        bo.resolved = False
-        bo.resolved_at = None
+        bo.expected_in_pi = None
         bo.updated_at = now
         history.append({
             "date": now.isoformat(),
@@ -1852,18 +1844,6 @@ async def bulk_resolve_rollback(
             "qty_restored": qty_before,
         })
         bo.history = history
-
-        item = await db.get(SparePartItem, bo.spare_part_item_id)
-        if item:
-            item.qty_received = max(0, (item.qty_received or 0) - qty_applied)
-            item.qty_pending = max(0, item.qty_ordered - item.qty_received)
-            if item.qty_received <= 0:
-                item.status = "BACKORDER"
-            elif item.qty_pending > 0:
-                item.status = "PARTIAL"
-            else:
-                item.status = "RECEIVED"
-            item.updated_at = now
 
         rolled_back += 1
 
