@@ -1,18 +1,17 @@
 """backfill DECLARED status for items received without physical inspection
 
-Revision ID: a1b2c3d4e5f6
-Revises: z9a0b1c2d3e4
+Revision ID: e6f7a8b9c0d1
+Revises: d3e4f5a6b7c8
 Create Date: 2026-05-02
 
 Items reconciliados con código anterior quedaron en RECEIVED aunque nunca
 tuvieron inspección física (qty_physical IS NULL). El nuevo flujo los marca
-DECLARED hasta que se confirme el inventario físico. Esta migración corrige
-los datos existentes sin tocar items que ya pasaron por inspección física.
+DECLARED hasta que se confirme el inventario físico.
 """
 from alembic import op
 
-revision = 'a1b2c3d4e5f6'
-down_revision = 'z9a0b1c2d3e4'
+revision = 'e6f7a8b9c0d1'
+down_revision = 'd3e4f5a6b7c8'
 branch_labels = None
 depends_on = None
 
