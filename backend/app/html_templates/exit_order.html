@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Orden de Salida — {{ tenant_name }}</title>
+  <style>
+    @page { size: A4; margin: 0; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #1a1a1a; }
+    .page { width: 100%; background: #ffffff; }
+
+    .doc-header { background: #111827; display: flex; align-items: stretch; min-height: 80px; }
+    .header-accent { width: 5px; background: #10b981; flex-shrink: 0; }
+    .header-brand { padding: 16px 22px; display: flex; flex-direction: column; justify-content: center; flex: 1; border-right: 1px solid rgba(255,255,255,0.06); }
+    .brand-row { display: flex; align-items: center; gap: 9px; margin-bottom: 3px; }
+    .brand-badge { background: #10b981; color: #fff; font-size: 10px; font-weight: 900; padding: 3px 8px; border-radius: 3px; letter-spacing: 0.06em; font-style: italic; }
+    .brand-name { color: #fff; font-size: 12px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; }
+    .brand-sub { color: rgba(255,255,255,0.28); font-size: 7.5px; font-weight: 500; letter-spacing: 0.18em; text-transform: uppercase; }
+    .header-order { padding: 16px 24px; display: flex; flex-direction: column; align-items: flex-end; justify-content: center; min-width: 180px; }
+    .order-label { color: rgba(255,255,255,0.28); font-size: 7px; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase; margin-bottom: 2px; }
+    .order-number { color: #fff; font-size: 24px; font-weight: 900; letter-spacing: -0.02em; line-height: 1; }
+    .order-meta { color: rgba(255,255,255,0.35); font-size: 8px; margin-top: 4px; text-align: right; line-height: 1.5; }
+    .service-type-label { margin-top: 5px; font-size: 7.5px; font-weight: 700; color: #10b981; text-transform: uppercase; letter-spacing: 0.12em; text-align: right; }
+
+    .delivery-banner { background: #ecfdf5; border-bottom: 2px solid #10b981; padding: 10px 26px; display: flex; align-items: center; gap: 10px; }
+    .delivery-banner-icon { width: 28px; height: 28px; background: #10b981; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .delivery-banner-text { font-size: 8.5px; color: #065f46; line-height: 1.6; }
+    .delivery-banner-text strong { font-weight: 800; font-size: 9px; }
+
+    .doc-body { padding: 22px 26px; }
+
+    .section-label { font-size: 7px; font-weight: 800; color: #10b981; text-transform: uppercase; letter-spacing: 0.22em; margin-bottom: 10px; margin-top: 18px; display: flex; align-items: center; gap: 8px; }
+    .section-label:first-child { margin-top: 0; }
+    .section-label::after { content: ''; flex: 1; height: 1px; background: #e5e7eb; }
+
+    .identity-row { display: flex; gap: 10px; }
+    .identity-card { flex: 1; border: 1px solid #e5e7eb; border-radius: 5px; padding: 13px 15px; position: relative; overflow: hidden; }
+    .identity-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: #e5e7eb; }
+    .identity-card.accent::before { background: #10b981; }
+    .card-field-label { font-size: 6.5px; font-weight: 700; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.15em; margin-bottom: 5px; }
+    .card-main { font-size: 14px; font-weight: 800; color: #111827; line-height: 1.2; margin-bottom: 4px; }
+    .card-sub { font-size: 8.5px; color: #6b7280; line-height: 1.5; }
+    .plate-tag { display: inline-block; background: #111827; color: #fff; font-size: 18px; font-weight: 900; padding: 4px 12px; border-radius: 4px; letter-spacing: 0.1em; margin-bottom: 5px; border-bottom: 2px solid #10b981; }
+
+    .compare-row { display: flex; gap: 8px; align-items: stretch; }
+    .indicator-chip { flex: 1; border: 1px solid #e5e7eb; border-radius: 5px; padding: 10px 12px; }
+    .chip-label { font-size: 6.5px; font-weight: 700; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.14em; margin-bottom: 5px; }
+    .chip-value { font-size: 13px; font-weight: 800; color: #111827; line-height: 1; }
+    .chip-unit { font-size: 8.5px; font-weight: 500; color: #9ca3af; }
+    .fuel-bar-track { height: 5px; background: #f3f4f6; border-radius: 3px; margin-top: 7px; overflow: hidden; border: 1px solid #e5e7eb; }
+    .fuel-bar-fill { height: 100%; border-radius: 2px; background: #374151; }
+    .fuel-ticks { display: flex; justify-content: space-between; margin-top: 3px; }
+    .fuel-ticks span { font-size: 5.5px; color: #d1d5db; font-weight: 600; }
+
+    .work-table { width: 100%; border-collapse: collapse; border: 1px solid #e5e7eb; border-radius: 5px; overflow: hidden; font-size: 8px; }
+    .work-table thead tr { background: #f9fafb; }
+    .work-table th { padding: 7px 10px; text-align: left; font-size: 6.5px; font-weight: 800; color: #6b7280; text-transform: uppercase; letter-spacing: 0.14em; border-bottom: 1px solid #e5e7eb; }
+    .work-table td { padding: 8px 10px; border-bottom: 1px solid #f3f4f6; color: #374151; vertical-align: top; line-height: 1.5; }
+    .work-table tr:last-child td { border-bottom: none; }
+    .work-table tr:nth-child(even) td { background: #fafafa; }
+    .tag-warranty { display: inline-block; background: #dbeafe; color: #1d4ed8; font-size: 6px; font-weight: 800; padding: 2px 6px; border-radius: 10px; text-transform: uppercase; letter-spacing: 0.08em; }
+    .tag-paid { display: inline-block; background: #fef9c3; color: #854d0e; font-size: 6px; font-weight: 800; padding: 2px 6px; border-radius: 10px; text-transform: uppercase; letter-spacing: 0.08em; }
+
+    .accessories-list { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 4px; }
+    .accessory-tag { background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 20px; padding: 3px 10px; font-size: 7.5px; color: #065f46; white-space: nowrap; display: flex; align-items: center; gap: 4px; }
+    .accessory-check { color: #10b981; font-size: 9px; font-weight: 900; }
+
+    .obs-box { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 5px; padding: 10px 13px; font-size: 8px; color: #374151; line-height: 1.7; white-space: pre-line; }
+
+    .legal-prose { border: 1px solid #e5e7eb; border-radius: 5px; padding: 11px 14px; background: #fafafa; font-size: 7px; color: #6b7280; line-height: 1.75; }
+    .legal-prose strong { color: #374151; font-weight: 800; }
+
+    .stamp-row { display: flex; align-items: flex-start; gap: 14px; border: 1px solid #e5e7eb; border-radius: 5px; padding: 13px 16px; }
+    .stamp-indicator { width: 8px; align-self: stretch; border-radius: 3px; flex-shrink: 0; background: #22c55e; }
+    .stamp-title { font-size: 8.5px; font-weight: 800; color: #111827; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px; }
+    .stamp-detail { font-size: 8px; color: #6b7280; line-height: 1.6; }
+
+    .signatures { display: flex; gap: 40px; margin-top: 14px; padding-top: 10px; }
+    .sig-box { flex: 1; text-align: center; }
+    .sig-space { height: 44px; }
+    .sig-line { border-top: 1px solid #374151; padding-top: 7px; }
+    .sig-name { font-size: 7.5px; font-weight: 700; color: #374151; text-transform: uppercase; letter-spacing: 0.08em; }
+    .sig-sub { font-size: 7px; color: #9ca3af; margin-top: 2px; line-height: 1.5; }
+
+    .doc-footer { background: #f9fafb; border-top: 1px solid #e5e7eb; padding: 9px 26px; display: flex; justify-content: space-between; align-items: center; }
+    .footer-legal { font-size: 6px; color: #9ca3af; line-height: 1.6; max-width: 68%; }
+    .footer-ref { font-size: 7px; color: #d1d5db; font-weight: 600; letter-spacing: 0.08em; text-align: right; line-height: 1.6; }
+    .footer-ref span { color: #10b981; }
+  </style>
+</head>
+<body>
+<div class="page">
+
+  <div class="doc-header">
+    <div class="header-accent"></div>
+    <div class="header-brand">
+      <div class="brand-row">
+        <span class="brand-badge">UM</span>
+        <span class="brand-name">{{ tenant_name }}</span>
+      </div>
+      <span class="brand-sub">Orden de Salida &nbsp;·&nbsp; Documento Oficial de Entrega</span>
+      {% if tenant_nit or tenant_phone or tenant_city %}
+      <span class="brand-sub" style="margin-top:3px; color:rgba(255,255,255,0.40);">
+        {% if tenant_nit %}NIT: {{ tenant_nit }} &nbsp;·&nbsp;{% endif %}
+        {% if tenant_phone %}Tel: {{ tenant_phone }} &nbsp;·&nbsp;{% endif %}
+        {{ tenant_city }}
+      </span>
+      {% endif %}
+    </div>
+    <div class="header-order">
+      <span class="order-label">Orden de Servicio</span>
+      <span class="order-number">#{{ order_id_short }}</span>
+      <span class="order-meta">{{ delivered_date }}<br>{{ tenant_name }}</span>
+      <span class="service-type-label">{{ service_type_label }}</span>
+    </div>
+  </div>
+
+  <div class="delivery-banner">
+    <div class="delivery-banner-icon">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+    </div>
+    <div class="delivery-banner-text">
+      <strong>Vehículo entregado al propietario</strong> · Este documento certifica la devolución del vehículo en las condiciones descritas.
+      La firma o aceptación OTP del cliente constituye conformidad con los trabajos realizados.
+    </div>
+  </div>
+
+  <div class="doc-body">
+
+    <div class="section-label">Identificacion</div>
+    <div class="identity-row">
+      <div class="identity-card">
+        <div class="card-field-label">Propietario del Vehículo</div>
+        <div class="card-main">{{ owner_name }}</div>
+        <div class="card-sub">
+          {{ owner_id_doc }}<br>
+          {% if owner_phone %}Cel: {{ owner_phone }}<br>{% endif %}
+          {% if owner_email %}{{ owner_email }}{% endif %}
+        </div>
+      </div>
+      <div class="identity-card accent">
+        <div class="card-field-label">Motocicleta</div>
+        <div class="plate-tag">{{ vehicle_plate }}</div>
+        <div class="card-sub">
+          {{ vehicle_model }}{% if vehicle_color %} · Color: {{ vehicle_color }}{% endif %}<br>
+          {% if vehicle_vin %}VIN: {{ vehicle_vin }}<br>{% endif %}
+          {% if vehicle_motor %}Motor: {{ vehicle_motor }}{% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="section-label">Condicion de Ingreso</div>
+    <div class="compare-row">
+      <div class="indicator-chip">
+        <div class="chip-label">Kilometraje al Ingreso</div>
+        <div class="chip-value">{{ mileage_km }} <span class="chip-unit">km</span></div>
+      </div>
+      <div class="indicator-chip" style="flex: 1.8">
+        <div class="chip-label">Nivel de Combustible al Ingreso{% if gas_level %} &mdash; {{ gas_level }}{% endif %}</div>
+        <div class="fuel-bar-track">
+          <div class="fuel-bar-fill" style="width: {{ fuel_bar_width }}%"></div>
+        </div>
+        <div class="fuel-ticks">
+          <span>E</span><span>1/4</span><span>1/2</span><span>3/4</span><span>F</span>
+        </div>
+      </div>
+      <div class="indicator-chip">
+        <div class="chip-label">Tipo de Servicio</div>
+        <div class="chip-value" style="font-size:10px; font-weight:700; color:#2563eb;">{{ service_type_label }}</div>
+      </div>
+      {% if technician_name %}
+      <div class="indicator-chip">
+        <div class="chip-label">Asesor Tecnico</div>
+        <div class="chip-value" style="font-size:10px; font-weight:700;">{{ technician_name }}</div>
+      </div>
+      {% endif %}
+    </div>
+
+    <div class="section-label">Trabajo Realizado</div>
+    <table class="work-table">
+      <thead>
+        <tr>
+          <th style="width:40%">Referido por el Cliente</th>
+          <th style="width:60%">Diagnóstico / Trabajo Realizado</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if work_logs %}
+          {% for wl in work_logs %}
+          <tr>
+            <td style="color:#6b7280; font-style:italic;">
+              {% if loop.first and customer_notes %}{{ customer_notes }}{% else %}&mdash;{% endif %}
+            </td>
+            <td>{{ wl }}</td>
+          </tr>
+          {% endfor %}
+        {% else %}
+        <tr>
+          <td style="color:#6b7280; font-style:italic;">{{ customer_notes or '—' }}</td>
+          <td style="color:#9ca3af; font-style:italic;">Sin diagnóstico registrado</td>
+        </tr>
+        {% endif %}
+      </tbody>
+    </table>
+
+    {% if parts %}
+    <div class="section-label">Repuestos y Materiales Utilizados</div>
+    <table class="work-table">
+      <thead>
+        <tr>
+          <th style="width:55%">Referencia</th>
+          <th style="width:10%">Cant.</th>
+          <th style="width:20%">Tipo</th>
+          <th style="width:15%">Estado</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in parts %}
+        <tr>
+          <td>{{ p.reference }}</td>
+          <td>{{ p.qty }}</td>
+          <td>
+            {% if p.part_type == 'warranty' %}<span class="tag-warranty">Garantía</span>
+            {% else %}<span class="tag-paid">Cliente</span>{% endif %}
+          </td>
+          <td>{{ p.status_label }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+
+    {% if accessories %}
+    <div class="section-label">Accesorios e Inventario Devuelto</div>
+    <div class="accessories-list">
+      {% for acc in accessories %}
+      <span class="accessory-tag"><span class="accessory-check">✓</span> {{ acc }}</span>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if exit_observations %}
+    <div class="section-label">Observaciones de Salida</div>
+    <div class="obs-box">{{ exit_observations }}</div>
+    {% endif %}
+
+    <div class="section-label">Condiciones Legales de Entrega</div>
+    <div class="legal-prose">{{ legal_text }}</div>
+
+    <div class="section-label">Estado de Entrega</div>
+    {% if accepted_at %}
+    <div class="stamp-row">
+      <div class="stamp-indicator"></div>
+      <div>
+        <div class="stamp-title">Vehículo entregado — Aceptado via OTP</div>
+        <div class="stamp-detail">
+          Código de 6 dígitos validado el <strong>{{ accepted_at }}</strong><br>
+          {% if accepted_phone %}Enviado y confirmado desde el número <strong>{{ accepted_phone }}</strong>{% endif %}
+        </div>
+      </div>
+    </div>
+    {% elif bypass_at %}
+    <div class="stamp-row">
+      <div class="stamp-indicator" style="background:#f59e0b;"></div>
+      <div>
+        <div class="stamp-title">Vehículo entregado — Autorización Manual</div>
+        <div class="stamp-detail">
+          Autorizado por <strong>{{ bypass_by_name }}</strong> el <strong>{{ bypass_at }}</strong>
+        </div>
+      </div>
+    </div>
+    {% else %}
+    <div class="signatures">
+      <div class="sig-box">
+        <div class="sig-space"></div>
+        <div class="sig-line">
+          <div class="sig-name">Firma del Propietario / Cliente</div>
+          <div class="sig-sub">Confirmo haber recibido mi vehículo<br>en las condiciones descritas.</div>
+        </div>
+      </div>
+      <div class="sig-box">
+        <div class="sig-space"></div>
+        <div class="sig-line">
+          <div class="sig-name">Firma del Asesor de Entrega</div>
+          <div class="sig-sub">Nombre: ___________________________</div>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+  </div>
+
+  <div class="doc-footer">
+    <div class="footer-legal">
+      Este documento es constancia oficial de entrega del vehículo. La firma o aceptación OTP del cliente
+      certifica conformidad con los trabajos realizados. Conserve este documento para reclamaciones de garantía.
+    </div>
+    <div class="footer-ref">
+      <span>SAL-{{ order_id_short }}</span><br>
+      Sistema UM · Generado automáticamente
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

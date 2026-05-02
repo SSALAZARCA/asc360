@@ -168,6 +168,108 @@ async def get_last_mileage(vehicle_id: uuid.UUID, db: AsyncSession = Depends(get
     
     return {"last_mileage_km": row[0], "last_visit_date": row[1].strftime("%Y-%m-%d") if row[1] else None}
 
+@router.get("/{order_id}/exit-pdf")
+async def download_exit_order_pdf(
+    order_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user)
+):
+    from app.services.pdf_service import generate_exit_order_pdf
+    from fastapi.responses import StreamingResponse
+    import io
+
+    stmt = (
+        select(ServiceOrder)
+        .options(
+            selectinload(ServiceOrder.reception),
+            selectinload(ServiceOrder.vehicle),
+            selectinload(ServiceOrder.client),
+            selectinload(ServiceOrder.technician),
+            selectinload(ServiceOrder.tenant),
+            selectinload(ServiceOrder.work_logs),
+            selectinload(ServiceOrder.parts),
+        )
+        .where(ServiceOrder.id == order_id)
+    )
+    res = await db.execute(stmt)
+    order = res.scalar_one_or_none()
+
+    if not order:
+        raise HTTPException(status_code=404, detail="Orden no encontrada")
+    if not current_user.is_superadmin and order.tenant_id != current_user.tenant_id:
+        raise HTTPException(status_code=403, detail="Sin permiso para esta orden")
+
+    r = order.reception
+    order_data = {
+        "id": str(order.id),
+        "service_type": order.service_type.value if order.service_type else "",
+        "delivered_at": order.delivered_at.isoformat() if order.delivered_at else None,
+        "completed_at": order.completed_at.isoformat() if order.completed_at else None,
+        "technician_name": order.technician.name if order.technician else "",
+        "accepted_at": r.accepted_at.isoformat() if r and getattr(r, "accepted_at", None) else None,
+        "accepted_phone": getattr(r, "accepted_phone", None) if r else None,
+        "bypass_at": r.bypass_at.isoformat() if r and getattr(r, "bypass_at", None) else None,
+        "bypass_by_name": getattr(r, "bypass_by_name", None) if r else None,
+    }
+    reception_data = {}
+    if r:
+        reception_data = {
+            "mileage_km": float(r.mileage_km) if r.mileage_km else 0,
+            "gas_level": r.gas_level or "",
+            "customer_notes": r.customer_notes or "",
+            "general_observations": r.general_observations or "",
+            "accessories": r.accessories or [],
+        }
+    vehicle_data = {}
+    if order.vehicle:
+        v = order.vehicle
+        vehicle_data = {
+            "plate": v.plate or "",
+            "model": v.model or "",
+            "color": getattr(v, "color", "") or "",
+            "vin": v.vin or "",
+            "motor": getattr(v, "motor", "") or "",
+        }
+    client_data = {}
+    if order.client:
+        c = order.client
+        client_data = {
+            "name": c.name or "",
+            "identification": getattr(c, "identification", "") or "",
+            "phone": getattr(c, "phone", "") or "",
+            "email": getattr(c, "email", "") or "",
+        }
+    tenant_data = {}
+    if order.tenant:
+        t = order.tenant
+        tenant_data = {
+            "name": t.name or "UM Colombia",
+            "nit": getattr(t, "nit", "") or "",
+            "phone": getattr(t, "phone", "") or "",
+            "city": getattr(t, "ciudad", "") or "",
+        }
+    work_logs = [{"diagnosis": wl.diagnosis} for wl in (order.work_logs or [])]
+    parts = [
+        {
+            "reference": p.reference,
+            "qty": p.qty,
+            "part_type": p.part_type.value if p.part_type else "paid",
+            "status": p.status.value if p.status else "applied",
+        }
+        for p in (order.parts or [])
+    ]
+
+    pdf_bytes = await generate_exit_order_pdf(
+        order_data, reception_data, vehicle_data, client_data, tenant_data, work_logs, parts
+    )
+    short = str(order.id).replace("-", "")[:8].upper()
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=OrdenSalida_{short}.pdf"}
+    )
+
+
 @router.get("/{order_id}/pdf")
 async def download_reception_pdf(
     order_id: uuid.UUID, 

@@ -481,6 +481,15 @@ function OrderModal({ order, onClose, onOrderAccepted }) {
                     Ver Acta de Recepcion PDF
                   </a>
                 )}
+                <a
+                  href={`${API()}/orders/${order.order_id}/exit-pdf?token=${typeof window !== 'undefined' ? sessionStorage.getItem('um_token') : ''}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mpdf-btn"
+                  style={{ background: 'rgba(16,185,129,0.12)', borderColor: 'rgba(16,185,129,0.35)', color: '#10b981', marginTop: 6 }}
+                >
+                  Descargar Orden de Salida PDF
+                </a>
               </div>
             )}
 
