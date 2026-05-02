@@ -172,11 +172,16 @@ async def get_last_mileage(vehicle_id: uuid.UUID, db: AsyncSession = Depends(get
 async def download_exit_order_pdf(
     order_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user)
+    current_user: Optional[CurrentUser] = Depends(get_optional_user),
+    x_sonia_secret: Optional[str] = Header(None),
 ):
     from app.services.pdf_service import generate_exit_order_pdf
     from fastapi.responses import StreamingResponse
+    from app.config import settings
     import io
+
+    if not current_user and x_sonia_secret != settings.SONIA_BOT_SECRET:
+        raise HTTPException(status_code=401, detail="No autenticado")
 
     stmt = (
         select(ServiceOrder)
@@ -196,7 +201,7 @@ async def download_exit_order_pdf(
 
     if not order:
         raise HTTPException(status_code=404, detail="Orden no encontrada")
-    if not current_user.is_superadmin and order.tenant_id != current_user.tenant_id:
+    if current_user and not current_user.is_superadmin and order.tenant_id != current_user.tenant_id:
         raise HTTPException(status_code=403, detail="Sin permiso para esta orden")
 
     r = order.reception

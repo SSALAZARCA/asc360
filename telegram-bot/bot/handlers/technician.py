@@ -205,3 +205,42 @@ async def handle_order_status_change(update: Update, context: ContextTypes.DEFAU
             f"🛠️ ¿A dónde va la *{plate}*? (Ej: torno de Hernández, pintura, etc.)",
             parse_mode="Markdown"
         )
+
+    elif nuevo_estado == "completed":
+        kb = [[InlineKeyboardButton("📤 Entregar Moto y generar Orden de Salida", callback_data=f"exit_pdf_{order_id}")]]
+        await query.message.reply_text(
+            f"✅ La *{plate}* quedó lista. Cuando la entregues al cliente, generá la Orden de Salida:",
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup(kb)
+        )
+
+
+@role_required(allowed_roles=["superadmin", "jefe_taller", "technician"])
+async def handle_exit_pdf_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Genera la Orden de Salida PDF, la envía por Telegram y marca la orden como entregada."""
+    query = update.callback_query
+    await query.answer()
+    order_id = query.data[len("exit_pdf_"):]
+    chat_id = query.message.chat_id
+
+    await query.message.reply_text("⏳ Generando Orden de Salida, un momento...")
+
+    from services.api import get_exit_order_pdf, update_order_status
+    import io
+
+    pdf_bytes = await get_exit_order_pdf(order_id)
+    if not pdf_bytes:
+        await query.message.reply_text("❌ No pude generar la Orden de Salida. Revisá la conexión e intentá de nuevo.")
+        return
+
+    tech_id = context.user_data.get("logged_in_user", {}).get("id")
+    await update_order_status(order_id, "delivered", tech_id)
+
+    short = order_id.replace("-", "")[:8].upper()
+    await context.bot.send_document(
+        chat_id=chat_id,
+        document=io.BytesIO(pdf_bytes),
+        filename=f"OrdenSalida_{short}.pdf",
+        caption=f"📋 *Orden de Salida #{short}*\n¡Moto entregada! Firmá con el cliente.",
+        parse_mode="Markdown",
+    )

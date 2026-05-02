@@ -343,6 +343,24 @@ async def get_part_by_code(model_code: str, order_num: str) -> dict:
             return None
 
 
+async def get_exit_order_pdf(order_id: str) -> bytes | None:
+    """Descarga la Orden de Salida en PDF directamente del backend. Retorna los bytes o None."""
+    async with httpx.AsyncClient() as client:
+        try:
+            res = await client.get(
+                f"{BACKEND_URL}/orders/{order_id}/exit-pdf",
+                headers={"x-sonia-secret": SONIA_BOT_SECRET},
+                timeout=30.0,
+            )
+            if res.status_code == 200:
+                return res.content
+            logger.warning(f"get_exit_order_pdf: {res.status_code} — {res.text}")
+            return None
+        except Exception as e:
+            logger.error(f"Error get_exit_order_pdf: {e}")
+            return None
+
+
 async def get_tenant_config(tenant_id: str) -> dict:
     """Obtiene la configuración del taller (diagnosis_reminder_minutes, etc.)."""
     async with httpx.AsyncClient() as client:

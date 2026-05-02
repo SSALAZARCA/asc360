@@ -326,8 +326,9 @@ def main() -> None:
     # Callbacks General Admin / Tecnico (Fuera de la conversación porque son botones inline persistentes)
     application.add_handler(CallbackQueryHandler(handle_admin_menu, pattern="^admin_"))
     application.add_handler(CallbackQueryHandler(handle_status_change, pattern="^status_(approve|reject)_"))
-    from handlers.technician import handle_order_status_change
+    from handlers.technician import handle_order_status_change, handle_exit_pdf_callback
     application.add_handler(CallbackQueryHandler(handle_order_status_change, pattern="^ord_stat_"))
+    application.add_handler(CallbackQueryHandler(handle_exit_pdf_callback, pattern="^exit_pdf_"))
     application.add_handler(CallbackQueryHandler(handle_status_confirm, pattern="^status_confirm_"))
     application.add_handler(CallbackQueryHandler(handle_parts_callback, pattern="^parts_"))
     application.add_handler(CallbackQueryHandler(handle_catalog_model_callback, pattern="^catalog_model_"))
