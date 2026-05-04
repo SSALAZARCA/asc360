@@ -1090,6 +1090,8 @@ async def load_section(
 
         # 4. Generar card estilizada y subir a MinIO
         diagram_url = None
+        png_bytes: bytes | None = None
+
         if illus_bytes:
             try:
                 from app.services.diagram_styler import create_diagram_card
@@ -1101,6 +1103,22 @@ async def load_section(
                     parts=parts,
                     logo_bytes=logo_bytes,
                 )
+            except Exception:
+                logger.exception(f"load_section diagram_styler failed ({filename})")
+
+        # Fallback: render página completa si el styler falló o no había ilustración
+        if not png_bytes:
+            logger.warning(f"load_section using full-page render fallback ({filename})")
+            try:
+                doc = fitz.open(tmp_path)
+                pix = doc[0].get_pixmap(matrix=fitz.Matrix(2, 2))
+                png_bytes = pix.tobytes("png")
+                doc.close()
+            except Exception as e:
+                logger.error(f"load_section fallback render failed ({filename}): {e}")
+
+        if png_bytes:
+            try:
                 client = _minio_client()
                 _ensure_parts_bucket(client)
                 object_name = f"{model_code}/{section_code}.png"
@@ -1113,7 +1131,7 @@ async def load_section(
                 )
                 diagram_url = _diagram_public_url(object_name)
             except Exception as e:
-                logger.warning(f"load_section card generate/upload error ({filename}): {e}")
+                logger.error(f"load_section MinIO upload error ({filename}): {e}")
 
     finally:
         os.unlink(tmp_path)
