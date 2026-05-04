@@ -98,36 +98,53 @@ export default function NuevoPedidoModal({ isOpen, onClose, onSuccess }) {
         </div>
 
         {/* Resultado */}
-        {result && (
-          <div style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)', borderRadius: '10px', padding: '16px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-              <CheckCircle size={16} style={{ color: '#22c55e' }} />
-              <span style={{ color: '#22c55e', fontWeight: 700, fontSize: '12px' }}>PEDIDO CREADO</span>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
-              {[
-                { label: 'Creados', value: result.inserted ?? 0, color: '#22c55e' },
-                { label: 'Actualizados', value: result.updated ?? 0, color: '#60a5fa' },
-                { label: 'Omitidos', value: result.skipped ?? 0, color: '#606075' },
-              ].map(({ label, value, color }) => (
-                <div key={label} style={{ textAlign: 'center' }}>
-                  <p style={{ color, fontWeight: 800, fontSize: '22px', margin: 0 }}>{value}</p>
-                  <p style={{ color: '#606075', fontSize: '10px', margin: 0, fontWeight: 600 }}>{label}</p>
+        {result && (() => {
+          const totalOk = (result.inserted ?? 0) + (result.updated ?? 0);
+          const hasItems = totalOk > 0;
+          return (
+            <div style={{
+              background: hasItems ? 'rgba(34,197,94,0.08)' : 'rgba(251,146,60,0.08)',
+              border: `1px solid ${hasItems ? 'rgba(34,197,94,0.2)' : 'rgba(251,146,60,0.25)'}`,
+              borderRadius: '10px', padding: '16px',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                {hasItems
+                  ? <CheckCircle size={16} style={{ color: '#22c55e' }} />
+                  : <AlertCircle size={16} style={{ color: '#fb923c' }} />
+                }
+                <span style={{ color: hasItems ? '#22c55e' : '#fb923c', fontWeight: 700, fontSize: '12px' }}>
+                  {hasItems ? 'PEDIDO CREADO' : 'SIN ÍTEMS PROCESADOS'}
+                </span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
+                {[
+                  { label: 'Creados', value: result.inserted ?? 0, color: '#22c55e' },
+                  { label: 'Actualizados', value: result.updated ?? 0, color: '#60a5fa' },
+                  { label: 'Omitidos', value: result.skipped ?? 0, color: '#606075' },
+                ].map(({ label, value, color }) => (
+                  <div key={label} style={{ textAlign: 'center' }}>
+                    <p style={{ color, fontWeight: 800, fontSize: '22px', margin: 0 }}>{value}</p>
+                    <p style={{ color: '#606075', fontSize: '10px', margin: 0, fontWeight: 600 }}>{label}</p>
+                  </div>
+                ))}
+              </div>
+              {result.reference && (
+                <p style={{ color: '#9ca3af', fontSize: '11px', marginTop: '10px', margin: '10px 0 0' }}>
+                  Referencia: <strong style={{ color: '#fff' }}>{result.reference}</strong>
+                </p>
+              )}
+              {result.errors?.length > 0 && (
+                <div style={{ marginTop: '8px' }}>
+                  {result.errors.map((e, i) => (
+                    <p key={i} style={{ color: '#f87171', fontSize: '11px', margin: '2px 0' }}>
+                      {e.reason || JSON.stringify(e)}
+                    </p>
+                  ))}
                 </div>
-              ))}
+              )}
             </div>
-            {result.reference && (
-              <p style={{ color: '#9ca3af', fontSize: '11px', marginTop: '10px', margin: '10px 0 0' }}>
-                Referencia: <strong style={{ color: '#fff' }}>{result.reference}</strong>
-              </p>
-            )}
-            {result.errors?.length > 0 && (
-              <p style={{ color: '#f87171', fontSize: '11px', marginTop: '8px' }}>
-                {result.errors.length} fila(s) con errores
-              </p>
-            )}
-          </div>
-        )}
+          );
+        })()}
 
         {!result && (
           <>

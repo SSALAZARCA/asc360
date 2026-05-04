@@ -116,38 +116,46 @@ def compute_status(etr_raw, etl_raw, etd, eta) -> str:
     return "en_preparacion"
 
 
+import unicodedata as _unicodedata
+
+def _normalize(text: str) -> str:
+    """Lowercase + elimina acentos/tildes para comparación flexible."""
+    return _unicodedata.normalize("NFD", text).encode("ascii", "ignore").decode("ascii").lower()
+
+
 def _find_header_row(sheet, expected_cols: set, max_rows: int = 35) -> Optional[int]:
     """
     Escanea las primeras max_rows filas buscando la que tenga al menos 3
-    coincidencias con expected_cols (case-insensitive).
+    coincidencias con expected_cols (case-insensitive, sin acentos).
     Retorna el índice de fila (base-1) o None.
     """
+    normalized_expected = {_normalize(c) for c in expected_cols}
     for row_idx in range(1, max_rows + 1):
         row_values = {
-            str(sheet.cell(row=row_idx, column=c).value or "").strip().lower()
+            _normalize(str(sheet.cell(row=row_idx, column=c).value or "").strip())
             for c in range(1, sheet.max_column + 1)
         }
-        matches = sum(1 for col in expected_cols if col.lower() in row_values)
+        matches = sum(1 for col in normalized_expected if col in row_values)
         if matches >= 3:
             return row_idx
     return None
 
 
 def _build_col_map(sheet, header_row: int) -> dict[str, int]:
-    """Mapea nombre_de_columna_normalizado → índice (base-1)."""
+    """Mapea nombre_de_columna_normalizado (sin acentos) → índice (base-1)."""
     col_map = {}
     for col_idx in range(1, sheet.max_column + 1):
         val = sheet.cell(row=header_row, column=col_idx).value
         if val:
-            col_map[str(val).strip().lower()] = col_idx
+            col_map[_normalize(str(val).strip())] = col_idx
     return col_map
 
 
 def _cell(sheet, row: int, col_map: dict, *keys) -> any:
-    """Obtiene el valor de la primera clave encontrada en col_map."""
+    """Obtiene el valor de la primera clave encontrada en col_map (sin acentos)."""
     for key in keys:
-        if key.lower() in col_map:
-            return sheet.cell(row=row, column=col_map[key.lower()]).value
+        if _normalize(key) in col_map:
+            return sheet.cell(row=row, column=col_map[_normalize(key)]).value
     return None
 
 
@@ -730,7 +738,13 @@ async def _process_sp_invoice(db: AsyncSession, sheet, actor: CurrentUser) -> in
 # Crear pedido de repuestos desde Excel (flujo inicial)
 # ---------------------------------------------------------------------------
 
-SP_ORDER_COLS = {"codigo parte", "nombre", "cantidad", "moto aplica", "codigo", "part #", "referencia", "qty ordered", "qty"}
+SP_ORDER_COLS = {
+    "codigo parte", "código parte", "codigo", "código",
+    "nombre", "descripcion", "descripción",
+    "cantidad", "qty", "qty ordered", "cantidad solicitada",
+    "moto aplica", "moto", "aplica",
+    "part #", "referencia",
+}
 
 async def create_sp_order_from_excel(
     db: AsyncSession,
@@ -755,7 +769,11 @@ async def create_sp_order_from_excel(
             break
 
     if sheet is None or header_row is None:
-        return {"inserted": 0, "errors": [{"row": 0, "reason": "No se encontraron columnas requeridas (Codigo Parte / Cantidad)"}]}
+        raise ValueError(
+            "No se encontraron las columnas requeridas en el Excel. "
+            "Asegurate de tener al menos 3 de estas columnas (sin acentos): "
+            "Codigo Parte / Cantidad / Nombre / Moto Aplica / Part # / Qty"
+        )
 
     col_map = _build_col_map(sheet, header_row)
 

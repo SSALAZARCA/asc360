@@ -288,7 +288,11 @@ async def new_order_sp_from_excel(
     if not file.filename.endswith(".xlsx"):
         raise HTTPException(status_code=422, detail={"detail": "Solo se aceptan archivos .xlsx", "code": "INVALID_FILE_TYPE"})
     file_bytes = await file.read()
-    result = await imports_service.create_sp_order_from_excel(db, reference, file_bytes, current_user)
+    try:
+        result = await imports_service.create_sp_order_from_excel(db, reference, file_bytes, current_user)
+    except ValueError as e:
+        await db.rollback()
+        raise HTTPException(status_code=422, detail={"detail": str(e), "code": "INVALID_COLUMNS"})
     await db.commit()
     return result
 
