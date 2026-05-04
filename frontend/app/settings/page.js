@@ -58,9 +58,9 @@ const PERM_GROUPS = [
       { label: 'Eliminar pedido',                   perms: [true,  false, false, false, false, false, false] },
       { label: 'Cargar Excel shipment status',      perms: [true,  false, false, false, false, false, false] },
       { label: 'Exportar pedidos a Excel',          perms: [true,  false, false, false, false, false, false] },
-      { label: 'Subir adjunto al pedido',           perms: [true,  true,  false, false, false, true,  false] },
-      { label: 'Descargar adjunto',                 perms: [true,  true,  false, false, false, true,  false] },
-      { label: 'Eliminar adjunto',                  perms: [true,  false, false, false, false, false, false] },
+      { label: 'Subir doc. adjunto (desde detalle del pedido)',   perms: [true,  true,  false, false, false, true,  false] },
+      { label: 'Descargar doc. adjunto (BL, factura, PL…)',      perms: [true,  true,  false, false, false, true,  false] },
+      { label: 'Eliminar doc. adjunto (desde detalle del pedido)',perms: [true,  false, false, false, false, false, false] },
     ],
   },
   {
