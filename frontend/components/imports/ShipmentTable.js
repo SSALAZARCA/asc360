@@ -161,7 +161,11 @@ export default function ShipmentTable({ orders, total, page, pageSize, onPageCha
                   </td>
 
                   {/* Columnas normales */}
-                  <td style={COL_STYLE}>{order.qty ?? '—'}</td>
+                  <td style={COL_STYLE}>
+                    {isSP
+                      ? (order.total_units != null ? order.total_units.toLocaleString() : '1LOT')
+                      : (order.qty ?? '—')}
+                  </td>
                   <td style={COL_STYLE}>{order.order_date ?? '—'}</td>
                   <td style={COL_STYLE}>{order.etd_raw ?? order.etd?.split('T')[0] ?? '—'}</td>
                   <td style={COL_STYLE}>{order.eta_raw ?? order.eta?.split('T')[0] ?? '—'}</td>

@@ -156,7 +156,7 @@ async def list_shipment_orders(
 
     # Items
     stmt = select(ShipmentOrder).options(
-        selectinload(ShipmentOrder.spare_part_lots),
+        selectinload(ShipmentOrder.spare_part_lots).selectinload(SparePartLot.items),
         selectinload(ShipmentOrder.moto_units),
     )
     if filters:
@@ -177,8 +177,19 @@ async def list_shipment_orders(
     if stale:
         await db.commit()
 
+    def _build_order_read(o: ShipmentOrder) -> ShipmentOrderRead:
+        read = ShipmentOrderRead.model_validate(o)
+        if o.is_spare_part and any(lot.detail_loaded for lot in o.spare_part_lots):
+            total_units = sum(
+                item.qty_ordered or 0
+                for lot in o.spare_part_lots if lot.detail_loaded
+                for item in lot.items
+            )
+            read = read.model_copy(update={"total_units": total_units})
+        return read
+
     return ShipmentOrderListResponse(
-        items=[ShipmentOrderRead.model_validate(o) for o in orders],
+        items=[_build_order_read(o) for o in orders],
         total=total,
         page=page,
         page_size=page_size,
