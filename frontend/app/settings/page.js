@@ -2,10 +2,102 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import AdminLayout from '../admin-layout';
-import { UploadCloud, Image as ImageIcon, Save, Trash2, Clock, Bike, Plus, Pencil, X, AlertCircle, BookOpen, Upload, FileText, Loader2, ChevronDown, ScanSearch } from 'lucide-react';
+import { UploadCloud, Image as ImageIcon, Save, Trash2, Clock, Bike, Plus, Pencil, X, AlertCircle, BookOpen, Upload, FileText, Loader2, ChevronDown, ScanSearch, Shield } from 'lucide-react';
 import { authFetch } from '../../lib/authFetch';
 
 const BACKEND_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1').replace('http://', 'https://');
+
+// ---------------------------------------------------------------------------
+// Datos estáticos — Matriz de Permisos
+// ---------------------------------------------------------------------------
+const PERM_ROLES = ['superadmin', 'administrativo', 'jefe_taller', 'technician', 'parts_dealer', 'proveedor', 'client'];
+const PERM_ROLE_LABELS = {
+  superadmin:    'Super Admin',
+  administrativo:'Administrativo',
+  jefe_taller:   'Jefe Taller',
+  technician:    'Técnico',
+  parts_dealer:  'Vend. Rep.',
+  proveedor:     'Proveedor',
+  client:        'Cliente',
+};
+const PERM_ROLE_COLORS = {
+  superadmin:    { color: '#f59e0b', background: 'rgba(245,158,11,0.1)',   border: '1px solid rgba(245,158,11,0.25)' },
+  administrativo:{ color: '#a78bfa', background: 'rgba(167,139,250,0.1)', border: '1px solid rgba(167,139,250,0.25)' },
+  jefe_taller:   { color: '#10b981', background: 'rgba(16,185,129,0.1)',   border: '1px solid rgba(16,185,129,0.25)' },
+  technician:    { color: '#60a5fa', background: 'rgba(96,165,250,0.1)',   border: '1px solid rgba(96,165,250,0.25)' },
+  parts_dealer:  { color: '#34d399', background: 'rgba(52,211,153,0.1)',   border: '1px solid rgba(52,211,153,0.25)' },
+  proveedor:     { color: '#fb923c', background: 'rgba(251,146,60,0.1)',   border: '1px solid rgba(251,146,60,0.25)' },
+  client:        { color: '#94a3b8', background: 'rgba(148,163,184,0.1)', border: '1px solid rgba(148,163,184,0.25)' },
+};
+
+// true = acceso total | 'p' = parcial (tenant propio) | false = sin acceso
+// Orden: superadmin | administrativo | jefe_taller | technician | parts_dealer | proveedor | client
+const PERM_GROUPS = [
+  {
+    label: 'Acceso a Secciones',
+    rows: [
+      { label: 'Dashboard / Centro de Comando',  perms: [true,  true,  false, false, false, false, false] },
+      { label: 'Kanban / Tablero Operativo',      perms: [true,  false, true,  true,  true,  false, true ] },
+      { label: 'Gestión de Órdenes de Servicio',  perms: [true,  true,  true,  true,  true,  false, true ] },
+      { label: 'Estado de Pedidos (Importaciones)',perms: [true,  true,  false, false, false, true,  false] },
+      { label: 'Red de Talleres',                 perms: [true,  false, false, false, false, false, false] },
+      { label: 'Personal & Acceso (Usuarios)',     perms: [true,  false, false, false, false, false, false] },
+      { label: 'Catálogo de Partes',              perms: [true,  false, false, false, false, false, false] },
+      { label: 'Configuración del Sistema',       perms: [true,  false, false, false, false, false, false] },
+    ],
+  },
+  {
+    label: 'Importaciones',
+    rows: [
+      { label: 'Ver pedidos / repuestos / motos', perms: [true,  true,  false, false, false, true,  false] },
+      { label: 'Cargar Excel de shipment status', perms: [true,  false, false, false, false, false, false] },
+      { label: 'Crear pedido repuestos (SP)',      perms: [true,  true,  false, false, false, true,  false] },
+      { label: 'Crear pedido motos',              perms: [true,  true,  false, false, false, true,  false] },
+      { label: 'Cargar packing list / DIM',       perms: [true,  true,  false, false, false, true,  false] },
+      { label: 'Editar pedidos',                  perms: [true,  true,  false, false, false, true,  false] },
+      { label: 'Gestionar backorders',            perms: [true,  true,  false, false, false, true,  false] },
+      { label: 'Exportar a Excel',                perms: [true,  false, false, false, false, false, false] },
+      { label: 'Cancelar ítems pendientes',       perms: [true,  true,  false, false, false, false, false] },
+    ],
+  },
+  {
+    label: 'Órdenes de Servicio',
+    rows: [
+      { label: 'Ver órdenes',                     perms: [true,  true,  'p',   true,  true,  false, true ] },
+      { label: 'Crear nueva orden',               perms: [true,  true,  'p',   'p',   false, false, false] },
+      { label: 'Editar orden',                    perms: [true,  true,  'p',   false, false, false, false] },
+      { label: 'Aprobar salida / bypass OTP',     perms: [true,  false, 'p',   false, false, false, false] },
+    ],
+  },
+  {
+    label: 'Gestión de Usuarios',
+    rows: [
+      { label: 'Ver usuarios',                    perms: [true,  false, 'p',   false, false, false, false] },
+      { label: 'Crear usuario',                   perms: [true,  false, 'p',   false, false, false, false] },
+      { label: 'Editar / Eliminar usuario',       perms: [true,  false, false, false, false, false, false] },
+      { label: 'Aprobar / Rechazar acceso',       perms: [true,  false, 'p',   false, false, false, false] },
+    ],
+  },
+  {
+    label: 'Catálogo de Partes',
+    rows: [
+      { label: 'Ver catálogo y diagramas',        perms: [true,  false, false, false, false, false, false] },
+      { label: 'Cargar PDFs de catálogo',         perms: [true,  false, false, false, false, false, false] },
+      { label: 'Detectar cambios de código',      perms: [true,  false, false, false, false, false, false] },
+      { label: 'Limpiar / Eliminar catálogo',     perms: [true,  false, false, false, false, false, false] },
+    ],
+  },
+  {
+    label: 'Configuración del Sistema',
+    rows: [
+      { label: 'Editar logotipo',                 perms: [true,  false, false, false, false, false, false] },
+      { label: 'Editar factores de pricing',      perms: [true,  false, false, false, false, false, false] },
+      { label: 'Variables del sistema',           perms: [true,  false, false, false, false, false, false] },
+      { label: 'Modelos de vehículos (CRUD)',     perms: [true,  false, false, false, false, false, false] },
+      { label: 'Calcular costos históricos',      perms: [true,  false, false, false, false, false, false] },
+    ],
+  },
+];
 
 const VM_FORM_DEFAULTS = {
   modelo: '',
@@ -743,6 +835,74 @@ export default function SettingsPage() {
               </table>
             </div>
           )}
+        </section>
+
+        {/* Matriz de Permisos por Rol */}
+        <section className="glass p-6">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '1rem', paddingBottom: '0.75rem', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+            <Shield size={16} style={{ color: '#ff5f33', flexShrink: 0 }} />
+            <h2 style={{ fontSize: '0.8rem', fontWeight: 700, color: '#fff', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Matriz de Permisos por Rol</h2>
+          </div>
+          <p style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.25)', margin: '0 0 1.25rem', lineHeight: 1.7 }}>
+            Referencia visual de acceso por rol, derivada de la configuración actual del sistema. Los permisos marcados con <span style={{ color: '#f59e0b', fontWeight: 700 }}>✓*</span> aplican únicamente al taller del usuario.
+          </p>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px', minWidth: '720px' }}>
+              <thead>
+                <tr style={{ background: 'rgba(0,0,0,0.35)' }}>
+                  <th style={{ padding: '10px 14px', textAlign: 'left', fontSize: '9px', fontWeight: 700, color: '#606075', textTransform: 'uppercase', letterSpacing: '0.07em', borderBottom: '1px solid rgba(255,255,255,0.06)', width: '230px' }}>
+                    Acción / Recurso
+                  </th>
+                  {PERM_ROLES.map(r => (
+                    <th key={r} style={{ padding: '10px 10px', textAlign: 'center', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                      <span style={{ display: 'inline-block', fontSize: '9px', fontWeight: 800, padding: '3px 7px', borderRadius: '20px', whiteSpace: 'nowrap', ...PERM_ROLE_COLORS[r] }}>
+                        {PERM_ROLE_LABELS[r]}
+                      </span>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {PERM_GROUPS.map((group, gi) => (
+                  <>
+                    <tr key={`grp-${gi}`}>
+                      <td colSpan={PERM_ROLES.length + 1} style={{
+                        padding: '10px 14px 5px',
+                        background: 'rgba(255,95,51,0.04)',
+                        borderTop: gi > 0 ? '1px solid rgba(255,255,255,0.06)' : 'none',
+                      }}>
+                        <span style={{ fontSize: '9px', fontWeight: 800, color: '#ff5f33', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+                          {group.label}
+                        </span>
+                      </td>
+                    </tr>
+                    {group.rows.map((row, ri) => (
+                      <tr
+                        key={`row-${gi}-${ri}`}
+                        style={{ borderBottom: '1px solid rgba(255,255,255,0.025)', transition: 'background 0.15s' }}
+                        onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
+                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                      >
+                        <td style={{ padding: '7px 14px', color: '#9ca3af', fontWeight: 500, fontSize: '11px' }}>
+                          {row.label}
+                        </td>
+                        {row.perms.map((perm, pi) => (
+                          <td key={pi} style={{ padding: '7px 10px', textAlign: 'center' }}>
+                            {perm === true  && <span style={{ color: '#22c55e', fontWeight: 900, fontSize: '14px' }}>✓</span>}
+                            {perm === 'p'   && <span style={{ color: '#f59e0b', fontWeight: 900, fontSize: '11px' }}>✓*</span>}
+                            {perm === false && <span style={{ color: '#252535', fontWeight: 900, fontSize: '14px' }}>—</span>}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.15)', margin: '0.75rem 0 0' }}>
+            ✓ Acceso completo &nbsp;·&nbsp; ✓* Acceso restringido al taller propio &nbsp;·&nbsp; — Sin acceso
+          </p>
         </section>
 
         {/* Sección: Carga de Catálogo de Partes */}
