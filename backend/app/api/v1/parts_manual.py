@@ -1,3 +1,4 @@
+import base64
 import io
 import json
 import logging
@@ -1053,26 +1054,20 @@ async def load_section(
         with os.fdopen(fd, "wb") as f:
             f.write(pdf_bytes)
 
-        # 1. Renderizar página → PNG → MinIO
-        diagram_url = None
+        # 1. Extraer ilustración del PDF
+        illus_bytes: bytes | None = None
         try:
             doc = fitz.open(tmp_path)
-            pix = doc[0].get_pixmap(matrix=fitz.Matrix(150 / 72, 150 / 72))
-            png_bytes = pix.tobytes("png")
-
-            client = _minio_client()
-            _ensure_parts_bucket(client)
-            object_name = f"{model_code}/{section_code}.png"
-            client.put_object(
-                bucket_name=PARTS_BUCKET,
-                object_name=object_name,
-                data=io.BytesIO(png_bytes),
-                length=len(png_bytes),
-                content_type="image/png",
-            )
-            diagram_url = _diagram_public_url(object_name)
+            imgs = doc[0].get_images(full=True)
+            if imgs:
+                base_img = doc.extract_image(imgs[0][0])
+                illus_bytes = base_img["image"]
+            else:
+                pix = doc[0].get_pixmap(matrix=fitz.Matrix(2, 2))
+                illus_bytes = pix.tobytes("png")
+            doc.close()
         except Exception as e:
-            logger.warning(f"load_section render/upload error ({filename}): {e}")
+            logger.warning(f"load_section illustration extract error ({filename}): {e}")
 
         # 2. Parsear tabla de repuestos
         parts: list[dict] = []
@@ -1080,6 +1075,45 @@ async def load_section(
             parts = _parse_parts_table(tmp_path)
         except Exception as e:
             logger.warning(f"load_section parse error ({filename}): {e}")
+
+        # 3. Obtener logo de la configuración del sistema
+        logo_bytes: bytes | None = None
+        try:
+            logo_record = await db.get(SystemConfig, "logo_base64")
+            if logo_record and logo_record.value:
+                b64 = logo_record.value
+                if "," in b64:
+                    b64 = b64.split(",", 1)[1]
+                logo_bytes = base64.b64decode(b64)
+        except Exception as e:
+            logger.warning(f"load_section logo fetch error: {e}")
+
+        # 4. Generar card estilizada y subir a MinIO
+        diagram_url = None
+        if illus_bytes:
+            try:
+                from app.services.diagram_styler import create_diagram_card
+                png_bytes = create_diagram_card(
+                    illus_bytes=illus_bytes,
+                    section_code=section_code,
+                    section_name=section_name,
+                    model_name=vehicle_model,
+                    parts=parts,
+                    logo_bytes=logo_bytes,
+                )
+                client = _minio_client()
+                _ensure_parts_bucket(client)
+                object_name = f"{model_code}/{section_code}.png"
+                client.put_object(
+                    bucket_name=PARTS_BUCKET,
+                    object_name=object_name,
+                    data=io.BytesIO(png_bytes),
+                    length=len(png_bytes),
+                    content_type="image/png",
+                )
+                diagram_url = _diagram_public_url(object_name)
+            except Exception as e:
+                logger.warning(f"load_section card generate/upload error ({filename}): {e}")
 
     finally:
         os.unlink(tmp_path)

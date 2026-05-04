@@ -13,6 +13,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     shared-mime-info \
     postgresql-client \
     curl \
+    fonts-liberation \
     && rm -rf /var/lib/apt/lists/*
 
 # ==== STAGE 2: Construcción e instalación de paquetes ====
