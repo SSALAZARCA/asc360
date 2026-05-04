@@ -48,6 +48,23 @@ def _require_superadmin(current_user: CurrentUser) -> CurrentUser:
     return current_user
 
 
+def _excel_response(ws_title: str, headers: list, rows: list, filename: str) -> StreamingResponse:
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = ws_title
+    ws.append(headers)
+    for row in rows:
+        ws.append(row)
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 # ---------------------------------------------------------------------------
 # Importar Excel de Shipment Status
 # ---------------------------------------------------------------------------
@@ -166,6 +183,65 @@ async def list_shipment_orders(
         page=page,
         page_size=page_size,
     )
+
+
+# ---------------------------------------------------------------------------
+# Exportar pedidos a Excel (superadmin)
+# ---------------------------------------------------------------------------
+
+@router.get("/shipment-orders/export")
+async def export_shipment_orders(
+    cycle: Optional[int] = None,
+    is_spare_part: Optional[bool] = None,
+    computed_status: Optional[str] = None,
+    search: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    _require_superadmin(current_user)
+
+    filters = []
+    if cycle is not None:
+        filters.append(ShipmentOrder.cycle == cycle)
+    if is_spare_part is not None:
+        filters.append(ShipmentOrder.is_spare_part == is_spare_part)
+    if computed_status:
+        filters.append(ShipmentOrder.computed_status == computed_status)
+    if search:
+        filters.append(
+            ShipmentOrder.pi_number.ilike(f"%{search}%") |
+            ShipmentOrder.model.ilike(f"%{search}%")
+        )
+
+    stmt = select(ShipmentOrder)
+    if filters:
+        stmt = stmt.where(*filters)
+    stmt = stmt.order_by(ShipmentOrder.cycle.desc().nullslast(), ShipmentOrder.pi_number.asc())
+    orders = (await db.execute(stmt)).scalars().all()
+
+    for o in orders:
+        fresh = compute_status(o.etr_raw, o.etl_raw, o.etd, o.eta)
+        if fresh != o.computed_status:
+            o.computed_status = fresh
+
+    headers = [
+        "PI NUMBER", "MODELO", "CICLO", "CANTIDAD", "TIPO", "ESTADO",
+        "CONTENEDORES", "ETR", "ETL", "ETD", "ETA",
+        "DOCS DIGITALES", "DOCS ORIGINALES", "VESSEL", "BL/CONTAINER", "OBSERVACIONES",
+    ]
+    rows = [
+        [
+            o.pi_number, o.model, o.cycle, o.qty,
+            "Repuestos" if o.is_spare_part else "Motocicletas",
+            o.computed_status, o.containers,
+            o.etr_raw, o.etl_raw, o.etd_raw, o.eta_raw,
+            o.digital_docs_status, o.original_docs_status,
+            o.vessel, o.bl_container, o.remarks,
+        ]
+        for o in orders
+    ]
+    filename = f"pedidos_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    return _excel_response("Pedidos", headers, rows, filename)
 
 
 # ---------------------------------------------------------------------------
@@ -1123,6 +1199,69 @@ async def repair_extra_received(
     return {"fixed": fixed, "errors": errors}
 
 
+@router.get("/spare-parts/export")
+async def export_spare_parts(
+    detail_loaded: Optional[bool] = None,
+    has_bl: Optional[bool] = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    _require_superadmin(current_user)
+
+    stmt = (
+        select(SparePartLot)
+        .options(
+            selectinload(SparePartLot.items),
+        )
+    )
+    if detail_loaded is not None:
+        stmt = stmt.where(SparePartLot.detail_loaded == detail_loaded)
+    if has_bl is not None:
+        stmt = stmt.join(ShipmentOrder, SparePartLot.shipment_order_id == ShipmentOrder.id)
+        if has_bl:
+            stmt = stmt.where(
+                ShipmentOrder.bl_container.isnot(None),
+                ShipmentOrder.bl_container != "",
+                ShipmentOrder.bl_container != "PENDING",
+                ShipmentOrder.bl_container != "TBD",
+            )
+        else:
+            stmt = stmt.where(
+                (ShipmentOrder.bl_container.is_(None)) |
+                (ShipmentOrder.bl_container == "") |
+                (ShipmentOrder.bl_container == "PENDING") |
+                (ShipmentOrder.bl_container == "TBD")
+            )
+    stmt = stmt.order_by(SparePartLot.created_at.desc())
+    lots = (await db.execute(stmt)).scalars().all()
+
+    headers = [
+        "LOTE (PI)", "PART NUMBER", "DESCRIPCIÓN ES", "DESCRIPCIÓN EN",
+        "MODELO APLICABLE", "QTY PEDIDO", "QTY RECIBIDO", "QTY PENDIENTE",
+        "STATUS", "PI BACKORDER", "PRECIO UNIT (USD)", "MONTO (USD)",
+    ]
+    rows = []
+    for lot in lots:
+        for item in lot.items:
+            rows.append([
+                lot.lot_identifier,
+                item.part_number,
+                item.description_es,
+                item.description,
+                item.model_applicable,
+                item.qty_ordered,
+                item.qty_received,
+                item.qty_pending,
+                item.status,
+                item.backorder_pi,
+                float(item.unit_price) if item.unit_price is not None else None,
+                float(item.amount) if item.amount is not None else None,
+            ])
+
+    filename = f"repuestos_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    return _excel_response("Repuestos", headers, rows, filename)
+
+
 @router.post("/spare-parts/rollback-lot")
 async def rollback_lot(
     pi_number: str,
@@ -1277,6 +1416,47 @@ async def list_backorders(
     _require_imports_editor(current_user)
     items = await imports_service.list_backorders(db, resolved=resolved, part_number=part_number, origin_pi=origin_pi)
     return [BackorderRead.model_validate(i, from_attributes=False) for i in items]
+
+
+@router.get("/backorders/export")
+async def export_backorders(
+    resolved: Optional[bool] = None,
+    part_number: Optional[str] = None,
+    origin_pi: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    _require_superadmin(current_user)
+    raw = await imports_service.list_backorders(db, resolved=resolved, part_number=part_number, origin_pi=origin_pi)
+    items = [BackorderRead.model_validate(i, from_attributes=False) for i in raw]
+
+    headers = [
+        "PART NUMBER", "DESCRIPCIÓN ES", "MODELO APLICABLE",
+        "QTY PENDIENTE", "PI ORIGEN", "PI ESPERADO",
+        "DÍAS DESDE ORIGEN", "FUENTE", "ESTADO", "FECHA CREACIÓN",
+    ]
+    rows = []
+    now = datetime.utcnow()
+    for b in items:
+        days = None
+        if b.created_at:
+            dt = b.created_at.replace(tzinfo=None) if b.created_at.tzinfo else b.created_at
+            days = (now - dt).days
+        rows.append([
+            b.part_number,
+            b.description_es,
+            b.model_applicable,
+            b.qty_pending,
+            b.origin_pi,
+            b.expected_in_pi,
+            days,
+            b.source,
+            "Resuelto" if b.resolved else "Activo",
+            str(b.created_at)[:10] if b.created_at else None,
+        ])
+
+    filename = f"backorders_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    return _excel_response("Backorders", headers, rows, filename)
 
 
 @router.patch("/backorders/{backorder_id}", response_model=BackorderRead)
@@ -1685,6 +1865,77 @@ async def list_all_moto_units(
         "page": page,
         "page_size": page_size,
     }
+
+
+# ---------------------------------------------------------------------------
+# Exportar motocicletas a Excel (superadmin)
+# ---------------------------------------------------------------------------
+
+@router.get("/moto-units/export")
+async def export_moto_units(
+    pi_number: Optional[str] = None,
+    model: Optional[str] = None,
+    vin: Optional[str] = None,
+    engine: Optional[str] = None,
+    certificado_generado: Optional[bool] = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    _require_superadmin(current_user)
+
+    base_filters = [ShipmentOrder.is_spare_part == False]
+    if pi_number:
+        base_filters.append(ShipmentOrder.pi_number.ilike(f"%{pi_number}%"))
+    if model:
+        base_filters.append(
+            ShipmentMotoUnit.model.ilike(f"%{model}%") |
+            ShipmentOrder.model.ilike(f"%{model}%")
+        )
+    if vin:
+        base_filters.append(ShipmentMotoUnit.vin_number.ilike(f"%{vin}%"))
+    if engine:
+        base_filters.append(ShipmentMotoUnit.engine_number.ilike(f"%{engine}%"))
+
+    filters = list(base_filters)
+    if certificado_generado is not None:
+        filters.append(ShipmentMotoUnit.certificado_generado == certificado_generado)
+
+    stmt = (
+        select(ShipmentMotoUnit)
+        .join(ShipmentOrder, ShipmentMotoUnit.shipment_order_id == ShipmentOrder.id)
+        .where(*filters)
+        .options(selectinload(ShipmentMotoUnit.shipment_order))
+        .order_by(ShipmentMotoUnit.created_at.desc())
+    )
+    units = (await db.execute(stmt)).scalars().all()
+
+    headers = [
+        "PI NUMBER", "MODELO", "AÑO MODELO", "VIN", "No. MOTOR", "COLOR",
+        "EMPADRONADO", "FECHA EMPADRONAMIENTO",
+        "EMPADR. FÍSICO", "FECHA EMPADR. FÍSICO", "DISTRIBUIDOR",
+        "DIM CARGADO", "ITEM No.",
+    ]
+    rows = []
+    for u in units:
+        o = u.shipment_order
+        rows.append([
+            o.pi_number if o else u.source_pi,
+            u.model or (o.model if o else None),
+            u.model_year or (o.model_year if o else None),
+            u.vin_number,
+            u.engine_number,
+            u.color,
+            "Sí" if u.certificado_generado else "No",
+            u.certificado_fecha.strftime("%Y-%m-%d") if u.certificado_fecha else None,
+            "Sí" if u.empadronamiento_fisico_enviado else "No",
+            u.empadronamiento_fisico_fecha.strftime("%Y-%m-%d") if u.empadronamiento_fisico_fecha else None,
+            u.empadronamiento_fisico_distribuidor_nombre,
+            "Sí" if u.dim_pdf_object_name else "No",
+            u.item_no,
+        ])
+
+    filename = f"motocicletas_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    return _excel_response("Motocicletas", headers, rows, filename)
 
 
 # ---------------------------------------------------------------------------

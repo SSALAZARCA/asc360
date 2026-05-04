@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { authFetch } from '../../lib/authFetch';
-import { ChevronDown, ChevronRight, Search, RefreshCw, Package, ClipboardCheck, XCircle, UploadCloud } from 'lucide-react';
+import { ChevronDown, ChevronRight, Search, RefreshCw, Package, ClipboardCheck, XCircle, UploadCloud, FileSpreadsheet } from 'lucide-react';
 import ExcelUploadModal from './ExcelUploadModal';
 import ReconciliationModal from './ReconciliationModal';
 import PhysicalInventoryUploadModal from './PhysicalInventoryUploadModal';
@@ -582,6 +582,29 @@ export default function SparePartsTab({ userRole }) {
   const [reconcileLot, setReconcileLot] = useState(null);
   const [resetting, setResetting] = useState(false);
   const [repairingExtras, setRepairingExtras] = useState(false);
+  const [exportingRepuestos, setExportingRepuestos] = useState(false);
+
+  const handleExportRepuestos = async () => {
+    setExportingRepuestos(true);
+    try {
+      const params = new URLSearchParams();
+      if (filterLoaded !== '') params.append('detail_loaded', filterLoaded);
+      if (filterBL) params.append('has_bl', 'true');
+      const res = await authFetch(`${API()}/imports/spare-parts/export?${params}`);
+      if (!res.ok) return;
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `repuestos_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error('Error exportando repuestos:', e);
+    } finally {
+      setExportingRepuestos(false);
+    }
+  };
 
   const handleRepairExtras = async () => {
     if (!confirm('Actualiza las Pcs Rec. de todos los ítems EXTRA que quedaron en 0. ¿Continuar?')) return;
@@ -675,6 +698,26 @@ export default function SparePartsTab({ userRole }) {
         <button onClick={fetchLots} style={{ padding: '7px 9px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)', cursor: 'pointer', color: '#9ca3af' }}>
           <RefreshCw size={13} />
         </button>
+
+        {/* Exportar Excel (solo superadmin) */}
+        {userRole === 'superadmin' && (
+          <button
+            onClick={handleExportRepuestos}
+            disabled={exportingRepuestos}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '6px',
+              padding: '7px 14px', borderRadius: '8px', border: 'none',
+              background: exportingRepuestos ? 'rgba(34,197,94,0.06)' : 'rgba(34,197,94,0.12)',
+              color: exportingRepuestos ? '#606075' : '#22c55e',
+              fontSize: '11px', fontWeight: 700, cursor: exportingRepuestos ? 'not-allowed' : 'pointer',
+              letterSpacing: '0.04em',
+            }}
+          >
+            <FileSpreadsheet size={13} />
+            {exportingRepuestos ? 'Exportando...' : 'Exportar Excel'}
+          </button>
+        )}
+
         <span style={{ fontSize: '11px', color: '#606075', marginLeft: 'auto' }}>
           {totalLots} lote{totalLots !== 1 ? 's' : ''} encontrado{totalLots !== 1 ? 's' : ''}
         </span>

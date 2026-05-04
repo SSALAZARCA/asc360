@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { authFetch } from '../../lib/authFetch';
-import { FileUp, Download, RefreshCw, Search, CheckCircle, Clock, Bike, X, AlertCircle, Pencil, Send, FileText, Trash2, MapPin, AlertTriangle } from 'lucide-react';
+import { FileUp, Download, RefreshCw, Search, CheckCircle, Clock, Bike, X, AlertCircle, Pencil, Send, FileText, Trash2, MapPin, AlertTriangle, FileSpreadsheet } from 'lucide-react';
 
 function API() {
   return (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1').replace('http://', 'https://');
@@ -537,6 +537,32 @@ export default function MotocicletasTab({ userRole }) {
   const [unitPendienteEnvio, setUnitPendienteEnvio] = useState(null); // unidad esperando selección de distribuidor
 
   const PAGE_SIZE = 50;
+  const [exportingMotos, setExportingMotos] = useState(false);
+
+  const handleExportMotos = async () => {
+    setExportingMotos(true);
+    try {
+      const params = new URLSearchParams();
+      if (filterPI) params.append('pi_number', filterPI);
+      if (filterModel) params.append('model', filterModel);
+      if (filterVIN) params.append('vin', filterVIN);
+      if (filterEngine) params.append('engine', filterEngine);
+      if (filterCertificado !== '') params.append('certificado_generado', filterCertificado);
+      const res = await authFetch(`${API()}/imports/moto-units/export?${params}`);
+      if (!res.ok) return;
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `motocicletas_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error('Error exportando motocicletas:', e);
+    } finally {
+      setExportingMotos(false);
+    }
+  };
 
   const fetchUnits = useCallback(async () => {
     setLoading(true);
@@ -836,6 +862,25 @@ export default function MotocicletasTab({ userRole }) {
             }}
           >
             <FileUp size={13} /> Cargar DIM
+          </button>
+        )}
+
+        {/* Exportar Excel (solo superadmin) */}
+        {userRole === 'superadmin' && (
+          <button
+            onClick={handleExportMotos}
+            disabled={exportingMotos}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '6px',
+              padding: '7px 14px', borderRadius: '8px', border: 'none',
+              background: exportingMotos ? 'rgba(34,197,94,0.06)' : 'rgba(34,197,94,0.12)',
+              color: exportingMotos ? '#606075' : '#22c55e',
+              fontSize: '11px', fontWeight: 700, cursor: exportingMotos ? 'not-allowed' : 'pointer',
+              letterSpacing: '0.04em',
+            }}
+          >
+            <FileSpreadsheet size={13} />
+            {exportingMotos ? 'Exportando...' : 'Exportar Excel'}
           </button>
         )}
 

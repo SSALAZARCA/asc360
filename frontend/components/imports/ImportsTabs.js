@@ -10,7 +10,7 @@ import BackorderTab from './BackorderTab';
 import DashboardTab from './DashboardTab';
 import ShipmentOrderFormModal from './ShipmentOrderFormModal';
 import NuevoPedidoModal from './NuevoPedidoModal';
-import { RefreshCw, Upload, FileUp, Plus } from 'lucide-react';
+import { RefreshCw, Upload, FileUp, Plus, Download } from 'lucide-react';
 
 const TABS = [
   { id: 'orders', label: 'Pedidos' },
@@ -46,6 +46,7 @@ export default function ImportsTabs({ userRole }) {
   const [detailOrder, setDetailOrder] = useState(null);
   const [formModal, setFormModal] = useState({ open: false, order: null }); // edit
   const [showNuevoPedido, setShowNuevoPedido] = useState(false);
+  const [exportingOrders, setExportingOrders] = useState(false);
 
   const PAGE_SIZE = 50;
 
@@ -105,6 +106,30 @@ export default function ImportsTabs({ userRole }) {
 
   const handleEdit = (order) => {
     setFormModal({ open: true, order });
+  };
+
+  const handleExportOrders = async () => {
+    setExportingOrders(true);
+    try {
+      const params = new URLSearchParams();
+      if (filterCycle) params.append('cycle', filterCycle);
+      if (filterSP !== '') params.append('is_spare_part', filterSP);
+      if (filterStatus) params.append('computed_status', filterStatus);
+      if (search) params.append('search', search);
+      const res = await authFetch(`${API()}/imports/shipment-orders/export?${params}`);
+      if (!res.ok) return;
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `pedidos_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error('Error exportando pedidos:', e);
+    } finally {
+      setExportingOrders(false);
+    }
   };
 
   const handleRowClick = async (order) => {
@@ -213,6 +238,25 @@ export default function ImportsTabs({ userRole }) {
             >
               <RefreshCw size={14} />
             </button>
+
+            {/* Exportar Excel (solo superadmin) */}
+            {userRole === 'superadmin' && (
+              <button
+                onClick={handleExportOrders}
+                disabled={exportingOrders}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '6px',
+                  padding: '8px 14px', borderRadius: '8px', border: 'none',
+                  background: exportingOrders ? 'rgba(34,197,94,0.06)' : 'rgba(34,197,94,0.12)',
+                  color: exportingOrders ? '#606075' : '#22c55e',
+                  fontSize: '11px', fontWeight: 700, cursor: exportingOrders ? 'not-allowed' : 'pointer',
+                  letterSpacing: '0.04em',
+                }}
+              >
+                <Download size={13} />
+                {exportingOrders ? 'Exportando...' : 'Exportar Excel'}
+              </button>
+            )}
 
             {/* Nuevo Pedido (imports_editor + superadmin) */}
             {(userRole === 'superadmin' || userRole === 'imports_editor') && (

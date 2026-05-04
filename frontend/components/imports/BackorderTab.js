@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { authFetch } from '../../lib/authFetch';
-import { RefreshCw, Search, CheckCircle, Clock, AlertTriangle, Tag, FileUp, X, RotateCcw } from 'lucide-react';
+import { RefreshCw, Search, CheckCircle, Clock, AlertTriangle, Tag, FileUp, X, RotateCcw, FileSpreadsheet } from 'lucide-react';
 
 function API() {
   return (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1').replace('http://', 'https://');
@@ -236,6 +236,29 @@ export default function BackorderTab({ userRole }) {
 
   const canEdit = userRole === 'superadmin' || userRole === 'proveedor';
   const isSuperadmin = userRole === 'superadmin';
+  const [exportingBackorders, setExportingBackorders] = useState(false);
+
+  const handleExportBackorders = async () => {
+    setExportingBackorders(true);
+    try {
+      const params = new URLSearchParams();
+      if (!showResolved) params.append('resolved', 'false');
+      if (filterPi) params.append('origin_pi', filterPi);
+      const res = await authFetch(`${API()}/imports/backorders/export?${params}`);
+      if (!res.ok) return;
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `backorders_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error('Error exportando backorders:', e);
+    } finally {
+      setExportingBackorders(false);
+    }
+  };
 
   // Bulk resolve state
   const [bulkResolvePreview, setBulkResolvePreview] = useState(null);
@@ -524,6 +547,25 @@ export default function BackorderTab({ userRole }) {
           >
             <RotateCcw size={11} />
             Revertir carga
+          </button>
+        )}
+
+        {/* Exportar Excel (solo superadmin) */}
+        {isSuperadmin && (
+          <button
+            onClick={handleExportBackorders}
+            disabled={exportingBackorders}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '6px',
+              padding: '7px 14px', borderRadius: '8px', border: 'none',
+              background: exportingBackorders ? 'rgba(34,197,94,0.06)' : 'rgba(34,197,94,0.12)',
+              color: exportingBackorders ? '#606075' : '#22c55e',
+              fontSize: '11px', fontWeight: 700, cursor: exportingBackorders ? 'not-allowed' : 'pointer',
+              letterSpacing: '0.04em', whiteSpace: 'nowrap',
+            }}
+          >
+            <FileSpreadsheet size={13} />
+            {exportingBackorders ? 'Exportando...' : 'Exportar Excel'}
           </button>
         )}
 
