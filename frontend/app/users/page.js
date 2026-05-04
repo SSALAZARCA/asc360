@@ -218,6 +218,9 @@ export default function UsersPage() {
                     <option value="technician">Técnico Mecánico</option>
                     <option value="jefe_taller">Jefe / Coordinador de Taller</option>
                     <option value="administrativo">Administrativo</option>
+                    <option value="proveedor">Proveedor</option>
+                    <option value="parts_dealer">Vendedor de Repuestos</option>
+                    <option value="client">Cliente</option>
                     <option value="superadmin">Super Admin (Global)</option>
                   </select>
                 </div>
@@ -281,6 +284,10 @@ export default function UsersPage() {
         .superadmin { color: #f59e0b; background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3); }
         .technician { color: #3b82f6; background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); }
         .jefe_taller { color: #10b981; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); }
+        .administrativo { color: #a78bfa; background: rgba(167, 139, 250, 0.1); border: 1px solid rgba(167, 139, 250, 0.3); }
+        .proveedor { color: #fb923c; background: rgba(251, 146, 60, 0.1); border: 1px solid rgba(251, 146, 60, 0.3); }
+        .parts_dealer { color: #34d399; background: rgba(52, 211, 153, 0.1); border: 1px solid rgba(52, 211, 153, 0.3); }
+        .client { color: #94a3b8; background: rgba(148, 163, 184, 0.1); border: 1px solid rgba(148, 163, 184, 0.3); }
 
         .status-point { display: inline-block; width: 6px; height: 6px; border-radius: 50%; }
         .active { background: #10b981; box-shadow: 0 0 10px #10b981; }
