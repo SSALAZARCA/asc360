@@ -180,12 +180,11 @@ async def list_shipment_orders(
     def _build_order_read(o: ShipmentOrder) -> ShipmentOrderRead:
         read = ShipmentOrderRead.model_validate(o)
         if o.is_spare_part and any(lot.detail_loaded for lot in o.spare_part_lots):
-            total_units = sum(
-                item.qty_ordered or 0
+            ref_count = sum(
+                len(lot.items)
                 for lot in o.spare_part_lots if lot.detail_loaded
-                for item in lot.items
             )
-            read = read.model_copy(update={"total_units": total_units})
+            read = read.model_copy(update={"total_units": ref_count})
         return read
 
     return ShipmentOrderListResponse(
