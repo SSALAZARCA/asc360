@@ -201,7 +201,7 @@ export default function ShipmentTable({ orders, total, page, pageSize, onPageCha
                           <Pencil size={13} />
                         </button>
                       )}
-                      {userRole === 'superadmin' && (
+                      {(userRole === 'superadmin' || userRole === 'administrativo') && (
                         <button
                           onClick={(e) => handleDelete(e, order)}
                           disabled={deletingId === order.id}

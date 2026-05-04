@@ -55,7 +55,7 @@ const PERM_GROUPS = [
       { label: 'Crear pedido repuestos (Excel SP)',  perms: [true,  true,  false, false, false, true,  false] },
       { label: 'Crear pedido motos (Excel)',         perms: [true,  true,  false, false, false, true,  false] },
       { label: 'Editar pedido',                     perms: [true,  true,  false, false, false, true,  false] },
-      { label: 'Eliminar pedido',                   perms: [true,  false, false, false, false, false, false] },
+      { label: 'Eliminar pedido',                   perms: [true,  true,  false, false, false, false, false] },
       { label: 'Cargar Excel shipment status',      perms: [true,  false, false, false, false, false, false] },
       { label: 'Exportar pedidos a Excel',          perms: [true,  false, false, false, false, false, false] },
       { label: 'Subir doc. adjunto (desde detalle del pedido)',   perms: [true,  true,  false, false, false, true,  false] },

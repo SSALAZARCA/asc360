@@ -459,7 +459,8 @@ async def delete_shipment_order(
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
-    _require_superadmin(current_user)
+    if not (current_user.is_superadmin or current_user.role == "administrativo"):
+        raise HTTPException(status_code=403, detail="Sin permisos para eliminar pedidos")
 
     order = await db.get(ShipmentOrder, order_id)
     if not order:
