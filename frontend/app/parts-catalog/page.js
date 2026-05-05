@@ -44,7 +44,8 @@ export default function PartsCatalogPage() {
 
   // Modal de edición
   const [editItem, setEditItem] = useState(null);
-  const [editForm, setEditForm] = useState({ description: '', description_es_manual: '', public_price: '' });
+  const EMPTY_SUB = { substitute_part_code: '', brand: '', model: '' };
+  const [editForm, setEditForm] = useState({ description: '', description_es_manual: '', public_price: '', substitutes: [{ ...EMPTY_SUB }, { ...EMPTY_SUB }, { ...EMPTY_SUB }] });
   const [editLoading, setEditLoading] = useState(false);
   const [editMsg, setEditMsg] = useState('');
 
@@ -147,11 +148,17 @@ export default function PartsCatalogPage() {
       : item.precio_publico_calculado != null
         ? String(Math.round(Number(item.precio_publico_calculado)))
         : '';
+    const existingSubs = Array.isArray(item.substitutes) ? item.substitutes : [];
+    const substitutes = [0, 1, 2].map(i => existingSubs[i]
+      ? { substitute_part_code: existingSubs[i].substitute_part_code, brand: existingSubs[i].brand, model: existingSubs[i].model }
+      : { ...EMPTY_SUB }
+    );
     setEditForm({
       description: item.description || '',
       description_es_manual: item.description_es || '',
       public_price: defaultPrice,
       new_code: '',
+      substitutes,
     });
     setEditItem(item);
   };
@@ -188,6 +195,7 @@ export default function PartsCatalogPage() {
         body.description_es_manual = editForm.description_es_manual.trim() || null;
         const price = parseFloat(editForm.public_price);
         if (!isNaN(price) && price > 0) body.public_price = price;
+        body.substitutes = editForm.substitutes.filter(s => s.substitute_part_code.trim() && s.brand.trim() && s.model.trim());
         const res = await authFetch(`/parts/admin/catalog/${encodeURIComponent(editItem.factory_part_number)}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
@@ -500,6 +508,37 @@ export default function PartsCatalogPage() {
                     Se reemplazará <strong style={{ fontFamily: 'monospace' }}>{editItem?.factory_part_number}</strong> → <strong style={{ fontFamily: 'monospace' }}>{editForm.new_code.trim()}</strong> y se actualizará el historial de códigos.
                   </p>
                 )}
+              </div>
+
+              <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '1rem', marginTop: '0.25rem' }}>
+                <label style={{ display: 'block', fontSize: '0.62rem', fontWeight: 800, color: 'rgba(129,140,248,0.7)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.75rem' }}>
+                  Repuestos sustitutos <span style={{ fontWeight: 400, color: 'rgba(255,255,255,0.25)', textTransform: 'none', letterSpacing: 0 }}>— hasta 3</span>
+                </label>
+                {[0, 1, 2].map(idx => (
+                  <div key={idx} style={{ marginBottom: idx < 2 ? '0.75rem' : 0, padding: '0.75rem', borderRadius: '8px', background: 'rgba(99,102,241,0.04)', border: '1px solid rgba(99,102,241,0.1)' }}>
+                    <p style={{ fontSize: '0.58rem', fontWeight: 800, color: 'rgba(99,102,241,0.5)', textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 0.5rem' }}>Sustituto #{idx + 1}</p>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                      <input
+                        value={editForm.substitutes[idx].substitute_part_code}
+                        onChange={e => setEditForm(f => { const subs = [...f.substitutes]; subs[idx] = { ...subs[idx], substitute_part_code: e.target.value }; return { ...f, substitutes: subs }; })}
+                        placeholder="Código de parte"
+                        style={{ padding: '0.5rem 0.65rem', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '6px', color: '#fff', fontSize: '0.72rem', fontFamily: 'monospace', outline: 'none', boxSizing: 'border-box' }}
+                      />
+                      <input
+                        value={editForm.substitutes[idx].brand}
+                        onChange={e => setEditForm(f => { const subs = [...f.substitutes]; subs[idx] = { ...subs[idx], brand: e.target.value }; return { ...f, substitutes: subs }; })}
+                        placeholder="Marca"
+                        style={{ padding: '0.5rem 0.65rem', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '6px', color: '#fff', fontSize: '0.72rem', outline: 'none', boxSizing: 'border-box' }}
+                      />
+                    </div>
+                    <input
+                      value={editForm.substitutes[idx].model}
+                      onChange={e => setEditForm(f => { const subs = [...f.substitutes]; subs[idx] = { ...subs[idx], model: e.target.value }; return { ...f, substitutes: subs }; })}
+                      placeholder="Modelo de motocicleta"
+                      style={{ width: '100%', padding: '0.5rem 0.65rem', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '6px', color: '#fff', fontSize: '0.72rem', outline: 'none', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                ))}
               </div>
             </div>
 

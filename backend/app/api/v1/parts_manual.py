@@ -28,7 +28,7 @@ from app.models.imports import VehicleModel, SparePartItem
 from app.models.logistics import PartCatalog
 from app.models.parts_manual import (
     PartsManualItem, PartsManualSection, PartsReference, VehicleCatalogMap,
-    PartsCodeReviewTask,
+    PartsCodeReviewTask, PartSubstitute,
 )
 from app.models.system_config import SystemConfig
 
@@ -591,6 +591,17 @@ async def run_detection_bg() -> None:
 
 # ── Endpoint de consulta — tabla de repuestos cargados ────────────────────────
 
+class PartSubstituteOut(BaseModel):
+    substitute_part_code: str
+    brand: str
+    model: str
+    position: int
+
+class PartSubstituteIn(BaseModel):
+    substitute_part_code: str
+    brand: str
+    model: str
+
 class CatalogItemResult(BaseModel):
     factory_part_number: str
     description: str
@@ -602,16 +613,17 @@ class CatalogItemResult(BaseModel):
     pending_task_id: Optional[str] = None
     pending_candidate_code: Optional[str] = None
     pending_score: Optional[float] = None
-    # Cadena de precios derivada del costo FOB promedio ponderado
     avg_fob_cost: Optional[float] = None
     costo_importado: Optional[float] = None
     precio_distribuidor: Optional[float] = None
     precio_publico_calculado: Optional[float] = None
+    substitutes: list[PartSubstituteOut] = []
 
 class CatalogItemUpdate(BaseModel):
     description: Optional[str] = None
     description_es_manual: Optional[str] = None
     public_price: Optional[float] = None
+    substitutes: Optional[list[PartSubstituteIn]] = None
 
 class ReplaceCodeRequest(BaseModel):
     new_code: str
@@ -762,11 +774,24 @@ async def list_catalog(
     )
     rows = (await db.execute(rows_q)).all()
 
+    # Sustitutos para las referencias de esta página
+    fpns = [r[0] for r in rows]
+    subs_by_fpn: dict[str, list[PartSubstitute]] = {}
+    if fpns:
+        subs_q = (
+            select(PartSubstitute)
+            .where(PartSubstitute.factory_part_number.in_(fpns))
+            .order_by(PartSubstitute.factory_part_number, PartSubstitute.position)
+        )
+        for s in (await db.execute(subs_q)).scalars().all():
+            subs_by_fpn.setdefault(s.factory_part_number, []).append(s)
+
     def _build_item(r) -> CatalogItemResult:
         avg_fob = float(r[11]) if r[11] is not None else None
         prices  = compute_prices(avg_fob, pricing_factors)
+        fpn = r[0]
         return CatalogItemResult(
-            factory_part_number=r[0],
+            factory_part_number=fpn,
             description=r[1],
             description_es=r[2],
             public_price=float(r[3]) if r[3] is not None else None,
@@ -780,6 +805,15 @@ async def list_catalog(
             costo_importado=prices["costo_importado"],
             precio_distribuidor=prices["precio_distribuidor"],
             precio_publico_calculado=prices["precio_publico"],
+            substitutes=[
+                PartSubstituteOut(
+                    substitute_part_code=s.substitute_part_code,
+                    brand=s.brand,
+                    model=s.model,
+                    position=s.position,
+                )
+                for s in subs_by_fpn.get(fpn, [])
+            ],
         )
 
     return CatalogListResult(
@@ -840,6 +874,23 @@ async def update_catalog_item(
                 description=payload.description or ref.description,
                 public_price=payload.public_price,
             ))
+
+    if payload.substitutes is not None:
+        await db.execute(
+            sa_delete(PartSubstitute).where(PartSubstitute.factory_part_number == factory_part_number)
+        )
+        for idx, sub in enumerate(payload.substitutes[:3], start=1):
+            code = sub.substitute_part_code.strip()
+            brand = sub.brand.strip()
+            model = sub.model.strip()
+            if code and brand and model:
+                db.add(PartSubstitute(
+                    factory_part_number=factory_part_number,
+                    substitute_part_code=code,
+                    brand=brand,
+                    model=model,
+                    position=idx,
+                ))
 
     await db.commit()
     return {"ok": True}

@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, DateTime, ForeignKey, Numeric, Integer
+from sqlalchemy import Column, String, DateTime, ForeignKey, Numeric, Integer, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 
@@ -25,6 +25,7 @@ class PartsReference(Base):
 
     items = relationship("PartsManualItem", back_populates="reference")
     cost_history = relationship("PartCostHistory", back_populates="reference", cascade="all, delete-orphan")
+    substitutes = relationship("PartSubstitute", back_populates="reference", cascade="all, delete-orphan", order_by="PartSubstitute.position")
 
 
 class PartsManualSection(Base):
@@ -73,6 +74,23 @@ class PartCostHistory(Base):
     recorded_at         = Column(DateTime, nullable=False, default=datetime.utcnow)
 
     reference = relationship("PartsReference", back_populates="cost_history")
+
+
+class PartSubstitute(Base):
+    """Repuestos sustitutos de una referencia del catálogo (máx 3 por referencia)."""
+    __tablename__ = "part_substitutes"
+    __table_args__ = (
+        UniqueConstraint("factory_part_number", "position", name="uq_part_substitute_position"),
+    )
+
+    id                   = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    factory_part_number  = Column(String(100), ForeignKey("parts_references.factory_part_number", ondelete="CASCADE"), nullable=False, index=True)
+    substitute_part_code = Column(String(100), nullable=False)
+    brand                = Column(String(100), nullable=False)
+    model                = Column(String(255), nullable=False)
+    position             = Column(Integer, nullable=False)
+
+    reference = relationship("PartsReference", back_populates="substitutes")
 
 
 class PartsCodeReviewTask(Base):
