@@ -717,7 +717,8 @@ async def list_spare_part_items(
     if search:
         stmt = stmt.where(
             SparePartItem.part_number.ilike(f"%{search}%") |
-            SparePartItem.description.ilike(f"%{search}%")
+            SparePartItem.description.ilike(f"%{search}%") |
+            SparePartItem.description_es.ilike(f"%{search}%")
         )
     if item_status:
         stmt = stmt.where(SparePartItem.status == item_status)
