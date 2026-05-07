@@ -276,32 +276,34 @@ export default function ImportsTabs({ userRole }) {
 
             {/* Botones de importación (solo superadmin) */}
             {userRole === 'superadmin' && (
-              <>
-                <button
-                  onClick={() => setShowShipmentUpload(true)}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: '6px',
-                    padding: '8px 14px', borderRadius: '8px', border: 'none',
-                    background: 'rgba(255,95,51,0.15)', color: '#ff5f33',
-                    fontSize: '11px', fontWeight: 700, cursor: 'pointer',
-                    letterSpacing: '0.04em',
-                  }}
-                >
-                  <Upload size={13} /> Shipment Status
-                </button>
-                <button
-                  onClick={() => setShowShippingDocUpload(true)}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: '6px',
-                    padding: '8px 14px', borderRadius: '8px', border: 'none',
-                    background: 'rgba(96,165,250,0.1)', color: '#60a5fa',
-                    fontSize: '11px', fontWeight: 700, cursor: 'pointer',
-                    letterSpacing: '0.04em',
-                  }}
-                >
-                  <FileUp size={13} /> Packing List Motos
-                </button>
-              </>
+              <button
+                onClick={() => setShowShipmentUpload(true)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '6px',
+                  padding: '8px 14px', borderRadius: '8px', border: 'none',
+                  background: 'rgba(255,95,51,0.15)', color: '#ff5f33',
+                  fontSize: '11px', fontWeight: 700, cursor: 'pointer',
+                  letterSpacing: '0.04em',
+                }}
+              >
+                <Upload size={13} /> Shipment Status
+              </button>
+            )}
+
+            {/* Packing List Motos (superadmin + administrativo) */}
+            {(userRole === 'superadmin' || userRole === 'administrativo') && (
+              <button
+                onClick={() => setShowShippingDocUpload(true)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '6px',
+                  padding: '8px 14px', borderRadius: '8px', border: 'none',
+                  background: 'rgba(96,165,250,0.1)', color: '#60a5fa',
+                  fontSize: '11px', fontWeight: 700, cursor: 'pointer',
+                  letterSpacing: '0.04em',
+                }}
+              >
+                <FileUp size={13} /> Packing List Motos
+              </button>
             )}
           </div>
 

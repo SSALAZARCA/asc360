@@ -98,7 +98,7 @@ async def upload_shipping_doc_excel(
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
-    _require_superadmin(current_user)
+    _require_imports_editor(current_user)
 
     if not file.filename.endswith(".xlsx"):
         raise HTTPException(
