@@ -699,6 +699,54 @@ async def list_spare_part_lots(
     return result
 
 
+# ---------------------------------------------------------------------------
+# Stats de referencias únicas por filtro (para KPIs del header)
+# ---------------------------------------------------------------------------
+
+@router.get("/spare-part-lots/stats")
+async def get_spare_part_lots_stats(
+    detail_loaded: Optional[bool] = None,
+    has_bl: Optional[bool] = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    _require_imports_editor(current_user)
+
+    lot_stmt = select(SparePartLot.id)
+    if detail_loaded is not None:
+        lot_stmt = lot_stmt.where(SparePartLot.detail_loaded == detail_loaded)
+    if has_bl is not None:
+        lot_stmt = lot_stmt.join(ShipmentOrder, SparePartLot.shipment_order_id == ShipmentOrder.id)
+        if has_bl:
+            lot_stmt = lot_stmt.where(
+                ShipmentOrder.bl_container.isnot(None),
+                ShipmentOrder.bl_container != "",
+                ShipmentOrder.bl_container != "PENDING",
+                ShipmentOrder.bl_container != "TBD",
+            )
+        else:
+            lot_stmt = lot_stmt.where(
+                (ShipmentOrder.bl_container.is_(None)) |
+                (ShipmentOrder.bl_container == "") |
+                (ShipmentOrder.bl_container == "PENDING") |
+                (ShipmentOrder.bl_container == "TBD")
+            )
+
+    lot_ids = (await db.execute(lot_stmt)).scalars().all()
+
+    unique_refs = (await db.execute(
+        select(func.count(func.distinct(SparePartItem.part_number)))
+        .where(SparePartItem.lot_id.in_(lot_ids))
+    )).scalar() or 0
+
+    declared_refs = (await db.execute(
+        select(func.count(func.distinct(SparePartItem.part_number)))
+        .where(SparePartItem.lot_id.in_(lot_ids), SparePartItem.status == "DECLARED")
+    )).scalar() or 0
+
+    return {"unique_refs": unique_refs, "declared_refs": declared_refs}
+
+
 @router.get("/spare-part-lots/{lot_id}/items", response_model=list[SparePartItemRead])
 async def list_spare_part_items(
     lot_id: uuid.UUID,

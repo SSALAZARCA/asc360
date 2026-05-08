@@ -579,6 +579,7 @@ export default function SparePartsTab({ userRole }) {
   const [loading, setLoading] = useState(true);
   const [filterLoaded, setFilterLoaded] = useState('');
   const [filterBL, setFilterBL] = useState(true);
+  const [lotStats, setLotStats] = useState({ unique_refs: null, declared_refs: null });
   const [reconcileLot, setReconcileLot] = useState(null);
   const [resetting, setResetting] = useState(false);
   const [repairingExtras, setRepairingExtras] = useState(false);
@@ -613,7 +614,7 @@ export default function SparePartsTab({ userRole }) {
       const res = await authFetch(`${API()}/imports/backorders/repair-extra-received`, { method: 'POST' });
       const data = await res.json();
       alert(`Reparación completa: ${data.fixed} ítems actualizados${data.errors?.length ? `, ${data.errors.length} errores` : ''}`);
-      fetchLots();
+      fetchLots(); fetchStats();
     } catch { alert('Error en la reparación'); }
     finally { setRepairingExtras(false); }
   };
@@ -627,7 +628,7 @@ export default function SparePartsTab({ userRole }) {
       const data = await res.json();
       const msg = Object.entries(data.deleted).map(([k, v]) => `${k}: ${v}`).join(', ');
       alert(`Reset completo. Eliminados → ${msg}`);
-      fetchLots();
+      fetchLots(); fetchStats();
     } catch {
       alert('Error al ejecutar el reset');
     } finally {
@@ -651,7 +652,20 @@ export default function SparePartsTab({ userRole }) {
     }
   }, [filterLoaded, filterBL]);
 
-  useEffect(() => { fetchLots(); }, [fetchLots]);
+  const fetchStats = useCallback(async () => {
+    try {
+      const params = new URLSearchParams();
+      if (filterLoaded !== '') params.append('detail_loaded', filterLoaded);
+      if (filterBL) params.append('has_bl', 'true');
+      const res = await authFetch(`${API()}/imports/spare-part-lots/stats?${params}`);
+      const data = await res.json();
+      setLotStats(data);
+    } catch {
+      setLotStats({ unique_refs: null, declared_refs: null });
+    }
+  }, [filterLoaded, filterBL]);
+
+  useEffect(() => { fetchLots(); fetchStats(); }, [fetchLots, fetchStats]);
 
   // Totales del header
   const totalLots = lots.length;
@@ -662,10 +676,12 @@ export default function SparePartsTab({ userRole }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
 
       {/* KPIs rápidos */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '10px' }}>
         {[
           { label: 'Lotes activos', value: totalLots, color: '#60a5fa' },
           { label: 'Ítems totales', value: totalItems, color: '#a78bfa' },
+          { label: 'Refs. únicas', value: lotStats.unique_refs ?? '—', color: '#f59e0b' },
+          { label: 'Refs. declaradas', value: lotStats.declared_refs ?? '—', color: '#34d399' },
           { label: 'Valor declarado', value: totalValue > 0 ? `$${totalValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—', color: '#22c55e' },
         ].map(({ label, value, color }) => (
           <div key={label} style={{ padding: '14px 16px', borderRadius: '10px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
@@ -776,7 +792,7 @@ export default function SparePartsTab({ userRole }) {
         <ReconciliationModal
           lot={reconcileLot}
           onClose={() => setReconcileLot(null)}
-          onConfirmed={() => { fetchLots(); setReconcileLot(null); }}
+          onConfirmed={() => { fetchLots(); fetchStats(); setReconcileLot(null); }}
         />
       )}
     </div>
