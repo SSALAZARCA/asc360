@@ -16,50 +16,40 @@ STATIC_DIR = os.path.join(os.path.dirname(__file__), "../static/empadronamiento"
 TEMPLATES_DIR = os.path.join(os.path.dirname(__file__), "../html_templates")
 
 # ---------------------------------------------------------------------------
-# Diccionario de traducción de colores (portado verbatim)
+# Tabla de colores RUNT — fuente de verdad para empadronamientos
 # ---------------------------------------------------------------------------
-DICT_COLORES = {
-    'RED': 'ROJO',
-    'BLUE': 'AZUL',
-    'BLACK': 'NEGRO',
-    'WHITE': 'BLANCO',
-    'GREY': 'GRIS',
-    'GRAY': 'GRIS',
-    'GREEN': 'VERDE',
-    'YELLOW': 'AMARILLO',
-    'ORANGE': 'NARANJA',
-    'MATTE': 'MATE',
-    'MATT': 'MATE',
-    'MAT': 'MATE',
-    'GLOSSY': 'BRILLANTE',
-    'SILVER': 'PLATA',
-    'BROWN': 'CAFÉ',
-    'GOLD': 'DORADO',
-    'SAND': 'ARENA',
-    'BAJA': '',    # variantes de marca, se eliminan
-    'ALPINE': '',
+
+def _norm(s: str) -> str:
+    return re.sub(r'\s+', ' ', str(s).upper().strip().replace('/', ' '))
+
+# (clave normalizada) → (codigo_runt, nombre_runt)
+COLORES_RUNT: dict[str, tuple[int, str]] = {
+    _norm(k): (cod, nombre) for k, cod, nombre in [
+        ('ALPINE MAT WHITE',    9251,  'BLANCO MATE'),
+        ('BAJA MAT SAND',         80,  'ARENA'),
+        ('BAJA MATT SAND',        80,  'ARENA'),
+        ('BLACK',                 43,  'NEGRO'),
+        ('BLACK RED',           2338,  'NEGRO ROJO'),
+        ('Black/Neon Yellow',  17501,  'AMARILLO NEON - NEGRO'),
+        ('Black/Red',           2338,  'NEGRO ROJO'),
+        ('GLOSSY BLACK',        2255,  'NEGRO BRILLANTE'),
+        ('GRAY/NEON YELLOW',   15493,  'GRIS AMARILLO NEON'),
+        ('MATT GRAY',          10484,  'GRIS MATE'),
+        ('MATT GREEN',          7792,  'VERDE MATE'),
+        ('MATT GREY',          10484,  'GRIS MATE'),
+        ('MATT SAND',             80,  'ARENA'),
+        ('MATT WHITE',          9251,  'BLANCO MATE'),
+        ('RED',                   53,  'ROJO'),
+        ('WHITE/ORANGE',         181,  'BLANCO NARANJA'),
+    ]
 }
 
-_COLOR_WORDS      = {'ROJO', 'AZUL', 'NEGRO', 'BLANCO', 'GRIS', 'VERDE', 'AMARILLO', 'NARANJA', 'PLATA', 'CAFÉ', 'DORADO', 'ARENA'}
-_DESCRIPTOR_WORDS = {'MATE', 'BRILLANTE'}
 
-
-def traducir_color(color_ingles: str) -> str:
-    if not color_ingles:
-        return ""
-    c = str(color_ingles).upper().strip()
-
-    # Traducción por palabra completa (word boundary) para evitar reemplazos parciales
-    for eng, esp in DICT_COLORES.items():
-        c = re.sub(r'\b' + eng + r'\b', esp, c)
-
-    # Reordenar: colores → otras palabras (nombres de variante) → descriptores de acabado
-    parts = [p for p in c.split() if p]
-    colors      = [p for p in parts if p in _COLOR_WORDS]
-    descriptors = [p for p in parts if p in _DESCRIPTOR_WORDS]
-    others      = [p for p in parts if p not in _COLOR_WORDS and p not in _DESCRIPTOR_WORDS]
-
-    return " ".join(colors + others + descriptors).strip()
+def lookup_color_runt(color_str: str | None) -> tuple[int, str] | None:
+    """Devuelve (codigo_runt, nombre_runt) o None si el color no está registrado."""
+    if not color_str:
+        return None
+    return COLORES_RUNT.get(_norm(color_str))
 
 
 def get_image_base64(path: str) -> str:
@@ -170,7 +160,7 @@ def encontrar_specs_para_modelo(vehicle_models: list, modelo_str: str) -> dict:
     return defaults
 
 
-def generate_certificado_bytes(unit, order, vehicle_model) -> bytes:
+def generate_certificado_bytes(unit, order, vehicle_model, color_runt: str = '') -> bytes:
     """
     Genera el PDF del certificado individual de aduanas para una unidad.
 
@@ -178,12 +168,13 @@ def generate_certificado_bytes(unit, order, vehicle_model) -> bytes:
         unit: ShipmentMotoUnit ORM object
         order: ShipmentOrder ORM object
         vehicle_model: VehicleModel ORM object o None
+        color_runt: nombre RUNT del color ya validado y resuelto
 
     Returns:
         bytes del PDF generado
     """
-    # 1. Traducir color
-    color_es = traducir_color(unit.color or "")
+    # 1. Color ya resuelto desde la tabla RUNT por el endpoint
+    color_es = color_runt
 
     # 2. Obtener specs del vehicle_model o usar defaults
     if vehicle_model:

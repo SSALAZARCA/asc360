@@ -1901,13 +1901,14 @@ async def list_all_moto_units(
     items = []
     for u in units:
         o = u.shipment_order
+        _color_lookup = certificate_service.lookup_color_runt(u.color)
         items.append({
             "id": str(u.id),
             "shipment_order_id": str(u.shipment_order_id),
             "item_no": u.item_no,
             "vin_number": u.vin_number,
             "engine_number": u.engine_number,
-            "color": u.color,
+            "color": _color_lookup[1] if _color_lookup else u.color,
             "container_no": u.container_no,
             "seal_no": u.seal_no,
             "source_pi": u.source_pi,
@@ -2243,6 +2244,8 @@ async def download_certificado(
     effective_model = unit.model or order.model
     effective_model_year = unit.model_year or order.model_year
 
+    color_lookup = certificate_service.lookup_color_runt(unit.color)
+
     missing = []
     if not effective_model:
         missing.append("modelo de la motocicleta")
@@ -2252,11 +2255,15 @@ async def download_certificado(
         missing.append("número de motor")
     if not unit.vin_number:
         missing.append("número de chasis (VIN)")
+    if color_lookup is None:
+        missing.append(f"color '{unit.color or 'vacío'}' no registrado en tabla RUNT")
     if missing:
         raise HTTPException(
             status_code=422,
             detail=f"Faltan datos obligatorios para generar el empadronamiento: {', '.join(missing)}.",
         )
+
+    _, color_runt_nombre = color_lookup
 
     # Aplicar fallbacks en la unidad antes de generar el PDF
     unit.model = effective_model
@@ -2279,7 +2286,7 @@ async def download_certificado(
                 self.fuel_system = d.get("fuel_system")
         vm_obj = _SpecsProxy(matched_vm)
 
-    pdf_bytes = certificate_service.generate_certificado_bytes(unit, order, vm_obj)
+    pdf_bytes = certificate_service.generate_certificado_bytes(unit, order, vm_obj, color_runt_nombre)
 
     return StreamingResponse(
         io.BytesIO(pdf_bytes),
