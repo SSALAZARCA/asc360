@@ -15,42 +15,6 @@ from weasyprint import HTML as WeasyHTML
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "../static/empadronamiento")
 TEMPLATES_DIR = os.path.join(os.path.dirname(__file__), "../html_templates")
 
-# ---------------------------------------------------------------------------
-# Tabla de colores RUNT — fuente de verdad para empadronamientos
-# ---------------------------------------------------------------------------
-
-def _norm(s: str) -> str:
-    return re.sub(r'\s+', ' ', str(s).upper().strip().replace('/', ' '))
-
-# (clave normalizada) → (codigo_runt, nombre_runt)
-COLORES_RUNT: dict[str, tuple[int, str]] = {
-    _norm(k): (cod, nombre) for k, cod, nombre in [
-        ('ALPINE MAT WHITE',    9251,  'BLANCO MATE'),
-        ('BAJA MAT SAND',         80,  'ARENA'),
-        ('BAJA MATT SAND',        80,  'ARENA'),
-        ('BLACK',                 43,  'NEGRO'),
-        ('BLACK RED',           2338,  'NEGRO ROJO'),
-        ('Black/Neon Yellow',  17501,  'AMARILLO NEON - NEGRO'),
-        ('Black/Red',           2338,  'NEGRO ROJO'),
-        ('GLOSSY BLACK',        2255,  'NEGRO BRILLANTE'),
-        ('GRAY/NEON YELLOW',   15493,  'GRIS AMARILLO NEON'),
-        ('MATT GRAY',          10484,  'GRIS MATE'),
-        ('MATT GREEN',          7792,  'VERDE MATE'),
-        ('MATT GREY',          10484,  'GRIS MATE'),
-        ('MATT SAND',             80,  'ARENA'),
-        ('MATT WHITE',          9251,  'BLANCO MATE'),
-        ('RED',                   53,  'ROJO'),
-        ('WHITE/ORANGE',         181,  'BLANCO NARANJA'),
-    ]
-}
-
-
-def lookup_color_runt(color_str: str | None) -> tuple[int, str] | None:
-    """Devuelve (codigo_runt, nombre_runt) o None si el color no está registrado."""
-    if not color_str:
-        return None
-    return COLORES_RUNT.get(_norm(color_str))
-
 
 def get_image_base64(path: str) -> str:
     if path and os.path.exists(path):

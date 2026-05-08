@@ -140,10 +140,13 @@ const PERM_GROUPS = [
       { label: 'Editar factores de pricing',         perms: [true,  false, false, false, false, false, false] },
       { label: 'Variables del sistema (recordatorio, umbral)',perms:[true, false, false, false, false, false, false] },
       { label: 'Modelos de vehículos (CRUD)',         perms: [true,  false, false, false, false, false, false] },
+      { label: 'Colores RUNT (CRUD)',                 perms: [true,  false, false, false, false, false, false] },
       { label: 'Calcular costos históricos',          perms: [true,  false, false, false, false, false, false] },
     ],
   },
 ];
+
+const CM_FORM_DEFAULTS = { color_original: '', codigo_runt: '', nombre_runt: '' };
 
 const VM_FORM_DEFAULTS = {
   modelo: '',
@@ -312,6 +315,73 @@ export default function SettingsPage() {
   const [vmSaving, setVmSaving] = useState(false);
   const [vmError, setVmError] = useState('');
 
+  // Colores RUNT
+  const [colorMappings, setColorMappings] = useState([]);
+  const [cmLoading, setCmLoading] = useState(false);
+  const [showCMModal, setShowCMModal] = useState(false);
+  const [editingCM, setEditingCM] = useState(null);
+  const [cmForm, setCmForm] = useState(CM_FORM_DEFAULTS);
+  const [cmSaving, setCmSaving] = useState(false);
+  const [cmError, setCmError] = useState('');
+
+  const fetchColorMappings = useCallback(async () => {
+    setCmLoading(true);
+    try {
+      const res = await authFetch(`${BACKEND_URL}/color-runt-mappings`);
+      if (res.ok) setColorMappings(await res.json());
+    } catch (e) { console.error('Error cargando colores RUNT:', e); }
+    finally { setCmLoading(false); }
+  }, []);
+
+  const saveCM = async () => {
+    if (!cmForm.color_original.trim()) { setCmError('El color del packing list es obligatorio.'); return; }
+    if (!cmForm.nombre_runt.trim()) { setCmError('El nombre RUNT es obligatorio.'); return; }
+    setCmSaving(true);
+    setCmError('');
+    try {
+      const payload = {
+        color_original: cmForm.color_original.trim(),
+        codigo_runt: cmForm.codigo_runt !== '' ? parseInt(cmForm.codigo_runt, 10) : null,
+        nombre_runt: cmForm.nombre_runt.trim(),
+      };
+      const url = editingCM
+        ? `${BACKEND_URL}/color-runt-mappings/${editingCM.id}`
+        : `${BACKEND_URL}/color-runt-mappings`;
+      const method = editingCM ? 'PUT' : 'POST';
+      const res = await authFetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        setShowCMModal(false);
+        setEditingCM(null);
+        setCmForm(CM_FORM_DEFAULTS);
+        fetchColorMappings();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        setCmError(err.detail || 'Error al guardar el mapeo.');
+      }
+    } catch { setCmError('Error de conexión.'); }
+    finally { setCmSaving(false); }
+  };
+
+  const deleteCM = async (cm) => {
+    if (!confirm(`¿Eliminar el mapeo "${cm.color_original}"? Esta acción no se puede deshacer.`)) return;
+    try {
+      await authFetch(`${BACKEND_URL}/color-runt-mappings/${cm.id}`, { method: 'DELETE' });
+      fetchColorMappings();
+    } catch { alert('Error al eliminar el mapeo.'); }
+  };
+
+  const openCreateCM = () => { setEditingCM(null); setCmForm(CM_FORM_DEFAULTS); setCmError(''); setShowCMModal(true); };
+  const openEditCM = (cm) => {
+    setEditingCM(cm);
+    setCmForm({ color_original: cm.color_original || '', codigo_runt: cm.codigo_runt ?? '', nombre_runt: cm.nombre_runt || '' });
+    setCmError('');
+    setShowCMModal(true);
+  };
+
   const fetchVehicleModels = useCallback(async () => {
     setVmLoading(true);
     try {
@@ -448,6 +518,7 @@ export default function SettingsPage() {
   }, []);
 
   useEffect(() => { fetchVehicleModels(); }, [fetchVehicleModels]);
+  useEffect(() => { fetchColorMappings(); }, [fetchColorMappings]);
 
   useEffect(() => {
     authFetch('/parts/admin/vehicle-models')
@@ -883,6 +954,113 @@ export default function SettingsPage() {
           )}
         </section>
 
+        {/* Sección: Colores RUNT */}
+        <section className="glass p-6">
+          <div className="flex items-center justify-between mb-6 border-b border-white/5 pb-4">
+            <div className="flex items-center space-x-3">
+              <AlertCircle size={20} className="text-orange-500" />
+              <h2 className="text-lg font-bold">Colores RUNT</h2>
+            </div>
+            {userRole === 'superadmin' && (
+              <button
+                onClick={openCreateCM}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '6px',
+                  padding: '7px 14px', borderRadius: '8px', border: 'none',
+                  background: 'rgba(34,197,94,0.12)', color: '#22c55e',
+                  fontSize: '12px', fontWeight: 700, cursor: 'pointer',
+                  letterSpacing: '0.04em',
+                }}
+              >
+                <Plus size={14} /> Nuevo Color
+              </button>
+            )}
+          </div>
+          <p style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.3)', margin: '0 0 1rem', lineHeight: 1.7 }}>
+            Equivalencias entre el color tal como viene en el packing list y el nombre oficial del RUNT.
+            Los colores sin mapeo bloquean la generación del certificado de empadronamiento.
+          </p>
+
+          {cmLoading ? (
+            <p style={{ color: '#606075', fontSize: '12px', textAlign: 'center', margin: '32px 0' }}>Cargando colores...</p>
+          ) : colorMappings.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '48px 0', color: '#606075' }}>
+              <p style={{ fontSize: '13px', margin: 0 }}>No hay mapeos cargados</p>
+            </div>
+          ) : (
+            <div style={{ overflowX: 'auto', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.06)' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                <thead>
+                  <tr style={{ background: 'rgba(0,0,0,0.3)' }}>
+                    {['Color Packing List', 'Clave normalizada', 'Código RUNT', 'Nombre RUNT', ''].map(h => (
+                      <th key={h} style={{
+                        padding: '9px 14px', textAlign: 'left',
+                        fontSize: '9px', fontWeight: 700, color: '#606075',
+                        textTransform: 'uppercase', letterSpacing: '0.07em',
+                        borderBottom: '1px solid rgba(255,255,255,0.06)',
+                        whiteSpace: 'nowrap',
+                      }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {colorMappings.map((cm) => (
+                    <tr
+                      key={cm.id}
+                      style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}
+                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
+                      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                    >
+                      <td style={{ padding: '10px 14px', color: '#e2e8f0', fontWeight: 700 }}>{cm.color_original}</td>
+                      <td style={{ padding: '10px 14px', color: '#606075', fontFamily: 'monospace', fontSize: '11px' }}>{cm.color_key}</td>
+                      <td style={{ padding: '10px 14px', color: '#9ca3af' }}>{cm.codigo_runt ?? '—'}</td>
+                      <td style={{ padding: '10px 14px' }}>
+                        <span style={{
+                          fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '20px',
+                          background: 'rgba(99,102,241,0.1)', color: '#818cf8',
+                          border: '1px solid rgba(99,102,241,0.25)',
+                        }}>
+                          {cm.nombre_runt}
+                        </span>
+                      </td>
+                      {userRole === 'superadmin' ? (
+                        <td style={{ padding: '10px 14px' }}>
+                          <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
+                            <button
+                              onClick={() => openEditCM(cm)}
+                              title="Editar"
+                              style={{
+                                padding: '4px 8px', borderRadius: '6px', border: 'none',
+                                background: 'rgba(96,165,250,0.1)', color: '#60a5fa',
+                                cursor: 'pointer', display: 'flex', alignItems: 'center',
+                              }}
+                            >
+                              <Pencil size={12} />
+                            </button>
+                            <button
+                              onClick={() => deleteCM(cm)}
+                              title="Eliminar"
+                              style={{
+                                padding: '4px 8px', borderRadius: '6px', border: 'none',
+                                background: 'rgba(248,113,113,0.1)', color: '#f87171',
+                                cursor: 'pointer', display: 'flex', alignItems: 'center',
+                              }}
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </div>
+                        </td>
+                      ) : (
+                        <td />
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
         {/* Matriz de Permisos por Rol */}
         <section className="glass p-6">
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '1rem', paddingBottom: '0.75rem', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
@@ -1060,6 +1238,106 @@ export default function SettingsPage() {
         </section>
 
       </div>
+
+      {/* Modal Crear / Editar Color RUNT */}
+      {showCMModal && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 1000,
+          background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: '16px',
+        }}>
+          <div style={{
+            background: '#13131a', border: '1px solid rgba(255,255,255,0.08)',
+            borderRadius: '16px', padding: '28px',
+            width: '440px', maxWidth: '100%',
+            display: 'flex', flexDirection: 'column', gap: '18px',
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ color: '#fff', fontWeight: 700, fontSize: '15px', margin: 0 }}>
+                {editingCM ? 'Editar Color RUNT' : 'Nuevo Color RUNT'}
+              </h3>
+              <button
+                onClick={() => setShowCMModal(false)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#606075', padding: '4px' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                <label style={{ fontSize: '11px', fontWeight: 600, color: '#9ca3af' }}>
+                  Color en Packing List <span style={{ color: '#f87171' }}>*</span>
+                </label>
+                <input
+                  value={cmForm.color_original}
+                  onChange={e => setCmForm(f => ({ ...f, color_original: e.target.value }))}
+                  placeholder="Ej: BLACK NEON YELLOW"
+                  style={{ padding: '8px 12px', borderRadius: '8px', fontSize: '13px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', outline: 'none' }}
+                  onFocus={e => e.target.style.borderColor = '#60a5fa'}
+                  onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.1)'}
+                />
+                {cmForm.color_original && (
+                  <span style={{ fontSize: '10px', color: '#606075' }}>
+                    Clave normalizada: <code style={{ color: '#818cf8' }}>{cmForm.color_original.toUpperCase().trim().replace(/\//g, ' ').replace(/\s+/g, ' ')}</code>
+                  </span>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                <label style={{ fontSize: '11px', fontWeight: 600, color: '#9ca3af' }}>
+                  Nombre RUNT <span style={{ color: '#f87171' }}>*</span>
+                </label>
+                <input
+                  value={cmForm.nombre_runt}
+                  onChange={e => setCmForm(f => ({ ...f, nombre_runt: e.target.value }))}
+                  placeholder="Ej: AMARILLO NEON - NEGRO"
+                  style={{ padding: '8px 12px', borderRadius: '8px', fontSize: '13px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', outline: 'none' }}
+                  onFocus={e => e.target.style.borderColor = '#60a5fa'}
+                  onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.1)'}
+                />
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                <label style={{ fontSize: '11px', fontWeight: 600, color: '#9ca3af' }}>Código RUNT</label>
+                <input
+                  type="number"
+                  value={cmForm.codigo_runt}
+                  onChange={e => setCmForm(f => ({ ...f, codigo_runt: e.target.value }))}
+                  placeholder="Ej: 17501"
+                  style={{ padding: '8px 12px', borderRadius: '8px', fontSize: '13px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', outline: 'none' }}
+                  onFocus={e => e.target.style.borderColor = '#60a5fa'}
+                  onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.1)'}
+                />
+              </div>
+            </div>
+
+            {cmError && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 12px', borderRadius: '8px', background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)' }}>
+                <AlertCircle size={14} color="#f87171" />
+                <span style={{ fontSize: '12px', color: '#f87171' }}>{cmError}</span>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setShowCMModal(false)}
+                style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: '#9ca3af', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={saveCM}
+                disabled={cmSaving}
+                style={{ padding: '8px 20px', borderRadius: '8px', border: 'none', background: '#22c55e', color: '#fff', fontSize: '12px', fontWeight: 700, cursor: cmSaving ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', gap: '6px', opacity: cmSaving ? 0.7 : 1 }}
+              >
+                <Save size={13} /> {cmSaving ? 'Guardando...' : 'Guardar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal Crear / Editar Modelo de Vehículo */}
       {showVMModal && (

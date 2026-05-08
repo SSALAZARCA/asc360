@@ -407,6 +407,33 @@ class ImportAuditLogRead(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Color RUNT Mappings
+# ---------------------------------------------------------------------------
+class ColorRuntMappingCreate(BaseModel):
+    color_original: str
+    codigo_runt: Optional[int] = None
+    nombre_runt: str
+
+
+class ColorRuntMappingUpdate(BaseModel):
+    color_original: Optional[str] = None
+    codigo_runt: Optional[int] = None
+    nombre_runt: Optional[str] = None
+
+
+class ColorRuntMappingRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    color_key: str
+    color_original: str
+    codigo_runt: Optional[int] = None
+    nombre_runt: str
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+
+# ---------------------------------------------------------------------------
 # Resultados de importación Excel
 # ---------------------------------------------------------------------------
 class ImportExcelResult(BaseModel):

@@ -400,3 +400,18 @@ class VehicleModel(Base):
     llanta_trasera = Column(String(100), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+# ---------------------------------------------------------------------------
+# Color RUNT Mappings — equivalencias color packing list → nombre RUNT
+# ---------------------------------------------------------------------------
+class ColorRuntMapping(Base):
+    __tablename__ = "color_runt_mappings"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    color_key = Column(String(255), nullable=False, unique=True)   # normalizado: UPPER, trim, / → space
+    color_original = Column(String(255), nullable=False)            # tal como viene del packing list
+    codigo_runt = Column(Integer, nullable=True)
+    nombre_runt = Column(String(255), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

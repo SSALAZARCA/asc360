@@ -1,4 +1,5 @@
 import io
+import re
 import uuid
 import logging
 from datetime import datetime, timedelta
@@ -11,12 +12,17 @@ from sqlalchemy.future import select
 from app.models.imports import (
     ShipmentOrder, ShipmentMotoUnit, SparePartLot, SparePartItem,
     PackingList, PackingListItem, ReconciliationResult, Backorder, ImportAuditLog,
+    ColorRuntMapping,
 )
 from app.api.deps import CurrentUser
-from app.services.certificate_service import lookup_color_runt
 from app.schemas.imports import ImportExcelResult
 
 logger = logging.getLogger(__name__)
+
+
+def _norm_color(s: str) -> str:
+    return re.sub(r'\s+', ' ', str(s).upper().strip().replace('/', ' '))
+
 
 # Columnas esperadas en el Excel de Shipment Status
 SHIPMENT_EXPECTED_COLS = {
@@ -515,8 +521,12 @@ async def _process_moto_packing_list(db: AsyncSession, sheet, actor: CurrentUser
         model_raw = _cell(sheet, row_idx, col_map, "model", "model name", "item description", "description")
         model = str(model_raw).strip() if model_raw else None
 
-        _color_runt_lookup = lookup_color_runt(color)
-        _color_runt = _color_runt_lookup[1] if _color_runt_lookup else None
+        _color_runt = None
+        if color:
+            _cr = (await db.execute(
+                select(ColorRuntMapping).where(ColorRuntMapping.color_key == _norm_color(color))
+            )).scalar_one_or_none()
+            _color_runt = _cr.nombre_runt if _cr else None
 
         if vin_clean in existing_units_map:
             # Upsert: actualizar campos del archivo, sin tocar datos de aduana/DIM
