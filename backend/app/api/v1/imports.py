@@ -2239,10 +2239,14 @@ async def download_certificado(
             detail="La DIM no ha sido cargada para esta unidad. Cargá primero el PDF de la DIM.",
         )
 
+    # Mismo fallback que el listado: unit > order
+    effective_model = unit.model or order.model
+    effective_model_year = unit.model_year or order.model_year
+
     missing = []
-    if not unit.model:
+    if not effective_model:
         missing.append("modelo de la motocicleta")
-    if not unit.model_year:
+    if not effective_model_year:
         missing.append("año modelo")
     if not unit.engine_number:
         missing.append("número de motor")
@@ -2254,9 +2258,13 @@ async def download_certificado(
             detail=f"Faltan datos obligatorios para generar el empadronamiento: {', '.join(missing)}.",
         )
 
+    # Aplicar fallbacks en la unidad antes de generar el PDF
+    unit.model = effective_model
+    unit.model_year = effective_model_year
+
     # Load all VehicleModel records for spec matching using unit's own model
     vehicle_models = (await db.execute(select(VehicleModel))).scalars().all()
-    matched_vm = certificate_service.encontrar_specs_para_modelo(list(vehicle_models), unit.model)
+    matched_vm = certificate_service.encontrar_specs_para_modelo(list(vehicle_models), effective_model)
 
     vm_obj = None
     if matched_vm and matched_vm.get("cilindrada") != "N/A":
