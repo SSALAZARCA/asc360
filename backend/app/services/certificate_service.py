@@ -36,7 +36,11 @@ DICT_COLORES = {
     'BROWN': 'CAFÉ',
     'GOLD': 'DORADO',
     'SAND': 'ARENA',
+    'BAJA': '',   # variante de marca, se elimina
 }
+
+_COLOR_WORDS      = {'ROJO', 'AZUL', 'NEGRO', 'BLANCO', 'GRIS', 'VERDE', 'AMARILLO', 'NARANJA', 'PLATA', 'CAFÉ', 'DORADO', 'ARENA'}
+_DESCRIPTOR_WORDS = {'MATE', 'BRILLANTE'}
 
 
 def traducir_color(color_ingles: str) -> str:
@@ -48,16 +52,13 @@ def traducir_color(color_ingles: str) -> str:
     for eng, esp in DICT_COLORES.items():
         c = re.sub(r'\b' + eng + r'\b', esp, c)
 
-    # Ajuste gramatical: "MATE NEGRO" -> "NEGRO MATE"
-    # Solo si empieza con MATE o BRILLANTE y tiene mas palabras
-    parts = c.split()
-    if len(parts) > 1:
-        if parts[0] in ['MATE', 'BRILLANTE']:
-            modifier = parts.pop(0)
-            parts.append(modifier)
-            c = " ".join(parts)
+    # Reordenar: colores → otras palabras (nombres de variante) → descriptores de acabado
+    parts = [p for p in c.split() if p]
+    colors      = [p for p in parts if p in _COLOR_WORDS]
+    descriptors = [p for p in parts if p in _DESCRIPTOR_WORDS]
+    others      = [p for p in parts if p not in _COLOR_WORDS and p not in _DESCRIPTOR_WORDS]
 
-    return c
+    return " ".join(colors + others + descriptors).strip()
 
 
 def get_image_base64(path: str) -> str:
