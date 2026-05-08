@@ -238,8 +238,8 @@ function EditUnitModal({ unit, onSave, onClose, saving }) {
     model: unit.model || '',
     vin_number: unit.vin_number || '',
     engine_number: unit.engine_number || '',
-    color: unit.color || '',
     model_year: unit.model_year || '',
+    color: unit.color || '',  // solo lectura, no se envía al backend
   });
 
   const handleChange = (field, value) => setForm(f => ({ ...f, [field]: value }));
@@ -293,7 +293,7 @@ function EditUnitModal({ unit, onSave, onClose, saving }) {
           </div>
           <div>
             <label style={labelStyle}>Color</label>
-            <input style={inputStyle} value={form.color} onChange={e => handleChange('color', e.target.value)} />
+            <div style={{ ...inputStyle, color: '#606075', cursor: 'default' }}>{form.color || '—'}</div>
           </div>
           <div>
             <label style={labelStyle}>Año Modelo</label>
@@ -620,7 +620,6 @@ export default function MotocicletasTab({ userRole }) {
       if (form.model.trim()) payload.model = form.model.trim();
       if (form.vin_number.trim()) payload.vin_number = form.vin_number.trim();
       if (form.engine_number.trim()) payload.engine_number = form.engine_number.trim();
-      if (form.color.trim()) payload.color = form.color.trim();
       if (form.model_year !== '' && form.model_year !== null) {
         const y = parseInt(form.model_year, 10);
         if (!isNaN(y)) payload.model_year = y;
