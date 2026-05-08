@@ -36,7 +36,8 @@ DICT_COLORES = {
     'BROWN': 'CAFÉ',
     'GOLD': 'DORADO',
     'SAND': 'ARENA',
-    'BAJA': '',   # variante de marca, se elimina
+    'BAJA': '',    # variantes de marca, se eliminan
+    'ALPINE': '',
 }
 
 _COLOR_WORDS      = {'ROJO', 'AZUL', 'NEGRO', 'BLANCO', 'GRIS', 'VERDE', 'AMARILLO', 'NARANJA', 'PLATA', 'CAFÉ', 'DORADO', 'ARENA'}
