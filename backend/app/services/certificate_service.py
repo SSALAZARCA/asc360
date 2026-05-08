@@ -30,10 +30,12 @@ DICT_COLORES = {
     'ORANGE': 'NARANJA',
     'MATTE': 'MATE',
     'MATT': 'MATE',
+    'MAT': 'MATE',
     'GLOSSY': 'BRILLANTE',
     'SILVER': 'PLATA',
     'BROWN': 'CAFÉ',
     'GOLD': 'DORADO',
+    'SAND': 'ARENA',
 }
 
 
@@ -42,9 +44,9 @@ def traducir_color(color_ingles: str) -> str:
         return ""
     c = str(color_ingles).upper().strip()
 
-    # Traducción directa
+    # Traducción por palabra completa (word boundary) para evitar reemplazos parciales
     for eng, esp in DICT_COLORES.items():
-        c = c.replace(eng, esp)
+        c = re.sub(r'\b' + eng + r'\b', esp, c)
 
     # Ajuste gramatical: "MATE NEGRO" -> "NEGRO MATE"
     # Solo si empieza con MATE o BRILLANTE y tiene mas palabras
