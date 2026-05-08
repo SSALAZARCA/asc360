@@ -223,7 +223,10 @@ async def export_shipment_orders(
             ShipmentOrder.model.ilike(f"%{search}%")
         )
 
-    stmt = select(ShipmentOrder)
+    stmt = (
+        select(ShipmentOrder)
+        .options(selectinload(ShipmentOrder.spare_part_lots).selectinload(SparePartLot.items))
+    )
     if filters:
         stmt = stmt.where(*filters)
     stmt = stmt.order_by(ShipmentOrder.cycle.desc().nullslast(), ShipmentOrder.pi_number.asc())
@@ -234,6 +237,13 @@ async def export_shipment_orders(
         if fresh != o.computed_status:
             o.computed_status = fresh
 
+    def _export_qty(o: ShipmentOrder) -> str:
+        if o.is_spare_part:
+            loaded = [lot for lot in o.spare_part_lots if lot.detail_loaded]
+            if loaded:
+                return str(sum(len(lot.items) for lot in loaded))
+        return o.qty or ''
+
     headers = [
         "PI NUMBER", "MODELO", "CICLO", "CANTIDAD", "TIPO", "ESTADO",
         "CONTENEDORES", "ETR", "ETL", "ETD", "ETA",
@@ -241,7 +251,7 @@ async def export_shipment_orders(
     ]
     rows = [
         [
-            o.pi_number, o.model, o.cycle, o.qty,
+            o.pi_number, o.model, o.cycle, _export_qty(o),
             "Repuestos" if o.is_spare_part else "Motocicletas",
             o.computed_status, o.containers,
             o.etr_raw, o.etl_raw, o.etd_raw, o.eta_raw,
