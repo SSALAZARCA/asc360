@@ -345,6 +345,7 @@ class BackorderRead(BaseModel):
     spare_part_item_id: uuid.UUID
     part_number: str
     description_es: Optional[str] = None
+    description: Optional[str] = None
     model_applicable: Optional[str] = None
     origin_pi: str
     expected_in_pi: Optional[str] = None

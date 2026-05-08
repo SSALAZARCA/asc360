@@ -717,10 +717,15 @@ export default function BackorderTab({ userRole }) {
                     </td>
 
                     {/* Descripción */}
-                    <td style={{ padding: '9px 12px', color: '#d1d5db', fontSize: '11px', maxWidth: 200 }}>
-                      <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <td style={{ padding: '9px 12px', fontSize: '11px', maxWidth: 200 }}>
+                      <span style={{ display: 'block', color: '#d1d5db', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={group.description_es || ''}>
                         {group.description_es || '—'}
                       </span>
+                      {group.description && (
+                        <span style={{ display: 'block', fontSize: '9px', color: '#606075', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {group.description}
+                        </span>
+                      )}
                     </td>
 
                     {/* Moto */}

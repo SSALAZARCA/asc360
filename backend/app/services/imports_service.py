@@ -1918,6 +1918,7 @@ async def list_backorders(
             "spare_part_item_id": bo.spare_part_item_id,
             "part_number": bo.part_number,
             "description_es": sp.description_es if sp else None,
+            "description": sp.description if sp else None,
             "model_applicable": sp.model_applicable if sp else None,
             "origin_pi": bo.origin_pi,
             "expected_in_pi": bo.expected_in_pi,
