@@ -13,6 +13,7 @@ from app.models.imports import (
     PackingList, PackingListItem, ReconciliationResult, Backorder, ImportAuditLog,
 )
 from app.api.deps import CurrentUser
+from app.services.certificate_service import lookup_color_runt
 from app.schemas.imports import ImportExcelResult
 
 logger = logging.getLogger(__name__)
@@ -514,12 +515,16 @@ async def _process_moto_packing_list(db: AsyncSession, sheet, actor: CurrentUser
         model_raw = _cell(sheet, row_idx, col_map, "model", "model name", "item description", "description")
         model = str(model_raw).strip() if model_raw else None
 
+        _color_runt_lookup = lookup_color_runt(color)
+        _color_runt = _color_runt_lookup[1] if _color_runt_lookup else None
+
         if vin_clean in existing_units_map:
             # Upsert: actualizar campos del archivo, sin tocar datos de aduana/DIM
             unit = existing_units_map[vin_clean]
             unit.item_no = item_no
             unit.engine_number = engine
             unit.color = color
+            unit.color_runt = _color_runt
             if parsed_year is not None:
                 unit.model_year = parsed_year
             if model:
@@ -532,6 +537,7 @@ async def _process_moto_packing_list(db: AsyncSession, sheet, actor: CurrentUser
                 vin_number=vin_clean,
                 engine_number=engine,
                 color=color,
+                color_runt=_color_runt,
                 model=model,
                 model_year=parsed_year,
                 source_pi=source_pi,

@@ -100,6 +100,9 @@ class ShipmentMotoUnit(Base):
     no_lev = Column(String(100), nullable=True)
     f_lev = Column(Date, nullable=True)
 
+    # Color original del packing list y nombre RUNT resuelto
+    color_runt = Column(String(255), nullable=True)
+
     # Control de certificado
     certificado_generado = Column(Boolean, nullable=False, default=False)
     certificado_fecha = Column(DateTime, nullable=True)

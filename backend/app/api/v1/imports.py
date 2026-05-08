@@ -1901,14 +1901,13 @@ async def list_all_moto_units(
     items = []
     for u in units:
         o = u.shipment_order
-        _color_lookup = certificate_service.lookup_color_runt(u.color)
         items.append({
             "id": str(u.id),
             "shipment_order_id": str(u.shipment_order_id),
             "item_no": u.item_no,
             "vin_number": u.vin_number,
             "engine_number": u.engine_number,
-            "color": _color_lookup[1] if _color_lookup else u.color,
+            "color": u.color_runt or u.color,
             "container_no": u.container_no,
             "seal_no": u.seal_no,
             "source_pi": u.source_pi,
@@ -2244,8 +2243,6 @@ async def download_certificado(
     effective_model = unit.model or order.model
     effective_model_year = unit.model_year or order.model_year
 
-    color_lookup = certificate_service.lookup_color_runt(unit.color)
-
     missing = []
     if not effective_model:
         missing.append("modelo de la motocicleta")
@@ -2255,7 +2252,7 @@ async def download_certificado(
         missing.append("número de motor")
     if not unit.vin_number:
         missing.append("número de chasis (VIN)")
-    if color_lookup is None:
+    if not unit.color_runt:
         missing.append(f"color '{unit.color or 'vacío'}' no registrado en tabla RUNT")
     if missing:
         raise HTTPException(
@@ -2263,7 +2260,7 @@ async def download_certificado(
             detail=f"Faltan datos obligatorios para generar el empadronamiento: {', '.join(missing)}.",
         )
 
-    _, color_runt_nombre = color_lookup
+    color_runt_nombre = unit.color_runt
 
     # Aplicar fallbacks en la unidad antes de generar el PDF
     unit.model = effective_model
