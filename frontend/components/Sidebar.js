@@ -42,7 +42,9 @@ export default function Sidebar({ collapsed = false, onToggle }) {
   useEffect(() => {
     const checkAuth = () => {
       const stored = sessionStorage.getItem('um_user');
-      if (stored) setUser(JSON.parse(stored));
+      if (stored) {
+        try { setUser(JSON.parse(stored)); } catch { sessionStorage.removeItem('um_user'); }
+      }
       const cached = localStorage.getItem('um_logo');
       setCompanyLogo(cached || null);
     };
@@ -90,6 +92,7 @@ export default function Sidebar({ collapsed = false, onToggle }) {
 
   const handleLogout = () => {
     sessionStorage.removeItem('um_user');
+    sessionStorage.removeItem('um_token');
     window.dispatchEvent(new Event('storage'));
     router.push('/login');
   };

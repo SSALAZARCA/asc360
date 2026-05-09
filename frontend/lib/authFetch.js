@@ -27,10 +27,19 @@ export async function authFetch(path, options = {}) {
 
   const url = path.startsWith('http') ? path : `${API()}${path}`;
 
-  const response = await fetch(url, {
-    ...options,
-    headers,
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+  let response;
+  try {
+    response = await fetch(url, {
+      ...options,
+      headers,
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   // Si el servidor responde con 401 (token vencido o inválido), limpiar sesión
   if (response.status === 401) {
