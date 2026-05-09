@@ -139,7 +139,7 @@ services:
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - API_URL=http://backend:8000/api/v1
       - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - SONIA_BOT_SECRET=${SONIA_BOT_SECRET:-sonia-internal-secret-2024}
+      - SONIA_BOT_SECRET=${SONIA_BOT_SECRET}
       # Feature flags — cambiar a true para activar el clasificador unificado de voz+texto
       - USE_UNIFIED_INTENT=${USE_UNIFIED_INTENT:-true}
       - USER_CACHE_TTL_SECONDS=${USER_CACHE_TTL_SECONDS:-3600}
