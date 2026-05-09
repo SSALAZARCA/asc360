@@ -814,68 +814,66 @@ async def get_kpi_analytics(
     - superadmin: ve toda la red
     - otros roles: solo ven su propio taller
     """
-    from sqlalchemy import func, case
+    from sqlalchemy import func, case, and_
     from app.models.order import OrderHistory
     from app.models.tenant import Tenant
-    
-    now = datetime.utcnow()
-    
-    # 1. Filtro por tenant extraído del JWT — nunca del query string
-    # Si es superadmin: ve toda la red. Cualquier otro rol: solo su taller.
+
     tenant_id = None if current_user.is_superadmin else current_user.tenant_id
-    
-    base_stmt = select(ServiceOrder)
+    active_excluded = [ServiceStatus.completed, ServiceStatus.delivered, ServiceStatus.cancelled]
+
+    # 1. Semáforo — calculado en SQL, sin traer filas a memoria
+    days_active = func.extract('epoch', func.now() - ServiceOrder.created_at) / 86400.0
+    semaphore_stmt = select(
+        func.sum(case((days_active <= 2, 1), else_=0)).label("green"),
+        func.sum(case((and_(days_active > 2, days_active <= 5), 1), else_=0)).label("yellow"),
+        func.sum(case((days_active > 5, 1), else_=0)).label("red"),
+    ).where(ServiceOrder.status.notin_(active_excluded))
     if tenant_id:
-        base_stmt = base_stmt.where(ServiceOrder.tenant_id == tenant_id)
-    
-    res = await db.execute(base_stmt)
-    orders = res.scalars().all()
-    
-    # 2. Semáforo y Tiempo Promedio Total
-    semaphore = {"green": 0, "yellow": 0, "red": 0}
-    total_cycle_minutes = 0
-    completed_cycles = 0
-    
-    for o in orders:
-        if o.status not in [ServiceStatus.completed, ServiceStatus.delivered, ServiceStatus.cancelled]:
-            diff_days = (now - o.created_at).days
-            if diff_days <= 2: semaphore["green"] += 1
-            elif diff_days <= 5: semaphore["yellow"] += 1
-            else: semaphore["red"] += 1
-        
-        # Tiempo total solo para entregados
-        if o.delivered_at and o.created_at:
-            total_cycle_minutes += (o.delivered_at - o.created_at).total_seconds() / 60.0
-            completed_cycles += 1
-            
-    avg_total_time = total_cycle_minutes / completed_cycles if completed_cycles > 0 else 0
-    
-    # 3. Cantidad por Estado y Tiempos por Estado
-    # Usamos Group By en la base de datos para eficiencia
-    count_by_status = {}
-    for status in ServiceStatus:
-        count_by_status[status.value] = 0
-        
-    for o in orders:
-        if o.status not in [ServiceStatus.delivered, ServiceStatus.cancelled]:
-            count_by_status[o.status.value] += 1
-            
-    # Tiempos promedio por estado desde OrderHistory
+        semaphore_stmt = semaphore_stmt.where(ServiceOrder.tenant_id == tenant_id)
+    sem_row = (await db.execute(semaphore_stmt)).one()
+    semaphore = {
+        "green": int(sem_row.green or 0),
+        "yellow": int(sem_row.yellow or 0),
+        "red": int(sem_row.red or 0),
+    }
+
+    # 2. Tiempo promedio total (solo órdenes entregadas)
+    avg_stmt = select(
+        func.avg(
+            func.extract('epoch', ServiceOrder.delivered_at - ServiceOrder.created_at) / 60.0
+        ).label("avg_minutes")
+    ).where(ServiceOrder.delivered_at.isnot(None))
+    if tenant_id:
+        avg_stmt = avg_stmt.where(ServiceOrder.tenant_id == tenant_id)
+    avg_row = (await db.execute(avg_stmt)).one()
+    avg_total_time = float(avg_row.avg_minutes or 0)
+
+    # 3. Cantidad por estado (excluye delivered y cancelled)
+    count_stmt = (
+        select(ServiceOrder.status, func.count(ServiceOrder.id).label("cnt"))
+        .where(ServiceOrder.status.notin_([ServiceStatus.delivered, ServiceStatus.cancelled]))
+        .group_by(ServiceOrder.status)
+    )
+    if tenant_id:
+        count_stmt = count_stmt.where(ServiceOrder.tenant_id == tenant_id)
+    count_by_status = {s.value: 0 for s in ServiceStatus}
+    for row in (await db.execute(count_stmt)).all():
+        count_by_status[row.status.value] = row.cnt
+
+    # 4. Tiempos promedio por estado desde OrderHistory
     history_stmt = select(
         OrderHistory.from_status,
         func.avg(OrderHistory.duration_minutes).label("avg_duration")
     ).where(OrderHistory.duration_minutes.isnot(None))
-    
     if tenant_id:
         history_stmt = history_stmt.join(ServiceOrder).where(ServiceOrder.tenant_id == tenant_id)
-        
     history_stmt = history_stmt.group_by(OrderHistory.from_status)
-    h_res = await db.execute(history_stmt)
-    
-    avg_time_by_status = {row[0].value if row[0] else "start": float(row[1]) for row in h_res.all()}
+    avg_time_by_status = {
+        row[0].value if row[0] else "start": float(row[1])
+        for row in (await db.execute(history_stmt)).all()
+    }
 
-    # 4. Gestión de Garantías (Top Centros por tiempo)
-    # Filtramos órdenes de tipo garantía y calculamos promedio por taller
+    # 5. Gestión de Garantías (Top Centros por tiempo)
     warranty_stmt = (
         select(
             Tenant.name,
@@ -951,6 +949,24 @@ async def get_services_analytics(
     res = await db.execute(stmt)
     results = res.all()
 
+    # 3. Una sola query agregada para todas las placas — evita N+1
+    plates = list({row[1] for row in results})
+    plate_metrics: dict = {}
+    if plates:
+        agg_stmt = (
+            select(
+                Vehicle.plate,
+                func.count(ServiceOrder.id).label("total_visits"),
+                func.count(ServiceOrder.id).filter(ServiceOrder.created_at >= two_months_ago).label("recent_visits"),
+                func.count(ServiceOrder.id).filter(ServiceOrder.service_type == ServiceType.warranty).label("warranty_count"),
+            )
+            .join(Vehicle, ServiceOrder.vehicle_id == Vehicle.id)
+            .where(Vehicle.plate.in_(plates))
+            .group_by(Vehicle.plate)
+        )
+        agg_res = await db.execute(agg_stmt)
+        plate_metrics = {row.plate: row for row in agg_res.all()}
+
     services_data = []
 
     for row in results:
@@ -960,29 +976,10 @@ async def get_services_analytics(
         city_name = row[3]
         mileage = row[4]
 
-        # 3. Calcular métricas históricas reales por vehículo (PLACA)
-        # Visitas totales
-        total_visits_stmt = select(func.count(ServiceOrder.id)).join(Vehicle).where(Vehicle.plate == plate)
-        total_visits_res = await db.execute(total_visits_stmt)
-        total_visits = total_visits_res.scalar()
-
-        # Visitas últimos 2 meses
-        recent_visits_stmt = (
-            select(func.count(ServiceOrder.id))
-            .join(Vehicle)
-            .where(and_(Vehicle.plate == plate, ServiceOrder.created_at >= two_months_ago))
-        )
-        recent_visits_res = await db.execute(recent_visits_stmt)
-        recent_visits = recent_visits_res.scalar()
-
-        # Garantías totales
-        warranty_count_stmt = (
-            select(func.count(ServiceOrder.id))
-            .join(Vehicle)
-            .where(and_(Vehicle.plate == plate, ServiceOrder.service_type == ServiceType.warranty))
-        )
-        warranty_count_res = await db.execute(warranty_count_stmt)
-        warranty_count = warranty_count_res.scalar()
+        agg = plate_metrics.get(plate)
+        total_visits = agg.total_visits if agg else 0
+        recent_visits = agg.recent_visits if agg else 0
+        warranty_count = agg.warranty_count if agg else 0
 
         # Calcular tiempo en taller
         end_time = order.delivered_at or datetime.utcnow()

@@ -260,7 +260,8 @@ async def resolve_and_apply_user_status(update: Update, context: ContextTypes.DE
                     chat_id=user_updated["telegram_id"],
                     text=f"🎉 ¡Bienvenido a la Red UM Colombia!\n\nTu cuenta fue aprobada por el Super Administrador. Escribí /start para ver tu menú y empezar a trabajar con Sonia."
                 )
-            except: pass
+            except Exception as notify_err:
+                logger.warning(f"No se pudo notificar al usuario {user_updated.get('telegram_id')}: {notify_err}")
     else:
         await update.message.reply_text("Uy, tuve un problema con el servidor al intentar procesar esa solicitud.")
 
@@ -292,7 +293,8 @@ async def handle_status_change(update: Update, context: ContextTypes.DEFAULT_TYP
                         chat_id=user_updated["telegram_id"],
                         text=f"🎉 ¡Bienvenido a la Red UM Colombia!\n\nTu cuenta fue aprobada por el Super Administrador. Escribí /start para ver tu menú y empezar a trabajar con Sonia."
                     )
-                except: pass
+                except Exception as notify_err:
+                    logger.warning(f"No se pudo notificar al usuario {user_updated.get('telegram_id')}: {notify_err}")
         else:
              await query.edit_message_text("❌ Ocurrió un error cambiando el estado en el servidor.")
     except Exception as e:

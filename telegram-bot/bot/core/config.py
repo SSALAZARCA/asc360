@@ -20,7 +20,7 @@ if not SONIA_BOT_SECRET:
 FAKE_TENANT = os.getenv("FAKE_TENANT", "")
 
 # Control de caché de autenticación
-USER_CACHE_TTL_SECONDS = int(os.getenv("USER_CACHE_TTL_SECONDS", "3600"))
+USER_CACHE_TTL_SECONDS = int(os.getenv("USER_CACHE_TTL_SECONDS", "300"))
 
 # Control de reintentos OpenAI
 OPENAI_MAX_RETRIES = int(os.getenv("OPENAI_MAX_RETRIES", "3"))

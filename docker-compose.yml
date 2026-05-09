@@ -142,7 +142,7 @@ services:
       - SONIA_BOT_SECRET=${SONIA_BOT_SECRET}
       # Feature flags — cambiar a true para activar el clasificador unificado de voz+texto
       - USE_UNIFIED_INTENT=${USE_UNIFIED_INTENT:-true}
-      - USER_CACHE_TTL_SECONDS=${USER_CACHE_TTL_SECONDS:-3600}
+      - USER_CACHE_TTL_SECONDS=${USER_CACHE_TTL_SECONDS:-300}
       - OPENAI_MAX_RETRIES=${OPENAI_MAX_RETRIES:-3}
     depends_on:
       - backend
