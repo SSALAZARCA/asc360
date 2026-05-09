@@ -1,5 +1,5 @@
 import json as json_lib
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
+from fastapi import APIRouter, Depends, Header, HTTPException, status, UploadFile, File, Form
 from typing import List, Optional
 from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,8 +8,13 @@ from sqlalchemy.future import select
 from app.database import get_db
 from app.models.order import ServiceOrderReception
 from app.services.pdf_service import upload_file_to_minio
+from app.config import settings
+from app.core.security import verify_sonia_secret
 
 router = APIRouter()
+
+ALLOWED_MIME_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB
 
 @router.post("/{order_id}/photos", status_code=status.HTTP_200_OK)
 async def upload_reception_photos(
@@ -17,8 +22,11 @@ async def upload_reception_photos(
     files: Optional[List[UploadFile]] = File(None),
     descriptions: Optional[str] = Form(None),
     text_observations: Optional[str] = Form(None),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    x_sonia_secret: Optional[str] = Header(None),
 ):
+    if not verify_sonia_secret(x_sonia_secret, settings.SONIA_BOT_SECRET):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="No autenticado")
     """
     Sube fotos de evidencia y/o observaciones de texto para la Recepción.
     - files: lista de imágenes (opcional)
@@ -47,7 +55,17 @@ async def upload_reception_photos(
 
     if files:
         for i, file in enumerate(files):
+            if file.content_type not in ALLOWED_MIME_TYPES:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"Tipo de archivo no permitido: {file.content_type}. Solo se aceptan imágenes."
+                )
             contents = await file.read()
+            if len(contents) > MAX_FILE_SIZE_BYTES:
+                raise HTTPException(
+                    status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                    detail=f"El archivo '{file.filename}' supera el límite de 10 MB."
+                )
             file_url = await upload_file_to_minio(
                 file_bytes=contents,
                 file_name=file.filename,

@@ -13,12 +13,10 @@ from app.models.tenant import Tenant
 from app.schemas.order import OrderCreate, OrderRead, WorkLogCreate, PartCreate
 from app.services.pdf_service import generate_and_upload_reception_pdf
 from app.api.deps import get_current_user, get_optional_user, CurrentUser
+from app.core.security import verify_sonia_secret
+from app.config import settings as app_settings
 
 from typing import Optional
-
-# NOTA: get_current_user_mock se mantiene solo por compatibilidad con endpoints legacy
-def get_current_user_mock() -> Optional[User]:
-    return None
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
 
@@ -26,8 +24,11 @@ router = APIRouter(prefix="/orders", tags=["Orders"])
 async def create_service_order(
     order_in: OrderCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: Optional[User] = Depends(get_current_user_mock)
+    x_sonia_secret: Optional[str] = Header(None),
 ):
+    if not verify_sonia_secret(x_sonia_secret, app_settings.SONIA_BOT_SECRET):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="No autenticado")
+
     # 1. Crear Entidad Principal: La Orden de Servicio
     new_order = ServiceOrder(
         tenant_id=order_in.tenant_id,

@@ -1,16 +1,16 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
-    # Base de datos
-    DATABASE_URL: str = "postgresql+asyncpg://umadmin:umadmin_secret@127.0.0.1:5432/um_service_db"
+    # Base de datos — requerido, sin default para forzar configuración explícita
+    DATABASE_URL: str
 
     # Redis
     REDIS_URL: str = "redis://localhost:6379/0"
 
-    # MinIO
+    # MinIO — credenciales requeridas sin default
     MINIO_ENDPOINT: str = "localhost:9000"
-    MINIO_ACCESS_KEY: str = "umadmin"
-    MINIO_SECRET_KEY: str = "minio_secret_admin"
+    MINIO_ACCESS_KEY: str
+    MINIO_SECRET_KEY: str
     MINIO_SECURE: bool = False
     MINIO_PUBLIC_URL: str = ""   # URL pública de MinIO (ej: https://minio.dominio.com). Si vacío, usa MINIO_ENDPOINT.
 

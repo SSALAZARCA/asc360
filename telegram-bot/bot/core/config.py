@@ -14,8 +14,10 @@ logger = logging.getLogger(__name__)
 # Configuraciones de API
 BACKEND_URL = os.getenv("API_URL", "http://backend:8000/api/v1")
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-SONIA_BOT_SECRET = os.getenv("SONIA_BOT_SECRET", "sonia-internal-secret-2024")
-FAKE_TENANT = "c9a40552-3eb6-4cb4-bfff-6aacaead3ca7" # Tenant de prueba para entorno desarrollo
+SONIA_BOT_SECRET = os.getenv("SONIA_BOT_SECRET")
+if not SONIA_BOT_SECRET:
+    raise ValueError("SONIA_BOT_SECRET must be set via environment variable — no default allowed")
+FAKE_TENANT = os.getenv("FAKE_TENANT", "")
 
 # Control de caché de autenticación
 USER_CACHE_TTL_SECONDS = int(os.getenv("USER_CACHE_TTL_SECONDS", "3600"))

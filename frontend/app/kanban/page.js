@@ -42,6 +42,25 @@ const TYPE_CFG = {
 const colById = Object.fromEntries(COLUMNS.map(c => [c.id, c]));
 const API     = () => (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1').replace('http://', 'https://');
 
+async function downloadPdf(apiUrl, filename) {
+  const token = typeof window !== 'undefined' ? sessionStorage.getItem('um_token') : null;
+  try {
+    const res = await fetch(apiUrl, { headers: { Authorization: `Bearer ${token}` } });
+    if (!res.ok) throw new Error('Error al descargar');
+    const blob = await res.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = objectUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(objectUrl);
+  } catch {
+    alert('No se pudo descargar el PDF. Intentá de nuevo.');
+  }
+}
+
 function dayColor(d) { return d > 5 ? '#ef4444' : d > 2 ? '#fbbf24' : '#10b981'; }
 function fmtDate(iso) {
   if (!iso) return '-';
@@ -472,24 +491,20 @@ function OrderModal({ order, onClose, onOrderAccepted }) {
                 )}
 
                 {detail.recepcion.reception_pdf_url && (
-                  <a
-                    href={`${API()}/orders/${order.order_id}/pdf?token=${typeof window !== 'undefined' ? sessionStorage.getItem('um_token') : ''}`}
-                    target="_blank"
-                    rel="noreferrer"
+                  <button
+                    onClick={() => downloadPdf(`${API()}/orders/${order.order_id}/pdf`, `Acta_${order.order_id.slice(0,8)}.pdf`)}
                     className="mpdf-btn"
                   >
                     Ver Acta de Recepcion PDF
-                  </a>
+                  </button>
                 )}
-                <a
-                  href={`${API()}/orders/${order.order_id}/exit-pdf?token=${typeof window !== 'undefined' ? sessionStorage.getItem('um_token') : ''}`}
-                  target="_blank"
-                  rel="noreferrer"
+                <button
+                  onClick={() => downloadPdf(`${API()}/orders/${order.order_id}/exit-pdf`, `OrdenSalida_${order.order_id.slice(0,8)}.pdf`)}
                   className="mpdf-btn"
                   style={{ background: 'rgba(16,185,129,0.12)', borderColor: 'rgba(16,185,129,0.35)', color: '#10b981', marginTop: 6 }}
                 >
                   Descargar Orden de Salida PDF
-                </a>
+                </button>
               </div>
             )}
 

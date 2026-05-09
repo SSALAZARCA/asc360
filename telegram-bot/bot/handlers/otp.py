@@ -167,16 +167,28 @@ async def otp_handle_code(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     # Extraer solo dígitos
     digits = "".join(filter(str.isdigit, text))
     if len(digits) != 6:
+        attempts = context.user_data.get("otp_attempts", 0) + 1
+        context.user_data["otp_attempts"] = attempts
+        if attempts >= 5:
+            for key in ("otp_plate", "otp_order_id", "otp_attempts"):
+                context.user_data.pop(key, None)
+            await update.message.reply_text(
+                "⛔ Demasiados intentos fallidos. El flujo fue cancelado por seguridad. "
+                "Iniciá de nuevo cuando tengas el código correcto.",
+                reply_markup=get_main_keyboard(user_role)
+            )
+            return ConversationHandler.END
         bypass_hint = "\n\nSi no tenés el código, escribí *'sin otp'* para autorizar manualmente." if can_bypass else ""
         await update.message.reply_text(
             f"El código debe tener exactamente 6 dígitos. "
-            f"Te entendí: *'{text}'* — revisalo e intentá de nuevo.{bypass_hint}",
+            f"Te entendí: *'{text}'* — revisalo e intentá de nuevo ({attempts}/5).{bypass_hint}",
             parse_mode="Markdown"
         )
         return OTP_ASKING_CODE
 
-    context.user_data["otp_code"]   = digits
-    context.user_data["otp_bypass"] = False
+    context.user_data["otp_code"]    = digits
+    context.user_data["otp_bypass"]  = False
+    context.user_data["otp_attempts"] = 0
 
     kb = [[
         InlineKeyboardButton("✅ Sí, registrar", callback_data="otp_confirm_yes"),
@@ -276,7 +288,7 @@ async def otp_handle_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE)
         )
 
     # Limpiar datos del flujo OTP
-    for key in ("otp_plate", "otp_order_id", "otp_code", "otp_bypass"):
+    for key in ("otp_plate", "otp_order_id", "otp_code", "otp_bypass", "otp_attempts"):
         context.user_data.pop(key, None)
 
     return ConversationHandler.END

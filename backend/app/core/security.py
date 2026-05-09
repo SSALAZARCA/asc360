@@ -1,4 +1,5 @@
 import bcrypt
+import hmac
 from datetime import datetime, timedelta
 from typing import Optional
 from jose import JWTError, jwt
@@ -37,3 +38,9 @@ def get_password_hash(password: str) -> str:
     """Obtener hash de una contraseña plana."""
     salt = bcrypt.gensalt()
     return bcrypt.hashpw(password.encode('utf-8'), salt).decode('utf-8')
+
+def verify_sonia_secret(provided: Optional[str], expected: str) -> bool:
+    """Compara el secret de Sonia resistente a timing attacks."""
+    if not provided:
+        return False
+    return hmac.compare_digest(provided, expected)
