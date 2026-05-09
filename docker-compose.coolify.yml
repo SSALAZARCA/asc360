@@ -6,7 +6,7 @@ services:
     restart: always
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-umadmin}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-UmAdmin2024Secure}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB:-um_service_db}
       POSTGRES_HOST_AUTH_METHOD: trust
     volumes:
@@ -52,11 +52,11 @@ services:
       dockerfile: Dockerfile
     restart: always
     environment:
-      - DATABASE_URL=postgresql+asyncpg://umadmin:UmAdmin2024Secure@asc360-db:5432/um_service_db
-      - REDIS_URL=redis://:Redis2024Secure@redis:6379/0
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-umadmin}:${POSTGRES_PASSWORD}@asc360-db:5432/${POSTGRES_DB:-um_service_db}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
       - MINIO_ENDPOINT=minio:9000
-      - MINIO_ACCESS_KEY=umadmin
-      - MINIO_SECRET_KEY=Minio2024Secure
+      - MINIO_ACCESS_KEY=${MINIO_ROOT_USER}
+      - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD}
       - MINIO_SECURE=false
       - SECRET_KEY=${SECRET_KEY}
       - SONIA_BOT_SECRET=${SONIA_BOT_SECRET}
