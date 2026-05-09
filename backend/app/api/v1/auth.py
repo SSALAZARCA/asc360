@@ -8,7 +8,7 @@ from pydantic import BaseModel, EmailStr
 from typing import Optional
 from app.database import get_db
 from app.models.user import User, UserStatus, Role
-from app.core.security import verify_password, create_access_token, get_password_hash
+from app.core.security import verify_password, create_access_token, get_password_hash, verify_sonia_secret
 from app.config import settings
 
 router = APIRouter()
@@ -128,7 +128,7 @@ async def telegram_auth(
     Protección: requiere el header X-Sonia-Secret para evitar acceso externo.
     """
     # Validación del secreto del bot
-    if x_sonia_secret != settings.SONIA_BOT_SECRET:
+    if not verify_sonia_secret(x_sonia_secret, settings.SONIA_BOT_SECRET):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Acceso no autorizado. Este endpoint es exclusivo del sistema Sonia."
@@ -178,7 +178,7 @@ async def link_telegram_to_user(
     Útil cuando el admin crea el usuario en la web y luego el técnico
     interactúa con Sonia por primera vez.
     """
-    if x_sonia_secret != settings.SONIA_BOT_SECRET:
+    if not verify_sonia_secret(x_sonia_secret, settings.SONIA_BOT_SECRET):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Acceso no autorizado."
@@ -228,7 +228,7 @@ async def get_user_by_telegram(
     Permite a Sonia consultar si un telegram_id ya tiene cuenta,
     cuál es su rol y a qué taller pertenece, sin generar token.
     """
-    if x_sonia_secret != settings.SONIA_BOT_SECRET:
+    if not verify_sonia_secret(x_sonia_secret, settings.SONIA_BOT_SECRET):
         raise HTTPException(status_code=403, detail="Acceso no autorizado.")
 
     stmt = select(User).where(User.telegram_id == telegram_id)

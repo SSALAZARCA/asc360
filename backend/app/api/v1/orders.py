@@ -181,7 +181,7 @@ async def download_exit_order_pdf(
     from app.config import settings
     import io
 
-    if not current_user and x_sonia_secret != settings.SONIA_BOT_SECRET:
+    if not current_user and not verify_sonia_secret(x_sonia_secret, settings.SONIA_BOT_SECRET):
         raise HTTPException(status_code=401, detail="No autenticado")
 
     stmt = (
@@ -485,7 +485,7 @@ async def update_order_status(
     from app.models.order import OrderHistory, OrderWorkLog, OrderPart, OrderPartType, OrderPartStatus
     from app.config import settings
 
-    is_bot_call = x_sonia_secret == settings.SONIA_BOT_SECRET
+    is_bot_call = verify_sonia_secret(x_sonia_secret, settings.SONIA_BOT_SECRET)
     if not is_bot_call and current_user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="No autenticado.")
 
@@ -1096,7 +1096,7 @@ async def get_pending_otp_orders(
 ):
     """Lista todas las órdenes pendientes de firma OTP. Acepta JWT o X-Sonia-Secret."""
     from app.config import settings
-    is_bot_call = x_sonia_secret == settings.SONIA_BOT_SECRET
+    is_bot_call = verify_sonia_secret(x_sonia_secret, settings.SONIA_BOT_SECRET)
     if not is_bot_call and current_user is None:
         raise HTTPException(status_code=401, detail="No autenticado")
 
@@ -1132,7 +1132,7 @@ async def get_pending_otp_by_plate(
     """Retorna la orden pending_signature para una placa específica."""
     from app.config import settings
     from app.models.vehicle import Vehicle
-    is_bot_call = x_sonia_secret == settings.SONIA_BOT_SECRET
+    is_bot_call = verify_sonia_secret(x_sonia_secret, settings.SONIA_BOT_SECRET)
     if not is_bot_call and current_user is None:
         raise HTTPException(status_code=401, detail="No autenticado")
 
@@ -1169,7 +1169,7 @@ async def verify_otp(
     from app.models.order import OrderOTP, OrderHistory
 
     from app.config import settings
-    is_bot_call = x_sonia_secret == settings.SONIA_BOT_SECRET
+    is_bot_call = verify_sonia_secret(x_sonia_secret, settings.SONIA_BOT_SECRET)
     if not is_bot_call and current_user is None:
         raise HTTPException(status_code=401, detail="No autenticado")
 
@@ -1325,7 +1325,7 @@ async def resend_otp(
     Delega internamente al endpoint send_otp.
     """
     from app.config import settings
-    is_bot_call = x_sonia_secret == settings.SONIA_BOT_SECRET
+    is_bot_call = verify_sonia_secret(x_sonia_secret, settings.SONIA_BOT_SECRET)
     if not is_bot_call and current_user is None:
         raise HTTPException(status_code=401, detail="No autenticado")
 
@@ -1355,7 +1355,7 @@ async def bypass_otp(
     from app.config import settings
     from app.models.user import Role
 
-    is_bot_call = x_sonia_secret == settings.SONIA_BOT_SECRET
+    is_bot_call = verify_sonia_secret(x_sonia_secret, settings.SONIA_BOT_SECRET)
     if not is_bot_call and current_user is None:
         raise HTTPException(status_code=401, detail="No autenticado")
 

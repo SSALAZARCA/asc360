@@ -21,6 +21,7 @@ from sqlalchemy.future import select
 from openai import AsyncOpenAI
 
 from app.api.deps import get_current_user
+from app.core.security import verify_sonia_secret
 from app.config import settings
 from app.database import get_db, async_session_maker
 from app.models.order import ServiceOrder
@@ -271,7 +272,7 @@ async def search_parts(
     db: AsyncSession = Depends(get_db),
     x_sonia_secret: str = Header(default=""),
 ):
-    if x_sonia_secret != settings.SONIA_BOT_SECRET:
+    if not verify_sonia_secret(x_sonia_secret, settings.SONIA_BOT_SECRET):
         raise HTTPException(status_code=403, detail="Forbidden")
 
     result = await db.execute(
@@ -325,7 +326,7 @@ async def bot_catalog_models(
     db: AsyncSession = Depends(get_db),
     x_sonia_secret: str = Header(default=""),
 ):
-    if x_sonia_secret != settings.SONIA_BOT_SECRET:
+    if not verify_sonia_secret(x_sonia_secret, settings.SONIA_BOT_SECRET):
         raise HTTPException(status_code=403, detail="Forbidden")
 
     result = await db.execute(
@@ -346,7 +347,7 @@ async def search_parts_by_model(
     db: AsyncSession = Depends(get_db),
     x_sonia_secret: str = Header(default=""),
 ):
-    if x_sonia_secret != settings.SONIA_BOT_SECRET:
+    if not verify_sonia_secret(x_sonia_secret, settings.SONIA_BOT_SECRET):
         raise HTTPException(status_code=403, detail="Forbidden")
 
     sections_result = await db.execute(
@@ -378,7 +379,7 @@ async def get_all_sections_for_model(
     db: AsyncSession = Depends(get_db),
     x_sonia_secret: str = Header(default=""),
 ):
-    if x_sonia_secret != settings.SONIA_BOT_SECRET:
+    if not verify_sonia_secret(x_sonia_secret, settings.SONIA_BOT_SECRET):
         raise HTTPException(status_code=403, detail="Forbidden")
 
     result = await db.execute(
@@ -403,7 +404,7 @@ async def get_part_by_model_and_code(
     db: AsyncSession = Depends(get_db),
     x_sonia_secret: str = Header(default=""),
 ):
-    if x_sonia_secret != settings.SONIA_BOT_SECRET:
+    if not verify_sonia_secret(x_sonia_secret, settings.SONIA_BOT_SECRET):
         raise HTTPException(status_code=403, detail="Forbidden")
 
     result = await db.execute(
@@ -437,7 +438,7 @@ async def get_diagram_image(
     x_sonia_secret: str = Header(default=""),
 ):
     """Proxy: descarga la imagen de diagrama desde MinIO y la devuelve al bot."""
-    if x_sonia_secret != settings.SONIA_BOT_SECRET:
+    if not verify_sonia_secret(x_sonia_secret, settings.SONIA_BOT_SECRET):
         raise HTTPException(status_code=403, detail="Forbidden")
 
     try:
@@ -474,7 +475,7 @@ async def get_part_by_number(
     db: AsyncSession = Depends(get_db),
     x_sonia_secret: str = Header(default=""),
 ):
-    if x_sonia_secret != settings.SONIA_BOT_SECRET:
+    if not verify_sonia_secret(x_sonia_secret, settings.SONIA_BOT_SECRET):
         raise HTTPException(status_code=403, detail="Forbidden")
 
     result = await db.execute(
@@ -507,7 +508,7 @@ async def get_part_by_factory_code(
     db: AsyncSession = Depends(get_db),
     x_sonia_secret: str = Header(default=""),
 ):
-    if x_sonia_secret != settings.SONIA_BOT_SECRET:
+    if not verify_sonia_secret(x_sonia_secret, settings.SONIA_BOT_SECRET):
         raise HTTPException(status_code=403, detail="Forbidden")
 
     result = await db.execute(

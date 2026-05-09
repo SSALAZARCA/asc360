@@ -12,6 +12,7 @@ import re
 import datetime
 
 from app.api.deps import get_current_user, CurrentUser
+from app.core.security import verify_sonia_secret
 
 router = APIRouter()
 
@@ -165,7 +166,7 @@ async def list_tenants_for_bot(
     x_sonia_secret: Optional[str] = Header(None),
 ):
     from app.config import settings
-    if x_sonia_secret != settings.SONIA_BOT_SECRET:
+    if not verify_sonia_secret(x_sonia_secret, settings.SONIA_BOT_SECRET):
         raise HTTPException(status_code=403, detail="Acceso no autorizado.")
     result = await db.execute(select(Tenant))
     return [TenantOut.from_tenant(t) for t in result.scalars().all()]

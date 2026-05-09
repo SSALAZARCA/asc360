@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.models.user import User, UserStatus, Role
 from app.schemas.user import UserCreate, UserOut, UserStatusUpdate, UserUpdate
-from app.core.security import get_password_hash
+from app.core.security import get_password_hash, verify_sonia_secret
 from app.api.deps import get_current_user, get_optional_user, CurrentUser
 from uuid import UUID
 import uuid
@@ -27,7 +27,7 @@ async def create_user(
     - Con X-Sonia-Secret: uso interno del bot (crea clientes durante la recepción).
     - Con Bearer JWT: Solo SuperAdmin o Admin del panel web.
     """
-    is_bot_call = x_sonia_secret == settings.SONIA_BOT_SECRET
+    is_bot_call = verify_sonia_secret(x_sonia_secret, settings.SONIA_BOT_SECRET)
 
     if not is_bot_call:
         if not current_user or not current_user.is_admin:
@@ -86,9 +86,9 @@ async def get_user_by_telegram_id(
     Mantenido por compatibilidad temporal con el bot.
     Requiere el secreto de Sonia.
     """
-    if x_sonia_secret != settings.SONIA_BOT_SECRET:
+    if not verify_sonia_secret(x_sonia_secret, settings.SONIA_BOT_SECRET):
         raise HTTPException(status_code=403, detail="Acceso no autorizado.")
-        
+
     stmt = select(User).where(User.telegram_id == telegram_id)
     result = await db.execute(stmt)
     user = result.scalar_one_or_none()
@@ -110,7 +110,7 @@ async def get_superadmin_telegram_ids(
     Devuelve la lista de telegram_ids de superadmins activos.
     Solo para uso interno del bot Sonia.
     """
-    if x_sonia_secret != settings.SONIA_BOT_SECRET:
+    if not verify_sonia_secret(x_sonia_secret, settings.SONIA_BOT_SECRET):
         raise HTTPException(status_code=403, detail="Acceso no autorizado.")
     stmt = select(User).where(
         User.role == Role.superadmin,
@@ -133,7 +133,7 @@ async def get_pending_users(
     - Con X-Sonia-Secret: uso interno del bot (ve todos los pendientes).
     - Con Bearer JWT: SuperAdmin ve todos; Admin solo ve los de su taller.
     """
-    is_bot_call = x_sonia_secret == settings.SONIA_BOT_SECRET
+    is_bot_call = verify_sonia_secret(x_sonia_secret, settings.SONIA_BOT_SECRET)
 
     if not is_bot_call and not current_user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="No autenticado.")
@@ -256,7 +256,7 @@ async def update_user_status(
     Actualiza el estado de un usuario.
     Acepta JWT Bearer (panel web) o X-Sonia-Secret (bot Sonia).
     """
-    is_bot_call = x_sonia_secret == settings.SONIA_BOT_SECRET
+    is_bot_call = verify_sonia_secret(x_sonia_secret, settings.SONIA_BOT_SECRET)
 
     if not is_bot_call and not current_user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="No autenticado.")
