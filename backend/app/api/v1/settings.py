@@ -61,8 +61,13 @@ class PricingFactorsPayload(BaseModel):
 
 
 @router.get("/pricing-factors")
-async def get_pricing_factors(db: AsyncSession = Depends(get_db)):
-    """Retorna los factores de pricing del catálogo de partes."""
+async def get_pricing_factors(
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Retorna los factores de pricing. Requiere autenticación."""
+    if not current_user.is_superadmin and not current_user.is_imports_editor:
+        raise HTTPException(status_code=403, detail="Sin permiso para ver factores de pricing")
     from app.services.pricing_service import get_pricing_factors
     return await get_pricing_factors(db)
 
@@ -106,7 +111,12 @@ class SimilarityThresholdPayload(BaseModel):
 
 
 @router.get("/parts-similarity-threshold")
-async def get_parts_similarity_threshold(db: AsyncSession = Depends(get_db)):
+async def get_parts_similarity_threshold(
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    if not current_user.is_superadmin:
+        raise HTTPException(status_code=403, detail="Solo superadmin")
     record = await db.get(SystemConfig, PARTS_SIM_KEY)
     return {"threshold": float(record.value) if record else 0.9}
 

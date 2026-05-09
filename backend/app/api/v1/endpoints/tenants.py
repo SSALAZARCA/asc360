@@ -173,7 +173,13 @@ async def list_tenants_for_bot(
 
 
 @router.get("/search", response_model=List[TenantOut])
-async def search_tenants(q: str = Query(..., min_length=2), db: AsyncSession = Depends(get_db)):
+async def search_tenants(
+    q: str = Query(..., min_length=2),
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    if not current_user.is_superadmin:
+        raise HTTPException(status_code=403, detail="Acceso denegado")
     q_lower = f"%{q.lower()}%"
     stmt = select(Tenant).where(
         or_(

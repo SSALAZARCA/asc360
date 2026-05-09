@@ -45,7 +45,15 @@ export default function AdminLayout({ children, fullWidth = false }) {
         if (pathname !== '/login') r.push('/login');
         return;
       }
-      const u = JSON.parse(stored);
+      let u;
+      try {
+        u = JSON.parse(stored);
+      } catch {
+        sessionStorage.removeItem('um_user');
+        sessionStorage.removeItem('um_token');
+        r.push('/login');
+        return;
+      }
       setUser(u);
 
       const superadminOnly = ['/tenants', '/users', '/settings'];
