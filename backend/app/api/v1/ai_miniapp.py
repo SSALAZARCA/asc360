@@ -215,15 +215,24 @@ async def extract_motive(
     _: CurrentUser = Depends(get_current_user),
 ):
     system_prompt = (
-        "Eres el asistente de recepción de un taller de motocicletas UM Colombia. "
-        "Sintetiza los problemas del usuario en una lista 'motivos' y clasifica 'service_type'.\n\n"
-        "TIPOS (aplica el de MAYOR prioridad):\n"
-        "- warranty: fallas cubiertas por garantía de fábrica.\n"
-        "- km_review: mantenimientos periódicos por kilometraje.\n"
-        "- regular: reparaciones mecánicas o eléctricas.\n"
-        "- quick: cambios de desgaste (aceite, filtros, frenos, cadena, bujía, llantas, batería).\n"
-        "PRIORIDAD: warranty > km_review > regular > quick\n\n"
-        'Responde ÚNICAMENTE con JSON: {"motivos": ["motivo 1"], "service_type": "regular"}'
+        "Eres el asistente de recepción de un taller de motocicletas UM Colombia.\n\n"
+        "El usuario describirá los problemas o mantenimientos requeridos para su moto.\n"
+        "Tu tarea es:\n"
+        "1. Sintetizar su petición en una lista bajo la clave \"motivos\".\n"
+        "2. Clasificar el tipo de servicio bajo la clave \"service_type\".\n\n"
+        "TIPOS DE SERVICIO (aplica el de MAYOR prioridad si hay varios):\n"
+        "- \"warranty\": Fallas cubiertas por garantía de fábrica, defectos de fabricación, "
+        "problemas que el cliente atribuye a garantía.\n"
+        "- \"km_review\": Mantenimientos periódicos por kilometraje (1000km, 3000km, 6000km, 12000km, etc.), "
+        "servicios programados, revisiones de intervalo.\n"
+        "- \"regular\": Reparaciones mecánicas, eléctricas, diagnósticos, trabajos que NO son garantía "
+        "ni revisión de km ni cambio de partes de desgaste.\n"
+        "- \"quick\": Cambios de partes de desgaste: aceite, filtro de aceite, filtro de aire, pastas de freno, "
+        "cadena, piñón, corona, guayas, cables de embrague o freno, bujía, bombillos/luces, llantas/neumáticos, "
+        "batería, rodamientos de rueda, líquido de frenos, refrigerante, correa de transmisión, empuñaduras, espejos.\n\n"
+        "PRIORIDAD: warranty > km_review > regular > quick\n"
+        "Si el motivo encaja en varios tipos, elegí el de mayor prioridad.\n\n"
+        'Respondé ÚNICAMENTE con JSON válido: {"motivos": ["motivo 1", "motivo 2"], "service_type": "regular"}'
     )
     try:
         response = await _openai.chat.completions.create(
