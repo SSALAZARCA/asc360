@@ -36,6 +36,7 @@ export default function TgHome() {
   const [updating, setUpdating] = useState(false);
   const [filter, setFilter]   = useState('active');
   const [refreshing, setRefreshing] = useState(false);
+  const [apiError, setApiError] = useState(null);
 
   useEffect(() => {
     const stored = sessionStorage.getItem('um_user');
@@ -47,10 +48,19 @@ export default function TgHome() {
 
   const loadOrders = useCallback(async (silent = false) => {
     if (!silent) setLoading(true); else setRefreshing(true);
+    setApiError(null);
     try {
       const res = await authFetch('/orders/analytics/services');
       if (res.status === 401) { router.replace('/tg'); return; }
-      setOrders(await res.json());
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        setApiError(`HTTP ${res.status}: ${err.detail || res.statusText}`);
+        return;
+      }
+      const data = await res.json();
+      setOrders(Array.isArray(data) ? data : []);
+    } catch (e) {
+      setApiError(`Error de conexión: ${e.message}`);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -124,6 +134,14 @@ export default function TgHome() {
           </button>
         ))}
       </div>
+
+      {/* Error de API */}
+      {apiError && (
+        <div style={{ margin: '0 0.75rem 0.5rem', padding: '0.75rem 1rem', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 10 }}>
+          <p style={{ margin: 0, fontSize: '0.65rem', color: '#ef4444', fontWeight: 700, marginBottom: 2 }}>Error al cargar órdenes</p>
+          <p style={{ margin: 0, fontSize: '0.6rem', color: '#9ca3af', wordBreak: 'break-all' }}>{apiError}</p>
+        </div>
+      )}
 
       {/* Lista de órdenes */}
       <div style={{ padding: '0 0.75rem', display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
