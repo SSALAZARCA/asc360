@@ -684,6 +684,7 @@ export default function TgReception() {
 
       {/* Header */}
       <div style={{ background: '#13131a', borderBottom: '1px solid rgba(255,255,255,0.06)', padding: '0.8rem 1.1rem', flexShrink: 0, display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+        <img src="/logo.png" alt="UM" style={{ height: 28, width: 'auto', objectFit: 'contain', flexShrink: 0, opacity: 0.9 }} />
         <button onClick={() => router.back()} style={{ background: 'none', border: 'none', color: '#606075', cursor: 'pointer', fontSize: '1.1rem', padding: 0, lineHeight: 1 }}>←</button>
         <div style={{ flex: 1 }}>
           <p style={{ margin: 0, fontWeight: 900, fontSize: '0.85rem', color: '#fff' }}>Nueva Recepción</p>

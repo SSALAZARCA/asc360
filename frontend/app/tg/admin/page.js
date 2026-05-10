@@ -62,9 +62,12 @@ export default function TgAdmin() {
   return (
     <div style={{ minHeight: '100vh', background: '#0a0a0c', paddingBottom: '5.5rem' }}>
       {/* Header */}
-      <div style={{ background: '#13131a', borderBottom: '1px solid rgba(255,255,255,0.06)', padding: '0.9rem 1.25rem' }}>
-        <p style={{ margin: 0, fontWeight: 900, fontSize: '0.9rem', color: '#fff' }}>Panel Admin</p>
-        <p style={{ margin: 0, fontSize: '0.6rem', color: '#606075' }}>Solicitudes de acceso pendientes</p>
+      <div style={{ background: '#13131a', borderBottom: '1px solid rgba(255,255,255,0.06)', padding: '0.9rem 1.25rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+        <img src="/logo.png" alt="UM" style={{ height: 28, width: 'auto', objectFit: 'contain', flexShrink: 0, opacity: 0.9 }} />
+        <div>
+          <p style={{ margin: 0, fontWeight: 900, fontSize: '0.9rem', color: '#fff' }}>Panel Admin</p>
+          <p style={{ margin: 0, fontSize: '0.6rem', color: '#606075' }}>Solicitudes de acceso pendientes</p>
+        </div>
       </div>
 
       <div style={{ padding: '1rem' }}>
