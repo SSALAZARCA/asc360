@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Header
+from fastapi import APIRouter, Depends, HTTPException, status, Header, Request
 import uuid
 from app.api.deps import get_current_user, CurrentUser
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,6 +10,7 @@ from app.database import get_db
 from app.models.user import User, UserStatus, Role
 from app.core.security import verify_password, create_access_token, get_password_hash, verify_sonia_secret
 from app.config import settings
+from app.core.limiter import limiter
 
 router = APIRouter()
 
@@ -69,8 +70,9 @@ def _build_token_and_user(user: User) -> dict:
 # ─── Endpoint 1: Login Web (Email + Contraseña) ───────────────────────────────
 
 @router.post("/login", response_model=LoginResponse)
+@limiter.limit("10/minute")
 async def login_for_access_token(
-    login_data: LoginRequest, db: AsyncSession = Depends(get_db)
+    request: Request, login_data: LoginRequest, db: AsyncSession = Depends(get_db)
 ):
     """Login tradicional con email y contraseña para acceder al panel web."""
     stmt = select(User).where(User.email == login_data.email)
@@ -249,7 +251,9 @@ async def get_user_by_telegram(
 # ─── Endpoint 5: Cambio de contraseña propia ─────────────────────────────────
 
 @router.post("/change-password", status_code=204)
+@limiter.limit("5/minute")
 async def change_own_password(
+    request: Request,
     payload: ChangePasswordRequest,
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
