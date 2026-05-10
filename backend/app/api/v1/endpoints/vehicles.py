@@ -52,9 +52,11 @@ async def create_or_update_vehicle(
     vehicle_in: VehicleCreate,
     db: AsyncSession = Depends(get_db),
     x_sonia_secret: Optional[str] = Header(None),
+    current_user: Optional[CurrentUser] = Depends(get_optional_user),
 ):
-    """Registra una moto en el Taller. Protegido por X-Sonia-Secret (uso interno del bot)."""
-    if not verify_sonia_secret(x_sonia_secret, settings.SONIA_BOT_SECRET):
+    """Registra una moto en el Taller. Acepta X-Sonia-Secret o JWT (admin/superadmin)."""
+    is_bot = verify_sonia_secret(x_sonia_secret, settings.SONIA_BOT_SECRET)
+    if not is_bot and (current_user is None or not current_user.is_admin):
         raise HTTPException(status_code=403, detail="Acceso no autorizado.")
     try:
         vehicle = await vehicle_service.register_or_update_vehicle(db, vehicle_in, vehicle_in.tenant_id)

@@ -18,7 +18,6 @@ export default function TgParts() {
   const [tab, setTab]             = useState('model');
   const [selectedSection, setSelectedSection] = useState(null);
   const [diagramUrl, setDiagramUrl] = useState(null);
-  const [loadingDiagram, setLoadingDiagram] = useState(false);
 
   useEffect(() => {
     const stored = sessionStorage.getItem('um_user');
@@ -68,20 +67,10 @@ export default function TgParts() {
     if (res.ok) setSections(await res.json());
   };
 
-  const openSection = async (section) => {
+  const openSection = (section) => {
     setSelectedSection(section);
-    setDiagramUrl(null);
-    if (!section.diagram_url) return;
-    setLoadingDiagram(true);
-    try {
-      const res = await authFetch(`/parts/section/${section.section_id}/diagram-image`);
-      if (res.ok) {
-        const blob = await res.blob();
-        setDiagramUrl(URL.createObjectURL(blob));
-      }
-    } finally {
-      setLoadingDiagram(false);
-    }
+    // diagram_url es una URL pública de MinIO — usarla directo
+    setDiagramUrl(section.diagram_url || null);
   };
 
   return (
@@ -208,9 +197,6 @@ export default function TgParts() {
               <button onClick={() => { setSelectedSection(null); setDiagramUrl(null); }} style={{ background: 'none', border: 'none', color: '#606075', cursor: 'pointer', fontSize: '1.2rem' }}>✕</button>
             </div>
 
-            {loadingDiagram && (
-              <div style={{ textAlign: 'center', padding: '2rem', color: '#606075', fontSize: '0.75rem' }}>Cargando diagrama...</div>
-            )}
             {diagramUrl && (
               <img
                 src={diagramUrl}

@@ -13,27 +13,35 @@ const SERVICE_TYPES = [
 
 const GAS_LEVELS = ['Vacío', 'Reserva', '1/4', '1/2', '3/4', 'Lleno'];
 
-const STEPS = ['placa', 'tipo', 'recepcion', 'confirmar'];
+// pasos: placa → (si nueva: datos_vehiculo) → tipo → recepcion → confirmar
+const STEP_LABELS = ['Placa', 'Vehículo', 'Tipo de Servicio', 'Datos de Ingreso', 'Confirmar'];
 
 export default function TgReception() {
   const router = useRouter();
-  const [user, setUser]     = useState(null);
-  const [step, setStep]     = useState(0);
-  const [plate, setPlate]   = useState('');
+  const [user, setUser]       = useState(null);
+  const [step, setStep]       = useState(0);   // 0=placa 1=vehiculo_nuevo 2=tipo 3=recepcion 4=confirmar
+  const [plate, setPlate]     = useState('');
   const [vehicle, setVehicle] = useState(null);
-  const [lookupError, setLookupError] = useState(null);
-  const [looking, setLooking] = useState(false);
+  const [isNewVehicle, setIsNewVehicle] = useState(false);
+  const [lookupError, setLookupError]   = useState(null);
+  const [looking, setLooking]           = useState(false);
 
-  const [serviceType, setServiceType] = useState('regular');
-  const [km, setKm]         = useState('');
-  const [gas, setGas]       = useState('');
-  const [notes, setNotes]   = useState('');
-  const [accessories, setAccessories] = useState('');
+  // Datos para vehículo nuevo
+  const [newBrand, setNewBrand]   = useState('UM');
+  const [newModel, setNewModel]   = useState('');
+  const [newYear, setNewYear]     = useState('');
+  const [newColor, setNewColor]   = useState('');
+
+  const [serviceType, setServiceType]   = useState('regular');
+  const [km, setKm]                     = useState('');
+  const [gas, setGas]                   = useState('');
+  const [notes, setNotes]               = useState('');
+  const [accessories, setAccessories]   = useState('');
   const [observations, setObservations] = useState('');
 
-  const [submitting, setSubmitting] = useState(false);
+  const [submitting, setSubmitting]   = useState(false);
   const [submitError, setSubmitError] = useState(null);
-  const [submitted, setSubmitted]   = useState(null);
+  const [submitted, setSubmitted]     = useState(null);
 
   useEffect(() => {
     const stored = sessionStorage.getItem('um_user');
@@ -47,21 +55,61 @@ export default function TgReception() {
     setLooking(true);
     setLookupError(null);
     setVehicle(null);
+    setIsNewVehicle(false);
     try {
       const res = await authFetch(`/orders/mini-app/vehicle/${plate.trim().toUpperCase()}`);
       if (res.status === 401) { router.replace('/tg'); return; }
-      if (res.status === 404) { setLookupError('Vehículo no registrado en el sistema'); return; }
+      if (res.status === 404) {
+        // Placa no existe — permitir registrarla
+        setIsNewVehicle(true);
+        setStep(1);
+        return;
+      }
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        setLookupError(err.detail || `Error ${res.status} al consultar la placa`);
+        setLookupError(err.detail || `Error ${res.status}`);
         return;
       }
       const data = await res.json();
-      if (data.active_order) { setLookupError('Este vehículo ya tiene una orden activa en taller'); return; }
+      if (data.active_order) {
+        setLookupError('Esta moto ya tiene una orden activa en taller');
+        return;
+      }
       setVehicle(data);
-      setStep(1);
+      setStep(2); // saltar paso de datos de vehículo
     } catch (e) {
       setLookupError(`Error de conexión: ${e.message}`);
+    } finally {
+      setLooking(false);
+    }
+  };
+
+  const createVehicleAndContinue = async () => {
+    if (!newModel.trim()) { setLookupError('Ingresá el modelo'); return; }
+    setLooking(true);
+    setLookupError(null);
+    try {
+      const tenantId = user?.tenant_id;
+      if (!tenantId) { setLookupError('Tu usuario no tiene taller asignado. Contactá al admin.'); return; }
+      const body = {
+        plate: plate.trim().toUpperCase(),
+        brand: newBrand || 'UM',
+        model: newModel.trim(),
+        year: newYear ? parseInt(newYear) : null,
+        color: newColor || null,
+        tenant_id: tenantId,
+      };
+      const res = await authFetch('/vehicles/', { method: 'POST', body: JSON.stringify(body) });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        setLookupError(err.detail || 'Error al registrar el vehículo');
+        return;
+      }
+      const data = await res.json();
+      setVehicle({ id: data.id, plate: data.plate, brand: data.brand, model: data.model, year: data.year, color: data.color, tenant_id: data.tenant_id });
+      setStep(2);
+    } catch (e) {
+      setLookupError(`Error: ${e.message}`);
     } finally {
       setLooking(false);
     }
@@ -72,9 +120,8 @@ export default function TgReception() {
     setSubmitting(true);
     setSubmitError(null);
     try {
-      const tenantId = vehicle.tenant_id || user.tenant_id;
+      const tenantId = vehicle?.tenant_id || user?.tenant_id;
       if (!tenantId) { setSubmitError('No se pudo determinar el taller'); return; }
-
       const body = {
         tenant_id: tenantId,
         vehicle_id: vehicle.id,
@@ -91,7 +138,6 @@ export default function TgReception() {
           warranty_warnings: null,
         },
       };
-
       const res = await authFetch('/orders/', { method: 'POST', body: JSON.stringify(body) });
       if (res.status === 401) { router.replace('/tg'); return; }
       if (!res.ok) {
@@ -99,8 +145,7 @@ export default function TgReception() {
         setSubmitError(err.detail || 'Error al crear la orden');
         return;
       }
-      const order = await res.json();
-      setSubmitted(order);
+      setSubmitted(await res.json());
     } catch (e) {
       setSubmitError(`Error: ${e.message}`);
     } finally {
@@ -109,37 +154,41 @@ export default function TgReception() {
   };
 
   const reset = () => {
-    setStep(0); setPlate(''); setVehicle(null); setLookupError(null);
+    setStep(0); setPlate(''); setVehicle(null); setIsNewVehicle(false);
+    setLookupError(null); setNewBrand('UM'); setNewModel(''); setNewYear(''); setNewColor('');
     setServiceType('regular'); setKm(''); setGas(''); setNotes('');
     setAccessories(''); setObservations(''); setSubmitted(null); setSubmitError(null);
   };
 
-  const card = (content) => (
-    <div style={{ background: '#13131a', borderRadius: 14, padding: '1.25rem', border: '1px solid rgba(255,255,255,0.06)' }}>
-      {content}
-    </div>
-  );
+  const stepBack = () => {
+    if (step === 2 && isNewVehicle) setStep(1);
+    else if (step > 0) setStep(s => s - 1);
+  };
+
+  // Índice visual del paso (sin contar paso "datos_vehiculo" si no aplica)
+  const visibleSteps = isNewVehicle ? 5 : 4;
+  const visibleStep  = isNewVehicle ? step : step === 0 ? 0 : step - 1;
 
   return (
     <div style={{ minHeight: '100vh', background: '#0a0a0c', paddingBottom: '5.5rem' }}>
       {/* Header */}
       <div style={{ background: '#13131a', borderBottom: '1px solid rgba(255,255,255,0.06)', padding: '0.9rem 1.25rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
         {step > 0 && !submitted && (
-          <button onClick={() => setStep(s => s - 1)} style={{ background: 'none', border: 'none', color: '#606075', cursor: 'pointer', fontSize: '1rem', padding: 0 }}>←</button>
+          <button onClick={stepBack} style={{ background: 'none', border: 'none', color: '#606075', cursor: 'pointer', fontSize: '1rem', padding: 0 }}>←</button>
         )}
         <div>
           <p style={{ margin: 0, fontWeight: 900, fontSize: '0.9rem', color: '#fff' }}>Nueva Recepción</p>
           <p style={{ margin: 0, fontSize: '0.6rem', color: '#606075' }}>
-            {submitted ? 'Completado' : `Paso ${step + 1} de ${STEPS.length}: ${['Placa','Tipo de Servicio','Datos de Ingreso','Confirmar'][step]}`}
+            {submitted ? 'Completado' : STEP_LABELS[step] || ''}
           </p>
         </div>
       </div>
 
-      {/* Indicador de pasos */}
+      {/* Barra de progreso */}
       {!submitted && (
         <div style={{ display: 'flex', gap: '0.3rem', padding: '0.75rem 1rem 0' }}>
-          {STEPS.map((_, i) => (
-            <div key={i} style={{ flex: 1, height: 3, borderRadius: 2, background: i <= step ? '#ff5f33' : 'rgba(255,255,255,0.08)', transition: 'background 0.2s' }} />
+          {Array.from({ length: visibleSteps }).map((_, i) => (
+            <div key={i} style={{ flex: 1, height: 3, borderRadius: 2, background: i <= visibleStep ? '#ff5f33' : 'rgba(255,255,255,0.08)', transition: 'background 0.2s' }} />
           ))}
         </div>
       )}
@@ -157,6 +206,7 @@ export default function TgReception() {
             <div style={{ background: '#13131a', borderRadius: 12, padding: '1rem', marginBottom: '0.75rem', border: '1px solid rgba(255,255,255,0.05)' }}>
               <p style={{ margin: '0 0 4px', fontSize: '0.55rem', color: '#606075', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Placa</p>
               <p style={{ margin: 0, fontWeight: 900, fontSize: '1.2rem', color: '#ff8c5a' }}>{plate}</p>
+              {vehicle?.model && <p style={{ margin: '2px 0 0', fontSize: '0.7rem', color: '#606075' }}>{vehicle.brand} {vehicle.model} {vehicle.year || ''}</p>}
             </div>
             <button onClick={reset} style={{ width: '100%', padding: '0.9rem', background: '#ff5f33', border: 'none', borderRadius: 12, color: '#fff', fontWeight: 800, fontSize: '0.9rem', cursor: 'pointer' }}>
               Nueva Recepción
@@ -167,70 +217,91 @@ export default function TgReception() {
         {/* Paso 0: Placa */}
         {!submitted && step === 0 && (
           <>
-            <div style={{ marginBottom: '1rem' }}>
-              <label style={{ fontSize: '0.55rem', color: '#606075', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700, display: 'block', marginBottom: 8 }}>Placa de la motocicleta</label>
-              <input
-                value={plate}
-                onChange={e => setPlate(e.target.value.toUpperCase())}
-                onKeyDown={e => e.key === 'Enter' && lookupVehicle()}
-                placeholder="ABC123"
-                maxLength={6}
-                style={{ width: '100%', background: '#13131a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, padding: '1rem', color: '#fff', fontSize: '1.5rem', fontWeight: 900, letterSpacing: '0.12em', textAlign: 'center', outline: 'none', boxSizing: 'border-box' }}
-              />
+            <label style={{ fontSize: '0.55rem', color: '#606075', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700, display: 'block', marginBottom: 8 }}>Placa de la motocicleta</label>
+            <input
+              value={plate}
+              onChange={e => setPlate(e.target.value.toUpperCase())}
+              onKeyDown={e => e.key === 'Enter' && lookupVehicle()}
+              placeholder="ABC123"
+              maxLength={6}
+              style={{ width: '100%', background: '#13131a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, padding: '1rem', color: '#fff', fontSize: '1.5rem', fontWeight: 900, letterSpacing: '0.12em', textAlign: 'center', outline: 'none', boxSizing: 'border-box', marginBottom: '0.75rem' }}
+            />
+            {lookupError && (
+              <div style={{ padding: '0.7rem 0.9rem', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 10, marginBottom: '0.75rem' }}>
+                <p style={{ margin: 0, fontSize: '0.72rem', color: '#ef4444', fontWeight: 700 }}>{lookupError}</p>
+              </div>
+            )}
+            <button onClick={lookupVehicle} disabled={looking || !plate.trim()}
+              style={{ width: '100%', padding: '0.9rem', background: '#ff5f33', border: 'none', borderRadius: 12, color: '#fff', fontWeight: 800, fontSize: '0.9rem', cursor: 'pointer', opacity: looking || !plate.trim() ? 0.5 : 1 }}>
+              {looking ? 'Verificando...' : 'Continuar'}
+            </button>
+          </>
+        )}
+
+        {/* Paso 1: Datos vehículo nuevo */}
+        {!submitted && step === 1 && isNewVehicle && (
+          <>
+            <div style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.25)', borderRadius: 10, padding: '0.75rem 0.9rem', marginBottom: '1rem' }}>
+              <p style={{ margin: 0, fontSize: '0.72rem', color: '#f59e0b', fontWeight: 700 }}>Placa <strong>{plate}</strong> no está registrada</p>
+              <p style={{ margin: '2px 0 0', fontSize: '0.62rem', color: '#606075' }}>Completá los datos para registrarla</p>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', marginBottom: '1rem' }}>
+              {[
+                { label: 'Marca', value: newBrand, set: setNewBrand, placeholder: 'UM' },
+                { label: 'Modelo *', value: newModel, set: setNewModel, placeholder: 'Renegade 200, NKD 125...' },
+                { label: 'Año', value: newYear, set: setNewYear, placeholder: '2023', type: 'number' },
+                { label: 'Color', value: newColor, set: setNewColor, placeholder: 'Rojo, Negro...' },
+              ].map(f => (
+                <div key={f.label}>
+                  <label style={{ fontSize: '0.55rem', color: '#606075', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700, display: 'block', marginBottom: 5 }}>{f.label}</label>
+                  <input type={f.type || 'text'} value={f.value} onChange={e => f.set(e.target.value)} placeholder={f.placeholder}
+                    style={{ width: '100%', background: '#13131a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: '0.7rem 0.9rem', color: '#fff', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box' }} />
+                </div>
+              ))}
             </div>
             {lookupError && (
               <div style={{ padding: '0.7rem 0.9rem', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 10, marginBottom: '0.75rem' }}>
                 <p style={{ margin: 0, fontSize: '0.72rem', color: '#ef4444', fontWeight: 700 }}>{lookupError}</p>
               </div>
             )}
-            <button
-              onClick={lookupVehicle}
-              disabled={looking || !plate.trim()}
-              style={{ width: '100%', padding: '0.9rem', background: '#ff5f33', border: 'none', borderRadius: 12, color: '#fff', fontWeight: 800, fontSize: '0.9rem', cursor: 'pointer', opacity: looking || !plate.trim() ? 0.5 : 1 }}
-            >
-              {looking ? 'Verificando...' : 'Continuar'}
+            <button onClick={createVehicleAndContinue} disabled={looking || !newModel.trim()}
+              style={{ width: '100%', padding: '0.9rem', background: '#ff5f33', border: 'none', borderRadius: 12, color: '#fff', fontWeight: 800, fontSize: '0.9rem', cursor: 'pointer', opacity: looking || !newModel.trim() ? 0.5 : 1 }}>
+              {looking ? 'Registrando...' : 'Registrar y Continuar'}
             </button>
           </>
         )}
 
-        {/* Paso 1: Tipo de servicio */}
-        {!submitted && step === 1 && (
+        {/* Paso 2: Tipo de servicio */}
+        {!submitted && step === 2 && (
           <>
-            <p style={{ margin: '0 0 0.75rem', fontWeight: 900, fontSize: '1.1rem', color: '#ff8c5a' }}>{plate}</p>
+            <div style={{ marginBottom: '0.75rem' }}>
+              <p style={{ margin: '0 0 2px', fontWeight: 900, fontSize: '1rem', color: '#ff8c5a' }}>{plate}</p>
+              {vehicle?.model && <p style={{ margin: 0, fontSize: '0.65rem', color: '#606075' }}>{vehicle.brand} {vehicle.model} {vehicle.year || ''}</p>}
+            </div>
             <p style={{ margin: '0 0 0.6rem', fontSize: '0.55rem', color: '#606075', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700 }}>Tipo de servicio</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', marginBottom: '1rem' }}>
               {SERVICE_TYPES.map(t => (
-                <button
-                  key={t.value}
-                  onClick={() => setServiceType(t.value)}
-                  style={{ padding: '0.8rem 1rem', borderRadius: 12, border: `1px solid ${serviceType === t.value ? '#ff5f33' : 'rgba(255,255,255,0.08)'}`, background: serviceType === t.value ? 'rgba(255,95,51,0.1)' : 'transparent', color: serviceType === t.value ? '#ff5f33' : '#9ca3af', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer', textAlign: 'left' }}
-                >
+                <button key={t.value} onClick={() => setServiceType(t.value)}
+                  style={{ padding: '0.8rem 1rem', borderRadius: 12, border: `1px solid ${serviceType === t.value ? '#ff5f33' : 'rgba(255,255,255,0.08)'}`, background: serviceType === t.value ? 'rgba(255,95,51,0.1)' : 'transparent', color: serviceType === t.value ? '#ff5f33' : '#9ca3af', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer', textAlign: 'left' }}>
                   {t.label}
                 </button>
               ))}
             </div>
-            <button onClick={() => setStep(2)} style={{ width: '100%', padding: '0.9rem', background: '#ff5f33', border: 'none', borderRadius: 12, color: '#fff', fontWeight: 800, fontSize: '0.9rem', cursor: 'pointer' }}>
+            <button onClick={() => setStep(3)} style={{ width: '100%', padding: '0.9rem', background: '#ff5f33', border: 'none', borderRadius: 12, color: '#fff', fontWeight: 800, fontSize: '0.9rem', cursor: 'pointer' }}>
               Continuar
             </button>
           </>
         )}
 
-        {/* Paso 2: Datos de recepción */}
-        {!submitted && step === 2 && (
+        {/* Paso 3: Datos de recepción */}
+        {!submitted && step === 3 && (
           <>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1rem' }}>
               <div>
                 <label style={{ fontSize: '0.55rem', color: '#606075', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700, display: 'block', marginBottom: 6 }}>Kilometraje actual *</label>
-                <input
-                  type="number"
-                  value={km}
-                  onChange={e => setKm(e.target.value)}
-                  placeholder="Ej: 12500"
-                  inputMode="numeric"
-                  style={{ width: '100%', background: '#13131a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: '0.75rem 0.9rem', color: '#fff', fontSize: '1rem', fontWeight: 700, outline: 'none', boxSizing: 'border-box' }}
-                />
+                <input type="number" value={km} onChange={e => setKm(e.target.value)} placeholder="Ej: 12500" inputMode="numeric"
+                  style={{ width: '100%', background: '#13131a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: '0.75rem 0.9rem', color: '#fff', fontSize: '1rem', fontWeight: 700, outline: 'none', boxSizing: 'border-box' }} />
               </div>
-
               <div>
                 <label style={{ fontSize: '0.55rem', color: '#606075', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700, display: 'block', marginBottom: 6 }}>Nivel de gasolina *</label>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
@@ -242,57 +313,36 @@ export default function TgReception() {
                   ))}
                 </div>
               </div>
-
               <div>
                 <label style={{ fontSize: '0.55rem', color: '#606075', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700, display: 'block', marginBottom: 6 }}>Motivo de ingreso</label>
-                <textarea
-                  value={notes}
-                  onChange={e => setNotes(e.target.value)}
-                  placeholder="Qué trae la moto, qué reporta el cliente..."
-                  rows={3}
-                  style={{ width: '100%', background: '#13131a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: '0.75rem 0.9rem', color: '#fff', fontSize: '0.82rem', resize: 'none', outline: 'none', boxSizing: 'border-box' }}
-                />
+                <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Qué trae la moto, qué reporta el cliente..." rows={3}
+                  style={{ width: '100%', background: '#13131a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: '0.75rem 0.9rem', color: '#fff', fontSize: '0.82rem', resize: 'none', outline: 'none', boxSizing: 'border-box' }} />
               </div>
-
               <div>
                 <label style={{ fontSize: '0.55rem', color: '#606075', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700, display: 'block', marginBottom: 6 }}>Accesorios (separados por coma)</label>
-                <input
-                  value={accessories}
-                  onChange={e => setAccessories(e.target.value)}
-                  placeholder="Casco, chaleco, candado..."
-                  style={{ width: '100%', background: '#13131a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: '0.75rem 0.9rem', color: '#fff', fontSize: '0.82rem', outline: 'none', boxSizing: 'border-box' }}
-                />
+                <input value={accessories} onChange={e => setAccessories(e.target.value)} placeholder="Casco, chaleco, candado..."
+                  style={{ width: '100%', background: '#13131a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: '0.75rem 0.9rem', color: '#fff', fontSize: '0.82rem', outline: 'none', boxSizing: 'border-box' }} />
               </div>
-
               <div>
                 <label style={{ fontSize: '0.55rem', color: '#606075', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700, display: 'block', marginBottom: 6 }}>Observaciones generales</label>
-                <textarea
-                  value={observations}
-                  onChange={e => setObservations(e.target.value)}
-                  placeholder="Estado general, rayones, acuerdos..."
-                  rows={2}
-                  style={{ width: '100%', background: '#13131a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: '0.75rem 0.9rem', color: '#fff', fontSize: '0.82rem', resize: 'none', outline: 'none', boxSizing: 'border-box' }}
-                />
+                <textarea value={observations} onChange={e => setObservations(e.target.value)} placeholder="Estado general, rayones, acuerdos..." rows={2}
+                  style={{ width: '100%', background: '#13131a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: '0.75rem 0.9rem', color: '#fff', fontSize: '0.82rem', resize: 'none', outline: 'none', boxSizing: 'border-box' }} />
               </div>
             </div>
-
-            <button
-              onClick={() => setStep(3)}
-              disabled={!km || !gas}
-              style={{ width: '100%', padding: '0.9rem', background: '#ff5f33', border: 'none', borderRadius: 12, color: '#fff', fontWeight: 800, fontSize: '0.9rem', cursor: 'pointer', opacity: !km || !gas ? 0.5 : 1 }}
-            >
+            <button onClick={() => setStep(4)} disabled={!km || !gas}
+              style={{ width: '100%', padding: '0.9rem', background: '#ff5f33', border: 'none', borderRadius: 12, color: '#fff', fontWeight: 800, fontSize: '0.9rem', cursor: 'pointer', opacity: !km || !gas ? 0.5 : 1 }}>
               Revisar y Confirmar
             </button>
           </>
         )}
 
-        {/* Paso 3: Confirmar */}
-        {!submitted && step === 3 && (
+        {/* Paso 4: Confirmar */}
+        {!submitted && step === 4 && (
           <>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginBottom: '1rem' }}>
               {[
                 ['Placa', plate],
-                ['Modelo', vehicle?.model || '—'],
+                ['Vehículo', vehicle ? `${vehicle.brand || ''} ${vehicle.model || ''}`.trim() || '—' : '—'],
                 ['Tipo de servicio', SERVICE_TYPES.find(t => t.value === serviceType)?.label],
                 ['Kilometraje', `${Number(km).toLocaleString()} km`],
                 ['Gasolina', gas],
@@ -305,18 +355,13 @@ export default function TgReception() {
                 </div>
               ))}
             </div>
-
             {submitError && (
               <div style={{ padding: '0.7rem 0.9rem', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 10, marginBottom: '0.75rem' }}>
                 <p style={{ margin: 0, fontSize: '0.72rem', color: '#ef4444', fontWeight: 700 }}>{submitError}</p>
               </div>
             )}
-
-            <button
-              onClick={submit}
-              disabled={submitting}
-              style={{ width: '100%', padding: '0.9rem', background: '#ff5f33', border: 'none', borderRadius: 12, color: '#fff', fontWeight: 800, fontSize: '0.9rem', cursor: 'pointer', opacity: submitting ? 0.5 : 1 }}
-            >
+            <button onClick={submit} disabled={submitting}
+              style={{ width: '100%', padding: '0.9rem', background: '#ff5f33', border: 'none', borderRadius: 12, color: '#fff', fontWeight: 800, fontSize: '0.9rem', cursor: 'pointer', opacity: submitting ? 0.5 : 1 }}>
               {submitting ? 'Registrando...' : 'Confirmar Recepción'}
             </button>
           </>
