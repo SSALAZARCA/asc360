@@ -140,16 +140,24 @@ export default function TgHome() {
           <p style={{ margin: 0, fontWeight: 800, fontSize: '0.85rem', color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user?.name}</p>
           <p style={{ margin: 0, fontSize: '0.6rem', color: '#606075', textTransform: 'uppercase', letterSpacing: '0.07em' }}>{user?.role?.replace('_', ' ')}</p>
         </div>
-        <VoiceInput
-          onTranscript={handleVoiceCommand}
-          onError={msg => setVoiceError(msg)}
-          size={36}
-        />
         <button
           onClick={() => loadOrders(true)}
           disabled={refreshing}
           style={{ background: 'transparent', border: 'none', color: refreshing ? '#3f3f55' : '#606075', cursor: 'pointer', fontSize: '1.2rem', padding: '0.4rem', lineHeight: 1, transition: 'color 0.15s' }}
         >↻</button>
+      </div>
+
+      {/* Barra de comando de voz */}
+      <div style={{ margin: '0.75rem 0.75rem 0', display: 'flex', alignItems: 'center', gap: '0.6rem', background: '#13131a', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 12, padding: '0.6rem 0.9rem' }}>
+        <VoiceInput
+          onTranscript={handleVoiceCommand}
+          onError={msg => setVoiceError(msg)}
+          size={38}
+        />
+        <div style={{ minWidth: 0 }}>
+          <p style={{ margin: 0, fontSize: '0.68rem', color: '#9ca3af', fontWeight: 600 }}>Comando de voz</p>
+          <p style={{ margin: 0, fontSize: '0.58rem', color: '#3f3f55' }}>Ej: "La NOI82G ya está lista"</p>
+        </div>
       </div>
 
       {/* Banner de confirmación de comando de voz */}
