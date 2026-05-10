@@ -143,9 +143,7 @@ export default function TgHome() {
 
       {/* Header */}
       <div style={{ background: '#13131a', borderBottom: '1px solid rgba(255,255,255,0.06)', padding: '0.9rem 1.25rem', display: 'flex', alignItems: 'center', gap: '0.75rem', position: 'sticky', top: 0, zIndex: 10 }}>
-        <div style={{ width: 38, height: 38, borderRadius: '50%', background: 'rgba(255,95,51,0.12)', border: '1px solid rgba(255,95,51,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: '0.85rem', color: '#ff5f33', flexShrink: 0 }}>
-          {user?.name?.substring(0, 2).toUpperCase() || '??'}
-        </div>
+        <img src="/logo.png" alt="UM" style={{ height: 28, width: 'auto', objectFit: 'contain', flexShrink: 0, opacity: 0.9 }} />
         <div style={{ minWidth: 0, flex: 1 }}>
           <p style={{ margin: 0, fontWeight: 800, fontSize: '0.85rem', color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user?.name}</p>
           <p style={{ margin: 0, fontSize: '0.6rem', color: '#606075', textTransform: 'uppercase', letterSpacing: '0.07em' }}>{user?.role?.replace('_', ' ')}</p>

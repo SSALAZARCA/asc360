@@ -83,9 +83,12 @@ export default function TgEntry() {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', gap: '1rem' }}>
-      <div style={{ width: 36, height: 36, border: '3px solid rgba(255,95,51,0.15)', borderTopColor: '#ff5f33', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-      <p style={{ color: '#606075', fontSize: '0.75rem', margin: 0 }}>Verificando identidad...</p>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', gap: '1.5rem', background: '#0a0a0c' }}>
+      <img src="/logo.png" alt="UM Colombia" style={{ width: 160, objectFit: 'contain', opacity: 0.92 }} />
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.6rem' }}>
+        <div style={{ width: 28, height: 28, border: '3px solid rgba(255,95,51,0.15)', borderTopColor: '#ff5f33', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+        <p style={{ color: '#606075', fontSize: '0.7rem', margin: 0 }}>Verificando identidad...</p>
+      </div>
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
