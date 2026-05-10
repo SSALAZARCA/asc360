@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from openai import AsyncOpenAI
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, get_optional_user
 from app.core.security import verify_sonia_secret
 from app.config import settings
 from app.database import get_db, async_session_maker
@@ -325,8 +325,9 @@ async def search_parts(
 async def bot_catalog_models(
     db: AsyncSession = Depends(get_db),
     x_sonia_secret: str = Header(default=""),
+    current_user=Depends(get_optional_user),
 ):
-    if not verify_sonia_secret(x_sonia_secret, settings.SONIA_BOT_SECRET):
+    if not verify_sonia_secret(x_sonia_secret, settings.SONIA_BOT_SECRET) and current_user is None:
         raise HTTPException(status_code=403, detail="Forbidden")
 
     result = await db.execute(
@@ -346,8 +347,9 @@ async def search_parts_by_model(
     body: PartsByModelRequest,
     db: AsyncSession = Depends(get_db),
     x_sonia_secret: str = Header(default=""),
+    current_user=Depends(get_optional_user),
 ):
-    if not verify_sonia_secret(x_sonia_secret, settings.SONIA_BOT_SECRET):
+    if not verify_sonia_secret(x_sonia_secret, settings.SONIA_BOT_SECRET) and current_user is None:
         raise HTTPException(status_code=403, detail="Forbidden")
 
     sections_result = await db.execute(
@@ -378,8 +380,9 @@ async def get_all_sections_for_model(
     model_code: str,
     db: AsyncSession = Depends(get_db),
     x_sonia_secret: str = Header(default=""),
+    current_user=Depends(get_optional_user),
 ):
-    if not verify_sonia_secret(x_sonia_secret, settings.SONIA_BOT_SECRET):
+    if not verify_sonia_secret(x_sonia_secret, settings.SONIA_BOT_SECRET) and current_user is None:
         raise HTTPException(status_code=403, detail="Forbidden")
 
     result = await db.execute(

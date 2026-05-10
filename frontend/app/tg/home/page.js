@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { authFetch } from '../../../lib/authFetch';
+import TgNav from '../../../components/tg/TgNav';
 
 const STATES = {
   received:          { name: 'Recibido',         color: '#3b82f6' },
@@ -94,7 +95,7 @@ export default function TgHome() {
   };
 
   return (
-    <div style={{ minHeight: '100vh', background: '#0a0a0c', paddingBottom: '3rem' }}>
+    <div style={{ minHeight: '100vh', background: '#0a0a0c', paddingBottom: '5.5rem' }}>
 
       {/* Header */}
       <div style={{ background: '#13131a', borderBottom: '1px solid rgba(255,255,255,0.06)', padding: '0.9rem 1.25rem', display: 'flex', alignItems: 'center', gap: '0.75rem', position: 'sticky', top: 0, zIndex: 10 }}>
@@ -173,6 +174,8 @@ export default function TgHome() {
           );
         })}
       </div>
+
+      <TgNav userRole={user?.role} />
 
       {/* Bottom sheet — detalle + cambio de estado */}
       {selected && (() => {

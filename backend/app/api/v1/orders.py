@@ -25,8 +25,10 @@ async def create_service_order(
     order_in: OrderCreate,
     db: AsyncSession = Depends(get_db),
     x_sonia_secret: Optional[str] = Header(None),
+    current_user: Optional[CurrentUser] = Depends(get_optional_user),
 ):
-    if not verify_sonia_secret(x_sonia_secret, app_settings.SONIA_BOT_SECRET):
+    is_bot = verify_sonia_secret(x_sonia_secret, app_settings.SONIA_BOT_SECRET)
+    if not is_bot and current_user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="No autenticado")
 
     # 1. Crear Entidad Principal: La Orden de Servicio

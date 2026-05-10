@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Header, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.api.deps import get_current_user, CurrentUser
+from app.api.deps import get_current_user, get_optional_user, CurrentUser
 from app.config import settings
 from app.core.security import verify_sonia_secret
 from app.schemas.vehicle import VehicleOut, VehicleCreate
@@ -35,9 +35,11 @@ async def get_vehicle_by_plate(
     db: AsyncSession = Depends(get_db),
     x_sonia_secret: Optional[str] = Header(None),
     x_tenant_id: Optional[str] = Header(None),
+    current_user: Optional[CurrentUser] = Depends(get_optional_user),
 ):
-    """Consulta una moto por placa. Protegido por X-Sonia-Secret (uso interno del bot)."""
-    if not verify_sonia_secret(x_sonia_secret, settings.SONIA_BOT_SECRET):
+    """Consulta una moto por placa. Acepta X-Sonia-Secret o JWT Bearer."""
+    is_bot = verify_sonia_secret(x_sonia_secret, settings.SONIA_BOT_SECRET)
+    if not is_bot and current_user is None:
         raise HTTPException(status_code=403, detail="Acceso no autorizado.")
     vehicle = await vehicle_service.get_vehicle_by_plate(db, plate, x_tenant_id)
     if not vehicle:
