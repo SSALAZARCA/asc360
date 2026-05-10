@@ -48,15 +48,21 @@ def verify_sonia_secret(provided: Optional[str], expected: str) -> bool:
         return False
     return hmac.compare_digest(provided, expected)
 
-def verify_telegram_initdata(init_data: str, bot_token: str) -> Optional[dict]:
+def verify_telegram_initdata(init_data: str, bot_token: str, max_age_seconds: int = 86400) -> Optional[dict]:
     """Valida el initData de Telegram Mini App con HMAC-SHA256.
-    Retorna el dict del usuario de Telegram o None si la firma es inválida.
+    Retorna el dict del usuario de Telegram o None si la firma es inválida o expiró.
     Referencia: https://core.telegram.org/bots/webapps#validating-data-received-via-the-mini-app
     """
+    import time
     try:
         parsed = dict(urllib.parse.parse_qsl(init_data, keep_blank_values=True))
         hash_received = parsed.pop("hash", None)
         if not hash_received:
+            return None
+
+        # Rechazar initData con más de max_age_seconds de antigüedad (anti-replay)
+        auth_date = int(parsed.get("auth_date", 0))
+        if not auth_date or (time.time() - auth_date) > max_age_seconds:
             return None
 
         check_string = "\n".join(f"{k}={parsed[k]}" for k in sorted(parsed))

@@ -294,6 +294,12 @@ async def telegram_mini_app_auth(
             detail="Este usuario ha sido bloqueado por el administrador.",
         )
 
+    if user.status == UserStatus.pending:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tu cuenta está pendiente de aprobación. Contactá al administrador del taller.",
+        )
+
     return _build_token_and_user(user)
 
 
