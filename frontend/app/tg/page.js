@@ -35,7 +35,12 @@ export default function TgEntry() {
       });
 
       if (!tg) {
-        window.location.replace('https://t.me/SoniaUMbot/asc360');
+        // tg:// abre Telegram directamente en el dispositivo
+        window.location.replace('tg://resolve?domain=SoniaUMbot&appname=asc360');
+        // Fallback: si tg:// no funciona, después de 1.5s abre t.me
+        setTimeout(() => {
+          window.location.replace('https://t.me/SoniaUMbot/asc360');
+        }, 1500);
         return;
       }
 
