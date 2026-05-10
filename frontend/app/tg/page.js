@@ -57,7 +57,8 @@ export default function TgEntry() {
           if (data.access_token) {
             sessionStorage.setItem('um_token', data.access_token);
             sessionStorage.setItem('um_user', JSON.stringify(data.user));
-            router.replace('/tg/home');
+            const isSuperadminWithoutTenant = data.user.role === 'superadmin' && !data.user.tenant_id;
+            router.replace(isSuperadminWithoutTenant ? '/tg/tenant' : '/tg/home');
           } else {
             setError(data.detail || 'Error de autenticación.');
           }

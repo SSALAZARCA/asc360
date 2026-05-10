@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { authFetch } from '../../../lib/authFetch';
+import { needsTenantSelection, getActiveTenantId } from '../../../lib/activeTenant';
 import TgNav from '../../../components/tg/TgNav';
 import VoiceInput from '../../../components/tg/VoiceInput';
 import CameraInput from '../../../components/tg/CameraInput';
@@ -121,6 +122,7 @@ export default function TgReception() {
     const token  = sessionStorage.getItem('um_token');
     if (!stored || !token) { router.replace('/tg'); return; }
     const u = JSON.parse(stored);
+    if (needsTenantSelection(u)) { router.replace('/tg/tenant'); return; }
     setUser(u);
 
     const raw = sessionStorage.getItem(STORAGE_KEY);
@@ -486,7 +488,7 @@ export default function TgReception() {
     setBusy(true);
     const tid = showTyping();
     try {
-      const tenantId = vehicleData?.tenant_id || user?.tenant_id;
+      const tenantId = vehicleData?.tenant_id || getActiveTenantId(user);
       if (!tenantId) { removeTyping(tid); pushBot('No se pudo determinar el taller.'); setBusy(false); return; }
 
       let vid = vehicleId;

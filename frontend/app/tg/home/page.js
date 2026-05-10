@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { authFetch } from '../../../lib/authFetch';
+import { needsTenantSelection, getActiveTenantName } from '../../../lib/activeTenant';
 import TgNav from '../../../components/tg/TgNav';
 import VoiceInput from '../../../components/tg/VoiceInput';
 
@@ -46,7 +47,9 @@ export default function TgHome() {
     const stored = sessionStorage.getItem('um_user');
     const token  = sessionStorage.getItem('um_token');
     if (!stored || !token) { router.replace('/tg'); return; }
-    setUser(JSON.parse(stored));
+    const u = JSON.parse(stored);
+    if (needsTenantSelection(u)) { router.replace('/tg/tenant'); return; }
+    setUser(u);
     loadOrders();
   }, []);
 
@@ -139,7 +142,20 @@ export default function TgHome() {
         <div style={{ minWidth: 0, flex: 1 }}>
           <p style={{ margin: 0, fontWeight: 800, fontSize: '0.85rem', color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user?.name}</p>
           <p style={{ margin: 0, fontSize: '0.6rem', color: '#606075', textTransform: 'uppercase', letterSpacing: '0.07em' }}>{user?.role?.replace('_', ' ')}</p>
+          {user?.role === 'superadmin' && getActiveTenantName(user) && (
+            <p style={{ margin: 0, fontSize: '0.58rem', color: '#ff8c5a', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              📍 {getActiveTenantName(user)}
+            </p>
+          )}
         </div>
+        {user?.role === 'superadmin' && (
+          <button
+            onClick={() => router.push('/tg/tenant')}
+            style={{ background: 'rgba(255,95,51,0.08)', border: '1px solid rgba(255,95,51,0.2)', borderRadius: 8, color: '#ff8c5a', fontSize: '0.6rem', fontWeight: 700, padding: '0.3rem 0.55rem', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}
+          >
+            Cambiar
+          </button>
+        )}
         <button
           onClick={() => loadOrders(true)}
           disabled={refreshing}
