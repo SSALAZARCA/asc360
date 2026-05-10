@@ -395,6 +395,7 @@ async def get_all_sections_for_model(
             "section_id": str(s.id),
             "section_code": s.section_code,
             "section_name": s.section_name,
+            "diagram_url": s.diagram_url,
         }
         for s in result.scalars().all()
     ]
@@ -439,9 +440,10 @@ async def get_diagram_image(
     section_id: str,
     db: AsyncSession = Depends(get_db),
     x_sonia_secret: str = Header(default=""),
+    current_user=Depends(get_optional_user),
 ):
-    """Proxy: descarga la imagen de diagrama desde MinIO y la devuelve al bot."""
-    if not verify_sonia_secret(x_sonia_secret, settings.SONIA_BOT_SECRET):
+    """Proxy: descarga la imagen de diagrama desde MinIO. Acepta Sonia secret o JWT."""
+    if not verify_sonia_secret(x_sonia_secret, settings.SONIA_BOT_SECRET) and current_user is None:
         raise HTTPException(status_code=403, detail="Forbidden")
 
     try:

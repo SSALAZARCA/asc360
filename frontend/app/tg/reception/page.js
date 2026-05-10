@@ -48,16 +48,20 @@ export default function TgReception() {
     setLookupError(null);
     setVehicle(null);
     try {
-      const res = await authFetch(`/vehicles/${plate.trim().toUpperCase()}`);
+      const res = await authFetch(`/orders/mini-app/vehicle/${plate.trim().toUpperCase()}`);
       if (res.status === 401) { router.replace('/tg'); return; }
       if (res.status === 404) { setLookupError('Vehículo no registrado en el sistema'); return; }
-      if (!res.ok) { setLookupError('Error al consultar la placa'); return; }
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        setLookupError(err.detail || `Error ${res.status} al consultar la placa`);
+        return;
+      }
       const data = await res.json();
       if (data.active_order) { setLookupError('Este vehículo ya tiene una orden activa en taller'); return; }
       setVehicle(data);
       setStep(1);
     } catch (e) {
-      setLookupError(`Error: ${e.message}`);
+      setLookupError(`Error de conexión: ${e.message}`);
     } finally {
       setLooking(false);
     }

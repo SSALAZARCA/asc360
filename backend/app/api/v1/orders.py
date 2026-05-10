@@ -763,6 +763,48 @@ async def get_active_orders_for_tenant(
     res = await db.execute(stmt)
     return res.scalars().all()
 
+@router.get("/mini-app/vehicle/{plate}")
+async def mini_app_get_vehicle(
+    plate: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Endpoint JWT para la Mini App: busca un vehículo por placa y retorna info básica + estado activo."""
+    from app.models.vehicle import Vehicle
+    from sqlalchemy.orm import selectinload
+
+    clean = "".join(plate.split()).upper()
+    stmt = (
+        select(Vehicle)
+        .options(selectinload(Vehicle.service_orders))
+        .where(Vehicle.plate == clean)
+    )
+    if not current_user.is_superadmin and current_user.tenant_id:
+        stmt = stmt.where(Vehicle.tenant_id == current_user.tenant_id)
+
+    res = await db.execute(stmt)
+    vehicle = res.scalars().first()
+
+    if not vehicle:
+        raise HTTPException(status_code=404, detail="Vehículo no encontrado")
+
+    CLOSED = {"completed", "delivered", "cancelled"}
+    active = next((o for o in sorted(vehicle.service_orders, key=lambda o: o.created_at, reverse=True) if o.status.value not in CLOSED), None)
+
+    return {
+        "id": str(vehicle.id),
+        "plate": vehicle.plate,
+        "brand": vehicle.brand,
+        "model": vehicle.model,
+        "year": vehicle.year,
+        "color": vehicle.color,
+        "vin": vehicle.vin,
+        "tenant_id": str(vehicle.tenant_id),
+        "client_id": None,
+        "active_order": {"status": active.status.value} if active else None,
+    }
+
+
 @router.get("/dashboard/admin")
 async def get_admin_dashboard(db: AsyncSession = Depends(get_db)):
     """

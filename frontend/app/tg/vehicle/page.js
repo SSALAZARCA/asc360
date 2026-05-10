@@ -34,10 +34,14 @@ export default function TgVehicle() {
     setVehicle(null);
     setHistory([]);
     try {
-      const res = await authFetch(`/vehicles/${plate.trim().toUpperCase()}`);
+      const res = await authFetch(`/orders/mini-app/vehicle/${plate.trim().toUpperCase()}`);
       if (res.status === 401) { router.replace('/tg'); return; }
       if (res.status === 404) { setError('Vehículo no encontrado'); return; }
-      if (!res.ok) { setError('Error al consultar'); return; }
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        setError(err.detail || `Error ${res.status}`);
+        return;
+      }
       const data = await res.json();
       setVehicle(data);
       if (data.id) {

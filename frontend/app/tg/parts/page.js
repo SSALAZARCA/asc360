@@ -6,16 +6,19 @@ import TgNav from '../../../components/tg/TgNav';
 
 export default function TgParts() {
   const router = useRouter();
-  const [user, setUser]         = useState(null);
-  const [models, setModels]     = useState([]);
-  const [model, setModel]       = useState('');
-  const [desc, setDesc]         = useState('');
-  const [results, setResults]   = useState([]);
-  const [sections, setSections] = useState([]);
-  const [loading, setLoading]   = useState(false);
+  const [user, setUser]           = useState(null);
+  const [models, setModels]       = useState([]);
+  const [model, setModel]         = useState('');
+  const [desc, setDesc]           = useState('');
+  const [results, setResults]     = useState([]);
+  const [sections, setSections]   = useState([]);
+  const [loading, setLoading]     = useState(false);
   const [loadingMod, setLoadingMod] = useState(true);
-  const [error, setError]       = useState(null);
-  const [tab, setTab]           = useState('model');
+  const [error, setError]         = useState(null);
+  const [tab, setTab]             = useState('model');
+  const [selectedSection, setSelectedSection] = useState(null);
+  const [diagramUrl, setDiagramUrl] = useState(null);
+  const [loadingDiagram, setLoadingDiagram] = useState(false);
 
   useEffect(() => {
     const stored = sessionStorage.getItem('um_user');
@@ -59,8 +62,26 @@ export default function TgParts() {
   const loadSections = async (modelCode) => {
     setSections([]);
     setResults([]);
+    setSelectedSection(null);
+    setDiagramUrl(null);
     const res = await authFetch(`/parts/model/${modelCode}/all-sections`);
     if (res.ok) setSections(await res.json());
+  };
+
+  const openSection = async (section) => {
+    setSelectedSection(section);
+    setDiagramUrl(null);
+    if (!section.diagram_url) return;
+    setLoadingDiagram(true);
+    try {
+      const res = await authFetch(`/parts/section/${section.section_id}/diagram-image`);
+      if (res.ok) {
+        const blob = await res.blob();
+        setDiagramUrl(URL.createObjectURL(blob));
+      }
+    } finally {
+      setLoadingDiagram(false);
+    }
   };
 
   return (
@@ -131,14 +152,19 @@ export default function TgParts() {
         {/* Secciones (tab modelo) */}
         {tab === 'model' && sections.length > 0 && (
           <>
-            <p style={{ margin: '0.5rem 0 0.4rem', fontSize: '0.55rem', color: '#606075', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700 }}>Secciones del catálogo</p>
+            <p style={{ margin: '0.5rem 0 0.4rem', fontSize: '0.55rem', color: '#606075', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700 }}>Secciones del catálogo — toca para ver diagrama</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
               {sections.map(s => (
-                <div key={s.section_id} style={{ background: '#13131a', borderRadius: 10, padding: '0.65rem 0.9rem', border: '1px solid rgba(255,255,255,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div
+                  key={s.section_id}
+                  onClick={() => openSection(s)}
+                  style={{ background: '#13131a', borderRadius: 10, padding: '0.65rem 0.9rem', border: '1px solid rgba(255,255,255,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: s.diagram_url ? 'pointer' : 'default' }}
+                >
                   <div>
                     <span style={{ fontSize: '0.62rem', color: '#ff8c5a', fontWeight: 800, marginRight: '0.5rem' }}>{s.section_code}</span>
                     <span style={{ fontSize: '0.72rem', color: '#e2e2f0', fontWeight: 600 }}>{s.section_name}</span>
                   </div>
+                  {s.diagram_url && <span style={{ fontSize: '0.6rem', color: '#606075' }}>→</span>}
                 </div>
               ))}
             </div>
@@ -162,6 +188,42 @@ export default function TgParts() {
           </>
         )}
       </div>
+
+      {/* Bottom sheet — diagrama */}
+      {selectedSection && (
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(4px)', zIndex: 50, display: 'flex', alignItems: 'flex-end' }}
+          onClick={() => { setSelectedSection(null); setDiagramUrl(null); }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{ width: '100%', background: '#13131a', borderRadius: '20px 20px 0 0', padding: '1.25rem 1.25rem 2rem', maxHeight: '90vh', overflowY: 'auto' }}
+          >
+            <div style={{ width: 36, height: 4, background: 'rgba(255,255,255,0.12)', borderRadius: 2, margin: '0 auto 1rem' }} />
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
+              <div>
+                <span style={{ fontSize: '0.6rem', color: '#ff8c5a', fontWeight: 800 }}>{selectedSection.section_code}</span>
+                <p style={{ margin: '2px 0 0', fontWeight: 800, fontSize: '0.88rem', color: '#fff' }}>{selectedSection.section_name}</p>
+              </div>
+              <button onClick={() => { setSelectedSection(null); setDiagramUrl(null); }} style={{ background: 'none', border: 'none', color: '#606075', cursor: 'pointer', fontSize: '1.2rem' }}>✕</button>
+            </div>
+
+            {loadingDiagram && (
+              <div style={{ textAlign: 'center', padding: '2rem', color: '#606075', fontSize: '0.75rem' }}>Cargando diagrama...</div>
+            )}
+            {diagramUrl && (
+              <img
+                src={diagramUrl}
+                alt={selectedSection.section_name}
+                style={{ width: '100%', borderRadius: 10, border: '1px solid rgba(255,255,255,0.06)' }}
+              />
+            )}
+            {!loadingDiagram && !diagramUrl && !selectedSection.diagram_url && (
+              <div style={{ textAlign: 'center', padding: '2rem', color: '#606075', fontSize: '0.75rem' }}>Sin diagrama disponible para esta sección</div>
+            )}
+          </div>
+        </div>
+      )}
 
       <TgNav userRole={user?.role} />
     </div>
