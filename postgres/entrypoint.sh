@@ -8,6 +8,11 @@ if [ -f "$PGDATA/PG_VERSION" ]; then
 
     chown -R postgres:postgres "$PGDATA" 2>/dev/null || true
 
+    # Garantiza que local use trust antes de arrancar, para que psql del entrypoint pueda conectar
+    if [ -f "$PGDATA/pg_hba.conf" ]; then
+        sed -i 's/^local.*/local   all             all                                     trust/' "$PGDATA/pg_hba.conf"
+    fi
+
     su-exec postgres pg_ctl -D "$PGDATA" -o "-c listen_addresses=''" -w start
 
     su-exec postgres psql -U "${POSTGRES_USER:-umadmin}" postgres \
