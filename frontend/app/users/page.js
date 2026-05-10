@@ -140,9 +140,9 @@ export default function UsersPage() {
             ) : users.map((u) => (
               <tr key={u.id} className="hover:bg-white/5 transition-colors border-b border-white/5">
                 <td className="py-4">
-                  <div className="flex items-center gap-4">
-                    <div className="avatar-small">{u.name.substring(0,2).toUpperCase()}</div>
-                    <span className="font-bold text-white tracking-tight">{u.name}</span>
+                  <div className="flex items-center gap-4 min-w-0">
+                    <div className="avatar-small flex-shrink-0">{u.name.substring(0,2).toUpperCase()}</div>
+                    <span className="font-bold text-white tracking-tight truncate" title={u.name}>{u.name}</span>
                   </div>
                 </td>
                 <td>
@@ -152,14 +152,14 @@ export default function UsersPage() {
                   </span>
                 </td>
                 <td>
-                  <div className="flex flex-col gap-1 text-[11px] text-white/60 font-mono">
-                    <span className="flex items-center gap-1.5"><Mail size={12} className="text-white/30" /> {u.email || 'N/A'}</span>
-                    <span className="flex items-center gap-1.5"><Phone size={12} className="text-white/30" /> {u.phone || 'N/A'}</span>
-                    <span className="flex items-center gap-1.5 text-blue-400/80"><Send size={12} /> {u.telegram_id ? 'Vinculado' : 'Pendiente Telegram'}</span>
+                  <div className="flex flex-col gap-1 text-[11px] text-white/60 font-mono min-w-0">
+                    <span className="flex items-center gap-1.5 min-w-0"><Mail size={12} className="text-white/30 flex-shrink-0" /> <span className="truncate" title={u.email || 'N/A'}>{u.email || 'N/A'}</span></span>
+                    <span className="flex items-center gap-1.5 min-w-0"><Phone size={12} className="text-white/30 flex-shrink-0" /> <span className="truncate">{u.phone || 'N/A'}</span></span>
+                    <span className="flex items-center gap-1.5 text-blue-400/80"><Send size={12} className="flex-shrink-0" /> {u.telegram_id ? 'Vinculado' : 'Pendiente Telegram'}</span>
                   </div>
                 </td>
                 <td>
-                  <span className="px-2 py-1 bg-white/5 rounded-md text-xs font-bold text-white/70 uppercase tracking-tighter border border-white/5">
+                  <span className="cell-truncate px-2 py-1 bg-white/5 rounded-md text-xs font-bold text-white/70 uppercase tracking-tighter border border-white/5" title={u.service_center_name || u.tenant?.name || 'ACCESO GLOBAL'}>
                     {u.service_center_name || (u.tenant?.name) || 'ACCESO GLOBAL'}
                   </span>
                 </td>

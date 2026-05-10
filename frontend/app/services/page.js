@@ -423,8 +423,8 @@ export default function ServicesPage() {
                     </td>
                     <td><span className="td-days" style={{ color: dc }}>{s.tiempo_taller_dias ?? 0}d</span></td>
                     <td className="td-dim">{(s.kilometraje || 0).toLocaleString()}</td>
-                    <td className="td-dim">{s.centro_actual}</td>
-                    <td className="td-dim">{s.ciudad || '-'}</td>
+                    <td className="td-dim"><span className="cell-truncate" title={s.centro_actual}>{s.centro_actual}</span></td>
+                    <td className="td-dim"><span className="cell-truncate" title={s.ciudad || '-'}>{s.ciudad || '-'}</span></td>
                     <td className="td-dim" style={{ textAlign:'center' }}>{s.v_totales ?? '-'}</td>
                     <td className="td-dim" title="Visitas últ. 2 meses" style={{ textAlign:'center', color: (s.v_2meses||0) > 1 ? '#ef4444' : undefined, fontWeight: (s.v_2meses||0) > 1 ? '900' : 'normal' }}>{s.v_2meses ?? '-'}</td>
                     <td className="td-dim" style={{ textAlign:'center', color: (s.g_totales||0) > 1 ? '#eab308' : undefined }}>{s.g_totales ?? '-'}</td>
