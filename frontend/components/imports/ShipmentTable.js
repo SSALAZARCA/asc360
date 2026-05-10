@@ -11,11 +11,6 @@ const COL_STYLE = {
   color: '#d1d5db',
 };
 
-const STICKY = {
-  position: 'sticky',
-  left: 0,
-  zIndex: 2,
-};
 
 function SortIcon({ field, sortKey, sortDir }) {
   const active = sortKey === field;
@@ -27,18 +22,16 @@ function SortIcon({ field, sortKey, sortDir }) {
   );
 }
 
-const TH = ({ children, sortField, sortKey, sortDir, onSort, sticky, style = {} }) => (
+const TH = ({ children, sortField, sortKey, sortDir, onSort, style = {} }) => (
   <th
     onClick={() => sortField && onSort && onSort(sortField)}
     style={{
       padding: '10px 14px', fontSize: '10px', fontWeight: 700,
       letterSpacing: '0.08em', color: sortKey === sortField ? '#ff5f33' : '#606075',
       textTransform: 'uppercase', borderBottom: '1px solid rgba(255,255,255,0.06)',
-      whiteSpace: 'nowrap',
+      whiteSpace: 'nowrap', background: '#0e0e14',
       cursor: sortField ? 'pointer' : 'default',
       userSelect: 'none',
-      ...(sticky ? STICKY : {}),
-      background: '#0e0e14',
       ...style,
     }}
   >
@@ -98,9 +91,9 @@ export default function ShipmentTable({ orders, total, page, pageSize, onPageCha
         <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'auto' }}>
           <thead>
             <tr>
-              <TH sticky style={{ left: 0, minWidth: 60, width: 60 }} sortField="cycle" sortKey={sortKey} sortDir={sortDir} onSort={handleSort}>Ciclo</TH>
-              <TH sticky style={{ left: 60, minWidth: 140, width: 140 }} sortField="pi_number" sortKey={sortKey} sortDir={sortDir} onSort={handleSort}>PI Number</TH>
-              <TH sticky style={{ left: 200, minWidth: 160, boxShadow: '4px 0 10px rgba(0,0,0,0.5)' }} sortField="model" sortKey={sortKey} sortDir={sortDir} onSort={handleSort}>Modelo</TH>
+              <TH sortField="cycle" sortKey={sortKey} sortDir={sortDir} onSort={handleSort}>Ciclo</TH>
+              <TH sortField="pi_number" sortKey={sortKey} sortDir={sortDir} onSort={handleSort}>PI Number</TH>
+              <TH sortField="model" sortKey={sortKey} sortDir={sortDir} onSort={handleSort}>Modelo</TH>
               <TH sortField="qty_numeric" sortKey={sortKey} sortDir={sortDir} onSort={handleSort}>QTY</TH>
               <TH sortField="order_date" sortKey={sortKey} sortDir={sortDir} onSort={handleSort}>F. Pedido</TH>
               <TH sortField="etd" sortKey={sortKey} sortDir={sortDir} onSort={handleSort}>ETD</TH>
@@ -139,11 +132,10 @@ export default function ShipmentTable({ orders, total, page, pageSize, onPageCha
                   onMouseEnter={e => e.currentTarget.style.background = isSP ? 'rgba(59,130,246,0.1)' : 'rgba(255,255,255,0.02)'}
                   onMouseLeave={e => e.currentTarget.style.background = rowBg}
                 >
-                  {/* Columnas sticky */}
-                  <td style={{ ...COL_STYLE, ...STICKY, left: 0, width: 60, minWidth: 60, background: isSP ? '#0f1420' : '#13131a', fontWeight: 700, color: '#fff' }}>
+                  <td style={{ ...COL_STYLE, fontWeight: 700, color: '#fff' }}>
                     {order.cycle ?? '—'}
                   </td>
-                  <td style={{ ...COL_STYLE, ...STICKY, left: 60, width: 140, minWidth: 140, background: isSP ? '#0f1420' : '#13131a' }}>
+                  <td style={COL_STYLE}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <span style={{ fontWeight: 700, color: isSP ? '#60a5fa' : '#fff', fontSize: '11px' }}>
                         {order.pi_number}
@@ -157,8 +149,8 @@ export default function ShipmentTable({ orders, total, page, pageSize, onPageCha
                       )}
                     </div>
                   </td>
-                  <td style={{ ...COL_STYLE, ...STICKY, left: 200, minWidth: 160, background: isSP ? '#0f1420' : '#13131a', boxShadow: '4px 0 10px rgba(0,0,0,0.5)' }}>
-                    <span style={{ display: 'block', color: '#d1d5db', fontSize: '11px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 160 }}>{order.model}</span>
+                  <td style={COL_STYLE}>
+                    <span style={{ color: '#d1d5db', fontSize: '11px' }}>{order.model}</span>
                   </td>
 
                   {/* Columnas normales */}
