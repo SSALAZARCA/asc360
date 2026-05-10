@@ -10,6 +10,7 @@ from app.api.v1 import vehicle_models
 from app.api.v1 import settings as settings_module
 from app.api.v1 import parts_manual as parts_manual_module
 from app.api.v1 import color_runt_mappings as color_runt_mappings_module
+from app.api.v1 import ai_miniapp as ai_miniapp_module
 
 api_router = APIRouter()
 
@@ -26,3 +27,4 @@ api_router.include_router(vehicle_models.router)
 api_router.include_router(settings_module.router)
 api_router.include_router(parts_manual_module.router)
 api_router.include_router(color_runt_mappings_module.router)
+api_router.include_router(ai_miniapp_module.router)
