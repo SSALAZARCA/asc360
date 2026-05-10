@@ -34,18 +34,13 @@ export default function TgEntry() {
         version:     tg?.version ?? 'N/A',
       });
 
-      if (!tg) {
+      if (!tg || !initData) {
         window.location.replace('https://t.me/SoniaUMbot/asc360');
         return;
       }
 
       tg.ready();
       tg.expand();
-
-      if (!initData) {
-        setError('initData vacío — el bot puede necesitar un /start previo del usuario.');
-        return;
-      }
 
       fetch(`${getApiUrl()}/auth/telegram-mini-app`, {
         method: 'POST',
