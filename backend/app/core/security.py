@@ -1,5 +1,8 @@
 import bcrypt
+import hashlib
 import hmac
+import json
+import urllib.parse
 from datetime import datetime, timedelta
 from typing import Optional
 from jose import JWTError, jwt
@@ -44,3 +47,27 @@ def verify_sonia_secret(provided: Optional[str], expected: str) -> bool:
     if not provided:
         return False
     return hmac.compare_digest(provided, expected)
+
+def verify_telegram_initdata(init_data: str, bot_token: str) -> Optional[dict]:
+    """Valida el initData de Telegram Mini App con HMAC-SHA256.
+    Retorna el dict del usuario de Telegram o None si la firma es inválida.
+    Referencia: https://core.telegram.org/bots/webapps#validating-data-received-via-the-mini-app
+    """
+    try:
+        parsed = dict(urllib.parse.parse_qsl(init_data, keep_blank_values=True))
+        hash_received = parsed.pop("hash", None)
+        if not hash_received:
+            return None
+
+        check_string = "\n".join(f"{k}={parsed[k]}" for k in sorted(parsed))
+
+        # Clave secreta: HMAC-SHA256(key="WebAppData", msg=bot_token)
+        secret_key = hmac.new("WebAppData".encode(), bot_token.encode(), hashlib.sha256).digest()
+        expected_hash = hmac.new(secret_key, check_string.encode(), hashlib.sha256).hexdigest()
+
+        if not hmac.compare_digest(expected_hash, hash_received):
+            return None
+
+        return json.loads(parsed.get("user", "{}"))
+    except Exception:
+        return None

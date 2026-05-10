@@ -8,7 +8,7 @@ from pydantic import BaseModel, EmailStr
 from typing import Optional
 from app.database import get_db
 from app.models.user import User, UserStatus, Role
-from app.core.security import verify_password, create_access_token, get_password_hash, verify_sonia_secret
+from app.core.security import verify_password, create_access_token, get_password_hash, verify_sonia_secret, verify_telegram_initdata
 from app.config import settings
 from app.core.limiter import limiter
 
@@ -40,6 +40,10 @@ class TelegramLinkRequest(BaseModel):
 class ChangePasswordRequest(BaseModel):
     current_password: str
     new_password: str
+
+class TelegramMiniAppRequest(BaseModel):
+    """initData crudo que envía el SDK de Telegram Mini App."""
+    init_data: str
 
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -248,7 +252,52 @@ async def get_user_by_telegram(
     }
 
 
-# ─── Endpoint 5: Cambio de contraseña propia ─────────────────────────────────
+# ─── Endpoint 5: Auth Telegram Mini App (initData HMAC-SHA256) ───────────────
+
+@router.post("/telegram-mini-app", response_model=LoginResponse)
+async def telegram_mini_app_auth(
+    payload: TelegramMiniAppRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Autenticación para la Telegram Mini App.
+    El frontend de la Mini App envía el initData que provee el SDK de Telegram.
+    Se valida con HMAC-SHA256 contra el token del bot para garantizar autenticidad.
+    No requiere contraseña ni X-Sonia-Secret — la firma de Telegram es suficiente.
+    """
+    if not settings.TELEGRAM_BOT_TOKEN:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Mini App auth no configurada en este servidor.",
+        )
+
+    user_data = verify_telegram_initdata(payload.init_data, settings.TELEGRAM_BOT_TOKEN)
+    if not user_data or "id" not in user_data:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Firma de Telegram inválida o initData malformado.",
+        )
+
+    telegram_id = str(user_data["id"])
+    stmt = select(User).where(User.telegram_id == telegram_id)
+    user = (await db.execute(stmt)).scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Usuario no registrado. Interactuá con Sonia primero para crear tu cuenta.",
+        )
+
+    if user.status == UserStatus.rejected:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Este usuario ha sido bloqueado por el administrador.",
+        )
+
+    return _build_token_and_user(user)
+
+
+# ─── Endpoint 6: Cambio de contraseña propia ─────────────────────────────────
 
 @router.post("/change-password", status_code=204)
 @limiter.limit("5/minute")
