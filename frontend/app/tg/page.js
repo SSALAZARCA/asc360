@@ -3,37 +3,67 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { getApiUrl } from '../../lib/api';
 
+function loadTelegramScript() {
+  return new Promise((resolve) => {
+    if (window.Telegram?.WebApp) { resolve(); return; }
+    const script = document.createElement('script');
+    script.src = 'https://telegram.org/js/telegram-web-app.js';
+    script.onload = resolve;
+    script.onerror = resolve; // continuar aunque falle
+    document.head.appendChild(script);
+  });
+}
+
 export default function TgEntry() {
-  const [error, setError] = useState(null);
+  const [error, setError]   = useState(null);
+  const [debug, setDebug]   = useState(null);
   const router = useRouter();
 
   useEffect(() => {
-    const tg = window.Telegram?.WebApp;
+    (async () => {
+      await loadTelegramScript();
 
-    if (!tg || !tg.initData) {
-      setError('Esta app debe abrirse desde Telegram.');
-      return;
-    }
+      const tg = window.Telegram?.WebApp;
+      const initData = tg?.initData ?? '';
 
-    tg.ready();
-    tg.expand();
+      // Debug temporal — lo quitamos una vez que funcione
+      setDebug({
+        hasTelegram: !!window.Telegram,
+        hasWebApp:   !!tg,
+        initDataLen: initData.length,
+        version:     tg?.version ?? 'N/A',
+      });
 
-    fetch(`${getApiUrl()}/auth/telegram-mini-app`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ init_data: tg.initData }),
-    })
-      .then(res => res.json())
-      .then(data => {
-        if (data.access_token) {
-          sessionStorage.setItem('um_token', data.access_token);
-          sessionStorage.setItem('um_user', JSON.stringify(data.user));
-          router.replace('/tg/home');
-        } else {
-          setError(data.detail || 'Error de autenticación. Verificá con el administrador.');
-        }
+      if (!tg) {
+        setError('window.Telegram no está disponible. Abrí desde Telegram.');
+        return;
+      }
+
+      tg.ready();
+      tg.expand();
+
+      if (!initData) {
+        setError('initData vacío — el bot puede necesitar un /start previo del usuario.');
+        return;
+      }
+
+      fetch(`${getApiUrl()}/auth/telegram-mini-app`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ init_data: initData }),
       })
-      .catch(() => setError('No se pudo conectar con el servidor. Intentá de nuevo.'));
+        .then(res => res.json())
+        .then(data => {
+          if (data.access_token) {
+            sessionStorage.setItem('um_token', data.access_token);
+            sessionStorage.setItem('um_user', JSON.stringify(data.user));
+            router.replace('/tg/home');
+          } else {
+            setError(data.detail || 'Error de autenticación.');
+          }
+        })
+        .catch(() => setError('No se pudo conectar con el servidor.'));
+    })();
   }, []);
 
   if (error) {
@@ -42,6 +72,11 @@ export default function TgEntry() {
         <div style={{ width: 56, height: 56, borderRadius: 16, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem' }}>⚠</div>
         <p style={{ color: '#ef4444', fontSize: '0.85rem', fontWeight: 700, margin: 0 }}>Error</p>
         <p style={{ color: '#606075', fontSize: '0.75rem', margin: 0, lineHeight: 1.6 }}>{error}</p>
+        {debug && (
+          <pre style={{ color: '#3f3f55', fontSize: '0.6rem', textAlign: 'left', background: '#13131a', padding: '0.75rem', borderRadius: 8, marginTop: '0.5rem' }}>
+            {JSON.stringify(debug, null, 2)}
+          </pre>
+        )}
       </div>
     );
   }
