@@ -479,8 +479,9 @@ async def get_part_by_number(
     order_num: str,
     db: AsyncSession = Depends(get_db),
     x_sonia_secret: str = Header(default=""),
+    current_user=Depends(get_optional_user),
 ):
-    if not verify_sonia_secret(x_sonia_secret, settings.SONIA_BOT_SECRET):
+    if not verify_sonia_secret(x_sonia_secret, settings.SONIA_BOT_SECRET) and current_user is None:
         raise HTTPException(status_code=403, detail="Forbidden")
 
     result = await db.execute(
@@ -512,8 +513,9 @@ async def get_part_by_factory_code(
     factory_code: str,
     db: AsyncSession = Depends(get_db),
     x_sonia_secret: str = Header(default=""),
+    current_user=Depends(get_optional_user),
 ):
-    if not verify_sonia_secret(x_sonia_secret, settings.SONIA_BOT_SECRET):
+    if not verify_sonia_secret(x_sonia_secret, settings.SONIA_BOT_SECRET) and current_user is None:
         raise HTTPException(status_code=403, detail="Forbidden")
 
     result = await db.execute(

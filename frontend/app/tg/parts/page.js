@@ -6,18 +6,25 @@ import TgNav from '../../../components/tg/TgNav';
 
 export default function TgParts() {
   const router = useRouter();
-  const [user, setUser]           = useState(null);
-  const [models, setModels]       = useState([]);
-  const [model, setModel]         = useState('');
-  const [desc, setDesc]           = useState('');
-  const [results, setResults]     = useState([]);
-  const [sections, setSections]   = useState([]);
-  const [loading, setLoading]     = useState(false);
+  const [user, setUser]             = useState(null);
+  const [models, setModels]         = useState([]);
+  const [model, setModel]           = useState('');
+  const [desc, setDesc]             = useState('');
+  const [results, setResults]       = useState([]);
+  const [sections, setSections]     = useState([]);
+  const [loading, setLoading]       = useState(false);
   const [loadingMod, setLoadingMod] = useState(true);
-  const [error, setError]         = useState(null);
-  const [tab, setTab]             = useState('model');
-  const [selectedSection, setSelectedSection] = useState(null);
-  const [diagramUrl, setDiagramUrl] = useState(null);
+  const [error, setError]           = useState(null);
+  const [tab, setTab]               = useState('model');
+
+  // Bottom sheet de sección
+  const [sheet, setSheet]           = useState(null);  // { section_id, section_code, section_name, diagram_url, model_code }
+  const [diagramBlob, setDiagramBlob] = useState(null);
+  const [loadingDiagram, setLoadingDiagram] = useState(false);
+  const [posCode, setPosCode]       = useState('');
+  const [partResult, setPartResult] = useState(null);
+  const [partError, setPartError]   = useState(null);
+  const [searchingPart, setSearchingPart] = useState(false);
 
   useEffect(() => {
     const stored = sessionStorage.getItem('um_user');
@@ -37,54 +44,93 @@ export default function TgParts() {
     }
   };
 
-  const searchByModel = async () => {
+  const loadSections = async (modelCode) => {
+    setSections([]); setResults([]); closeSheet();
+    const res = await authFetch(`/parts/model/${modelCode}/all-sections`);
+    if (res.ok) setSections(await res.json());
+  };
+
+  const searchByDesc = async () => {
     if (!model || !desc.trim()) return;
-    setLoading(true);
-    setError(null);
-    setResults([]);
-    setSections([]);
+    setLoading(true); setError(null); setResults([]); setSections([]);
     try {
       const res = await authFetch('/parts/search-by-model', {
         method: 'POST',
         body: JSON.stringify({ model_code: model, description: desc }),
       });
-      if (!res.ok) { setError('Sin resultados para ese modelo'); return; }
-      const data = await res.json();
-      setResults(data);
-    } catch (e) {
-      setError(`Error: ${e.message}`);
-    } finally {
-      setLoading(false);
-    }
+      if (!res.ok) { setError('Sin resultados'); return; }
+      setResults(await res.json());
+    } catch (e) { setError(`Error: ${e.message}`); }
+    finally { setLoading(false); }
   };
 
-  const loadSections = async (modelCode) => {
-    setSections([]);
-    setResults([]);
-    setSelectedSection(null);
-    setDiagramUrl(null);
-    const res = await authFetch(`/parts/model/${modelCode}/all-sections`);
-    if (res.ok) setSections(await res.json());
+  const openSheet = async (s) => {
+    setSheet(s);
+    setPosCode(''); setPartResult(null); setPartError(null);
+    setDiagramBlob(null);
+    if (!s.diagram_url) return;
+    setLoadingDiagram(true);
+    try {
+      const res = await authFetch(`/parts/section/${s.section_id}/diagram-image`);
+      if (res.ok) {
+        const blob = await res.blob();
+        setDiagramBlob(URL.createObjectURL(blob));
+      }
+    } finally { setLoadingDiagram(false); }
   };
 
-  const openSection = (section) => {
-    setSelectedSection(section);
-    // diagram_url es una URL pública de MinIO — usarla directo
-    setDiagramUrl(section.diagram_url || null);
+  const closeSheet = () => {
+    setSheet(null); setDiagramBlob(null);
+    setPosCode(''); setPartResult(null); setPartError(null);
   };
+
+  const lookupPart = async () => {
+    if (!posCode.trim() || !sheet) return;
+    setSearchingPart(true); setPartResult(null); setPartError(null);
+    try {
+      const res = await authFetch(`/parts/section/${sheet.section_id}/item/${posCode.trim().toUpperCase()}`);
+      if (res.status === 404) { setPartError('Código de posición no encontrado en esta sección'); return; }
+      if (!res.ok) { setPartError('Error al buscar la pieza'); return; }
+      setPartResult(await res.json());
+    } catch (e) { setPartError(`Error: ${e.message}`); }
+    finally { setSearchingPart(false); }
+  };
+
+  const sectionRow = (s, highlight = false) => (
+    <div
+      key={s.section_id}
+      onClick={() => openSheet(s)}
+      style={{
+        background: '#13131a', borderRadius: 10, padding: '0.75rem 0.9rem',
+        border: `1px solid ${highlight ? 'rgba(255,95,51,0.2)' : 'rgba(255,255,255,0.05)'}`,
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer',
+        WebkitTapHighlightColor: 'transparent',
+      }}
+    >
+      <div style={{ minWidth: 0 }}>
+        <span style={{ fontSize: '0.62rem', color: '#ff8c5a', fontWeight: 800, marginRight: '0.5rem' }}>{s.section_code}</span>
+        <span style={{ fontSize: '0.72rem', color: '#e2e2f0', fontWeight: 600 }}>{s.section_name}</span>
+      </div>
+      <span style={{ fontSize: '0.65rem', color: '#606075', flexShrink: 0, marginLeft: '0.5rem' }}>
+        {s.diagram_url ? '🔍' : '→'}
+      </span>
+    </div>
+  );
 
   return (
     <div style={{ minHeight: '100vh', background: '#0a0a0c', paddingBottom: '5.5rem' }}>
+
       {/* Header */}
       <div style={{ background: '#13131a', borderBottom: '1px solid rgba(255,255,255,0.06)', padding: '0.9rem 1.25rem' }}>
         <p style={{ margin: 0, fontWeight: 900, fontSize: '0.9rem', color: '#fff' }}>Catálogo de Repuestos</p>
-        <p style={{ margin: 0, fontSize: '0.6rem', color: '#606075' }}>Buscar por modelo o descripción</p>
+        <p style={{ margin: 0, fontSize: '0.6rem', color: '#606075' }}>Seleccioná un modelo para explorar secciones</p>
       </div>
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: '0.4rem', padding: '0.75rem 1rem 0.5rem' }}>
         {[['model', 'Por Modelo'], ['desc', 'Por Descripción']].map(([v, l]) => (
-          <button key={v} onClick={() => { setTab(v); setResults([]); setSections([]); setError(null); }}
+          <button key={v}
+            onClick={() => { setTab(v); setResults([]); setSections([]); setError(null); closeSheet(); }}
             style={{ padding: '0.4rem 0.9rem', borderRadius: 20, border: 'none', background: tab === v ? '#ff5f33' : 'rgba(255,255,255,0.06)', color: tab === v ? '#fff' : '#606075', fontWeight: 700, fontSize: '0.68rem', cursor: 'pointer' }}>
             {l}
           </button>
@@ -92,17 +138,16 @@ export default function TgParts() {
       </div>
 
       <div style={{ padding: '0 1rem' }}>
+
         {/* Selector de modelo */}
-        <div style={{ marginBottom: '0.5rem' }}>
+        <div style={{ marginBottom: '0.65rem' }}>
           <label style={{ fontSize: '0.55rem', color: '#606075', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700, display: 'block', marginBottom: 6 }}>Modelo UM</label>
           {loadingMod ? (
             <p style={{ color: '#606075', fontSize: '0.7rem' }}>Cargando modelos...</p>
           ) : (
-            <select
-              value={model}
+            <select value={model}
               onChange={e => { setModel(e.target.value); if (e.target.value && tab === 'model') loadSections(e.target.value); }}
-              style={{ width: '100%', background: '#13131a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: '0.7rem 0.9rem', color: model ? '#fff' : '#606075', fontSize: '0.82rem', outline: 'none' }}
-            >
+              style={{ width: '100%', background: '#13131a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: '0.7rem 0.9rem', color: model ? '#fff' : '#606075', fontSize: '0.82rem', outline: 'none' }}>
               <option value="">Seleccionar modelo...</option>
               {models.map(m => (
                 <option key={m.catalog_model_code} value={m.catalog_model_code}>{m.vehicle_model}</option>
@@ -113,100 +158,137 @@ export default function TgParts() {
 
         {/* Búsqueda por descripción */}
         {tab === 'desc' && (
-          <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
-            <input
-              value={desc}
-              onChange={e => setDesc(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && searchByModel()}
+          <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.65rem' }}>
+            <input value={desc} onChange={e => setDesc(e.target.value)} onKeyDown={e => e.key === 'Enter' && searchByDesc()}
               placeholder="Ej: bujía, freno trasero..."
-              style={{ flex: 1, background: '#13131a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: '0.7rem 0.9rem', color: '#fff', fontSize: '0.82rem', outline: 'none' }}
-            />
-            <button
-              onClick={searchByModel}
-              disabled={loading || !model || !desc.trim()}
-              style={{ padding: '0.7rem 1rem', background: '#ff5f33', border: 'none', borderRadius: 10, color: '#fff', fontWeight: 800, fontSize: '0.82rem', cursor: 'pointer', opacity: loading || !model || !desc.trim() ? 0.5 : 1 }}
-            >
+              style={{ flex: 1, background: '#13131a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: '0.7rem 0.9rem', color: '#fff', fontSize: '0.82rem', outline: 'none' }} />
+            <button onClick={searchByDesc} disabled={loading || !model || !desc.trim()}
+              style={{ padding: '0.7rem 1rem', background: '#ff5f33', border: 'none', borderRadius: 10, color: '#fff', fontWeight: 800, fontSize: '0.82rem', cursor: 'pointer', opacity: loading || !model || !desc.trim() ? 0.5 : 1 }}>
               {loading ? '...' : 'Buscar'}
             </button>
           </div>
         )}
 
-        {/* Error */}
         {error && (
-          <div style={{ padding: '0.7rem 1rem', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 10, marginBottom: '0.5rem' }}>
+          <div style={{ padding: '0.65rem 0.9rem', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 10, marginBottom: '0.5rem' }}>
             <p style={{ margin: 0, fontSize: '0.72rem', color: '#ef4444', fontWeight: 700 }}>{error}</p>
           </div>
         )}
 
-        {/* Secciones (tab modelo) */}
+        {/* Lista de secciones */}
         {tab === 'model' && sections.length > 0 && (
           <>
-            <p style={{ margin: '0.5rem 0 0.4rem', fontSize: '0.55rem', color: '#606075', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700 }}>Secciones del catálogo — toca para ver diagrama</p>
+            <p style={{ margin: '0.25rem 0 0.4rem', fontSize: '0.55rem', color: '#606075', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700 }}>
+              Secciones — tocá para ver diagrama y buscar pieza
+            </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
-              {sections.map(s => (
-                <div
-                  key={s.section_id}
-                  onClick={() => openSection(s)}
-                  style={{ background: '#13131a', borderRadius: 10, padding: '0.65rem 0.9rem', border: '1px solid rgba(255,255,255,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: s.diagram_url ? 'pointer' : 'default' }}
-                >
-                  <div>
-                    <span style={{ fontSize: '0.62rem', color: '#ff8c5a', fontWeight: 800, marginRight: '0.5rem' }}>{s.section_code}</span>
-                    <span style={{ fontSize: '0.72rem', color: '#e2e2f0', fontWeight: 600 }}>{s.section_name}</span>
-                  </div>
-                  {s.diagram_url && <span style={{ fontSize: '0.6rem', color: '#606075' }}>→</span>}
-                </div>
-              ))}
+              {sections.map(s => sectionRow(s))}
             </div>
           </>
         )}
 
-        {/* Resultados de búsqueda */}
+        {/* Resultados de búsqueda por descripción */}
         {results.length > 0 && (
           <>
-            <p style={{ margin: '0.5rem 0 0.4rem', fontSize: '0.55rem', color: '#606075', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700 }}>Secciones encontradas</p>
+            <p style={{ margin: '0.25rem 0 0.4rem', fontSize: '0.55rem', color: '#606075', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700 }}>
+              Secciones encontradas — tocá para ver diagrama
+            </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
-              {results.map(r => (
-                <div key={r.section_id} style={{ background: '#13131a', borderRadius: 10, padding: '0.75rem 0.9rem', border: '1px solid rgba(255,95,51,0.15)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                    <span style={{ fontSize: '0.62rem', color: '#ff8c5a', fontWeight: 800 }}>{r.section_code}</span>
-                  </div>
-                  <p style={{ margin: 0, fontSize: '0.74rem', color: '#e2e2f0', fontWeight: 600 }}>{r.section_name}</p>
-                </div>
-              ))}
+              {results.map(s => sectionRow(s, true))}
             </div>
           </>
         )}
       </div>
 
-      {/* Bottom sheet — diagrama */}
-      {selectedSection && (
+      {/* ── Bottom sheet: diagrama + buscador de pieza ── */}
+      {sheet && (
         <div
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(4px)', zIndex: 50, display: 'flex', alignItems: 'flex-end' }}
-          onClick={() => { setSelectedSection(null); setDiagramUrl(null); }}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.82)', backdropFilter: 'blur(4px)', zIndex: 50, display: 'flex', alignItems: 'flex-end' }}
+          onClick={closeSheet}
         >
           <div
             onClick={e => e.stopPropagation()}
-            style={{ width: '100%', background: '#13131a', borderRadius: '20px 20px 0 0', padding: '1.25rem 1.25rem 2rem', maxHeight: '90vh', overflowY: 'auto' }}
+            style={{ width: '100%', background: '#13131a', borderRadius: '20px 20px 0 0', padding: '1rem 1.1rem 2.5rem', maxHeight: '92vh', overflowY: 'auto' }}
           >
+            {/* Handle */}
             <div style={{ width: 36, height: 4, background: 'rgba(255,255,255,0.12)', borderRadius: 2, margin: '0 auto 1rem' }} />
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
+
+            {/* Título */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.9rem' }}>
               <div>
-                <span style={{ fontSize: '0.6rem', color: '#ff8c5a', fontWeight: 800 }}>{selectedSection.section_code}</span>
-                <p style={{ margin: '2px 0 0', fontWeight: 800, fontSize: '0.88rem', color: '#fff' }}>{selectedSection.section_name}</p>
+                <span style={{ fontSize: '0.58rem', color: '#ff8c5a', fontWeight: 800 }}>{sheet.section_code}</span>
+                <p style={{ margin: '2px 0 0', fontWeight: 800, fontSize: '0.9rem', color: '#fff' }}>{sheet.section_name}</p>
               </div>
-              <button onClick={() => { setSelectedSection(null); setDiagramUrl(null); }} style={{ background: 'none', border: 'none', color: '#606075', cursor: 'pointer', fontSize: '1.2rem' }}>✕</button>
+              <button onClick={closeSheet} style={{ background: 'none', border: 'none', color: '#606075', cursor: 'pointer', fontSize: '1.1rem', padding: '0.2rem' }}>✕</button>
             </div>
 
-            {diagramUrl && (
+            {/* Diagrama */}
+            {loadingDiagram && (
+              <div style={{ textAlign: 'center', padding: '2rem 0', color: '#606075', fontSize: '0.72rem' }}>Cargando diagrama...</div>
+            )}
+            {diagramBlob && (
               <img
-                src={diagramUrl}
-                alt={selectedSection.section_name}
-                style={{ width: '100%', borderRadius: 10, border: '1px solid rgba(255,255,255,0.06)' }}
+                src={diagramBlob}
+                alt={sheet.section_name}
+                style={{ width: '100%', borderRadius: 10, border: '1px solid rgba(255,255,255,0.06)', marginBottom: '1rem', display: 'block' }}
               />
             )}
-            {!loadingDiagram && !diagramUrl && !selectedSection.diagram_url && (
-              <div style={{ textAlign: 'center', padding: '2rem', color: '#606075', fontSize: '0.75rem' }}>Sin diagrama disponible para esta sección</div>
+            {!loadingDiagram && !diagramBlob && !sheet.diagram_url && (
+              <div style={{ textAlign: 'center', padding: '1.5rem 0', color: '#606075', fontSize: '0.72rem', marginBottom: '1rem' }}>
+                Sin diagrama disponible para esta sección
+              </div>
             )}
+
+            {/* Buscador de pieza por código de posición */}
+            <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '1rem' }}>
+              <p style={{ margin: '0 0 0.5rem', fontSize: '0.55rem', color: '#606075', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700 }}>
+                Buscar pieza por código de posición
+              </p>
+              <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.6rem' }}>
+                <input
+                  value={posCode}
+                  onChange={e => setPosCode(e.target.value.toUpperCase())}
+                  onKeyDown={e => e.key === 'Enter' && lookupPart()}
+                  placeholder="Ej: A1, B3, C12..."
+                  style={{ flex: 1, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 10, padding: '0.65rem 0.9rem', color: '#fff', fontSize: '0.85rem', fontWeight: 700, letterSpacing: '0.05em', outline: 'none' }}
+                />
+                <button onClick={lookupPart} disabled={searchingPart || !posCode.trim()}
+                  style={{ padding: '0.65rem 1rem', background: '#ff5f33', border: 'none', borderRadius: 10, color: '#fff', fontWeight: 800, fontSize: '0.82rem', cursor: 'pointer', opacity: searchingPart || !posCode.trim() ? 0.5 : 1 }}>
+                  {searchingPart ? '...' : 'Buscar'}
+                </button>
+              </div>
+
+              {partError && (
+                <div style={{ padding: '0.6rem 0.8rem', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 10, marginBottom: '0.5rem' }}>
+                  <p style={{ margin: 0, fontSize: '0.7rem', color: '#ef4444', fontWeight: 700 }}>{partError}</p>
+                </div>
+              )}
+
+              {partResult && (
+                <div style={{ background: 'rgba(255,95,51,0.06)', border: '1px solid rgba(255,95,51,0.2)', borderRadius: 12, padding: '0.9rem 1rem' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.4rem' }}>
+                    {[
+                      ['Posición',     partResult.order_num],
+                      ['Cód. Fábrica', partResult.factory_part_number],
+                      ['Cód. UM',      partResult.um_part_number || '—'],
+                      ['Unidad',       partResult.unit || '—'],
+                    ].map(([l, v]) => (
+                      <div key={l} style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 8, padding: '0.5rem 0.65rem' }}>
+                        <p style={{ margin: 0, fontSize: '0.48rem', color: '#606075', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>{l}</p>
+                        <p style={{ margin: 0, fontSize: '0.72rem', fontWeight: 800, color: '#ff8c5a', wordBreak: 'break-all' }}>{v}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ marginTop: '0.5rem', background: 'rgba(255,255,255,0.03)', borderRadius: 8, padding: '0.5rem 0.65rem' }}>
+                    <p style={{ margin: '0 0 2px', fontSize: '0.48rem', color: '#606075', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Descripción</p>
+                    <p style={{ margin: 0, fontSize: '0.75rem', fontWeight: 700, color: '#e2e2f0' }}>{partResult.description}</p>
+                    {partResult.description_es && (
+                      <p style={{ margin: '2px 0 0', fontSize: '0.68rem', color: '#606075' }}>{partResult.description_es}</p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
