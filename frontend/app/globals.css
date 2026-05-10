@@ -424,18 +424,28 @@ table th, table td { text-align: center !important; }
 
   /* ── Kanban ── */
   .kb-board {
-    grid-template-columns: repeat(9, minmax(140px, 1fr)) !important;
+    grid-template-columns: repeat(9, minmax(150px, 1fr)) !important;
     overflow-x: auto !important;
+    overflow-y: hidden !important;
     height: calc(100vh - 120px) !important;
   }
 
-  /* Cards del kanban más compactas */
-  .kb-card {
-    padding: 0.6rem !important;
+  .kcol-head {
+    padding: 0.45rem 0.5rem !important;
   }
 
-  .kb-card-plate {
-    font-size: 0.75rem !important;
+  .kcol-name {
+    font-size: 0.55rem !important;
+    letter-spacing: 0.04em !important;
+  }
+
+  /* Cards del kanban más compactas */
+  .kcard {
+    padding: 0.5rem 0.55rem !important;
+  }
+
+  .kcard-plate {
+    font-size: 0.78rem !important;
   }
 
   /* ── Filtros / toolbars ── */
