@@ -83,10 +83,12 @@ export default function TgReception() {
 
   // ── Flujo principal ────────────────────────────────────────────────────────
 
-  const lookupPlate = useCallback(async (rawPlate) => {
+  // docData: datos ya extraídos de tarjeta (pasados directo para evitar el bug async de estado)
+  const lookupPlate = useCallback(async (rawPlate, docData = null) => {
     const plate = rawPlate.trim().toUpperCase().replace(/\s/g, '');
     if (!plate) return;
-    pushUser(plate);
+    // Si viene de cámara, el mensaje ya fue añadido por onDocumentPhoto — no duplicar
+    if (!docData) pushUser(plate);
     setBusy(true);
     const tid = showTyping();
     try {
@@ -95,9 +97,21 @@ export default function TgReception() {
       if (res.status === 401) { router.replace('/tg'); return; }
       if (res.status === 404) {
         setIsNew(true);
-        // Si hay datos OCR del documento, pre-llenar
-        if (ocrDoc) setNewVeh({ brand: ocrDoc.marca || 'UM', model: ocrDoc.linea || '', year: ocrDoc.modelo || '', color: ocrDoc.color || '', vin: ocrDoc.vin || '' });
-        pushBot(`La placa *${plate}* no está registrada. Completá los datos para registrarla:`);
+        const ocr = docData;
+        if (ocr) {
+          // Pre-llenar TODOS los campos del vehículo con los datos de la tarjeta
+          setNewVeh({
+            brand: ocr.marca  || 'UM',
+            model: ocr.linea  || '',
+            year:  ocr.modelo || '',
+            color: ocr.color  || '',
+            vin:   ocr.vin    || '',
+          });
+          const det = [ocr.marca, ocr.linea, ocr.modelo, ocr.color].filter(Boolean).join(' · ');
+          pushBot(`Placa *${plate}* no registrada.\nExtrajé de la tarjeta: *${det}*\nRevisá los datos y tocá *Registrar y continuar*:`);
+        } else {
+          pushBot(`La placa *${plate}* no está registrada. Completá los datos para registrarla:`);
+        }
         setFormData(f => ({ ...f, plate }));
         setVehicle({ plate });
         setStep(STEP.NEW_VEHICLE);
@@ -123,7 +137,7 @@ export default function TgReception() {
     } finally {
       setBusy(false);
     }
-  }, [ocrDoc, pushBot, pushUser, showTyping, removeTyping, router]);
+  }, [pushBot, pushUser, showTyping, removeTyping, router]);
 
   const registerNewVehicle = useCallback(async () => {
     if (!newVeh.model.trim()) { pushBot('Necesito al menos el modelo para registrarla.'); return; }
@@ -317,11 +331,19 @@ export default function TgReception() {
 
   const onDocumentPhoto = useCallback((data) => {
     setOcrDoc(data);
-    if (data.placa) {
-      setInput(data.placa);
-      if (step === STEP.PLATE) lookupPlate(data.placa);
+    if (!data.placa) {
+      pushBot('No pude leer la placa del documento. Escribila manualmente.');
+      return;
     }
-  }, [step, lookupPlate]);
+    // Mostrar resumen de TODO lo extraído como mensaje del usuario
+    const lines = [`📷 Tarjeta: ${data.placa}`];
+    if (data.marca || data.linea) lines.push(`${[data.marca, data.linea].filter(Boolean).join(' ')}`);
+    if (data.modelo) lines.push(`Año: ${data.modelo}`);
+    if (data.color)  lines.push(`Color: ${data.color}`);
+    if (data.vin)    lines.push(`VIN: ${data.vin}`);
+    setMsgs(m => [...m, mkUser(lines.join('\n'))]);
+    if (step === STEP.PLATE) lookupPlate(data.placa, data);
+  }, [step, lookupPlate, pushBot]);
 
   const onOdometerPhoto = useCallback((data) => {
     const km  = data.kilometraje?.replace(/[^\d.]/g, '') || '';
