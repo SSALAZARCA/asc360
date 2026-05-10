@@ -29,14 +29,15 @@ export default function TgVehicle() {
     setUser(JSON.parse(stored));
   }, []);
 
-  const search = async () => {
-    if (!plate.trim()) return;
+  const search = async (plateOverride) => {
+    const p = (plateOverride ?? plate).trim().toUpperCase();
+    if (!p) return;
     setLoading(true);
     setError(null);
     setVehicle(null);
     setHistory([]);
     try {
-      const res = await authFetch(`/orders/mini-app/vehicle/${plate.trim().toUpperCase()}`);
+      const res = await authFetch(`/orders/mini-app/vehicle/${p}`);
       if (res.status === 401) { router.replace('/tg'); return; }
       if (res.status === 404) { setError('Vehículo no encontrado'); return; }
       if (!res.ok) {
@@ -66,41 +67,51 @@ export default function TgVehicle() {
       </div>
 
       {/* Buscador */}
-      <div style={{ padding: '1rem 1rem 0.5rem', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-        <input
-          value={plate}
-          onChange={e => setPlate(e.target.value.toUpperCase())}
-          onKeyDown={e => e.key === 'Enter' && search()}
-          placeholder="Ej: ABC123"
-          maxLength={6}
-          style={{ flex: 1, background: '#13131a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: '0.7rem 1rem', color: '#fff', fontSize: '1rem', fontWeight: 800, letterSpacing: '0.08em', outline: 'none' }}
-        />
-        <VoiceInput
-          onTranscript={text => {
-            const p = text.trim().toUpperCase().replace(/\s/g, '').slice(0, 6);
-            setPlate(p);
-          }}
-          onError={msg => setError(msg)}
-          disabled={loading}
-          size={40}
-        />
-        <CameraInput
-          mode="document"
-          onResult={data => {
-            if (data.placa) { setPlate(data.placa); setTimeout(search, 50); }
-            else setError('No se pudo leer la placa del documento');
-          }}
-          onError={msg => setError(msg)}
-          disabled={loading}
-          size={40}
-        />
-        <button
-          onClick={search}
-          disabled={loading || !plate.trim()}
-          style={{ padding: '0.7rem 1.1rem', background: '#ff5f33', border: 'none', borderRadius: 10, color: '#fff', fontWeight: 800, fontSize: '0.85rem', cursor: 'pointer', opacity: loading || !plate.trim() ? 0.5 : 1 }}
-        >
-          {loading ? '...' : 'Buscar'}
-        </button>
+      <div style={{ padding: '1rem 1rem 0.5rem' }}>
+        {/* Fila principal: input + buscar */}
+        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.45rem' }}>
+          <input
+            value={plate}
+            onChange={e => setPlate(e.target.value.toUpperCase())}
+            onKeyDown={e => e.key === 'Enter' && search()}
+            placeholder="Ej: ABC123"
+            maxLength={6}
+            style={{ flex: 1, background: '#13131a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: '0.7rem 1rem', color: '#fff', fontSize: '1rem', fontWeight: 800, letterSpacing: '0.08em', outline: 'none' }}
+          />
+          <button
+            onClick={() => search()}
+            disabled={loading || !plate.trim()}
+            style={{ padding: '0.7rem 1.1rem', background: '#ff5f33', border: 'none', borderRadius: 10, color: '#fff', fontWeight: 800, fontSize: '0.85rem', cursor: 'pointer', opacity: loading || !plate.trim() ? 0.5 : 1 }}
+          >
+            {loading ? '...' : 'Buscar'}
+          </button>
+        </div>
+        {/* Fila secundaria: voz + cámara */}
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <VoiceInput
+            onTranscript={text => {
+              const p = text.trim().toUpperCase().replace(/\s/g, '').slice(0, 6);
+              setPlate(p);
+              search(p);
+            }}
+            onError={msg => setError(msg)}
+            disabled={loading}
+            size={36}
+          />
+          <span style={{ fontSize: '0.62rem', color: '#606075', alignSelf: 'center' }}>Dictá la placa</span>
+          <div style={{ flex: 1 }} />
+          <CameraInput
+            mode="document"
+            onResult={data => {
+              if (data.placa) { setPlate(data.placa); search(data.placa); }
+              else setError('No se pudo leer la placa del documento');
+            }}
+            onError={msg => setError(msg)}
+            disabled={loading}
+            size={36}
+          />
+          <span style={{ fontSize: '0.62rem', color: '#606075', alignSelf: 'center' }}>Foto tarjeta</span>
+        </div>
       </div>
 
       {/* Error */}

@@ -52,13 +52,14 @@ export default function TgParts() {
     if (res.ok) setSections(await res.json());
   };
 
-  const searchByDesc = async () => {
-    if (!model || !desc.trim()) return;
+  const searchByDesc = async (descOverride) => {
+    const d = descOverride ?? desc;
+    if (!model || !d.trim()) return;
     setLoading(true); setError(null); setResults([]); setSections([]);
     try {
       const res = await authFetch('/parts/search-by-model', {
         method: 'POST',
-        body: JSON.stringify({ model_code: model, description: desc }),
+        body: JSON.stringify({ model_code: model, description: d }),
       });
       if (!res.ok) { setError('Sin resultados'); return; }
       setResults(await res.json());
@@ -165,7 +166,7 @@ export default function TgParts() {
               placeholder="Ej: bujía, freno trasero..."
               style={{ flex: 1, background: '#13131a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: '0.7rem 0.9rem', color: '#fff', fontSize: '0.82rem', outline: 'none' }} />
             <VoiceInput
-              onTranscript={text => setDesc(text)}
+              onTranscript={text => { setDesc(text); searchByDesc(text); }}
               onError={msg => setError(msg)}
               disabled={loading}
               size={38}
@@ -173,10 +174,7 @@ export default function TgParts() {
             <CameraInput
               mode="part"
               onResult={data => {
-                if (data.description) {
-                  setDesc(data.description);
-                  if (model) setTimeout(searchByDesc, 50);
-                }
+                if (data.description) { setDesc(data.description); searchByDesc(data.description); }
               }}
               onError={msg => setError(msg)}
               disabled={loading}

@@ -46,15 +46,17 @@ export default function TgOtp() {
     setStep('enter');
   };
 
-  const searchByPlate = async () => {
-    if (!plate.trim()) return;
+  const searchByPlate = async (plateOverride) => {
+    const p = (plateOverride ?? plate).trim().toUpperCase();
+    if (!p) return;
     setError(null);
     try {
-      const res = await authFetch(`/orders/pending-otp/plate/${plate.trim().toUpperCase()}`);
+      const res = await authFetch(`/orders/pending-otp/plate/${p}`);
       if (res.status === 404) { setError('Sin orden pendiente de firma para esa placa'); return; }
       if (!res.ok) { setError('Error al buscar'); return; }
       const data = await res.json();
       setOrderId(data.order_id);
+      setPlate(p);
       setStep('enter');
     } catch (e) {
       setError(`Error: ${e.message}`);
@@ -118,6 +120,7 @@ export default function TgOtp() {
                 onTranscript={text => {
                   const p = text.trim().toUpperCase().replace(/\s/g, '').slice(0, 6);
                   setPlate(p);
+                  searchByPlate(p);
                 }}
                 onError={msg => setError(msg)}
                 size={38}
