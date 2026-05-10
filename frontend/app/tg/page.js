@@ -35,7 +35,7 @@ export default function TgEntry() {
       });
 
       if (!tg) {
-        setError('window.Telegram no está disponible. Abrí desde Telegram.');
+        window.location.replace('https://t.me/SoniaUMbot/asc360');
         return;
       }
 
