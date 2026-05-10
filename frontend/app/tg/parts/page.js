@@ -3,6 +3,8 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { authFetch } from '../../../lib/authFetch';
 import TgNav from '../../../components/tg/TgNav';
+import VoiceInput from '../../../components/tg/VoiceInput';
+import CameraInput from '../../../components/tg/CameraInput';
 
 export default function TgParts() {
   const router = useRouter();
@@ -158,10 +160,28 @@ export default function TgParts() {
 
         {/* Búsqueda por descripción */}
         {tab === 'desc' && (
-          <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.65rem' }}>
+          <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.65rem', alignItems: 'center' }}>
             <input value={desc} onChange={e => setDesc(e.target.value)} onKeyDown={e => e.key === 'Enter' && searchByDesc()}
               placeholder="Ej: bujía, freno trasero..."
               style={{ flex: 1, background: '#13131a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: '0.7rem 0.9rem', color: '#fff', fontSize: '0.82rem', outline: 'none' }} />
+            <VoiceInput
+              onTranscript={text => setDesc(text)}
+              onError={msg => setError(msg)}
+              disabled={loading}
+              size={38}
+            />
+            <CameraInput
+              mode="part"
+              onResult={data => {
+                if (data.description) {
+                  setDesc(data.description);
+                  if (model) setTimeout(searchByDesc, 50);
+                }
+              }}
+              onError={msg => setError(msg)}
+              disabled={loading}
+              size={38}
+            />
             <button onClick={searchByDesc} disabled={loading || !model || !desc.trim()}
               style={{ padding: '0.7rem 1rem', background: '#ff5f33', border: 'none', borderRadius: 10, color: '#fff', fontWeight: 800, fontSize: '0.82rem', cursor: 'pointer', opacity: loading || !model || !desc.trim() ? 0.5 : 1 }}>
               {loading ? '...' : 'Buscar'}

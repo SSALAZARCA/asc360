@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { authFetch } from '../../../lib/authFetch';
 import TgNav from '../../../components/tg/TgNav';
+import VoiceInput from '../../../components/tg/VoiceInput';
 
 export default function TgOtp() {
   const router = useRouter();
@@ -104,7 +105,7 @@ export default function TgOtp() {
         {step === 'list' && (
           <>
             {/* Búsqueda manual */}
-            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', alignItems: 'center' }}>
               <input
                 value={plate}
                 onChange={e => setPlate(e.target.value.toUpperCase())}
@@ -112,6 +113,14 @@ export default function TgOtp() {
                 placeholder="Buscar por placa..."
                 maxLength={6}
                 style={{ flex: 1, background: '#13131a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: '0.65rem 0.9rem', color: '#fff', fontSize: '0.85rem', fontWeight: 700, letterSpacing: '0.06em', outline: 'none' }}
+              />
+              <VoiceInput
+                onTranscript={text => {
+                  const p = text.trim().toUpperCase().replace(/\s/g, '').slice(0, 6);
+                  setPlate(p);
+                }}
+                onError={msg => setError(msg)}
+                size={38}
               />
               <button onClick={searchByPlate} style={{ padding: '0.65rem 0.9rem', background: '#ff5f33', border: 'none', borderRadius: 10, color: '#fff', fontWeight: 800, fontSize: '0.82rem', cursor: 'pointer' }}>
                 Buscar

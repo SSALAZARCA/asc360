@@ -3,6 +3,8 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { authFetch } from '../../../lib/authFetch';
 import TgNav from '../../../components/tg/TgNav';
+import VoiceInput from '../../../components/tg/VoiceInput';
+import CameraInput from '../../../components/tg/CameraInput';
 
 const STATES = {
   received: 'Recibido', scheduled: 'Agendado', in_progress: 'En Proceso',
@@ -64,7 +66,7 @@ export default function TgVehicle() {
       </div>
 
       {/* Buscador */}
-      <div style={{ padding: '1rem 1rem 0.5rem', display: 'flex', gap: '0.5rem' }}>
+      <div style={{ padding: '1rem 1rem 0.5rem', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
         <input
           value={plate}
           onChange={e => setPlate(e.target.value.toUpperCase())}
@@ -72,6 +74,25 @@ export default function TgVehicle() {
           placeholder="Ej: ABC123"
           maxLength={6}
           style={{ flex: 1, background: '#13131a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: '0.7rem 1rem', color: '#fff', fontSize: '1rem', fontWeight: 800, letterSpacing: '0.08em', outline: 'none' }}
+        />
+        <VoiceInput
+          onTranscript={text => {
+            const p = text.trim().toUpperCase().replace(/\s/g, '').slice(0, 6);
+            setPlate(p);
+          }}
+          onError={msg => setError(msg)}
+          disabled={loading}
+          size={40}
+        />
+        <CameraInput
+          mode="document"
+          onResult={data => {
+            if (data.placa) { setPlate(data.placa); setTimeout(search, 50); }
+            else setError('No se pudo leer la placa del documento');
+          }}
+          onError={msg => setError(msg)}
+          disabled={loading}
+          size={40}
         />
         <button
           onClick={search}

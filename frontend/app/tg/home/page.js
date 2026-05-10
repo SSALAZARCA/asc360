@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { authFetch } from '../../../lib/authFetch';
 import TgNav from '../../../components/tg/TgNav';
+import VoiceInput from '../../../components/tg/VoiceInput';
 
 const STATES = {
   received:          { name: 'Recibido',         color: '#3b82f6' },
@@ -38,6 +39,8 @@ export default function TgHome() {
   const [filter, setFilter]   = useState('active');
   const [refreshing, setRefreshing] = useState(false);
   const [apiError, setApiError] = useState(null);
+  const [voiceIntent, setVoiceIntent] = useState(null);   // { placa, estado, label } pendiente de confirmar
+  const [voiceError, setVoiceError]   = useState(null);
 
   useEffect(() => {
     const stored = sessionStorage.getItem('um_user');
@@ -84,6 +87,37 @@ export default function TgHome() {
     }
   };
 
+  const handleVoiceCommand = useCallback(async (text) => {
+    setVoiceError(null);
+    setVoiceIntent(null);
+    try {
+      const res = await authFetch('/mini-app/ai/extract-intent', {
+        method: 'POST',
+        body: JSON.stringify({ text, role: user?.role || 'technician' }),
+      });
+      if (!res.ok) { setVoiceError('No pude entender el comando'); return; }
+      const data = await res.json();
+      if (data.intent === 'CHANGE_STATUS' && data.confidence >= 0.6 && data.entities?.placa && data.entities?.estado) {
+        const stateLabel = STATES[data.entities.estado]?.name || data.entities.estado;
+        setVoiceIntent({ placa: data.entities.placa, estado: data.entities.estado, label: stateLabel });
+      } else if (data.intent === 'CHANGE_STATUS') {
+        setVoiceError('Entendí que querés cambiar un estado, pero necesito la placa y el nuevo estado. Ej: "La NOI82G ya está lista"');
+      } else {
+        setVoiceError(`No entendí "${text}" como un comando de cambio de estado.`);
+      }
+    } catch (e) {
+      setVoiceError(`Error al procesar el comando: ${e.message}`);
+    }
+  }, [user]);
+
+  const confirmVoiceIntent = useCallback(async () => {
+    if (!voiceIntent) return;
+    const order = orders.find(o => o.placa === voiceIntent.placa);
+    if (!order) { setVoiceError(`No encontré una orden activa para la placa ${voiceIntent.placa}`); setVoiceIntent(null); return; }
+    await updateStatus(order.order_id, voiceIntent.estado);
+    setVoiceIntent(null);
+  }, [voiceIntent, orders, updateStatus]);
+
   const displayed = filter === 'active'
     ? orders.filter(o => !INACTIVE.includes(o.estado))
     : orders;
@@ -106,12 +140,39 @@ export default function TgHome() {
           <p style={{ margin: 0, fontWeight: 800, fontSize: '0.85rem', color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user?.name}</p>
           <p style={{ margin: 0, fontSize: '0.6rem', color: '#606075', textTransform: 'uppercase', letterSpacing: '0.07em' }}>{user?.role?.replace('_', ' ')}</p>
         </div>
+        <VoiceInput
+          onTranscript={handleVoiceCommand}
+          onError={msg => setVoiceError(msg)}
+          size={36}
+        />
         <button
           onClick={() => loadOrders(true)}
           disabled={refreshing}
           style={{ background: 'transparent', border: 'none', color: refreshing ? '#3f3f55' : '#606075', cursor: 'pointer', fontSize: '1.2rem', padding: '0.4rem', lineHeight: 1, transition: 'color 0.15s' }}
         >↻</button>
       </div>
+
+      {/* Banner de confirmación de comando de voz */}
+      {voiceIntent && (
+        <div style={{ margin: '0.5rem 0.75rem 0', padding: '0.85rem 1rem', background: 'rgba(255,95,51,0.08)', border: '1px solid rgba(255,95,51,0.3)', borderRadius: 12 }}>
+          <p style={{ margin: '0 0 0.6rem', fontSize: '0.75rem', color: '#ff8c5a', fontWeight: 700 }}>
+            ¿Cambiar <strong>{voiceIntent.placa}</strong> a <strong>{voiceIntent.label}</strong>?
+          </p>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button onClick={confirmVoiceIntent} style={{ flex: 1, padding: '0.55rem', background: '#ff5f33', border: 'none', borderRadius: 8, color: '#fff', fontWeight: 800, fontSize: '0.78rem', cursor: 'pointer' }}>
+              Confirmar
+            </button>
+            <button onClick={() => setVoiceIntent(null)} style={{ flex: 1, padding: '0.55rem', background: 'rgba(255,255,255,0.06)', border: 'none', borderRadius: 8, color: '#9ca3af', fontWeight: 700, fontSize: '0.78rem', cursor: 'pointer' }}>
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
+      {voiceError && (
+        <div style={{ margin: '0.5rem 0.75rem 0', padding: '0.6rem 0.9rem', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 10 }}>
+          <p style={{ margin: 0, fontSize: '0.68rem', color: '#ef4444', fontWeight: 600 }}>{voiceError}</p>
+        </div>
+      )}
 
       {/* Semáforo */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem', padding: '1rem 1rem 0.5rem' }}>
