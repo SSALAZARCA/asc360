@@ -2,15 +2,12 @@
  * authFetch.js
  * Helper centralizado para hacer peticiones a la API con el JWT inyectado
  * automáticamente desde localStorage.
- * 
+ *
  * Uso: import { authFetch } from '@/lib/authFetch'
  *      const res = await authFetch('/orders/analytics/kpis')
  */
 
-const API = () => {
-  const url = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
-  return url.replace(/^http:\/\/(?!localhost)/, 'https://');
-};
+import { getApiUrl } from './api';
 
 export async function authFetch(path, options = {}) {
   const token = typeof window !== 'undefined' ? sessionStorage.getItem('um_token') : null;
@@ -25,7 +22,7 @@ export async function authFetch(path, options = {}) {
     ...(options.headers || {}),
   };
 
-  const url = path.startsWith('http') ? path : `${API()}${path}`;
+  const url = path.startsWith('http') ? path : `${getApiUrl()}${path}`;
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 30000);

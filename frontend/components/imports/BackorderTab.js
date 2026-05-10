@@ -1,11 +1,8 @@
 'use client';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { authFetch } from '../../lib/authFetch';
+import { getApiUrl } from '../../lib/api';
 import { RefreshCw, Search, CheckCircle, Clock, AlertTriangle, Tag, FileUp, X, RotateCcw, FileSpreadsheet } from 'lucide-react';
-
-function API() {
-  return (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1').replace('http://', 'https://');
-}
 
 function daysSince(dateStr) {
   if (!dateStr) return null;
@@ -33,7 +30,7 @@ function EditableExpectedPI({ boId, current, onSaved }) {
     setEditing(false);
     if (value === (current || '')) return;
     try {
-      await authFetch(`${API()}/imports/backorders/${boId}`, {
+      await authFetch(`${getApiUrl()}/imports/backorders/${boId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ expected_in_pi: value || null }),
@@ -244,7 +241,7 @@ export default function BackorderTab({ userRole }) {
       const params = new URLSearchParams();
       if (!showResolved) params.append('resolved', 'false');
       if (filterPi) params.append('origin_pi', filterPi);
-      const res = await authFetch(`${API()}/imports/backorders/export?${params}`);
+      const res = await authFetch(`${getApiUrl()}/imports/backorders/export?${params}`);
       if (!res.ok) return;
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
@@ -275,7 +272,7 @@ export default function BackorderTab({ userRole }) {
     try {
       const form = new FormData();
       form.append('file', file);
-      const res = await authFetch(`${API()}/imports/backorders/bulk-resolve-preview`, { method: 'POST', body: form });
+      const res = await authFetch(`${getApiUrl()}/imports/backorders/bulk-resolve-preview`, { method: 'POST', body: form });
       if (!res.ok) {
         const err = await res.json();
         alert(err.detail || 'Error al procesar el Excel');
@@ -294,7 +291,7 @@ export default function BackorderTab({ userRole }) {
     try {
       const form = new FormData();
       form.append('file', pendingFile);
-      const res = await authFetch(`${API()}/imports/backorders/bulk-resolve-apply`, { method: 'POST', body: form });
+      const res = await authFetch(`${getApiUrl()}/imports/backorders/bulk-resolve-apply`, { method: 'POST', body: form });
       if (!res.ok) {
         const err = await res.json();
         alert(err.detail || 'Error al aplicar');
@@ -310,7 +307,7 @@ export default function BackorderTab({ userRole }) {
   const handleRollback = async (piNuevo) => {
     setRollbackLoading(true);
     try {
-      const res = await authFetch(`${API()}/imports/backorders/bulk-resolve-rollback`, {
+      const res = await authFetch(`${getApiUrl()}/imports/backorders/bulk-resolve-rollback`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pi_nuevo: piNuevo }),
@@ -331,7 +328,7 @@ export default function BackorderTab({ userRole }) {
     if (!confirm('Esto re-calculará todos los backorders de inspección física. ¿Continuar?')) return;
     setRepairing(true);
     try {
-      const res = await authFetch(`${API()}/imports/backorders/repair-physical-inspection`, { method: 'POST' });
+      const res = await authFetch(`${getApiUrl()}/imports/backorders/repair-physical-inspection`, { method: 'POST' });
       const data = await res.json();
       alert(`Reparación completa: ${data.fixed} ítems procesados${data.errors?.length ? `, ${data.errors.length} errores` : ''}`);
       fetchBackorders();
@@ -345,7 +342,7 @@ export default function BackorderTab({ userRole }) {
       const params = new URLSearchParams();
       if (!showResolved) params.append('resolved', 'false');
       if (filterPi) params.append('origin_pi', filterPi);
-      const res = await authFetch(`${API()}/imports/backorders?${params}`);
+      const res = await authFetch(`${getApiUrl()}/imports/backorders?${params}`);
       const data = await res.json();
       setBackorders(Array.isArray(data) ? data : []);
       setSelected(new Set());
@@ -362,7 +359,7 @@ export default function BackorderTab({ userRole }) {
     const label = bo.source === 'physical_inspection' ? 'cobrado (faltante físico)' : 'no cobrado (no enviado)';
     if (!confirm(`¿Marcar como resuelto el backorder ${label} de ${bo.part_number}?`)) return;
     try {
-      await authFetch(`${API()}/imports/backorders/${bo.id}`, {
+      await authFetch(`${getApiUrl()}/imports/backorders/${bo.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ resolved: true }),
@@ -429,7 +426,7 @@ export default function BackorderTab({ userRole }) {
   const handleBulkAssignPI = async (piValue) => {
     setBulkLoading(true);
     try {
-      await authFetch(`${API()}/imports/backorders/bulk-expected-pi`, {
+      await authFetch(`${getApiUrl()}/imports/backorders/bulk-expected-pi`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ids: [...selected], expected_in_pi: piValue }),

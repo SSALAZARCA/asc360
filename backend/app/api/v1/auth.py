@@ -82,7 +82,7 @@ async def login_for_access_token(
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Credenciales incorrectas (Usuario no encontrado)",
+            detail="Credenciales incorrectas",
             headers={"WWW-Authenticate": "Bearer"},
         )
     

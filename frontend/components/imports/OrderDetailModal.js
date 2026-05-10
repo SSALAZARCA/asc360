@@ -1,15 +1,12 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
 import { authFetch } from '../../lib/authFetch';
+import { getApiUrl } from '../../lib/api';
 import StatusBadge from './StatusBadge';
 import {
   X, Upload, Trash2, FileText, FileSpreadsheet, Image,
   File, Download, ChevronRight, Check, Clock, Package, AlertCircle,
 } from 'lucide-react';
-
-function API() {
-  return (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1').replace('http://', 'https://');
-}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -163,7 +160,7 @@ function DocsTab({ orderId, userRole }) {
   const fetchAttachments = async () => {
     setLoading(true);
     try {
-      const res = await authFetch(`${API()}/imports/shipment-orders/${orderId}/attachments`);
+      const res = await authFetch(`${getApiUrl()}/imports/shipment-orders/${orderId}/attachments`);
       const data = await res.json();
       setAttachments(Array.isArray(data) ? data : []);
     } catch {
@@ -184,7 +181,7 @@ function DocsTab({ orderId, userRole }) {
       const formData = new FormData();
       formData.append('file', file);
       const res = await authFetch(
-        `${API()}/imports/shipment-orders/${orderId}/attachments?file_type=${selectedType}`,
+        `${getApiUrl()}/imports/shipment-orders/${orderId}/attachments?file_type=${selectedType}`,
         { method: 'POST', body: formData, headers: {} }
       );
       if (!res.ok) {
@@ -203,7 +200,7 @@ function DocsTab({ orderId, userRole }) {
   const handleDelete = async (id) => {
     if (!confirm('¿Eliminar este adjunto?')) return;
     try {
-      await authFetch(`${API()}/imports/attachments/${id}`, { method: 'DELETE' });
+      await authFetch(`${getApiUrl()}/imports/attachments/${id}`, { method: 'DELETE' });
       setAttachments(prev => prev.filter(a => a.id !== id));
     } catch {
       alert('Error al eliminar adjunto');

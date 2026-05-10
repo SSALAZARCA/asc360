@@ -1,11 +1,8 @@
 'use client';
 import { useState, useRef } from 'react';
 import { authFetch } from '../../lib/authFetch';
+import { getApiUrl } from '../../lib/api';
 import { Upload, CheckCircle, XCircle, MinusCircle, AlertTriangle, RefreshCw } from 'lucide-react';
-
-function API() {
-  return (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1').replace('http://', 'https://');
-}
 
 function Section({ icon: Icon, color, title, count, children }) {
   const [open, setOpen] = useState(true);
@@ -68,7 +65,7 @@ export default function PhysicalInventoryUploadModal({ lotId, onClose, onApplied
     try {
       const form = new FormData();
       form.append('file', file);
-      const res = await authFetch(`${API()}/imports/lots/${lotId}/physical-inspection-preview`, {
+      const res = await authFetch(`${getApiUrl()}/imports/lots/${lotId}/physical-inspection-preview`, {
         method: 'POST',
         body: form,
       });
@@ -93,7 +90,7 @@ export default function PhysicalInventoryUploadModal({ lotId, onClose, onApplied
         ...preview.matched.map(m => ({ item_id: m.item_id, qty_physical: m.qty_physical })),
         ...preview.zeroed.map(z => ({ item_id: z.item_id, qty_physical: 0 })),
       ];
-      const res = await authFetch(`${API()}/imports/lots/${lotId}/physical-inspection-apply`, {
+      const res = await authFetch(`${getApiUrl()}/imports/lots/${lotId}/physical-inspection-apply`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ items }),

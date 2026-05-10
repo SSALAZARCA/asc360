@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import SoftwayHelperModal from '../../components/SoftwayHelperModal';
 import { authFetch } from '../../lib/authFetch';
+import { getApiUrl } from '../../lib/api';
 
 // ─── Estados reales del modelo ServiceStatus ───────────────────────────────
 const COLUMNS = [
@@ -40,7 +41,6 @@ const TYPE_CFG = {
 };
 
 const colById = Object.fromEntries(COLUMNS.map(c => [c.id, c]));
-const API     = () => (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1').replace('http://', 'https://');
 
 async function downloadPdf(apiUrl, filename) {
   const token = typeof window !== 'undefined' ? sessionStorage.getItem('um_token') : null;
@@ -343,7 +343,7 @@ function OrderModal({ order, onClose, onOrderAccepted }) {
     if (!order.order_id) return;
     (async () => {
       try {
-        const res = await authFetch(`${API()}/orders/${order.order_id}/detail`);
+        const res = await authFetch(`${getApiUrl()}/orders/${order.order_id}/detail`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         setDetail(await res.json());
       } catch (e) {
@@ -492,14 +492,14 @@ function OrderModal({ order, onClose, onOrderAccepted }) {
 
                 {detail.recepcion.reception_pdf_url && (
                   <button
-                    onClick={() => downloadPdf(`${API()}/orders/${order.order_id}/pdf`, `Acta_${order.order_id.slice(0,8)}.pdf`)}
+                    onClick={() => downloadPdf(`${getApiUrl()}/orders/${order.order_id}/pdf`, `Acta_${order.order_id.slice(0,8)}.pdf`)}
                     className="mpdf-btn"
                   >
                     Ver Acta de Recepcion PDF
                   </button>
                 )}
                 <button
-                  onClick={() => downloadPdf(`${API()}/orders/${order.order_id}/exit-pdf`, `OrdenSalida_${order.order_id.slice(0,8)}.pdf`)}
+                  onClick={() => downloadPdf(`${getApiUrl()}/orders/${order.order_id}/exit-pdf`, `OrdenSalida_${order.order_id.slice(0,8)}.pdf`)}
                   className="mpdf-btn"
                   style={{ background: 'rgba(16,185,129,0.12)', borderColor: 'rgba(16,185,129,0.35)', color: '#10b981', marginTop: 6 }}
                 >

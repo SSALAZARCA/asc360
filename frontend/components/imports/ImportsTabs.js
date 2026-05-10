@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { authFetch } from '../../lib/authFetch';
+import { getApiUrl } from '../../lib/api';
 import ShipmentTable from './ShipmentTable';
 import ExcelUploadModal from './ExcelUploadModal';
 import OrderDetailModal from './OrderDetailModal';
@@ -19,10 +20,6 @@ const TABS = [
   { id: 'backorders', label: 'Backorders' },
   { id: 'dashboard', label: 'Dashboard' },
 ];
-
-function API() {
-  return (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1').replace('http://', 'https://');
-}
 
 export default function ImportsTabs({ userRole }) {
   const [activeTab, setActiveTab] = useState('orders');
@@ -59,7 +56,7 @@ export default function ImportsTabs({ userRole }) {
       if (filterStatus) params.append('computed_status', filterStatus);
       if (search) params.append('search', search);
 
-      const res = await authFetch(`${API()}/imports/shipment-orders?${params}`);
+      const res = await authFetch(`${getApiUrl()}/imports/shipment-orders?${params}`);
       const data = await res.json();
       setOrders(data.items ?? []);
       setTotal(data.total ?? 0);
@@ -76,7 +73,7 @@ export default function ImportsTabs({ userRole }) {
 
   const handleDelete = async (id) => {
     try {
-      await authFetch(`${API()}/imports/shipment-orders/${id}`, { method: 'DELETE' });
+      await authFetch(`${getApiUrl()}/imports/shipment-orders/${id}`, { method: 'DELETE' });
       fetchOrders();
     } catch (e) {
       console.error('Error eliminando pedido:', e);
@@ -116,7 +113,7 @@ export default function ImportsTabs({ userRole }) {
       if (filterSP !== '') params.append('is_spare_part', filterSP);
       if (filterStatus) params.append('computed_status', filterStatus);
       if (search) params.append('search', search);
-      const res = await authFetch(`${API()}/imports/shipment-orders/export?${params}`);
+      const res = await authFetch(`${getApiUrl()}/imports/shipment-orders/export?${params}`);
       if (!res.ok) return;
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
@@ -135,7 +132,7 @@ export default function ImportsTabs({ userRole }) {
   const handleRowClick = async (order) => {
     // Carga el detalle completo (incluye moto_units) antes de abrir el modal
     try {
-      const res = await authFetch(`${API()}/imports/shipment-orders/${order.id}`);
+      const res = await authFetch(`${getApiUrl()}/imports/shipment-orders/${order.id}`);
       const detail = await res.json();
       setDetailOrder(detail);
     } catch {
@@ -371,14 +368,14 @@ export default function ImportsTabs({ userRole }) {
         isOpen={showShipmentUpload}
         onClose={handleShipmentUploadClose}
         onSuccess={handleUploadSuccess}
-        uploadUrl={`${API()}/imports/shipment-excel`}
+        uploadUrl={`${getApiUrl()}/imports/shipment-excel`}
         title="Importar Shipment Status"
       />
       <ExcelUploadModal
         isOpen={showShippingDocUpload}
         onClose={handleShippingDocUploadClose}
         onSuccess={handleUploadSuccess}
-        uploadUrl={`${API()}/imports/shipping-doc-excel`}
+        uploadUrl={`${getApiUrl()}/imports/shipping-doc-excel`}
         title="Importar Packing List de Motos (VINs)"
       />
     </div>

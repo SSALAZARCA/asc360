@@ -2,8 +2,7 @@
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
-
-const API_URL = () => (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1').replace(/^http:\/\/(?!localhost)/, 'https://');
+import { getApiUrl } from '../lib/api';
 import {
   BarChart4,
   Wrench,
@@ -52,7 +51,7 @@ export default function Sidebar({ collapsed = false, onToggle }) {
     window.addEventListener('storage', checkAuth);
 
     // Logo global de la marca — sin asociación a taller
-    fetch(`${API_URL()}/settings/logo`)
+    fetch(`${getApiUrl()}/settings/logo`)
       .then(r => r.ok ? r.json() : null)
       .then(data => {
         if (data?.logo_base64) {
@@ -74,7 +73,7 @@ export default function Sidebar({ collapsed = false, onToggle }) {
     setPwdLoading(true); setPwdError('');
     try {
       const token = sessionStorage.getItem('um_token');
-      const res = await fetch(`${API_URL()}/auth/change-password`, {
+      const res = await fetch(`${getApiUrl()}/auth/change-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ current_password: pwdForm.current, new_password: pwdForm.next })

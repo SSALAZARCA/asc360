@@ -1,11 +1,8 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { authFetch } from '../../lib/authFetch';
+import { getApiUrl } from '../../lib/api';
 import { X, CheckCircle, AlertCircle, XCircle, Plus, Upload, RefreshCw, Search } from 'lucide-react';
-
-function API() {
-  return (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1').replace('http://', 'https://');
-}
 
 const RESULT_CFG = {
   COMPLETE:      { label: 'Completo',       color: '#22c55e', bg: 'rgba(34,197,94,0.1)',    border: 'rgba(34,197,94,0.25)',   icon: CheckCircle },
@@ -46,7 +43,7 @@ function EditableReconciliationCell({ resultId, field, current, type = 'text', a
     const parsed = type === 'number' ? (value === '' ? null : parseInt(value, 10)) : (String(value).trim() || null);
     if (parsed === (current ?? null)) return;
     try {
-      await authFetch(`${API()}/imports/reconciliation-results/${resultId}`, {
+      await authFetch(`${getApiUrl()}/imports/reconciliation-results/${resultId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ [field]: parsed }),
@@ -108,7 +105,7 @@ export default function ReconciliationModal({ lot, onClose, onConfirmed }) {
   const fetchResults = async () => {
     setLoading(true);
     try {
-      const res = await authFetch(`${API()}/imports/spare-part-lots/${lot.id}/reconciliation`);
+      const res = await authFetch(`${getApiUrl()}/imports/spare-part-lots/${lot.id}/reconciliation`);
       const data = await res.json();
       setResults(Array.isArray(data) ? data : []);
     } catch {
@@ -129,7 +126,7 @@ export default function ReconciliationModal({ lot, onClose, onConfirmed }) {
       const formData = new FormData();
       formData.append('file', file);
       const res = await authFetch(
-        `${API()}/imports/spare-part-lots/${lot.id}/packing-list`,
+        `${getApiUrl()}/imports/spare-part-lots/${lot.id}/packing-list`,
         { method: 'POST', body: formData, headers: {} }
       );
       const data = await res.json();
@@ -149,7 +146,7 @@ export default function ReconciliationModal({ lot, onClose, onConfirmed }) {
     setConfirming(true);
     try {
       const res = await authFetch(
-        `${API()}/imports/spare-part-lots/${lot.id}/reconciliation/confirm`,
+        `${getApiUrl()}/imports/spare-part-lots/${lot.id}/reconciliation/confirm`,
         { method: 'POST' }
       );
       if (!res.ok) throw new Error('Error al confirmar');

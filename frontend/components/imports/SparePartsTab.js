@@ -1,14 +1,11 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { authFetch } from '../../lib/authFetch';
+import { getApiUrl } from '../../lib/api';
 import { ChevronDown, ChevronRight, Search, RefreshCw, Package, ClipboardCheck, XCircle, UploadCloud, FileSpreadsheet } from 'lucide-react';
 import ExcelUploadModal from './ExcelUploadModal';
 import ReconciliationModal from './ReconciliationModal';
 import PhysicalInventoryUploadModal from './PhysicalInventoryUploadModal';
-
-function API() {
-  return (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1').replace('http://', 'https://');
-}
 
 // ---------------------------------------------------------------------------
 // Status badge para spare part items
@@ -47,7 +44,7 @@ function EditableCell({ itemId, field, current, type = 'text', align = 'left', c
     const parsed = type === 'number' ? (value === '' ? null : parseFloat(value)) : (String(value).trim() || null);
     if (parsed === (current ?? null)) return;
     try {
-      await authFetch(`${API()}/imports/spare-part-items/${itemId}`, {
+      await authFetch(`${getApiUrl()}/imports/spare-part-items/${itemId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ [field]: parsed }),
@@ -106,7 +103,7 @@ function EditableStatus({ itemId, current, onSaved }) {
     setValue(newVal);
     setEditing(false);
     try {
-      await authFetch(`${API()}/imports/spare-part-items/${itemId}`, {
+      await authFetch(`${getApiUrl()}/imports/spare-part-items/${itemId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newVal }),
@@ -147,7 +144,7 @@ function EditableQty({ itemId, current, max, onSaved }) {
     const num = parseInt(value, 10);
     if (isNaN(num) || num === current) return;
     try {
-      await authFetch(`${API()}/imports/spare-part-items/${itemId}`, {
+      await authFetch(`${getApiUrl()}/imports/spare-part-items/${itemId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ qty_received: num }),
@@ -200,7 +197,7 @@ function LotItemsTable({ lotId, userRole, isConfirmed }) {
       const params = new URLSearchParams();
       if (search) params.append('search', search);
       if (filterStatus) params.append('item_status', filterStatus);
-      const res = await authFetch(`${API()}/imports/spare-part-lots/${lotId}/items?${params}`);
+      const res = await authFetch(`${getApiUrl()}/imports/spare-part-lots/${lotId}/items?${params}`);
       const data = await res.json();
       setItems(Array.isArray(data) ? data.filter(i => i.status !== 'CANCELLED') : []);
     } catch {
@@ -374,7 +371,7 @@ function LotItemsTable({ lotId, userRole, isConfirmed }) {
                           const qty = item.qty_pending ?? 0;
                           if (!confirm(`¿Cancelar las ${qty} unidades pendientes de ${item.part_number}? Esta acción cerrará el backorder.`)) return;
                           try {
-                            await authFetch(`${API()}/imports/spare-part-items/${item.id}/cancel-pending`, { method: 'POST' });
+                            await authFetch(`${getApiUrl()}/imports/spare-part-items/${item.id}/cancel-pending`, { method: 'POST' });
                             fetch();
                           } catch { alert('Error al cancelar pendiente'); }
                         }}
@@ -412,7 +409,7 @@ function LotRow({ lot, userRole, onReconcile }) {
     setDeduplicating(true);
     try {
       const res = await authFetch(
-        `${API()}/imports/spare-parts/rollback-lot?pi_number=${encodeURIComponent(lot.lot_identifier)}`,
+        `${getApiUrl()}/imports/spare-parts/rollback-lot?pi_number=${encodeURIComponent(lot.lot_identifier)}`,
         { method: 'POST' }
       );
       const data = await res.json();
@@ -431,7 +428,7 @@ function LotRow({ lot, userRole, onReconcile }) {
     setDeduplicating(true);
     try {
       const res = await authFetch(
-        `${API()}/imports/spare-parts/repair-deduplicate?pi_number=${encodeURIComponent(lot.lot_identifier)}`,
+        `${getApiUrl()}/imports/spare-parts/repair-deduplicate?pi_number=${encodeURIComponent(lot.lot_identifier)}`,
         { method: 'POST' }
       );
       const data = await res.json();
@@ -591,7 +588,7 @@ export default function SparePartsTab({ userRole }) {
       const params = new URLSearchParams();
       if (filterLoaded !== '') params.append('detail_loaded', filterLoaded);
       if (filterBL) params.append('has_bl', 'true');
-      const res = await authFetch(`${API()}/imports/spare-parts/export?${params}`);
+      const res = await authFetch(`${getApiUrl()}/imports/spare-parts/export?${params}`);
       if (!res.ok) return;
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
@@ -611,7 +608,7 @@ export default function SparePartsTab({ userRole }) {
     if (!confirm('Actualiza las Pcs Rec. de todos los ítems EXTRA que quedaron en 0. ¿Continuar?')) return;
     setRepairingExtras(true);
     try {
-      const res = await authFetch(`${API()}/imports/backorders/repair-extra-received`, { method: 'POST' });
+      const res = await authFetch(`${getApiUrl()}/imports/backorders/repair-extra-received`, { method: 'POST' });
       const data = await res.json();
       alert(`Reparación completa: ${data.fixed} ítems actualizados${data.errors?.length ? `, ${data.errors.length} errores` : ''}`);
       fetchLots(); fetchStats();
@@ -624,7 +621,7 @@ export default function SparePartsTab({ userRole }) {
     if (!confirm('Segunda confirmación: esta acción NO se puede deshacer. ¿Continuar?')) return;
     setResetting(true);
     try {
-      const res = await authFetch(`${API()}/imports/spare-parts/reset-detail`, { method: 'POST' });
+      const res = await authFetch(`${getApiUrl()}/imports/spare-parts/reset-detail`, { method: 'POST' });
       const data = await res.json();
       const msg = Object.entries(data.deleted).map(([k, v]) => `${k}: ${v}`).join(', ');
       alert(`Reset completo. Eliminados → ${msg}`);
@@ -642,7 +639,7 @@ export default function SparePartsTab({ userRole }) {
       const params = new URLSearchParams();
       if (filterLoaded !== '') params.append('detail_loaded', filterLoaded);
       if (filterBL) params.append('has_bl', 'true');
-      const res = await authFetch(`${API()}/imports/spare-part-lots?${params}`);
+      const res = await authFetch(`${getApiUrl()}/imports/spare-part-lots?${params}`);
       const data = await res.json();
       setLots(Array.isArray(data) ? data : []);
     } catch {
@@ -657,7 +654,7 @@ export default function SparePartsTab({ userRole }) {
       const params = new URLSearchParams();
       if (filterLoaded !== '') params.append('detail_loaded', filterLoaded);
       if (filterBL) params.append('has_bl', 'true');
-      const res = await authFetch(`${API()}/imports/spare-part-lots/stats?${params}`);
+      const res = await authFetch(`${getApiUrl()}/imports/spare-part-lots/stats?${params}`);
       const data = await res.json();
       setLotStats(data);
     } catch {

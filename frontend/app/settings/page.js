@@ -4,8 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import AdminLayout from '../admin-layout';
 import { UploadCloud, Image as ImageIcon, Save, Trash2, Clock, Bike, Plus, Pencil, X, AlertCircle, BookOpen, Upload, FileText, Loader2, ChevronDown, ScanSearch, Shield } from 'lucide-react';
 import { authFetch } from '../../lib/authFetch';
-
-const BACKEND_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1').replace('http://', 'https://');
+import { getApiUrl } from '../../lib/api';
 
 // ---------------------------------------------------------------------------
 // Datos estáticos — Matriz de Permisos
@@ -327,7 +326,7 @@ export default function SettingsPage() {
   const fetchColorMappings = useCallback(async () => {
     setCmLoading(true);
     try {
-      const res = await authFetch(`${BACKEND_URL}/color-runt-mappings`);
+      const res = await authFetch(`${getApiUrl()}/color-runt-mappings`);
       if (res.ok) setColorMappings(await res.json());
     } catch (e) { console.error('Error cargando colores RUNT:', e); }
     finally { setCmLoading(false); }
@@ -345,8 +344,8 @@ export default function SettingsPage() {
         nombre_runt: cmForm.nombre_runt.trim(),
       };
       const url = editingCM
-        ? `${BACKEND_URL}/color-runt-mappings/${editingCM.id}`
-        : `${BACKEND_URL}/color-runt-mappings`;
+        ? `${getApiUrl()}/color-runt-mappings/${editingCM.id}`
+        : `${getApiUrl()}/color-runt-mappings`;
       const method = editingCM ? 'PUT' : 'POST';
       const res = await authFetch(url, {
         method,
@@ -369,7 +368,7 @@ export default function SettingsPage() {
   const deleteCM = async (cm) => {
     if (!confirm(`¿Eliminar el mapeo "${cm.color_original}"? Esta acción no se puede deshacer.`)) return;
     try {
-      await authFetch(`${BACKEND_URL}/color-runt-mappings/${cm.id}`, { method: 'DELETE' });
+      await authFetch(`${getApiUrl()}/color-runt-mappings/${cm.id}`, { method: 'DELETE' });
       fetchColorMappings();
     } catch { alert('Error al eliminar el mapeo.'); }
   };
@@ -385,7 +384,7 @@ export default function SettingsPage() {
   const fetchVehicleModels = useCallback(async () => {
     setVmLoading(true);
     try {
-      const res = await authFetch(`${BACKEND_URL}/vehicle-models`);
+      const res = await authFetch(`${getApiUrl()}/vehicle-models`);
       if (res.ok) {
         const data = await res.json();
         setVehicleModels(Array.isArray(data) ? data : (data.items || []));
@@ -404,8 +403,8 @@ export default function SettingsPage() {
     try {
       const payload = { ...vmForm };
       const url = editingVM
-        ? `${BACKEND_URL}/vehicle-models/${editingVM.id}`
-        : `${BACKEND_URL}/vehicle-models`;
+        ? `${getApiUrl()}/vehicle-models/${editingVM.id}`
+        : `${getApiUrl()}/vehicle-models`;
       const method = editingVM ? 'PUT' : 'POST';
       const res = await authFetch(url, {
         method,
@@ -431,7 +430,7 @@ export default function SettingsPage() {
   const deleteVehicleModel = async (vm) => {
     if (!confirm(`¿Eliminar el modelo "${vm.modelo}"? Esta acción no se puede deshacer.`)) return;
     try {
-      await authFetch(`${BACKEND_URL}/vehicle-models/${vm.id}`, { method: 'DELETE' });
+      await authFetch(`${getApiUrl()}/vehicle-models/${vm.id}`, { method: 'DELETE' });
       fetchVehicleModels();
     } catch (e) {
       alert('Error al eliminar el modelo.');
@@ -483,7 +482,7 @@ export default function SettingsPage() {
     } catch { setUserRole(null); }
 
     // Cargar logo global de la marca
-    fetch(`${BACKEND_URL}/settings/logo`)
+    fetch(`${getApiUrl()}/settings/logo`)
       .then(r => r.ok ? r.json() : null)
       .then(data => {
         if (data?.logo_base64) {
@@ -496,7 +495,7 @@ export default function SettingsPage() {
     // Cargar config del taller
     const tenantId = sessionStorage.getItem('um_tenant_id');
     if (tenantId) {
-      fetch(`${BACKEND_URL}/tenants/${tenantId}/config`, {
+      fetch(`${getApiUrl()}/tenants/${tenantId}/config`, {
         headers: { Authorization: `Bearer ${sessionStorage.getItem('um_token') || ''}` }
       })
         .then(r => r.ok ? r.json() : null)
@@ -547,7 +546,7 @@ export default function SettingsPage() {
   const handleSaveLogo = async () => {
     if (!logoBase64) return;
     try {
-      const res = await fetch(`${BACKEND_URL}/settings/logo`, {
+      const res = await fetch(`${getApiUrl()}/settings/logo`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sessionStorage.getItem('um_token') || ''}` },
         body: JSON.stringify({ logo_base64: logoBase64 }),
@@ -575,7 +574,7 @@ export default function SettingsPage() {
 
     setReminderSaving(true);
     try {
-      const res = await fetch(`${BACKEND_URL}/tenants/${tenantId}/config`, {
+      const res = await fetch(`${getApiUrl()}/tenants/${tenantId}/config`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -652,7 +651,7 @@ export default function SettingsPage() {
   };
 
   const handleRemoveLogo = async () => {
-    await fetch(`${BACKEND_URL}/settings/logo`, {
+    await fetch(`${getApiUrl()}/settings/logo`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sessionStorage.getItem('um_token') || ''}` },
       body: JSON.stringify({ logo_base64: null }),

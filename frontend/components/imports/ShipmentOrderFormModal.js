@@ -2,8 +2,7 @@
 import { useState, useEffect } from 'react';
 import { X, Save, Plus } from 'lucide-react';
 import { authFetch } from '../../lib/authFetch';
-
-const API = () => (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1').replace('http://', 'https://');
+import { getApiUrl } from '../../lib/api';
 
 const STATUS_OPTIONS = [
   { value: 'en_preparacion', label: 'En Preparación' },
@@ -131,8 +130,8 @@ export default function ShipmentOrderFormModal({ isOpen, onClose, onSuccess, ord
 
     try {
       const url = isEdit
-        ? `${API()}/imports/shipment-orders/${order.id}`
-        : `${API()}/imports/shipment-orders`;
+        ? `${getApiUrl()}/imports/shipment-orders/${order.id}`
+        : `${getApiUrl()}/imports/shipment-orders`;
       const method = isEdit ? 'PATCH' : 'POST';
 
       const res = await authFetch(url, {

@@ -3,8 +3,7 @@ import { useState, useEffect } from 'react';
 import AdminLayout from '../admin-layout';
 import { Building2, Edit, Save, X, Phone, MapPin, Hash, Plus, Mail, User, Calendar, Wrench, ShoppingCart, Package } from 'lucide-react';
 import { authFetch } from '../../lib/authFetch';
-
-const API = () => (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1').replace(/^http:\/\/(?!localhost)/, 'https://');
+import { getApiUrl } from '../../lib/api';
 
 const NIVEL_CFG = {
   '1S': { color: '#60a5fa', bg: 'rgba(96,165,250,0.12)', border: 'rgba(96,165,250,0.3)' },
@@ -77,7 +76,7 @@ export default function TenantsPage() {
 
   const fetchDepartments = async () => {
     try {
-      const res = await fetch(`${API()}/tenants/divipola/departments`);
+      const res = await fetch(`${getApiUrl()}/tenants/divipola/departments`);
       setDepartments(await res.json());
     } catch (e) { console.error(e); }
   };
@@ -85,7 +84,7 @@ export default function TenantsPage() {
   const fetchCities = async (dpto) => {
     if (!dpto) { setCities([]); return; }
     try {
-      const res = await fetch(`${API()}/tenants/divipola/cities?departamento=${encodeURIComponent(dpto)}`);
+      const res = await fetch(`${getApiUrl()}/tenants/divipola/cities?departamento=${encodeURIComponent(dpto)}`);
       setCities(await res.json());
     } catch (e) { console.error(e); }
   };

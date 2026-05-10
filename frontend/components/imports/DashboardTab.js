@@ -1,11 +1,8 @@
 'use client';
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { authFetch } from '../../lib/authFetch';
+import { getApiUrl } from '../../lib/api';
 import { RefreshCw, TrendingUp, Package, Ship, Loader } from 'lucide-react';
-
-function API() {
-  return (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1').replace('http://', 'https://');
-}
 
 function daysUntil(isoDate) {
   if (!isoDate) return null;
@@ -116,7 +113,7 @@ function useOrdersCache() {
   const fetch = useCallback(async (key, params) => {
     if (cache.current[key]) return cache.current[key];
     const qs = new URLSearchParams({ ...params, limit: 50 }).toString();
-    const res = await authFetch(`${API()}/imports/shipment-orders?${qs}`);
+    const res = await authFetch(`${getApiUrl()}/imports/shipment-orders?${qs}`);
     const json = await res.json();
     const orders = Array.isArray(json) ? json : (json.items || []);
     cache.current[key] = orders;
@@ -348,7 +345,7 @@ export default function DashboardTab() {
     try {
       const opt = FILTER_OPTS.find(o => o.key === f);
       const qs = opt?.param !== null && opt?.param !== undefined ? `?is_spare_part=${opt.param}` : '';
-      const res = await authFetch(`${API()}/imports/dashboard${qs}`);
+      const res = await authFetch(`${getApiUrl()}/imports/dashboard${qs}`);
       const json = await res.json();
       setData(json);
       setLastUpdated(new Date().toLocaleTimeString('es-CO'));

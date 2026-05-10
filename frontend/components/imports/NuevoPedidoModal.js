@@ -1,8 +1,7 @@
 'use client';
 import { useState, useRef } from 'react';
 import { X, FileSpreadsheet, Upload, CheckCircle, AlertCircle, Package, Bike } from 'lucide-react';
-
-const API = () => (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1').replace('http://', 'https://');
+import { getApiUrl } from '../../lib/api';
 
 const inputStyle = {
   padding: '9px 12px', borderRadius: '8px',
@@ -48,9 +47,9 @@ export default function NuevoPedidoModal({ isOpen, onClose, onSuccess }) {
 
       let url;
       if (tipo === 'sp') {
-        url = `${API()}/imports/new-order-sp?reference=${encodeURIComponent(reference.trim())}`;
+        url = `${getApiUrl()}/imports/new-order-sp?reference=${encodeURIComponent(reference.trim())}`;
       } else {
-        url = `${API()}/imports/new-order-motos${cycle ? `?cycle=${cycle}` : ''}`;
+        url = `${getApiUrl()}/imports/new-order-motos${cycle ? `?cycle=${cycle}` : ''}`;
       }
 
       const res = await fetch(url, {

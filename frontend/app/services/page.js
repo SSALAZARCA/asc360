@@ -10,8 +10,7 @@ import {
 } from 'lucide-react';
 import SoftwayHelperModal from '../../components/SoftwayHelperModal';
 import { authFetch } from '../../lib/authFetch';
-
-const API = () => (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1').replace('http://', 'https://');
+import { getApiUrl } from '../../lib/api';
 
 async function downloadPdf(apiUrl, filename) {
   const token = typeof window !== 'undefined' ? sessionStorage.getItem('um_token') : null;
@@ -202,14 +201,14 @@ function OrderModal({ order, onClose }) {
 
                 {detail.recepcion.reception_pdf_url && (
                   <button
-                    onClick={() => downloadPdf(`${API()}/orders/${order.order_id}/pdf`, `Acta_${order.order_id.slice(0,8)}.pdf`)}
+                    onClick={() => downloadPdf(`${getApiUrl()}/orders/${order.order_id}/pdf`, `Acta_${order.order_id.slice(0,8)}.pdf`)}
                     className="mpdf-btn"
                   >
                     <FileDown size={14} /> Ver Acta de Recepción PDF
                   </button>
                 )}
                 <button
-                  onClick={() => downloadPdf(`${API()}/orders/${order.order_id}/exit-pdf`, `OrdenSalida_${order.order_id.slice(0,8)}.pdf`)}
+                  onClick={() => downloadPdf(`${getApiUrl()}/orders/${order.order_id}/exit-pdf`, `OrdenSalida_${order.order_id.slice(0,8)}.pdf`)}
                   className="mpdf-btn"
                   style={{ background: 'rgba(16,185,129,0.12)', borderColor: 'rgba(16,185,129,0.35)', color: '#10b981', marginTop: 6 }}
                 >
@@ -431,7 +430,7 @@ export default function ServicesPage() {
                     <td className="td-dim" style={{ textAlign:'center', color: (s.g_totales||0) > 1 ? '#eab308' : undefined }}>{s.g_totales ?? '-'}</td>
                     <td onClick={e => e.stopPropagation()}>
                       {s.pdf_url ? (
-                        <a href={`${API()}/orders/${s.order_id}/pdf?token=${typeof window !== 'undefined' ? sessionStorage.getItem('um_token') : ''}`} target="_blank" className="btn-pdf">
+                        <a href={`${getApiUrl()}/orders/${s.order_id}/pdf?token=${typeof window !== 'undefined' ? sessionStorage.getItem('um_token') : ''}`} target="_blank" className="btn-pdf">
                           <FileDown size={14} />
                         </a>
                       ) : <span className="td-dim text-[0.6rem]">Sin PDF</span>}

@@ -1,11 +1,8 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { authFetch } from '../../lib/authFetch';
+import { getApiUrl } from '../../lib/api';
 import { FileUp, Download, RefreshCw, Search, CheckCircle, Clock, Bike, X, AlertCircle, Pencil, Send, FileText, Trash2, MapPin, AlertTriangle, FileSpreadsheet } from 'lucide-react';
-
-function API() {
-  return (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1').replace('http://', 'https://');
-}
 
 // ---------------------------------------------------------------------------
 // Error modal estilizado
@@ -351,7 +348,7 @@ function SeleccionarDistribuidorModal({ onConfirm, onClose }) {
   useEffect(() => {
     (async () => {
       try {
-        const res = await authFetch(`${API()}/imports/distribuidores-venta`);
+        const res = await authFetch(`${getApiUrl()}/imports/distribuidores-venta`);
         const data = await res.json();
         setDistribuidores(data || []);
       } catch {
@@ -548,7 +545,7 @@ export default function MotocicletasTab({ userRole }) {
       if (filterVIN) params.append('vin', filterVIN);
       if (filterEngine) params.append('engine', filterEngine);
       if (filterCertificado !== '') params.append('certificado_generado', filterCertificado);
-      const res = await authFetch(`${API()}/imports/moto-units/export?${params}`);
+      const res = await authFetch(`${getApiUrl()}/imports/moto-units/export?${params}`);
       if (!res.ok) return;
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
@@ -573,7 +570,7 @@ export default function MotocicletasTab({ userRole }) {
       if (filterVIN) params.append('vin', filterVIN);
       if (filterEngine) params.append('engine', filterEngine);
       if (filterCertificado !== '') params.append('certificado_generado', filterCertificado);
-      const res = await authFetch(`${API()}/imports/moto-units?${params}`);
+      const res = await authFetch(`${getApiUrl()}/imports/moto-units?${params}`);
       const data = await res.json();
       setUnits(data.items || []);
       setTotal(data.total || 0);
@@ -595,7 +592,7 @@ export default function MotocicletasTab({ userRole }) {
     try {
       const formData = new FormData();
       formData.append('file', file);
-      const res = await authFetch(`${API()}/imports/moto-units/dim`, {
+      const res = await authFetch(`${getApiUrl()}/imports/moto-units/dim`, {
         method: 'POST',
         body: formData,
       });
@@ -624,7 +621,7 @@ export default function MotocicletasTab({ userRole }) {
         const y = parseInt(form.model_year, 10);
         if (!isNaN(y)) payload.model_year = y;
       }
-      const res = await authFetch(`${API()}/imports/moto-units/${unitId}`, {
+      const res = await authFetch(`${getApiUrl()}/imports/moto-units/${unitId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -667,7 +664,7 @@ export default function MotocicletasTab({ userRole }) {
   const _patchEmpadronamiento = async (unitId, payload) => {
     setToggling(unitId);
     try {
-      const res = await authFetch(`${API()}/imports/moto-units/${unitId}`, {
+      const res = await authFetch(`${getApiUrl()}/imports/moto-units/${unitId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -698,7 +695,7 @@ export default function MotocicletasTab({ userRole }) {
 
   const handleDownloadCertificado = async (unit) => {
     try {
-      const res = await authFetch(`${API()}/imports/moto-units/${unit.id}/certificado`);
+      const res = await authFetch(`${getApiUrl()}/imports/moto-units/${unit.id}/certificado`);
       if (!res.ok) {
         const err = await res.json();
         setCertError(err.detail || 'Error al generar el certificado.');
@@ -719,7 +716,7 @@ export default function MotocicletasTab({ userRole }) {
   const handleDeleteCertificado = async (unit) => {
     if (!confirm(`¿Anular el empadronamiento de VIN ${unit.vin_number || unit.id}? Esta acción no se puede deshacer.`)) return;
     try {
-      const res = await authFetch(`${API()}/imports/moto-units/${unit.id}/certificado`, { method: 'DELETE' });
+      const res = await authFetch(`${getApiUrl()}/imports/moto-units/${unit.id}/certificado`, { method: 'DELETE' });
       if (!res.ok) {
         const err = await res.json();
         alert(err.detail || 'Error al anular el empadronamiento');
@@ -735,7 +732,7 @@ export default function MotocicletasTab({ userRole }) {
 
   const handleOpenDim = (unit) => {
     const token = sessionStorage.getItem('um_token');
-    const url = `${API()}/imports/moto-units/${unit.id}/dim-url?token=${token}`;
+    const url = `${getApiUrl()}/imports/moto-units/${unit.id}/dim-url?token=${token}`;
     window.open(url, '_blank', 'noopener,noreferrer');
   };
 
