@@ -73,12 +73,38 @@ export default function TgOtp() {
         body: JSON.stringify({ code }),
       });
       if (res.ok) {
-        setSuccess('Firma registrada correctamente. La moto queda marcada como entregada.');
+        const data = await res.json().catch(() => ({}));
+        const phone = data.accepted_phone ? ` · Firmado desde ${data.accepted_phone}` : '';
+        setSuccess(`Firma registrada correctamente.${phone} La moto queda marcada como entregada.`);
         setStep('list');
         loadPending();
       } else {
         const err = await res.json().catch(() => ({}));
         setError(err.detail || 'Código OTP incorrecto o expirado');
+      }
+    } catch (e) {
+      setError(`Error: ${e.message}`);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const canBypass = ['superadmin', 'jefe_taller'].includes(user?.role);
+
+  const submitBypass = async () => {
+    setSubmitting(true);
+    setError(null);
+    try {
+      const res = await authFetch(`/orders/${orderId}/otp/bypass`, { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json().catch(() => ({}));
+        const who = data.bypass_by_name ? ` · Autorizado por ${data.bypass_by_name}` : '';
+        setSuccess(`Firma registrada por bypass autorizado.${who} La moto queda marcada como entregada.`);
+        setStep('list');
+        loadPending();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        setError(err.detail || 'No se pudo realizar el bypass');
       }
     } catch (e) {
       setError(`Error: ${e.message}`);
@@ -198,6 +224,16 @@ export default function TgOtp() {
               >
                 {submitting ? 'Verificando...' : 'Confirmar Firma'}
               </button>
+
+              {canBypass && (
+                <button
+                  onClick={submitBypass}
+                  disabled={submitting}
+                  style={{ width: '100%', marginTop: '0.5rem', padding: '0.75rem', background: 'transparent', border: '1px solid rgba(245,158,11,0.35)', borderRadius: 12, color: '#f59e0b', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', opacity: submitting ? 0.5 : 1 }}
+                >
+                  {submitting ? 'Procesando...' : 'Bypass autorizado (sin código)'}
+                </button>
+              )}
             </div>
           </div>
         )}
