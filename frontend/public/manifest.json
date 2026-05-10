@@ -3,7 +3,7 @@
   "short_name": "ASC360",
   "description": "Red de servicio post-venta UM Colombia",
   "start_url": "/tg",
-  "display": "standalone",
+  "display": "browser",
   "background_color": "#0a0a0c",
   "theme_color": "#ff5f33",
   "orientation": "portrait",
