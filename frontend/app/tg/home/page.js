@@ -42,6 +42,7 @@ export default function TgHome() {
   const [apiError, setApiError] = useState(null);
   const [voiceIntent, setVoiceIntent] = useState(null);   // { placa, estado, label } pendiente de confirmar
   const [voiceError, setVoiceError]   = useState(null);
+  const [showAddToHome, setShowAddToHome] = useState(false);
 
   useEffect(() => {
     const stored = sessionStorage.getItem('um_user');
@@ -51,6 +52,12 @@ export default function TgHome() {
     if (needsTenantSelection(u)) { router.replace('/tg/tenant'); return; }
     setUser(u);
     loadOrders();
+    const tg = window.Telegram?.WebApp;
+    if (tg?.checkHomeScreenStatus) {
+      tg.checkHomeScreenStatus(status => {
+        if (status === 'missed' || status === 'unknown') setShowAddToHome(true);
+      });
+    }
   }, []);
 
   const loadOrders = useCallback(async (silent = false) => {
@@ -195,6 +202,27 @@ export default function TgHome() {
       {voiceError && (
         <div style={{ margin: '0.5rem 0.75rem 0', padding: '0.6rem 0.9rem', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 10 }}>
           <p style={{ margin: 0, fontSize: '0.68rem', color: '#ef4444', fontWeight: 600 }}>{voiceError}</p>
+        </div>
+      )}
+
+      {/* Banner: agregar acceso directo */}
+      {showAddToHome && (
+        <div style={{ margin: '0.5rem 0.75rem 0', padding: '0.6rem 0.9rem', background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.22)', borderRadius: 10, display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+          <span style={{ fontSize: '1rem', flexShrink: 0 }}>📌</span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <p style={{ margin: 0, fontSize: '0.68rem', color: '#a5b4fc', fontWeight: 700 }}>Agregar a pantalla de inicio</p>
+            <p style={{ margin: 0, fontSize: '0.58rem', color: '#606075' }}>Abrí ASC360 directo sin pasar por Telegram</p>
+          </div>
+          <button
+            onClick={() => { window.Telegram?.WebApp?.addToHomeScreen(); setShowAddToHome(false); }}
+            style={{ background: '#6366f1', border: 'none', borderRadius: 7, color: '#fff', fontWeight: 800, fontSize: '0.62rem', padding: '0.3rem 0.6rem', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}
+          >
+            Agregar
+          </button>
+          <button
+            onClick={() => setShowAddToHome(false)}
+            style={{ background: 'transparent', border: 'none', color: '#3f3f55', fontSize: '1rem', cursor: 'pointer', padding: '0.1rem', lineHeight: 1, flexShrink: 0 }}
+          >×</button>
         </div>
       )}
 
