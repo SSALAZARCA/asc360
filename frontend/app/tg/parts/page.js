@@ -121,7 +121,7 @@ export default function TgParts() {
   );
 
   return (
-    <div style={{ minHeight: '100vh', background: '#0a0a0c', paddingBottom: '5.5rem' }}>
+    <div style={{ minHeight: 'var(--tg-viewport-stable-height, 100vh)', background: '#0a0a0c', paddingBottom: '5.5rem' }}>
 
       {/* Header */}
       <div style={{ background: '#13131a', borderBottom: '1px solid rgba(255,255,255,0.06)', padding: '0.9rem 1.25rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
