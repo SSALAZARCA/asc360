@@ -5,6 +5,7 @@ const NAV_ITEMS = [
   { path: '/tg/home',      label: 'Órdenes',   icon: '◉', roles: ['superadmin','jefe_taller','technician'] },
   { path: '/tg/vehicle',   label: 'Hoja Vida', icon: '⌖', roles: ['superadmin','jefe_taller','technician'] },
   { path: '/tg/parts',     label: 'Repuestos', icon: '⚙', roles: ['superadmin','jefe_taller','technician'] },
+  { path: '/tg/specs',     label: 'Specs',     icon: '≡', roles: ['superadmin','jefe_taller','technician'] },
   { path: '/tg/otp',       label: 'OTP',       icon: '✎', roles: ['superadmin','jefe_taller','technician'] },
   { path: '/tg/reception', label: 'Recepción', icon: '+', roles: ['superadmin','jefe_taller','technician'] },
   { path: '/tg/admin',     label: 'Admin',     icon: '⬡', roles: ['superadmin'] },
