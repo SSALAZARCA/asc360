@@ -34,13 +34,18 @@ export default function TgEntry() {
         version:     tg?.version ?? 'N/A',
       });
 
-      if (!tg || !initData) {
+      if (!tg) {
         window.location.replace('https://t.me/SoniaUMbot/asc360');
         return;
       }
 
       tg.ready();
       tg.expand();
+
+      if (!initData) {
+        setError('NO_INIT_DATA');
+        return;
+      }
 
       fetch(`${getApiUrl()}/auth/telegram-mini-app`, {
         method: 'POST',
@@ -63,33 +68,22 @@ export default function TgEntry() {
   }, []);
 
   if (error) {
-    const noTelegram = !debug?.hasTelegram;
+    const noInitData = error === 'NO_INIT_DATA';
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', gap: '1.25rem', padding: '2rem', textAlign: 'center', background: '#0a0a0c' }}>
         <img src="/logo.png" alt="UM Colombia" style={{ width: 140, objectFit: 'contain', opacity: 0.9 }} />
-        {noTelegram ? (
+        {noInitData ? (
           <>
-            <p style={{ color: '#e2e2f0', fontSize: '0.9rem', fontWeight: 800, margin: 0 }}>Abrí la app desde Telegram</p>
+            <p style={{ color: '#e2e2f0', fontSize: '0.9rem', fontWeight: 800, margin: 0 }}>Abrí la mini app correctamente</p>
             <p style={{ color: '#606075', fontSize: '0.75rem', margin: 0, lineHeight: 1.6 }}>
-              ASC360 solo funciona dentro de Telegram.<br />Tocá el botón para abrirla correctamente.
+              Tocá el botón del menú en el chat con Sonia para entrar a ASC360.
             </p>
-            <a
-              href="https://t.me/SoniaUMbot/asc360"
-              style={{ display: 'inline-block', marginTop: '0.5rem', padding: '0.75rem 1.75rem', background: '#ff5f33', borderRadius: 12, color: '#fff', fontWeight: 800, fontSize: '0.85rem', textDecoration: 'none' }}
-            >
-              Abrir en Telegram
-            </a>
           </>
         ) : (
           <>
             <div style={{ width: 48, height: 48, borderRadius: 14, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem' }}>⚠</div>
             <p style={{ color: '#ef4444', fontSize: '0.85rem', fontWeight: 700, margin: 0 }}>Error</p>
             <p style={{ color: '#606075', fontSize: '0.75rem', margin: 0, lineHeight: 1.6 }}>{error}</p>
-            {debug && (
-              <pre style={{ color: '#3f3f55', fontSize: '0.6rem', textAlign: 'left', background: '#13131a', padding: '0.75rem', borderRadius: 8, marginTop: '0.5rem' }}>
-                {JSON.stringify(debug, null, 2)}
-              </pre>
-            )}
           </>
         )}
       </div>
