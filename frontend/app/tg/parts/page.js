@@ -314,6 +314,9 @@ export default function TgParts() {
         </div>
       )}
 
+      {/* Espaciador para que TgNav (fixed) no tape el contenido */}
+      <div style={{ height: '5rem', flexShrink: 0 }} />
+
       <TgNav userRole={user?.role} />
     </div>
   );
