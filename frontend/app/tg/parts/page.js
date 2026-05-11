@@ -167,7 +167,7 @@ export default function TgParts() {
           <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.65rem', alignItems: 'center' }}>
             <input value={desc} onChange={e => setDesc(e.target.value)} onKeyDown={e => e.key === 'Enter' && searchByDesc()}
               placeholder="Ej: bujía, freno trasero..."
-              style={{ flex: 1, background: '#13131a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: '0.7rem 0.9rem', color: '#fff', fontSize: '0.82rem', outline: 'none' }} />
+              style={{ flex: 1, background: '#13131a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: '0.7rem 0.9rem', color: '#fff', fontSize: '1rem', outline: 'none' }} />
             <VoiceInput
               onTranscript={text => { setDesc(text); searchByDesc(text); }}
               onError={msg => setError(msg)}
