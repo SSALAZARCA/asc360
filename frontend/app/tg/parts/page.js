@@ -121,10 +121,10 @@ export default function TgParts() {
   );
 
   return (
-    <div style={{ minHeight: 'var(--tg-viewport-stable-height, 100vh)', background: '#0a0a0c', paddingBottom: '5.5rem' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100dvh', background: '#0a0a0c' }}>
 
       {/* Header */}
-      <div style={{ background: '#13131a', borderBottom: '1px solid rgba(255,255,255,0.06)', padding: '0.9rem 1.25rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+      <div style={{ background: '#13131a', borderBottom: '1px solid rgba(255,255,255,0.06)', padding: '0.9rem 1.25rem', display: 'flex', alignItems: 'center', gap: '0.75rem', flexShrink: 0 }}>
         <img src="/logo.png" alt="UM" style={{ height: 28, width: 'auto', objectFit: 'contain', flexShrink: 0, opacity: 0.9 }} />
         <div>
           <p style={{ margin: 0, fontWeight: 900, fontSize: '0.9rem', color: '#fff' }}>Catálogo de Repuestos</p>
@@ -133,7 +133,7 @@ export default function TgParts() {
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: '0.4rem', padding: '0.75rem 1rem 0.5rem' }}>
+      <div style={{ display: 'flex', gap: '0.4rem', padding: '0.75rem 1rem 0.5rem', flexShrink: 0 }}>
         {[['model', 'Por Modelo'], ['desc', 'Por Descripción']].map(([v, l]) => (
           <button key={v}
             onClick={() => { setTab(v); setResults([]); setSections([]); setError(null); closeSheet(); }}
@@ -143,7 +143,7 @@ export default function TgParts() {
         ))}
       </div>
 
-      <div style={{ padding: '0 1rem' }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '0 1rem', paddingBottom: '5.5rem' }}>
 
         {/* Selector de modelo */}
         <div style={{ marginBottom: '0.65rem' }}>
@@ -313,9 +313,6 @@ export default function TgParts() {
           </div>
         </div>
       )}
-
-      {/* Espaciador para que TgNav (fixed) no tape el contenido */}
-      <div style={{ height: '5rem', flexShrink: 0 }} />
 
       <TgNav userRole={user?.role} />
     </div>
