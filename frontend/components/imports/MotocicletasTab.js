@@ -902,7 +902,7 @@ export default function MotocicletasTab({ userRole }) {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
             <thead>
               <tr style={{ background: '#0e0e14' }}>
-                {['PI Number', 'Modelo', 'VIN', 'Motor No.', 'Color PL', 'Color RUNT', 'Año Modelo', 'Empadronamiento', 'Empadr. Físico', 'Acciones'].map(h => (
+                {['PI Number', 'Modelo', 'VIN', 'Motor No.', 'Color RUNT', 'Año Modelo', 'Empadronamiento', 'Empadr. Físico', 'Acciones'].map(h => (
                   <th
                     key={h}
                     style={{
@@ -937,9 +937,6 @@ export default function MotocicletasTab({ userRole }) {
                   </td>
                   <td style={{ padding: '9px 12px', color: '#9ca3af', fontFamily: 'monospace', fontSize: '10px', whiteSpace: 'nowrap' }}>
                     {unit.engine_number || unit.motor_number || '—'}
-                  </td>
-                  <td style={{ padding: '9px 12px', color: '#9ca3af', whiteSpace: 'nowrap', fontSize: '10px' }}>
-                    {unit.color || '—'}
                   </td>
                   <td style={{ padding: '9px 12px', whiteSpace: 'nowrap' }}>
                     {unit.color_runt
