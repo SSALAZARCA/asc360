@@ -136,39 +136,42 @@ async def resync_all_moto_units(
 ):
     _require_superadmin(current_user)
 
+    # Construir índice de mapeos en Python: color_key -> nombre_runt
+    mappings = (await db.execute(select(ColorRuntMapping))).scalars().all()
+    mapping_index = {m.color_key: m.nombre_runt for m in mappings}
+
+    # Traer todas las motos con color definido
     base_where = [ShipmentMotoUnit.color.isnot(None)]
     if solo_pendientes:
         base_where.append(ShipmentMotoUnit.certificado_generado.is_(False))
 
-    await db.execute(
-        sa_update(ShipmentMotoUnit)
+    motos = (await db.execute(
+        select(ShipmentMotoUnit.id, ShipmentMotoUnit.color)
         .where(*base_where)
-        .values(color_runt=None)
-        .execution_options(synchronize_session=False)
-    )
-    mappings = (await db.execute(select(ColorRuntMapping))).scalars().all()
-    motos_actualizadas = 0
-    for mapping in mappings:
-        result = await db.execute(
-            sa_update(ShipmentMotoUnit)
-            .where(*base_where, _sql_norm_color(ShipmentMotoUnit.color) == mapping.color_key)
-            .values(color_runt=mapping.nombre_runt)
-            .execution_options(synchronize_session=False)
-        )
-        motos_actualizadas += result.rowcount
+    )).fetchall()
 
-    sin_mapeo_result = await db.execute(
-        select(ShipmentMotoUnit.color)
-        .where(*base_where, ShipmentMotoUnit.color_runt.is_(None))
-        .distinct()
-    )
-    sin_mapeo = [r[0] for r in sin_mapeo_result.fetchall() if r[0]]
+    motos_actualizadas = 0
+    sin_mapeo = set()
+
+    for moto_id, color in motos:
+        color_key = _norm(color)
+        nombre_runt = mapping_index.get(color_key)
+        if nombre_runt:
+            await db.execute(
+                sa_update(ShipmentMotoUnit)
+                .where(ShipmentMotoUnit.id == moto_id)
+                .values(color_runt=nombre_runt)
+                .execution_options(synchronize_session=False)
+            )
+            motos_actualizadas += 1
+        else:
+            sin_mapeo.add(color)
 
     await db.commit()
     scope = "sin empadronamiento" if solo_pendientes else "en total"
     msg = f"Sincronización completada. {motos_actualizadas} motos actualizadas ({scope})."
     if sin_mapeo:
-        msg += f" Colores sin mapeo: {', '.join(sin_mapeo)}."
+        msg += f" Colores sin mapeo: {', '.join(sorted(sin_mapeo))}."
     return {"detail": msg}
 
 
