@@ -26,6 +26,7 @@ class MotoUnitRead(BaseModel):
     vin_number: Optional[str] = None
     engine_number: Optional[str] = None
     color: Optional[str] = None
+    color_runt: Optional[str] = None
     model_year: Optional[int] = None
     container_no: Optional[str] = None
     seal_no: Optional[str] = None
