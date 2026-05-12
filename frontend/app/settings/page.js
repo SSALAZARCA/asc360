@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import AdminLayout from '../admin-layout';
-import { UploadCloud, Image as ImageIcon, Save, Trash2, Clock, Bike, Plus, Pencil, X, AlertCircle, BookOpen, Upload, FileText, Loader2, ChevronDown, ScanSearch, Shield } from 'lucide-react';
+import { UploadCloud, Image as ImageIcon, Save, Trash2, Clock, Bike, Plus, Pencil, X, AlertCircle, BookOpen, Upload, FileText, Loader2, ChevronDown, ScanSearch, Shield, RefreshCw } from 'lucide-react';
 import { authFetch } from '../../lib/authFetch';
 import { getApiUrl } from '../../lib/api';
 
@@ -322,6 +322,7 @@ export default function SettingsPage() {
   const [cmForm, setCmForm] = useState(CM_FORM_DEFAULTS);
   const [cmSaving, setCmSaving] = useState(false);
   const [cmError, setCmError] = useState('');
+  const [cmResyncing, setCmResyncing] = useState(false);
 
   const fetchColorMappings = useCallback(async () => {
     setCmLoading(true);
@@ -374,6 +375,22 @@ export default function SettingsPage() {
   };
 
   const openCreateCM = () => { setEditingCM(null); setCmForm(CM_FORM_DEFAULTS); setCmError(''); setShowCMModal(true); };
+
+  const resyncAllCM = async () => {
+    if (!confirm('¿Sincronizar todos los colores RUNT con las motos existentes? Esto actualizará el campo color RUNT en todas las unidades.')) return;
+    setCmResyncing(true);
+    try {
+      const res = await authFetch(`${getApiUrl()}/color-runt-mappings/resync-all`, { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        alert(data.detail || 'Sincronización completada.');
+        fetchColorMappings();
+      } else {
+        alert('Error al sincronizar.');
+      }
+    } catch { alert('Error de conexión.'); }
+    finally { setCmResyncing(false); }
+  };
   const openEditCM = (cm) => {
     setEditingCM(cm);
     setCmForm({ color_original: cm.color_original || '', codigo_runt: cm.codigo_runt ?? '', nombre_runt: cm.nombre_runt || '' });
@@ -961,18 +978,33 @@ export default function SettingsPage() {
               <h2 className="text-lg font-bold">Colores RUNT</h2>
             </div>
             {userRole === 'superadmin' && (
-              <button
-                onClick={openCreateCM}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: '6px',
-                  padding: '7px 14px', borderRadius: '8px', border: 'none',
-                  background: 'rgba(34,197,94,0.12)', color: '#22c55e',
-                  fontSize: '12px', fontWeight: 700, cursor: 'pointer',
-                  letterSpacing: '0.04em',
-                }}
-              >
-                <Plus size={14} /> Nuevo Color
-              </button>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  onClick={resyncAllCM}
+                  disabled={cmResyncing}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '6px',
+                    padding: '7px 14px', borderRadius: '8px', border: 'none',
+                    background: 'rgba(251,191,36,0.12)', color: '#fbbf24',
+                    fontSize: '12px', fontWeight: 700, cursor: cmResyncing ? 'wait' : 'pointer',
+                    letterSpacing: '0.04em', opacity: cmResyncing ? 0.7 : 1,
+                  }}
+                >
+                  <RefreshCw size={14} /> {cmResyncing ? 'Sincronizando...' : 'Sincronizar motos'}
+                </button>
+                <button
+                  onClick={openCreateCM}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '6px',
+                    padding: '7px 14px', borderRadius: '8px', border: 'none',
+                    background: 'rgba(34,197,94,0.12)', color: '#22c55e',
+                    fontSize: '12px', fontWeight: 700, cursor: 'pointer',
+                    letterSpacing: '0.04em',
+                  }}
+                >
+                  <Plus size={14} /> Nuevo Color
+                </button>
+              </div>
             )}
           </div>
           <p style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.3)', margin: '0 0 1rem', lineHeight: 1.7 }}>

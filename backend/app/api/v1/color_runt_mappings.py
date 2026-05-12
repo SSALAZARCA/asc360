@@ -128,6 +128,37 @@ async def update_color_runt_mapping(
     return ColorRuntMappingRead.model_validate(record).model_dump()
 
 
+@router.post("/resync-all", status_code=200)
+async def resync_all_moto_units(
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    _require_superadmin(current_user)
+    # Solo motos sin empadronamiento generado (las que ya tienen certificado no se tocan)
+    pending_filter = ShipmentMotoUnit.certificado_generado.is_(False)
+
+    await db.execute(
+        sa_update(ShipmentMotoUnit)
+        .where(ShipmentMotoUnit.color.isnot(None), pending_filter)
+        .values(color_runt=None)
+        .execution_options(synchronize_session=False)
+    )
+    mappings = (await db.execute(select(ColorRuntMapping))).scalars().all()
+    for mapping in mappings:
+        await db.execute(
+            sa_update(ShipmentMotoUnit)
+            .where(
+                ShipmentMotoUnit.color.isnot(None),
+                pending_filter,
+                _sql_norm_color(ShipmentMotoUnit.color) == mapping.color_key,
+            )
+            .values(color_runt=mapping.nombre_runt)
+            .execution_options(synchronize_session=False)
+        )
+    await db.commit()
+    return {"detail": f"Sincronización completada. {len(mappings)} mapeos aplicados a motos sin empadronamiento."}
+
+
 @router.delete("/{mapping_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_color_runt_mapping(
     mapping_id: uuid.UUID,
