@@ -902,7 +902,7 @@ export default function MotocicletasTab({ userRole }) {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
             <thead>
               <tr style={{ background: '#0e0e14' }}>
-                {['PI Number', 'Modelo', 'VIN', 'Motor No.', 'Color', 'Año Modelo', 'Empadronamiento', 'Empadr. Físico', 'Acciones'].map(h => (
+                {['PI Number', 'Modelo', 'VIN', 'Motor No.', 'Color PL', 'Color RUNT', 'Año Modelo', 'Empadronamiento', 'Empadr. Físico', 'Acciones'].map(h => (
                   <th
                     key={h}
                     style={{
@@ -938,8 +938,14 @@ export default function MotocicletasTab({ userRole }) {
                   <td style={{ padding: '9px 12px', color: '#9ca3af', fontFamily: 'monospace', fontSize: '10px', whiteSpace: 'nowrap' }}>
                     {unit.engine_number || unit.motor_number || '—'}
                   </td>
-                  <td style={{ padding: '9px 12px', color: '#9ca3af', whiteSpace: 'nowrap' }}>
+                  <td style={{ padding: '9px 12px', color: '#9ca3af', whiteSpace: 'nowrap', fontSize: '10px' }}>
                     {unit.color || '—'}
+                  </td>
+                  <td style={{ padding: '9px 12px', whiteSpace: 'nowrap' }}>
+                    {unit.color_runt
+                      ? <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 7px', borderRadius: '20px', background: 'rgba(99,102,241,0.1)', color: '#818cf8', border: '1px solid rgba(99,102,241,0.25)' }}>{unit.color_runt}</span>
+                      : <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 7px', borderRadius: '20px', background: 'rgba(248,113,113,0.1)', color: '#f87171', border: '1px solid rgba(248,113,113,0.25)' }}>Sin mapeo</span>
+                    }
                   </td>
                   <td style={{ padding: '9px 12px', color: '#9ca3af', whiteSpace: 'nowrap' }}>
                     {unit.model_year || '—'}
