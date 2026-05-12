@@ -130,16 +130,19 @@ async def update_color_runt_mapping(
 
 @router.post("/resync-all", status_code=200)
 async def resync_all_moto_units(
+    solo_pendientes: bool = True,
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
     _require_superadmin(current_user)
-    # Solo motos sin empadronamiento generado (las que ya tienen certificado no se tocan)
-    pending_filter = ShipmentMotoUnit.certificado_generado.is_(False)
+
+    base_where = [ShipmentMotoUnit.color.isnot(None)]
+    if solo_pendientes:
+        base_where.append(ShipmentMotoUnit.certificado_generado.is_(False))
 
     await db.execute(
         sa_update(ShipmentMotoUnit)
-        .where(ShipmentMotoUnit.color.isnot(None), pending_filter)
+        .where(*base_where)
         .values(color_runt=None)
         .execution_options(synchronize_session=False)
     )
@@ -147,16 +150,13 @@ async def resync_all_moto_units(
     for mapping in mappings:
         await db.execute(
             sa_update(ShipmentMotoUnit)
-            .where(
-                ShipmentMotoUnit.color.isnot(None),
-                pending_filter,
-                _sql_norm_color(ShipmentMotoUnit.color) == mapping.color_key,
-            )
+            .where(*base_where, _sql_norm_color(ShipmentMotoUnit.color) == mapping.color_key)
             .values(color_runt=mapping.nombre_runt)
             .execution_options(synchronize_session=False)
         )
     await db.commit()
-    return {"detail": f"Sincronización completada. {len(mappings)} mapeos aplicados a motos sin empadronamiento."}
+    scope = "motos sin empadronamiento" if solo_pendientes else "todas las motos"
+    return {"detail": f"Sincronización completada. {len(mappings)} mapeos aplicados a {scope}."}
 
 
 @router.delete("/{mapping_id}", status_code=status.HTTP_204_NO_CONTENT)

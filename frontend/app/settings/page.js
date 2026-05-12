@@ -323,6 +323,7 @@ export default function SettingsPage() {
   const [cmSaving, setCmSaving] = useState(false);
   const [cmError, setCmError] = useState('');
   const [cmResyncing, setCmResyncing] = useState(false);
+  const [showResyncModal, setShowResyncModal] = useState(false);
 
   const fetchColorMappings = useCallback(async () => {
     setCmLoading(true);
@@ -376,11 +377,14 @@ export default function SettingsPage() {
 
   const openCreateCM = () => { setEditingCM(null); setCmForm(CM_FORM_DEFAULTS); setCmError(''); setShowCMModal(true); };
 
-  const resyncAllCM = async () => {
-    if (!confirm('¿Sincronizar todos los colores RUNT con las motos existentes? Esto actualizará el campo color RUNT en todas las unidades.')) return;
+  const resyncAllCM = async (soloPendientes) => {
+    setShowResyncModal(false);
     setCmResyncing(true);
     try {
-      const res = await authFetch(`${getApiUrl()}/color-runt-mappings/resync-all`, { method: 'POST' });
+      const res = await authFetch(
+        `${getApiUrl()}/color-runt-mappings/resync-all?solo_pendientes=${soloPendientes}`,
+        { method: 'POST' }
+      );
       if (res.ok) {
         const data = await res.json();
         alert(data.detail || 'Sincronización completada.');
@@ -980,7 +984,7 @@ export default function SettingsPage() {
             {userRole === 'superadmin' && (
               <div style={{ display: 'flex', gap: '8px' }}>
                 <button
-                  onClick={resyncAllCM}
+                  onClick={() => setShowResyncModal(true)}
                   disabled={cmResyncing}
                   style={{
                     display: 'flex', alignItems: 'center', gap: '6px',
@@ -1269,6 +1273,70 @@ export default function SettingsPage() {
         </section>
 
       </div>
+
+      {/* Modal Sincronizar motos */}
+      {showResyncModal && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 1000,
+          background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <div style={{
+            background: '#1a1a2e', borderRadius: '16px', padding: '28px',
+            width: '100%', maxWidth: '420px', border: '1px solid rgba(255,255,255,0.08)',
+            display: 'flex', flexDirection: 'column', gap: '20px',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <RefreshCw size={18} color="#fbbf24" />
+                <span style={{ fontWeight: 700, fontSize: '15px' }}>Sincronizar colores RUNT</span>
+              </div>
+              <button onClick={() => setShowResyncModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#606075', padding: '4px' }}>
+                <X size={18} />
+              </button>
+            </div>
+            <p style={{ fontSize: '12px', color: '#9ca3af', lineHeight: 1.7, margin: 0 }}>
+              Aplicará los colores actuales de la tabla de configuración a las motos. Elegí qué motos actualizar:
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <button
+                onClick={() => resyncAllCM(true)}
+                style={{
+                  padding: '14px 18px', borderRadius: '10px', border: '1px solid rgba(251,191,36,0.25)',
+                  background: 'rgba(251,191,36,0.07)', color: '#fbbf24',
+                  fontSize: '13px', fontWeight: 700, cursor: 'pointer', textAlign: 'left',
+                  display: 'flex', flexDirection: 'column', gap: '4px',
+                }}
+              >
+                Solo motos sin empadronamiento
+                <span style={{ fontSize: '11px', fontWeight: 400, color: '#9ca3af' }}>
+                  Las que ya tienen certificado generado no se modifican.
+                </span>
+              </button>
+              <button
+                onClick={() => resyncAllCM(false)}
+                style={{
+                  padding: '14px 18px', borderRadius: '10px', border: '1px solid rgba(248,113,113,0.25)',
+                  background: 'rgba(248,113,113,0.07)', color: '#f87171',
+                  fontSize: '13px', fontWeight: 700, cursor: 'pointer', textAlign: 'left',
+                  display: 'flex', flexDirection: 'column', gap: '4px',
+                }}
+              >
+                Todas las motos
+                <span style={{ fontSize: '11px', fontWeight: 400, color: '#9ca3af' }}>
+                  Incluye motos con empadronamiento ya generado. El PDF guardado no cambia, solo el campo de color.
+                </span>
+              </button>
+            </div>
+            <button
+              onClick={() => setShowResyncModal(false)}
+              style={{ alignSelf: 'flex-end', padding: '7px 16px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: '#9ca3af', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Modal Crear / Editar Color RUNT */}
       {showCMModal && (
