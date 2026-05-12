@@ -147,16 +147,29 @@ async def resync_all_moto_units(
         .execution_options(synchronize_session=False)
     )
     mappings = (await db.execute(select(ColorRuntMapping))).scalars().all()
+    motos_actualizadas = 0
     for mapping in mappings:
-        await db.execute(
+        result = await db.execute(
             sa_update(ShipmentMotoUnit)
             .where(*base_where, _sql_norm_color(ShipmentMotoUnit.color) == mapping.color_key)
             .values(color_runt=mapping.nombre_runt)
             .execution_options(synchronize_session=False)
         )
+        motos_actualizadas += result.rowcount
+
+    sin_mapeo_result = await db.execute(
+        select(ShipmentMotoUnit.color)
+        .where(*base_where, ShipmentMotoUnit.color_runt.is_(None))
+        .distinct()
+    )
+    sin_mapeo = [r[0] for r in sin_mapeo_result.fetchall() if r[0]]
+
     await db.commit()
-    scope = "motos sin empadronamiento" if solo_pendientes else "todas las motos"
-    return {"detail": f"Sincronización completada. {len(mappings)} mapeos aplicados a {scope}."}
+    scope = "sin empadronamiento" if solo_pendientes else "en total"
+    msg = f"Sincronización completada. {motos_actualizadas} motos actualizadas ({scope})."
+    if sin_mapeo:
+        msg += f" Colores sin mapeo: {', '.join(sin_mapeo)}."
+    return {"detail": msg}
 
 
 @router.delete("/{mapping_id}", status_code=status.HTTP_204_NO_CONTENT)
