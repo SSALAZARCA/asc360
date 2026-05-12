@@ -315,6 +315,18 @@ export default function SettingsPage() {
   const [vmError, setVmError] = useState('');
 
   // Colores RUNT
+  const [confirmDialog, setConfirmDialog] = useState(null);
+  const [toast, setToast] = useState(null);
+
+  const showToast = (text, type = 'success') => {
+    setToast({ text, type });
+    setTimeout(() => setToast(null), 3500);
+  };
+
+  const openConfirm = (title, message, confirmText, onConfirm, danger = false) => {
+    setConfirmDialog({ title, message, confirmText, onConfirm, danger });
+  };
+
   const [colorMappings, setColorMappings] = useState([]);
   const [cmLoading, setCmLoading] = useState(false);
   const [showCMModal, setShowCMModal] = useState(false);
@@ -366,33 +378,47 @@ export default function SettingsPage() {
     finally { setCmSaving(false); }
   };
 
-  const deleteCM = async (cm) => {
-    if (!confirm(`¿Eliminar el mapeo "${cm.color_original}"? Esta acción no se puede deshacer.`)) return;
-    try {
-      await authFetch(`${getApiUrl()}/color-runt-mappings/${cm.id}`, { method: 'DELETE' });
-      fetchColorMappings();
-    } catch { alert('Error al eliminar el mapeo.'); }
+  const deleteCM = (cm) => {
+    openConfirm(
+      'Eliminar mapeo de color',
+      `¿Eliminás el mapeo "${cm.color_original}"? Las motos que tenían este color quedarán sin color RUNT asignado. Esta acción no se puede deshacer.`,
+      'Eliminar',
+      async () => {
+        try {
+          await authFetch(`${getApiUrl()}/color-runt-mappings/${cm.id}`, { method: 'DELETE' });
+          fetchColorMappings();
+          showToast('Mapeo eliminado correctamente.');
+        } catch { showToast('Error al eliminar el mapeo.', 'error'); }
+      },
+      true
+    );
   };
 
   const openCreateCM = () => { setEditingCM(null); setCmForm(CM_FORM_DEFAULTS); setCmError(''); setShowCMModal(true); };
 
-  const resyncAllCM = async () => {
-    if (!confirm('¿Sincronizar el color RUNT en todas las motos con los valores actuales de configuración?')) return;
-    setCmResyncing(true);
-    try {
-      const res = await authFetch(
-        `${getApiUrl()}/color-runt-mappings/resync-all?solo_pendientes=false`,
-        { method: 'POST' }
-      );
-      if (res.ok) {
-        const data = await res.json();
-        alert(data.detail || 'Sincronización completada.');
-        fetchColorMappings();
-      } else {
-        alert('Error al sincronizar.');
+  const resyncAllCM = () => {
+    openConfirm(
+      'Sincronizar colores RUNT',
+      'Se actualizará el campo color RUNT en todas las motos con los valores actuales de configuración. Las reimpresiones de empadronamiento usarán el nuevo color.',
+      'Sincronizar todo',
+      async () => {
+        setCmResyncing(true);
+        try {
+          const res = await authFetch(
+            `${getApiUrl()}/color-runt-mappings/resync-all?solo_pendientes=false`,
+            { method: 'POST' }
+          );
+          if (res.ok) {
+            const data = await res.json();
+            showToast(data.detail || 'Sincronización completada.');
+            fetchColorMappings();
+          } else {
+            showToast('Error al sincronizar.', 'error');
+          }
+        } catch { showToast('Error de conexión.', 'error'); }
+        finally { setCmResyncing(false); }
       }
-    } catch { alert('Error de conexión.'); }
-    finally { setCmResyncing(false); }
+    );
   };
   const openEditCM = (cm) => {
     setEditingCM(cm);
@@ -1272,6 +1298,76 @@ export default function SettingsPage() {
         </section>
 
       </div>
+
+      {/* Toast de notificación */}
+      {toast && (
+        <div style={{
+          position: 'fixed', bottom: '28px', right: '28px', zIndex: 2000,
+          display: 'flex', alignItems: 'center', gap: '10px',
+          padding: '12px 18px', borderRadius: '10px',
+          background: toast.type === 'error' ? 'rgba(248,113,113,0.12)' : 'rgba(34,197,94,0.12)',
+          border: `1px solid ${toast.type === 'error' ? 'rgba(248,113,113,0.3)' : 'rgba(34,197,94,0.3)'}`,
+          color: toast.type === 'error' ? '#f87171' : '#22c55e',
+          fontSize: '13px', fontWeight: 600,
+          boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+          backdropFilter: 'blur(8px)',
+          maxWidth: '360px',
+        }}>
+          {toast.type === 'error'
+            ? <AlertCircle size={15} />
+            : <Save size={15} />}
+          {toast.text}
+        </div>
+      )}
+
+      {/* Modal de confirmación genérico */}
+      {confirmDialog && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 1500,
+          background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px',
+        }}>
+          <div style={{
+            background: '#13131a', border: '1px solid rgba(255,255,255,0.08)',
+            borderRadius: '16px', padding: '28px',
+            width: '420px', maxWidth: '100%',
+            display: 'flex', flexDirection: 'column', gap: '16px',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <AlertCircle size={18} color={confirmDialog.danger ? '#f87171' : '#fbbf24'} />
+              <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: '#fff' }}>
+                {confirmDialog.title}
+              </h3>
+            </div>
+            <p style={{ margin: 0, fontSize: '13px', color: '#9ca3af', lineHeight: 1.7 }}>
+              {confirmDialog.message}
+            </p>
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '4px' }}>
+              <button
+                onClick={() => setConfirmDialog(null)}
+                style={{
+                  padding: '8px 18px', borderRadius: '8px',
+                  border: '1px solid rgba(255,255,255,0.1)', background: 'transparent',
+                  color: '#9ca3af', fontSize: '12px', fontWeight: 600, cursor: 'pointer',
+                }}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => { setConfirmDialog(null); confirmDialog.onConfirm(); }}
+                style={{
+                  padding: '8px 20px', borderRadius: '8px', border: 'none',
+                  background: confirmDialog.danger ? '#ef4444' : '#fbbf24',
+                  color: confirmDialog.danger ? '#fff' : '#000',
+                  fontSize: '12px', fontWeight: 700, cursor: 'pointer',
+                }}
+              >
+                {confirmDialog.confirmText}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal Crear / Editar Color RUNT */}
       {showCMModal && (
