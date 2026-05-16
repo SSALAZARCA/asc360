@@ -45,8 +45,7 @@ class VehicleRepository(BaseRepository[Vehicle, VehicleCreate, VehicleUpdate]):
                 if o.reception and o.reception.mileage_km:
                     latest_km = int(o.reception.mileage_km)
                     break
-            if latest_km is not None:
-                setattr(vehicle, 'latest_mileage', latest_km)
+            setattr(vehicle, 'latest_mileage', latest_km)
 
             # Orden activa (la más reciente que no esté cerrada)
             CLOSED = {"completed", "delivered"}
@@ -70,7 +69,7 @@ class VehicleRepository(BaseRepository[Vehicle, VehicleCreate, VehicleUpdate]):
                 }
                 for o in sorted_orders[:5]
             ])
-        else:
+        elif vehicle:
             setattr(vehicle, 'latest_mileage', None)
             setattr(vehicle, 'active_order', None)
             setattr(vehicle, 'service_orders_summary', [])
