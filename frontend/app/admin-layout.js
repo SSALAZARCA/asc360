@@ -56,11 +56,16 @@ export default function AdminLayout({ children, fullWidth = false }) {
       }
       setUser(u);
 
-      const superadminOnly = ['/tenants', '/users', '/settings'];
+      const superadminOnly = ['/users', '/settings'];
+      const adminOrAdministrativo = ['/tenants'];
       const dashboardRoles = ['superadmin', 'administrativo'];
 
       if (u.role !== 'superadmin' && superadminOnly.includes(pathname)) {
         r.push(u.role === 'administrativo' ? '/' : '/kanban');
+        return;
+      }
+      if (!['superadmin', 'administrativo'].includes(u.role) && adminOrAdministrativo.includes(pathname)) {
+        r.push('/kanban');
         return;
       }
       if (pathname === '/' && !dashboardRoles.includes(u.role)) {

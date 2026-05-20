@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import AdminLayout from '../admin-layout';
-import { Building2, Edit, Save, X, Phone, MapPin, Hash, Plus, Mail, User, Calendar, Wrench, ShoppingCart, Package } from 'lucide-react';
+import { Building2, Edit, Save, X, Phone, MapPin, Hash, Plus, Mail, User, Calendar, Wrench, ShoppingCart, Package, Download } from 'lucide-react';
 import { authFetch } from '../../lib/authFetch';
 import { getApiUrl } from '../../lib/api';
 
@@ -60,6 +60,7 @@ export default function TenantsPage() {
   const [departments, setDepartments] = useState([]);
   const [cities, setCities] = useState([]);
   const [saving, setSaving] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   const fetchTenants = async () => {
     setLoading(true);
@@ -131,6 +132,25 @@ export default function TenantsPage() {
     finally { setSaving(false); }
   };
 
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const res = await authFetch('/tenants/export');
+      if (!res.ok) return;
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `red_distribucion_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error('Error exportando red:', e);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const computedNivel = () => {
     const n = [editForm.has_sales, editForm.has_parts, editForm.has_service].filter(Boolean).length;
     return n > 0 ? `${n}S` : null;
@@ -143,9 +163,26 @@ export default function TenantsPage() {
           <h1 className="page-title">Red de <span style={{ fontStyle: 'italic', color: 'var(--accent-orange)', WebkitTextFillColor: 'var(--accent-orange)' }}>Distribución</span></h1>
           <p className="page-subtitle">Puntos de la red nacional UM Colombia · {tenants.length} registrados</p>
         </div>
-        <button className="btn-primary" onClick={openNew}>
-          <Plus size={16} /> Agregar Punto de Red
-        </button>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button
+            onClick={handleExport}
+            disabled={exporting || loading}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: '0.65rem 1.1rem', borderRadius: 9, border: 'none',
+              background: exporting ? 'rgba(34,197,94,0.06)' : 'rgba(34,197,94,0.12)',
+              color: exporting ? '#606075' : '#22c55e',
+              fontSize: 11, fontWeight: 800, cursor: exporting ? 'not-allowed' : 'pointer',
+              letterSpacing: '0.04em', textTransform: 'uppercase',
+            }}
+          >
+            <Download size={14} />
+            {exporting ? 'Exportando...' : 'Exportar Excel'}
+          </button>
+          <button className="btn-primary" onClick={openNew}>
+            <Plus size={16} /> Agregar Punto de Red
+          </button>
+        </div>
       </header>
 
       <div className="tenants-grid">

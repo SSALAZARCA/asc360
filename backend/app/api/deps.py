@@ -28,6 +28,10 @@ class CurrentUser:
         return self.role == "proveedor"
 
     @property
+    def is_administrativo(self) -> bool:
+        return self.role == "administrativo"
+
+    @property
     def is_imports_editor(self) -> bool:
         return self.role in ("superadmin", "proveedor", "administrativo")
 

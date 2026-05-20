@@ -7,9 +7,12 @@ from app.models.tenant import Tenant, TenantType, EstadoRed
 from app.services.divipola_service import validate_ciudad_dpto, search_municipios
 from pydantic import BaseModel, ConfigDict
 from typing import Optional, List
+from starlette.responses import StreamingResponse
 import uuid
 import re
+import io
 import datetime
+import openpyxl
 
 from app.api.deps import get_current_user, CurrentUser
 from app.core.security import verify_sonia_secret
@@ -154,7 +157,7 @@ async def list_tenants(
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user)
 ):
-    if not current_user.is_superadmin:
+    if not (current_user.is_superadmin or current_user.is_administrativo):
         raise HTTPException(status_code=403, detail="Acceso denegado. Solo la administración central puede ver la red completa.")
     result = await db.execute(select(Tenant))
     return [TenantOut.from_tenant(t) for t in result.scalars().all()]
@@ -178,7 +181,7 @@ async def search_tenants(
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
-    if not current_user.is_superadmin:
+    if not (current_user.is_superadmin or current_user.is_administrativo):
         raise HTTPException(status_code=403, detail="Acceso denegado")
     q_lower = f"%{q.lower()}%"
     stmt = select(Tenant).where(
@@ -191,13 +194,68 @@ async def search_tenants(
     return [TenantOut.from_tenant(t) for t in result.scalars().all()]
 
 
+@router.get("/export")
+async def export_tenants(
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user)
+):
+    if not (current_user.is_superadmin or current_user.is_administrativo):
+        raise HTTPException(status_code=403, detail="Acceso denegado")
+    result = await db.execute(select(Tenant))
+    tenants = result.scalars().all()
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Red de Distribución"
+    ws.append([
+        "Razón Social", "NIT", "Tipo", "Nivel Red", "Estado", "Categoría",
+        "Departamento", "Ciudad", "Dirección", "Zona Geográfica",
+        "Teléfono", "Email", "Representante Legal", "Fecha Vinculación",
+        "Venta Motos", "Venta Repuestos", "Servicio Taller",
+        "Capacidad Bahías", "Número Técnicos", "Tipo Servicio",
+    ])
+    for t in tenants:
+        ws.append([
+            t.name,
+            t.nit or "",
+            t.tenant_type.value if t.tenant_type else "",
+            t.nivel_red or "",
+            t.estado_red.value if t.estado_red else "activo",
+            t.categoria or "",
+            t.departamento or "",
+            t.ciudad or "",
+            t.direccion or "",
+            t.zona_geografica or "",
+            t.phone or "",
+            t.email or "",
+            t.representante_legal or "",
+            str(t.fecha_vinculacion) if t.fecha_vinculacion else "",
+            "Sí" if t.has_sales else "No",
+            "Sí" if t.has_parts else "No",
+            "Sí" if t.has_service else "No",
+            t.capacidad_bahias or "",
+            t.numero_tecnicos or "",
+            t.tipo_servicio or "",
+        ])
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    filename = f"red_distribucion_{datetime.datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 @router.post("/", response_model=TenantOut, status_code=201)
 async def create_tenant(
     data: TenantCreate,
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user)
 ):
-    if not current_user.is_superadmin:
+    if not (current_user.is_superadmin or current_user.is_administrativo):
         raise HTTPException(status_code=403, detail="Permiso denegado para crear puntos de red")
 
     existing = await db.execute(
@@ -264,7 +322,7 @@ async def update_tenant(
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user)
 ):
-    if not current_user.is_superadmin:
+    if not (current_user.is_superadmin or current_user.is_administrativo):
         raise HTTPException(status_code=403, detail="Permiso denegado")
 
     tenant = await db.get(Tenant, tenant_id)
