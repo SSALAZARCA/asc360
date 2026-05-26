@@ -651,6 +651,7 @@ async def list_catalog(
     search: str = "",
     model_code: str = "",
     only_pending: bool = False,
+    rotation_class: str = "",
     sort_col: str = "section_code",
     sort_dir: str = "asc",
     page: int = 1,
@@ -715,6 +716,10 @@ async def list_catalog(
             ))
         if only_pending:
             q = q.where(pending_sq.c.task_id.isnot(None))
+        if rotation_class == "none":
+            q = q.where(PartsReference.rotation_class.is_(None))
+        elif rotation_class in ("alta", "media", "baja"):
+            q = q.where(PartsReference.rotation_class == rotation_class)
         return q
 
     # Total

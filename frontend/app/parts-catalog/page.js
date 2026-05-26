@@ -43,6 +43,7 @@ export default function PartsCatalogPage() {
   const [modelCode, setModelCode]     = useState('');
   const [models, setModels]           = useState([]);
   const [onlyPending, setOnlyPending] = useState(false);
+  const [rotationFilter, setRotationFilter] = useState('');
 
   const [sortCol, setSortCol] = useState('section_code');
   const [sortDir, setSortDir] = useState('asc');
@@ -100,6 +101,7 @@ export default function PartsCatalogPage() {
         search,
         model_code: modelCode,
         only_pending: String(onlyPending),
+        rotation_class: rotationFilter,
         sort_col: sortCol,
         sort_dir: sortDir,
       });
@@ -114,7 +116,7 @@ export default function PartsCatalogPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, search, modelCode, onlyPending, sortCol, sortDir]);
+  }, [page, search, modelCode, onlyPending, rotationFilter, sortCol, sortDir]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -356,6 +358,18 @@ export default function PartsCatalogPage() {
         >
           <option value="">Todos los modelos</option>
           {models.map(m => <option key={m.vehicle_model} value={m.catalog_model_code}>{m.vehicle_model}</option>)}
+        </select>
+
+        <select
+          value={rotationFilter}
+          onChange={e => { setRotationFilter(e.target.value); setPage(1); }}
+          style={{ padding: '0.625rem 1rem', background: rotationFilter ? (ROTATION_STYLES[rotationFilter]?.bg || 'rgba(255,255,255,0.04)') : 'rgba(255,255,255,0.04)', border: `1px solid ${rotationFilter ? (ROTATION_STYLES[rotationFilter]?.border || 'rgba(255,255,255,0.08)') : 'rgba(255,255,255,0.08)'}`, borderRadius: '10px', color: rotationFilter ? (ROTATION_STYLES[rotationFilter]?.color || '#fff') : 'rgba(255,255,255,0.3)', fontSize: '0.78rem', outline: 'none', cursor: 'pointer', flexShrink: 0, fontWeight: rotationFilter ? 800 : 400 }}
+        >
+          <option value="">Toda rotación</option>
+          <option value="alta">Alta rotación</option>
+          <option value="media">Media rotación</option>
+          <option value="baja">Baja rotación</option>
+          <option value="none">Sin clasificar</option>
         </select>
 
         <div style={{ position: 'relative', display: 'inline-block' }}
