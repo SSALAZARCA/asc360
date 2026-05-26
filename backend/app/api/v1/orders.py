@@ -134,13 +134,13 @@ async def create_service_order(
         import logging
         logging.getLogger(__name__).error(f"Error registrando evento en hoja de vida: {e}")
     
-    # Recargar la orden con TODAS las relaciones usando eager load
-    # (lazy loading no funciona en contextos async de SQLAlchemy)
     stmt = (
         select(ServiceOrder)
         .options(
             selectinload(ServiceOrder.reception),
             selectinload(ServiceOrder.vehicle),
+            selectinload(ServiceOrder.work_logs),
+            selectinload(ServiceOrder.parts),
         )
         .where(ServiceOrder.id == new_order.id)
     )
@@ -756,7 +756,12 @@ async def get_active_orders_for_tenant(
     exclude_statuses = [ServiceStatus.completed, ServiceStatus.delivered, ServiceStatus.cancelled]
     stmt = (
         select(ServiceOrder)
-        .options(selectinload(ServiceOrder.reception), selectinload(ServiceOrder.vehicle))
+        .options(
+            selectinload(ServiceOrder.reception),
+            selectinload(ServiceOrder.vehicle),
+            selectinload(ServiceOrder.work_logs),
+            selectinload(ServiceOrder.parts),
+        )
         .where(ServiceOrder.tenant_id == tenant_id)
         .where(ServiceOrder.status.not_in(exclude_statuses))
     )

@@ -45,7 +45,7 @@ class ServiceOrder(Base):
     delivered_at = Column(DateTime, nullable=True) # Cuándo se le entrega físicamente al cliente
 
     tenant = relationship("Tenant", back_populates="service_orders")
-    vehicle = relationship("Vehicle", back_populates="service_orders")
+    vehicle = relationship("Vehicle", back_populates="service_orders", lazy="selectin")
     client = relationship("User", foreign_keys=[client_id])
     technician = relationship("User", foreign_keys=[technician_id])
     history = relationship("OrderHistory", back_populates="order", cascade="all, delete-orphan")
