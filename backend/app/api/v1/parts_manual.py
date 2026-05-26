@@ -1431,13 +1431,13 @@ async def get_coverage(
         aqui AS (
             SELECT UPPER(TRIM(REPLACE(part_number, ' ', ''))) AS pn
             FROM spare_part_items
-            WHERE qty_physical IS NOT NULL
+            WHERE qty_physical IS NOT NULL OR qty_received > 0
             GROUP BY 1
         ),
         en_camino AS (
             SELECT UPPER(TRIM(REPLACE(part_number, ' ', ''))) AS pn
             FROM spare_part_items
-            WHERE qty_physical IS NULL
+            WHERE (qty_physical IS NULL AND COALESCE(qty_received, 0) = 0)
               AND UPPER(TRIM(REPLACE(part_number, ' ', ''))) NOT IN (SELECT pn FROM aqui)
             GROUP BY 1
         ),
@@ -1449,8 +1449,8 @@ async def get_coverage(
                 COUNT(CASE WHEN c.pn IS NOT NULL AND a.pn IS NULL THEN 1 END) AS en_camino,
                 COUNT(CASE WHEN a.pn IS NULL AND c.pn IS NULL THEN 1 END) AS no_pedidas
             FROM parts_references r
-            LEFT JOIN aqui      a ON a.pn = r.factory_part_number
-            LEFT JOIN en_camino c ON c.pn = r.factory_part_number
+            LEFT JOIN aqui      a ON a.pn = UPPER(TRIM(r.factory_part_number))
+            LEFT JOIN en_camino c ON c.pn = UPPER(TRIM(r.factory_part_number))
             WHERE r.rotation_class IS NOT NULL
             GROUP BY r.rotation_class
         )
@@ -1517,9 +1517,10 @@ async def export_unordered(
         FROM parts_references r
         WHERE r.rotation_class IS NOT NULL
           {rc_clause}
-          AND r.factory_part_number NOT IN (
+          AND UPPER(TRIM(r.factory_part_number)) NOT IN (
               SELECT DISTINCT UPPER(TRIM(REPLACE(part_number, ' ', '')))
               FROM spare_part_items
+              WHERE qty_physical IS NOT NULL OR qty_received > 0
           )
         ORDER BY r.rotation_class, r.factory_part_number
     """)
