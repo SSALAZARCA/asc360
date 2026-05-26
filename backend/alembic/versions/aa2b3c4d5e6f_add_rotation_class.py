@@ -1,13 +1,13 @@
 """add rotation_class to parts_references
 
-Revision ID: a0b1c2d3e4f5
+Revision ID: aa2b3c4d5e6f
 Revises: z9a0b1c2d3e4
 Create Date: 2026-05-26
 """
 from alembic import op
 import sqlalchemy as sa
 
-revision = 'a0b1c2d3e4f5'
+revision = 'aa2b3c4d5e6f'
 down_revision = 'z9a0b1c2d3e4'
 branch_labels = None
 depends_on = None
