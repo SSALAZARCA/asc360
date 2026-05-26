@@ -1278,6 +1278,11 @@ import openpyxl
 
 
 _VALID_ROTATION = {"alta", "media", "baja"}
+_ROTATION_MAP = {
+    "alta": "alta", "a": "alta",
+    "media": "media", "b": "media",
+    "baja": "baja", "c": "baja",
+}
 
 
 def _normalize_part_code(s: str) -> str:
@@ -1369,9 +1374,9 @@ async def import_rotation(
             continue
 
         code_n = _normalize_part_code(code_raw)
-        rc_n   = str(rc_raw or "").strip().lower()
+        rc_n   = _ROTATION_MAP.get(str(rc_raw or "").strip().lower())
 
-        if rc_n not in _VALID_ROTATION:
+        if rc_n is None:
             skipped += 1
             errors.append({"row": row_idx, "code": code_n, "reason": "invalid_rotation_class"})
             continue
