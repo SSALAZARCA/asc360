@@ -1328,7 +1328,12 @@ async def import_rotation(
     wb = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
     sheet = wb.active
 
-    expected = {"part_code", "factory_part_number", "rotation_class"}
+    _CODE_ALIASES = {"part_code", "factory_part_number", "codigo", "código", "codigo_parte",
+                     "referencia", "ref", "part number", "reference", "numero_parte", "numero parte"}
+    _RC_ALIASES   = {"rotation_class", "rotacion", "rotación", "clase", "clase_rotacion",
+                     "clase_rotación", "clase rotacion", "clase rotación", "tipo_rotacion",
+                     "tipo_rotación", "tipo rotacion"}
+    expected = _CODE_ALIASES | _RC_ALIASES
     try:
         header_row = _find_header_row(sheet, expected)
     except ValueError as exc:
@@ -1336,11 +1341,23 @@ async def import_rotation(
 
     col_map = _build_col_map(sheet, header_row)
 
+    # verify that at least one code column and one rotation column are present
+    has_code = any(a in col_map for a in _CODE_ALIASES)
+    has_rc   = any(a in col_map for a in _RC_ALIASES)
+    if not has_code or not has_rc:
+        missing = []
+        if not has_code: missing.append("código de parte (ej: 'part_code' o 'codigo')")
+        if not has_rc:   missing.append("clasificación (ej: 'rotation_class' o 'rotacion')")
+        raise HTTPException(status_code=422, detail=f"Faltan columnas requeridas: {', '.join(missing)}")
+
+    code_cols = list(_CODE_ALIASES)
+    rc_cols   = list(_RC_ALIASES)
+
     updated, skipped, errors = 0, 0, []
 
     for row_idx in range(header_row + 1, sheet.max_row + 1):
-        code_raw = _cell(sheet, row_idx, col_map, "part_code", "factory_part_number")
-        rc_raw   = _cell(sheet, row_idx, col_map, "rotation_class")
+        code_raw = _cell(sheet, row_idx, col_map, *code_cols)
+        rc_raw   = _cell(sheet, row_idx, col_map, *rc_cols)
 
         if not code_raw and not rc_raw:
             # blank row — skip silently

@@ -719,7 +719,7 @@ export default function PartsCatalogPage() {
               <input type="file" accept=".xlsx" style={{ display: 'none' }} onChange={e => { setRotationFile(e.target.files[0] || null); setRotationResult(null); }} />
             </label>
 
-            {rotationResult && !rotationResult.error && (
+            {rotationResult && !rotationResult.error && rotationResult.updated > 0 && (
               <div style={{ background: 'rgba(74,222,128,0.05)', border: '1px solid rgba(74,222,128,0.2)', borderRadius: '10px', padding: '0.875rem 1rem', display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
                 <p style={{ margin: 0, fontSize: '0.72rem', fontWeight: 700, color: '#4ade80' }}>✅ Clasificación cargada</p>
                 <p style={{ margin: 0, fontSize: '0.68rem', color: 'rgba(255,255,255,0.45)' }}>
@@ -727,6 +727,21 @@ export default function PartsCatalogPage() {
                   Saltadas: <strong style={{ color: '#fb923c' }}>{rotationResult.skipped}</strong>
                   {rotationResult.errors?.length > 0 && <> &nbsp;·&nbsp; Con error: <strong style={{ color: '#ef4444' }}>{rotationResult.errors.length}</strong></>}
                 </p>
+              </div>
+            )}
+            {rotationResult && !rotationResult.error && rotationResult.updated === 0 && (
+              <div style={{ background: 'rgba(251,146,60,0.05)', border: '1px solid rgba(251,146,60,0.3)', borderRadius: '10px', padding: '0.875rem 1rem', display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                <p style={{ margin: 0, fontSize: '0.72rem', fontWeight: 700, color: '#fb923c' }}>⚠️ Ninguna parte actualizada</p>
+                <p style={{ margin: 0, fontSize: '0.68rem', color: 'rgba(255,255,255,0.45)', lineHeight: 1.5 }}>
+                  {rotationResult.skipped > 0
+                    ? <>Saltadas: <strong style={{ color: '#fff' }}>{rotationResult.skipped}</strong>. Verificá que las columnas del Excel se llamen <strong style={{ color: '#fff' }}>part_code</strong> (o <strong style={{ color: '#fff' }}>codigo</strong>) y <strong style={{ color: '#fff' }}>rotation_class</strong> (o <strong style={{ color: '#fff' }}>rotacion</strong>), y que los códigos de parte coincidan exactamente con el catálogo.</>
+                    : 'El archivo no tenía filas de datos para procesar.'}
+                </p>
+                {rotationResult.errors?.slice(0, 3).map((e, i) => (
+                  <p key={i} style={{ margin: 0, fontSize: '0.63rem', color: 'rgba(255,255,255,0.3)', fontFamily: 'monospace' }}>
+                    Fila {e.row}: {e.code || '—'} → {e.reason}
+                  </p>
+                ))}
               </div>
             )}
             {rotationResult?.error && (
