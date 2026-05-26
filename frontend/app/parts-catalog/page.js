@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import AdminLayout from '../admin-layout';
 import { authFetch } from '../../lib/authFetch';
-import { Search, ChevronLeft, ChevronRight, X, ArrowUp, ArrowDown, ChevronsUpDown, AlertTriangle, CheckCircle2, ShieldX, Pencil } from 'lucide-react';
+import { Search, ChevronLeft, ChevronRight, X, ArrowUp, ArrowDown, ChevronsUpDown, AlertTriangle, CheckCircle2, ShieldX, Pencil, UploadCloud, BarChart3, Download } from 'lucide-react';
 
 const PAGE_SIZE = 50;
 
@@ -16,6 +16,16 @@ const computeImpliedProviderMargin = (priceCOP, costoCOP, factors) => {
 
 const marginColor = (m) =>
   m == null ? null : m >= 0.30 ? '#4ade80' : m >= 0.10 ? '#facc15' : m >= 0 ? '#fb923c' : '#ef4444';
+
+const ROTATION_STYLES = {
+  alta:  { bg: 'rgba(239,68,68,0.12)',  color: '#ef4444', border: 'rgba(239,68,68,0.3)' },
+  media: { bg: 'rgba(251,191,36,0.12)', color: '#fbbf24', border: 'rgba(251,191,36,0.3)' },
+  baja:  { bg: 'rgba(74,222,128,0.12)', color: '#4ade80', border: 'rgba(74,222,128,0.3)' },
+};
+const rotationBadge = (rc) => {
+  const c = ROTATION_STYLES[rc] || { bg: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.3)', border: 'rgba(255,255,255,0.1)' };
+  return { fontSize: '0.58rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', padding: '2px 8px', borderRadius: '20px', background: c.bg, color: c.color, border: `1px solid ${c.border}`, display: 'inline-block', whiteSpace: 'nowrap' };
+};
 
 export default function PartsCatalogPage() {
   const [items, setItems]     = useState([]);
@@ -45,9 +55,18 @@ export default function PartsCatalogPage() {
   // Modal de edición
   const [editItem, setEditItem] = useState(null);
   const EMPTY_SUB = { substitute_part_code: '', brand: '', model: '' };
-  const [editForm, setEditForm] = useState({ description: '', description_es_manual: '', public_price: '', substitutes: [{ ...EMPTY_SUB }, { ...EMPTY_SUB }, { ...EMPTY_SUB }] });
+  const [editForm, setEditForm] = useState({ description: '', description_es_manual: '', public_price: '', rotation_class: '', substitutes: [{ ...EMPTY_SUB }, { ...EMPTY_SUB }, { ...EMPTY_SUB }] });
   const [editLoading, setEditLoading] = useState(false);
   const [editMsg, setEditMsg] = useState('');
+
+  // Modal de carga masiva de rotación
+  const [showRotationUpload, setShowRotationUpload] = useState(false);
+  const [rotationFile, setRotationFile] = useState(null);
+  const [rotationUploading, setRotationUploading] = useState(false);
+  const [rotationResult, setRotationResult] = useState(null);
+
+  // Panel de cobertura
+  const [coverage, setCoverage] = useState(null);
 
   const [pricingFactors, setPricingFactors] = useState(null);
 
@@ -62,6 +81,13 @@ export default function PartsCatalogPage() {
     authFetch('/settings/pricing-factors')
       .then(r => r.ok ? r.json() : null)
       .then(data => { if (data) setPricingFactors(data); })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    authFetch('/parts/admin/coverage')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data) setCoverage(data); })
       .catch(() => {});
   }, []);
 
@@ -157,6 +183,7 @@ export default function PartsCatalogPage() {
       description: item.description || '',
       description_es_manual: item.description_es || '',
       public_price: defaultPrice,
+      rotation_class: item.rotation_class || '',
       new_code: '',
       substitutes,
     });
@@ -196,6 +223,7 @@ export default function PartsCatalogPage() {
         const price = parseFloat(editForm.public_price);
         if (!isNaN(price) && price > 0) body.public_price = price;
         body.substitutes = editForm.substitutes.filter(s => s.substitute_part_code.trim() && s.brand.trim() && s.model.trim());
+        body.rotation_class = editForm.rotation_class || null;
         const res = await authFetch(`/parts/admin/catalog/${encodeURIComponent(editItem.factory_part_number)}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
@@ -213,6 +241,22 @@ export default function PartsCatalogPage() {
     finally { setEditLoading(false); }
   };
 
+  const handleRotationImport = async () => {
+    if (!rotationFile) return;
+    setRotationUploading(true);
+    setRotationResult(null);
+    try {
+      const fd = new FormData();
+      fd.append('file', rotationFile);
+      const res = await authFetch('/parts/admin/rotation-import', { method: 'POST', body: fd });
+      const data = await res.json();
+      setRotationResult(data);
+      fetchData();
+      authFetch('/parts/admin/coverage').then(r => r.ok ? r.json() : null).then(d => { if (d) setCoverage(d); }).catch(() => {});
+    } catch { setRotationResult({ error: 'Error de conexión' }); }
+    finally { setRotationUploading(false); }
+  };
+
   return (
     <AdminLayout>
       <header className="page-header">
@@ -228,7 +272,63 @@ export default function PartsCatalogPage() {
             )}
           </p>
         </div>
+        <button
+          onClick={() => { setShowRotationUpload(true); setRotationFile(null); setRotationResult(null); }}
+          style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.6rem 1.1rem', borderRadius: '10px', background: 'rgba(99,102,241,0.12)', border: '1px solid rgba(99,102,241,0.3)', color: '#818cf8', fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', cursor: 'pointer', flexShrink: 0 }}
+        >
+          <UploadCloud size={14} /> Clasificar rotación
+        </button>
       </header>
+
+      {/* Panel de cobertura por rotación */}
+      {coverage && coverage.buckets && coverage.buckets.length > 0 && (
+        <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
+          {coverage.buckets.map(b => {
+            const c = ROTATION_STYLES[b.rotation_class] || {};
+            return (
+              <div key={b.rotation_class} style={{ flex: '1 1 180px', background: 'rgba(255,255,255,0.02)', border: `1px solid ${c.border || 'rgba(255,255,255,0.08)'}`, borderRadius: '12px', padding: '0.875rem 1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={rotationBadge(b.rotation_class)}>{b.rotation_class}</span>
+                  <span style={{ fontSize: '0.62rem', color: 'rgba(255,255,255,0.3)', fontWeight: 600 }}>{b.total} partes</span>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                  {[
+                    { label: 'Aquí', val: b.aqui, pct: b.pct_aqui, color: '#4ade80' },
+                    { label: 'En camino', val: b.en_camino, pct: b.pct_en_camino, color: '#38bdf8' },
+                    { label: 'No pedidas', val: b.no_pedidas, pct: b.pct_no_pedidas, color: '#ef4444' },
+                  ].map(({ label, val, pct, color }) => (
+                    <div key={label} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                      <span style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.35)', width: '64px', flexShrink: 0 }}>{label}</span>
+                      <div style={{ flex: 1, height: '4px', borderRadius: '2px', background: 'rgba(255,255,255,0.05)' }}>
+                        <div style={{ height: '100%', width: `${Math.min(pct, 100)}%`, borderRadius: '2px', background: color, transition: 'width 0.4s' }} />
+                      </div>
+                      <span style={{ fontSize: '0.6rem', fontWeight: 700, color, width: '38px', textAlign: 'right', flexShrink: 0 }}>{val} <span style={{ fontWeight: 400, opacity: 0.6 }}>({pct.toFixed(0)}%)</span></span>
+                    </div>
+                  ))}
+                </div>
+                <button
+                  onClick={async () => {
+                    const res = await authFetch(`/parts/admin/coverage/unordered?rotation_class=${b.rotation_class}`);
+                    if (!res.ok) return;
+                    const blob = await res.blob();
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a'); a.href = url; a.download = `no_pedidas_${b.rotation_class}.xlsx`; a.click(); URL.revokeObjectURL(url);
+                  }}
+                  style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.58rem', fontWeight: 700, color: 'rgba(255,255,255,0.3)', background: 'none', border: 'none', cursor: 'pointer', marginTop: '0.1rem', padding: 0 }}
+                >
+                  <Download size={9} /> Exportar no pedidas
+                </button>
+              </div>
+            );
+          })}
+          {coverage.sin_clasificar > 0 && (
+            <div style={{ flex: '1 1 140px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '12px', padding: '0.875rem 1rem', display: 'flex', flexDirection: 'column', gap: '0.3rem', justifyContent: 'center' }}>
+              <span style={{ fontSize: '0.58rem', fontWeight: 800, color: 'rgba(255,255,255,0.25)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Sin clasificar</span>
+              <span style={{ fontSize: '1.1rem', fontWeight: 900, color: 'rgba(255,255,255,0.35)', fontFamily: 'monospace' }}>{coverage.sin_clasificar.toLocaleString()}</span>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Barra de filtros */}
       <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.25rem', flexWrap: 'wrap', alignItems: 'center' }}>
@@ -313,6 +413,7 @@ export default function PartsCatalogPage() {
                   {lbl} <SortIcon col={col} />
                 </th>
               ))}
+              <th className="sort-head" style={{ whiteSpace: 'nowrap' }}>Rotación</th>
               <th className="sort-head" onClick={() => toggleSort('avg_fob_cost')} style={{ whiteSpace: 'nowrap' }}>FOB Prom. <span style={{ fontWeight: 400, opacity: 0.5 }}>USD</span> <SortIcon col="avg_fob_cost" /></th>
               <th className="sort-head" onClick={() => toggleSort('avg_fob_cost')} style={{ whiteSpace: 'nowrap' }}>C. Importado <span style={{ fontWeight: 400, opacity: 0.5 }}>COP</span> <SortIcon col="avg_fob_cost" /></th>
               <th className="sort-head" onClick={() => toggleSort('avg_fob_cost')} style={{ whiteSpace: 'nowrap' }}>P. Distribuidor <span style={{ fontWeight: 400, opacity: 0.5 }}>COP</span> <SortIcon col="avg_fob_cost" /></th>
@@ -343,6 +444,7 @@ export default function PartsCatalogPage() {
                   }
                 </td>
                 <td><span className="cell-truncate" style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.7)', fontWeight: 600 }} title={item.vehicle_model_name || '—'}>{item.vehicle_model_name || '—'}</span></td>
+                <td>{item.rotation_class ? <span style={rotationBadge(item.rotation_class)}>{item.rotation_class}</span> : <span style={{ color: 'rgba(255,255,255,0.15)', fontSize: '0.68rem' }}>—</span>}</td>
                 <td>
                   {item.avg_fob_cost != null
                     ? <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '0.78rem', color: '#38bdf8' }}>${Number(item.avg_fob_cost).toFixed(2)}</span>
@@ -464,6 +566,19 @@ export default function PartsCatalogPage() {
                 />
               </div>
               <div>
+                <label style={{ display: 'block', fontSize: '0.62rem', fontWeight: 800, color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.4rem' }}>Rotación</label>
+                <select
+                  value={editForm.rotation_class}
+                  onChange={e => setEditForm(f => ({ ...f, rotation_class: e.target.value }))}
+                  style={{ width: '100%', padding: '0.6rem 0.85rem', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: editForm.rotation_class ? '#fff' : 'rgba(255,255,255,0.3)', fontSize: '0.78rem', outline: 'none', boxSizing: 'border-box', cursor: 'pointer' }}
+                >
+                  <option value="">Sin clasificar</option>
+                  <option value="alta">Alta</option>
+                  <option value="media">Media</option>
+                  <option value="baja">Baja</option>
+                </select>
+              </div>
+              <div>
                 <label style={{ display: 'block', fontSize: '0.62rem', fontWeight: 800, color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.4rem' }}>Precio Final (COP)</label>
                 <input
                   type="number"
@@ -560,6 +675,64 @@ export default function PartsCatalogPage() {
                 style={{ flex: 1, background: 'rgba(255,255,255,0.03)', color: 'rgba(255,255,255,0.4)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px', padding: '0.7rem', fontWeight: 900, fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.06em', cursor: 'pointer', opacity: editLoading ? 0.5 : 1 }}
               >
                 Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de carga masiva de clasificación de rotación */}
+      {showRotationUpload && (
+        <div onClick={() => !rotationUploading && setShowRotationUpload(false)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ background: '#0c0c0e', border: '1px solid rgba(99,102,241,0.25)', borderRadius: '16px', padding: '2rem', width: '100%', maxWidth: '440px', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <UploadCloud size={16} color="#818cf8" />
+              <p style={{ color: '#fff', fontWeight: 900, fontSize: '0.82rem', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>Clasificar rotación desde Excel</p>
+            </div>
+
+            <p style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.35)', margin: 0, lineHeight: 1.6 }}>
+              El Excel debe tener columnas <strong style={{ color: 'rgba(255,255,255,0.6)' }}>part_code</strong> y <strong style={{ color: 'rgba(255,255,255,0.6)' }}>rotation_class</strong> (valores: alta, media, baja).
+            </p>
+
+            <label style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', padding: '1.5rem', borderRadius: '10px', border: `2px dashed ${rotationFile ? 'rgba(99,102,241,0.4)' : 'rgba(255,255,255,0.1)'}`, background: rotationFile ? 'rgba(99,102,241,0.05)' : 'rgba(255,255,255,0.02)', cursor: 'pointer', transition: 'all 0.2s' }}>
+              <BarChart3 size={22} color={rotationFile ? '#818cf8' : 'rgba(255,255,255,0.2)'} />
+              <span style={{ fontSize: '0.72rem', color: rotationFile ? '#818cf8' : 'rgba(255,255,255,0.3)', fontWeight: 600 }}>
+                {rotationFile ? rotationFile.name : 'Seleccionar archivo .xlsx'}
+              </span>
+              <input type="file" accept=".xlsx" style={{ display: 'none' }} onChange={e => { setRotationFile(e.target.files[0] || null); setRotationResult(null); }} />
+            </label>
+
+            {rotationResult && !rotationResult.error && (
+              <div style={{ background: 'rgba(74,222,128,0.05)', border: '1px solid rgba(74,222,128,0.2)', borderRadius: '10px', padding: '0.875rem 1rem', display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                <p style={{ margin: 0, fontSize: '0.72rem', fontWeight: 700, color: '#4ade80' }}>✅ Clasificación cargada</p>
+                <p style={{ margin: 0, fontSize: '0.68rem', color: 'rgba(255,255,255,0.45)' }}>
+                  Actualizadas: <strong style={{ color: '#fff' }}>{rotationResult.updated}</strong> &nbsp;·&nbsp;
+                  Saltadas: <strong style={{ color: '#fb923c' }}>{rotationResult.skipped}</strong>
+                  {rotationResult.errors?.length > 0 && <> &nbsp;·&nbsp; Con error: <strong style={{ color: '#ef4444' }}>{rotationResult.errors.length}</strong></>}
+                </p>
+              </div>
+            )}
+            {rotationResult?.error && (
+              <p style={{ fontSize: '0.72rem', color: '#ef4444', margin: 0 }}>⚠️ {rotationResult.error}</p>
+            )}
+
+            <div style={{ display: 'flex', gap: '0.75rem' }}>
+              <button
+                onClick={handleRotationImport}
+                disabled={!rotationFile || rotationUploading}
+                style={{ flex: 1, background: 'rgba(99,102,241,0.15)', color: '#818cf8', border: '1px solid rgba(99,102,241,0.3)', borderRadius: '10px', padding: '0.7rem', fontWeight: 900, fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.06em', cursor: (!rotationFile || rotationUploading) ? 'not-allowed' : 'pointer', opacity: (!rotationFile || rotationUploading) ? 0.4 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}
+              >
+                <UploadCloud size={13} /> {rotationUploading ? 'Cargando...' : 'Cargar'}
+              </button>
+              <button
+                onClick={() => setShowRotationUpload(false)}
+                disabled={rotationUploading}
+                style={{ flex: 1, background: 'rgba(255,255,255,0.03)', color: 'rgba(255,255,255,0.4)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px', padding: '0.7rem', fontWeight: 900, fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.06em', cursor: 'pointer', opacity: rotationUploading ? 0.5 : 1 }}
+              >
+                Cerrar
               </button>
             </div>
           </div>
