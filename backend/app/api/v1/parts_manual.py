@@ -7,12 +7,12 @@ import tempfile
 import uuid as _uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional
 
 import fitz  # PyMuPDF
 import pdfplumber
 from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, UploadFile
-from fastapi.responses import Response
+from fastapi.responses import Response, StreamingResponse
 from minio import Minio
 from pydantic import BaseModel
 from sqlalchemy import delete as sa_delete, update as sa_update, text, exists
@@ -626,12 +626,14 @@ class CatalogItemResult(BaseModel):
     precio_distribuidor: Optional[float] = None
     precio_publico_calculado: Optional[float] = None
     substitutes: list[PartSubstituteOut] = []
+    rotation_class: Optional[str] = None
 
 class CatalogItemUpdate(BaseModel):
     description: Optional[str] = None
     description_es_manual: Optional[str] = None
     public_price: Optional[float] = None
     substitutes: Optional[list[PartSubstituteIn]] = None
+    rotation_class: Optional[Literal['alta', 'media', 'baja']] = None
 
 class ReplaceCodeRequest(BaseModel):
     new_code: str
@@ -738,6 +740,7 @@ async def list_catalog(
             pending_sq.c.candidate_code.label("candidate_code"),
             pending_sq.c.score.label("score"),
             PartsReference.avg_fob_cost.label("avg_fob_cost"),  # r[11]
+            PartsReference.rotation_class.label("rotation_class"),  # r[12]
         )
         .distinct(PartsReference.factory_part_number)
     ).order_by(
@@ -822,6 +825,7 @@ async def list_catalog(
                 )
                 for s in subs_by_fpn.get(fpn, [])
             ],
+            rotation_class=r[12],
         )
 
     return CatalogListResult(
@@ -882,6 +886,9 @@ async def update_catalog_item(
                 description=payload.description or ref.description,
                 public_price=payload.public_price,
             ))
+
+    if payload.rotation_class is not None:
+        ref.rotation_class = payload.rotation_class
 
     if payload.substitutes is not None:
         await db.execute(
@@ -1257,4 +1264,273 @@ async def load_section(
         diagram_url=diagram_url,
         parts_loaded=len(parts),
         references_new=refs_new,
+    )
+
+
+# ── Rotation class — bulk import, coverage dashboard, unordered export ─────────
+
+import openpyxl
+
+
+_VALID_ROTATION = {"alta", "media", "baja"}
+
+
+def _normalize_part_code(s: str) -> str:
+    return str(s).strip().upper().replace(" ", "")
+
+
+def _find_header_row(sheet, expected_cols: set[str]) -> int:
+    """Return the 1-based row index of the header row (case-insensitive match)."""
+    for row_idx in range(1, min(sheet.max_row + 1, 20)):
+        row_vals = {
+            str(sheet.cell(row_idx, c).value or "").strip().lower()
+            for c in range(1, sheet.max_column + 1)
+        }
+        if expected_cols & row_vals:
+            return row_idx
+    raise ValueError("No header row found with required columns")
+
+
+def _build_col_map(sheet, header_row: int) -> dict[str, int]:
+    """Return {normalized_col_name: col_index (1-based)} for the header row."""
+    col_map: dict[str, int] = {}
+    for c in range(1, sheet.max_column + 1):
+        val = sheet.cell(header_row, c).value
+        if val is not None:
+            col_map[str(val).strip().lower()] = c
+    return col_map
+
+
+def _cell(sheet, row_idx: int, col_map: dict[str, int], *col_names: str):
+    """Return the value of the first matching column name found in col_map."""
+    for name in col_names:
+        if name in col_map:
+            return sheet.cell(row_idx, col_map[name]).value
+    return None
+
+
+@router.post("/admin/rotation-import", status_code=200)
+async def import_rotation(
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Bulk-assign rotation_class from an Excel file. Solo superadmin."""
+    if not current_user.is_superadmin:
+        raise HTTPException(status_code=403, detail="Solo superadmin")
+
+    content = await file.read()
+    wb = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
+    sheet = wb.active
+
+    expected = {"part_code", "factory_part_number", "rotation_class"}
+    try:
+        header_row = _find_header_row(sheet, expected)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+    col_map = _build_col_map(sheet, header_row)
+
+    updated, skipped, errors = 0, 0, []
+
+    for row_idx in range(header_row + 1, sheet.max_row + 1):
+        code_raw = _cell(sheet, row_idx, col_map, "part_code", "factory_part_number")
+        rc_raw   = _cell(sheet, row_idx, col_map, "rotation_class")
+
+        if not code_raw and not rc_raw:
+            # blank row — skip silently
+            continue
+
+        if not code_raw:
+            skipped += 1
+            errors.append({"row": row_idx, "code": None, "reason": "missing_part_code"})
+            continue
+
+        code_n = _normalize_part_code(code_raw)
+        rc_n   = str(rc_raw or "").strip().lower()
+
+        if rc_n not in _VALID_ROTATION:
+            skipped += 1
+            errors.append({"row": row_idx, "code": code_n, "reason": "invalid_rotation_class"})
+            continue
+
+        res = await db.execute(
+            sa_update(PartsReference)
+            .where(PartsReference.factory_part_number == code_n)
+            .values(rotation_class=rc_n)
+        )
+        if res.rowcount == 0:
+            skipped += 1
+            errors.append({"row": row_idx, "code": code_n, "reason": "part_not_found"})
+        else:
+            updated += 1
+
+    await db.commit()
+    return {"updated": updated, "skipped": skipped, "errors": errors}
+
+
+# ── Coverage dashboard ─────────────────────────────────────────────────────────
+
+from pydantic import BaseModel as _BM
+
+
+class CoverageBucket(_BM):
+    rotation_class: str
+    total: int
+    aqui: int
+    en_camino: int
+    no_pedidas: int
+    pct_aqui: float
+    pct_en_camino: float
+    pct_no_pedidas: float
+
+
+class CoverageResponse(_BM):
+    sin_clasificar: int
+    buckets: list[CoverageBucket]
+
+
+@router.get("/admin/coverage", response_model=CoverageResponse)
+async def get_coverage(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Resumen de cobertura de repuestos por rotation_class. Solo superadmin."""
+    if not current_user.is_superadmin:
+        raise HTTPException(status_code=403, detail="Solo superadmin")
+
+    coverage_sql = text("""
+        WITH
+        aqui AS (
+            SELECT UPPER(TRIM(REPLACE(part_number, ' ', ''))) AS pn
+            FROM spare_part_items
+            WHERE qty_physical IS NOT NULL
+            GROUP BY 1
+        ),
+        en_camino AS (
+            SELECT UPPER(TRIM(REPLACE(part_number, ' ', ''))) AS pn
+            FROM spare_part_items
+            WHERE qty_physical IS NULL
+              AND UPPER(TRIM(REPLACE(part_number, ' ', ''))) NOT IN (SELECT pn FROM aqui)
+            GROUP BY 1
+        ),
+        coverage AS (
+            SELECT
+                r.rotation_class,
+                COUNT(*) AS total,
+                COUNT(CASE WHEN a.pn IS NOT NULL THEN 1 END) AS aqui,
+                COUNT(CASE WHEN c.pn IS NOT NULL AND a.pn IS NULL THEN 1 END) AS en_camino,
+                COUNT(CASE WHEN a.pn IS NULL AND c.pn IS NULL THEN 1 END) AS no_pedidas
+            FROM parts_references r
+            LEFT JOIN aqui      a ON a.pn = r.factory_part_number
+            LEFT JOIN en_camino c ON c.pn = r.factory_part_number
+            WHERE r.rotation_class IS NOT NULL
+            GROUP BY r.rotation_class
+        )
+        SELECT * FROM coverage
+        ORDER BY rotation_class
+    """)
+
+    sin_sql = text(
+        "SELECT COUNT(*) FROM parts_references WHERE rotation_class IS NULL"
+    )
+
+    rows = (await db.execute(coverage_sql)).all()
+    sin_clasificar = (await db.execute(sin_sql)).scalar_one()
+
+    clases: list[CoverageBucket] = []
+    for row in rows:
+        total     = row.total
+        aqui      = row.aqui
+        en_camino = row.en_camino
+        no_pedidas = row.no_pedidas
+        pct_aqui       = round((aqui      / total) * 100, 2) if total else 0.0
+        pct_en_camino  = round((en_camino / total) * 100, 2) if total else 0.0
+        pct_no_pedidas = round((no_pedidas / total) * 100, 2) if total else 0.0
+        clases.append(CoverageBucket(
+            rotation_class=row.rotation_class,
+            total=total,
+            aqui=aqui,
+            en_camino=en_camino,
+            no_pedidas=no_pedidas,
+            pct_aqui=pct_aqui,
+            pct_en_camino=pct_en_camino,
+            pct_no_pedidas=pct_no_pedidas,
+        ))
+
+    return CoverageResponse(sin_clasificar=int(sin_clasificar), buckets=clases)
+
+
+# ── Unordered parts export ─────────────────────────────────────────────────────
+
+@router.get("/admin/coverage/unordered")
+async def export_unordered(
+    rotation_class: Optional[Literal['alta', 'media', 'baja', 'all']] = None,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Exporta repuestos clasificados sin SparePartItems a Excel. Solo superadmin."""
+    if not current_user.is_superadmin:
+        raise HTTPException(status_code=403, detail="Solo superadmin")
+
+    params: dict = {}
+    rc_clause = ""
+    if rotation_class and rotation_class != 'all':
+        rc_clause = "AND r.rotation_class = :rc"
+        params["rc"] = rotation_class
+
+    unordered_sql = text(f"""
+        SELECT
+            r.factory_part_number,
+            r.um_part_number,
+            r.description,
+            r.description_es_manual,
+            r.rotation_class,
+            r.avg_fob_cost
+        FROM parts_references r
+        WHERE r.rotation_class IS NOT NULL
+          {rc_clause}
+          AND r.factory_part_number NOT IN (
+              SELECT DISTINCT UPPER(TRIM(REPLACE(part_number, ' ', '')))
+              FROM spare_part_items
+          )
+        ORDER BY r.rotation_class, r.factory_part_number
+    """)
+
+    rows = (await db.execute(unordered_sql, params)).all()
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Unordered Parts"
+    headers = [
+        "factory_part_number",
+        "um_part_number",
+        "description",
+        "description_es_manual",
+        "rotation_class",
+        "avg_fob_cost",
+    ]
+    ws.append(headers)
+    for row in rows:
+        ws.append([
+            row.factory_part_number,
+            row.um_part_number,
+            row.description,
+            row.description_es_manual,
+            row.rotation_class,
+            float(row.avg_fob_cost) if row.avg_fob_cost is not None else None,
+        ])
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    rc_label = rotation_class or "all"
+    date_str = datetime.utcnow().strftime("%Y-%m-%d")
+    filename = f"unordered_parts_{rc_label}_{date_str}.xlsx"
+
+    return StreamingResponse(
+        iter([buf.getvalue()]),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )

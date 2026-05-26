@@ -22,6 +22,7 @@ class PartsReference(Base):
     avg_fob_cost      = Column(Numeric(12, 4), nullable=True)
     total_fob_qty     = Column(Integer, nullable=True)
     last_cost_updated = Column(DateTime, nullable=True)
+    rotation_class    = Column(String(10), nullable=True, index=True)
 
     items = relationship("PartsManualItem", back_populates="reference")
     cost_history = relationship("PartCostHistory", back_populates="reference", cascade="all, delete-orphan")
