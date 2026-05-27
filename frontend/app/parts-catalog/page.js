@@ -56,7 +56,8 @@ export default function PartsCatalogPage() {
   // Modal de edición
   const [editItem, setEditItem] = useState(null);
   const EMPTY_SUB = { substitute_part_code: '', brand: '', model: '' };
-  const [editForm, setEditForm] = useState({ description: '', description_es_manual: '', public_price: '', rotation_class: '', substitutes: [{ ...EMPTY_SUB }, { ...EMPTY_SUB }, { ...EMPTY_SUB }] });
+  const [editForm, setEditForm] = useState({ description: '', description_es_manual: '', public_price: '', rotation_class: '', new_code: '', substitutes: [{ ...EMPTY_SUB }, { ...EMPTY_SUB }, { ...EMPTY_SUB }], prev_codes: [] });
+  const [newPrevCode, setNewPrevCode] = useState('');
   const [editLoading, setEditLoading] = useState(false);
   const [editMsg, setEditMsg] = useState('');
 
@@ -198,6 +199,7 @@ export default function PartsCatalogPage() {
       ? { substitute_part_code: existingSubs[i].substitute_part_code, brand: existingSubs[i].brand, model: existingSubs[i].model }
       : { ...EMPTY_SUB }
     );
+    setNewPrevCode('');
     setEditForm({
       description: item.description || '',
       description_es_manual: item.description_es || '',
@@ -205,6 +207,7 @@ export default function PartsCatalogPage() {
       rotation_class: item.rotation_class || '',
       new_code: '',
       substitutes,
+      prev_codes: Array.isArray(item.prev_codes) ? [...item.prev_codes] : [],
     });
     setEditItem(item);
   };
@@ -243,6 +246,7 @@ export default function PartsCatalogPage() {
         if (!isNaN(price) && price > 0) body.public_price = price;
         body.substitutes = editForm.substitutes.filter(s => s.substitute_part_code.trim() && s.brand.trim() && s.model.trim());
         body.rotation_class = editForm.rotation_class || null;
+        body.prev_codes = editForm.prev_codes.filter(c => c.trim());
         const res = await authFetch(`/parts/admin/catalog/${encodeURIComponent(editItem.factory_part_number)}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
@@ -588,7 +592,7 @@ export default function PartsCatalogPage() {
         <div onClick={() => !editLoading && setEditItem(null)}
           style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div onClick={e => e.stopPropagation()}
-            style={{ background: '#0c0c0e', border: '1px solid rgba(99,102,241,0.25)', borderRadius: '16px', padding: '2rem', width: '100%', maxWidth: '480px', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+            style={{ background: '#0c0c0e', border: '1px solid rgba(99,102,241,0.25)', borderRadius: '16px', padding: '2rem', width: '100%', maxWidth: '480px', maxHeight: '90vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
               <Pencil size={16} color="#818cf8" />
@@ -655,6 +659,63 @@ export default function PartsCatalogPage() {
                     </div>
                   );
                 })()}
+              </div>
+
+              <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '1rem', marginTop: '0.25rem' }}>
+                <label style={{ display: 'block', fontSize: '0.62rem', fontWeight: 800, color: 'rgba(167,139,250,0.7)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.6rem' }}>
+                  Códigos de fábrica relacionados <span style={{ fontWeight: 400, color: 'rgba(255,255,255,0.25)', textTransform: 'none', letterSpacing: 0 }}>— hasta 5</span>
+                </label>
+                {editForm.prev_codes.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', marginBottom: '0.6rem' }}>
+                    {editForm.prev_codes.map((code, idx) => (
+                      <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', padding: '0.25rem 0.5rem 0.25rem 0.65rem', background: 'rgba(167,139,250,0.08)', border: '1px solid rgba(167,139,250,0.2)', borderRadius: '6px' }}>
+                        <span style={{ fontFamily: 'monospace', fontSize: '0.72rem', color: 'rgba(167,139,250,0.9)' }}>{code}</span>
+                        <button
+                          onClick={() => setEditForm(f => ({ ...f, prev_codes: f.prev_codes.filter((_, i) => i !== idx) }))}
+                          style={{ display: 'flex', alignItems: 'center', background: 'none', border: 'none', cursor: 'pointer', padding: '1px', color: 'rgba(167,139,250,0.4)', lineHeight: 1 }}
+                          title="Quitar"
+                        >
+                          <X size={11} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {editForm.prev_codes.length < 5 && (
+                  <div style={{ display: 'flex', gap: '0.4rem' }}>
+                    <input
+                      value={newPrevCode}
+                      onChange={e => setNewPrevCode(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          const val = newPrevCode.trim();
+                          if (val && !editForm.prev_codes.includes(val) && val !== editItem?.factory_part_number && editForm.prev_codes.length < 5) {
+                            setEditForm(f => ({ ...f, prev_codes: [...f.prev_codes, val] }));
+                            setNewPrevCode('');
+                          }
+                        }
+                      }}
+                      placeholder="Código a agregar"
+                      style={{ flex: 1, padding: '0.5rem 0.65rem', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(167,139,250,0.2)', borderRadius: '6px', color: '#fff', fontSize: '0.72rem', fontFamily: 'monospace', outline: 'none', boxSizing: 'border-box' }}
+                    />
+                    <button
+                      onClick={() => {
+                        const val = newPrevCode.trim();
+                        if (val && !editForm.prev_codes.includes(val) && val !== editItem?.factory_part_number && editForm.prev_codes.length < 5) {
+                          setEditForm(f => ({ ...f, prev_codes: [...f.prev_codes, val] }));
+                          setNewPrevCode('');
+                        }
+                      }}
+                      style={{ padding: '0.5rem 0.75rem', background: 'rgba(167,139,250,0.12)', border: '1px solid rgba(167,139,250,0.25)', borderRadius: '6px', color: '#a78bfa', fontSize: '0.68rem', fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                    >
+                      Agregar
+                    </button>
+                  </div>
+                )}
+                {editForm.prev_codes.length >= 5 && (
+                  <p style={{ fontSize: '0.62rem', color: 'rgba(255,255,255,0.3)', margin: '0.3rem 0 0' }}>Límite de 5 códigos alcanzado.</p>
+                )}
               </div>
 
               <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '1rem', marginTop: '0.25rem' }}>

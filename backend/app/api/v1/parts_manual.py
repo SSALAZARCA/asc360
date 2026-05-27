@@ -707,6 +707,7 @@ class CatalogItemResult(BaseModel):
     precio_publico_calculado: Optional[float] = None
     substitutes: list[PartSubstituteOut] = []
     rotation_class: Optional[str] = None
+    prev_codes: list[str] = []
 
 class CatalogItemUpdate(BaseModel):
     description: Optional[str] = None
@@ -714,6 +715,7 @@ class CatalogItemUpdate(BaseModel):
     public_price: Optional[float] = None
     substitutes: Optional[list[PartSubstituteIn]] = None
     rotation_class: Optional[Literal['alta', 'media', 'baja']] = None
+    prev_codes: Optional[list[str]] = None
 
 class ReplaceCodeRequest(BaseModel):
     new_code: str
@@ -871,9 +873,10 @@ async def list_catalog(
     )
     rows = (await db.execute(rows_q)).all()
 
-    # Sustitutos para las referencias de esta página
+    # Sustitutos y prev_codes para las referencias de esta página
     fpns = [r[0] for r in rows]
     subs_by_fpn: dict[str, list[PartSubstitute]] = {}
+    prev_codes_by_fpn: dict[str, list[str]] = {}
     if fpns:
         subs_q = (
             select(PartSubstitute)
@@ -882,6 +885,18 @@ async def list_catalog(
         )
         for s in (await db.execute(subs_q)).scalars().all():
             subs_by_fpn.setdefault(s.factory_part_number, []).append(s)
+
+        refs_q = select(PartsReference.factory_part_number, PartsReference.prev_codes).where(
+            PartsReference.factory_part_number.in_(fpns)
+        )
+        for fpn_r, codes in (await db.execute(refs_q)).all():
+            extracted = []
+            for entry in (codes or []):
+                if isinstance(entry, dict) and "code" in entry:
+                    extracted.append(entry["code"])
+                elif isinstance(entry, str) and entry:
+                    extracted.append(entry)
+            prev_codes_by_fpn[fpn_r] = extracted
 
     def _build_item(r) -> CatalogItemResult:
         avg_fob = float(r[11]) if r[11] is not None else None
@@ -912,6 +927,7 @@ async def list_catalog(
                 for s in subs_by_fpn.get(fpn, [])
             ],
             rotation_class=r[12],
+            prev_codes=prev_codes_by_fpn.get(fpn, []),
         )
 
     return CatalogListResult(
@@ -992,6 +1008,10 @@ async def update_catalog_item(
                     model=model,
                     position=idx,
                 ))
+
+    if payload.prev_codes is not None:
+        clean = [c.strip() for c in payload.prev_codes if c.strip() and c.strip() != factory_part_number]
+        ref.prev_codes = [{"code": c} for c in clean[:5]]
 
     await db.commit()
     return {"ok": True}
