@@ -56,7 +56,7 @@ export default function PartsCatalogPage() {
   // Modal de edición
   const [editItem, setEditItem] = useState(null);
   const EMPTY_SUB = { substitute_part_code: '', brand: '', model: '' };
-  const [editForm, setEditForm] = useState({ description: '', description_es_manual: '', public_price: '', rotation_class: '', new_code: '', substitutes: [{ ...EMPTY_SUB }, { ...EMPTY_SUB }, { ...EMPTY_SUB }], prev_codes: [] });
+  const [editForm, setEditForm] = useState({ description: '', description_es_manual: '', public_price: '', rotation_class: '', substitutes: [{ ...EMPTY_SUB }, { ...EMPTY_SUB }, { ...EMPTY_SUB }], prev_codes: [] });
   const [newPrevCode, setNewPrevCode] = useState('');
   const [editLoading, setEditLoading] = useState(false);
   const [editMsg, setEditMsg] = useState('');
@@ -205,7 +205,6 @@ export default function PartsCatalogPage() {
       description_es_manual: item.description_es || '',
       public_price: defaultPrice,
       rotation_class: item.rotation_class || '',
-      new_code: '',
       substitutes,
       prev_codes: Array.isArray(item.prev_codes) ? [...item.prev_codes] : [],
     });
@@ -216,49 +215,26 @@ export default function PartsCatalogPage() {
     if (!editItem) return;
     setEditLoading(true);
     setEditMsg('');
-    const newCode = editForm.new_code.trim();
     try {
-      if (newCode) {
-        // Reemplazo de código — un solo endpoint que hace todo
-        const body = { new_code: newCode };
-        if (editForm.description.trim()) body.description = editForm.description.trim();
-        body.description_es_manual = editForm.description_es_manual.trim() || null;
-        const price = parseFloat(editForm.public_price);
-        if (!isNaN(price) && price > 0) body.public_price = price;
-        const res = await authFetch(`/parts/admin/catalog/${encodeURIComponent(editItem.factory_part_number)}/replace-code`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-        });
-        if (res.ok) {
-          setEditMsg('✅ Código reemplazado.');
-          setTimeout(() => { setEditItem(null); fetchData(); }, 900);
-        } else {
-          const err = await res.json().catch(() => ({}));
-          setEditMsg(`⚠️ ${err.detail || 'Error al reemplazar el código.'}`);
-        }
+      const body = {};
+      if (editForm.description.trim()) body.description = editForm.description.trim();
+      body.description_es_manual = editForm.description_es_manual.trim() || null;
+      const price = parseFloat(editForm.public_price);
+      if (!isNaN(price) && price > 0) body.public_price = price;
+      body.substitutes = editForm.substitutes.filter(s => s.substitute_part_code.trim() && s.brand.trim() && s.model.trim());
+      body.rotation_class = editForm.rotation_class || null;
+      body.prev_codes = editForm.prev_codes.filter(c => c.trim());
+      const res = await authFetch(`/parts/admin/catalog/${encodeURIComponent(editItem.factory_part_number)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (res.ok) {
+        setEditMsg('✅ Guardado.');
+        setTimeout(() => { setEditItem(null); fetchData(); }, 900);
       } else {
-        // Solo actualización de campos — PATCH normal
-        const body = {};
-        if (editForm.description.trim()) body.description = editForm.description.trim();
-        body.description_es_manual = editForm.description_es_manual.trim() || null;
-        const price = parseFloat(editForm.public_price);
-        if (!isNaN(price) && price > 0) body.public_price = price;
-        body.substitutes = editForm.substitutes.filter(s => s.substitute_part_code.trim() && s.brand.trim() && s.model.trim());
-        body.rotation_class = editForm.rotation_class || null;
-        body.prev_codes = editForm.prev_codes.filter(c => c.trim());
-        const res = await authFetch(`/parts/admin/catalog/${encodeURIComponent(editItem.factory_part_number)}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-        });
-        if (res.ok) {
-          setEditMsg('✅ Guardado.');
-          setTimeout(() => { setEditItem(null); fetchData(); }, 900);
-        } else {
-          const err = await res.json().catch(() => ({}));
-          setEditMsg(`⚠️ ${err.detail || 'Error al guardar.'}`);
-        }
+        const err = await res.json().catch(() => ({}));
+        setEditMsg(`⚠️ ${err.detail || 'Error al guardar.'}`);
       }
     } catch { setEditMsg('⚠️ Error de conexión.'); }
     finally { setEditLoading(false); }
@@ -715,23 +691,6 @@ export default function PartsCatalogPage() {
                 )}
                 {editForm.prev_codes.length >= 5 && (
                   <p style={{ fontSize: '0.62rem', color: 'rgba(255,255,255,0.3)', margin: '0.3rem 0 0' }}>Límite de 5 códigos alcanzado.</p>
-                )}
-              </div>
-
-              <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '1rem', marginTop: '0.25rem' }}>
-                <label style={{ display: 'block', fontSize: '0.62rem', fontWeight: 800, color: 'rgba(251,146,60,0.6)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.4rem' }}>
-                  Reemplazar código activo <span style={{ fontWeight: 400, color: 'rgba(255,255,255,0.25)', textTransform: 'none', letterSpacing: 0 }}>— cambia el código principal, dejar vacío si no aplica</span>
-                </label>
-                <input
-                  value={editForm.new_code}
-                  onChange={e => setEditForm(f => ({ ...f, new_code: e.target.value }))}
-                  placeholder={editItem?.factory_part_number}
-                  style={{ width: '100%', padding: '0.6rem 0.85rem', background: editForm.new_code ? 'rgba(251,146,60,0.06)' : 'rgba(255,255,255,0.04)', border: `1px solid ${editForm.new_code ? 'rgba(251,146,60,0.35)' : 'rgba(255,255,255,0.1)'}`, borderRadius: '8px', color: editForm.new_code ? '#fb923c' : '#fff', fontSize: '0.78rem', fontFamily: 'monospace', outline: 'none', boxSizing: 'border-box', transition: 'all 0.2s' }}
-                />
-                {editForm.new_code && (
-                  <p style={{ fontSize: '0.62rem', color: 'rgba(251,146,60,0.7)', margin: '0.35rem 0 0', lineHeight: 1.5 }}>
-                    El código activo cambiará de <strong style={{ fontFamily: 'monospace' }}>{editItem?.factory_part_number}</strong> a <strong style={{ fontFamily: 'monospace' }}>{editForm.new_code.trim()}</strong>. El código anterior quedará en el historial de relacionados.
-                  </p>
                 )}
               </div>
 

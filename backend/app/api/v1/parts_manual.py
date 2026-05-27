@@ -1017,6 +1017,8 @@ async def update_catalog_item(
     if payload.prev_codes is not None:
         clean = [c.strip() for c in payload.prev_codes if c.strip() and c.strip() != factory_part_number]
         ref.prev_codes = [{"code": c} for c in clean[:5]]
+        from app.services.pricing_service import recalculate_part_cost
+        await recalculate_part_cost(db, factory_part_number)
 
     await db.commit()
     return {"ok": True}
