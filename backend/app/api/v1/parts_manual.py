@@ -29,7 +29,7 @@ from app.models.imports import VehicleModel, SparePartItem
 from app.models.logistics import PartCatalog
 from app.models.parts_manual import (
     PartsManualItem, PartsManualSection, PartsReference, VehicleCatalogMap,
-    PartsCodeReviewTask, PartSubstitute,
+    PartsCodeReviewTask, PartSubstitute, PartCostHistory,
 )
 from app.models.system_config import SystemConfig
 
