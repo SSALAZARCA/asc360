@@ -1300,9 +1300,6 @@ async def approve_review_task(
             unit=existing_ref.unit,
             prev_codes=new_prev,
             rotation_class=existing_ref.rotation_class,
-            avg_fob_cost=existing_ref.avg_fob_cost,
-            total_fob_qty=existing_ref.total_fob_qty,
-            last_cost_updated=existing_ref.last_cost_updated,
         )
         db.add(candidate_ref)
         await db.flush()
