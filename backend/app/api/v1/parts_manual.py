@@ -658,12 +658,12 @@ async def _detect_code_changes(db: AsyncSession) -> int:
               pr.prev_codes @> to_jsonb(spi.part_number::text)
               OR pr.prev_codes @> jsonb_build_array(jsonb_build_object('code', spi.part_number))
           )
-          -- No hay ya una tarea pendiente para este par (aprobadas se permiten re-detectar si prev_codes no fue actualizado)
+          -- No re-detectar pares pendientes ni descartados explícitamente; aprobados se re-evalúan via prev_codes
           AND NOT EXISTS (
               SELECT 1 FROM parts_code_review_tasks t
               WHERE t.candidate_code = spi.part_number
                 AND t.existing_code = pr.factory_part_number
-                AND t.status = 'pending'
+                AND t.status IN ('pending', 'rejected')
           )
         ORDER BY spi.part_number, pr.factory_part_number
     """), {"threshold": threshold})
