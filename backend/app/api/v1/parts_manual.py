@@ -1607,7 +1607,13 @@ async def export_unordered(
             r.description,
             r.description_es_manual,
             r.rotation_class,
-            r.avg_fob_cost
+            r.avg_fob_cost,
+            (
+                SELECT STRING_AGG(DISTINCT s.model_code, ', ' ORDER BY s.model_code)
+                FROM parts_manual_items i
+                JOIN parts_manual_sections s ON s.id = i.section_id
+                WHERE i.factory_part_number = r.factory_part_number
+            ) AS models
         FROM parts_references r
         WHERE r.rotation_class IS NOT NULL
           {rc_clause}
@@ -1631,6 +1637,7 @@ async def export_unordered(
         "description_es_manual",
         "rotation_class",
         "avg_fob_cost",
+        "motocicleta",
     ]
     ws.append(headers)
     for row in rows:
@@ -1641,6 +1648,7 @@ async def export_unordered(
             row.description_es_manual,
             row.rotation_class,
             float(row.avg_fob_cost) if row.avg_fob_cost is not None else None,
+            row.models,
         ])
 
     buf = io.BytesIO()
