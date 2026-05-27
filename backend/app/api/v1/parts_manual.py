@@ -163,11 +163,31 @@ def _detect_col(header_row: list, keywords: list) -> int:
     return -1
 
 
+def _extract_tables_from_page(page) -> list[list[list]]:
+    """Try default line-based extraction; fall back to text-alignment strategy."""
+    tables = page.extract_tables() or []
+    if tables:
+        return tables
+    # Fallback: text-alignment strategy — works for tables without visible borders
+    for strategy in (
+        {"vertical_strategy": "text", "horizontal_strategy": "lines"},
+        {"vertical_strategy": "text", "horizontal_strategy": "text",
+         "snap_tolerance": 5, "join_tolerance": 5, "text_tolerance": 5},
+    ):
+        try:
+            t = page.extract_table(table_settings=strategy)
+            if t and len(t) >= 2:
+                return [t]
+        except Exception:
+            pass
+    return []
+
+
 def _parse_parts_table(pdf_path: str) -> list[dict]:
     parts = []
     with pdfplumber.open(pdf_path) as pdf:
         for page in pdf.pages:
-            for table in (page.extract_tables() or []):
+            for table in _extract_tables_from_page(page):
                 if not table or len(table) < 2:
                     continue
                 header_idx, col_map = -1, {}
