@@ -993,8 +993,7 @@ async def delete_catalog_part(
     if history_count > 0:
         raise HTTPException(status_code=409, detail="No se puede eliminar: tiene historial de costos.")
 
-    from app.models.logistics import PartCatalog
-    from sqlalchemy import func as sa_func
+    from sqlalchemy import func
     catalog = await db.get(PartCatalog, factory_part_number)
     if catalog:
         from app.models.logistics import PartsOrderItem, PurchaseOrderItem
