@@ -961,7 +961,7 @@ async def delete_catalog(
 
 # ── Edición inline de un repuesto del catálogo ───────────────────────────────
 
-@router.patch("/admin/catalog/{factory_part_number}", status_code=200)
+@router.patch("/admin/catalog/{factory_part_number:path}", status_code=200)
 async def update_catalog_item(
     factory_part_number: str,
     payload: CatalogItemUpdate,
@@ -1024,7 +1024,7 @@ async def update_catalog_item(
     return {"ok": True}
 
 
-@router.post("/admin/catalog/{factory_part_number}/replace-code", status_code=200)
+@router.post("/admin/catalog-replace/{factory_part_number:path}", status_code=200)
 async def replace_catalog_code(
     factory_part_number: str,
     payload: ReplaceCodeRequest,
