@@ -1296,13 +1296,18 @@ async def approve_review_task(
             factory_part_number=task.candidate_code,
             um_part_number=existing_ref.um_part_number,
             description=existing_ref.description,
+            description_es_manual=existing_ref.description_es_manual,
             unit=existing_ref.unit,
             prev_codes=new_prev,
+            rotation_class=existing_ref.rotation_class,
+            avg_fob_cost=existing_ref.avg_fob_cost,
+            total_fob_qty=existing_ref.total_fob_qty,
+            last_cost_updated=existing_ref.last_cost_updated,
         )
         db.add(candidate_ref)
         await db.flush()
     else:
-        # El candidato ya existe — solo actualizar prev_codes si hace falta
+        # El candidato ya existe — heredar campos del existente si no los tiene
         prev = candidate_ref.prev_codes or []
         existing_in_prev = any(
             (e["code"] == task.existing_code if isinstance(e, dict) else e == task.existing_code)
@@ -1310,6 +1315,10 @@ async def approve_review_task(
         )
         if not existing_in_prev:
             candidate_ref.prev_codes = ([{"code": task.existing_code}] + list(prev))[:5]
+        if candidate_ref.rotation_class is None and existing_ref.rotation_class is not None:
+            candidate_ref.rotation_class = existing_ref.rotation_class
+        if candidate_ref.description_es_manual is None and existing_ref.description_es_manual is not None:
+            candidate_ref.description_es_manual = existing_ref.description_es_manual
 
     # Redirigir todos los items del catálogo al nuevo código
     await db.execute(
