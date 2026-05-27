@@ -658,12 +658,18 @@ async def _detect_code_changes(db: AsyncSession) -> int:
               pr.prev_codes @> to_jsonb(spi.part_number::text)
               OR pr.prev_codes @> jsonb_build_array(jsonb_build_object('code', spi.part_number))
           )
-          -- No re-detectar pares pendientes ni descartados explícitamente; aprobados se re-evalúan via prev_codes
+          -- No re-detectar el mismo par si ya está pendiente o rechazado
           AND NOT EXISTS (
               SELECT 1 FROM parts_code_review_tasks t
               WHERE t.candidate_code = spi.part_number
                 AND t.existing_code = pr.factory_part_number
                 AND t.status IN ('pending', 'rejected')
+          )
+          -- No agregar un segundo candidato mientras ya hay uno pendiente para este código
+          AND NOT EXISTS (
+              SELECT 1 FROM parts_code_review_tasks t2
+              WHERE t2.existing_code = pr.factory_part_number
+                AND t2.status = 'pending'
           )
         ORDER BY spi.part_number, pr.factory_part_number
     """), {"threshold": threshold})
@@ -779,7 +785,7 @@ async def list_catalog(
         )
         .where(PartsCodeReviewTask.status == "pending")
         .distinct(PartsCodeReviewTask.existing_code)
-        .order_by(PartsCodeReviewTask.existing_code, PartsCodeReviewTask.created_at.desc())
+        .order_by(PartsCodeReviewTask.existing_code, PartsCodeReviewTask.similarity_score.desc(), PartsCodeReviewTask.created_at.desc())
         .subquery("pending_sq")
     )
 
