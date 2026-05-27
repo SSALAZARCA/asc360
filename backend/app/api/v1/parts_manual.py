@@ -1122,6 +1122,124 @@ async def detect_code_changes(
     return {"tasks_created": created}
 
 
+@router.get("/admin/diagnose-detection")
+async def diagnose_detection(
+    part_code: str = "",
+    description: str = "",
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """
+    Diagnóstica por qué un spare_part_item no genera tarea de revisión de código.
+    Pasá part_code (el código del pedido) o description (texto a buscar).
+    """
+    if not current_user.is_superadmin:
+        raise HTTPException(status_code=403, detail="Solo superadmin")
+
+    results = {}
+
+    # Paso 1: ¿Existe el item en spare_part_items?
+    if part_code:
+        r1 = await db.execute(text("""
+            SELECT part_number, description, description_es, model_applicable, unit_price, qty_ordered
+            FROM spare_part_items
+            WHERE part_number = :code
+            ORDER BY created_at DESC LIMIT 5
+        """), {"code": part_code.strip().upper().replace(" ", "")})
+    else:
+        r1 = await db.execute(text("""
+            SELECT part_number, description, description_es, model_applicable, unit_price, qty_ordered
+            FROM spare_part_items
+            WHERE description ILIKE :desc OR description_es ILIKE :desc
+            ORDER BY created_at DESC LIMIT 5
+        """), {"desc": f"%{description}%"})
+    results["1_spare_part_items"] = [dict(r._mapping) for r in r1.all()]
+
+    if not results["1_spare_part_items"]:
+        results["conclusion"] = "No existe ningún spare_part_item con ese código/descripción."
+        return results
+
+    sample = results["1_spare_part_items"][0]
+    pn = sample["part_number"]
+    desc = sample["description"]
+    model_ap = sample["model_applicable"]
+
+    # Paso 2: ¿Tiene description en inglés?
+    results["2_description_en_null"] = desc is None or desc == ""
+    results["2_description_es_null"] = sample["description_es"] is None or sample["description_es"] == ""
+
+    # Paso 3: ¿Tiene model_applicable?
+    results["3_model_applicable"] = model_ap
+    results["3_model_applicable_null"] = model_ap is None or model_ap == ""
+
+    # Paso 4: ¿Existe en vehicle_catalog_map?
+    if model_ap:
+        r4 = await db.execute(text("""
+            SELECT vehicle_model_pattern, catalog_model_code
+            FROM vehicle_catalog_map
+            WHERE vehicle_model_pattern = :model
+        """), {"model": model_ap})
+        results["4_vehicle_catalog_map_match"] = [dict(r._mapping) for r in r4.all()]
+
+        # También buscar coincidencias parciales para diagnóstico
+        r4b = await db.execute(text("""
+            SELECT vehicle_model_pattern, catalog_model_code
+            FROM vehicle_catalog_map
+            WHERE vehicle_model_pattern ILIKE :model
+        """), {"model": f"%{model_ap}%"})
+        results["4_vehicle_catalog_map_ilike"] = [dict(r._mapping) for r in r4b.all()]
+    else:
+        results["4_vehicle_catalog_map_match"] = []
+        results["4_vehicle_catalog_map_ilike"] = []
+
+    # Paso 5: ¿El código ya existe en parts_references?
+    r5 = await db.execute(text("""
+        SELECT factory_part_number, description FROM parts_references
+        WHERE factory_part_number = :code
+    """), {"code": pn})
+    results["5_candidate_already_in_catalog"] = [dict(r._mapping) for r in r5.all()]
+
+    # Paso 6: Similitud real contra el catálogo (sin filtros de modelo)
+    if desc:
+        r6 = await db.execute(text("""
+            SELECT pr.factory_part_number, pr.description,
+                   similarity(:desc, pr.description) AS score
+            FROM parts_references pr
+            WHERE similarity(:desc, pr.description) > 0.4
+            ORDER BY score DESC LIMIT 10
+        """), {"desc": desc})
+        results["6_similarity_scores_in_catalog"] = [dict(r._mapping) for r in r6.all()]
+    else:
+        results["6_similarity_scores_in_catalog"] = "No hay description en inglés para comparar"
+
+    # Paso 7: ¿Hay tareas ya existentes para este código?
+    r7 = await db.execute(text("""
+        SELECT id, existing_code, candidate_code, status, similarity_score
+        FROM parts_code_review_tasks
+        WHERE candidate_code = :code OR existing_code = :code
+        ORDER BY created_at DESC LIMIT 5
+    """), {"code": pn})
+    results["7_existing_tasks"] = [dict(r._mapping) for r in r7.all()]
+
+    # Conclusión automática
+    issues = []
+    if results["2_description_en_null"]:
+        issues.append("description (inglés) es NULL — la query lo filtra antes de comparar")
+    if results["3_model_applicable_null"]:
+        issues.append("model_applicable es NULL — el JOIN con vehicle_catalog_map falla")
+    elif not results["4_vehicle_catalog_map_match"]:
+        issues.append(f"model_applicable '{model_ap}' no coincide exactamente con ningún vehicle_model_pattern")
+    if results["5_candidate_already_in_catalog"]:
+        issues.append("El código del pedido YA existe en parts_references — la detección lo ignora a propósito")
+    if results["6_similarity_scores_in_catalog"] and isinstance(results["6_similarity_scores_in_catalog"], list):
+        top = results["6_similarity_scores_in_catalog"]
+        if top and top[0]["score"] < 0.9:
+            issues.append(f"Mejor similitud encontrada: {top[0]['score']:.2f} (umbral es 0.9) — descripción difiere")
+
+    results["conclusion"] = issues if issues else ["No se encontró el problema automáticamente — revisar manualmente los pasos"]
+    return results
+
+
 @router.post("/admin/review-tasks/{task_id}/approve", status_code=200)
 async def approve_review_task(
     task_id: str,
