@@ -711,6 +711,7 @@ class CatalogItemResult(BaseModel):
     substitutes: list[PartSubstituteOut] = []
     rotation_class: Optional[str] = None
     prev_codes: list[str] = []
+    needs_price_review: bool = False
 
 class CatalogItemUpdate(BaseModel):
     description: Optional[str] = None
@@ -719,6 +720,7 @@ class CatalogItemUpdate(BaseModel):
     substitutes: Optional[list[PartSubstituteIn]] = None
     rotation_class: Optional[Literal['alta', 'media', 'baja']] = None
     prev_codes: Optional[list[str]] = None
+    needs_price_review: Optional[bool] = None
 
 class ReplaceCodeRequest(BaseModel):
     new_code: str
@@ -736,6 +738,7 @@ async def list_catalog(
     search: str = "",
     model_code: str = "",
     only_pending: bool = False,
+    only_price_review: bool = False,
     rotation_class: str = "",
     sort_col: str = "section_code",
     sort_dir: str = "asc",
@@ -803,6 +806,8 @@ async def list_catalog(
             ))
         if only_pending:
             q = q.where(pending_sq.c.task_id.isnot(None))
+        if only_price_review:
+            q = q.where(PartsReference.needs_price_review == True)
         if rotation_class == "none":
             q = q.where(PartsReference.rotation_class.is_(None))
         elif rotation_class in ("alta", "media", "baja"):
@@ -831,8 +836,9 @@ async def list_catalog(
             pending_sq.c.task_id.label("task_id"),
             pending_sq.c.candidate_code.label("candidate_code"),
             pending_sq.c.score.label("score"),
-            PartsReference.avg_fob_cost.label("avg_fob_cost"),  # r[11]
-            PartsReference.rotation_class.label("rotation_class"),  # r[12]
+            PartsReference.avg_fob_cost.label("avg_fob_cost"),          # r[11]
+            PartsReference.rotation_class.label("rotation_class"),        # r[12]
+            PartsReference.needs_price_review.label("needs_price_review"), # r[13]
         )
         .distinct(PartsReference.factory_part_number)
     ).order_by(
@@ -865,7 +871,8 @@ async def list_catalog(
         "section_code":        inner_sq.c.section_code,
         "vehicle_model_name":  inner_sq.c.vehicle_model_pattern,
         "avg_fob_cost":        cast(inner_sq.c.avg_fob_cost, SANumeric(12, 4)),
-        "rotation_class":      inner_sq.c.rotation_class,
+        "rotation_class":       inner_sq.c.rotation_class,
+        "needs_price_review":   inner_sq.c.needs_price_review,
     }
     sort_expr = _SORT_MAP.get(sort_col, inner_sq.c.section_code)
     order_expr = nullslast(sort_expr.asc() if sort_dir == "asc" else sort_expr.desc())
@@ -933,6 +940,7 @@ async def list_catalog(
             ],
             rotation_class=r[12],
             prev_codes=prev_codes_by_fpn.get(fpn, []),
+            needs_price_review=bool(r[13]) if r[13] is not None else False,
         )
 
     return CatalogListResult(
@@ -996,6 +1004,9 @@ async def update_catalog_item(
 
     if payload.rotation_class is not None:
         ref.rotation_class = payload.rotation_class
+
+    if payload.needs_price_review is not None:
+        ref.needs_price_review = payload.needs_price_review
 
     if payload.substitutes is not None:
         await db.execute(

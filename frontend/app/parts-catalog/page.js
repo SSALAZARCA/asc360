@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import AdminLayout from '../admin-layout';
 import { authFetch } from '../../lib/authFetch';
-import { Search, ChevronLeft, ChevronRight, X, ArrowUp, ArrowDown, ChevronsUpDown, AlertTriangle, CheckCircle2, ShieldX, Pencil, UploadCloud, BarChart3, Download } from 'lucide-react';
+import { Search, ChevronLeft, ChevronRight, X, ArrowUp, ArrowDown, ChevronsUpDown, AlertTriangle, CheckCircle2, ShieldX, Pencil, UploadCloud, BarChart3, Download, Flag } from 'lucide-react';
 
 const PAGE_SIZE = 50;
 
@@ -43,6 +43,7 @@ export default function PartsCatalogPage() {
   const [modelCode, setModelCode]     = useState('');
   const [models, setModels]           = useState([]);
   const [onlyPending, setOnlyPending] = useState(false);
+  const [onlyPriceReview, setOnlyPriceReview] = useState(false);
   const [rotationFilter, setRotationFilter] = useState('');
 
   const [sortCol, setSortCol] = useState('section_code');
@@ -119,6 +120,7 @@ export default function PartsCatalogPage() {
         search,
         model_code: modelCode,
         only_pending: String(onlyPending),
+        only_price_review: String(onlyPriceReview),
         rotation_class: rotationFilter,
         sort_col: sortCol,
         sort_dir: sortDir,
@@ -134,7 +136,7 @@ export default function PartsCatalogPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, search, modelCode, onlyPending, rotationFilter, sortCol, sortDir]);
+  }, [page, search, modelCode, onlyPending, onlyPriceReview, rotationFilter, sortCol, sortDir]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -185,6 +187,16 @@ export default function PartsCatalogPage() {
       }
     } catch { setReviewMsg('⚠️ Error de conexión.'); }
     finally { setReviewLoading(false); }
+  };
+
+  const togglePriceReview = async (item) => {
+    const newVal = !item.needs_price_review;
+    await authFetch(`/parts/admin/catalog/${encodeURIComponent(item.factory_part_number)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ needs_price_review: newVal }),
+    });
+    fetchData();
   };
 
   const openEdit = (item) => {
@@ -402,6 +414,17 @@ export default function PartsCatalogPage() {
             <AlertTriangle size={12} style={{ display: 'inline', marginRight: '0.4rem', verticalAlign: 'middle' }} />
             {onlyPending ? 'Mostrando pendientes' : 'Solo pendientes'}
           </button>
+          <button
+            onClick={() => { setOnlyPriceReview(p => !p); setPage(1); }}
+            style={{ padding: '0.625rem 1rem', borderRadius: '10px', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', cursor: 'pointer', border: '1px solid', transition: 'all 0.2s',
+              background: onlyPriceReview ? 'rgba(234,179,8,0.15)' : 'rgba(255,255,255,0.04)',
+              borderColor: onlyPriceReview ? 'rgba(234,179,8,0.4)' : 'rgba(255,255,255,0.08)',
+              color: onlyPriceReview ? '#eab308' : 'rgba(255,255,255,0.5)',
+            }}
+          >
+            <Flag size={12} style={{ display: 'inline', marginRight: '0.4rem', verticalAlign: 'middle' }} />
+            {onlyPriceReview ? 'Revisar precio' : 'Revisar precio'}
+          </button>
           <div data-tip style={{
             position: 'absolute', bottom: 'calc(100% + 8px)', right: 0,
             background: '#16161f', border: '1px solid rgba(251,146,60,0.25)',
@@ -443,6 +466,7 @@ export default function PartsCatalogPage() {
                 </th>
               ))}
               <th className="sort-head" onClick={() => toggleSort('rotation_class')} style={{ whiteSpace: 'nowrap' }}>Rotación <SortIcon col="rotation_class" /></th>
+              <th className="sort-head" onClick={() => toggleSort('needs_price_review')} style={{ whiteSpace: 'nowrap' }} title="Revisar precio"><Flag size={12} style={{ display: 'inline', verticalAlign: 'middle' }} /> <SortIcon col="needs_price_review" /></th>
               <th className="sort-head" onClick={() => toggleSort('avg_fob_cost')} style={{ whiteSpace: 'nowrap' }}>FOB Prom. <span style={{ fontWeight: 400, opacity: 0.5 }}>USD</span> <SortIcon col="avg_fob_cost" /></th>
               <th className="sort-head" onClick={() => toggleSort('avg_fob_cost')} style={{ whiteSpace: 'nowrap' }}>C. Importado <span style={{ fontWeight: 400, opacity: 0.5 }}>COP</span> <SortIcon col="avg_fob_cost" /></th>
               <th className="sort-head" onClick={() => toggleSort('avg_fob_cost')} style={{ whiteSpace: 'nowrap' }}>P. Distribuidor <span style={{ fontWeight: 400, opacity: 0.5 }}>COP</span> <SortIcon col="avg_fob_cost" /></th>
@@ -526,6 +550,17 @@ export default function PartsCatalogPage() {
                         <AlertTriangle size={9} /> Verificar
                       </button>
                     )}
+                    <button
+                      onClick={() => togglePriceReview(item)}
+                      title={item.needs_price_review ? 'Quitar marca de revisión' : 'Marcar para revisar precio'}
+                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '26px', height: '26px', borderRadius: '8px', cursor: 'pointer', transition: 'all 0.15s',
+                        background: item.needs_price_review ? 'rgba(234,179,8,0.15)' : 'rgba(255,255,255,0.05)',
+                        border: `1px solid ${item.needs_price_review ? 'rgba(234,179,8,0.4)' : 'rgba(255,255,255,0.08)'}`,
+                        color: item.needs_price_review ? '#eab308' : 'rgba(255,255,255,0.3)',
+                      }}
+                    >
+                      <Flag size={11} />
+                    </button>
                     <button
                       onClick={() => openEdit(item)}
                       title="Editar repuesto"

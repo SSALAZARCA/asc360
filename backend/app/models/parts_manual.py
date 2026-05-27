@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, DateTime, ForeignKey, Numeric, Integer, UniqueConstraint
+from sqlalchemy import Column, String, DateTime, ForeignKey, Numeric, Integer, UniqueConstraint, Boolean
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 
@@ -22,7 +22,8 @@ class PartsReference(Base):
     avg_fob_cost      = Column(Numeric(12, 4), nullable=True)
     total_fob_qty     = Column(Integer, nullable=True)
     last_cost_updated = Column(DateTime, nullable=True)
-    rotation_class    = Column(String(10), nullable=True, index=True)
+    rotation_class      = Column(String(10), nullable=True, index=True)
+    needs_price_review  = Column(Boolean, nullable=False, default=False, server_default='false')
 
     items = relationship("PartsManualItem", back_populates="reference")
     cost_history = relationship("PartCostHistory", back_populates="reference", cascade="all, delete-orphan")
