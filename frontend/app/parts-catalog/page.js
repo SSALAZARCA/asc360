@@ -472,7 +472,7 @@ export default function PartsCatalogPage() {
               <th className="sort-head" onClick={() => toggleSort('avg_fob_cost')} style={{ whiteSpace: 'nowrap' }}>P. Público Calc. <span style={{ fontWeight: 400, opacity: 0.5 }}>COP</span> <SortIcon col="avg_fob_cost" /></th>
               <th className="sort-head" onClick={() => toggleSort('public_price')} style={{ whiteSpace: 'nowrap' }}>Precio Final <SortIcon col="public_price" /></th>
               <th className="sort-head" onClick={() => toggleSort('needs_price_review')} style={{ whiteSpace: 'nowrap', textAlign: 'center' }} title="Revisar precio"><Flag size={12} style={{ display: 'inline', verticalAlign: 'middle' }} /> <SortIcon col="needs_price_review" /></th>
-              <th className="sort-head" style={{ width: '120px', textAlign: 'center' }}>Acciones</th>
+              <th className="sort-head" style={{ width: '90px', textAlign: 'center' }}>Acciones</th>
             </tr>
           </thead>
           <tbody>
@@ -557,9 +557,9 @@ export default function PartsCatalogPage() {
                       <button
                         onClick={() => openReview(item)}
                         title="Verificar posible cambio de código"
-                        style={{ display: 'flex', alignItems: 'center', gap: '3px', fontSize: '0.6rem', fontWeight: 800, padding: '2px 8px', borderRadius: '20px', background: 'rgba(251,146,60,0.15)', color: '#fb923c', border: '1px solid rgba(251,146,60,0.35)', cursor: 'pointer', whiteSpace: 'nowrap', lineHeight: 1.4 }}
+                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '26px', height: '26px', borderRadius: '8px', background: 'rgba(251,146,60,0.15)', color: '#fb923c', border: '1px solid rgba(251,146,60,0.35)', cursor: 'pointer', flexShrink: 0 }}
                       >
-                        <AlertTriangle size={9} /> Verificar
+                        <AlertTriangle size={13} />
                       </button>
                     )}
                     <button
