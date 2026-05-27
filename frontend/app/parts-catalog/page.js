@@ -477,9 +477,9 @@ export default function PartsCatalogPage() {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan="11" style={{ textAlign: 'center', padding: '3rem', color: 'rgba(255,255,255,0.3)', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Cargando repuestos...</td></tr>
+              <tr><td colSpan="12" style={{ textAlign: 'center', padding: '3rem', color: 'rgba(255,255,255,0.3)', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Cargando repuestos...</td></tr>
             ) : sortedItems.length === 0 ? (
-              <tr><td colSpan="11" style={{ textAlign: 'center', padding: '4rem', color: 'rgba(255,255,255,0.2)', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+              <tr><td colSpan="12" style={{ textAlign: 'center', padding: '4rem', color: 'rgba(255,255,255,0.2)', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
                 {!search && !modelCode && !onlyPending ? 'Sin repuestos cargados — subí los PDFs desde Configuración' : 'Sin resultados para la búsqueda'}
               </td></tr>
             ) : sortedItems.map((item, i) => (
@@ -498,6 +498,18 @@ export default function PartsCatalogPage() {
                 </td>
                 <td><span className="cell-truncate" style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.7)', fontWeight: 600 }} title={item.vehicle_model_name || '—'}>{item.vehicle_model_name || '—'}</span></td>
                 <td>{item.rotation_class ? <span style={rotationBadge(item.rotation_class)}>{item.rotation_class}</span> : <span style={{ color: 'rgba(255,255,255,0.15)', fontSize: '0.68rem' }}>—</span>}</td>
+                <td style={{ textAlign: 'center' }}>
+                  <button
+                    onClick={() => togglePriceReview(item)}
+                    title={item.needs_price_review ? 'Quitar marca de revisión' : 'Marcar para revisar precio'}
+                    style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '24px', height: '24px', borderRadius: '6px', cursor: 'pointer', transition: 'all 0.15s', border: 'none',
+                      background: item.needs_price_review ? 'rgba(234,179,8,0.15)' : 'transparent',
+                      color: item.needs_price_review ? '#eab308' : 'rgba(255,255,255,0.15)',
+                    }}
+                  >
+                    <Flag size={12} />
+                  </button>
+                </td>
                 <td>
                   {item.avg_fob_cost != null
                     ? <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '0.78rem', color: '#38bdf8' }}>${Number(item.avg_fob_cost).toFixed(2)}</span>
@@ -550,17 +562,6 @@ export default function PartsCatalogPage() {
                         <AlertTriangle size={9} /> Verificar
                       </button>
                     )}
-                    <button
-                      onClick={() => togglePriceReview(item)}
-                      title={item.needs_price_review ? 'Quitar marca de revisión' : 'Marcar para revisar precio'}
-                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '26px', height: '26px', borderRadius: '8px', cursor: 'pointer', transition: 'all 0.15s',
-                        background: item.needs_price_review ? 'rgba(234,179,8,0.15)' : 'rgba(255,255,255,0.05)',
-                        border: `1px solid ${item.needs_price_review ? 'rgba(234,179,8,0.4)' : 'rgba(255,255,255,0.08)'}`,
-                        color: item.needs_price_review ? '#eab308' : 'rgba(255,255,255,0.3)',
-                      }}
-                    >
-                      <Flag size={11} />
-                    </button>
                     <button
                       onClick={() => openEdit(item)}
                       title="Editar repuesto"
