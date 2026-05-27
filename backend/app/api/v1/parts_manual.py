@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Uploa
 from fastapi.responses import Response, StreamingResponse
 from minio import Minio
 from pydantic import BaseModel
-from sqlalchemy import delete as sa_delete, update as sa_update, text, exists
+from sqlalchemy import delete as sa_delete, update as sa_update, text, exists, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from openai import AsyncOpenAI
@@ -993,7 +993,6 @@ async def delete_catalog_part(
     if history_count > 0:
         raise HTTPException(status_code=409, detail="No se puede eliminar: tiene historial de costos.")
 
-    from sqlalchemy import func
     catalog = await db.get(PartCatalog, factory_part_number)
     if catalog:
         from app.models.logistics import PartsOrderItem, PurchaseOrderItem
