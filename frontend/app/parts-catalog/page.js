@@ -86,11 +86,12 @@ export default function PartsCatalogPage() {
   }, []);
 
   useEffect(() => {
-    authFetch('/parts/admin/coverage')
+    const qs = modelCode ? `?model_code=${encodeURIComponent(modelCode)}` : '';
+    authFetch(`/parts/admin/coverage${qs}`)
       .then(r => r.ok ? r.json() : null)
       .then(data => { if (data) setCoverage(data); })
       .catch(() => {});
-  }, []);
+  }, [modelCode]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -254,7 +255,8 @@ export default function PartsCatalogPage() {
       const data = await res.json();
       setRotationResult(data);
       fetchData();
-      authFetch('/parts/admin/coverage').then(r => r.ok ? r.json() : null).then(d => { if (d) setCoverage(d); }).catch(() => {});
+      const qs = modelCode ? `?model_code=${encodeURIComponent(modelCode)}` : '';
+      authFetch(`/parts/admin/coverage${qs}`).then(r => r.ok ? r.json() : null).then(d => { if (d) setCoverage(d); }).catch(() => {});
     } catch { setRotationResult({ error: 'Error de conexión' }); }
     finally { setRotationUploading(false); }
   };

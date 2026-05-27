@@ -1498,6 +1498,7 @@ class CoverageResponse(_BM):
 
 @router.get("/admin/coverage", response_model=CoverageResponse)
 async def get_coverage(
+    model_code: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
@@ -1505,7 +1506,16 @@ async def get_coverage(
     if not current_user.is_superadmin:
         raise HTTPException(status_code=403, detail="Solo superadmin")
 
-    coverage_sql = text("""
+    model_filter = """
+        AND r.factory_part_number IN (
+            SELECT i.factory_part_number
+            FROM parts_manual_items i
+            JOIN parts_manual_sections s ON s.id = i.section_id
+            WHERE s.model_code = :model_code
+        )
+    """ if model_code else ""
+
+    coverage_sql = text(f"""
         WITH
         aqui AS (
             SELECT UPPER(TRIM(REPLACE(part_number, ' ', ''))) AS pn
@@ -1531,18 +1541,22 @@ async def get_coverage(
             LEFT JOIN aqui      a ON a.pn = UPPER(TRIM(r.factory_part_number))
             LEFT JOIN en_camino c ON c.pn = UPPER(TRIM(r.factory_part_number))
             WHERE r.rotation_class IS NOT NULL
+            {model_filter}
             GROUP BY r.rotation_class
         )
         SELECT * FROM coverage
         ORDER BY rotation_class
     """)
 
-    sin_sql = text(
-        "SELECT COUNT(*) FROM parts_references WHERE rotation_class IS NULL"
-    )
+    sin_sql = text(f"""
+        SELECT COUNT(*) FROM parts_references r
+        WHERE rotation_class IS NULL
+        {model_filter}
+    """)
 
-    rows = (await db.execute(coverage_sql)).all()
-    sin_clasificar = (await db.execute(sin_sql)).scalar_one()
+    params = {"model_code": model_code} if model_code else {}
+    rows = (await db.execute(coverage_sql, params)).all()
+    sin_clasificar = (await db.execute(sin_sql, params)).scalar_one()
 
     clases: list[CoverageBucket] = []
     for row in rows:
