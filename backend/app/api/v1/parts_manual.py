@@ -655,12 +655,12 @@ async def _detect_code_changes(db: AsyncSession) -> int:
           )
           -- El candidato no es un código previo ya conocido de esta parte
           AND NOT (pr.prev_codes @> to_jsonb(spi.part_number::text))
-          -- No hay ya una tarea pendiente o aprobada para este par
+          -- No hay ya una tarea pendiente para este par (aprobadas se permiten re-detectar si prev_codes no fue actualizado)
           AND NOT EXISTS (
               SELECT 1 FROM parts_code_review_tasks t
               WHERE t.candidate_code = spi.part_number
                 AND t.existing_code = pr.factory_part_number
-                AND t.status IN ('pending', 'approved')
+                AND t.status = 'pending'
           )
         ORDER BY spi.part_number, pr.factory_part_number
     """), {"threshold": threshold})
