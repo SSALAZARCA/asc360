@@ -472,7 +472,7 @@ export default function PartsCatalogPage() {
               <th className="sort-head" onClick={() => toggleSort('avg_fob_cost')} style={{ whiteSpace: 'nowrap' }}>P. Público Calc. <span style={{ fontWeight: 400, opacity: 0.5 }}>COP</span> <SortIcon col="avg_fob_cost" /></th>
               <th className="sort-head" onClick={() => toggleSort('public_price')} style={{ whiteSpace: 'nowrap' }}>Precio Final <SortIcon col="public_price" /></th>
               <th className="sort-head" onClick={() => toggleSort('needs_price_review')} style={{ whiteSpace: 'nowrap', textAlign: 'center' }} title="Revisar precio"><Flag size={12} style={{ display: 'inline', verticalAlign: 'middle' }} /> <SortIcon col="needs_price_review" /></th>
-              <th className="sort-head" style={{ width: '90px', textAlign: 'center' }}>Acciones</th>
+              <th className="sort-head" style={{ width: '120px', textAlign: 'center' }}>Acciones</th>
             </tr>
           </thead>
           <tbody>
@@ -551,8 +551,8 @@ export default function PartsCatalogPage() {
                     <Flag size={12} />
                   </button>
                 </td>
-                <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}>
+                <td style={{ textAlign: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
                     {item.pending_task_id && (
                       <button
                         onClick={() => openReview(item)}
