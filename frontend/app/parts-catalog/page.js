@@ -720,7 +720,7 @@ export default function PartsCatalogPage() {
 
               <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '1rem', marginTop: '0.25rem' }}>
                 <label style={{ display: 'block', fontSize: '0.62rem', fontWeight: 800, color: 'rgba(251,146,60,0.6)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.4rem' }}>
-                  Nuevo código de fábrica <span style={{ fontWeight: 400, color: 'rgba(255,255,255,0.25)', textTransform: 'none', letterSpacing: 0 }}>— dejar vacío si no cambia</span>
+                  Reemplazar código activo <span style={{ fontWeight: 400, color: 'rgba(255,255,255,0.25)', textTransform: 'none', letterSpacing: 0 }}>— cambia el código principal, dejar vacío si no aplica</span>
                 </label>
                 <input
                   value={editForm.new_code}
@@ -730,7 +730,7 @@ export default function PartsCatalogPage() {
                 />
                 {editForm.new_code && (
                   <p style={{ fontSize: '0.62rem', color: 'rgba(251,146,60,0.7)', margin: '0.35rem 0 0', lineHeight: 1.5 }}>
-                    Se reemplazará <strong style={{ fontFamily: 'monospace' }}>{editItem?.factory_part_number}</strong> → <strong style={{ fontFamily: 'monospace' }}>{editForm.new_code.trim()}</strong> y se actualizará el historial de códigos.
+                    El código activo cambiará de <strong style={{ fontFamily: 'monospace' }}>{editItem?.factory_part_number}</strong> a <strong style={{ fontFamily: 'monospace' }}>{editForm.new_code.trim()}</strong>. El código anterior quedará en el historial de relacionados.
                   </p>
                 )}
               </div>

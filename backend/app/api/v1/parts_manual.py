@@ -653,8 +653,11 @@ async def _detect_code_changes(db: AsyncSession) -> int:
               JOIN parts_manual_items pmi2 ON pmi2.factory_part_number = pr2.factory_part_number
               WHERE pr2.factory_part_number = spi.part_number
           )
-          -- El candidato no es un código previo ya conocido de esta parte
-          AND NOT (pr.prev_codes @> to_jsonb(spi.part_number::text))
+          -- El candidato no es un código previo ya conocido de esta parte (formato dict nuevo o string plano legado)
+          AND NOT (
+              pr.prev_codes @> to_jsonb(spi.part_number::text)
+              OR pr.prev_codes @> jsonb_build_array(jsonb_build_object('code', spi.part_number))
+          )
           -- No hay ya una tarea pendiente para este par (aprobadas se permiten re-detectar si prev_codes no fue actualizado)
           AND NOT EXISTS (
               SELECT 1 FROM parts_code_review_tasks t
@@ -790,11 +793,13 @@ async def list_catalog(
             q = q.where(PartsManualSection.model_code == model_code)
         if search:
             term = f"%{search}%"
+            from sqlalchemy import cast as sa_cast, Text as SAText
             q = q.where(or_(
                 PartsReference.factory_part_number.ilike(term),
                 PartsReference.description.ilike(term),
                 PartsReference.description_es_manual.ilike(term),
                 spi_latest.c.description_es.ilike(term),
+                sa_cast(PartsReference.prev_codes, SAText).ilike(term),
             ))
         if only_pending:
             q = q.where(pending_sq.c.task_id.isnot(None))
