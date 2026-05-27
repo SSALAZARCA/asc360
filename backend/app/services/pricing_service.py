@@ -41,10 +41,16 @@ async def _find_reference_for_part_number(
     if ref:
         return ref
 
-    # prev_codes es JSONB array: [{"code": "...", "source": "...", "date_seen": "..."}]
-    # @> verifica que el array contenga el elemento dado
+    # Buscar por formato dict {"code": "..."} (nuevo) o string plano (legado)
     stmt = select(PartsReference).where(
         PartsReference.prev_codes.contains([{"code": part_number}])
+    )
+    ref = (await db.execute(stmt)).scalar_one_or_none()
+    if ref:
+        return ref
+
+    stmt = select(PartsReference).where(
+        PartsReference.prev_codes.contains([part_number])
     )
     return (await db.execute(stmt)).scalar_one_or_none()
 
@@ -65,10 +71,13 @@ async def recalculate_part_cost(
         return
 
     # Todos los códigos que mapean a este ref (canónico + alternativos)
+    # Tolera formato dict {"code": "..."} (nuevo) y string plano (legado)
     all_codes = [ref.factory_part_number]
     for entry in (ref.prev_codes or []):
         if isinstance(entry, dict) and "code" in entry:
             all_codes.append(entry["code"])
+        elif isinstance(entry, str) and entry:
+            all_codes.append(entry)
 
     stmt = select(SparePartItem).where(
         SparePartItem.part_number.in_(all_codes),

@@ -1025,8 +1025,8 @@ async def replace_catalog_code(
             detail=f"El código '{new_code}' ya existe en el catálogo. Usá el flujo de Verificar si querés unificar dos entradas."
         )
 
-    # Construir prev_codes: el código que sale entra al historial, máx 2
-    new_prev = ([factory_part_number] + list(existing_ref.prev_codes or []))[:2]
+    # Construir prev_codes: el código que sale entra al historial, máx 5
+    new_prev = ([{"code": factory_part_number}] + list(existing_ref.prev_codes or []))[:5]
 
     new_ref = PartsReference(
         factory_part_number=new_code,
@@ -1262,8 +1262,8 @@ async def approve_review_task(
     candidate_ref = await db.get(PartsReference, task.candidate_code)
 
     if candidate_ref is None:
-        # Construir nuevo prev_codes: [código que sale] + prev anteriores, máx 2
-        new_prev = ([task.existing_code] + list(existing_ref.prev_codes or []))[:2]
+        # Construir nuevo prev_codes: [código que sale] + prev anteriores, máx 5
+        new_prev = ([{"code": task.existing_code}] + list(existing_ref.prev_codes or []))[:5]
         candidate_ref = PartsReference(
             factory_part_number=task.candidate_code,
             um_part_number=existing_ref.um_part_number,
@@ -1275,9 +1275,13 @@ async def approve_review_task(
         await db.flush()
     else:
         # El candidato ya existe — solo actualizar prev_codes si hace falta
-        existing_in_prev = task.existing_code in (candidate_ref.prev_codes or [])
+        prev = candidate_ref.prev_codes or []
+        existing_in_prev = any(
+            (e["code"] == task.existing_code if isinstance(e, dict) else e == task.existing_code)
+            for e in prev
+        )
         if not existing_in_prev:
-            candidate_ref.prev_codes = ([task.existing_code] + list(candidate_ref.prev_codes or []))[:2]
+            candidate_ref.prev_codes = ([{"code": task.existing_code}] + list(prev))[:5]
 
     # Redirigir todos los items del catálogo al nuevo código
     await db.execute(
