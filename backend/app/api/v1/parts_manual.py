@@ -647,9 +647,10 @@ async def _detect_code_changes(db: AsyncSession) -> int:
         JOIN parts_references pr ON pr.factory_part_number = pmi.factory_part_number
         WHERE similarity(spi.description, pr.description) >= :threshold
           AND spi.part_number != pr.factory_part_number
-          -- El candidato no existe ya como código activo
+          -- El candidato no existe ya como código activo en el catálogo con secciones asignadas
           AND NOT EXISTS (
               SELECT 1 FROM parts_references pr2
+              JOIN parts_manual_items pmi2 ON pmi2.factory_part_number = pr2.factory_part_number
               WHERE pr2.factory_part_number = spi.part_number
           )
           -- El candidato no es un código previo ya conocido de esta parte
