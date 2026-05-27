@@ -1344,6 +1344,9 @@ async def approve_review_task(
         .values(status="rejected", resolved_at=datetime.utcnow())
     )
 
+    from app.services.pricing_service import recalculate_part_cost
+    await recalculate_part_cost(db, task.candidate_code)
+
     await db.commit()
     return {"ok": True, "new_code": task.candidate_code}
 
