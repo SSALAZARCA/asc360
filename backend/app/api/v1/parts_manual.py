@@ -168,7 +168,6 @@ def _extract_tables_from_page(page) -> list[list[list]]:
     tables = page.extract_tables() or []
     if tables:
         return tables
-    # Fallback: text-alignment strategy — works for tables without visible borders
     for strategy in (
         {"vertical_strategy": "text", "horizontal_strategy": "lines"},
         {"vertical_strategy": "text", "horizontal_strategy": "text",
@@ -183,10 +182,45 @@ def _extract_tables_from_page(page) -> list[list[list]]:
     return []
 
 
+def _parse_parts_from_text(text: str) -> list[dict]:
+    """Fallback for PDFs without structured tables (plain-text layout)."""
+    import re as _re
+    parts = []
+    lines = [l.strip() for l in text.splitlines() if l.strip()]
+    header_idx = -1
+    for i, line in enumerate(lines):
+        low = line.lower()
+        if ("no" in low or "item" in low) and ("factory" in low or "bom" in low or "part" in low):
+            header_idx = i
+            break
+    if header_idx < 0:
+        return parts
+    pattern = _re.compile(r'^(\S+)\s+(\S+)\s+(.+)$')
+    skip = {"no.", "no", "item", "pos", "page"}
+    for line in lines[header_idx + 1:]:
+        m = pattern.match(line)
+        if not m:
+            continue
+        order_num, factory, description = m.group(1), m.group(2), m.group(3).strip()
+        if order_num.lower() in skip:
+            continue
+        if len(factory) < 3 or not _re.search(r'[A-Z0-9]', factory, _re.I):
+            continue
+        parts.append({
+            "order_num":           order_num,
+            "factory_part_number": factory,
+            "um_part_number":      "",
+            "description":         description,
+            "unit":                None,
+        })
+    return parts
+
+
 def _parse_parts_table(pdf_path: str) -> list[dict]:
     parts = []
     with pdfplumber.open(pdf_path) as pdf:
         for page in pdf.pages:
+            page_parts: list[dict] = []
             for table in _extract_tables_from_page(page):
                 if not table or len(table) < 2:
                     continue
@@ -223,13 +257,19 @@ def _parse_parts_table(pdf_path: str) -> list[dict]:
                         continue
                     if order_num.lower() in ("page", "no.", "no", "item", "pos", ""):
                         continue
-                    parts.append({
+                    page_parts.append({
                         "order_num":           order_num,
                         "factory_part_number": factory,
                         "um_part_number":      get("um") or "",
                         "description":         get("description") or "",
                         "unit":                get("unit"),
                     })
+
+            if page_parts:
+                parts.extend(page_parts)
+            else:
+                text = page.extract_text() or ""
+                parts.extend(_parse_parts_from_text(text))
     return parts
 
 

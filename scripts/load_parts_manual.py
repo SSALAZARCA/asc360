@@ -115,11 +115,48 @@ def _detect_col(header_row: list, keywords: list) -> int:
     return -1
 
 
+def _parse_parts_from_text(text: str) -> list[dict]:
+    """Fallback for PDFs without structured tables (plain-text layout)."""
+    parts = []
+    lines = [l.strip() for l in text.splitlines() if l.strip()]
+    header_idx = -1
+    for i, line in enumerate(lines):
+        low = line.lower()
+        has_num = "no" in low or "item" in low
+        has_part = "factory" in low or "bom" in low or "part" in low
+        if has_num and has_part:
+            header_idx = i
+            break
+    if header_idx < 0:
+        return parts
+    pattern = re.compile(r'^(\S+)\s+(\S+)\s+(.+)$')
+    skip = {"no.", "no", "item", "pos", "page"}
+    for line in lines[header_idx + 1:]:
+        m = pattern.match(line)
+        if not m:
+            continue
+        order_num, factory, description = m.group(1), m.group(2), m.group(3).strip()
+        if order_num.lower() in skip:
+            continue
+        if len(factory) < 3 or not re.search(r'[A-Z0-9]', factory, re.I):
+            continue
+        parts.append({
+            "order_num":           order_num,
+            "factory_part_number": factory,
+            "um_part_number":      "",
+            "description":         description,
+            "unit":                None,
+        })
+    return parts
+
+
 def parse_parts_table(pdf_path: Path) -> list[dict]:
     parts = []
     with pdfplumber.open(str(pdf_path)) as pdf:
         for page in pdf.pages:
             tables = page.extract_tables()
+            page_parts: list[dict] = []
+
             for table in tables:
                 if not table or len(table) < 2:
                     continue
@@ -165,13 +202,20 @@ def parse_parts_table(pdf_path: Path) -> list[dict]:
                     if order_num.lower() in ("page", "no.", "no", "item", "pos", ""):
                         continue
 
-                    parts.append({
+                    page_parts.append({
                         "order_num":           order_num,
                         "factory_part_number": factory,
                         "um_part_number":      get("um") or "",
                         "description":         get("description") or "",
                         "unit":                get("unit"),
                     })
+
+            if page_parts:
+                parts.extend(page_parts)
+            else:
+                text = page.extract_text() or ""
+                parts.extend(_parse_parts_from_text(text))
+
     return parts
 
 
