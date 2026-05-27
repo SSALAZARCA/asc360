@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import AdminLayout from '../admin-layout';
 import { authFetch } from '../../lib/authFetch';
-import { Search, ChevronLeft, ChevronRight, X, ArrowUp, ArrowDown, ChevronsUpDown, AlertTriangle, CheckCircle2, ShieldX, Pencil, UploadCloud, BarChart3, Download, Flag } from 'lucide-react';
+import { Search, ChevronLeft, ChevronRight, X, ArrowUp, ArrowDown, ChevronsUpDown, AlertTriangle, CheckCircle2, ShieldX, Pencil, UploadCloud, BarChart3, Download, Flag, Trash2 } from 'lucide-react';
 
 const PAGE_SIZE = 50;
 
@@ -61,6 +61,11 @@ export default function PartsCatalogPage() {
   const [newPrevCode, setNewPrevCode] = useState('');
   const [editLoading, setEditLoading] = useState(false);
   const [editMsg, setEditMsg] = useState('');
+
+  // Modal de confirmación de eliminación
+  const [deleteItem, setDeleteItem] = useState(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
 
   // Modal de carga masiva de rotación
   const [showRotationUpload, setShowRotationUpload] = useState(false);
@@ -250,6 +255,23 @@ export default function PartsCatalogPage() {
       }
     } catch { setEditMsg('⚠️ Error de conexión.'); }
     finally { setEditLoading(false); }
+  };
+
+  const handleDeletePart = async () => {
+    if (!deleteItem) return;
+    setDeleteLoading(true);
+    setDeleteError('');
+    try {
+      const res = await authFetch(`/parts/admin/catalog/part/${encodeURIComponent(deleteItem.factory_part_number)}`, { method: 'DELETE' });
+      if (res.ok || res.status === 204) {
+        setDeleteItem(null);
+        fetchData();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        setDeleteError(err.detail || 'Error al eliminar.');
+      }
+    } catch { setDeleteError('Error de conexión.'); }
+    finally { setDeleteLoading(false); }
   };
 
   const handleRotationImport = async () => {
@@ -571,6 +593,17 @@ export default function PartsCatalogPage() {
                     >
                       <Pencil size={11} />
                     </button>
+                    {item.avg_fob_cost == null && (
+                      <button
+                        onClick={() => { setDeleteError(''); setDeleteItem(item); }}
+                        title="Eliminar repuesto"
+                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '26px', height: '26px', borderRadius: '8px', background: 'rgba(239,68,68,0.07)', border: '1px solid rgba(239,68,68,0.15)', color: 'rgba(239,68,68,0.45)', cursor: 'pointer', transition: 'all 0.15s' }}
+                        onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.18)'; e.currentTarget.style.color = '#ef4444'; e.currentTarget.style.borderColor = 'rgba(239,68,68,0.4)'; }}
+                        onMouseLeave={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.07)'; e.currentTarget.style.color = 'rgba(239,68,68,0.45)'; e.currentTarget.style.borderColor = 'rgba(239,68,68,0.15)'; }}
+                      >
+                        <Trash2 size={11} />
+                      </button>
+                    )}
                   </div>
                 </td>
               </tr>
@@ -853,6 +886,51 @@ export default function PartsCatalogPage() {
                 style={{ flex: 1, background: 'rgba(255,255,255,0.03)', color: 'rgba(255,255,255,0.4)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px', padding: '0.7rem', fontWeight: 900, fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.06em', cursor: 'pointer', opacity: rotationUploading ? 0.5 : 1 }}
               >
                 Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de confirmación de eliminación */}
+      {deleteItem && (
+        <div onClick={() => !deleteLoading && setDeleteItem(null)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(4px)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ background: '#0c0c0e', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '16px', padding: '2rem', width: '100%', maxWidth: '420px', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <Trash2 size={16} color="#ef4444" />
+              <p style={{ color: '#fff', fontWeight: 900, fontSize: '0.82rem', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>Eliminar repuesto</p>
+            </div>
+
+            <div style={{ background: 'rgba(239,68,68,0.05)', border: '1px solid rgba(239,68,68,0.15)', borderRadius: '10px', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+              <span style={{ fontFamily: 'monospace', fontSize: '0.82rem', fontWeight: 700, color: '#ff5f33' }}>{deleteItem.factory_part_number}</span>
+              <span style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.5)' }}>{deleteItem.description || '—'}</span>
+            </div>
+
+            <p style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.4)', margin: 0, lineHeight: 1.6 }}>
+              Esta acción eliminará el repuesto del catálogo. Se borrarán también sus entradas en el manual de partes y las tareas de revisión de código asociadas.
+            </p>
+
+            {deleteError && (
+              <p style={{ fontSize: '0.72rem', color: '#ef4444', margin: 0, fontWeight: 700 }}>⚠ {deleteError}</p>
+            )}
+
+            <div style={{ display: 'flex', gap: '0.75rem' }}>
+              <button
+                onClick={handleDeletePart}
+                disabled={deleteLoading}
+                style={{ flex: 1, background: 'rgba(239,68,68,0.15)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.35)', borderRadius: '10px', padding: '0.7rem', fontWeight: 900, fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.06em', cursor: deleteLoading ? 'not-allowed' : 'pointer', opacity: deleteLoading ? 0.5 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}
+              >
+                <Trash2 size={13} /> {deleteLoading ? 'Eliminando...' : 'Eliminar'}
+              </button>
+              <button
+                onClick={() => setDeleteItem(null)}
+                disabled={deleteLoading}
+                style={{ flex: 1, background: 'rgba(255,255,255,0.03)', color: 'rgba(255,255,255,0.4)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px', padding: '0.7rem', fontWeight: 900, fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.06em', cursor: 'pointer', opacity: deleteLoading ? 0.5 : 1 }}
+              >
+                Cancelar
               </button>
             </div>
           </div>

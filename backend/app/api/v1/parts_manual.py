@@ -967,6 +967,62 @@ async def delete_catalog(
     await db.commit()
 
 
+# ── Eliminación de un repuesto individual del catálogo ───────────────────────
+
+@router.delete("/admin/catalog/part/{factory_part_number:path}", status_code=204)
+async def delete_catalog_part(
+    factory_part_number: str,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Elimina un repuesto del catálogo. Bloqueado si tiene costos, historial o pedidos asociados."""
+    if not current_user.is_superadmin:
+        raise HTTPException(status_code=403, detail="Solo superadmin")
+
+    ref = await db.get(PartsReference, factory_part_number)
+    if not ref:
+        raise HTTPException(status_code=404, detail="Referencia no encontrada")
+
+    if ref.avg_fob_cost is not None:
+        raise HTTPException(status_code=409, detail="No se puede eliminar: tiene costo promedio calculado.")
+
+    history_count = (await db.execute(
+        select(func.count()).select_from(PartCostHistory)
+        .where(PartCostHistory.factory_part_number == factory_part_number)
+    )).scalar_one()
+    if history_count > 0:
+        raise HTTPException(status_code=409, detail="No se puede eliminar: tiene historial de costos.")
+
+    from app.models.logistics import PartCatalog
+    from sqlalchemy import func as sa_func
+    catalog = await db.get(PartCatalog, factory_part_number)
+    if catalog:
+        from app.models.logistics import PartsOrderItem, PurchaseOrderItem
+        order_refs = (await db.execute(
+            select(func.count()).select_from(PartsOrderItem)
+            .where(PartsOrderItem.part_code == factory_part_number)
+        )).scalar_one()
+        purchase_refs = (await db.execute(
+            select(func.count()).select_from(PurchaseOrderItem)
+            .where(PurchaseOrderItem.part_code == factory_part_number)
+        )).scalar_one()
+        if order_refs > 0 or purchase_refs > 0:
+            raise HTTPException(status_code=409, detail="No se puede eliminar: tiene órdenes de compra asociadas.")
+        await db.delete(catalog)
+
+    await db.execute(
+        sa_delete(PartsManualItem).where(PartsManualItem.factory_part_number == factory_part_number)
+    )
+    await db.execute(
+        sa_delete(PartsCodeReviewTask).where(
+            (PartsCodeReviewTask.existing_code == factory_part_number) |
+            (PartsCodeReviewTask.candidate_code == factory_part_number)
+        )
+    )
+    await db.delete(ref)
+    await db.commit()
+
+
 # ── Edición inline de un repuesto del catálogo ───────────────────────────────
 
 @router.patch("/admin/catalog/{factory_part_number:path}", status_code=200)
