@@ -97,15 +97,16 @@ def ensure_bucket_public(client: Minio, bucket: str) -> None:
 
 HEADER_KEYWORDS = {
     "order_num":   ["page", "no.", "no ", "item", "pos"],
-    "factory":     ["factory", "part no", "part num"],
+    "factory":     ["factory", "part no", "part num", "code", "bom"],
     "um":          ["um part", "um no"],
     "description": ["description", "descrip"],
     "unit":        ["unit"],
 }
 
 
-def _detect_col(header_row: list, keywords: list) -> int:
-    for i, cell in enumerate(header_row):
+def _detect_col(header_row: list, keywords: list, start: int = 0) -> int:
+    for i in range(start, len(header_row)):
+        cell = header_row[i]
         if cell is None:
             continue
         cell_lower = str(cell).lower().strip()
@@ -113,6 +114,24 @@ def _detect_col(header_row: list, keywords: list) -> int:
             if kw in cell_lower:
                 return i
     return -1
+
+
+def _find_col_groups(header_row: list) -> list[dict]:
+    """Return all (order_num, factory, description, um, unit) column groups found in a header row."""
+    groups = []
+    row_lower = [str(c).lower().strip() if c else "" for c in header_row]
+    i = 0
+    while i < len(row_lower):
+        cell = row_lower[i]
+        if cell and any(kw in cell for kw in ["no.", "no ", "item", "pos"]):
+            col_map = {field: _detect_col(header_row, kws, start=i) for field, kws in HEADER_KEYWORDS.items()}
+            col_map["order_num"] = i
+            if col_map.get("factory", -1) > i:
+                groups.append(col_map)
+                i = max(v for v in col_map.values() if v > 0) + 1
+                continue
+        i += 1
+    return groups
 
 
 def _parse_parts_from_text(text: str) -> list[dict]:
@@ -162,53 +181,51 @@ def parse_parts_table(pdf_path: Path) -> list[dict]:
                     continue
 
                 header_idx = -1
-                col_map: dict[str, int] = {}
+                col_groups: list[dict] = []
 
                 for row_i, row in enumerate(table):
                     if not row:
                         continue
                     row_lower = [str(c).lower() if c else "" for c in row]
-                    hits = 0
-                    for kw_list in HEADER_KEYWORDS.values():
-                        for kw in kw_list:
-                            if any(kw in cell for cell in row_lower):
-                                hits += 1
-                                break
+                    hits = sum(
+                        1 for kw_list in HEADER_KEYWORDS.values()
+                        for kw in kw_list if any(kw in cell for cell in row_lower)
+                    )
                     if hits >= 3:
                         header_idx = row_i
-                        for field, kws in HEADER_KEYWORDS.items():
-                            col_map[field] = _detect_col(row, kws)
+                        col_groups = _find_col_groups(row)
                         break
 
-                if header_idx < 0 or not col_map:
+                if header_idx < 0 or not col_groups:
                     continue
 
+                skip = {"page", "no.", "no", "item", "pos", ""}
                 for row in table[header_idx + 1:]:
                     if not row:
                         continue
+                    for col_map in col_groups:
+                        def get(field: str, _cm=col_map, _row=row) -> str | None:
+                            idx = _cm.get(field, -1)
+                            if idx < 0 or idx >= len(_row):
+                                return None
+                            v = _row[idx]
+                            return str(v).strip() if v is not None else None
 
-                    def get(field: str) -> str | None:
-                        idx = col_map.get(field, -1)
-                        if idx < 0 or idx >= len(row):
-                            return None
-                        v = row[idx]
-                        return str(v).strip() if v is not None else None
+                        order_num = get("order_num")
+                        factory   = get("factory")
 
-                    order_num = get("order_num")
-                    factory   = get("factory")
+                        if not order_num or not factory:
+                            continue
+                        if order_num.lower() in skip:
+                            continue
 
-                    if not order_num or not factory:
-                        continue
-                    if order_num.lower() in ("page", "no.", "no", "item", "pos", ""):
-                        continue
-
-                    page_parts.append({
-                        "order_num":           order_num,
-                        "factory_part_number": factory,
-                        "um_part_number":      get("um") or "",
-                        "description":         get("description") or "",
-                        "unit":                get("unit"),
-                    })
+                        page_parts.append({
+                            "order_num":           order_num,
+                            "factory_part_number": factory,
+                            "um_part_number":      get("um") or "",
+                            "description":         get("description") or "",
+                            "unit":                get("unit"),
+                        })
 
             if page_parts:
                 parts.extend(page_parts)

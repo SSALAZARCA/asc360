@@ -145,15 +145,16 @@ def _parse_section_filename(filename: str) -> tuple[str, str]:
 
 _HEADER_KEYWORDS = {
     "order_num":   ["page", "no.", "no ", "item", "pos"],
-    "factory":     ["factory", "part no", "part num"],
+    "factory":     ["factory", "part no", "part num", "code", "bom"],
     "um":          ["um part", "um no"],
     "description": ["description", "descrip"],
     "unit":        ["unit"],
 }
 
 
-def _detect_col(header_row: list, keywords: list) -> int:
-    for i, cell in enumerate(header_row):
+def _detect_col(header_row: list, keywords: list, start: int = 0) -> int:
+    for i in range(start, len(header_row)):
+        cell = header_row[i]
         if cell is None:
             continue
         cell_lower = str(cell).lower().strip()
@@ -161,6 +162,24 @@ def _detect_col(header_row: list, keywords: list) -> int:
             if kw in cell_lower:
                 return i
     return -1
+
+
+def _find_col_groups(header_row: list) -> list[dict]:
+    """Return all column groups (order_num, factory, …) found in a header row."""
+    groups = []
+    row_lower = [str(c).lower().strip() if c else "" for c in header_row]
+    i = 0
+    while i < len(row_lower):
+        cell = row_lower[i]
+        if cell and any(kw in cell for kw in ["no.", "no ", "item", "pos"]):
+            col_map = {field: _detect_col(header_row, kws, start=i) for field, kws in _HEADER_KEYWORDS.items()}
+            col_map["order_num"] = i
+            if col_map.get("factory", -1) > i:
+                groups.append(col_map)
+                i = max(v for v in col_map.values() if v > 0) + 1
+                continue
+        i += 1
+    return groups
 
 
 def _extract_tables_from_page(page) -> list[list[list]]:
@@ -224,7 +243,7 @@ def _parse_parts_table(pdf_path: str) -> list[dict]:
             for table in _extract_tables_from_page(page):
                 if not table or len(table) < 2:
                     continue
-                header_idx, col_map = -1, {}
+                header_idx, col_groups = -1, []
                 for row_i, row in enumerate(table):
                     if not row:
                         continue
@@ -235,35 +254,35 @@ def _parse_parts_table(pdf_path: str) -> list[dict]:
                     )
                     if hits >= 3:
                         header_idx = row_i
-                        for field, kws in _HEADER_KEYWORDS.items():
-                            col_map[field] = _detect_col(row, kws)
+                        col_groups = _find_col_groups(row)
                         break
-                if header_idx < 0:
+                if header_idx < 0 or not col_groups:
                     continue
+                skip = {"page", "no.", "no", "item", "pos", ""}
                 for row in table[header_idx + 1:]:
                     if not row:
                         continue
+                    for col_map in col_groups:
+                        def get(field, _cm=col_map, _row=row):
+                            idx = _cm.get(field, -1)
+                            if idx < 0 or idx >= len(_row):
+                                return None
+                            v = _row[idx]
+                            return str(v).strip() if v is not None else None
 
-                    def get(field):
-                        idx = col_map.get(field, -1)
-                        if idx < 0 or idx >= len(row):
-                            return None
-                        v = row[idx]
-                        return str(v).strip() if v is not None else None
-
-                    order_num = get("order_num")
-                    factory   = get("factory")
-                    if not order_num or not factory:
-                        continue
-                    if order_num.lower() in ("page", "no.", "no", "item", "pos", ""):
-                        continue
-                    page_parts.append({
-                        "order_num":           order_num,
-                        "factory_part_number": factory,
-                        "um_part_number":      get("um") or "",
-                        "description":         get("description") or "",
-                        "unit":                get("unit"),
-                    })
+                        order_num = get("order_num")
+                        factory   = get("factory")
+                        if not order_num or not factory:
+                            continue
+                        if order_num.lower() in skip:
+                            continue
+                        page_parts.append({
+                            "order_num":           order_num,
+                            "factory_part_number": factory,
+                            "um_part_number":      get("um") or "",
+                            "description":         get("description") or "",
+                            "unit":                get("unit"),
+                        })
 
             if page_parts:
                 parts.extend(page_parts)
