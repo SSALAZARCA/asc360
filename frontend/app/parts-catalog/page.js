@@ -466,12 +466,12 @@ export default function PartsCatalogPage() {
                 </th>
               ))}
               <th className="sort-head" onClick={() => toggleSort('rotation_class')} style={{ whiteSpace: 'nowrap' }}>Rotación <SortIcon col="rotation_class" /></th>
-              <th className="sort-head" onClick={() => toggleSort('needs_price_review')} style={{ whiteSpace: 'nowrap' }} title="Revisar precio"><Flag size={12} style={{ display: 'inline', verticalAlign: 'middle' }} /> <SortIcon col="needs_price_review" /></th>
               <th className="sort-head" onClick={() => toggleSort('avg_fob_cost')} style={{ whiteSpace: 'nowrap' }}>FOB Prom. <span style={{ fontWeight: 400, opacity: 0.5 }}>USD</span> <SortIcon col="avg_fob_cost" /></th>
               <th className="sort-head" onClick={() => toggleSort('avg_fob_cost')} style={{ whiteSpace: 'nowrap' }}>C. Importado <span style={{ fontWeight: 400, opacity: 0.5 }}>COP</span> <SortIcon col="avg_fob_cost" /></th>
               <th className="sort-head" onClick={() => toggleSort('avg_fob_cost')} style={{ whiteSpace: 'nowrap' }}>P. Distribuidor <span style={{ fontWeight: 400, opacity: 0.5 }}>COP</span> <SortIcon col="avg_fob_cost" /></th>
               <th className="sort-head" onClick={() => toggleSort('avg_fob_cost')} style={{ whiteSpace: 'nowrap' }}>P. Público Calc. <span style={{ fontWeight: 400, opacity: 0.5 }}>COP</span> <SortIcon col="avg_fob_cost" /></th>
               <th className="sort-head" onClick={() => toggleSort('public_price')} style={{ whiteSpace: 'nowrap' }}>Precio Final <SortIcon col="public_price" /></th>
+              <th className="sort-head" onClick={() => toggleSort('needs_price_review')} style={{ whiteSpace: 'nowrap', textAlign: 'center' }} title="Revisar precio"><Flag size={12} style={{ display: 'inline', verticalAlign: 'middle' }} /> <SortIcon col="needs_price_review" /></th>
               <th className="sort-head" style={{ width: '90px', textAlign: 'center' }}>Acciones</th>
             </tr>
           </thead>
@@ -498,18 +498,6 @@ export default function PartsCatalogPage() {
                 </td>
                 <td><span className="cell-truncate" style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.7)', fontWeight: 600 }} title={item.vehicle_model_name || '—'}>{item.vehicle_model_name || '—'}</span></td>
                 <td>{item.rotation_class ? <span style={rotationBadge(item.rotation_class)}>{item.rotation_class}</span> : <span style={{ color: 'rgba(255,255,255,0.15)', fontSize: '0.68rem' }}>—</span>}</td>
-                <td style={{ textAlign: 'center' }}>
-                  <button
-                    onClick={() => togglePriceReview(item)}
-                    title={item.needs_price_review ? 'Quitar marca de revisión' : 'Marcar para revisar precio'}
-                    style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '24px', height: '24px', borderRadius: '6px', cursor: 'pointer', transition: 'all 0.15s', border: 'none',
-                      background: item.needs_price_review ? 'rgba(234,179,8,0.15)' : 'transparent',
-                      color: item.needs_price_review ? '#eab308' : 'rgba(255,255,255,0.15)',
-                    }}
-                  >
-                    <Flag size={12} />
-                  </button>
-                </td>
                 <td>
                   {item.avg_fob_cost != null
                     ? <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '0.78rem', color: '#38bdf8' }}>${Number(item.avg_fob_cost).toFixed(2)}</span>
@@ -550,6 +538,18 @@ export default function PartsCatalogPage() {
                       </div>
                     );
                   })()}
+                </td>
+                <td style={{ textAlign: 'center' }}>
+                  <button
+                    onClick={() => togglePriceReview(item)}
+                    title={item.needs_price_review ? 'Quitar marca de revisión' : 'Marcar para revisar precio'}
+                    style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '24px', height: '24px', borderRadius: '6px', cursor: 'pointer', transition: 'all 0.15s', border: 'none',
+                      background: item.needs_price_review ? 'rgba(234,179,8,0.15)' : 'transparent',
+                      color: item.needs_price_review ? '#eab308' : 'rgba(255,255,255,0.15)',
+                    }}
+                  >
+                    <Flag size={12} />
+                  </button>
                 </td>
                 <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}>
