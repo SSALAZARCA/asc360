@@ -857,6 +857,7 @@ async def list_catalog(
         "section_code":        inner_sq.c.section_code,
         "vehicle_model_name":  inner_sq.c.vehicle_model_pattern,
         "avg_fob_cost":        cast(inner_sq.c.avg_fob_cost, SANumeric(12, 4)),
+        "rotation_class":      inner_sq.c.rotation_class,
     }
     sort_expr = _SORT_MAP.get(sort_col, inner_sq.c.section_code)
     order_expr = nullslast(sort_expr.asc() if sort_dir == "asc" else sort_expr.desc())

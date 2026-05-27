@@ -429,7 +429,7 @@ export default function PartsCatalogPage() {
                   {lbl} <SortIcon col={col} />
                 </th>
               ))}
-              <th className="sort-head" style={{ whiteSpace: 'nowrap' }}>Rotación</th>
+              <th className="sort-head" onClick={() => toggleSort('rotation_class')} style={{ whiteSpace: 'nowrap' }}>Rotación <SortIcon col="rotation_class" /></th>
               <th className="sort-head" onClick={() => toggleSort('avg_fob_cost')} style={{ whiteSpace: 'nowrap' }}>FOB Prom. <span style={{ fontWeight: 400, opacity: 0.5 }}>USD</span> <SortIcon col="avg_fob_cost" /></th>
               <th className="sort-head" onClick={() => toggleSort('avg_fob_cost')} style={{ whiteSpace: 'nowrap' }}>C. Importado <span style={{ fontWeight: 400, opacity: 0.5 }}>COP</span> <SortIcon col="avg_fob_cost" /></th>
               <th className="sort-head" onClick={() => toggleSort('avg_fob_cost')} style={{ whiteSpace: 'nowrap' }}>P. Distribuidor <span style={{ fontWeight: 400, opacity: 0.5 }}>COP</span> <SortIcon col="avg_fob_cost" /></th>
