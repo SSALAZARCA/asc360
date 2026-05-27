@@ -1072,11 +1072,43 @@ async def replace_catalog_code(
         .values(status="rejected", resolved_at=datetime.utcnow())
     )
 
+    # Recalcular costo promedio para el nuevo código — puede haber SparePartItems con precio
+    from app.services.pricing_service import recalculate_part_cost
+    await recalculate_part_cost(db, new_code)
+
     await db.commit()
     return {"ok": True, "new_code": new_code}
 
 
 # ── Detección manual y revisión de cambios de código ─────────────────────────
+
+@router.post("/admin/backfill-costs")
+async def backfill_costs(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Recalcula avg_fob_cost para todas las referencias sin costo que tienen precios en pedidos."""
+    if not current_user.is_superadmin:
+        raise HTTPException(status_code=403, detail="Solo superadmin")
+
+    from app.services.pricing_service import recalculate_part_cost
+
+    result = await db.execute(
+        select(PartsReference.factory_part_number).where(PartsReference.avg_fob_cost.is_(None))
+    )
+    codes = [row[0] for row in result.all()]
+
+    updated = 0
+    for code in codes:
+        before = (await db.get(PartsReference, code))
+        await recalculate_part_cost(db, code)
+        after = (await db.get(PartsReference, code))
+        if after and after.avg_fob_cost is not None:
+            updated += 1
+
+    await db.commit()
+    return {"checked": len(codes), "updated": updated}
+
 
 @router.post("/admin/detect-code-changes")
 async def detect_code_changes(

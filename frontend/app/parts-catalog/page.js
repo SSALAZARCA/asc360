@@ -66,6 +66,22 @@ export default function PartsCatalogPage() {
   const [rotationUploading, setRotationUploading] = useState(false);
   const [rotationResult, setRotationResult] = useState(null);
 
+  // Backfill de costos
+  const [backfilling, setBackfilling] = useState(false);
+  const [backfillResult, setBackfillResult] = useState(null);
+
+  const handleBackfillCosts = async () => {
+    setBackfilling(true);
+    setBackfillResult(null);
+    try {
+      const res = await authFetch('/parts/admin/backfill-costs', { method: 'POST' });
+      const data = await res.json();
+      setBackfillResult(data);
+      fetchData();
+    } catch { setBackfillResult({ error: 'Error de conexión' }); }
+    finally { setBackfilling(false); }
+  };
+
   // Panel de cobertura
   const [coverage, setCoverage] = useState(null);
 
@@ -276,12 +292,29 @@ export default function PartsCatalogPage() {
             )}
           </p>
         </div>
-        <button
-          onClick={() => { setShowRotationUpload(true); setRotationFile(null); setRotationResult(null); }}
-          style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.6rem 1.1rem', borderRadius: '10px', background: 'rgba(99,102,241,0.12)', border: '1px solid rgba(99,102,241,0.3)', color: '#818cf8', fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', cursor: 'pointer', flexShrink: 0 }}
-        >
-          <UploadCloud size={14} /> Clasificar rotación
-        </button>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.4rem' }}>
+          <button
+            onClick={() => { setShowRotationUpload(true); setRotationFile(null); setRotationResult(null); }}
+            style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.6rem 1.1rem', borderRadius: '10px', background: 'rgba(99,102,241,0.12)', border: '1px solid rgba(99,102,241,0.3)', color: '#818cf8', fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', cursor: 'pointer', flexShrink: 0 }}
+          >
+            <UploadCloud size={14} /> Clasificar rotación
+          </button>
+          <button
+            onClick={handleBackfillCosts}
+            disabled={backfilling}
+            style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.45rem 0.9rem', borderRadius: '10px', background: 'rgba(56,189,248,0.08)', border: '1px solid rgba(56,189,248,0.25)', color: '#38bdf8', fontSize: '0.65rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', cursor: backfilling ? 'not-allowed' : 'pointer', flexShrink: 0, opacity: backfilling ? 0.5 : 1 }}
+          >
+            <BarChart3 size={12} /> {backfilling ? 'Calculando...' : 'Recalcular costos'}
+          </button>
+          {backfillResult && !backfillResult.error && (
+            <span style={{ fontSize: '0.6rem', color: '#4ade80', fontWeight: 700 }}>
+              ✓ {backfillResult.updated} de {backfillResult.checked} actualizados
+            </span>
+          )}
+          {backfillResult?.error && (
+            <span style={{ fontSize: '0.6rem', color: '#ef4444', fontWeight: 700 }}>⚠ {backfillResult.error}</span>
+          )}
+        </div>
       </header>
 
       {/* Panel de cobertura por rotación */}
