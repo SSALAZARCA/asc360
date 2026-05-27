@@ -1521,13 +1521,13 @@ async def get_coverage(
         aqui AS (
             SELECT UPPER(TRIM(REPLACE(part_number, ' ', ''))) AS pn
             FROM spare_part_items
-            WHERE qty_physical IS NOT NULL OR qty_received > 0
+            WHERE qty_physical IS NOT NULL
             GROUP BY 1
         ),
         en_camino AS (
             SELECT UPPER(TRIM(REPLACE(part_number, ' ', ''))) AS pn
             FROM spare_part_items
-            WHERE (qty_physical IS NULL AND COALESCE(qty_received, 0) = 0)
+            WHERE qty_received > 0 AND qty_physical IS NULL
               AND UPPER(TRIM(REPLACE(part_number, ' ', ''))) NOT IN (SELECT pn FROM aqui)
             GROUP BY 1
         ),
