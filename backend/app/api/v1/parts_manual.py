@@ -16,7 +16,7 @@ from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Uploa
 from fastapi.responses import Response, StreamingResponse
 from minio import Minio
 from pydantic import BaseModel
-from sqlalchemy import delete as sa_delete, update as sa_update, text, exists, func
+from sqlalchemy import delete as sa_delete, update as sa_update, text, exists as sa_exists, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from openai import AsyncOpenAI
@@ -755,6 +755,7 @@ async def list_catalog(
     only_pending: bool = False,
     only_price_review: bool = False,
     rotation_class: str = "",
+    coverage_status: str = "",
     sort_col: str = "section_code",
     sort_dir: str = "asc",
     page: int = 1,
@@ -827,6 +828,74 @@ async def list_catalog(
             q = q.where(PartsReference.rotation_class.is_(None))
         elif rotation_class in ("alta", "media", "baja"):
             q = q.where(PartsReference.rotation_class == rotation_class)
+        if coverage_status == "aqui":
+            q = q.where(
+                sa_exists(
+                    select(SparePartItem.id).where(
+                        func.upper(func.trim(func.replace(SparePartItem.part_number, ' ', ''))) == func.upper(func.trim(PartsReference.factory_part_number)),
+                        SparePartItem.qty_physical.isnot(None),
+                        SparePartItem.qty_physical > 0,
+                    )
+                )
+            )
+        elif coverage_status == "en_camino":
+            from app.models.imports import SparePartLot, ShipmentOrder
+            q = q.where(
+                sa_exists(
+                    select(SparePartItem.id)
+                    .join(SparePartLot, SparePartLot.id == SparePartItem.lot_id)
+                    .join(ShipmentOrder, ShipmentOrder.id == SparePartLot.shipment_order_id)
+                    .where(
+                        func.upper(func.trim(func.replace(SparePartItem.part_number, ' ', ''))) == func.upper(func.trim(PartsReference.factory_part_number)),
+                        SparePartItem.qty_received > 0,
+                        SparePartItem.qty_physical.is_(None),
+                        ShipmentOrder.bl_container.isnot(None),
+                    )
+                )
+            )
+        elif coverage_status == "pedido":
+            from app.models.imports import SparePartLot, ShipmentOrder
+            q = q.where(
+                sa_exists(
+                    select(SparePartItem.id)
+                    .join(SparePartLot, SparePartLot.id == SparePartItem.lot_id)
+                    .join(ShipmentOrder, ShipmentOrder.id == SparePartLot.shipment_order_id)
+                    .where(
+                        func.upper(func.trim(func.replace(SparePartItem.part_number, ' ', ''))) == func.upper(func.trim(PartsReference.factory_part_number)),
+                        ShipmentOrder.bl_container.is_(None),
+                    )
+                )
+            ).where(
+                ~sa_exists(
+                    select(SparePartItem.id)
+                    .join(SparePartLot, SparePartLot.id == SparePartItem.lot_id)
+                    .join(ShipmentOrder, ShipmentOrder.id == SparePartLot.shipment_order_id)
+                    .where(
+                        func.upper(func.trim(func.replace(SparePartItem.part_number, ' ', ''))) == func.upper(func.trim(PartsReference.factory_part_number)),
+                        SparePartItem.qty_received > 0,
+                        SparePartItem.qty_physical.is_(None),
+                        ShipmentOrder.bl_container.isnot(None),
+                    )
+                )
+            ).where(
+                ~sa_exists(
+                    select(SparePartItem.id).where(
+                        func.upper(func.trim(func.replace(SparePartItem.part_number, ' ', ''))) == func.upper(func.trim(PartsReference.factory_part_number)),
+                        SparePartItem.qty_physical.isnot(None),
+                        SparePartItem.qty_physical > 0,
+                    )
+                )
+            )
+        elif coverage_status == "no_pedidas":
+            q = q.where(
+                ~sa_exists(
+                    select(SparePartItem.id).where(
+                        func.upper(func.trim(func.replace(SparePartItem.part_number, ' ', ''))) == func.upper(func.trim(PartsReference.factory_part_number)),
+                    )
+                )
+            ).where(
+                PartCatalog.public_price.is_(None)
+            )
         return q
 
     # Total — cuenta pares únicos (parte, modelo)

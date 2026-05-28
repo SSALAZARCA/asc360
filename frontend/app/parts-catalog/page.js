@@ -45,6 +45,7 @@ export default function PartsCatalogPage() {
   const [onlyPending, setOnlyPending] = useState(false);
   const [onlyPriceReview, setOnlyPriceReview] = useState(false);
   const [rotationFilter, setRotationFilter] = useState('');
+  const [coverageFilter, setCoverageFilter] = useState('');
 
   const [sortCol, setSortCol] = useState('section_code');
   const [sortDir, setSortDir] = useState('asc');
@@ -127,6 +128,7 @@ export default function PartsCatalogPage() {
         only_pending: String(onlyPending),
         only_price_review: String(onlyPriceReview),
         rotation_class: rotationFilter,
+        coverage_status: coverageFilter,
         sort_col: sortCol,
         sort_dir: sortDir,
       });
@@ -141,7 +143,7 @@ export default function PartsCatalogPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, search, modelCode, onlyPending, onlyPriceReview, rotationFilter, sortCol, sortDir]);
+  }, [page, search, modelCode, onlyPending, onlyPriceReview, rotationFilter, coverageFilter, sortCol, sortDir]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -458,6 +460,24 @@ export default function PartsCatalogPage() {
             <Flag size={12} style={{ display: 'inline', marginRight: '0.4rem', verticalAlign: 'middle' }} />
             {onlyPriceReview ? 'Revisar precio' : 'Revisar precio'}
           </button>
+          {[
+            { val: 'aqui',       label: 'Aquí',       color: '#4ade80' },
+            { val: 'en_camino',  label: 'En camino',  color: '#38bdf8' },
+            { val: 'pedido',     label: 'Pedido',     color: '#a78bfa' },
+            { val: 'no_pedidas', label: 'No pedidas', color: '#ef4444' },
+          ].map(({ val, label, color }) => {
+            const active = coverageFilter === val;
+            return (
+              <button key={val}
+                onClick={() => { setCoverageFilter(active ? '' : val); setPage(1); }}
+                style={{ padding: '0.625rem 1rem', borderRadius: '10px', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', cursor: 'pointer', border: '1px solid', transition: 'all 0.2s',
+                  background: active ? `${color}22` : 'rgba(255,255,255,0.04)',
+                  borderColor: active ? `${color}66` : 'rgba(255,255,255,0.08)',
+                  color: active ? color : 'rgba(255,255,255,0.5)',
+                }}
+              >{label}</button>
+            );
+          })}
           <div data-tip style={{
             position: 'absolute', bottom: 'calc(100% + 8px)', right: 0,
             background: '#16161f', border: '1px solid rgba(251,146,60,0.25)',
