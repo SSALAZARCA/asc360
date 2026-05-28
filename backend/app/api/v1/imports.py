@@ -719,15 +719,21 @@ async def list_spare_part_lots(
             read.models = sorted({i.model_applicable for i in lot.items if i.model_applicable})
 
             rc_counts: dict[str, int] = {}
+            sin_clasificar = 0
             for i in lot.items:
                 rc = rotation_map.get(i.part_number)
                 if rc:
                     rc_counts[rc] = rc_counts.get(rc, 0) + 1
+                else:
+                    sin_clasificar += 1
             total_classified = sum(rc_counts.values())
+            total_items = total_classified + sin_clasificar
             read.rotation_pct = {
-                rc: round(cnt / total_classified * 100, 1)
+                rc: round(cnt / total_items * 100, 1)
                 for rc, cnt in rc_counts.items()
-            } if total_classified else {}
+            } if total_items else {}
+            if sin_clasificar:
+                read.rotation_pct['sin_clasificar'] = round(sin_clasificar / total_items * 100, 1)
 
         result.append(read)
 

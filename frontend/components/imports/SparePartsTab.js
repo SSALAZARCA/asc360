@@ -515,10 +515,10 @@ function LotRow({ lot, userRole, onReconcile }) {
         {/* Rotación */}
         {lot.rotation_pct && Object.keys(lot.rotation_pct).length > 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', minWidth: 80 }}>
-            {[['alta','#ef4444'],['media','#fbbf24'],['baja','#4ade80']].map(([rc, color]) =>
+            {[['alta','#ef4444'],['media','#fbbf24'],['baja','#4ade80'],['sin_clasificar','#606075']].map(([rc, color]) =>
               lot.rotation_pct[rc] != null ? (
                 <div key={rc} style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                  <span style={{ fontSize: '8px', fontWeight: 800, color, textTransform: 'uppercase', width: 28 }}>{rc}</span>
+                  <span style={{ fontSize: '8px', fontWeight: 800, color, textTransform: 'uppercase', width: 28 }}>{rc === 'sin_clasificar' ? 'S/C' : rc}</span>
                   <div style={{ flex: 1, height: 3, borderRadius: 3, background: 'rgba(255,255,255,0.06)', overflow: 'hidden', minWidth: 40 }}>
                     <div style={{ height: '100%', width: `${lot.rotation_pct[rc]}%`, background: color, borderRadius: 3 }} />
                   </div>
