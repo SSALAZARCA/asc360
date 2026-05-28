@@ -354,8 +354,9 @@ export default function PartsCatalogPage() {
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
                   {[
-                    { label: 'Aquí', val: b.aqui, pct: b.pct_aqui, color: '#4ade80' },
-                    { label: 'En camino', val: b.en_camino, pct: b.pct_en_camino, color: '#38bdf8' },
+                    { label: 'Aquí',       val: b.aqui,       pct: b.pct_aqui,       color: '#4ade80' },
+                    { label: 'En camino',  val: b.en_camino,  pct: b.pct_en_camino,  color: '#38bdf8' },
+                    { label: 'Pedido',     val: b.pedido,     pct: b.pct_pedido,     color: '#a78bfa' },
                     { label: 'No pedidas', val: b.no_pedidas, pct: b.pct_no_pedidas, color: '#ef4444' },
                   ].map(({ label, val, pct, color }) => (
                     <div key={label} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>

@@ -1760,9 +1760,11 @@ class CoverageBucket(_BM):
     total: int
     aqui: int
     en_camino: int
+    pedido: int
     no_pedidas: int
     pct_aqui: float
     pct_en_camino: float
+    pct_pedido: float
     pct_no_pedidas: float
 
 
@@ -1804,15 +1806,29 @@ async def get_coverage(
             GROUP BY 1
         ),
         en_camino AS (
-            SELECT UPPER(TRIM(REPLACE(part_number, ' ', ''))) AS pn
-            FROM spare_part_items
-            WHERE qty_received > 0 AND qty_physical IS NULL
-              AND UPPER(TRIM(REPLACE(part_number, ' ', ''))) NOT IN (SELECT pn FROM aqui)
+            SELECT UPPER(TRIM(REPLACE(spi.part_number, ' ', ''))) AS pn
+            FROM spare_part_items spi
+            JOIN spare_part_lots spl ON spl.id = spi.lot_id
+            JOIN shipment_orders so  ON so.id  = spl.shipment_order_id
+            WHERE spi.qty_received > 0
+              AND spi.qty_physical IS NULL
+              AND so.bl_container IS NOT NULL
+              AND UPPER(TRIM(REPLACE(spi.part_number, ' ', ''))) NOT IN (SELECT pn FROM aqui)
             UNION
             SELECT UPPER(TRIM(part_code)) AS pn
             FROM part_catalog
             WHERE public_price IS NOT NULL
               AND UPPER(TRIM(part_code)) NOT IN (SELECT pn FROM aqui)
+        ),
+        pedido AS (
+            SELECT UPPER(TRIM(REPLACE(spi.part_number, ' ', ''))) AS pn
+            FROM spare_part_items spi
+            JOIN spare_part_lots spl ON spl.id = spi.lot_id
+            JOIN shipment_orders so  ON so.id  = spl.shipment_order_id
+            WHERE so.bl_container IS NULL
+              AND UPPER(TRIM(REPLACE(spi.part_number, ' ', ''))) NOT IN (SELECT pn FROM aqui)
+              AND UPPER(TRIM(REPLACE(spi.part_number, ' ', ''))) NOT IN (SELECT pn FROM en_camino)
+            GROUP BY 1
         ),
         coverage AS (
             SELECT
@@ -1820,10 +1836,12 @@ async def get_coverage(
                 COUNT(*) AS total,
                 COUNT(CASE WHEN a.pn IS NOT NULL THEN 1 END) AS aqui,
                 COUNT(CASE WHEN c.pn IS NOT NULL AND a.pn IS NULL THEN 1 END) AS en_camino,
-                COUNT(CASE WHEN a.pn IS NULL AND c.pn IS NULL THEN 1 END) AS no_pedidas
+                COUNT(CASE WHEN p.pn IS NOT NULL AND a.pn IS NULL AND c.pn IS NULL THEN 1 END) AS pedido,
+                COUNT(CASE WHEN a.pn IS NULL AND c.pn IS NULL AND p.pn IS NULL THEN 1 END) AS no_pedidas
             FROM parts_references r
             LEFT JOIN aqui      a ON a.pn = UPPER(TRIM(r.factory_part_number))
             LEFT JOIN en_camino c ON c.pn = UPPER(TRIM(r.factory_part_number))
+            LEFT JOIN pedido    p ON p.pn = UPPER(TRIM(r.factory_part_number))
             WHERE r.rotation_class IS NOT NULL
             {model_filter}
             GROUP BY r.rotation_class
@@ -1844,21 +1862,25 @@ async def get_coverage(
 
     clases: list[CoverageBucket] = []
     for row in rows:
-        total     = row.total
-        aqui      = row.aqui
-        en_camino = row.en_camino
+        total      = row.total
+        aqui       = row.aqui
+        en_camino  = row.en_camino
+        pedido     = row.pedido
         no_pedidas = row.no_pedidas
         pct_aqui       = round((aqui      / total) * 100, 2) if total else 0.0
         pct_en_camino  = round((en_camino / total) * 100, 2) if total else 0.0
+        pct_pedido     = round((pedido    / total) * 100, 2) if total else 0.0
         pct_no_pedidas = round((no_pedidas / total) * 100, 2) if total else 0.0
         clases.append(CoverageBucket(
             rotation_class=row.rotation_class,
             total=total,
             aqui=aqui,
             en_camino=en_camino,
+            pedido=pedido,
             no_pedidas=no_pedidas,
             pct_aqui=pct_aqui,
             pct_en_camino=pct_en_camino,
+            pct_pedido=pct_pedido,
             pct_no_pedidas=pct_no_pedidas,
         ))
 
