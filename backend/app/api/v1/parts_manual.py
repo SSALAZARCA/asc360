@@ -3,6 +3,7 @@ import io
 import json
 import logging
 import os
+import re
 import tempfile
 import uuid as _uuid
 from datetime import datetime
@@ -126,6 +127,7 @@ def _parse_section_filename(filename: str) -> tuple[str, str]:
     'RENEGADE 200 SPORT_B1_FRAME.pdf'        → ('B1',  'FRAME')
     'RENEGADE 200 SPORT_B12_REAR FENDER_REAR TURN SIGNAL.pdf' → ('B12', 'REAR FENDER / REAR TURN SIGNAL')
     'B01_BODY COMP FRAME.pdf'                → ('B01', 'BODY COMP FRAME')
+    'B01 - AIR CLEANER ASSY.pdf'             → ('B01', 'AIR CLEANER ASSY')
     """
     stem = Path(filename).stem
     parts = [p.strip() for p in stem.split("_") if p.strip()]
@@ -138,8 +140,14 @@ def _parse_section_filename(filename: str) -> tuple[str, str]:
         code = parts[0]
         name = parts[1]
     else:
-        code = stem
-        name = stem
+        # Formato "B01 - DESCRIPCION" (sin guiones bajos)
+        m = re.match(r'^([A-Z]\d+)\s*-+\s*(.+)$', stem, re.IGNORECASE)
+        if m:
+            code = m.group(1).strip().upper()
+            name = m.group(2).strip()
+        else:
+            code = stem
+            name = stem
     return code, name
 
 
@@ -171,7 +179,7 @@ def _find_col_groups(header_row: list) -> list[dict]:
     i = 0
     while i < len(row_lower):
         cell = row_lower[i]
-        if cell and any(kw in cell for kw in ["no.", "no ", "item", "pos"]):
+        if cell and any(kw in cell for kw in ["no.", "no ", "n0.", "item", "pos"]):
             col_map = {field: _detect_col(header_row, kws, start=i) for field, kws in _HEADER_KEYWORDS.items()}
             col_map["order_num"] = i
             if col_map.get("factory", -1) > i:
@@ -209,7 +217,7 @@ def _parse_parts_from_text(text: str) -> list[dict]:
     header_idx = -1
     for i, line in enumerate(lines):
         low = line.lower()
-        if ("no" in low or "item" in low) and ("factory" in low or "bom" in low or "part" in low):
+        if ("no" in low or "n0" in low or "item" in low) and ("factory" in low or "bom" in low or "part" in low):
             header_idx = i
             break
     if header_idx < 0:

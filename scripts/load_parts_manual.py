@@ -123,7 +123,7 @@ def _find_col_groups(header_row: list) -> list[dict]:
     i = 0
     while i < len(row_lower):
         cell = row_lower[i]
-        if cell and any(kw in cell for kw in ["no.", "no ", "item", "pos"]):
+        if cell and any(kw in cell for kw in ["no.", "no ", "n0.", "item", "pos"]):
             col_map = {field: _detect_col(header_row, kws, start=i) for field, kws in HEADER_KEYWORDS.items()}
             col_map["order_num"] = i
             if col_map.get("factory", -1) > i:
@@ -141,7 +141,7 @@ def _parse_parts_from_text(text: str) -> list[dict]:
     header_idx = -1
     for i, line in enumerate(lines):
         low = line.lower()
-        has_num = "no" in low or "item" in low
+        has_num = "no" in low or "n0" in low or "item" in low
         has_part = "factory" in low or "bom" in low or "part" in low
         if has_num and has_part:
             header_idx = i
@@ -242,13 +242,22 @@ def parse_parts_table(pdf_path: Path) -> list[dict]:
 
 def parse_filename(filename: str) -> tuple[str, str]:
     """
-    'B01_BODY COMP FRAME_FLOOR STEP.pdf'
-    → ('B01', 'BODY COMP FRAME / FLOOR STEP')
+    'B01_BODY COMP FRAME_FLOOR STEP.pdf' → ('B01', 'BODY COMP FRAME / FLOOR STEP')
+    'B01 - AIR CLEANER ASSY.pdf'         → ('B01', 'AIR CLEANER ASSY')
     """
     stem = Path(filename).stem
     parts = stem.split("_", 1)
-    code = parts[0].strip()
-    name = parts[1].replace("_", " / ").strip() if len(parts) > 1 else stem
+    if len(parts) == 2:
+        code = parts[0].strip()
+        name = parts[1].replace("_", " / ").strip()
+    else:
+        m = re.match(r'^([A-Z]\d+)\s*-+\s*(.+)$', stem, re.IGNORECASE)
+        if m:
+            code = m.group(1).strip().upper()
+            name = m.group(2).strip()
+        else:
+            code = stem
+            name = stem
     return code, name
 
 
