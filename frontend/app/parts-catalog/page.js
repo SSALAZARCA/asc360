@@ -332,7 +332,7 @@ export default function PartsCatalogPage() {
       </header>
 
       {/* Panel de cobertura por rotación */}
-      {coverage && coverage.buckets && coverage.buckets.length > 0 && (
+      {coverage && (coverage.buckets?.length > 0 || coverage.sin_clasificar > 0) && (
         <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
           {coverage.buckets.map(b => {
             const c = ROTATION_STYLES[b.rotation_class] || {};
