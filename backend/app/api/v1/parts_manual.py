@@ -887,15 +887,29 @@ async def list_catalog(
                 )
             )
         elif coverage_status == "no_pedidas":
-            q = q.where(
-                ~sa_exists(
-                    select(SparePartItem.id).where(
-                        func.upper(func.trim(func.replace(SparePartItem.part_number, ' ', ''))) == func.upper(func.trim(PartsReference.factory_part_number)),
-                    )
-                )
-            ).where(
-                PartCatalog.public_price.is_(None)
-            )
+            from app.models.imports import SparePartLot, ShipmentOrder
+            fpn_expr = func.upper(func.trim(func.replace(SparePartItem.part_number, ' ', '')))
+            ref_expr = func.upper(func.trim(PartsReference.factory_part_number))
+            # NOT aqui
+            q = q.where(~sa_exists(
+                select(SparePartItem.id).where(fpn_expr == ref_expr, SparePartItem.qty_physical.isnot(None), SparePartItem.qty_physical > 0)
+            ))
+            # NOT en_camino (BL branch)
+            q = q.where(~sa_exists(
+                select(SparePartItem.id)
+                .join(SparePartLot, SparePartLot.id == SparePartItem.lot_id)
+                .join(ShipmentOrder, ShipmentOrder.id == SparePartLot.shipment_order_id)
+                .where(fpn_expr == ref_expr, SparePartItem.qty_received > 0, SparePartItem.qty_physical.is_(None), ShipmentOrder.bl_container.isnot(None))
+            ))
+            # NOT en_camino (catalog price branch)
+            q = q.where(PartCatalog.public_price.is_(None))
+            # NOT pedido (en spare_part_items con shipment sin BL)
+            q = q.where(~sa_exists(
+                select(SparePartItem.id)
+                .join(SparePartLot, SparePartLot.id == SparePartItem.lot_id)
+                .join(ShipmentOrder, ShipmentOrder.id == SparePartLot.shipment_order_id)
+                .where(fpn_expr == ref_expr, ShipmentOrder.bl_container.is_(None))
+            ))
         return q
 
     # Total — cuenta pares únicos (parte, modelo)
