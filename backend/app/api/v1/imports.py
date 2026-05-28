@@ -783,7 +783,23 @@ async def list_spare_part_items(
     stmt = stmt.order_by(SparePartItem.part_number)
 
     items = (await db.execute(stmt)).scalars().all()
-    return [SparePartItemRead.model_validate(i) for i in items]
+
+    from app.models.parts_manual import PartsReference
+    part_numbers = list({i.part_number for i in items})
+    rotation_map: dict[str, str] = {}
+    if part_numbers:
+        refs = (await db.execute(
+            select(PartsReference.factory_part_number, PartsReference.rotation_class)
+            .where(PartsReference.factory_part_number.in_(part_numbers))
+        )).all()
+        rotation_map = {r.factory_part_number: r.rotation_class for r in refs if r.rotation_class}
+
+    result = []
+    for i in items:
+        data = SparePartItemRead.model_validate(i)
+        data.rotation_class = rotation_map.get(i.part_number)
+        result.append(data)
+    return result
 
 
 def _compute_reconciliation_result(qty_ordered, qty_in_packing) -> str:

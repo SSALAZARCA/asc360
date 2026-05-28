@@ -269,6 +269,7 @@ class SparePartItemRead(BaseModel):
     status: str
     backorder_pi: Optional[str] = None
     notes: Optional[str] = None
+    rotation_class: Optional[str] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
 

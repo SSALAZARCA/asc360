@@ -272,7 +272,7 @@ function LotItemsTable({ lotId, userRole, isConfirmed }) {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
             <thead>
               <tr style={{ background: '#0e0e14' }}>
-                {['Parte #', 'Descripción', 'Modelo', 'Pcs Ord.', 'Pcs Rec.', 'Inv. Físico', 'Diferencia', 'Unit Price', 'Amount', 'Estado', ''].map(h => (
+                {['Parte #', 'Descripción', 'Modelo', 'Rot.', 'Pcs Ord.', 'Pcs Rec.', 'Inv. Físico', 'Diferencia', 'Unit Price', 'Amount', 'Estado', ''].map(h => (
                   <th key={h} style={{ padding: '8px 10px', textAlign: 'center', fontSize: '9px', fontWeight: 700, color: h === 'Inv. Físico' ? '#fb923c' : h === 'Diferencia' ? '#a78bfa' : '#606075', textTransform: 'uppercase', letterSpacing: '0.07em', borderBottom: '1px solid rgba(255,255,255,0.06)', whiteSpace: 'nowrap' }}>{h}</th>
                 ))}
               </tr>
@@ -305,6 +305,16 @@ function LotItemsTable({ lotId, userRole, isConfirmed }) {
                     {canEdit
                       ? <EditableCell itemId={item.id} field="model_applicable" current={item.model_applicable} onSaved={fetch} cellStyle={{ color: '#9ca3af' }} />
                       : <span style={{ color: '#9ca3af' }}>{item.model_applicable || '—'}</span>
+                    }
+                  </td>
+                  <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                    {item.rotation_class
+                      ? <span style={{ fontSize: '0.58rem', fontWeight: 800, textTransform: 'uppercase', padding: '2px 7px', borderRadius: '20px', ...(
+                          item.rotation_class === 'alta'  ? { background: 'rgba(239,68,68,0.12)',  color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)'  } :
+                          item.rotation_class === 'media' ? { background: 'rgba(251,191,36,0.12)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.3)' } :
+                                                            { background: 'rgba(74,222,128,0.12)', color: '#4ade80', border: '1px solid rgba(74,222,128,0.3)'  }
+                        )}}>{item.rotation_class}</span>
+                      : <span style={{ color: 'rgba(255,255,255,0.15)', fontSize: '0.68rem' }}>—</span>
                     }
                   </td>
                   <td style={{ padding: '8px 10px', textAlign: 'center' }}>
