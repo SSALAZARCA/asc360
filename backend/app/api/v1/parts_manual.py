@@ -1813,7 +1813,7 @@ async def get_coverage(
             GROUP BY r.rotation_class
         )
         SELECT * FROM coverage
-        ORDER BY rotation_class
+        ORDER BY CASE rotation_class WHEN 'alta' THEN 1 WHEN 'media' THEN 2 WHEN 'baja' THEN 3 ELSE 4 END
     """)
 
     sin_sql = text(f"""
