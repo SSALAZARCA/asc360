@@ -204,6 +204,16 @@ export default function PartsCatalogPage() {
     fetchData();
   };
 
+  const updateRotation = async (item, rc) => {
+    const newVal = item.rotation_class === rc ? null : rc;
+    setItems(prev => prev.map(i => i.factory_part_number === item.factory_part_number ? { ...i, rotation_class: newVal } : i));
+    await authFetch(`/parts/admin/catalog/${encodeURIComponent(item.factory_part_number)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rotation_class: newVal }),
+    });
+  };
+
   const openEdit = (item) => {
     setEditMsg('');
     const defaultPrice = item.public_price != null
@@ -519,7 +529,19 @@ export default function PartsCatalogPage() {
                   }
                 </td>
                 <td><span className="cell-truncate" style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.7)', fontWeight: 600 }} title={item.vehicle_model_name || '—'}>{item.vehicle_model_name || '—'}</span></td>
-                <td>{item.rotation_class ? <span style={rotationBadge(item.rotation_class)}>{item.rotation_class}</span> : <span style={{ color: 'rgba(255,255,255,0.15)', fontSize: '0.68rem' }}>—</span>}</td>
+                <td>
+                  <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                    {[['alta','A','#ef4444'],['media','M','#fbbf24'],['baja','B','#4ade80']].map(([val, label, color]) => {
+                      const active = item.rotation_class === val;
+                      return (
+                        <button key={val} onClick={() => updateRotation(item, val)} title={val}
+                          style={{ width: 20, height: 20, borderRadius: '50%', border: `2px solid ${active ? color : 'rgba(255,255,255,0.15)'}`, background: active ? color : 'transparent', color: active ? '#000' : 'rgba(255,255,255,0.25)', fontSize: '0.52rem', fontWeight: 900, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, lineHeight: 1, transition: 'all 0.15s' }}>
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </td>
                 <td>
                   {item.avg_fob_cost != null
                     ? <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '0.78rem', color: '#38bdf8' }}>${Number(item.avg_fob_cost).toFixed(2)}</span>
