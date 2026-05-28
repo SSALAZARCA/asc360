@@ -1941,7 +1941,7 @@ async def export_unordered(
     )
 
 
-@router.get("/admin/coverage/debug-no-pedidas")
+@router.get("/coverage/debug-no-pedidas")
 async def debug_no_pedidas(
     model_code: str,
     rotation_class: str = "media",
