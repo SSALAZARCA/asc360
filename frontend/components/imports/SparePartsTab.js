@@ -468,11 +468,18 @@ function LotRow({ lot, userRole, onReconcile }) {
           : <ChevronRight size={14} color="#606075" style={{ flexShrink: 0 }} />
         }
 
-        {/* Lot identifier */}
+        {/* Lot identifier + modelos */}
         <div style={{ flex: 1, minWidth: 0 }}>
-          <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: '#60a5fa', fontFamily: 'monospace' }}>
+          <p style={{ margin: '0 0 4px 0', fontSize: '12px', fontWeight: 700, color: '#60a5fa', fontFamily: 'monospace' }}>
             {lot.lot_identifier}
           </p>
+          {lot.models?.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>
+              {lot.models.map(m => (
+                <span key={m} style={{ fontSize: '8px', fontWeight: 700, padding: '1px 6px', borderRadius: '20px', background: 'rgba(96,165,250,0.1)', color: '#60a5fa', border: '1px solid rgba(96,165,250,0.2)', whiteSpace: 'nowrap' }}>{m}</span>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Items count */}
@@ -504,15 +511,6 @@ function LotRow({ lot, userRole, onReconcile }) {
             : <p style={{ margin: 0, fontSize: '11px', color: '#606075' }}>—</p>
           }
         </div>
-
-        {/* Modelos */}
-        {lot.models?.length > 0 && (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', maxWidth: 200 }}>
-            {lot.models.map(m => (
-              <span key={m} style={{ fontSize: '8px', fontWeight: 700, padding: '2px 6px', borderRadius: '20px', background: 'rgba(96,165,250,0.1)', color: '#60a5fa', border: '1px solid rgba(96,165,250,0.2)', whiteSpace: 'nowrap' }}>{m}</span>
-            ))}
-          </div>
-        )}
 
         {/* Rotación */}
         {lot.rotation_pct && Object.keys(lot.rotation_pct).length > 0 && (
