@@ -1791,22 +1791,12 @@ async def get_coverage(
         )
     """
 
-    # Scope stock to the selected model via vehicle_catalog_map → vehicle_model_pattern
-    stock_filter = """
-        AND UPPER(TRIM(model_applicable)) IN (
-            SELECT UPPER(TRIM(vehicle_model_pattern))
-            FROM vehicle_catalog_map
-            WHERE catalog_model_code = :model_code
-        )
-    """ if model_code else ""
-
     coverage_sql = text(f"""
         WITH
         aqui AS (
             SELECT UPPER(TRIM(REPLACE(part_number, ' ', ''))) AS pn
             FROM spare_part_items
             WHERE qty_physical IS NOT NULL
-            {stock_filter}
             GROUP BY 1
         ),
         en_camino AS (
@@ -1814,7 +1804,6 @@ async def get_coverage(
             FROM spare_part_items
             WHERE qty_received > 0 AND qty_physical IS NULL
               AND UPPER(TRIM(REPLACE(part_number, ' ', ''))) NOT IN (SELECT pn FROM aqui)
-            {stock_filter}
             GROUP BY 1
         ),
         coverage AS (
