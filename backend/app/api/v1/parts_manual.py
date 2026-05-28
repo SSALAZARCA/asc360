@@ -1939,3 +1939,67 @@ async def export_unordered(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+@router.get("/admin/coverage/debug-no-pedidas")
+async def debug_no_pedidas(
+    model_code: str,
+    rotation_class: str = "media",
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Endpoint temporal de diagnóstico — muestra las partes contadas como no_pedidas en cobertura."""
+    if not current_user.is_superadmin:
+        raise HTTPException(status_code=403, detail="Solo superadmin")
+
+    sql = text("""
+        WITH
+        catalog_parts AS (
+            SELECT DISTINCT r.factory_part_number, r.description
+            FROM parts_references r
+            JOIN parts_manual_items i  ON i.factory_part_number = r.factory_part_number
+            JOIN parts_manual_sections s ON s.id = i.section_id
+            WHERE s.model_code = :model_code
+              AND r.rotation_class = :rotation_class
+        ),
+        aqui AS (
+            SELECT UPPER(TRIM(REPLACE(part_number, ' ', ''))) AS pn
+            FROM spare_part_items
+            WHERE qty_physical IS NOT NULL AND qty_physical > 0
+            GROUP BY 1
+        ),
+        en_camino AS (
+            SELECT UPPER(TRIM(REPLACE(part_number, ' ', ''))) AS pn
+            FROM spare_part_items
+            WHERE qty_received > 0 AND qty_physical IS NULL
+              AND UPPER(TRIM(REPLACE(part_number, ' ', ''))) NOT IN (SELECT pn FROM aqui)
+            GROUP BY 1
+        )
+        SELECT
+            cp.factory_part_number,
+            cp.description,
+            pc.public_price,
+            spi.qty_received,
+            spi.qty_physical,
+            spi.model_applicable
+        FROM catalog_parts cp
+        LEFT JOIN part_catalog       pc  ON pc.part_code = cp.factory_part_number
+        LEFT JOIN spare_part_items   spi ON UPPER(TRIM(REPLACE(spi.part_number, ' ', ''))) = UPPER(TRIM(cp.factory_part_number))
+        LEFT JOIN aqui               a   ON a.pn = UPPER(TRIM(cp.factory_part_number))
+        LEFT JOIN en_camino          ec  ON ec.pn = UPPER(TRIM(cp.factory_part_number))
+        WHERE a.pn IS NULL AND ec.pn IS NULL
+        ORDER BY cp.factory_part_number
+    """)
+
+    rows = (await db.execute(sql, {"model_code": model_code, "rotation_class": rotation_class})).all()
+    return [
+        {
+            "factory_part_number": r.factory_part_number,
+            "description":         r.description,
+            "public_price":        float(r.public_price) if r.public_price else None,
+            "qty_received":        r.qty_received,
+            "qty_physical":        r.qty_physical,
+            "model_applicable":    r.model_applicable,
+        }
+        for r in rows
+    ]
