@@ -829,13 +829,15 @@ async def list_catalog(
             q = q.where(PartsReference.rotation_class == rotation_class)
         return q
 
-    # Total
+    # Total — cuenta pares únicos (parte, modelo)
     count_q = select(func.count()).select_from(
-        _base_joins(select(PartsReference.factory_part_number)).distinct().subquery()
+        _base_joins(
+            select(PartsReference.factory_part_number, PartsManualSection.model_code)
+        ).distinct().subquery()
     )
     total = (await db.execute(count_q)).scalar_one()
 
-    # Filas — inner subquery con DISTINCT ON (requerido por PostgreSQL: primer ORDER BY = DISTINCT ON col)
+    # Filas — DISTINCT ON (factory_part_number, model_code): una fila por par parte+modelo
     from sqlalchemy import nullslast, cast
     from sqlalchemy import Numeric as SANumeric
     inner_sq = _base_joins(
@@ -855,7 +857,7 @@ async def list_catalog(
             PartsReference.rotation_class.label("rotation_class"),        # r[12]
             PartsReference.needs_price_review.label("needs_price_review"), # r[13]
         )
-        .distinct(PartsReference.factory_part_number)
+        .distinct(PartsReference.factory_part_number, PartsManualSection.model_code)
     ).order_by(
         PartsReference.factory_part_number,
         PartsManualSection.model_code,
