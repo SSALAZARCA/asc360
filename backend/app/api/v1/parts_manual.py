@@ -1776,7 +1776,12 @@ async def get_coverage(
             JOIN parts_manual_sections s ON s.id = i.section_id
             WHERE s.model_code = :model_code
         )
-    """ if model_code else ""
+    """ if model_code else """
+        AND EXISTS (
+            SELECT 1 FROM parts_manual_items pmi
+            WHERE pmi.factory_part_number = r.factory_part_number
+        )
+    """
 
     coverage_sql = text(f"""
         WITH
