@@ -696,6 +696,17 @@ async def list_spare_part_lots(
 
     lots = (await db.execute(stmt)).scalars().all()
 
+    # Batch query rotation_class para todos los part_numbers de todos los lotes
+    from app.models.parts_manual import PartsReference
+    all_part_numbers = list({i.part_number for lot in lots for i in lot.items})
+    rotation_map: dict[str, str] = {}
+    if all_part_numbers:
+        refs = (await db.execute(
+            select(PartsReference.factory_part_number, PartsReference.rotation_class)
+            .where(PartsReference.factory_part_number.in_(all_part_numbers))
+        )).all()
+        rotation_map = {r.factory_part_number: r.rotation_class for r in refs if r.rotation_class}
+
     result = []
     for lot in lots:
         read = SparePartLotRead.model_validate(lot)
@@ -704,6 +715,20 @@ async def list_spare_part_lots(
             total_ordered = sum(i.qty_ordered for i in lot.items)
             total_received = sum(i.qty_received for i in lot.items)
             read.pct_received = round((total_received / total_ordered * 100) if total_ordered > 0 else 0, 1)
+
+            read.models = sorted({i.model_applicable for i in lot.items if i.model_applicable})
+
+            rc_counts: dict[str, int] = {}
+            for i in lot.items:
+                rc = rotation_map.get(i.part_number)
+                if rc:
+                    rc_counts[rc] = rc_counts.get(rc, 0) + 1
+            total_classified = sum(rc_counts.values())
+            read.rotation_pct = {
+                rc: round(cnt / total_classified * 100, 1)
+                for rc, cnt in rc_counts.items()
+            } if total_classified else {}
+
         result.append(read)
 
     return result

@@ -242,6 +242,8 @@ class SparePartLotRead(BaseModel):
     # Calculados en el endpoint
     items_count: int = 0
     pct_received: float = 0.0
+    models: list[str] = []
+    rotation_pct: dict = {}
 
 
 # ---------------------------------------------------------------------------

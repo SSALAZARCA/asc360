@@ -505,6 +505,32 @@ function LotRow({ lot, userRole, onReconcile }) {
           }
         </div>
 
+        {/* Modelos */}
+        {lot.models?.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', maxWidth: 200 }}>
+            {lot.models.map(m => (
+              <span key={m} style={{ fontSize: '8px', fontWeight: 700, padding: '2px 6px', borderRadius: '20px', background: 'rgba(96,165,250,0.1)', color: '#60a5fa', border: '1px solid rgba(96,165,250,0.2)', whiteSpace: 'nowrap' }}>{m}</span>
+            ))}
+          </div>
+        )}
+
+        {/* Rotación */}
+        {lot.rotation_pct && Object.keys(lot.rotation_pct).length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', minWidth: 80 }}>
+            {[['alta','#ef4444'],['media','#fbbf24'],['baja','#4ade80']].map(([rc, color]) =>
+              lot.rotation_pct[rc] != null ? (
+                <div key={rc} style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  <span style={{ fontSize: '8px', fontWeight: 800, color, textTransform: 'uppercase', width: 28 }}>{rc}</span>
+                  <div style={{ flex: 1, height: 3, borderRadius: 3, background: 'rgba(255,255,255,0.06)', overflow: 'hidden', minWidth: 40 }}>
+                    <div style={{ height: '100%', width: `${lot.rotation_pct[rc]}%`, background: color, borderRadius: 3 }} />
+                  </div>
+                  <span style={{ fontSize: '8px', color, fontWeight: 700, minWidth: 28, textAlign: 'right' }}>{lot.rotation_pct[rc]}%</span>
+                </div>
+              ) : null
+            )}
+          </div>
+        )}
+
         {/* Detail loaded badge */}
         <div style={{ flexShrink: 0 }}>
           {lot.detail_loaded
