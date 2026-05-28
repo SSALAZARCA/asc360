@@ -1941,13 +1941,16 @@ async def export_unordered(
     )
 
 
-@router.get("/coverage/debug-no-pedidas")
+@router.get("/admin/coverage/debug-no-pedidas")
 async def debug_no_pedidas(
     model_code: str,
     rotation_class: str = "media",
     db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     """Endpoint temporal de diagnóstico — muestra las partes contadas como no_pedidas en cobertura."""
+    if not current_user.is_superadmin:
+        raise HTTPException(status_code=403, detail="Solo superadmin")
 
     sql = text("""
         WITH
