@@ -1737,6 +1737,7 @@ async def import_rotation(
         res = await db.execute(
             sa_update(PartsReference)
             .where(PartsReference.factory_part_number == code_n)
+            .where(PartsReference.rotation_class.is_(None))
             .values(rotation_class=rc_n)
         )
         if res.rowcount == 0:
