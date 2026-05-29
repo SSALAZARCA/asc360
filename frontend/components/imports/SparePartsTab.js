@@ -720,7 +720,7 @@ export default function SparePartsTab({ userRole }) {
 
   // Totales del header
   const totalLots = lots.length;
-  const totalItems = lots.reduce((acc, l) => acc + l.items_count, 0);
+  const totalItems = lots.reduce((acc, l) => acc + (l.total_qty_ordered || 0), 0);
   const totalValue = lots.reduce((acc, l) => acc + (parseFloat(l.total_declared_value) || 0), 0);
 
   return (
@@ -730,7 +730,7 @@ export default function SparePartsTab({ userRole }) {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '10px' }}>
         {[
           { label: 'Lotes activos', value: totalLots, color: '#60a5fa' },
-          { label: 'Ítems totales', value: totalItems, color: '#a78bfa' },
+          { label: 'Unidades totales', value: totalItems.toLocaleString(), color: '#a78bfa' },
           { label: 'Refs. únicas', value: lotStats.unique_refs ?? '—', color: '#f59e0b' },
           { label: 'Refs. declaradas', value: lotStats.declared_refs ?? '—', color: '#34d399' },
           { label: 'Valor declarado', value: totalValue > 0 ? `$${totalValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—', color: '#22c55e' },
