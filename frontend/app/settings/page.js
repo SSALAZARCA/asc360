@@ -314,6 +314,12 @@ export default function SettingsPage() {
   const [vmSaving, setVmSaving] = useState(false);
   const [vmError, setVmError] = useState('');
 
+  // Moto Locations — bodegas / ubicaciones
+  const [motoLocations, setMotoLocations] = useState([]);
+  const [newLocationName, setNewLocationName] = useState('');
+  const [locationCreating, setLocationCreating] = useState(false);
+  const [locationDeleting, setLocationDeleting] = useState(null);
+
   // Colores RUNT
   const [confirmDialog, setConfirmDialog] = useState(null);
   const [toast, setToast] = useState(null);
@@ -562,8 +568,16 @@ export default function SettingsPage() {
       .catch(() => {});
   }, []);
 
+  const fetchMotoLocations = useCallback(async () => {
+    try {
+      const res = await authFetch(`${getApiUrl()}/imports/moto-locations`);
+      if (res.ok) setMotoLocations(await res.json());
+    } catch (e) { console.error('Error cargando ubicaciones:', e); }
+  }, []);
+
   useEffect(() => { fetchVehicleModels(); }, [fetchVehicleModels]);
   useEffect(() => { fetchColorMappings(); }, [fetchColorMappings]);
+  useEffect(() => { fetchMotoLocations(); }, [fetchMotoLocations]);
 
   useEffect(() => {
     authFetch('/parts/admin/vehicle-models')
@@ -1296,6 +1310,118 @@ export default function SettingsPage() {
             )}
           </div>
         </section>
+
+        {/* Sección: Ubicaciones / Bodegas de Motos */}
+        {userRole === 'superadmin' && (
+          <section className="glass p-6">
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', paddingBottom: '0.75rem', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                <Bike size={16} style={{ color: '#ff5f33', flexShrink: 0 }} />
+                <h2 style={{ fontSize: '0.8rem', fontWeight: 700, color: '#fff', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Ubicaciones / Bodegas de Motos</h2>
+              </div>
+            </div>
+            <p style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.3)', margin: '0 0 1rem', lineHeight: 1.7 }}>
+              Bodegas o puntos de almacenamiento físico de motocicletas. Se asignan por unidad desde el tab de Motocicletas.
+            </p>
+
+            {/* Lista de ubicaciones */}
+            {motoLocations.length === 0 ? (
+              <p style={{ color: '#606075', fontSize: '12px', margin: '0 0 1rem' }}>No hay ubicaciones cargadas.</p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '1rem' }}>
+                {motoLocations.map(loc => (
+                  <div
+                    key={loc.id}
+                    style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      padding: '8px 12px', borderRadius: '8px',
+                      background: 'rgba(167,139,250,0.06)', border: '1px solid rgba(167,139,250,0.15)',
+                    }}
+                  >
+                    <span style={{ fontSize: '12px', fontWeight: 700, color: '#a78bfa' }}>{loc.name}</span>
+                    <button
+                      onClick={async () => {
+                        if (!confirm(`¿Eliminar la ubicación "${loc.name}"? Las motos asignadas quedarán sin ubicación.`)) return;
+                        setLocationDeleting(loc.id);
+                        try {
+                          const res = await authFetch(`${getApiUrl()}/imports/moto-locations/${loc.id}`, { method: 'DELETE' });
+                          if (res.ok || res.status === 204) {
+                            setMotoLocations(prev => prev.filter(l => l.id !== loc.id));
+                          } else {
+                            const err = await res.json().catch(() => ({}));
+                            alert(err.detail || 'Error al eliminar la ubicación.');
+                          }
+                        } catch { alert('Error de conexión.'); }
+                        finally { setLocationDeleting(null); }
+                      }}
+                      disabled={locationDeleting === loc.id}
+                      style={{
+                        padding: '3px 8px', borderRadius: '6px', border: 'none',
+                        background: 'rgba(248,113,113,0.1)', color: '#f87171',
+                        cursor: locationDeleting === loc.id ? 'wait' : 'pointer',
+                        display: 'flex', alignItems: 'center', opacity: locationDeleting === loc.id ? 0.5 : 1,
+                      }}
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Agregar nueva ubicación */}
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <input
+                value={newLocationName}
+                onChange={e => setNewLocationName(e.target.value)}
+                placeholder="Ej: BODEGA NORTE"
+                onKeyDown={async e => { if (e.key === 'Enter') e.currentTarget.nextSibling?.click(); }}
+                style={{
+                  padding: '7px 12px', borderRadius: '8px', fontSize: '12px',
+                  background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
+                  color: '#fff', outline: 'none', minWidth: '200px',
+                }}
+                onFocus={e => e.target.style.borderColor = '#a78bfa'}
+                onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.1)'}
+              />
+              <button
+                onClick={async () => {
+                  const name = newLocationName.trim();
+                  if (!name) return;
+                  setLocationCreating(true);
+                  try {
+                    const res = await authFetch(`${getApiUrl()}/imports/moto-locations`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ name }),
+                    });
+                    if (res.ok) {
+                      const data = await res.json();
+                      setMotoLocations(prev => [...prev, data].sort((a, b) => a.name.localeCompare(b.name)));
+                      setNewLocationName('');
+                    } else {
+                      const err = await res.json().catch(() => ({}));
+                      alert(err.detail || 'Error al crear la ubicación.');
+                    }
+                  } catch { alert('Error de conexión.'); }
+                  finally { setLocationCreating(false); }
+                }}
+                disabled={locationCreating || !newLocationName.trim()}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '6px',
+                  padding: '7px 14px', borderRadius: '8px', border: 'none',
+                  background: locationCreating || !newLocationName.trim() ? 'rgba(167,139,250,0.1)' : 'rgba(167,139,250,0.2)',
+                  color: locationCreating || !newLocationName.trim() ? '#606075' : '#a78bfa',
+                  fontSize: '12px', fontWeight: 700,
+                  cursor: locationCreating || !newLocationName.trim() ? 'not-allowed' : 'pointer',
+                  letterSpacing: '0.04em',
+                }}
+              >
+                <Plus size={13} /> {locationCreating ? 'Guardando...' : 'Agregar'}
+              </button>
+            </div>
+          </section>
+        )}
 
       </div>
 

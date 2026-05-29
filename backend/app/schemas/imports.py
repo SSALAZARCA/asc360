@@ -5,6 +5,19 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 # ---------------------------------------------------------------------------
+# Moto Locations
+# ---------------------------------------------------------------------------
+class MotoLocationCreate(BaseModel):
+    name: str
+
+class MotoLocationRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    name: str
+    created_at: datetime
+
+
+# ---------------------------------------------------------------------------
 # Moto Units
 # ---------------------------------------------------------------------------
 class MotoUnitUpdate(BaseModel):
@@ -15,6 +28,7 @@ class MotoUnitUpdate(BaseModel):
     model_year: Optional[int] = None
     empadronamiento_fisico_enviado: Optional[bool] = None
     empadronamiento_fisico_distribuidor_id: Optional[uuid.UUID] = None
+    location_id: Optional[uuid.UUID] = None
 
 
 class MotoUnitRead(BaseModel):
@@ -46,6 +60,9 @@ class MotoUnitRead(BaseModel):
     empadronamiento_fisico_distribuidor_nombre: Optional[str] = None
     # DIM PDF
     dim_pdf_object_name: Optional[str] = None
+    # Ubicación / bodega
+    location_id: Optional[uuid.UUID] = None
+    location_name: Optional[str] = None
     created_at: datetime
 
 

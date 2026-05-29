@@ -533,6 +533,10 @@ export default function MotocicletasTab({ userRole }) {
   const [toggling, setToggling] = useState(null); // id de la unidad en proceso
   const [unitPendienteEnvio, setUnitPendienteEnvio] = useState(null); // unidad esperando selección de distribuidor
 
+  // Ubicaciones / bodegas
+  const [locations, setLocations] = useState([]);
+  const [locationSaving, setLocationSaving] = useState(null); // id de la unidad en proceso
+
   const PAGE_SIZE = 50;
   const [exportingMotos, setExportingMotos] = useState(false);
 
@@ -584,7 +588,15 @@ export default function MotocicletasTab({ userRole }) {
     }
   }, [page, filterPI, filterModel, filterVIN, filterEngine, filterCertificado]);
 
-  useEffect(() => { fetchUnits(); }, [fetchUnits]);
+  const fetchLocations = useCallback(async () => {
+    try {
+      const res = await authFetch(`${getApiUrl()}/imports/moto-locations`);
+      const data = await res.json();
+      setLocations(Array.isArray(data) ? data : []);
+    } catch { setLocations([]); }
+  }, []);
+
+  useEffect(() => { fetchUnits(); fetchLocations(); }, [fetchUnits, fetchLocations]);
 
   const handleDimUpload = async (file) => {
     setDimUploading(true);
@@ -902,7 +914,7 @@ export default function MotocicletasTab({ userRole }) {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
             <thead>
               <tr style={{ background: '#0e0e14' }}>
-                {['PI Number', 'Modelo', 'VIN', 'Motor No.', 'Color RUNT', 'Año Modelo', 'No. Levante', 'Empadronamiento', 'Empadr. Físico', 'Acciones'].map(h => (
+                {['PI Number', 'Modelo', 'VIN', 'Motor No.', 'Color RUNT', 'Año Modelo', 'No. Levante', 'Ubicación', 'Empadronamiento', 'Empadr. Físico', 'Acciones'].map(h => (
                   <th
                     key={h}
                     style={{
@@ -952,6 +964,36 @@ export default function MotocicletasTab({ userRole }) {
                       ? <span style={{ fontFamily: 'monospace', fontSize: '10px', color: '#a78bfa', fontWeight: 700 }}>{unit.no_lev}</span>
                       : <span style={{ color: '#404050', fontSize: '10px' }}>—</span>
                     }
+                  </td>
+                  <td style={{ padding: '9px 12px' }}>
+                    <select
+                      value={unit.location_id || ''}
+                      disabled={locationSaving === unit.id}
+                      onChange={async (e) => {
+                        const locId = e.target.value || null;
+                        setLocationSaving(unit.id);
+                        try {
+                          const res = await authFetch(`${getApiUrl()}/imports/moto-units/${unit.id}`, {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ location_id: locId }),
+                          });
+                          if (res.ok) {
+                            const data = await res.json();
+                            setUnits(prev => prev.map(u => u.id === unit.id ? { ...u, location_id: data.location_id, location_name: data.location_name } : u));
+                          }
+                        } finally { setLocationSaving(null); }
+                      }}
+                      style={{
+                        background: unit.location_id ? 'rgba(167,139,250,0.1)' : '#1a1a24',
+                        border: `1px solid ${unit.location_id ? 'rgba(167,139,250,0.3)' : 'rgba(255,255,255,0.08)'}`,
+                        borderRadius: '6px', color: unit.location_id ? '#a78bfa' : '#606075',
+                        fontSize: '11px', fontWeight: 700, padding: '4px 8px', outline: 'none', cursor: 'pointer',
+                      }}
+                    >
+                      <option value="">— Sin ubicación —</option>
+                      {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                    </select>
                   </td>
                   <td style={{ padding: '9px 12px', whiteSpace: 'nowrap' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>

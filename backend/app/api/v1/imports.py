@@ -14,7 +14,7 @@ from starlette.responses import StreamingResponse
 
 from app.database import get_db
 from app.api.deps import get_current_user, CurrentUser
-from app.models.imports import ShipmentOrder, SparePartLot, ShipmentMotoUnit, ImportAttachment, SparePartItem, ReconciliationResult, Backorder, VehicleModel
+from app.models.imports import ShipmentOrder, SparePartLot, ShipmentMotoUnit, ImportAttachment, SparePartItem, ReconciliationResult, Backorder, VehicleModel, MotoLocation
 from app.models.tenant import Tenant, EstadoRed
 from app.schemas.imports import (
     ShipmentOrderRead, ShipmentOrderCreate, ShipmentOrderUpdate, ShipmentOrderListResponse,
@@ -22,6 +22,7 @@ from app.schemas.imports import (
     SparePartLotRead, SparePartItemRead, SparePartItemUpdate,
     ReconciliationResultRead, ReconciliationResultUpdate, BackorderRead, BackorderUpdate,
     BackorderBulkUpdatePI, BackorderBulkRollbackRequest, PhysicalInspectionApplyPayload,
+    MotoLocationCreate, MotoLocationRead,
 )
 from app.services import imports_service
 from app.services.imports_service import compute_status
@@ -1977,7 +1978,10 @@ async def list_all_moto_units(
     # Paginated items with the related order eagerly loaded
     stmt = (
         base_stmt
-        .options(selectinload(ShipmentMotoUnit.shipment_order))
+        .options(
+            selectinload(ShipmentMotoUnit.shipment_order),
+            selectinload(ShipmentMotoUnit.location),
+        )
         .order_by(ShipmentMotoUnit.created_at.desc())
         .offset(skip)
         .limit(page_size)
@@ -2009,6 +2013,8 @@ async def list_all_moto_units(
             "empadronamiento_fisico_distribuidor_id": str(u.empadronamiento_fisico_distribuidor_id) if u.empadronamiento_fisico_distribuidor_id else None,
             "empadronamiento_fisico_distribuidor_nombre": u.empadronamiento_fisico_distribuidor_nombre,
             "dim_pdf_object_name": u.dim_pdf_object_name,
+            "location_id": str(u.location_id) if u.location_id else None,
+            "location_name": u.location.name if u.location else None,
             "created_at": u.created_at.isoformat(),
             # Fields from the related order
             "pi_number": o.pi_number if o else None,
@@ -2112,12 +2118,17 @@ async def update_moto_unit(
 ):
     if current_user.role not in ("superadmin", "administrativo"):
         raise HTTPException(status_code=403, detail="Sin permisos para editar unidades")
-    unit = (await db.execute(select(ShipmentMotoUnit).where(ShipmentMotoUnit.id == unit_id))).scalar_one_or_none()
+    unit = (await db.execute(
+        select(ShipmentMotoUnit)
+        .where(ShipmentMotoUnit.id == unit_id)
+        .options(selectinload(ShipmentMotoUnit.location))
+    )).scalar_one_or_none()
     if not unit:
         raise HTTPException(status_code=404, detail="Unidad no encontrada")
     update_data = payload.model_dump(exclude_unset=True)
 
     distribuidor_id = update_data.pop("empadronamiento_fisico_distribuidor_id", None)
+    location_id = update_data.pop("location_id", ...)  # sentinel: ... means not provided
 
     for field, value in update_data.items():
         setattr(unit, field, value)
@@ -2139,8 +2150,12 @@ async def update_moto_unit(
         unit.empadronamiento_fisico_distribuidor_id = None
         unit.empadronamiento_fisico_distribuidor_nombre = None
 
+    # Si se provee location_id (incluyendo None para desasignar), actualizar
+    if location_id is not ...:
+        unit.location_id = location_id
+
     await db.commit()
-    await db.refresh(unit)
+    await db.refresh(unit, ['location'])
     return {
         "id": str(unit.id),
         "model": unit.model,
@@ -2152,7 +2167,56 @@ async def update_moto_unit(
         "empadronamiento_fisico_fecha": unit.empadronamiento_fisico_fecha.isoformat() if unit.empadronamiento_fisico_fecha else None,
         "empadronamiento_fisico_distribuidor_id": str(unit.empadronamiento_fisico_distribuidor_id) if unit.empadronamiento_fisico_distribuidor_id else None,
         "empadronamiento_fisico_distribuidor_nombre": unit.empadronamiento_fisico_distribuidor_nombre,
+        "location_id": str(unit.location_id) if unit.location_id else None,
+        "location_name": unit.location.name if unit.location else None,
     }
+
+
+# ---------------------------------------------------------------------------
+# Moto Locations — bodegas / ubicaciones físicas de motos
+# ---------------------------------------------------------------------------
+
+@router.get("/moto-locations", response_model=list[MotoLocationRead], status_code=200)
+async def list_moto_locations(
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    _require_imports_editor(current_user)
+    locations = (await db.execute(select(MotoLocation).order_by(MotoLocation.name))).scalars().all()
+    return [MotoLocationRead.model_validate(l) for l in locations]
+
+
+@router.post("/moto-locations", response_model=MotoLocationRead, status_code=201)
+async def create_moto_location(
+    payload: MotoLocationCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    _require_superadmin(current_user)
+    existing = (await db.execute(
+        select(MotoLocation).where(MotoLocation.name == payload.name.strip())
+    )).scalar_one_or_none()
+    if existing:
+        raise HTTPException(status_code=409, detail=f"Ya existe una ubicación con el nombre '{payload.name}'")
+    location = MotoLocation(name=payload.name.strip())
+    db.add(location)
+    await db.commit()
+    await db.refresh(location)
+    return MotoLocationRead.model_validate(location)
+
+
+@router.delete("/moto-locations/{location_id}", status_code=204)
+async def delete_moto_location(
+    location_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    _require_superadmin(current_user)
+    location = await db.get(MotoLocation, location_id)
+    if not location:
+        raise HTTPException(status_code=404, detail="Ubicación no encontrada")
+    await db.delete(location)
+    await db.commit()
 
 
 # ---------------------------------------------------------------------------
