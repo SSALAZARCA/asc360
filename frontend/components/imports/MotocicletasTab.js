@@ -228,14 +228,27 @@ function DimUploadModal({ onUpload, onClose, uploading, result }) {
 // ---------------------------------------------------------------------------
 // Modal de edición de unidad
 // ---------------------------------------------------------------------------
-function EditUnitModal({ unit, onSave, onClose, saving }) {
+function EditUnitModal({ unit, onSave, onClose, saving, userRole }) {
   const [form, setForm] = useState({
     model: unit.model || '',
     vin_number: unit.vin_number || '',
     engine_number: unit.engine_number || '',
     model_year: unit.model_year || '',
     color: unit.color || '',  // solo lectura, no se envía al backend
+    shipment_order_id: '',
   });
+  const [orders, setOrders] = useState([]);
+  const [ordersLoading, setOrdersLoading] = useState(false);
+
+  useEffect(() => {
+    if (userRole !== 'superadmin') return;
+    setOrdersLoading(true);
+    authFetch(`${getApiUrl()}/imports/shipment-orders?is_spare_part=false&page_size=200`)
+      .then(r => r.json())
+      .then(data => setOrders(data.items || []))
+      .catch(() => {})
+      .finally(() => setOrdersLoading(false));
+  }, [userRole]);
 
   const handleChange = (field, value) => setForm(f => ({ ...f, [field]: value }));
 
@@ -300,6 +313,33 @@ function EditUnitModal({ unit, onSave, onClose, saving }) {
               placeholder="Ej: 2025"
             />
           </div>
+
+          {/* Cambiar pedido — solo superadmin */}
+          {userRole === 'superadmin' && (
+            <div>
+              <label style={labelStyle}>Mover a otro pedido</label>
+              <select
+                style={{ ...inputStyle, cursor: ordersLoading ? 'wait' : 'pointer' }}
+                value={form.shipment_order_id}
+                onChange={e => handleChange('shipment_order_id', e.target.value)}
+                disabled={ordersLoading}
+              >
+                <option value="">— Sin cambio —</option>
+                {orders
+                  .filter(o => o.id !== unit.shipment_order_id)
+                  .map(o => (
+                    <option key={o.id} value={o.id}>
+                      {o.pi_number} — {o.model}{o.cycle ? ` (C${o.cycle})` : ''}
+                    </option>
+                  ))}
+              </select>
+              {form.shipment_order_id && (
+                <p style={{ margin: '5px 0 0', fontSize: '10px', color: '#fbbf24' }}>
+                  ⚠ La unidad se moverá al pedido seleccionado.
+                </p>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Acciones */}
@@ -641,6 +681,7 @@ export default function MotocicletasTab({ userRole }) {
         const y = parseInt(form.model_year, 10);
         if (!isNaN(y)) payload.model_year = y;
       }
+      if (form.shipment_order_id) payload.shipment_order_id = form.shipment_order_id;
       const res = await authFetch(`${getApiUrl()}/imports/moto-units/${unitId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -1293,6 +1334,7 @@ export default function MotocicletasTab({ userRole }) {
           onSave={handleEditSave}
           onClose={() => setEditUnit(null)}
           saving={editSaving}
+          userRole={userRole}
         />
       )}
 

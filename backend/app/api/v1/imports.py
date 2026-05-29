@@ -2149,9 +2149,22 @@ async def update_moto_unit(
     distribuidor_id = update_data.pop("empadronamiento_fisico_distribuidor_id", None)
     location_id = update_data.pop("location_id", ...)
     observation_id = update_data.pop("observation_id", ...)
+    new_order_id = update_data.pop("shipment_order_id", None)
 
     for field, value in update_data.items():
         setattr(unit, field, value)
+
+    # Transferir la unidad a otro pedido (solo superadmin)
+    if new_order_id is not None and new_order_id != unit.shipment_order_id:
+        if current_user.role != "superadmin":
+            raise HTTPException(status_code=403, detail="Solo superadmin puede transferir unidades entre pedidos")
+        target_order = await db.get(ShipmentOrder, new_order_id)
+        if not target_order:
+            raise HTTPException(status_code=404, detail="Pedido destino no encontrado")
+        if target_order.is_spare_part:
+            raise HTTPException(status_code=400, detail="El pedido destino debe ser de motocicletas, no de repuestos")
+        unit.shipment_order_id = new_order_id
+        unit.source_pi = target_order.pi_number
 
     # Si se marca el envío físico, registrar fecha y distribuidor
     if update_data.get("empadronamiento_fisico_enviado") is True:

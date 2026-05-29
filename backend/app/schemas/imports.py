@@ -42,6 +42,7 @@ class MotoUnitUpdate(BaseModel):
     separada_nacionalizacion: Optional[bool] = None
     facturado: Optional[bool] = None
     cargado_runt: Optional[bool] = None
+    shipment_order_id: Optional[uuid.UUID] = None
 
 
 class MotoUnitRead(BaseModel):
