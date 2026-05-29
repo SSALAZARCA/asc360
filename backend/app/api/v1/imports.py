@@ -2017,6 +2017,11 @@ async def list_all_moto_units(
             "dim_pdf_object_name": u.dim_pdf_object_name,
             "location_id": str(u.location_id) if u.location_id else None,
             "location_name": u.location.name if u.location else None,
+            "observation_id": str(u.observation_id) if u.observation_id else None,
+            "observation_name": u.observation.name if u.observation else None,
+            "separada_nacionalizacion": u.separada_nacionalizacion,
+            "facturado": u.facturado,
+            "cargado_runt": u.cargado_runt,
             "created_at": u.created_at.isoformat(),
             # Fields from the related order
             "pi_number": o.pi_number if o else None,
