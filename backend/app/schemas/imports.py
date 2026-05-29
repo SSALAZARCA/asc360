@@ -29,6 +29,7 @@ class MotoUnitUpdate(BaseModel):
     empadronamiento_fisico_enviado: Optional[bool] = None
     empadronamiento_fisico_distribuidor_id: Optional[uuid.UUID] = None
     location_id: Optional[uuid.UUID] = None
+    facturado: Optional[bool] = None
 
 
 class MotoUnitRead(BaseModel):
@@ -58,6 +59,7 @@ class MotoUnitRead(BaseModel):
     empadronamiento_fisico_fecha: Optional[datetime] = None
     empadronamiento_fisico_distribuidor_id: Optional[uuid.UUID] = None
     empadronamiento_fisico_distribuidor_nombre: Optional[str] = None
+    facturado: bool = False
     # DIM PDF
     dim_pdf_object_name: Optional[str] = None
     # Ubicación / bodega

@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { authFetch } from '../../lib/authFetch';
 import { getApiUrl } from '../../lib/api';
-import { FileUp, Download, RefreshCw, Search, CheckCircle, Clock, Bike, X, AlertCircle, Pencil, Send, FileText, Trash2, MapPin, AlertTriangle, FileSpreadsheet } from 'lucide-react';
+import { FileUp, Download, RefreshCw, Search, CheckCircle, Clock, Bike, X, AlertCircle, Pencil, Send, FileText, Trash2, MapPin, AlertTriangle, FileSpreadsheet, Receipt } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
 // Error modal estilizado
@@ -912,7 +912,7 @@ export default function MotocicletasTab({ userRole }) {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
             <thead>
               <tr style={{ background: '#0e0e14' }}>
-                {['PI Number', 'Modelo', 'VIN', 'Motor No.', 'Color RUNT', 'Año Modelo', 'No. Levante', 'Ubicación', 'Empadronamiento', 'Empadr. Físico', 'Acciones'].map(h => (
+                {['PI Number', 'Modelo', 'VIN', 'Motor No.', 'Color RUNT', 'Año Modelo', 'No. Levante', 'Ubicación', 'Empadronamiento', 'Gestión Distribuidor', 'Acciones'].map(h => (
                   <th
                     key={h}
                     style={{
@@ -1085,6 +1085,44 @@ export default function MotocicletasTab({ userRole }) {
                           {unit.empadronamiento_fisico_distribuidor_nombre}
                         </span>
                       )}
+                      {/* Facturado */}
+                      {(userRole === 'superadmin' || userRole === 'administrativo') ? (
+                        <button
+                          title={unit.facturado ? 'Facturado — click para desmarcar' : 'Marcar como facturado'}
+                          onClick={async () => {
+                            try {
+                              const res = await authFetch(`${getApiUrl()}/imports/moto-units/${unit.id}`, {
+                                method: 'PATCH',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ facturado: !unit.facturado }),
+                              });
+                              if (res.ok) {
+                                const data = await res.json();
+                                setUnits(prev => prev.map(u => u.id === unit.id ? { ...u, facturado: data.facturado } : u));
+                              }
+                            } catch { /* silencioso */ }
+                          }}
+                          style={{
+                            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                            width: 24, height: 24, borderRadius: '50%', border: 'none',
+                            cursor: 'pointer', transition: 'all 0.15s',
+                            ...(unit.facturado
+                              ? { background: 'rgba(59,130,246,0.15)', color: '#3b82f6', outline: '1px solid rgba(59,130,246,0.4)' }
+                              : { background: 'rgba(96,96,117,0.1)', color: '#404050', outline: '1px solid rgba(96,96,117,0.2)' }
+                            ),
+                          }}
+                        >
+                          <Receipt size={13} />
+                        </button>
+                      ) : unit.facturado ? (
+                        <span title="Facturado" style={{
+                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                          width: 24, height: 24, borderRadius: '50%',
+                          background: 'rgba(59,130,246,0.15)', color: '#3b82f6', border: '1px solid rgba(59,130,246,0.4)',
+                        }}>
+                          <Receipt size={13} />
+                        </span>
+                      ) : null}
                     </div>
                   </td>
                   <td style={{ padding: '9px 12px', whiteSpace: 'nowrap' }}>

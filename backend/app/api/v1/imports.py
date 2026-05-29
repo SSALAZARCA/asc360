@@ -2169,6 +2169,7 @@ async def update_moto_unit(
         "empadronamiento_fisico_distribuidor_nombre": unit.empadronamiento_fisico_distribuidor_nombre,
         "location_id": str(unit.location_id) if unit.location_id else None,
         "location_name": unit.location.name if unit.location else None,
+        "facturado": unit.facturado,
     }
 
 
