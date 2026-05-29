@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { authFetch } from '../../lib/authFetch';
 import { getApiUrl } from '../../lib/api';
-import { FileUp, Download, RefreshCw, Search, CheckCircle, Clock, Bike, X, AlertCircle, Pencil, Send, FileText, Trash2, MapPin, AlertTriangle, FileSpreadsheet, Receipt } from 'lucide-react';
+import { FileUp, Download, RefreshCw, Search, CheckCircle, Clock, Bike, X, AlertCircle, Pencil, Send, FileText, Trash2, MapPin, AlertTriangle, FileSpreadsheet, Receipt, ShieldCheck } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
 // Error modal estilizado
@@ -1041,23 +1041,22 @@ export default function MotocicletasTab({ userRole }) {
                     </div>
                   </td>
                   <td style={{ padding: '9px 12px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '7px', flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flexWrap: 'nowrap' }}>
+                      {/* 1. Enviado */}
                       {(userRole === 'superadmin' || userRole === 'administrativo') ? (
                         <button
                           onClick={() => handleToggleEmpadronamiento(unit)}
                           disabled={toggling === unit.id}
                           title={unit.empadronamiento_fisico_enviado
                             ? `Enviado${unit.empadronamiento_fisico_fecha ? ' el ' + new Date(unit.empadronamiento_fisico_fecha).toLocaleDateString('es-CO') : ''}${unit.empadronamiento_fisico_distribuidor_nombre ? ' a ' + unit.empadronamiento_fisico_distribuidor_nombre : ''} — click para desmarcar`
-                            : 'Seleccionar distribuidor y marcar como enviado'}
+                            : 'Marcar como enviado al distribuidor'}
                           style={{
                             display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                             width: 24, height: 24, borderRadius: '50%', border: 'none',
-                            cursor: toggling === unit.id ? 'not-allowed' : 'pointer',
-                            transition: 'all 0.15s',
+                            cursor: toggling === unit.id ? 'not-allowed' : 'pointer', transition: 'all 0.15s',
                             ...(unit.empadronamiento_fisico_enviado
                               ? { background: 'rgba(34,197,94,0.12)', color: '#22c55e', outline: '1px solid rgba(34,197,94,0.3)' }
-                              : { background: 'rgba(96,96,117,0.12)', color: '#606075', outline: '1px solid rgba(96,96,117,0.25)' }
-                            ),
+                              : { background: 'rgba(96,96,117,0.12)', color: '#606075', outline: '1px solid rgba(96,96,117,0.25)' }),
                           }}
                         >
                           {toggling === unit.id ? '·' : <Send size={13} />}
@@ -1068,39 +1067,21 @@ export default function MotocicletasTab({ userRole }) {
                           width: 24, height: 24, borderRadius: '50%',
                           ...(unit.empadronamiento_fisico_enviado
                             ? { background: 'rgba(34,197,94,0.1)', color: '#22c55e', border: '1px solid rgba(34,197,94,0.25)' }
-                            : { background: 'rgba(96,96,117,0.1)', color: '#404050', border: '1px solid rgba(96,96,117,0.2)' }
-                          ),
+                            : { background: 'rgba(96,96,117,0.1)', color: '#404050', border: '1px solid rgba(96,96,117,0.2)' }),
                         }}>
                           <Send size={13} />
                         </span>
                       )}
-                      {unit.empadronamiento_fisico_enviado && unit.empadronamiento_fisico_distribuidor_nombre && (
-                        <span style={{
-                          fontSize: '9px', color: '#9ca3af', fontWeight: 600,
-                          maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap', display: 'inline-block',
-                        }}
-                          title={unit.empadronamiento_fisico_distribuidor_nombre}
-                        >
-                          {unit.empadronamiento_fisico_distribuidor_nombre}
-                        </span>
-                      )}
-                      {/* Facturado */}
+                      {/* 2. Facturado */}
                       {(userRole === 'superadmin' || userRole === 'administrativo') ? (
                         <button
                           title={unit.facturado ? 'Facturado — click para desmarcar' : 'Marcar como facturado'}
                           onClick={async () => {
-                            try {
-                              const res = await authFetch(`${getApiUrl()}/imports/moto-units/${unit.id}`, {
-                                method: 'PATCH',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ facturado: !unit.facturado }),
-                              });
-                              if (res.ok) {
-                                const data = await res.json();
-                                setUnits(prev => prev.map(u => u.id === unit.id ? { ...u, facturado: data.facturado } : u));
-                              }
-                            } catch { /* silencioso */ }
+                            const res = await authFetch(`${getApiUrl()}/imports/moto-units/${unit.id}`, {
+                              method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ facturado: !unit.facturado }),
+                            });
+                            if (res.ok) { const d = await res.json(); setUnits(prev => prev.map(u => u.id === unit.id ? { ...u, facturado: d.facturado } : u)); }
                           }}
                           style={{
                             display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
@@ -1108,21 +1089,67 @@ export default function MotocicletasTab({ userRole }) {
                             cursor: 'pointer', transition: 'all 0.15s',
                             ...(unit.facturado
                               ? { background: 'rgba(59,130,246,0.15)', color: '#3b82f6', outline: '1px solid rgba(59,130,246,0.4)' }
-                              : { background: 'rgba(96,96,117,0.1)', color: '#404050', outline: '1px solid rgba(96,96,117,0.2)' }
-                            ),
+                              : { background: 'rgba(96,96,117,0.1)', color: '#404050', outline: '1px solid rgba(96,96,117,0.2)' }),
                           }}
                         >
                           <Receipt size={13} />
                         </button>
-                      ) : unit.facturado ? (
-                        <span title="Facturado" style={{
+                      ) : (
+                        <span title={unit.facturado ? 'Facturado' : 'Sin facturar'} style={{
                           display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                           width: 24, height: 24, borderRadius: '50%',
-                          background: 'rgba(59,130,246,0.15)', color: '#3b82f6', border: '1px solid rgba(59,130,246,0.4)',
+                          ...(unit.facturado
+                            ? { background: 'rgba(59,130,246,0.15)', color: '#3b82f6', border: '1px solid rgba(59,130,246,0.4)' }
+                            : { background: 'rgba(96,96,117,0.1)', color: '#404050', border: '1px solid rgba(96,96,117,0.2)' }),
                         }}>
                           <Receipt size={13} />
                         </span>
-                      ) : null}
+                      )}
+                      {/* 3. Cargado RUNT */}
+                      {(userRole === 'superadmin' || userRole === 'administrativo') ? (
+                        <button
+                          title={unit.cargado_runt ? 'Cargado al RUNT — click para desmarcar' : 'Marcar como cargado al RUNT'}
+                          onClick={async () => {
+                            const res = await authFetch(`${getApiUrl()}/imports/moto-units/${unit.id}`, {
+                              method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ cargado_runt: !unit.cargado_runt }),
+                            });
+                            if (res.ok) { const d = await res.json(); setUnits(prev => prev.map(u => u.id === unit.id ? { ...u, cargado_runt: d.cargado_runt } : u)); }
+                          }}
+                          style={{
+                            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                            width: 24, height: 24, borderRadius: '50%', border: 'none',
+                            cursor: 'pointer', transition: 'all 0.15s',
+                            ...(unit.cargado_runt
+                              ? { background: 'rgba(59,130,246,0.15)', color: '#3b82f6', outline: '1px solid rgba(59,130,246,0.4)' }
+                              : { background: 'rgba(96,96,117,0.1)', color: '#404050', outline: '1px solid rgba(96,96,117,0.2)' }),
+                          }}
+                        >
+                          <ShieldCheck size={13} />
+                        </button>
+                      ) : (
+                        <span title={unit.cargado_runt ? 'Cargado al RUNT' : 'Sin cargar al RUNT'} style={{
+                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                          width: 24, height: 24, borderRadius: '50%',
+                          ...(unit.cargado_runt
+                            ? { background: 'rgba(59,130,246,0.15)', color: '#3b82f6', border: '1px solid rgba(59,130,246,0.4)' }
+                            : { background: 'rgba(96,96,117,0.1)', color: '#404050', border: '1px solid rgba(96,96,117,0.2)' }),
+                        }}>
+                          <ShieldCheck size={13} />
+                        </span>
+                      )}
+                      {/* Nombre distribuidor — después de los 3 íconos */}
+                      {unit.empadronamiento_fisico_distribuidor_nombre && (
+                        <span style={{
+                          fontSize: '9px', color: '#9ca3af', fontWeight: 600,
+                          maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap', display: 'inline-block',
+                        }}
+                          title={unit.empadronamiento_fisico_distribuidor_nombre}
+                        >
+                          {unit.empadronamiento_fisico_distribuidor_nombre}
+                        </span>
+                      )}
                     </div>
                   </td>
                   <td style={{ padding: '9px 12px', whiteSpace: 'nowrap' }}>

@@ -2085,7 +2085,7 @@ async def export_moto_units(
         "UBICACIÓN",
         "EMPADRONADO", "FECHA EMPADRONAMIENTO",
         "EMPADR. FÍSICO ENVIADO", "FECHA EMPADR. FÍSICO", "DISTRIBUIDOR",
-        "FACTURADO",
+        "FACTURADO", "CARGADO RUNT",
         "DIM CARGADO", "ITEM No.",
     ]
     rows = []
@@ -2107,6 +2107,7 @@ async def export_moto_units(
             u.empadronamiento_fisico_fecha.strftime("%Y-%m-%d") if u.empadronamiento_fisico_fecha else None,
             u.empadronamiento_fisico_distribuidor_nombre,
             "Sí" if u.facturado else "No",
+            "Sí" if u.cargado_runt else "No",
             "Sí" if u.dim_pdf_object_name else "No",
             u.item_no,
         ])
@@ -2180,6 +2181,7 @@ async def update_moto_unit(
         "location_id": str(unit.location_id) if unit.location_id else None,
         "location_name": unit.location.name if unit.location else None,
         "facturado": unit.facturado,
+        "cargado_runt": unit.cargado_runt,
     }
 
 

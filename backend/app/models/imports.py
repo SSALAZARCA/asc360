@@ -126,6 +126,7 @@ class ShipmentMotoUnit(Base):
 
     # Facturación al distribuidor
     facturado = Column(Boolean, nullable=False, default=False)
+    cargado_runt = Column(Boolean, nullable=False, default=False)
 
     # DIM PDF original subido a MinIO
     dim_pdf_object_name = Column(String(500), nullable=True)
