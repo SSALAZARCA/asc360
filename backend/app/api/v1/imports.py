@@ -2071,15 +2071,21 @@ async def export_moto_units(
         select(ShipmentMotoUnit)
         .join(ShipmentOrder, ShipmentMotoUnit.shipment_order_id == ShipmentOrder.id)
         .where(*filters)
-        .options(selectinload(ShipmentMotoUnit.shipment_order))
+        .options(
+            selectinload(ShipmentMotoUnit.shipment_order),
+            selectinload(ShipmentMotoUnit.location),
+        )
         .order_by(ShipmentMotoUnit.created_at.desc())
     )
     units = (await db.execute(stmt)).scalars().all()
 
     headers = [
-        "PI NUMBER", "MODELO", "AÑO MODELO", "VIN", "No. MOTOR", "COLOR",
+        "PI NUMBER", "MODELO", "AÑO MODELO", "VIN", "No. MOTOR",
+        "COLOR", "COLOR RUNT", "No. LEVANTE",
+        "UBICACIÓN",
         "EMPADRONADO", "FECHA EMPADRONAMIENTO",
-        "EMPADR. FÍSICO", "FECHA EMPADR. FÍSICO", "DISTRIBUIDOR",
+        "EMPADR. FÍSICO ENVIADO", "FECHA EMPADR. FÍSICO", "DISTRIBUIDOR",
+        "FACTURADO",
         "DIM CARGADO", "ITEM No.",
     ]
     rows = []
@@ -2092,11 +2098,15 @@ async def export_moto_units(
             u.vin_number,
             u.engine_number,
             u.color,
+            u.color_runt,
+            u.no_lev,
+            u.location.name if u.location else None,
             "Sí" if u.certificado_generado else "No",
             u.certificado_fecha.strftime("%Y-%m-%d") if u.certificado_fecha else None,
             "Sí" if u.empadronamiento_fisico_enviado else "No",
             u.empadronamiento_fisico_fecha.strftime("%Y-%m-%d") if u.empadronamiento_fisico_fecha else None,
             u.empadronamiento_fisico_distribuidor_nombre,
+            "Sí" if u.facturado else "No",
             "Sí" if u.dim_pdf_object_name else "No",
             u.item_no,
         ])
