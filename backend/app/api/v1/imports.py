@@ -2025,8 +2025,7 @@ async def list_all_moto_units(
             "created_at": u.created_at.isoformat(),
             # Fields from the related order
             "pi_number": o.pi_number if o else None,
-            "model": u.model or (o.model if o else None),
-            # unit.model_year tiene prioridad sobre el de la orden
+            "model": ((u.model or (o.model if o else None)) or "").strip().upper() or None,
             "model_year": u.model_year or (o.model_year if o else None),
         })
 
@@ -2101,7 +2100,7 @@ async def export_moto_units(
         o = u.shipment_order
         rows.append([
             o.pi_number if o else u.source_pi,
-            u.model or (o.model if o else None),
+            ((u.model or (o.model if o else None)) or "").strip().upper() or None,
             u.model_year or (o.model_year if o else None),
             u.vin_number,
             u.engine_number,
