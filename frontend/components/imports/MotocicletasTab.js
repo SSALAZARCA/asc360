@@ -55,6 +55,71 @@ function ErrorModal({ message, onClose }) {
 }
 
 // ---------------------------------------------------------------------------
+// Modal de confirmación de eliminación
+// ---------------------------------------------------------------------------
+function ConfirmDeleteModal({ unit, onConfirm, onClose }) {
+  if (!unit) return null;
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 9999,
+      background: 'rgba(0,0,0,0.72)', backdropFilter: 'blur(4px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+    }}>
+      <div style={{
+        background: '#16161f', border: '1px solid rgba(248,113,113,0.25)',
+        borderRadius: '14px', padding: '24px', width: 400, maxWidth: '90vw',
+        display: 'flex', flexDirection: 'column', gap: '16px',
+        boxShadow: '0 16px 48px rgba(0,0,0,0.6)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+          <div style={{ padding: '6px', borderRadius: '8px', background: 'rgba(248,113,113,0.1)', flexShrink: 0 }}>
+            <Trash2 size={16} color="#f87171" />
+          </div>
+          <div style={{ flex: 1 }}>
+            <p style={{ margin: '0 0 6px', fontSize: '13px', fontWeight: 700, color: '#fff' }}>
+              Eliminar unidad
+            </p>
+            <p style={{ margin: 0, fontSize: '11px', color: '#9ca3af', lineHeight: 1.6 }}>
+              ¿Confirmás la eliminación de{' '}
+              <span style={{ color: '#e2e8f0', fontWeight: 600 }}>
+                {unit.vin_number || unit.id}
+              </span>
+              ?<br />Esta acción no se puede deshacer.
+            </p>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#606075', cursor: 'pointer', padding: 0, flexShrink: 0 }}>
+            <X size={14} />
+          </button>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+          <button
+            onClick={onClose}
+            style={{
+              padding: '7px 16px', borderRadius: '8px',
+              border: '1px solid rgba(255,255,255,0.08)',
+              background: 'transparent', color: '#9ca3af',
+              fontSize: '11px', fontWeight: 600, cursor: 'pointer',
+            }}
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={onConfirm}
+            style={{
+              padding: '7px 18px', borderRadius: '8px', border: 'none',
+              background: '#f87171', color: '#0d0d14',
+              fontSize: '11px', fontWeight: 700, cursor: 'pointer',
+            }}
+          >
+            Eliminar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Badge de empadronamiento
 // ---------------------------------------------------------------------------
 function CertBadge({ generated }) {
@@ -562,6 +627,7 @@ export default function MotocicletasTab({ userRole }) {
 
   // Edición inline
   const [editUnit, setEditUnit] = useState(null);
+  const [deleteUnit, setDeleteUnit] = useState(null);
   const [editSaving, setEditSaving] = useState(false);
 
   // Error modal para certificado
@@ -701,9 +767,12 @@ export default function MotocicletasTab({ userRole }) {
     }
   };
 
-  const handleDeleteUnit = async (unit) => {
-    const label = unit.vin_number || unit.id;
-    if (!window.confirm(`¿Eliminar la unidad ${label}? Esta acción no se puede deshacer.`)) return;
+  const handleDeleteUnit = (unit) => setDeleteUnit(unit);
+
+  const handleConfirmDelete = async () => {
+    if (!deleteUnit) return;
+    const unit = deleteUnit;
+    setDeleteUnit(null);
     try {
       const res = await authFetch(`${getApiUrl()}/imports/moto-units/${unit.id}`, { method: 'DELETE' });
       if (!res.ok) {
@@ -1371,6 +1440,13 @@ export default function MotocicletasTab({ userRole }) {
           userRole={userRole}
         />
       )}
+
+      {/* Modal confirmación de eliminación */}
+      <ConfirmDeleteModal
+        unit={deleteUnit}
+        onConfirm={handleConfirmDelete}
+        onClose={() => setDeleteUnit(null)}
+      />
 
       {/* Modal selección de distribuidor para envío físico */}
       {unitPendienteEnvio && (
