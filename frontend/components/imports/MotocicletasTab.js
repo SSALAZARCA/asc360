@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { authFetch } from '../../lib/authFetch';
 import { getApiUrl } from '../../lib/api';
-import { FileUp, Download, RefreshCw, Search, CheckCircle, Clock, Bike, X, AlertCircle, Pencil, Send, FileText, Trash2, MapPin, AlertTriangle, FileSpreadsheet, Receipt, ShieldCheck } from 'lucide-react';
+import { FileUp, Download, RefreshCw, Search, CheckCircle, Clock, Bike, X, AlertCircle, Pencil, Send, FileText, Trash2, MapPin, AlertTriangle, FileSpreadsheet, Receipt, ShieldCheck, Lock } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
 // Error modal estilizado
@@ -922,7 +922,7 @@ export default function MotocicletasTab({ userRole }) {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
             <thead>
               <tr style={{ background: '#0e0e14' }}>
-                {['PI Number', 'Modelo', 'VIN', 'Motor No.', 'Color RUNT', 'Año Modelo', 'No. Levante', 'Ubicación', 'Observación', 'Empadronamiento', 'Gestión Distribuidor', 'Acciones'].map(h => (
+                {['PI Number', 'Modelo', 'VIN', 'Motor No.', 'Color RUNT', 'Año Modelo', 'No. Levante', 'Ubicación', 'Naciol.', 'Observación', 'Empadronamiento', 'Gestión Distribuidor', 'Acciones'].map(h => (
                   <th
                     key={h}
                     style={{
@@ -1002,6 +1002,40 @@ export default function MotocicletasTab({ userRole }) {
                       <option value="">— Sin ubicación —</option>
                       {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
                     </select>
+                  </td>
+                  <td style={{ padding: '9px 12px', textAlign: 'center' }}>
+                    {(userRole === 'superadmin' || userRole === 'administrativo') ? (
+                      <button
+                        title={unit.separada_nacionalizacion ? 'Separada para nacionalización — click para liberar' : 'Marcar como separada para nacionalización'}
+                        onClick={async () => {
+                          const res = await authFetch(`${getApiUrl()}/imports/moto-units/${unit.id}`, {
+                            method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ separada_nacionalizacion: !unit.separada_nacionalizacion }),
+                          });
+                          if (res.ok) { const d = await res.json(); setUnits(prev => prev.map(u => u.id === unit.id ? { ...u, separada_nacionalizacion: d.separada_nacionalizacion } : u)); }
+                        }}
+                        style={{
+                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                          width: 24, height: 24, borderRadius: '50%', border: 'none',
+                          cursor: 'pointer', transition: 'all 0.15s',
+                          ...(unit.separada_nacionalizacion
+                            ? { background: 'rgba(251,191,36,0.18)', color: '#fbbf24', outline: '1px solid rgba(251,191,36,0.5)' }
+                            : { background: 'rgba(96,96,117,0.1)', color: '#404050', outline: '1px solid rgba(96,96,117,0.2)' }),
+                        }}
+                      >
+                        <Lock size={13} />
+                      </button>
+                    ) : (
+                      <span title={unit.separada_nacionalizacion ? 'Separada para nacionalización' : ''} style={{
+                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                        width: 24, height: 24, borderRadius: '50%',
+                        ...(unit.separada_nacionalizacion
+                          ? { background: 'rgba(251,191,36,0.18)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.5)' }
+                          : { background: 'transparent', color: '#404050' }),
+                      }}>
+                        {unit.separada_nacionalizacion && <Lock size={13} />}
+                      </span>
+                    )}
                   </td>
                   <td style={{ padding: '9px 12px' }}>
                     <select

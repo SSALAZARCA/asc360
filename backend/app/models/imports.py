@@ -135,6 +135,9 @@ class ShipmentMotoUnit(Base):
     empadronamiento_fisico_distribuidor_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="SET NULL"), nullable=True)
     empadronamiento_fisico_distribuidor_nombre = Column(String(255), nullable=True)
 
+    # Separada para nacionalización
+    separada_nacionalizacion = Column(Boolean, nullable=False, default=False)
+
     # Facturación al distribuidor
     facturado = Column(Boolean, nullable=False, default=False)
     cargado_runt = Column(Boolean, nullable=False, default=False)

@@ -39,6 +39,7 @@ class MotoUnitUpdate(BaseModel):
     empadronamiento_fisico_distribuidor_id: Optional[uuid.UUID] = None
     location_id: Optional[uuid.UUID] = None
     observation_id: Optional[uuid.UUID] = None
+    separada_nacionalizacion: Optional[bool] = None
     facturado: Optional[bool] = None
     cargado_runt: Optional[bool] = None
 
@@ -70,6 +71,7 @@ class MotoUnitRead(BaseModel):
     empadronamiento_fisico_fecha: Optional[datetime] = None
     empadronamiento_fisico_distribuidor_id: Optional[uuid.UUID] = None
     empadronamiento_fisico_distribuidor_nombre: Optional[str] = None
+    separada_nacionalizacion: bool = False
     facturado: bool = False
     cargado_runt: bool = False
     observation_id: Optional[uuid.UUID] = None

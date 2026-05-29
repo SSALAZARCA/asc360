@@ -2085,7 +2085,7 @@ async def export_moto_units(
     headers = [
         "PI NUMBER", "MODELO", "AÑO MODELO", "VIN", "No. MOTOR",
         "COLOR", "COLOR RUNT", "No. LEVANTE",
-        "UBICACIÓN", "OBSERVACIÓN",
+        "UBICACIÓN", "SEP. NACIONALIZACIÓN", "OBSERVACIÓN",
         "EMPADRONADO", "FECHA EMPADRONAMIENTO",
         "EMPADR. FÍSICO ENVIADO", "FECHA EMPADR. FÍSICO", "DISTRIBUIDOR",
         "FACTURADO", "CARGADO RUNT",
@@ -2104,6 +2104,7 @@ async def export_moto_units(
             u.color_runt,
             u.no_lev,
             u.location.name if u.location else None,
+            "Sí" if u.separada_nacionalizacion else "No",
             u.observation.name if u.observation else None,
             "Sí" if u.certificado_generado else "No",
             u.certificado_fecha.strftime("%Y-%m-%d") if u.certificado_fecha else None,
@@ -2189,6 +2190,7 @@ async def update_moto_unit(
         "location_name": unit.location.name if unit.location else None,
         "observation_id": str(unit.observation_id) if unit.observation_id else None,
         "observation_name": unit.observation.name if unit.observation else None,
+        "separada_nacionalizacion": unit.separada_nacionalizacion,
         "facturado": unit.facturado,
         "cargado_runt": unit.cargado_runt,
     }
