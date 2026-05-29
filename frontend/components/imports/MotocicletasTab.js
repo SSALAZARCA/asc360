@@ -324,11 +324,11 @@ function EditUnitModal({ unit, onSave, onClose, saving, userRole }) {
                 onChange={e => handleChange('shipment_order_id', e.target.value)}
                 disabled={ordersLoading}
               >
-                <option value="">— Sin cambio —</option>
+                <option value="" style={{ background: '#1e1e2e', color: '#fff' }}>— Sin cambio —</option>
                 {orders
                   .filter(o => o.id !== unit.shipment_order_id)
                   .map(o => (
-                    <option key={o.id} value={o.id}>
+                    <option key={o.id} value={o.id} style={{ background: '#1e1e2e', color: '#fff' }}>
                       {o.pi_number} — {o.model}{o.cycle ? ` (C${o.cycle})` : ''}
                     </option>
                   ))}
