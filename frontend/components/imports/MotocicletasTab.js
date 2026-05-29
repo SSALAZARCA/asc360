@@ -701,6 +701,22 @@ export default function MotocicletasTab({ userRole }) {
     }
   };
 
+  const handleDeleteUnit = async (unit) => {
+    const label = unit.vin_number || unit.id;
+    if (!window.confirm(`¿Eliminar la unidad ${label}? Esta acción no se puede deshacer.`)) return;
+    try {
+      const res = await authFetch(`${getApiUrl()}/imports/moto-units/${unit.id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert(err.detail || 'Error al eliminar la unidad');
+        return;
+      }
+      fetchUnits();
+    } catch {
+      alert('Error de conexión');
+    }
+  };
+
   const handleToggleEmpadronamiento = (unit) => {
     if (toggling) return;
     if (!unit.empadronamiento_fisico_enviado) {
@@ -1264,20 +1280,38 @@ export default function MotocicletasTab({ userRole }) {
                     </div>
                   </td>
                   <td style={{ padding: '9px 12px', whiteSpace: 'nowrap' }}>
-                    <button
-                      onClick={() => setEditUnit(unit)}
-                      title="Editar unidad"
-                      style={{
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        padding: '4px 8px', borderRadius: '6px', border: 'none',
-                        background: 'rgba(255,255,255,0.06)', color: '#9ca3af',
-                        cursor: 'pointer', transition: 'all 0.15s',
-                      }}
-                      onMouseEnter={e => { e.currentTarget.style.background = 'rgba(96,165,250,0.15)'; e.currentTarget.style.color = '#60a5fa'; }}
-                      onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; e.currentTarget.style.color = '#9ca3af'; }}
-                    >
-                      <Pencil size={12} />
-                    </button>
+                    <div style={{ display: 'flex', gap: '4px' }}>
+                      <button
+                        onClick={() => setEditUnit(unit)}
+                        title="Editar unidad"
+                        style={{
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          padding: '4px 8px', borderRadius: '6px', border: 'none',
+                          background: 'rgba(255,255,255,0.06)', color: '#9ca3af',
+                          cursor: 'pointer', transition: 'all 0.15s',
+                        }}
+                        onMouseEnter={e => { e.currentTarget.style.background = 'rgba(96,165,250,0.15)'; e.currentTarget.style.color = '#60a5fa'; }}
+                        onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; e.currentTarget.style.color = '#9ca3af'; }}
+                      >
+                        <Pencil size={12} />
+                      </button>
+                      {userRole === 'superadmin' && (
+                        <button
+                          onClick={() => handleDeleteUnit(unit)}
+                          title="Eliminar unidad"
+                          style={{
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            padding: '4px 8px', borderRadius: '6px', border: 'none',
+                            background: 'rgba(255,255,255,0.06)', color: '#9ca3af',
+                            cursor: 'pointer', transition: 'all 0.15s',
+                          }}
+                          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(248,113,113,0.15)'; e.currentTarget.style.color = '#f87171'; }}
+                          onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; e.currentTarget.style.color = '#9ca3af'; }}
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}

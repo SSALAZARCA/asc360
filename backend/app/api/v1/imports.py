@@ -2640,6 +2640,27 @@ async def download_certificado(
 
 
 # ---------------------------------------------------------------------------
+# DELETE /moto-units/{unit_id} — eliminar unidad (solo superadmin)
+# ---------------------------------------------------------------------------
+
+@router.delete("/moto-units/{unit_id}", status_code=204)
+async def delete_moto_unit(
+    unit_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    _require_superadmin(current_user)
+    unit = await db.get(ShipmentMotoUnit, unit_id)
+    if not unit:
+        raise HTTPException(status_code=404, detail="Unidad no encontrada")
+    if unit.certificado_generado:
+        raise HTTPException(status_code=400, detail="No se puede eliminar una unidad con empadronamiento generado. Anulá el empadronamiento primero.")
+    if unit.facturado:
+        raise HTTPException(status_code=400, detail="No se puede eliminar una unidad ya facturada.")
+    await db.delete(unit)
+    await db.commit()
+
+
 # DELETE /moto-units/{unit_id}/certificado — anular empadronamiento
 # ---------------------------------------------------------------------------
 
