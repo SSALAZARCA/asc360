@@ -332,6 +332,88 @@ const FILTER_OPTS = [
   { key: 'repuestos', label: 'Repuestos',  param: true  },
 ];
 
+function DisponiblesMatrix() {
+  const [matrix, setMatrix] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetch = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await authFetch(`${getApiUrl()}/imports/moto-units/disponibles-matrix`);
+      if (res.ok) setMatrix(await res.json());
+    } catch { setMatrix([]); }
+    finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { fetch(); }, [fetch]);
+
+  const allLocations = useMemo(() => {
+    const s = new Set();
+    matrix.forEach(m => m.by_location.forEach(l => s.add(l.location)));
+    return [...s].sort();
+  }, [matrix]);
+
+  if (loading) return <p style={{ color: '#606075', fontSize: '12px', margin: '16px 0' }}>Cargando disponibilidad...</p>;
+  if (!matrix.length) return <p style={{ color: '#606075', fontSize: '12px', margin: '16px 0' }}>Sin motos disponibles.</p>;
+
+  return (
+    <div style={{ overflowX: 'auto' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
+        <thead>
+          <tr style={{ background: 'rgba(255,255,255,0.02)' }}>
+            <th style={{ padding: '8px 12px', textAlign: 'left', color: '#606075', fontWeight: 700, fontSize: '9px', textTransform: 'uppercase', letterSpacing: '0.07em', borderBottom: '1px solid rgba(255,255,255,0.06)', whiteSpace: 'nowrap' }}>Modelo</th>
+            <th style={{ padding: '8px 12px', textAlign: 'center', color: '#f59e0b', fontWeight: 700, fontSize: '9px', textTransform: 'uppercase', letterSpacing: '0.07em', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>Total</th>
+            {allLocations.map(loc => (
+              <th key={loc} style={{ padding: '8px 12px', textAlign: 'center', color: '#a78bfa', fontWeight: 700, fontSize: '9px', textTransform: 'uppercase', letterSpacing: '0.07em', borderBottom: '1px solid rgba(255,255,255,0.06)', whiteSpace: 'nowrap' }}>{loc}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {matrix.map(row => {
+            const locMap = Object.fromEntries(row.by_location.map(l => [l.location, l]));
+            return (
+              <tr key={row.model} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}
+                onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+              >
+                <td style={{ padding: '10px 12px', color: '#e2e8f0', fontWeight: 700 }}>{row.model}</td>
+                <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                  <span style={{ fontSize: '14px', fontWeight: 800, color: '#f59e0b' }}>{row.total}</span>
+                </td>
+                {allLocations.map(loc => {
+                  const cell = locMap[loc];
+                  return (
+                    <td key={loc} style={{ padding: '8px 12px', textAlign: 'center', verticalAlign: 'top' }}>
+                      {cell ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                          <span style={{ fontSize: '13px', fontWeight: 800, color: '#a78bfa' }}>{cell.count}</span>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px', justifyContent: 'center' }}>
+                            {cell.colors.map(c => (
+                              <span key={c.color} style={{
+                                fontSize: '9px', fontWeight: 700, padding: '1px 5px', borderRadius: '4px',
+                                background: 'rgba(167,139,250,0.08)', color: '#9ca3af',
+                                border: '1px solid rgba(167,139,250,0.15)', whiteSpace: 'nowrap',
+                              }}>
+                                {c.color} ×{c.count}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <span style={{ color: '#2a2a3a', fontSize: '11px' }}>—</span>
+                      )}
+                    </td>
+                  );
+                })}
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export default function DashboardTab() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -440,7 +522,17 @@ export default function DashboardTab() {
         </div>
       </div>
 
-      {/* Row 3: Próximas ETAs */}
+      {/* Row 3: Motos disponibles para nacionalizar */}
+      <div style={{ padding: '18px', borderRadius: '12px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+          <Package size={14} color="#a78bfa" />
+          <h3 style={{ margin: 0, fontSize: '11px', fontWeight: 700, color: '#fff', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Motos disponibles para nacionalizar</h3>
+          <span style={{ fontSize: '9px', color: '#606075', marginLeft: '4px' }}>sin DIM · no separadas</span>
+        </div>
+        <DisponiblesMatrix />
+      </div>
+
+      {/* Row 4: Próximas ETAs */}
       <div style={{ padding: '18px', borderRadius: '12px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
           <Ship size={14} color="#ff5f33" />

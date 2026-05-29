@@ -2292,6 +2292,68 @@ async def delete_moto_observation(
 
 
 # ---------------------------------------------------------------------------
+# GET /moto-units/disponibles-matrix — motos disponibles agrupadas por modelo/ubicación/color
+# Disponible = sin DIM cargada AND no separada para nacionalización
+# ---------------------------------------------------------------------------
+
+@router.get("/moto-units/disponibles-matrix")
+async def get_disponibles_matrix(
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    _require_imports_editor(current_user)
+
+    stmt = (
+        select(ShipmentMotoUnit)
+        .join(ShipmentOrder, ShipmentMotoUnit.shipment_order_id == ShipmentOrder.id)
+        .where(
+            ShipmentOrder.is_spare_part == False,
+            ShipmentMotoUnit.dim_pdf_object_name == None,
+            ShipmentMotoUnit.separada_nacionalizacion == False,
+        )
+        .options(
+            selectinload(ShipmentMotoUnit.shipment_order),
+            selectinload(ShipmentMotoUnit.location),
+        )
+    )
+    units = (await db.execute(stmt)).scalars().all()
+
+    # Agrupar: model → location_name → color_runt → count
+    from collections import defaultdict
+    matrix: dict = {}  # model → {location → {color → count}}
+
+    for u in units:
+        o = u.shipment_order
+        model = u.model or (o.model if o else "Sin modelo")
+        location = u.location.name if u.location else "Sin ubicación"
+        color = u.color_runt or u.color or "Sin color"
+
+        if model not in matrix:
+            matrix[model] = {}
+        if location not in matrix[model]:
+            matrix[model][location] = {}
+        matrix[model][location][color] = matrix[model][location].get(color, 0) + 1
+
+    # Serializar a lista ordenada
+    result = []
+    for model, locations in sorted(matrix.items()):
+        total = sum(sum(colors.values()) for colors in locations.values())
+        by_location = []
+        for loc, colors in sorted(locations.items()):
+            by_location.append({
+                "location": loc,
+                "count": sum(colors.values()),
+                "colors": sorted(
+                    [{"color": c, "count": n} for c, n in colors.items()],
+                    key=lambda x: -x["count"]
+                ),
+            })
+        result.append({"model": model, "total": total, "by_location": by_location})
+
+    return sorted(result, key=lambda x: -x["total"])
+
+
+# ---------------------------------------------------------------------------
 # GET /distribuidores-venta — tenants con venta de motos activos
 # ---------------------------------------------------------------------------
 

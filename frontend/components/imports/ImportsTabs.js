@@ -14,15 +14,15 @@ import NuevoPedidoModal from './NuevoPedidoModal';
 import { RefreshCw, Upload, FileUp, Plus, Download } from 'lucide-react';
 
 const TABS = [
+  { id: 'dashboard', label: 'Dashboard' },
   { id: 'orders', label: 'Pedidos' },
   { id: 'motocicletas', label: 'Motocicletas' },
   { id: 'spare_parts', label: 'Repuestos' },
   { id: 'backorders', label: 'Backorders' },
-  { id: 'dashboard', label: 'Dashboard' },
 ];
 
 export default function ImportsTabs({ userRole }) {
-  const [activeTab, setActiveTab] = useState('orders');
+  const [activeTab, setActiveTab] = useState('dashboard');
 
   // --- Estado de la pestaña Pedidos ---
   const [orders, setOrders] = useState([]);
