@@ -49,7 +49,8 @@ async def list_color_runt_mappings(
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
-    _require_superadmin(current_user)
+    if not current_user.is_imports_editor:
+        raise HTTPException(status_code=403, detail="Sin permisos para ver los mapeos de color")
     rows = (await db.execute(
         select(ColorRuntMapping).order_by(ColorRuntMapping.color_key.asc())
     )).scalars().all()

@@ -299,11 +299,13 @@ function EditUnitModal({ unit, onSave, onClose, saving, userRole }) {
     vin_number: unit.vin_number || '',
     engine_number: unit.engine_number || '',
     model_year: unit.model_year || '',
-    color: unit.color || '',  // solo lectura, no se envía al backend
+    color: unit.color || '',
     shipment_order_id: '',
   });
   const [orders, setOrders] = useState([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
+  const [colorOptions, setColorOptions] = useState([]);
+  const [colorsLoading, setColorsLoading] = useState(true);
 
   useEffect(() => {
     if (userRole !== 'superadmin') return;
@@ -314,6 +316,15 @@ function EditUnitModal({ unit, onSave, onClose, saving, userRole }) {
       .catch(() => {})
       .finally(() => setOrdersLoading(false));
   }, [userRole]);
+
+  useEffect(() => {
+    setColorsLoading(true);
+    authFetch(`${getApiUrl()}/color-runt-mappings`)
+      .then(r => r.json())
+      .then(data => setColorOptions(Array.isArray(data) ? data : []))
+      .catch(() => {})
+      .finally(() => setColorsLoading(false));
+  }, []);
 
   const handleChange = (field, value) => setForm(f => ({ ...f, [field]: value }));
 
@@ -366,7 +377,19 @@ function EditUnitModal({ unit, onSave, onClose, saving, userRole }) {
           </div>
           <div>
             <label style={labelStyle}>Color</label>
-            <div style={{ ...inputStyle, color: '#606075', cursor: 'default' }}>{form.color || '—'}</div>
+            <select
+              style={{ ...inputStyle, cursor: colorsLoading ? 'wait' : 'pointer' }}
+              value={form.color}
+              onChange={e => handleChange('color', e.target.value)}
+              disabled={colorsLoading}
+            >
+              <option value="" style={{ background: '#1e1e2e', color: '#fff' }}>— Sin cambio —</option>
+              {colorOptions.map(c => (
+                <option key={c.color_key} value={c.color_original} style={{ background: '#1e1e2e', color: '#fff' }}>
+                  {c.color_original}{c.nombre_runt ? ` → ${c.nombre_runt}` : ''}
+                </option>
+              ))}
+            </select>
           </div>
           <div>
             <label style={labelStyle}>Año Modelo</label>
@@ -747,6 +770,7 @@ export default function MotocicletasTab({ userRole }) {
         const y = parseInt(form.model_year, 10);
         if (!isNaN(y)) payload.model_year = y;
       }
+      if (form.color) payload.color = form.color;
       if (form.shipment_order_id) payload.shipment_order_id = form.shipment_order_id;
       const res = await authFetch(`${getApiUrl()}/imports/moto-units/${unitId}`, {
         method: 'PATCH',

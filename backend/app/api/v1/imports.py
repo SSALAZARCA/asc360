@@ -2150,9 +2150,21 @@ async def update_moto_unit(
     location_id = update_data.pop("location_id", ...)
     observation_id = update_data.pop("observation_id", ...)
     new_order_id = update_data.pop("shipment_order_id", None)
+    new_color = update_data.pop("color", None)
 
     for field, value in update_data.items():
         setattr(unit, field, value)
+
+    # Actualizar color y resolver color_runt automáticamente
+    if new_color is not None:
+        from app.models.imports import ColorRuntMapping
+        from app.services.imports_service import _norm_color
+        unit.color = new_color
+        color_key = _norm_color(new_color)
+        mapping = (await db.execute(
+            select(ColorRuntMapping).where(ColorRuntMapping.color_key == color_key)
+        )).scalar_one_or_none()
+        unit.color_runt = mapping.nombre_runt if mapping else None
 
     # Transferir la unidad a otro pedido (solo superadmin)
     if new_order_id is not None and new_order_id != unit.shipment_order_id:
