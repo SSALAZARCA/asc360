@@ -2324,9 +2324,9 @@ async def get_disponibles_matrix(
 
     for u in units:
         o = u.shipment_order
-        model = u.model or (o.model if o else "Sin modelo")
+        model = (u.model or (o.model if o else "") or "Sin modelo").strip().upper()
         location = u.location.name if u.location else "Sin ubicación"
-        color = u.color_runt or u.color or "Sin color"
+        color = (u.color_runt or u.color or "Sin color").strip().upper()
 
         if model not in matrix:
             matrix[model] = {}
@@ -2382,7 +2382,7 @@ async def get_facturadas_matrix(
     for u in units:
         o = u.shipment_order
         distribuidor = u.empadronamiento_fisico_distribuidor_nombre or "Sin distribuidor"
-        model = u.model or (o.model if o else "Sin modelo")
+        model = (u.model or (o.model if o else "") or "Sin modelo").strip().upper()
 
         if distribuidor not in matrix:
             matrix[distribuidor] = {}
