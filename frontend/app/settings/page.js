@@ -320,6 +320,12 @@ export default function SettingsPage() {
   const [locationCreating, setLocationCreating] = useState(false);
   const [locationDeleting, setLocationDeleting] = useState(null);
 
+  // Moto Observations — observaciones predefinidas
+  const [motoObservations, setMotoObservations] = useState([]);
+  const [newObservationName, setNewObservationName] = useState('');
+  const [observationCreating, setObservationCreating] = useState(false);
+  const [observationDeleting, setObservationDeleting] = useState(null);
+
   // Colores RUNT
   const [confirmDialog, setConfirmDialog] = useState(null);
   const [toast, setToast] = useState(null);
@@ -575,9 +581,17 @@ export default function SettingsPage() {
     } catch (e) { console.error('Error cargando ubicaciones:', e); }
   }, []);
 
+  const fetchMotoObservations = useCallback(async () => {
+    try {
+      const res = await authFetch(`${getApiUrl()}/imports/moto-observations`);
+      if (res.ok) setMotoObservations(await res.json());
+    } catch (e) { console.error('Error cargando observaciones:', e); }
+  }, []);
+
   useEffect(() => { fetchVehicleModels(); }, [fetchVehicleModels]);
   useEffect(() => { fetchColorMappings(); }, [fetchColorMappings]);
   useEffect(() => { fetchMotoLocations(); }, [fetchMotoLocations]);
+  useEffect(() => { fetchMotoObservations(); }, [fetchMotoObservations]);
 
   useEffect(() => {
     authFetch('/parts/admin/vehicle-models')
@@ -1418,6 +1432,75 @@ export default function SettingsPage() {
                 }}
               >
                 <Plus size={13} /> {locationCreating ? 'Guardando...' : 'Agregar'}
+              </button>
+            </div>
+          </section>
+        )}
+
+        {/* Sección: Observaciones predefinidas de Motos */}
+        {userRole === 'superadmin' && (
+          <section className="glass p-6">
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', paddingBottom: '0.75rem', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                <Bike size={16} style={{ color: '#fb923c', flexShrink: 0 }} />
+                <h2 style={{ fontSize: '0.8rem', fontWeight: 700, color: '#fff', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Observaciones de Motocicletas</h2>
+              </div>
+            </div>
+            <p style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.3)', margin: '0 0 1rem', lineHeight: 1.7 }}>
+              Observaciones predefinidas que se pueden asignar a cada motocicleta desde la tabla de Estado Pedidos.
+            </p>
+            {motoObservations.length === 0 ? (
+              <p style={{ color: '#606075', fontSize: '12px', margin: '0 0 1rem' }}>No hay observaciones cargadas.</p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '1rem' }}>
+                {motoObservations.map(obs => (
+                  <div key={obs.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', borderRadius: '8px', background: 'rgba(251,146,60,0.06)', border: '1px solid rgba(251,146,60,0.15)' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 700, color: '#fb923c' }}>{obs.name}</span>
+                    <button
+                      onClick={async () => {
+                        if (!confirm(`¿Eliminar la observación "${obs.name}"? Las motos asignadas quedarán sin observación.`)) return;
+                        setObservationDeleting(obs.id);
+                        try {
+                          const res = await authFetch(`${getApiUrl()}/imports/moto-observations/${obs.id}`, { method: 'DELETE' });
+                          if (res.ok || res.status === 204) setMotoObservations(prev => prev.filter(o => o.id !== obs.id));
+                          else { const err = await res.json().catch(() => ({})); alert(err.detail || 'Error al eliminar.'); }
+                        } catch { alert('Error de conexión.'); }
+                        finally { setObservationDeleting(null); }
+                      }}
+                      disabled={observationDeleting === obs.id}
+                      style={{ padding: '3px 8px', borderRadius: '6px', border: 'none', background: 'rgba(248,113,113,0.1)', color: '#f87171', cursor: observationDeleting === obs.id ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', opacity: observationDeleting === obs.id ? 0.5 : 1 }}
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <input
+                value={newObservationName}
+                onChange={e => setNewObservationName(e.target.value)}
+                placeholder="Ej: DOCUMENTACIÓN INCOMPLETA"
+                style={{ padding: '7px 12px', borderRadius: '8px', fontSize: '12px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', outline: 'none', minWidth: '240px' }}
+                onFocus={e => e.target.style.borderColor = '#fb923c'}
+                onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.1)'}
+              />
+              <button
+                onClick={async () => {
+                  const name = newObservationName.trim();
+                  if (!name) return;
+                  setObservationCreating(true);
+                  try {
+                    const res = await authFetch(`${getApiUrl()}/imports/moto-observations`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });
+                    if (res.ok) { const data = await res.json(); setMotoObservations(prev => [...prev, data].sort((a, b) => a.name.localeCompare(b.name))); setNewObservationName(''); }
+                    else { const err = await res.json().catch(() => ({})); alert(err.detail || 'Error al crear la observación.'); }
+                  } catch { alert('Error de conexión.'); }
+                  finally { setObservationCreating(false); }
+                }}
+                disabled={observationCreating || !newObservationName.trim()}
+                style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '7px 14px', borderRadius: '8px', border: 'none', background: observationCreating || !newObservationName.trim() ? 'rgba(251,146,60,0.08)' : 'rgba(251,146,60,0.18)', color: observationCreating || !newObservationName.trim() ? '#606075' : '#fb923c', fontSize: '12px', fontWeight: 700, cursor: observationCreating || !newObservationName.trim() ? 'not-allowed' : 'pointer', letterSpacing: '0.04em' }}
+              >
+                <Plus size={13} /> {observationCreating ? 'Guardando...' : 'Agregar'}
               </button>
             </div>
           </section>

@@ -533,7 +533,9 @@ export default function MotocicletasTab({ userRole }) {
 
   // Ubicaciones / bodegas
   const [locations, setLocations] = useState([]);
-  const [locationSaving, setLocationSaving] = useState(null); // id de la unidad en proceso
+  const [locationSaving, setLocationSaving] = useState(null);
+  // Observaciones predefinidas
+  const [observations, setObservations] = useState([]);
 
   const PAGE_SIZE = 50;
   const [exportingMotos, setExportingMotos] = useState(false);
@@ -594,7 +596,15 @@ export default function MotocicletasTab({ userRole }) {
     } catch { setLocations([]); }
   }, []);
 
-  useEffect(() => { fetchUnits(); fetchLocations(); }, [fetchUnits, fetchLocations]);
+  const fetchObservations = useCallback(async () => {
+    try {
+      const res = await authFetch(`${getApiUrl()}/imports/moto-observations`);
+      const data = await res.json();
+      setObservations(Array.isArray(data) ? data : []);
+    } catch { setObservations([]); }
+  }, []);
+
+  useEffect(() => { fetchUnits(); fetchLocations(); fetchObservations(); }, [fetchUnits, fetchLocations, fetchObservations]);
 
   const handleDimUpload = async (file) => {
     setDimUploading(true);
@@ -912,7 +922,7 @@ export default function MotocicletasTab({ userRole }) {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
             <thead>
               <tr style={{ background: '#0e0e14' }}>
-                {['PI Number', 'Modelo', 'VIN', 'Motor No.', 'Color RUNT', 'Año Modelo', 'No. Levante', 'Ubicación', 'Empadronamiento', 'Gestión Distribuidor', 'Acciones'].map(h => (
+                {['PI Number', 'Modelo', 'VIN', 'Motor No.', 'Color RUNT', 'Año Modelo', 'No. Levante', 'Ubicación', 'Observación', 'Empadronamiento', 'Gestión Distribuidor', 'Acciones'].map(h => (
                   <th
                     key={h}
                     style={{
@@ -991,6 +1001,32 @@ export default function MotocicletasTab({ userRole }) {
                     >
                       <option value="">— Sin ubicación —</option>
                       {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                    </select>
+                  </td>
+                  <td style={{ padding: '9px 12px' }}>
+                    <select
+                      value={unit.observation_id || ''}
+                      onChange={async (e) => {
+                        const obsId = e.target.value || null;
+                        const res = await authFetch(`${getApiUrl()}/imports/moto-units/${unit.id}`, {
+                          method: 'PATCH',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ observation_id: obsId }),
+                        });
+                        if (res.ok) {
+                          const data = await res.json();
+                          setUnits(prev => prev.map(u => u.id === unit.id ? { ...u, observation_id: data.observation_id, observation_name: data.observation_name } : u));
+                        }
+                      }}
+                      style={{
+                        background: unit.observation_id ? 'rgba(251,146,60,0.1)' : '#1a1a24',
+                        border: `1px solid ${unit.observation_id ? 'rgba(251,146,60,0.3)' : 'rgba(255,255,255,0.08)'}`,
+                        borderRadius: '6px', color: unit.observation_id ? '#fb923c' : '#606075',
+                        fontSize: '11px', fontWeight: 700, padding: '4px 8px', outline: 'none', cursor: 'pointer', maxWidth: '160px',
+                      }}
+                    >
+                      <option value="">— Sin observación —</option>
+                      {observations.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
                     </select>
                   </td>
                   <td style={{ padding: '9px 12px', whiteSpace: 'nowrap' }}>

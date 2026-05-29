@@ -83,6 +83,17 @@ class MotoLocation(Base):
 
 
 # ---------------------------------------------------------------------------
+# Moto Observations — observaciones predefinidas para motos
+# ---------------------------------------------------------------------------
+class MotoObservation(Base):
+    __tablename__ = "moto_observations"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String(200), nullable=False, unique=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    moto_units = relationship("ShipmentMotoUnit", back_populates="observation")
+
+
+# ---------------------------------------------------------------------------
 # Shipment Moto Units — VINs individuales por pedido
 # ---------------------------------------------------------------------------
 class ShipmentMotoUnit(Base):
@@ -133,11 +144,13 @@ class ShipmentMotoUnit(Base):
 
     # Ubicación / bodega donde está la moto
     location_id = Column(UUID(as_uuid=True), ForeignKey("moto_locations.id", ondelete="SET NULL"), nullable=True)
+    observation_id = Column(UUID(as_uuid=True), ForeignKey("moto_observations.id", ondelete="SET NULL"), nullable=True)
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     shipment_order = relationship("ShipmentOrder", back_populates="moto_units")
     location = relationship("MotoLocation", back_populates="moto_units")
+    observation = relationship("MotoObservation", back_populates="moto_units")
 
 
 # ---------------------------------------------------------------------------

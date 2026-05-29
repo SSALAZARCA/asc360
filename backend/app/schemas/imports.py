@@ -16,6 +16,15 @@ class MotoLocationRead(BaseModel):
     name: str
     created_at: datetime
 
+class MotoObservationCreate(BaseModel):
+    name: str
+
+class MotoObservationRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    name: str
+    created_at: datetime
+
 
 # ---------------------------------------------------------------------------
 # Moto Units
@@ -29,6 +38,7 @@ class MotoUnitUpdate(BaseModel):
     empadronamiento_fisico_enviado: Optional[bool] = None
     empadronamiento_fisico_distribuidor_id: Optional[uuid.UUID] = None
     location_id: Optional[uuid.UUID] = None
+    observation_id: Optional[uuid.UUID] = None
     facturado: Optional[bool] = None
     cargado_runt: Optional[bool] = None
 
@@ -62,6 +72,8 @@ class MotoUnitRead(BaseModel):
     empadronamiento_fisico_distribuidor_nombre: Optional[str] = None
     facturado: bool = False
     cargado_runt: bool = False
+    observation_id: Optional[uuid.UUID] = None
+    observation_name: Optional[str] = None
     # DIM PDF
     dim_pdf_object_name: Optional[str] = None
     # Ubicación / bodega

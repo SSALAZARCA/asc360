@@ -14,7 +14,7 @@ from starlette.responses import StreamingResponse
 
 from app.database import get_db
 from app.api.deps import get_current_user, CurrentUser
-from app.models.imports import ShipmentOrder, SparePartLot, ShipmentMotoUnit, ImportAttachment, SparePartItem, ReconciliationResult, Backorder, VehicleModel, MotoLocation
+from app.models.imports import ShipmentOrder, SparePartLot, ShipmentMotoUnit, ImportAttachment, SparePartItem, ReconciliationResult, Backorder, VehicleModel, MotoLocation, MotoObservation
 from app.models.tenant import Tenant, EstadoRed
 from app.schemas.imports import (
     ShipmentOrderRead, ShipmentOrderCreate, ShipmentOrderUpdate, ShipmentOrderListResponse,
@@ -23,6 +23,7 @@ from app.schemas.imports import (
     ReconciliationResultRead, ReconciliationResultUpdate, BackorderRead, BackorderUpdate,
     BackorderBulkUpdatePI, BackorderBulkRollbackRequest, PhysicalInspectionApplyPayload,
     MotoLocationCreate, MotoLocationRead,
+    MotoObservationCreate, MotoObservationRead,
 )
 from app.services import imports_service
 from app.services.imports_service import compute_status
@@ -1981,6 +1982,7 @@ async def list_all_moto_units(
         .options(
             selectinload(ShipmentMotoUnit.shipment_order),
             selectinload(ShipmentMotoUnit.location),
+            selectinload(ShipmentMotoUnit.observation),
         )
         .order_by(ShipmentMotoUnit.created_at.desc())
         .offset(skip)
@@ -2074,6 +2076,7 @@ async def export_moto_units(
         .options(
             selectinload(ShipmentMotoUnit.shipment_order),
             selectinload(ShipmentMotoUnit.location),
+            selectinload(ShipmentMotoUnit.observation),
         )
         .order_by(ShipmentMotoUnit.created_at.desc())
     )
@@ -2082,7 +2085,7 @@ async def export_moto_units(
     headers = [
         "PI NUMBER", "MODELO", "AÑO MODELO", "VIN", "No. MOTOR",
         "COLOR", "COLOR RUNT", "No. LEVANTE",
-        "UBICACIÓN",
+        "UBICACIÓN", "OBSERVACIÓN",
         "EMPADRONADO", "FECHA EMPADRONAMIENTO",
         "EMPADR. FÍSICO ENVIADO", "FECHA EMPADR. FÍSICO", "DISTRIBUIDOR",
         "FACTURADO", "CARGADO RUNT",
@@ -2101,6 +2104,7 @@ async def export_moto_units(
             u.color_runt,
             u.no_lev,
             u.location.name if u.location else None,
+            u.observation.name if u.observation else None,
             "Sí" if u.certificado_generado else "No",
             u.certificado_fecha.strftime("%Y-%m-%d") if u.certificado_fecha else None,
             "Sí" if u.empadronamiento_fisico_enviado else "No",
@@ -2132,14 +2136,15 @@ async def update_moto_unit(
     unit = (await db.execute(
         select(ShipmentMotoUnit)
         .where(ShipmentMotoUnit.id == unit_id)
-        .options(selectinload(ShipmentMotoUnit.location))
+        .options(selectinload(ShipmentMotoUnit.location), selectinload(ShipmentMotoUnit.observation))
     )).scalar_one_or_none()
     if not unit:
         raise HTTPException(status_code=404, detail="Unidad no encontrada")
     update_data = payload.model_dump(exclude_unset=True)
 
     distribuidor_id = update_data.pop("empadronamiento_fisico_distribuidor_id", None)
-    location_id = update_data.pop("location_id", ...)  # sentinel: ... means not provided
+    location_id = update_data.pop("location_id", ...)
+    observation_id = update_data.pop("observation_id", ...)
 
     for field, value in update_data.items():
         setattr(unit, field, value)
@@ -2161,12 +2166,14 @@ async def update_moto_unit(
         unit.empadronamiento_fisico_distribuidor_id = None
         unit.empadronamiento_fisico_distribuidor_nombre = None
 
-    # Si se provee location_id (incluyendo None para desasignar), actualizar
     if location_id is not ...:
         unit.location_id = location_id
 
+    if observation_id is not ...:
+        unit.observation_id = observation_id
+
     await db.commit()
-    await db.refresh(unit, ['location'])
+    await db.refresh(unit, ['location', 'observation'])
     return {
         "id": str(unit.id),
         "model": unit.model,
@@ -2180,6 +2187,8 @@ async def update_moto_unit(
         "empadronamiento_fisico_distribuidor_nombre": unit.empadronamiento_fisico_distribuidor_nombre,
         "location_id": str(unit.location_id) if unit.location_id else None,
         "location_name": unit.location.name if unit.location else None,
+        "observation_id": str(unit.observation_id) if unit.observation_id else None,
+        "observation_name": unit.observation.name if unit.observation else None,
         "facturado": unit.facturado,
         "cargado_runt": unit.cargado_runt,
     }
@@ -2229,6 +2238,50 @@ async def delete_moto_location(
     if not location:
         raise HTTPException(status_code=404, detail="Ubicación no encontrada")
     await db.delete(location)
+    await db.commit()
+
+
+# ---------------------------------------------------------------------------
+# CRUD /moto-observations — observaciones predefinidas para motos
+# ---------------------------------------------------------------------------
+
+@router.get("/moto-observations", response_model=list[MotoObservationRead])
+async def list_moto_observations(
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    result = await db.execute(select(MotoObservation).order_by(MotoObservation.name))
+    return result.scalars().all()
+
+
+@router.post("/moto-observations", response_model=MotoObservationRead, status_code=201)
+async def create_moto_observation(
+    payload: MotoObservationCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    _require_superadmin(current_user)
+    existing = (await db.execute(select(MotoObservation).where(MotoObservation.name == payload.name.strip()))).scalar_one_or_none()
+    if existing:
+        raise HTTPException(status_code=409, detail=f"Ya existe una observación con el nombre '{payload.name}'")
+    obs = MotoObservation(name=payload.name.strip().upper())
+    db.add(obs)
+    await db.commit()
+    await db.refresh(obs)
+    return MotoObservationRead.model_validate(obs)
+
+
+@router.delete("/moto-observations/{observation_id}", status_code=204)
+async def delete_moto_observation(
+    observation_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    _require_superadmin(current_user)
+    obs = await db.get(MotoObservation, observation_id)
+    if not obs:
+        raise HTTPException(status_code=404, detail="Observación no encontrada")
+    await db.delete(obs)
     await db.commit()
 
 
