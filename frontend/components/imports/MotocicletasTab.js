@@ -60,26 +60,24 @@ function ErrorModal({ message, onClose }) {
 function CertBadge({ generated }) {
   if (generated) {
     return (
-      <span style={{
-        display: 'inline-flex', alignItems: 'center', gap: '4px',
-        fontSize: '9px', fontWeight: 700, letterSpacing: '0.05em',
-        padding: '2px 8px', borderRadius: '20px',
+      <span title="Empadronado" style={{
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        width: 24, height: 24, borderRadius: '50%',
         background: 'rgba(34,197,94,0.1)', color: '#22c55e',
-        border: '1px solid rgba(34,197,94,0.25)', whiteSpace: 'nowrap',
+        border: '1px solid rgba(34,197,94,0.25)',
       }}>
-        <CheckCircle size={9} /> EMPADRONADO
+        <CheckCircle size={13} />
       </span>
     );
   }
   return (
-    <span style={{
-      display: 'inline-flex', alignItems: 'center', gap: '4px',
-      fontSize: '9px', fontWeight: 700, letterSpacing: '0.05em',
-      padding: '2px 8px', borderRadius: '20px',
-      background: 'rgba(96,96,117,0.15)', color: '#606075',
-      border: '1px solid rgba(96,96,117,0.25)', whiteSpace: 'nowrap',
+    <span title="Pendiente de empadronamiento" style={{
+      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+      width: 24, height: 24, borderRadius: '50%',
+      background: 'rgba(96,96,117,0.1)', color: '#404050',
+      border: '1px solid rgba(96,96,117,0.2)',
     }}>
-      <Clock size={9} /> PENDIENTE
+      <Clock size={13} />
     </span>
   );
 }
@@ -1052,36 +1050,28 @@ export default function MotocicletasTab({ userRole }) {
                             ? `Enviado${unit.empadronamiento_fisico_fecha ? ' el ' + new Date(unit.empadronamiento_fisico_fecha).toLocaleDateString('es-CO') : ''}${unit.empadronamiento_fisico_distribuidor_nombre ? ' a ' + unit.empadronamiento_fisico_distribuidor_nombre : ''} — click para desmarcar`
                             : 'Seleccionar distribuidor y marcar como enviado'}
                           style={{
-                            display: 'inline-flex', alignItems: 'center', gap: '5px',
-                            padding: '3px 10px', borderRadius: '20px', border: 'none',
+                            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                            width: 24, height: 24, borderRadius: '50%', border: 'none',
                             cursor: toggling === unit.id ? 'not-allowed' : 'pointer',
-                            fontSize: '9px', fontWeight: 700, letterSpacing: '0.04em',
-                            transition: 'all 0.15s', whiteSpace: 'nowrap',
+                            transition: 'all 0.15s',
                             ...(unit.empadronamiento_fisico_enviado
-                              ? { background: 'rgba(34,197,94,0.12)', color: '#22c55e', border: '1px solid rgba(34,197,94,0.3)' }
-                              : { background: 'rgba(96,96,117,0.12)', color: '#606075', border: '1px solid rgba(96,96,117,0.25)' }
+                              ? { background: 'rgba(34,197,94,0.12)', color: '#22c55e', outline: '1px solid rgba(34,197,94,0.3)' }
+                              : { background: 'rgba(96,96,117,0.12)', color: '#606075', outline: '1px solid rgba(96,96,117,0.25)' }
                             ),
                           }}
                         >
-                          {toggling === unit.id
-                            ? '...'
-                            : unit.empadronamiento_fisico_enviado
-                              ? <><Send size={9} /> ENVIADO</>
-                              : <><Send size={9} /> PENDIENTE</>
-                          }
+                          {toggling === unit.id ? '·' : <Send size={13} />}
                         </button>
                       ) : (
-                        <span style={{
-                          display: 'inline-flex', alignItems: 'center', gap: '4px',
-                          fontSize: '9px', fontWeight: 700, padding: '2px 8px', borderRadius: '20px',
-                          whiteSpace: 'nowrap',
+                        <span title={unit.empadronamiento_fisico_enviado ? 'Enviado' : 'Pendiente de envío'} style={{
+                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                          width: 24, height: 24, borderRadius: '50%',
                           ...(unit.empadronamiento_fisico_enviado
                             ? { background: 'rgba(34,197,94,0.1)', color: '#22c55e', border: '1px solid rgba(34,197,94,0.25)' }
-                            : { background: 'rgba(96,96,117,0.1)', color: '#606075', border: '1px solid rgba(96,96,117,0.2)' }
+                            : { background: 'rgba(96,96,117,0.1)', color: '#404050', border: '1px solid rgba(96,96,117,0.2)' }
                           ),
                         }}>
-                          <Send size={9} />
-                          {unit.empadronamiento_fisico_enviado ? 'ENVIADO' : 'PENDIENTE'}
+                          <Send size={13} />
                         </span>
                       )}
                       {unit.empadronamiento_fisico_enviado && unit.empadronamiento_fisico_distribuidor_nombre && (
