@@ -268,10 +268,6 @@ export default function ServicesPage() {
   const [sortCol, setSortCol] = useState('tiempo_taller_dias');
   const [sortDir, setSortDir] = useState('desc');
 
-  // Part reference search
-  const [partQuery, setPartQuery] = useState('');
-  const [partResults, setPartResults] = useState(null);
-
   // Modal
   const [selectedOrder, setSelectedOrder] = useState(null);
 
@@ -331,22 +327,6 @@ export default function ServicesPage() {
         : <ArrowDown size={10} style={{ color: '#ff5f33', marginLeft: '3px', flexShrink: 0 }} />)
     : <ChevronsUpDown size={10} style={{ opacity: 0.25, marginLeft: '3px', flexShrink: 0 }} />;
 
-  const handlePartSearch = async (query) => {
-    const trimmed = query.trim();
-    if (trimmed.length < 2) {
-      setPartResults(null);
-      return;
-    }
-    try {
-      const res = await authFetch(`/orders/search/parts?q=${encodeURIComponent(trimmed)}`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      setPartResults(await res.json());
-    } catch (e) {
-      console.error('Error buscando por referencia:', e);
-      setPartResults([]);
-    }
-  };
-
   return (
     <AdminLayout fullWidth>
       <div className="master-page">
@@ -400,68 +380,7 @@ export default function ServicesPage() {
             </select>
           </div>
 
-          <div className="search-bar" style={{ minWidth: '220px', flex: 'none' }}>
-            <Search size={14} className="icon-muted" />
-            <input
-              className="search-input"
-              type="text"
-              placeholder="Buscar referencia de repuesto..."
-              value={partQuery}
-              onChange={e => setPartQuery(e.target.value)}
-              onKeyDown={e => {
-                if (e.key === 'Enter') {
-                  handlePartSearch(partQuery);
-                }
-              }}
-            />
-            {partQuery && (
-              <button
-                onClick={() => { setPartQuery(''); setPartResults(null); }}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.4)', display: 'flex', alignItems: 'center', padding: 0 }}
-                title="Limpiar búsqueda"
-              >
-                <X size={13} />
-              </button>
-            )}
-          </div>
         </div>
-
-        {/* Part Reference Search Results */}
-        {partResults !== null && (
-          <div className="part-results-panel">
-            <div className="part-results-label">
-              Resultados para &ldquo;{partQuery}&rdquo; &mdash; {partResults.length} {partResults.length === 1 ? 'orden encontrada' : 'órdenes encontradas'}
-            </div>
-            {partResults.length === 0 ? (
-              <p className="part-results-empty">No se encontraron órdenes con esa referencia.</p>
-            ) : (
-              <div className="part-results-list">
-                {partResults.map(r => {
-                  const st = STATES[r.status] || { name: r.status, color: '#888' };
-                  return (
-                    <div key={r.order_id} className="part-result-card">
-                      <div className="part-result-header">
-                        <span className="part-result-plate">{r.vehicle_plate || '-'}</span>
-                        <span className="badge-state" style={{ color: st.color, background: `${st.color}20`, fontSize: '0.58rem' }}>
-                          {st.icon && <st.icon size={11} style={{ marginRight: 3 }} />}{st.name}
-                        </span>
-                        <span className="part-result-meta">{fmtDate(r.created_at)}</span>
-                        {r.client_name && <span className="part-result-client">{r.client_name}</span>}
-                      </div>
-                      <div className="part-result-parts">
-                        {r.matched_parts.map((p, i) => (
-                          <span key={i} className="part-pill">
-                            {p.reference} (x{p.qty}) &mdash; {p.status}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        )}
 
         {/* Tabla Full Surface */}
         <div className="table-container">
@@ -625,19 +544,6 @@ export default function ServicesPage() {
         .mhistory-item:nth-child(even) { border-left-color: rgba(255,255,255,0.05); }
         .mhistory-item:nth-child(odd)  { border-left-color: #3b82f6; }
         .mhistory-line { display:flex; align-items:center; gap:0.4rem; flex-wrap:wrap; }
-
-        /* ── Part Reference Search Results ── */
-        .part-results-panel { background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:1rem; margin-bottom:0.75rem; flex-shrink:0; }
-        .part-results-label { font-size:0.58rem; font-weight:800; text-transform:uppercase; letter-spacing:0.1em; color:rgba(255,255,255,0.4); margin-bottom:0.75rem; }
-        .part-results-empty { font-size:0.7rem; color:rgba(255,255,255,0.3); margin:0; padding:0.5rem 0; }
-        .part-results-list { display:flex; flex-direction:column; gap:0.5rem; }
-        .part-result-card { background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.07); border-radius:10px; padding:0.75rem 1rem; }
-        .part-result-header { display:flex; align-items:center; gap:0.6rem; flex-wrap:wrap; margin-bottom:0.5rem; }
-        .part-result-plate { font-size:0.9rem; font-weight:900; color:#ff8c5a; letter-spacing:0.04em; }
-        .part-result-meta { font-size:0.58rem; color:rgba(255,255,255,0.3); }
-        .part-result-client { font-size:0.62rem; color:rgba(255,255,255,0.55); font-weight:600; margin-left:auto; }
-        .part-result-parts { display:flex; flex-wrap:wrap; gap:0.4rem; }
-        .part-pill { font-size:0.58rem; font-weight:700; background:rgba(59,130,246,0.12); border:1px solid rgba(59,130,246,0.25); color:#93c5fd; border-radius:6px; padding:2px 8px; letter-spacing:0.02em; }
       `}</style>
     </AdminLayout>
   );

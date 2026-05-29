@@ -610,6 +610,8 @@ export default function SparePartsTab({ userRole }) {
   const [loading, setLoading] = useState(true);
   const [filterLoaded, setFilterLoaded] = useState('');
   const [filterBL, setFilterBL] = useState(false);
+  const [partSearch, setPartSearch] = useState('');
+  const [partSearchResults, setPartSearchResults] = useState(null);
   const [lotStats, setLotStats] = useState({ unique_refs: null, declared_refs: null });
   const [reconcileLot, setReconcileLot] = useState(null);
   const [resetting, setResetting] = useState(false);
@@ -698,6 +700,18 @@ export default function SparePartsTab({ userRole }) {
 
   useEffect(() => { fetchLots(); fetchStats(); }, [fetchLots, fetchStats]);
 
+  const handlePartSearch = async (q) => {
+    const trimmed = q.trim();
+    if (trimmed.length < 2) { setPartSearchResults(null); return; }
+    try {
+      const res = await authFetch(`${getApiUrl()}/imports/spare-parts/search?q=${encodeURIComponent(trimmed)}`);
+      if (!res.ok) throw new Error();
+      setPartSearchResults(await res.json());
+    } catch {
+      setPartSearchResults([]);
+    }
+  };
+
   // Totales del header
   const totalLots = lots.length;
   const totalItems = lots.reduce((acc, l) => acc + l.items_count, 0);
@@ -745,6 +759,22 @@ export default function SparePartsTab({ userRole }) {
         <button onClick={fetchLots} style={{ padding: '7px 9px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)', cursor: 'pointer', color: '#9ca3af' }}>
           <RefreshCw size={13} />
         </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 10px', borderRadius: '8px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)', minWidth: '220px' }}>
+          <Search size={13} style={{ color: '#606075', flexShrink: 0 }} />
+          <input
+            type="text"
+            value={partSearch}
+            onChange={e => setPartSearch(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') handlePartSearch(partSearch); }}
+            placeholder="Buscar referencia en pedidos..."
+            style={{ background: 'none', border: 'none', outline: 'none', color: '#fff', fontSize: '11px', width: '100%' }}
+          />
+          {partSearch && (
+            <button onClick={() => { setPartSearch(''); setPartSearchResults(null); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#606075', padding: 0, display: 'flex' }}>
+              <XCircle size={13} />
+            </button>
+          )}
+        </div>
 
         {/* Exportar Excel (solo superadmin) */}
         {userRole === 'superadmin' && (
@@ -795,6 +825,39 @@ export default function SparePartsTab({ userRole }) {
           </button>
         )}
       </div>
+
+      {/* Resultados de búsqueda por referencia */}
+      {partSearchResults !== null && (
+        <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', padding: '14px 16px' }}>
+          <p style={{ margin: '0 0 10px', fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#606075' }}>
+            Resultados para &ldquo;{partSearch}&rdquo; — {partSearchResults.length} {partSearchResults.length === 1 ? 'pedido encontrado' : 'pedidos encontrados'}
+          </p>
+          {partSearchResults.length === 0 ? (
+            <p style={{ margin: 0, fontSize: '12px', color: '#606075' }}>No se encontró esa referencia en ningún pedido.</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {partSearchResults.map(lot => (
+                <div key={lot.lot_id} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: '10px', padding: '10px 14px' }}>
+                  <p style={{ margin: '0 0 8px', fontSize: '12px', fontWeight: 800, color: '#60a5fa' }}>{lot.lot_identifier}</p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    {lot.items.map((item, i) => {
+                      const s = ITEM_STATUS[item.status] || { label: item.status, color: '#9ca3af', bg: 'rgba(156,163,175,0.12)', border: 'rgba(156,163,175,0.3)' };
+                      return (
+                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '11px' }}>
+                          <span style={{ fontWeight: 700, color: '#fff', fontFamily: 'monospace' }}>{item.part_number}</span>
+                          {item.description_es && <span style={{ color: '#9ca3af' }}>{item.description_es}</span>}
+                          <span style={{ marginLeft: 'auto', whiteSpace: 'nowrap', color: '#606075' }}>Ped: {item.qty_ordered} · Rec: {item.qty_received}</span>
+                          <span style={{ padding: '2px 8px', borderRadius: '6px', fontSize: '10px', fontWeight: 700, background: s.bg, color: s.color, border: `1px solid ${s.border}` }}>{s.label}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Lista de lotes */}
       {loading ? (

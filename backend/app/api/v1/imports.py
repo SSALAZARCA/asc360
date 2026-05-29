@@ -788,6 +788,45 @@ async def get_spare_part_lots_stats(
     return {"unique_refs": unique_refs, "declared_refs": declared_refs}
 
 
+@router.get("/spare-parts/search")
+async def search_spare_parts(
+    q: str = "",
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    _require_imports_editor(current_user)
+
+    if not q or len(q.strip()) < 2:
+        raise HTTPException(status_code=422, detail="Ingresá al menos 2 caracteres")
+
+    stmt = (
+        select(SparePartItem, SparePartLot)
+        .join(SparePartLot, SparePartItem.lot_id == SparePartLot.id)
+        .where(SparePartItem.part_number.ilike(f"%{q.strip()}%"))
+        .order_by(SparePartLot.lot_identifier, SparePartItem.part_number)
+    )
+    rows = (await db.execute(stmt)).all()
+
+    lots_map: dict = {}
+    for item, lot in rows:
+        lid = str(lot.id)
+        if lid not in lots_map:
+            lots_map[lid] = {
+                "lot_id": lid,
+                "lot_identifier": lot.lot_identifier,
+                "items": [],
+            }
+        lots_map[lid]["items"].append({
+            "part_number": item.part_number,
+            "description_es": item.description_es,
+            "qty_ordered": item.qty_ordered,
+            "qty_received": item.qty_received,
+            "status": item.status,
+        })
+
+    return list(lots_map.values())
+
+
 @router.get("/spare-part-lots/{lot_id}/items", response_model=list[SparePartItemRead])
 async def list_spare_part_items(
     lot_id: uuid.UUID,
