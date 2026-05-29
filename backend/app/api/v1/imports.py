@@ -712,7 +712,7 @@ async def list_spare_part_lots(
     result = []
     for lot in lots:
         read = SparePartLotRead.model_validate(lot)
-        read.items_count = len(lot.items)
+        read.items_count = len({i.part_number for i in lot.items})
         if lot.items:
             total_ordered = sum(i.qty_ordered for i in lot.items)
             total_received = sum(i.qty_received for i in lot.items)
