@@ -2094,7 +2094,7 @@ async def export_moto_units(
         "EMPADRONADO", "FECHA EMPADRONAMIENTO",
         "EMPADR. FÍSICO ENVIADO", "FECHA EMPADR. FÍSICO", "DISTRIBUIDOR",
         "FACTURADO", "CARGADO RUNT",
-        "DIM CARGADO", "ITEM No.",
+        "DIM CARGADO",
     ]
     rows = []
     for u in units:
@@ -2119,7 +2119,6 @@ async def export_moto_units(
             "Sí" if u.facturado else "No",
             "Sí" if u.cargado_runt else "No",
             "Sí" if u.dim_pdf_object_name else "No",
-            u.item_no,
         ])
 
     filename = f"motocicletas_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.xlsx"
