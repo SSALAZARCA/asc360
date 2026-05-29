@@ -2354,6 +2354,56 @@ async def get_disponibles_matrix(
 
 
 # ---------------------------------------------------------------------------
+# GET /moto-units/facturadas-matrix — motos facturadas por distribuidor y modelo
+# ---------------------------------------------------------------------------
+
+@router.get("/moto-units/facturadas-matrix")
+async def get_facturadas_matrix(
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    _require_imports_editor(current_user)
+
+    stmt = (
+        select(ShipmentMotoUnit)
+        .join(ShipmentOrder, ShipmentMotoUnit.shipment_order_id == ShipmentOrder.id)
+        .where(
+            ShipmentOrder.is_spare_part == False,
+            ShipmentMotoUnit.facturado == True,
+        )
+        .options(selectinload(ShipmentMotoUnit.shipment_order))
+    )
+    units = (await db.execute(stmt)).scalars().all()
+
+    from collections import defaultdict
+    # distribuidor → model → count
+    matrix: dict = {}
+
+    for u in units:
+        o = u.shipment_order
+        distribuidor = u.empadronamiento_fisico_distribuidor_nombre or "Sin distribuidor"
+        model = u.model or (o.model if o else "Sin modelo")
+
+        if distribuidor not in matrix:
+            matrix[distribuidor] = {}
+        matrix[distribuidor][model] = matrix[distribuidor].get(model, 0) + 1
+
+    result = []
+    for dist, models in sorted(matrix.items()):
+        total = sum(models.values())
+        result.append({
+            "distribuidor": dist,
+            "total": total,
+            "by_model": sorted(
+                [{"model": m, "count": c} for m, c in models.items()],
+                key=lambda x: -x["count"]
+            ),
+        })
+
+    return sorted(result, key=lambda x: -x["total"])
+
+
+# ---------------------------------------------------------------------------
 # GET /distribuidores-venta — tenants con venta de motos activos
 # ---------------------------------------------------------------------------
 

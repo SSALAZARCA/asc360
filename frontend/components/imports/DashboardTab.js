@@ -332,6 +332,71 @@ const FILTER_OPTS = [
   { key: 'repuestos', label: 'Repuestos',  param: true  },
 ];
 
+function FacturadasMatrix() {
+  const [matrix, setMatrix] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetch = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await authFetch(`${getApiUrl()}/imports/moto-units/facturadas-matrix`);
+      if (res.ok) setMatrix(await res.json());
+    } catch { setMatrix([]); }
+    finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { fetch(); }, [fetch]);
+
+  const allModels = useMemo(() => {
+    const s = new Set();
+    matrix.forEach(r => r.by_model.forEach(m => s.add(m.model)));
+    return [...s].sort();
+  }, [matrix]);
+
+  if (loading) return <p style={{ color: '#606075', fontSize: '12px', margin: '16px 0' }}>Cargando facturación...</p>;
+  if (!matrix.length) return <p style={{ color: '#606075', fontSize: '12px', margin: '16px 0' }}>Sin motos facturadas.</p>;
+
+  return (
+    <div style={{ overflowX: 'auto' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
+        <thead>
+          <tr style={{ background: 'rgba(255,255,255,0.02)' }}>
+            <th style={{ padding: '8px 12px', textAlign: 'left', color: '#606075', fontWeight: 700, fontSize: '9px', textTransform: 'uppercase', letterSpacing: '0.07em', borderBottom: '1px solid rgba(255,255,255,0.06)', whiteSpace: 'nowrap' }}>Distribuidor</th>
+            <th style={{ padding: '8px 12px', textAlign: 'center', color: '#22c55e', fontWeight: 700, fontSize: '9px', textTransform: 'uppercase', letterSpacing: '0.07em', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>Total</th>
+            {allModels.map(m => (
+              <th key={m} style={{ padding: '8px 12px', textAlign: 'center', color: '#60a5fa', fontWeight: 700, fontSize: '9px', textTransform: 'uppercase', letterSpacing: '0.07em', borderBottom: '1px solid rgba(255,255,255,0.06)', whiteSpace: 'nowrap' }}>{m}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {matrix.map(row => {
+            const modelMap = Object.fromEntries(row.by_model.map(m => [m.model, m.count]));
+            return (
+              <tr key={row.distribuidor} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}
+                onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+              >
+                <td style={{ padding: '10px 12px', color: '#e2e8f0', fontWeight: 700, whiteSpace: 'nowrap' }}>{row.distribuidor}</td>
+                <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                  <span style={{ fontSize: '14px', fontWeight: 800, color: '#22c55e' }}>{row.total}</span>
+                </td>
+                {allModels.map(m => (
+                  <td key={m} style={{ padding: '10px 12px', textAlign: 'center' }}>
+                    {modelMap[m]
+                      ? <span style={{ fontSize: '13px', fontWeight: 800, color: '#60a5fa' }}>{modelMap[m]}</span>
+                      : <span style={{ color: '#2a2a3a' }}>—</span>
+                    }
+                  </td>
+                ))}
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function DisponiblesMatrix() {
   const [matrix, setMatrix] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -532,7 +597,16 @@ export default function DashboardTab() {
         <DisponiblesMatrix />
       </div>
 
-      {/* Row 4: Próximas ETAs */}
+      {/* Row 4: Motos facturadas por distribuidor y modelo */}
+      <div style={{ padding: '18px', borderRadius: '12px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+          <TrendingUp size={14} color="#22c55e" />
+          <h3 style={{ margin: 0, fontSize: '11px', fontWeight: 700, color: '#fff', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Facturadas por distribuidor y modelo</h3>
+        </div>
+        <FacturadasMatrix />
+      </div>
+
+      {/* Row 5: Próximas ETAs */}
       <div style={{ padding: '18px', borderRadius: '12px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
           <Ship size={14} color="#ff5f33" />
