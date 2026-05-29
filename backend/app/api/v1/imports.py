@@ -2025,7 +2025,7 @@ async def list_all_moto_units(
             "created_at": u.created_at.isoformat(),
             # Fields from the related order
             "pi_number": o.pi_number if o else None,
-            "model": ((u.model or (o.model if o else None)) or "").strip().upper() or None,
+            "model": ' '.join(((u.model or (o.model if o else None)) or "").split()).upper() or None,
             "model_year": u.model_year or (o.model_year if o else None),
         })
 
@@ -2100,7 +2100,7 @@ async def export_moto_units(
         o = u.shipment_order
         rows.append([
             o.pi_number if o else u.source_pi,
-            ((u.model or (o.model if o else None)) or "").strip().upper() or None,
+            ' '.join(((u.model or (o.model if o else None)) or "").split()).upper() or None,
             u.model_year or (o.model_year if o else None),
             u.vin_number,
             u.engine_number,
@@ -2323,9 +2323,9 @@ async def get_disponibles_matrix(
 
     for u in units:
         o = u.shipment_order
-        model = (u.model or (o.model if o else "") or "Sin modelo").strip().upper()
+        model = ' '.join((u.model or (o.model if o else "") or "Sin modelo").split()).upper()
         location = u.location.name if u.location else "Sin ubicación"
-        color = (u.color_runt or u.color or "Sin color").strip().upper()
+        color = ' '.join((u.color_runt or u.color or "Sin color").split()).upper()
 
         if model not in matrix:
             matrix[model] = {}
@@ -2381,7 +2381,7 @@ async def get_facturadas_matrix(
     for u in units:
         o = u.shipment_order
         distribuidor = u.empadronamiento_fisico_distribuidor_nombre or "Sin distribuidor"
-        model = (u.model or (o.model if o else "") or "Sin modelo").strip().upper()
+        model = ' '.join((u.model or (o.model if o else "") or "Sin modelo").split()).upper()
 
         if distribuidor not in matrix:
             matrix[distribuidor] = {}
