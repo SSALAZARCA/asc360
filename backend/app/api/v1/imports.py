@@ -716,6 +716,7 @@ async def list_spare_part_lots(
         if lot.items:
             total_ordered = sum(i.qty_ordered for i in lot.items)
             total_received = sum(i.qty_received for i in lot.items)
+            read.total_qty_ordered = total_ordered
             read.pct_received = round((total_received / total_ordered * 100) if total_ordered > 0 else 0, 1)
 
             read.models = sorted({i.model_applicable for i in lot.items if i.model_applicable})

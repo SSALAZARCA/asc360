@@ -482,10 +482,16 @@ function LotRow({ lot, userRole, onReconcile }) {
           )}
         </div>
 
-        {/* Items count */}
-        <div style={{ textAlign: 'center', minWidth: 60 }}>
-          <p style={{ margin: 0, fontSize: '14px', fontWeight: 800, color: '#fff' }}>{lot.items_count}</p>
-          <p style={{ margin: 0, fontSize: '9px', color: '#606075', fontWeight: 600 }}>ítems</p>
+        {/* Items count + total qty */}
+        <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+          <div style={{ textAlign: 'center', minWidth: 50 }}>
+            <p style={{ margin: 0, fontSize: '14px', fontWeight: 800, color: '#fff' }}>{lot.items_count}</p>
+            <p style={{ margin: 0, fontSize: '9px', color: '#606075', fontWeight: 600 }}>refs</p>
+          </div>
+          <div style={{ textAlign: 'center', minWidth: 50 }}>
+            <p style={{ margin: 0, fontSize: '14px', fontWeight: 800, color: '#e2e8f0' }}>{(lot.total_qty_ordered || 0).toLocaleString()}</p>
+            <p style={{ margin: 0, fontSize: '9px', color: '#606075', fontWeight: 600 }}>unidades</p>
+          </div>
         </div>
 
         {/* % recibido */}
