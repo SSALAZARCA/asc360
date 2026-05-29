@@ -609,7 +609,7 @@ export default function SparePartsTab({ userRole }) {
   const [lots, setLots] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filterLoaded, setFilterLoaded] = useState('');
-  const [filterBL, setFilterBL] = useState(true);
+  const [filterBL, setFilterBL] = useState(false);
   const [lotStats, setLotStats] = useState({ unique_refs: null, declared_refs: null });
   const [reconcileLot, setReconcileLot] = useState(null);
   const [resetting, setResetting] = useState(false);
