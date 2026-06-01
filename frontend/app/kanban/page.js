@@ -482,11 +482,14 @@ function OrderModal({ order, onClose, onOrderAccepted }) {
 
                 {detail.recepcion.damage_photos_urls?.length > 0 && (
                   <div className="mphotos">
-                    {detail.recepcion.damage_photos_urls.map((url, i) => (
-                      <a key={i} href={url} target="_blank" rel="noreferrer" className="mphoto-thumb">
-                        <img src={url} alt={`Foto ${i + 1}`} onError={e => { e.target.style.display = 'none'; }} />
-                      </a>
-                    ))}
+                    {detail.recepcion.damage_photos_urls.filter(u => typeof u === 'string' ? u : u?.url).map((u, i) => {
+                      const href = typeof u === 'string' ? u : u.url;
+                      return (
+                        <a key={i} href={href} target="_blank" rel="noreferrer" className="mphoto-thumb">
+                          <img src={href} alt={`Foto ${i + 1}`} onError={e => { e.target.style.display = 'none'; }} />
+                        </a>
+                      );
+                    })}
                   </div>
                 )}
 
