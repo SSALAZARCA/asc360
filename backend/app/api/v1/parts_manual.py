@@ -1902,7 +1902,8 @@ async def get_coverage(
             FROM spare_part_items spi
             JOIN spare_part_lots spl ON spl.id = spi.lot_id
             JOIN shipment_orders so  ON so.id  = spl.shipment_order_id
-            WHERE spi.qty_physical IS NULL
+            WHERE spi.qty_received > 0
+              AND spi.qty_physical IS NULL
               AND (so.bl_container IS NOT NULL OR spl.packing_list_received = true)
               AND UPPER(TRIM(REPLACE(spi.part_number, ' ', ''))) NOT IN (SELECT pn FROM aqui)
             UNION
