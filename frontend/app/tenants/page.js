@@ -4,6 +4,7 @@ import AdminLayout from '../admin-layout';
 import { Building2, Edit, Save, X, Phone, MapPin, Hash, Plus, Mail, User, Calendar, Wrench, ShoppingCart, Package, Download } from 'lucide-react';
 import { authFetch } from '../../lib/authFetch';
 import { getApiUrl } from '../../lib/api';
+import { toast } from '../../lib/toast';
 
 const NIVEL_CFG = {
   '1S': { color: '#60a5fa', bg: 'rgba(96,165,250,0.12)', border: 'rgba(96,165,250,0.3)' },
@@ -127,8 +128,8 @@ export default function TenantsPage() {
       };
       const res = await authFetch(url, { method, body: JSON.stringify(payload) });
       if (res.ok) { setShowModal(false); fetchTenants(); }
-      else { const err = await res.json(); alert(err.detail || 'Error al guardar'); }
-    } catch (e) { alert('Error de conexión'); }
+      else { const err = await res.json(); toast.error(err.detail || 'Error al guardar'); }
+    } catch (e) { toast.error('Error de conexión'); }
     finally { setSaving(false); }
   };
 

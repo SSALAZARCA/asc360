@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import AdminLayout from '../admin-layout';
 import { UserCheck, UserX, Shield, Briefcase, Mail, Phone, Send, Plus, Users as UsersIcon, Edit, X, Trash2 } from 'lucide-react';
 import { authFetch } from '../../lib/authFetch';
+import { toast } from '../../lib/toast';
 
 export default function UsersPage() {
   const [users, setUsers] = useState([]);
@@ -37,13 +38,13 @@ export default function UsersPage() {
       const res = await authFetch(`/users/${confirmDelete.id}`, { method: 'DELETE' });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        alert(body.detail || `Error ${res.status} al eliminar`);
+        toast.error(body.detail || `Error ${res.status} al eliminar`);
         return;
       }
       setConfirmDelete(null);
       await fetchUsers();
     } catch (e) {
-      alert('Error de conexión al eliminar');
+      toast.error('Error de conexión al eliminar');
     }
   };
 
@@ -55,7 +56,7 @@ export default function UsersPage() {
       });
       fetchUsers();
     } catch (e) {
-      alert("Error al actualizar");
+      toast.error("Error al actualizar");
     }
   };
 
@@ -106,7 +107,7 @@ export default function UsersPage() {
       fetchUsers();
     } catch (e) {
       console.error(e);
-      alert('Error al guardar el usuario');
+      toast.error('Error al guardar el usuario');
     }
   };
 

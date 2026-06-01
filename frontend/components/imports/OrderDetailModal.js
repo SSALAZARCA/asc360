@@ -8,6 +8,7 @@ import {
   X, Upload, Trash2, FileText, FileSpreadsheet, Image,
   File, Download, ChevronRight, Check, Clock, Package, AlertCircle,
 } from 'lucide-react';
+import { toast } from '../../lib/toast';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -210,7 +211,7 @@ function DocsTab({ orderId, userRole }) {
           await authFetch(`${getApiUrl()}/imports/attachments/${id}`, { method: 'DELETE' });
           setAttachments(prev => prev.filter(a => a.id !== id));
         } catch {
-          alert('Error al eliminar adjunto');
+          toast.error('Error al eliminar adjunto');
         }
       },
     });

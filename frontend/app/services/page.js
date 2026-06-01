@@ -11,6 +11,7 @@ import {
 import SoftwayHelperModal from '../../components/SoftwayHelperModal';
 import { authFetch } from '../../lib/authFetch';
 import { getApiUrl } from '../../lib/api';
+import { toast } from '../../lib/toast';
 
 async function downloadPdf(apiUrl, filename) {
   const token = typeof window !== 'undefined' ? sessionStorage.getItem('um_token') : null;
@@ -27,7 +28,7 @@ async function downloadPdf(apiUrl, filename) {
     document.body.removeChild(a);
     URL.revokeObjectURL(objectUrl);
   } catch {
-    alert('No se pudo descargar el PDF. Intentá de nuevo.');
+    toast.error('No se pudo descargar el PDF. Intentá de nuevo.');
   }
 }
 

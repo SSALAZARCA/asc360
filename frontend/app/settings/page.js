@@ -6,6 +6,7 @@ import { UploadCloud, Image as ImageIcon, Save, Trash2, Clock, Bike, Plus, Penci
 import { authFetch } from '../../lib/authFetch';
 import { getApiUrl } from '../../lib/api';
 import ConfirmModal from '../../components/ConfirmModal';
+import { toast } from '../../lib/toast';
 
 // ---------------------------------------------------------------------------
 // Datos estáticos — Matriz de Permisos
@@ -244,7 +245,7 @@ export default function SettingsPage() {
       setCatFiles([]);
       setCatResults([]);
     } catch (e) {
-      alert('Error al limpiar el catálogo.');
+      toast.error('Error al limpiar el catálogo.');
     } finally {
       setCatCleaning(false);
     }
@@ -499,7 +500,7 @@ export default function SettingsPage() {
           await authFetch(`${getApiUrl()}/vehicle-models/${vm.id}`, { method: 'DELETE' });
           fetchVehicleModels();
         } catch (e) {
-          alert('Error al eliminar el modelo.');
+          toast.error('Error al eliminar el modelo.');
         }
       },
     });
@@ -616,7 +617,7 @@ export default function SettingsPage() {
     if (!file) return;
 
     if (file.size > 2 * 1024 * 1024) {
-      alert('El archivo es muy pesado. Máximo 2MB.');
+      toast.error('El archivo es muy pesado. Máximo 2MB.');
       return;
     }
 
@@ -1384,9 +1385,9 @@ export default function SettingsPage() {
                               setMotoLocations(prev => prev.filter(l => l.id !== loc.id));
                             } else {
                               const err = await res.json().catch(() => ({}));
-                              alert(err.detail || 'Error al eliminar la ubicación.');
+                              toast.error(err.detail || 'Error al eliminar la ubicación.');
                             }
-                          } catch { alert('Error de conexión.'); }
+                          } catch { toast.error('Error de conexión.'); }
                           finally { setLocationDeleting(null); }
                         },
                       })}
@@ -1437,9 +1438,9 @@ export default function SettingsPage() {
                       setNewLocationName('');
                     } else {
                       const err = await res.json().catch(() => ({}));
-                      alert(err.detail || 'Error al crear la ubicación.');
+                      toast.error(err.detail || 'Error al crear la ubicación.');
                     }
-                  } catch { alert('Error de conexión.'); }
+                  } catch { toast.error('Error de conexión.'); }
                   finally { setLocationCreating(false); }
                 }}
                 disabled={locationCreating || !newLocationName.trim()}
@@ -1489,8 +1490,8 @@ export default function SettingsPage() {
                           try {
                             const res = await authFetch(`${getApiUrl()}/imports/moto-observations/${obs.id}`, { method: 'DELETE' });
                             if (res.ok || res.status === 204) setMotoObservations(prev => prev.filter(o => o.id !== obs.id));
-                            else { const err = await res.json().catch(() => ({})); alert(err.detail || 'Error al eliminar.'); }
-                          } catch { alert('Error de conexión.'); }
+                            else { const err = await res.json().catch(() => ({})); toast.error(err.detail || 'Error al eliminar.'); }
+                          } catch { toast.error('Error de conexión.'); }
                           finally { setObservationDeleting(null); }
                         },
                       })}
@@ -1520,8 +1521,8 @@ export default function SettingsPage() {
                   try {
                     const res = await authFetch(`${getApiUrl()}/imports/moto-observations`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });
                     if (res.ok) { const data = await res.json(); setMotoObservations(prev => [...prev, data].sort((a, b) => a.name.localeCompare(b.name))); setNewObservationName(''); }
-                    else { const err = await res.json().catch(() => ({})); alert(err.detail || 'Error al crear la observación.'); }
-                  } catch { alert('Error de conexión.'); }
+                    else { const err = await res.json().catch(() => ({})); toast.error(err.detail || 'Error al crear la observación.'); }
+                  } catch { toast.error('Error de conexión.'); }
                   finally { setObservationCreating(false); }
                 }}
                 disabled={observationCreating || !newObservationName.trim()}

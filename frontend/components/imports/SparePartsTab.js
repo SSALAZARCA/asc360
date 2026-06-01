@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { authFetch } from '../../lib/authFetch';
 import { getApiUrl } from '../../lib/api';
 import { ChevronDown, ChevronRight, Search, RefreshCw, Package, ClipboardCheck, XCircle, UploadCloud, FileSpreadsheet } from 'lucide-react';
+import { toast } from '../../lib/toast';
 import ExcelUploadModal from './ExcelUploadModal';
 import ReconciliationModal from './ReconciliationModal';
 import PhysicalInventoryUploadModal from './PhysicalInventoryUploadModal';
@@ -450,9 +451,9 @@ function LotRow({ lot, userRole, onReconcile }) {
           );
           const data = await res.json();
           const msg = Object.entries(data.deleted).map(([k, v]) => `${k}: ${v}`).join(', ');
-          alert(`Rollback completo. Eliminados → ${msg}`);
+          toast.success(`Rollback completo. Eliminados → ${msg}`);
         } catch {
-          alert('Error al ejecutar el rollback');
+          toast.error('Error al ejecutar el rollback');
         } finally {
           setDeduplicating(false);
         }
@@ -475,9 +476,9 @@ function LotRow({ lot, userRole, onReconcile }) {
             { method: 'POST' }
           );
           const data = await res.json();
-          alert(`Limpieza completa: ${data.deleted} duplicados eliminados, ${data.kept} ítems conservados.`);
+          toast.success(`Limpieza completa: ${data.deleted} duplicados eliminados, ${data.kept} ítems conservados.`);
         } catch {
-          alert('Error al limpiar duplicados');
+          toast.error('Error al limpiar duplicados');
         } finally {
           setDeduplicating(false);
         }
@@ -704,9 +705,9 @@ export default function SparePartsTab({ userRole }) {
         try {
           const res = await authFetch(`${getApiUrl()}/imports/backorders/repair-extra-received`, { method: 'POST' });
           const data = await res.json();
-          alert(`Reparación completa: ${data.fixed} ítems actualizados${data.errors?.length ? `, ${data.errors.length} errores` : ''}`);
+          toast.success(`Reparación completa: ${data.fixed} ítems actualizados${data.errors?.length ? `, ${data.errors.length} errores` : ''}`);
           fetchLots(); fetchStats();
-        } catch { alert('Error en la reparación'); }
+        } catch { toast.error('Error en la reparación'); }
         finally { setRepairingExtras(false); }
       },
     });
@@ -724,10 +725,10 @@ export default function SparePartsTab({ userRole }) {
           const res = await authFetch(`${getApiUrl()}/imports/spare-parts/reset-detail`, { method: 'POST' });
           const data = await res.json();
           const msg = Object.entries(data.deleted).map(([k, v]) => `${k}: ${v}`).join(', ');
-          alert(`Reset completo. Eliminados → ${msg}`);
+          toast.success(`Reset completo. Eliminados → ${msg}`);
           fetchLots(); fetchStats();
         } catch {
-          alert('Error al ejecutar el reset');
+          toast.error('Error al ejecutar el reset');
         } finally {
           setResetting(false);
         }

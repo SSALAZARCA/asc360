@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { authFetch } from '../../lib/authFetch';
 import { getApiUrl } from '../../lib/api';
 import { RefreshCw, Search, CheckCircle, Clock, AlertTriangle, Tag, FileUp, X, RotateCcw, FileSpreadsheet } from 'lucide-react';
+import { toast } from '../../lib/toast';
 import ConfirmModal from '../ConfirmModal';
 
 function daysSince(dateStr) {
@@ -277,13 +278,13 @@ export default function BackorderTab({ userRole }) {
       const res = await authFetch(`${getApiUrl()}/imports/backorders/bulk-resolve-preview`, { method: 'POST', body: form });
       if (!res.ok) {
         const err = await res.json();
-        alert(err.detail || 'Error al procesar el Excel');
+        toast.error(err.detail || 'Error al procesar el Excel');
         return;
       }
       const preview = await res.json();
       setPendingFile(file);
       setBulkResolvePreview(preview);
-    } catch { alert('Error de conexión al procesar el Excel'); }
+    } catch { toast.error('Error de conexión al procesar el Excel'); }
     finally { setBulkResolveLoading(false); }
   };
 
@@ -296,13 +297,13 @@ export default function BackorderTab({ userRole }) {
       const res = await authFetch(`${getApiUrl()}/imports/backorders/bulk-resolve-apply`, { method: 'POST', body: form });
       if (!res.ok) {
         const err = await res.json();
-        alert(err.detail || 'Error al aplicar');
+        toast.error(err.detail || 'Error al aplicar');
         return;
       }
       setBulkResolvePreview(null);
       setPendingFile(null);
       fetchBackorders();
-    } catch { alert('Error de conexión al aplicar'); }
+    } catch { toast.error('Error de conexión al aplicar'); }
     finally { setBulkResolveLoading(false); }
   };
 
@@ -316,13 +317,13 @@ export default function BackorderTab({ userRole }) {
       });
       const data = await res.json();
       if (!res.ok) {
-        alert(data.detail || 'Error al revertir');
+        toast.error(data.detail || 'Error al revertir');
         return;
       }
       setShowRollbackModal(false);
-      alert(`Revertidos ${data.rolled_back} backorder${data.rolled_back !== 1 ? 's' : ''} del PI ${piNuevo}`);
+      toast.success(`Revertidos ${data.rolled_back} backorder${data.rolled_back !== 1 ? 's' : ''} del PI ${piNuevo}`);
       fetchBackorders();
-    } catch { alert('Error de conexión al revertir'); }
+    } catch { toast.error('Error de conexión al revertir'); }
     finally { setRollbackLoading(false); }
   };
 
@@ -337,9 +338,9 @@ export default function BackorderTab({ userRole }) {
         try {
           const res = await authFetch(`${getApiUrl()}/imports/backorders/repair-physical-inspection`, { method: 'POST' });
           const data = await res.json();
-          alert(`Reparación completa: ${data.fixed} ítems procesados${data.errors?.length ? `, ${data.errors.length} errores` : ''}`);
+          toast.success(`Reparación completa: ${data.fixed} ítems procesados${data.errors?.length ? `, ${data.errors.length} errores` : ''}`);
           fetchBackorders();
-        } catch { alert('Error en la reparación'); }
+        } catch { toast.error('Error en la reparación'); }
         finally { setRepairing(false); }
       },
     });
@@ -379,7 +380,7 @@ export default function BackorderTab({ userRole }) {
             body: JSON.stringify({ resolved: true }),
           });
           fetchBackorders();
-        } catch { alert('Error al resolver backorder'); }
+        } catch { toast.error('Error al resolver backorder'); }
       },
     });
   };
@@ -450,7 +451,7 @@ export default function BackorderTab({ userRole }) {
       setShowBulkModal(false);
       fetchBackorders();
     } catch {
-      alert('Error al asignar PI');
+      toast.error('Error al asignar PI');
     } finally {
       setBulkLoading(false);
     }

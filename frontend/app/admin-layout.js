@@ -2,6 +2,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Sidebar from '../components/Sidebar';
+import ToastContainer from '../components/ToastContainer';
 
 export default function AdminLayout({ children, fullWidth = false }) {
   const router = useRouter();
@@ -108,6 +109,7 @@ export default function AdminLayout({ children, fullWidth = false }) {
       >
         {children}
       </main>
+      <ToastContainer />
     </div>
   );
 }

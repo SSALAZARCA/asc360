@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { authFetch } from '../../lib/authFetch';
 import { getApiUrl } from '../../lib/api';
 import { FileUp, Download, RefreshCw, Search, CheckCircle, Clock, Bike, X, AlertCircle, Pencil, Send, FileText, Trash2, MapPin, AlertTriangle, FileSpreadsheet, Receipt, ShieldCheck, Lock } from 'lucide-react';
+import { toast } from '../../lib/toast';
 import ConfirmModal from '../ConfirmModal';
 
 // ---------------------------------------------------------------------------
@@ -781,13 +782,13 @@ export default function MotocicletasTab({ userRole }) {
       });
       if (!res.ok) {
         const err = await res.json();
-        alert(err.detail || 'Error al guardar');
+        toast.error(err.detail || 'Error al guardar');
         return;
       }
       setEditUnit(null);
       fetchUnits();
     } catch (e) {
-      alert('Error de conexión');
+      toast.error('Error de conexión');
     } finally {
       setEditSaving(false);
     }
@@ -803,12 +804,12 @@ export default function MotocicletasTab({ userRole }) {
       const res = await authFetch(`${getApiUrl()}/imports/moto-units/${unit.id}`, { method: 'DELETE' });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        alert(err.detail || 'Error al eliminar la unidad');
+        toast.error(err.detail || 'Error al eliminar la unidad');
         return;
       }
       fetchUnits();
     } catch {
-      alert('Error de conexión');
+      toast.error('Error de conexión');
     }
   };
 
@@ -843,7 +844,7 @@ export default function MotocicletasTab({ userRole }) {
       });
       if (!res.ok) {
         const err = await res.json();
-        alert(err.detail || 'Error al actualizar');
+        toast.error(err.detail || 'Error al actualizar');
         return;
       }
       const data = await res.json();
@@ -859,7 +860,7 @@ export default function MotocicletasTab({ userRole }) {
           : u
       ));
     } catch {
-      alert('Error de conexión');
+      toast.error('Error de conexión');
     } finally {
       setToggling(null);
     }
@@ -896,14 +897,14 @@ export default function MotocicletasTab({ userRole }) {
           const res = await authFetch(`${getApiUrl()}/imports/moto-units/${unit.id}/certificado`, { method: 'DELETE' });
           if (!res.ok) {
             const err = await res.json();
-            alert(err.detail || 'Error al anular el empadronamiento');
+            toast.error(err.detail || 'Error al anular el empadronamiento');
             return;
           }
           setUnits(prev => prev.map(u =>
             u.id === unit.id ? { ...u, certificado_generado: false, certificado_fecha: null } : u
           ));
         } catch {
-          alert('Error de conexión');
+          toast.error('Error de conexión');
         }
       },
     });

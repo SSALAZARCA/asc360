@@ -20,6 +20,7 @@ import SoftwayHelperModal from '../../components/SoftwayHelperModal';
 import ConfirmModal from '../../components/ConfirmModal';
 import { authFetch } from '../../lib/authFetch';
 import { getApiUrl } from '../../lib/api';
+import { toast } from '../../lib/toast';
 
 // ─── Estados reales del modelo ServiceStatus ───────────────────────────────
 const COLUMNS = [
@@ -58,7 +59,7 @@ async function downloadPdf(apiUrl, filename) {
     document.body.removeChild(a);
     URL.revokeObjectURL(objectUrl);
   } catch {
-    alert('No se pudo descargar el PDF. Intentá de nuevo.');
+    toast.error('No se pudo descargar el PDF. Intentá de nuevo.');
   }
 }
 

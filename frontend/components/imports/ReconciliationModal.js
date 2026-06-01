@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { authFetch } from '../../lib/authFetch';
 import { getApiUrl } from '../../lib/api';
 import { X, CheckCircle, AlertCircle, XCircle, Plus, Upload, RefreshCw, Search } from 'lucide-react';
+import { toast } from '../../lib/toast';
 
 const RESULT_CFG = {
   COMPLETE:      { label: 'Completo',       color: '#22c55e', bg: 'rgba(34,197,94,0.1)',    border: 'rgba(34,197,94,0.25)',   icon: CheckCircle },
@@ -153,7 +154,7 @@ export default function ReconciliationModal({ lot, onClose, onConfirmed }) {
       setConfirmed(true);
       onConfirmed?.();
     } catch (err) {
-      alert(err.message);
+      toast.error(err.message);
     } finally {
       setConfirming(false);
     }
