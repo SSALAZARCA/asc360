@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { authFetch } from '../../lib/authFetch';
 import { getApiUrl } from '../../lib/api';
 import { FileUp, Download, RefreshCw, Search, CheckCircle, Clock, Bike, X, AlertCircle, Pencil, Send, FileText, Trash2, MapPin, AlertTriangle, FileSpreadsheet, Receipt, ShieldCheck, Lock } from 'lucide-react';
+import ConfirmModal from '../ConfirmModal';
 
 // ---------------------------------------------------------------------------
 // Error modal estilizado
@@ -655,6 +656,7 @@ export default function MotocicletasTab({ userRole }) {
 
   // Error modal para certificado
   const [certError, setCertError] = useState('');
+  const [pendingConfirm, setPendingConfirm] = useState(null);
 
   // Toggle empadronamiento físico
   const [toggling, setToggling] = useState(null); // id de la unidad en proceso
@@ -883,21 +885,28 @@ export default function MotocicletasTab({ userRole }) {
     }
   };
 
-  const handleDeleteCertificado = async (unit) => {
-    if (!confirm(`¿Anular el empadronamiento de VIN ${unit.vin_number || unit.id}? Esta acción no se puede deshacer.`)) return;
-    try {
-      const res = await authFetch(`${getApiUrl()}/imports/moto-units/${unit.id}/certificado`, { method: 'DELETE' });
-      if (!res.ok) {
-        const err = await res.json();
-        alert(err.detail || 'Error al anular el empadronamiento');
-        return;
-      }
-      setUnits(prev => prev.map(u =>
-        u.id === unit.id ? { ...u, certificado_generado: false, certificado_fecha: null } : u
-      ));
-    } catch {
-      alert('Error de conexión');
-    }
+  const handleDeleteCertificado = (unit) => {
+    setPendingConfirm({
+      title: 'Anular empadronamiento',
+      message: `¿Anular el empadronamiento de VIN ${unit.vin_number || unit.id}? Esta acción no se puede deshacer.`,
+      danger: true,
+      confirmLabel: 'Sí, anular',
+      action: async () => {
+        try {
+          const res = await authFetch(`${getApiUrl()}/imports/moto-units/${unit.id}/certificado`, { method: 'DELETE' });
+          if (!res.ok) {
+            const err = await res.json();
+            alert(err.detail || 'Error al anular el empadronamiento');
+            return;
+          }
+          setUnits(prev => prev.map(u =>
+            u.id === unit.id ? { ...u, certificado_generado: false, certificado_fecha: null } : u
+          ));
+        } catch {
+          alert('Error de conexión');
+        }
+      },
+    });
   };
 
   const handleOpenDim = (unit) => {
@@ -1477,6 +1486,17 @@ export default function MotocicletasTab({ userRole }) {
         <SeleccionarDistribuidorModal
           onConfirm={handleConfirmarEnvio}
           onClose={() => setUnitPendienteEnvio(null)}
+        />
+      )}
+
+      {pendingConfirm && (
+        <ConfirmModal
+          title={pendingConfirm.title}
+          message={pendingConfirm.message}
+          danger={pendingConfirm.danger}
+          confirmLabel={pendingConfirm.confirmLabel}
+          onCancel={() => setPendingConfirm(null)}
+          onConfirm={() => { setPendingConfirm(null); pendingConfirm.action(); }}
         />
       )}
     </div>

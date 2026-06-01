@@ -5,6 +5,7 @@ import AdminLayout from '../admin-layout';
 import { UploadCloud, Image as ImageIcon, Save, Trash2, Clock, Bike, Plus, Pencil, X, AlertCircle, BookOpen, Upload, FileText, Loader2, ChevronDown, ScanSearch, Shield, RefreshCw } from 'lucide-react';
 import { authFetch } from '../../lib/authFetch';
 import { getApiUrl } from '../../lib/api';
+import ConfirmModal from '../../components/ConfirmModal';
 
 // ---------------------------------------------------------------------------
 // Datos estáticos — Matriz de Permisos
@@ -305,6 +306,8 @@ export default function SettingsPage() {
   const [backfilling, setBackfilling] = useState(false);
   const [backfillMsg, setBackfillMsg] = useState('');
 
+  const [pendingConfirm, setPendingConfirm] = useState(null);
+
   // Modelos de Vehículos
   const [vehicleModels, setVehicleModels] = useState([]);
   const [vmLoading, setVmLoading] = useState(false);
@@ -485,14 +488,21 @@ export default function SettingsPage() {
     }
   };
 
-  const deleteVehicleModel = async (vm) => {
-    if (!confirm(`¿Eliminar el modelo "${vm.modelo}"? Esta acción no se puede deshacer.`)) return;
-    try {
-      await authFetch(`${getApiUrl()}/vehicle-models/${vm.id}`, { method: 'DELETE' });
-      fetchVehicleModels();
-    } catch (e) {
-      alert('Error al eliminar el modelo.');
-    }
+  const deleteVehicleModel = (vm) => {
+    setPendingConfirm({
+      title: 'Eliminar modelo',
+      message: `¿Eliminar el modelo "${vm.modelo}"? Esta acción no se puede deshacer.`,
+      danger: true,
+      confirmLabel: 'Sí, eliminar',
+      action: async () => {
+        try {
+          await authFetch(`${getApiUrl()}/vehicle-models/${vm.id}`, { method: 'DELETE' });
+          fetchVehicleModels();
+        } catch (e) {
+          alert('Error al eliminar el modelo.');
+        }
+      },
+    });
   };
 
   const openCreateVM = () => {
@@ -669,20 +679,27 @@ export default function SettingsPage() {
     }
   };
 
-  const handleBackfill = async () => {
-    if (!confirm('¿Calcular el costo promedio FOB para todas las partes del catálogo con pedidos históricos? Esto puede tomar unos segundos.')) return;
-    setBackfilling(true);
-    setBackfillMsg('');
-    try {
-      const res = await authFetch('/settings/backfill-part-costs', { method: 'POST' });
-      if (res.ok) {
-        const data = await res.json();
-        setBackfillMsg(`✅ ${data.updated} partes actualizadas, ${data.skipped} sin datos de costo (total: ${data.total}).`);
-      } else {
-        setBackfillMsg('⚠️ Error al ejecutar el backfill.');
-      }
-    } catch { setBackfillMsg('⚠️ Error de conexión.'); }
-    finally { setBackfilling(false); }
+  const handleBackfill = () => {
+    setPendingConfirm({
+      title: 'Calcular costos FOB',
+      message: '¿Calcular el costo promedio FOB para todas las partes del catálogo con pedidos históricos? Esto puede tomar unos segundos.',
+      danger: false,
+      confirmLabel: 'Sí, calcular',
+      action: async () => {
+        setBackfilling(true);
+        setBackfillMsg('');
+        try {
+          const res = await authFetch('/settings/backfill-part-costs', { method: 'POST' });
+          if (res.ok) {
+            const data = await res.json();
+            setBackfillMsg(`✅ ${data.updated} partes actualizadas, ${data.skipped} sin datos de costo (total: ${data.total}).`);
+          } else {
+            setBackfillMsg('⚠️ Error al ejecutar el backfill.');
+          }
+        } catch { setBackfillMsg('⚠️ Error de conexión.'); }
+        finally { setBackfilling(false); }
+      },
+    });
   };
 
   const handleSavePricing = async () => {
@@ -1354,20 +1371,25 @@ export default function SettingsPage() {
                   >
                     <span style={{ fontSize: '12px', fontWeight: 700, color: '#a78bfa' }}>{loc.name}</span>
                     <button
-                      onClick={async () => {
-                        if (!confirm(`¿Eliminar la ubicación "${loc.name}"? Las motos asignadas quedarán sin ubicación.`)) return;
-                        setLocationDeleting(loc.id);
-                        try {
-                          const res = await authFetch(`${getApiUrl()}/imports/moto-locations/${loc.id}`, { method: 'DELETE' });
-                          if (res.ok || res.status === 204) {
-                            setMotoLocations(prev => prev.filter(l => l.id !== loc.id));
-                          } else {
-                            const err = await res.json().catch(() => ({}));
-                            alert(err.detail || 'Error al eliminar la ubicación.');
-                          }
-                        } catch { alert('Error de conexión.'); }
-                        finally { setLocationDeleting(null); }
-                      }}
+                      onClick={() => setPendingConfirm({
+                        title: 'Eliminar ubicación',
+                        message: `¿Eliminar la ubicación "${loc.name}"? Las motos asignadas quedarán sin ubicación.`,
+                        danger: true,
+                        confirmLabel: 'Sí, eliminar',
+                        action: async () => {
+                          setLocationDeleting(loc.id);
+                          try {
+                            const res = await authFetch(`${getApiUrl()}/imports/moto-locations/${loc.id}`, { method: 'DELETE' });
+                            if (res.ok || res.status === 204) {
+                              setMotoLocations(prev => prev.filter(l => l.id !== loc.id));
+                            } else {
+                              const err = await res.json().catch(() => ({}));
+                              alert(err.detail || 'Error al eliminar la ubicación.');
+                            }
+                          } catch { alert('Error de conexión.'); }
+                          finally { setLocationDeleting(null); }
+                        },
+                      })}
                       disabled={locationDeleting === loc.id}
                       style={{
                         padding: '3px 8px', borderRadius: '6px', border: 'none',
@@ -1457,16 +1479,21 @@ export default function SettingsPage() {
                   <div key={obs.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', borderRadius: '8px', background: 'rgba(251,146,60,0.06)', border: '1px solid rgba(251,146,60,0.15)' }}>
                     <span style={{ fontSize: '12px', fontWeight: 700, color: '#fb923c' }}>{obs.name}</span>
                     <button
-                      onClick={async () => {
-                        if (!confirm(`¿Eliminar la observación "${obs.name}"? Las motos asignadas quedarán sin observación.`)) return;
-                        setObservationDeleting(obs.id);
-                        try {
-                          const res = await authFetch(`${getApiUrl()}/imports/moto-observations/${obs.id}`, { method: 'DELETE' });
-                          if (res.ok || res.status === 204) setMotoObservations(prev => prev.filter(o => o.id !== obs.id));
-                          else { const err = await res.json().catch(() => ({})); alert(err.detail || 'Error al eliminar.'); }
-                        } catch { alert('Error de conexión.'); }
-                        finally { setObservationDeleting(null); }
-                      }}
+                      onClick={() => setPendingConfirm({
+                        title: 'Eliminar observación',
+                        message: `¿Eliminar la observación "${obs.name}"? Las motos asignadas quedarán sin observación.`,
+                        danger: true,
+                        confirmLabel: 'Sí, eliminar',
+                        action: async () => {
+                          setObservationDeleting(obs.id);
+                          try {
+                            const res = await authFetch(`${getApiUrl()}/imports/moto-observations/${obs.id}`, { method: 'DELETE' });
+                            if (res.ok || res.status === 204) setMotoObservations(prev => prev.filter(o => o.id !== obs.id));
+                            else { const err = await res.json().catch(() => ({})); alert(err.detail || 'Error al eliminar.'); }
+                          } catch { alert('Error de conexión.'); }
+                          finally { setObservationDeleting(null); }
+                        },
+                      })}
                       disabled={observationDeleting === obs.id}
                       style={{ padding: '3px 8px', borderRadius: '6px', border: 'none', background: 'rgba(248,113,113,0.1)', color: '#f87171', cursor: observationDeleting === obs.id ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', opacity: observationDeleting === obs.id ? 0.5 : 1 }}
                     >
@@ -1977,6 +2004,17 @@ export default function SettingsPage() {
         .cat-btn-secondary { background: transparent; border: 1px solid rgba(255,255,255,0.15); color: rgba(255,255,255,0.6); padding: 0.75rem 1.25rem; border-radius: 10px; font-weight: 800; font-size: 0.75rem; text-transform: uppercase; cursor: pointer; }
         .cat-btn-secondary:hover { background: rgba(255,255,255,0.08); }
       `}</style>
+
+      {pendingConfirm && (
+        <ConfirmModal
+          title={pendingConfirm.title}
+          message={pendingConfirm.message}
+          danger={pendingConfirm.danger}
+          confirmLabel={pendingConfirm.confirmLabel}
+          onCancel={() => setPendingConfirm(null)}
+          onConfirm={() => { setPendingConfirm(null); pendingConfirm.action(); }}
+        />
+      )}
     </AdminLayout>
   );
 }

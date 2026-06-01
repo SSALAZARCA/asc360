@@ -6,6 +6,7 @@ import { ChevronDown, ChevronRight, Search, RefreshCw, Package, ClipboardCheck, 
 import ExcelUploadModal from './ExcelUploadModal';
 import ReconciliationModal from './ReconciliationModal';
 import PhysicalInventoryUploadModal from './PhysicalInventoryUploadModal';
+import ConfirmModal from '../ConfirmModal';
 
 // ---------------------------------------------------------------------------
 // Status badge para spare part items
@@ -190,6 +191,7 @@ function LotItemsTable({ lotId, userRole, isConfirmed }) {
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [showPhysicalUpload, setShowPhysicalUpload] = useState(false);
+  const [pendingConfirm, setPendingConfirm] = useState(null);
 
   const fetch = useCallback(async () => {
     setLoading(true);
@@ -377,13 +379,20 @@ function LotItemsTable({ lotId, userRole, isConfirmed }) {
                   <td style={{ padding: '8px 10px', textAlign: 'center', width: 32 }}>
                     {canCancel && (item.status === 'BACKORDER' || (item.status === 'PARTIAL' && (item.qty_pending ?? 0) > 0)) && (
                       <button
-                        onClick={async () => {
+                        onClick={() => {
                           const qty = item.qty_pending ?? 0;
-                          if (!confirm(`¿Cancelar las ${qty} unidades pendientes de ${item.part_number}? Esta acción cerrará el backorder.`)) return;
-                          try {
-                            await authFetch(`${getApiUrl()}/imports/spare-part-items/${item.id}/cancel-pending`, { method: 'POST' });
-                            fetch();
-                          } catch { alert('Error al cancelar pendiente'); }
+                          setPendingConfirm({
+                            title: 'Cancelar pendientes',
+                            message: `¿Cancelar las ${qty} unidades pendientes de ${item.part_number}? Esta acción cerrará el backorder.`,
+                            danger: true,
+                            confirmLabel: 'Sí, cancelar',
+                            action: async () => {
+                              try {
+                                await authFetch(`${getApiUrl()}/imports/spare-part-items/${item.id}/cancel-pending`, { method: 'POST' });
+                                fetch();
+                              } catch { /* error silencioso */ }
+                            },
+                          });
                         }}
                         title="Cancelar unidades pendientes"
                         style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '4px', borderRadius: '5px', border: 'none', background: 'transparent', color: '#6b7280', cursor: 'pointer' }}
@@ -400,6 +409,17 @@ function LotItemsTable({ lotId, userRole, isConfirmed }) {
           </table>
         </div>
       )}
+
+      {pendingConfirm && (
+        <ConfirmModal
+          title={pendingConfirm.title}
+          message={pendingConfirm.message}
+          danger={pendingConfirm.danger}
+          confirmLabel={pendingConfirm.confirmLabel}
+          onCancel={() => setPendingConfirm(null)}
+          onConfirm={() => { setPendingConfirm(null); pendingConfirm.action(); }}
+        />
+      )}
     </div>
   );
 }
@@ -410,44 +430,59 @@ function LotItemsTable({ lotId, userRole, isConfirmed }) {
 function LotRow({ lot, userRole, onReconcile }) {
   const [expanded, setExpanded] = useState(false);
   const [deduplicating, setDeduplicating] = useState(false);
+  const [pendingConfirm, setPendingConfirm] = useState(null);
 
   const pctColor = lot.pct_received >= 100 ? '#22c55e' : lot.pct_received > 0 ? '#fb923c' : '#606075';
 
-  const handleRollback = async (e) => {
+  const handleRollback = (e) => {
     e.stopPropagation();
-    if (!confirm(`¿Revertir COMPLETAMENTE el lote ${lot.lot_identifier}?\n\nSe borrarán: ítems, backorders, reconciliación y packing list.\nEl lote quedará vacío para re-cargar desde cero.\n\nEsta acción no se puede deshacer.`)) return;
-    setDeduplicating(true);
-    try {
-      const res = await authFetch(
-        `${getApiUrl()}/imports/spare-parts/rollback-lot?pi_number=${encodeURIComponent(lot.lot_identifier)}`,
-        { method: 'POST' }
-      );
-      const data = await res.json();
-      const msg = Object.entries(data.deleted).map(([k, v]) => `${k}: ${v}`).join(', ');
-      alert(`Rollback completo. Eliminados → ${msg}`);
-    } catch {
-      alert('Error al ejecutar el rollback');
-    } finally {
-      setDeduplicating(false);
-    }
+    setPendingConfirm({
+      title: `Revertir lote ${lot.lot_identifier}`,
+      message: `Se borrarán: ítems, backorders, reconciliación y packing list.\nEl lote quedará vacío para re-cargar desde cero.\n\nEsta acción no se puede deshacer.`,
+      danger: true,
+      confirmLabel: 'Sí, revertir',
+      action: async () => {
+        setDeduplicating(true);
+        try {
+          const res = await authFetch(
+            `${getApiUrl()}/imports/spare-parts/rollback-lot?pi_number=${encodeURIComponent(lot.lot_identifier)}`,
+            { method: 'POST' }
+          );
+          const data = await res.json();
+          const msg = Object.entries(data.deleted).map(([k, v]) => `${k}: ${v}`).join(', ');
+          alert(`Rollback completo. Eliminados → ${msg}`);
+        } catch {
+          alert('Error al ejecutar el rollback');
+        } finally {
+          setDeduplicating(false);
+        }
+      },
+    });
   };
 
-  const handleDeduplicate = async (e) => {
+  const handleDeduplicate = (e) => {
     e.stopPropagation();
-    if (!confirm(`¿Eliminar ítems duplicados sin backorders del lote ${lot.lot_identifier}? Esta acción no se puede deshacer.`)) return;
-    setDeduplicating(true);
-    try {
-      const res = await authFetch(
-        `${getApiUrl()}/imports/spare-parts/repair-deduplicate?pi_number=${encodeURIComponent(lot.lot_identifier)}`,
-        { method: 'POST' }
-      );
-      const data = await res.json();
-      alert(`Limpieza completa: ${data.deleted} duplicados eliminados, ${data.kept} ítems conservados.`);
-    } catch {
-      alert('Error al limpiar duplicados');
-    } finally {
-      setDeduplicating(false);
-    }
+    setPendingConfirm({
+      title: 'Eliminar duplicados',
+      message: `¿Eliminar ítems duplicados sin backorders del lote ${lot.lot_identifier}? Esta acción no se puede deshacer.`,
+      danger: true,
+      confirmLabel: 'Sí, limpiar',
+      action: async () => {
+        setDeduplicating(true);
+        try {
+          const res = await authFetch(
+            `${getApiUrl()}/imports/spare-parts/repair-deduplicate?pi_number=${encodeURIComponent(lot.lot_identifier)}`,
+            { method: 'POST' }
+          );
+          const data = await res.json();
+          alert(`Limpieza completa: ${data.deleted} duplicados eliminados, ${data.kept} ítems conservados.`);
+        } catch {
+          alert('Error al limpiar duplicados');
+        } finally {
+          setDeduplicating(false);
+        }
+      },
+    });
   };
 
   return (
@@ -604,6 +639,17 @@ function LotRow({ lot, userRole, onReconcile }) {
 
       {/* Contenido expandido */}
       {expanded && <LotItemsTable lotId={lot.id} userRole={userRole} isConfirmed={!!lot.packing_list_received} />}
+
+      {pendingConfirm && (
+        <ConfirmModal
+          title={pendingConfirm.title}
+          message={pendingConfirm.message}
+          danger={pendingConfirm.danger}
+          confirmLabel={pendingConfirm.confirmLabel}
+          onCancel={() => setPendingConfirm(null)}
+          onConfirm={() => { setPendingConfirm(null); pendingConfirm.action(); }}
+        />
+      )}
     </div>
   );
 }
@@ -623,6 +669,7 @@ export default function SparePartsTab({ userRole }) {
   const [resetting, setResetting] = useState(false);
   const [repairingExtras, setRepairingExtras] = useState(false);
   const [exportingRepuestos, setExportingRepuestos] = useState(false);
+  const [pendingConfirm, setPendingConfirm] = useState(null);
 
   const handleExportRepuestos = async () => {
     setExportingRepuestos(true);
@@ -646,33 +693,46 @@ export default function SparePartsTab({ userRole }) {
     }
   };
 
-  const handleRepairExtras = async () => {
-    if (!confirm('Actualiza las Pcs Rec. de todos los ítems EXTRA que quedaron en 0. ¿Continuar?')) return;
-    setRepairingExtras(true);
-    try {
-      const res = await authFetch(`${getApiUrl()}/imports/backorders/repair-extra-received`, { method: 'POST' });
-      const data = await res.json();
-      alert(`Reparación completa: ${data.fixed} ítems actualizados${data.errors?.length ? `, ${data.errors.length} errores` : ''}`);
-      fetchLots(); fetchStats();
-    } catch { alert('Error en la reparación'); }
-    finally { setRepairingExtras(false); }
+  const handleRepairExtras = () => {
+    setPendingConfirm({
+      title: 'Reparar ítems EXTRA',
+      message: 'Actualiza las Pcs Rec. de todos los ítems EXTRA que quedaron en 0. ¿Continuar?',
+      danger: false,
+      confirmLabel: 'Sí, reparar',
+      action: async () => {
+        setRepairingExtras(true);
+        try {
+          const res = await authFetch(`${getApiUrl()}/imports/backorders/repair-extra-received`, { method: 'POST' });
+          const data = await res.json();
+          alert(`Reparación completa: ${data.fixed} ítems actualizados${data.errors?.length ? `, ${data.errors.length} errores` : ''}`);
+          fetchLots(); fetchStats();
+        } catch { alert('Error en la reparación'); }
+        finally { setRepairingExtras(false); }
+      },
+    });
   };
 
-  const handleResetDetail = async () => {
-    if (!confirm('⚠️ ATENCIÓN: Esto borrará TODOS los lotes, ítems, backorders, packing lists y reconciliaciones de repuestos. Los pedidos (shipment orders) se conservan.\n\n¿Estás seguro?')) return;
-    if (!confirm('Segunda confirmación: esta acción NO se puede deshacer. ¿Continuar?')) return;
-    setResetting(true);
-    try {
-      const res = await authFetch(`${getApiUrl()}/imports/spare-parts/reset-detail`, { method: 'POST' });
-      const data = await res.json();
-      const msg = Object.entries(data.deleted).map(([k, v]) => `${k}: ${v}`).join(', ');
-      alert(`Reset completo. Eliminados → ${msg}`);
-      fetchLots(); fetchStats();
-    } catch {
-      alert('Error al ejecutar el reset');
-    } finally {
-      setResetting(false);
-    }
+  const handleResetDetail = () => {
+    setPendingConfirm({
+      title: '⚠️ Reset total de repuestos',
+      message: 'Esto borrará TODOS los lotes, ítems, backorders, packing lists y reconciliaciones de repuestos. Los pedidos (shipment orders) se conservan.\n\nEsta acción NO se puede deshacer.',
+      danger: true,
+      confirmLabel: 'Sí, borrar todo',
+      action: async () => {
+        setResetting(true);
+        try {
+          const res = await authFetch(`${getApiUrl()}/imports/spare-parts/reset-detail`, { method: 'POST' });
+          const data = await res.json();
+          const msg = Object.entries(data.deleted).map(([k, v]) => `${k}: ${v}`).join(', ');
+          alert(`Reset completo. Eliminados → ${msg}`);
+          fetchLots(); fetchStats();
+        } catch {
+          alert('Error al ejecutar el reset');
+        } finally {
+          setResetting(false);
+        }
+      },
+    });
   };
 
   const fetchLots = useCallback(async () => {
@@ -893,6 +953,17 @@ export default function SparePartsTab({ userRole }) {
           lot={reconcileLot}
           onClose={() => setReconcileLot(null)}
           onConfirmed={() => { fetchLots(); fetchStats(); setReconcileLot(null); }}
+        />
+      )}
+
+      {pendingConfirm && (
+        <ConfirmModal
+          title={pendingConfirm.title}
+          message={pendingConfirm.message}
+          danger={pendingConfirm.danger}
+          confirmLabel={pendingConfirm.confirmLabel}
+          onCancel={() => setPendingConfirm(null)}
+          onConfirm={() => { setPendingConfirm(null); pendingConfirm.action(); }}
         />
       )}
     </div>

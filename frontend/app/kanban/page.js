@@ -17,6 +17,7 @@ import {
   ClipboardList, CalendarDays, Hourglass, CircleHelp, Factory, RefreshCw, Handshake
 } from 'lucide-react';
 import SoftwayHelperModal from '../../components/SoftwayHelperModal';
+import ConfirmModal from '../../components/ConfirmModal';
 import { authFetch } from '../../lib/authFetch';
 import { getApiUrl } from '../../lib/api';
 
@@ -198,13 +199,14 @@ function KanbanColumn({ col, cards, onOpen, isOver, animIdx }) {
 
 // ─── Sección OTP ──────────────────────────────────────────────────────────
 function OtpSection({ orderId, onAccepted, onBypassed }) {
-  const [otpSent,    setOtpSent]    = useState(false);
-  const [code,       setCode]       = useState('');
-  const [error,      setError]      = useState('');
-  const [sending,    setSending]    = useState(false);
-  const [verifying,  setVerifying]  = useState(false);
-  const [bypassing,  setBypassing]  = useState(false);
-  const [cooldown,   setCooldown]   = useState(0);
+  const [otpSent,       setOtpSent]       = useState(false);
+  const [code,          setCode]          = useState('');
+  const [error,         setError]         = useState('');
+  const [sending,       setSending]       = useState(false);
+  const [verifying,     setVerifying]     = useState(false);
+  const [bypassing,     setBypassing]     = useState(false);
+  const [cooldown,      setCooldown]      = useState(0);
+  const [bypassConfirm, setBypassConfirm] = useState(false);
 
   const currentUser = typeof window !== 'undefined'
     ? JSON.parse(sessionStorage.getItem('um_user') || '{}')
@@ -297,17 +299,7 @@ function OtpSection({ orderId, onAccepted, onBypassed }) {
       {canBypass && (
         <div style={{ marginTop: '0.8rem', paddingTop: '0.8rem', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
           <button
-            onClick={async () => {
-              if (!window.confirm('¿Confirmás que querés autorizar esta orden sin OTP? Quedará registrado con tu usuario.')) return;
-              setBypassing(true);
-              try {
-                const res = await authFetch(`/orders/${orderId}/otp/bypass`, { method: 'POST' });
-                const data = await res.json();
-                if (!res.ok) { setError(data.detail || 'Error al autorizar'); return; }
-                onBypassed(data);
-              } catch { setError('Error de conexión'); }
-              finally { setBypassing(false); }
-            }}
+            onClick={() => setBypassConfirm(true)}
             disabled={bypassing}
             style={{ width: '100%', padding: '0.5rem', background: 'rgba(249,115,22,0.1)', color: '#f97316', border: '1px solid rgba(249,115,22,0.3)', borderRadius: 6, fontSize: '0.65rem', fontWeight: 800, cursor: bypassing ? 'not-allowed' : 'pointer', textTransform: 'uppercase' }}
           >
@@ -317,6 +309,27 @@ function OtpSection({ orderId, onAccepted, onBypassed }) {
             Solo jefe de taller / superadmin · Queda registrado
           </p>
         </div>
+      )}
+
+      {bypassConfirm && (
+        <ConfirmModal
+          title="Autorizar sin OTP"
+          message="¿Confirmás que querés autorizar esta orden sin OTP? Quedará registrado con tu usuario."
+          danger
+          confirmLabel="Sí, autorizar"
+          onCancel={() => setBypassConfirm(false)}
+          onConfirm={async () => {
+            setBypassConfirm(false);
+            setBypassing(true);
+            try {
+              const res = await authFetch(`/orders/${orderId}/otp/bypass`, { method: 'POST' });
+              const data = await res.json();
+              if (!res.ok) { setError(data.detail || 'Error al autorizar'); return; }
+              onBypassed(data);
+            } catch { setError('Error de conexión'); }
+            finally { setBypassing(false); }
+          }}
+        />
       )}
     </div>
   );

@@ -2,6 +2,7 @@
 import { useState, useMemo } from 'react';
 import StatusBadge from './StatusBadge';
 import { Eye, Pencil, Trash2, ChevronLeft, ChevronRight, ChevronUp, ChevronDown as ChevronDownIcon } from 'lucide-react';
+import ConfirmModal from '../ConfirmModal';
 
 const COL_STYLE = {
   padding: '10px 14px',
@@ -44,6 +45,7 @@ export default function ShipmentTable({ orders, total, page, pageSize, onPageCha
   const [deletingId, setDeletingId] = useState(null);
   const [sortKey, setSortKey] = useState(null);
   const [sortDir, setSortDir] = useState('asc');
+  const [pendingConfirm, setPendingConfirm] = useState(null);
   const totalPages = Math.ceil(total / pageSize);
 
   const handleSort = (field) => {
@@ -76,12 +78,19 @@ export default function ShipmentTable({ orders, total, page, pageSize, onPageCha
     });
   }, [orders, sortKey, sortDir]);
 
-  const handleDelete = async (e, order) => {
+  const handleDelete = (e, order) => {
     e.stopPropagation();
-    if (!confirm(`¿Eliminar ${order.pi_number} — ${order.model}?`)) return;
-    setDeletingId(order.id);
-    await onDelete(order.id);
-    setDeletingId(null);
+    setPendingConfirm({
+      title: 'Eliminar pedido',
+      message: `¿Eliminar ${order.pi_number} — ${order.model}?`,
+      danger: true,
+      confirmLabel: 'Sí, eliminar',
+      action: async () => {
+        setDeletingId(order.id);
+        await onDelete(order.id);
+        setDeletingId(null);
+      },
+    });
   };
 
   return (
@@ -237,6 +246,17 @@ export default function ShipmentTable({ orders, total, page, pageSize, onPageCha
             </button>
           </div>
         </div>
+      )}
+
+      {pendingConfirm && (
+        <ConfirmModal
+          title={pendingConfirm.title}
+          message={pendingConfirm.message}
+          danger={pendingConfirm.danger}
+          confirmLabel={pendingConfirm.confirmLabel}
+          onCancel={() => setPendingConfirm(null)}
+          onConfirm={() => { setPendingConfirm(null); pendingConfirm.action(); }}
+        />
       )}
     </div>
   );

@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from 'react';
 import { authFetch } from '../../lib/authFetch';
 import { getApiUrl } from '../../lib/api';
 import StatusBadge from './StatusBadge';
+import ConfirmModal from '../ConfirmModal';
 import {
   X, Upload, Trash2, FileText, FileSpreadsheet, Image,
   File, Download, ChevronRight, Check, Clock, Package, AlertCircle,
@@ -155,6 +156,7 @@ function DocsTab({ orderId, userRole }) {
   const [uploading, setUploading] = useState(false);
   const [selectedType, setSelectedType] = useState('OTHER');
   const [error, setError] = useState(null);
+  const [pendingConfirm, setPendingConfirm] = useState(null);
   const inputRef = useRef();
 
   const fetchAttachments = async () => {
@@ -197,14 +199,21 @@ function DocsTab({ orderId, userRole }) {
     }
   };
 
-  const handleDelete = async (id) => {
-    if (!confirm('¿Eliminar este adjunto?')) return;
-    try {
-      await authFetch(`${getApiUrl()}/imports/attachments/${id}`, { method: 'DELETE' });
-      setAttachments(prev => prev.filter(a => a.id !== id));
-    } catch {
-      alert('Error al eliminar adjunto');
-    }
+  const handleDelete = (id) => {
+    setPendingConfirm({
+      title: 'Eliminar adjunto',
+      message: '¿Eliminar este adjunto?',
+      danger: true,
+      confirmLabel: 'Sí, eliminar',
+      action: async () => {
+        try {
+          await authFetch(`${getApiUrl()}/imports/attachments/${id}`, { method: 'DELETE' });
+          setAttachments(prev => prev.filter(a => a.id !== id));
+        } catch {
+          alert('Error al eliminar adjunto');
+        }
+      },
+    });
   };
 
   return (
@@ -300,6 +309,17 @@ function DocsTab({ orderId, userRole }) {
             </div>
           ))}
         </div>
+      )}
+
+      {pendingConfirm && (
+        <ConfirmModal
+          title={pendingConfirm.title}
+          message={pendingConfirm.message}
+          danger={pendingConfirm.danger}
+          confirmLabel={pendingConfirm.confirmLabel}
+          onCancel={() => setPendingConfirm(null)}
+          onConfirm={() => { setPendingConfirm(null); pendingConfirm.action(); }}
+        />
       )}
     </div>
   );

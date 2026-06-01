@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { authFetch } from '../../lib/authFetch';
 import { getApiUrl } from '../../lib/api';
 import { RefreshCw, Search, CheckCircle, Clock, AlertTriangle, Tag, FileUp, X, RotateCcw, FileSpreadsheet } from 'lucide-react';
+import ConfirmModal from '../ConfirmModal';
 
 function daysSince(dateStr) {
   if (!dateStr) return null;
@@ -263,6 +264,7 @@ export default function BackorderTab({ userRole }) {
   const [pendingFile, setPendingFile] = useState(null);
   const [showRollbackModal, setShowRollbackModal] = useState(false);
   const [rollbackLoading, setRollbackLoading] = useState(false);
+  const [pendingConfirm, setPendingConfirm] = useState(null);
 
   const handleBulkResolveUpload = async (e) => {
     const file = e.target.files?.[0];
@@ -324,16 +326,23 @@ export default function BackorderTab({ userRole }) {
     finally { setRollbackLoading(false); }
   };
 
-  const handleRepair = async () => {
-    if (!confirm('Esto re-calculará todos los backorders de inspección física. ¿Continuar?')) return;
-    setRepairing(true);
-    try {
-      const res = await authFetch(`${getApiUrl()}/imports/backorders/repair-physical-inspection`, { method: 'POST' });
-      const data = await res.json();
-      alert(`Reparación completa: ${data.fixed} ítems procesados${data.errors?.length ? `, ${data.errors.length} errores` : ''}`);
-      fetchBackorders();
-    } catch { alert('Error en la reparación'); }
-    finally { setRepairing(false); }
+  const handleRepair = () => {
+    setPendingConfirm({
+      title: 'Recalcular backorders físicos',
+      message: 'Esto re-calculará todos los backorders de inspección física. ¿Continuar?',
+      danger: false,
+      confirmLabel: 'Sí, recalcular',
+      action: async () => {
+        setRepairing(true);
+        try {
+          const res = await authFetch(`${getApiUrl()}/imports/backorders/repair-physical-inspection`, { method: 'POST' });
+          const data = await res.json();
+          alert(`Reparación completa: ${data.fixed} ítems procesados${data.errors?.length ? `, ${data.errors.length} errores` : ''}`);
+          fetchBackorders();
+        } catch { alert('Error en la reparación'); }
+        finally { setRepairing(false); }
+      },
+    });
   };
 
   const fetchBackorders = useCallback(async () => {
@@ -355,17 +364,24 @@ export default function BackorderTab({ userRole }) {
 
   useEffect(() => { fetchBackorders(); }, [fetchBackorders]);
 
-  const handleResolve = async (bo) => {
+  const handleResolve = (bo) => {
     const label = bo.source === 'physical_inspection' ? 'cobrado (faltante físico)' : 'no cobrado (no enviado)';
-    if (!confirm(`¿Marcar como resuelto el backorder ${label} de ${bo.part_number}?`)) return;
-    try {
-      await authFetch(`${getApiUrl()}/imports/backorders/${bo.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ resolved: true }),
-      });
-      fetchBackorders();
-    } catch { alert('Error al resolver backorder'); }
+    setPendingConfirm({
+      title: 'Resolver backorder',
+      message: `¿Marcar como resuelto el backorder ${label} de ${bo.part_number}?`,
+      danger: false,
+      confirmLabel: 'Sí, resolver',
+      action: async () => {
+        try {
+          await authFetch(`${getApiUrl()}/imports/backorders/${bo.id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ resolved: true }),
+          });
+          fetchBackorders();
+        } catch { alert('Error al resolver backorder'); }
+      },
+    });
   };
 
   // Filtro local
@@ -825,6 +841,17 @@ export default function BackorderTab({ userRole }) {
             </tbody>
           </table>
         </div>
+      )}
+
+      {pendingConfirm && (
+        <ConfirmModal
+          title={pendingConfirm.title}
+          message={pendingConfirm.message}
+          danger={pendingConfirm.danger}
+          confirmLabel={pendingConfirm.confirmLabel}
+          onCancel={() => setPendingConfirm(null)}
+          onConfirm={() => { setPendingConfirm(null); pendingConfirm.action(); }}
+        />
       )}
     </div>
   );
