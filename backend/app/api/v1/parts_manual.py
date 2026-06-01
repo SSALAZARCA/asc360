@@ -2034,7 +2034,7 @@ async def coverage_debug(
             (SELECT json_agg(pn) FROM (SELECT pn FROM pedido LIMIT 10) x)            AS muestra_pedido,
             (SELECT json_agg(pn) FROM (SELECT pn FROM pedido_absorbido LIMIT 10) x)  AS muestra_absorbidos,
             (SELECT COUNT(*) FROM parts_references WHERE rotation_class IS NOT NULL)  AS refs_con_rotacion,
-            (SELECT COUNT(DISTINCT UPPER(TRIM(REPLACE(r.factory_part_number,' ','')))
+            (SELECT COUNT(DISTINCT UPPER(TRIM(REPLACE(r.factory_part_number,' ',''))))
              FROM parts_references r
              JOIN pedido p ON p.pn = UPPER(TRIM(REPLACE(r.factory_part_number,' ','')))
              WHERE r.rotation_class IS NOT NULL)                                      AS pedido_con_match_en_refs
