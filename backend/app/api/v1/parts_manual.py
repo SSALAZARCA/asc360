@@ -902,12 +902,11 @@ async def list_catalog(
             ))
             # NOT en_camino (catalog price branch)
             q = q.where(PartCatalog.public_price.is_(None))
-            # NOT pedido (en spare_part_items con shipment sin BL)
+            # NOT pedido (en spare_part_items sin packing list)
             q = q.where(~sa_exists(
                 select(SparePartItem.id)
                 .join(SparePartLot, SparePartLot.id == SparePartItem.lot_id)
-                .join(ShipmentOrder, ShipmentOrder.id == SparePartLot.shipment_order_id)
-                .where(fpn_expr == ref_expr, ShipmentOrder.bl_container.is_(None))
+                .where(fpn_expr == ref_expr, SparePartLot.packing_list_received == False)
             ))
         return q
 
