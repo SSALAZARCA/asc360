@@ -840,16 +840,21 @@ async def list_catalog(
             )
         elif coverage_status == "en_camino":
             from app.models.imports import SparePartLot, ShipmentOrder
+            from sqlalchemy import or_
+            fpn_ec = func.upper(func.trim(func.replace(SparePartItem.part_number, ' ', '')))
+            ref_ec = func.upper(func.trim(PartsReference.factory_part_number))
             q = q.where(
                 sa_exists(
                     select(SparePartItem.id)
                     .join(SparePartLot, SparePartLot.id == SparePartItem.lot_id)
                     .join(ShipmentOrder, ShipmentOrder.id == SparePartLot.shipment_order_id)
                     .where(
-                        func.upper(func.trim(func.replace(SparePartItem.part_number, ' ', ''))) == func.upper(func.trim(PartsReference.factory_part_number)),
-                        SparePartItem.qty_received > 0,
+                        fpn_ec == ref_ec,
                         SparePartItem.qty_physical.is_(None),
-                        ShipmentOrder.bl_container.isnot(None),
+                        or_(
+                            ShipmentOrder.bl_container.isnot(None),
+                            SparePartLot.packing_list_received == True,
+                        ),
                     )
                 )
             )
@@ -871,9 +876,11 @@ async def list_catalog(
                     .join(ShipmentOrder, ShipmentOrder.id == SparePartLot.shipment_order_id)
                     .where(
                         func.upper(func.trim(func.replace(SparePartItem.part_number, ' ', ''))) == func.upper(func.trim(PartsReference.factory_part_number)),
-                        SparePartItem.qty_received > 0,
                         SparePartItem.qty_physical.is_(None),
-                        ShipmentOrder.bl_container.isnot(None),
+                        or_(
+                            ShipmentOrder.bl_container.isnot(None),
+                            SparePartLot.packing_list_received == True,
+                        ),
                     )
                 )
             ).where(
@@ -893,12 +900,16 @@ async def list_catalog(
             q = q.where(~sa_exists(
                 select(SparePartItem.id).where(fpn_expr == ref_expr, SparePartItem.qty_physical.isnot(None), SparePartItem.qty_physical > 0)
             ))
-            # NOT en_camino (BL branch)
+            # NOT en_camino (BL o packing list)
             q = q.where(~sa_exists(
                 select(SparePartItem.id)
                 .join(SparePartLot, SparePartLot.id == SparePartItem.lot_id)
                 .join(ShipmentOrder, ShipmentOrder.id == SparePartLot.shipment_order_id)
-                .where(fpn_expr == ref_expr, SparePartItem.qty_received > 0, SparePartItem.qty_physical.is_(None), ShipmentOrder.bl_container.isnot(None))
+                .where(
+                    fpn_expr == ref_expr,
+                    SparePartItem.qty_physical.is_(None),
+                    or_(ShipmentOrder.bl_container.isnot(None), SparePartLot.packing_list_received == True),
+                )
             ))
             # NOT en_camino (catalog price branch)
             q = q.where(PartCatalog.public_price.is_(None))
@@ -1891,9 +1902,8 @@ async def get_coverage(
             FROM spare_part_items spi
             JOIN spare_part_lots spl ON spl.id = spi.lot_id
             JOIN shipment_orders so  ON so.id  = spl.shipment_order_id
-            WHERE spi.qty_received > 0
-              AND spi.qty_physical IS NULL
-              AND so.bl_container IS NOT NULL
+            WHERE spi.qty_physical IS NULL
+              AND (so.bl_container IS NOT NULL OR spl.packing_list_received = true)
               AND UPPER(TRIM(REPLACE(spi.part_number, ' ', ''))) NOT IN (SELECT pn FROM aqui)
             UNION
             SELECT UPPER(TRIM(part_code)) AS pn
