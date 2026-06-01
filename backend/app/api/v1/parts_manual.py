@@ -1922,9 +1922,9 @@ async def get_coverage(
                 COUNT(CASE WHEN p.pn IS NOT NULL AND a.pn IS NULL AND c.pn IS NULL THEN 1 END) AS pedido,
                 COUNT(CASE WHEN a.pn IS NULL AND c.pn IS NULL AND p.pn IS NULL THEN 1 END) AS no_pedidas
             FROM parts_references r
-            LEFT JOIN aqui      a ON a.pn = UPPER(TRIM(r.factory_part_number))
-            LEFT JOIN en_camino c ON c.pn = UPPER(TRIM(r.factory_part_number))
-            LEFT JOIN pedido    p ON p.pn = UPPER(TRIM(r.factory_part_number))
+            LEFT JOIN aqui      a ON a.pn = UPPER(TRIM(REPLACE(r.factory_part_number, ' ', '')))
+            LEFT JOIN en_camino c ON c.pn = UPPER(TRIM(REPLACE(r.factory_part_number, ' ', '')))
+            LEFT JOIN pedido    p ON p.pn = UPPER(TRIM(REPLACE(r.factory_part_number, ' ', '')))
             WHERE r.rotation_class IS NOT NULL
             {model_filter}
             GROUP BY r.rotation_class
