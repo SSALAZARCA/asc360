@@ -1407,7 +1407,7 @@ async def bypass_otp(
 
     # Validar rol — solo jefe_taller y superadmin
     if not is_bot_call:
-        allowed_roles = [Role.jefe_taller, Role.superadmin]
+        allowed_roles = [Role.jefe_taller.value, Role.superadmin.value]
         if current_user.role not in allowed_roles:
             raise HTTPException(status_code=403, detail="Solo el jefe de taller o superadmin puede autorizar sin OTP")
 
