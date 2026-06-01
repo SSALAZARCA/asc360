@@ -1910,6 +1910,17 @@ async def list_backorders(
         )
         items_map = {i.id: i for i in items_result.scalars().all()}
 
+    # Enriquecer con rotation_class de parts_references
+    from app.models.parts_manual import PartsReference
+    part_numbers = list({bo.part_number for bo in backorders if bo.part_number})
+    rotation_map: dict = {}
+    if part_numbers:
+        refs_result = await db.execute(
+            select(PartsReference.factory_part_number, PartsReference.rotation_class)
+            .where(PartsReference.factory_part_number.in_(part_numbers))
+        )
+        rotation_map = {r.factory_part_number: r.rotation_class for r in refs_result.all()}
+
     result = []
     for bo in backorders:
         sp = items_map.get(bo.spare_part_item_id)
@@ -1935,6 +1946,7 @@ async def list_backorders(
             "sp_qty_received":  sp.qty_received  if sp else None,
             "sp_qty_physical":  sp.qty_physical  if sp else None,
             "sp_qty_pending":   sp.qty_pending   if sp else None,
+            "rotation_class":   rotation_map.get(bo.part_number),
         }
         result.append(d)
 

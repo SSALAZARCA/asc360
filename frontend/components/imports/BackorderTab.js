@@ -652,7 +652,7 @@ export default function BackorderTab({ userRole }) {
                     />
                   </th>
                 )}
-                {['Parte #', 'Descripción', 'Moto', 'PI Origen', 'PI Esperado',
+                {['Parte #', 'Rot.', 'Descripción', 'Moto', 'PI Origen', 'PI Esperado',
                   'Sin Cobrar', 'Cobrado', 'Total', 'Días', 'Estado', ''].map(h => (
                   <th key={h} style={{
                     padding: '9px 12px', textAlign: 'center', fontSize: '9px', fontWeight: 700,
@@ -728,6 +728,21 @@ export default function BackorderTab({ userRole }) {
                     {/* Parte # */}
                     <td style={{ padding: '9px 12px', whiteSpace: 'nowrap' }}>
                       <span style={{ color: '#f87171', fontWeight: 700, fontFamily: 'monospace' }}>{group.part_number}</span>
+                    </td>
+
+                    {/* Rotación */}
+                    <td style={{ padding: '9px 12px', textAlign: 'center' }}>
+                      {primaryBo?.rotation_class ? (
+                        <span style={{
+                          fontSize: '8px', fontWeight: 800, textTransform: 'uppercase',
+                          padding: '2px 6px', borderRadius: '4px', letterSpacing: '0.05em',
+                          ...(primaryBo.rotation_class === 'alta'  ? { background: 'rgba(239,68,68,0.12)',  color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)'  } :
+                              primaryBo.rotation_class === 'media' ? { background: 'rgba(251,191,36,0.12)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.3)' } :
+                                                                     { background: 'rgba(74,222,128,0.12)', color: '#4ade80', border: '1px solid rgba(74,222,128,0.3)'  }),
+                        }}>
+                          {primaryBo.rotation_class}
+                        </span>
+                      ) : <span style={{ color: 'rgba(255,255,255,0.15)', fontSize: '10px' }}>—</span>}
                     </td>
 
                     {/* Descripción */}

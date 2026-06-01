@@ -403,6 +403,7 @@ class BackorderRead(BaseModel):
     sp_qty_received: Optional[int] = None
     sp_qty_physical: Optional[int] = None
     sp_qty_pending: Optional[int] = None
+    rotation_class: Optional[str] = None
 
 
 class BackorderUpdate(BaseModel):
