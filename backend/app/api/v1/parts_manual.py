@@ -859,10 +859,9 @@ async def list_catalog(
                 sa_exists(
                     select(SparePartItem.id)
                     .join(SparePartLot, SparePartLot.id == SparePartItem.lot_id)
-                    .join(ShipmentOrder, ShipmentOrder.id == SparePartLot.shipment_order_id)
                     .where(
                         func.upper(func.trim(func.replace(SparePartItem.part_number, ' ', ''))) == func.upper(func.trim(PartsReference.factory_part_number)),
-                        ShipmentOrder.bl_container.is_(None),
+                        SparePartLot.packing_list_received == False,
                     )
                 )
             ).where(
@@ -1907,8 +1906,7 @@ async def get_coverage(
             SELECT UPPER(TRIM(REPLACE(spi.part_number, ' ', ''))) AS pn
             FROM spare_part_items spi
             JOIN spare_part_lots spl ON spl.id = spi.lot_id
-            JOIN shipment_orders so  ON so.id  = spl.shipment_order_id
-            WHERE so.bl_container IS NULL
+            WHERE spl.packing_list_received = false
               AND UPPER(TRIM(REPLACE(spi.part_number, ' ', ''))) NOT IN (SELECT pn FROM aqui)
               AND UPPER(TRIM(REPLACE(spi.part_number, ' ', ''))) NOT IN (SELECT pn FROM en_camino)
             GROUP BY 1
