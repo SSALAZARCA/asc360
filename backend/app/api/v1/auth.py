@@ -56,6 +56,7 @@ def _build_token_and_user(user: User) -> dict:
             "role": user.role.value,
             "tenant_id": str(user.tenant_id) if user.tenant_id else None,
             "telegram_id": user.telegram_id,
+            "name": user.name,
         }
     )
     return {

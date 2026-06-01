@@ -1432,7 +1432,7 @@ async def bypass_otp(
 
     now = datetime.utcnow()
     authorizer_name = current_user.name if not is_bot_call else "Sonia (Bot)"
-    authorizer_id   = current_user.id   if not is_bot_call else None
+    authorizer_id   = current_user.user_id if not is_bot_call else None
 
     # Registrar bypass en reception
     reception = order.reception

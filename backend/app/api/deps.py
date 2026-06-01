@@ -10,9 +10,10 @@ from app.database import get_db
 
 class CurrentUser:
     """Contenedor simple para los datos del usuario autenticado extraídos del JWT."""
-    def __init__(self, user_id: str, role: str, tenant_id: Optional[str]):
+    def __init__(self, user_id: str, role: str, tenant_id: Optional[str], name: Optional[str] = None):
         self.user_id = user_id
         self.role = role
+        self.name = name or ""
         self.tenant_id = uuid.UUID(tenant_id) if tenant_id else None
 
     @property
@@ -75,7 +76,7 @@ async def get_current_user(
     if not user_id or not role:
         raise credentials_exception
 
-    return CurrentUser(user_id=user_id, role=role, tenant_id=tenant_id)
+    return CurrentUser(user_id=user_id, role=role, tenant_id=tenant_id, name=payload.get("name"))
 
 
 async def get_optional_user(authorization: Optional[str] = Header(None)) -> Optional[CurrentUser]:
@@ -93,7 +94,7 @@ async def get_optional_user(authorization: Optional[str] = Header(None)) -> Opti
     tenant_id = payload.get("tenant_id")
     if not user_id or not role:
         return None
-    return CurrentUser(user_id=user_id, role=role, tenant_id=tenant_id)
+    return CurrentUser(user_id=user_id, role=role, tenant_id=tenant_id, name=payload.get("name"))
 
 
 
