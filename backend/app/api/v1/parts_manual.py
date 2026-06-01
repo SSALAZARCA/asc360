@@ -850,6 +850,7 @@ async def list_catalog(
                     .join(ShipmentOrder, ShipmentOrder.id == SparePartLot.shipment_order_id)
                     .where(
                         fpn_ec == ref_ec,
+                        SparePartItem.qty_received > 0,
                         SparePartItem.qty_physical.is_(None),
                         or_(
                             ShipmentOrder.bl_container.isnot(None),
@@ -876,6 +877,7 @@ async def list_catalog(
                     .join(ShipmentOrder, ShipmentOrder.id == SparePartLot.shipment_order_id)
                     .where(
                         func.upper(func.trim(func.replace(SparePartItem.part_number, ' ', ''))) == func.upper(func.trim(PartsReference.factory_part_number)),
+                        SparePartItem.qty_received > 0,
                         SparePartItem.qty_physical.is_(None),
                         or_(
                             ShipmentOrder.bl_container.isnot(None),
@@ -907,6 +909,7 @@ async def list_catalog(
                 .join(ShipmentOrder, ShipmentOrder.id == SparePartLot.shipment_order_id)
                 .where(
                     fpn_expr == ref_expr,
+                    SparePartItem.qty_received > 0,
                     SparePartItem.qty_physical.is_(None),
                     or_(ShipmentOrder.bl_container.isnot(None), SparePartLot.packing_list_received == True),
                 )
