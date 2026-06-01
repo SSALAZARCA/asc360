@@ -1970,6 +1970,80 @@ async def get_coverage(
     return CoverageResponse(sin_clasificar=int(sin_clasificar), buckets=clases)
 
 
+@router.get("/admin/coverage-debug")
+async def coverage_debug(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Diagnóstico de cobertura: muestra conteos y muestras de cada CTE. Solo superadmin."""
+    if not current_user.is_superadmin:
+        raise HTTPException(status_code=403, detail="Solo superadmin")
+
+    debug_sql = text("""
+        WITH
+        aqui AS (
+            SELECT UPPER(TRIM(REPLACE(part_number, ' ', ''))) AS pn
+            FROM spare_part_items
+            WHERE qty_physical IS NOT NULL AND qty_physical > 0
+            GROUP BY 1
+        ),
+        en_camino AS (
+            SELECT UPPER(TRIM(REPLACE(spi.part_number, ' ', ''))) AS pn
+            FROM spare_part_items spi
+            JOIN spare_part_lots spl ON spl.id = spi.lot_id
+            JOIN shipment_orders so  ON so.id  = spl.shipment_order_id
+            WHERE spi.qty_received > 0
+              AND spi.qty_physical IS NULL
+              AND so.bl_container IS NOT NULL
+              AND UPPER(TRIM(REPLACE(spi.part_number, ' ', ''))) NOT IN (SELECT pn FROM aqui)
+            UNION
+            SELECT UPPER(TRIM(part_code)) AS pn
+            FROM part_catalog
+            WHERE public_price IS NOT NULL
+              AND UPPER(TRIM(part_code)) NOT IN (SELECT pn FROM aqui)
+        ),
+        pedido_raw AS (
+            SELECT UPPER(TRIM(REPLACE(spi.part_number, ' ', ''))) AS pn,
+                   so.bl_container,
+                   spl.packing_list_received,
+                   spi.qty_ordered,
+                   spi.qty_received
+            FROM spare_part_items spi
+            JOIN spare_part_lots spl ON spl.id = spi.lot_id
+            JOIN shipment_orders so  ON so.id  = spl.shipment_order_id
+            WHERE so.bl_container IS NULL
+        ),
+        pedido AS (
+            SELECT pn FROM pedido_raw
+            WHERE pn NOT IN (SELECT pn FROM aqui)
+              AND pn NOT IN (SELECT pn FROM en_camino)
+            GROUP BY 1
+        ),
+        pedido_absorbido AS (
+            SELECT pn FROM pedido_raw
+            WHERE pn IN (SELECT pn FROM en_camino)
+            GROUP BY 1
+        )
+        SELECT
+            (SELECT COUNT(*) FROM aqui)             AS aqui_count,
+            (SELECT COUNT(*) FROM en_camino)        AS en_camino_count,
+            (SELECT COUNT(*) FROM pedido)           AS pedido_count,
+            (SELECT COUNT(*) FROM pedido_raw)       AS pedido_raw_count,
+            (SELECT COUNT(*) FROM pedido_absorbido) AS pedido_absorbido_por_en_camino,
+            (SELECT json_agg(pn) FROM (SELECT pn FROM pedido_raw LIMIT 10) x)        AS muestra_pedido_raw,
+            (SELECT json_agg(pn) FROM (SELECT pn FROM pedido LIMIT 10) x)            AS muestra_pedido,
+            (SELECT json_agg(pn) FROM (SELECT pn FROM pedido_absorbido LIMIT 10) x)  AS muestra_absorbidos,
+            (SELECT COUNT(*) FROM parts_references WHERE rotation_class IS NOT NULL)  AS refs_con_rotacion,
+            (SELECT COUNT(DISTINCT UPPER(TRIM(REPLACE(r.factory_part_number,' ','')))
+             FROM parts_references r
+             JOIN pedido p ON p.pn = UPPER(TRIM(REPLACE(r.factory_part_number,' ','')))
+             WHERE r.rotation_class IS NOT NULL)                                      AS pedido_con_match_en_refs
+    """)
+
+    row = (await db.execute(debug_sql)).mappings().one()
+    return dict(row)
+
+
 # ── Unordered parts export ─────────────────────────────────────────────────────
 
 @router.get("/admin/coverage/unordered")
