@@ -2011,7 +2011,7 @@ async def coverage_debug(
             FROM spare_part_items spi
             JOIN spare_part_lots spl ON spl.id = spi.lot_id
             JOIN shipment_orders so  ON so.id  = spl.shipment_order_id
-            WHERE so.bl_container IS NULL
+            WHERE spl.packing_list_received = false
         ),
         pedido AS (
             SELECT pn FROM pedido_raw
