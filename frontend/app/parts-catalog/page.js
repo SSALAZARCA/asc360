@@ -566,19 +566,10 @@ export default function PartsCatalogPage() {
                 </td>
                 <td style={{ textAlign: 'center' }}>
                   {(() => {
-                    const cs = item.coverage_status;
-                    const map = {
-                      aqui:       { label: 'En bodega',  bg: 'rgba(74,222,128,0.12)',  color: '#4ade80', border: 'rgba(74,222,128,0.35)'  },
-                      en_camino:  { label: 'En camino',  bg: 'rgba(96,165,250,0.12)',  color: '#60a5fa', border: 'rgba(96,165,250,0.35)'  },
-                      pedido:     { label: 'Pedido',     bg: 'rgba(251,191,36,0.12)',  color: '#fbbf24', border: 'rgba(251,191,36,0.35)'  },
-                      sin_pedido: { label: 'Sin pedido', bg: 'rgba(255,255,255,0.05)', color: '#6b7280', border: 'rgba(255,255,255,0.1)'  },
-                    };
-                    const s = map[cs] || map.sin_pedido;
-                    return (
-                      <span style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', padding: '2px 7px', borderRadius: '4px', background: s.bg, color: s.color, border: `1px solid ${s.border}`, whiteSpace: 'nowrap' }}>
-                        {s.label}
-                      </span>
-                    );
+                    const DOT = { aqui: '#4ade80', en_camino: '#38bdf8', pedido: '#a78bfa', sin_pedido: '#ef4444' };
+                    const TIP = { aqui: 'Aquí', en_camino: 'En camino', pedido: 'Pedido', sin_pedido: 'No pedida' };
+                    const c = DOT[item.coverage_status] || DOT.sin_pedido;
+                    return <span title={TIP[item.coverage_status] || 'No pedida'} style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: c, flexShrink: 0 }} />;
                   })()}
                 </td>
                 <td>
