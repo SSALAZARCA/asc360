@@ -768,6 +768,34 @@ async def list_catalog(
     if not current_user.is_superadmin:
         raise HTTPException(status_code=403, detail="Solo superadmin")
 
+    try:
+        return await _list_catalog_impl(
+            search, model_code, only_pending, only_price_review,
+            rotation_class, coverage_status, sort_col, sort_dir, page, page_size, db,
+        )
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception(
+            "list_catalog failed: search=%r model=%r page=%d sort=%s/%s",
+            search, model_code, page, sort_col, sort_dir,
+        )
+        raise HTTPException(status_code=500, detail="Error interno al consultar el catálogo")
+
+
+async def _list_catalog_impl(
+    search: str,
+    model_code: str,
+    only_pending: bool,
+    only_price_review: bool,
+    rotation_class: str,
+    coverage_status: str,
+    sort_col: str,
+    sort_dir: str,
+    page: int,
+    page_size: int,
+    db: AsyncSession,
+) -> "CatalogListResult":
     from app.services.pricing_service import get_pricing_factors, compute_prices
     pricing_factors = await get_pricing_factors(db)
 
@@ -813,13 +841,11 @@ async def list_catalog(
             q = q.where(PartsManualSection.model_code == model_code)
         if search:
             term = f"%{search.strip()}%"
-            from sqlalchemy import cast as sa_cast, Text as SAText
             q = q.where(or_(
                 PartsReference.factory_part_number.ilike(term),
                 PartsReference.description.ilike(term),
                 PartsReference.description_es_manual.ilike(term),
                 spi_latest.c.description_es.ilike(term),
-                sa_cast(PartsReference.prev_codes, SAText).ilike(term),
             ))
         if only_pending:
             q = q.where(pending_sq.c.task_id.isnot(None))

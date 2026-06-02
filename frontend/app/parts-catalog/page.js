@@ -138,7 +138,8 @@ export default function PartsCatalogPage() {
         setItems(data.items || []);
         setTotal(data.total || 0);
       } else {
-        console.error('[catalog] error', res.status, params.toString());
+        const errText = await res.text().catch(() => '');
+        console.error('[catalog] error', res.status, errText, params.toString());
       }
     } catch (e) {
       console.error('[catalog] exception', e);
