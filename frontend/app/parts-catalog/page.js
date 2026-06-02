@@ -37,7 +37,7 @@ export default function PartsCatalogPage() {
   const [searchInput, setSearchInput] = useState('');
 
   useEffect(() => {
-    const t = setTimeout(() => { setSearch(searchInput); setPage(1); }, 350);
+    const t = setTimeout(() => { setSearch(searchInput); setPage(1); }, 150);
     return () => clearTimeout(t);
   }, [searchInput]);
   const [modelCode, setModelCode]     = useState('');
@@ -142,9 +142,11 @@ export default function PartsCatalogPage() {
         if (seq !== fetchSeqRef.current) return;
         setItems(data.items || []);
         setTotal(data.total || 0);
+      } else {
+        console.error('[catalog] fetch error', res.status, params.toString());
       }
     } catch (e) {
-      if (seq === fetchSeqRef.current) console.error(e);
+      if (seq === fetchSeqRef.current) console.error('[catalog] fetch exception', e);
     } finally {
       if (seq === fetchSeqRef.current) setLoading(false);
     }
