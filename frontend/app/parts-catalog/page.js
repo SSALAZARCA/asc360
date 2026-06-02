@@ -307,7 +307,7 @@ export default function PartsCatalogPage() {
     <AdminLayout>
       <header className="page-header">
         <div>
-          <h1 className="page-title">Catálogo de <span style={{ fontStyle: 'italic', color: 'var(--accent-orange)', WebkitTextFillColor: 'var(--accent-orange)' }}>Partes</span></h1>
+          <h1 className="page-title">Maestro de <span style={{ fontStyle: 'italic', color: 'var(--accent-orange)', WebkitTextFillColor: 'var(--accent-orange)' }}>Partes</span></h1>
           <p className="page-subtitle">
             {total > 0 ? `${total.toLocaleString()} repuestos cargados en el sistema` : 'Consulta el catálogo de despiece de todos los modelos'}
             {pendingCount > 0 && !onlyPending && (
