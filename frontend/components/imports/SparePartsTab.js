@@ -354,7 +354,8 @@ function LotItemsTable({ lotId, userRole, isConfirmed }) {
                   </td>
                   <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 700 }}>
                     {(() => {
-                      const diff = (item.qty_received ?? 0) - (item.qty_ordered ?? 0);
+                      const ref = item.qty_physical != null ? item.qty_physical : item.qty_received;
+                      const diff = (ref ?? 0) - (item.qty_ordered ?? 0);
                       if (diff > 0) return <span style={{ color: '#34d399' }}>+{diff}</span>;
                       if (diff < 0) return <span style={{ color: '#f87171' }}>{diff}</span>;
                       return <span style={{ color: '#3f3f55' }}>—</span>;
