@@ -1000,19 +1000,21 @@ async def _list_catalog_impl(
         * (1 + _pf["iva_rate"])
         * _pf["trm"]
     )
+    # fob_effective: avg_fob_cost si existe, sino preliminary_fob (mismo que _build_item)
+    fob_effective = func.coalesce(inner_sq.c.avg_fob_cost, inner_sq.c.preliminary_fob)
     _SORT_MAP = {
         "factory_part_number": inner_sq.c.fpn,
         "description":         inner_sq.c.description,
         "description_es":      inner_sq.c.description_es,
         "public_price":        func.coalesce(
-            cast(inner_sq.c.public_price,  SANumeric(15, 2)),
-            cast(inner_sq.c.avg_fob_cost * k_publico, SANumeric(15, 2)),
+            cast(inner_sq.c.public_price, SANumeric(15, 2)),
+            cast(fob_effective * k_publico, SANumeric(15, 2)),
         ),
         "section_code":        inner_sq.c.section_code,
         "vehicle_model_name":  inner_sq.c.vehicle_model_pattern,
-        "avg_fob_cost":        cast(inner_sq.c.avg_fob_cost, SANumeric(12, 4)),
-        "rotation_class":       inner_sq.c.rotation_class,
-        "needs_price_review":   inner_sq.c.needs_price_review,
+        "avg_fob_cost":        cast(fob_effective, SANumeric(12, 4)),
+        "rotation_class":      inner_sq.c.rotation_class,
+        "needs_price_review":  inner_sq.c.needs_price_review,
     }
     sort_expr = _SORT_MAP.get(sort_col, inner_sq.c.section_code)
     order_expr = nullslast(sort_expr.asc() if sort_dir == "asc" else sort_expr.desc())
@@ -1964,9 +1966,9 @@ async def import_fob_preliminary(
     skipped_no_pi = 0
     skipped_no_item = 0
 
-    # {factory_part_number: [(fob_val, qty_ordered)]} para calcular promedio
-    fob_accum: dict[str, list[tuple[float, int]]] = defaultdict(list)
-
+    # ── Paso 1: primera pasada para parsear filas ──────────────────────────────
+    # Evita N+1 queries cargando todos los lotes de una vez con IN (...)
+    parsed_rows: list[tuple[int, str, str | None, float]] = []  # (row_idx, fpn, lot_id, fob_val)
     for row_idx in range(header_row + 1, sheet.max_row + 1):
         ref_raw = _cell(sheet, row_idx, col_map, *list(_REF_ALIASES))
         pi_raw  = _cell(sheet, row_idx, col_map, *list(_PI_ALIASES))
@@ -1977,7 +1979,6 @@ async def import_fob_preliminary(
         if not ref_raw or not fob_raw:
             parse_errors.append({"row": row_idx, "reason": "missing_ref_or_fob"})
             continue
-
         try:
             fob_val = float(str(fob_raw).replace(",", ".").strip())
         except (ValueError, TypeError):
@@ -1986,35 +1987,50 @@ async def import_fob_preliminary(
 
         fpn    = _normalize_part_code(ref_raw)
         lot_id = str(pi_raw).strip() if pi_raw else None
+        parsed_rows.append((row_idx, fpn, lot_id, fob_val))
 
-        # 1. Buscar el lote por lot_identifier
-        lot_obj = None
-        if lot_id:
-            lot_obj = (await db.execute(
-                select(_SPL).where(_SPL.lot_identifier == lot_id)
-            )).scalar_one_or_none()
+    # ── Paso 2: batch-load de lotes y sus items ────────────────────────────────
+    lot_ids = {lot_id for _, _, lot_id, _ in parsed_rows if lot_id}
+    lots_by_id: dict[str, _SPL] = {}
+    if lot_ids:
+        lot_rows = (await db.execute(
+            select(_SPL).where(_SPL.lot_identifier.in_(lot_ids))
+        )).scalars().all()
+        lots_by_id = {l.lot_identifier: l for l in lot_rows}
+
+    # Batch-load de items para todos los lotes encontrados
+    lot_uuids = [l.id for l in lots_by_id.values()]
+    items_by_lot: dict = defaultdict(list)  # lot_id (uuid) → [SparePartItem]
+    if lot_uuids:
+        all_items = (await db.execute(
+            select(_SPI2).where(_SPI2.lot_id.in_(lot_uuids))
+        )).scalars().all()
+        for spi in all_items:
+            items_by_lot[spi.lot_id].append(spi)
+
+    # ── Paso 3: procesar filas con datos ya en memoria ─────────────────────────
+    fob_accum: dict[str, list[tuple[float, int]]] = defaultdict(list)
+
+    for _, fpn, lot_id, fob_val in parsed_rows:
+        lot_obj = lots_by_id.get(lot_id) if lot_id else None
 
         if not lot_obj:
             skipped_no_pi += 1
-            # Igual acumulamos el FOB con qty=1 para el promedio aunque no haya lote
             fob_accum[fpn].append((fob_val, 1))
             continue
 
-        # 2. Buscar los spare_part_items de esa referencia en ese lote
-        items_found = (await db.execute(
-            select(_SPI2).where(
-                _SPI2.lot_id == lot_obj.id,
-                func.upper(func.trim(func.replace(_SPI2.part_number, ' ', ''))) ==
-                func.upper(func.trim(fpn)),
-            )
-        )).scalars().all()
+        norm_fpn = func.upper(func.trim(fpn)).compile(compile_kwargs={"literal_binds": True}).string \
+            if False else fpn.upper().strip().replace(' ', '')
+        items_found = [
+            spi for spi in items_by_lot.get(lot_obj.id, [])
+            if spi.part_number.upper().strip().replace(' ', '') == norm_fpn
+        ]
 
         if not items_found:
             skipped_no_item += 1
             fob_accum[fpn].append((fob_val, 1))
             continue
 
-        # 3. Escribir fob_pi en cada item encontrado
         qty_total = 0
         for item in items_found:
             item.fob_pi = fob_val
@@ -2358,14 +2374,14 @@ async def save_decision(
 
     if existing:
         existing.decision   = body.decision
-        existing.updated_at = __import__('datetime').datetime.utcnow()
-        existing.updated_by = __import__('uuid').UUID(current_user.user_id)
+        existing.updated_at = datetime.utcnow()
+        existing.updated_by = _uuid.UUID(current_user.user_id)
     else:
         db.add(_POD(
             factory_part_number=body.factory_part_number,
             lot_identifier=body.lot_identifier,
             decision=body.decision,
-            updated_by=__import__('uuid').UUID(current_user.user_id),
+            updated_by=_uuid.UUID(current_user.user_id),
         ))
     await db.commit()
     return {"status": "saved"}
@@ -2469,7 +2485,7 @@ async def export_low_rotation_ordered(
     buf.seek(0)
 
     from fastapi.responses import StreamingResponse
-    filename = f"analisis_repuestos_{__import__('datetime').date.today()}.xlsx"
+    filename = f"analisis_repuestos_{datetime.utcnow().date()}.xlsx"
     return StreamingResponse(
         buf,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

@@ -686,8 +686,12 @@ export default function SparePartsTab({ userRole }) {
       const fd = new FormData();
       fd.append('file', fobFile);
       const res  = await authFetch(`${getApiUrl()}/parts/admin/fob-preliminary-import`, { method: 'POST', body: fd });
-      const data = await res.json();
-      setFobResult(data);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setFobResult({ error: data.detail || `Error ${res.status}` });
+      } else {
+        setFobResult(data);
+      }
     } catch { setFobResult({ error: 'Error de conexión' }); }
     finally { setFobUploading(false); }
   };

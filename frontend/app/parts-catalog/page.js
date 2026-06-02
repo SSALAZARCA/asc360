@@ -74,7 +74,6 @@ export default function PartsCatalogPage() {
   const [rotationUploading, setRotationUploading] = useState(false);
   const [rotationResult, setRotationResult] = useState(null);
 
-  // Modal de carga FOB preliminar
   // Backfill de costos
   const [backfilling, setBackfilling] = useState(false);
   const [backfillResult, setBackfillResult] = useState(null);
