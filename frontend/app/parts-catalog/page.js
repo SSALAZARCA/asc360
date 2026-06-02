@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import AdminLayout from '../admin-layout';
 import { authFetch } from '../../lib/authFetch';
 import { Search, ChevronLeft, ChevronRight, X, ArrowUp, ArrowDown, ChevronsUpDown, AlertTriangle, CheckCircle2, ShieldX, Pencil, UploadCloud, BarChart3, Download, Flag, Trash2 } from 'lucide-react';
@@ -49,6 +49,8 @@ export default function PartsCatalogPage() {
 
   const [sortCol, setSortCol] = useState('section_code');
   const [sortDir, setSortDir] = useState('asc');
+
+  const fetchSeqRef = useRef(0);
 
   // Modal de verificación
   const [reviewTask, setReviewTask] = useState(null); // { taskId, existingCode, candidateCode, score }
@@ -118,6 +120,7 @@ export default function PartsCatalogPage() {
   }, [modelCode]);
 
   const fetchData = useCallback(async () => {
+    const seq = ++fetchSeqRef.current;
     setLoading(true);
     try {
       const params = new URLSearchParams({
@@ -133,15 +136,17 @@ export default function PartsCatalogPage() {
         sort_dir: sortDir,
       });
       const res = await authFetch(`/parts/admin/catalog?${params}`);
+      if (seq !== fetchSeqRef.current) return;
       if (res.ok) {
         const data = await res.json();
+        if (seq !== fetchSeqRef.current) return;
         setItems(data.items || []);
         setTotal(data.total || 0);
       }
     } catch (e) {
-      console.error(e);
+      if (seq === fetchSeqRef.current) console.error(e);
     } finally {
-      setLoading(false);
+      if (seq === fetchSeqRef.current) setLoading(false);
     }
   }, [page, search, modelCode, onlyPending, onlyPriceReview, rotationFilter, coverageFilter, sortCol, sortDir]);
 
