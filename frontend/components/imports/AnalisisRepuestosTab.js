@@ -56,15 +56,19 @@ export default function AnalisisRepuestosTab() {
 
   useEffect(() => { load(); }, []);
 
-  const toggleMark = (lotId) => {
+  // Clave compuesta para que la marcación sea independiente por referencia
+  const markKey = (fpn, lotId) => `${fpn}::${lotId}`;
+
+  const toggleMark = (fpn, lotId) => {
+    const key = markKey(fpn, lotId);
     setMarked(prev => {
-      const next = CYCLE[prev[lotId] || ''];
+      const next = CYCLE[prev[key] || ''];
       if (!next) {
         const copy = { ...prev };
-        delete copy[lotId];
+        delete copy[key];
         return copy;
       }
-      return { ...prev, [lotId]: next };
+      return { ...prev, [key]: next };
     });
   };
 
@@ -105,9 +109,14 @@ export default function AnalisisRepuestosTab() {
     return sortDir === 'asc' ? av - bv : bv - av;
   });
 
-  const markedCancelar = Object.entries(marked).filter(([, v]) => v === 'cancelar').map(([k]) => k);
-  const markedCambiar  = Object.entries(marked).filter(([, v]) => v === 'cambiar').map(([k]) => k);
-  const hasMarked      = markedCancelar.length > 0 || markedCambiar.length > 0;
+  // Para la barra de resumen: mostrar "CÓDIGO · PI"
+  const markedCancelar = Object.entries(marked)
+    .filter(([, v]) => v === 'cancelar')
+    .map(([k]) => { const [fpn, pi] = k.split('::'); return { fpn, pi }; });
+  const markedCambiar  = Object.entries(marked)
+    .filter(([, v]) => v === 'cambiar')
+    .map(([k]) => { const [fpn, pi] = k.split('::'); return { fpn, pi }; });
+  const hasMarked = markedCancelar.length > 0 || markedCambiar.length > 0;
 
   const thStyle = {
     padding: '0.65rem 1rem', fontSize: '0.58rem', fontWeight: 800,
@@ -275,12 +284,12 @@ export default function AnalisisRepuestosTab() {
                   <td style={{ padding: '0.7rem 1rem' }}>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
                       {item.lots.map(lot => {
-                        const state = marked[lot.lot_identifier] || '';
+                        const state = marked[markKey(item.factory_part_number, lot.lot_identifier)] || '';
                         const s     = PI_STYLES[state];
                         return (
                           <button
                             key={lot.lot_identifier}
-                            onClick={() => toggleMark(lot.lot_identifier)}
+                            onClick={() => toggleMark(item.factory_part_number, lot.lot_identifier)}
                             title={state ? `Marcado: ${state} — click para cambiar` : 'Click para marcar'}
                             style={{
                               display: 'inline-flex', alignItems: 'center', gap: '0.25rem',
@@ -321,11 +330,16 @@ export default function AnalisisRepuestosTab() {
                 ✕ Cancelar ({markedCancelar.length})
               </span>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
-                {markedCancelar.map(pi => (
-                  <span key={pi} style={{
-                    fontFamily: 'monospace', fontSize: '0.68rem', padding: '2px 8px', borderRadius: '5px',
+                {markedCancelar.map(({ fpn, pi }) => (
+                  <span key={`${fpn}::${pi}`} style={{
+                    fontFamily: 'monospace', fontSize: '0.65rem', padding: '2px 8px', borderRadius: '5px',
                     background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.3)', color: '#fca5a5',
-                  }}>{pi}</span>
+                    display: 'flex', gap: '0.3rem', alignItems: 'center',
+                  }}>
+                    <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: '0.58rem' }}>{fpn}</span>
+                    <span style={{ color: 'rgba(255,255,255,0.2)' }}>·</span>
+                    <span>{pi}</span>
+                  </span>
                 ))}
               </div>
             </div>
@@ -336,11 +350,16 @@ export default function AnalisisRepuestosTab() {
                 ↺ Cambiar ({markedCambiar.length})
               </span>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
-                {markedCambiar.map(pi => (
-                  <span key={pi} style={{
-                    fontFamily: 'monospace', fontSize: '0.68rem', padding: '2px 8px', borderRadius: '5px',
+                {markedCambiar.map(({ fpn, pi }) => (
+                  <span key={`${fpn}::${pi}`} style={{
+                    fontFamily: 'monospace', fontSize: '0.65rem', padding: '2px 8px', borderRadius: '5px',
                     background: 'rgba(251,191,36,0.1)', border: '1px solid rgba(251,191,36,0.3)', color: '#fde68a',
-                  }}>{pi}</span>
+                    display: 'flex', gap: '0.3rem', alignItems: 'center',
+                  }}>
+                    <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: '0.58rem' }}>{fpn}</span>
+                    <span style={{ color: 'rgba(255,255,255,0.2)' }}>·</span>
+                    <span>{pi}</span>
+                  </span>
                 ))}
               </div>
             </div>

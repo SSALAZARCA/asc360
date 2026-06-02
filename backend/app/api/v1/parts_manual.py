@@ -2227,7 +2227,7 @@ async def export_low_rotation_ordered(
     for item in analysis.items:
         models_str = ", ".join(item.models) if item.models else "—"
         for lot in item.lots:
-            decision = body.marked.get(lot.lot_identifier, "")
+            decision = body.marked.get(f"{item.factory_part_number}::{lot.lot_identifier}", "")
             decision_label = DECISION_LABEL.get(decision, "—")
 
             if decision == "cancelar":
