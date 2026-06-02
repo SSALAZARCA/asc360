@@ -644,6 +644,10 @@ export default function MotocicletasTab({ userRole }) {
   const [filterVIN, setFilterVIN] = useState('');
   const [filterEngine, setFilterEngine] = useState('');
   const [filterCertificado, setFilterCertificado] = useState(''); // '', 'true', 'false'
+  const [filterObservation, setFilterObservation] = useState(''); // '' | observation uuid
+  const [filterEnviado, setFilterEnviado] = useState(''); // '', 'true', 'false'
+  const [filterFacturado, setFilterFacturado] = useState(''); // '', 'true', 'false'
+  const [filterCargadoRunt, setFilterCargadoRunt] = useState(''); // '', 'true', 'false'
 
   // DIM upload
   const [showDimUpload, setShowDimUpload] = useState(false);
@@ -681,6 +685,10 @@ export default function MotocicletasTab({ userRole }) {
       if (filterVIN) params.append('vin', filterVIN);
       if (filterEngine) params.append('engine', filterEngine);
       if (filterCertificado !== '') params.append('certificado_generado', filterCertificado);
+      if (filterObservation !== '') params.append('observation_id', filterObservation);
+      if (filterEnviado !== '') params.append('empadronamiento_fisico_enviado', filterEnviado);
+      if (filterFacturado !== '') params.append('facturado', filterFacturado);
+      if (filterCargadoRunt !== '') params.append('cargado_runt', filterCargadoRunt);
       const res = await authFetch(`${getApiUrl()}/imports/moto-units/export?${params}`);
       if (!res.ok) return;
       const blob = await res.blob();
@@ -706,6 +714,10 @@ export default function MotocicletasTab({ userRole }) {
       if (filterVIN) params.append('vin', filterVIN);
       if (filterEngine) params.append('engine', filterEngine);
       if (filterCertificado !== '') params.append('certificado_generado', filterCertificado);
+      if (filterObservation !== '') params.append('observation_id', filterObservation);
+      if (filterEnviado !== '') params.append('empadronamiento_fisico_enviado', filterEnviado);
+      if (filterFacturado !== '') params.append('facturado', filterFacturado);
+      if (filterCargadoRunt !== '') params.append('cargado_runt', filterCargadoRunt);
       const res = await authFetch(`${getApiUrl()}/imports/moto-units?${params}`);
       const data = await res.json();
       setUnits(data.items || []);
@@ -718,7 +730,7 @@ export default function MotocicletasTab({ userRole }) {
     } finally {
       setLoading(false);
     }
-  }, [page, filterPI, filterModel, filterVIN, filterEngine, filterCertificado]);
+  }, [page, filterPI, filterModel, filterVIN, filterEngine, filterCertificado, filterObservation, filterEnviado, filterFacturado, filterCargadoRunt]);
 
   const fetchLocations = useCallback(async () => {
     try {
@@ -1015,6 +1027,71 @@ export default function MotocicletasTab({ userRole }) {
           <option value="">Todos</option>
           <option value="true">Empadronados</option>
           <option value="false">Pendientes</option>
+        </select>
+
+        {/* Filtro observación */}
+        <select
+          value={filterObservation}
+          onChange={e => { setFilterObservation(e.target.value); setPage(1); }}
+          style={{
+            padding: '6px 10px', borderRadius: '8px',
+            background: '#1a1a24', border: '1px solid rgba(255,255,255,0.08)',
+            color: filterObservation === '' ? '#606075' : '#fff',
+            fontSize: '11px', outline: 'none',
+          }}
+        >
+          <option value="">Observación</option>
+          {observations.map(obs => (
+            <option key={obs.id} value={obs.id}>{obs.name}</option>
+          ))}
+        </select>
+
+        {/* Filtro enviado */}
+        <select
+          value={filterEnviado}
+          onChange={e => { setFilterEnviado(e.target.value); setPage(1); }}
+          style={{
+            padding: '6px 10px', borderRadius: '8px',
+            background: '#1a1a24', border: '1px solid rgba(255,255,255,0.08)',
+            color: filterEnviado === '' ? '#606075' : '#fff',
+            fontSize: '11px', outline: 'none',
+          }}
+        >
+          <option value="">Enviado</option>
+          <option value="true">Enviado</option>
+          <option value="false">No enviado</option>
+        </select>
+
+        {/* Filtro facturado */}
+        <select
+          value={filterFacturado}
+          onChange={e => { setFilterFacturado(e.target.value); setPage(1); }}
+          style={{
+            padding: '6px 10px', borderRadius: '8px',
+            background: '#1a1a24', border: '1px solid rgba(255,255,255,0.08)',
+            color: filterFacturado === '' ? '#606075' : '#fff',
+            fontSize: '11px', outline: 'none',
+          }}
+        >
+          <option value="">Facturado</option>
+          <option value="true">Facturado</option>
+          <option value="false">No facturado</option>
+        </select>
+
+        {/* Filtro cargado RUNT */}
+        <select
+          value={filterCargadoRunt}
+          onChange={e => { setFilterCargadoRunt(e.target.value); setPage(1); }}
+          style={{
+            padding: '6px 10px', borderRadius: '8px',
+            background: '#1a1a24', border: '1px solid rgba(255,255,255,0.08)',
+            color: filterCargadoRunt === '' ? '#606075' : '#fff',
+            fontSize: '11px', outline: 'none',
+          }}
+        >
+          <option value="">Cargado RUNT</option>
+          <option value="true">Cargado RUNT</option>
+          <option value="false">No cargado RUNT</option>
         </select>
 
         {/* Refresh */}

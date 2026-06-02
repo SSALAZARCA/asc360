@@ -1911,6 +1911,10 @@ async def list_all_moto_units(
     vin: Optional[str] = None,
     engine: Optional[str] = None,
     certificado_generado: Optional[bool] = None,
+    observation_id: Optional[uuid.UUID] = None,
+    empadronamiento_fisico_enviado: Optional[bool] = None,
+    facturado: Optional[bool] = None,
+    cargado_runt: Optional[bool] = None,
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
@@ -1939,6 +1943,14 @@ async def list_all_moto_units(
     filters = list(base_filters)
     if certificado_generado is not None:
         filters.append(ShipmentMotoUnit.certificado_generado == certificado_generado)
+    if observation_id is not None:
+        filters.append(ShipmentMotoUnit.observation_id == observation_id)
+    if empadronamiento_fisico_enviado is not None:
+        filters.append(ShipmentMotoUnit.empadronamiento_fisico_enviado == empadronamiento_fisico_enviado)
+    if facturado is not None:
+        filters.append(ShipmentMotoUnit.facturado == facturado)
+    if cargado_runt is not None:
+        filters.append(ShipmentMotoUnit.cargado_runt == cargado_runt)
 
     base_stmt = (
         select(ShipmentMotoUnit)
@@ -2052,6 +2064,10 @@ async def export_moto_units(
     vin: Optional[str] = None,
     engine: Optional[str] = None,
     certificado_generado: Optional[bool] = None,
+    observation_id: Optional[uuid.UUID] = None,
+    empadronamiento_fisico_enviado: Optional[bool] = None,
+    facturado: Optional[bool] = None,
+    cargado_runt: Optional[bool] = None,
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
@@ -2073,6 +2089,14 @@ async def export_moto_units(
     filters = list(base_filters)
     if certificado_generado is not None:
         filters.append(ShipmentMotoUnit.certificado_generado == certificado_generado)
+    if observation_id is not None:
+        filters.append(ShipmentMotoUnit.observation_id == observation_id)
+    if empadronamiento_fisico_enviado is not None:
+        filters.append(ShipmentMotoUnit.empadronamiento_fisico_enviado == empadronamiento_fisico_enviado)
+    if facturado is not None:
+        filters.append(ShipmentMotoUnit.facturado == facturado)
+    if cargado_runt is not None:
+        filters.append(ShipmentMotoUnit.cargado_runt == cargado_runt)
 
     stmt = (
         select(ShipmentMotoUnit)
