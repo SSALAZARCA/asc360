@@ -109,3 +109,14 @@ class PartsCodeReviewTask(Base):
     created_at           = Column(DateTime, default=datetime.utcnow)
     resolved_at          = Column(DateTime, nullable=True)
     resolved_by          = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+
+
+class PartOrderDecision(Base):
+    """Decisión de cancelar o cambiar una referencia en un PI específico."""
+    __tablename__ = "part_order_decisions"
+
+    factory_part_number = Column(String(100), primary_key=True)
+    lot_identifier      = Column(String(100), primary_key=True)
+    decision            = Column(String(20),  nullable=False)  # 'cancelar' | 'cambiar'
+    updated_at          = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_by          = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)

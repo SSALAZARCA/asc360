@@ -48,10 +48,14 @@ export default function AnalisisRepuestosTab() {
 
   const load = () => {
     setLoading(true);
-    authFetch('/parts/admin/analysis/low-rotation-ordered')
-      .then(r => r.ok ? r.json() : Promise.reject(r.status))
-      .then(d => { setData(d); setLoading(false); })
-      .catch(() => setLoading(false));
+    Promise.all([
+      authFetch('/parts/admin/analysis/low-rotation-ordered').then(r => r.ok ? r.json() : null),
+      authFetch('/parts/admin/analysis/decisions').then(r => r.ok ? r.json() : {}),
+    ]).then(([analysisData, savedMarked]) => {
+      if (analysisData) setData(analysisData);
+      setMarked(savedMarked || {});
+      setLoading(false);
+    }).catch(() => setLoading(false));
   };
 
   useEffect(() => { load(); }, []);
@@ -60,15 +64,17 @@ export default function AnalisisRepuestosTab() {
   const markKey = (fpn, lotId) => `${fpn}::${lotId}`;
 
   const toggleMark = (fpn, lotId) => {
-    const key = markKey(fpn, lotId);
+    const key  = markKey(fpn, lotId);
     setMarked(prev => {
       const next = CYCLE[prev[key] || ''];
-      if (!next) {
-        const copy = { ...prev };
-        delete copy[key];
-        return copy;
-      }
-      return { ...prev, [key]: next };
+      const copy = { ...prev };
+      if (!next) delete copy[key]; else copy[key] = next;
+      // Persistir en DB (fire-and-forget)
+      authFetch('/parts/admin/analysis/decisions', {
+        method: 'POST',
+        body: JSON.stringify({ factory_part_number: fpn, lot_identifier: lotId, decision: next || '' }),
+      }).catch(() => {});
+      return copy;
     });
   };
 
@@ -365,7 +371,17 @@ export default function AnalisisRepuestosTab() {
             </div>
           )}
           <button
-            onClick={() => setMarked({})}
+            onClick={() => {
+              // Borrar todas las decisiones en DB
+              Object.keys(marked).forEach(key => {
+                const [fpn, lotId] = key.split('::');
+                authFetch('/parts/admin/analysis/decisions', {
+                  method: 'POST',
+                  body: JSON.stringify({ factory_part_number: fpn, lot_identifier: lotId, decision: '' }),
+                }).catch(() => {});
+              });
+              setMarked({});
+            }}
             style={{
               marginLeft: 'auto', alignSelf: 'center', padding: '0.35rem 0.75rem', borderRadius: '7px',
               background: 'none', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.3)',

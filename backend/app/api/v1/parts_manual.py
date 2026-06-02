@@ -2172,8 +2172,64 @@ async def low_rotation_ordered_analysis(
     )
 
 
+# ── Decisiones de análisis (persistencia en DB) ───────────────────────────────
+
+from app.models.parts_manual import PartOrderDecision as _POD
+
+
+@router.get("/admin/analysis/decisions")
+async def get_decisions(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Devuelve todas las decisiones guardadas como {fpn::lot_id: decision}."""
+    if not current_user.is_superadmin:
+        raise HTTPException(status_code=403, detail="Solo superadmin")
+    rows = (await db.execute(select(_POD))).scalars().all()
+    return {f"{r.factory_part_number}::{r.lot_identifier}": r.decision for r in rows}
+
+
+class _DecisionIn(BaseModel):
+    factory_part_number: str
+    lot_identifier: str
+    decision: str  # 'cancelar' | 'cambiar' | '' (vacío = borrar)
+
+
+@router.post("/admin/analysis/decisions", status_code=200)
+async def save_decision(
+    body: _DecisionIn,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Guarda o elimina una decisión para un par (referencia, PI)."""
+    if not current_user.is_superadmin:
+        raise HTTPException(status_code=403, detail="Solo superadmin")
+
+    existing = await db.get(_POD, (body.factory_part_number, body.lot_identifier))
+
+    if not body.decision:
+        if existing:
+            await db.delete(existing)
+            await db.commit()
+        return {"status": "deleted"}
+
+    if existing:
+        existing.decision   = body.decision
+        existing.updated_at = __import__('datetime').datetime.utcnow()
+        existing.updated_by = current_user.id
+    else:
+        db.add(_POD(
+            factory_part_number=body.factory_part_number,
+            lot_identifier=body.lot_identifier,
+            decision=body.decision,
+            updated_by=current_user.id,
+        ))
+    await db.commit()
+    return {"status": "saved"}
+
+
 class _ExportRequest(BaseModel):
-    marked: dict[str, str] = {}  # { lot_identifier: "cancelar" | "cambiar" }
+    marked: dict[str, str] = {}  # { "fpn::lot_id": "cancelar" | "cambiar" }
 
 
 @router.post("/admin/analysis/low-rotation-ordered/export")
