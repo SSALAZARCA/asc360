@@ -17,8 +17,9 @@ const ITEM_STATUS = {
   PARTIAL:   { label: 'Parcial',    color: '#fb923c', bg: 'rgba(251,146,60,0.12)',  border: 'rgba(251,146,60,0.3)' },
   DECLARED:  { label: 'Declarado',  color: '#60a5fa', bg: 'rgba(96,165,250,0.12)',  border: 'rgba(96,165,250,0.3)' },
   RECEIVED:  { label: 'Recibido',   color: '#22c55e', bg: 'rgba(34,197,94,0.12)',   border: 'rgba(34,197,94,0.3)' },
-  BACKORDER: { label: 'Backorder',  color: '#f87171', bg: 'rgba(248,113,113,0.12)', border: 'rgba(248,113,113,0.3)' },
-  CANCELLED: { label: 'Cancelado',  color: '#6b7280', bg: 'rgba(107,114,128,0.12)', border: 'rgba(107,114,128,0.3)' },
+  BACKORDER:         { label: 'Backorder',         color: '#f87171', bg: 'rgba(248,113,113,0.12)', border: 'rgba(248,113,113,0.3)' },
+  BACKORDER_PARCIAL: { label: 'Backorder Parcial', color: '#fb923c', bg: 'rgba(251,146,60,0.12)',  border: 'rgba(251,146,60,0.3)' },
+  CANCELLED:         { label: 'Cancelado',         color: '#6b7280', bg: 'rgba(107,114,128,0.12)', border: 'rgba(107,114,128,0.3)' },
 };
 
 function ItemStatusBadge({ status }) {
@@ -383,7 +384,7 @@ function LotItemsTable({ lotId, userRole, isConfirmed }) {
                     }
                   </td>
                   <td style={{ padding: '8px 10px', textAlign: 'center', width: 32 }}>
-                    {canCancel && (item.status === 'BACKORDER' || (item.status === 'PARTIAL' && (item.qty_pending ?? 0) > 0)) && (
+                    {canCancel && (item.status === 'BACKORDER' || item.status === 'BACKORDER_PARCIAL' || (item.status === 'PARTIAL' && (item.qty_pending ?? 0) > 0)) && (
                       <button
                         onClick={() => {
                           const qty = item.qty_pending ?? 0;

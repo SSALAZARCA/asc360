@@ -1629,7 +1629,12 @@ async def apply_physical_inspection(
     now = datetime.utcnow()
     item.qty_physical = qty_physical
     item.qty_pending  = max(0, qty_ordered - qty_physical)
-    item.status       = 'RECEIVED' if qty_physical >= qty_ordered else 'BACKORDER'
+    if qty_physical >= qty_ordered:
+        item.status = 'RECEIVED'
+    elif qty_physical > 0:
+        item.status = 'BACKORDER_PARCIAL'
+    else:
+        item.status = 'BACKORDER'
     item.updated_at   = now
 
     # Resolver BOs de otros lotes asignados a este PI via bulk-resolve o EXTRA

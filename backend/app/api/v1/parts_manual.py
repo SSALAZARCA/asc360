@@ -894,7 +894,10 @@ async def _list_catalog_impl(
                     .join(SparePartLot, SparePartLot.id == SparePartItem.lot_id)
                     .where(
                         func.upper(func.trim(func.replace(SparePartItem.part_number, ' ', ''))) == func.upper(func.trim(PartsReference.factory_part_number)),
-                        SparePartLot.packing_list_received == False,
+                        or_(
+                            SparePartLot.packing_list_received == False,
+                            SparePartItem.status.in_(['BACKORDER', 'BACKORDER_PARCIAL']),
+                        ),
                     )
                 )
             ).where(
@@ -948,6 +951,12 @@ async def _list_catalog_impl(
                 select(SparePartItem.id)
                 .join(SparePartLot, SparePartLot.id == SparePartItem.lot_id)
                 .where(fpn_expr == ref_expr, SparePartLot.packing_list_received == False)
+            ))
+            # NOT backorder (pedido pero faltó todo o parcial en inspección física)
+            q = q.where(~sa_exists(
+                select(SparePartItem.id)
+                .join(SparePartLot, SparePartLot.id == SparePartItem.lot_id)
+                .where(fpn_expr == ref_expr, SparePartItem.status.in_(['BACKORDER', 'BACKORDER_PARCIAL']))
             ))
         return q
 
@@ -1070,6 +1079,7 @@ async def _list_catalog_impl(
                             or_(_SO.bl_container.isnot(None), SparePartLot.packing_list_received == True),
                         ), 2),
                         (SparePartLot.packing_list_received == False, 1),
+                        (SparePartItem.status.in_(['BACKORDER', 'BACKORDER_PARCIAL']), 1),
                         else_=0,
                     )
                 ).label('score'),
@@ -2136,7 +2146,7 @@ async def get_coverage(
             SELECT UPPER(TRIM(REPLACE(spi.part_number, ' ', ''))) AS pn
             FROM spare_part_items spi
             JOIN spare_part_lots spl ON spl.id = spi.lot_id
-            WHERE spl.packing_list_received = false
+            WHERE (spl.packing_list_received = false OR spi.status IN ('BACKORDER', 'BACKORDER_PARCIAL'))
               AND UPPER(TRIM(REPLACE(spi.part_number, ' ', ''))) NOT IN (SELECT pn FROM aqui)
               AND UPPER(TRIM(REPLACE(spi.part_number, ' ', ''))) NOT IN (SELECT pn FROM en_camino)
             GROUP BY 1
