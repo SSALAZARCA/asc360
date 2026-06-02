@@ -96,8 +96,7 @@ async def recalculate_part_cost(
     ref.avg_fob_cost      = new_avg
     ref.total_fob_qty     = total_qty
     ref.last_cost_updated = datetime.utcnow()
-    # Packing list confirmado — el FOB preliminar de PI ya no aplica
-    ref.preliminary_fob   = None
+    # preliminary_fob se conserva como referencia histórica (PI vs packing list real)
 
     if lot_identifier:
         # Registrar solo el item de este lote específico (el que disparó el recálculo)
