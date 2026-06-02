@@ -228,6 +228,7 @@ export default function BackorderTab({ userRole }) {
   const [showResolved, setShowResolved] = useState(false);
   const [search, setSearch] = useState('');
   const [filterPi, setFilterPi] = useState('');
+  const [filterRotation, setFilterRotation] = useState('');
   const [selected, setSelected] = useState(new Set());
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [bulkLoading, setBulkLoading] = useState(false);
@@ -386,15 +387,16 @@ export default function BackorderTab({ userRole }) {
   };
 
   // Filtro local
-  const filtered = search
-    ? backorders.filter(b =>
-        b.part_number?.toLowerCase().includes(search.toLowerCase()) ||
-        b.origin_pi?.toLowerCase().includes(search.toLowerCase()) ||
-        b.expected_in_pi?.toLowerCase().includes(search.toLowerCase()) ||
-        b.description_es?.toLowerCase().includes(search.toLowerCase()) ||
-        b.model_applicable?.toLowerCase().includes(search.toLowerCase())
-      )
-    : backorders;
+  const filtered = backorders
+    .filter(b =>
+      !search ||
+      b.part_number?.toLowerCase().includes(search.toLowerCase()) ||
+      b.origin_pi?.toLowerCase().includes(search.toLowerCase()) ||
+      b.expected_in_pi?.toLowerCase().includes(search.toLowerCase()) ||
+      b.description_es?.toLowerCase().includes(search.toLowerCase()) ||
+      b.model_applicable?.toLowerCase().includes(search.toLowerCase())
+    )
+    .filter(b => !filterRotation || b.rotation_class === filterRotation);
 
   // Agrupar por (part_number, origin_pi) para mostrar una fila consolidada
   const groupedFiltered = useMemo(() => {
@@ -532,6 +534,16 @@ export default function BackorderTab({ userRole }) {
           onChange={e => setFilterPi(e.target.value.toUpperCase())}
           style={{ padding: '7px 10px', borderRadius: '8px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)', color: '#fff', fontSize: '11px', outline: 'none', width: 180, fontFamily: 'monospace' }}
         />
+        <select
+          value={filterRotation}
+          onChange={e => setFilterRotation(e.target.value)}
+          style={{ padding: '7px 10px', borderRadius: '8px', background: '#1a1a2e', border: '1px solid rgba(255,255,255,0.07)', color: filterRotation === 'alta' ? '#ef4444' : filterRotation === 'media' ? '#fbbf24' : filterRotation === 'baja' ? '#4ade80' : '#9ca3af', fontSize: '11px', outline: 'none', cursor: 'pointer' }}
+        >
+          <option value="">Rotación: todas</option>
+          <option value="alta"  style={{ color: '#ef4444' }}>Alta</option>
+          <option value="media" style={{ color: '#fbbf24' }}>Media</option>
+          <option value="baja"  style={{ color: '#4ade80' }}>Baja</option>
+        </select>
         <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '11px', color: '#9ca3af' }}>
           <input
             type="checkbox"
