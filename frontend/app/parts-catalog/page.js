@@ -519,7 +519,6 @@ export default function PartsCatalogPage() {
                 </th>
               ))}
               <th className="sort-head" onClick={() => toggleSort('rotation_class')} style={{ whiteSpace: 'nowrap' }}>Rotación <SortIcon col="rotation_class" /></th>
-              <th style={{ whiteSpace: 'nowrap', textAlign: 'center' }}>Cobertura</th>
               <th className="sort-head" onClick={() => toggleSort('avg_fob_cost')} style={{ whiteSpace: 'nowrap' }}>FOB Prom. <span style={{ fontWeight: 400, opacity: 0.5 }}>USD</span> <SortIcon col="avg_fob_cost" /></th>
               <th className="sort-head" onClick={() => toggleSort('avg_fob_cost')} style={{ whiteSpace: 'nowrap' }}>C. Importado <span style={{ fontWeight: 400, opacity: 0.5 }}>COP</span> <SortIcon col="avg_fob_cost" /></th>
               <th className="sort-head" onClick={() => toggleSort('avg_fob_cost')} style={{ whiteSpace: 'nowrap' }}>P. Distribuidor <span style={{ fontWeight: 400, opacity: 0.5 }}>COP</span> <SortIcon col="avg_fob_cost" /></th>
@@ -531,15 +530,22 @@ export default function PartsCatalogPage() {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan="13" style={{ textAlign: 'center', padding: '3rem', color: 'rgba(255,255,255,0.3)', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Cargando repuestos...</td></tr>
+              <tr><td colSpan="12" style={{ textAlign: 'center', padding: '3rem', color: 'rgba(255,255,255,0.3)', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Cargando repuestos...</td></tr>
             ) : sortedItems.length === 0 ? (
-              <tr><td colSpan="13" style={{ textAlign: 'center', padding: '4rem', color: 'rgba(255,255,255,0.2)', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+              <tr><td colSpan="12" style={{ textAlign: 'center', padding: '4rem', color: 'rgba(255,255,255,0.2)', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
                 {!search && !modelCode && !onlyPending ? 'Sin repuestos cargados — subí los PDFs desde Configuración' : 'Sin resultados para la búsqueda'}
               </td></tr>
             ) : sortedItems.map((item, i) => (
               <tr key={`${item.factory_part_number}-${item.section_code}-${i}`} className="hover:bg-white/5 transition-colors border-b border-white/5">
                 <td style={{ whiteSpace: 'nowrap' }}>
-                  <span style={{ fontFamily: 'monospace', fontSize: '0.78rem', fontWeight: 700, color: '#ff5f33' }}>{item.factory_part_number}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {(() => {
+                      const DOT = { aqui: '#4ade80', en_camino: '#38bdf8', pedido: '#a78bfa', sin_pedido: '#ef4444' };
+                      const TIP = { aqui: 'Aquí', en_camino: 'En camino', pedido: 'Pedido', sin_pedido: 'No pedida' };
+                      return <span title={TIP[item.coverage_status] || 'No pedida'} style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: DOT[item.coverage_status] || DOT.sin_pedido, flexShrink: 0 }} />;
+                    })()}
+                    <span style={{ fontFamily: 'monospace', fontSize: '0.78rem', fontWeight: 700, color: '#ff5f33' }}>{item.factory_part_number}</span>
+                  </div>
                 </td>
                 <td style={{ color: 'rgba(255,255,255,0.85)', maxWidth: '260px' }}>
                   <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.description || '—'}</span>
@@ -563,14 +569,6 @@ export default function PartsCatalogPage() {
                       );
                     })}
                   </div>
-                </td>
-                <td style={{ textAlign: 'center' }}>
-                  {(() => {
-                    const DOT = { aqui: '#4ade80', en_camino: '#38bdf8', pedido: '#a78bfa', sin_pedido: '#ef4444' };
-                    const TIP = { aqui: 'Aquí', en_camino: 'En camino', pedido: 'Pedido', sin_pedido: 'No pedida' };
-                    const c = DOT[item.coverage_status] || DOT.sin_pedido;
-                    return <span title={TIP[item.coverage_status] || 'No pedida'} style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: c, flexShrink: 0 }} />;
-                  })()}
                 </td>
                 <td>
                   {item.avg_fob_cost != null
