@@ -275,7 +275,7 @@ function LotItemsTable({ lotId, userRole, isConfirmed }) {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
             <thead>
               <tr style={{ background: '#0e0e14' }}>
-                {['Parte #', 'Descripción', 'Modelo', 'Rot.', 'Pcs Ord.', 'Pcs Rec.', 'Inv. Físico', 'Diferencia', 'Unit Price', 'Amount', 'Estado', ''].map(h => (
+                {['Parte #', 'Descripción', 'Modelo', 'Rot.', 'Pcs Ord.', 'Pcs Rec.', 'Inv. Físico', 'Diferencia', 'Unit Price', 'FOB PI', 'Amount', 'Estado', ''].map(h => (
                   <th key={h} style={{ padding: '8px 10px', textAlign: 'center', fontSize: '9px', fontWeight: 700, color: h === 'Inv. Físico' ? '#fb923c' : h === 'Diferencia' ? '#a78bfa' : '#606075', textTransform: 'uppercase', letterSpacing: '0.07em', borderBottom: '1px solid rgba(255,255,255,0.06)', whiteSpace: 'nowrap' }}>{h}</th>
                 ))}
               </tr>
@@ -364,6 +364,11 @@ function LotItemsTable({ lotId, userRole, isConfirmed }) {
                       ? <EditableCell itemId={item.id} field="unit_price" current={item.unit_price != null ? parseFloat(item.unit_price).toFixed(2) : null} type="number" align="center" onSaved={fetch} cellStyle={{ color: '#d1d5db' }} />
                       : <span style={{ color: '#d1d5db' }}>{item.unit_price != null ? `$${parseFloat(item.unit_price).toFixed(2)}` : '—'}</span>
                     }
+                  </td>
+                  <td style={{ padding: '8px 10px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                    <span style={{ color: item.fob_pi != null ? '#34d399' : 'rgba(255,255,255,0.15)', fontWeight: item.fob_pi != null ? 700 : 400 }}>
+                      {item.fob_pi != null ? `$${parseFloat(item.fob_pi).toFixed(2)}` : '—'}
+                    </span>
                   </td>
                   <td style={{ padding: '8px 10px', textAlign: 'center', whiteSpace: 'nowrap' }}>
                     {canEdit

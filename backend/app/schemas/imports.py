@@ -304,6 +304,7 @@ class SparePartItemRead(BaseModel):
     gross_weight_kg: Optional[float] = None
     cbm: Optional[float] = None
     unit_price: Optional[float] = None
+    fob_pi: Optional[float] = None
     amount: Optional[float] = None
     status: str
     backorder_pi: Optional[str] = None
