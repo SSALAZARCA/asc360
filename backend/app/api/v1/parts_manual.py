@@ -866,7 +866,6 @@ async def _list_catalog_impl(
             )
         elif coverage_status == "en_camino":
             from app.models.imports import SparePartLot, ShipmentOrder
-            from sqlalchemy import or_
             fpn_ec = func.upper(func.trim(func.replace(SparePartItem.part_number, ' ', '')))
             ref_ec = func.upper(func.trim(PartsReference.factory_part_number))
             q = q.where(
