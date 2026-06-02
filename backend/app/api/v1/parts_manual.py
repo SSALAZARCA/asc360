@@ -180,7 +180,7 @@ def _find_col_groups(header_row: list) -> list[dict]:
     i = 0
     while i < len(row_lower):
         cell = row_lower[i]
-        if cell and any(kw in cell for kw in ["no.", "no ", "n0.", "item", "pos"]):
+        if cell and (any(kw in cell for kw in ["no.", "no ", "n0.", "item", "pos"]) or cell == "n"):
             col_map = {field: _detect_col(header_row, kws, start=i) for field, kws in _HEADER_KEYWORDS.items()}
             col_map["order_num"] = i
             if col_map.get("factory", -1) > i:
