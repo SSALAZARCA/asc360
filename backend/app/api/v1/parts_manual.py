@@ -727,6 +727,7 @@ class CatalogItemResult(BaseModel):
     rotation_class: Optional[str] = None
     prev_codes: list[str] = []
     needs_price_review: bool = False
+    coverage_status: Optional[str] = None
 
 class CatalogItemUpdate(BaseModel):
     description: Optional[str] = None
@@ -1022,6 +1023,38 @@ async def list_catalog(
                     extracted.append(entry)
             prev_codes_by_fpn[fpn_r] = extracted
 
+    coverage_by_fpn: dict[str, str] = {}
+    if fpns:
+        from app.models.imports import SparePartLot, ShipmentOrder as _SO
+        from sqlalchemy import case as sa_case, and_ as sa_and
+        _fn = func.upper(func.trim(func.replace(SparePartItem.part_number, ' ', '')))
+        _norm_fpns = [f.upper().strip().replace(' ', '') for f in fpns]
+        cov_q = (
+            select(
+                _fn.label('fpn'),
+                func.max(
+                    sa_case(
+                        (sa_and(SparePartItem.qty_physical.isnot(None), SparePartItem.qty_physical > 0), 3),
+                        (sa_and(
+                            SparePartItem.qty_received > 0,
+                            SparePartItem.qty_physical.is_(None),
+                            or_(_SO.bl_container.isnot(None), SparePartLot.packing_list_received == True),
+                        ), 2),
+                        (SparePartLot.packing_list_received == False, 1),
+                        else_=0,
+                    )
+                ).label('score'),
+            )
+            .select_from(SparePartItem)
+            .join(SparePartLot, SparePartLot.id == SparePartItem.lot_id)
+            .outerjoin(_SO, _SO.id == SparePartLot.shipment_order_id)
+            .where(_fn.in_(_norm_fpns))
+            .group_by(_fn)
+        )
+        _SCORE = {3: 'aqui', 2: 'en_camino', 1: 'pedido', 0: 'sin_pedido'}
+        for _fpn_val, _score in (await db.execute(cov_q)).all():
+            coverage_by_fpn[_fpn_val] = _SCORE.get(_score or 0, 'sin_pedido')
+
     def _build_item(r) -> CatalogItemResult:
         avg_fob = float(r[11]) if r[11] is not None else None
         prices  = compute_prices(avg_fob, pricing_factors)
@@ -1053,6 +1086,7 @@ async def list_catalog(
             rotation_class=r[12],
             prev_codes=prev_codes_by_fpn.get(fpn, []),
             needs_price_review=bool(r[13]) if r[13] is not None else False,
+            coverage_status=coverage_by_fpn.get(fpn.upper().strip().replace(' ', ''), 'sin_pedido'),
         )
 
     return CatalogListResult(

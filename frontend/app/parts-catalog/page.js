@@ -519,6 +519,7 @@ export default function PartsCatalogPage() {
                 </th>
               ))}
               <th className="sort-head" onClick={() => toggleSort('rotation_class')} style={{ whiteSpace: 'nowrap' }}>Rotación <SortIcon col="rotation_class" /></th>
+              <th style={{ whiteSpace: 'nowrap', textAlign: 'center' }}>Cobertura</th>
               <th className="sort-head" onClick={() => toggleSort('avg_fob_cost')} style={{ whiteSpace: 'nowrap' }}>FOB Prom. <span style={{ fontWeight: 400, opacity: 0.5 }}>USD</span> <SortIcon col="avg_fob_cost" /></th>
               <th className="sort-head" onClick={() => toggleSort('avg_fob_cost')} style={{ whiteSpace: 'nowrap' }}>C. Importado <span style={{ fontWeight: 400, opacity: 0.5 }}>COP</span> <SortIcon col="avg_fob_cost" /></th>
               <th className="sort-head" onClick={() => toggleSort('avg_fob_cost')} style={{ whiteSpace: 'nowrap' }}>P. Distribuidor <span style={{ fontWeight: 400, opacity: 0.5 }}>COP</span> <SortIcon col="avg_fob_cost" /></th>
@@ -530,9 +531,9 @@ export default function PartsCatalogPage() {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan="12" style={{ textAlign: 'center', padding: '3rem', color: 'rgba(255,255,255,0.3)', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Cargando repuestos...</td></tr>
+              <tr><td colSpan="13" style={{ textAlign: 'center', padding: '3rem', color: 'rgba(255,255,255,0.3)', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Cargando repuestos...</td></tr>
             ) : sortedItems.length === 0 ? (
-              <tr><td colSpan="12" style={{ textAlign: 'center', padding: '4rem', color: 'rgba(255,255,255,0.2)', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+              <tr><td colSpan="13" style={{ textAlign: 'center', padding: '4rem', color: 'rgba(255,255,255,0.2)', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
                 {!search && !modelCode && !onlyPending ? 'Sin repuestos cargados — subí los PDFs desde Configuración' : 'Sin resultados para la búsqueda'}
               </td></tr>
             ) : sortedItems.map((item, i) => (
@@ -562,6 +563,23 @@ export default function PartsCatalogPage() {
                       );
                     })}
                   </div>
+                </td>
+                <td style={{ textAlign: 'center' }}>
+                  {(() => {
+                    const cs = item.coverage_status;
+                    const map = {
+                      aqui:       { label: 'En bodega',  bg: 'rgba(74,222,128,0.12)',  color: '#4ade80', border: 'rgba(74,222,128,0.35)'  },
+                      en_camino:  { label: 'En camino',  bg: 'rgba(96,165,250,0.12)',  color: '#60a5fa', border: 'rgba(96,165,250,0.35)'  },
+                      pedido:     { label: 'Pedido',     bg: 'rgba(251,191,36,0.12)',  color: '#fbbf24', border: 'rgba(251,191,36,0.35)'  },
+                      sin_pedido: { label: 'Sin pedido', bg: 'rgba(255,255,255,0.05)', color: '#6b7280', border: 'rgba(255,255,255,0.1)'  },
+                    };
+                    const s = map[cs] || map.sin_pedido;
+                    return (
+                      <span style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', padding: '2px 7px', borderRadius: '4px', background: s.bg, color: s.color, border: `1px solid ${s.border}`, whiteSpace: 'nowrap' }}>
+                        {s.label}
+                      </span>
+                    );
+                  })()}
                 </td>
                 <td>
                   {item.avg_fob_cost != null
