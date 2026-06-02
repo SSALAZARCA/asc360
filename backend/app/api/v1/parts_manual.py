@@ -2216,13 +2216,13 @@ async def save_decision(
     if existing:
         existing.decision   = body.decision
         existing.updated_at = __import__('datetime').datetime.utcnow()
-        existing.updated_by = current_user.id
+        existing.updated_by = __import__('uuid').UUID(current_user.user_id)
     else:
         db.add(_POD(
             factory_part_number=body.factory_part_number,
             lot_identifier=body.lot_identifier,
             decision=body.decision,
-            updated_by=current_user.id,
+            updated_by=__import__('uuid').UUID(current_user.user_id),
         ))
     await db.commit()
     return {"status": "saved"}
