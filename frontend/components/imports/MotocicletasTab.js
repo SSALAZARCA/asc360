@@ -1040,7 +1040,7 @@ export default function MotocicletasTab({ userRole }) {
             fontSize: '11px', outline: 'none',
           }}
         >
-          <option value="">Observación</option>
+          <option value="">Todas (Observación)</option>
           {observations.map(obs => (
             <option key={obs.id} value={obs.id}>{obs.name}</option>
           ))}
@@ -1057,7 +1057,7 @@ export default function MotocicletasTab({ userRole }) {
             fontSize: '11px', outline: 'none',
           }}
         >
-          <option value="">Enviado</option>
+          <option value="">Todos (Enviado)</option>
           <option value="true">Enviado</option>
           <option value="false">No enviado</option>
         </select>
@@ -1073,7 +1073,7 @@ export default function MotocicletasTab({ userRole }) {
             fontSize: '11px', outline: 'none',
           }}
         >
-          <option value="">Facturado</option>
+          <option value="">Todos (Facturado)</option>
           <option value="true">Facturado</option>
           <option value="false">No facturado</option>
         </select>
@@ -1089,7 +1089,7 @@ export default function MotocicletasTab({ userRole }) {
             fontSize: '11px', outline: 'none',
           }}
         >
-          <option value="">Cargado RUNT</option>
+          <option value="">Todos (RUNT)</option>
           <option value="true">Cargado RUNT</option>
           <option value="false">No cargado RUNT</option>
         </select>
