@@ -816,12 +816,11 @@ async def list_catalog(
             from sqlalchemy import cast as sa_cast, Text as SAText
             q = q.where(or_(
                 PartsReference.factory_part_number.ilike(term),
+                PartsReference.um_part_number.ilike(term),
                 PartsReference.description.ilike(term),
                 PartsReference.description_es_manual.ilike(term),
                 spi_latest.c.description_es.ilike(term),
                 sa_cast(PartsReference.prev_codes, SAText).ilike(term),
-                PartsManualSection.section_name.ilike(term),
-                PartsManualSection.section_code.ilike(term),
             ))
         if only_pending:
             q = q.where(pending_sq.c.task_id.isnot(None))
