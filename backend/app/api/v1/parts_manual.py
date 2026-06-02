@@ -30,7 +30,7 @@ from app.models.imports import VehicleModel, SparePartItem
 from app.models.logistics import PartCatalog
 from app.models.parts_manual import (
     PartsManualItem, PartsManualSection, PartsReference, VehicleCatalogMap,
-    PartsCodeReviewTask, PartSubstitute, PartCostHistory,
+    PartsCodeReviewTask, PartSubstitute, PartCostHistory, PartOrderDecision,
 )
 from app.models.system_config import SystemConfig
 
@@ -2174,7 +2174,7 @@ async def low_rotation_ordered_analysis(
 
 # ── Decisiones de análisis (persistencia en DB) ───────────────────────────────
 
-from app.models.parts_manual import PartOrderDecision as _POD
+_POD = PartOrderDecision
 
 
 @router.get("/admin/analysis/decisions")

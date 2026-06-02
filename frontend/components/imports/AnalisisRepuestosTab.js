@@ -50,10 +50,11 @@ export default function AnalisisRepuestosTab() {
     setLoading(true);
     Promise.all([
       authFetch('/parts/admin/analysis/low-rotation-ordered').then(r => r.ok ? r.json() : null),
-      authFetch('/parts/admin/analysis/decisions').then(r => r.ok ? r.json() : {}),
+      authFetch('/parts/admin/analysis/decisions').then(r => r.ok ? r.json() : null),
     ]).then(([analysisData, savedMarked]) => {
       if (analysisData) setData(analysisData);
-      setMarked(savedMarked || {});
+      // Solo sobreescribir marcas si la request a DB fue exitosa
+      if (savedMarked !== null) setMarked(savedMarked);
       setLoading(false);
     }).catch(() => setLoading(false));
   };
@@ -64,17 +65,28 @@ export default function AnalisisRepuestosTab() {
   const markKey = (fpn, lotId) => `${fpn}::${lotId}`;
 
   const toggleMark = (fpn, lotId) => {
-    const key  = markKey(fpn, lotId);
+    const key      = markKey(fpn, lotId);
+    const current  = marked[key] || '';
+    const next     = CYCLE[current];
+
+    // 1. Actualizar UI inmediatamente
     setMarked(prev => {
-      const next = CYCLE[prev[key] || ''];
       const copy = { ...prev };
       if (!next) delete copy[key]; else copy[key] = next;
-      // Persistir en DB (fire-and-forget)
-      authFetch('/parts/admin/analysis/decisions', {
-        method: 'POST',
-        body: JSON.stringify({ factory_part_number: fpn, lot_identifier: lotId, decision: next || '' }),
-      }).catch(() => {});
       return copy;
+    });
+
+    // 2. Persistir en DB (separado del setState para evitar doble ejecución)
+    authFetch('/parts/admin/analysis/decisions', {
+      method: 'POST',
+      body: JSON.stringify({ factory_part_number: fpn, lot_identifier: lotId, decision: next || '' }),
+    }).catch(() => {
+      // Si falla, revertir el cambio visual
+      setMarked(prev => {
+        const copy = { ...prev };
+        if (!current) delete copy[key]; else copy[key] = current;
+        return copy;
+      });
     });
   };
 
