@@ -2519,6 +2519,12 @@ async def export_unordered(
             r.description_es_manual,
             r.rotation_class,
             r.avg_fob_cost,
+            r.preliminary_fob,
+            CASE
+                WHEN r.avg_fob_cost IS NOT NULL THEN 'Confirmado'
+                WHEN r.preliminary_fob IS NOT NULL THEN 'Preliminar (PI)'
+                ELSE NULL
+            END AS costo_origen,
             (
                 SELECT STRING_AGG(DISTINCT s.model_code, ', ' ORDER BY s.model_code)
                 FROM parts_manual_items i
@@ -2538,29 +2544,64 @@ async def export_unordered(
 
     rows = (await db.execute(unordered_sql, params)).all()
 
-    wb = openpyxl.Workbook()
+    import openpyxl as _xl
+    from openpyxl.styles import Font, PatternFill, Alignment
+    wb = _xl.Workbook()
     ws = wb.active
-    ws.title = "Unordered Parts"
+    ws.title = "No Pedidas"
+
     headers = [
-        "factory_part_number",
-        "um_part_number",
-        "description",
-        "description_es_manual",
-        "rotation_class",
-        "avg_fob_cost",
-        "motocicleta",
+        "Código fábrica",
+        "Descripción",
+        "Descripción ES",
+        "Rotación",
+        "Costo FOB USD",
+        "Origen costo",
+        "Modelos",
     ]
-    ws.append(headers)
-    for row in rows:
-        ws.append([
+    col_widths = [22, 40, 40, 10, 14, 18, 30]
+
+    hdr_font = Font(bold=True, color="FFFFFF", size=9)
+    hdr_fill = PatternFill("solid", fgColor="1e1e2e")
+    center   = Alignment(horizontal="center", vertical="center")
+    left     = Alignment(horizontal="left",   vertical="center")
+
+    for ci, (h, w) in enumerate(zip(headers, col_widths), 1):
+        cell = ws.cell(row=1, column=ci, value=h)
+        cell.font      = hdr_font
+        cell.fill      = hdr_fill
+        cell.alignment = center
+        from openpyxl.utils import get_column_letter
+        ws.column_dimensions[get_column_letter(ci)].width = w
+
+    fill_prel = PatternFill("solid", fgColor="3b2e0a")  # naranja oscuro para preliminares
+    fill_alt  = PatternFill("solid", fgColor="12121e")
+
+    for ri, row in enumerate(rows, 2):
+        fob = row.avg_fob_cost if row.avg_fob_cost is not None else row.preliminary_fob
+        is_prel = row.avg_fob_cost is None and row.preliminary_fob is not None
+        row_fill = fill_prel if is_prel else (fill_alt if ri % 2 == 0 else None)
+
+        values = [
             row.factory_part_number,
-            row.um_part_number,
             row.description,
             row.description_es_manual,
-            row.rotation_class,
-            float(row.avg_fob_cost) if row.avg_fob_cost is not None else None,
+            row.rotation_class.upper() if row.rotation_class else None,
+            float(fob) if fob is not None else None,
+            row.costo_origen,
             row.models,
-        ])
+        ]
+        aligns = [left, left, left, center, center, center, left]
+
+        for ci, (val, aln) in enumerate(values, 1):
+            cell = ws.cell(row=ri, column=ci, value=val)
+            cell.alignment = aln
+            cell.font = Font(size=9, color="FCD34D" if is_prel and ci == 6 else "FFFFFF")
+            if row_fill:
+                cell.fill = row_fill
+
+    ws.freeze_panes = "A2"
+    ws.auto_filter.ref = f"A1:G{len(rows) + 1}"
 
     buf = io.BytesIO()
     wb.save(buf)
