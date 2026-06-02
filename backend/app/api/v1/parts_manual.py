@@ -816,7 +816,6 @@ async def list_catalog(
             from sqlalchemy import cast as sa_cast, Text as SAText
             q = q.where(or_(
                 PartsReference.factory_part_number.ilike(term),
-                PartsReference.um_part_number.ilike(term),
                 PartsReference.description.ilike(term),
                 PartsReference.description_es_manual.ilike(term),
                 spi_latest.c.description_es.ilike(term),
