@@ -2008,16 +2008,12 @@ async def import_fob_preliminary(
         fob_data[fpn].append((fob_val, qty))
 
     # Calcular promedio ponderado y actualizar parts_references
-    updated, skipped_no_ref, skipped_has_packing = 0, 0, 0
+    updated, skipped_no_ref = 0, 0
 
     for fpn, entries in fob_data.items():
         ref = await db.get(PartsReference, fpn)
         if not ref:
             skipped_no_ref += 1
-            continue
-        # Si ya tiene avg_fob_cost (packing list confirmado), no tocar
-        if ref.avg_fob_cost is not None:
-            skipped_has_packing += 1
             continue
 
         total_cost = sum(fob * qty for fob, qty in entries)
@@ -2029,7 +2025,6 @@ async def import_fob_preliminary(
     return {
         "updated": updated,
         "skipped_no_reference": skipped_no_ref,
-        "skipped_has_packing_list": skipped_has_packing,
         "parse_errors": parse_errors,
     }
 

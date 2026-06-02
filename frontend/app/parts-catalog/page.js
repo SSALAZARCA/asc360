@@ -1116,7 +1116,6 @@ export default function PartsCatalogPage() {
                 <p style={{ margin: 0, fontSize: '0.72rem', fontWeight: 700, color: '#4ade80' }}>✅ FOB cargado</p>
                 <p style={{ margin: '0.3rem 0 0', fontSize: '0.68rem', color: 'rgba(255,255,255,0.45)' }}>
                   Actualizadas: <strong style={{ color: '#fff' }}>{fobResult.updated}</strong> &nbsp;·&nbsp;
-                  Sin packing list (omitidas): <strong style={{ color: '#fb923c' }}>{fobResult.skipped_has_packing_list}</strong> &nbsp;·&nbsp;
                   No encontradas: <strong style={{ color: '#ef4444' }}>{fobResult.skipped_no_reference}</strong>
                 </p>
               </div>
