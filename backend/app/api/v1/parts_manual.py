@@ -2172,6 +2172,112 @@ async def low_rotation_ordered_analysis(
     )
 
 
+class _ExportRequest(BaseModel):
+    marked: dict[str, str] = {}  # { lot_identifier: "cancelar" | "cambiar" }
+
+
+@router.post("/admin/analysis/low-rotation-ordered/export")
+async def export_low_rotation_ordered(
+    body: _ExportRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Exporta análisis de baja/media rotación a Excel con decisiones marcadas."""
+    if not current_user.is_superadmin:
+        raise HTTPException(status_code=403, detail="Solo superadmin")
+
+    analysis = await low_rotation_ordered_analysis(db=db, current_user=current_user)
+
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+    import io
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Para Revisar"
+
+    # Estilos
+    hdr_font  = Font(bold=True, color="FFFFFF", size=9)
+    hdr_fill  = PatternFill("solid", fgColor="1e1e2e")
+    center    = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    left      = Alignment(horizontal="left",   vertical="center", wrap_text=True)
+    thin_side = Side(style="thin", color="444455")
+    thin_brd  = Border(bottom=Side(style="thin", color="333344"))
+
+    fill_cancelar = PatternFill("solid", fgColor="3b1219")
+    fill_cambiar  = PatternFill("solid", fgColor="3b2e0a")
+    fill_alt      = PatternFill("solid", fgColor="12121e")
+
+    DECISION_LABEL = {"cancelar": "CANCELAR", "cambiar": "CAMBIAR", "": "—"}
+
+    headers = ["Rotación", "Código", "Descripción", "Modelos", "PI Number", "Cantidad", "Total ref.", "Decisión"]
+    col_widths = [10, 20, 35, 25, 18, 10, 10, 12]
+
+    for ci, (h, w) in enumerate(zip(headers, col_widths), 1):
+        cell = ws.cell(row=1, column=ci, value=h)
+        cell.font      = hdr_font
+        cell.fill      = hdr_fill
+        cell.alignment = center
+        ws.column_dimensions[get_column_letter(ci)].width = w
+
+    ws.row_dimensions[1].height = 22
+
+    row = 2
+    for item in analysis.items:
+        models_str = ", ".join(item.models) if item.models else "—"
+        for lot in item.lots:
+            decision = body.marked.get(lot.lot_identifier, "")
+            decision_label = DECISION_LABEL.get(decision, "—")
+
+            if decision == "cancelar":
+                row_fill = fill_cancelar
+                dec_font = Font(bold=True, color="F87171", size=9)
+            elif decision == "cambiar":
+                row_fill = fill_cambiar
+                dec_font = Font(bold=True, color="FCD34D", size=9)
+            else:
+                row_fill = fill_alt if row % 2 == 0 else None
+                dec_font = Font(color="888899", size=9)
+
+            values = [
+                item.rotation_class.upper(),
+                item.factory_part_number,
+                item.description_es or item.description,
+                models_str,
+                lot.lot_identifier,
+                lot.qty,
+                item.total_qty,
+                decision_label,
+            ]
+            aligns = [center, left, left, left, left, center, center, center]
+
+            for ci, (val, aln) in enumerate(zip(values, aligns), 1):
+                cell = ws.cell(row=row, column=ci, value=val)
+                cell.alignment = aln
+                cell.font = dec_font if ci == 8 else Font(size=9)
+                cell.border = thin_brd
+                if row_fill:
+                    cell.fill = row_fill
+
+            row += 1
+
+    ws.freeze_panes = "A2"
+    ws.auto_filter.ref = f"A1:H{row - 1}"
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    from fastapi.responses import StreamingResponse
+    filename = f"analisis_repuestos_{__import__('datetime').date.today()}.xlsx"
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 # ── Unordered parts export ─────────────────────────────────────────────────────
 
 @router.get("/admin/coverage/unordered")
