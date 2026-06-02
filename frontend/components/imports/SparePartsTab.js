@@ -672,6 +672,26 @@ export default function SparePartsTab({ userRole }) {
   const [exportingRepuestos, setExportingRepuestos] = useState(false);
   const [pendingConfirm, setPendingConfirm] = useState(null);
 
+  // FOB PI upload
+  const [showFobUpload, setShowFobUpload] = useState(false);
+  const [fobFile, setFobFile]             = useState(null);
+  const [fobUploading, setFobUploading]   = useState(false);
+  const [fobResult, setFobResult]         = useState(null);
+
+  const handleFobImport = async () => {
+    if (!fobFile) return;
+    setFobUploading(true);
+    setFobResult(null);
+    try {
+      const fd = new FormData();
+      fd.append('file', fobFile);
+      const res  = await authFetch(`${getApiUrl()}/parts/admin/fob-preliminary-import`, { method: 'POST', body: fd });
+      const data = await res.json();
+      setFobResult(data);
+    } catch { setFobResult({ error: 'Error de conexión' }); }
+    finally { setFobUploading(false); }
+  };
+
   const handleExportRepuestos = async () => {
     setExportingRepuestos(true);
     try {
@@ -862,6 +882,22 @@ export default function SparePartsTab({ userRole }) {
           </button>
         )}
 
+        {/* Cargar FOB de PI (solo superadmin) */}
+        {userRole === 'superadmin' && (
+          <button
+            onClick={() => { setShowFobUpload(true); setFobFile(null); setFobResult(null); }}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '6px',
+              padding: '7px 14px', borderRadius: '8px',
+              border: '1px solid rgba(251,146,60,0.3)',
+              background: 'rgba(251,146,60,0.1)', color: '#fb923c',
+              fontSize: '11px', fontWeight: 700, cursor: 'pointer', letterSpacing: '0.04em',
+            }}
+          >
+            <UploadCloud size={13} /> Cargar FOB PI
+          </button>
+        )}
+
         <span style={{ fontSize: '11px', color: '#606075', marginLeft: 'auto' }}>
           {totalLots} lote{totalLots !== 1 ? 's' : ''} encontrado{totalLots !== 1 ? 's' : ''}
         </span>
@@ -966,6 +1002,49 @@ export default function SparePartsTab({ userRole }) {
           onCancel={() => setPendingConfirm(null)}
           onConfirm={() => { setPendingConfirm(null); pendingConfirm.action(); }}
         />
+      )}
+
+      {showFobUpload && (
+        <div onClick={() => !fobUploading && setShowFobUpload(false)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ background: '#0c0c0e', border: '1px solid rgba(251,146,60,0.25)', borderRadius: '16px', padding: '2rem', width: '100%', maxWidth: '480px', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <UploadCloud size={16} color="#fb923c" />
+              <p style={{ color: '#fff', fontWeight: 900, fontSize: '0.82rem', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>Cargar FOB desde PI</p>
+            </div>
+            <p style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.35)', margin: 0, lineHeight: 1.6 }}>
+              Excel con columnas <strong style={{ color: 'rgba(255,255,255,0.6)' }}>referencia</strong> · <strong style={{ color: 'rgba(255,255,255,0.6)' }}>pi_number</strong> · <strong style={{ color: 'rgba(255,255,255,0.6)' }}>fob_price</strong>. Un solo archivo con todos los PIs.
+            </p>
+            <label style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem', padding: '1.5rem', borderRadius: '10px', border: `2px dashed ${fobFile ? 'rgba(251,146,60,0.4)' : 'rgba(255,255,255,0.1)'}`, background: fobFile ? 'rgba(251,146,60,0.05)' : 'rgba(255,255,255,0.02)', cursor: 'pointer' }}>
+              <UploadCloud size={22} color={fobFile ? '#fb923c' : 'rgba(255,255,255,0.2)'} />
+              <span style={{ fontSize: '0.72rem', color: fobFile ? '#fb923c' : 'rgba(255,255,255,0.3)', fontWeight: 600 }}>{fobFile ? fobFile.name : 'Seleccionar .xlsx'}</span>
+              <input type="file" accept=".xlsx" style={{ display: 'none' }} onChange={e => { setFobFile(e.target.files[0] || null); setFobResult(null); }} />
+            </label>
+            {fobResult && !fobResult.error && (
+              <div style={{ background: 'rgba(74,222,128,0.05)', border: '1px solid rgba(74,222,128,0.2)', borderRadius: '10px', padding: '0.875rem 1rem' }}>
+                <p style={{ margin: '0 0 0.3rem', fontSize: '0.72rem', fontWeight: 700, color: '#4ade80' }}>✅ FOB cargado</p>
+                <p style={{ margin: 0, fontSize: '0.68rem', color: 'rgba(255,255,255,0.45)', lineHeight: 1.7 }}>
+                  Ítems: <strong style={{ color: '#fff' }}>{fobResult.items_updated}</strong> &nbsp;·&nbsp;
+                  Catálogo: <strong style={{ color: '#fff' }}>{fobResult.refs_updated}</strong> refs &nbsp;·&nbsp;
+                  PI no encontrados: <strong style={{ color: '#fb923c' }}>{fobResult.skipped_no_pi}</strong> &nbsp;·&nbsp;
+                  Refs no encontradas: <strong style={{ color: '#ef4444' }}>{fobResult.refs_not_found}</strong>
+                </p>
+              </div>
+            )}
+            {fobResult?.error && <p style={{ fontSize: '0.72rem', color: '#ef4444', margin: 0 }}>⚠️ {fobResult.error}</p>}
+            <div style={{ display: 'flex', gap: '0.75rem' }}>
+              <button onClick={handleFobImport} disabled={!fobFile || fobUploading}
+                style={{ flex: 1, background: 'rgba(251,146,60,0.15)', color: '#fb923c', border: '1px solid rgba(251,146,60,0.3)', borderRadius: '10px', padding: '0.7rem', fontWeight: 900, fontSize: '0.7rem', textTransform: 'uppercase', cursor: (!fobFile || fobUploading) ? 'not-allowed' : 'pointer', opacity: (!fobFile || fobUploading) ? 0.4 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}>
+                <UploadCloud size={13} /> {fobUploading ? 'Cargando...' : 'Cargar'}
+              </button>
+              <button onClick={() => setShowFobUpload(false)} disabled={fobUploading}
+                style={{ flex: 1, background: 'rgba(255,255,255,0.03)', color: 'rgba(255,255,255,0.4)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px', padding: '0.7rem', fontWeight: 900, fontSize: '0.7rem', textTransform: 'uppercase', cursor: 'pointer' }}>
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

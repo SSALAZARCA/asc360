@@ -220,7 +220,8 @@ class SparePartItem(Base):
     cbm = Column(Numeric(10, 4), nullable=True)
 
     # Precio (del invoice)
-    unit_price = Column(Numeric(12, 2), nullable=True)
+    unit_price = Column(Numeric(12, 2), nullable=True)   # FOB confirmado del packing list
+    fob_pi     = Column(Numeric(12, 4), nullable=True)   # FOB del PI (preliminar, histórico)
     amount = Column(Numeric(12, 2), nullable=True)  # unit_price × qty_ordered
 
     status = Column(String(50), nullable=False, default="PENDING")  # PENDING/PARTIAL/RECEIVED/BACKORDER

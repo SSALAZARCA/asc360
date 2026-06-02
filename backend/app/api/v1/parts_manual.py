@@ -1921,9 +1921,11 @@ async def import_fob_preliminary(
     current_user=Depends(get_current_user),
 ):
     """
-    Carga valores FOB de PI para poblar preliminary_fob en parts_references.
-    Columnas esperadas: referencia (factory_part_number), pi_number (lot_identifier), fob_price.
-    Solo actualiza partes SIN avg_fob_cost (sin packing list confirmado).
+    Carga FOB de PI desde un Excel con columnas: referencia | pi_number | fob_price.
+    1. Escribe fob_pi en cada spare_part_item correspondiente.
+    2. Recalcula preliminary_fob en parts_references como promedio ponderado
+       usando qty_ordered de spare_part_items.
+    Guarda siempre como historia, independiente de si hay packing list.
     Solo superadmin.
     """
     if not current_user.is_superadmin:
@@ -1937,8 +1939,8 @@ async def import_fob_preliminary(
                     "codigo", "código", "part_code", "ref", "numero_parte"}
     _PI_ALIASES  = {"pi_number", "pi", "numero_pi", "lot", "lot_identifier",
                     "lote", "pi number", "numero pi", "n_pi"}
-    _FOB_ALIASES = {"fob", "fob_price", "precio_fob", "unit_price", "precio_unitario",
-                    "valor_fob", "fob price", "unit price", "precio fob", "valor fob"}
+    _FOB_ALIASES = {"fob", "fob_price", "precio_fob", "fob_pi",
+                    "valor_fob", "fob price", "precio fob", "valor fob"}
 
     expected = _REF_ALIASES | _PI_ALIASES | _FOB_ALIASES
     try:
@@ -1946,22 +1948,24 @@ async def import_fob_preliminary(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
-    col_map   = _build_col_map(sheet, header_row)
-    has_ref   = any(a in col_map for a in _REF_ALIASES)
-    has_pi    = any(a in col_map for a in _PI_ALIASES)
-    has_fob   = any(a in col_map for a in _FOB_ALIASES)
-
+    col_map = _build_col_map(sheet, header_row)
     missing = []
-    if not has_ref: missing.append("referencia (ej: 'referencia' o 'factory_part_number')")
-    if not has_pi:  missing.append("número de PI (ej: 'pi_number' o 'pi')")
-    if not has_fob: missing.append("precio FOB (ej: 'fob_price' o 'fob')")
+    if not any(a in col_map for a in _REF_ALIASES): missing.append("referencia")
+    if not any(a in col_map for a in _PI_ALIASES):  missing.append("pi_number")
+    if not any(a in col_map for a in _FOB_ALIASES): missing.append("fob_price")
     if missing:
         raise HTTPException(status_code=422, detail=f"Faltan columnas: {', '.join(missing)}")
 
-    # Acumular {factory_part_number: [(fob, qty)]} para calcular promedio ponderado
     from collections import defaultdict
-    fob_data: dict[str, list[tuple[float, int]]] = defaultdict(list)
-    parse_errors = []
+    from app.models.imports import SparePartLot as _SPL, SparePartItem as _SPI2
+
+    parse_errors  = []
+    items_updated = 0
+    skipped_no_pi = 0
+    skipped_no_item = 0
+
+    # {factory_part_number: [(fob_val, qty_ordered)]} para calcular promedio
+    fob_accum: dict[str, list[tuple[float, int]]] = defaultdict(list)
 
     for row_idx in range(header_row + 1, sheet.max_row + 1):
         ref_raw = _cell(sheet, row_idx, col_map, *list(_REF_ALIASES))
@@ -1970,7 +1974,6 @@ async def import_fob_preliminary(
 
         if not ref_raw and not pi_raw and not fob_raw:
             continue
-
         if not ref_raw or not fob_raw:
             parse_errors.append({"row": row_idx, "reason": "missing_ref_or_fob"})
             continue
@@ -1981,51 +1984,65 @@ async def import_fob_preliminary(
             parse_errors.append({"row": row_idx, "ref": str(ref_raw), "reason": "invalid_fob_value"})
             continue
 
-        fpn = _normalize_part_code(ref_raw)
+        fpn    = _normalize_part_code(ref_raw)
         lot_id = str(pi_raw).strip() if pi_raw else None
 
-        # Buscar qty en spare_part_items si hay lot_identifier
-        qty = 1
+        # 1. Buscar el lote por lot_identifier
+        lot_obj = None
         if lot_id:
-            from app.models.imports import SparePartLot as _SPL
-            lot_result = await db.execute(
+            lot_obj = (await db.execute(
                 select(_SPL).where(_SPL.lot_identifier == lot_id)
-            )
-            lot_obj = lot_result.scalar_one_or_none()
-            if lot_obj:
-                from app.models.imports import SparePartItem as _SPI2
-                spi_result = await db.execute(
-                    select(_SPI2).where(
-                        _SPI2.lot_id == lot_obj.id,
-                        func.upper(func.trim(func.replace(_SPI2.part_number, ' ', ''))) == func.upper(func.trim(fpn)),
-                        _SPI2.qty_ordered > 0,
-                    )
-                )
-                items_found = spi_result.scalars().all()
-                if items_found:
-                    qty = sum(i.qty_ordered for i in items_found)
+            )).scalar_one_or_none()
 
-        fob_data[fpn].append((fob_val, qty))
-
-    # Calcular promedio ponderado y actualizar parts_references
-    updated, skipped_no_ref = 0, 0
-
-    for fpn, entries in fob_data.items():
-        ref = await db.get(PartsReference, fpn)
-        if not ref:
-            skipped_no_ref += 1
+        if not lot_obj:
+            skipped_no_pi += 1
+            # Igual acumulamos el FOB con qty=1 para el promedio aunque no haya lote
+            fob_accum[fpn].append((fob_val, 1))
             continue
 
-        total_cost = sum(fob * qty for fob, qty in entries)
-        total_qty  = sum(qty for _, qty in entries)
+        # 2. Buscar los spare_part_items de esa referencia en ese lote
+        items_found = (await db.execute(
+            select(_SPI2).where(
+                _SPI2.lot_id == lot_obj.id,
+                func.upper(func.trim(func.replace(_SPI2.part_number, ' ', ''))) ==
+                func.upper(func.trim(fpn)),
+            )
+        )).scalars().all()
+
+        if not items_found:
+            skipped_no_item += 1
+            fob_accum[fpn].append((fob_val, 1))
+            continue
+
+        # 3. Escribir fob_pi en cada item encontrado
+        qty_total = 0
+        for item in items_found:
+            item.fob_pi = fob_val
+            qty_total  += (item.qty_ordered or 1)
+            items_updated += 1
+
+        fob_accum[fpn].append((fob_val, qty_total))
+
+    # 4. Recalcular preliminary_fob en parts_references (promedio ponderado)
+    refs_updated, refs_not_found = 0, 0
+    for fpn, entries in fob_accum.items():
+        ref = await db.get(PartsReference, fpn)
+        if not ref:
+            refs_not_found += 1
+            continue
+        total_cost = sum(f * q for f, q in entries)
+        total_qty  = sum(q for _, q in entries)
         ref.preliminary_fob = round(total_cost / total_qty, 4)
-        updated += 1
+        refs_updated += 1
 
     await db.commit()
     return {
-        "updated": updated,
-        "skipped_no_reference": skipped_no_ref,
-        "parse_errors": parse_errors,
+        "items_updated":    items_updated,
+        "refs_updated":     refs_updated,
+        "skipped_no_pi":    skipped_no_pi,
+        "skipped_no_item":  skipped_no_item,
+        "refs_not_found":   refs_not_found,
+        "parse_errors":     parse_errors,
     }
 
 
