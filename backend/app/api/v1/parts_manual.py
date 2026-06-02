@@ -2039,6 +2039,126 @@ async def get_coverage(
     return CoverageResponse(sin_clasificar=int(sin_clasificar), buckets=clases)
 
 
+# ── Análisis: baja/media rotación en estado pedido ────────────────────────────
+
+class _LotQty(BaseModel):
+    lot_identifier: str
+    qty: int
+
+class _LowRotItem(BaseModel):
+    factory_part_number: str
+    description: str
+    description_es: Optional[str]
+    rotation_class: str
+    total_qty: int
+    lots: list[_LotQty]
+
+class _LowRotResponse(BaseModel):
+    items: list[_LowRotItem]
+    total_references: int
+    total_qty: int
+    baja_count: int
+    media_count: int
+
+
+@router.get("/admin/analysis/low-rotation-ordered", response_model=_LowRotResponse)
+async def low_rotation_ordered_analysis(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Repuestos baja/media rotación en pedido (aún cancelables). Solo superadmin."""
+    if not current_user.is_superadmin:
+        raise HTTPException(status_code=403, detail="Solo superadmin")
+
+    sql = text("""
+        WITH
+        aqui AS (
+            SELECT UPPER(TRIM(REPLACE(part_number, ' ', ''))) AS pn
+            FROM spare_part_items
+            WHERE qty_physical IS NOT NULL AND qty_physical > 0
+            GROUP BY 1
+        ),
+        en_camino AS (
+            SELECT UPPER(TRIM(REPLACE(spi.part_number, ' ', ''))) AS pn
+            FROM spare_part_items spi
+            JOIN spare_part_lots  spl ON spl.id = spi.lot_id
+            JOIN shipment_orders  so  ON so.id  = spl.shipment_order_id
+            WHERE spi.qty_received > 0
+              AND spi.qty_physical IS NULL
+              AND (so.bl_container IS NOT NULL OR spl.packing_list_received = true)
+            UNION
+            SELECT UPPER(TRIM(part_code)) AS pn
+            FROM part_catalog
+            WHERE public_price IS NOT NULL
+        ),
+        desc_es_src AS (
+            SELECT DISTINCT ON (UPPER(TRIM(REPLACE(part_number, ' ', ''))))
+                UPPER(TRIM(REPLACE(part_number, ' ', ''))) AS pn,
+                description_es
+            FROM spare_part_items
+            WHERE description_es IS NOT NULL AND description_es != ''
+            ORDER BY UPPER(TRIM(REPLACE(part_number, ' ', ''))), created_at ASC
+        )
+        SELECT
+            pr.factory_part_number,
+            pr.description,
+            COALESCE(pr.description_es_manual, d.description_es) AS description_es,
+            pr.rotation_class,
+            spl.lot_identifier,
+            SUM(spi.qty_ordered)::int AS qty
+        FROM parts_references pr
+        JOIN spare_part_items spi
+            ON UPPER(TRIM(REPLACE(spi.part_number, ' ', ''))) = UPPER(TRIM(pr.factory_part_number))
+        JOIN spare_part_lots spl ON spl.id = spi.lot_id
+        LEFT JOIN desc_es_src d ON d.pn = UPPER(TRIM(pr.factory_part_number))
+        WHERE pr.rotation_class IN ('baja', 'media')
+          AND spl.packing_list_received = FALSE
+          AND UPPER(TRIM(pr.factory_part_number)) NOT IN (SELECT pn FROM aqui)
+          AND UPPER(TRIM(pr.factory_part_number)) NOT IN (SELECT pn FROM en_camino)
+        GROUP BY
+            pr.factory_part_number, pr.description,
+            COALESCE(pr.description_es_manual, d.description_es),
+            pr.rotation_class, spl.lot_identifier
+        ORDER BY pr.rotation_class, pr.factory_part_number, spl.lot_identifier
+    """)
+
+    rows = (await db.execute(sql)).all()
+
+    from collections import defaultdict  # noqa: F401
+    parts_map: dict[str, dict] = {}
+    for row in rows:
+        fpn = row.factory_part_number
+        if fpn not in parts_map:
+            parts_map[fpn] = {
+                'factory_part_number': fpn,
+                'description': row.description or '',
+                'description_es': row.description_es,
+                'rotation_class': row.rotation_class,
+                'lots': [],
+                'total_qty': 0,
+            }
+        qty = int(row.qty) if row.qty else 0
+        parts_map[fpn]['lots'].append({'lot_identifier': row.lot_identifier, 'qty': qty})
+        parts_map[fpn]['total_qty'] += qty
+
+    items = sorted(
+        parts_map.values(),
+        key=lambda x: (0 if x['rotation_class'] == 'baja' else 1, -x['total_qty']),
+    )
+
+    baja_count  = sum(1 for i in items if i['rotation_class'] == 'baja')
+    media_count = sum(1 for i in items if i['rotation_class'] == 'media')
+    total_qty   = sum(i['total_qty'] for i in items)
+
+    return _LowRotResponse(
+        items=[_LowRotItem(**i) for i in items],
+        total_references=len(items),
+        total_qty=total_qty,
+        baja_count=baja_count,
+        media_count=media_count,
+    )
+
+
 # ── Unordered parts export ─────────────────────────────────────────────────────
 
 @router.get("/admin/coverage/unordered")

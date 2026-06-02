@@ -9,6 +9,7 @@ import SparePartsTab from './SparePartsTab';
 import MotocicletasTab from './MotocicletasTab';
 import BackorderTab from './BackorderTab';
 import DashboardTab from './DashboardTab';
+import AnalisisRepuestosTab from './AnalisisRepuestosTab';
 import ShipmentOrderFormModal from './ShipmentOrderFormModal';
 import NuevoPedidoModal from './NuevoPedidoModal';
 import { RefreshCw, Upload, FileUp, Plus, Download } from 'lucide-react';
@@ -18,7 +19,8 @@ const TABS = [
   { id: 'orders', label: 'Pedidos' },
   { id: 'motocicletas', label: 'Motocicletas' },
   { id: 'spare_parts', label: 'Repuestos' },
-  { id: 'backorders', label: 'Backorders' },
+  { id: 'backorders',        label: 'Backorders'          },
+  { id: 'analisis_repuestos', label: 'Análisis Repuestos' },
 ];
 
 export default function ImportsTabs({ userRole }) {
@@ -337,6 +339,9 @@ export default function ImportsTabs({ userRole }) {
       )}
       {activeTab === 'dashboard' && (
         <DashboardTab />
+      )}
+      {activeTab === 'analisis_repuestos' && (
+        <AnalisisRepuestosTab />
       )}
 
       {/* Modal de detalle */}
