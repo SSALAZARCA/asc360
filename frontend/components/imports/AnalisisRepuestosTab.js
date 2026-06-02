@@ -163,6 +163,7 @@ export default function AnalisisRepuestosTab() {
                 </th>
                 <th style={thStyle}>Código</th>
                 <th style={thStyle}>Descripción</th>
+                <th style={thStyle}>Modelos</th>
                 <th style={{ ...thStyle, textAlign: 'center' }} onClick={() => toggleSort('lots')}>
                   N° PIs <SortIcon col="lots" sortCol={sortCol} sortDir={sortDir} />
                 </th>
@@ -196,6 +197,18 @@ export default function AnalisisRepuestosTab() {
                         {item.description}
                       </span>
                     )}
+                  </td>
+                  <td style={{ padding: '0.7rem 1rem' }}>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
+                      {(item.models || []).map(m => (
+                        <span key={m} style={{
+                          fontSize: '0.6rem', fontWeight: 700, padding: '2px 7px',
+                          borderRadius: '5px', background: 'rgba(99,102,241,0.12)',
+                          border: '1px solid rgba(99,102,241,0.25)', color: '#a5b4fc',
+                          whiteSpace: 'nowrap',
+                        }}>{m}</span>
+                      ))}
+                    </div>
                   </td>
                   <td style={{ padding: '0.7rem 1rem', textAlign: 'center' }}>
                     <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'rgba(255,255,255,0.6)' }}>

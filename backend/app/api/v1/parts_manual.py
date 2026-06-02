@@ -2052,6 +2052,7 @@ class _LowRotItem(BaseModel):
     rotation_class: str
     total_qty: int
     lots: list[_LotQty]
+    models: list[str] = []
 
 class _LowRotResponse(BaseModel):
     items: list[_LowRotItem]
@@ -2098,6 +2099,14 @@ async def low_rotation_ordered_analysis(
             FROM spare_part_items
             WHERE description_es IS NOT NULL AND description_es != ''
             ORDER BY UPPER(TRIM(REPLACE(part_number, ' ', ''))), created_at ASC
+        ),
+        models_per_part AS (
+            SELECT
+                pmi.factory_part_number,
+                array_agg(DISTINCT pms.model_code ORDER BY pms.model_code) AS models
+            FROM parts_manual_items pmi
+            JOIN parts_manual_sections pms ON pms.id = pmi.section_id
+            GROUP BY pmi.factory_part_number
         )
         SELECT
             pr.factory_part_number,
@@ -2105,12 +2114,14 @@ async def low_rotation_ordered_analysis(
             COALESCE(pr.description_es_manual, d.description_es) AS description_es,
             pr.rotation_class,
             spl.lot_identifier,
-            SUM(spi.qty_ordered)::int AS qty
+            SUM(spi.qty_ordered)::int AS qty,
+            COALESCE(mp.models, ARRAY[]::text[]) AS models
         FROM parts_references pr
         JOIN spare_part_items spi
             ON UPPER(TRIM(REPLACE(spi.part_number, ' ', ''))) = UPPER(TRIM(pr.factory_part_number))
         JOIN spare_part_lots spl ON spl.id = spi.lot_id
-        LEFT JOIN desc_es_src d ON d.pn = UPPER(TRIM(pr.factory_part_number))
+        LEFT JOIN desc_es_src d       ON d.pn  = UPPER(TRIM(pr.factory_part_number))
+        LEFT JOIN models_per_part mp  ON mp.factory_part_number = pr.factory_part_number
         WHERE pr.rotation_class IN ('baja', 'media')
           AND spl.packing_list_received = FALSE
           AND UPPER(TRIM(pr.factory_part_number)) NOT IN (SELECT pn FROM aqui)
@@ -2118,7 +2129,8 @@ async def low_rotation_ordered_analysis(
         GROUP BY
             pr.factory_part_number, pr.description,
             COALESCE(pr.description_es_manual, d.description_es),
-            pr.rotation_class, spl.lot_identifier
+            pr.rotation_class, spl.lot_identifier,
+            COALESCE(mp.models, ARRAY[]::text[])
         ORDER BY pr.rotation_class, pr.factory_part_number, spl.lot_identifier
     """)
 
@@ -2136,6 +2148,7 @@ async def low_rotation_ordered_analysis(
                 'rotation_class': row.rotation_class,
                 'lots': [],
                 'total_qty': 0,
+                'models': list(row.models) if row.models else [],
             }
         qty = int(row.qty) if row.qty else 0
         parts_map[fpn]['lots'].append({'lot_identifier': row.lot_identifier, 'qty': qty})
