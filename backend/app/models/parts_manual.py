@@ -22,6 +22,7 @@ class PartsReference(Base):
     avg_fob_cost      = Column(Numeric(12, 4), nullable=True)
     total_fob_qty     = Column(Integer, nullable=True)
     last_cost_updated = Column(DateTime, nullable=True)
+    preliminary_fob   = Column(Numeric(12, 4), nullable=True)  # promedio PI, solo si no hay packing list
     rotation_class      = Column(String(10), nullable=True, index=True)
     needs_price_review  = Column(Boolean, nullable=False, default=False, server_default='false')
 

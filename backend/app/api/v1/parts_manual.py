@@ -720,6 +720,8 @@ class CatalogItemResult(BaseModel):
     pending_candidate_code: Optional[str] = None
     pending_score: Optional[float] = None
     avg_fob_cost: Optional[float] = None
+    preliminary_fob: Optional[float] = None
+    fob_is_preliminary: bool = False          # True si el precio viene de PI, no de packing list
     costo_importado: Optional[float] = None
     precio_distribuidor: Optional[float] = None
     precio_publico_calculado: Optional[float] = None
@@ -973,9 +975,10 @@ async def _list_catalog_impl(
             pending_sq.c.task_id.label("task_id"),
             pending_sq.c.candidate_code.label("candidate_code"),
             pending_sq.c.score.label("score"),
-            PartsReference.avg_fob_cost.label("avg_fob_cost"),          # r[11]
-            PartsReference.rotation_class.label("rotation_class"),        # r[12]
+            PartsReference.avg_fob_cost.label("avg_fob_cost"),           # r[11]
+            PartsReference.rotation_class.label("rotation_class"),         # r[12]
             PartsReference.needs_price_review.label("needs_price_review"), # r[13]
+            PartsReference.preliminary_fob.label("preliminary_fob"),       # r[14]
         )
         .distinct(PartsReference.factory_part_number, PartsManualSection.model_code)
     ).order_by(
@@ -1080,8 +1083,12 @@ async def _list_catalog_impl(
             coverage_by_fpn[_fpn_val] = _SCORE.get(_score or 0, 'sin_pedido')
 
     def _build_item(r) -> CatalogItemResult:
-        avg_fob = float(r[11]) if r[11] is not None else None
-        prices  = compute_prices(avg_fob, pricing_factors)
+        avg_fob      = float(r[11]) if r[11] is not None else None
+        prelim_fob   = float(r[14]) if r[14] is not None else None
+        # Jerarquía: avg_fob_cost (packing list) > preliminary_fob (PI)
+        fob_for_calc = avg_fob if avg_fob is not None else prelim_fob
+        is_prelim    = avg_fob is None and prelim_fob is not None
+        prices       = compute_prices(fob_for_calc, pricing_factors)
         fpn = r[0]
         return CatalogItemResult(
             factory_part_number=fpn,
@@ -1095,6 +1102,8 @@ async def _list_catalog_impl(
             pending_candidate_code=r[9],
             pending_score=float(r[10]) if r[10] is not None else None,
             avg_fob_cost=avg_fob,
+            preliminary_fob=prelim_fob,
+            fob_is_preliminary=is_prelim,
             costo_importado=prices["costo_importado"],
             precio_distribuidor=prices["precio_distribuidor"],
             precio_publico_calculado=prices["precio_publico"],
@@ -1901,6 +1910,128 @@ async def import_rotation(
 
     await db.commit()
     return {"updated": updated, "skipped": skipped, "errors": errors}
+
+
+# ── FOB preliminar desde PI ────────────────────────────────────────────────────
+
+@router.post("/admin/fob-preliminary-import", status_code=200)
+async def import_fob_preliminary(
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """
+    Carga valores FOB de PI para poblar preliminary_fob en parts_references.
+    Columnas esperadas: referencia (factory_part_number), pi_number (lot_identifier), fob_price.
+    Solo actualiza partes SIN avg_fob_cost (sin packing list confirmado).
+    Solo superadmin.
+    """
+    if not current_user.is_superadmin:
+        raise HTTPException(status_code=403, detail="Solo superadmin")
+
+    content = await file.read()
+    wb      = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
+    sheet   = wb.active
+
+    _REF_ALIASES = {"referencia", "reference", "factory_part_number", "part_number",
+                    "codigo", "código", "part_code", "ref", "numero_parte"}
+    _PI_ALIASES  = {"pi_number", "pi", "numero_pi", "lot", "lot_identifier",
+                    "lote", "pi number", "numero pi", "n_pi"}
+    _FOB_ALIASES = {"fob", "fob_price", "precio_fob", "unit_price", "precio_unitario",
+                    "valor_fob", "fob price", "unit price", "precio fob", "valor fob"}
+
+    expected = _REF_ALIASES | _PI_ALIASES | _FOB_ALIASES
+    try:
+        header_row = _find_header_row(sheet, expected)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+    col_map   = _build_col_map(sheet, header_row)
+    has_ref   = any(a in col_map for a in _REF_ALIASES)
+    has_pi    = any(a in col_map for a in _PI_ALIASES)
+    has_fob   = any(a in col_map for a in _FOB_ALIASES)
+
+    missing = []
+    if not has_ref: missing.append("referencia (ej: 'referencia' o 'factory_part_number')")
+    if not has_pi:  missing.append("número de PI (ej: 'pi_number' o 'pi')")
+    if not has_fob: missing.append("precio FOB (ej: 'fob_price' o 'fob')")
+    if missing:
+        raise HTTPException(status_code=422, detail=f"Faltan columnas: {', '.join(missing)}")
+
+    # Acumular {factory_part_number: [(fob, qty)]} para calcular promedio ponderado
+    from collections import defaultdict
+    fob_data: dict[str, list[tuple[float, int]]] = defaultdict(list)
+    parse_errors = []
+
+    for row_idx in range(header_row + 1, sheet.max_row + 1):
+        ref_raw = _cell(sheet, row_idx, col_map, *list(_REF_ALIASES))
+        pi_raw  = _cell(sheet, row_idx, col_map, *list(_PI_ALIASES))
+        fob_raw = _cell(sheet, row_idx, col_map, *list(_FOB_ALIASES))
+
+        if not ref_raw and not pi_raw and not fob_raw:
+            continue
+
+        if not ref_raw or not fob_raw:
+            parse_errors.append({"row": row_idx, "reason": "missing_ref_or_fob"})
+            continue
+
+        try:
+            fob_val = float(str(fob_raw).replace(",", ".").strip())
+        except (ValueError, TypeError):
+            parse_errors.append({"row": row_idx, "ref": str(ref_raw), "reason": "invalid_fob_value"})
+            continue
+
+        fpn = _normalize_part_code(ref_raw)
+        lot_id = str(pi_raw).strip() if pi_raw else None
+
+        # Buscar qty en spare_part_items si hay lot_identifier
+        qty = 1
+        if lot_id:
+            from app.models.imports import SparePartLot as _SPL
+            lot_result = await db.execute(
+                select(_SPL).where(_SPL.lot_identifier == lot_id)
+            )
+            lot_obj = lot_result.scalar_one_or_none()
+            if lot_obj:
+                from app.models.imports import SparePartItem as _SPI2
+                spi_result = await db.execute(
+                    select(_SPI2).where(
+                        _SPI2.lot_id == lot_obj.id,
+                        func.upper(func.trim(func.replace(_SPI2.part_number, ' ', ''))) == func.upper(func.trim(fpn)),
+                        _SPI2.qty_ordered > 0,
+                    )
+                )
+                items_found = spi_result.scalars().all()
+                if items_found:
+                    qty = sum(i.qty_ordered for i in items_found)
+
+        fob_data[fpn].append((fob_val, qty))
+
+    # Calcular promedio ponderado y actualizar parts_references
+    updated, skipped_no_ref, skipped_has_packing = 0, 0, 0
+
+    for fpn, entries in fob_data.items():
+        ref = await db.get(PartsReference, fpn)
+        if not ref:
+            skipped_no_ref += 1
+            continue
+        # Si ya tiene avg_fob_cost (packing list confirmado), no tocar
+        if ref.avg_fob_cost is not None:
+            skipped_has_packing += 1
+            continue
+
+        total_cost = sum(fob * qty for fob, qty in entries)
+        total_qty  = sum(qty for _, qty in entries)
+        ref.preliminary_fob = round(total_cost / total_qty, 4)
+        updated += 1
+
+    await db.commit()
+    return {
+        "updated": updated,
+        "skipped_no_reference": skipped_no_ref,
+        "skipped_has_packing_list": skipped_has_packing,
+        "parse_errors": parse_errors,
+    }
 
 
 # ── Coverage dashboard ─────────────────────────────────────────────────────────
