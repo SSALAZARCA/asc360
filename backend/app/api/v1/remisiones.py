@@ -28,6 +28,7 @@ from app.models.imports import (
 )
 from app.schemas.remisiones import (
     RemisionCreate,
+    RemisionUpdate,
     RemisionRead,
     RemisionDetail,
     RemisionItemCreate,
@@ -515,6 +516,68 @@ async def anular(
 
     await db.commit()
 
+    remision = await _get_remision_or_404(db, remision_id)
+    return _build_detail(remision)
+
+
+# ---------------------------------------------------------------------------
+# PUT /{id} — update header + sync items of a BORRADOR remision
+# ---------------------------------------------------------------------------
+
+@router.put("/{remision_id}", response_model=RemisionDetail)
+async def update_remision(
+    remision_id: uuid.UUID,
+    payload: RemisionUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    _require_superadmin(current_user)
+    remision = await _get_remision_or_404(db, remision_id)
+
+    if remision.status != "BORRADOR":
+        raise HTTPException(
+            status_code=409,
+            detail=f"Solo se pueden editar remisiones en BORRADOR (status actual: {remision.status})",
+        )
+
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+
+    # Update header fields
+    remision.type = payload.type.value
+    remision.reference_lot_id = payload.reference_lot_id
+    remision.notes = payload.notes
+    remision.updated_at = now
+
+    # Sync items: delete existing and re-create from payload
+    for item in remision.items:
+        await db.delete(item)
+    await db.flush()
+
+    for item_data in payload.items:
+        qty_available = await _get_availability(db, item_data.spare_part_item_id)
+        available = qty_available if qty_available is not None else 0
+        if item_data.qty_dispatched > available:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Stock insuficiente para {item_data.spare_part_item_id}: "
+                       f"solicitado {item_data.qty_dispatched}, disponible {available}",
+            )
+        spi_result = await db.execute(
+            select(SparePartItem).where(SparePartItem.id == item_data.spare_part_item_id)
+        )
+        spi = spi_result.scalar_one_or_none()
+        if spi is None:
+            raise HTTPException(status_code=404, detail=f"Repuesto no encontrado: {item_data.spare_part_item_id}")
+
+        db.add(InventoryRemisionItem(
+            id=uuid.uuid4(),
+            remision_id=remision_id,
+            spare_part_item_id=item_data.spare_part_item_id,
+            part_number=spi.part_number,
+            qty_dispatched=item_data.qty_dispatched,
+        ))
+
+    await db.commit()
     remision = await _get_remision_or_404(db, remision_id)
     return _build_detail(remision)
 

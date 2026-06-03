@@ -89,6 +89,21 @@ class RemisionCreate(BaseModel):
         return self
 
 
+class RemisionUpdate(BaseModel):
+    type: RemisionType
+    reference_lot_id: Optional[uuid.UUID] = None
+    notes: Optional[str] = None
+    items: List[RemisionItemCreate] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_pedido_requires_lot(self) -> "RemisionUpdate":
+        if self.type == RemisionType.PEDIDO and self.reference_lot_id is None:
+            raise ValueError("reference_lot_id is required when type is PEDIDO")
+        if self.type != RemisionType.PEDIDO and self.reference_lot_id is not None:
+            raise ValueError("reference_lot_id must be null for non-PEDIDO types")
+        return self
+
+
 class RemisionRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
