@@ -172,6 +172,81 @@ class TestFobValueCalculation:
 
 
 # ---------------------------------------------------------------------------
+# Tests: cálculo de pl_value del lote (usa qty_received, no qty_ordered)
+# ---------------------------------------------------------------------------
+
+def calc_pl_value(lot_items):
+    """Lógica pura de cálculo de pl_value (extraída del endpoint de lotes).
+    Usa qty_received porque representa lo que el proveedor despachó y cobró.
+    """
+    total = sum(
+        float(i.unit_price) * (i.qty_received or 0)
+        for i in lot_items
+        if i.unit_price is not None and i.status != 'CANCELLED'
+    )
+    return round(total, 2) if total > 0 else None
+
+
+def make_item_pl(part_number, status='DECLARED', qty_ordered=10, qty_received=10,
+                 unit_price=None, fob_pi=None):
+    item = make_item(part_number, status=status, qty_ordered=qty_ordered,
+                     fob_pi=fob_pi, unit_price=unit_price)
+    item.qty_received = qty_received
+    return item
+
+
+class TestPlValueCalculation:
+
+    def test_pl_value_usa_qty_received_no_qty_ordered(self):
+        """El valor del PL debe usar qty_received (lo despachado), no qty_ordered."""
+        # Pedido: 100 unidades, llegaron 80
+        item = make_item_pl('REF001', qty_ordered=100, qty_received=80, unit_price=5.0)
+        assert calc_pl_value([item]) == 400.0  # 80 × 5, no 100 × 5
+
+    def test_pl_value_completo_coincide_con_pedido(self):
+        """Si llegó todo, pl_value == fob_value."""
+        item = make_item_pl('REF001', qty_ordered=10, qty_received=10, unit_price=5.0)
+        assert calc_pl_value([item]) == 50.0
+
+    def test_pl_value_parcial_menor_que_pedido(self):
+        """Si hubo backorder/partial, pl_value < valor del pedido."""
+        item = make_item_pl('REF001', qty_ordered=10, qty_received=6, unit_price=5.0)
+        pl  = calc_pl_value([item])
+        fob = 10 * 5.0  # valor del pedido
+        assert pl == 30.0
+        assert pl < fob
+
+    def test_pl_value_excluye_cancelados(self):
+        """Ítems CANCELLED no deben sumar al pl_value."""
+        items = [
+            make_item_pl('REF001', status='CANCELLED', qty_ordered=10, qty_received=10, unit_price=5.0),
+            make_item_pl('REF002', status='DECLARED',  qty_ordered=5,  qty_received=5,  unit_price=4.0),
+        ]
+        assert calc_pl_value(items) == 20.0  # solo REF002: 5 × 4
+
+    def test_pl_value_sin_unit_price_no_suma(self):
+        """Ítems sin unit_price (solo fob_pi) no entran en pl_value."""
+        items = [
+            make_item_pl('REF001', qty_ordered=10, qty_received=10, unit_price=None, fob_pi=5.0),
+            make_item_pl('REF002', qty_ordered=5,  qty_received=5,  unit_price=4.0),
+        ]
+        assert calc_pl_value(items) == 20.0  # solo REF002
+
+    def test_pl_value_todos_sin_unit_price_devuelve_none(self):
+        """Si ningún ítem tiene unit_price, pl_value es None."""
+        items = [make_item_pl('REF001', qty_received=10, unit_price=None, fob_pi=5.0)]
+        assert calc_pl_value(items) is None
+
+    def test_pl_value_qty_received_cero_no_suma(self):
+        """Si qty_received=0 (nada llegó), ese ítem no aporta al valor del PL."""
+        items = [
+            make_item_pl('REF001', qty_ordered=10, qty_received=0, unit_price=5.0),
+            make_item_pl('REF002', qty_ordered=5,  qty_received=5, unit_price=4.0),
+        ]
+        assert calc_pl_value(items) == 20.0  # solo REF002
+
+
+# ---------------------------------------------------------------------------
 # Tests: guardia de seguridad — no cancelar si packing_list_received
 # ---------------------------------------------------------------------------
 
