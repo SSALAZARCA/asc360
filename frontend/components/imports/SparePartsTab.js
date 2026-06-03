@@ -561,10 +561,10 @@ function LotRow({ lot, userRole, onReconcile }) {
               </>
             : <p style={{ margin: 0, fontSize: '11px', color: '#3f3f55' }}>—</p>
           }
-          {lot.pl_value != null
+          {(lot.total_declared_value != null || lot.pl_value != null)
             ? <>
                 <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: '#a78bfa' }}>
-                  ${parseFloat(lot.pl_value).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                  ${parseFloat(lot.total_declared_value ?? lot.pl_value).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                 </p>
                 <p style={{ margin: 0, fontSize: '9px', color: '#606075' }}>Packing list USD</p>
               </>
