@@ -218,7 +218,7 @@ export default function AnalisisRepuestosTab() {
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
         <div>
-          <h2 style={{ margin: 0, fontSize: '1rem', fontWeight: 900, color: '#fff' }}>Ajuste de Repuestos</h2>
+          <h2 style={{ margin: 0, fontSize: '1rem', fontWeight: 900, color: '#fff' }}>Ajuste de Pedidos</h2>
           <p style={{ margin: '0.2rem 0 0', fontSize: '0.72rem', color: 'rgba(255,255,255,0.35)' }}>
             Baja/media rotación en pedido — click en un PI para marcarlo
           </p>
