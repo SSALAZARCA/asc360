@@ -196,23 +196,44 @@ export default function RemisionForm({ remision = null, onClose, onSuccess }) {
     if (!validate()) return;
     setSaving(true);
     try {
-      const payload = {
+      const itemsPayload = items.map(i => ({
+        spare_part_item_id: i.spare_part_item_id,
+        qty_dispatched: Number(i.qty_dispatched),
+      }));
+      const headerPayload = {
         type,
         reference_lot_id: type === 'PEDIDO' ? (referenceLotId || null) : null,
         notes: notes || null,
-        items: items.map(i => ({
-          spare_part_item_id: i.spare_part_item_id,
-          qty_dispatched: Number(i.qty_dispatched),
-        })),
       };
 
-      const res = remision?.id
-        ? await api.updateRemision(remision.id, payload)
-        : await api.createRemision(payload);
+      let res;
+      if (remision?.id) {
+        // EDIT: PUT sends header + items in one request
+        res = await api.updateRemision(remision.id, { ...headerPayload, items: itemsPayload });
+      } else {
+        // CREATE: POST header first, then add each item individually
+        res = await api.createRemision(headerPayload);
+        if (res.ok) {
+          const created = await res.json();
+          for (const item of itemsPayload) {
+            const itemRes = await api.addItem(created.id, item);
+            if (!itemRes.ok) {
+              const err = await itemRes.json().catch(() => ({}));
+              toast.error(err.detail || 'Error al agregar ítem');
+              setSaving(false);
+              return;
+            }
+          }
+          toast.success('Remisión creada en borrador.');
+          onSuccess?.(created);
+          setSaving(false);
+          return;
+        }
+      }
 
       if (res.ok) {
         const data = await res.json();
-        toast.success(remision?.id ? 'Remisión actualizada.' : 'Remisión creada en borrador.');
+        toast.success('Remisión actualizada.');
         onSuccess?.(data);
       } else {
         const err = await res.json().catch(() => ({}));
