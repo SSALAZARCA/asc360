@@ -857,12 +857,15 @@ async def _list_catalog_impl(
         elif rotation_class in ("alta", "media", "baja"):
             q = q.where(PartsReference.rotation_class == rotation_class)
         if coverage_status == "aqui":
+            # Use spare_part_availability VIEW so dispatched units are excluded
             q = q.where(
                 sa_exists(
-                    select(SparePartItem.id).where(
-                        func.upper(func.trim(func.replace(SparePartItem.part_number, ' ', ''))) == func.upper(func.trim(PartsReference.factory_part_number)),
-                        SparePartItem.qty_physical.isnot(None),
-                        SparePartItem.qty_physical > 0,
+                    select(text("1")).select_from(text("spare_part_availability spa")).where(
+                        text(
+                            "UPPER(TRIM(REPLACE(spa.part_number, ' ', ''))) = "
+                            "UPPER(TRIM(REPLACE(parts_references.factory_part_number, ' ', ''))) "
+                            "AND spa.qty_available > 0"
+                        )
                     )
                 )
             )
@@ -2122,8 +2125,8 @@ async def get_coverage(
         WITH
         aqui AS (
             SELECT UPPER(TRIM(REPLACE(part_number, ' ', ''))) AS pn
-            FROM spare_part_items
-            WHERE qty_physical IS NOT NULL AND qty_physical > 0
+            FROM spare_part_availability
+            WHERE qty_available > 0
             GROUP BY 1
         ),
         en_camino AS (
@@ -2244,8 +2247,8 @@ async def low_rotation_ordered_analysis(
         WITH
         aqui AS (
             SELECT UPPER(TRIM(REPLACE(part_number, ' ', ''))) AS pn
-            FROM spare_part_items
-            WHERE qty_physical IS NOT NULL AND qty_physical > 0
+            FROM spare_part_availability
+            WHERE qty_available > 0
             GROUP BY 1
         ),
         en_camino AS (

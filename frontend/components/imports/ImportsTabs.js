@@ -10,18 +10,22 @@ import MotocicletasTab from './MotocicletasTab';
 import BackorderTab from './BackorderTab';
 import DashboardTab from './DashboardTab';
 import AnalisisRepuestosTab from './AnalisisRepuestosTab';
+import RemisionesTab from './RemisionesTab';
 import ShipmentOrderFormModal from './ShipmentOrderFormModal';
 import NuevoPedidoModal from './NuevoPedidoModal';
 import { RefreshCw, Upload, FileUp, Plus, Download } from 'lucide-react';
 
-const TABS = [
-  { id: 'dashboard', label: 'Dashboard' },
-  { id: 'orders', label: 'Pedidos' },
-  { id: 'motocicletas', label: 'Motocicletas' },
-  { id: 'spare_parts', label: 'Repuestos' },
-  { id: 'backorders',        label: 'Backorders'          },
-  { id: 'analisis_repuestos', label: 'Ajuste de Pedidos' },
+const ALL_TABS = [
+  { id: 'dashboard',         label: 'Dashboard',         roles: null },
+  { id: 'orders',            label: 'Pedidos',           roles: null },
+  { id: 'motocicletas',      label: 'Motocicletas',      roles: null },
+  { id: 'spare_parts',       label: 'Repuestos',         roles: null },
+  { id: 'backorders',        label: 'Backorders',        roles: null },
+  { id: 'analisis_repuestos', label: 'Ajuste de Pedidos', roles: null },
+  { id: 'remisiones',        label: 'Remisiones',        roles: ['superadmin'] },
 ];
+
+// roles: null means visible to all; array means visible only to those roles
 
 export default function ImportsTabs({ userRole }) {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -162,7 +166,7 @@ export default function ImportsTabs({ userRole }) {
 
       {/* Tab bar */}
       <div style={{ display: 'flex', gap: '4px', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '0' }}>
-        {TABS.map(tab => (
+        {ALL_TABS.filter(tab => !tab.roles || tab.roles.includes(userRole)).map(tab => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
@@ -358,6 +362,9 @@ export default function ImportsTabs({ userRole }) {
       )}
       {activeTab === 'analisis_repuestos' && (
         <AnalisisRepuestosTab />
+      )}
+      {activeTab === 'remisiones' && userRole === 'superadmin' && (
+        <RemisionesTab userRole={userRole} />
       )}
 
       {/* Modal de detalle */}
