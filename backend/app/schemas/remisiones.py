@@ -121,6 +121,7 @@ class RemisionRead(BaseModel):
     created_by: uuid.UUID
     created_at: datetime
     updated_at: Optional[datetime] = None
+    items_count: int = 0
 
 
 class RemisionDetail(RemisionRead):

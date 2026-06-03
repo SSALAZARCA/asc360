@@ -164,14 +164,20 @@ async def list_remisiones(
         count_stmt = count_stmt.where(*filters)
     total = (await db.execute(count_stmt)).scalar_one()
 
-    stmt = select(InventoryRemision)
+    stmt = select(InventoryRemision).options(selectinload(InventoryRemision.items))
     if filters:
         stmt = stmt.where(*filters)
     stmt = stmt.order_by(InventoryRemision.created_at.desc()).offset(skip).limit(limit)
     rows = (await db.execute(stmt)).scalars().all()
 
+    remision_reads = []
+    for r in rows:
+        read = RemisionRead.model_validate(r)
+        read.items_count = len(r.items)
+        remision_reads.append(read)
+
     return RemisionListResponse(
-        items=[RemisionRead.model_validate(r) for r in rows],
+        items=remision_reads,
         total=total,
         skip=skip,
         limit=limit,

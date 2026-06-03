@@ -356,7 +356,7 @@ export default function RemisionesTab({ userRole }) {
 
                   {/* Ítems count */}
                   <td style={{ padding: '10px 14px', textAlign: 'center', color: '#9ca3af' }}>
-                    {Array.isArray(rem.items) ? rem.items.length : (rem.items_count ?? '—')}
+                    {rem.items_count ?? 0}
                   </td>
 
                   {/* Acciones */}
