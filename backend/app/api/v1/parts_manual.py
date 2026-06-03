@@ -2574,7 +2574,7 @@ async def export_low_rotation_ordered(
                 row_fill = fill_cambiar
                 dec_font = Font(bold=True, color="FCD34D", size=9)
             else:
-                row_fill = fill_alt if row % 2 == 0 else None
+                row_fill = None
                 dec_font = Font(color="888899", size=9)
 
             values = [
