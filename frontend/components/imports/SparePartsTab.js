@@ -829,18 +829,25 @@ export default function SparePartsTab({ userRole }) {
   const totalLots = lots.length;
   const totalItems = lots.reduce((acc, l) => acc + (l.total_qty_ordered || 0), 0);
   const totalValue = lots.reduce((acc, l) => acc + (parseFloat(l.total_declared_value) || 0), 0);
+  const totalFobValue = lots.reduce((acc, l) => acc + (l.fob_value || 0), 0);
+  const fobIsEstimate = lots.some(l => l.fob_value_is_estimate);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
 
       {/* KPIs rápidos */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '10px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '10px' }}>
         {[
           { label: 'Lotes activos', value: totalLots, color: '#60a5fa' },
           { label: 'Unidades totales', value: totalItems.toLocaleString(), color: '#a78bfa' },
           { label: 'Refs. únicas', value: lotStats.unique_refs ?? '—', color: '#f59e0b' },
           { label: 'Refs. declaradas', value: lotStats.declared_refs ?? '—', color: '#34d399' },
           { label: 'Valor declarado', value: totalValue > 0 ? `$${totalValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—', color: '#22c55e' },
+          {
+            label: totalFobValue > 0 ? (fobIsEstimate ? 'Total FOB est. USD' : 'Total FOB USD') : 'Total FOB USD',
+            value: totalFobValue > 0 ? `$${totalFobValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—',
+            color: totalFobValue > 0 ? (fobIsEstimate ? '#fb923c' : '#34d399') : '#606075',
+          },
         ].map(({ label, value, color }) => (
           <div key={label} style={{ padding: '14px 16px', borderRadius: '10px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
             <p style={{ margin: 0, fontSize: '18px', fontWeight: 800, color }}>{value}</p>
