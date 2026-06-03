@@ -130,6 +130,9 @@ export default function RemisionesTab({ userRole }) {
   // Cancel reason modal
   const [pendingCancel, setPendingCancel] = useState(null);
 
+  // Confirm delete modal
+  const [pendingDelete, setPendingDelete] = useState(null);
+
   const isSuperadmin = userRole === 'superadmin';
 
   // -------------------------------------------------------------------------
@@ -173,6 +176,25 @@ export default function RemisionesTab({ userRole }) {
       }
     } catch {
       toast.error('Error de conexión al despachar');
+    }
+  };
+
+  // -------------------------------------------------------------------------
+  // Delete (BORRADOR only)
+  // -------------------------------------------------------------------------
+  const handleDelete = async (remision) => {
+    setPendingDelete(null);
+    try {
+      const res = await api.deleteRemision(remision.id);
+      if (res.ok || res.status === 204) {
+        toast.success('Remisión eliminada.');
+        fetchRemisiones();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        toast.error(err.detail || 'Error al eliminar');
+      }
+    } catch {
+      toast.error('Error de conexión al eliminar');
     }
   };
 
@@ -364,6 +386,17 @@ export default function RemisionesTab({ userRole }) {
                             >
                               Editar
                             </button>
+                            {/* Eliminar */}
+                            <button
+                              onClick={() => setPendingDelete(rem)}
+                              style={{
+                                padding: '4px 10px', borderRadius: '6px', border: 'none',
+                                background: 'rgba(248,113,113,0.12)', color: '#f87171',
+                                fontSize: '10px', fontWeight: 700, cursor: 'pointer',
+                              }}
+                            >
+                              Eliminar
+                            </button>
                           </>
                         )}
 
@@ -420,6 +453,17 @@ export default function RemisionesTab({ userRole }) {
         <CancelReasonModal
           onCancel={() => setPendingCancel(null)}
           onConfirm={(reason) => handleCancel(pendingCancel, reason)}
+        />
+      )}
+
+      {/* Confirm delete BORRADOR */}
+      {pendingDelete && (
+        <ConfirmModal
+          title="Eliminar Remisión"
+          message="¿Confirmás que querés eliminar esta remisión en borrador? Esta acción es permanente."
+          confirmLabel="Sí, eliminar"
+          onCancel={() => setPendingDelete(null)}
+          onConfirm={() => handleDelete(pendingDelete)}
         />
       )}
     </div>

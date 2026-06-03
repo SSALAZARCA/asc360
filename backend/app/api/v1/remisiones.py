@@ -517,3 +517,28 @@ async def anular(
 
     remision = await _get_remision_or_404(db, remision_id)
     return _build_detail(remision)
+
+
+# ---------------------------------------------------------------------------
+# DELETE /{id} — hard-delete a BORRADOR remision
+# ---------------------------------------------------------------------------
+
+@router.delete("/{remision_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_remision(
+    remision_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    _require_superadmin(current_user)
+    remision = await _get_remision_or_404(db, remision_id)
+
+    if remision.status != "BORRADOR":
+        raise HTTPException(
+            status_code=409,
+            detail=f"Solo se pueden eliminar remisiones en BORRADOR (status actual: {remision.status})",
+        )
+
+    for item in remision.items:
+        await db.delete(item)
+    await db.delete(remision)
+    await db.commit()

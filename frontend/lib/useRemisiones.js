@@ -114,6 +114,10 @@ export function useRemisiones() {
     });
   }
 
+  async function deleteRemision(id) {
+    return authFetch(`${BASE()}/${id}`, { method: 'DELETE' });
+  }
+
   /**
    * Get available spare part items (qty_available > 0) for the item selector.
    * @param {Object} filters - { lot_id, part_number }
@@ -135,6 +139,7 @@ export function useRemisiones() {
     removeItem,
     dispatchRemision,
     cancelRemision,
+    deleteRemision,
     getAvailability,
   };
 }
