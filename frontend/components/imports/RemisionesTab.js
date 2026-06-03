@@ -316,7 +316,8 @@ export default function RemisionesTab({ userRole }) {
               <tr style={{ background: '#0e0e14' }}>
                 {['Número', 'Tipo', 'Fecha', 'Estado', 'Ítems', 'Acciones'].map(h => (
                   <th key={h} style={{
-                    padding: '10px 14px', textAlign: 'left',
+                    padding: '10px 14px',
+                    textAlign: h === 'Acciones' ? 'center' : 'left',
                     fontSize: '9px', fontWeight: 700, color: '#606075',
                     textTransform: 'uppercase', letterSpacing: '0.07em',
                     borderBottom: '1px solid rgba(255,255,255,0.06)',
@@ -359,9 +360,9 @@ export default function RemisionesTab({ userRole }) {
                   </td>
 
                   {/* Acciones */}
-                  <td style={{ padding: '10px 14px' }}>
+                  <td style={{ padding: '10px 14px', textAlign: 'center' }}>
                     {isSuperadmin && (
-                      <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                      <div style={{ display: 'flex', gap: '6px', alignItems: 'center', justifyContent: 'center' }}>
                         {rem.status === 'BORRADOR' && (
                           <>
                             {/* Despachar */}
