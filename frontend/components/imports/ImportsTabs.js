@@ -20,7 +20,7 @@ const TABS = [
   { id: 'motocicletas', label: 'Motocicletas' },
   { id: 'spare_parts', label: 'Repuestos' },
   { id: 'backorders',        label: 'Backorders'          },
-  { id: 'analisis_repuestos', label: 'Análisis Repuestos' },
+  { id: 'analisis_repuestos', label: 'Ajuste de Pedidos' },
 ];
 
 export default function ImportsTabs({ userRole }) {
