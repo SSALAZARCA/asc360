@@ -281,6 +281,8 @@ class SparePartLotRead(BaseModel):
     pct_received: float = 0.0
     models: list[str] = []
     rotation_pct: dict = {}
+    fob_value: Optional[float] = None
+    fob_value_is_estimate: bool = False
 
 
 # ---------------------------------------------------------------------------

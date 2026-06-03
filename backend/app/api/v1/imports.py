@@ -721,6 +721,18 @@ async def list_spare_part_lots(
 
             read.models = sorted({i.model_applicable for i in lot.items if i.model_applicable})
 
+            fob_total = 0.0
+            has_estimate = False
+            for i in lot.items:
+                price = i.unit_price if i.unit_price is not None else i.fob_pi
+                if price is not None:
+                    fob_total += float(price) * (i.qty_ordered or 0)
+                    if i.unit_price is None and i.fob_pi is not None:
+                        has_estimate = True
+            if fob_total > 0:
+                read.fob_value = round(fob_total, 2)
+                read.fob_value_is_estimate = has_estimate
+
             rc_counts: dict[str, int] = {}
             sin_clasificar = 0
             for i in lot.items:

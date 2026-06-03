@@ -548,7 +548,7 @@ function LotRow({ lot, userRole, onReconcile }) {
           </div>
         </div>
 
-        {/* Valor total */}
+        {/* Valor total declarado */}
         <div style={{ textAlign: 'right', minWidth: 100 }}>
           {lot.total_declared_value != null
             ? <>
@@ -556,6 +556,21 @@ function LotRow({ lot, userRole, onReconcile }) {
                   ${parseFloat(lot.total_declared_value).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                 </p>
                 <p style={{ margin: 0, fontSize: '9px', color: '#606075' }}>{lot.currency || 'USD'}</p>
+              </>
+            : <p style={{ margin: 0, fontSize: '11px', color: '#606075' }}>—</p>
+          }
+        </div>
+
+        {/* Valor FOB calculado (unit_price ?? fob_pi) × qty_ordered */}
+        <div style={{ textAlign: 'right', minWidth: 110 }}>
+          {lot.fob_value != null
+            ? <>
+                <p style={{ margin: 0, fontSize: '13px', fontWeight: 800, color: lot.fob_value_is_estimate ? '#fb923c' : '#34d399' }}>
+                  ${parseFloat(lot.fob_value).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                </p>
+                <p style={{ margin: 0, fontSize: '9px', color: lot.fob_value_is_estimate ? '#fb923c' : '#606075' }}>
+                  {lot.fob_value_is_estimate ? 'FOB est. USD' : 'FOB USD'}
+                </p>
               </>
             : <p style={{ margin: 0, fontSize: '11px', color: '#606075' }}>—</p>
           }
