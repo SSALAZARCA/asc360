@@ -121,3 +121,4 @@ class PartOrderDecision(Base):
     decision            = Column(String(20),  nullable=False)  # 'cancelar' | 'cambiar'
     updated_at          = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     updated_by          = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    executed_at         = Column(DateTime, nullable=True)

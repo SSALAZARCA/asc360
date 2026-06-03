@@ -46,6 +46,10 @@ export default function AnalisisRepuestosTab() {
   // { lot_identifier: 'cancelar' | 'cambiar' }
   const [marked, setMarked] = useState({});
 
+  const [executing,    setExecuting]    = useState(false);
+  const [confirmOpen,  setConfirmOpen]  = useState(false);
+  const [execResult,   setExecResult]   = useState(null);
+
   const load = () => {
     setLoading(true);
     Promise.all([
@@ -88,6 +92,23 @@ export default function AnalisisRepuestosTab() {
         return copy;
       });
     });
+  };
+
+  const handleExecuteCancellations = async () => {
+    setConfirmOpen(false);
+    setExecuting(true);
+    setExecResult(null);
+    try {
+      const res = await authFetch('/parts/admin/analysis/decisions/execute', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Error al ejecutar');
+      setExecResult(data);
+      load(); // recargar datos
+    } catch (e) {
+      setExecResult({ error: e.message });
+    } finally {
+      setExecuting(false);
+    }
   };
 
   const toggleSort = (col) => {
@@ -146,6 +167,53 @@ export default function AnalisisRepuestosTab() {
 
   return (
     <div style={{ padding: '0 0 2rem' }}>
+
+      {/* Modal de confirmación de cancelación */}
+      {confirmOpen && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 1000,
+          background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <div style={{
+            background: '#12121c', border: '1px solid rgba(239,68,68,0.3)',
+            borderRadius: '16px', padding: '2rem', maxWidth: '420px', width: '90%',
+          }}>
+            <h3 style={{ margin: '0 0 0.75rem', color: '#f87171', fontSize: '1rem', fontWeight: 800 }}>
+              ¿Confirmar cancelación?
+            </h3>
+            <p style={{ margin: '0 0 0.5rem', fontSize: '0.78rem', color: 'rgba(255,255,255,0.6)', lineHeight: 1.6 }}>
+              Se cancelarán <strong style={{ color: '#fff' }}>{markedCancelar.length}</strong> referencia(s) en sus respectivos PIs.
+              Esta acción no se puede deshacer.
+            </p>
+            <p style={{ margin: '0 0 1.5rem', fontSize: '0.72rem', color: 'rgba(255,255,255,0.35)' }}>
+              Solo se cancelan ítems que aún no tienen packing list recibido.
+            </p>
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setConfirmOpen(false)}
+                style={{
+                  padding: '0.5rem 1rem', borderRadius: '8px', fontSize: '0.75rem', fontWeight: 700,
+                  background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
+                  color: 'rgba(255,255,255,0.5)', cursor: 'pointer',
+                }}
+              >
+                Volver
+              </button>
+              <button
+                onClick={handleExecuteCancellations}
+                style={{
+                  padding: '0.5rem 1.25rem', borderRadius: '8px', fontSize: '0.75rem', fontWeight: 800,
+                  background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.4)',
+                  color: '#f87171', cursor: 'pointer',
+                }}
+              >
+                Sí, cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
@@ -382,6 +450,22 @@ export default function AnalisisRepuestosTab() {
               </div>
             </div>
           )}
+          {markedCancelar.length > 0 && (
+            <button
+              onClick={() => setConfirmOpen(true)}
+              disabled={executing}
+              style={{
+                alignSelf: 'center', padding: '0.45rem 1.1rem', borderRadius: '8px',
+                background: executing ? 'rgba(239,68,68,0.06)' : 'rgba(239,68,68,0.15)',
+                border: '1px solid rgba(239,68,68,0.4)',
+                color: executing ? '#606075' : '#f87171',
+                fontSize: '0.7rem', fontWeight: 800, cursor: executing ? 'not-allowed' : 'pointer',
+                display: 'flex', alignItems: 'center', gap: '0.4rem',
+              }}
+            >
+              {executing ? 'Ejecutando...' : `✕ Proceder con cancelación (${markedCancelar.length})`}
+            </button>
+          )}
           <button
             onClick={() => {
               // Borrar todas las decisiones en DB
@@ -402,6 +486,29 @@ export default function AnalisisRepuestosTab() {
           >
             Limpiar marcas
           </button>
+        </div>
+      )}
+
+      {execResult && !execResult.error && (
+        <div style={{
+          marginTop: '0.75rem', padding: '0.875rem 1.25rem',
+          background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)',
+          borderRadius: '12px', fontSize: '0.72rem',
+        }}>
+          <span style={{ color: '#f87171', fontWeight: 800 }}>✓ Cancelación ejecutada — </span>
+          <span style={{ color: 'rgba(255,255,255,0.6)' }}>
+            {execResult.cancelled_items} ítem(s) cancelado(s) en {execResult.affected_references?.length || 0} referencia(s).
+            {execResult.skipped_lots?.length > 0 && ` ${execResult.skipped_lots.length} lote(s) omitido(s) (PL ya recibido).`}
+          </span>
+        </div>
+      )}
+      {execResult?.error && (
+        <div style={{
+          marginTop: '0.75rem', padding: '0.875rem 1.25rem',
+          background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)',
+          borderRadius: '12px', fontSize: '0.72rem', color: '#f87171',
+        }}>
+          Error: {execResult.error}
         </div>
       )}
 

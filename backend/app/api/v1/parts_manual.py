@@ -898,6 +898,7 @@ async def _list_catalog_impl(
                             SparePartLot.packing_list_received == False,
                             SparePartItem.status.in_(['BACKORDER', 'BACKORDER_PARCIAL']),
                         ),
+                        SparePartItem.status != 'CANCELLED',
                     )
                 )
             ).where(
@@ -1078,7 +1079,7 @@ async def _list_catalog_impl(
                             SparePartItem.qty_physical.is_(None),
                             or_(_SO.bl_container.isnot(None), SparePartLot.packing_list_received == True),
                         ), 2),
-                        (SparePartLot.packing_list_received == False, 1),
+                        (sa_and(SparePartLot.packing_list_received == False, SparePartItem.status != 'CANCELLED'), 1),
                         (SparePartItem.status.in_(['BACKORDER', 'BACKORDER_PARCIAL']), 1),
                         else_=0,
                     )
@@ -2145,6 +2146,7 @@ async def get_coverage(
             FROM spare_part_items spi
             JOIN spare_part_lots spl ON spl.id = spi.lot_id
             WHERE (spl.packing_list_received = false OR spi.status IN ('BACKORDER', 'BACKORDER_PARCIAL'))
+              AND spi.status != 'CANCELLED'
               AND UPPER(TRIM(REPLACE(spi.part_number, ' ', ''))) NOT IN (SELECT pn FROM aqui)
               AND UPPER(TRIM(REPLACE(spi.part_number, ' ', ''))) NOT IN (SELECT pn FROM en_camino)
             GROUP BY 1
@@ -2393,6 +2395,118 @@ async def save_decision(
         ))
     await db.commit()
     return {"status": "saved"}
+
+
+@router.post("/admin/analysis/decisions/execute", status_code=200)
+async def execute_cancellations(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """
+    Ejecuta todas las decisiones marcadas como 'cancelar' que aún no han sido ejecutadas.
+    Solo cancela ítems en lotes SIN packing list recibido (aún cancelables).
+    Recalcula preliminary_fob para las referencias afectadas.
+    """
+    if not current_user.is_superadmin:
+        raise HTTPException(status_code=403, detail="Solo superadmin")
+
+    from app.models.imports import SparePartLot, SparePartItem
+    from app.models.parts_manual import PartsReference
+
+    # Cargar decisiones pendientes de ejecutar
+    decisions = (await db.execute(
+        select(_POD).where(
+            _POD.decision == 'cancelar',
+            _POD.executed_at.is_(None),
+        )
+    )).scalars().all()
+
+    if not decisions:
+        return {"cancelled_items": 0, "refs_updated": 0, "affected_references": [], "skipped_lots": []}
+
+    now = datetime.utcnow()
+    cancelled_items = 0
+    skipped_lots: list[str] = []
+    affected_fpns: set[str] = set()
+
+    for decision in decisions:
+        fpn = decision.factory_part_number
+        lot_id_str = decision.lot_identifier
+
+        # Buscar lote por lot_identifier
+        lot = (await db.execute(
+            select(SparePartLot).where(SparePartLot.lot_identifier == lot_id_str)
+        )).scalar_one_or_none()
+
+        if not lot:
+            skipped_lots.append(f"{lot_id_str} (no encontrado)")
+            continue
+
+        # Guardia crítica: solo cancelar si el packing list NO fue recibido
+        if lot.packing_list_received:
+            skipped_lots.append(f"{lot_id_str} (packing list ya recibido)")
+            continue
+
+        # Normalización de part_number — misma que usa el sistema en todos lados
+        norm_fpn = fpn.upper().strip().replace(' ', '')
+
+        # Buscar ítems del lote que matcheen la referencia y estén cancelables
+        items_result = await db.execute(
+            select(SparePartItem).where(
+                SparePartItem.lot_id == lot.id,
+                SparePartItem.status.notin_(['CANCELLED', 'RECEIVED', 'DECLARED', 'BACKORDER']),
+                func.upper(func.trim(func.replace(SparePartItem.part_number, ' ', ''))) == norm_fpn,
+            )
+        )
+        items = items_result.scalars().all()
+
+        for item in items:
+            item.status = 'CANCELLED'
+            item.qty_pending = 0
+            item.updated_at = now
+            cancelled_items += 1
+
+        # Marcar decisión como ejecutada
+        decision.executed_at = now
+        affected_fpns.add(fpn)
+
+    # Recalcular preliminary_fob para todas las referencias afectadas
+    refs_updated = 0
+    for fpn in affected_fpns:
+        ref = await db.get(PartsReference, fpn)
+        if not ref:
+            continue
+
+        norm_fpn = fpn.upper().strip().replace(' ', '')
+
+        # Todos los ítems activos (no cancelados) con fob_pi para esta referencia
+        active_items_result = await db.execute(
+            select(SparePartItem).where(
+                func.upper(func.trim(func.replace(SparePartItem.part_number, ' ', ''))) == norm_fpn,
+                SparePartItem.status != 'CANCELLED',
+                SparePartItem.fob_pi.isnot(None),
+                SparePartItem.qty_ordered > 0,
+            )
+        )
+        active_items = active_items_result.scalars().all()
+
+        if active_items:
+            total_cost = sum(float(i.fob_pi) * (i.qty_ordered or 0) for i in active_items)
+            total_qty = sum(i.qty_ordered or 0 for i in active_items)
+            ref.preliminary_fob = round(total_cost / total_qty, 4) if total_qty > 0 else None
+        else:
+            ref.preliminary_fob = None
+
+        refs_updated += 1
+
+    await db.commit()
+
+    return {
+        "cancelled_items": cancelled_items,
+        "refs_updated": refs_updated,
+        "affected_references": list(affected_fpns),
+        "skipped_lots": skipped_lots,
+    }
 
 
 class _ExportRequest(BaseModel):
