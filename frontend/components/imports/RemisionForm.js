@@ -67,9 +67,8 @@ export default function RemisionForm({ remision = null, onClose, onSuccess }) {
 
   const [saving, setSaving] = useState(false);
 
-  // Search text and dropdown open state per item row (keyed by _key)
+  // Search text per item row (keyed by _key) — drives the datalist input
   const [itemSearch, setItemSearch] = useState({});
-  const [itemDropdownOpen, setItemDropdownOpen] = useState({});
 
   // -------------------------------------------------------------------------
   // Fetch availability
@@ -126,7 +125,6 @@ export default function RemisionForm({ remision = null, onClose, onSuccess }) {
   const removeItem = (key) => {
     setItems(prev => prev.filter(i => i._key !== key));
     setItemSearch(prev => { const n = { ...prev }; delete n[key]; return n; });
-    setItemDropdownOpen(prev => { const n = { ...prev }; delete n[key]; return n; });
   };
 
   const updateItemField = (key, field, value) => {
@@ -148,14 +146,18 @@ export default function RemisionForm({ remision = null, onClose, onSuccess }) {
           : i
       ));
       setItemSearch(prev => ({ ...prev, [key]: found.part_number }));
-      setItemDropdownOpen(prev => ({ ...prev, [key]: false }));
     }
   };
 
-  const getFilteredAvailability = (key) => {
-    const q = (itemSearch[key] || '').toLowerCase().trim();
-    if (!q) return availability.slice(0, 80);
-    return availability.filter(a => a.part_number.toLowerCase().includes(q)).slice(0, 80);
+  const handleItemSearchChange = (key, text) => {
+    setItemSearch(prev => ({ ...prev, [key]: text }));
+    // Find exact match (browser fires onChange when user selects from datalist)
+    const match = availability.find(a => a.part_number === text);
+    if (match) {
+      handleItemSelect(key, match.spare_part_item_id);
+    } else if (!text) {
+      updateItemField(key, 'spare_part_item_id', '');
+    }
   };
 
   // -------------------------------------------------------------------------
@@ -361,58 +363,21 @@ export default function RemisionForm({ remision = null, onClose, onSuccess }) {
                     const maxQty = avail ? avail.qty_available : item.qty_available;
                     return (
                       <tr key={item._key} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
-                        {/* Repuesto selector — searchable combobox */}
-                        <td style={{ padding: '7px 10px', minWidth: 200, position: 'relative' }}>
+                        {/* Repuesto selector — native datalist search */}
+                        <td style={{ padding: '7px 10px', minWidth: 200 }}>
                           <input
                             type="text"
+                            list={`avail-${item._key}`}
                             value={itemSearch[item._key] !== undefined ? itemSearch[item._key] : (item.part_number || '')}
-                            placeholder="Buscar por referencia..."
-                            autoComplete="off"
-                            onChange={e => {
-                              setItemSearch(prev => ({ ...prev, [item._key]: e.target.value }));
-                              setItemDropdownOpen(prev => ({ ...prev, [item._key]: true }));
-                              if (!e.target.value) updateItemField(item._key, 'spare_part_item_id', '');
-                            }}
-                            onFocus={() => setItemDropdownOpen(prev => ({ ...prev, [item._key]: true }))}
-                            onBlur={() => setTimeout(() => setItemDropdownOpen(prev => ({ ...prev, [item._key]: false })), 180)}
+                            placeholder="Buscar referencia..."
+                            onChange={e => handleItemSearchChange(item._key, e.target.value)}
                             style={{ ...inputStyle, fontSize: '11px' }}
                           />
-                          {itemDropdownOpen[item._key] && (
-                            <div style={{
-                              position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 100,
-                              background: '#1a1a24', border: '1px solid rgba(255,255,255,0.12)',
-                              borderRadius: '8px', maxHeight: 220, overflowY: 'auto',
-                              boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
-                            }}>
-                              {getFilteredAvailability(item._key).length === 0 ? (
-                                <div style={{ padding: '10px 12px', fontSize: '11px', color: '#606075' }}>
-                                  Sin resultados
-                                </div>
-                              ) : (
-                                getFilteredAvailability(item._key).map(a => (
-                                  <div
-                                    key={a.spare_part_item_id}
-                                    onMouseDown={() => handleItemSelect(item._key, a.spare_part_item_id)}
-                                    style={{
-                                      padding: '8px 12px', cursor: 'pointer', fontSize: '11px',
-                                      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                                      borderBottom: '1px solid rgba(255,255,255,0.04)',
-                                      background: item.spare_part_item_id === a.spare_part_item_id
-                                        ? 'rgba(255,95,51,0.12)' : 'transparent',
-                                      color: item.spare_part_item_id === a.spare_part_item_id ? '#ff5f33' : '#d1d5db',
-                                    }}
-                                    onMouseEnter={e => { if (item.spare_part_item_id !== a.spare_part_item_id) e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; }}
-                                    onMouseLeave={e => { if (item.spare_part_item_id !== a.spare_part_item_id) e.currentTarget.style.background = 'transparent'; }}
-                                  >
-                                    <span style={{ fontFamily: 'monospace' }}>{a.part_number}</span>
-                                    <span style={{ fontSize: '10px', color: '#22c55e', fontWeight: 700 }}>
-                                      disp: {a.qty_available}
-                                    </span>
-                                  </div>
-                                ))
-                              )}
-                            </div>
-                          )}
+                          <datalist id={`avail-${item._key}`}>
+                            {availability.map(a => (
+                              <option key={a.spare_part_item_id} value={a.part_number} />
+                            ))}
+                          </datalist>
                         </td>
 
                         {/* Part number (auto) */}
