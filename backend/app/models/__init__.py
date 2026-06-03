@@ -21,6 +21,7 @@ from .imports import (
     ShipmentOrder, ShipmentMotoUnit, SparePartLot, SparePartItem,
     PackingList, PackingListItem, ReconciliationResult,
     Backorder, ImportAttachment, ImportAuditLog, VehicleModel,
+    InventoryRemision, InventoryRemisionItem, InventoryRemisionMovement,
 )
 
 # Esto exporta todo correctamente.
@@ -36,4 +37,5 @@ __all__ = [
     "Backorder", "ImportAttachment", "ImportAuditLog", "VehicleModel",
     "PartsReference", "PartsManualSection", "PartsManualItem", "VehicleCatalogMap",
     "PartCostHistory", "PartsCodeReviewTask",
+    "InventoryRemision", "InventoryRemisionItem", "InventoryRemisionMovement",
 ]

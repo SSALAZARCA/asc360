@@ -455,3 +455,93 @@ class ColorRuntMapping(Base):
     nombre_runt = Column(String(255), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+# ---------------------------------------------------------------------------
+# Inventory Remisiones — cabecera de despacho de inventario de repuestos
+# ---------------------------------------------------------------------------
+class InventoryRemision(Base):
+    __tablename__ = "inventory_remisions"
+    __table_args__ = (
+        Index("ix_ir_status", "status"),
+        Index("ix_ir_type", "type"),
+        Index("ix_ir_created_at", "created_at"),
+        Index("ix_ir_reference_lot", "reference_lot_id"),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    # type: PEDIDO | GARANTIA | CORTESIA | VEHICULO_PROPIO
+    type = Column(String(20), nullable=False)
+    # status: BORRADOR | DESPACHADO | ANULADO
+    status = Column(String(20), nullable=False, default="BORRADOR")
+    # Solo requerido cuando type == PEDIDO
+    reference_lot_id = Column(UUID(as_uuid=True), ForeignKey("spare_part_lots.id"), nullable=True)
+    notes = Column(Text, nullable=True)
+    # Asignado al despachar: REM-{YYYY}-{seq:04d}
+    remision_number = Column(String(20), nullable=True, unique=True)
+
+    dispatched_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    dispatched_at = Column(DateTime, nullable=True)
+
+    cancelled_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    cancelled_at = Column(DateTime, nullable=True)
+    cancellation_reason = Column(Text, nullable=True)
+
+    created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relaciones
+    reference_lot = relationship("SparePartLot", foreign_keys=[reference_lot_id])
+    items = relationship("InventoryRemisionItem", back_populates="remision", cascade="all, delete-orphan")
+    movements = relationship("InventoryRemisionMovement", back_populates="remision")
+
+
+# ---------------------------------------------------------------------------
+# Inventory Remision Items — líneas de ítems de una remisión (solo en BORRADOR)
+# ---------------------------------------------------------------------------
+class InventoryRemisionItem(Base):
+    __tablename__ = "inventory_remision_items"
+    __table_args__ = (
+        UniqueConstraint("remision_id", "spare_part_item_id", name="uq_remision_item"),
+        Index("ix_iri_remision", "remision_id"),
+        Index("ix_iri_spare_part_item", "spare_part_item_id"),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    remision_id = Column(UUID(as_uuid=True), ForeignKey("inventory_remisions.id"), nullable=False)
+    spare_part_item_id = Column(UUID(as_uuid=True), ForeignKey("spare_part_items.id"), nullable=False)
+    # Desnormalizado para consulta rápida
+    part_number = Column(String(100), nullable=False)
+    qty_dispatched = Column(Integer, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    remision = relationship("InventoryRemision", back_populates="items")
+    spare_part_item = relationship("SparePartItem")
+
+
+# ---------------------------------------------------------------------------
+# Inventory Remision Movements — ledger inmutable; append-only, sin updated_at
+# ---------------------------------------------------------------------------
+class InventoryRemisionMovement(Base):
+    __tablename__ = "inventory_remision_movements"
+    __table_args__ = (
+        Index("ix_irm_spare_part_item", "spare_part_item_id"),
+        Index("ix_irm_remision", "remision_id"),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    remision_id = Column(UUID(as_uuid=True), ForeignKey("inventory_remisions.id"), nullable=False)
+    spare_part_item_id = Column(UUID(as_uuid=True), ForeignKey("spare_part_items.id"), nullable=False)
+    # Desnormalizado para trazabilidad histórica
+    part_number = Column(String(100), nullable=False)
+    # Negativo para DESPACHO, positivo para ANULACION
+    delta = Column(Integer, nullable=False)
+    # DESPACHO | ANULACION
+    movement_type = Column(String(20), nullable=False)
+    created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    # Sin updated_at — ledger inmutable
+
+    remision = relationship("InventoryRemision", back_populates="movements")
+    spare_part_item = relationship("SparePartItem")
