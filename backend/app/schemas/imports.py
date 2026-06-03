@@ -197,6 +197,9 @@ class ShipmentOrderRead(BaseModel):
     computed_status: Optional[str] = None
     order_date: Optional[str] = None
 
+    nacionalizacion_status: Optional[str] = None
+    nacionalizacion_fecha: Optional[datetime] = None
+
     created_at: datetime
     updated_at: Optional[datetime] = None
 
@@ -257,6 +260,10 @@ class ShipmentOrderListResponse(BaseModel):
     total: int
     page: int
     page_size: int
+
+
+class NacionalizacionUpdate(BaseModel):
+    status: Optional[str] = None  # null | "parcial" | "completo"
 
 
 # ---------------------------------------------------------------------------

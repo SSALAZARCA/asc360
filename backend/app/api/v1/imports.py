@@ -18,6 +18,7 @@ from app.models.imports import ShipmentOrder, SparePartLot, ShipmentMotoUnit, Im
 from app.models.tenant import Tenant, EstadoRed
 from app.schemas.imports import (
     ShipmentOrderRead, ShipmentOrderCreate, ShipmentOrderUpdate, ShipmentOrderListResponse,
+    NacionalizacionUpdate,
     ImportExcelResult, MotoUnitRead, MotoUnitUpdate, ImportAttachmentRead,
     SparePartLotRead, SparePartItemRead, SparePartItemUpdate,
     ReconciliationResultRead, ReconciliationResultUpdate, BackorderRead, BackorderUpdate,
@@ -479,6 +480,39 @@ async def delete_shipment_order(
         raise HTTPException(status_code=404, detail={"detail": "Pedido no encontrado", "code": "ORDER_NOT_FOUND"})
 
     await db.delete(order)
+
+
+# ---------------------------------------------------------------------------
+# Marcar nacionalización de pedido de repuestos
+# ---------------------------------------------------------------------------
+
+_VALID_NACION_STATUSES = {None, "parcial", "completo"}
+
+@router.patch("/shipment-orders/{order_id}/nacionalizacion")
+async def update_nacionalizacion(
+    order_id: uuid.UUID,
+    payload: NacionalizacionUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    _require_imports_editor(current_user)
+
+    if payload.status not in _VALID_NACION_STATUSES:
+        raise HTTPException(status_code=422, detail={"detail": "status debe ser null, 'parcial' o 'completo'", "code": "INVALID_STATUS"})
+
+    order = await db.get(ShipmentOrder, order_id)
+    if not order:
+        raise HTTPException(status_code=404, detail={"detail": "Pedido no encontrado", "code": "ORDER_NOT_FOUND"})
+
+    if not order.is_spare_part:
+        raise HTTPException(status_code=400, detail={"detail": "Solo pedidos de repuestos pueden ser nacionalizados", "code": "NOT_SPARE_PART"})
+
+    order.nacionalizacion_status = payload.status
+    order.nacionalizacion_fecha = datetime.utcnow() if payload.status else None
+    order.updated_at = datetime.utcnow()
+    await db.commit()
+
+    return {"id": str(order.id), "nacionalizacion_status": order.nacionalizacion_status, "nacionalizacion_fecha": order.nacionalizacion_fecha}
 
 
 # ---------------------------------------------------------------------------

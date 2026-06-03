@@ -61,6 +61,10 @@ class ShipmentOrder(Base):
     computed_status = Column(String(50), nullable=True, default="en_preparacion")
     order_date = Column(Date, nullable=True)
 
+    # Nacionalización de repuestos (solo is_spare_part=True): null | "parcial" | "completo"
+    nacionalizacion_status = Column(String(20), nullable=True)
+    nacionalizacion_fecha = Column(DateTime, nullable=True)
+
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

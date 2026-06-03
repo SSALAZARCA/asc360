@@ -107,6 +107,21 @@ export default function ImportsTabs({ userRole }) {
     setFormModal({ open: true, order });
   };
 
+  const handleNacionalizacion = async (orderId, newStatus) => {
+    try {
+      await authFetch(`${getApiUrl()}/imports/shipment-orders/${orderId}/nacionalizacion`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      setOrders(prev => prev.map(o =>
+        o.id === orderId ? { ...o, nacionalizacion_status: newStatus } : o
+      ));
+    } catch (e) {
+      console.error('Error actualizando nacionalización:', e);
+    }
+  };
+
   const handleExportOrders = async () => {
     setExportingOrders(true);
     try {
@@ -321,6 +336,7 @@ export default function ImportsTabs({ userRole }) {
             onRowClick={handleRowClick}
             onEdit={handleEdit}
             onDelete={handleDelete}
+            onNacionalizacion={handleNacionalizacion}
             userRole={userRole}
             loading={loading}
           />

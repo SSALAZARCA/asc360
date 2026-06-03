@@ -41,11 +41,34 @@ const TH = ({ children, sortField, sortKey, sortDir, onSort, style = {} }) => (
   </th>
 );
 
-export default function ShipmentTable({ orders, total, page, pageSize, onPageChange, onRowClick, onEdit, onDelete, userRole, loading }) {
+const NACION_OPTIONS = [
+  { value: '', label: '—' },
+  { value: 'parcial', label: 'Parcial' },
+  { value: 'completo', label: 'Completo' },
+];
+
+const NACION_COLORS = {
+  parcial: { bg: 'rgba(251,146,60,0.15)', color: '#fb923c' },
+  completo: { bg: 'rgba(34,197,94,0.15)', color: '#22c55e' },
+};
+
+export default function ShipmentTable({ orders, total, page, pageSize, onPageChange, onRowClick, onEdit, onDelete, onNacionalizacion, userRole, loading }) {
   const [deletingId, setDeletingId] = useState(null);
   const [sortKey, setSortKey] = useState(null);
   const [sortDir, setSortDir] = useState('asc');
   const [pendingConfirm, setPendingConfirm] = useState(null);
+  const [nacionLoading, setNacionLoading] = useState({});
+
+  const handleNacion = async (e, orderId) => {
+    e.stopPropagation();
+    const newStatus = e.target.value || null;
+    setNacionLoading(prev => ({ ...prev, [orderId]: true }));
+    try {
+      await onNacionalizacion(orderId, newStatus);
+    } finally {
+      setNacionLoading(prev => ({ ...prev, [orderId]: false }));
+    }
+  };
   const totalPages = Math.ceil(total / pageSize);
 
   const handleSort = (field) => {
@@ -111,20 +134,21 @@ export default function ShipmentTable({ orders, total, page, pageSize, onPageCha
               <TH sortField="digital_docs_status" sortKey={sortKey} sortDir={sortDir} onSort={handleSort}>Docs Digital</TH>
               <TH sortField="original_docs_status" sortKey={sortKey} sortDir={sortDir} onSort={handleSort}>Docs Original</TH>
               <TH sortField="computed_status" sortKey={sortKey} sortDir={sortDir} onSort={handleSort}>Estado</TH>
+              <TH>Nacion.</TH>
               <TH></TH>
             </tr>
           </thead>
           <tbody>
             {loading && (
               <tr>
-                <td colSpan={12} style={{ ...COL_STYLE, textAlign: 'center', color: '#606075', padding: '32px' }}>
+                <td colSpan={13} style={{ ...COL_STYLE, textAlign: 'center', color: '#606075', padding: '32px' }}>
                   Cargando...
                 </td>
               </tr>
             )}
             {!loading && orders.length === 0 && (
               <tr>
-                <td colSpan={12} style={{ ...COL_STYLE, textAlign: 'center', color: '#606075', padding: '32px' }}>
+                <td colSpan={13} style={{ ...COL_STYLE, textAlign: 'center', color: '#606075', padding: '32px' }}>
                   No hay pedidos que mostrar
                 </td>
               </tr>
@@ -184,6 +208,39 @@ export default function ShipmentTable({ orders, total, page, pageSize, onPageCha
                   </td>
                   <td style={COL_STYLE}>
                     <StatusBadge status={order.computed_status} type="computed_status" />
+                  </td>
+                  <td style={{ ...COL_STYLE }} onClick={e => e.stopPropagation()}>
+                    {isSP ? (
+                      <select
+                        value={order.nacionalizacion_status ?? ''}
+                        disabled={nacionLoading[order.id]}
+                        onChange={e => handleNacion(e, order.id)}
+                        style={{
+                          background: order.nacionalizacion_status
+                            ? NACION_COLORS[order.nacionalizacion_status]?.bg
+                            : 'rgba(255,255,255,0.04)',
+                          color: order.nacionalizacion_status
+                            ? NACION_COLORS[order.nacionalizacion_status]?.color
+                            : '#606075',
+                          border: '1px solid rgba(255,255,255,0.08)',
+                          borderRadius: '6px',
+                          fontSize: '10px',
+                          fontWeight: 700,
+                          padding: '3px 6px',
+                          cursor: nacionLoading[order.id] ? 'wait' : 'pointer',
+                          outline: 'none',
+                          letterSpacing: '0.04em',
+                        }}
+                      >
+                        {NACION_OPTIONS.map(opt => (
+                          <option key={opt.value} value={opt.value} style={{ background: '#1a1a24', color: '#d1d5db' }}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <span style={{ color: '#3a3a50', fontSize: '11px' }}>—</span>
+                    )}
                   </td>
                   <td style={{ ...COL_STYLE, textAlign: 'right' }}>
                     <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }} onClick={e => e.stopPropagation()}>
