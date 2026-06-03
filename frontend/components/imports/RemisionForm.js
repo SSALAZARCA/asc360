@@ -112,6 +112,27 @@ export default function RemisionForm({ remision = null, onClose, onSuccess }) {
     fetchLots();
   }, [fetchAvailability, fetchLots]);
 
+  // In edit mode, fetch the full detail to populate existing items
+  useEffect(() => {
+    if (!remision?.id) return;
+    api.getRemision(remision.id).then(async res => {
+      if (!res.ok) return;
+      const detail = await res.json();
+      if (Array.isArray(detail.items) && detail.items.length > 0) {
+        setItems(detail.items.map(i => ({
+          _key: i.id,
+          spare_part_item_id: i.spare_part_item_id,
+          part_number: i.part_number,
+          qty_available: null,
+          qty_dispatched: i.qty_dispatched,
+        })));
+        const searches = {};
+        detail.items.forEach(i => { searches[i.id] = i.part_number; });
+        setItemSearch(searches);
+      }
+    }).catch(() => {});
+  }, [remision?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // -------------------------------------------------------------------------
   // Item helpers
   // -------------------------------------------------------------------------
