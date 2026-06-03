@@ -391,8 +391,7 @@ async def despachar(
 
     # Pessimistic lock on spare_part_items rows
     await db.execute(
-        text("SELECT id FROM spare_part_items WHERE id = ANY(:ids) FOR UPDATE"),
-        {"ids": [str(iid) for iid in item_ids]},
+        select(SparePartItem).where(SparePartItem.id.in_(item_ids)).with_for_update()
     )
 
     # Re-validate availability from VIEW (inside the lock)
@@ -438,7 +437,7 @@ async def despachar(
             "FROM inventory_remisions "
             "WHERE remision_number LIKE :prefix"
         ),
-        {"start": str(len(prefix) + 1), "prefix": f"{prefix}%"},
+        {"start": len(prefix) + 1, "prefix": f"{prefix}%"},
     )
     current_max = seq_result.scalar()
     next_seq = (current_max or 0) + 1

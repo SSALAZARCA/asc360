@@ -12,7 +12,7 @@ Validates:
 import uuid
 import pytest
 from pydantic import ValidationError
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
 import sys, os
@@ -76,7 +76,7 @@ class TestCounterMovementCreation:
         Pure function replicating the endpoint's reversal logic:
         for each DESPACHO movement, create an ANULACION movement with delta = -original_delta.
         """
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
         counters = []
         for dm in dispatch_movements:
             counters.append({

@@ -9,7 +9,7 @@ To run: pytest backend/tests/ -v
 """
 import uuid
 import pytest
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import MagicMock, AsyncMock
 
 
@@ -42,7 +42,7 @@ def make_remision_item(
     item.spare_part_item_id = spare_part_item_id or uuid.uuid4()
     item.part_number = part_number
     item.qty_dispatched = qty_dispatched
-    item.created_at = datetime.utcnow()
+    item.created_at = datetime.now(timezone.utc).replace(tzinfo=None)
     return item
 
 
@@ -62,7 +62,7 @@ def make_movement(
     m.delta = delta
     m.movement_type = movement_type
     m.created_by = created_by or uuid.uuid4()
-    m.created_at = datetime.utcnow()
+    m.created_at = datetime.now(timezone.utc).replace(tzinfo=None)
     return m
 
 
@@ -87,7 +87,7 @@ def make_remision(
     r.cancelled_at = None
     r.cancellation_reason = None
     r.created_by = created_by or uuid.uuid4()
-    r.created_at = datetime.utcnow()
+    r.created_at = datetime.now(timezone.utc).replace(tzinfo=None)
     r.updated_at = None
     r.items = items if items is not None else []
     r.movements = movements if movements is not None else []

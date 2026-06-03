@@ -11,7 +11,7 @@ Validates:
 """
 import uuid
 import pytest
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
 import sys
@@ -60,7 +60,7 @@ class TestDispatchMovementCreation:
         Pure function simulating what the endpoint does:
         creates one DESPACHO movement per item with delta = -qty_dispatched.
         """
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
         movements = []
         for item in items:
             movements.append({
