@@ -737,7 +737,7 @@ async def list_spare_part_lots(
 
             if lot.packing_list_received:
                 pl_total = sum(
-                    float(i.unit_price) * (i.qty_ordered or 0)
+                    float(i.unit_price) * (i.qty_received or 0)
                     for i in lot.items if i.unit_price is not None and i.status != 'CANCELLED'
                 )
                 if pl_total > 0:
