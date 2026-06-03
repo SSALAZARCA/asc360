@@ -733,6 +733,14 @@ async def list_spare_part_lots(
                 read.fob_value = round(fob_total, 2)
                 read.fob_value_is_estimate = has_estimate
 
+            if lot.packing_list_received:
+                pl_total = sum(
+                    float(i.unit_price) * (i.qty_ordered or 0)
+                    for i in lot.items if i.unit_price is not None
+                )
+                if pl_total > 0:
+                    read.pl_value = round(pl_total, 2)
+
             rc_counts: dict[str, int] = {}
             sin_clasificar = 0
             for i in lot.items:

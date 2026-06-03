@@ -283,6 +283,7 @@ class SparePartLotRead(BaseModel):
     rotation_pct: dict = {}
     fob_value: Optional[float] = None
     fob_value_is_estimate: bool = False
+    pl_value: Optional[float] = None
 
 
 # ---------------------------------------------------------------------------

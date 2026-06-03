@@ -548,31 +548,27 @@ function LotRow({ lot, userRole, onReconcile }) {
           </div>
         </div>
 
-        {/* Valor total declarado */}
-        <div style={{ textAlign: 'right', minWidth: 100 }}>
-          {lot.total_declared_value != null
-            ? <>
-                <p style={{ margin: 0, fontSize: '13px', fontWeight: 800, color: '#a78bfa' }}>
-                  ${parseFloat(lot.total_declared_value).toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                </p>
-                <p style={{ margin: 0, fontSize: '9px', color: '#606075' }}>{lot.currency || 'USD'}</p>
-              </>
-            : <p style={{ margin: 0, fontSize: '11px', color: '#606075' }}>—</p>
-          }
-        </div>
-
-        {/* Valor FOB calculado (unit_price ?? fob_pi) × qty_ordered */}
-        <div style={{ textAlign: 'right', minWidth: 110 }}>
+        {/* Valor pedido + valor PL apilados */}
+        <div style={{ textAlign: 'right', minWidth: 120, display: 'flex', flexDirection: 'column', gap: '4px' }}>
           {lot.fob_value != null
             ? <>
                 <p style={{ margin: 0, fontSize: '13px', fontWeight: 800, color: lot.fob_value_is_estimate ? '#fb923c' : '#34d399' }}>
                   ${parseFloat(lot.fob_value).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                 </p>
-                <p style={{ margin: 0, fontSize: '9px', color: lot.fob_value_is_estimate ? '#fb923c' : '#606075' }}>
-                  {lot.fob_value_is_estimate ? 'FOB est. USD' : 'FOB USD'}
+                <p style={{ margin: 0, fontSize: '9px', color: '#606075' }}>
+                  {lot.fob_value_is_estimate ? 'Pedido est. USD' : 'Pedido USD'}
                 </p>
               </>
-            : <p style={{ margin: 0, fontSize: '11px', color: '#606075' }}>—</p>
+            : <p style={{ margin: 0, fontSize: '11px', color: '#3f3f55' }}>—</p>
+          }
+          {lot.pl_value != null
+            ? <>
+                <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: '#a78bfa' }}>
+                  ${parseFloat(lot.pl_value).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                </p>
+                <p style={{ margin: 0, fontSize: '9px', color: '#606075' }}>Packing list USD</p>
+              </>
+            : null
           }
         </div>
 
