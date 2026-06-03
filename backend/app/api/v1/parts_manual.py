@@ -2216,6 +2216,7 @@ async def get_coverage(
 class _LotQty(BaseModel):
     lot_identifier: str
     qty: int
+    fob_unit: Optional[float] = None
 
 class _LowRotItem(BaseModel):
     factory_part_number: str
@@ -2225,6 +2226,8 @@ class _LowRotItem(BaseModel):
     total_qty: int
     lots: list[_LotQty]
     models: list[str] = []
+    fob_unit: Optional[float] = None
+    total_fob: Optional[float] = None
 
 class _LowRotResponse(BaseModel):
     items: list[_LowRotItem]
@@ -2287,7 +2290,8 @@ async def low_rotation_ordered_analysis(
             pr.rotation_class,
             spl.lot_identifier,
             SUM(spi.qty_ordered)::int AS qty,
-            COALESCE(mp.models, ARRAY[]::text[]) AS models
+            COALESCE(mp.models, ARRAY[]::text[]) AS models,
+            MAX(COALESCE(spi.unit_price, spi.fob_pi))::float AS fob_unit
         FROM parts_references pr
         JOIN spare_part_items spi
             ON UPPER(TRIM(REPLACE(spi.part_number, ' ', ''))) = UPPER(TRIM(pr.factory_part_number))
@@ -2323,8 +2327,19 @@ async def low_rotation_ordered_analysis(
                 'models': list(row.models) if row.models else [],
             }
         qty = int(row.qty) if row.qty else 0
-        parts_map[fpn]['lots'].append({'lot_identifier': row.lot_identifier, 'qty': qty})
+        fob_unit = float(row.fob_unit) if row.fob_unit is not None else None
+        parts_map[fpn]['lots'].append({'lot_identifier': row.lot_identifier, 'qty': qty, 'fob_unit': fob_unit})
         parts_map[fpn]['total_qty'] += qty
+        if fob_unit is not None:
+            parts_map[fpn]['_fob_weighted'] = parts_map[fpn].get('_fob_weighted', 0) + fob_unit * qty
+            parts_map[fpn]['_fob_qty'] = parts_map[fpn].get('_fob_qty', 0) + qty
+
+    for part in parts_map.values():
+        fob_qty = part.pop('_fob_qty', 0)
+        fob_weighted = part.pop('_fob_weighted', 0)
+        if fob_qty > 0:
+            part['fob_unit'] = round(fob_weighted / fob_qty, 4)
+            part['total_fob'] = round(fob_weighted, 2)
 
     items = sorted(
         parts_map.values(),

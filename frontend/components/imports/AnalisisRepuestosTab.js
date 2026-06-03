@@ -323,6 +323,7 @@ export default function AnalisisRepuestosTab() {
                 <th style={{ ...thStyle, textAlign: 'right' }} onClick={() => toggleSort('total_qty')}>
                   Total <SortIcon col="total_qty" sortCol={sortCol} sortDir={sortDir} />
                 </th>
+                <th style={{ ...thStyle, textAlign: 'right', cursor: 'default' }}>Costo FOB</th>
                 <th style={{ ...thStyle, cursor: 'default' }}>PI numbers · cantidad <span style={{ fontWeight: 400, opacity: 0.5, textTransform: 'none', letterSpacing: 0 }}>— click para marcar</span></th>
               </tr>
             </thead>
@@ -366,6 +367,18 @@ export default function AnalisisRepuestosTab() {
                   <td style={{ padding: '0.7rem 1rem', textAlign: 'right' }}>
                     <span style={{ fontFamily: 'monospace', fontWeight: 900, fontSize: '0.85rem', color: '#fff' }}>{item.total_qty}</span>
                     <span style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.3)', marginLeft: '0.3rem' }}>u</span>
+                  </td>
+                  <td style={{ padding: '0.7rem 1rem', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    {item.fob_unit != null ? (
+                      <>
+                        <span style={{ fontFamily: 'monospace', fontSize: '0.78rem', color: '#fbbf24', fontWeight: 700 }}>
+                          ${item.fob_unit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                        <span style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.3)', marginLeft: '0.25rem' }}>USD</span>
+                      </>
+                    ) : (
+                      <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.2)' }}>—</span>
+                    )}
                   </td>
                   <td style={{ padding: '0.7rem 1rem' }}>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
