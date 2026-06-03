@@ -2026,7 +2026,6 @@ async def import_fob_preliminary(
 
         if not lot_obj:
             skipped_no_pi += 1
-            fob_accum[fpn].append((fob_val, 1))
             continue
 
         norm_fpn = func.upper(func.trim(fpn)).compile(compile_kwargs={"literal_binds": True}).string \
@@ -2038,7 +2037,6 @@ async def import_fob_preliminary(
 
         if not items_found:
             skipped_no_item += 1
-            fob_accum[fpn].append((fob_val, 1))
             continue
 
         qty_total = 0
