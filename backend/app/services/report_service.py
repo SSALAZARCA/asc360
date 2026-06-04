@@ -359,7 +359,7 @@ async def _query_f6(desde: date, hasta: date, db: AsyncSession) -> dict:
             COUNT(*) FILTER (WHERE resolved = false)                          AS activos,
             COUNT(*) FILTER (WHERE resolved = true
                              AND resolved_at::date BETWEEN :desde AND :hasta) AS resueltos_periodo,
-            COUNT(DISTINCT part_number) FILTER (WHERE resolved = false)       AS refs_afectadas,
+            COUNT(DISTINCT bo.part_number) FILTER (WHERE resolved = false)     AS refs_afectadas,
             COALESCE(SUM(
                 CASE WHEN resolved = false
                 THEN qty_pending * COALESCE(unit_price, fob_pi, 0)
@@ -566,7 +566,7 @@ async def generate_gerencial_report(desde: date, hasta: date, db: AsyncSession) 
     template = _jinja_env.get_template('informe_gerencial.html')
     html_out = template.render(context)
 
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     pdf_bytes = await loop.run_in_executor(
         None,
         partial(HTML(string=html_out).write_pdf)
