@@ -621,8 +621,7 @@ body{
             <div class="prog-track">
               <div class="prog-seg" style="width:{{ f4.pct_aqui_pbar }}%;background:#2F9E44;">Aquí · {{ "{:,.0f}".format(f4.fob_aqui) }}</div>
               <div class="prog-seg" style="width:{{ f4.pct_camino_pbar }}%;background:#1C7ED6;">{{ "{:,.0f}".format(f4.fob_camino) }}</div>
-              {% set pendiente = f4.fob_pedido - f4.fob_materializado %}
-              <div class="prog-track__rest">Pendiente · USD {{ "{:,.0f}".format([pendiente, 0]|max) }}</div>
+              <div class="prog-track__rest">Pendiente · USD {{ "{:,.0f}".format(f4.fob_pendiente) }}</div>
             </div>
             <div class="prog-foot">
               <div class="prog-foot__item"><span class="sw" style="background:#2F9E44"></span>Aquí (stock) <b class="num">USD {{ "{:,.0f}".format(f4.fob_aqui) }}</b></div>

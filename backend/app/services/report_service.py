@@ -623,6 +623,7 @@ async def _query_f4(db: AsyncSession) -> dict:
         pct_camino_pbar = 100 - pct_aqui_pbar
 
     mat_status = 'ok' if pct_materializado >= 80 else ('warn' if pct_materializado >= 50 else 'crit')
+    fob_pendiente = max(0.0, fob_pedido - fob_materializado)
 
     if total == 0 and fob_pedido == 0:
         return {
@@ -630,7 +631,7 @@ async def _query_f4(db: AsyncSession) -> dict:
             'total': 0, 'aqui': 0, 'en_camino': 0, 'pedido': 0, 'sin_cobertura': 0,
             'fob_stock': 0.0,
             'fob_pedido': 0.0, 'fob_camino': 0.0,
-            'fob_aqui': 0.0, 'fob_materializado': 0.0,
+            'fob_aqui': 0.0, 'fob_materializado': 0.0, 'fob_pendiente': 0.0,
             'pct_materializado': 0, 'pct_aqui_pbar': 0, 'pct_camino_pbar': 0,
             'mat_status': 'crit',
         }
@@ -647,6 +648,7 @@ async def _query_f4(db: AsyncSession) -> dict:
         'fob_camino': fob_camino,
         'fob_aqui': fob_aqui,
         'fob_materializado': fob_materializado,
+        'fob_pendiente': fob_pendiente,
         'pct_materializado': pct_materializado,
         'pct_aqui_pbar': pct_aqui_pbar,
         'pct_camino_pbar': pct_camino_pbar,
