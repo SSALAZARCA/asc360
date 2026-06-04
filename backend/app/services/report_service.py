@@ -356,13 +356,13 @@ async def _query_f5(db: AsyncSession) -> dict:
 async def _query_f6(desde: date, hasta: date, db: AsyncSession) -> dict:
     sql = text("""
         SELECT
-            COUNT(*) FILTER (WHERE resolved = false)                          AS activos,
-            COUNT(*) FILTER (WHERE resolved = true
-                             AND resolved_at::date BETWEEN :desde AND :hasta) AS resueltos_periodo,
-            COUNT(DISTINCT bo.part_number) FILTER (WHERE resolved = false)     AS refs_afectadas,
+            COUNT(*) FILTER (WHERE bo.resolved = false)                           AS activos,
+            COUNT(*) FILTER (WHERE bo.resolved = true
+                             AND bo.resolved_at::date BETWEEN :desde AND :hasta)  AS resueltos_periodo,
+            COUNT(DISTINCT bo.part_number) FILTER (WHERE bo.resolved = false)     AS refs_afectadas,
             COALESCE(SUM(
-                CASE WHEN resolved = false
-                THEN qty_pending * COALESCE(unit_price, fob_pi, 0)
+                CASE WHEN bo.resolved = false
+                THEN bo.qty_pending * COALESCE(spi.unit_price, spi.fob_pi, 0)
                 ELSE 0 END
             ), 0) AS fob_pendiente
         FROM backorders bo
