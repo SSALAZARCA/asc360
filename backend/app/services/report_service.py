@@ -385,10 +385,11 @@ async def _query_f3(db: AsyncSession) -> dict:
     # UPPER+TRIM normaliza "RockVille 200" y "ROCKVILLE 200" en una sola fila
     matriz_sql = text("""
         SELECT
-            UPPER(TRIM(COALESCE(mu.model, 'SIN MODELO'))) AS model,
+            UPPER(TRIM(COALESCE(mu.model, so.model, 'SIN MODELO'))) AS model,
             COALESCE(ml.name, 'Sin ubicación') AS ubicacion,
             COUNT(*) AS cnt
         FROM shipment_moto_units mu
+        JOIN shipment_orders so ON so.id = mu.shipment_order_id
         LEFT JOIN moto_locations ml ON ml.id = mu.location_id
         WHERE mu.facturado = false AND mu.separada_nacionalizacion = false
         GROUP BY 1, 2
@@ -417,12 +418,14 @@ async def _query_f3(db: AsyncSession) -> dict:
     """)
 
     # --- B4: Por año modelo ---
+    # Fallback a modelo/año del pedido padre cuando la unidad no tiene el suyo propio
     anio_sql = text("""
         SELECT
-            COALESCE(model_year::text, 'Sin año') AS anio,
-            UPPER(TRIM(COALESCE(model, 'SIN MODELO'))) AS model,
+            COALESCE(mu.model_year, so.model_year, 0)::text AS anio,
+            UPPER(TRIM(COALESCE(mu.model, so.model, 'SIN MODELO'))) AS model,
             COUNT(*) AS cnt
-        FROM shipment_moto_units
+        FROM shipment_moto_units mu
+        JOIN shipment_orders so ON so.id = mu.shipment_order_id
         GROUP BY 1, 2
         ORDER BY 1 ASC, 3 DESC
     """)
