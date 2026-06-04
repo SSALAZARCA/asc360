@@ -611,7 +611,7 @@ body{
       <div class="section__head">
         <span class="section__num">04</span>
         <span class="section__title">Repuestos</span>
-        <span class="section__meta">materialización, rotación y remisiones</span>
+        <span class="section__meta">materialización, rotación y precios</span>
       </div>
 
       <!-- C1 + C2: Materializado + Rotación -->
@@ -709,78 +709,8 @@ body{
         {% endif %}
       </div>
 
-      <!-- C6: Remisiones -->
-      <div class="block-title" style="margin-top:16px;"><span class="dot"></span> Remisionado por razón</div>
-      {% if f8.sin_datos %}
-      <div class="no-data">Sin remisiones en el período.</div>
-      {% else %}
-      <div class="grid-2-3">
-        <div class="panel">
-          <div class="stack">
-            {% for c in f8.por_concepto %}
-            {% if c.count > 0 %}
-            <div class="stack__seg" style="width:{{ c.pct }}%;background:{{ c.color }};">
-              {% if c.pct >= 12 %}{{ c.tipo[:3] }} · {{ c.count }}{% endif %}
-            </div>
-            {% endif %}
-            {% endfor %}
-          </div>
-          <div class="prog-foot" style="margin-top:10px;gap:10px 14px;">
-            {% for c in f8.por_concepto %}
-            <div class="prog-foot__item">
-              <span class="sw" style="background:{{ c.color }}"></span>
-              {% if c.tipo == 'VEHICULO_PROPIO' %}Vehículo propio{% elif c.tipo == 'GARANTIA' %}Garantía{% elif c.tipo == 'CORTESIA' %}Cortesía{% else %}Pedido{% endif %}
-              <b class="num">{{ c.count }}</b>
-            </div>
-            {% endfor %}
-          </div>
-          <p class="block-sub" style="margin-top:8px;">Total remisionado: <b style="color:var(--ink);">{{ f8.total }}</b> unidades</p>
-        </div>
-        <div class="panel" style="padding:10px 14px;">
-          <table class="tbl">
-            <thead><tr><th>Tipo</th><th class="r">Cant.</th></tr></thead>
-            <tbody>
-              {% for c in f8.por_concepto %}
-              <tr>
-                <td>
-                  <span class="chip" style="background:{% if c.tipo == 'PEDIDO' %}#E7F1FB;color:#1C7ED6{% elif c.tipo == 'GARANTIA' %}#EEE9FC;color:#6C44E0{% elif c.tipo == 'CORTESIA' %}#E9F6ED;color:#2F9E44{% else %}#FCF3DD;color:#B97f00{% endif %};">
-                    <span class="d" style="background:{{ c.color }}"></span>
-                    {% if c.tipo == 'VEHICULO_PROPIO' %}V. propio{% elif c.tipo == 'GARANTIA' %}Garantía{% elif c.tipo == 'CORTESIA' %}Cortesía{% else %}Pedido{% endif %}
-                  </span>
-                </td>
-                <td class="r num">{{ c.count }}</td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-      </div>
-      {% endif %}
-
-    </div>
-  </div>
-
-  <div class="foot">
-    <div class="foot__brand"><span class="tri"></span> UM Colombia</div>
-    <div>Informe Gerencial · Red de Servicio · <b>{{ meta.periodo_label }}</b></div>
-    <div class="foot__page">Página <b>4</b> / 5</div>
-  </div>
-</section>
-
-<!-- ============================================================
-     PÁGINA 5 — MAESTRO DE PARTES + CIERRE
-     ============================================================ -->
-<section class="sheet page-break" data-page="5">
-  <div class="sheet__body">
-
-    <div class="section">
-      <div class="section__head">
-        <span class="section__num">05</span>
-        <span class="section__title">Repuestos · Maestro de Partes</span>
-        <span class="section__meta">cobertura del catálogo de precios</span>
-      </div>
-
-      <div class="block-title"><span class="dot"></span> Maestro de Partes — referencias creadas vs. con precio público definido</div>
+      <!-- Maestro de Partes -->
+      <div class="block-title" style="margin-top:16px;"><span class="dot"></span> Maestro de Partes — referencias creadas vs. con precio público definido</div>
 
       {% if maestro.sin_datos %}
       <div class="no-data">Sin referencias en el maestro de partes.</div>
@@ -837,6 +767,76 @@ body{
           <div class="kpi__val num" style="font-size:24px;">0</div>
         </div>
         {% endif %}
+      </div>
+      {% endif %}
+
+    </div>
+  </div>
+
+  <div class="foot">
+    <div class="foot__brand"><span class="tri"></span> UM Colombia</div>
+    <div>Informe Gerencial · Red de Servicio · <b>{{ meta.periodo_label }}</b></div>
+    <div class="foot__page">Página <b>4</b> / 5</div>
+  </div>
+</section>
+
+<!-- ============================================================
+     PÁGINA 5 — REMISIONADO POR RAZÓN
+     ============================================================ -->
+<section class="sheet page-break" data-page="5">
+  <div class="sheet__body">
+
+    <div class="section">
+      <div class="section__head">
+        <span class="section__num">05</span>
+        <span class="section__title">Repuestos · Remisiones</span>
+        <span class="section__meta">despachos por razón en el período</span>
+      </div>
+
+      <div class="block-title"><span class="dot"></span> Remisionado por razón</div>
+      {% if f8.sin_datos %}
+      <div class="no-data">Sin remisiones en el período.</div>
+      {% else %}
+      <div class="grid-2-3">
+        <div class="panel">
+          <div class="stack">
+            {% for c in f8.por_concepto %}
+            {% if c.count > 0 %}
+            <div class="stack__seg" style="width:{{ c.pct }}%;background:{{ c.color }};">
+              {% if c.pct >= 12 %}{{ c.tipo[:3] }} · {{ c.count }}{% endif %}
+            </div>
+            {% endif %}
+            {% endfor %}
+          </div>
+          <div class="prog-foot" style="margin-top:10px;gap:10px 14px;">
+            {% for c in f8.por_concepto %}
+            <div class="prog-foot__item">
+              <span class="sw" style="background:{{ c.color }}"></span>
+              {% if c.tipo == 'VEHICULO_PROPIO' %}Vehículo propio{% elif c.tipo == 'GARANTIA' %}Garantía{% elif c.tipo == 'CORTESIA' %}Cortesía{% else %}Pedido{% endif %}
+              <b class="num">{{ c.count }}</b>
+            </div>
+            {% endfor %}
+          </div>
+          <p class="block-sub" style="margin-top:8px;">Total remisionado: <b style="color:var(--ink);">{{ f8.total }}</b> unidades</p>
+        </div>
+        <div class="panel" style="padding:10px 14px;">
+          <table class="tbl">
+            <thead><tr><th>Tipo</th><th class="r">Cant.</th></tr></thead>
+            <tbody>
+              {% for c in f8.por_concepto %}
+              <tr>
+                <td>
+                  <span class="chip" style="background:{% if c.tipo == 'PEDIDO' %}#E7F1FB;color:#1C7ED6{% elif c.tipo == 'GARANTIA' %}#EEE9FC;color:#6C44E0{% elif c.tipo == 'CORTESIA' %}#E9F6ED;color:#2F9E44{% else %}#FCF3DD;color:#B97f00{% endif %};">
+                    <span class="d" style="background:{{ c.color }}"></span>
+                    {% if c.tipo == 'VEHICULO_PROPIO' %}V. propio{% elif c.tipo == 'GARANTIA' %}Garantía{% elif c.tipo == 'CORTESIA' %}Cortesía{% else %}Pedido{% endif %}
+                  </span>
+                </td>
+                <td class="r num">{{ c.count }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
       </div>
       {% endif %}
 
