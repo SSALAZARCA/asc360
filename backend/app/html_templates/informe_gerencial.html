@@ -531,12 +531,6 @@ body{
           <div class="kpi__sub">sin cobertura inmediata</div>
         </div>
 
-        <div class="kpi s-{{ f4.mat_status }}">
-          <div class="kpi__label">Tasa de materialización</div>
-          <div class="kpi__val num">{{ f4.pct_materializado }}<span class="u">%</span></div>
-          <div class="kpi__sub">materializado / pedido</div>
-        </div>
-
         <div class="kpi s-{{ 'risk' if f7.fob_cancelar_pendiente > 0 else 'ok' }}">
           <div class="kpi__label">Valor a cancelar</div>
           <div class="kpi__val num"><span class="u">USD </span>{{ "{:,.0f}".format(f7.fob_cancelar_pendiente) }}</div>
