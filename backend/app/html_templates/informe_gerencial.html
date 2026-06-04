@@ -265,7 +265,11 @@ body{
       <div class="cover__top">
         <div>
           <div class="cover__kicker">Red de Servicio · Informe Gerencial</div>
+          {% if logo_base64 %}
+          <img src="data:image/png;base64,{{ logo_base64 }}" alt="Logo" style="height:48px;width:auto;margin-top:6px;filter:brightness(0) invert(1);">
+          {% else %}
           <div class="cover__brand-mark">UM Colombia</div>
+          {% endif %}
           <div class="cover__title" style="margin-top:12px;">Estado de la operación<br>de importación y servicio</div>
         </div>
         <div class="cover__meta">
@@ -292,89 +296,49 @@ body{
 
       <div class="kpi-grid">
 
-        <!-- KPI 1: Pedidos activos -->
         <div class="kpi s-ink">
           <div class="kpi__label">Pedidos activos</div>
           <div class="kpi__val num">{{ f2.activos_total }}</div>
           <div class="kpi__sub"><b>{{ f2.motos_activos }}</b> motos · <b>{{ f2.repuestos_activos }}</b> repuestos</div>
         </div>
 
-        <!-- KPI 2: Unidades de moto en pedido -->
         <div class="kpi s-ink">
           <div class="kpi__label">Unidades de moto en pedido</div>
           <div class="kpi__val num">{{ f2.motos_unidades }}</div>
           <div class="kpi__sub">en {{ f2.motos_activos }} pedidos activos</div>
         </div>
 
-        <!-- KPI 3: Motos disponibles -->
         <div class="kpi s-ok">
-          <span class="kpi__tag tag-ok">OK</span>
           <div class="kpi__label">Motos disponibles para nacionalizar</div>
           <div class="kpi__val num">{{ f3.disponibles }}</div>
           <div class="kpi__sub">listas en destino</div>
         </div>
 
-        <!-- KPI 4: Referencias únicas -->
         <div class="kpi s-info">
           <div class="kpi__label">Referencias únicas solicitadas</div>
           <div class="kpi__val num">{{ f2.refs_unicas_sp }}</div>
           <div class="kpi__sub">repuestos activos</div>
         </div>
 
-        <!-- KPI 5: Backorder -->
         <div class="kpi s-{{ bo_status }}">
-          {% if bo_status == 'crit' %}
-          <span class="kpi__tag tag-crit">Crítico</span>
-          {% elif bo_status == 'warn' %}
-          <span class="kpi__tag tag-warn">Atención</span>
-          {% else %}
-          <span class="kpi__tag tag-ok">OK</span>
-          {% endif %}
           <div class="kpi__label">Referencias en backorder</div>
           <div class="kpi__val num">{{ f6.refs_afectadas }}</div>
           <div class="kpi__sub">sin cobertura inmediata</div>
         </div>
 
-        <!-- KPI 6: Materialización -->
         <div class="kpi s-{{ f4.mat_status }}">
-          {% if f4.mat_status == 'ok' %}
-          <span class="kpi__tag tag-ok">OK</span>
-          {% elif f4.mat_status == 'warn' %}
-          <span class="kpi__tag tag-warn">Atención</span>
-          {% else %}
-          <span class="kpi__tag tag-crit">Crítico</span>
-          {% endif %}
           <div class="kpi__label">Tasa de materialización de repuestos</div>
           <div class="kpi__val num">{{ f4.pct_materializado }}<span class="u">%</span></div>
           <div class="kpi__sub">materializado / pedido</div>
         </div>
 
-        <!-- KPI 7: Valor a cancelar -->
-        {% if f7.fob_cancelar_pendiente > 0 %}
-        <div class="kpi s-risk">
-          <span class="kpi__tag tag-risk">Riesgo</span>
+        <div class="kpi s-{{ 'risk' if f7.fob_cancelar_pendiente > 0 else 'ok' }}">
           <div class="kpi__label">Valor a cancelar</div>
           <div class="kpi__val num"><span class="u">USD </span>{{ "{:,.0f}".format(f7.fob_cancelar_pendiente) }}</div>
           <div class="kpi__sub">{{ f7.cancelar_pendiente }} refs no requeridas</div>
         </div>
-        {% else %}
-        <div class="kpi s-ok">
-          <span class="kpi__tag tag-ok">OK</span>
-          <div class="kpi__label">Valor a cancelar</div>
-          <div class="kpi__val num"><span class="u">USD </span>0</div>
-          <div class="kpi__sub">sin cancelaciones pendientes</div>
-        </div>
-        {% endif %}
 
-        <!-- KPI 8: Cobertura maestro -->
         <div class="kpi s-{{ maestro.precio_status }}">
-          {% if maestro.precio_status == 'ok' %}
-          <span class="kpi__tag tag-ok">OK</span>
-          {% elif maestro.precio_status == 'warn' %}
-          <span class="kpi__tag tag-warn">Atención</span>
-          {% else %}
-          <span class="kpi__tag tag-crit">Crítico</span>
-          {% endif %}
           <div class="kpi__label">Cobertura de precios del Maestro</div>
           <div class="kpi__val num">{{ maestro.pct_con_precio }}<span class="u">%</span></div>
           <div class="kpi__sub">refs con precio público</div>
@@ -439,7 +403,7 @@ body{
   <div class="foot">
     <div class="foot__brand"><span class="tri"></span> UM Colombia</div>
     <div>Informe Gerencial · Red de Servicio · <b>{{ meta.periodo_label }}</b></div>
-    <div class="foot__page">Página <b>1</b> / 5</div>
+    <div class="foot__page">Página <b>1</b> / 4</div>
   </div>
 </section>
 
@@ -545,7 +509,7 @@ body{
   <div class="foot">
     <div class="foot__brand"><span class="tri"></span> UM Colombia</div>
     <div>Informe Gerencial · Red de Servicio · <b>{{ meta.periodo_label }}</b></div>
-    <div class="foot__page">Página <b>2</b> / 5</div>
+    <div class="foot__page">Página <b>2</b> / 4</div>
   </div>
 </section>
 
@@ -597,7 +561,7 @@ body{
   <div class="foot">
     <div class="foot__brand"><span class="tri"></span> UM Colombia</div>
     <div>Informe Gerencial · Red de Servicio · <b>{{ meta.periodo_label }}</b></div>
-    <div class="foot__page">Página <b>3</b> / 5</div>
+    <div class="foot__page">Página <b>3</b> / 4</div>
   </div>
 </section>
 
@@ -631,9 +595,6 @@ body{
               </div>
               <div style="text-align:right;">
                 <div class="num" style="font-size:28px;font-weight:800;{% if f4.mat_status == 'ok' %}color:#2F9E44{% elif f4.mat_status == 'warn' %}color:#E8A200{% else %}color:#E03131{% endif %};">{{ f4.pct_materializado }}%</div>
-                <div class="chip" style="{% if f4.mat_status == 'ok' %}background:#E9F6ED;color:#2F9E44{% elif f4.mat_status == 'warn' %}background:#FCF3DD;color:#B97f00{% else %}background:#FBEAEA;color:#E03131{% endif %};">
-                  {% if f4.mat_status == 'ok' %}OK{% elif f4.mat_status == 'warn' %}Atención{% else %}Crítico{% endif %}
-                </div>
               </div>
             </div>
             <div class="prog-track">
@@ -687,17 +648,11 @@ body{
           <div class="kpi__val num" style="font-size:24px;">{{ f2.refs_unicas_sp }}</div>
         </div>
         <div class="kpi s-{{ bo_status }}" style="min-height:80px;">
-          {% if bo_status == 'crit' %}
-          <span class="kpi__tag tag-crit">Crítico</span>
-          {% elif bo_status == 'warn' %}
-          <span class="kpi__tag tag-warn">Atención</span>
-          {% endif %}
           <div class="kpi__label">Referencias únicas en backorder</div>
           <div class="kpi__val num" style="font-size:24px;">{{ f6.refs_afectadas }}</div>
         </div>
         {% if f7.cancelar_pendiente > 0 %}
         <div class="kpi s-risk" style="min-height:80px;">
-          <span class="kpi__tag tag-risk">Riesgo</span>
           <div class="kpi__label">Refs a cancelar</div>
           <div class="kpi__val num" style="font-size:24px;">{{ f7.cancelar_pendiente }} <span class="u">· USD {{ "{:,.0f}".format(f7.fob_cancelar_pendiente) }}</span></div>
         </div>
@@ -723,9 +678,6 @@ body{
           </div>
           <div style="text-align:right;">
             <div class="num" style="font-size:32px;font-weight:800;{% if maestro.precio_status == 'ok' %}color:#2F9E44{% elif maestro.precio_status == 'warn' %}color:#E8A200{% else %}color:#E03131{% endif %};">{{ maestro.pct_con_precio }}%</div>
-            <div class="chip" style="{% if maestro.precio_status == 'ok' %}background:#E9F6ED;color:#2F9E44{% elif maestro.precio_status == 'warn' %}background:#FCF3DD;color:#B97f00{% else %}background:#FBEAEA;color:#E03131{% endif %};">
-              {% if maestro.precio_status == 'ok' %}OK{% elif maestro.precio_status == 'warn' %}Atención{% else %}Crítico{% endif %}
-            </div>
           </div>
         </div>
         <div class="prog-track" style="height:32px;">
@@ -744,25 +696,16 @@ body{
           <div class="kpi__val num" style="font-size:24px;">{{ "{:,}".format(maestro.total_refs) }}</div>
         </div>
         <div class="kpi s-{{ maestro.precio_status }}" style="min-height:80px;">
-          {% if maestro.precio_status == 'ok' %}
-          <span class="kpi__tag tag-ok">OK</span>
-          {% elif maestro.precio_status == 'warn' %}
-          <span class="kpi__tag tag-warn">Atención</span>
-          {% else %}
-          <span class="kpi__tag tag-crit">Crítico</span>
-          {% endif %}
           <div class="kpi__label">Con precio definido</div>
           <div class="kpi__val num" style="font-size:24px;">{{ "{:,}".format(maestro.con_precio) }}</div>
         </div>
         {% if maestro.sin_precio > 0 %}
         <div class="kpi s-warn" style="min-height:80px;">
-          <span class="kpi__tag tag-warn">Atención</span>
           <div class="kpi__label">Sin precio público</div>
           <div class="kpi__val num" style="font-size:24px;">{{ "{:,}".format(maestro.sin_precio) }}</div>
         </div>
         {% else %}
         <div class="kpi s-ok" style="min-height:80px;">
-          <span class="kpi__tag tag-ok">OK</span>
           <div class="kpi__label">Sin precio público</div>
           <div class="kpi__val num" style="font-size:24px;">0</div>
         </div>
@@ -770,30 +713,7 @@ body{
       </div>
       {% endif %}
 
-    </div>
-  </div>
-
-  <div class="foot">
-    <div class="foot__brand"><span class="tri"></span> UM Colombia</div>
-    <div>Informe Gerencial · Red de Servicio · <b>{{ meta.periodo_label }}</b></div>
-    <div class="foot__page">Página <b>4</b> / 5</div>
-  </div>
-</section>
-
-<!-- ============================================================
-     PÁGINA 5 — REMISIONADO POR RAZÓN
-     ============================================================ -->
-<section class="sheet page-break" data-page="5">
-  <div class="sheet__body">
-
-    <div class="section">
-      <div class="section__head">
-        <span class="section__num">05</span>
-        <span class="section__title">Repuestos · Remisiones</span>
-        <span class="section__meta">despachos por razón en el período</span>
-      </div>
-
-      <div class="block-title"><span class="dot"></span> Remisionado por razón</div>
+      <div class="block-title" style="margin-top:18px;"><span class="dot"></span> Remisionado por razón</div>
       {% if f8.sin_datos %}
       <div class="no-data">Sin remisiones en el período.</div>
       {% else %}
@@ -841,13 +761,12 @@ body{
       {% endif %}
 
     </div>
-
   </div>
 
   <div class="foot">
     <div class="foot__brand"><span class="tri"></span> UM Colombia</div>
     <div>Informe Gerencial · Red de Servicio · <b>{{ meta.periodo_label }}</b>{% if trm %} · TRM {{ "{:,.0f}".format(trm) }}{% endif %}</div>
-    <div class="foot__page">Página <b>5</b> / 5</div>
+    <div class="foot__page">Página <b>4</b> / 4</div>
   </div>
 </section>
 

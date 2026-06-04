@@ -999,6 +999,16 @@ async def _query_maestro(db: AsyncSession) -> dict:
 # TRM
 # ---------------------------------------------------------------------------
 
+async def _query_logo(db: AsyncSession) -> str | None:
+    row = (await db.execute(text("SELECT value FROM system_config WHERE key = 'logo_base64'"))).fetchone()
+    if row and row.value:
+        val = row.value
+        if "," in val:
+            val = val.split(",", 1)[1]
+        return val
+    return None
+
+
 async def _query_trm(db: AsyncSession):
     row = (await db.execute(text("SELECT value FROM system_config WHERE key = 'pricing.trm'"))).fetchone()
     if row and row.value:
@@ -1047,6 +1057,7 @@ async def generate_gerencial_report(desde: date, hasta: date, db: AsyncSession) 
     f8 = await _query_f8(desde, hasta, db)
     trm = await _query_trm(db)
     maestro = await _query_maestro(db)
+    logo_base64 = await _query_logo(db)
 
     now_col5 = datetime.now(tz=COL_5)
     generado_at = now_col5.strftime('%d/%m/%Y %H:%M') + ' (UTC-5)'
@@ -1070,6 +1081,7 @@ async def generate_gerencial_report(desde: date, hasta: date, db: AsyncSession) 
         'f8': f8,
         'trm': trm,
         'maestro': maestro,
+        'logo_base64': logo_base64,
         'bo_status': bo_status,
     }
 
