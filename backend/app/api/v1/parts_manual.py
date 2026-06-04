@@ -2359,6 +2359,106 @@ async def low_rotation_ordered_analysis(
     )
 
 
+# ── Comparativa de referencias compartidas entre modelos ─────────────────────
+
+class _ComparativaModelPrice(BaseModel):
+    fob_cost: float
+    is_confirmed: bool  # True = unit_price (packing list), False = fob_pi (PI)
+
+class _ComparativaItem(BaseModel):
+    factory_part_number: str
+    description: str
+    description_es: Optional[str]
+    rotation_class: Optional[str]
+    prices: dict[str, _ComparativaModelPrice]  # {model: price_info}
+
+class _ComparativaResponse(BaseModel):
+    items: list[_ComparativaItem]
+    models: list[str]
+    total: int
+
+
+@router.get("/admin/analysis/comparativa", response_model=_ComparativaResponse)
+async def comparativa_referencias(
+    model_filter: Optional[str] = Query(None, description="Filtrar por modelo específico"),
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Referencias compartidas entre modelos con comparativa de precios FOB. Solo superadmin."""
+    if not current_user.is_superadmin:
+        raise HTTPException(status_code=403, detail="Solo superadmin")
+
+    sql = text("""
+        WITH price_per_model AS (
+            SELECT
+                UPPER(TRIM(REPLACE(spi.part_number, ' ', ''))) AS pn,
+                so.model                                         AS model,
+                MAX(COALESCE(spi.unit_price, spi.fob_pi))::float AS fob_cost,
+                BOOL_OR(spi.unit_price IS NOT NULL)              AS is_confirmed
+            FROM spare_part_items   spi
+            JOIN spare_part_lots    spl ON spl.id = spi.lot_id
+            JOIN shipment_orders    so  ON so.id  = spl.shipment_order_id
+            WHERE COALESCE(spi.unit_price, spi.fob_pi) IS NOT NULL
+              AND so.model IS NOT NULL
+              AND so.is_spare_part = TRUE
+            GROUP BY 1, 2
+        ),
+        multi_model AS (
+            SELECT pn
+            FROM   price_per_model
+            GROUP  BY pn
+            HAVING COUNT(DISTINCT model) >= 2
+        )
+        SELECT
+            pr.factory_part_number,
+            pr.description,
+            pr.description_es_manual,
+            pr.rotation_class,
+            ppm.model,
+            ppm.fob_cost,
+            ppm.is_confirmed
+        FROM   parts_references  pr
+        JOIN   multi_model       mm  ON mm.pn  = UPPER(TRIM(REPLACE(pr.factory_part_number, ' ', '')))
+        JOIN   price_per_model   ppm ON ppm.pn = UPPER(TRIM(REPLACE(pr.factory_part_number, ' ', '')))
+        ORDER  BY pr.factory_part_number, ppm.model
+    """)
+
+    rows = (await db.execute(sql)).all()
+
+    parts_map: dict[str, dict] = {}
+    for row in rows:
+        fpn = row.factory_part_number
+        if fpn not in parts_map:
+            parts_map[fpn] = {
+                'factory_part_number': fpn,
+                'description': row.description or '',
+                'description_es': row.description_es_manual,
+                'rotation_class': row.rotation_class,
+                'prices': {},
+            }
+        parts_map[fpn]['prices'][row.model] = {
+            'fob_cost': round(float(row.fob_cost), 4),
+            'is_confirmed': bool(row.is_confirmed),
+        }
+
+    items = list(parts_map.values())
+
+    if model_filter:
+        items = [i for i in items if model_filter in i['prices']]
+
+    items.sort(key=lambda x: x['factory_part_number'])
+
+    all_models = sorted({
+        m for i in items for m in i['prices']
+    })
+
+    return _ComparativaResponse(
+        items=[_ComparativaItem(**i) for i in items],
+        models=all_models,
+        total=len(items),
+    )
+
+
 # ── Decisiones de análisis (persistencia en DB) ───────────────────────────────
 
 _POD = PartOrderDecision

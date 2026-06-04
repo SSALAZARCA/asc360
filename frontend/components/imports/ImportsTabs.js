@@ -11,6 +11,7 @@ import BackorderTab from './BackorderTab';
 import DashboardTab from './DashboardTab';
 import AnalisisRepuestosTab from './AnalisisRepuestosTab';
 import RemisionesTab from './RemisionesTab';
+import ComparativaTab from './ComparativaTab';
 import ShipmentOrderFormModal from './ShipmentOrderFormModal';
 import NuevoPedidoModal from './NuevoPedidoModal';
 import { RefreshCw, Upload, FileUp, Plus, Download } from 'lucide-react';
@@ -23,6 +24,7 @@ const ALL_TABS = [
   { id: 'backorders',        label: 'Backorders',        roles: null },
   { id: 'analisis_repuestos', label: 'Ajuste de Pedidos', roles: null },
   { id: 'remisiones',        label: 'Remisiones',        roles: ['superadmin'] },
+  { id: 'comparativa',       label: 'Comparativa',       roles: null },
 ];
 
 // roles: null means visible to all; array means visible only to those roles
@@ -365,6 +367,9 @@ export default function ImportsTabs({ userRole }) {
       )}
       {activeTab === 'remisiones' && userRole === 'superadmin' && (
         <RemisionesTab userRole={userRole} />
+      )}
+      {activeTab === 'comparativa' && (
+        <ComparativaTab />
       )}
 
       {/* Modal de detalle */}
