@@ -157,6 +157,20 @@ export default function AnalisisRepuestosTab() {
     .map(([k]) => { const [fpn, pi] = k.split('::'); return { fpn, pi }; });
   const hasMarked = markedCancelar.length > 0 || markedCambiar.length > 0;
 
+  // Total FOB de lo marcado como cancelar: fob_unit × qty por lote
+  const cancelFobTotal = markedCancelar.reduce((total, { fpn, pi }) => {
+    const item = (data?.items || []).find(i => i.factory_part_number === fpn);
+    if (!item) return total;
+    const lot = item.lots.find(l => l.lot_identifier === pi);
+    if (!lot || lot.fob_unit == null) return total;
+    return total + lot.fob_unit * lot.qty;
+  }, 0);
+  const cancelFobHasData = markedCancelar.some(({ fpn, pi }) => {
+    const item = (data?.items || []).find(i => i.factory_part_number === fpn);
+    const lot  = item?.lots.find(l => l.lot_identifier === pi);
+    return lot?.fob_unit != null;
+  });
+
   const thStyle = {
     padding: '0.65rem 1rem', fontSize: '0.58rem', fontWeight: 800,
     color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.1em',
@@ -265,6 +279,28 @@ export default function AnalisisRepuestosTab() {
               <span style={{ fontSize: '1.2rem', fontWeight: 900, color, fontFamily: 'monospace' }}>{value.toLocaleString()}</span>
             </div>
           ))}
+
+          {/* Box FOB cancelaciones */}
+          {markedCancelar.length > 0 && (
+            <div style={{
+              background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)',
+              borderRadius: '10px', padding: '0.6rem 1rem',
+              display: 'flex', flexDirection: 'column', gap: '0.2rem',
+            }}>
+              <span style={{ fontSize: '0.58rem', fontWeight: 700, color: 'rgba(248,113,113,0.7)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                Total a cancelar
+              </span>
+              <span style={{ fontSize: '1.2rem', fontWeight: 900, color: '#f87171', fontFamily: 'monospace' }}>
+                {cancelFobHasData
+                  ? `$${cancelFobTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                  : '—'}
+              </span>
+              <span style={{ fontSize: '0.58rem', color: 'rgba(255,255,255,0.25)' }}>
+                FOB · {markedCancelar.length} ref{markedCancelar.length !== 1 ? 's' : ''}
+                {cancelFobHasData && cancelFobTotal === 0 ? '' : !cancelFobHasData ? ' · sin precio' : ''}
+              </span>
+            </div>
+          )}
         </div>
       )}
 
