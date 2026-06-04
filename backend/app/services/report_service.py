@@ -262,7 +262,7 @@ async def _query_f2(desde: date, hasta: date, db: AsyncSession) -> dict:
     global_max = max(all_vals) if any(all_vals) else 1
 
     def build_stages(vals):
-        return [{'n': v, 'pct': _bar(v, global_max)} for v in vals]
+        return [{'n': v, 'pct': _bar(v, global_max), 'min_pct': max(_bar(v, global_max), 10) if v > 0 else 0} for v in vals]
 
     pipeline_motos = {
         'total': _i(row.motos_activos),
@@ -331,9 +331,10 @@ async def _query_f3(db: AsyncSession) -> dict:
         }
 
     # --- B1: Matrix (disponibles para nacionalizar) ---
+    # UPPER+TRIM normaliza "RockVille 200" y "ROCKVILLE 200" en una sola fila
     matriz_sql = text("""
         SELECT
-            COALESCE(mu.model, 'Sin modelo') AS model,
+            UPPER(TRIM(COALESCE(mu.model, 'SIN MODELO'))) AS model,
             COALESCE(ml.name, 'Sin ubicación') AS ubicacion,
             COUNT(*) AS cnt
         FROM shipment_moto_units mu
@@ -368,7 +369,7 @@ async def _query_f3(db: AsyncSession) -> dict:
     anio_sql = text("""
         SELECT
             COALESCE(model_year::text, 'Sin año') AS anio,
-            COALESCE(model, 'Sin modelo') AS model,
+            UPPER(TRIM(COALESCE(model, 'SIN MODELO'))) AS model,
             COUNT(*) AS cnt
         FROM shipment_moto_units
         GROUP BY 1, 2
@@ -934,12 +935,12 @@ async def _query_maestro(db: AsyncSession) -> dict:
 
 async def _query_trm(db: AsyncSession):
     row = (await db.execute(text("SELECT value FROM system_config WHERE key = 'pricing.trm'"))).fetchone()
-    if row:
+    if row and row.value:
         try:
             return float(row.value)
-        except Exception:
+        except (TypeError, ValueError):
             pass
-    return None
+    return 3800.0  # default from pricing service
 
 
 # ---------------------------------------------------------------------------
