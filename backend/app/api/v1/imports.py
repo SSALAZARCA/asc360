@@ -2398,7 +2398,7 @@ async def delete_moto_observation(
 
 # ---------------------------------------------------------------------------
 # GET /moto-units/disponibles-matrix — motos disponibles agrupadas por modelo/ubicación/color
-# Disponible = sin DIM cargada AND no separada para nacionalización
+# Disponible = no facturada, no separada, sin observación, sin DIM cargada
 # ---------------------------------------------------------------------------
 
 @router.get("/moto-units/disponibles-matrix")
@@ -2413,8 +2413,10 @@ async def get_disponibles_matrix(
         .join(ShipmentOrder, ShipmentMotoUnit.shipment_order_id == ShipmentOrder.id)
         .where(
             ShipmentOrder.is_spare_part == False,
-            ShipmentMotoUnit.dim_pdf_object_name == None,
+            ShipmentMotoUnit.facturado == False,
             ShipmentMotoUnit.separada_nacionalizacion == False,
+            ShipmentMotoUnit.observation_id == None,
+            ShipmentMotoUnit.dim_pdf_object_name == None,
         )
         .options(
             selectinload(ShipmentMotoUnit.shipment_order),

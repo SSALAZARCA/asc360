@@ -357,7 +357,9 @@ async def _query_f3(db: AsyncSession) -> dict:
         SELECT
             COUNT(*)                                                           AS total,
             COUNT(*) FILTER (WHERE facturado = false
-                             AND separada_nacionalizacion = false)             AS disponibles,
+                             AND separada_nacionalizacion = false
+                             AND observation_id IS NULL
+                             AND dim_pdf_object_name IS NULL)                 AS disponibles,
             COUNT(*) FILTER (WHERE separada_nacionalizacion = true)           AS separadas,
             COUNT(*) FILTER (WHERE empadronamiento_fisico_enviado = false)    AS pend_empadronamiento,
             COUNT(*) FILTER (WHERE observation_id IS NOT NULL)                AS con_obs,
@@ -391,7 +393,10 @@ async def _query_f3(db: AsyncSession) -> dict:
         FROM shipment_moto_units mu
         JOIN shipment_orders so ON so.id = mu.shipment_order_id
         LEFT JOIN moto_locations ml ON ml.id = mu.location_id
-        WHERE mu.facturado = false AND mu.separada_nacionalizacion = false
+        WHERE mu.facturado = false
+          AND mu.separada_nacionalizacion = false
+          AND mu.observation_id IS NULL
+          AND mu.dim_pdf_object_name IS NULL
         GROUP BY 1, 2
         ORDER BY 1, 2
     """)
@@ -427,6 +432,9 @@ async def _query_f3(db: AsyncSession) -> dict:
         FROM shipment_moto_units mu
         JOIN shipment_orders so ON so.id = mu.shipment_order_id
         WHERE mu.facturado = false
+          AND mu.separada_nacionalizacion = false
+          AND mu.observation_id IS NULL
+          AND mu.dim_pdf_object_name IS NULL
         GROUP BY 1, 2
         ORDER BY 1 ASC, 3 DESC
     """)
