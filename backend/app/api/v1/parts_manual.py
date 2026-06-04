@@ -2380,7 +2380,7 @@ class _ComparativaResponse(BaseModel):
 
 @router.get("/admin/analysis/comparativa", response_model=_ComparativaResponse)
 async def comparativa_referencias(
-    model_filter: Optional[str] = Query(None, description="Filtrar por modelo específico"),
+    model_filter: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
