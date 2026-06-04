@@ -426,6 +426,7 @@ async def _query_f3(db: AsyncSession) -> dict:
             COUNT(*) AS cnt
         FROM shipment_moto_units mu
         JOIN shipment_orders so ON so.id = mu.shipment_order_id
+        WHERE mu.facturado = false
         GROUP BY 1, 2
         ORDER BY 1 ASC, 3 DESC
     """)
