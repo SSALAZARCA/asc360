@@ -619,13 +619,12 @@ body{
               </div>
             </div>
             <div class="prog-track">
-              <div class="prog-seg" style="width:{{ f4.pct_aqui_pbar }}%;background:#2F9E44;">Aquí · {{ "{:,.0f}".format(f4.fob_aqui) }}</div>
-              <div class="prog-seg" style="width:{{ f4.pct_camino_pbar }}%;background:#1C7ED6;">{{ "{:,.0f}".format(f4.fob_camino) }}</div>
+              <div class="prog-seg" style="width:{{ f4.pct_mat_pbar }}%;background:{% if f4.mat_status == 'ok' %}#2F9E44{% elif f4.mat_status == 'warn' %}#E8A200{% else %}#E03131{% endif %};"></div>
               <div class="prog-track__rest">Pendiente · USD {{ "{:,.0f}".format(f4.fob_pendiente) }}</div>
             </div>
             <div class="prog-foot">
-              <div class="prog-foot__item"><span class="sw" style="background:#2F9E44"></span>Aquí (stock) <b class="num">USD {{ "{:,.0f}".format(f4.fob_aqui) }}</b></div>
-              <div class="prog-foot__item"><span class="sw" style="background:#1C7ED6"></span>En camino <b class="num">USD {{ "{:,.0f}".format(f4.fob_camino) }}</b></div>
+              <div class="prog-foot__item"><span class="sw" style="background:{% if f4.mat_status == 'ok' %}#2F9E44{% elif f4.mat_status == 'warn' %}#E8A200{% else %}#E03131{% endif %}"></span>Valor declarado (materializado) <b class="num">USD {{ "{:,.0f}".format(f4.fob_materializado) }}</b></div>
+              <div class="prog-foot__item"><span class="sw" style="background:var(--zone);border:1px solid var(--line)"></span>Pendiente <b class="num">USD {{ "{:,.0f}".format(f4.fob_pendiente) }}</b></div>
             </div>
             {% endif %}
           </div>

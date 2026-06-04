@@ -116,35 +116,35 @@ def _make_conic(slices: list) -> str:
 async def _query_f2(desde: date, hasta: date, db: AsyncSession) -> dict:
     sql = text("""
         SELECT
-            COUNT(*) FILTER (WHERE computed_status NOT IN ('completado','cancelado'))
+            COUNT(*) FILTER (WHERE computed_status != 'completado')
                 AS activos_total,
             COUNT(*) FILTER (
-                WHERE computed_status NOT IN ('completado','cancelado')
+                WHERE computed_status != 'completado'
                   AND is_spare_part = false
             ) AS motos_activos,
             COUNT(*) FILTER (
-                WHERE computed_status NOT IN ('completado','cancelado')
+                WHERE computed_status != 'completado'
                   AND is_spare_part = true
             ) AS repuestos_activos,
             -- status buckets motos (all active)
             COUNT(*) FILTER (
-                WHERE computed_status NOT IN ('completado','cancelado')
+                WHERE computed_status != 'completado'
                   AND is_spare_part = false
                   AND computed_status IN ('en_destino','completado_parcial','nacionalizado')
             ) AS motos_nacionalizado,
             COUNT(*) FILTER (
-                WHERE computed_status NOT IN ('completado','cancelado')
+                WHERE computed_status != 'completado'
                   AND is_spare_part = false
                   AND computed_status IN ('en_transito','en_transito_parcial')
             ) AS motos_en_transito,
             COUNT(*) FILTER (
-                WHERE computed_status NOT IN ('completado','cancelado')
+                WHERE computed_status != 'completado'
                   AND is_spare_part = false
                   AND computed_status IN ('en_preparacion','listo_fabrica','en_origen')
             ) AS motos_en_origen,
             -- motos en pedido: sum total_units for active moto orders
             COALESCE(SUM(total_units) FILTER (
-                WHERE computed_status NOT IN ('completado','cancelado')
+                WHERE computed_status != 'completado'
                   AND is_spare_part = false
             ), 0) AS motos_unidades,
             -- repuestos FOB: sum fob_pi from spare_part_items linked to active SP orders
@@ -153,67 +153,67 @@ async def _query_f2(desde: date, hasta: date, db: AsyncSession) -> dict:
                 FROM spare_part_items spi
                 JOIN spare_part_lots spl ON spl.id = spi.lot_id
                 JOIN shipment_orders so2 ON so2.id = spl.shipment_order_id
-                WHERE so2.computed_status NOT IN ('completado','cancelado')
+                WHERE so2.computed_status != 'completado'
                   AND so2.is_spare_part = true
             ), 0) AS repuestos_fob,
             -- 12 pipeline stage FILTERs (6 motos + 6 repuestos)
             COUNT(*) FILTER (
-                WHERE computed_status NOT IN ('completado','cancelado')
+                WHERE computed_status != 'completado'
                   AND is_spare_part = false
                   AND computed_status = 'en_preparacion'
             ) AS m_prep,
             COUNT(*) FILTER (
-                WHERE computed_status NOT IN ('completado','cancelado')
+                WHERE computed_status != 'completado'
                   AND is_spare_part = false
                   AND computed_status = 'listo_fabrica'
             ) AS m_listo,
             COUNT(*) FILTER (
-                WHERE computed_status NOT IN ('completado','cancelado')
+                WHERE computed_status != 'completado'
                   AND is_spare_part = false
                   AND computed_status = 'en_origen'
             ) AS m_origen,
             COUNT(*) FILTER (
-                WHERE computed_status NOT IN ('completado','cancelado')
+                WHERE computed_status != 'completado'
                   AND is_spare_part = false
                   AND computed_status IN ('en_transito','en_transito_parcial')
             ) AS m_transito,
             COUNT(*) FILTER (
-                WHERE computed_status NOT IN ('completado','cancelado')
+                WHERE computed_status != 'completado'
                   AND is_spare_part = false
                   AND computed_status = 'en_destino'
             ) AS m_destino,
             COUNT(*) FILTER (
-                WHERE computed_status NOT IN ('completado','cancelado')
+                WHERE computed_status != 'completado'
                   AND is_spare_part = false
                   AND computed_status IN ('nacionalizado','completado_parcial')
             ) AS m_nac,
             COUNT(*) FILTER (
-                WHERE computed_status NOT IN ('completado','cancelado')
+                WHERE computed_status != 'completado'
                   AND is_spare_part = true
                   AND computed_status = 'en_preparacion'
             ) AS r_prep,
             COUNT(*) FILTER (
-                WHERE computed_status NOT IN ('completado','cancelado')
+                WHERE computed_status != 'completado'
                   AND is_spare_part = true
                   AND computed_status = 'listo_fabrica'
             ) AS r_listo,
             COUNT(*) FILTER (
-                WHERE computed_status NOT IN ('completado','cancelado')
+                WHERE computed_status != 'completado'
                   AND is_spare_part = true
                   AND computed_status = 'en_origen'
             ) AS r_origen,
             COUNT(*) FILTER (
-                WHERE computed_status NOT IN ('completado','cancelado')
+                WHERE computed_status != 'completado'
                   AND is_spare_part = true
                   AND computed_status IN ('en_transito','en_transito_parcial')
             ) AS r_transito,
             COUNT(*) FILTER (
-                WHERE computed_status NOT IN ('completado','cancelado')
+                WHERE computed_status != 'completado'
                   AND is_spare_part = true
                   AND computed_status = 'en_destino'
             ) AS r_destino,
             COUNT(*) FILTER (
-                WHERE computed_status NOT IN ('completado','cancelado')
+                WHERE computed_status != 'completado'
                   AND is_spare_part = true
                   AND (computed_status IN ('nacionalizado','completado_parcial')
                        OR nacionalizacion_status IS NOT NULL)
@@ -568,59 +568,34 @@ async def _query_f4(db: AsyncSession) -> dict:
         )
     """)
 
-    fob_sql = text("""
-        SELECT COALESCE(SUM(spa.qty_available * COALESCE(spi.unit_price, spi.fob_pi, 0)), 0) AS fob_stock
-        FROM spare_part_availability spa
-        JOIN spare_part_items spi ON spi.id = spa.id
-        WHERE spa.qty_available > 0
+    # Valor materializado = SUM(total_declared_value) — idéntico al ebox
+    # "Valor declarado" de la pestaña Repuestos en la app (imports dashboard)
+    fob_materializado_sql = text("""
+        SELECT COALESCE(SUM(total_declared_value), 0) AS fob_materializado
+        FROM spare_part_lots
     """)
 
-    # FOB pedido: total ordered value (active non-cancelled SP orders)
+    # Valor pedido = FOB comprometido en órdenes activas de repuestos
     fob_pedido_sql = text("""
-        SELECT COALESCE(SUM(spi.qty_ordered * COALESCE(spi.unit_price, spi.fob_pi, 0)), 0) AS fob_pedido
+        SELECT COALESCE(SUM(spi.qty_ordered * COALESCE(spi.fob_pi, spi.unit_price, 0)), 0) AS fob_pedido
         FROM spare_part_items spi
         JOIN spare_part_lots spl ON spl.id = spi.lot_id
         JOIN shipment_orders so ON so.id = spl.shipment_order_id
-        WHERE so.computed_status NOT IN ('completado', 'cancelado')
-          AND so.is_spare_part = true
-          AND spi.status != 'CANCELLED'
-    """)
-
-    # FOB camino: received but not physically counted, packing list received
-    fob_camino_sql = text("""
-        SELECT COALESCE(SUM(spi.qty_received * COALESCE(spi.unit_price, spi.fob_pi, 0)), 0) AS fob_camino
-        FROM spare_part_items spi
-        JOIN spare_part_lots spl ON spl.id = spi.lot_id
-        JOIN shipment_orders so ON so.id = spl.shipment_order_id
-        WHERE spi.qty_physical IS NULL
-          AND spl.packing_list_received = true
-          AND so.computed_status NOT IN ('completado', 'cancelado')
+        WHERE so.computed_status != 'completado'
           AND so.is_spare_part = true
           AND spi.status != 'CANCELLED'
     """)
 
     cov_row = (await db.execute(coverage_sql)).fetchone()
-    fob_row = (await db.execute(fob_sql)).fetchone()
+    fob_mat_row = (await db.execute(fob_materializado_sql)).fetchone()
     fob_pedido_row = (await db.execute(fob_pedido_sql)).fetchone()
-    fob_camino_row = (await db.execute(fob_camino_sql)).fetchone()
 
     total = _i(cov_row.total) if cov_row else 0
-    fob_stock = _f(fob_row.fob_stock) if fob_row else 0.0
+    fob_materializado = _f(fob_mat_row.fob_materializado) if fob_mat_row else 0.0
     fob_pedido = _f(fob_pedido_row.fob_pedido) if fob_pedido_row else 0.0
-    fob_camino = _f(fob_camino_row.fob_camino) if fob_camino_row else 0.0
 
-    fob_aqui = fob_stock
-    fob_materializado = fob_aqui + fob_camino
     pct_materializado = _pct(fob_materializado, fob_pedido)
-    pct_aqui_pbar = _pct(fob_aqui, fob_pedido)
-    pct_camino_pbar = _pct(fob_camino, fob_pedido)
-
-    # Cap: if sum > 100, scale proportionally
-    if pct_aqui_pbar + pct_camino_pbar > 100:
-        total_raw = pct_aqui_pbar + pct_camino_pbar
-        pct_aqui_pbar = round(pct_aqui_pbar / total_raw * 100)
-        pct_camino_pbar = 100 - pct_aqui_pbar
-
+    pct_mat_pbar = min(100, pct_materializado)
     mat_status = 'ok' if pct_materializado >= 80 else ('warn' if pct_materializado >= 50 else 'crit')
     fob_pendiente = max(0.0, fob_pedido - fob_materializado)
 
@@ -628,10 +603,8 @@ async def _query_f4(db: AsyncSession) -> dict:
         return {
             'sin_datos': True,
             'total': 0, 'aqui': 0, 'en_camino': 0, 'pedido': 0, 'sin_cobertura': 0,
-            'fob_stock': 0.0,
-            'fob_pedido': 0.0, 'fob_camino': 0.0,
-            'fob_aqui': 0.0, 'fob_materializado': 0.0, 'fob_pendiente': 0.0,
-            'pct_materializado': 0, 'pct_aqui_pbar': 0, 'pct_camino_pbar': 0,
+            'fob_pedido': 0.0, 'fob_materializado': 0.0, 'fob_pendiente': 0.0,
+            'pct_materializado': 0, 'pct_mat_pbar': 0,
             'mat_status': 'crit',
         }
 
@@ -642,15 +615,11 @@ async def _query_f4(db: AsyncSession) -> dict:
         'en_camino': _i(cov_row.en_camino) if cov_row else 0,
         'pedido': _i(cov_row.pedido) if cov_row else 0,
         'sin_cobertura': _i(cov_row.sin_cobertura) if cov_row else 0,
-        'fob_stock': fob_stock,
         'fob_pedido': fob_pedido,
-        'fob_camino': fob_camino,
-        'fob_aqui': fob_aqui,
         'fob_materializado': fob_materializado,
         'fob_pendiente': fob_pendiente,
         'pct_materializado': pct_materializado,
-        'pct_aqui_pbar': pct_aqui_pbar,
-        'pct_camino_pbar': pct_camino_pbar,
+        'pct_mat_pbar': pct_mat_pbar,
         'mat_status': mat_status,
     }
 
@@ -810,7 +779,7 @@ async def _query_f7(desde: date, hasta: date, db: AsyncSession) -> dict:
 
     # FOB = qty_ordered × precio real del packing list (unit_price > fob_pi)
     fob_pendiente_sql = text("""
-        SELECT COALESCE(SUM(spi.qty_ordered * COALESCE(spi.unit_price, spi.fob_pi, 0)), 0) AS fob
+        SELECT COALESCE(SUM(spi.qty_ordered * COALESCE(spi.fob_pi, spi.unit_price, 0)), 0) AS fob
         FROM part_order_decisions pod
         JOIN spare_part_lots spl ON spl.lot_identifier = pod.lot_identifier
         JOIN spare_part_items spi
@@ -823,7 +792,7 @@ async def _query_f7(desde: date, hasta: date, db: AsyncSession) -> dict:
     """)
 
     fob_ejecutado_sql = text("""
-        SELECT COALESCE(SUM(spi.qty_ordered * COALESCE(spi.unit_price, spi.fob_pi, 0)), 0) AS fob
+        SELECT COALESCE(SUM(spi.qty_ordered * COALESCE(spi.fob_pi, spi.unit_price, 0)), 0) AS fob
         FROM part_order_decisions pod
         JOIN spare_part_lots spl ON spl.lot_identifier = pod.lot_identifier
         JOIN spare_part_items spi
