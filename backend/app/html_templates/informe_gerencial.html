@@ -1,592 +1,841 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="UTF-8" />
-<title>Informe Gerencial</title>
+<meta charset="utf-8">
+<title>Informe Gerencial · Red de Servicio UM Colombia</title>
 <style>
-  /* ── Page setup ──────────────────────────────────────────────────────────── */
-  @page {
-    size: A4 portrait;
-    margin: 18mm 14mm 14mm 14mm;
-  }
-  @page :first {
-    margin-top: 0;
-    margin-bottom: 0;
-    margin-left: 0;
-    margin-right: 0;
-  }
+/* ============================================================
+   Informe Gerencial UM Colombia — Sistema de diseño
+   Letter portrait (8.5 x 11"), print-ready — WeasyPrint 61
+   Fonts: Arial/Helvetica (no Google Fonts — container offline)
+   ============================================================ */
 
-  * { box-sizing: border-box; margin: 0; padding: 0; }
+@page { size: Letter portrait; margin: 0; }
+.page-break { break-before: page; }
 
-  body {
-    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-    background: #13131b;
-    color: #e2e2f0;
-    font-size: 9pt;
-    line-height: 1.4;
-  }
+:root{
+  /* Brand */
+  --brand:        #E8590C;
+  --brand-deep:   #C9490A;
+  --brand-tint:   #FDF1E9;
 
-  /* ── Cover page ──────────────────────────────────────────────────────────── */
-  .cover {
-    background: #13131b;
-    width: 210mm;
-    height: 297mm;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-    page-break-after: always;
-  }
-  .cover-accent {
-    width: 60px;
-    height: 5px;
-    background: #ff5f33;
-    margin: 0 auto 28px auto;
-    border-radius: 3px;
-  }
-  .cover-title {
-    font-size: 34pt;
-    font-weight: 800;
-    color: #ffffff;
-    letter-spacing: -0.5px;
-    margin-bottom: 10px;
-  }
-  .cover-subtitle {
-    font-size: 13pt;
-    color: #9ca3b8;
-    margin-bottom: 36px;
-  }
-  .cover-period {
-    font-size: 16pt;
-    font-weight: 700;
-    color: #ff5f33;
-    margin-bottom: 12px;
-  }
-  .cover-meta {
-    font-size: 9pt;
-    color: #606075;
-  }
+  /* Neutrals */
+  --ink:    #15181C;
+  --ink-2:  #2A2F36;
+  --text:   #3C434B;
+  --muted:  #828B95;
+  --faint:  #AEB6BF;
+  --line:   #E5E8EC;
+  --line-2: #EFF1F4;
+  --zone:   #F5F6F9;
+  --zone-2: #FAFBFC;
+  --paper:  #FFFFFF;
 
-  /* ── Section wrapper ─────────────────────────────────────────────────────── */
-  .section {
-    break-before: page;
-    padding: 14px 0 0 0;
-  }
-  .section:first-of-type {
-    break-before: auto;
-  }
+  /* Semáforo / estados */
+  --ok:     #2F9E44;   --ok-tint:   #E9F6ED;
+  --warn:   #E8A200;   --warn-tint: #FCF3DD;
+  --risk:   #E8590C;   --risk-tint: #FDEDE2;
+  --crit:   #E03131;   --crit-tint: #FBEAEA;
+  --info:   #1C7ED6;   --info-tint: #E7F1FB;
+  --violet: #6C44E0;   --violet-tint:#EEE9FC;
+  --indigo: #3B47B8;   --indigo-tint:#E8EAF8;
+  --cancel: #748399;   --cancel-tint:#EEF1F4;
+}
 
-  .section-header {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 14px;
-    padding-bottom: 8px;
-    border-bottom: 1px solid rgba(255,255,255,0.07);
-  }
-  .section-dot {
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    flex-shrink: 0;
-  }
-  .section-title {
-    font-size: 12pt;
-    font-weight: 700;
-    letter-spacing: 0.03em;
-    color: #ffffff;
-  }
-  .section-badge {
-    font-size: 7pt;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    padding: 2px 7px;
-    border-radius: 10px;
-    margin-left: auto;
-  }
+*{ box-sizing:border-box; }
+html,body{ margin:0; padding:0; background:#FFFFFF; }
 
-  /* ── KPI card grid ───────────────────────────────────────────────────────── */
-  .kpi-grid {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    margin-bottom: 12px;
-  }
-  .kpi-card {
-    background: #1a1a24;
-    border-radius: 8px;
-    padding: 12px 16px;
-    flex: 1;
-    min-width: 100px;
-    border-top: 3px solid transparent;
-  }
-  .kpi-value {
-    font-size: 22pt;
-    font-weight: 800;
-    line-height: 1;
-    margin-bottom: 4px;
-  }
-  .kpi-label {
-    font-size: 7pt;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: #606075;
-    font-weight: 600;
-  }
-  .kpi-sub {
-    font-size: 8pt;
-    color: #9ca3b8;
-    margin-top: 3px;
-  }
+body{
+  font-family: Arial, Helvetica, sans-serif;
+  color:var(--text);
+  font-size:12px;
+}
 
-  /* ── Table ───────────────────────────────────────────────────────────────── */
-  .data-table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-top: 10px;
-    font-size: 8pt;
-  }
-  .data-table th {
-    text-align: left;
-    padding: 6px 8px;
-    font-size: 7pt;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.07em;
-    color: #606075;
-    border-bottom: 1px solid rgba(255,255,255,0.07);
-  }
-  .data-table td {
-    padding: 6px 8px;
-    border-bottom: 1px solid rgba(255,255,255,0.04);
-    color: #c8c8e0;
-  }
-  .data-table tr:last-child td { border-bottom: none; }
-  .data-table .num { text-align: right; font-variant-numeric: tabular-nums; }
-  .data-table .highlight-row td {
-    font-weight: 700;
-    color: #ffffff;
-    background: rgba(255,255,255,0.03);
-  }
+/* ---------- Page sheet ---------- */
+.sheet{
+  width:100%;
+  min-height:100vh;
+  background:var(--paper);
+  padding:44px 52px 48px;
+  display:flex;
+  flex-direction:column;
+  position:relative;
+  overflow:hidden;
+}
+.sheet__body{ flex:1; display:flex; flex-direction:column; }
 
-  /* ── Placeholder ─────────────────────────────────────────────────────────── */
-  .no-data {
-    background: #1a1a24;
-    border-radius: 8px;
-    padding: 20px;
-    text-align: center;
-    color: #606075;
-    font-size: 9pt;
-    font-style: italic;
-  }
+/* ---------- Typography ---------- */
+.num{ font-family:Arial,Helvetica,sans-serif; font-variant-numeric:tabular-nums; letter-spacing:-.02em; font-weight:700; }
+.code{ font-family:'Courier New',monospace; color:var(--brand); font-weight:600; letter-spacing:-.01em; }
 
-  /* ── Color accents per section ───────────────────────────────────────────── */
-  .c-f2 { color: #38bdf8; }
-  .c-f3 { color: #4ade80; }
-  .c-f4 { color: #ff5f33; }
-  .c-f5 { color: #fbbf24; }
-  .c-f6 { color: #f87171; }
-  .c-f7 { color: #a78bfa; }
-  .c-f8 { color: #22d3ee; }
+/* ---------- Section header ---------- */
+.section{ margin-top:22px; }
+.section:first-child{ margin-top:0; }
+.section__head{
+  display:flex; align-items:baseline; gap:12px;
+  padding-bottom:8px; margin-bottom:14px;
+  border-bottom:2px solid var(--ink);
+}
+.section__num{ font-weight:800; font-size:13px; color:var(--brand); }
+.section__title{ font-size:17px; font-weight:700; white-space:nowrap; flex:none; }
+.section__meta{ margin-left:auto; font-size:10.5px; color:var(--muted); font-weight:500; text-align:right; flex:0 0 auto; white-space:nowrap; }
 
-  .b-f2 { border-top-color: #38bdf8; }
-  .b-f3 { border-top-color: #4ade80; }
-  .b-f4 { border-top-color: #ff5f33; }
-  .b-f5 { border-top-color: #fbbf24; }
-  .b-f6 { border-top-color: #f87171; }
-  .b-f7 { border-top-color: #a78bfa; }
-  .b-f8 { border-top-color: #22d3ee; }
+.block-title{
+  font-size:12px; font-weight:700; color:var(--ink-2);
+  margin-bottom:10px; display:flex; align-items:center; gap:8px;
+}
+.block-title .dot{ width:7px; height:7px; border-radius:2px; background:var(--brand); flex:none; }
+.block-sub{ font-size:10px; color:var(--muted); font-weight:500; }
 
-  .dot-f2 { background: #38bdf8; }
-  .dot-f3 { background: #4ade80; }
-  .dot-f4 { background: #ff5f33; }
-  .dot-f5 { background: #fbbf24; }
-  .dot-f6 { background: #f87171; }
-  .dot-f7 { background: #a78bfa; }
-  .dot-f8 { background: #22d3ee; }
+/* ---------- Cover header ---------- */
+.cover{
+  background:var(--ink);
+  margin:-44px -52px 20px;
+  padding:28px 52px 24px;
+  color:#fff;
+  position:relative;
+  overflow:hidden;
+}
+.cover::after{
+  content:''; position:absolute; right:-60px; top:-40px; width:260px; height:260px;
+  background:radial-gradient(circle at center, rgba(232,89,12,.22), transparent 65%);
+}
+.cover__top{ display:flex; align-items:flex-start; justify-content:space-between; gap:24px; position:relative; z-index:1; }
+.cover__brand-mark{ font-size:26px; font-weight:800; color:var(--brand); letter-spacing:-.02em; line-height:1; }
+.cover__title{ font-size:21px; font-weight:700; color:#fff; line-height:1.14; letter-spacing:-.02em; margin-top:10px; }
+.cover__kicker{ font-size:10px; font-weight:600; letter-spacing:.16em; text-transform:uppercase; color:var(--brand); margin-bottom:6px; }
+.cover__meta{ text-align:right; font-size:11px; line-height:1.7; color:#AAB2BC; }
+.cover__meta b{ color:#fff; font-weight:600; }
+.cover__meta .trm{
+  display:inline-block; margin-top:4px; padding:3px 9px;
+  border:1px solid rgba(255,255,255,.22); border-radius:5px;
+  font-family:'Courier New',monospace; font-size:10.5px; color:#fff;
+}
 
-  .badge-f2 { background: rgba(56,189,248,0.12); color: #38bdf8; }
-  .badge-f3 { background: rgba(74,222,128,0.12); color: #4ade80; }
-  .badge-f4 { background: rgba(255,95,51,0.12);  color: #ff5f33; }
-  .badge-f5 { background: rgba(251,191,36,0.12); color: #fbbf24; }
-  .badge-f6 { background: rgba(248,113,113,0.12);color: #f87171; }
-  .badge-f7 { background: rgba(167,139,250,0.12);color: #a78bfa; }
-  .badge-f8 { background: rgba(34,211,238,0.12); color: #22d3ee; }
+/* ---------- KPI grid ---------- */
+.kpi-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
+.kpi{
+  background:var(--paper); border:1px solid var(--line);
+  border-top:3px solid var(--state, var(--ink)); border-radius:9px;
+  padding:12px 13px 13px; position:relative; min-height:90px;
+  display:flex; flex-direction:column;
+}
+.kpi__label{ font-size:10px; font-weight:600; color:var(--muted); line-height:1.25; letter-spacing:.01em; }
+.kpi__val{ font-weight:700; font-size:28px; color:var(--ink); margin-top:auto; line-height:1; font-variant-numeric:tabular-nums; letter-spacing:-.03em; }
+.kpi__val .u{ font-size:12px; font-weight:600; color:var(--muted); letter-spacing:0; }
+.kpi__sub{ font-size:9.5px; color:var(--muted); font-weight:500; margin-top:4px; }
+.kpi__sub b{ color:var(--text); font-weight:600; }
+.kpi__tag{ align-self:flex-end; margin-bottom:5px; font-size:8.5px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; padding:2px 6px; border-radius:4px; }
+.tag-ok{ background:var(--ok-tint); color:var(--ok); }
+.tag-warn{ background:var(--warn-tint); color:#B97f00; }
+.tag-risk{ background:var(--risk-tint); color:var(--brand-deep); }
+.tag-crit{ background:var(--crit-tint); color:var(--crit); }
+.tag-info{ background:var(--info-tint); color:var(--info); }
 
-  .highlight-total { color: #ff5f33; font-weight: 800; font-size: 11pt; }
+/* state borders */
+.s-ok{ --state:var(--ok); }
+.s-warn{ --state:var(--warn); }
+.s-risk{ --state:var(--risk); }
+.s-crit{ --state:var(--crit); }
+.s-info{ --state:var(--info); }
+.s-ink{ --state:var(--ink); }
+
+/* ---------- Pipeline / funnel ---------- */
+.pipe{ background:var(--zone); border:1px solid var(--line); border-radius:11px; padding:14px 16px; }
+.pipe__row{ display:flex; align-items:center; gap:12px; }
+.pipe__row + .pipe__row{ margin-top:11px; }
+.pipe__lab{ width:76px; flex:none; font-size:11.5px; font-weight:700; color:var(--ink); }
+.pipe__lab small{ display:block; font-size:9px; font-weight:500; color:var(--muted); }
+.funnel{ display:flex; gap:5px; flex:1; }
+.stage{
+  flex:1; position:relative; border-radius:6px; padding:8px 6px 7px;
+  background:var(--c-tint, #F5F6F9); border:1px solid var(--c-border, var(--line));
+  text-align:center;
+}
+.stage__n{ font-weight:700; font-size:19px; color:var(--c-ink, var(--c, #3C434B)); line-height:1; font-variant-numeric:tabular-nums; }
+.stage__n.zero{ color:var(--faint); }
+.stage__bar{ height:4px; border-radius:3px; background:var(--c, var(--brand)); margin-top:6px; opacity:.9; }
+.pipe__stages-head{ display:flex; gap:5px; margin-left:88px; margin-bottom:7px; }
+.pipe__stages-head .sh{ flex:1; text-align:center; font-size:8.5px; font-weight:600; color:var(--muted); line-height:1.2; letter-spacing:.01em; text-transform:uppercase; }
+
+/* stage color helpers */
+.c-prep{ --c:#1C7ED6; --c-tint:#E7F1FB; --c-border:#B8D4EF; }
+.c-listo{ --c:#6C44E0; --c-tint:#EEE9FC; --c-border:#C8BEF0; }
+.c-origen{ --c:#3B47B8; --c-tint:#E8EAF8; --c-border:#B9BEE4; }
+.c-transito{ --c:#E8590C; --c-tint:#FDEDE2; --c-border:#F0C4AD; --c-ink:#C9490A; }
+.c-destino{ --c:#E8A200; --c-tint:#FCF3DD; --c-border:#EFD98A; --c-ink:#B97f00; }
+.c-nac{ --c:#2F9E44; --c-tint:#E9F6ED; --c-border:#A4D4AD; }
+
+/* ---------- Cards / panels ---------- */
+.panel{ background:var(--paper); border:1px solid var(--line); border-radius:11px; padding:14px 16px; }
+.panel--zone{ background:var(--zone); }
+.grid-2{ display:grid; grid-template-columns:1fr 1fr; gap:13px; margin-top:14px; }
+.grid-2-3{ display:grid; grid-template-columns:1.1fr 1fr; gap:13px; }
+.grid-3{ display:grid; grid-template-columns:repeat(3,1fr); gap:11px; }
+
+/* ---------- Matrix table ---------- */
+.matrix{ width:100%; border-collapse:collapse; font-size:11px; }
+.matrix th, .matrix td{ padding:7px 9px; text-align:center; }
+.matrix thead th{ font-size:9.5px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; border-bottom:1.5px solid var(--line); }
+.matrix thead th:first-child{ text-align:left; }
+.matrix tbody th{ text-align:left; font-weight:600; color:var(--ink-2); font-size:11px; }
+.matrix tbody tr + tr td, .matrix tbody tr + tr th{ border-top:1px solid var(--line-2); }
+.cell{ display:inline-flex; align-items:center; justify-content:center; min-width:32px; height:26px; border-radius:6px; font-weight:700; font-variant-numeric:tabular-nums; font-size:11px; }
+.matrix tfoot td, .matrix tfoot th{ border-top:1.5px solid var(--line); font-weight:700; color:var(--ink); padding-top:8px; }
+.matrix tfoot th{ font-size:10px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); }
+
+/* ---------- Horizontal bars ---------- */
+.bars{ display:flex; flex-direction:column; gap:8px; }
+.bar-row{ display:grid; grid-template-columns:120px 1fr 42px; align-items:center; gap:10px; }
+.bar-row__lab{ font-size:10.5px; font-weight:500; color:var(--text); text-align:right; line-height:1.15; }
+.bar-track{ height:16px; background:var(--zone); border-radius:5px; overflow:hidden; }
+.bar-fill{ height:100%; border-radius:5px; background:var(--brand); display:block; }
+.bar-row__val{ font-weight:700; font-size:12px; color:var(--ink); text-align:right; font-variant-numeric:tabular-nums; }
+
+/* ---------- Donut ---------- */
+.donut-wrap{ display:flex; align-items:center; gap:16px; }
+.donut{ width:120px; height:120px; border-radius:50%; flex:none; position:relative; }
+.donut::after{ content:''; position:absolute; inset:22px; background:var(--paper); border-radius:50%; }
+.donut__center{ position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:1; }
+.donut__center b{ font-weight:800; font-size:22px; color:var(--ink); line-height:1; font-variant-numeric:tabular-nums; }
+.donut__center span{ font-size:9px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; margin-top:2px; }
+.legend{ display:flex; flex-direction:column; gap:7px; flex:1; }
+.legend__item{ display:flex; align-items:center; gap:8px; font-size:11px; }
+.legend__sw{ width:10px; height:10px; border-radius:3px; flex:none; }
+.legend__lab{ color:var(--text); font-weight:500; flex:1; }
+.legend__val{ font-weight:700; color:var(--ink); font-variant-numeric:tabular-nums; }
+.legend__pct{ width:38px; text-align:right; font-size:10px; color:var(--muted); font-weight:600; font-variant-numeric:tabular-nums; }
+
+/* ---------- Progress / materializado ---------- */
+.prog-head{ display:flex; align-items:baseline; justify-content:space-between; margin-bottom:10px; gap:12px; }
+.prog-head .big{ font-weight:800; font-size:24px; color:var(--ink); font-variant-numeric:tabular-nums; letter-spacing:-.02em; }
+.prog-head .big small{ font-size:12px; color:var(--muted); font-weight:600; }
+.prog-track{ height:28px; border-radius:8px; background:var(--zone); overflow:hidden; display:flex; border:1px solid var(--line); }
+.prog-seg{ height:100%; display:flex; align-items:center; padding:0 9px; color:#fff; font-weight:700; font-size:11px; white-space:nowrap; }
+.prog-track__rest{ flex:1; display:flex; align-items:center; padding:0 9px; color:var(--muted); font-size:10px; font-weight:600; }
+.prog-foot{ display:flex; gap:16px; margin-top:10px; flex-wrap:wrap; }
+.prog-foot__item{ font-size:10.5px; color:var(--text); display:flex; align-items:center; gap:6px; }
+.prog-foot__item .sw{ width:9px; height:9px; border-radius:3px; flex:none; }
+.prog-foot__item b{ font-weight:700; color:var(--ink); }
+
+/* ---------- Stacked bar ---------- */
+.stack{ display:flex; height:24px; border-radius:7px; overflow:hidden; border:1px solid var(--line); }
+.stack__seg{ height:100%; display:flex; align-items:center; justify-content:center; color:#fff; font-weight:700; font-size:10.5px; white-space:nowrap; padding:0 4px; }
+
+/* ---------- Mini table ---------- */
+.tbl{ width:100%; border-collapse:collapse; font-size:10.5px; }
+.tbl th{ text-align:left; font-size:9px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; padding:0 9px 6px; border-bottom:1.5px solid var(--line); }
+.tbl th.r, .tbl td.r{ text-align:right; }
+.tbl td{ padding:6px 9px; border-bottom:1px solid var(--line-2); color:var(--text); }
+.tbl td.num, .tbl td .num{ font-weight:600; color:var(--ink); font-variant-numeric:tabular-nums; }
+.tbl tr:last-child td{ border-bottom:none; }
+
+/* chips */
+.chip{ display:inline-flex; align-items:center; gap:4px; font-size:9.5px; font-weight:600; padding:2px 7px; border-radius:20px; }
+.chip .d{ width:6px; height:6px; border-radius:50%; flex:none; }
+
+/* ---------- Footer ---------- */
+.foot{
+  margin-top:auto; padding-top:12px; border-top:1px solid var(--line);
+  display:flex; align-items:center; justify-content:space-between;
+  font-size:9px; color:var(--muted); font-weight:500;
+}
+.foot b{ color:var(--text); font-weight:600; }
+.foot > div{ white-space:nowrap; }
+.foot__brand{ display:flex; align-items:center; gap:6px; font-weight:700; color:var(--ink); font-size:10px; letter-spacing:.02em; }
+.foot__brand .tri{ width:0; height:0; border-left:5px solid transparent; border-right:5px solid transparent; border-top:9px solid var(--brand); flex:none; }
+.foot__page{ font-weight:600; color:var(--text); }
+.foot__page b{ color:var(--ink); }
+
+/* ---------- Misc ---------- */
+.row-spread{ display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.no-data{ color:var(--muted); font-style:italic; font-size:11px; padding:14px 0; text-align:center; }
 </style>
 </head>
 <body>
 
-<!-- ═══════════════════════════════════════════════════════════════════════════
-     PORTADA (F1)
-════════════════════════════════════════════════════════════════════════════ -->
-<div class="cover">
-  <div class="cover-accent"></div>
-  <div class="cover-title">Informe Gerencial</div>
-  <div class="cover-subtitle">UM Colombia — Red de Servicio</div>
-  <div class="cover-period">{{ meta.periodo_label }}</div>
-  <div class="cover-meta">Generado el {{ meta.generado_at }}</div>
-</div>
+<!-- ============================================================
+     PÁGINA 1 — PORTADA + RESUMEN EJECUTIVO
+     ============================================================ -->
+<section class="sheet" data-page="1">
+  <div class="sheet__body">
 
-
-<!-- ═══════════════════════════════════════════════════════════════════════════
-     F2 — Pedidos de Importación
-════════════════════════════════════════════════════════════════════════════ -->
-<div class="section">
-  <div class="section-header">
-    <div class="section-dot dot-f2"></div>
-    <div class="section-title c-f2">Pedidos de Importación</div>
-    <span class="section-badge badge-f2">F2</span>
-  </div>
-
-  {% if f2.sin_datos %}
-  <div class="no-data">Sin pedidos activos en el sistema</div>
-  {% else %}
-  <div class="kpi-grid">
-    <div class="kpi-card b-f2">
-      <div class="kpi-value c-f2">{{ f2.activos_total }}</div>
-      <div class="kpi-label">PIs Activos Total</div>
-    </div>
-    <div class="kpi-card b-f2">
-      <div class="kpi-value c-f2">{{ f2.motos_activos }}</div>
-      <div class="kpi-label">PIs Motos</div>
-    </div>
-    <div class="kpi-card b-f2">
-      <div class="kpi-value c-f2">{{ f2.repuestos_activos }}</div>
-      <div class="kpi-label">PIs Repuestos</div>
-    </div>
-    <div class="kpi-card b-f2">
-      <div class="kpi-value c-f2">{{ f2.motos_unidades }}</div>
-      <div class="kpi-label">Unidades en Pedido</div>
-    </div>
-  </div>
-
-  <div class="kpi-grid">
-    <div class="kpi-card b-f2">
-      <div class="kpi-value" style="font-size:16pt; color:#38bdf8;">{{ f2.motos_nacionalizado }}</div>
-      <div class="kpi-label">Motos Nacionalizadas</div>
-    </div>
-    <div class="kpi-card b-f2">
-      <div class="kpi-value" style="font-size:16pt; color:#38bdf8;">{{ f2.motos_en_transito }}</div>
-      <div class="kpi-label">Motos en Tránsito</div>
-    </div>
-    <div class="kpi-card b-f2">
-      <div class="kpi-value" style="font-size:16pt; color:#38bdf8;">{{ f2.motos_en_origen }}</div>
-      <div class="kpi-label">Motos en Origen</div>
-    </div>
-    <div class="kpi-card b-f2">
-      <div class="kpi-value" style="font-size:14pt; color:#38bdf8;">USD {{ "%.0f"|format(f2.repuestos_fob) | replace(".", ",") }}</div>
-      <div class="kpi-label">FOB Comprometido Repuestos</div>
-    </div>
-  </div>
-  {% endif %}
-</div>
-
-
-<!-- ═══════════════════════════════════════════════════════════════════════════
-     F3 — Motocicletas
-════════════════════════════════════════════════════════════════════════════ -->
-<div class="section">
-  <div class="section-header">
-    <div class="section-dot dot-f3"></div>
-    <div class="section-title c-f3">Motocicletas</div>
-    <span class="section-badge badge-f3">F3 — Snapshot</span>
-  </div>
-
-  {% if f3.sin_datos %}
-  <div class="no-data">Sin unidades registradas en el sistema</div>
-  {% else %}
-  <div class="kpi-grid">
-    <div class="kpi-card b-f3">
-      <div class="kpi-value c-f3">{{ f3.total }}</div>
-      <div class="kpi-label">Total en Sistema</div>
-    </div>
-    <div class="kpi-card b-f3">
-      <div class="kpi-value c-f3">{{ f3.disponibles }}</div>
-      <div class="kpi-label">Disponibles</div>
-    </div>
-    <div class="kpi-card b-f3">
-      <div class="kpi-value c-f3">{{ f3.facturadas_historico }}</div>
-      <div class="kpi-label">Facturadas (Histórico)</div>
-    </div>
-    <div class="kpi-card b-f3">
-      <div class="kpi-value c-f3">{{ f3.separadas }}</div>
-      <div class="kpi-label">Separadas Nac.</div>
-    </div>
-  </div>
-
-  <div class="kpi-grid">
-    <div class="kpi-card b-f3">
-      <div class="kpi-value" style="font-size:16pt; color:#4ade80;">{{ f3.pend_empadronamiento }}</div>
-      <div class="kpi-label">Pend. Empadronamiento</div>
-    </div>
-    <div class="kpi-card b-f3">
-      <div class="kpi-value" style="font-size:16pt; color:#4ade80;">{{ f3.con_obs }}</div>
-      <div class="kpi-label">Con Observaciones</div>
-    </div>
-    <div class="kpi-card b-f3">
-      <div class="kpi-value" style="font-size:16pt; color:#4ade80;">{{ f3.con_runt }}</div>
-      <div class="kpi-label">Con RUNT</div>
-    </div>
-    <div class="kpi-card b-f3">
-      <div class="kpi-value" style="font-size:16pt; color:#f87171;">{{ f3.total - f3.con_runt }}</div>
-      <div class="kpi-label">RUNT Pendiente</div>
-    </div>
-  </div>
-
-  {% if f3.por_modelo %}
-  <table class="data-table">
-    <thead>
-      <tr>
-        <th>Modelo</th>
-        <th class="num">Total</th>
-        <th class="num">Disponibles</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for m in f3.por_modelo %}
-      <tr>
-        <td>{{ m.model }}</td>
-        <td class="num">{{ m.total }}</td>
-        <td class="num c-f3">{{ m.disponibles }}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  {% endif %}
-  {% endif %}
-</div>
-
-
-<!-- ═══════════════════════════════════════════════════════════════════════════
-     F4 — Cobertura de Repuestos
-════════════════════════════════════════════════════════════════════════════ -->
-<div class="section">
-  <div class="section-header">
-    <div class="section-dot dot-f4"></div>
-    <div class="section-title c-f4">Inventario — Cobertura</div>
-    <span class="section-badge badge-f4">F4</span>
-  </div>
-
-  {% if f4.sin_datos %}
-  <div class="no-data">Sin referencias en el catálogo</div>
-  {% else %}
-  <div class="kpi-grid">
-    <div class="kpi-card b-f4">
-      <div class="kpi-value c-f4">{{ f4.total }}</div>
-      <div class="kpi-label">Total Referencias</div>
-    </div>
-    <div class="kpi-card b-f4">
-      <div class="kpi-value c-f4">{{ f4.aqui }}</div>
-      <div class="kpi-label">Aquí (stock)</div>
-    </div>
-    <div class="kpi-card b-f4">
-      <div class="kpi-value" style="font-size:22pt; color:#fbbf24;">{{ f4.en_camino }}</div>
-      <div class="kpi-label">En Camino</div>
-    </div>
-    <div class="kpi-card b-f4">
-      <div class="kpi-value" style="font-size:22pt; color:#38bdf8;">{{ f4.pedido }}</div>
-      <div class="kpi-label">En Pedido</div>
-    </div>
-    <div class="kpi-card b-f4">
-      <div class="kpi-value" style="font-size:22pt; color:#f87171;">{{ f4.sin_cobertura }}</div>
-      <div class="kpi-label">Sin Cobertura</div>
-    </div>
-  </div>
-
-  <div class="kpi-grid">
-    <div class="kpi-card b-f4" style="flex: 2;">
-      <div class="kpi-value" style="font-size:18pt; color:#ff5f33;">
-        USD {{ "{:,.0f}".format(f4.fob_stock) }}
+    <!-- Cover band -->
+    <div class="cover">
+      <div class="cover__top">
+        <div>
+          <div class="cover__kicker">Red de Servicio · Informe Gerencial</div>
+          <div class="cover__brand-mark">UM Colombia</div>
+          <div class="cover__title" style="margin-top:12px;">Estado de la operación<br>de importación y servicio</div>
+        </div>
+        <div class="cover__meta">
+          <div class="cover__kicker" style="color:#AAB2BC;margin-bottom:8px;">Período</div>
+          <div><b>{{ meta.periodo_label }}</b></div>
+          <div style="margin-top:8px;color:#7A828C;">Generado</div>
+          <div><b>{{ meta.generado_at }}</b></div>
+          {% if trm %}
+          <div class="trm">TRM {{ "{:,.0f}".format(trm) }} COP / USD</div>
+          {% else %}
+          <div class="trm">TRM N/D</div>
+          {% endif %}
+        </div>
       </div>
-      <div class="kpi-label">Valor FOB Stock Disponible</div>
     </div>
-  </div>
-  {% endif %}
-</div>
 
+    <!-- Resumen ejecutivo KPIs -->
+    <div class="section" style="margin-top:4px;">
+      <div class="section__head">
+        <span class="section__num">01</span>
+        <span class="section__title">Resumen ejecutivo</span>
+        <span class="section__meta">8 indicadores clave · semáforo de estado</span>
+      </div>
 
-<!-- ═══════════════════════════════════════════════════════════════════════════
-     F5 — Rotación de Repuestos
-════════════════════════════════════════════════════════════════════════════ -->
-<div class="section">
-  <div class="section-header">
-    <div class="section-dot dot-f5"></div>
-    <div class="section-title c-f5">Rotación de Repuestos</div>
-    <span class="section-badge badge-f5">F5</span>
-  </div>
+      <div class="kpi-grid">
 
-  {% if f5.sin_datos %}
-  <div class="no-data">Sin clasificación de rotación asignada</div>
-  {% else %}
-  <table class="data-table">
-    <thead>
-      <tr>
-        <th>Clase</th>
-        <th class="num">Referencias</th>
-        <th class="num">FOB Disponible</th>
-        <th class="num">FOB en Riesgo</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for c in f5.clases %}
-      <tr>
-        <td style="font-weight:700; text-transform:capitalize;">{{ c.clase }}</td>
-        <td class="num">{{ c.refs }}</td>
-        <td class="num">USD {{ "{:,.0f}".format(c.fob_disponible) }}</td>
-        <td class="num {% if c.clase in ('media','baja') %}c-f6{% endif %}">
-          {% if c.clase in ('media','baja') %}USD {{ "{:,.0f}".format(c.fob_riesgo) }}{% else %}—{% endif %}
-        </td>
-      </tr>
-      {% endfor %}
-      {% if f5.sin_clasificar_refs > 0 %}
-      <tr>
-        <td style="color:#606075; font-style:italic;">Sin clasificar</td>
-        <td class="num" style="color:#606075;">{{ f5.sin_clasificar_refs }}</td>
-        <td class="num" style="color:#606075;">USD {{ "{:,.0f}".format(f5.sin_clasificar_fob) }}</td>
-        <td class="num">—</td>
-      </tr>
+        <!-- KPI 1: Pedidos activos -->
+        <div class="kpi s-ink">
+          <div class="kpi__label">Pedidos activos</div>
+          <div class="kpi__val num">{{ f2.activos_total }}</div>
+          <div class="kpi__sub"><b>{{ f2.motos_activos }}</b> motos · <b>{{ f2.repuestos_activos }}</b> repuestos</div>
+        </div>
+
+        <!-- KPI 2: Unidades de moto en pedido -->
+        <div class="kpi s-ink">
+          <div class="kpi__label">Unidades de moto en pedido</div>
+          <div class="kpi__val num">{{ f2.motos_unidades }}</div>
+          <div class="kpi__sub">en {{ f2.motos_activos }} pedidos activos</div>
+        </div>
+
+        <!-- KPI 3: Motos disponibles -->
+        <div class="kpi s-ok">
+          <span class="kpi__tag tag-ok">OK</span>
+          <div class="kpi__label">Motos disponibles para nacionalizar</div>
+          <div class="kpi__val num">{{ f3.disponibles }}</div>
+          <div class="kpi__sub">listas en destino</div>
+        </div>
+
+        <!-- KPI 4: Referencias únicas -->
+        <div class="kpi s-info">
+          <div class="kpi__label">Referencias únicas solicitadas</div>
+          <div class="kpi__val num">{{ f2.refs_unicas_sp }}</div>
+          <div class="kpi__sub">repuestos activos</div>
+        </div>
+
+        <!-- KPI 5: Backorder -->
+        <div class="kpi s-{{ bo_status }}">
+          {% if bo_status == 'crit' %}
+          <span class="kpi__tag tag-crit">Crítico</span>
+          {% elif bo_status == 'warn' %}
+          <span class="kpi__tag tag-warn">Atención</span>
+          {% else %}
+          <span class="kpi__tag tag-ok">OK</span>
+          {% endif %}
+          <div class="kpi__label">Referencias en backorder</div>
+          <div class="kpi__val num">{{ f6.refs_afectadas }}</div>
+          <div class="kpi__sub">sin cobertura inmediata</div>
+        </div>
+
+        <!-- KPI 6: Materialización -->
+        <div class="kpi s-{{ f4.mat_status }}">
+          {% if f4.mat_status == 'ok' %}
+          <span class="kpi__tag tag-ok">OK</span>
+          {% elif f4.mat_status == 'warn' %}
+          <span class="kpi__tag tag-warn">Atención</span>
+          {% else %}
+          <span class="kpi__tag tag-crit">Crítico</span>
+          {% endif %}
+          <div class="kpi__label">Tasa de materialización de repuestos</div>
+          <div class="kpi__val num">{{ f4.pct_materializado }}<span class="u">%</span></div>
+          <div class="kpi__sub">materializado / pedido</div>
+        </div>
+
+        <!-- KPI 7: Valor a cancelar -->
+        {% if f7.fob_cancelar_pendiente > 0 %}
+        <div class="kpi s-risk">
+          <span class="kpi__tag tag-risk">Riesgo</span>
+          <div class="kpi__label">Valor a cancelar</div>
+          <div class="kpi__val num"><span class="u">USD </span>{{ "{:,.0f}".format(f7.fob_cancelar_pendiente) }}</div>
+          <div class="kpi__sub">{{ f7.cancelar_pendiente }} refs no requeridas</div>
+        </div>
+        {% else %}
+        <div class="kpi s-ok">
+          <span class="kpi__tag tag-ok">OK</span>
+          <div class="kpi__label">Valor a cancelar</div>
+          <div class="kpi__val num"><span class="u">USD </span>0</div>
+          <div class="kpi__sub">sin cancelaciones pendientes</div>
+        </div>
+        {% endif %}
+
+        <!-- KPI 8: Cobertura maestro -->
+        <div class="kpi s-{{ maestro.precio_status }}">
+          {% if maestro.precio_status == 'ok' %}
+          <span class="kpi__tag tag-ok">OK</span>
+          {% elif maestro.precio_status == 'warn' %}
+          <span class="kpi__tag tag-warn">Atención</span>
+          {% else %}
+          <span class="kpi__tag tag-crit">Crítico</span>
+          {% endif %}
+          <div class="kpi__label">Cobertura de precios del Maestro</div>
+          <div class="kpi__val num">{{ maestro.pct_con_precio }}<span class="u">%</span></div>
+          <div class="kpi__sub">refs con precio público</div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Pipeline -->
+    <div class="section">
+      <div class="section__head">
+        <span class="section__num">02</span>
+        <span class="section__title">Pipeline de pedidos por estado</span>
+        <span class="section__meta">motos y repuestos · flujo logístico</span>
+      </div>
+
+      {% set stage_labels = ['En preparación','Listo fábrica','En origen','En tránsito','En destino','Nacionalizado'] %}
+      {% set stage_classes = ['c-prep','c-listo','c-origen','c-transito','c-destino','c-nac'] %}
+
+      {% if f2.pipeline_motos.total == 0 and f2.pipeline_repuestos.total == 0 %}
+      <div class="no-data">Sin datos de pedidos activos en el pipeline.</div>
+      {% else %}
+      <div class="pipe">
+        <div class="pipe__stages-head">
+          {% for label in stage_labels %}
+          <div class="sh">{{ label }}</div>
+          {% endfor %}
+        </div>
+
+        <div class="pipe__row">
+          <div class="pipe__lab">Motos<small>{{ f2.motos_activos }} pedidos</small></div>
+          <div class="funnel">
+            {% for idx in range(6) %}
+            {% set stage = f2.pipeline_motos.stages[idx] %}
+            <div class="stage {{ stage_classes[idx] }}">
+              <div class="stage__n num{% if stage.n == 0 %} zero{% endif %}">{{ stage.n }}</div>
+              <div class="stage__bar" style="width:{{ stage.pct }}%"></div>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+
+        <div class="pipe__row">
+          <div class="pipe__lab">Repuestos<small>{{ f2.repuestos_activos }} pedidos</small></div>
+          <div class="funnel">
+            {% for idx in range(6) %}
+            {% set stage = f2.pipeline_repuestos.stages[idx] %}
+            <div class="stage {{ stage_classes[idx] }}">
+              <div class="stage__n num{% if stage.n == 0 %} zero{% endif %}">{{ stage.n }}</div>
+              <div class="stage__bar" style="width:{{ stage.pct }}%"></div>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
       {% endif %}
-    </tbody>
-  </table>
 
-  <div class="kpi-grid" style="margin-top:12px;">
-    <div class="kpi-card b-f5">
-      <div class="kpi-value" style="font-size:18pt; color:#f87171;">
-        USD {{ "{:,.0f}".format(f5.total_riesgo) }}
+    </div>
+
+  </div>
+
+  <div class="foot">
+    <div class="foot__brand"><span class="tri"></span> UM Colombia</div>
+    <div>Informe Gerencial · Red de Servicio · <b>{{ meta.periodo_label }}</b></div>
+    <div class="foot__page">Página <b>1</b> / 4</div>
+  </div>
+</section>
+
+<!-- ============================================================
+     PÁGINA 2 — MOTOCICLETAS
+     ============================================================ -->
+<section class="sheet page-break" data-page="2">
+  <div class="sheet__body">
+
+    <div class="section">
+      <div class="section__head">
+        <span class="section__num">03</span>
+        <span class="section__title">Motocicletas</span>
+        <span class="section__meta">disponibilidad, ventas y clasificación</span>
       </div>
-      <div class="kpi-label">Total Valor en Riesgo (Media + Baja)</div>
-    </div>
-  </div>
-  {% endif %}
-</div>
 
+      <!-- B1: Disponibles para nacionalizar — matriz modelo × ubicación -->
+      <div class="block-title"><span class="dot"></span> Disponibles para nacionalizar — modelo × ubicación</div>
 
-<!-- ═══════════════════════════════════════════════════════════════════════════
-     F6 — Backorders
-════════════════════════════════════════════════════════════════════════════ -->
-<div class="section">
-  <div class="section-header">
-    <div class="section-dot dot-f6"></div>
-    <div class="section-title c-f6">Backorders</div>
-    <span class="section-badge badge-f6">F6</span>
-  </div>
-
-  {% if f6.sin_datos %}
-  <div class="no-data">Sin backorders registrados</div>
-  {% else %}
-  <div class="kpi-grid">
-    <div class="kpi-card b-f6">
-      <div class="kpi-value c-f6">{{ f6.activos }}</div>
-      <div class="kpi-label">Activos (sin resolver)</div>
-    </div>
-    <div class="kpi-card b-f6">
-      <div class="kpi-value c-f6">{{ f6.resueltos_periodo }}</div>
-      <div class="kpi-label">Resueltos en el Período</div>
-    </div>
-    <div class="kpi-card b-f6">
-      <div class="kpi-value c-f6">{{ f6.refs_afectadas }}</div>
-      <div class="kpi-label">Referencias Afectadas</div>
-    </div>
-    <div class="kpi-card b-f6">
-      <div class="kpi-value" style="font-size:14pt; color:#f87171;">
-        USD {{ "{:,.0f}".format(f6.fob_pendiente) }}
+      {% if f3.matriz %}
+      <div class="panel panel--zone" style="padding:12px 16px;">
+        <table class="matrix">
+          <thead>
+            <tr>
+              <th>Modelo</th>
+              {% for ub in f3.matriz.ubicaciones %}
+              <th>{{ ub }}</th>
+              {% endfor %}
+              <th>Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in f3.matriz.rows %}
+            <tr>
+              <th>{{ row.model }}</th>
+              {% for ub in f3.matriz.ubicaciones %}
+              <td><span class="cell" style="{{ row.celdas[ub].style }}">{{ row.celdas[ub].n }}</span></td>
+              {% endfor %}
+              <td class="num">{{ row.total }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+          <tfoot>
+            <tr>
+              <th>Total ubicación</th>
+              {% for ub in f3.matriz.ubicaciones %}
+              <td class="num">{{ f3.matriz.totales_ubicacion[ub] }}</td>
+              {% endfor %}
+              <td class="num" style="color:var(--brand);">{{ f3.matriz.total_general }}</td>
+            </tr>
+          </tfoot>
+        </table>
       </div>
-      <div class="kpi-label">FOB Pendiente (activos)</div>
-    </div>
-  </div>
-  {% endif %}
-</div>
+      {% else %}
+      <div class="no-data">Sin unidades disponibles para nacionalizar.</div>
+      {% endif %}
 
+      <!-- B2 + B3 -->
+      <div class="grid-2">
+        <div>
+          <div class="block-title"><span class="dot"></span> Facturadas por distribuidor</div>
+          <div class="panel">
+            {% if f3.por_distribuidor %}
+            <div class="bars">
+              {% for d in f3.por_distribuidor %}
+              <div class="bar-row">
+                <div class="bar-row__lab">{{ d.nombre }}</div>
+                <div class="bar-track"><span class="bar-fill" style="width:{{ d.pct }}%"></span></div>
+                <div class="bar-row__val">{{ d.cnt }}</div>
+              </div>
+              {% endfor %}
+            </div>
+            <p class="block-sub" style="margin-top:10px;">Total facturado: <b style="color:var(--ink);">{{ f3.facturadas_historico }}</b> unidades</p>
+            {% else %}
+            <div class="no-data">Sin unidades facturadas.</div>
+            {% endif %}
+          </div>
+        </div>
 
-<!-- ═══════════════════════════════════════════════════════════════════════════
-     F7 — Ajuste de Pedidos
-════════════════════════════════════════════════════════════════════════════ -->
-<div class="section">
-  <div class="section-header">
-    <div class="section-dot dot-f7"></div>
-    <div class="section-title c-f7">Ajuste de Pedidos</div>
-    <span class="section-badge badge-f7">F7</span>
-  </div>
-
-  {% if f7.sin_datos %}
-  <div class="no-data">Sin decisiones de ajuste registradas</div>
-  {% else %}
-  <div class="kpi-grid">
-    <div class="kpi-card b-f7">
-      <div class="kpi-value c-f7">{{ f7.cancelar_pendiente }}</div>
-      <div class="kpi-label">Cancelaciones Pendientes</div>
-      <div class="kpi-sub">USD {{ "{:,.0f}".format(f7.fob_cancelar_pendiente) }} en riesgo</div>
-    </div>
-    <div class="kpi-card b-f7">
-      <div class="kpi-value c-f7">{{ f7.cambiar_pendiente }}</div>
-      <div class="kpi-label">Cambios Pendientes</div>
-    </div>
-    <div class="kpi-card b-f7">
-      <div class="kpi-value" style="font-size:22pt; color:#a78bfa;">{{ f7.cancelar_ejecutado }}</div>
-      <div class="kpi-label">Cancelaciones Ejecutadas</div>
-      <div class="kpi-sub">En el período — USD {{ "{:,.0f}".format(f7.fob_cancelar_ejecutado) }}</div>
-    </div>
-  </div>
-  {% endif %}
-</div>
-
-
-<!-- ═══════════════════════════════════════════════════════════════════════════
-     F8 — Remisiones de Inventario
-════════════════════════════════════════════════════════════════════════════ -->
-<div class="section">
-  <div class="section-header">
-    <div class="section-dot dot-f8"></div>
-    <div class="section-title c-f8">Remisiones de Inventario</div>
-    <span class="section-badge badge-f8">F8</span>
-  </div>
-
-  {% if f8.sin_datos %}
-  <div class="no-data">Sin remisiones en el período seleccionado</div>
-  {% else %}
-  <div class="kpi-grid">
-    <div class="kpi-card b-f8">
-      <div class="kpi-value c-f8">{{ f8.total }}</div>
-      <div class="kpi-label">Remisiones Despachadas</div>
-    </div>
-    <div class="kpi-card b-f8">
-      <div class="kpi-value" style="font-size:18pt; color:#22d3ee;">
-        USD {{ "{:,.0f}".format(f8.fob) }}
+        <div>
+          <div class="block-title"><span class="dot"></span> Clasificación (campo Observación)</div>
+          <div class="panel">
+            {% if f3.por_observacion %}
+            <div class="bars">
+              {% for d in f3.por_observacion %}
+              <div class="bar-row">
+                <div class="bar-row__lab">{{ d.nombre }}</div>
+                <div class="bar-track"><span class="bar-fill" style="width:{{ d.pct }}%;background:{{ d.color }}"></span></div>
+                <div class="bar-row__val">{{ d.cnt }}</div>
+              </div>
+              {% endfor %}
+            </div>
+            {% else %}
+            <div class="no-data">Sin observaciones registradas.</div>
+            {% endif %}
+          </div>
+        </div>
       </div>
-      <div class="kpi-label">FOB Total Despachado</div>
-    </div>
-    <div class="kpi-card b-f8">
-      <div class="kpi-value" style="font-size:22pt; color:#f87171;">{{ f8.anuladas }}</div>
-      <div class="kpi-label">Anuladas en el Período</div>
+
+      <!-- B4: Por año modelo -->
+      {% if f3.por_anio %}
+      <div class="block-title" style="margin-top:16px;"><span class="dot"></span> Por año modelo — segmentado por modelo</div>
+      <div class="grid-2">
+        {% for y in f3.por_anio[:2] %}
+        <div class="panel">
+          <div class="row-spread" style="margin-bottom:5px;">
+            <div class="block-title" style="margin:0;color:var(--ink);">Año {{ y.anio }}</div>
+            <div class="num" style="font-size:17px;color:var(--ink);">{{ y.total }} <span style="font-size:10px;color:var(--muted);font-weight:600;">unid.</span></div>
+          </div>
+          <div class="donut-wrap">
+            <div class="donut" style="background:{{ y.conic }};">
+              <div class="donut__center"><b class="num">{{ y.total }}</b><span>{{ y.anio }}</span></div>
+            </div>
+            <div class="legend">
+              {% for m in y.por_modelo %}
+              <div class="legend__item">
+                <span class="legend__sw" style="background:{{ m.color }}"></span>
+                <span class="legend__lab">{{ m.model }}</span>
+                <span class="legend__val num">{{ m.cnt }}</span>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+        {% if f3.por_anio|length == 1 %}
+        <div></div>
+        {% endif %}
+      </div>
+      {% else %}
+      <div class="no-data">Sin datos por año modelo.</div>
+      {% endif %}
+
     </div>
   </div>
 
-  <table class="data-table">
-    <thead>
-      <tr>
-        <th>Concepto</th>
-        <th class="num">Remisiones</th>
-        <th class="num">FOB</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for c in f8.por_concepto %}
-      <tr {% if c.count == 0 %}style="opacity:0.45;"{% endif %}>
-        <td style="text-transform:capitalize;">
-          {{ c.tipo.replace('_', ' ').title() }}
-        </td>
-        <td class="num">{{ c.count }}</td>
-        <td class="num">USD {{ "{:,.0f}".format(c.fob) }}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  {% endif %}
-</div>
+  <div class="foot">
+    <div class="foot__brand"><span class="tri"></span> UM Colombia</div>
+    <div>Informe Gerencial · Red de Servicio · <b>{{ meta.periodo_label }}</b></div>
+    <div class="foot__page">Página <b>2</b> / 4</div>
+  </div>
+</section>
+
+<!-- ============================================================
+     PÁGINA 3 — REPUESTOS
+     ============================================================ -->
+<section class="sheet page-break" data-page="3">
+  <div class="sheet__body">
+
+    <div class="section">
+      <div class="section__head">
+        <span class="section__num">04</span>
+        <span class="section__title">Repuestos</span>
+        <span class="section__meta">materialización, rotación y remisiones</span>
+      </div>
+
+      <!-- C1 + C2: Materializado + Rotación -->
+      <div class="grid-2-3">
+
+        <!-- C1: Materialización -->
+        <div>
+          <div class="block-title"><span class="dot"></span> Valor pedido vs. materializado</div>
+          <div class="panel">
+            {% if f4.sin_datos %}
+            <div class="no-data">Sin datos de pedidos de repuestos.</div>
+            {% else %}
+            <div class="prog-head">
+              <div>
+                <div class="big num">USD {{ "{:,.0f}".format(f4.fob_materializado) }} <small>materializado</small></div>
+                <div class="block-sub" style="margin-top:2px;">de USD {{ "{:,.0f}".format(f4.fob_pedido) }} pedido</div>
+              </div>
+              <div style="text-align:right;">
+                <div class="num" style="font-size:28px;font-weight:800;{% if f4.mat_status == 'ok' %}color:#2F9E44{% elif f4.mat_status == 'warn' %}color:#E8A200{% else %}color:#E03131{% endif %};">{{ f4.pct_materializado }}%</div>
+                <div class="chip" style="{% if f4.mat_status == 'ok' %}background:#E9F6ED;color:#2F9E44{% elif f4.mat_status == 'warn' %}background:#FCF3DD;color:#B97f00{% else %}background:#FBEAEA;color:#E03131{% endif %};">
+                  {% if f4.mat_status == 'ok' %}OK{% elif f4.mat_status == 'warn' %}Atención{% else %}Crítico{% endif %}
+                </div>
+              </div>
+            </div>
+            <div class="prog-track">
+              <div class="prog-seg" style="width:{{ f4.pct_aqui_pbar }}%;background:#2F9E44;">Aquí · {{ "{:,.0f}".format(f4.fob_aqui) }}</div>
+              <div class="prog-seg" style="width:{{ f4.pct_camino_pbar }}%;background:#1C7ED6;">{{ "{:,.0f}".format(f4.fob_camino) }}</div>
+              {% set pendiente = f4.fob_pedido - f4.fob_materializado %}
+              <div class="prog-track__rest">Pendiente · USD {{ "{:,.0f}".format([pendiente, 0]|max) }}</div>
+            </div>
+            <div class="prog-foot">
+              <div class="prog-foot__item"><span class="sw" style="background:#2F9E44"></span>Aquí (stock) <b class="num">USD {{ "{:,.0f}".format(f4.fob_aqui) }}</b></div>
+              <div class="prog-foot__item"><span class="sw" style="background:#1C7ED6"></span>En camino <b class="num">USD {{ "{:,.0f}".format(f4.fob_camino) }}</b></div>
+            </div>
+            {% endif %}
+          </div>
+        </div>
+
+        <!-- C2: Rotación -->
+        <div>
+          <div class="block-title"><span class="dot"></span> Referencias por rotación</div>
+          <div class="panel">
+            {% if f5.sin_datos %}
+            <div class="no-data">Sin datos de rotación.</div>
+            {% else %}
+            <div class="donut-wrap">
+              <div class="donut" style="width:110px;height:110px;background:{{ f5.conic }};">
+                <div class="donut__center"><b class="num" style="font-size:18px;">{{ f5.total_refs }}</b><span>refs</span></div>
+              </div>
+              <div class="legend">
+                {% for c in f5.clases %}
+                <div class="legend__item">
+                  <span class="legend__sw" style="background:{% if c.clase == 'alta' %}#2F9E44{% elif c.clase == 'media' %}#E8A200{% else %}#E03131{% endif %}"></span>
+                  <span class="legend__lab">{{ c.clase|capitalize }}</span>
+                  <span class="legend__val num">{{ c.refs }}</span>
+                  <span class="legend__pct">{{ c.pct }}%</span>
+                </div>
+                {% endfor %}
+                {% if f5.sin_clasificar_refs > 0 %}
+                <div class="legend__item">
+                  <span class="legend__sw" style="background:#AEB6BF"></span>
+                  <span class="legend__lab">Sin clasificar</span>
+                  <span class="legend__val num">{{ f5.sin_clasificar_refs }}</span>
+                </div>
+                {% endif %}
+              </div>
+            </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- C3, C4, C5 KPIs -->
+      <div class="grid-3" style="margin-top:14px;">
+        <div class="kpi s-info" style="min-height:80px;">
+          <div class="kpi__label">Referencias únicas solicitadas</div>
+          <div class="kpi__val num" style="font-size:24px;">{{ f2.refs_unicas_sp }}</div>
+        </div>
+        <div class="kpi s-{{ bo_status }}" style="min-height:80px;">
+          {% if bo_status == 'crit' %}
+          <span class="kpi__tag tag-crit">Crítico</span>
+          {% elif bo_status == 'warn' %}
+          <span class="kpi__tag tag-warn">Atención</span>
+          {% endif %}
+          <div class="kpi__label">Referencias únicas en backorder</div>
+          <div class="kpi__val num" style="font-size:24px;">{{ f6.refs_afectadas }}</div>
+        </div>
+        {% if f7.cancelar_pendiente > 0 %}
+        <div class="kpi s-risk" style="min-height:80px;">
+          <span class="kpi__tag tag-risk">Riesgo</span>
+          <div class="kpi__label">Refs a cancelar</div>
+          <div class="kpi__val num" style="font-size:24px;">{{ f7.cancelar_pendiente }} <span class="u">· USD {{ "{:,.0f}".format(f7.fob_cancelar_pendiente) }}</span></div>
+        </div>
+        {% else %}
+        <div class="kpi s-ok" style="min-height:80px;">
+          <div class="kpi__label">Refs a cancelar</div>
+          <div class="kpi__val num" style="font-size:24px;">0</div>
+        </div>
+        {% endif %}
+      </div>
+
+      <!-- C6: Remisiones -->
+      <div class="block-title" style="margin-top:16px;"><span class="dot"></span> Remisionado por razón</div>
+      {% if f8.sin_datos %}
+      <div class="no-data">Sin remisiones en el período.</div>
+      {% else %}
+      <div class="grid-2-3">
+        <div class="panel">
+          <div class="stack">
+            {% for c in f8.por_concepto %}
+            {% if c.count > 0 %}
+            <div class="stack__seg" style="width:{{ c.pct }}%;background:{{ c.color }};">
+              {% if c.pct >= 12 %}{{ c.tipo[:3] }} · {{ c.count }}{% endif %}
+            </div>
+            {% endif %}
+            {% endfor %}
+          </div>
+          <div class="prog-foot" style="margin-top:10px;gap:10px 14px;">
+            {% for c in f8.por_concepto %}
+            <div class="prog-foot__item">
+              <span class="sw" style="background:{{ c.color }}"></span>
+              {% if c.tipo == 'VEHICULO_PROPIO' %}Vehículo propio{% elif c.tipo == 'GARANTIA' %}Garantía{% elif c.tipo == 'CORTESIA' %}Cortesía{% else %}Pedido{% endif %}
+              <b class="num">{{ c.count }}</b>
+            </div>
+            {% endfor %}
+          </div>
+          <p class="block-sub" style="margin-top:8px;">Total remisionado: <b style="color:var(--ink);">{{ f8.total }}</b> unidades</p>
+        </div>
+        <div class="panel" style="padding:10px 14px;">
+          <table class="tbl">
+            <thead><tr><th>Tipo</th><th class="r">Cant.</th></tr></thead>
+            <tbody>
+              {% for c in f8.por_concepto %}
+              <tr>
+                <td>
+                  <span class="chip" style="background:{% if c.tipo == 'PEDIDO' %}#E7F1FB;color:#1C7ED6{% elif c.tipo == 'GARANTIA' %}#EEE9FC;color:#6C44E0{% elif c.tipo == 'CORTESIA' %}#E9F6ED;color:#2F9E44{% else %}#FCF3DD;color:#B97f00{% endif %};">
+                    <span class="d" style="background:{{ c.color }}"></span>
+                    {% if c.tipo == 'VEHICULO_PROPIO' %}V. propio{% elif c.tipo == 'GARANTIA' %}Garantía{% elif c.tipo == 'CORTESIA' %}Cortesía{% else %}Pedido{% endif %}
+                  </span>
+                </td>
+                <td class="r num">{{ c.count }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {% endif %}
+
+    </div>
+  </div>
+
+  <div class="foot">
+    <div class="foot__brand"><span class="tri"></span> UM Colombia</div>
+    <div>Informe Gerencial · Red de Servicio · <b>{{ meta.periodo_label }}</b></div>
+    <div class="foot__page">Página <b>3</b> / 4</div>
+  </div>
+</section>
+
+<!-- ============================================================
+     PÁGINA 4 — MAESTRO DE PARTES + CIERRE
+     ============================================================ -->
+<section class="sheet page-break" data-page="4">
+  <div class="sheet__body">
+
+    <div class="section">
+      <div class="section__head">
+        <span class="section__num">05</span>
+        <span class="section__title">Repuestos · Maestro de Partes</span>
+        <span class="section__meta">cobertura del catálogo de precios</span>
+      </div>
+
+      <div class="block-title"><span class="dot"></span> Maestro de Partes — referencias creadas vs. con precio público definido</div>
+
+      {% if maestro.sin_datos %}
+      <div class="no-data">Sin referencias en el maestro de partes.</div>
+      {% else %}
+      <div class="panel">
+        <div class="prog-head">
+          <div>
+            <div class="big num">{{ "{:,}".format(maestro.con_precio) }} <small>con precio público</small></div>
+            <div class="block-sub" style="margin-top:2px;">de {{ "{:,}".format(maestro.total_refs) }} referencias creadas</div>
+          </div>
+          <div style="text-align:right;">
+            <div class="num" style="font-size:32px;font-weight:800;{% if maestro.precio_status == 'ok' %}color:#2F9E44{% elif maestro.precio_status == 'warn' %}color:#E8A200{% else %}color:#E03131{% endif %};">{{ maestro.pct_con_precio }}%</div>
+            <div class="chip" style="{% if maestro.precio_status == 'ok' %}background:#E9F6ED;color:#2F9E44{% elif maestro.precio_status == 'warn' %}background:#FCF3DD;color:#B97f00{% else %}background:#FBEAEA;color:#E03131{% endif %};">
+              {% if maestro.precio_status == 'ok' %}OK{% elif maestro.precio_status == 'warn' %}Atención{% else %}Crítico{% endif %}
+            </div>
+          </div>
+        </div>
+        <div class="prog-track" style="height:32px;">
+          <div class="prog-seg" style="width:{{ maestro.pct_con_precio }}%;background:#2F9E44;">Definidas · {{ "{:,}".format(maestro.con_precio) }}</div>
+          <div class="prog-track__rest">Sin precio · {{ "{:,}".format(maestro.sin_precio) }}</div>
+        </div>
+        <div class="prog-foot">
+          <div class="prog-foot__item"><span class="sw" style="background:#2F9E44"></span>Con precio público <b class="num">{{ "{:,}".format(maestro.con_precio) }}</b></div>
+          <div class="prog-foot__item"><span class="sw" style="background:#F5F6F9;border:1px solid #E5E8EC"></span>Pendiente de precio <b class="num">{{ "{:,}".format(maestro.sin_precio) }}</b></div>
+        </div>
+      </div>
+
+      <div class="grid-3" style="margin-top:14px;">
+        <div class="kpi s-ink" style="min-height:80px;">
+          <div class="kpi__label">Referencias creadas</div>
+          <div class="kpi__val num" style="font-size:24px;">{{ "{:,}".format(maestro.total_refs) }}</div>
+        </div>
+        <div class="kpi s-{{ maestro.precio_status }}" style="min-height:80px;">
+          {% if maestro.precio_status == 'ok' %}
+          <span class="kpi__tag tag-ok">OK</span>
+          {% elif maestro.precio_status == 'warn' %}
+          <span class="kpi__tag tag-warn">Atención</span>
+          {% else %}
+          <span class="kpi__tag tag-crit">Crítico</span>
+          {% endif %}
+          <div class="kpi__label">Con precio definido</div>
+          <div class="kpi__val num" style="font-size:24px;">{{ "{:,}".format(maestro.con_precio) }}</div>
+        </div>
+        {% if maestro.sin_precio > 0 %}
+        <div class="kpi s-warn" style="min-height:80px;">
+          <span class="kpi__tag tag-warn">Atención</span>
+          <div class="kpi__label">Sin precio público</div>
+          <div class="kpi__val num" style="font-size:24px;">{{ "{:,}".format(maestro.sin_precio) }}</div>
+        </div>
+        {% else %}
+        <div class="kpi s-ok" style="min-height:80px;">
+          <span class="kpi__tag tag-ok">OK</span>
+          <div class="kpi__label">Sin precio público</div>
+          <div class="kpi__val num" style="font-size:24px;">0</div>
+        </div>
+        {% endif %}
+      </div>
+      {% endif %}
+
+    </div>
+
+  </div>
+
+  <div class="foot">
+    <div class="foot__brand"><span class="tri"></span> UM Colombia</div>
+    <div>Informe Gerencial · Red de Servicio · <b>{{ meta.periodo_label }}</b>{% if trm %} · TRM {{ "{:,.0f}".format(trm) }}{% endif %}</div>
+    <div class="foot__page">Página <b>4</b> / 4</div>
+  </div>
+</section>
 
 </body>
 </html>

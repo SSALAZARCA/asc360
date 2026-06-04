@@ -31,7 +31,17 @@ _MONTH_NAMES = {
 COL_5 = timezone(timedelta(hours=-5))
 
 # ---------------------------------------------------------------------------
-# Helper: normalize float
+# Palette
+# ---------------------------------------------------------------------------
+
+_MODEL_COLORS = [
+    '#E8590C', '#3B47B8', '#0CA678', '#6C44E0',
+    '#E8A200', '#1C7ED6', '#E03131', '#748399',
+    '#0B7285', '#5C940D', '#862E9C', '#C92A2A',
+]
+
+# ---------------------------------------------------------------------------
+# Helper: normalize float / int
 # ---------------------------------------------------------------------------
 
 def _f(val) -> float:
@@ -51,6 +61,52 @@ def _i(val) -> int:
         return int(val)
     except (TypeError, ValueError):
         return 0
+
+
+# ---------------------------------------------------------------------------
+# Presentation helpers (pure functions — tested in test_report_helpers.py)
+# ---------------------------------------------------------------------------
+
+def _pct(num, den, decimals: int = 0):
+    """Safe percentage. Returns 0 when den == 0."""
+    if not den:
+        return 0
+    v = num / den * 100
+    return round(v, decimals) if decimals else round(v)
+
+
+def _bar(value, max_val) -> int:
+    """Bar width 0-100. Returns 0 when max_val == 0."""
+    if not max_val:
+        return 0
+    return int(min(100, max(0, round(value / max_val * 100))))
+
+
+def _heat_style(value, max_val) -> str:
+    """Orange heatmap CSS style for matrix cells."""
+    if not value or not max_val:
+        return 'background:#F5F6F9;color:#AEB6BF;'
+    i = value / max_val
+    if i >= 0.7:
+        return 'background:#F7C3A2;color:#8A3206;'
+    if i >= 0.4:
+        return 'background:#FBD9C4;color:#9C3908;'
+    if i >= 0.2:
+        return 'background:#FCE7D6;color:#B14709;'
+    return 'background:#FDF1E9;color:#C9490A;'
+
+
+def _make_conic(slices: list) -> str:
+    """Build a CSS conic-gradient string from [(color, pct_float), ...]."""
+    if not slices:
+        return 'conic-gradient(#AEB6BF 0% 100%)'
+    parts = []
+    pos = 0.0
+    for color, pct in slices:
+        end = pos + pct
+        parts.append(f"{color} {pos:.1f}% {end:.1f}%")
+        pos = end
+    return f"conic-gradient({', '.join(parts)})"
 
 
 # ---------------------------------------------------------------------------
@@ -99,18 +155,124 @@ async def _query_f2(desde: date, hasta: date, db: AsyncSession) -> dict:
                 JOIN shipment_orders so2 ON so2.id = spl.shipment_order_id
                 WHERE so2.computed_status NOT IN ('completado','cancelado')
                   AND so2.is_spare_part = true
-            ), 0) AS repuestos_fob
+            ), 0) AS repuestos_fob,
+            -- 12 pipeline stage FILTERs (6 motos + 6 repuestos)
+            COUNT(*) FILTER (
+                WHERE computed_status NOT IN ('completado','cancelado')
+                  AND is_spare_part = false
+                  AND computed_status = 'en_preparacion'
+            ) AS m_prep,
+            COUNT(*) FILTER (
+                WHERE computed_status NOT IN ('completado','cancelado')
+                  AND is_spare_part = false
+                  AND computed_status = 'listo_fabrica'
+            ) AS m_listo,
+            COUNT(*) FILTER (
+                WHERE computed_status NOT IN ('completado','cancelado')
+                  AND is_spare_part = false
+                  AND computed_status = 'en_origen'
+            ) AS m_origen,
+            COUNT(*) FILTER (
+                WHERE computed_status NOT IN ('completado','cancelado')
+                  AND is_spare_part = false
+                  AND computed_status IN ('en_transito','en_transito_parcial')
+            ) AS m_transito,
+            COUNT(*) FILTER (
+                WHERE computed_status NOT IN ('completado','cancelado')
+                  AND is_spare_part = false
+                  AND computed_status = 'en_destino'
+            ) AS m_destino,
+            COUNT(*) FILTER (
+                WHERE computed_status NOT IN ('completado','cancelado')
+                  AND is_spare_part = false
+                  AND computed_status IN ('nacionalizado','completado_parcial')
+            ) AS m_nac,
+            COUNT(*) FILTER (
+                WHERE computed_status NOT IN ('completado','cancelado')
+                  AND is_spare_part = true
+                  AND computed_status = 'en_preparacion'
+            ) AS r_prep,
+            COUNT(*) FILTER (
+                WHERE computed_status NOT IN ('completado','cancelado')
+                  AND is_spare_part = true
+                  AND computed_status = 'listo_fabrica'
+            ) AS r_listo,
+            COUNT(*) FILTER (
+                WHERE computed_status NOT IN ('completado','cancelado')
+                  AND is_spare_part = true
+                  AND computed_status = 'en_origen'
+            ) AS r_origen,
+            COUNT(*) FILTER (
+                WHERE computed_status NOT IN ('completado','cancelado')
+                  AND is_spare_part = true
+                  AND computed_status IN ('en_transito','en_transito_parcial')
+            ) AS r_transito,
+            COUNT(*) FILTER (
+                WHERE computed_status NOT IN ('completado','cancelado')
+                  AND is_spare_part = true
+                  AND computed_status = 'en_destino'
+            ) AS r_destino,
+            COUNT(*) FILTER (
+                WHERE computed_status NOT IN ('completado','cancelado')
+                  AND is_spare_part = true
+                  AND (computed_status IN ('nacionalizado','completado_parcial')
+                       OR nacionalizacion_status IS NOT NULL)
+            ) AS r_nac
         FROM shipment_orders
     """)
 
+    # COUNT DISTINCT normalized part_number on active SP orders
+    refs_sql = text("""
+        SELECT COUNT(DISTINCT UPPER(TRIM(REPLACE(spi.part_number, ' ', '')))) AS refs_unicas
+        FROM spare_part_items spi
+        JOIN spare_part_lots spl ON spl.id = spi.lot_id
+        JOIN shipment_orders so ON so.id = spl.shipment_order_id
+        WHERE so.computed_status NOT IN ('completado', 'cancelado')
+          AND so.is_spare_part = true
+          AND spi.status != 'CANCELLED'
+    """)
+
     row = (await db.execute(sql)).fetchone()
+    refs_row = (await db.execute(refs_sql)).fetchone()
+
+    refs_unicas_sp = _i(refs_row.refs_unicas) if refs_row else 0
+
     if row is None or (_i(row.activos_total) == 0):
-        return {
+        empty = {
             'sin_datos': True,
             'activos_total': 0, 'motos_activos': 0, 'repuestos_activos': 0,
             'motos_nacionalizado': 0, 'motos_en_transito': 0, 'motos_en_origen': 0,
             'motos_unidades': 0, 'repuestos_fob': 0.0,
+            'refs_unicas_sp': refs_unicas_sp,
         }
+        # Build zero pipelines
+        empty['pipeline_motos'] = _build_pipeline([0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0], 0, 'Motos', 0)
+        empty['pipeline_repuestos'] = _build_pipeline([0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0], 0, 'Repuestos', 0)
+        return empty
+
+    m_vals = [
+        _i(row.m_prep), _i(row.m_listo), _i(row.m_origen),
+        _i(row.m_transito), _i(row.m_destino), _i(row.m_nac),
+    ]
+    r_vals = [
+        _i(row.r_prep), _i(row.r_listo), _i(row.r_origen),
+        _i(row.r_transito), _i(row.r_destino), _i(row.r_nac),
+    ]
+    all_vals = m_vals + r_vals
+    global_max = max(all_vals) if any(all_vals) else 1
+
+    def build_stages(vals):
+        return [{'n': v, 'pct': _bar(v, global_max)} for v in vals]
+
+    pipeline_motos = {
+        'total': _i(row.motos_activos),
+        'stages': build_stages(m_vals),
+    }
+    pipeline_repuestos = {
+        'total': _i(row.repuestos_activos),
+        'stages': build_stages(r_vals),
+    }
+
     return {
         'sin_datos': False,
         'activos_total': _i(row.activos_total),
@@ -121,6 +283,17 @@ async def _query_f2(desde: date, hasta: date, db: AsyncSession) -> dict:
         'motos_en_origen': _i(row.motos_en_origen),
         'motos_unidades': _i(row.motos_unidades),
         'repuestos_fob': _f(row.repuestos_fob),
+        'refs_unicas_sp': refs_unicas_sp,
+        'pipeline_motos': pipeline_motos,
+        'pipeline_repuestos': pipeline_repuestos,
+    }
+
+
+def _build_pipeline(m_vals, r_vals, global_max, label, total):
+    """Helper to build a zero pipeline dict."""
+    return {
+        'total': total,
+        'stages': [{'n': 0, 'pct': 0} for _ in range(6)],
     }
 
 
@@ -142,19 +315,7 @@ async def _query_f3(db: AsyncSession) -> dict:
         FROM shipment_moto_units
     """)
 
-    modelo_sql = text("""
-        SELECT
-            model,
-            COUNT(*) FILTER (WHERE facturado = false
-                             AND separada_nacionalizacion = false) AS disponibles,
-            COUNT(*) AS total
-        FROM shipment_moto_units
-        GROUP BY model
-        ORDER BY model
-    """)
-
     snap_row = (await db.execute(snap_sql)).fetchone()
-    modelo_rows = (await db.execute(modelo_sql)).all()
 
     total = _i(snap_row.total) if snap_row else 0
     if total == 0:
@@ -163,24 +324,193 @@ async def _query_f3(db: AsyncSession) -> dict:
             'total': 0, 'disponibles': 0, 'separadas': 0,
             'pend_empadronamiento': 0, 'con_obs': 0, 'con_runt': 0,
             'facturadas_historico': 0,
-            'por_modelo': [],
+            'matriz': None,
+            'por_distribuidor': [],
+            'por_observacion': [],
+            'por_anio': [],
         }
 
-    por_modelo = [
-        {'model': r.model or 'Sin modelo', 'disponibles': _i(r.disponibles), 'total': _i(r.total)}
-        for r in modelo_rows
-    ]
+    # --- B1: Matrix (disponibles para nacionalizar) ---
+    matriz_sql = text("""
+        SELECT
+            COALESCE(mu.model, 'Sin modelo') AS model,
+            COALESCE(ml.name, 'Sin ubicación') AS ubicacion,
+            COUNT(*) AS cnt
+        FROM shipment_moto_units mu
+        LEFT JOIN moto_locations ml ON ml.id = mu.location_id
+        WHERE mu.facturado = false AND mu.separada_nacionalizacion = false
+        GROUP BY 1, 2
+        ORDER BY 1, 2
+    """)
+
+    # --- B2: Facturadas por distribuidor ---
+    dist_sql = text("""
+        SELECT
+            COALESCE(empadronamiento_fisico_distribuidor_nombre, 'Sin asignar') AS dist,
+            COUNT(*) AS cnt
+        FROM shipment_moto_units
+        WHERE facturado = true
+        GROUP BY 1
+        ORDER BY 2 DESC
+        LIMIT 8
+    """)
+
+    # --- B3: Por observación ---
+    obs_sql = text("""
+        SELECT mo.name AS obs_name, COUNT(*) AS cnt
+        FROM shipment_moto_units mu
+        JOIN moto_observations mo ON mo.id = mu.observation_id
+        GROUP BY mo.name
+        ORDER BY cnt DESC
+    """)
+
+    # --- B4: Por año modelo ---
+    anio_sql = text("""
+        SELECT
+            COALESCE(model_year::text, 'Sin año') AS anio,
+            COALESCE(model, 'Sin modelo') AS model,
+            COUNT(*) AS cnt
+        FROM shipment_moto_units
+        GROUP BY 1, 2
+        ORDER BY 1 ASC, 3 DESC
+    """)
+
+    matriz_rows = (await db.execute(matriz_sql)).all()
+    dist_rows = (await db.execute(dist_sql)).all()
+    obs_rows = (await db.execute(obs_sql)).all()
+    anio_rows = (await db.execute(anio_sql)).all()
+
+    # Build matriz
+    matriz = None
+    if matriz_rows:
+        modelos_set = []
+        ubicaciones_set = []
+        for r in matriz_rows:
+            if r.model not in modelos_set:
+                modelos_set.append(r.model)
+            if r.ubicacion not in ubicaciones_set:
+                ubicaciones_set.append(r.ubicacion)
+
+        # Fill grid
+        cell_data = {}  # (model, ubicacion) -> count
+        for r in matriz_rows:
+            cell_data[(r.model, r.ubicacion)] = _i(r.cnt)
+
+        rows = []
+        for model in modelos_set:
+            row_max = max(
+                (cell_data.get((model, ub), 0) for ub in ubicaciones_set),
+                default=0,
+            )
+            celdas = {}
+            row_total = 0
+            for ub in ubicaciones_set:
+                n = cell_data.get((model, ub), 0)
+                celdas[ub] = {'n': n, 'style': _heat_style(n, row_max)}
+                row_total += n
+            rows.append({'model': model, 'celdas': celdas, 'total': row_total})
+
+        totales_ubicacion = {ub: sum(cell_data.get((m, ub), 0) for m in modelos_set) for ub in ubicaciones_set}
+        total_general = sum(totales_ubicacion.values())
+
+        matriz = {
+            'modelos': modelos_set,
+            'ubicaciones': ubicaciones_set,
+            'rows': rows,
+            'totales_ubicacion': totales_ubicacion,
+            'total_general': total_general,
+            'sin_datos': False,
+        }
+
+    # Build por_distribuidor
+    por_distribuidor = []
+    if dist_rows:
+        max_dist = max((_i(r.cnt) for r in dist_rows), default=1)
+        total_facturadas = sum(_i(r.cnt) for r in dist_rows)
+        for r in dist_rows:
+            cnt = _i(r.cnt)
+            por_distribuidor.append({
+                'nombre': r.dist,
+                'cnt': cnt,
+                'pct': _bar(cnt, max_dist),
+                'total_pct': _pct(cnt, total_facturadas),
+            })
+
+    # Build por_observacion
+    por_observacion = []
+    if obs_rows:
+        max_obs = max((_i(r.cnt) for r in obs_rows), default=1)
+        total_obs = sum(_i(r.cnt) for r in obs_rows)
+        for idx, r in enumerate(obs_rows):
+            cnt = _i(r.cnt)
+            por_observacion.append({
+                'nombre': r.obs_name,
+                'cnt': cnt,
+                'pct': _bar(cnt, max_obs),
+                'total_pct': _pct(cnt, total_obs),
+                'color': _MODEL_COLORS[idx % len(_MODEL_COLORS)],
+            })
+
+    # Build por_anio
+    por_anio = []
+    if anio_rows:
+        # Group by year
+        anio_totals = {}  # anio -> total
+        anio_modelos = {}  # anio -> [(model, cnt)]
+        for r in anio_rows:
+            anio = r.anio
+            if anio not in anio_totals:
+                anio_totals[anio] = 0
+                anio_modelos[anio] = []
+            cnt = _i(r.cnt)
+            anio_totals[anio] += cnt
+            anio_modelos[anio].append((r.model, cnt))
+
+        # Sort: non-null years ascending, then 'Sin año'
+        real_years = sorted(k for k in anio_totals if k != 'Sin año')
+        if 'Sin año' in anio_totals:
+            real_years.append('Sin año')
+        # Keep only top 2 by total (non-null first)
+        sorted_by_total = sorted(real_years, key=lambda y: anio_totals.get(y, 0), reverse=True)
+        top2 = sorted_by_total[:2]
+        # Re-sort top2 ascending
+        top2_non_null = sorted(y for y in top2 if y != 'Sin año')
+        if 'Sin año' in top2:
+            top2_non_null.append('Sin año')
+        top2 = top2_non_null
+
+        for anio in top2:
+            modelos_list = anio_modelos[anio]
+            total_anio = anio_totals[anio]
+            # Build conic slices
+            slices = []
+            por_modelo = []
+            for idx, (model, cnt) in enumerate(modelos_list):
+                color = _MODEL_COLORS[idx % len(_MODEL_COLORS)]
+                pct_val = _pct(cnt, total_anio, decimals=2) if total_anio else 0
+                slices.append((color, pct_val))
+                por_modelo.append({'model': model, 'cnt': cnt, 'color': color, 'pct': round(pct_val)})
+            conic = _make_conic(slices)
+            por_anio.append({
+                'anio': anio,
+                'total': total_anio,
+                'conic': conic,
+                'por_modelo': por_modelo,
+            })
 
     return {
         'sin_datos': False,
-        'total': total,
+        'total': _i(snap_row.total),
         'disponibles': _i(snap_row.disponibles),
         'separadas': _i(snap_row.separadas),
         'pend_empadronamiento': _i(snap_row.pend_empadronamiento),
         'con_obs': _i(snap_row.con_obs),
         'con_runt': _i(snap_row.con_runt),
         'facturadas_historico': _i(snap_row.facturadas_historico),
-        'por_modelo': por_modelo,
+        'matriz': matriz,
+        'por_distribuidor': por_distribuidor,
+        'por_observacion': por_observacion,
+        'por_anio': por_anio,
     }
 
 
@@ -246,25 +576,81 @@ async def _query_f4(db: AsyncSession) -> dict:
         WHERE spa.qty_available > 0
     """)
 
+    # FOB pedido: total ordered value (active non-cancelled SP orders)
+    fob_pedido_sql = text("""
+        SELECT COALESCE(SUM(spi.qty_ordered * COALESCE(spi.unit_price, spi.fob_pi, 0)), 0) AS fob_pedido
+        FROM spare_part_items spi
+        JOIN spare_part_lots spl ON spl.id = spi.lot_id
+        JOIN shipment_orders so ON so.id = spl.shipment_order_id
+        WHERE so.computed_status NOT IN ('completado', 'cancelado')
+          AND so.is_spare_part = true
+          AND spi.status != 'CANCELLED'
+    """)
+
+    # FOB camino: received but not physically counted, packing list received
+    fob_camino_sql = text("""
+        SELECT COALESCE(SUM(spi.qty_received * COALESCE(spi.unit_price, spi.fob_pi, 0)), 0) AS fob_camino
+        FROM spare_part_items spi
+        JOIN spare_part_lots spl ON spl.id = spi.lot_id
+        JOIN shipment_orders so ON so.id = spl.shipment_order_id
+        WHERE spi.qty_physical IS NULL
+          AND spl.packing_list_received = true
+          AND so.computed_status NOT IN ('completado', 'cancelado')
+          AND so.is_spare_part = true
+          AND spi.status != 'CANCELLED'
+    """)
+
     cov_row = (await db.execute(coverage_sql)).fetchone()
     fob_row = (await db.execute(fob_sql)).fetchone()
+    fob_pedido_row = (await db.execute(fob_pedido_sql)).fetchone()
+    fob_camino_row = (await db.execute(fob_camino_sql)).fetchone()
 
     total = _i(cov_row.total) if cov_row else 0
-    if total == 0:
+    fob_stock = _f(fob_row.fob_stock) if fob_row else 0.0
+    fob_pedido = _f(fob_pedido_row.fob_pedido) if fob_pedido_row else 0.0
+    fob_camino = _f(fob_camino_row.fob_camino) if fob_camino_row else 0.0
+
+    fob_aqui = fob_stock
+    fob_materializado = fob_aqui + fob_camino
+    pct_materializado = _pct(fob_materializado, fob_pedido)
+    pct_aqui_pbar = _pct(fob_aqui, fob_pedido)
+    pct_camino_pbar = _pct(fob_camino, fob_pedido)
+
+    # Cap: if sum > 100, scale proportionally
+    if pct_aqui_pbar + pct_camino_pbar > 100:
+        total_raw = pct_aqui_pbar + pct_camino_pbar
+        pct_aqui_pbar = round(pct_aqui_pbar / total_raw * 100)
+        pct_camino_pbar = 100 - pct_aqui_pbar
+
+    mat_status = 'ok' if pct_materializado >= 80 else ('warn' if pct_materializado >= 50 else 'crit')
+
+    if total == 0 and fob_pedido == 0:
         return {
             'sin_datos': True,
             'total': 0, 'aqui': 0, 'en_camino': 0, 'pedido': 0, 'sin_cobertura': 0,
             'fob_stock': 0.0,
+            'fob_pedido': 0.0, 'fob_camino': 0.0,
+            'fob_aqui': 0.0, 'fob_materializado': 0.0,
+            'pct_materializado': 0, 'pct_aqui_pbar': 0, 'pct_camino_pbar': 0,
+            'mat_status': 'crit',
         }
 
     return {
         'sin_datos': False,
         'total': total,
-        'aqui': _i(cov_row.aqui),
-        'en_camino': _i(cov_row.en_camino),
-        'pedido': _i(cov_row.pedido),
-        'sin_cobertura': _i(cov_row.sin_cobertura),
-        'fob_stock': _f(fob_row.fob_stock) if fob_row else 0.0,
+        'aqui': _i(cov_row.aqui) if cov_row else 0,
+        'en_camino': _i(cov_row.en_camino) if cov_row else 0,
+        'pedido': _i(cov_row.pedido) if cov_row else 0,
+        'sin_cobertura': _i(cov_row.sin_cobertura) if cov_row else 0,
+        'fob_stock': fob_stock,
+        'fob_pedido': fob_pedido,
+        'fob_camino': fob_camino,
+        'fob_aqui': fob_aqui,
+        'fob_materializado': fob_materializado,
+        'pct_materializado': pct_materializado,
+        'pct_aqui_pbar': pct_aqui_pbar,
+        'pct_camino_pbar': pct_camino_pbar,
+        'mat_status': mat_status,
     }
 
 
@@ -313,6 +699,8 @@ async def _query_f5(db: AsyncSession) -> dict:
             'sin_clasificar_refs': 0,
             'sin_clasificar_fob': 0.0,
             'total_riesgo': 0.0,
+            'total_refs': 0,
+            'conic': _make_conic([]),
         }
 
     risk_by_class = {r.rotation_class: _f(r.fob_riesgo) for r in risk_rows}
@@ -340,12 +728,28 @@ async def _query_f5(db: AsyncSession) -> dict:
     total_riesgo = sum(c['fob_riesgo'] for c in clases if c['clase'] in ('media', 'baja'))
 
     has_data = any(c['refs'] > 0 for c in clases) or sin_clasificar_refs > 0
+
+    # Compute pct for each class + build conic
+    total_rot_refs = sum(c['refs'] for c in clases) + sin_clasificar_refs
+    rot_colors = {'alta': '#2F9E44', 'media': '#E8A200', 'baja': '#E03131'}
+
+    for c in clases:
+        c['pct'] = _pct(c['refs'], total_rot_refs, 1)
+
+    slices = [(rot_colors.get(c['clase'], '#AEB6BF'), _pct(c['refs'], total_rot_refs, 2)) for c in clases]
+    if sin_clasificar_refs > 0:
+        slices.append(('#AEB6BF', _pct(sin_clasificar_refs, total_rot_refs, 2)))
+
+    conic = _make_conic(slices)
+
     return {
         'sin_datos': not has_data,
         'clases': clases,
         'sin_clasificar_refs': sin_clasificar_refs,
         'sin_clasificar_fob': sin_clasificar_fob,
         'total_riesgo': total_riesgo,
+        'total_refs': total_rot_refs,
+        'conic': conic,
     }
 
 
@@ -471,27 +875,83 @@ async def _query_f8(desde: date, hasta: date, db: AsyncSession) -> dict:
     anu_row = (await db.execute(anuladas_sql, params)).fetchone()
 
     # Build concept map — ensure all 4 appear even with 0
-    por_concepto = {c: {'count': 0, 'fob': 0.0} for c in _CONCEPTS}
+    por_concepto_map = {c: {'count': 0, 'fob': 0.0} for c in _CONCEPTS}
     for r in desp_rows:
         tipo = (r.type or '').upper()
-        if tipo in por_concepto:
-            por_concepto[tipo] = {'count': _i(r.total), 'fob': _f(r.fob)}
+        if tipo in por_concepto_map:
+            por_concepto_map[tipo] = {'count': _i(r.total), 'fob': _f(r.fob)}
 
-    total_despachos = sum(v['count'] for v in por_concepto.values())
-    total_fob = sum(v['fob'] for v in por_concepto.values())
+    total_despachos = sum(v['count'] for v in por_concepto_map.values())
+    total_fob = sum(v['fob'] for v in por_concepto_map.values())
     anuladas = _i(anu_row.anuladas) if anu_row else 0
+
+    # Add pct per concepto
+    _CONCEPT_COLORS = {
+        'PEDIDO': 'var(--info)',
+        'GARANTIA': 'var(--violet)',
+        'CORTESIA': 'var(--ok)',
+        'VEHICULO_PROPIO': 'var(--warn)',
+    }
+
+    por_concepto = [
+        {
+            'tipo': c,
+            'count': por_concepto_map[c]['count'],
+            'fob': por_concepto_map[c]['fob'],
+            'pct': _pct(por_concepto_map[c]['count'], total_despachos) if total_despachos else 0,
+            'color': _CONCEPT_COLORS.get(c, 'var(--muted)'),
+        }
+        for c in _CONCEPTS
+    ]
 
     sin_datos = total_despachos == 0 and anuladas == 0
     return {
         'sin_datos': sin_datos,
         'total': total_despachos,
         'fob': total_fob,
-        'por_concepto': [
-            {'tipo': c, 'count': por_concepto[c]['count'], 'fob': por_concepto[c]['fob']}
-            for c in _CONCEPTS
-        ],
+        'por_concepto': por_concepto,
         'anuladas': anuladas,
     }
+
+
+# ---------------------------------------------------------------------------
+# Maestro de Partes
+# ---------------------------------------------------------------------------
+
+async def _query_maestro(db: AsyncSession) -> dict:
+    sql = text("""
+        SELECT
+            (SELECT COUNT(*) FROM parts_references) AS total_refs,
+            (SELECT COUNT(*) FROM part_catalog WHERE public_price IS NOT NULL) AS con_precio
+    """)
+    row = (await db.execute(sql)).fetchone()
+    total = _i(row.total_refs) if row else 0
+    con = _i(row.con_precio) if row else 0
+    sin = max(0, total - con)
+    pct = _pct(con, total)
+    status = 'ok' if pct >= 90 else ('warn' if pct >= 70 else 'crit')
+    return {
+        'sin_datos': total == 0,
+        'total_refs': total,
+        'con_precio': con,
+        'sin_precio': sin,
+        'pct_con_precio': pct,
+        'precio_status': status,
+    }
+
+
+# ---------------------------------------------------------------------------
+# TRM
+# ---------------------------------------------------------------------------
+
+async def _query_trm(db: AsyncSession):
+    row = (await db.execute(text("SELECT value FROM system_config WHERE key = 'pricing.trm'"))).fetchone()
+    if row:
+        try:
+            return float(row.value)
+        except Exception:
+            pass
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -519,33 +979,24 @@ def _periodo_label(desde: date, hasta: date) -> str:
 
 async def generate_gerencial_report(desde: date, hasta: date, db: AsyncSession) -> bytes:
     """
-    Runs all section queries (mostly in parallel), builds Jinja2 context,
-    renders the HTML template, and converts to PDF bytes via WeasyPrint
-    in a thread pool executor (non-blocking).
+    Runs all section queries sequentially (AsyncSession not safe for concurrent
+    execution on one connection), builds Jinja2 context, renders the HTML template,
+    and converts to PDF bytes via WeasyPrint in a thread pool executor (non-blocking).
     """
-    # Run independent queries concurrently
-    f2_task = _query_f2(desde, hasta, db)
-    f3_task = _query_f3(db)
-    f4_task = _query_f4(db)
-    f5_task = _query_f5(db)
-    f6_task = _query_f6(desde, hasta, db)
-    f7_task = _query_f7(desde, hasta, db)
-    f8_task = _query_f8(desde, hasta, db)
-
-    # SQLAlchemy AsyncSession is NOT safe for true concurrent tasks on the same
-    # connection, so we gather sequentially-safe by awaiting them in order.
-    # For true parallelism you'd need separate sessions; for simplicity here
-    # we run sequentially which is still fast enough for a management report.
-    f2 = await f2_task
-    f3 = await f3_task
-    f4 = await f4_task
-    f5 = await f5_task
-    f6 = await f6_task
-    f7 = await f7_task
-    f8 = await f8_task
+    f2 = await _query_f2(desde, hasta, db)
+    f3 = await _query_f3(db)
+    f4 = await _query_f4(db)
+    f5 = await _query_f5(db)
+    f6 = await _query_f6(desde, hasta, db)
+    f7 = await _query_f7(desde, hasta, db)
+    f8 = await _query_f8(desde, hasta, db)
+    trm = await _query_trm(db)
+    maestro = await _query_maestro(db)
 
     now_col5 = datetime.now(tz=COL_5)
     generado_at = now_col5.strftime('%d/%m/%Y %H:%M') + ' (UTC-5)'
+
+    bo_status = 'ok' if f6['refs_afectadas'] == 0 else ('warn' if f6['refs_afectadas'] < 50 else 'crit')
 
     context = {
         'meta': {
@@ -553,6 +1004,7 @@ async def generate_gerencial_report(desde: date, hasta: date, db: AsyncSession) 
             'generado_at': generado_at,
             'desde': desde.isoformat(),
             'hasta': hasta.isoformat(),
+            'trm': trm,
         },
         'f2': f2,
         'f3': f3,
@@ -561,6 +1013,9 @@ async def generate_gerencial_report(desde: date, hasta: date, db: AsyncSession) 
         'f6': f6,
         'f7': f7,
         'f8': f8,
+        'trm': trm,
+        'maestro': maestro,
+        'bo_status': bo_status,
     }
 
     template = _jinja_env.get_template('informe_gerencial.html')
