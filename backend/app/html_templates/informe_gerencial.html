@@ -194,7 +194,7 @@ body{
 
 /* ---------- Donut ---------- */
 .donut-wrap{ display:flex; align-items:center; gap:16px; }
-.donut{ width:120px; height:120px; border-radius:50%; flex:none; position:relative; }
+.donut{ width:120px; height:120px; border-radius:50%; flex:none; position:relative; overflow:hidden; }
 .donut::after{ content:''; position:absolute; inset:22px; background:var(--paper); border-radius:50%; }
 .donut__center{ position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:1; }
 .donut__center b{ font-weight:800; font-size:22px; color:var(--ink); line-height:1; font-variant-numeric:tabular-nums; }

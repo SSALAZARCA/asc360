@@ -569,10 +569,9 @@ async def _query_f4(db: AsyncSession) -> dict:
     """)
 
     fob_sql = text("""
-        SELECT COALESCE(SUM(spa.qty_available * COALESCE(pr.avg_fob_cost, pr.preliminary_fob, 0)), 0) AS fob_stock
+        SELECT COALESCE(SUM(spa.qty_available * COALESCE(spi.unit_price, spi.fob_pi, 0)), 0) AS fob_stock
         FROM spare_part_availability spa
-        LEFT JOIN parts_references pr
-            ON UPPER(TRIM(REPLACE(spa.part_number, ' ', ''))) = UPPER(TRIM(pr.factory_part_number))
+        JOIN spare_part_items spi ON spi.id = spa.id
         WHERE spa.qty_available > 0
     """)
 
@@ -797,7 +796,7 @@ async def _query_f6(desde: date, hasta: date, db: AsyncSession) -> dict:
 # ---------------------------------------------------------------------------
 
 async def _query_f7(desde: date, hasta: date, db: AsyncSession) -> dict:
-    sql = text("""
+    counts_sql = text("""
         SELECT
             COUNT(*) FILTER (WHERE decision = 'cancelar' AND executed_at IS NULL) AS cancelar_pendiente,
             COUNT(*) FILTER (WHERE decision = 'cambiar'  AND executed_at IS NULL) AS cambiar_pendiente,
@@ -805,29 +804,47 @@ async def _query_f7(desde: date, hasta: date, db: AsyncSession) -> dict:
                 WHERE decision = 'cancelar'
                   AND executed_at IS NOT NULL
                   AND executed_at::date BETWEEN :desde AND :hasta
-            ) AS cancelar_ejecutado,
-            COALESCE(SUM(
-                CASE WHEN decision = 'cancelar' AND executed_at IS NULL
-                THEN COALESCE(pr.avg_fob_cost, pr.preliminary_fob, 0)
-                ELSE 0 END
-            ), 0) AS fob_cancelar_pendiente,
-            COALESCE(SUM(
-                CASE WHEN decision = 'cancelar'
-                      AND executed_at IS NOT NULL
-                      AND executed_at::date BETWEEN :desde AND :hasta
-                THEN COALESCE(pr.avg_fob_cost, pr.preliminary_fob, 0)
-                ELSE 0 END
-            ), 0) AS fob_cancelar_ejecutado
-        FROM part_order_decisions pod
-        LEFT JOIN parts_references pr
-            ON UPPER(TRIM(REPLACE(pod.factory_part_number, ' ', ''))) = UPPER(TRIM(pr.factory_part_number))
+            ) AS cancelar_ejecutado
+        FROM part_order_decisions
     """)
 
-    row = (await db.execute(sql, {'desde': desde, 'hasta': hasta})).fetchone()
-    if row is None or (
-        _i(row.cancelar_pendiente) == 0 and _i(row.cambiar_pendiente) == 0
-        and _i(row.cancelar_ejecutado) == 0
-    ):
+    # FOB = qty_ordered × precio real del packing list (unit_price > fob_pi)
+    fob_pendiente_sql = text("""
+        SELECT COALESCE(SUM(spi.qty_ordered * COALESCE(spi.unit_price, spi.fob_pi, 0)), 0) AS fob
+        FROM part_order_decisions pod
+        JOIN spare_part_lots spl ON spl.lot_identifier = pod.lot_identifier
+        JOIN spare_part_items spi
+            ON spi.lot_id = spl.id
+           AND UPPER(TRIM(REPLACE(spi.part_number, ' ', ''))) =
+               UPPER(TRIM(REPLACE(pod.factory_part_number, ' ', '')))
+        WHERE pod.decision = 'cancelar'
+          AND pod.executed_at IS NULL
+          AND spi.status != 'CANCELLED'
+    """)
+
+    fob_ejecutado_sql = text("""
+        SELECT COALESCE(SUM(spi.qty_ordered * COALESCE(spi.unit_price, spi.fob_pi, 0)), 0) AS fob
+        FROM part_order_decisions pod
+        JOIN spare_part_lots spl ON spl.lot_identifier = pod.lot_identifier
+        JOIN spare_part_items spi
+            ON spi.lot_id = spl.id
+           AND UPPER(TRIM(REPLACE(spi.part_number, ' ', ''))) =
+               UPPER(TRIM(REPLACE(pod.factory_part_number, ' ', '')))
+        WHERE pod.decision = 'cancelar'
+          AND pod.executed_at IS NOT NULL
+          AND pod.executed_at::date BETWEEN :desde AND :hasta
+          AND spi.status != 'CANCELLED'
+    """)
+
+    cnt_row = (await db.execute(counts_sql, {'desde': desde, 'hasta': hasta})).fetchone()
+    fob_p_row = (await db.execute(fob_pendiente_sql)).fetchone()
+    fob_e_row = (await db.execute(fob_ejecutado_sql, {'desde': desde, 'hasta': hasta})).fetchone()
+
+    cancelar_pendiente = _i(cnt_row.cancelar_pendiente) if cnt_row else 0
+    cambiar_pendiente  = _i(cnt_row.cambiar_pendiente)  if cnt_row else 0
+    cancelar_ejecutado = _i(cnt_row.cancelar_ejecutado) if cnt_row else 0
+
+    if cancelar_pendiente == 0 and cambiar_pendiente == 0 and cancelar_ejecutado == 0:
         return {
             'sin_datos': True,
             'cancelar_pendiente': 0, 'cambiar_pendiente': 0,
@@ -837,11 +854,11 @@ async def _query_f7(desde: date, hasta: date, db: AsyncSession) -> dict:
 
     return {
         'sin_datos': False,
-        'cancelar_pendiente': _i(row.cancelar_pendiente),
-        'cambiar_pendiente': _i(row.cambiar_pendiente),
-        'cancelar_ejecutado': _i(row.cancelar_ejecutado),
-        'fob_cancelar_pendiente': _f(row.fob_cancelar_pendiente),
-        'fob_cancelar_ejecutado': _f(row.fob_cancelar_ejecutado),
+        'cancelar_pendiente': cancelar_pendiente,
+        'cambiar_pendiente': cambiar_pendiente,
+        'cancelar_ejecutado': cancelar_ejecutado,
+        'fob_cancelar_pendiente': _f(fob_p_row.fob) if fob_p_row else 0.0,
+        'fob_cancelar_ejecutado': _f(fob_e_row.fob) if fob_e_row else 0.0,
     }
 
 
