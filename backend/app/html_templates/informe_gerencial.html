@@ -570,9 +570,7 @@ body{
             <div class="num" style="font-size:18px;color:var(--ink);">{{ y.total }} <span style="font-size:10px;color:var(--muted);font-weight:600;">unid.</span></div>
           </div>
           <div class="donut-wrap">
-            <div class="donut" style="background:{{ y.conic }};">
-              <div class="donut__center"><b class="num">{{ y.total }}</b><span>{{ y.anio }}</span></div>
-            </div>
+            {{ y.svg | safe }}
             <div class="legend">
               {% for m in y.por_modelo %}
               <div class="legend__item">
@@ -658,9 +656,7 @@ body{
             <div class="no-data">Sin datos de rotación.</div>
             {% else %}
             <div class="donut-wrap">
-              <div class="donut" style="width:110px;height:110px;background:{{ f5.conic }};">
-                <div class="donut__center"><b class="num" style="font-size:18px;">{{ f5.total_refs }}</b><span>refs</span></div>
-              </div>
+              {{ f5.svg | safe }}
               <div class="legend">
                 {% for c in f5.clases %}
                 <div class="legend__item">

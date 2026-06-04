@@ -109,6 +109,57 @@ def _make_conic(slices: list) -> str:
     return f"conic-gradient({', '.join(parts)})"
 
 
+def _make_svg_donut(slices: list, size: int = 120, hole: float = 0.40,
+                    center_val: str = '', center_sub: str = '') -> str:
+    """
+    Generate an inline SVG donut chart — 100% WeasyPrint safe.
+    slices = [(color, pct_float), ...] where pct_float values sum to ~100.
+    """
+    import math
+    cx = cy = size / 2.0
+    r_out = size / 2.0
+    r_in  = size / 2.0 * hole
+
+    if not slices or sum(p for _, p in slices) <= 0:
+        gray = f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="{r_out:.1f}" fill="#E5E8EC"/>'
+        gray_in = f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="{r_in:.1f}" fill="#fff"/>'
+        return f'<svg width="{size}" height="{size}" viewBox="0 0 {size} {size}" xmlns="http://www.w3.org/2000/svg">{gray}{gray_in}</svg>'
+
+    paths = []
+    angle = -90.0
+    for color, pct in slices:
+        if pct <= 0:
+            continue
+        sweep = min(pct / 100.0 * 360.0, 359.9999)
+        end = angle + sweep
+        def pt(a, r):
+            return cx + r * math.cos(math.radians(a)), cy + r * math.sin(math.radians(a))
+        ox1, oy1 = pt(angle, r_out)
+        ox2, oy2 = pt(end,   r_out)
+        ix1, iy1 = pt(end,   r_in)
+        ix2, iy2 = pt(angle, r_in)
+        lg = 1 if sweep > 180 else 0
+        d = (f"M {ox1:.3f},{oy1:.3f} "
+             f"A {r_out:.3f},{r_out:.3f} 0 {lg} 1 {ox2:.3f},{oy2:.3f} "
+             f"L {ix1:.3f},{iy1:.3f} "
+             f"A {r_in:.3f},{r_in:.3f} 0 {lg} 0 {ix2:.3f},{iy2:.3f} Z")
+        paths.append(f'<path d="{d}" fill="{color}"/>')
+        angle = end
+
+    txt = ''
+    if center_val:
+        txt += (f'<text x="{cx:.0f}" y="{cy-2:.0f}" '
+                f'text-anchor="middle" font-family="Arial,Helvetica,sans-serif" '
+                f'font-size="22" font-weight="800" fill="#15181C">{center_val}</text>')
+    if center_sub:
+        txt += (f'<text x="{cx:.0f}" y="{cy+14:.0f}" '
+                f'text-anchor="middle" font-family="Arial,Helvetica,sans-serif" '
+                f'font-size="9" fill="#828B95" letter-spacing="1">{center_sub}</text>')
+
+    body = ''.join(paths) + txt
+    return f'<svg width="{size}" height="{size}" viewBox="0 0 {size} {size}" xmlns="http://www.w3.org/2000/svg">{body}</svg>'
+
+
 # ---------------------------------------------------------------------------
 # F2 — Pedidos de Importación
 # ---------------------------------------------------------------------------
@@ -491,11 +542,11 @@ async def _query_f3(db: AsyncSession) -> dict:
                 pct_val = _pct(cnt, total_anio, decimals=2) if total_anio else 0
                 slices.append((color, pct_val))
                 por_modelo.append({'model': model, 'cnt': cnt, 'color': color, 'pct': round(pct_val)})
-            conic = _make_conic(slices)
+            svg = _make_svg_donut(slices, center_val=str(total_anio), center_sub=anio)
             por_anio.append({
                 'anio': anio,
                 'total': total_anio,
-                'conic': conic,
+                'svg': svg,
                 'por_modelo': por_modelo,
             })
 
@@ -711,7 +762,8 @@ async def _query_f5(db: AsyncSession) -> dict:
     if sin_clasificar_refs > 0:
         slices.append(('#AEB6BF', _pct(sin_clasificar_refs, total_rot_refs, 2)))
 
-    conic = _make_conic(slices)
+    svg_rot = _make_svg_donut(slices, size=110,
+                              center_val=str(total_rot_refs), center_sub='refs')
 
     return {
         'sin_datos': not has_data,
@@ -720,7 +772,7 @@ async def _query_f5(db: AsyncSession) -> dict:
         'sin_clasificar_fob': sin_clasificar_fob,
         'total_riesgo': total_riesgo,
         'total_refs': total_rot_refs,
-        'conic': conic,
+        'svg': svg_rot,
     }
 
 
@@ -908,10 +960,20 @@ async def _query_f8(desde: date, hasta: date, db: AsyncSession) -> dict:
 # ---------------------------------------------------------------------------
 
 async def _query_maestro(db: AsyncSession) -> dict:
+    # con_precio = partes con cualquier "Valor Final" disponible en el Maestro:
+    # precio manual (part_catalog) O precio calculado desde FOB (avg_fob_cost / preliminary_fob)
     sql = text("""
         SELECT
             (SELECT COUNT(*) FROM parts_references) AS total_refs,
-            (SELECT COUNT(*) FROM part_catalog WHERE public_price IS NOT NULL) AS con_precio
+            (SELECT COUNT(*)
+             FROM parts_references pr
+             WHERE pr.avg_fob_cost IS NOT NULL
+                OR pr.preliminary_fob IS NOT NULL
+                OR EXISTS (
+                    SELECT 1 FROM part_catalog pc
+                    WHERE pc.part_code = pr.factory_part_number
+                )
+            ) AS con_precio
     """)
     row = (await db.execute(sql)).fetchone()
     total = _i(row.total_refs) if row else 0
