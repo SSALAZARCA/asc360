@@ -312,42 +312,30 @@ body{
     </div>
 
     <!-- Pipeline motos -->
-    <div class="section">
-      <div class="section__head">
-        <span class="section__num">02</span>
-        <span class="section__title">Pipeline de pedidos por estado</span>
-        <span class="section__meta">motocicletas · flujo logístico</span>
+    {% set stage_labels = ['En preparación','Listo fábrica','En origen','En tránsito','En destino','Nacionalizado'] %}
+    {% set stage_classes = ['c-prep','c-listo','c-origen','c-transito','c-destino','c-nac'] %}
+
+    {% if f2.pipeline_motos.total > 0 %}
+    <div class="pipe" style="margin-top:10px;">
+      <div class="pipe__stages-head">
+        {% for label in stage_labels %}
+        <div class="sh">{{ label }}</div>
+        {% endfor %}
       </div>
-
-      {% set stage_labels = ['En preparación','Listo fábrica','En origen','En tránsito','En destino','Nacionalizado'] %}
-      {% set stage_classes = ['c-prep','c-listo','c-origen','c-transito','c-destino','c-nac'] %}
-
-      {% if f2.pipeline_motos.total == 0 %}
-      <div class="no-data">Sin datos de pedidos de motos en el pipeline.</div>
-      {% else %}
-      <div class="pipe">
-        <div class="pipe__stages-head">
-          {% for label in stage_labels %}
-          <div class="sh">{{ label }}</div>
+      <div class="pipe__row">
+        <div class="pipe__lab">Motos<small>{{ f2.motos_activos }} pedidos</small></div>
+        <div class="funnel">
+          {% for idx in range(6) %}
+          {% set stage = f2.pipeline_motos.stages[idx] %}
+          <div class="stage {{ stage_classes[idx] }}">
+            <div class="stage__n num{% if stage.n == 0 %} zero{% endif %}">{{ stage.n }}</div>
+            <div class="stage__bar" style="width:{{ stage.min_pct }}%"></div>
+          </div>
           {% endfor %}
         </div>
-
-        <div class="pipe__row">
-          <div class="pipe__lab">Motos<small>{{ f2.motos_activos }} pedidos</small></div>
-          <div class="funnel">
-            {% for idx in range(6) %}
-            {% set stage = f2.pipeline_motos.stages[idx] %}
-            <div class="stage {{ stage_classes[idx] }}">
-              <div class="stage__n num{% if stage.n == 0 %} zero{% endif %}">{{ stage.n }}</div>
-              <div class="stage__bar" style="width:{{ stage.min_pct }}%"></div>
-            </div>
-            {% endfor %}
-          </div>
-        </div>
       </div>
-      {% endif %}
-
     </div>
+    {% endif %}
 
   </div>
 
@@ -553,12 +541,6 @@ body{
           <div class="kpi__label">Valor a cancelar</div>
           <div class="kpi__val num"><span class="u">USD </span>{{ "{:,.0f}".format(f7.fob_cancelar_pendiente) }}</div>
           <div class="kpi__sub">{{ f7.cancelar_pendiente }} refs no requeridas</div>
-        </div>
-
-        <div class="kpi s-{{ maestro.precio_status }}">
-          <div class="kpi__label">Cobertura de precios del Maestro</div>
-          <div class="kpi__val num">{{ maestro.pct_con_precio }}<span class="u">%</span></div>
-          <div class="kpi__sub">refs con precio público</div>
         </div>
 
       </div>
