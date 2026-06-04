@@ -14,7 +14,8 @@ import RemisionesTab from './RemisionesTab';
 import ComparativaTab from './ComparativaTab';
 import ShipmentOrderFormModal from './ShipmentOrderFormModal';
 import NuevoPedidoModal from './NuevoPedidoModal';
-import { RefreshCw, Upload, FileUp, Plus, Download } from 'lucide-react';
+import InformeGerencialModal from './InformeGerencialModal';
+import { RefreshCw, Upload, FileUp, Plus, Download, FileText } from 'lucide-react';
 
 const ALL_TABS = [
   { id: 'dashboard',         label: 'Dashboard',         roles: null },
@@ -52,6 +53,7 @@ export default function ImportsTabs({ userRole }) {
   const [formModal, setFormModal] = useState({ open: false, order: null }); // edit
   const [showNuevoPedido, setShowNuevoPedido] = useState(false);
   const [exportingOrders, setExportingOrders] = useState(false);
+  const [showInformeModal, setShowInformeModal] = useState(false);
 
   const PAGE_SIZE = 50;
 
@@ -278,6 +280,22 @@ export default function ImportsTabs({ userRole }) {
               </button>
             )}
 
+            {/* Informe Gerencial PDF (solo superadmin) */}
+            {userRole === 'superadmin' && (
+              <button
+                onClick={() => setShowInformeModal(true)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '6px',
+                  padding: '8px 14px', borderRadius: '8px', border: 'none',
+                  background: 'rgba(255,95,51,0.12)', color: '#ff5f33',
+                  fontSize: '11px', fontWeight: 700, cursor: 'pointer',
+                  letterSpacing: '0.04em',
+                }}
+              >
+                <FileText size={13} /> Informe Gerencial
+              </button>
+            )}
+
             {/* Nuevo Pedido (imports_editor + superadmin) */}
             {(userRole === 'superadmin' || userRole === 'imports_editor') && (
               <button
@@ -370,6 +388,11 @@ export default function ImportsTabs({ userRole }) {
       )}
       {activeTab === 'comparativa' && (
         <ComparativaTab />
+      )}
+
+      {/* Modal Informe Gerencial */}
+      {showInformeModal && (
+        <InformeGerencialModal onClose={() => setShowInformeModal(false)} />
       )}
 
       {/* Modal de detalle */}

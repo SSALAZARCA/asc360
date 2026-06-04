@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<title>Informe Gerencial</title>
+<style>
+  /* ── Page setup ──────────────────────────────────────────────────────────── */
+  @page {
+    size: A4 portrait;
+    margin: 18mm 14mm 14mm 14mm;
+  }
+  @page :first {
+    margin-top: 0;
+    margin-bottom: 0;
+    margin-left: 0;
+    margin-right: 0;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    background: #13131b;
+    color: #e2e2f0;
+    font-size: 9pt;
+    line-height: 1.4;
+  }
+
+  /* ── Cover page ──────────────────────────────────────────────────────────── */
+  .cover {
+    background: #13131b;
+    width: 210mm;
+    height: 297mm;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    page-break-after: always;
+  }
+  .cover-accent {
+    width: 60px;
+    height: 5px;
+    background: #ff5f33;
+    margin: 0 auto 28px auto;
+    border-radius: 3px;
+  }
+  .cover-title {
+    font-size: 34pt;
+    font-weight: 800;
+    color: #ffffff;
+    letter-spacing: -0.5px;
+    margin-bottom: 10px;
+  }
+  .cover-subtitle {
+    font-size: 13pt;
+    color: #9ca3b8;
+    margin-bottom: 36px;
+  }
+  .cover-period {
+    font-size: 16pt;
+    font-weight: 700;
+    color: #ff5f33;
+    margin-bottom: 12px;
+  }
+  .cover-meta {
+    font-size: 9pt;
+    color: #606075;
+  }
+
+  /* ── Section wrapper ─────────────────────────────────────────────────────── */
+  .section {
+    break-before: page;
+    padding: 14px 0 0 0;
+  }
+  .section:first-of-type {
+    break-before: auto;
+  }
+
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 14px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(255,255,255,0.07);
+  }
+  .section-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .section-title {
+    font-size: 12pt;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    color: #ffffff;
+  }
+  .section-badge {
+    font-size: 7pt;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 2px 7px;
+    border-radius: 10px;
+    margin-left: auto;
+  }
+
+  /* ── KPI card grid ───────────────────────────────────────────────────────── */
+  .kpi-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .kpi-card {
+    background: #1a1a24;
+    border-radius: 8px;
+    padding: 12px 16px;
+    flex: 1;
+    min-width: 100px;
+    border-top: 3px solid transparent;
+  }
+  .kpi-value {
+    font-size: 22pt;
+    font-weight: 800;
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+  .kpi-label {
+    font-size: 7pt;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #606075;
+    font-weight: 600;
+  }
+  .kpi-sub {
+    font-size: 8pt;
+    color: #9ca3b8;
+    margin-top: 3px;
+  }
+
+  /* ── Table ───────────────────────────────────────────────────────────────── */
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+    font-size: 8pt;
+  }
+  .data-table th {
+    text-align: left;
+    padding: 6px 8px;
+    font-size: 7pt;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: #606075;
+    border-bottom: 1px solid rgba(255,255,255,0.07);
+  }
+  .data-table td {
+    padding: 6px 8px;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    color: #c8c8e0;
+  }
+  .data-table tr:last-child td { border-bottom: none; }
+  .data-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .data-table .highlight-row td {
+    font-weight: 700;
+    color: #ffffff;
+    background: rgba(255,255,255,0.03);
+  }
+
+  /* ── Placeholder ─────────────────────────────────────────────────────────── */
+  .no-data {
+    background: #1a1a24;
+    border-radius: 8px;
+    padding: 20px;
+    text-align: center;
+    color: #606075;
+    font-size: 9pt;
+    font-style: italic;
+  }
+
+  /* ── Color accents per section ───────────────────────────────────────────── */
+  .c-f2 { color: #38bdf8; }
+  .c-f3 { color: #4ade80; }
+  .c-f4 { color: #ff5f33; }
+  .c-f5 { color: #fbbf24; }
+  .c-f6 { color: #f87171; }
+  .c-f7 { color: #a78bfa; }
+  .c-f8 { color: #22d3ee; }
+
+  .b-f2 { border-top-color: #38bdf8; }
+  .b-f3 { border-top-color: #4ade80; }
+  .b-f4 { border-top-color: #ff5f33; }
+  .b-f5 { border-top-color: #fbbf24; }
+  .b-f6 { border-top-color: #f87171; }
+  .b-f7 { border-top-color: #a78bfa; }
+  .b-f8 { border-top-color: #22d3ee; }
+
+  .dot-f2 { background: #38bdf8; }
+  .dot-f3 { background: #4ade80; }
+  .dot-f4 { background: #ff5f33; }
+  .dot-f5 { background: #fbbf24; }
+  .dot-f6 { background: #f87171; }
+  .dot-f7 { background: #a78bfa; }
+  .dot-f8 { background: #22d3ee; }
+
+  .badge-f2 { background: rgba(56,189,248,0.12); color: #38bdf8; }
+  .badge-f3 { background: rgba(74,222,128,0.12); color: #4ade80; }
+  .badge-f4 { background: rgba(255,95,51,0.12);  color: #ff5f33; }
+  .badge-f5 { background: rgba(251,191,36,0.12); color: #fbbf24; }
+  .badge-f6 { background: rgba(248,113,113,0.12);color: #f87171; }
+  .badge-f7 { background: rgba(167,139,250,0.12);color: #a78bfa; }
+  .badge-f8 { background: rgba(34,211,238,0.12); color: #22d3ee; }
+
+  .highlight-total { color: #ff5f33; font-weight: 800; font-size: 11pt; }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     PORTADA (F1)
+════════════════════════════════════════════════════════════════════════════ -->
+<div class="cover">
+  <div class="cover-accent"></div>
+  <div class="cover-title">Informe Gerencial</div>
+  <div class="cover-subtitle">UM Colombia — Red de Servicio</div>
+  <div class="cover-period">{{ meta.periodo_label }}</div>
+  <div class="cover-meta">Generado el {{ meta.generado_at }}</div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     F2 — Pedidos de Importación
+════════════════════════════════════════════════════════════════════════════ -->
+<div class="section">
+  <div class="section-header">
+    <div class="section-dot dot-f2"></div>
+    <div class="section-title c-f2">Pedidos de Importación</div>
+    <span class="section-badge badge-f2">F2</span>
+  </div>
+
+  {% if f2.sin_datos %}
+  <div class="no-data">Sin pedidos activos en el sistema</div>
+  {% else %}
+  <div class="kpi-grid">
+    <div class="kpi-card b-f2">
+      <div class="kpi-value c-f2">{{ f2.activos_total }}</div>
+      <div class="kpi-label">PIs Activos Total</div>
+    </div>
+    <div class="kpi-card b-f2">
+      <div class="kpi-value c-f2">{{ f2.motos_activos }}</div>
+      <div class="kpi-label">PIs Motos</div>
+    </div>
+    <div class="kpi-card b-f2">
+      <div class="kpi-value c-f2">{{ f2.repuestos_activos }}</div>
+      <div class="kpi-label">PIs Repuestos</div>
+    </div>
+    <div class="kpi-card b-f2">
+      <div class="kpi-value c-f2">{{ f2.motos_unidades }}</div>
+      <div class="kpi-label">Unidades en Pedido</div>
+    </div>
+  </div>
+
+  <div class="kpi-grid">
+    <div class="kpi-card b-f2">
+      <div class="kpi-value" style="font-size:16pt; color:#38bdf8;">{{ f2.motos_nacionalizado }}</div>
+      <div class="kpi-label">Motos Nacionalizadas</div>
+    </div>
+    <div class="kpi-card b-f2">
+      <div class="kpi-value" style="font-size:16pt; color:#38bdf8;">{{ f2.motos_en_transito }}</div>
+      <div class="kpi-label">Motos en Tránsito</div>
+    </div>
+    <div class="kpi-card b-f2">
+      <div class="kpi-value" style="font-size:16pt; color:#38bdf8;">{{ f2.motos_en_origen }}</div>
+      <div class="kpi-label">Motos en Origen</div>
+    </div>
+    <div class="kpi-card b-f2">
+      <div class="kpi-value" style="font-size:14pt; color:#38bdf8;">USD {{ "%.0f"|format(f2.repuestos_fob) | replace(".", ",") }}</div>
+      <div class="kpi-label">FOB Comprometido Repuestos</div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     F3 — Motocicletas
+════════════════════════════════════════════════════════════════════════════ -->
+<div class="section">
+  <div class="section-header">
+    <div class="section-dot dot-f3"></div>
+    <div class="section-title c-f3">Motocicletas</div>
+    <span class="section-badge badge-f3">F3 — Snapshot</span>
+  </div>
+
+  {% if f3.sin_datos %}
+  <div class="no-data">Sin unidades registradas en el sistema</div>
+  {% else %}
+  <div class="kpi-grid">
+    <div class="kpi-card b-f3">
+      <div class="kpi-value c-f3">{{ f3.total }}</div>
+      <div class="kpi-label">Total en Sistema</div>
+    </div>
+    <div class="kpi-card b-f3">
+      <div class="kpi-value c-f3">{{ f3.disponibles }}</div>
+      <div class="kpi-label">Disponibles</div>
+    </div>
+    <div class="kpi-card b-f3">
+      <div class="kpi-value c-f3">{{ f3.facturadas_historico }}</div>
+      <div class="kpi-label">Facturadas (Histórico)</div>
+    </div>
+    <div class="kpi-card b-f3">
+      <div class="kpi-value c-f3">{{ f3.separadas }}</div>
+      <div class="kpi-label">Separadas Nac.</div>
+    </div>
+  </div>
+
+  <div class="kpi-grid">
+    <div class="kpi-card b-f3">
+      <div class="kpi-value" style="font-size:16pt; color:#4ade80;">{{ f3.pend_empadronamiento }}</div>
+      <div class="kpi-label">Pend. Empadronamiento</div>
+    </div>
+    <div class="kpi-card b-f3">
+      <div class="kpi-value" style="font-size:16pt; color:#4ade80;">{{ f3.con_obs }}</div>
+      <div class="kpi-label">Con Observaciones</div>
+    </div>
+    <div class="kpi-card b-f3">
+      <div class="kpi-value" style="font-size:16pt; color:#4ade80;">{{ f3.con_runt }}</div>
+      <div class="kpi-label">Con RUNT</div>
+    </div>
+    <div class="kpi-card b-f3">
+      <div class="kpi-value" style="font-size:16pt; color:#f87171;">{{ f3.total - f3.con_runt }}</div>
+      <div class="kpi-label">RUNT Pendiente</div>
+    </div>
+  </div>
+
+  {% if f3.por_modelo %}
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Modelo</th>
+        <th class="num">Total</th>
+        <th class="num">Disponibles</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for m in f3.por_modelo %}
+      <tr>
+        <td>{{ m.model }}</td>
+        <td class="num">{{ m.total }}</td>
+        <td class="num c-f3">{{ m.disponibles }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+  {% endif %}
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     F4 — Cobertura de Repuestos
+════════════════════════════════════════════════════════════════════════════ -->
+<div class="section">
+  <div class="section-header">
+    <div class="section-dot dot-f4"></div>
+    <div class="section-title c-f4">Inventario — Cobertura</div>
+    <span class="section-badge badge-f4">F4</span>
+  </div>
+
+  {% if f4.sin_datos %}
+  <div class="no-data">Sin referencias en el catálogo</div>
+  {% else %}
+  <div class="kpi-grid">
+    <div class="kpi-card b-f4">
+      <div class="kpi-value c-f4">{{ f4.total }}</div>
+      <div class="kpi-label">Total Referencias</div>
+    </div>
+    <div class="kpi-card b-f4">
+      <div class="kpi-value c-f4">{{ f4.aqui }}</div>
+      <div class="kpi-label">Aquí (stock)</div>
+    </div>
+    <div class="kpi-card b-f4">
+      <div class="kpi-value" style="font-size:22pt; color:#fbbf24;">{{ f4.en_camino }}</div>
+      <div class="kpi-label">En Camino</div>
+    </div>
+    <div class="kpi-card b-f4">
+      <div class="kpi-value" style="font-size:22pt; color:#38bdf8;">{{ f4.pedido }}</div>
+      <div class="kpi-label">En Pedido</div>
+    </div>
+    <div class="kpi-card b-f4">
+      <div class="kpi-value" style="font-size:22pt; color:#f87171;">{{ f4.sin_cobertura }}</div>
+      <div class="kpi-label">Sin Cobertura</div>
+    </div>
+  </div>
+
+  <div class="kpi-grid">
+    <div class="kpi-card b-f4" style="flex: 2;">
+      <div class="kpi-value" style="font-size:18pt; color:#ff5f33;">
+        USD {{ "{:,.0f}".format(f4.fob_stock) }}
+      </div>
+      <div class="kpi-label">Valor FOB Stock Disponible</div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     F5 — Rotación de Repuestos
+════════════════════════════════════════════════════════════════════════════ -->
+<div class="section">
+  <div class="section-header">
+    <div class="section-dot dot-f5"></div>
+    <div class="section-title c-f5">Rotación de Repuestos</div>
+    <span class="section-badge badge-f5">F5</span>
+  </div>
+
+  {% if f5.sin_datos %}
+  <div class="no-data">Sin clasificación de rotación asignada</div>
+  {% else %}
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Clase</th>
+        <th class="num">Referencias</th>
+        <th class="num">FOB Disponible</th>
+        <th class="num">FOB en Riesgo</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for c in f5.clases %}
+      <tr>
+        <td style="font-weight:700; text-transform:capitalize;">{{ c.clase }}</td>
+        <td class="num">{{ c.refs }}</td>
+        <td class="num">USD {{ "{:,.0f}".format(c.fob_disponible) }}</td>
+        <td class="num {% if c.clase in ('media','baja') %}c-f6{% endif %}">
+          {% if c.clase in ('media','baja') %}USD {{ "{:,.0f}".format(c.fob_riesgo) }}{% else %}—{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+      {% if f5.sin_clasificar_refs > 0 %}
+      <tr>
+        <td style="color:#606075; font-style:italic;">Sin clasificar</td>
+        <td class="num" style="color:#606075;">{{ f5.sin_clasificar_refs }}</td>
+        <td class="num" style="color:#606075;">USD {{ "{:,.0f}".format(f5.sin_clasificar_fob) }}</td>
+        <td class="num">—</td>
+      </tr>
+      {% endif %}
+    </tbody>
+  </table>
+
+  <div class="kpi-grid" style="margin-top:12px;">
+    <div class="kpi-card b-f5">
+      <div class="kpi-value" style="font-size:18pt; color:#f87171;">
+        USD {{ "{:,.0f}".format(f5.total_riesgo) }}
+      </div>
+      <div class="kpi-label">Total Valor en Riesgo (Media + Baja)</div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     F6 — Backorders
+════════════════════════════════════════════════════════════════════════════ -->
+<div class="section">
+  <div class="section-header">
+    <div class="section-dot dot-f6"></div>
+    <div class="section-title c-f6">Backorders</div>
+    <span class="section-badge badge-f6">F6</span>
+  </div>
+
+  {% if f6.sin_datos %}
+  <div class="no-data">Sin backorders registrados</div>
+  {% else %}
+  <div class="kpi-grid">
+    <div class="kpi-card b-f6">
+      <div class="kpi-value c-f6">{{ f6.activos }}</div>
+      <div class="kpi-label">Activos (sin resolver)</div>
+    </div>
+    <div class="kpi-card b-f6">
+      <div class="kpi-value c-f6">{{ f6.resueltos_periodo }}</div>
+      <div class="kpi-label">Resueltos en el Período</div>
+    </div>
+    <div class="kpi-card b-f6">
+      <div class="kpi-value c-f6">{{ f6.refs_afectadas }}</div>
+      <div class="kpi-label">Referencias Afectadas</div>
+    </div>
+    <div class="kpi-card b-f6">
+      <div class="kpi-value" style="font-size:14pt; color:#f87171;">
+        USD {{ "{:,.0f}".format(f6.fob_pendiente) }}
+      </div>
+      <div class="kpi-label">FOB Pendiente (activos)</div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     F7 — Ajuste de Pedidos
+════════════════════════════════════════════════════════════════════════════ -->
+<div class="section">
+  <div class="section-header">
+    <div class="section-dot dot-f7"></div>
+    <div class="section-title c-f7">Ajuste de Pedidos</div>
+    <span class="section-badge badge-f7">F7</span>
+  </div>
+
+  {% if f7.sin_datos %}
+  <div class="no-data">Sin decisiones de ajuste registradas</div>
+  {% else %}
+  <div class="kpi-grid">
+    <div class="kpi-card b-f7">
+      <div class="kpi-value c-f7">{{ f7.cancelar_pendiente }}</div>
+      <div class="kpi-label">Cancelaciones Pendientes</div>
+      <div class="kpi-sub">USD {{ "{:,.0f}".format(f7.fob_cancelar_pendiente) }} en riesgo</div>
+    </div>
+    <div class="kpi-card b-f7">
+      <div class="kpi-value c-f7">{{ f7.cambiar_pendiente }}</div>
+      <div class="kpi-label">Cambios Pendientes</div>
+    </div>
+    <div class="kpi-card b-f7">
+      <div class="kpi-value" style="font-size:22pt; color:#a78bfa;">{{ f7.cancelar_ejecutado }}</div>
+      <div class="kpi-label">Cancelaciones Ejecutadas</div>
+      <div class="kpi-sub">En el período — USD {{ "{:,.0f}".format(f7.fob_cancelar_ejecutado) }}</div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     F8 — Remisiones de Inventario
+════════════════════════════════════════════════════════════════════════════ -->
+<div class="section">
+  <div class="section-header">
+    <div class="section-dot dot-f8"></div>
+    <div class="section-title c-f8">Remisiones de Inventario</div>
+    <span class="section-badge badge-f8">F8</span>
+  </div>
+
+  {% if f8.sin_datos %}
+  <div class="no-data">Sin remisiones en el período seleccionado</div>
+  {% else %}
+  <div class="kpi-grid">
+    <div class="kpi-card b-f8">
+      <div class="kpi-value c-f8">{{ f8.total }}</div>
+      <div class="kpi-label">Remisiones Despachadas</div>
+    </div>
+    <div class="kpi-card b-f8">
+      <div class="kpi-value" style="font-size:18pt; color:#22d3ee;">
+        USD {{ "{:,.0f}".format(f8.fob) }}
+      </div>
+      <div class="kpi-label">FOB Total Despachado</div>
+    </div>
+    <div class="kpi-card b-f8">
+      <div class="kpi-value" style="font-size:22pt; color:#f87171;">{{ f8.anuladas }}</div>
+      <div class="kpi-label">Anuladas en el Período</div>
+    </div>
+  </div>
+
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Concepto</th>
+        <th class="num">Remisiones</th>
+        <th class="num">FOB</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for c in f8.por_concepto %}
+      <tr {% if c.count == 0 %}style="opacity:0.45;"{% endif %}>
+        <td style="text-transform:capitalize;">
+          {{ c.tipo.replace('_', ' ').title() }}
+        </td>
+        <td class="num">{{ c.count }}</td>
+        <td class="num">USD {{ "{:,.0f}".format(c.fob) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</div>
+
+</body>
+</html>
