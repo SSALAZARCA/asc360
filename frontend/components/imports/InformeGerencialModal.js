@@ -34,7 +34,8 @@ export default function InformeGerencialModal({ onClose }) {
     setError('');
     try {
       const res = await authFetch(
-        `${getApiUrl()}/reports/gerencial?desde=${desde}&hasta=${hasta}`
+        `${getApiUrl()}/reports/gerencial?desde=${desde}&hasta=${hasta}`,
+        { timeout: 120000 }
       );
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));

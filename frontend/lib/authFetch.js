@@ -25,7 +25,7 @@ export async function authFetch(path, options = {}) {
   const url = path.startsWith('http') ? path : `${getApiUrl()}${path}`;
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 30000);
+  const timeoutId = setTimeout(() => controller.abort(), options.timeout ?? 30000);
 
   let response;
   try {
