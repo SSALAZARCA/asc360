@@ -12,7 +12,7 @@ from sqlalchemy.future import select
 from app.models.imports import (
     ShipmentOrder, ShipmentMotoUnit, SparePartLot, SparePartItem,
     PackingList, PackingListItem, ReconciliationResult, Backorder, ImportAuditLog,
-    ColorRuntMapping,
+    ColorRuntMapping, VehicleModel,
 )
 from app.api.deps import CurrentUser
 from app.schemas.imports import ImportExcelResult
@@ -22,6 +22,21 @@ logger = logging.getLogger(__name__)
 
 def _norm_color(s: str) -> str:
     return re.sub(r'\s+', ' ', str(s).upper().strip().replace('/', ' '))
+
+
+async def _load_models_map(db: AsyncSession) -> dict[str, str]:
+    """Returns {UPPER(model_name): canonical_model_name} from vehicle_models."""
+    rows = (await db.execute(select(VehicleModel.model_name))).scalars().all()
+    return {m.upper(): m for m in rows}
+
+
+def _normalize_model(raw: str | None, models_map: dict[str, str]) -> str | None:
+    """Normalize raw model string against controlled vehicle_models list (case-insensitive).
+    Returns canonical name if found, original stripped value if not."""
+    if not raw:
+        return None
+    stripped = str(raw).strip()
+    return models_map.get(stripped.upper(), stripped) or None
 
 
 # Columnas esperadas en el Excel de Shipment Status
@@ -568,6 +583,7 @@ async def _process_sp_packing_list(db: AsyncSession, sheet, actor: CurrentUser) 
     from app.models.imports import SparePartItem
     import re as _re
 
+    models_map = await _load_models_map(db)
     header_row = _find_header_row(sheet, SP_PL_EXPECTED_COLS)
     if not header_row:
         return 0
@@ -632,7 +648,7 @@ async def _process_sp_packing_list(db: AsyncSession, sheet, actor: CurrentUser) 
         except Exception:
             desc_es = str(desc_es_raw) if desc_es_raw else None
 
-        model_applicable = _cell(sheet, row_idx, col_map, "model")
+        model_applicable = _normalize_model(_cell(sheet, row_idx, col_map, "model"), models_map)
 
         def _apply_fields(item: SparePartItem):
             if qty_pcs is not None:
@@ -792,6 +808,7 @@ async def create_sp_order_from_excel(
         )
 
     col_map = _build_col_map(sheet, header_row)
+    models_map = await _load_models_map(db)
 
     ref = reference.strip().upper()
 
@@ -880,8 +897,11 @@ async def create_sp_order_from_excel(
                 continue
 
             nombre = _cell(sheet, row_idx, col_map, "nombre", "descripcion", "descripción", "nombre es", "description")
-            modelo_moto = _cell(sheet, row_idx, col_map, "moto aplica", "moto", "modelo moto", "modelo", "aplica")
-            modelo_str = str(modelo_moto).strip() if modelo_moto else None
+            modelo_moto = _normalize_model(
+                _cell(sheet, row_idx, col_map, "moto aplica", "moto", "modelo moto", "modelo", "aplica"),
+                models_map,
+            )
+            modelo_str = modelo_moto
 
             agg_key = (part_number, modelo_str)
             if agg_key in aggregated:
@@ -1067,6 +1087,7 @@ async def load_order_detail_excel(
 
     header_row = _find_header_row(target_sheet, ORDER_DETAIL_EXPECTED_COLS)
     col_map = _build_col_map(target_sheet, header_row)
+    models_map = await _load_models_map(db)
 
     # Índice de ítems existentes en este lote
     existing_stmt = select(SparePartItem).where(SparePartItem.lot_id == lot.id)
@@ -1118,7 +1139,7 @@ async def load_order_detail_excel(
                 if desc_es:
                     item.description_es = str(desc_es).strip()
                 if model_raw:
-                    item.model_applicable = str(model_raw).strip()
+                    item.model_applicable = _normalize_model(model_raw, models_map)
                 if unit_price is not None:
                     item.unit_price = unit_price
                     item.amount = round(unit_price * qty_ordered, 4)
@@ -1132,7 +1153,7 @@ async def load_order_detail_excel(
                     part_number=part_number,
                     description=str(desc_en).strip() if desc_en else None,
                     description_es=str(desc_es).strip() if desc_es else None,
-                    model_applicable=str(model_raw).strip() if model_raw else None,
+                    model_applicable=_normalize_model(model_raw, models_map),
                     qty_ordered=qty_ordered,
                     qty_received=0,
                     qty_pending=qty_ordered,

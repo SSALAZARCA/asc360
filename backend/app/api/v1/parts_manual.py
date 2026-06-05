@@ -2276,6 +2276,14 @@ async def low_rotation_ordered_analysis(
             WHERE description_es IS NOT NULL AND description_es != ''
             ORDER BY UPPER(TRIM(REPLACE(part_number, ' ', ''))), created_at ASC
         ),
+        models_from_items AS (
+            SELECT
+                UPPER(TRIM(REPLACE(spi2.part_number, ' ', ''))) AS norm_fpn,
+                array_agg(DISTINCT spi2.model_applicable ORDER BY spi2.model_applicable)
+                    FILTER (WHERE spi2.model_applicable IS NOT NULL AND spi2.model_applicable != '') AS models
+            FROM spare_part_items spi2
+            GROUP BY 1
+        ),
         models_per_part AS (
             SELECT
                 pmi.factory_part_number,
@@ -2291,14 +2299,15 @@ async def low_rotation_ordered_analysis(
             pr.rotation_class,
             spl.lot_identifier,
             SUM(spi.qty_ordered)::int AS qty,
-            COALESCE(mp.models, ARRAY[]::text[]) AS models,
+            COALESCE(mfi.models, mp.models, ARRAY[]::text[]) AS models,
             MAX(COALESCE(spi.unit_price, spi.fob_pi))::float AS fob_unit
         FROM parts_references pr
         JOIN spare_part_items spi
             ON UPPER(TRIM(REPLACE(spi.part_number, ' ', ''))) = UPPER(TRIM(pr.factory_part_number))
         JOIN spare_part_lots spl ON spl.id = spi.lot_id
-        LEFT JOIN desc_es_src d       ON d.pn  = UPPER(TRIM(pr.factory_part_number))
-        LEFT JOIN models_per_part mp  ON mp.factory_part_number = pr.factory_part_number
+        LEFT JOIN desc_es_src d       ON d.pn   = UPPER(TRIM(pr.factory_part_number))
+        LEFT JOIN models_from_items mfi ON mfi.norm_fpn = UPPER(TRIM(pr.factory_part_number))
+        LEFT JOIN models_per_part mp    ON mp.factory_part_number = pr.factory_part_number
         WHERE pr.rotation_class IN ('baja', 'media', 'alta')
           AND spl.packing_list_received = FALSE
           AND UPPER(TRIM(pr.factory_part_number)) NOT IN (SELECT pn FROM aqui)
@@ -2307,7 +2316,7 @@ async def low_rotation_ordered_analysis(
             pr.factory_part_number, pr.description,
             COALESCE(pr.description_es_manual, d.description_es),
             pr.rotation_class, spl.lot_identifier,
-            COALESCE(mp.models, ARRAY[]::text[])
+            COALESCE(mfi.models, mp.models, ARRAY[]::text[])
         ORDER BY pr.rotation_class, pr.factory_part_number, spl.lot_identifier
     """)
 
