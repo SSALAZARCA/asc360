@@ -149,6 +149,7 @@ export default function AnalisisRepuestosTab() {
   // Modal de detalle para ítems amarillos
   const [changeModal, setChangeModal] = useState(null);
 
+  const [search,      setSearch]      = useState('');
   const [executing,   setExecuting]   = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [execResult,  setExecResult]  = useState(null);
@@ -276,8 +277,10 @@ export default function AnalisisRepuestosTab() {
     }
   };
 
+  const searchNorm = search.trim().toUpperCase();
   const items = (data?.items || []).filter(i =>
-    rotFilter === 'all' || i.rotation_class === rotFilter
+    (rotFilter === 'all' || i.rotation_class === rotFilter) &&
+    (!searchNorm || i.factory_part_number.toUpperCase().includes(searchNorm))
   );
 
   const sorted = [...items].sort((a, b) => {
@@ -575,7 +578,7 @@ export default function AnalisisRepuestosTab() {
       )}
 
       {/* Filter toggle */}
-      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', alignItems: 'center' }}>
         {[
           { val: 'all',   label: 'Todas' },
           { val: 'baja',  label: 'Baja',  color: '#4ade80' },
@@ -594,6 +597,17 @@ export default function AnalisisRepuestosTab() {
             }}>{label}</button>
           );
         })}
+
+        <input
+          placeholder="Buscar referencia..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          style={{
+            padding: '0.4rem 0.75rem', borderRadius: '8px', fontSize: '0.7rem',
+            background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
+            color: '#fff', outline: 'none', width: '180px',
+          }}
+        />
 
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.62rem', color: 'rgba(255,255,255,0.3)' }}>
           <span>Click en un PI:</span>
