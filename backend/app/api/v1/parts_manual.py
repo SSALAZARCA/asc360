@@ -2238,42 +2238,6 @@ class _LowRotResponse(BaseModel):
     alta_count: int
 
 
-@router.get("/admin/analysis/diag-no-models")
-async def diag_no_models(
-    db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_user),
-):
-    """Diagnóstico: referencias en análisis sin modelo asignado en el manual de partes."""
-    if not current_user.is_superadmin:
-        raise HTTPException(status_code=403, detail="Solo superadmin")
-
-    sql = text("""
-        SELECT
-            pr.factory_part_number,
-            pr.rotation_class,
-            COUNT(DISTINCT pmi.id) AS manual_entries
-        FROM parts_references pr
-        JOIN spare_part_items spi
-            ON UPPER(TRIM(REPLACE(spi.part_number, ' ', ''))) = UPPER(TRIM(pr.factory_part_number))
-        JOIN spare_part_lots spl ON spl.id = spi.lot_id
-        LEFT JOIN parts_manual_items pmi ON pmi.factory_part_number = pr.factory_part_number
-        WHERE pr.rotation_class IN ('baja', 'media', 'alta')
-          AND spl.packing_list_received = FALSE
-        GROUP BY pr.factory_part_number, pr.rotation_class
-        HAVING COUNT(DISTINCT pmi.id) = 0
-        ORDER BY pr.rotation_class, pr.factory_part_number
-    """)
-
-    rows = (await db.execute(sql)).all()
-    return {
-        "total_sin_modelo": len(rows),
-        "referencias": [
-            {"factory_part_number": r.factory_part_number, "rotation_class": r.rotation_class}
-            for r in rows
-        ],
-    }
-
-
 @router.get("/admin/analysis/low-rotation-ordered", response_model=_LowRotResponse)
 async def low_rotation_ordered_analysis(
     db: AsyncSession = Depends(get_db),
