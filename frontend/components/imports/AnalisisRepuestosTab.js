@@ -5,7 +5,8 @@ import { ArrowUp, ArrowDown, ChevronsUpDown, RefreshCw, Download } from 'lucide-
 
 const ROT = {
   baja:  { bg: 'rgba(74,222,128,0.12)',  color: '#4ade80',  border: 'rgba(74,222,128,0.3)',  label: 'BAJA'  },
-  media: { bg: 'rgba(251,191,36,0.12)', color: '#fbbf24', border: 'rgba(251,191,36,0.3)', label: 'MEDIA' },
+  media: { bg: 'rgba(251,191,36,0.12)',  color: '#fbbf24',  border: 'rgba(251,191,36,0.3)',  label: 'MEDIA' },
+  alta:  { bg: 'rgba(239,68,68,0.12)',   color: '#f87171',  border: 'rgba(239,68,68,0.3)',   label: 'ALTA'  },
 };
 
 const PI_STYLES = {
@@ -517,6 +518,7 @@ export default function AnalisisRepuestosTab() {
             { label: 'Unidades totales', value: data.total_qty,        color: '#38bdf8' },
             { label: 'Baja rotación',   value: data.baja_count,        color: '#4ade80' },
             { label: 'Media rotación',  value: data.media_count,       color: '#fbbf24' },
+            { label: 'Alta rotación',   value: data.alta_count ?? 0,   color: '#f87171' },
           ].map(({ label, value, color }) => (
             <div key={label} style={{
               background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)',
@@ -577,6 +579,7 @@ export default function AnalisisRepuestosTab() {
           { val: 'all',   label: 'Todas' },
           { val: 'baja',  label: 'Baja',  color: '#4ade80' },
           { val: 'media', label: 'Media', color: '#fbbf24' },
+          { val: 'alta',  label: 'Alta',  color: '#f87171' },
         ].map(({ val, label, color }) => {
           const active = rotFilter === val;
           return (

@@ -2235,6 +2235,7 @@ class _LowRotResponse(BaseModel):
     total_qty: int
     baja_count: int
     media_count: int
+    alta_count: int
 
 
 @router.get("/admin/analysis/low-rotation-ordered", response_model=_LowRotResponse)
@@ -2242,7 +2243,7 @@ async def low_rotation_ordered_analysis(
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """Repuestos baja/media rotación en pedido (aún cancelables). Solo superadmin."""
+    """Repuestos en pedido (aún cancelables/ajustables) por clase de rotación. Solo superadmin."""
     if not current_user.is_superadmin:
         raise HTTPException(status_code=403, detail="Solo superadmin")
 
@@ -2298,7 +2299,7 @@ async def low_rotation_ordered_analysis(
         JOIN spare_part_lots spl ON spl.id = spi.lot_id
         LEFT JOIN desc_es_src d       ON d.pn  = UPPER(TRIM(pr.factory_part_number))
         LEFT JOIN models_per_part mp  ON mp.factory_part_number = pr.factory_part_number
-        WHERE pr.rotation_class IN ('baja', 'media')
+        WHERE pr.rotation_class IN ('baja', 'media', 'alta')
           AND spl.packing_list_received = FALSE
           AND UPPER(TRIM(pr.factory_part_number)) NOT IN (SELECT pn FROM aqui)
           AND UPPER(TRIM(pr.factory_part_number)) NOT IN (SELECT pn FROM en_camino)
@@ -2343,11 +2344,12 @@ async def low_rotation_ordered_analysis(
 
     items = sorted(
         parts_map.values(),
-        key=lambda x: (0 if x['rotation_class'] == 'baja' else 1, -x['total_qty']),
+        key=lambda x: ({'baja': 0, 'media': 1, 'alta': 2}.get(x['rotation_class'], 3), -x['total_qty']),
     )
 
     baja_count  = sum(1 for i in items if i['rotation_class'] == 'baja')
     media_count = sum(1 for i in items if i['rotation_class'] == 'media')
+    alta_count  = sum(1 for i in items if i['rotation_class'] == 'alta')
     total_qty   = sum(i['total_qty'] for i in items)
 
     return _LowRotResponse(
@@ -2356,6 +2358,7 @@ async def low_rotation_ordered_analysis(
         total_qty=total_qty,
         baja_count=baja_count,
         media_count=media_count,
+        alta_count=alta_count,
     )
 
 
