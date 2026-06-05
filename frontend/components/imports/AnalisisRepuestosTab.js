@@ -8,9 +8,6 @@ const ROT = {
   media: { bg: 'rgba(251,191,36,0.12)', color: '#fbbf24', border: 'rgba(251,191,36,0.3)', label: 'MEDIA' },
 };
 
-// ciclo: sin marcar → cancelar → cambiar → sin marcar
-const CYCLE = { '': 'cancelar', 'cancelar': 'cambiar', 'cambiar': '' };
-
 const PI_STYLES = {
   '':         { bg: 'rgba(255,255,255,0.05)', border: 'rgba(255,255,255,0.1)',  piColor: 'rgba(255,255,255,0.7)', qtyColor: '#38bdf8',  prefix: null },
   'cancelar': { bg: 'rgba(239,68,68,0.12)',   border: 'rgba(239,68,68,0.35)',   piColor: '#fca5a5',               qtyColor: '#f87171',  prefix: '✕' },
@@ -35,6 +32,102 @@ function SortIcon({ col, sortCol, sortDir }) {
     : <ArrowDown size={10} style={{ color: '#ff5f33', marginLeft: 3 }} />;
 }
 
+function ChangeModal({ fpn, lotId, lot, initialDetails, onSave, onUnmark, onClose }) {
+  const [qty,  setQty]  = useState(initialDetails?.new_quantity ?? lot.qty);
+  const [note, setNote] = useState(initialDetails?.change_note  ?? '');
+
+  const inputStyle = {
+    width: '100%', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)',
+    borderRadius: '8px', padding: '0.5rem 0.75rem', color: '#fff', fontSize: '0.8rem',
+    outline: 'none', boxSizing: 'border-box',
+  };
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 1001,
+      background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+    }}>
+      <div style={{
+        background: '#12121c', border: '1px solid rgba(251,191,36,0.3)',
+        borderRadius: '16px', padding: '1.75rem', maxWidth: '400px', width: '90%',
+      }}>
+        <h3 style={{ margin: '0 0 0.3rem', color: '#fbbf24', fontSize: '0.9rem', fontWeight: 800 }}>
+          ↺ Ajuste de cantidad / observación
+        </h3>
+        <p style={{ margin: '0 0 1.25rem', fontSize: '0.72rem', color: 'rgba(255,255,255,0.4)' }}>
+          <span style={{ fontFamily: 'monospace', color: '#ff5f33' }}>{fpn}</span>
+          {' · '}
+          <span style={{ color: 'rgba(255,255,255,0.6)' }}>{lotId}</span>
+          {' · '}
+          cantidad actual: <strong style={{ color: '#fff' }}>{lot.qty}</strong>
+        </p>
+
+        <div style={{ marginBottom: '1rem' }}>
+          <label style={{ display: 'block', fontSize: '0.65rem', fontWeight: 700, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.4rem' }}>
+            Nueva cantidad
+          </label>
+          <input
+            type="number"
+            min={1}
+            value={qty}
+            onChange={e => setQty(Number(e.target.value) || 1)}
+            style={inputStyle}
+          />
+        </div>
+
+        <div style={{ marginBottom: '1.5rem' }}>
+          <label style={{ display: 'block', fontSize: '0.65rem', fontWeight: 700, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.4rem' }}>
+            Observación <span style={{ fontWeight: 400, textTransform: 'none' }}>(opcional)</span>
+          </label>
+          <input
+            type="text"
+            value={note}
+            onChange={e => setNote(e.target.value)}
+            placeholder="Ej: venga sin pintar, color base"
+            style={inputStyle}
+          />
+        </div>
+
+        <div style={{ display: 'flex', gap: '0.6rem', justifyContent: 'space-between' }}>
+          <button
+            onClick={onUnmark}
+            style={{
+              padding: '0.45rem 0.9rem', borderRadius: '8px', fontSize: '0.72rem', fontWeight: 700,
+              background: 'none', border: '1px solid rgba(255,255,255,0.12)',
+              color: 'rgba(255,255,255,0.35)', cursor: 'pointer',
+            }}
+          >
+            Desmarcar
+          </button>
+          <div style={{ display: 'flex', gap: '0.6rem' }}>
+            <button
+              onClick={onClose}
+              style={{
+                padding: '0.45rem 0.9rem', borderRadius: '8px', fontSize: '0.72rem', fontWeight: 700,
+                background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
+                color: 'rgba(255,255,255,0.5)', cursor: 'pointer',
+              }}
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={() => onSave({ new_quantity: qty, change_note: note })}
+              style={{
+                padding: '0.45rem 1.1rem', borderRadius: '8px', fontSize: '0.72rem', fontWeight: 800,
+                background: 'rgba(251,191,36,0.15)', border: '1px solid rgba(251,191,36,0.4)',
+                color: '#fbbf24', cursor: 'pointer',
+              }}
+            >
+              Guardar
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function AnalisisRepuestosTab() {
   const [data,      setData]      = useState(null);
   const [loading,   setLoading]   = useState(true);
@@ -43,49 +136,62 @@ export default function AnalisisRepuestosTab() {
   const [sortCol,   setSortCol]   = useState('rotation');
   const [sortDir,   setSortDir]   = useState('asc');
 
-  // { lot_identifier: 'cancelar' | 'cambiar' }
-  const [marked, setMarked] = useState({});
+  // { "fpn::lotId": 'cancelar' | 'cambiar' }
+  const [marked,      setMarked]      = useState({});
+  // { "fpn::lotId": { new_quantity, change_note } }
+  const [details,     setDetails]     = useState({});
+  // Modal de detalle para ítems amarillos
+  const [changeModal, setChangeModal] = useState(null);
 
-  const [executing,    setExecuting]    = useState(false);
-  const [confirmOpen,  setConfirmOpen]  = useState(false);
-  const [execResult,   setExecResult]   = useState(null);
+  const [executing,   setExecuting]   = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [execResult,  setExecResult]  = useState(null);
 
   const load = () => {
     setLoading(true);
     Promise.all([
       authFetch('/parts/admin/analysis/low-rotation-ordered').then(r => r.ok ? r.json() : null),
       authFetch('/parts/admin/analysis/decisions').then(r => r.ok ? r.json() : null),
-    ]).then(([analysisData, savedMarked]) => {
+    ]).then(([analysisData, savedDecisions]) => {
       if (analysisData) setData(analysisData);
-      // Solo sobreescribir marcas si la request a DB fue exitosa
-      if (savedMarked !== null) setMarked(savedMarked);
+      if (savedDecisions !== null) {
+        const marks = {};
+        const dets  = {};
+        for (const [key, val] of Object.entries(savedDecisions)) {
+          const decision = typeof val === 'string' ? val : val.decision;
+          if (decision) marks[key] = decision;
+          if (typeof val === 'object' && (val.new_quantity != null || val.change_note)) {
+            dets[key] = { new_quantity: val.new_quantity, change_note: val.change_note || '' };
+          }
+        }
+        setMarked(marks);
+        setDetails(dets);
+      }
       setLoading(false);
     }).catch(() => setLoading(false));
   };
 
   useEffect(() => { load(); }, []);
 
-  // Clave compuesta para que la marcación sea independiente por referencia
   const markKey = (fpn, lotId) => `${fpn}::${lotId}`;
 
-  const toggleMark = (fpn, lotId) => {
-    const key      = markKey(fpn, lotId);
-    const current  = marked[key] || '';
-    const next     = CYCLE[current];
+  const toggleMark = (fpn, lotId, lot) => {
+    const key     = markKey(fpn, lotId);
+    const current = marked[key] || '';
 
-    // 1. Actualizar UI inmediatamente
-    setMarked(prev => {
-      const copy = { ...prev };
-      if (!next) delete copy[key]; else copy[key] = next;
-      return copy;
-    });
+    if (current === 'cambiar') {
+      setChangeModal({ key, fpn, lotId, lot });
+      return;
+    }
 
-    // 2. Persistir en DB (separado del setState para evitar doble ejecución)
+    const next = current === '' ? 'cancelar' : 'cambiar';
+
+    setMarked(prev => ({ ...prev, [key]: next }));
+
     authFetch('/parts/admin/analysis/decisions', {
       method: 'POST',
-      body: JSON.stringify({ factory_part_number: fpn, lot_identifier: lotId, decision: next || '' }),
+      body: JSON.stringify({ factory_part_number: fpn, lot_identifier: lotId, decision: next }),
     }).catch(() => {
-      // Si falla, revertir el cambio visual
       setMarked(prev => {
         const copy = { ...prev };
         if (!current) delete copy[key]; else copy[key] = current;
@@ -94,16 +200,43 @@ export default function AnalisisRepuestosTab() {
     });
   };
 
-  const handleExecuteCancellations = async () => {
+  const handleSaveDetails = async (det) => {
+    const { key, fpn, lotId } = changeModal;
+    setChangeModal(null);
+    setDetails(prev => ({ ...prev, [key]: det }));
+    await authFetch('/parts/admin/analysis/decisions', {
+      method: 'POST',
+      body: JSON.stringify({
+        factory_part_number: fpn,
+        lot_identifier:      lotId,
+        decision:            'cambiar',
+        new_quantity:        det.new_quantity,
+        change_note:         det.change_note || null,
+      }),
+    });
+  };
+
+  const handleUnmarkFromModal = async () => {
+    const { key, fpn, lotId } = changeModal;
+    setChangeModal(null);
+    setMarked(prev => { const c = { ...prev }; delete c[key]; return c; });
+    setDetails(prev => { const c = { ...prev }; delete c[key]; return c; });
+    await authFetch('/parts/admin/analysis/decisions', {
+      method: 'POST',
+      body: JSON.stringify({ factory_part_number: fpn, lot_identifier: lotId, decision: '' }),
+    });
+  };
+
+  const handleExecuteAdjustments = async () => {
     setConfirmOpen(false);
     setExecuting(true);
     setExecResult(null);
     try {
-      const res = await authFetch('/parts/admin/analysis/decisions/execute', { method: 'POST' });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || 'Error al ejecutar');
-      setExecResult(data);
-      load(); // recargar datos
+      const res  = await authFetch('/parts/admin/analysis/decisions/execute', { method: 'POST' });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.detail || 'Error al ejecutar');
+      setExecResult(json);
+      load();
     } catch (e) {
       setExecResult({ error: e.message });
     } finally {
@@ -143,25 +276,22 @@ export default function AnalisisRepuestosTab() {
   const sorted = [...items].sort((a, b) => {
     let av, bv;
     if      (sortCol === 'rotation')  { av = a.rotation_class === 'baja' ? 0 : 1; bv = b.rotation_class === 'baja' ? 0 : 1; }
-    else if (sortCol === 'total_qty') { av = a.total_qty;    bv = b.total_qty;    }
-    else                              { av = a.lots.length;  bv = b.lots.length;  }
+    else if (sortCol === 'total_qty') { av = a.total_qty;   bv = b.total_qty;   }
+    else                              { av = a.lots.length; bv = b.lots.length; }
     return sortDir === 'asc' ? av - bv : bv - av;
   });
 
-  // Para la barra de resumen: mostrar "CÓDIGO · PI"
   const markedCancelar = Object.entries(marked)
     .filter(([, v]) => v === 'cancelar')
     .map(([k]) => { const [fpn, pi] = k.split('::'); return { fpn, pi }; });
   const markedCambiar  = Object.entries(marked)
     .filter(([, v]) => v === 'cambiar')
-    .map(([k]) => { const [fpn, pi] = k.split('::'); return { fpn, pi }; });
+    .map(([k]) => { const [fpn, pi] = k.split('::'); return { fpn, pi, det: details[k] }; });
   const hasMarked = markedCancelar.length > 0 || markedCambiar.length > 0;
 
-  // Total FOB de lo marcado como cancelar: fob_unit × qty por lote
   const cancelFobTotal = markedCancelar.reduce((total, { fpn, pi }) => {
     const item = (data?.items || []).find(i => i.factory_part_number === fpn);
-    if (!item) return total;
-    const lot = item.lots.find(l => l.lot_identifier === pi);
+    const lot  = item?.lots.find(l => l.lot_identifier === pi);
     if (!lot || lot.fob_unit == null) return total;
     return total + lot.fob_unit * lot.qty;
   }, 0);
@@ -182,7 +312,20 @@ export default function AnalisisRepuestosTab() {
   return (
     <div style={{ padding: '0 0 2rem' }}>
 
-      {/* Modal de confirmación de cancelación */}
+      {/* Modal de detalle de cambio */}
+      {changeModal && (
+        <ChangeModal
+          fpn={changeModal.fpn}
+          lotId={changeModal.lotId}
+          lot={changeModal.lot}
+          initialDetails={details[changeModal.key]}
+          onSave={handleSaveDetails}
+          onUnmark={handleUnmarkFromModal}
+          onClose={() => setChangeModal(null)}
+        />
+      )}
+
+      {/* Modal de confirmación de ajustes */}
       {confirmOpen && (
         <div style={{
           position: 'fixed', inset: 0, zIndex: 1000,
@@ -190,19 +333,68 @@ export default function AnalisisRepuestosTab() {
           display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>
           <div style={{
-            background: '#12121c', border: '1px solid rgba(239,68,68,0.3)',
-            borderRadius: '16px', padding: '2rem', maxWidth: '420px', width: '90%',
+            background: '#12121c', border: '1px solid rgba(255,255,255,0.1)',
+            borderRadius: '16px', padding: '2rem', maxWidth: '480px', width: '90%', maxHeight: '80vh', overflowY: 'auto',
           }}>
-            <h3 style={{ margin: '0 0 0.75rem', color: '#f87171', fontSize: '1rem', fontWeight: 800 }}>
-              ¿Confirmar cancelación?
+            <h3 style={{ margin: '0 0 1rem', color: '#fff', fontSize: '1rem', fontWeight: 800 }}>
+              ¿Ejecutar ajustes?
             </h3>
-            <p style={{ margin: '0 0 0.5rem', fontSize: '0.78rem', color: 'rgba(255,255,255,0.6)', lineHeight: 1.6 }}>
-              Se cancelarán <strong style={{ color: '#fff' }}>{markedCancelar.length}</strong> referencia(s) en sus respectivos PIs.
-              Esta acción no se puede deshacer.
+
+            {markedCancelar.length > 0 && (
+              <div style={{ marginBottom: '1rem' }}>
+                <p style={{ margin: '0 0 0.5rem', fontSize: '0.72rem', fontWeight: 800, color: '#f87171' }}>
+                  ✕ Cancelaciones ({markedCancelar.length})
+                </p>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
+                  {markedCancelar.map(({ fpn, pi }) => (
+                    <span key={`${fpn}::${pi}`} style={{
+                      fontFamily: 'monospace', fontSize: '0.65rem', padding: '2px 8px', borderRadius: '5px',
+                      background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.25)', color: '#fca5a5',
+                    }}>
+                      {fpn} · {pi}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {markedCambiar.length > 0 && (
+              <div style={{ marginBottom: '1rem' }}>
+                <p style={{ margin: '0 0 0.5rem', fontSize: '0.72rem', fontWeight: 800, color: '#fbbf24' }}>
+                  ↺ Cambios de cantidad ({markedCambiar.length})
+                </p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                  {markedCambiar.map(({ fpn, pi, det }) => (
+                    <div key={`${fpn}::${pi}`} style={{
+                      fontFamily: 'monospace', fontSize: '0.65rem', padding: '5px 10px', borderRadius: '5px',
+                      background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.2)',
+                    }}>
+                      <span style={{ color: '#fde68a' }}>{fpn} · {pi}</span>
+                      {det?.new_quantity != null && (
+                        <span style={{ color: 'rgba(255,255,255,0.5)', marginLeft: '0.5rem' }}>
+                          → <strong style={{ color: '#fff' }}>{det.new_quantity}</strong> u
+                        </span>
+                      )}
+                      {det?.change_note && (
+                        <span style={{ color: 'rgba(255,255,255,0.4)', marginLeft: '0.5rem', fontFamily: 'sans-serif', fontSize: '0.6rem' }}>
+                          · {det.change_note}
+                        </span>
+                      )}
+                      {!det?.new_quantity && !det?.change_note && (
+                        <span style={{ color: 'rgba(255,255,255,0.25)', marginLeft: '0.5rem', fontFamily: 'sans-serif', fontSize: '0.6rem' }}>
+                          · sin detalle definido
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <p style={{ margin: '0.5rem 0 1.5rem', fontSize: '0.68rem', color: 'rgba(255,255,255,0.3)' }}>
+              Solo se procesan lotes sin packing list recibido. Esta acción no se puede deshacer.
             </p>
-            <p style={{ margin: '0 0 1.5rem', fontSize: '0.72rem', color: 'rgba(255,255,255,0.35)' }}>
-              Solo se cancelan ítems que aún no tienen packing list recibido.
-            </p>
+
             <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
               <button
                 onClick={() => setConfirmOpen(false)}
@@ -215,14 +407,14 @@ export default function AnalisisRepuestosTab() {
                 Volver
               </button>
               <button
-                onClick={handleExecuteCancellations}
+                onClick={handleExecuteAdjustments}
                 style={{
                   padding: '0.5rem 1.25rem', borderRadius: '8px', fontSize: '0.75rem', fontWeight: 800,
-                  background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.4)',
-                  color: '#f87171', cursor: 'pointer',
+                  background: 'rgba(255,165,0,0.15)', border: '1px solid rgba(255,165,0,0.4)',
+                  color: '#ffa500', cursor: 'pointer',
                 }}
               >
-                Sí, cancelar
+                Ejecutar ajustes
               </button>
             </div>
           </div>
@@ -280,7 +472,6 @@ export default function AnalisisRepuestosTab() {
             </div>
           ))}
 
-          {/* Box FOB cancelaciones */}
           {markedCancelar.length > 0 && (
             <div style={{
               background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)',
@@ -297,7 +488,7 @@ export default function AnalisisRepuestosTab() {
               </span>
               <span style={{ fontSize: '0.58rem', color: 'rgba(255,255,255,0.25)' }}>
                 FOB · {markedCancelar.length} ref{markedCancelar.length !== 1 ? 's' : ''}
-                {cancelFobHasData && cancelFobTotal === 0 ? '' : !cancelFobHasData ? ' · sin precio' : ''}
+                {!cancelFobHasData ? ' · sin precio' : ''}
               </span>
             </div>
           )}
@@ -324,7 +515,6 @@ export default function AnalisisRepuestosTab() {
           );
         })}
 
-        {/* Leyenda del ciclo */}
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.62rem', color: 'rgba(255,255,255,0.3)' }}>
           <span>Click en un PI:</span>
           {[['cancelar','#f87171','rgba(239,68,68,0.12)'], ['cambiar','#fbbf24','rgba(251,191,36,0.1)']].map(([lbl, clr, bg]) => (
@@ -419,13 +609,22 @@ export default function AnalisisRepuestosTab() {
                   <td style={{ padding: '0.7rem 1rem' }}>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
                       {item.lots.map(lot => {
-                        const state = marked[markKey(item.factory_part_number, lot.lot_identifier)] || '';
+                        const key   = markKey(item.factory_part_number, lot.lot_identifier);
+                        const state = marked[key] || '';
+                        const det   = details[key];
                         const s     = PI_STYLES[state];
+                        const hasDetail = state === 'cambiar' && (det?.new_quantity != null || det?.change_note);
                         return (
                           <button
                             key={lot.lot_identifier}
-                            onClick={() => toggleMark(item.factory_part_number, lot.lot_identifier)}
-                            title={state ? `Marcado: ${state} — click para cambiar` : 'Click para marcar'}
+                            onClick={() => toggleMark(item.factory_part_number, lot.lot_identifier, lot)}
+                            title={
+                              state === 'cambiar'
+                                ? `Ajuste: ${det?.new_quantity != null ? `→ ${det.new_quantity}u` : 'sin cantidad'} ${det?.change_note ? `· ${det.change_note}` : ''} — click para editar`
+                                : state === 'cancelar'
+                                ? 'Marcado para cancelar — click para cambiar a amarillo'
+                                : 'Click para marcar'
+                            }
                             style={{
                               display: 'inline-flex', alignItems: 'center', gap: '0.25rem',
                               padding: '2px 8px', borderRadius: '6px', cursor: 'pointer',
@@ -439,7 +638,12 @@ export default function AnalisisRepuestosTab() {
                             )}
                             <span style={{ color: s.piColor }}>{lot.lot_identifier}</span>
                             <span style={{ color: 'rgba(255,255,255,0.25)', fontSize: '0.6rem' }}>×</span>
-                            <span style={{ color: s.qtyColor, fontWeight: 800 }}>{lot.qty}</span>
+                            <span style={{ color: s.qtyColor, fontWeight: 800 }}>
+                              {state === 'cambiar' && det?.new_quantity != null ? det.new_quantity : lot.qty}
+                            </span>
+                            {hasDetail && (
+                              <span style={{ fontSize: '0.6rem', color: '#fbbf24', opacity: 0.7 }}>✎</span>
+                            )}
                           </button>
                         );
                       })}
@@ -485,7 +689,7 @@ export default function AnalisisRepuestosTab() {
                 ↺ Cambiar ({markedCambiar.length})
               </span>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
-                {markedCambiar.map(({ fpn, pi }) => (
+                {markedCambiar.map(({ fpn, pi, det }) => (
                   <span key={`${fpn}::${pi}`} style={{
                     fontFamily: 'monospace', fontSize: '0.65rem', padding: '2px 8px', borderRadius: '5px',
                     background: 'rgba(251,191,36,0.1)', border: '1px solid rgba(251,191,36,0.3)', color: '#fde68a',
@@ -494,30 +698,35 @@ export default function AnalisisRepuestosTab() {
                     <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: '0.58rem' }}>{fpn}</span>
                     <span style={{ color: 'rgba(255,255,255,0.2)' }}>·</span>
                     <span>{pi}</span>
+                    {det?.new_quantity != null && (
+                      <span style={{ color: '#fbbf24', fontWeight: 800 }}>→ {det.new_quantity}u</span>
+                    )}
+                    {det?.change_note && (
+                      <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: '0.58rem' }}>✎</span>
+                    )}
                   </span>
                 ))}
               </div>
             </div>
           )}
-          {markedCancelar.length > 0 && (
-            <button
-              onClick={() => setConfirmOpen(true)}
-              disabled={executing}
-              style={{
-                alignSelf: 'center', padding: '0.45rem 1.1rem', borderRadius: '8px',
-                background: executing ? 'rgba(239,68,68,0.06)' : 'rgba(239,68,68,0.15)',
-                border: '1px solid rgba(239,68,68,0.4)',
-                color: executing ? '#606075' : '#f87171',
-                fontSize: '0.7rem', fontWeight: 800, cursor: executing ? 'not-allowed' : 'pointer',
-                display: 'flex', alignItems: 'center', gap: '0.4rem',
-              }}
-            >
-              {executing ? 'Ejecutando...' : `✕ Proceder con cancelación (${markedCancelar.length})`}
-            </button>
-          )}
+
+          <button
+            onClick={() => setConfirmOpen(true)}
+            disabled={executing}
+            style={{
+              alignSelf: 'center', padding: '0.45rem 1.1rem', borderRadius: '8px',
+              background: executing ? 'rgba(255,165,0,0.06)' : 'rgba(255,165,0,0.15)',
+              border: '1px solid rgba(255,165,0,0.4)',
+              color: executing ? '#606075' : '#ffa500',
+              fontSize: '0.7rem', fontWeight: 800, cursor: executing ? 'not-allowed' : 'pointer',
+              display: 'flex', alignItems: 'center', gap: '0.4rem',
+            }}
+          >
+            {executing ? 'Ejecutando...' : `Ejecutar ajustes (${markedCancelar.length + markedCambiar.length})`}
+          </button>
+
           <button
             onClick={() => {
-              // Borrar todas las decisiones en DB
               Object.keys(marked).forEach(key => {
                 const [fpn, lotId] = key.split('::');
                 authFetch('/parts/admin/analysis/decisions', {
@@ -526,6 +735,7 @@ export default function AnalisisRepuestosTab() {
                 }).catch(() => {});
               });
               setMarked({});
+              setDetails({});
             }}
             style={{
               marginLeft: 'auto', alignSelf: 'center', padding: '0.35rem 0.75rem', borderRadius: '7px',
@@ -541,12 +751,16 @@ export default function AnalisisRepuestosTab() {
       {execResult && !execResult.error && (
         <div style={{
           marginTop: '0.75rem', padding: '0.875rem 1.25rem',
-          background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)',
+          background: 'rgba(74,222,128,0.06)', border: '1px solid rgba(74,222,128,0.2)',
           borderRadius: '12px', fontSize: '0.72rem',
         }}>
-          <span style={{ color: '#f87171', fontWeight: 800 }}>✓ Cancelación ejecutada — </span>
+          <span style={{ color: '#4ade80', fontWeight: 800 }}>✓ Ajustes ejecutados — </span>
           <span style={{ color: 'rgba(255,255,255,0.6)' }}>
-            {execResult.cancelled_items} ítem(s) cancelado(s) en {execResult.affected_references?.length || 0} referencia(s).
+            {execResult.cancelled_items > 0 && `${execResult.cancelled_items} ítem(s) cancelado(s)`}
+            {execResult.cancelled_items > 0 && (execResult.changed_items || 0) > 0 && ', '}
+            {(execResult.changed_items || 0) > 0 && `${execResult.changed_items} ítem(s) con cantidad actualizada`}
+            {execResult.cancelled_items === 0 && (execResult.changed_items || 0) === 0 && 'sin cambios en ítems'}
+            {` en ${execResult.affected_references?.length || 0} referencia(s).`}
             {execResult.skipped_lots?.length > 0 && ` ${execResult.skipped_lots.length} lote(s) omitido(s) (PL ya recibido).`}
           </span>
         </div>

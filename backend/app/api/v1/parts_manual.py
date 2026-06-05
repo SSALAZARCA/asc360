@@ -2469,17 +2469,26 @@ async def get_decisions(
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """Devuelve todas las decisiones guardadas como {fpn::lot_id: decision}."""
+    """Devuelve todas las decisiones guardadas como {fpn::lot_id: {decision, new_quantity, change_note}}."""
     if not current_user.is_superadmin:
         raise HTTPException(status_code=403, detail="Solo superadmin")
     rows = (await db.execute(select(_POD))).scalars().all()
-    return {f"{r.factory_part_number}::{r.lot_identifier}": r.decision for r in rows}
+    return {
+        f"{r.factory_part_number}::{r.lot_identifier}": {
+            "decision":     r.decision,
+            "new_quantity": r.new_quantity,
+            "change_note":  r.change_note,
+        }
+        for r in rows
+    }
 
 
 class _DecisionIn(BaseModel):
     factory_part_number: str
     lot_identifier: str
     decision: str  # 'cancelar' | 'cambiar' | '' (vacío = borrar)
+    new_quantity: Optional[int] = None
+    change_note: Optional[str] = None
 
 
 @router.post("/admin/analysis/decisions", status_code=200)
@@ -2501,14 +2510,18 @@ async def save_decision(
         return {"status": "deleted"}
 
     if existing:
-        existing.decision   = body.decision
-        existing.updated_at = datetime.utcnow()
-        existing.updated_by = _uuid.UUID(current_user.user_id)
+        existing.decision     = body.decision
+        existing.new_quantity = body.new_quantity
+        existing.change_note  = body.change_note
+        existing.updated_at   = datetime.utcnow()
+        existing.updated_by   = _uuid.UUID(current_user.user_id)
     else:
         db.add(_POD(
             factory_part_number=body.factory_part_number,
             lot_identifier=body.lot_identifier,
             decision=body.decision,
+            new_quantity=body.new_quantity,
+            change_note=body.change_note,
             updated_by=_uuid.UUID(current_user.user_id),
         ))
     await db.commit()
@@ -2516,13 +2529,15 @@ async def save_decision(
 
 
 @router.post("/admin/analysis/decisions/execute", status_code=200)
-async def execute_cancellations(
+async def execute_adjustments(
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
     """
-    Ejecuta todas las decisiones marcadas como 'cancelar' que aún no han sido ejecutadas.
-    Solo cancela ítems en lotes SIN packing list recibido (aún cancelables).
+    Ejecuta todas las decisiones pendientes:
+    - 'cancelar': marca ítems CANCELLED y qty_pending = 0
+    - 'cambiar': actualiza qty_ordered/qty_pending si new_quantity está definido
+    Solo actúa sobre lotes SIN packing list recibido.
     Recalcula preliminary_fob para las referencias afectadas.
     """
     if not current_user.is_superadmin:
@@ -2531,23 +2546,23 @@ async def execute_cancellations(
     from app.models.imports import SparePartLot, SparePartItem
     from app.models.parts_manual import PartsReference
 
-    # Cargar decisiones pendientes de ejecutar
-    decisions = (await db.execute(
-        select(_POD).where(
-            _POD.decision == 'cancelar',
-            _POD.executed_at.is_(None),
-        )
+    all_pending = (await db.execute(
+        select(_POD).where(_POD.executed_at.is_(None))
     )).scalars().all()
 
-    if not decisions:
-        return {"cancelled_items": 0, "refs_updated": 0, "affected_references": [], "skipped_lots": []}
+    cancelar_decisions = [d for d in all_pending if d.decision == 'cancelar']
+    cambiar_decisions  = [d for d in all_pending if d.decision == 'cambiar']
+
+    if not all_pending:
+        return {"cancelled_items": 0, "changed_items": 0, "refs_updated": 0, "affected_references": [], "skipped_lots": []}
 
     now = datetime.utcnow()
     cancelled_items = 0
+    changed_items   = 0
     skipped_lots: list[str] = []
     affected_fpns: set[str] = set()
 
-    for decision in decisions:
+    for decision in cancelar_decisions:
         fpn = decision.factory_part_number
         lot_id_str = decision.lot_identifier
 
@@ -2588,6 +2603,41 @@ async def execute_cancellations(
         decision.executed_at = now
         affected_fpns.add(fpn)
 
+    # ── Procesar decisiones 'cambiar' ─────────────────────────────────────────
+    for decision in cambiar_decisions:
+        fpn       = decision.factory_part_number
+        lot_id_str = decision.lot_identifier
+
+        lot = (await db.execute(
+            select(SparePartLot).where(SparePartLot.lot_identifier == lot_id_str)
+        )).scalar_one_or_none()
+
+        if not lot:
+            decision.executed_at = now
+            continue
+
+        if lot.packing_list_received:
+            skipped_lots.append(f"{lot_id_str} (packing list ya recibido)")
+            continue
+
+        if decision.new_quantity is not None:
+            norm_fpn = fpn.upper().strip().replace(' ', '')
+            items_result = await db.execute(
+                select(SparePartItem).where(
+                    SparePartItem.lot_id == lot.id,
+                    SparePartItem.status.notin_(['CANCELLED', 'RECEIVED', 'DECLARED', 'BACKORDER']),
+                    func.upper(func.trim(func.replace(SparePartItem.part_number, ' ', ''))) == norm_fpn,
+                )
+            )
+            for item in items_result.scalars().all():
+                item.qty_ordered = decision.new_quantity
+                item.qty_pending = decision.new_quantity
+                item.updated_at  = now
+                changed_items += 1
+            affected_fpns.add(fpn)
+
+        decision.executed_at = now
+
     # Recalcular preliminary_fob para todas las referencias afectadas
     refs_updated = 0
     for fpn in affected_fpns:
@@ -2621,7 +2671,8 @@ async def execute_cancellations(
 
     return {
         "cancelled_items": cancelled_items,
-        "refs_updated": refs_updated,
+        "changed_items":   changed_items,
+        "refs_updated":    refs_updated,
         "affected_references": list(affected_fpns),
         "skipped_lots": skipped_lots,
     }
@@ -2642,6 +2693,11 @@ async def export_low_rotation_ordered(
         raise HTTPException(status_code=403, detail="Solo superadmin")
 
     analysis = await low_rotation_ordered_analysis(db=db, current_user=current_user)
+
+    db_decisions = {
+        f"{r.factory_part_number}::{r.lot_identifier}": r
+        for r in (await db.execute(select(_POD))).scalars().all()
+    }
 
     import openpyxl
     from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
@@ -2666,8 +2722,8 @@ async def export_low_rotation_ordered(
 
     DECISION_LABEL = {"cancelar": "CANCELAR", "cambiar": "CAMBIAR", "": "—"}
 
-    headers = ["Rotación", "Código", "Descripción", "Modelos", "PI Number", "Cantidad", "Total ref.", "Decisión"]
-    col_widths = [10, 20, 35, 25, 18, 10, 10, 12]
+    headers = ["Rotación", "Código", "Descripción", "Modelos", "PI Number", "Cantidad", "Total ref.", "Decisión", "Nueva Cant.", "Observación"]
+    col_widths = [10, 20, 35, 25, 18, 10, 10, 12, 12, 40]
 
     for ci, (h, w) in enumerate(zip(headers, col_widths), 1):
         cell = ws.cell(row=1, column=ci, value=h)
@@ -2682,8 +2738,10 @@ async def export_low_rotation_ordered(
     for item in analysis.items:
         models_str = ", ".join(item.models) if item.models else "—"
         for lot in item.lots:
-            decision = body.marked.get(f"{item.factory_part_number}::{lot.lot_identifier}", "")
+            key = f"{item.factory_part_number}::{lot.lot_identifier}"
+            decision = body.marked.get(key, "")
             decision_label = DECISION_LABEL.get(decision, "—")
+            db_dec = db_decisions.get(key)
 
             if decision == "cancelar":
                 row_fill = fill_cancelar
@@ -2695,6 +2753,9 @@ async def export_low_rotation_ordered(
                 row_fill = None
                 dec_font = Font(color="888899", size=9)
 
+            new_qty    = db_dec.new_quantity if (db_dec and decision == "cambiar") else None
+            obs        = db_dec.change_note  if (db_dec and decision == "cambiar") else None
+
             values = [
                 item.rotation_class.upper(),
                 item.factory_part_number,
@@ -2704,8 +2765,10 @@ async def export_low_rotation_ordered(
                 lot.qty,
                 item.total_qty,
                 decision_label,
+                new_qty or "",
+                obs or "",
             ]
-            aligns = [center, left, left, left, left, center, center, center]
+            aligns = [center, left, left, left, left, center, center, center, center, left]
 
             for ci, (val, aln) in enumerate(zip(values, aligns), 1):
                 cell = ws.cell(row=row, column=ci, value=val)
@@ -2718,7 +2781,7 @@ async def export_low_rotation_ordered(
             row += 1
 
     ws.freeze_panes = "A2"
-    ws.auto_filter.ref = f"A1:H{row - 1}"
+    ws.auto_filter.ref = f"A1:J{row - 1}"
 
     buf = io.BytesIO()
     wb.save(buf)
