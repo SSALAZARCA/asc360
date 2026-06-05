@@ -2475,9 +2475,10 @@ async def get_decisions(
     rows = (await db.execute(select(_POD))).scalars().all()
     return {
         f"{r.factory_part_number}::{r.lot_identifier}": {
-            "decision":     r.decision,
-            "new_quantity": r.new_quantity,
-            "change_note":  r.change_note,
+            "decision":          r.decision,
+            "new_quantity":      r.new_quantity,
+            "original_quantity": r.original_quantity,
+            "change_note":       r.change_note,
         }
         for r in rows
     }
@@ -2488,6 +2489,7 @@ class _DecisionIn(BaseModel):
     lot_identifier: str
     decision: str  # 'cancelar' | 'cambiar' | '' (vacío = borrar)
     new_quantity: Optional[int] = None
+    original_quantity: Optional[int] = None
     change_note: Optional[str] = None
 
 
@@ -2510,17 +2512,21 @@ async def save_decision(
         return {"status": "deleted"}
 
     if existing:
-        existing.decision     = body.decision
-        existing.new_quantity = body.new_quantity
-        existing.change_note  = body.change_note
-        existing.updated_at   = datetime.utcnow()
-        existing.updated_by   = _uuid.UUID(current_user.user_id)
+        existing.decision          = body.decision
+        existing.new_quantity      = body.new_quantity
+        existing.change_note       = body.change_note
+        existing.updated_at        = datetime.utcnow()
+        existing.updated_by        = _uuid.UUID(current_user.user_id)
+        # Preserve original_quantity: only set on first save, never overwrite
+        if existing.original_quantity is None and body.original_quantity is not None:
+            existing.original_quantity = body.original_quantity
     else:
         db.add(_POD(
             factory_part_number=body.factory_part_number,
             lot_identifier=body.lot_identifier,
             decision=body.decision,
             new_quantity=body.new_quantity,
+            original_quantity=body.original_quantity,
             change_note=body.change_note,
             updated_by=_uuid.UUID(current_user.user_id),
         ))

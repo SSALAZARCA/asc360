@@ -120,6 +120,7 @@ class PartOrderDecision(Base):
     lot_identifier      = Column(String(100), primary_key=True)
     decision            = Column(String(20),  nullable=False)  # 'cancelar' | 'cambiar'
     new_quantity        = Column(Integer, nullable=True)
+    original_quantity   = Column(Integer, nullable=True)
     change_note         = Column(String(500), nullable=True)
     updated_at          = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     updated_by          = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)

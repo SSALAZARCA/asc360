@@ -112,7 +112,7 @@ function ChangeModal({ fpn, lotId, lot, initialDetails, onSave, onUnmark, onClos
               Cancelar
             </button>
             <button
-              onClick={() => onSave({ new_quantity: qty, change_note: note })}
+              onClick={() => onSave({ new_quantity: qty, change_note: note, original_quantity: initialDetails?.original_quantity ?? lot.qty })}
               style={{
                 padding: '0.45rem 1.1rem', borderRadius: '8px', fontSize: '0.72rem', fontWeight: 800,
                 background: 'rgba(251,191,36,0.15)', border: '1px solid rgba(251,191,36,0.4)',
@@ -160,8 +160,8 @@ export default function AnalisisRepuestosTab() {
         for (const [key, val] of Object.entries(savedDecisions)) {
           const decision = typeof val === 'string' ? val : val.decision;
           if (decision) marks[key] = decision;
-          if (typeof val === 'object' && (val.new_quantity != null || val.change_note)) {
-            dets[key] = { new_quantity: val.new_quantity, change_note: val.change_note || '' };
+          if (typeof val === 'object' && (val.new_quantity != null || val.change_note || val.original_quantity != null)) {
+            dets[key] = { new_quantity: val.new_quantity, change_note: val.change_note || '', original_quantity: val.original_quantity ?? null };
           }
         }
         setMarked(marks);
@@ -211,6 +211,7 @@ export default function AnalisisRepuestosTab() {
         lot_identifier:      lotId,
         decision:            'cambiar',
         new_quantity:        det.new_quantity,
+        original_quantity:   det.original_quantity ?? null,
         change_note:         det.change_note || null,
       }),
     });
