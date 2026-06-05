@@ -229,15 +229,24 @@ async def _query_f2(desde: date, hasta: date, db: AsyncSession) -> dict:
                   AND is_spare_part = false
                   AND computed_status IN ('en_transito','en_transito_parcial')
             ), 0) AS m_transito,
-            COALESCE(SUM(total_units) FILTER (
-                WHERE computed_status != 'completado'
-                  AND is_spare_part = false
-                  AND computed_status = 'en_destino'
+            -- m_destino: unidades en destino que aún no tienen DIM
+            COALESCE((
+                SELECT COUNT(*)
+                FROM shipment_moto_units mu_d
+                JOIN shipment_orders so_d ON so_d.id = mu_d.shipment_order_id
+                WHERE so_d.computed_status != 'completado'
+                  AND so_d.is_spare_part = false
+                  AND so_d.computed_status = 'en_destino'
+                  AND mu_d.dim_pdf_object_name IS NULL
             ), 0) AS m_destino,
-            COALESCE(SUM(total_units) FILTER (
-                WHERE computed_status != 'completado'
-                  AND is_spare_part = false
-                  AND computed_status IN ('nacionalizado','completado_parcial')
+            -- m_nac: unidades con DIM cargada (ya nacionalizadas)
+            COALESCE((
+                SELECT COUNT(*)
+                FROM shipment_moto_units mu_n
+                JOIN shipment_orders so_n ON so_n.id = mu_n.shipment_order_id
+                WHERE so_n.computed_status != 'completado'
+                  AND so_n.is_spare_part = false
+                  AND mu_n.dim_pdf_object_name IS NOT NULL
             ), 0) AS m_nac,
             -- pipeline repuestos: referencias únicas por etapa (subquery)
             COALESCE((

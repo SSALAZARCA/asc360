@@ -289,7 +289,7 @@ body{
         <span class="section__meta">pedidos y disponibilidad</span>
       </div>
 
-      <div class="kpi-grid">
+      <div class="kpi-grid" style="grid-template-columns:repeat(3,1fr);max-width:75%;margin-left:auto;margin-right:auto;">
 
         <div class="kpi s-ink">
           <div class="kpi__label">Pedidos motos activos</div>
@@ -317,7 +317,7 @@ body{
     {% set stage_classes = ['c-prep','c-listo','c-origen','c-transito','c-destino','c-nac'] %}
 
     {% if f2.pipeline_motos.total > 0 %}
-    <div class="pipe" style="margin-top:6px;">
+    <div class="pipe" style="margin-top:8px;">
       <div class="pipe__stages-head">
         {% for label in stage_labels %}
         <div class="sh">{{ label }}</div>
@@ -504,7 +504,7 @@ body{
         <span class="section__meta">pedidos, backorder y valor a cancelar</span>
       </div>
 
-      <div class="kpi-grid">
+      <div class="kpi-grid" style="grid-template-columns:repeat(3,1fr);max-width:75%;margin-left:auto;margin-right:auto;">
 
         <div class="kpi s-ink">
           <div class="kpi__label">Pedidos repuestos activos</div>
@@ -531,7 +531,7 @@ body{
       {% set stage_classes = ['c-prep','c-listo','c-origen','c-transito','c-destino','c-nac'] %}
 
       {% if f2.pipeline_repuestos.total > 0 %}
-      <div class="pipe" style="margin-top:10px;">
+      <div class="pipe" style="margin-top:8px;">
         <div class="pipe__stages-head">
           {% for label in stage_labels %}
           <div class="sh">{{ label }}</div>
