@@ -54,6 +54,7 @@ body{
 /* ---------- Page sheet ---------- */
 .sheet{
   width:100%;
+  min-height:100vh;
   background:var(--paper);
   padding:36px 48px 32px;
   display:flex;
@@ -117,10 +118,10 @@ body{
   background:var(--paper); border:1px solid var(--line);
   border-top:3px solid var(--state, var(--ink)); border-radius:9px;
   padding:10px 12px 11px; position:relative;
-  display:flex; flex-direction:column;
+  display:flex; flex-direction:column; align-items:center; text-align:center;
 }
 .kpi__label{ font-size:10px; font-weight:600; color:var(--muted); line-height:1.25; letter-spacing:.01em; }
-.kpi__val{ font-weight:700; font-size:28px; color:var(--ink); margin-top:auto; line-height:1; font-variant-numeric:tabular-nums; letter-spacing:-.03em; }
+.kpi__val{ font-weight:700; font-size:28px; color:var(--ink); margin-top:6px; line-height:1; font-variant-numeric:tabular-nums; letter-spacing:-.03em; }
 .kpi__val .u{ font-size:12px; font-weight:600; color:var(--muted); letter-spacing:0; }
 .kpi__sub{ font-size:9.5px; color:var(--muted); font-weight:500; margin-top:4px; }
 .kpi__sub b{ color:var(--text); font-weight:600; }
@@ -235,7 +236,7 @@ body{
 
 /* ---------- Footer ---------- */
 .foot{
-  margin-top:16px; padding-top:8px; border-top:1px solid var(--line);
+  margin-top:auto; padding-top:8px; border-top:1px solid var(--line);
   display:flex; align-items:center; justify-content:space-between;
   font-size:9px; color:var(--muted); font-weight:500;
 }
@@ -284,8 +285,8 @@ body{
     <div class="section" style="margin-top:4px;">
       <div class="section__head">
         <span class="section__num">01</span>
-        <span class="section__title">Resumen</span>
-        <span class="section__meta">motocicletas · pedidos y disponibilidad</span>
+        <span class="section__title">Motocicletas</span>
+        <span class="section__meta">pedidos y disponibilidad</span>
       </div>
 
       <div class="kpi-grid">
@@ -316,7 +317,7 @@ body{
     {% set stage_classes = ['c-prep','c-listo','c-origen','c-transito','c-destino','c-nac'] %}
 
     {% if f2.pipeline_motos.total > 0 %}
-    <div class="pipe" style="margin-top:10px;">
+    <div class="pipe" style="margin-top:6px;">
       <div class="pipe__stages-head">
         {% for label in stage_labels %}
         <div class="sh">{{ label }}</div>
@@ -404,7 +405,7 @@ body{
       <div class="grid-2">
         <div>
           <div class="block-title"><span class="dot"></span> Facturadas por distribuidor</div>
-          <div class="panel">
+          <div class="panel" style="box-sizing:border-box;height:100%;">
             {% if f3.por_distribuidor %}
             <div class="bars">
               {% for d in f3.por_distribuidor %}
@@ -423,7 +424,7 @@ body{
         </div>
 
         <div>
-          <div class="block-title"><span class="dot"></span> Clasificación (campo Observación)</div>
+          <div class="block-title"><span class="dot"></span> Motocicletas con observaciones</div>
           <div class="panel">
             {% if f3.por_observacion %}
             <div class="bars">
@@ -513,8 +514,8 @@ body{
     <div class="section">
       <div class="section__head">
         <span class="section__num">04</span>
-        <span class="section__title">Resumen</span>
-        <span class="section__meta">repuestos · pedidos, backorder y materialización</span>
+        <span class="section__title">Repuestos</span>
+        <span class="section__meta">pedidos, backorder y valor a cancelar</span>
       </div>
 
       <div class="kpi-grid">
@@ -532,7 +533,7 @@ body{
         </div>
 
         <div class="kpi s-{{ 'risk' if f7.fob_cancelar_pendiente > 0 else 'ok' }}">
-          <div class="kpi__label">Valor a cancelar</div>
+          <div class="kpi__label">Valor pedidos cancelar</div>
           <div class="kpi__val num"><span class="u">USD </span>{{ "{:,.0f}".format(f7.fob_cancelar_pendiente) }}</div>
           <div class="kpi__sub">{{ f7.cancelar_pendiente }} refs no requeridas</div>
         </div>
@@ -654,27 +655,6 @@ body{
         </div>
       </div>
 
-      <div class="grid-3" style="margin-top:8px;">
-        <div class="kpi s-ink">
-          <div class="kpi__label">Referencias creadas</div>
-          <div class="kpi__val num" style="font-size:22px;">{{ "{:,}".format(maestro.total_refs) }}</div>
-        </div>
-        <div class="kpi s-{{ maestro.precio_status }}">
-          <div class="kpi__label">Con precio definido</div>
-          <div class="kpi__val num" style="font-size:22px;">{{ "{:,}".format(maestro.con_precio) }}</div>
-        </div>
-        {% if maestro.sin_precio > 0 %}
-        <div class="kpi s-warn">
-          <div class="kpi__label">Sin precio público</div>
-          <div class="kpi__val num" style="font-size:22px;">{{ "{:,}".format(maestro.sin_precio) }}</div>
-        </div>
-        {% else %}
-        <div class="kpi s-ok">
-          <div class="kpi__label">Sin precio público</div>
-          <div class="kpi__val num" style="font-size:22px;">0</div>
-        </div>
-        {% endif %}
-      </div>
       {% endif %}
 
       <div class="block-title" style="margin-top:10px;"><span class="dot"></span> Remisionado por razón</div>
