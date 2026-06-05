@@ -2007,9 +2007,9 @@ async def list_all_moto_units(
     if pi_number:
         base_filters.append(ShipmentOrder.pi_number.ilike(f"%{pi_number}%"))
     if model:
+        from sqlalchemy import func as _func
         base_filters.append(
-            ShipmentMotoUnit.model.ilike(f"%{model}%") |
-            ShipmentOrder.model.ilike(f"%{model}%")
+            _func.coalesce(ShipmentMotoUnit.model, ShipmentOrder.model).ilike(f"%{model}%")
         )
     if vin:
         base_filters.append(ShipmentMotoUnit.vin_number.ilike(f"%{vin}%"))
@@ -2171,9 +2171,9 @@ async def export_moto_units(
     if pi_number:
         base_filters.append(ShipmentOrder.pi_number.ilike(f"%{pi_number}%"))
     if model:
+        from sqlalchemy import func as _func
         base_filters.append(
-            ShipmentMotoUnit.model.ilike(f"%{model}%") |
-            ShipmentOrder.model.ilike(f"%{model}%")
+            _func.coalesce(ShipmentMotoUnit.model, ShipmentOrder.model).ilike(f"%{model}%")
         )
     if vin:
         base_filters.append(ShipmentMotoUnit.vin_number.ilike(f"%{vin}%"))
