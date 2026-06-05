@@ -60,7 +60,6 @@ body{
   display:flex;
   flex-direction:column;
   position:relative;
-  overflow:hidden;
 }
 .sheet__body{ display:flex; flex-direction:column; }
 
@@ -338,33 +337,16 @@ body{
     </div>
     {% endif %}
 
-  </div>
-
-  <div class="foot">
-    <div class="foot__brand"><span class="tri"></span> UM Colombia</div>
-    <div>Informe Gerencial · Red de Servicio · <b>{{ meta.periodo_label }}</b></div>
-    <div class="foot__page">Página <b>1</b> / 4</div>
-  </div>
-</section>
-
-<!-- ============================================================
-     PÁGINA 2 — MOTOCICLETAS
-     ============================================================ -->
-<section class="sheet page-break" data-page="2">
-  <div class="sheet__body">
-
-    <div class="section">
+    <!-- B1: Disponibles para nacionalizar — tabla en página 1 -->
+    <div class="section" style="margin-top:10px;">
       <div class="section__head">
-        <span class="section__num">03</span>
-        <span class="section__title">Motocicletas</span>
-        <span class="section__meta">disponibilidad, ventas y clasificación</span>
+        <span class="section__num">02</span>
+        <span class="section__title">Disponibles para nacionalizar</span>
+        <span class="section__meta">modelo × ubicación</span>
       </div>
 
-      <!-- B1: Disponibles para nacionalizar — matriz modelo × ubicación -->
-      <div class="block-title"><span class="dot"></span> Disponibles para nacionalizar — modelo × ubicación</div>
-
       {% if f3.matriz %}
-      <div class="panel panel--zone" style="padding:12px 16px;">
+      <div class="panel panel--zone" style="padding:10px 14px;">
         <table class="matrix">
           <thead>
             <tr>
@@ -400,6 +382,29 @@ body{
       {% else %}
       <div class="no-data">Sin unidades disponibles para nacionalizar.</div>
       {% endif %}
+    </div>
+
+  </div>
+
+  <div class="foot">
+    <div class="foot__brand"><span class="tri"></span> UM Colombia</div>
+    <div>Informe Gerencial · Red de Servicio · <b>{{ meta.periodo_label }}</b></div>
+    <div class="foot__page">Página <b>1</b> / 4</div>
+  </div>
+</section>
+
+<!-- ============================================================
+     PÁGINA 2 — MOTOCICLETAS · FACTURADAS Y OBSERVACIONES
+     ============================================================ -->
+<section class="sheet page-break" data-page="2">
+  <div class="sheet__body">
+
+    <div class="section">
+      <div class="section__head">
+        <span class="section__num">03</span>
+        <span class="section__title">Motocicletas</span>
+        <span class="section__meta">facturadas por distribuidor y observaciones</span>
+      </div>
 
       <!-- B2 + B3 -->
       <div class="grid-2">
