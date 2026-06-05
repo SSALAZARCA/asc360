@@ -31,12 +31,23 @@ async def _load_models_map(db: AsyncSession) -> dict[str, str]:
 
 
 def _normalize_model(raw: str | None, models_map: dict[str, str]) -> str | None:
-    """Normalize raw model string against controlled vehicle_models list (case-insensitive).
-    Returns canonical name if found, original stripped value if not."""
+    """Returns canonical model name if found (case-insensitive), None if empty."""
     if not raw:
         return None
     stripped = str(raw).strip()
     return models_map.get(stripped.upper(), stripped) or None
+
+
+def _collect_unknown_models(sheet, header_row: int, col_map: dict, models_map: dict[str, str], *aliases) -> list[str]:
+    """Scans all data rows and returns sorted list of model values not in models_map."""
+    unknown: set[str] = set()
+    for row_idx in range(header_row + 1, sheet.max_row + 1):
+        raw = _cell(sheet, row_idx, col_map, *aliases)
+        if raw:
+            stripped = str(raw).strip()
+            if stripped and stripped.upper() not in models_map:
+                unknown.add(stripped)
+    return sorted(unknown)
 
 
 # Columnas esperadas en el Excel de Shipment Status
@@ -590,6 +601,10 @@ async def _process_sp_packing_list(db: AsyncSession, sheet, actor: CurrentUser) 
 
     col_map = _build_col_map(sheet, header_row)
 
+    unknown = _collect_unknown_models(sheet, header_row, col_map, models_map, "model")
+    if unknown:
+        raise ValueError(f"Modelos no reconocidos en el Excel: {', '.join(unknown)}. Verificá el catálogo de modelos antes de reimportar.")
+
     # Detectar PI number en las filas previas al encabezado
     source_pi = None
     for r in range(1, header_row):
@@ -809,6 +824,10 @@ async def create_sp_order_from_excel(
 
     col_map = _build_col_map(sheet, header_row)
     models_map = await _load_models_map(db)
+
+    unknown = _collect_unknown_models(sheet, header_row, col_map, models_map, "moto aplica", "moto", "modelo moto", "modelo", "aplica")
+    if unknown:
+        raise ValueError(f"Modelos no reconocidos en el Excel: {', '.join(unknown)}. Verificá el catálogo de modelos antes de reimportar.")
 
     ref = reference.strip().upper()
 
@@ -1088,6 +1107,13 @@ async def load_order_detail_excel(
     header_row = _find_header_row(target_sheet, ORDER_DETAIL_EXPECTED_COLS)
     col_map = _build_col_map(target_sheet, header_row)
     models_map = await _load_models_map(db)
+
+    unknown = _collect_unknown_models(target_sheet, header_row, col_map, models_map, "model", "modelo")
+    if unknown:
+        return {
+            "inserted": 0, "updated": 0, "skipped": 0,
+            "errors": [{"row": 0, "reason": f"Modelos no reconocidos en el Excel: {', '.join(unknown)}. Verificá el catálogo de modelos antes de reimportar."}],
+        }
 
     # Índice de ítems existentes en este lote
     existing_stmt = select(SparePartItem).where(SparePartItem.lot_id == lot.id)
