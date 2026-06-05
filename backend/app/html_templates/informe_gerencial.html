@@ -56,7 +56,7 @@ body{
   width:100%;
   min-height:100vh;
   background:var(--paper);
-  padding:36px 48px 32px;
+  padding:36px 48px 56px;
   display:flex;
   flex-direction:column;
   position:relative;
@@ -235,7 +235,8 @@ body{
 
 /* ---------- Footer ---------- */
 .foot{
-  margin-top:auto; padding-top:8px; border-top:1px solid var(--line);
+  position:absolute; bottom:20px; left:48px; right:48px;
+  padding-top:8px; border-top:1px solid var(--line);
   display:flex; align-items:center; justify-content:space-between;
   font-size:9px; color:var(--muted); font-weight:500;
 }
@@ -389,7 +390,7 @@ body{
   <div class="foot">
     <div class="foot__brand"><span class="tri"></span> UM Colombia</div>
     <div>Informe Gerencial · Red de Servicio · <b>{{ meta.periodo_label }}</b></div>
-    <div class="foot__page">Página <b>1</b> / 4</div>
+    <div class="foot__page">Página <b>1</b> / 3</div>
   </div>
 </section>
 
@@ -403,7 +404,7 @@ body{
       <div class="section__head">
         <span class="section__num">03</span>
         <span class="section__title">Motocicletas</span>
-        <span class="section__meta">facturadas por distribuidor y observaciones</span>
+        <span class="section__meta">facturadas, observaciones y año modelo</span>
       </div>
 
       <!-- B2 + B3 -->
@@ -448,30 +449,10 @@ body{
         </div>
       </div>
 
-    </div>
-  </div>
-
-  <div class="foot">
-    <div class="foot__brand"><span class="tri"></span> UM Colombia</div>
-    <div>Informe Gerencial · Red de Servicio · <b>{{ meta.periodo_label }}</b></div>
-    <div class="foot__page">Página <b>2</b> / 4</div>
-  </div>
-</section>
-
-<!-- ============================================================
-     PÁGINA 3 — MOTOCICLETAS · POR AÑO MODELO
-     ============================================================ -->
-<section class="sheet page-break" data-page="3">
-  <div class="sheet__body">
-    <div class="section">
-      <div class="section__head">
-        <span class="section__num">03</span>
-        <span class="section__title">Motocicletas</span>
-        <span class="section__meta">por año modelo — segmentado por modelo</span>
-      </div>
-
+      <!-- Año modelo -->
+      <div class="block-title" style="margin-top:12px;"><span class="dot"></span> Por año modelo</div>
       {% if f3.por_anio %}
-      <div class="grid-2">
+      <div class="grid-2" style="margin-top:6px;">
         {% for y in f3.por_anio[:2] %}
         <div class="panel">
           <div class="row-spread" style="margin-bottom:8px;">
@@ -506,7 +487,7 @@ body{
   <div class="foot">
     <div class="foot__brand"><span class="tri"></span> UM Colombia</div>
     <div>Informe Gerencial · Red de Servicio · <b>{{ meta.periodo_label }}</b></div>
-    <div class="foot__page">Página <b>3</b> / 4</div>
+    <div class="foot__page">Página <b>2</b> / 3</div>
   </div>
 </section>
 
@@ -715,7 +696,7 @@ body{
   <div class="foot">
     <div class="foot__brand"><span class="tri"></span> UM Colombia</div>
     <div>Informe Gerencial · Red de Servicio · <b>{{ meta.periodo_label }}</b></div>
-    <div class="foot__page">Página <b>4</b> / 4</div>
+    <div class="foot__page">Página <b>3</b> / 3</div>
   </div>
 </section>
 
