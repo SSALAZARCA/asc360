@@ -634,6 +634,7 @@ export default function AnalisisRepuestosTab() {
                 <th style={thStyle} onClick={() => toggleSort('rotation')}>
                   Rotación <SortIcon col="rotation" sortCol={sortCol} sortDir={sortDir} />
                 </th>
+                <th style={{ ...thStyle, textAlign: 'right', cursor: 'default' }}>Inv.</th>
                 <th style={thStyle}>Código</th>
                 <th style={thStyle}>Descripción</th>
                 <th style={thStyle}>Modelos</th>
@@ -654,6 +655,16 @@ export default function AnalisisRepuestosTab() {
                   background: idx % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.012)',
                 }}>
                   <td style={{ padding: '0.7rem 1rem' }}><RotBadge rc={item.rotation_class} /></td>
+                  <td style={{ padding: '0.7rem 1rem', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    {(item.qty_stock ?? 0) > 0 ? (
+                      <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '0.8rem', color: '#4ade80' }}>
+                        {item.qty_stock}
+                        <span style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.3)', marginLeft: '0.25rem' }}>u</span>
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.2)' }}>—</span>
+                    )}
+                  </td>
                   <td style={{ padding: '0.7rem 1rem' }}>
                     <span style={{ fontFamily: 'monospace', fontSize: '0.78rem', fontWeight: 700, color: '#ff5f33', whiteSpace: 'nowrap' }}>
                       {item.factory_part_number}

@@ -2228,6 +2228,7 @@ class _LowRotItem(BaseModel):
     models: list[str] = []
     fob_unit: Optional[float] = None
     total_fob: Optional[float] = None
+    qty_stock: Optional[int] = None
 
 class _LowRotResponse(BaseModel):
     items: list[_LowRotItem]
@@ -2291,6 +2292,27 @@ async def low_rotation_ordered_analysis(
             FROM parts_manual_items pmi
             JOIN parts_manual_sections pms ON pms.id = pmi.section_id
             GROUP BY pmi.factory_part_number
+        ),
+        stock_confirmado AS (
+            SELECT pn, SUM(qs) AS qty_stock
+            FROM (
+                SELECT
+                    UPPER(TRIM(REPLACE(part_number, ' ', ''))) AS pn,
+                    SUM(qty_available) AS qs
+                FROM spare_part_availability
+                GROUP BY 1
+                UNION ALL
+                SELECT
+                    UPPER(TRIM(REPLACE(spi_s.part_number, ' ', ''))) AS pn,
+                    SUM(spi_s.qty_received) AS qs
+                FROM spare_part_items spi_s
+                JOIN spare_part_lots spl_s ON spl_s.id = spi_s.lot_id
+                WHERE spl_s.packing_list_received = TRUE
+                  AND spi_s.qty_physical IS NULL
+                  AND spi_s.qty_received > 0
+                GROUP BY 1
+            ) sc_raw
+            GROUP BY pn
         )
         SELECT
             pr.factory_part_number,
@@ -2300,14 +2322,16 @@ async def low_rotation_ordered_analysis(
             spl.lot_identifier,
             SUM(spi.qty_ordered)::int AS qty,
             COALESCE(mfi.models, mp.models, ARRAY[]::text[]) AS models,
-            MAX(COALESCE(spi.unit_price, spi.fob_pi))::float AS fob_unit
+            MAX(COALESCE(spi.unit_price, spi.fob_pi))::float AS fob_unit,
+            MAX(COALESCE(sc.qty_stock, 0))::int AS qty_stock
         FROM parts_references pr
         JOIN spare_part_items spi
             ON UPPER(TRIM(REPLACE(spi.part_number, ' ', ''))) = UPPER(TRIM(pr.factory_part_number))
         JOIN spare_part_lots spl ON spl.id = spi.lot_id
-        LEFT JOIN desc_es_src d       ON d.pn   = UPPER(TRIM(pr.factory_part_number))
+        LEFT JOIN desc_es_src d         ON d.pn        = UPPER(TRIM(pr.factory_part_number))
         LEFT JOIN models_from_items mfi ON mfi.norm_fpn = UPPER(TRIM(pr.factory_part_number))
         LEFT JOIN models_per_part mp    ON mp.factory_part_number = pr.factory_part_number
+        LEFT JOIN stock_confirmado sc   ON sc.pn        = UPPER(TRIM(pr.factory_part_number))
         WHERE pr.rotation_class IN ('baja', 'media', 'alta')
           AND spl.packing_list_received = FALSE
           AND UPPER(TRIM(pr.factory_part_number)) NOT IN (SELECT pn FROM aqui)
@@ -2335,6 +2359,7 @@ async def low_rotation_ordered_analysis(
                 'lots': [],
                 'total_qty': 0,
                 'models': list(row.models) if row.models else [],
+                'qty_stock': int(row.qty_stock) if row.qty_stock else 0,
             }
         qty = int(row.qty) if row.qty else 0
         fob_unit = float(row.fob_unit) if row.fob_unit is not None else None
