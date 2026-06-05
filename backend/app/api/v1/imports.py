@@ -2503,6 +2503,42 @@ async def get_disponibles_matrix(
 
 
 # ---------------------------------------------------------------------------
+# GET /moto-units/diag-xpeed2 — todos los XPEED 150 ADV con sus flags (REMOVER)
+# ---------------------------------------------------------------------------
+
+@router.get("/moto-units/diag-xpeed2")
+async def diag_xpeed2(
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    _require_imports_editor(current_user)
+    from sqlalchemy import text
+    rows = (await db.execute(text("""
+        SELECT
+            mu.vin_number,
+            mu.model        AS unit_model,
+            so.pi_number,
+            mu.facturado,
+            mu.separada_nacionalizacion AS separada,
+            (mu.observation_id IS NOT NULL) AS tiene_obs,
+            (mu.dim_pdf_object_name IS NOT NULL) AS tiene_dim,
+            CASE
+                WHEN mu.facturado = true THEN 'facturado'
+                WHEN mu.separada_nacionalizacion = true THEN 'separada'
+                WHEN mu.observation_id IS NOT NULL THEN 'con_obs'
+                WHEN mu.dim_pdf_object_name IS NOT NULL THEN 'con_dim'
+                ELSE 'disponible'
+            END AS estado
+        FROM shipment_moto_units mu
+        JOIN shipment_orders so ON so.id = mu.shipment_order_id
+        WHERE so.is_spare_part = false
+          AND upper(trim(coalesce(mu.model, so.model, ''))) ILIKE '%XPEED 150 ADV%'
+        ORDER BY estado, so.pi_number, mu.vin_number
+    """))).fetchall()
+    return [dict(r._mapping) for r in rows]
+
+
+# ---------------------------------------------------------------------------
 # GET /moto-units/facturadas-matrix — motos facturadas por distribuidor y modelo
 # ---------------------------------------------------------------------------
 
