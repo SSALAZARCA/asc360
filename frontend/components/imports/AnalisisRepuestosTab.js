@@ -322,8 +322,38 @@ export default function AnalisisRepuestosTab() {
     const lot  = item?.lots.find(l => l.lot_identifier === pi);
     return lot?.fob_unit != null;
   });
-  const markedCambiarConReduccion = markedCambiar.filter(({ det }) => {
-    return det?.new_quantity != null;
+  const markedCambiarConReduccion = markedCambiar.filter(({ fpn, pi, det }) => {
+    if (det?.new_quantity == null) return false;
+    const item     = (data?.items || []).find(i => i.factory_part_number === fpn);
+    const lot      = item?.lots.find(l => l.lot_identifier === pi);
+    const original = det.original_quantity ?? lot?.qty ?? 0;
+    return det.new_quantity < original;
+  });
+
+  const cambiarFobAumento = markedCambiar.reduce((total, { fpn, pi, det }) => {
+    if (det?.new_quantity == null) return total;
+    const item     = (data?.items || []).find(i => i.factory_part_number === fpn);
+    const lot      = item?.lots.find(l => l.lot_identifier === pi);
+    if (!lot || lot.fob_unit == null) return total;
+    const original = det.original_quantity ?? lot.qty;
+    const delta    = det.new_quantity - original;
+    if (delta <= 0) return total;
+    return total + lot.fob_unit * delta;
+  }, 0);
+  const cambiarFobAumentoHasData = markedCambiar.some(({ fpn, pi, det }) => {
+    if (det?.new_quantity == null) return false;
+    const item     = (data?.items || []).find(i => i.factory_part_number === fpn);
+    const lot      = item?.lots.find(l => l.lot_identifier === pi);
+    if (!lot) return false;
+    const original = det.original_quantity ?? lot.qty;
+    return det.new_quantity > original && lot.fob_unit != null;
+  });
+  const markedCambiarConAumento = markedCambiar.filter(({ fpn, pi, det }) => {
+    if (det?.new_quantity == null) return false;
+    const item     = (data?.items || []).find(i => i.factory_part_number === fpn);
+    const lot      = item?.lots.find(l => l.lot_identifier === pi);
+    const original = det.original_quantity ?? lot?.qty ?? 0;
+    return det.new_quantity > original;
   });
 
   const thStyle = {
@@ -514,6 +544,27 @@ export default function AnalisisRepuestosTab() {
               <span style={{ fontSize: '0.58rem', color: 'rgba(255,255,255,0.25)' }}>
                 FOB · {markedCancelar.length + markedCambiarConReduccion.length} ref{(markedCancelar.length + markedCambiarConReduccion.length) !== 1 ? 's' : ''}
                 {!(cancelFobHasData || cambiarFobHasData) ? ' · sin precio' : ''}
+              </span>
+            </div>
+          )}
+
+          {markedCambiarConAumento.length > 0 && (
+            <div style={{
+              background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.3)',
+              borderRadius: '10px', padding: '0.6rem 1rem',
+              display: 'flex', flexDirection: 'column', gap: '0.2rem',
+            }}>
+              <span style={{ fontSize: '0.58rem', fontWeight: 700, color: 'rgba(74,222,128,0.7)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                Total aumento
+              </span>
+              <span style={{ fontSize: '1.2rem', fontWeight: 900, color: '#4ade80', fontFamily: 'monospace' }}>
+                {cambiarFobAumentoHasData
+                  ? `$${cambiarFobAumento.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                  : '—'}
+              </span>
+              <span style={{ fontSize: '0.58rem', color: 'rgba(255,255,255,0.25)' }}>
+                FOB · {markedCambiarConAumento.length} ref{markedCambiarConAumento.length !== 1 ? 's' : ''}
+                {!cambiarFobAumentoHasData ? ' · sin precio' : ''}
               </span>
             </div>
           )}
