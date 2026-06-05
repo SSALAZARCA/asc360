@@ -169,7 +169,8 @@ async def _query_f2(desde: date, hasta: date, db: AsyncSession) -> dict:
         SELECT
             COUNT(*) FILTER (WHERE computed_status != 'completado')
                 AS activos_total,
-            COUNT(*) FILTER (
+            -- pedidos únicos de motos por pi_number
+            COUNT(DISTINCT pi_number) FILTER (
                 WHERE computed_status != 'completado'
                   AND is_spare_part = false
             ) AS motos_activos,
@@ -198,7 +199,7 @@ async def _query_f2(desde: date, hasta: date, db: AsyncSession) -> dict:
                 WHERE computed_status != 'completado'
                   AND is_spare_part = false
             ), 0) AS motos_unidades,
-            -- repuestos FOB: sum fob_pi from spare_part_items linked to active SP orders
+            -- repuestos FOB
             COALESCE((
                 SELECT SUM(spi.fob_pi)
                 FROM spare_part_items spi
@@ -207,68 +208,99 @@ async def _query_f2(desde: date, hasta: date, db: AsyncSession) -> dict:
                 WHERE so2.computed_status != 'completado'
                   AND so2.is_spare_part = true
             ), 0) AS repuestos_fob,
-            -- 12 pipeline stage FILTERs (6 motos + 6 repuestos)
-            COUNT(*) FILTER (
+            -- pipeline motos: unidades de moto por etapa (SUM total_units)
+            COALESCE(SUM(total_units) FILTER (
                 WHERE computed_status != 'completado'
                   AND is_spare_part = false
                   AND computed_status = 'en_preparacion'
-            ) AS m_prep,
-            COUNT(*) FILTER (
+            ), 0) AS m_prep,
+            COALESCE(SUM(total_units) FILTER (
                 WHERE computed_status != 'completado'
                   AND is_spare_part = false
                   AND computed_status = 'listo_fabrica'
-            ) AS m_listo,
-            COUNT(*) FILTER (
+            ), 0) AS m_listo,
+            COALESCE(SUM(total_units) FILTER (
                 WHERE computed_status != 'completado'
                   AND is_spare_part = false
                   AND computed_status = 'en_origen'
-            ) AS m_origen,
-            COUNT(*) FILTER (
+            ), 0) AS m_origen,
+            COALESCE(SUM(total_units) FILTER (
                 WHERE computed_status != 'completado'
                   AND is_spare_part = false
                   AND computed_status IN ('en_transito','en_transito_parcial')
-            ) AS m_transito,
-            COUNT(*) FILTER (
+            ), 0) AS m_transito,
+            COALESCE(SUM(total_units) FILTER (
                 WHERE computed_status != 'completado'
                   AND is_spare_part = false
                   AND computed_status = 'en_destino'
-            ) AS m_destino,
-            COUNT(*) FILTER (
+            ), 0) AS m_destino,
+            COALESCE(SUM(total_units) FILTER (
                 WHERE computed_status != 'completado'
                   AND is_spare_part = false
                   AND computed_status IN ('nacionalizado','completado_parcial')
-            ) AS m_nac,
-            COUNT(*) FILTER (
-                WHERE computed_status != 'completado'
-                  AND is_spare_part = true
-                  AND computed_status = 'en_preparacion'
-            ) AS r_prep,
-            COUNT(*) FILTER (
-                WHERE computed_status != 'completado'
-                  AND is_spare_part = true
-                  AND computed_status = 'listo_fabrica'
-            ) AS r_listo,
-            COUNT(*) FILTER (
-                WHERE computed_status != 'completado'
-                  AND is_spare_part = true
-                  AND computed_status = 'en_origen'
-            ) AS r_origen,
-            COUNT(*) FILTER (
-                WHERE computed_status != 'completado'
-                  AND is_spare_part = true
-                  AND computed_status IN ('en_transito','en_transito_parcial')
-            ) AS r_transito,
-            COUNT(*) FILTER (
-                WHERE computed_status != 'completado'
-                  AND is_spare_part = true
-                  AND computed_status = 'en_destino'
-            ) AS r_destino,
-            COUNT(*) FILTER (
-                WHERE computed_status != 'completado'
-                  AND is_spare_part = true
-                  AND (computed_status IN ('nacionalizado','completado_parcial')
-                       OR nacionalizacion_status IS NOT NULL)
-            ) AS r_nac
+            ), 0) AS m_nac,
+            -- pipeline repuestos: referencias únicas por etapa (subquery)
+            COALESCE((
+                SELECT COUNT(DISTINCT UPPER(TRIM(REPLACE(spi.part_number,' ',''))))
+                FROM spare_part_items spi
+                JOIN spare_part_lots spl ON spl.id = spi.lot_id
+                JOIN shipment_orders so_s ON so_s.id = spl.shipment_order_id
+                WHERE so_s.computed_status != 'completado'
+                  AND so_s.is_spare_part = true
+                  AND so_s.computed_status = 'en_preparacion'
+                  AND spi.status != 'CANCELLED'
+            ), 0) AS r_prep,
+            COALESCE((
+                SELECT COUNT(DISTINCT UPPER(TRIM(REPLACE(spi.part_number,' ',''))))
+                FROM spare_part_items spi
+                JOIN spare_part_lots spl ON spl.id = spi.lot_id
+                JOIN shipment_orders so_s ON so_s.id = spl.shipment_order_id
+                WHERE so_s.computed_status != 'completado'
+                  AND so_s.is_spare_part = true
+                  AND so_s.computed_status = 'listo_fabrica'
+                  AND spi.status != 'CANCELLED'
+            ), 0) AS r_listo,
+            COALESCE((
+                SELECT COUNT(DISTINCT UPPER(TRIM(REPLACE(spi.part_number,' ',''))))
+                FROM spare_part_items spi
+                JOIN spare_part_lots spl ON spl.id = spi.lot_id
+                JOIN shipment_orders so_s ON so_s.id = spl.shipment_order_id
+                WHERE so_s.computed_status != 'completado'
+                  AND so_s.is_spare_part = true
+                  AND so_s.computed_status = 'en_origen'
+                  AND spi.status != 'CANCELLED'
+            ), 0) AS r_origen,
+            COALESCE((
+                SELECT COUNT(DISTINCT UPPER(TRIM(REPLACE(spi.part_number,' ',''))))
+                FROM spare_part_items spi
+                JOIN spare_part_lots spl ON spl.id = spi.lot_id
+                JOIN shipment_orders so_s ON so_s.id = spl.shipment_order_id
+                WHERE so_s.computed_status != 'completado'
+                  AND so_s.is_spare_part = true
+                  AND so_s.computed_status IN ('en_transito','en_transito_parcial')
+                  AND spi.status != 'CANCELLED'
+            ), 0) AS r_transito,
+            COALESCE((
+                SELECT COUNT(DISTINCT UPPER(TRIM(REPLACE(spi.part_number,' ',''))))
+                FROM spare_part_items spi
+                JOIN spare_part_lots spl ON spl.id = spi.lot_id
+                JOIN shipment_orders so_s ON so_s.id = spl.shipment_order_id
+                WHERE so_s.computed_status != 'completado'
+                  AND so_s.is_spare_part = true
+                  AND so_s.computed_status = 'en_destino'
+                  AND spi.status != 'CANCELLED'
+            ), 0) AS r_destino,
+            COALESCE((
+                SELECT COUNT(DISTINCT UPPER(TRIM(REPLACE(spi.part_number,' ',''))))
+                FROM spare_part_items spi
+                JOIN spare_part_lots spl ON spl.id = spi.lot_id
+                JOIN shipment_orders so_s ON so_s.id = spl.shipment_order_id
+                WHERE so_s.computed_status != 'completado'
+                  AND so_s.is_spare_part = true
+                  AND (so_s.computed_status IN ('nacionalizado','completado_parcial')
+                       OR so_s.nacionalizacion_status IS NOT NULL)
+                  AND spi.status != 'CANCELLED'
+            ), 0) AS r_nac
         FROM shipment_orders
     """)
 
@@ -384,10 +416,10 @@ async def _query_f3(db: AsyncSession) -> dict:
         }
 
     # --- B1: Matrix (disponibles para nacionalizar) ---
-    # UPPER+TRIM normaliza "RockVille 200" y "ROCKVILLE 200" en una sola fila
+    # REGEXP_REPLACE colapsa whitespace interno y caracteres invisibles además de UPPER+TRIM
     matriz_sql = text("""
         SELECT
-            UPPER(TRIM(COALESCE(mu.model, so.model, 'SIN MODELO'))) AS model,
+            REGEXP_REPLACE(UPPER(TRIM(COALESCE(mu.model, so.model, 'SIN MODELO'))), '\\s+', ' ', 'g') AS model,
             COALESCE(ml.name, 'Sin ubicación') AS ubicacion,
             COUNT(*) AS cnt
         FROM shipment_moto_units mu
@@ -399,6 +431,7 @@ async def _query_f3(db: AsyncSession) -> dict:
           AND mu.dim_pdf_object_name IS NULL
         GROUP BY 1, 2
         ORDER BY 1, 2
+
     """)
 
     # --- B2: Facturadas por distribuidor ---
@@ -427,7 +460,7 @@ async def _query_f3(db: AsyncSession) -> dict:
     anio_sql = text("""
         SELECT
             COALESCE(mu.model_year, so.model_year, 0)::text AS anio,
-            UPPER(TRIM(COALESCE(mu.model, so.model, 'SIN MODELO'))) AS model,
+            REGEXP_REPLACE(UPPER(TRIM(COALESCE(mu.model, so.model, 'SIN MODELO'))), '\\s+', ' ', 'g') AS model,
             COUNT(*) AS cnt
         FROM shipment_moto_units mu
         JOIN shipment_orders so ON so.id = mu.shipment_order_id

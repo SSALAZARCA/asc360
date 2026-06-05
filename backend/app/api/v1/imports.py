@@ -1859,22 +1859,33 @@ async def get_imports_dashboard(
             return []
         return [ShipmentOrder.is_spare_part == is_spare_part]
 
-    # Conteos por estado
-    status_rows = (await db.execute(
-        select(ShipmentOrder.computed_status, func.count().label("cnt"))
-        .where(*_sp_filter())
-        .group_by(ShipmentOrder.computed_status)
-    )).all()
+    # Conteos por estado — motos usan COUNT(DISTINCT pi_number), repuestos COUNT(*)
+    from sqlalchemy import distinct as _distinct
+    if is_spare_part is False:
+        status_rows = (await db.execute(
+            select(ShipmentOrder.computed_status, func.count(_distinct(ShipmentOrder.pi_number)).label("cnt"))
+            .where(ShipmentOrder.is_spare_part == False)
+            .group_by(ShipmentOrder.computed_status)
+        )).all()
+    else:
+        status_rows = (await db.execute(
+            select(ShipmentOrder.computed_status, func.count().label("cnt"))
+            .where(*_sp_filter())
+            .group_by(ShipmentOrder.computed_status)
+        )).all()
     status_map = {r.computed_status: r.cnt for r in status_rows}
 
-    # Tipo moto vs SP
+    # Tipo moto vs SP — motos: pedidos únicos por pi_number
     type_rows = (await db.execute(
         select(ShipmentOrder.is_spare_part, func.count().label("cnt"))
         .where(*_sp_filter())
         .group_by(ShipmentOrder.is_spare_part)
     )).all()
-    moto_count = next((r.cnt for r in type_rows if not r.is_spare_part), 0)
-    sp_count   = next((r.cnt for r in type_rows if r.is_spare_part), 0)
+    moto_count = (await db.execute(
+        select(func.count(_distinct(ShipmentOrder.pi_number)))
+        .where(ShipmentOrder.is_spare_part == False)
+    )).scalar_one()
+    sp_count = next((r.cnt for r in type_rows if r.is_spare_part), 0)
 
     # Backorders activos (solo aplica a repuestos)
     from app.models.imports import Backorder, SparePartLot
