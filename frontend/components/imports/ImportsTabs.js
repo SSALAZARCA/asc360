@@ -22,10 +22,10 @@ const ALL_TABS = [
   { id: 'orders',            label: 'Pedidos',           roles: null },
   { id: 'motocicletas',      label: 'Motocicletas',      roles: null },
   { id: 'spare_parts',       label: 'Repuestos',         roles: null },
-  { id: 'backorders',        label: 'Backorders',        roles: null },
-  { id: 'analisis_repuestos', label: 'Ajuste de Pedidos', roles: null },
+  { id: 'backorders',        label: 'Backorders',        roles: ['superadmin'] },
+  { id: 'analisis_repuestos', label: 'Ajuste de Pedidos', roles: ['superadmin'] },
   { id: 'remisiones',        label: 'Remisiones',        roles: ['superadmin'] },
-  { id: 'comparativa',       label: 'Comparativa',       roles: null },
+  { id: 'comparativa',       label: 'Comparativa',       roles: ['superadmin'] },
 ];
 
 // roles: null means visible to all; array means visible only to those roles
@@ -374,19 +374,19 @@ export default function ImportsTabs({ userRole }) {
       {activeTab === 'spare_parts' && (
         <SparePartsTab userRole={userRole} />
       )}
-      {activeTab === 'backorders' && (
+      {activeTab === 'backorders' && userRole === 'superadmin' && (
         <BackorderTab userRole={userRole} />
       )}
       {activeTab === 'dashboard' && (
         <DashboardTab />
       )}
-      {activeTab === 'analisis_repuestos' && (
+      {activeTab === 'analisis_repuestos' && userRole === 'superadmin' && (
         <AnalisisRepuestosTab />
       )}
       {activeTab === 'remisiones' && userRole === 'superadmin' && (
         <RemisionesTab userRole={userRole} />
       )}
-      {activeTab === 'comparativa' && (
+      {activeTab === 'comparativa' && userRole === 'superadmin' && (
         <ComparativaTab />
       )}
 
