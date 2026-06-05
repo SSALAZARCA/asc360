@@ -300,6 +300,7 @@ async def _query_f2(desde: date, hasta: date, db: AsyncSession) -> dict:
                   AND (so_s.computed_status IN ('nacionalizado','completado_parcial')
                        OR so_s.nacionalizacion_status IS NOT NULL)
                   AND spi.status != 'CANCELLED'
+                  AND spi.qty_received > 0
             ), 0) AS r_nac
         FROM shipment_orders
     """)

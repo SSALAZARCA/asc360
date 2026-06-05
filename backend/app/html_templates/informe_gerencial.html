@@ -168,7 +168,7 @@ body{
 /* ---------- Cards / panels ---------- */
 .panel{ background:var(--paper); border:1px solid var(--line); border-radius:11px; padding:11px 14px; }
 .panel--zone{ background:var(--zone); }
-.grid-2{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px; }
+.grid-2{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px; align-items:start; }
 .grid-2-3{ display:grid; grid-template-columns:1.1fr 1fr; gap:10px; }
 .grid-3{ display:grid; grid-template-columns:repeat(3,1fr); gap:9px; }
 
@@ -411,7 +411,7 @@ body{
       <div class="grid-2">
         <div>
           <div class="block-title"><span class="dot"></span> Facturadas por distribuidor</div>
-          <div class="panel" style="box-sizing:border-box;height:100%;">
+          <div class="panel">
             {% if f3.por_distribuidor %}
             <div class="bars">
               {% for d in f3.por_distribuidor %}
