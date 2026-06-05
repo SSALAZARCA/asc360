@@ -2503,6 +2503,29 @@ async def get_disponibles_matrix(
 
 
 # ---------------------------------------------------------------------------
+# POST /moto-units/fix-model-spaces — normaliza espacios en unit_model (REMOVER)
+# ---------------------------------------------------------------------------
+
+@router.post("/moto-units/fix-model-spaces", status_code=200)
+async def fix_model_spaces(
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    _require_superadmin(current_user)
+    from sqlalchemy import text
+    result = await db.execute(text("""
+        UPDATE shipment_moto_units
+        SET model = regexp_replace(upper(trim(model)), '\\s+', ' ', 'g')
+        WHERE model IS NOT NULL
+          AND model != regexp_replace(upper(trim(model)), '\\s+', ' ', 'g')
+        RETURNING id::text, vin_number, model
+    """))
+    fixed = [dict(r._mapping) for r in result.fetchall()]
+    await db.commit()
+    return {"fixed": len(fixed), "units": fixed}
+
+
+# ---------------------------------------------------------------------------
 # GET /moto-units/facturadas-matrix — motos facturadas por distribuidor y modelo
 # ---------------------------------------------------------------------------
 
