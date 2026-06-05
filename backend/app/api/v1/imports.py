@@ -2271,6 +2271,10 @@ async def update_moto_unit(
     new_order_id = update_data.pop("shipment_order_id", None)
     new_color = update_data.pop("color", None)
 
+    # Normalizar model: colapsar espacios múltiples y uppercase
+    if 'model' in update_data and update_data['model']:
+        update_data['model'] = ' '.join(update_data['model'].split()).upper()
+
     for field, value in update_data.items():
         setattr(unit, field, value)
 
@@ -2496,39 +2500,6 @@ async def get_disponibles_matrix(
         result.append({"model": model, "total": total, "by_location": by_location})
 
     return sorted(result, key=lambda x: -x["total"])
-
-
-# ---------------------------------------------------------------------------
-# GET /moto-units/diag-xpeed — diagnóstico temporal XPEED 150 ADV (REMOVER)
-# ---------------------------------------------------------------------------
-
-@router.get("/moto-units/diag-xpeed")
-async def diag_xpeed(
-    db: AsyncSession = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user),
-):
-    _require_imports_editor(current_user)
-    from sqlalchemy import text
-    rows = (await db.execute(text("""
-        SELECT
-            mu.id::text,
-            mu.vin_number,
-            mu.model                                                        AS unit_model,
-            so.model                                                        AS order_model,
-            so.pi_number,
-            so.is_spare_part,
-            so.computed_status,
-            regexp_replace(upper(trim(coalesce(mu.model, so.model, ''))), '\\s+', ' ', 'g') AS model_norm
-        FROM shipment_moto_units mu
-        JOIN shipment_orders so ON so.id = mu.shipment_order_id
-        WHERE regexp_replace(upper(trim(coalesce(mu.model, so.model, ''))), '\\s+', ' ', 'g') ILIKE '%XPEED 150 ADV%'
-          AND mu.facturado = false
-          AND mu.separada_nacionalizacion = false
-          AND mu.observation_id IS NULL
-          AND mu.dim_pdf_object_name IS NULL
-        ORDER BY so.pi_number, mu.vin_number
-    """))).fetchall()
-    return [dict(r._mapping) for r in rows]
 
 
 # ---------------------------------------------------------------------------
