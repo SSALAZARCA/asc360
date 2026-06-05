@@ -673,6 +673,8 @@ export default function MotocicletasTab({ userRole }) {
   const [locationSaving, setLocationSaving] = useState(null);
   // Observaciones predefinidas
   const [observations, setObservations] = useState([]);
+  // Modelos de motocicletas
+  const [modelOptions, setModelOptions] = useState([]);
 
   const PAGE_SIZE = 50;
   const [exportingMotos, setExportingMotos] = useState(false);
@@ -750,7 +752,15 @@ export default function MotocicletasTab({ userRole }) {
     } catch { setObservations([]); }
   }, []);
 
-  useEffect(() => { fetchUnits(); fetchLocations(); fetchObservations(); }, [fetchUnits, fetchLocations, fetchObservations]);
+  const fetchModelOptions = useCallback(async () => {
+    try {
+      const res = await authFetch(`${getApiUrl()}/vehicle-models`);
+      const data = await res.json();
+      setModelOptions(Array.isArray(data) ? data : []);
+    } catch { setModelOptions([]); }
+  }, []);
+
+  useEffect(() => { fetchUnits(); fetchLocations(); fetchObservations(); fetchModelOptions(); }, [fetchUnits, fetchLocations, fetchObservations, fetchModelOptions]);
 
   const handleDimUpload = async (file) => {
     setDimUploading(true);
@@ -969,20 +979,21 @@ export default function MotocicletasTab({ userRole }) {
         </div>
 
         {/* Modelo */}
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: '6px',
-          padding: '6px 10px', borderRadius: '8px',
-          background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)',
-          minWidth: 140,
-        }}>
-          <Search size={11} color="#606075" />
-          <input
-            placeholder="Buscar modelo..."
-            value={filterModel}
-            onChange={e => { setFilterModel(e.target.value); setPage(1); }}
-            style={{ background: 'none', border: 'none', color: '#fff', fontSize: '11px', outline: 'none', flex: 1 }}
-          />
-        </div>
+        <select
+          value={filterModel}
+          onChange={e => { setFilterModel(e.target.value); setPage(1); }}
+          style={{
+            padding: '6px 10px', borderRadius: '8px',
+            background: '#1a1a24', border: '1px solid rgba(255,255,255,0.08)',
+            color: filterModel === '' ? '#606075' : '#fff',
+            fontSize: '11px', outline: 'none',
+          }}
+        >
+          <option value="">Todos los modelos</option>
+          {modelOptions.map(m => (
+            <option key={m.id} value={m.model_name}>{m.model_name}</option>
+          ))}
+        </select>
 
         {/* VIN */}
         <div style={{
