@@ -10,9 +10,10 @@ const ROT = {
 };
 
 const PI_STYLES = {
-  '':         { bg: 'rgba(255,255,255,0.05)', border: 'rgba(255,255,255,0.1)',  piColor: 'rgba(255,255,255,0.7)', qtyColor: '#38bdf8',  prefix: null },
-  'cancelar': { bg: 'rgba(239,68,68,0.12)',   border: 'rgba(239,68,68,0.35)',   piColor: '#fca5a5',               qtyColor: '#f87171',  prefix: '✕' },
-  'cambiar':  { bg: 'rgba(251,191,36,0.1)',   border: 'rgba(251,191,36,0.35)',  piColor: '#fde68a',               qtyColor: '#fbbf24',  prefix: '↺' },
+  '':          { bg: 'rgba(255,255,255,0.05)', border: 'rgba(255,255,255,0.1)',  piColor: 'rgba(255,255,255,0.7)', qtyColor: '#38bdf8',  prefix: null },
+  'revisado':  { bg: 'rgba(74,222,128,0.1)',   border: 'rgba(74,222,128,0.35)', piColor: '#bbf7d0',               qtyColor: '#4ade80',  prefix: '✓' },
+  'cancelar':  { bg: 'rgba(239,68,68,0.12)',   border: 'rgba(239,68,68,0.35)',   piColor: '#fca5a5',               qtyColor: '#f87171',  prefix: '✕' },
+  'cambiar':   { bg: 'rgba(251,191,36,0.1)',   border: 'rgba(251,191,36,0.35)',  piColor: '#fde68a',               qtyColor: '#fbbf24',  prefix: '↺' },
 };
 
 function RotBadge({ rc }) {
@@ -189,7 +190,7 @@ export default function AnalisisRepuestosTab() {
       return;
     }
 
-    const next = current === '' ? 'cancelar' : 'cambiar';
+    const next = current === '' ? 'revisado' : current === 'revisado' ? 'cancelar' : 'cambiar';
 
     setMarked(prev => ({ ...prev, [key]: next }));
 
@@ -596,7 +597,7 @@ export default function AnalisisRepuestosTab() {
 
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.62rem', color: 'rgba(255,255,255,0.3)' }}>
           <span>Click en un PI:</span>
-          {[['cancelar','#f87171','rgba(239,68,68,0.12)'], ['cambiar','#fbbf24','rgba(251,191,36,0.1)']].map(([lbl, clr, bg]) => (
+          {[['revisado','#4ade80','rgba(74,222,128,0.1)'], ['cancelar','#f87171','rgba(239,68,68,0.12)'], ['cambiar','#fbbf24','rgba(251,191,36,0.1)']].map(([lbl, clr, bg]) => (
             <span key={lbl} style={{ padding: '1px 7px', borderRadius: '4px', background: bg, color: clr, fontWeight: 700, textTransform: 'uppercase', fontSize: '0.58rem' }}>{lbl}</span>
           ))}
         </div>
@@ -701,8 +702,10 @@ export default function AnalisisRepuestosTab() {
                               state === 'cambiar'
                                 ? `Ajuste: ${det?.new_quantity != null ? `→ ${det.new_quantity}u` : 'sin cantidad'} ${det?.change_note ? `· ${det.change_note}` : ''} — click para editar`
                                 : state === 'cancelar'
-                                ? 'Marcado para cancelar — click para cambiar a amarillo'
-                                : 'Click para marcar'
+                                ? 'Marcado para cancelar — click para pasar a ajuste'
+                                : state === 'revisado'
+                                ? 'Revisado OK — click para marcar como cancelar'
+                                : 'Click para marcar como revisado'
                             }
                             style={{
                               display: 'inline-flex', alignItems: 'center', gap: '0.25rem',
