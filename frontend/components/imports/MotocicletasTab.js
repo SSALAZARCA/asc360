@@ -635,6 +635,7 @@ export default function MotocicletasTab({ userRole }) {
   const [totalGlobal, setTotalGlobal] = useState(0);
   const [totalEmpadronados, setTotalEmpadronados] = useState(0);
   const [totalPendientes, setTotalPendientes] = useState(0);
+  const [totalFacturadas, setTotalFacturadas] = useState(0);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
 
@@ -725,6 +726,7 @@ export default function MotocicletasTab({ userRole }) {
       setTotalGlobal(data.total_global ?? data.total ?? 0);
       setTotalEmpadronados(data.total_empadronados ?? 0);
       setTotalPendientes(data.total_pendientes ?? 0);
+      setTotalFacturadas(data.total_facturadas ?? 0);
     } catch (e) {
       console.error(e);
     } finally {
@@ -934,11 +936,12 @@ export default function MotocicletasTab({ userRole }) {
       <ErrorModal message={certError} onClose={() => setCertError('')} />
 
       {/* KPIs — totales globales del backend */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px' }}>
         {[
           { label: 'Total unidades', value: totalGlobal, color: '#60a5fa' },
           { label: 'Empadronadas', value: totalEmpadronados, color: '#22c55e' },
           { label: 'Pendientes', value: totalPendientes, color: '#f97316' },
+          { label: 'Facturadas', value: totalFacturadas, color: '#a78bfa' },
         ].map(({ label, value, color }) => (
           <div key={label} style={{ padding: '14px 16px', borderRadius: '10px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
             <p style={{ margin: 0, fontSize: '18px', fontWeight: 800, color }}>{value}</p>

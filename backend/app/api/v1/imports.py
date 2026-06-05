@@ -2044,8 +2044,17 @@ async def list_all_moto_units(
     )
     total = (await db.execute(count_stmt)).scalar_one()
 
-    # KPIs — respetan los filtros activos (pi_number, model, vin, engine)
-    # pero NO el filtro de certificado_generado para mostrar el universo completo del filtro
+    # total_global respeta TODOS los filtros activos
+    total_global = (await db.execute(
+        select(func.count()).select_from(
+            select(ShipmentMotoUnit)
+            .join(ShipmentOrder, ShipmentMotoUnit.shipment_order_id == ShipmentOrder.id)
+            .where(*filters)
+            .subquery()
+        )
+    )).scalar_one()
+
+    # empadronados y pendientes usan base_filters (contexto de búsqueda sin filtros de estado)
     total_empadronados = (await db.execute(
         select(func.count()).select_from(
             select(ShipmentMotoUnit)
@@ -2055,16 +2064,23 @@ async def list_all_moto_units(
         )
     )).scalar_one()
 
-    total_global = (await db.execute(
+    total_pendientes = (await db.execute(
         select(func.count()).select_from(
             select(ShipmentMotoUnit)
             .join(ShipmentOrder, ShipmentMotoUnit.shipment_order_id == ShipmentOrder.id)
-            .where(*base_filters)
+            .where(*base_filters, ShipmentMotoUnit.certificado_generado == False)
             .subquery()
         )
     )).scalar_one()
 
-    total_pendientes = total_global - total_empadronados
+    total_facturadas = (await db.execute(
+        select(func.count()).select_from(
+            select(ShipmentMotoUnit)
+            .join(ShipmentOrder, ShipmentMotoUnit.shipment_order_id == ShipmentOrder.id)
+            .where(*base_filters, ShipmentMotoUnit.facturado == True)
+            .subquery()
+        )
+    )).scalar_one()
 
     # Paginated items with the related order eagerly loaded
     stmt = (
@@ -2125,6 +2141,7 @@ async def list_all_moto_units(
         "total_global": total_global,
         "total_empadronados": total_empadronados,
         "total_pendientes": total_pendientes,
+        "total_facturadas": total_facturadas,
         "page": page,
         "page_size": page_size,
     }
