@@ -991,7 +991,7 @@ export default function MotocicletasTab({ userRole }) {
         >
           <option value="">Todos los modelos</option>
           {modelOptions.map(m => (
-            <option key={m.id} value={m.model_name}>{m.model_name}</option>
+            <option key={m.id} value={m.modelo}>{m.modelo}</option>
           ))}
         </select>
 
