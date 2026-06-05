@@ -497,44 +497,23 @@ export default function AnalisisRepuestosTab() {
             </div>
           ))}
 
-          {markedCancelar.length > 0 && (
+          {(markedCancelar.length > 0 || markedCambiarConReduccion.length > 0) && (
             <div style={{
               background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)',
               borderRadius: '10px', padding: '0.6rem 1rem',
               display: 'flex', flexDirection: 'column', gap: '0.2rem',
             }}>
               <span style={{ fontSize: '0.58rem', fontWeight: 700, color: 'rgba(248,113,113,0.7)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                Total a cancelar
+                Total ajuste
               </span>
               <span style={{ fontSize: '1.2rem', fontWeight: 900, color: '#f87171', fontFamily: 'monospace' }}>
-                {cancelFobHasData
-                  ? `$${cancelFobTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                {(cancelFobHasData || cambiarFobHasData)
+                  ? `$${(cancelFobTotal + cambiarFobDelta).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                   : '—'}
               </span>
               <span style={{ fontSize: '0.58rem', color: 'rgba(255,255,255,0.25)' }}>
-                FOB · {markedCancelar.length} ref{markedCancelar.length !== 1 ? 's' : ''}
-                {!cancelFobHasData ? ' · sin precio' : ''}
-              </span>
-            </div>
-          )}
-
-          {markedCambiarConReduccion.length > 0 && (
-            <div style={{
-              background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.3)',
-              borderRadius: '10px', padding: '0.6rem 1rem',
-              display: 'flex', flexDirection: 'column', gap: '0.2rem',
-            }}>
-              <span style={{ fontSize: '0.58rem', fontWeight: 700, color: 'rgba(251,191,36,0.7)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                Ahorro por reducción
-              </span>
-              <span style={{ fontSize: '1.2rem', fontWeight: 900, color: '#fbbf24', fontFamily: 'monospace' }}>
-                {cambiarFobHasData
-                  ? `$${cambiarFobDelta.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                  : '—'}
-              </span>
-              <span style={{ fontSize: '0.58rem', color: 'rgba(255,255,255,0.25)' }}>
-                FOB · {markedCambiarConReduccion.length} ref{markedCambiarConReduccion.length !== 1 ? 's' : ''}
-                {!cambiarFobHasData ? ' · sin precio' : ''}
+                FOB · {markedCancelar.length + markedCambiarConReduccion.length} ref{(markedCancelar.length + markedCambiarConReduccion.length) !== 1 ? 's' : ''}
+                {!(cancelFobHasData || cambiarFobHasData) ? ' · sin precio' : ''}
               </span>
             </div>
           )}
