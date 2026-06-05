@@ -306,6 +306,26 @@ export default function AnalisisRepuestosTab() {
     return lot?.fob_unit != null;
   });
 
+  const cambiarFobDelta = markedCambiar.reduce((total, { fpn, pi, det }) => {
+    if (det?.new_quantity == null) return total;
+    const item     = (data?.items || []).find(i => i.factory_part_number === fpn);
+    const lot      = item?.lots.find(l => l.lot_identifier === pi);
+    if (!lot || lot.fob_unit == null) return total;
+    const original = det.original_quantity ?? lot.qty;
+    const delta    = original - det.new_quantity;
+    if (delta <= 0) return total;
+    return total + lot.fob_unit * delta;
+  }, 0);
+  const cambiarFobHasData = markedCambiar.some(({ fpn, pi, det }) => {
+    if (det?.new_quantity == null) return false;
+    const item = (data?.items || []).find(i => i.factory_part_number === fpn);
+    const lot  = item?.lots.find(l => l.lot_identifier === pi);
+    return lot?.fob_unit != null;
+  });
+  const markedCambiarConReduccion = markedCambiar.filter(({ det }) => {
+    return det?.new_quantity != null;
+  });
+
   const thStyle = {
     padding: '0.65rem 1rem', fontSize: '0.58rem', fontWeight: 800,
     color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.1em',
@@ -494,6 +514,27 @@ export default function AnalisisRepuestosTab() {
               <span style={{ fontSize: '0.58rem', color: 'rgba(255,255,255,0.25)' }}>
                 FOB · {markedCancelar.length} ref{markedCancelar.length !== 1 ? 's' : ''}
                 {!cancelFobHasData ? ' · sin precio' : ''}
+              </span>
+            </div>
+          )}
+
+          {markedCambiarConReduccion.length > 0 && (
+            <div style={{
+              background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.3)',
+              borderRadius: '10px', padding: '0.6rem 1rem',
+              display: 'flex', flexDirection: 'column', gap: '0.2rem',
+            }}>
+              <span style={{ fontSize: '0.58rem', fontWeight: 700, color: 'rgba(251,191,36,0.7)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                Ahorro por reducción
+              </span>
+              <span style={{ fontSize: '1.2rem', fontWeight: 900, color: '#fbbf24', fontFamily: 'monospace' }}>
+                {cambiarFobHasData
+                  ? `$${cambiarFobDelta.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                  : '—'}
+              </span>
+              <span style={{ fontSize: '0.58rem', color: 'rgba(255,255,255,0.25)' }}>
+                FOB · {markedCambiarConReduccion.length} ref{markedCambiarConReduccion.length !== 1 ? 's' : ''}
+                {!cambiarFobHasData ? ' · sin precio' : ''}
               </span>
             </div>
           )}
