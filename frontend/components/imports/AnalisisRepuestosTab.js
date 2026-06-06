@@ -115,7 +115,7 @@ function ChangeModal({ fpn, lotId, lot, initialDetails, onSave, onUnmark, onClos
             </button>
             <button
               onClick={() => onSave({
-              new_quantity:      qty !== (initialDetails?.original_quantity ?? lot.qty) ? qty : null,
+              new_quantity:      qty,
               change_note:       note,
               original_quantity: initialDetails?.original_quantity ?? lot.qty,
             })}

@@ -2336,6 +2336,7 @@ async def low_rotation_ordered_analysis(
         LEFT JOIN stock_confirmado sc   ON sc.pn        = UPPER(TRIM(pr.factory_part_number))
         WHERE pr.rotation_class IN ('baja', 'media', 'alta')
           AND spl.packing_list_received = FALSE
+          AND spi.status != 'CANCELLED'
         GROUP BY
             pr.factory_part_number, pr.description,
             COALESCE(pr.description_es_manual, d.description_es),
@@ -2517,7 +2518,9 @@ async def get_decisions(
     """Devuelve todas las decisiones guardadas como {fpn::lot_id: {decision, new_quantity, change_note}}."""
     if not current_user.is_superadmin:
         raise HTTPException(status_code=403, detail="Solo superadmin")
-    rows = (await db.execute(select(_POD))).scalars().all()
+    rows = (await db.execute(
+        select(_POD).where(_POD.executed_at.is_(None))
+    )).scalars().all()
     return {
         f"{r.factory_part_number}::{r.lot_identifier}": {
             "decision":          r.decision,
@@ -2603,6 +2606,7 @@ async def execute_adjustments(
 
     cancelar_decisions = [d for d in all_pending if d.decision == 'cancelar']
     cambiar_decisions  = [d for d in all_pending if d.decision == 'cambiar']
+    revisado_decisions = [d for d in all_pending if d.decision == 'revisado']
 
     if not all_pending:
         return {"cancelled_items": 0, "changed_items": 0, "refs_updated": 0, "affected_references": [], "skipped_lots": []}
@@ -2646,6 +2650,7 @@ async def execute_adjustments(
 
         for item in items:
             item.status = 'CANCELLED'
+            item.qty_ordered = 0
             item.qty_pending = 0
             item.updated_at = now
             cancelled_items += 1
@@ -2664,7 +2669,7 @@ async def execute_adjustments(
         )).scalar_one_or_none()
 
         if not lot:
-            decision.executed_at = now
+            skipped_lots.append(f"{lot_id_str} (no encontrado)")
             continue
 
         if lot.packing_list_received:
@@ -2687,6 +2692,10 @@ async def execute_adjustments(
                 changed_items += 1
             affected_fpns.add(fpn)
 
+        decision.executed_at = now
+
+    # Marcar decisiones 'revisado' como ejecutadas (no modifican datos, solo se cierran)
+    for decision in revisado_decisions:
         decision.executed_at = now
 
     # Recalcular preliminary_fob para todas las referencias afectadas
