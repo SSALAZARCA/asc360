@@ -73,7 +73,7 @@ function ChangeModal({ fpn, lotId, lot, initialDetails, onSave, onUnmark, onClos
             type="number"
             min={1}
             value={qty}
-            onChange={e => setQty(Number(e.target.value) || 1)}
+            onChange={e => setQty(Math.max(1, Number(e.target.value) || 1))}
             style={inputStyle}
           />
         </div>

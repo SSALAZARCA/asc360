@@ -15,7 +15,7 @@ import pdfplumber
 from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, UploadFile
 from fastapi.responses import Response, StreamingResponse
 from minio import Minio
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import delete as sa_delete, update as sa_update, text, exists as sa_exists, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -2536,8 +2536,8 @@ class _DecisionIn(BaseModel):
     factory_part_number: str
     lot_identifier: str
     decision: str  # 'cancelar' | 'cambiar' | '' (vacío = borrar)
-    new_quantity: Optional[int] = None
-    original_quantity: Optional[int] = None
+    new_quantity: Optional[int] = Field(None, ge=1)
+    original_quantity: Optional[int] = Field(None, ge=1)
     change_note: Optional[str] = None
 
 
@@ -2565,6 +2565,7 @@ async def save_decision(
         existing.change_note       = body.change_note
         existing.updated_at        = datetime.utcnow()
         existing.updated_by        = _uuid.UUID(current_user.user_id)
+        existing.executed_at       = None  # allow re-execution after a previous run
         # Preserve original_quantity: only set on first save, never overwrite
         if existing.original_quantity is None and body.original_quantity is not None:
             existing.original_quantity = body.original_quantity
@@ -2633,6 +2634,7 @@ async def execute_adjustments(
         # Guardia crítica: solo cancelar si el packing list NO fue recibido
         if lot.packing_list_received:
             skipped_lots.append(f"{lot_id_str} (packing list ya recibido)")
+            decision.executed_at = now  # consume so it never re-surfaces
             continue
 
         # Normalización de part_number — misma que usa el sistema en todos lados
@@ -2655,9 +2657,9 @@ async def execute_adjustments(
             item.updated_at = now
             cancelled_items += 1
 
-        # Marcar decisión como ejecutada
         decision.executed_at = now
-        affected_fpns.add(fpn)
+        if items:
+            affected_fpns.add(fpn)
 
     # ── Procesar decisiones 'cambiar' ─────────────────────────────────────────
     for decision in cambiar_decisions:
@@ -2674,9 +2676,14 @@ async def execute_adjustments(
 
         if lot.packing_list_received:
             skipped_lots.append(f"{lot_id_str} (packing list ya recibido)")
+            decision.executed_at = now  # consume so it never re-surfaces
             continue
 
-        if decision.new_quantity is not None:
+        qty_changed = (
+            decision.new_quantity is not None
+            and decision.new_quantity != decision.original_quantity
+        )
+        if qty_changed:
             norm_fpn = fpn.upper().strip().replace(' ', '')
             items_result = await db.execute(
                 select(SparePartItem).where(
@@ -2756,7 +2763,7 @@ async def export_low_rotation_ordered(
 
     db_decisions = {
         f"{r.factory_part_number}::{r.lot_identifier}": r
-        for r in (await db.execute(select(_POD))).scalars().all()
+        for r in (await db.execute(select(_POD).where(_POD.executed_at.is_(None)))).scalars().all()
     }
 
     import openpyxl
