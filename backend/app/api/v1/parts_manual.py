@@ -2334,8 +2334,6 @@ async def low_rotation_ordered_analysis(
         LEFT JOIN stock_confirmado sc   ON sc.pn        = UPPER(TRIM(pr.factory_part_number))
         WHERE pr.rotation_class IN ('baja', 'media', 'alta')
           AND spl.packing_list_received = FALSE
-          AND UPPER(TRIM(pr.factory_part_number)) NOT IN (SELECT pn FROM aqui)
-          AND UPPER(TRIM(pr.factory_part_number)) NOT IN (SELECT pn FROM en_camino)
         GROUP BY
             pr.factory_part_number, pr.description,
             COALESCE(pr.description_es_manual, d.description_es),
