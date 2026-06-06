@@ -291,6 +291,10 @@ export default function AnalisisRepuestosTab() {
     return sortDir === 'asc' ? av - bv : bv - av;
   });
 
+  const pendingCount = (data?.items || []).filter(item =>
+    item.lots.some(lot => !marked[markKey(item.factory_part_number, lot.lot_identifier)])
+  ).length;
+
   const markedCancelar = Object.entries(marked)
     .filter(([, v]) => v === 'cancelar')
     .map(([k]) => { const [fpn, pi] = k.split('::'); return { fpn, pi }; });
@@ -518,7 +522,7 @@ export default function AnalisisRepuestosTab() {
       {data && (
         <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
           {[
-            { label: 'Para revisar',    value: data.total_references, color: '#fff'    },
+            { label: 'Para revisar',    value: pendingCount,          color: pendingCount === 0 ? '#4ade80' : '#fff' },
             { label: 'Unidades totales', value: data.total_qty,        color: '#38bdf8' },
             { label: 'Baja rotación',   value: data.baja_count,        color: '#4ade80' },
             { label: 'Media rotación',  value: data.media_count,       color: '#fbbf24' },
