@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { authFetch } from '../../lib/authFetch';
-import { ArrowUp, ArrowDown, ChevronsUpDown, RefreshCw, Download } from 'lucide-react';
+import { ArrowUp, ArrowDown, ChevronsUpDown, RefreshCw, Download, Link2 } from 'lucide-react';
 
 const ROT = {
   baja:  { bg: 'rgba(74,222,128,0.12)',  color: '#4ade80',  border: 'rgba(74,222,128,0.3)',  label: 'BAJA'  },
@@ -134,6 +134,108 @@ function ChangeModal({ fpn, lotId, lot, initialDetails, onSave, onUnmark, onClos
   );
 }
 
+function RelatedCodesModal({ fpn, initialCodes, onSave, onClose }) {
+  const [codes, setCodes] = useState([...initialCodes]);
+  const [input, setInput] = useState('');
+
+  const addCode = () => {
+    const v = input.trim().toUpperCase();
+    if (!v || codes.includes(v) || v === fpn.toUpperCase() || codes.length >= 5) return;
+    setCodes(prev => [...prev, v]);
+    setInput('');
+  };
+
+  const inputStyle = {
+    background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)',
+    borderRadius: '8px', padding: '0.5rem 0.75rem', color: '#fff', fontSize: '0.8rem',
+    outline: 'none',
+  };
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 1001,
+      background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+    }}>
+      <div style={{
+        background: '#12121c', border: '1px solid rgba(99,102,241,0.3)',
+        borderRadius: '16px', padding: '1.75rem', maxWidth: '420px', width: '90%',
+      }}>
+        <h3 style={{ margin: '0 0 0.3rem', color: '#a5b4fc', fontSize: '0.9rem', fontWeight: 800 }}>
+          Códigos relacionados
+        </h3>
+        <p style={{ margin: '0 0 1.25rem', fontSize: '0.72rem', color: 'rgba(255,255,255,0.4)' }}>
+          <span style={{ fontFamily: 'monospace', color: '#ff5f33' }}>{fpn}</span>
+          {' — '}códigos previos o equivalentes encontrados en catálogo
+        </p>
+
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', minHeight: '2rem', marginBottom: '1rem' }}>
+          {codes.length === 0 && (
+            <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.25)' }}>Sin códigos relacionados aún</span>
+          )}
+          {codes.map(c => (
+            <span key={c} style={{
+              fontFamily: 'monospace', fontSize: '0.72rem', padding: '3px 10px', borderRadius: '6px',
+              background: 'rgba(99,102,241,0.12)', border: '1px solid rgba(99,102,241,0.25)', color: '#a5b4fc',
+              display: 'flex', alignItems: 'center', gap: '0.4rem',
+            }}>
+              {c}
+              <button
+                onClick={() => setCodes(prev => prev.filter(x => x !== c))}
+                style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.3)', cursor: 'pointer', padding: 0, fontSize: '0.9rem', lineHeight: 1 }}
+              >×</button>
+            </span>
+          ))}
+        </div>
+
+        {codes.length < 5 ? (
+          <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem' }}>
+            <input
+              type="text"
+              value={input}
+              onChange={e => setInput(e.target.value.toUpperCase())}
+              onKeyDown={e => { if (e.key === 'Enter') addCode(); if (e.key === 'Escape') onClose(); }}
+              placeholder="Código de fábrica..."
+              style={{ ...inputStyle, flex: 1 }}
+            />
+            <button
+              onClick={addCode}
+              style={{
+                padding: '0.5rem 0.85rem', borderRadius: '8px', fontSize: '0.72rem', fontWeight: 800,
+                background: 'rgba(99,102,241,0.15)', border: '1px solid rgba(99,102,241,0.35)',
+                color: '#a5b4fc', cursor: 'pointer', whiteSpace: 'nowrap',
+              }}
+            >Agregar</button>
+          </div>
+        ) : (
+          <p style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.25)', marginBottom: '1.5rem' }}>
+            Máximo 5 códigos relacionados
+          </p>
+        )}
+
+        <div style={{ display: 'flex', gap: '0.6rem', justifyContent: 'flex-end' }}>
+          <button
+            onClick={onClose}
+            style={{
+              padding: '0.45rem 0.9rem', borderRadius: '8px', fontSize: '0.72rem', fontWeight: 700,
+              background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
+              color: 'rgba(255,255,255,0.5)', cursor: 'pointer',
+            }}
+          >Cancelar</button>
+          <button
+            onClick={() => onSave(fpn, codes)}
+            style={{
+              padding: '0.45rem 1.1rem', borderRadius: '8px', fontSize: '0.72rem', fontWeight: 800,
+              background: 'rgba(99,102,241,0.15)', border: '1px solid rgba(99,102,241,0.4)',
+              color: '#a5b4fc', cursor: 'pointer',
+            }}
+          >Guardar</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function AnalisisRepuestosTab() {
   const [data,      setData]      = useState(null);
   const [loading,   setLoading]   = useState(true);
@@ -153,6 +255,9 @@ export default function AnalisisRepuestosTab() {
   const [executing,   setExecuting]   = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [execResult,  setExecResult]  = useState(null);
+
+  const [editingDesc, setEditingDesc] = useState(null); // {fpn, value}
+  const [codesModal,  setCodesModal]  = useState(null); // {fpn, codes}
 
   const load = () => {
     setLoading(true);
@@ -233,6 +338,35 @@ export default function AnalisisRepuestosTab() {
       method: 'POST',
       body: JSON.stringify({ factory_part_number: fpn, lot_identifier: lotId, decision: '' }),
     });
+  };
+
+  const handleSaveDesc = async (fpn, value) => {
+    const trimmed = value.trim();
+    setEditingDesc(null);
+    setData(prev => prev ? {
+      ...prev,
+      items: prev.items.map(i =>
+        i.factory_part_number === fpn ? { ...i, description_es: trimmed || null } : i
+      ),
+    } : prev);
+    await authFetch(`/parts/admin/catalog/${encodeURIComponent(fpn)}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ description_es_manual: trimmed || null }),
+    }).catch(() => {});
+  };
+
+  const handleSaveCodes = async (fpn, codes) => {
+    setCodesModal(null);
+    setData(prev => prev ? {
+      ...prev,
+      items: prev.items.map(i =>
+        i.factory_part_number === fpn ? { ...i, prev_codes: codes } : i
+      ),
+    } : prev);
+    await authFetch(`/parts/admin/catalog/${encodeURIComponent(fpn)}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ prev_codes: codes }),
+    }).catch(() => {});
   };
 
   const handleExecuteAdjustments = async () => {
@@ -376,6 +510,16 @@ export default function AnalisisRepuestosTab() {
 
   return (
     <div style={{ padding: '0 0 2rem' }}>
+
+      {/* Modal de códigos relacionados */}
+      {codesModal && (
+        <RelatedCodesModal
+          fpn={codesModal.fpn}
+          initialCodes={codesModal.codes}
+          onSave={handleSaveCodes}
+          onClose={() => setCodesModal(null)}
+        />
+      )}
 
       {/* Modal de detalle de cambio */}
       {changeModal && (
@@ -673,22 +817,60 @@ export default function AnalisisRepuestosTab() {
                     )}
                   </td>
                   <td style={{ padding: '0.7rem 1rem' }}>
-                    <span style={{ fontFamily: 'monospace', fontSize: '0.78rem', fontWeight: 700, color: '#ff5f33', whiteSpace: 'nowrap' }}>
-                      {item.factory_part_number}
-                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                      <span style={{ fontFamily: 'monospace', fontSize: '0.78rem', fontWeight: 700, color: '#ff5f33', whiteSpace: 'nowrap' }}>
+                        {item.factory_part_number}
+                      </span>
+                      <button
+                        onClick={() => setCodesModal({ fpn: item.factory_part_number, codes: item.prev_codes || [] })}
+                        title={item.prev_codes?.length ? `${item.prev_codes.length} código(s) relacionado(s): ${item.prev_codes.join(', ')}` : 'Agregar códigos relacionados'}
+                        style={{
+                          background: 'none', border: 'none', cursor: 'pointer', padding: '2px',
+                          color: item.prev_codes?.length ? '#a5b4fc' : 'rgba(255,255,255,0.15)',
+                          display: 'flex', alignItems: 'center', gap: '1px', flexShrink: 0,
+                        }}
+                      >
+                        <Link2 size={11} />
+                        {item.prev_codes?.length > 0 && (
+                          <span style={{ fontSize: '0.55rem', fontWeight: 800, color: '#a5b4fc' }}>
+                            {item.prev_codes.length}
+                          </span>
+                        )}
+                      </button>
+                    </div>
                   </td>
                   <td style={{ padding: '0.7rem 1rem', maxWidth: '280px' }}>
-                    <span
-                      title={item.description_es || item.description}
-                      style={{
-                        color: item.description_es ? '#4ade80' : 'rgba(255,255,255,0.6)',
-                        fontSize: '0.72rem', display: 'block',
-                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                        cursor: 'default',
-                      }}
-                    >
-                      {item.description_es || item.description}
-                    </span>
+                    {editingDesc?.fpn === item.factory_part_number ? (
+                      <input
+                        autoFocus
+                        value={editingDesc.value}
+                        onChange={e => setEditingDesc(prev => ({ ...prev, value: e.target.value }))}
+                        onBlur={() => handleSaveDesc(item.factory_part_number, editingDesc.value)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') handleSaveDesc(item.factory_part_number, editingDesc.value);
+                          if (e.key === 'Escape') setEditingDesc(null);
+                        }}
+                        style={{
+                          width: '100%', background: 'rgba(255,255,255,0.06)',
+                          border: '1px solid rgba(255,255,255,0.2)', borderRadius: '5px',
+                          padding: '2px 6px', color: '#fff', fontSize: '0.72rem',
+                          outline: 'none', boxSizing: 'border-box',
+                        }}
+                      />
+                    ) : (
+                      <span
+                        title={`${item.description_es || item.description} — click para editar`}
+                        onClick={() => setEditingDesc({ fpn: item.factory_part_number, value: item.description_es || '' })}
+                        style={{
+                          color: item.description_es ? '#4ade80' : 'rgba(255,255,255,0.6)',
+                          fontSize: '0.72rem', display: 'block',
+                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                          cursor: 'text',
+                        }}
+                      >
+                        {item.description_es || item.description}
+                      </span>
+                    )}
                   </td>
                   <td style={{ padding: '0.7rem 1rem' }}>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>

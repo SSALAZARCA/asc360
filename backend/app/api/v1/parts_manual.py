@@ -2229,6 +2229,7 @@ class _LowRotItem(BaseModel):
     fob_unit: Optional[float] = None
     total_fob: Optional[float] = None
     qty_stock: Optional[int] = None
+    prev_codes: list[str] = []
 
 class _LowRotResponse(BaseModel):
     items: list[_LowRotItem]
@@ -2323,7 +2324,8 @@ async def low_rotation_ordered_analysis(
             SUM(spi.qty_ordered)::int AS qty,
             COALESCE(mfi.models, mp.models, ARRAY[]::text[]) AS models,
             MAX(COALESCE(spi.unit_price, spi.fob_pi))::float AS fob_unit,
-            MAX(COALESCE(sc.qty_stock, 0))::int AS qty_stock
+            MAX(COALESCE(sc.qty_stock, 0))::int AS qty_stock,
+            pr.prev_codes
         FROM parts_references pr
         JOIN spare_part_items spi
             ON UPPER(TRIM(REPLACE(spi.part_number, ' ', ''))) = UPPER(TRIM(pr.factory_part_number))
@@ -2338,7 +2340,8 @@ async def low_rotation_ordered_analysis(
             pr.factory_part_number, pr.description,
             COALESCE(pr.description_es_manual, d.description_es),
             pr.rotation_class, spl.lot_identifier,
-            COALESCE(mfi.models, mp.models, ARRAY[]::text[])
+            COALESCE(mfi.models, mp.models, ARRAY[]::text[]),
+            pr.prev_codes
         ORDER BY pr.rotation_class, pr.factory_part_number, spl.lot_identifier
     """)
 
@@ -2349,6 +2352,12 @@ async def low_rotation_ordered_analysis(
     for row in rows:
         fpn = row.factory_part_number
         if fpn not in parts_map:
+            raw_prev = row.prev_codes or []
+            prev_codes = [
+                e["code"] if isinstance(e, dict) and "code" in e else e
+                for e in raw_prev
+                if (isinstance(e, dict) and e.get("code")) or (isinstance(e, str) and e)
+            ]
             parts_map[fpn] = {
                 'factory_part_number': fpn,
                 'description': row.description or '',
@@ -2358,6 +2367,7 @@ async def low_rotation_ordered_analysis(
                 'total_qty': 0,
                 'models': list(row.models) if row.models else [],
                 'qty_stock': int(row.qty_stock) if row.qty_stock else 0,
+                'prev_codes': prev_codes,
             }
         qty = int(row.qty) if row.qty else 0
         fob_unit = float(row.fob_unit) if row.fob_unit is not None else None
