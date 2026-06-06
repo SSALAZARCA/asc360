@@ -287,7 +287,7 @@ export default function AnalisisRepuestosTab() {
     let av, bv;
     if      (sortCol === 'rotation')  { av = a.rotation_class === 'baja' ? 0 : 1; bv = b.rotation_class === 'baja' ? 0 : 1; }
     else if (sortCol === 'total_qty') { av = a.total_qty;   bv = b.total_qty;   }
-    else if (sortCol === 'fob')       { av = a.total_fob ?? 0; bv = b.total_fob ?? 0; }
+    else if (sortCol === 'fob')       { av = a.fob_unit ?? 0; bv = b.fob_unit ?? 0; }
     else                              { av = a.lots.length; bv = b.lots.length; }
     return sortDir === 'asc' ? av - bv : bv - av;
   });
