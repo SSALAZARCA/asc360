@@ -675,11 +675,15 @@ export default function AnalisisRepuestosTab() {
                     </span>
                   </td>
                   <td style={{ padding: '0.7rem 1rem', maxWidth: '280px' }}>
-                    <span style={{
-                      color: item.description_es ? '#4ade80' : 'rgba(255,255,255,0.6)',
-                      fontSize: '0.72rem', display: 'block',
-                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                    }}>
+                    <span
+                      title={item.description_es || item.description}
+                      style={{
+                        color: item.description_es ? '#4ade80' : 'rgba(255,255,255,0.6)',
+                        fontSize: '0.72rem', display: 'block',
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        cursor: 'default',
+                      }}
+                    >
                       {item.description_es || item.description}
                     </span>
                   </td>
