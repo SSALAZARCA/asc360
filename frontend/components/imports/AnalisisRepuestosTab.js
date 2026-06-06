@@ -287,6 +287,7 @@ export default function AnalisisRepuestosTab() {
     let av, bv;
     if      (sortCol === 'rotation')  { av = a.rotation_class === 'baja' ? 0 : 1; bv = b.rotation_class === 'baja' ? 0 : 1; }
     else if (sortCol === 'total_qty') { av = a.total_qty;   bv = b.total_qty;   }
+    else if (sortCol === 'fob')       { av = a.total_fob ?? 0; bv = b.total_fob ?? 0; }
     else                              { av = a.lots.length; bv = b.lots.length; }
     return sortDir === 'asc' ? av - bv : bv - av;
   });
@@ -648,7 +649,9 @@ export default function AnalisisRepuestosTab() {
                 <th style={{ ...thStyle, textAlign: 'right' }} onClick={() => toggleSort('total_qty')}>
                   Total <SortIcon col="total_qty" sortCol={sortCol} sortDir={sortDir} />
                 </th>
-                <th style={{ ...thStyle, textAlign: 'right', cursor: 'default' }}>Costo FOB</th>
+                <th style={{ ...thStyle, textAlign: 'right' }} onClick={() => toggleSort('fob')}>
+                  Costo FOB <SortIcon col="fob" sortCol={sortCol} sortDir={sortDir} />
+                </th>
                 <th style={{ ...thStyle, cursor: 'default' }}>PI numbers · cantidad <span style={{ fontWeight: 400, opacity: 0.5, textTransform: 'none', letterSpacing: 0 }}>— click para marcar</span></th>
               </tr>
             </thead>
