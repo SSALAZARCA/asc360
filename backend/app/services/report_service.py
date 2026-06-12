@@ -907,7 +907,7 @@ async def _query_f7(desde: date, hasta: date, db: AsyncSession) -> dict:
             UNION ALL
 
             SELECT MAX(COALESCE(spi.unit_price, spi.fob_pi, 0)) *
-                   GREATEST(0, (pod.original_quantity - pod.new_quantity))::numeric AS adj_fob
+                   GREATEST(0, (COALESCE(pod.original_quantity, SUM(spi.qty_ordered)) - pod.new_quantity))::numeric AS adj_fob
             FROM part_order_decisions pod
             JOIN spare_part_lots spl ON spl.lot_identifier = pod.lot_identifier
             JOIN spare_part_items spi
@@ -917,8 +917,6 @@ async def _query_f7(desde: date, hasta: date, db: AsyncSession) -> dict:
             WHERE pod.decision = 'cambiar'
               AND pod.executed_at IS NULL
               AND pod.new_quantity IS NOT NULL
-              AND pod.original_quantity IS NOT NULL
-              AND pod.new_quantity < pod.original_quantity
               AND spi.status != 'CANCELLED'
               AND spl.packing_list_received = FALSE
             GROUP BY pod.factory_part_number, pod.lot_identifier, pod.original_quantity, pod.new_quantity
@@ -945,7 +943,7 @@ async def _query_f7(desde: date, hasta: date, db: AsyncSession) -> dict:
             UNION ALL
 
             SELECT MAX(COALESCE(spi.unit_price, spi.fob_pi, 0)) *
-                   GREATEST(0, (pod.original_quantity - pod.new_quantity))::numeric AS adj_fob
+                   GREATEST(0, (COALESCE(pod.original_quantity, SUM(spi.qty_ordered)) - pod.new_quantity))::numeric AS adj_fob
             FROM part_order_decisions pod
             JOIN spare_part_lots spl ON spl.lot_identifier = pod.lot_identifier
             JOIN spare_part_items spi
@@ -956,8 +954,6 @@ async def _query_f7(desde: date, hasta: date, db: AsyncSession) -> dict:
               AND pod.executed_at IS NOT NULL
               AND pod.executed_at::date BETWEEN :desde AND :hasta
               AND pod.new_quantity IS NOT NULL
-              AND pod.original_quantity IS NOT NULL
-              AND pod.new_quantity < pod.original_quantity
               AND spi.status != 'CANCELLED'
               AND spl.packing_list_received = FALSE
             GROUP BY pod.factory_part_number, pod.lot_identifier, pod.original_quantity, pod.new_quantity
