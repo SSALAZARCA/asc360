@@ -887,7 +887,7 @@ async def _query_f7(desde: date, hasta: date, db: AsyncSession) -> dict:
 
     # FOB = qty_ordered × precio real del packing list (unit_price > fob_pi)
     fob_pendiente_sql = text("""
-        SELECT COALESCE(SUM(spi.qty_ordered * COALESCE(spi.fob_pi, spi.unit_price, 0)), 0) AS fob
+        SELECT COALESCE(SUM(spi.qty_ordered * COALESCE(spi.unit_price, spi.fob_pi, 0)), 0) AS fob
         FROM part_order_decisions pod
         JOIN spare_part_lots spl ON spl.lot_identifier = pod.lot_identifier
         JOIN spare_part_items spi
@@ -897,10 +897,11 @@ async def _query_f7(desde: date, hasta: date, db: AsyncSession) -> dict:
         WHERE pod.decision = 'cancelar'
           AND pod.executed_at IS NULL
           AND spi.status != 'CANCELLED'
+          AND spl.packing_list_received = FALSE
     """)
 
     fob_ejecutado_sql = text("""
-        SELECT COALESCE(SUM(spi.qty_ordered * COALESCE(spi.fob_pi, spi.unit_price, 0)), 0) AS fob
+        SELECT COALESCE(SUM(spi.qty_ordered * COALESCE(spi.unit_price, spi.fob_pi, 0)), 0) AS fob
         FROM part_order_decisions pod
         JOIN spare_part_lots spl ON spl.lot_identifier = pod.lot_identifier
         JOIN spare_part_items spi
@@ -911,6 +912,7 @@ async def _query_f7(desde: date, hasta: date, db: AsyncSession) -> dict:
           AND pod.executed_at IS NOT NULL
           AND pod.executed_at::date BETWEEN :desde AND :hasta
           AND spi.status != 'CANCELLED'
+          AND spl.packing_list_received = FALSE
     """)
 
     cnt_row = (await db.execute(counts_sql, {'desde': desde, 'hasta': hasta})).fetchone()
