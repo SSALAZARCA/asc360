@@ -176,6 +176,7 @@ async def _query_f2(desde: date, hasta: date, db: AsyncSession) -> dict:
             ) AS motos_activos,
             COUNT(*) FILTER (
                 WHERE computed_status != 'completado'
+                  AND computed_status != 'cancelado'
                   AND is_spare_part = true
             ) AS repuestos_activos,
             -- status buckets motos (all active)
@@ -676,11 +677,14 @@ async def _query_f4(db: AsyncSession) -> dict:
         )
     """)
 
-    # Valor materializado = SUM(total_declared_value) — idéntico al ebox
-    # "Valor declarado" de la pestaña Repuestos en la app (imports dashboard)
+    # Valor materializado = SUM(total_declared_value) de lotes en órdenes activas de repuestos
+    # Mismo universo que fob_pedido_sql para que el ratio sea coherente
     fob_materializado_sql = text("""
-        SELECT COALESCE(SUM(total_declared_value), 0) AS fob_materializado
-        FROM spare_part_lots
+        SELECT COALESCE(SUM(spl.total_declared_value), 0) AS fob_materializado
+        FROM spare_part_lots spl
+        JOIN shipment_orders so ON so.id = spl.shipment_order_id
+        WHERE so.computed_status != 'completado'
+          AND so.is_spare_part = true
     """)
 
     # Valor pedido = FOB comprometido en órdenes activas de repuestos
@@ -756,7 +760,7 @@ async def _query_f5(db: AsyncSession) -> dict:
     risk_sql = text("""
         SELECT
             pr.rotation_class,
-            COALESCE(SUM(spi.qty_ordered * COALESCE(spi.fob_pi, pr.preliminary_fob, 0)), 0) AS fob_riesgo
+            COALESCE(SUM(spi.qty_ordered * COALESCE(spi.unit_price, spi.fob_pi, pr.preliminary_fob, 0)), 0) AS fob_riesgo
         FROM parts_references pr
         JOIN spare_part_items spi
             ON UPPER(TRIM(REPLACE(spi.part_number, ' ', ''))) = UPPER(TRIM(pr.factory_part_number))
@@ -874,16 +878,36 @@ async def _query_f6(desde: date, hasta: date, db: AsyncSession) -> dict:
 # ---------------------------------------------------------------------------
 
 async def _query_f7(desde: date, hasta: date, db: AsyncSession) -> dict:
+    # Counts usan los mismos filtros que el FOB: solo lotes sin PL recibido.
+    # cambiar_pendiente solo cuenta reducciones (new_quantity < original) para
+    # alinear con markedCambiarConReduccion del frontend.
     counts_sql = text("""
         SELECT
-            COUNT(*) FILTER (WHERE decision = 'cancelar' AND executed_at IS NULL) AS cancelar_pendiente,
-            COUNT(*) FILTER (WHERE decision = 'cambiar'  AND executed_at IS NULL) AS cambiar_pendiente,
             COUNT(*) FILTER (
-                WHERE decision = 'cancelar'
-                  AND executed_at IS NOT NULL
-                  AND executed_at::date BETWEEN :desde AND :hasta
+                WHERE pod.decision = 'cancelar' AND pod.executed_at IS NULL
+            ) AS cancelar_pendiente,
+            COUNT(*) FILTER (
+                WHERE pod.decision = 'cambiar'
+                  AND pod.executed_at IS NULL
+                  AND pod.new_quantity IS NOT NULL
+                  AND pod.new_quantity < COALESCE(
+                      pod.original_quantity,
+                      (SELECT SUM(spi2.qty_ordered)
+                       FROM spare_part_items spi2
+                       JOIN spare_part_lots spl2 ON spl2.id = spi2.lot_id
+                       WHERE spl2.lot_identifier = pod.lot_identifier
+                         AND UPPER(TRIM(REPLACE(spi2.part_number, ' ', ''))) =
+                             UPPER(TRIM(REPLACE(pod.factory_part_number, ' ', ''))))
+                  )
+            ) AS cambiar_pendiente,
+            COUNT(*) FILTER (
+                WHERE pod.decision = 'cancelar'
+                  AND pod.executed_at IS NOT NULL
+                  AND pod.executed_at::date BETWEEN :desde AND :hasta
             ) AS cancelar_ejecutado
-        FROM part_order_decisions
+        FROM part_order_decisions pod
+        JOIN spare_part_lots spl ON spl.lot_identifier = pod.lot_identifier
+        WHERE spl.packing_list_received = FALSE
     """)
 
     # FOB total ajuste = cancelar (qty total × precio) + cambiar (delta reducción × precio)
