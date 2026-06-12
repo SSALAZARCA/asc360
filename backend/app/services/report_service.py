@@ -885,34 +885,82 @@ async def _query_f7(desde: date, hasta: date, db: AsyncSession) -> dict:
         FROM part_order_decisions
     """)
 
-    # FOB = qty_ordered × precio real del packing list (unit_price > fob_pi)
+    # FOB total ajuste = cancelar (qty total × precio) + cambiar (delta reducción × precio)
+    # Usa MAX(unit_price, fob_pi) × SUM(qty) por lote — idéntico a low-rotation-ordered en la app
     fob_pendiente_sql = text("""
-        SELECT COALESCE(SUM(spi.qty_ordered * COALESCE(spi.unit_price, spi.fob_pi, 0)), 0) AS fob
-        FROM part_order_decisions pod
-        JOIN spare_part_lots spl ON spl.lot_identifier = pod.lot_identifier
-        JOIN spare_part_items spi
-            ON spi.lot_id = spl.id
-           AND UPPER(TRIM(REPLACE(spi.part_number, ' ', ''))) =
-               UPPER(TRIM(REPLACE(pod.factory_part_number, ' ', '')))
-        WHERE pod.decision = 'cancelar'
-          AND pod.executed_at IS NULL
-          AND spi.status != 'CANCELLED'
-          AND spl.packing_list_received = FALSE
+        SELECT COALESCE(SUM(adj_fob), 0) AS fob
+        FROM (
+            SELECT MAX(COALESCE(spi.unit_price, spi.fob_pi, 0)) * SUM(spi.qty_ordered)::numeric AS adj_fob
+            FROM part_order_decisions pod
+            JOIN spare_part_lots spl ON spl.lot_identifier = pod.lot_identifier
+            JOIN spare_part_items spi
+                ON spi.lot_id = spl.id
+               AND UPPER(TRIM(REPLACE(spi.part_number, ' ', ''))) =
+                   UPPER(TRIM(REPLACE(pod.factory_part_number, ' ', '')))
+            WHERE pod.decision = 'cancelar'
+              AND pod.executed_at IS NULL
+              AND spi.status != 'CANCELLED'
+              AND spl.packing_list_received = FALSE
+            GROUP BY pod.factory_part_number, pod.lot_identifier
+
+            UNION ALL
+
+            SELECT MAX(COALESCE(spi.unit_price, spi.fob_pi, 0)) *
+                   GREATEST(0, (pod.original_quantity - pod.new_quantity))::numeric AS adj_fob
+            FROM part_order_decisions pod
+            JOIN spare_part_lots spl ON spl.lot_identifier = pod.lot_identifier
+            JOIN spare_part_items spi
+                ON spi.lot_id = spl.id
+               AND UPPER(TRIM(REPLACE(spi.part_number, ' ', ''))) =
+                   UPPER(TRIM(REPLACE(pod.factory_part_number, ' ', '')))
+            WHERE pod.decision = 'cambiar'
+              AND pod.executed_at IS NULL
+              AND pod.new_quantity IS NOT NULL
+              AND pod.original_quantity IS NOT NULL
+              AND pod.new_quantity < pod.original_quantity
+              AND spi.status != 'CANCELLED'
+              AND spl.packing_list_received = FALSE
+            GROUP BY pod.factory_part_number, pod.lot_identifier, pod.original_quantity, pod.new_quantity
+        ) adj
     """)
 
     fob_ejecutado_sql = text("""
-        SELECT COALESCE(SUM(spi.qty_ordered * COALESCE(spi.unit_price, spi.fob_pi, 0)), 0) AS fob
-        FROM part_order_decisions pod
-        JOIN spare_part_lots spl ON spl.lot_identifier = pod.lot_identifier
-        JOIN spare_part_items spi
-            ON spi.lot_id = spl.id
-           AND UPPER(TRIM(REPLACE(spi.part_number, ' ', ''))) =
-               UPPER(TRIM(REPLACE(pod.factory_part_number, ' ', '')))
-        WHERE pod.decision = 'cancelar'
-          AND pod.executed_at IS NOT NULL
-          AND pod.executed_at::date BETWEEN :desde AND :hasta
-          AND spi.status != 'CANCELLED'
-          AND spl.packing_list_received = FALSE
+        SELECT COALESCE(SUM(adj_fob), 0) AS fob
+        FROM (
+            SELECT MAX(COALESCE(spi.unit_price, spi.fob_pi, 0)) * SUM(spi.qty_ordered)::numeric AS adj_fob
+            FROM part_order_decisions pod
+            JOIN spare_part_lots spl ON spl.lot_identifier = pod.lot_identifier
+            JOIN spare_part_items spi
+                ON spi.lot_id = spl.id
+               AND UPPER(TRIM(REPLACE(spi.part_number, ' ', ''))) =
+                   UPPER(TRIM(REPLACE(pod.factory_part_number, ' ', '')))
+            WHERE pod.decision = 'cancelar'
+              AND pod.executed_at IS NOT NULL
+              AND pod.executed_at::date BETWEEN :desde AND :hasta
+              AND spi.status != 'CANCELLED'
+              AND spl.packing_list_received = FALSE
+            GROUP BY pod.factory_part_number, pod.lot_identifier
+
+            UNION ALL
+
+            SELECT MAX(COALESCE(spi.unit_price, spi.fob_pi, 0)) *
+                   GREATEST(0, (pod.original_quantity - pod.new_quantity))::numeric AS adj_fob
+            FROM part_order_decisions pod
+            JOIN spare_part_lots spl ON spl.lot_identifier = pod.lot_identifier
+            JOIN spare_part_items spi
+                ON spi.lot_id = spl.id
+               AND UPPER(TRIM(REPLACE(spi.part_number, ' ', ''))) =
+                   UPPER(TRIM(REPLACE(pod.factory_part_number, ' ', '')))
+            WHERE pod.decision = 'cambiar'
+              AND pod.executed_at IS NOT NULL
+              AND pod.executed_at::date BETWEEN :desde AND :hasta
+              AND pod.new_quantity IS NOT NULL
+              AND pod.original_quantity IS NOT NULL
+              AND pod.new_quantity < pod.original_quantity
+              AND spi.status != 'CANCELLED'
+              AND spl.packing_list_received = FALSE
+            GROUP BY pod.factory_part_number, pod.lot_identifier, pod.original_quantity, pod.new_quantity
+        ) adj
     """)
 
     cnt_row = (await db.execute(counts_sql, {'desde': desde, 'hasta': hasta})).fetchone()

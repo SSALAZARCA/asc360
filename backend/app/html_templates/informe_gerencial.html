@@ -519,9 +519,9 @@ body{
         </div>
 
         <div class="kpi s-{{ 'risk' if f7.fob_cancelar_pendiente > 0 else 'ok' }}">
-          <div class="kpi__label">Valor pedidos cancelar</div>
+          <div class="kpi__label">Total ajuste</div>
           <div class="kpi__val num"><span class="u">USD </span>{{ "{:,.0f}".format(f7.fob_cancelar_pendiente) }}</div>
-          <div class="kpi__sub">{{ f7.cancelar_pendiente }} refs no requeridas</div>
+          <div class="kpi__sub">{{ f7.cancelar_pendiente + f7.cambiar_pendiente }} refs pendientes</div>
         </div>
 
       </div>
