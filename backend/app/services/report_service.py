@@ -201,12 +201,13 @@ async def _query_f2(desde: date, hasta: date, db: AsyncSession) -> dict:
             ), 0) AS motos_unidades,
             -- repuestos FOB
             COALESCE((
-                SELECT SUM(spi.fob_pi)
+                SELECT SUM(spi.qty_ordered * COALESCE(spi.unit_price, spi.fob_pi, 0))
                 FROM spare_part_items spi
                 JOIN spare_part_lots spl ON spl.id = spi.lot_id
                 JOIN shipment_orders so2 ON so2.id = spl.shipment_order_id
                 WHERE so2.computed_status != 'completado'
                   AND so2.is_spare_part = true
+                  AND spi.status != 'CANCELLED'
             ), 0) AS repuestos_fob,
             -- pipeline motos: unidades de moto por etapa (SUM total_units)
             COALESCE(SUM(total_units) FILTER (
@@ -684,7 +685,7 @@ async def _query_f4(db: AsyncSession) -> dict:
 
     # Valor pedido = FOB comprometido en órdenes activas de repuestos
     fob_pedido_sql = text("""
-        SELECT COALESCE(SUM(spi.qty_ordered * COALESCE(spi.fob_pi, spi.unit_price, 0)), 0) AS fob_pedido
+        SELECT COALESCE(SUM(spi.qty_ordered * COALESCE(spi.unit_price, spi.fob_pi, 0)), 0) AS fob_pedido
         FROM spare_part_items spi
         JOIN spare_part_lots spl ON spl.id = spi.lot_id
         JOIN shipment_orders so ON so.id = spl.shipment_order_id
