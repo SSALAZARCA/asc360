@@ -5,9 +5,9 @@
 <title>Informe Gerencial · Red de Servicio UM Colombia</title>
 <style>
 /* ============================================================
-   Informe Gerencial UM Colombia — Sistema de diseño
-   Letter portrait (8.5 x 11"), print-ready — WeasyPrint 61
-   Fonts: Arial/Helvetica (no Google Fonts — container offline)
+   Informe Gerencial UM Colombia — Sistema de diseño v2
+   Letter portrait · print-ready · WeasyPrint 61
+   Arial/Helvetica (sin Google Fonts — contenedor offline)
    ============================================================ */
 
 @page { size: Letter portrait; margin: 0; }
@@ -15,236 +15,218 @@
 
 :root{
   /* Brand */
-  --brand:        #E8590C;
-  --brand-deep:   #C9490A;
-  --brand-tint:   #FDF1E9;
+  --brand:#E1580E; --brand-deep:#B8440A; --brand-tint:#FBEDE4;
 
-  /* Neutrals */
-  --ink:    #15181C;
-  --ink-2:  #2A2F36;
-  --text:   #3C434B;
-  --muted:  #828B95;
-  --faint:  #AEB6BF;
-  --line:   #E5E8EC;
-  --line-2: #EFF1F4;
-  --zone:   #F5F6F9;
-  --zone-2: #FAFBFC;
-  --paper:  #FFFFFF;
+  /* Slate-navy neutrals (ejecutivo) */
+  --ink:#1B2531; --ink-2:#33414F; --text:#475260; --muted:#79858F; --faint:#A8B2BC;
+  --line:#E4E8EC; --line-2:#EFF2F5; --zone:#F4F6F8; --zone-2:#FAFBFC; --paper:#FFFFFF;
 
-  /* Semáforo / estados */
-  --ok:     #2F9E44;   --ok-tint:   #E9F6ED;
-  --warn:   #E8A200;   --warn-tint: #FCF3DD;
-  --risk:   #E8590C;   --risk-tint: #FDEDE2;
-  --crit:   #E03131;   --crit-tint: #FBEAEA;
-  --info:   #1C7ED6;   --info-tint: #E7F1FB;
-  --violet: #6C44E0;   --violet-tint:#EEE9FC;
-  --indigo: #3B47B8;   --indigo-tint:#E8EAF8;
-  --cancel: #748399;   --cancel-tint:#EEF1F4;
+  /* Estados — armonizados (familia cohesiva, dorado en vez de amarillo neón) */
+  --ok:#2F8F4E;     --ok-tint:#E8F3EC;
+  --warn:#C2901C;   --warn-tint:#F7EFD9;   --warn-ink:#9A6F0E;
+  --risk:#E1580E;   --risk-tint:#FBEDE4;
+  --crit:#CB3A3A;   --crit-tint:#F8E8E8;
+  --info:#2C6EAF;   --info-tint:#E6EEF6;
+  --violet:#6A4BA6; --violet-tint:#ECE7F4;
+  --indigo:#3C4F94; --indigo-tint:#E7EAF4;
+  --amber:#CA8E12;  --amber-tint:#F6EDD6;  --amber-ink:#9A6A0A;
+  --cancel:#6E7C8C; --cancel-tint:#ECEFF2;
 }
 
 *{ box-sizing:border-box; }
 html,body{ margin:0; padding:0; background:#FFFFFF; }
-
-body{
-  font-family: Arial, Helvetica, sans-serif;
-  color:var(--text);
-  font-size:12px;
-}
+body{ font-family:Arial, Helvetica, sans-serif; color:var(--text); font-size:12px; }
 
 /* ---------- Page sheet ---------- */
 .sheet{
-  width:100%;
-  min-height:100vh;
-  background:var(--paper);
-  padding:36px 48px 56px;
-  display:flex;
-  flex-direction:column;
-  position:relative;
+  width:100%; min-height:100vh; background:var(--paper);
+  padding:0 50px 54px; position:relative;
+  display:flex; flex-direction:column;
 }
-.sheet__body{ display:flex; flex-direction:column; }
+.sheet__body{ display:flex; flex-direction:column; flex:1; }
 
 /* ---------- Typography ---------- */
-.num{ font-family:Arial,Helvetica,sans-serif; font-variant-numeric:tabular-nums; letter-spacing:-.02em; font-weight:700; }
-.code{ font-family:'Courier New',monospace; color:var(--brand); font-weight:600; letter-spacing:-.01em; }
+.num{ font-variant-numeric:tabular-nums; letter-spacing:-.02em; font-weight:700; }
+.code{ font-family:'Courier New',monospace; color:var(--brand); font-weight:700; letter-spacing:-.01em; }
 
-/* ---------- Section header ---------- */
-.section{ margin-top:14px; }
-.section:first-child{ margin-top:0; }
-.section__head{
-  display:flex; align-items:baseline; gap:12px;
-  padding-bottom:6px; margin-bottom:10px;
-  border-bottom:2px solid var(--ink);
-}
-.section__num{ font-weight:800; font-size:13px; color:var(--brand); }
-.section__title{ font-size:17px; font-weight:700; white-space:nowrap; flex:none; }
-.section__meta{ margin-left:auto; font-size:10.5px; color:var(--muted); font-weight:500; text-align:right; flex:0 0 auto; white-space:nowrap; }
-
-.block-title{
-  font-size:12px; font-weight:700; color:var(--ink-2);
-  margin-bottom:10px; display:flex; align-items:center; gap:8px;
-}
-.block-title .dot{ width:7px; height:7px; border-radius:2px; background:var(--brand); flex:none; }
-.block-sub{ font-size:10px; color:var(--muted); font-weight:500; }
-
-/* ---------- Cover header ---------- */
+/* ---------- Cover (página 1) ---------- */
 .cover{
-  background:var(--ink);
-  margin:-36px -48px 16px;
-  padding:22px 48px 18px;
-  color:#fff;
-  position:relative;
-  overflow:hidden;
+  background:linear-gradient(150deg, #21303F 0%, #18222E 60%, #141C26 100%);
+  margin:0 -50px 18px; padding:30px 50px 24px;
+  color:#fff; position:relative; overflow:hidden;
+  border-bottom:3px solid var(--brand);
 }
 .cover::after{
-  content:''; position:absolute; right:-60px; top:-40px; width:260px; height:260px;
-  background:radial-gradient(circle at center, rgba(232,89,12,.22), transparent 65%);
+  content:''; position:absolute; right:-70px; top:-90px; width:340px; height:340px;
+  background:radial-gradient(circle at center, rgba(225,88,14,.20), transparent 62%);
 }
 .cover__top{ display:flex; align-items:flex-start; justify-content:space-between; gap:24px; position:relative; z-index:1; }
-.cover__brand-mark{ font-size:26px; font-weight:800; color:var(--brand); letter-spacing:-.02em; line-height:1; }
-.cover__title{ font-size:21px; font-weight:700; color:#fff; line-height:1.14; letter-spacing:-.02em; margin-top:10px; }
-.cover__kicker{ font-size:10px; font-weight:600; letter-spacing:.16em; text-transform:uppercase; color:var(--brand); margin-bottom:6px; }
-.cover__meta{ text-align:right; font-size:11px; line-height:1.7; color:#AAB2BC; }
-.cover__meta b{ color:#fff; font-weight:600; }
+.cover__kicker{ font-size:9.5px; font-weight:700; letter-spacing:.22em; text-transform:uppercase; color:var(--brand); margin-bottom:9px; }
+.cover__brand-mark{ font-size:27px; font-weight:800; color:#fff; letter-spacing:-.02em; line-height:1; }
+.cover__brand-mark .um{ color:var(--brand); }
+.cover__title{ font-size:21px; font-weight:700; color:#fff; line-height:1.14; letter-spacing:-.015em; margin-top:13px; }
+.cover__title small{ display:block; font-size:11.5px; font-weight:400; color:#9AA6B2; letter-spacing:0; margin-top:5px; }
+.cover__meta{ text-align:right; font-size:11px; line-height:1.65; color:#9AA6B2; }
+.cover__meta .lab{ font-size:8.5px; font-weight:700; letter-spacing:.18em; text-transform:uppercase; color:#6C7884; }
+.cover__meta b{ color:#fff; font-weight:700; }
+.cover__meta .grp + .grp{ margin-top:9px; }
 .cover__meta .trm{
-  display:inline-block; margin-top:4px; padding:3px 9px;
-  border:1px solid rgba(255,255,255,.22); border-radius:5px;
-  font-family:'Courier New',monospace; font-size:10.5px; color:#fff;
+  display:inline-block; margin-top:11px; padding:4px 10px;
+  border:1px solid rgba(255,255,255,.20); border-radius:5px;
+  font-family:'Courier New',monospace; font-size:10.5px; color:#fff; letter-spacing:.02em;
 }
 
-/* ---------- KPI grid ---------- */
+/* ---------- Running header (páginas 2–3) ---------- */
+.runhead{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:14px 0 9px; margin-bottom:6px; border-bottom:1px solid var(--line);
+  font-size:9.5px; color:var(--muted); font-weight:500;
+}
+.runhead__brand{ display:flex; align-items:center; gap:7px; font-weight:800; color:var(--ink); font-size:11px; letter-spacing:.01em; }
+.runhead__brand .um{ color:var(--brand); }
+.runhead__brand .tri{ width:0; height:0; border-left:5px solid transparent; border-right:5px solid transparent; border-top:9px solid var(--brand); }
+
+/* ---------- Section header (editorial) ---------- */
+.section{ margin-top:15px; }
+.section:first-child{ margin-top:0; }
+.section__head{
+  position:relative; display:flex; align-items:baseline; gap:11px;
+  padding-bottom:8px; margin-bottom:12px; border-bottom:1.5px solid var(--ink);
+}
+.section__head::after{ content:''; position:absolute; left:0; bottom:-1.5px; width:52px; height:1.5px; background:var(--brand); }
+.section__num{
+  font-weight:800; font-size:11px; color:#fff; background:var(--brand);
+  padding:3px 7px; border-radius:4px; letter-spacing:.02em; position:relative; top:-1px;
+}
+.section__title{ font-size:17px; font-weight:800; color:var(--ink); letter-spacing:-.015em; white-space:nowrap; flex:none; }
+.section__meta{ margin-left:auto; font-size:10.5px; color:var(--muted); font-weight:500; text-align:right; white-space:nowrap; }
+
+.block-title{ font-size:11.5px; font-weight:700; color:var(--ink-2); margin-bottom:9px; display:flex; align-items:center; gap:8px; letter-spacing:.005em; }
+.block-title .dot{ width:8px; height:8px; border-radius:2px; background:var(--brand); flex:none; }
+.block-sub{ font-size:10px; color:var(--muted); font-weight:500; }
+
+/* ---------- KPI ---------- */
 .kpi-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
 .kpi{
   background:var(--paper); border:1px solid var(--line);
-  border-top:3px solid var(--state, var(--ink)); border-radius:9px;
-  padding:10px 12px 11px; position:relative;
+  border-top:3px solid var(--state, var(--ink)); border-radius:7px;
+  padding:13px 14px 14px; position:relative;
   display:flex; flex-direction:column; align-items:center; text-align:center;
 }
-.kpi__label{ font-size:10px; font-weight:600; color:var(--muted); line-height:1.25; letter-spacing:.01em; }
-.kpi__val{ font-weight:700; font-size:28px; color:var(--ink); margin-top:6px; line-height:1; font-variant-numeric:tabular-nums; letter-spacing:-.03em; }
-.kpi__val .u{ font-size:12px; font-weight:600; color:var(--muted); letter-spacing:0; }
-.kpi__sub{ font-size:9.5px; color:var(--muted); font-weight:500; margin-top:4px; }
-.kpi__sub b{ color:var(--text); font-weight:600; }
-.kpi__tag{ align-self:flex-end; margin-bottom:5px; font-size:8.5px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; padding:2px 6px; border-radius:4px; }
+.kpi__label{ font-size:10px; font-weight:600; color:var(--muted); line-height:1.3; letter-spacing:.01em; }
+.kpi__val{ font-weight:800; font-size:31px; color:var(--ink); margin-top:8px; line-height:1; font-variant-numeric:tabular-nums; letter-spacing:-.035em; }
+.kpi__val .u{ font-size:13px; font-weight:700; color:var(--muted); letter-spacing:0; }
+.kpi__sub{ font-size:9.5px; color:var(--muted); font-weight:500; margin-top:6px; }
+.kpi__sub b{ color:var(--text); font-weight:700; }
+.kpi__tag{ order:-1; align-self:center; margin-bottom:8px; font-size:8px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; padding:2px 7px; border-radius:4px; }
 .tag-ok{ background:var(--ok-tint); color:var(--ok); }
-.tag-warn{ background:var(--warn-tint); color:#B97f00; }
+.tag-warn{ background:var(--warn-tint); color:var(--warn-ink); }
 .tag-risk{ background:var(--risk-tint); color:var(--brand-deep); }
 .tag-crit{ background:var(--crit-tint); color:var(--crit); }
 .tag-info{ background:var(--info-tint); color:var(--info); }
 
-/* state borders */
-.s-ok{ --state:var(--ok); }
-.s-warn{ --state:var(--warn); }
-.s-risk{ --state:var(--risk); }
-.s-crit{ --state:var(--crit); }
-.s-info{ --state:var(--info); }
-.s-ink{ --state:var(--ink); }
+.s-ok{ --state:var(--ok); } .s-warn{ --state:var(--warn); } .s-risk{ --state:var(--risk); }
+.s-crit{ --state:var(--crit); } .s-info{ --state:var(--info); } .s-ink{ --state:var(--ink); }
 
-/* ---------- Pipeline / funnel ---------- */
-.pipe{ background:var(--zone); border:1px solid var(--line); border-radius:11px; padding:10px 14px; }
-.pipe__row{ display:flex; align-items:center; gap:12px; }
-.pipe__row + .pipe__row{ margin-top:9px; }
-.pipe__lab{ width:76px; flex:none; font-size:11.5px; font-weight:700; color:var(--ink); }
-.pipe__lab small{ display:block; font-size:9px; font-weight:500; color:var(--muted); }
+/* ---------- Pipeline ---------- */
+.pipe{ background:var(--zone); border:1px solid var(--line); border-radius:9px; padding:12px 15px; }
+.pipe__row{ display:flex; align-items:center; gap:13px; }
+.pipe__lab{ width:80px; flex:none; font-size:12px; font-weight:800; color:var(--ink); }
+.pipe__lab small{ display:block; font-size:9px; font-weight:500; color:var(--muted); margin-top:1px; }
 .funnel{ display:flex; gap:5px; flex:1; }
-.stage{
-  flex:1; position:relative; border-radius:6px; padding:8px 6px 7px;
-  background:var(--c-tint, #F5F6F9); border:1px solid var(--c-border, var(--line));
-  text-align:center;
-}
-.stage__n{ font-weight:700; font-size:19px; color:var(--c-ink, var(--c, #3C434B)); line-height:1; font-variant-numeric:tabular-nums; }
+.stage{ flex:1; position:relative; border-radius:6px; padding:9px 6px 8px; background:var(--c-tint,#F4F6F8); border:1px solid var(--c-border,var(--line)); text-align:center; }
+.stage__n{ font-weight:800; font-size:20px; color:var(--c-ink, var(--c,#475260)); line-height:1; font-variant-numeric:tabular-nums; letter-spacing:-.02em; }
 .stage__n.zero{ color:var(--faint); }
-.stage__bar{ height:4px; border-radius:3px; background:var(--c, var(--brand)); margin-top:6px; opacity:.9; }
-.pipe__stages-head{ display:flex; gap:5px; margin-left:88px; margin-bottom:7px; }
-.pipe__stages-head .sh{ flex:1; text-align:center; font-size:8.5px; font-weight:600; color:var(--muted); line-height:1.2; letter-spacing:.01em; text-transform:uppercase; }
+.stage__bar{ height:4px; border-radius:3px; background:var(--c,var(--brand)); margin-top:7px; opacity:.92; }
+.pipe__stages-head{ display:flex; gap:5px; margin-left:93px; margin-bottom:8px; }
+.pipe__stages-head .sh{ flex:1; text-align:center; font-size:8.5px; font-weight:700; color:var(--muted); line-height:1.2; letter-spacing:.02em; text-transform:uppercase; }
 
-/* stage color helpers */
-.c-prep{ --c:#1C7ED6; --c-tint:#E7F1FB; --c-border:#B8D4EF; }
-.c-listo{ --c:#6C44E0; --c-tint:#EEE9FC; --c-border:#C8BEF0; }
-.c-origen{ --c:#3B47B8; --c-tint:#E8EAF8; --c-border:#B9BEE4; }
-.c-transito{ --c:#E8590C; --c-tint:#FDEDE2; --c-border:#F0C4AD; --c-ink:#C9490A; }
-.c-destino{ --c:#E8A200; --c-tint:#FCF3DD; --c-border:#EFD98A; --c-ink:#B97f00; }
-.c-nac{ --c:#2F9E44; --c-tint:#E9F6ED; --c-border:#A4D4AD; }
+.c-prep{ --c:var(--info); --c-tint:var(--info-tint); --c-border:#C3D5E8; }
+.c-listo{ --c:var(--violet); --c-tint:var(--violet-tint); --c-border:#CFC4E2; }
+.c-origen{ --c:var(--indigo); --c-tint:var(--indigo-tint); --c-border:#C2C9E4; }
+.c-transito{ --c:var(--brand); --c-tint:var(--risk-tint); --c-border:#F0C9B3; --c-ink:var(--brand-deep); }
+.c-destino{ --c:var(--amber); --c-tint:var(--amber-tint); --c-border:#E6D2A0; --c-ink:var(--amber-ink); }
+.c-nac{ --c:var(--ok); --c-tint:var(--ok-tint); --c-border:#AFD4BC; }
 
-/* ---------- Cards / panels ---------- */
-.panel{ background:var(--paper); border:1px solid var(--line); border-radius:11px; padding:11px 14px; }
-.panel--zone{ background:var(--zone); }
-.grid-2{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px; align-items:start; }
-.grid-2-3{ display:grid; grid-template-columns:1.1fr 1fr; gap:10px; }
-.grid-3{ display:grid; grid-template-columns:repeat(3,1fr); gap:9px; }
+/* ---------- Panels / grids ---------- */
+.panel{ background:var(--paper); border:1px solid var(--line); border-radius:8px; padding:13px 15px; }
+.panel--zone{ background:var(--zone-2); }
+.grid-2{ display:grid; grid-template-columns:1fr 1fr; gap:11px; margin-top:11px; align-items:start; }
+.grid-2-3{ display:grid; grid-template-columns:1.1fr 1fr; gap:11px; }
+.grid-3{ display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
 
-/* ---------- Matrix table ---------- */
+/* ---------- Matrix ---------- */
 .matrix{ width:100%; border-collapse:collapse; font-size:11px; }
-.matrix th, .matrix td{ padding:7px 9px; text-align:center; }
-.matrix thead th{ font-size:9.5px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; border-bottom:1.5px solid var(--line); }
+.matrix th, .matrix td{ padding:8px 9px; text-align:center; }
+.matrix thead th{ font-size:9px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; border-bottom:1.5px solid var(--line); }
 .matrix thead th:first-child{ text-align:left; }
-.matrix tbody th{ text-align:left; font-weight:600; color:var(--ink-2); font-size:11px; }
+.matrix tbody th{ text-align:left; font-weight:700; color:var(--ink-2); font-size:11px; }
 .matrix tbody tr + tr td, .matrix tbody tr + tr th{ border-top:1px solid var(--line-2); }
-.cell{ display:inline-flex; align-items:center; justify-content:center; min-width:32px; height:26px; border-radius:6px; font-weight:700; font-variant-numeric:tabular-nums; font-size:11px; }
-.matrix tfoot td, .matrix tfoot th{ border-top:1.5px solid var(--line); font-weight:700; color:var(--ink); padding-top:8px; }
-.matrix tfoot th{ font-size:10px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); }
+.cell{ display:inline-flex; align-items:center; justify-content:center; min-width:32px; height:26px; border-radius:6px; font-weight:800; font-variant-numeric:tabular-nums; font-size:11px; }
+.matrix tfoot td, .matrix tfoot th{ border-top:1.5px solid var(--line); font-weight:800; color:var(--ink); padding-top:9px; }
+.matrix tfoot th{ font-size:9.5px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); }
 
 /* ---------- Horizontal bars ---------- */
-.bars{ display:flex; flex-direction:column; gap:8px; }
-.bar-row{ display:grid; grid-template-columns:120px 1fr 42px; align-items:center; gap:10px; }
-.bar-row__lab{ font-size:10.5px; font-weight:500; color:var(--text); text-align:right; line-height:1.15; }
-.bar-track{ height:16px; background:var(--zone); border-radius:5px; overflow:hidden; }
-.bar-fill{ height:100%; border-radius:5px; background:var(--brand); display:block; }
-.bar-row__val{ font-weight:700; font-size:12px; color:var(--ink); text-align:right; font-variant-numeric:tabular-nums; }
+.bars{ display:flex; flex-direction:column; gap:9px; }
+.bar-row{ display:grid; grid-template-columns:118px 1fr 40px; align-items:center; gap:11px; }
+.bar-row__lab{ font-size:10.5px; font-weight:600; color:var(--text); text-align:right; line-height:1.15; }
+.bar-track{ height:17px; background:var(--zone); border-radius:4px; overflow:hidden; }
+.bar-fill{ height:100%; border-radius:4px; background:var(--brand); display:block; }
+.bar-row__val{ font-weight:800; font-size:12.5px; color:var(--ink); text-align:right; font-variant-numeric:tabular-nums; }
 
 /* ---------- Donut ---------- */
-.donut-wrap{ display:flex; align-items:center; gap:16px; }
-.donut{ width:120px; height:120px; border-radius:50%; flex:none; position:relative; overflow:hidden; }
-.donut::after{ content:''; position:absolute; inset:22px; background:var(--paper); border-radius:50%; }
+.donut-wrap{ display:flex; align-items:center; gap:17px; }
+.donut{ width:118px; height:118px; border-radius:50%; flex:none; position:relative; }
+.donut::after{ content:''; position:absolute; inset:23px; background:var(--paper); border-radius:50%; box-shadow:inset 0 0 0 1px var(--line-2); }
 .donut__center{ position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:1; }
-.donut__center b{ font-weight:800; font-size:22px; color:var(--ink); line-height:1; font-variant-numeric:tabular-nums; }
-.donut__center span{ font-size:9px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; margin-top:2px; }
-.legend{ display:flex; flex-direction:column; gap:7px; flex:1; }
-.legend__item{ display:flex; align-items:center; gap:8px; font-size:11px; }
-.legend__sw{ width:10px; height:10px; border-radius:3px; flex:none; }
-.legend__lab{ color:var(--text); font-weight:500; flex:1; }
-.legend__val{ font-weight:700; color:var(--ink); font-variant-numeric:tabular-nums; }
-.legend__pct{ width:38px; text-align:right; font-size:10px; color:var(--muted); font-weight:600; font-variant-numeric:tabular-nums; }
+.donut__center b{ font-weight:800; font-size:22px; color:var(--ink); line-height:1; font-variant-numeric:tabular-nums; letter-spacing:-.02em; }
+.donut__center span{ font-size:8.5px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.08em; margin-top:3px; }
+.legend{ display:flex; flex-direction:column; gap:8px; flex:1; }
+.legend__item{ display:flex; align-items:center; gap:9px; font-size:11px; }
+.legend__sw{ width:11px; height:11px; border-radius:3px; flex:none; }
+.legend__lab{ color:var(--text); font-weight:600; flex:1; }
+.legend__val{ font-weight:800; color:var(--ink); font-variant-numeric:tabular-nums; }
+.legend__pct{ width:40px; text-align:right; font-size:10px; color:var(--muted); font-weight:700; font-variant-numeric:tabular-nums; }
 
-/* ---------- Progress / materializado ---------- */
-.prog-head{ display:flex; align-items:baseline; justify-content:space-between; margin-bottom:10px; gap:12px; }
+/* ---------- Progress ---------- */
+.prog-head{ display:flex; align-items:baseline; justify-content:space-between; margin-bottom:11px; gap:12px; }
 .prog-head .big{ font-weight:800; font-size:24px; color:var(--ink); font-variant-numeric:tabular-nums; letter-spacing:-.02em; }
-.prog-head .big small{ font-size:12px; color:var(--muted); font-weight:600; }
-.prog-track{ height:28px; border-radius:8px; background:var(--zone); overflow:hidden; display:flex; border:1px solid var(--line); }
-.prog-seg{ height:100%; display:flex; align-items:center; padding:0 9px; color:#fff; font-weight:700; font-size:11px; white-space:nowrap; }
-.prog-track__rest{ flex:1; display:flex; align-items:center; padding:0 9px; color:var(--muted); font-size:10px; font-weight:600; }
-.prog-foot{ display:flex; gap:16px; margin-top:10px; flex-wrap:wrap; }
-.prog-foot__item{ font-size:10.5px; color:var(--text); display:flex; align-items:center; gap:6px; }
-.prog-foot__item .sw{ width:9px; height:9px; border-radius:3px; flex:none; }
-.prog-foot__item b{ font-weight:700; color:var(--ink); }
+.prog-head .big small{ font-size:12px; color:var(--muted); font-weight:700; letter-spacing:0; }
+.prog-track{ height:28px; border-radius:7px; background:var(--zone); overflow:hidden; display:flex; border:1px solid var(--line); }
+.prog-seg{ height:100%; display:flex; align-items:center; padding:0 10px; color:#fff; font-weight:700; font-size:11px; white-space:nowrap; }
+.prog-track__rest{ flex:1; display:flex; align-items:center; padding:0 10px; color:var(--muted); font-size:10px; font-weight:600; }
+.prog-foot{ display:flex; gap:18px; margin-top:11px; flex-wrap:wrap; }
+.prog-foot__item{ font-size:10.5px; color:var(--text); display:flex; align-items:center; gap:7px; }
+.prog-foot__item .sw{ width:10px; height:10px; border-radius:3px; flex:none; }
+.prog-foot__item b{ font-weight:800; color:var(--ink); }
 
-/* ---------- Stacked bar ---------- */
-.stack{ display:flex; height:24px; border-radius:7px; overflow:hidden; border:1px solid var(--line); }
+/* ---------- Stacked ---------- */
+.stack{ display:flex; height:25px; border-radius:7px; overflow:hidden; border:1px solid var(--line); }
 .stack__seg{ height:100%; display:flex; align-items:center; justify-content:center; color:#fff; font-weight:700; font-size:10.5px; white-space:nowrap; padding:0 4px; }
 
 /* ---------- Mini table ---------- */
 .tbl{ width:100%; border-collapse:collapse; font-size:10.5px; }
-.tbl th{ text-align:left; font-size:9px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; padding:0 9px 6px; border-bottom:1.5px solid var(--line); }
+.tbl th{ text-align:left; font-size:9px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; padding:0 10px 7px; border-bottom:1.5px solid var(--line); }
 .tbl th.r, .tbl td.r{ text-align:right; }
-.tbl td{ padding:6px 9px; border-bottom:1px solid var(--line-2); color:var(--text); }
-.tbl td.num, .tbl td .num{ font-weight:600; color:var(--ink); font-variant-numeric:tabular-nums; }
+.tbl td{ padding:7px 10px; border-bottom:1px solid var(--line-2); color:var(--text); }
+.tbl td.num, .tbl td .num{ font-weight:700; color:var(--ink); font-variant-numeric:tabular-nums; }
 .tbl tr:last-child td{ border-bottom:none; }
 
-/* chips */
-.chip{ display:inline-flex; align-items:center; gap:4px; font-size:9.5px; font-weight:600; padding:2px 7px; border-radius:20px; }
+.chip{ display:inline-flex; align-items:center; gap:5px; font-size:9.5px; font-weight:700; padding:2px 8px; border-radius:20px; }
 .chip .d{ width:6px; height:6px; border-radius:50%; flex:none; }
 
 /* ---------- Footer ---------- */
 .foot{
-  position:absolute; bottom:20px; left:48px; right:48px;
-  padding-top:8px; border-top:1px solid var(--line);
+  position:absolute; bottom:20px; left:50px; right:50px;
+  padding-top:9px; border-top:1px solid var(--line);
   display:flex; align-items:center; justify-content:space-between;
   font-size:9px; color:var(--muted); font-weight:500;
 }
-.foot b{ color:var(--text); font-weight:600; }
+.foot b{ color:var(--text); font-weight:700; }
 .foot > div{ white-space:nowrap; }
-.foot__brand{ display:flex; align-items:center; gap:6px; font-weight:700; color:var(--ink); font-size:10px; letter-spacing:.02em; }
-.foot__brand .tri{ width:0; height:0; border-left:5px solid transparent; border-right:5px solid transparent; border-top:9px solid var(--brand); flex:none; }
-.foot__page{ font-weight:600; color:var(--text); }
+.foot__brand{ display:flex; align-items:center; gap:6px; font-weight:800; color:var(--ink); font-size:10px; letter-spacing:.02em; }
+.foot__brand .um{ color:var(--brand); }
+.foot__brand .tri{ width:0; height:0; border-left:5px solid transparent; border-right:5px solid transparent; border-top:9px solid var(--brand); }
 .foot__page b{ color:var(--ink); }
 
 /* ---------- Misc ---------- */
@@ -266,17 +248,17 @@ body{
         <div>
           <div class="cover__kicker">Motocicletas y Repuestos</div>
           {% if logo_base64 %}
-          <img src="data:image/png;base64,{{ logo_base64 }}" alt="Logo" style="height:48px;width:auto;margin-top:6px;filter:brightness(0) invert(1);">
+          <img src="data:image/png;base64,{{ logo_base64 }}" alt="UM Colombia" style="height:46px;width:auto;margin-top:4px;filter:brightness(0) invert(1);">
           {% else %}
-          <div class="cover__brand-mark">UM Colombia</div>
+          <div class="cover__brand-mark"><span class="um">UM</span> Colombia</div>
           {% endif %}
-          <div class="cover__title" style="margin-top:12px;">Estado de la operación</div>
+          <div class="cover__title">Estado de la operación
+            <small>Red de Servicio · Informe Gerencial</small>
+          </div>
         </div>
         <div class="cover__meta">
-          <div class="cover__kicker" style="color:#AAB2BC;margin-bottom:8px;">Período</div>
-          <div><b>{{ meta.periodo_label }}</b></div>
-          <div style="margin-top:8px;color:#7A828C;">Generado</div>
-          <div><b>{{ meta.generado_at }}</b></div>
+          <div class="grp"><div class="lab">Período</div><b>{{ meta.periodo_label }}</b></div>
+          <div class="grp"><div class="lab">Generado</div><b>{{ meta.generado_at }}</b></div>
         </div>
       </div>
     </div>
@@ -388,7 +370,7 @@ body{
   </div>
 
   <div class="foot">
-    <div class="foot__brand"><span class="tri"></span> UM Colombia</div>
+    <div class="foot__brand"><span class="tri"></span> <span class="um">UM</span> Colombia</div>
     <div>Informe Gerencial · Red de Servicio · <b>{{ meta.periodo_label }}</b></div>
     <div class="foot__page">Página <b>1</b> / 3</div>
   </div>
@@ -399,6 +381,11 @@ body{
      ============================================================ -->
 <section class="sheet page-break" data-page="2">
   <div class="sheet__body">
+
+    <div class="runhead">
+      <div class="runhead__brand"><span class="tri"></span> <span class="um">UM</span> Colombia</div>
+      <div>Informe Gerencial · <b style="color:var(--text)">{{ meta.periodo_label }}</b></div>
+    </div>
 
     <div class="section">
       <div class="section__head">
@@ -485,7 +472,7 @@ body{
   </div>
 
   <div class="foot">
-    <div class="foot__brand"><span class="tri"></span> UM Colombia</div>
+    <div class="foot__brand"><span class="tri"></span> <span class="um">UM</span> Colombia</div>
     <div>Informe Gerencial · Red de Servicio · <b>{{ meta.periodo_label }}</b></div>
     <div class="foot__page">Página <b>2</b> / 3</div>
   </div>
@@ -496,6 +483,11 @@ body{
      ============================================================ -->
 <section class="sheet page-break" data-page="4">
   <div class="sheet__body">
+
+    <div class="runhead">
+      <div class="runhead__brand"><span class="tri"></span> <span class="um">UM</span> Colombia</div>
+      <div>Informe Gerencial · <b style="color:var(--text)">{{ meta.periodo_label }}</b></div>
+    </div>
 
     <div class="section">
       <div class="section__head">
@@ -568,15 +560,15 @@ body{
                 <div class="block-sub" style="margin-top:2px;">de USD {{ "{:,.0f}".format(f4.fob_pedido) }} pedido</div>
               </div>
               <div style="text-align:right;">
-                <div class="num" style="font-size:28px;font-weight:800;{% if f4.mat_status == 'ok' %}color:#2F9E44{% elif f4.mat_status == 'warn' %}color:#E8A200{% else %}color:#E03131{% endif %};">{{ f4.pct_materializado }}%</div>
+                <div class="num" style="font-size:28px;font-weight:800;{% if f4.mat_status == 'ok' %}color:#2F8F4E{% elif f4.mat_status == 'warn' %}color:#C2901C{% else %}color:#CB3A3A{% endif %};">{{ f4.pct_materializado }}%</div>
               </div>
             </div>
             <div class="prog-track">
-              <div class="prog-seg" style="width:{{ f4.pct_mat_pbar }}%;background:{% if f4.mat_status == 'ok' %}#2F9E44{% elif f4.mat_status == 'warn' %}#E8A200{% else %}#E03131{% endif %};"></div>
+              <div class="prog-seg" style="width:{{ f4.pct_mat_pbar }}%;background:{% if f4.mat_status == 'ok' %}#2F8F4E{% elif f4.mat_status == 'warn' %}#C2901C{% else %}#CB3A3A{% endif %};"></div>
               <div class="prog-track__rest">Pendiente · USD {{ "{:,.0f}".format(f4.fob_pendiente) }}</div>
             </div>
             <div class="prog-foot">
-              <div class="prog-foot__item"><span class="sw" style="background:{% if f4.mat_status == 'ok' %}#2F9E44{% elif f4.mat_status == 'warn' %}#E8A200{% else %}#E03131{% endif %}"></span>Valor declarado (materializado) <b class="num">USD {{ "{:,.0f}".format(f4.fob_materializado) }}</b></div>
+              <div class="prog-foot__item"><span class="sw" style="background:{% if f4.mat_status == 'ok' %}#2F8F4E{% elif f4.mat_status == 'warn' %}#C2901C{% else %}#CB3A3A{% endif %}"></span>Valor declarado (materializado) <b class="num">USD {{ "{:,.0f}".format(f4.fob_materializado) }}</b></div>
               <div class="prog-foot__item"><span class="sw" style="background:var(--zone);border:1px solid var(--line)"></span>Pendiente <b class="num">USD {{ "{:,.0f}".format(f4.fob_pendiente) }}</b></div>
             </div>
             {% endif %}
@@ -595,7 +587,7 @@ body{
               <div class="legend">
                 {% for c in f5.clases %}
                 <div class="legend__item">
-                  <span class="legend__sw" style="background:{% if c.clase == 'alta' %}#2F9E44{% elif c.clase == 'media' %}#E8A200{% else %}#E03131{% endif %}"></span>
+                  <span class="legend__sw" style="background:{% if c.clase == 'alta' %}#2F8F4E{% elif c.clase == 'media' %}#C2901C{% else %}#CB3A3A{% endif %}"></span>
                   <span class="legend__lab">{{ c.clase|capitalize }}</span>
                   <span class="legend__val num">{{ c.refs }}</span>
                   <span class="legend__pct">{{ c.pct }}%</span>
@@ -628,15 +620,15 @@ body{
             <div class="block-sub" style="margin-top:2px;">de {{ "{:,}".format(maestro.total_refs) }} referencias creadas</div>
           </div>
           <div style="text-align:right;">
-            <div class="num" style="font-size:32px;font-weight:800;{% if maestro.precio_status == 'ok' %}color:#2F9E44{% elif maestro.precio_status == 'warn' %}color:#E8A200{% else %}color:#E03131{% endif %};">{{ maestro.pct_con_precio }}%</div>
+            <div class="num" style="font-size:32px;font-weight:800;{% if maestro.precio_status == 'ok' %}color:#2F8F4E{% elif maestro.precio_status == 'warn' %}color:#C2901C{% else %}color:#CB3A3A{% endif %};">{{ maestro.pct_con_precio }}%</div>
           </div>
         </div>
         <div class="prog-track" style="height:32px;">
-          <div class="prog-seg" style="width:{{ maestro.pct_con_precio }}%;background:#2F9E44;">Definidas · {{ "{:,}".format(maestro.con_precio) }}</div>
+          <div class="prog-seg" style="width:{{ maestro.pct_con_precio }}%;background:#2F8F4E;">Definidas · {{ "{:,}".format(maestro.con_precio) }}</div>
           <div class="prog-track__rest">Sin precio · {{ "{:,}".format(maestro.sin_precio) }}</div>
         </div>
         <div class="prog-foot">
-          <div class="prog-foot__item"><span class="sw" style="background:#2F9E44"></span>Con precio público <b class="num">{{ "{:,}".format(maestro.con_precio) }}</b></div>
+          <div class="prog-foot__item"><span class="sw" style="background:#2F8F4E"></span>Con precio público <b class="num">{{ "{:,}".format(maestro.con_precio) }}</b></div>
           <div class="prog-foot__item"><span class="sw" style="background:#F5F6F9;border:1px solid #E5E8EC"></span>Pendiente de precio <b class="num">{{ "{:,}".format(maestro.sin_precio) }}</b></div>
         </div>
       </div>
@@ -676,7 +668,7 @@ body{
               {% for c in f8.por_concepto %}
               <tr>
                 <td>
-                  <span class="chip" style="background:{% if c.tipo == 'PEDIDO' %}#E7F1FB;color:#1C7ED6{% elif c.tipo == 'GARANTIA' %}#EEE9FC;color:#6C44E0{% elif c.tipo == 'CORTESIA' %}#E9F6ED;color:#2F9E44{% else %}#FCF3DD;color:#B97f00{% endif %};">
+                  <span class="chip" style="background:{% if c.tipo == 'PEDIDO' %}#E6EEF6;color:#2C6EAF{% elif c.tipo == 'GARANTIA' %}#ECE7F4;color:#6A4BA6{% elif c.tipo == 'CORTESIA' %}#E8F3EC;color:#2F8F4E{% else %}#F6EDD6;color:#9A6A0A{% endif %};">
                     <span class="d" style="background:{{ c.color }}"></span>
                     {% if c.tipo == 'VEHICULO_PROPIO' %}V. propio{% elif c.tipo == 'GARANTIA' %}Garantía{% elif c.tipo == 'CORTESIA' %}Cortesía{% else %}Pedido{% endif %}
                   </span>
@@ -694,7 +686,7 @@ body{
   </div>
 
   <div class="foot">
-    <div class="foot__brand"><span class="tri"></span> UM Colombia</div>
+    <div class="foot__brand"><span class="tri"></span> <span class="um">UM</span> Colombia</div>
     <div>Informe Gerencial · Red de Servicio · <b>{{ meta.periodo_label }}</b></div>
     <div class="foot__page">Página <b>3</b> / 3</div>
   </div>
