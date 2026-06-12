@@ -109,7 +109,7 @@ def _make_conic(slices: list) -> str:
     return f"conic-gradient({', '.join(parts)})"
 
 
-def _make_svg_donut(slices: list, size: int = 120, hole: float = 0.40,
+def _make_svg_donut(slices: list, size: int = 120, hole: float = 0.63,
                     center_val: str = '', center_sub: str = '') -> str:
     """
     Generate an inline SVG donut chart — 100% WeasyPrint safe.
