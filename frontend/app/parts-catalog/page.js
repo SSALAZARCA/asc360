@@ -405,7 +405,7 @@ export default function PartsCatalogPage() {
             <input
               value={searchInput}
               onChange={e => setSearchInput(e.target.value)}
-              placeholder="Buscar por código fábrica, código UM, descripción..."
+              placeholder="Buscar por código fábrica, descripción EN o ES..."
               style={{ width: '100%', padding: '0.625rem 2.25rem 0.625rem 2.25rem', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px', color: '#fff', fontSize: '0.78rem', outline: 'none', boxSizing: 'border-box' }}
             />
             {searchInput && (
