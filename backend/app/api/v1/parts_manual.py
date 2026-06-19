@@ -846,6 +846,7 @@ async def _list_catalog_impl(
             q = q.where(or_(
                 PartsReference.factory_part_number.ilike(term),
                 PartsReference.description.ilike(term),
+                PartsReference.description_es_manual.ilike(term),
                 spi_latest.c.description_es.ilike(term),
             ))
         if only_pending:
