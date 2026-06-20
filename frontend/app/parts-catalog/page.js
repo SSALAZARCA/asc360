@@ -78,6 +78,32 @@ export default function PartsCatalogPage() {
   const [backfilling, setBackfilling] = useState(false);
   const [backfillResult, setBackfillResult] = useState(null);
 
+  // Export Excel
+  const [exporting, setExporting] = useState(false);
+
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const params = new URLSearchParams({
+        search,
+        model_code: modelCode,
+        rotation_class: rotationFilter,
+        coverage_status: coverageFilter,
+      });
+      const res = await authFetch(`/parts/admin/catalog/export?${params}`);
+      if (!res.ok) return;
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const fname = `maestro_partes${modelCode ? '_' + modelCode : ''}${search ? '_filtrado' : ''}.xlsx`;
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fname;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch { /* silently fail */ }
+    finally { setExporting(false); }
+  };
+
   const handleBackfillCosts = async () => {
     setBackfilling(true);
     setBackfillResult(null);
@@ -328,13 +354,22 @@ export default function PartsCatalogPage() {
           >
             <UploadCloud size={14} /> Clasificar rotación
           </button>
-          <button
-            onClick={handleBackfillCosts}
-            disabled={backfilling}
-            style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.45rem 0.9rem', borderRadius: '10px', background: 'rgba(56,189,248,0.08)', border: '1px solid rgba(56,189,248,0.25)', color: '#38bdf8', fontSize: '0.65rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', cursor: backfilling ? 'not-allowed' : 'pointer', flexShrink: 0, opacity: backfilling ? 0.5 : 1 }}
-          >
-            <BarChart3 size={12} /> {backfilling ? 'Calculando...' : 'Recalcular costos'}
-          </button>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button
+              onClick={handleBackfillCosts}
+              disabled={backfilling}
+              style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.45rem 0.9rem', borderRadius: '10px', background: 'rgba(56,189,248,0.08)', border: '1px solid rgba(56,189,248,0.25)', color: '#38bdf8', fontSize: '0.65rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', cursor: backfilling ? 'not-allowed' : 'pointer', flexShrink: 0, opacity: backfilling ? 0.5 : 1 }}
+            >
+              <BarChart3 size={12} /> {backfilling ? 'Calculando...' : 'Recalcular costos'}
+            </button>
+            <button
+              onClick={handleExport}
+              disabled={exporting}
+              style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.45rem 0.9rem', borderRadius: '10px', background: 'rgba(52,211,153,0.08)', border: '1px solid rgba(52,211,153,0.25)', color: exporting ? '#606075' : '#34d399', fontSize: '0.65rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', cursor: exporting ? 'not-allowed' : 'pointer', flexShrink: 0, opacity: exporting ? 0.5 : 1 }}
+            >
+              <Download size={12} /> {exporting ? 'Exportando...' : 'Exportar Excel'}
+            </button>
+          </div>
           {backfillResult && !backfillResult.error && (
             <span style={{ fontSize: '0.6rem', color: '#4ade80', fontWeight: 700 }}>
               ✓ {backfillResult.updated} de {backfillResult.checked} actualizados

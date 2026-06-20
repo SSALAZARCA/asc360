@@ -1145,6 +1145,176 @@ async def _list_catalog_impl(
     )
 
 
+# ── Exportar maestro de partes a Excel ───────────────────────────────────────
+
+@router.get("/admin/catalog/export")
+async def export_catalog_excel(
+    search: str = "",
+    model_code: str = "",
+    rotation_class: str = "",
+    coverage_status: str = "",
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Descarga el maestro de partes completo como Excel con todas las columnas."""
+    if not current_user.is_superadmin:
+        raise HTTPException(status_code=403, detail="Solo superadmin")
+
+    result = await _list_catalog_impl(
+        search=search,
+        model_code=model_code,
+        only_pending=False,
+        only_price_review=False,
+        rotation_class=rotation_class,
+        coverage_status=coverage_status,
+        sort_col="section_code",
+        sort_dir="asc",
+        page=1,
+        page_size=50_000,
+        db=db,
+    )
+
+    fpns = [item.factory_part_number for item in result.items]
+    extra: dict[str, dict] = {}
+    if fpns:
+        for fpn, unit, qty, updated in (await db.execute(
+            select(
+                PartsReference.factory_part_number,
+                PartsReference.unit,
+                PartsReference.total_fob_qty,
+                PartsReference.last_cost_updated,
+            ).where(PartsReference.factory_part_number.in_(fpns))
+        )).all():
+            extra[fpn] = {"unit": unit, "total_fob_qty": qty, "last_cost_updated": updated}
+
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment
+    from openpyxl.utils import get_column_letter
+
+    HEADERS = [
+        ("Código Fábrica",             22),
+        ("Descripción EN",             36),
+        ("Descripción ES",             36),
+        ("Unidad",                      8),
+        ("Códigos Anteriores",         22),
+        ("Sección Código",             12),
+        ("Sección Nombre",             30),
+        ("Modelo Moto",                20),
+        ("Rotación",                   10),
+        ("Cobertura",                  13),
+        ("Req. Revisión Precio",       14),
+        ("FOB Promedio USD",           14),
+        ("FOB Preliminar USD",         14),
+        ("FOB es Preliminar",          12),
+        ("Fecha Último Costo",         18),
+        ("Cant. Total FOB",            12),
+        ("Costo Importado COP",        16),
+        ("Precio Distribuidor COP",    16),
+        ("Precio Público Calc. COP",   17),
+        ("Precio Público Manual COP",  17),
+        ("Sust. 1 Código",             20),
+        ("Sust. 1 Marca",              14),
+        ("Sust. 1 Modelo",             20),
+        ("Sust. 2 Código",             20),
+        ("Sust. 2 Marca",              14),
+        ("Sust. 2 Modelo",             20),
+        ("Sust. 3 Código",             20),
+        ("Sust. 3 Marca",              14),
+        ("Sust. 3 Modelo",             20),
+    ]
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Maestro de Partes"
+
+    hdr_font = Font(bold=True, color="FFFFFF", size=9)
+    hdr_fill = PatternFill("solid", fgColor="1e1e2e")
+    center   = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    left     = Alignment(horizontal="left",   vertical="center")
+
+    for ci, (h, w) in enumerate(HEADERS, 1):
+        cell = ws.cell(row=1, column=ci, value=h)
+        cell.font = hdr_font
+        cell.fill = hdr_fill
+        cell.alignment = center
+        ws.column_dimensions[get_column_letter(ci)].width = w
+    ws.row_dimensions[1].height = 22
+    ws.freeze_panes = "A2"
+
+    alt_fill = PatternFill("solid", fgColor="12121e")
+    COVERAGE_LABELS = {
+        "aqui": "Aquí",
+        "en_camino": "En camino",
+        "pedido": "Pedido",
+        "sin_pedido": "Sin pedido",
+    }
+    data_font = Font(size=9)
+
+    for i, item in enumerate(result.items):
+        ex = extra.get(item.factory_part_number, {})
+        subs = item.substitutes
+
+        def _sub(n: int, attr: str) -> str:
+            return getattr(subs[n], attr, "") if n < len(subs) else ""
+
+        values = [
+            item.factory_part_number,
+            item.description,
+            item.description_es or "",
+            ex.get("unit") or "",
+            ", ".join(item.prev_codes),
+            item.section_code,
+            item.section_name,
+            item.vehicle_model_name or "",
+            (item.rotation_class or "").upper() if item.rotation_class else "",
+            COVERAGE_LABELS.get(item.coverage_status or "", item.coverage_status or ""),
+            "Sí" if item.needs_price_review else "No",
+            item.avg_fob_cost,
+            item.preliminary_fob,
+            "Sí" if item.fob_is_preliminary else "No",
+            ex.get("last_cost_updated"),
+            ex.get("total_fob_qty"),
+            item.costo_importado,
+            item.precio_distribuidor,
+            item.precio_publico_calculado,
+            item.public_price,
+            _sub(0, "substitute_part_code"),
+            _sub(0, "brand"),
+            _sub(0, "model"),
+            _sub(1, "substitute_part_code"),
+            _sub(1, "brand"),
+            _sub(1, "model"),
+            _sub(2, "substitute_part_code"),
+            _sub(2, "brand"),
+            _sub(2, "model"),
+        ]
+
+        row_fill = alt_fill if i % 2 == 1 else None
+        for ci, val in enumerate(values, 1):
+            cell = ws.cell(row=i + 2, column=ci, value=val)
+            cell.font = data_font
+            cell.alignment = left
+            if row_fill:
+                cell.fill = row_fill
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    filename = "maestro_partes"
+    if model_code:
+        filename += f"_{model_code}"
+    if search:
+        filename += "_filtrado"
+    filename += ".xlsx"
+
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 # ── Limpiar catálogo completo de un modelo ────────────────────────────────────
 
 @router.delete("/admin/catalog/{model_code}", status_code=204)
