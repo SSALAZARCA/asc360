@@ -1241,7 +1241,6 @@ async def export_catalog_excel(
     ws.row_dimensions[1].height = 22
     ws.freeze_panes = "A2"
 
-    alt_fill = PatternFill("solid", fgColor="12121e")
     COVERAGE_LABELS = {
         "aqui": "Aquí",
         "en_camino": "En camino",
@@ -1289,13 +1288,10 @@ async def export_catalog_excel(
             _sub(2, "model"),
         ]
 
-        row_fill = alt_fill if i % 2 == 1 else None
         for ci, val in enumerate(values, 1):
             cell = ws.cell(row=i + 2, column=ci, value=val)
             cell.font = data_font
             cell.alignment = left
-            if row_fill:
-                cell.fill = row_fill
 
     buf = io.BytesIO()
     wb.save(buf)
