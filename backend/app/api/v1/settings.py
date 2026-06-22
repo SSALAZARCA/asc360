@@ -171,3 +171,86 @@ async def backfill_part_costs(
 
     await db.commit()
     return {"updated": updated, "skipped": skipped, "total": len(refs)}
+
+
+SUGERIDO_DEFAULTS = {
+    "sugerido.rate_alta":           20.0,
+    "sugerido.rate_media":          10.0,
+    "sugerido.rate_baja":           1.0,
+    "sugerido.pending_moto_factor": 0.5,
+}
+
+
+class SugeridoParamsResponse(BaseModel):
+    rate_alta: float
+    rate_media: float
+    rate_baja: float
+    pending_moto_factor: float
+
+
+class SugeridoParamsUpdate(BaseModel):
+    rate_alta: float
+    rate_media: float
+    rate_baja: float
+    pending_moto_factor: float
+
+
+@router.get("/sugerido-params", response_model=SugeridoParamsResponse)
+async def get_sugerido_params(
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Retorna los parámetros de cálculo de sugerido de pedido. Solo superadmin."""
+    if not current_user.is_superadmin:
+        raise HTTPException(status_code=403, detail="Solo superadmin")
+
+    key_to_field = {
+        "sugerido.rate_alta":           "rate_alta",
+        "sugerido.rate_media":          "rate_media",
+        "sugerido.rate_baja":           "rate_baja",
+        "sugerido.pending_moto_factor": "pending_moto_factor",
+    }
+
+    result = {}
+    for key, field in key_to_field.items():
+        record = await db.get(SystemConfig, key)
+        if record is None:
+            record = SystemConfig(key=key, value=str(SUGERIDO_DEFAULTS[key]))
+            db.add(record)
+        result[field] = float(record.value)
+
+    await db.commit()
+    return SugeridoParamsResponse(**result)
+
+
+@router.put("/sugerido-params", response_model=SugeridoParamsResponse)
+async def save_sugerido_params(
+    payload: SugeridoParamsUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Actualiza los parámetros de cálculo de sugerido de pedido. Solo superadmin."""
+    if not current_user.is_superadmin:
+        raise HTTPException(status_code=403, detail="Solo superadmin")
+
+    updates = {
+        "sugerido.rate_alta":           payload.rate_alta,
+        "sugerido.rate_media":          payload.rate_media,
+        "sugerido.rate_baja":           payload.rate_baja,
+        "sugerido.pending_moto_factor": payload.pending_moto_factor,
+    }
+
+    for key, value in updates.items():
+        record = await db.get(SystemConfig, key)
+        if record:
+            record.value = str(value)
+        else:
+            db.add(SystemConfig(key=key, value=str(value)))
+
+    await db.commit()
+    return SugeridoParamsResponse(
+        rate_alta=payload.rate_alta,
+        rate_media=payload.rate_media,
+        rate_baja=payload.rate_baja,
+        pending_moto_factor=payload.pending_moto_factor,
+    )

@@ -2396,6 +2396,9 @@ class _LowRotItem(BaseModel):
     fob_unit: Optional[float] = None
     total_fob: Optional[float] = None
     qty_stock: Optional[int] = None
+    sugerido: Optional[int] = None
+    flota_efectiva: Optional[float] = None
+    demand_estimate: Optional[float] = None
     prev_codes: list[str] = []
 
 class _LowRotResponse(BaseModel):
@@ -2481,6 +2484,59 @@ async def low_rotation_ordered_analysis(
                 GROUP BY 1
             ) sc_raw
             GROUP BY pn
+        ),
+        sugerido_params AS (
+            SELECT
+                COALESCE(MAX(CASE WHEN key = 'sugerido.rate_alta'           THEN value::float END), 20.0) AS rate_alta,
+                COALESCE(MAX(CASE WHEN key = 'sugerido.rate_media'          THEN value::float END), 10.0) AS rate_media,
+                COALESCE(MAX(CASE WHEN key = 'sugerido.rate_baja'           THEN value::float END), 1.0)  AS rate_baja,
+                COALESCE(MAX(CASE WHEN key = 'sugerido.pending_moto_factor' THEN value::float END), 0.5)  AS pending_moto_factor
+            FROM system_config
+            WHERE key IN ('sugerido.rate_alta', 'sugerido.rate_media', 'sugerido.rate_baja', 'sugerido.pending_moto_factor')
+        ),
+        fleet_by_model AS (
+            SELECT model, SUM(fleet_count) AS fleet_count
+            FROM (
+                SELECT COALESCE(mu.model, so.model) AS model, 1.0 AS fleet_count
+                FROM shipment_moto_units mu
+                JOIN shipment_orders so ON so.id = mu.shipment_order_id
+                WHERE mu.facturado = TRUE
+                  AND COALESCE(mu.model, so.model) IS NOT NULL
+                UNION ALL
+                SELECT so.model AS model, so.qty_numeric * sp.pending_moto_factor AS fleet_count
+                FROM shipment_orders so CROSS JOIN sugerido_params sp
+                WHERE NOT so.is_spare_part
+                  AND so.computed_status IN ('en_preparacion', 'listo_fabrica', 'en_transito')
+                  AND so.model IS NOT NULL
+                UNION ALL
+                SELECT so.model AS model, so.qty_numeric * 1.0 AS fleet_count
+                FROM shipment_orders so
+                WHERE NOT so.is_spare_part
+                  AND so.computed_status = 'en_destino'
+                  AND so.model IS NOT NULL
+                  AND NOT EXISTS (
+                      SELECT 1 FROM shipment_moto_units mu2
+                      WHERE mu2.shipment_order_id = so.id
+                  )
+            ) fbm_raw
+            GROUP BY model
+        ),
+        fleet_per_reference AS (
+            SELECT pmi.factory_part_number, SUM(fbm.fleet_count) AS flota_efectiva
+            FROM fleet_by_model fbm
+            JOIN vehicle_catalog_map vcm ON vcm.vehicle_model_pattern = fbm.model
+            JOIN parts_manual_sections pms ON pms.model_code = vcm.catalog_model_code
+            JOIN parts_manual_items pmi ON pmi.section_id = pms.id
+            GROUP BY pmi.factory_part_number
+        ),
+        total_qty_per_fpn AS (
+            SELECT UPPER(TRIM(REPLACE(spi.part_number, ' ', ''))) AS fpn,
+                   SUM(spi.qty_ordered) AS total_qty
+            FROM spare_part_items spi
+            JOIN spare_part_lots spl ON spl.id = spi.lot_id
+            WHERE spl.packing_list_received = FALSE
+              AND spi.status != 'CANCELLED'
+            GROUP BY 1
         )
         SELECT
             pr.factory_part_number,
@@ -2492,7 +2548,31 @@ async def low_rotation_ordered_analysis(
             COALESCE(mfi.models, mp.models, ARRAY[]::text[]) AS models,
             MAX(COALESCE(spi.unit_price, spi.fob_pi))::float AS fob_unit,
             MAX(COALESCE(sc.qty_stock, 0))::int AS qty_stock,
-            pr.prev_codes
+            pr.prev_codes,
+            MAX(fpr.flota_efectiva)::float AS flota_efectiva,
+            MAX(CASE
+                WHEN fpr.flota_efectiva IS NOT NULL THEN
+                    (fpr.flota_efectiva / 100.0) * CASE pr.rotation_class
+                        WHEN 'alta'  THEN sp.rate_alta
+                        WHEN 'media' THEN sp.rate_media
+                        WHEN 'baja'  THEN sp.rate_baja
+                        ELSE 0
+                    END
+                ELSE NULL
+            END)::float AS demand_estimate,
+            MAX(CASE
+                WHEN fpr.flota_efectiva IS NOT NULL THEN
+                    GREATEST(0, CEIL(
+                        (fpr.flota_efectiva / 100.0) * CASE pr.rotation_class
+                            WHEN 'alta'  THEN sp.rate_alta
+                            WHEN 'media' THEN sp.rate_media
+                            WHEN 'baja'  THEN sp.rate_baja
+                            ELSE 0
+                        END
+                        - (COALESCE(sc.qty_stock, 0) + COALESCE(tqf.total_qty, 0))
+                    ))
+                ELSE NULL
+            END)::int AS sugerido
         FROM parts_references pr
         JOIN spare_part_items spi
             ON UPPER(TRIM(REPLACE(spi.part_number, ' ', ''))) = UPPER(TRIM(pr.factory_part_number))
@@ -2501,6 +2581,9 @@ async def low_rotation_ordered_analysis(
         LEFT JOIN models_from_items mfi ON mfi.norm_fpn = UPPER(TRIM(pr.factory_part_number))
         LEFT JOIN models_per_part mp    ON mp.factory_part_number = pr.factory_part_number
         LEFT JOIN stock_confirmado sc   ON sc.pn        = UPPER(TRIM(pr.factory_part_number))
+        LEFT JOIN fleet_per_reference fpr ON fpr.factory_part_number = pr.factory_part_number
+        LEFT JOIN total_qty_per_fpn tqf   ON tqf.fpn = UPPER(TRIM(pr.factory_part_number))
+        CROSS JOIN sugerido_params sp
         WHERE pr.rotation_class IN ('baja', 'media', 'alta')
           AND spl.packing_list_received = FALSE
           AND spi.status != 'CANCELLED'
@@ -2535,6 +2618,9 @@ async def low_rotation_ordered_analysis(
                 'total_qty': 0,
                 'models': list(row.models) if row.models else [],
                 'qty_stock': int(row.qty_stock) if row.qty_stock else 0,
+                'sugerido': int(row.sugerido) if row.sugerido is not None else None,
+                'flota_efectiva': float(row.flota_efectiva) if row.flota_efectiva is not None else None,
+                'demand_estimate': float(row.demand_estimate) if row.demand_estimate is not None else None,
                 'prev_codes': prev_codes,
             }
         qty = int(row.qty) if row.qty else 0
@@ -2956,8 +3042,8 @@ async def export_low_rotation_ordered(
 
     DECISION_LABEL = {"cancelar": "CANCELAR", "cambiar": "CAMBIAR", "": "—"}
 
-    headers = ["Rotación", "Código", "Descripción", "Modelos", "PI Number", "Cantidad", "Total ref.", "Decisión", "Nueva Cant.", "Observación"]
-    col_widths = [10, 20, 35, 25, 18, 10, 10, 12, 12, 40]
+    headers = ["Rotación", "Código", "Descripción", "Modelos", "PI Number", "Cantidad", "Total ref.", "Sugerido", "Decisión", "Nueva Cant.", "Observación"]
+    col_widths = [10, 20, 35, 25, 18, 10, 10, 12, 12, 12, 40]
 
     for ci, (h, w) in enumerate(zip(headers, col_widths), 1):
         cell = ws.cell(row=1, column=ci, value=h)
@@ -2998,16 +3084,17 @@ async def export_low_rotation_ordered(
                 lot.lot_identifier,
                 lot.qty,
                 item.total_qty,
+                item.sugerido if item.sugerido is not None else "—",
                 decision_label,
                 new_qty or "",
                 obs or "",
             ]
-            aligns = [center, left, left, left, left, center, center, center, center, left]
+            aligns = [center, left, left, left, left, center, center, center, center, center, left]
 
             for ci, (val, aln) in enumerate(zip(values, aligns), 1):
                 cell = ws.cell(row=row, column=ci, value=val)
                 cell.alignment = aln
-                cell.font = dec_font if ci == 8 else Font(size=9)
+                cell.font = dec_font if ci == 9 else Font(size=9)
                 cell.border = thin_brd
                 if row_fill:
                     cell.fill = row_fill
@@ -3015,7 +3102,7 @@ async def export_low_rotation_ordered(
             row += 1
 
     ws.freeze_panes = "A2"
-    ws.auto_filter.ref = f"A1:J{row - 1}"
+    ws.auto_filter.ref = f"A1:K{row - 1}"
 
     buf = io.BytesIO()
     wb.save(buf)

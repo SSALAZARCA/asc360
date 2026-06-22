@@ -793,6 +793,7 @@ export default function AnalisisRepuestosTab() {
                 <th style={{ ...thStyle, textAlign: 'right' }} onClick={() => toggleSort('total_qty')}>
                   Total <SortIcon col="total_qty" sortCol={sortCol} sortDir={sortDir} />
                 </th>
+                <th style={{ ...thStyle, textAlign: 'right', cursor: 'default' }}>Sugerido</th>
                 <th style={{ ...thStyle, textAlign: 'right' }} onClick={() => toggleSort('fob')}>
                   Costo FOB <SortIcon col="fob" sortCol={sortCol} sortDir={sortDir} />
                 </th>
@@ -891,6 +892,15 @@ export default function AnalisisRepuestosTab() {
                   <td style={{ padding: '0.7rem 1rem', textAlign: 'right' }}>
                     <span style={{ fontFamily: 'monospace', fontWeight: 900, fontSize: '0.85rem', color: '#fff' }}>{item.total_qty}</span>
                     <span style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.3)', marginLeft: '0.3rem' }}>u</span>
+                  </td>
+                  <td style={{ padding: '0.7rem 1rem', textAlign: 'right' }}>
+                    {item.sugerido == null ? (
+                      <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.2)' }}>—</span>
+                    ) : item.sugerido === 0 ? (
+                      <span style={{ fontFamily: 'monospace', fontSize: '0.78rem', color: 'rgba(255,255,255,0.2)' }}>0</span>
+                    ) : (
+                      <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '0.85rem', color: '#38bdf8' }}>{item.sugerido}</span>
+                    )}
                   </td>
                   <td style={{ padding: '0.7rem 1rem', textAlign: 'right', whiteSpace: 'nowrap' }}>
                     {item.fob_unit != null ? (
