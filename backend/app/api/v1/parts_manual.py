@@ -2573,7 +2573,7 @@ async def low_rotation_ordered_analysis(
                             WHEN 'baja'  THEN sp.rate_baja
                             ELSE 0
                         END
-                        - (COALESCE(sc.qty_stock, 0) + COALESCE(tqf.total_qty, 0))
+                        - COALESCE(sc.qty_stock, 0)
                     ))
                 ELSE NULL
             END)::int AS sugerido
