@@ -2522,12 +2522,17 @@ async def low_rotation_ordered_analysis(
             GROUP BY model
         ),
         fleet_per_reference AS (
-            SELECT pmi.factory_part_number, SUM(fbm.fleet_count) AS flota_efectiva
-            FROM fleet_by_model fbm
-            JOIN vehicle_catalog_map vcm ON vcm.vehicle_model_pattern = fbm.model
-            JOIN parts_manual_sections pms ON pms.model_code = vcm.catalog_model_code
-            JOIN parts_manual_items pmi ON pmi.section_id = pms.id
-            GROUP BY pmi.factory_part_number
+            SELECT fpn AS factory_part_number, SUM(fleet_count) AS flota_efectiva
+            FROM (
+                SELECT DISTINCT pmi.factory_part_number AS fpn,
+                                fbm.model,
+                                fbm.fleet_count
+                FROM fleet_by_model fbm
+                JOIN vehicle_catalog_map vcm ON vcm.vehicle_model_pattern = fbm.model
+                JOIN parts_manual_sections pms ON pms.model_code = vcm.catalog_model_code
+                JOIN parts_manual_items pmi ON pmi.section_id = pms.id
+            ) deduped
+            GROUP BY fpn
         ),
         total_qty_per_fpn AS (
             SELECT UPPER(TRIM(REPLACE(spi.part_number, ' ', ''))) AS fpn,
