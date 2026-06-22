@@ -2500,8 +2500,7 @@ async def low_rotation_ordered_analysis(
                 SELECT COALESCE(mu.model, so.model) AS model, 1.0 AS fleet_count
                 FROM shipment_moto_units mu
                 JOIN shipment_orders so ON so.id = mu.shipment_order_id
-                WHERE mu.facturado = TRUE
-                  AND COALESCE(mu.model, so.model) IS NOT NULL
+                WHERE COALESCE(mu.model, so.model) IS NOT NULL
                 UNION ALL
                 SELECT so.model AS model, so.qty_numeric * sp.pending_moto_factor AS fleet_count
                 FROM shipment_orders so CROSS JOIN sugerido_params sp
