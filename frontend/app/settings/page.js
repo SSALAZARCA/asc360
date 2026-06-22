@@ -303,6 +303,11 @@ export default function SettingsPage() {
   const [pricingSaving, setPricingSaving] = useState(false);
   const [pricingMsg, setPricingMsg]   = useState('');
 
+  // Parámetros SUGERIDO — Ajuste de Pedidos
+  const [sugeridoParams, setSugeridoParams] = useState({ rate_alta: 20, rate_media: 10, rate_baja: 1, pending_moto_factor: 0.5 });
+  const [sugeridoSaving, setSugeridoSaving] = useState(false);
+  const [sugeridoMsg, setSugeridoMsg]       = useState('');
+
   // Backfill de costos históricos
   const [backfilling, setBackfilling] = useState(false);
   const [backfillMsg, setBackfillMsg] = useState('');
@@ -583,6 +588,12 @@ export default function SettingsPage() {
       .then(r => r.ok ? r.json() : null)
       .then(data => { if (data) setPricing(data); })
       .catch(() => {});
+
+    // Cargar parámetros SUGERIDO
+    authFetch('/settings/sugerido-params')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data) setSugeridoParams(data); })
+      .catch(() => {});
   }, []);
 
   const fetchMotoLocations = useCallback(async () => {
@@ -725,6 +736,29 @@ export default function SettingsPage() {
       setPricingMsg(res.ok ? '✅ Factores guardados.' : '⚠️ Error al guardar.');
     } catch { setPricingMsg('⚠️ Error de conexión.'); }
     finally { setPricingSaving(false); setTimeout(() => setPricingMsg(''), 4000); }
+  };
+
+  const handleSaveSugerido = async () => {
+    const vals = {
+      rate_alta:           parseFloat(sugeridoParams.rate_alta),
+      rate_media:          parseFloat(sugeridoParams.rate_media),
+      rate_baja:           parseFloat(sugeridoParams.rate_baja),
+      pending_moto_factor: parseFloat(sugeridoParams.pending_moto_factor),
+    };
+    if (Object.values(vals).some(v => isNaN(v) || v < 0)) {
+      setSugeridoMsg('Todos los valores deben ser números positivos.');
+      return;
+    }
+    setSugeridoSaving(true);
+    try {
+      const res = await authFetch('/settings/sugerido-params', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(vals),
+      });
+      setSugeridoMsg(res.ok ? '✅ Parámetros guardados.' : '⚠️ Error al guardar.');
+    } catch { setSugeridoMsg('⚠️ Error de conexión.'); }
+    finally { setSugeridoSaving(false); setTimeout(() => setSugeridoMsg(''), 4000); }
   };
 
   const handleSaveSimThreshold = async () => {
@@ -933,6 +967,45 @@ export default function SettingsPage() {
               </button>
               {backfillMsg && <span style={{ fontSize: '0.68rem', color: backfillMsg.startsWith('✅') ? '#4ade80' : '#ef4444', fontWeight: 600 }}>{backfillMsg}</span>}
             </div>
+          </div>
+        </section>
+
+        {/* Parámetros SUGERIDO — Ajuste de Pedidos */}
+        <section className="glass p-6">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '1.25rem', paddingBottom: '0.75rem', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+            <ScanSearch size={16} style={{ color: '#ff5f33', flexShrink: 0 }} />
+            <h2 style={{ fontSize: '0.8rem', fontWeight: 700, color: '#fff', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Parámetros SUGERIDO — Ajuste de Pedidos</h2>
+          </div>
+          <p style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.3)', margin: '0 0 1.25rem', lineHeight: 1.7 }}>
+            Controlan la columna SUGERIDO en la tabla de Ajuste de Pedidos. Las tasas de rotación indican cuántas unidades se necesitan por cada 100 motos en flota.<br />
+            <span style={{ color: 'rgba(255,255,255,0.2)' }}>SUGERIDO = MAX(0, CEIL(flota_efectiva / 100 × tasa − stock_base)) &nbsp;·&nbsp; Factor pendiente: fracción de motos pedidas aún no llegadas que se cuentan en la flota.</span>
+          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1rem' }}>
+            {[
+              { key: 'rate_alta',           label: 'Tasa rotación ALTA',        hint: 'Unidades por cada 100 motos. Ej: 20' },
+              { key: 'rate_media',          label: 'Tasa rotación MEDIA',       hint: 'Unidades por cada 100 motos. Ej: 10' },
+              { key: 'rate_baja',           label: 'Tasa rotación BAJA',        hint: 'Unidades por cada 100 motos. Ej: 1' },
+              { key: 'pending_moto_factor', label: 'Factor motos pendientes',   hint: 'Fracción de motos en tránsito a contar. Ej: 0.5 = 50%' },
+            ].map(({ key, label, hint }) => (
+              <div key={key} style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                <label style={{ fontSize: '0.62rem', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{label}</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={sugeridoParams[key]}
+                  onChange={e => setSugeridoParams(p => ({ ...p, [key]: e.target.value }))}
+                  style={{ padding: '0.55rem 0.75rem', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', fontSize: '0.85rem', outline: 'none', width: '100%', boxSizing: 'border-box' }}
+                />
+                <span style={{ fontSize: '0.58rem', color: 'rgba(255,255,255,0.2)' }}>{hint}</span>
+              </div>
+            ))}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+            <button className="btn-primary" onClick={handleSaveSugerido} disabled={sugeridoSaving} style={{ padding: '0.5rem 1.25rem', fontSize: '0.68rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+              <Save size={13} /> {sugeridoSaving ? 'Guardando...' : 'Guardar parámetros'}
+            </button>
+            {sugeridoMsg && <span style={{ fontSize: '0.68rem', color: sugeridoMsg.startsWith('✅') ? '#4ade80' : '#ef4444', fontWeight: 600 }}>{sugeridoMsg}</span>}
           </div>
         </section>
 
