@@ -2527,7 +2527,7 @@ async def low_rotation_ordered_analysis(
                                 fbm.model,
                                 fbm.fleet_count
                 FROM fleet_by_model fbm
-                JOIN vehicle_catalog_map vcm ON vcm.vehicle_model_pattern = fbm.model
+                JOIN vehicle_catalog_map vcm ON LOWER(TRIM(vcm.vehicle_model_pattern)) = LOWER(TRIM(fbm.model))
                 JOIN parts_manual_sections pms ON pms.model_code = vcm.catalog_model_code
                 JOIN parts_manual_items pmi ON pmi.section_id = pms.id
             ) deduped
@@ -2584,9 +2584,9 @@ async def low_rotation_ordered_analysis(
         LEFT JOIN desc_es_src d         ON d.pn        = UPPER(TRIM(pr.factory_part_number))
         LEFT JOIN models_from_items mfi ON mfi.norm_fpn = UPPER(TRIM(pr.factory_part_number))
         LEFT JOIN models_per_part mp    ON mp.factory_part_number = pr.factory_part_number
-        LEFT JOIN stock_confirmado sc   ON sc.pn        = UPPER(TRIM(pr.factory_part_number))
+        LEFT JOIN stock_confirmado sc   ON sc.pn        = UPPER(TRIM(REPLACE(pr.factory_part_number, ' ', '')))
         LEFT JOIN fleet_per_reference fpr ON fpr.factory_part_number = pr.factory_part_number
-        LEFT JOIN total_qty_per_fpn tqf   ON tqf.fpn = UPPER(TRIM(pr.factory_part_number))
+        LEFT JOIN total_qty_per_fpn tqf   ON tqf.fpn = UPPER(TRIM(REPLACE(pr.factory_part_number, ' ', '')))
         CROSS JOIN sugerido_params sp
         WHERE pr.rotation_class IN ('baja', 'media', 'alta')
           AND spl.packing_list_received = FALSE
