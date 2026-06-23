@@ -858,16 +858,28 @@ async def _list_catalog_impl(
         elif rotation_class in ("alta", "media", "baja"):
             q = q.where(PartsReference.rotation_class == rotation_class)
         if coverage_status == "aqui":
-            # Use spare_part_availability VIEW so dispatched units are excluded
+            # Use spare_part_availability VIEW so dispatched units are excluded.
+            # Also matches stock received under any prev_code of this reference.
             q = q.where(
-                sa_exists(
-                    select(text("1")).select_from(text("spare_part_availability spa")).where(
-                        text(
-                            "UPPER(TRIM(REPLACE(spa.part_number, ' ', ''))) = "
-                            "UPPER(TRIM(REPLACE(parts_references.factory_part_number, ' ', ''))) "
-                            "AND spa.qty_available > 0"
+                or_(
+                    sa_exists(
+                        select(text("1")).select_from(text("spare_part_availability spa")).where(
+                            text(
+                                "UPPER(TRIM(REPLACE(spa.part_number, ' ', ''))) = "
+                                "UPPER(TRIM(REPLACE(parts_references.factory_part_number, ' ', ''))) "
+                                "AND spa.qty_available > 0"
+                            )
                         )
-                    )
+                    ),
+                    text("""EXISTS (
+                        SELECT 1 FROM spare_part_availability _spa_pc
+                        JOIN jsonb_array_elements(parts_references.prev_codes) AS _pc(elem) ON true
+                        WHERE UPPER(TRIM(REPLACE(
+                            CASE WHEN jsonb_typeof(_pc.elem) = 'string' THEN _pc.elem #>> '{}'
+                                 ELSE _pc.elem->>'code'
+                            END, ' ', ''))) = UPPER(TRIM(REPLACE(_spa_pc.part_number, ' ', '')))
+                        AND _spa_pc.qty_available > 0
+                    )"""),
                 )
             )
         elif coverage_status == "en_camino":
@@ -875,43 +887,74 @@ async def _list_catalog_impl(
             fpn_ec = func.upper(func.trim(func.replace(SparePartItem.part_number, ' ', '')))
             ref_ec = func.upper(func.trim(PartsReference.factory_part_number))
             q = q.where(
-                sa_exists(
-                    select(SparePartItem.id)
-                    .join(SparePartLot, SparePartLot.id == SparePartItem.lot_id)
-                    .join(ShipmentOrder, ShipmentOrder.id == SparePartLot.shipment_order_id)
-                    .where(
-                        fpn_ec == ref_ec,
-                        SparePartItem.qty_received > 0,
-                        SparePartItem.qty_physical.is_(None),
-                        or_(
-                            ShipmentOrder.bl_container.isnot(None),
-                            SparePartLot.packing_list_received == True,
-                        ),
-                    )
+                or_(
+                    sa_exists(
+                        select(SparePartItem.id)
+                        .join(SparePartLot, SparePartLot.id == SparePartItem.lot_id)
+                        .join(ShipmentOrder, ShipmentOrder.id == SparePartLot.shipment_order_id)
+                        .where(
+                            fpn_ec == ref_ec,
+                            SparePartItem.qty_received > 0,
+                            SparePartItem.qty_physical.is_(None),
+                            or_(
+                                ShipmentOrder.bl_container.isnot(None),
+                                SparePartLot.packing_list_received == True,
+                            ),
+                        )
+                    ),
+                    text("""EXISTS (
+                        SELECT 1 FROM spare_part_items _spi_ec
+                        JOIN spare_part_lots _spl_ec ON _spl_ec.id = _spi_ec.lot_id
+                        JOIN shipment_orders _so_ec  ON _so_ec.id  = _spl_ec.shipment_order_id
+                        JOIN jsonb_array_elements(parts_references.prev_codes) AS _pc(elem) ON true
+                        WHERE UPPER(TRIM(REPLACE(
+                            CASE WHEN jsonb_typeof(_pc.elem) = 'string' THEN _pc.elem #>> '{}'
+                                 ELSE _pc.elem->>'code'
+                            END, ' ', ''))) = UPPER(TRIM(REPLACE(_spi_ec.part_number, ' ', '')))
+                        AND _spi_ec.qty_received > 0
+                        AND _spi_ec.qty_physical IS NULL
+                        AND (_so_ec.bl_container IS NOT NULL OR _spl_ec.packing_list_received = true)
+                    )"""),
                 )
             )
         elif coverage_status == "pedido":
             from app.models.imports import SparePartLot, ShipmentOrder
-            q = q.where(
+            _fpn_ped = func.upper(func.trim(func.replace(SparePartItem.part_number, ' ', '')))
+            _ref_ped = func.upper(func.trim(PartsReference.factory_part_number))
+            # EXISTS en pedido: código actual O prev_code
+            q = q.where(or_(
                 sa_exists(
                     select(SparePartItem.id)
                     .join(SparePartLot, SparePartLot.id == SparePartItem.lot_id)
                     .where(
-                        func.upper(func.trim(func.replace(SparePartItem.part_number, ' ', ''))) == func.upper(func.trim(PartsReference.factory_part_number)),
+                        _fpn_ped == _ref_ped,
                         or_(
                             SparePartLot.packing_list_received == False,
                             SparePartItem.status.in_(['BACKORDER', 'BACKORDER_PARCIAL']),
                         ),
                         SparePartItem.status != 'CANCELLED',
                     )
-                )
-            ).where(
-                ~sa_exists(
+                ),
+                text("""EXISTS (
+                    SELECT 1 FROM spare_part_items _spi_p
+                    JOIN spare_part_lots _spl_p ON _spl_p.id = _spi_p.lot_id
+                    JOIN jsonb_array_elements(parts_references.prev_codes) AS _pc(elem) ON true
+                    WHERE UPPER(TRIM(REPLACE(
+                        CASE WHEN jsonb_typeof(_pc.elem) = 'string' THEN _pc.elem #>> '{}'
+                             ELSE _pc.elem->>'code'
+                        END, ' ', ''))) = UPPER(TRIM(REPLACE(_spi_p.part_number, ' ', '')))
+                    AND (_spl_p.packing_list_received = false OR _spi_p.status IN ('BACKORDER','BACKORDER_PARCIAL'))
+                    AND _spi_p.status != 'CANCELLED'
+                )"""),
+            ))
+            # NOT en_camino: ni código actual ni prev_code
+            q = q.where(~or_(
+                sa_exists(
                     select(SparePartItem.id)
                     .join(SparePartLot, SparePartLot.id == SparePartItem.lot_id)
                     .join(ShipmentOrder, ShipmentOrder.id == SparePartLot.shipment_order_id)
                     .where(
-                        func.upper(func.trim(func.replace(SparePartItem.part_number, ' ', ''))) == func.upper(func.trim(PartsReference.factory_part_number)),
+                        _fpn_ped == _ref_ped,
                         SparePartItem.qty_received > 0,
                         SparePartItem.qty_physical.is_(None),
                         or_(
@@ -919,49 +962,124 @@ async def _list_catalog_impl(
                             SparePartLot.packing_list_received == True,
                         ),
                     )
-                )
-            ).where(
-                ~sa_exists(
+                ),
+                text("""EXISTS (
+                    SELECT 1 FROM spare_part_items _spi_ec2
+                    JOIN spare_part_lots _spl_ec2 ON _spl_ec2.id = _spi_ec2.lot_id
+                    JOIN shipment_orders _so_ec2  ON _so_ec2.id  = _spl_ec2.shipment_order_id
+                    JOIN jsonb_array_elements(parts_references.prev_codes) AS _pc(elem) ON true
+                    WHERE UPPER(TRIM(REPLACE(
+                        CASE WHEN jsonb_typeof(_pc.elem) = 'string' THEN _pc.elem #>> '{}'
+                             ELSE _pc.elem->>'code'
+                        END, ' ', ''))) = UPPER(TRIM(REPLACE(_spi_ec2.part_number, ' ', '')))
+                    AND _spi_ec2.qty_received > 0
+                    AND _spi_ec2.qty_physical IS NULL
+                    AND (_so_ec2.bl_container IS NOT NULL OR _spl_ec2.packing_list_received = true)
+                )"""),
+            ))
+            # NOT aqui: ni código actual ni prev_code
+            q = q.where(~or_(
+                sa_exists(
                     select(SparePartItem.id).where(
-                        func.upper(func.trim(func.replace(SparePartItem.part_number, ' ', ''))) == func.upper(func.trim(PartsReference.factory_part_number)),
+                        _fpn_ped == _ref_ped,
                         SparePartItem.qty_physical.isnot(None),
                         SparePartItem.qty_physical > 0,
                     )
-                )
-            )
+                ),
+                text("""EXISTS (
+                    SELECT 1 FROM spare_part_availability _spa_p2
+                    JOIN jsonb_array_elements(parts_references.prev_codes) AS _pc(elem) ON true
+                    WHERE UPPER(TRIM(REPLACE(
+                        CASE WHEN jsonb_typeof(_pc.elem) = 'string' THEN _pc.elem #>> '{}'
+                             ELSE _pc.elem->>'code'
+                        END, ' ', ''))) = UPPER(TRIM(REPLACE(_spa_p2.part_number, ' ', '')))
+                    AND _spa_p2.qty_available > 0
+                )"""),
+            ))
         elif coverage_status == "no_pedidas":
             from app.models.imports import SparePartLot, ShipmentOrder
             fpn_expr = func.upper(func.trim(func.replace(SparePartItem.part_number, ' ', '')))
             ref_expr = func.upper(func.trim(PartsReference.factory_part_number))
-            # NOT aqui
-            q = q.where(~sa_exists(
-                select(SparePartItem.id).where(fpn_expr == ref_expr, SparePartItem.qty_physical.isnot(None), SparePartItem.qty_physical > 0)
+            # NOT aqui: ni código actual ni prev_code
+            q = q.where(~or_(
+                sa_exists(
+                    select(SparePartItem.id).where(fpn_expr == ref_expr, SparePartItem.qty_physical.isnot(None), SparePartItem.qty_physical > 0)
+                ),
+                text("""EXISTS (
+                    SELECT 1 FROM spare_part_availability _spa_np
+                    JOIN jsonb_array_elements(parts_references.prev_codes) AS _pc(elem) ON true
+                    WHERE UPPER(TRIM(REPLACE(
+                        CASE WHEN jsonb_typeof(_pc.elem) = 'string' THEN _pc.elem #>> '{}'
+                             ELSE _pc.elem->>'code'
+                        END, ' ', ''))) = UPPER(TRIM(REPLACE(_spa_np.part_number, ' ', '')))
+                    AND _spa_np.qty_available > 0
+                )"""),
             ))
-            # NOT en_camino (BL o packing list)
-            q = q.where(~sa_exists(
-                select(SparePartItem.id)
-                .join(SparePartLot, SparePartLot.id == SparePartItem.lot_id)
-                .join(ShipmentOrder, ShipmentOrder.id == SparePartLot.shipment_order_id)
-                .where(
-                    fpn_expr == ref_expr,
-                    SparePartItem.qty_received > 0,
-                    SparePartItem.qty_physical.is_(None),
-                    or_(ShipmentOrder.bl_container.isnot(None), SparePartLot.packing_list_received == True),
-                )
+            # NOT en_camino (BL o packing list): ni código actual ni prev_code
+            q = q.where(~or_(
+                sa_exists(
+                    select(SparePartItem.id)
+                    .join(SparePartLot, SparePartLot.id == SparePartItem.lot_id)
+                    .join(ShipmentOrder, ShipmentOrder.id == SparePartLot.shipment_order_id)
+                    .where(
+                        fpn_expr == ref_expr,
+                        SparePartItem.qty_received > 0,
+                        SparePartItem.qty_physical.is_(None),
+                        or_(ShipmentOrder.bl_container.isnot(None), SparePartLot.packing_list_received == True),
+                    )
+                ),
+                text("""EXISTS (
+                    SELECT 1 FROM spare_part_items _spi_np
+                    JOIN spare_part_lots _spl_np ON _spl_np.id = _spi_np.lot_id
+                    JOIN shipment_orders _so_np  ON _so_np.id  = _spl_np.shipment_order_id
+                    JOIN jsonb_array_elements(parts_references.prev_codes) AS _pc(elem) ON true
+                    WHERE UPPER(TRIM(REPLACE(
+                        CASE WHEN jsonb_typeof(_pc.elem) = 'string' THEN _pc.elem #>> '{}'
+                             ELSE _pc.elem->>'code'
+                        END, ' ', ''))) = UPPER(TRIM(REPLACE(_spi_np.part_number, ' ', '')))
+                    AND _spi_np.qty_received > 0
+                    AND _spi_np.qty_physical IS NULL
+                    AND (_so_np.bl_container IS NOT NULL OR _spl_np.packing_list_received = true)
+                )"""),
             ))
             # NOT en_camino (catalog price branch)
             q = q.where(PartCatalog.public_price.is_(None))
-            # NOT pedido (en spare_part_items sin packing list)
-            q = q.where(~sa_exists(
-                select(SparePartItem.id)
-                .join(SparePartLot, SparePartLot.id == SparePartItem.lot_id)
-                .where(fpn_expr == ref_expr, SparePartLot.packing_list_received == False)
+            # NOT pedido (sin packing list): ni código actual ni prev_code
+            q = q.where(~or_(
+                sa_exists(
+                    select(SparePartItem.id)
+                    .join(SparePartLot, SparePartLot.id == SparePartItem.lot_id)
+                    .where(fpn_expr == ref_expr, SparePartLot.packing_list_received == False, SparePartItem.status != 'CANCELLED')
+                ),
+                text("""EXISTS (
+                    SELECT 1 FROM spare_part_items _spi_np2
+                    JOIN spare_part_lots _spl_np2 ON _spl_np2.id = _spi_np2.lot_id
+                    JOIN jsonb_array_elements(parts_references.prev_codes) AS _pc(elem) ON true
+                    WHERE UPPER(TRIM(REPLACE(
+                        CASE WHEN jsonb_typeof(_pc.elem) = 'string' THEN _pc.elem #>> '{}'
+                             ELSE _pc.elem->>'code'
+                        END, ' ', ''))) = UPPER(TRIM(REPLACE(_spi_np2.part_number, ' ', '')))
+                    AND _spl_np2.packing_list_received = false
+                    AND _spi_np2.status != 'CANCELLED'
+                )"""),
             ))
-            # NOT backorder (pedido pero faltó todo o parcial en inspección física)
-            q = q.where(~sa_exists(
-                select(SparePartItem.id)
-                .join(SparePartLot, SparePartLot.id == SparePartItem.lot_id)
-                .where(fpn_expr == ref_expr, SparePartItem.status.in_(['BACKORDER', 'BACKORDER_PARCIAL']))
+            # NOT backorder: ni código actual ni prev_code
+            q = q.where(~or_(
+                sa_exists(
+                    select(SparePartItem.id)
+                    .join(SparePartLot, SparePartLot.id == SparePartItem.lot_id)
+                    .where(fpn_expr == ref_expr, SparePartItem.status.in_(['BACKORDER', 'BACKORDER_PARCIAL']))
+                ),
+                text("""EXISTS (
+                    SELECT 1 FROM spare_part_items _spi_np3
+                    JOIN spare_part_lots _spl_np3 ON _spl_np3.id = _spi_np3.lot_id
+                    JOIN jsonb_array_elements(parts_references.prev_codes) AS _pc(elem) ON true
+                    WHERE UPPER(TRIM(REPLACE(
+                        CASE WHEN jsonb_typeof(_pc.elem) = 'string' THEN _pc.elem #>> '{}'
+                             ELSE _pc.elem->>'code'
+                        END, ' ', ''))) = UPPER(TRIM(REPLACE(_spi_np3.part_number, ' ', '')))
+                    AND _spi_np3.status IN ('BACKORDER', 'BACKORDER_PARCIAL')
+                )"""),
             ))
         return q
 
@@ -1071,7 +1189,17 @@ async def _list_catalog_impl(
         from app.models.imports import SparePartLot, ShipmentOrder as _SO
         from sqlalchemy import case as sa_case, and_ as sa_and
         _fn = func.upper(func.trim(func.replace(SparePartItem.part_number, ' ', '')))
-        _norm_fpns = [f.upper().strip().replace(' ', '') for f in fpns]
+
+        # Build norm_code → canonical FPN map, including prev_codes
+        _code_to_fpn: dict[str, str] = {}
+        for _f in fpns:
+            _code_to_fpn[_f.upper().strip().replace(' ', '')] = _f
+        for _fpn_r, _prev_list in prev_codes_by_fpn.items():
+            for _prev in _prev_list:
+                _norm = _prev.upper().strip().replace(' ', '')
+                if _norm not in _code_to_fpn:
+                    _code_to_fpn[_norm] = _fpn_r
+
         cov_q = (
             select(
                 _fn.label('fpn'),
@@ -1092,12 +1220,17 @@ async def _list_catalog_impl(
             .select_from(SparePartItem)
             .join(SparePartLot, SparePartLot.id == SparePartItem.lot_id)
             .outerjoin(_SO, _SO.id == SparePartLot.shipment_order_id)
-            .where(_fn.in_(_norm_fpns))
+            .where(_fn.in_(list(_code_to_fpn.keys())))
             .group_by(_fn)
         )
         _SCORE = {3: 'aqui', 2: 'en_camino', 1: 'pedido', 0: 'sin_pedido'}
+        _RANK  = {'aqui': 3, 'en_camino': 2, 'pedido': 1, 'sin_pedido': 0}
         for _fpn_val, _score in (await db.execute(cov_q)).all():
-            coverage_by_fpn[_fpn_val] = _SCORE.get(_score or 0, 'sin_pedido')
+            _canonical = _code_to_fpn.get(_fpn_val, _fpn_val)
+            _new_status = _SCORE.get(_score or 0, 'sin_pedido')
+            _cur = coverage_by_fpn.get(_canonical)
+            if _cur is None or _RANK[_new_status] > _RANK.get(_cur, 0):
+                coverage_by_fpn[_canonical] = _new_status
 
     def _build_item(r) -> CatalogItemResult:
         avg_fob      = float(r[11]) if r[11] is not None else None
@@ -2464,8 +2597,28 @@ async def low_rotation_ordered_analysis(
             JOIN parts_manual_sections pms ON pms.id = pmi.section_id
             GROUP BY pmi.factory_part_number
         ),
+        part_all_codes AS (
+            -- Maps every normalized code (current + prev_codes) to its canonical factory_part_number
+            SELECT factory_part_number,
+                   UPPER(TRIM(REPLACE(factory_part_number, ' ', ''))) AS norm_code
+            FROM parts_references
+            UNION ALL
+            SELECT pr.factory_part_number,
+                   UPPER(TRIM(REPLACE(
+                       CASE WHEN jsonb_typeof(elem) = 'string' THEN elem #>> '{}'
+                            ELSE elem->>'code'
+                       END, ' ', ''))) AS norm_code
+            FROM parts_references pr,
+                 jsonb_array_elements(pr.prev_codes) AS elem
+            WHERE jsonb_array_length(pr.prev_codes) > 0
+              AND (
+                  (jsonb_typeof(elem) = 'string'  AND (elem #>> '{}') != '')
+                  OR (jsonb_typeof(elem) = 'object' AND elem->>'code' IS NOT NULL AND elem->>'code' != '')
+              )
+        ),
         stock_confirmado AS (
-            SELECT pn, SUM(qs) AS qty_stock
+            -- Consolidates stock across current and prev_codes into one qty per canonical FPN
+            SELECT pac.factory_part_number AS fpn, SUM(sc_raw.qs) AS qty_stock
             FROM (
                 SELECT
                     UPPER(TRIM(REPLACE(part_number, ' ', ''))) AS pn,
@@ -2483,7 +2636,8 @@ async def low_rotation_ordered_analysis(
                   AND spi_s.qty_received > 0
                 GROUP BY 1
             ) sc_raw
-            GROUP BY pn
+            JOIN part_all_codes pac ON pac.norm_code = sc_raw.pn
+            GROUP BY pac.factory_part_number
         ),
         sugerido_params AS (
             SELECT
@@ -2584,7 +2738,7 @@ async def low_rotation_ordered_analysis(
         LEFT JOIN desc_es_src d         ON d.pn        = UPPER(TRIM(pr.factory_part_number))
         LEFT JOIN models_from_items mfi ON mfi.norm_fpn = UPPER(TRIM(pr.factory_part_number))
         LEFT JOIN models_per_part mp    ON mp.factory_part_number = pr.factory_part_number
-        LEFT JOIN stock_confirmado sc   ON sc.pn        = UPPER(TRIM(REPLACE(pr.factory_part_number, ' ', '')))
+        LEFT JOIN stock_confirmado sc   ON sc.fpn       = pr.factory_part_number
         LEFT JOIN fleet_per_reference fpr ON fpr.factory_part_number = pr.factory_part_number
         LEFT JOIN total_qty_per_fpn tqf   ON tqf.fpn = UPPER(TRIM(REPLACE(pr.factory_part_number, ' ', '')))
         CROSS JOIN sugerido_params sp
