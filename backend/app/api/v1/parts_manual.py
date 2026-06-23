@@ -848,6 +848,12 @@ async def _list_catalog_impl(
                 PartsReference.description.ilike(term),
                 PartsReference.description_es_manual.ilike(term),
                 spi_latest.c.description_es.ilike(term),
+                text("""EXISTS (
+                    SELECT 1 FROM jsonb_array_elements(parts_references.prev_codes) AS _pc(elem)
+                    WHERE CASE WHEN jsonb_typeof(_pc.elem) = 'string' THEN _pc.elem #>> '{}'
+                               ELSE _pc.elem->>'code'
+                          END ILIKE :search_term
+                )""").bindparams(search_term=term),
             ))
         if only_pending:
             q = q.where(pending_sq.c.task_id.isnot(None))
