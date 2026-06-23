@@ -2423,6 +2423,24 @@ async def get_coverage(
 
     coverage_sql = text(f"""
         WITH
+        part_all_codes AS (
+            SELECT factory_part_number,
+                   UPPER(TRIM(REPLACE(factory_part_number, ' ', ''))) AS norm_code
+            FROM parts_references
+            UNION ALL
+            SELECT pr.factory_part_number,
+                   UPPER(TRIM(REPLACE(
+                       CASE WHEN jsonb_typeof(elem) = 'string' THEN elem #>> '{{}}'
+                            ELSE elem->>'code'
+                       END, ' ', ''))) AS norm_code
+            FROM parts_references pr,
+                 jsonb_array_elements(pr.prev_codes) AS elem
+            WHERE jsonb_array_length(pr.prev_codes) > 0
+              AND (
+                  (jsonb_typeof(elem) = 'string'  AND (elem #>> '{{}}') != '')
+                  OR (jsonb_typeof(elem) = 'object' AND elem->>'code' IS NOT NULL AND elem->>'code' != '')
+              )
+        ),
         aqui AS (
             SELECT UPPER(TRIM(REPLACE(part_number, ' ', ''))) AS pn
             FROM spare_part_availability
@@ -2454,21 +2472,32 @@ async def get_coverage(
               AND UPPER(TRIM(REPLACE(spi.part_number, ' ', ''))) NOT IN (SELECT pn FROM en_camino)
             GROUP BY 1
         ),
-        coverage AS (
-            SELECT
-                r.rotation_class,
-                COUNT(*) AS total,
-                COUNT(CASE WHEN a.pn IS NOT NULL THEN 1 END) AS aqui,
-                COUNT(CASE WHEN c.pn IS NOT NULL AND a.pn IS NULL THEN 1 END) AS en_camino,
-                COUNT(CASE WHEN p.pn IS NOT NULL AND a.pn IS NULL AND c.pn IS NULL THEN 1 END) AS pedido,
-                COUNT(CASE WHEN a.pn IS NULL AND c.pn IS NULL AND p.pn IS NULL THEN 1 END) AS no_pedidas
+        ref_coverage AS (
+            SELECT r.factory_part_number, r.rotation_class,
+                MAX(CASE
+                    WHEN a.pn IS NOT NULL THEN 3
+                    WHEN c.pn IS NOT NULL THEN 2
+                    WHEN p.pn IS NOT NULL THEN 1
+                    ELSE 0
+                END) AS score
             FROM parts_references r
-            LEFT JOIN aqui      a ON a.pn = UPPER(TRIM(REPLACE(r.factory_part_number, ' ', '')))
-            LEFT JOIN en_camino c ON c.pn = UPPER(TRIM(REPLACE(r.factory_part_number, ' ', '')))
-            LEFT JOIN pedido    p ON p.pn = UPPER(TRIM(REPLACE(r.factory_part_number, ' ', '')))
+            JOIN part_all_codes pac ON pac.factory_part_number = r.factory_part_number
+            LEFT JOIN aqui      a ON a.pn = pac.norm_code
+            LEFT JOIN en_camino c ON c.pn = pac.norm_code
+            LEFT JOIN pedido    p ON p.pn = pac.norm_code
             WHERE r.rotation_class IS NOT NULL
             {model_filter}
-            GROUP BY r.rotation_class
+            GROUP BY r.factory_part_number, r.rotation_class
+        ),
+        coverage AS (
+            SELECT rotation_class,
+                COUNT(*)                               AS total,
+                COUNT(CASE WHEN score = 3 THEN 1 END) AS aqui,
+                COUNT(CASE WHEN score = 2 THEN 1 END) AS en_camino,
+                COUNT(CASE WHEN score = 1 THEN 1 END) AS pedido,
+                COUNT(CASE WHEN score = 0 THEN 1 END) AS no_pedidas
+            FROM ref_coverage
+            GROUP BY rotation_class
         )
         SELECT * FROM coverage
         ORDER BY CASE rotation_class WHEN 'alta' THEN 1 WHEN 'media' THEN 2 WHEN 'baja' THEN 3 ELSE 4 END

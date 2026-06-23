@@ -35,9 +35,9 @@ COL_5 = timezone(timedelta(hours=-5))
 # ---------------------------------------------------------------------------
 
 _MODEL_COLORS = [
-    '#E8590C', '#3B47B8', '#0CA678', '#6C44E0',
-    '#E8A200', '#1C7ED6', '#E03131', '#748399',
-    '#0B7285', '#5C940D', '#862E9C', '#C92A2A',
+    '#F4925C', '#7A88C0', '#66BA88', '#A888D0',
+    '#D9B05A', '#6EAAD8', '#E07878', '#8EA0B0',
+    '#5AAAB8', '#92C458', '#BC88CC', '#E09090',
 ]
 
 # ---------------------------------------------------------------------------
@@ -88,12 +88,12 @@ def _heat_style(value, max_val) -> str:
         return 'background:#F5F6F9;color:#AEB6BF;'
     i = value / max_val
     if i >= 0.7:
-        return 'background:#F7C3A2;color:#8A3206;'
+        return 'background:#F9CCAF;color:#B05030;'
     if i >= 0.4:
-        return 'background:#FBD9C4;color:#9C3908;'
+        return 'background:#FBDECB;color:#C06040;'
     if i >= 0.2:
-        return 'background:#FCE7D6;color:#B14709;'
-    return 'background:#FDF1E9;color:#C9490A;'
+        return 'background:#FDEEE4;color:#C87050;'
+    return 'background:#FEF5F0;color:#D08060;'
 
 
 def _make_conic(slices: list) -> str:
@@ -630,6 +630,24 @@ async def _query_f3(db: AsyncSession) -> dict:
 async def _query_f4(db: AsyncSession) -> dict:
     coverage_sql = text("""
         WITH
+        part_all_codes AS (
+            SELECT factory_part_number,
+                   UPPER(TRIM(REPLACE(factory_part_number, ' ', ''))) AS norm_code
+            FROM parts_references
+            UNION ALL
+            SELECT pr.factory_part_number,
+                   UPPER(TRIM(REPLACE(
+                       CASE WHEN jsonb_typeof(elem) = 'string' THEN elem #>> '{}'
+                            ELSE elem->>'code'
+                       END, ' ', ''))) AS norm_code
+            FROM parts_references pr,
+                 jsonb_array_elements(pr.prev_codes) AS elem
+            WHERE jsonb_array_length(pr.prev_codes) > 0
+              AND (
+                  (jsonb_typeof(elem) = 'string'  AND (elem #>> '{}') != '')
+                  OR (jsonb_typeof(elem) = 'object' AND elem->>'code' IS NOT NULL AND elem->>'code' != '')
+              )
+        ),
         aqui AS (
             SELECT UPPER(TRIM(REPLACE(part_number, ' ', ''))) AS pn
             FROM spare_part_availability
@@ -660,21 +678,33 @@ async def _query_f4(db: AsyncSession) -> dict:
               AND UPPER(TRIM(REPLACE(spi.part_number, ' ', ''))) NOT IN (SELECT pn FROM aqui)
               AND UPPER(TRIM(REPLACE(spi.part_number, ' ', ''))) NOT IN (SELECT pn FROM en_camino)
             GROUP BY 1
+        ),
+        ref_coverage AS (
+            SELECT r.factory_part_number,
+                MAX(CASE
+                    WHEN a.pn IS NOT NULL THEN 3
+                    WHEN c.pn IS NOT NULL THEN 2
+                    WHEN p.pn IS NOT NULL THEN 1
+                    ELSE 0
+                END) AS score
+            FROM parts_references r
+            JOIN part_all_codes pac ON pac.factory_part_number = r.factory_part_number
+            LEFT JOIN aqui      a ON a.pn = pac.norm_code
+            LEFT JOIN en_camino c ON c.pn = pac.norm_code
+            LEFT JOIN pedido    p ON p.pn = pac.norm_code
+            WHERE EXISTS (
+                SELECT 1 FROM parts_manual_items pmi
+                WHERE pmi.factory_part_number = r.factory_part_number
+            )
+            GROUP BY r.factory_part_number
         )
         SELECT
-            COUNT(*)                                                        AS total,
-            COUNT(CASE WHEN a.pn IS NOT NULL THEN 1 END)                   AS aqui,
-            COUNT(CASE WHEN c.pn IS NOT NULL AND a.pn IS NULL THEN 1 END)  AS en_camino,
-            COUNT(CASE WHEN p.pn IS NOT NULL AND a.pn IS NULL AND c.pn IS NULL THEN 1 END) AS pedido,
-            COUNT(CASE WHEN a.pn IS NULL AND c.pn IS NULL AND p.pn IS NULL THEN 1 END)     AS sin_cobertura
-        FROM parts_references r
-        LEFT JOIN aqui      a ON a.pn = UPPER(TRIM(REPLACE(r.factory_part_number, ' ', '')))
-        LEFT JOIN en_camino c ON c.pn = UPPER(TRIM(REPLACE(r.factory_part_number, ' ', '')))
-        LEFT JOIN pedido    p ON p.pn = UPPER(TRIM(REPLACE(r.factory_part_number, ' ', '')))
-        WHERE EXISTS (
-            SELECT 1 FROM parts_manual_items pmi
-            WHERE pmi.factory_part_number = r.factory_part_number
-        )
+            COUNT(*)                               AS total,
+            COUNT(CASE WHEN score = 3 THEN 1 END) AS aqui,
+            COUNT(CASE WHEN score = 2 THEN 1 END) AS en_camino,
+            COUNT(CASE WHEN score = 1 THEN 1 END) AS pedido,
+            COUNT(CASE WHEN score = 0 THEN 1 END) AS sin_cobertura
+        FROM ref_coverage
     """)
 
     # Valor materializado = SUM(total_declared_value) de lotes en órdenes activas de repuestos
@@ -813,7 +843,7 @@ async def _query_f5(db: AsyncSession) -> dict:
 
     # Compute pct for each class + build conic
     total_rot_refs = sum(c['refs'] for c in clases) + sin_clasificar_refs
-    rot_colors = {'alta': '#2F9E44', 'media': '#E8A200', 'baja': '#E03131'}
+    rot_colors = {'alta': '#66BA88', 'media': '#D9B05A', 'baja': '#E07878'}
 
     for c in clases:
         c['pct'] = _pct(c['refs'], total_rot_refs, 1)
