@@ -19,7 +19,7 @@ const PI_STYLES = {
   'cambiar':   { bg: 'rgba(251,191,36,0.1)',   border: 'rgba(251,191,36,0.35)',  piColor: '#fde68a',               qtyColor: '#fbbf24',  prefix: '↺' },
 };
 
-function RotBadge({ rc, fpn, canEdit, onSaved }) {
+function RotBadge({ rc, fpn, onSaved }) {
   const [local,   setLocal]   = useState(rc);
   const [saving,  setSaving]  = useState(false);
   const [hover,   setHover]   = useState(false);
@@ -27,7 +27,7 @@ function RotBadge({ rc, fpn, canEdit, onSaved }) {
   useEffect(() => { setLocal(rc); }, [rc]);
 
   const handleClick = async () => {
-    if (!canEdit || saving) return;
+    if (saving) return;
     const next = local ? (ROT_CYCLE[local] || 'alta') : 'alta';
     setLocal(next);
     setSaving(true);
@@ -52,11 +52,6 @@ function RotBadge({ rc, fpn, canEdit, onSaved }) {
     letterSpacing: '0.08em', padding: '2px 8px', borderRadius: '20px', whiteSpace: 'nowrap',
     transition: 'all 0.15s',
   };
-
-  if (!canEdit) {
-    if (!local) return <span style={{ color: 'rgba(255,255,255,0.15)', fontSize: '0.68rem' }}>—</span>;
-    return <span style={{ ...baseStyle, background: s.bg, color: s.color, border: `1px solid ${s.border}` }}>{s.label}</span>;
-  }
 
   if (!local) {
     return (
@@ -885,7 +880,6 @@ export default function AnalisisRepuestosTab({ userRole }) {
                     <RotBadge
                       rc={item.rotation_class}
                       fpn={item.factory_part_number}
-                      canEdit={userRole === 'superadmin'}
                       onSaved={handleRotationSaved}
                     />
                   </td>
