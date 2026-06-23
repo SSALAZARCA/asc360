@@ -353,6 +353,10 @@ export default function AnalisisRepuestosTab({ userRole }) {
       ...prev,
       items: prev.items.map(i => i.factory_part_number === fpn ? { ...i, rotation_class: newClass } : i),
     } : prev);
+    authFetch('/parts/admin/analysis/low-rotation-ordered')
+      .then(r => r.ok ? r.json() : null)
+      .then(fresh => { if (fresh) setData(fresh); })
+      .catch(() => {});
   };
 
   const markKey = (fpn, lotId) => `${fpn}::${lotId}`;
