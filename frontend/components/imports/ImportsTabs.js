@@ -381,7 +381,7 @@ export default function ImportsTabs({ userRole }) {
         <DashboardTab />
       )}
       {activeTab === 'analisis_repuestos' && userRole === 'superadmin' && (
-        <AnalisisRepuestosTab />
+        <AnalisisRepuestosTab userRole={userRole} />
       )}
       {activeTab === 'remisiones' && userRole === 'superadmin' && (
         <RemisionesTab userRole={userRole} />

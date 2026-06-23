@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { authFetch } from '../../lib/authFetch';
+import { toast } from '../../lib/toast';
 import { ArrowUp, ArrowDown, ChevronsUpDown, RefreshCw, Download, Link2 } from 'lucide-react';
 
 const ROT = {
@@ -9,6 +10,8 @@ const ROT = {
   alta:  { bg: 'rgba(239,68,68,0.12)',   color: '#f87171',  border: 'rgba(239,68,68,0.3)',   label: 'ALTA'  },
 };
 
+const ROT_CYCLE = { alta: 'media', media: 'baja', baja: 'alta' };
+
 const PI_STYLES = {
   '':          { bg: 'rgba(255,255,255,0.05)', border: 'rgba(255,255,255,0.1)',  piColor: 'rgba(255,255,255,0.7)', qtyColor: '#38bdf8',  prefix: null },
   'revisado':  { bg: 'rgba(74,222,128,0.1)',   border: 'rgba(74,222,128,0.35)', piColor: '#bbf7d0',               qtyColor: '#4ade80',  prefix: '✓' },
@@ -16,14 +19,79 @@ const PI_STYLES = {
   'cambiar':   { bg: 'rgba(251,191,36,0.1)',   border: 'rgba(251,191,36,0.35)',  piColor: '#fde68a',               qtyColor: '#fbbf24',  prefix: '↺' },
 };
 
-function RotBadge({ rc }) {
-  const s = ROT[rc] || {};
+function RotBadge({ rc, fpn, canEdit, onSaved }) {
+  const [local,   setLocal]   = useState(rc);
+  const [saving,  setSaving]  = useState(false);
+  const [hover,   setHover]   = useState(false);
+
+  useEffect(() => { setLocal(rc); }, [rc]);
+
+  const handleClick = async () => {
+    if (!canEdit || saving) return;
+    const next = local ? (ROT_CYCLE[local] || 'alta') : 'alta';
+    setLocal(next);
+    setSaving(true);
+    try {
+      await authFetch(`/parts/admin/catalog/${encodeURIComponent(fpn)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rotation_class: next }),
+      });
+      onSaved?.(fpn, next);
+    } catch {
+      setLocal(rc);
+      toast.error('Error al cambiar clasificación');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const s = ROT[local] || {};
+  const baseStyle = {
+    display: 'inline-block', fontSize: '0.58rem', fontWeight: 800, textTransform: 'uppercase',
+    letterSpacing: '0.08em', padding: '2px 8px', borderRadius: '20px', whiteSpace: 'nowrap',
+    transition: 'all 0.15s',
+  };
+
+  if (!canEdit) {
+    if (!local) return <span style={{ color: 'rgba(255,255,255,0.15)', fontSize: '0.68rem' }}>—</span>;
+    return <span style={{ ...baseStyle, background: s.bg, color: s.color, border: `1px solid ${s.border}` }}>{s.label}</span>;
+  }
+
+  if (!local) {
+    return (
+      <span
+        onClick={handleClick}
+        onMouseEnter={() => setHover(true)}
+        onMouseLeave={() => setHover(false)}
+        title="Asignar clasificación de rotación"
+        style={{
+          ...baseStyle, cursor: saving ? 'wait' : 'pointer',
+          background: hover ? 'rgba(255,255,255,0.08)' : 'transparent',
+          color: 'rgba(255,255,255,0.25)',
+          border: `1px solid ${hover ? 'rgba(255,255,255,0.2)' : 'transparent'}`,
+        }}
+      >
+        {saving ? '…' : '+ rot'}
+      </span>
+    );
+  }
+
   return (
-    <span style={{
-      fontSize: '0.58rem', fontWeight: 800, textTransform: 'uppercase',
-      letterSpacing: '0.08em', padding: '2px 8px', borderRadius: '20px',
-      background: s.bg, color: s.color, border: `1px solid ${s.border}`, whiteSpace: 'nowrap',
-    }}>{s.label}</span>
+    <span
+      onClick={handleClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      title="Click para cambiar rotación"
+      style={{
+        ...baseStyle, background: s.bg, color: s.color, border: `1px solid ${s.border}`,
+        cursor: saving ? 'wait' : 'pointer',
+        opacity: saving ? 0.5 : hover ? 0.75 : 1,
+        transform: hover && !saving ? 'scale(1.07)' : 'scale(1)',
+      }}
+    >
+      {saving ? '…' : s.label}
+    </span>
   );
 }
 
@@ -236,7 +304,7 @@ function RelatedCodesModal({ fpn, initialCodes, onSave, onClose }) {
   );
 }
 
-export default function AnalisisRepuestosTab() {
+export default function AnalisisRepuestosTab({ userRole }) {
   const [data,      setData]      = useState(null);
   const [loading,   setLoading]   = useState(true);
   const [exporting, setExporting] = useState(false);
@@ -284,6 +352,13 @@ export default function AnalisisRepuestosTab() {
   };
 
   useEffect(() => { load(); }, []);
+
+  const handleRotationSaved = (fpn, newClass) => {
+    setData(prev => prev ? {
+      ...prev,
+      items: prev.items.map(i => i.factory_part_number === fpn ? { ...i, rotation_class: newClass } : i),
+    } : prev);
+  };
 
   const markKey = (fpn, lotId) => `${fpn}::${lotId}`;
 
@@ -806,7 +881,14 @@ export default function AnalisisRepuestosTab() {
                   borderBottom: '1px solid rgba(255,255,255,0.05)',
                   background: idx % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.012)',
                 }}>
-                  <td style={{ padding: '0.7rem 1rem' }}><RotBadge rc={item.rotation_class} /></td>
+                  <td style={{ padding: '0.7rem 1rem' }}>
+                    <RotBadge
+                      rc={item.rotation_class}
+                      fpn={item.factory_part_number}
+                      canEdit={userRole === 'superadmin'}
+                      onSaved={handleRotationSaved}
+                    />
+                  </td>
                   <td style={{ padding: '0.7rem 1rem', textAlign: 'right', whiteSpace: 'nowrap' }}>
                     {(item.qty_stock ?? 0) > 0 ? (
                       <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '0.8rem', color: '#4ade80' }}>
