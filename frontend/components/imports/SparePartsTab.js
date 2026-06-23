@@ -185,6 +185,90 @@ function EditableQty({ itemId, current, max, onSaved }) {
 }
 
 // ---------------------------------------------------------------------------
+// Rotation badge clickable — cicla alta → media → baja → alta (solo superadmin)
+// ---------------------------------------------------------------------------
+const ROT_CYCLE = { alta: 'media', media: 'baja', baja: 'alta' };
+const ROT_STYLES = {
+  alta:  { background: 'rgba(239,68,68,0.12)',  color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)'  },
+  media: { background: 'rgba(251,191,36,0.12)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.3)' },
+  baja:  { background: 'rgba(74,222,128,0.12)', color: '#4ade80', border: '1px solid rgba(74,222,128,0.3)'  },
+};
+
+function RotationBadge({ partNumber, value, onSaved, canEdit }) {
+  const [saving, setSaving] = useState(false);
+  const [hover, setHover] = useState(false);
+  const [local, setLocal] = useState(value);
+
+  useEffect(() => { setLocal(value); }, [value]);
+
+  const handleClick = async () => {
+    if (!canEdit || saving) return;
+    const next = local ? (ROT_CYCLE[local] || 'alta') : 'alta';
+    setLocal(next);
+    setSaving(true);
+    try {
+      await authFetch(`/parts/admin/catalog/${encodeURIComponent(partNumber)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rotation_class: next }),
+      });
+      onSaved?.();
+    } catch {
+      setLocal(value);
+      toast.error('Error al cambiar clasificación');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const baseStyle = {
+    display: 'inline-block', fontSize: '0.58rem', fontWeight: 800,
+    textTransform: 'uppercase', padding: '2px 7px', borderRadius: '20px',
+    transition: 'all 0.15s',
+  };
+
+  if (!canEdit) {
+    if (!local) return <span style={{ color: 'rgba(255,255,255,0.15)', fontSize: '0.68rem' }}>—</span>;
+    return <span style={{ ...baseStyle, ...ROT_STYLES[local] }}>{local}</span>;
+  }
+
+  if (!local) {
+    return (
+      <span
+        onClick={handleClick}
+        onMouseEnter={() => setHover(true)}
+        onMouseLeave={() => setHover(false)}
+        title="Asignar clasificación de rotación"
+        style={{
+          ...baseStyle, cursor: saving ? 'wait' : 'pointer',
+          background: hover ? 'rgba(255,255,255,0.08)' : 'transparent',
+          color: 'rgba(255,255,255,0.25)',
+          border: `1px solid ${hover ? 'rgba(255,255,255,0.2)' : 'transparent'}`,
+        }}
+      >
+        {saving ? '…' : '+ rot'}
+      </span>
+    );
+  }
+
+  return (
+    <span
+      onClick={handleClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      title="Click para cambiar rotación"
+      style={{
+        ...baseStyle, ...ROT_STYLES[local], cursor: saving ? 'wait' : 'pointer',
+        opacity: saving ? 0.5 : hover ? 0.75 : 1,
+        transform: hover && !saving ? 'scale(1.07)' : 'scale(1)',
+      }}
+    >
+      {saving ? '…' : local}
+    </span>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Items table dentro de un lote expandido
 // ---------------------------------------------------------------------------
 function LotItemsTable({ lotId, userRole, isConfirmed }) {
@@ -312,14 +396,12 @@ function LotItemsTable({ lotId, userRole, isConfirmed }) {
                     }
                   </td>
                   <td style={{ padding: '8px 10px', textAlign: 'center' }}>
-                    {item.rotation_class
-                      ? <span style={{ fontSize: '0.58rem', fontWeight: 800, textTransform: 'uppercase', padding: '2px 7px', borderRadius: '20px', ...(
-                          item.rotation_class === 'alta'  ? { background: 'rgba(239,68,68,0.12)',  color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)'  } :
-                          item.rotation_class === 'media' ? { background: 'rgba(251,191,36,0.12)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.3)' } :
-                                                            { background: 'rgba(74,222,128,0.12)', color: '#4ade80', border: '1px solid rgba(74,222,128,0.3)'  }
-                        )}}>{item.rotation_class}</span>
-                      : <span style={{ color: 'rgba(255,255,255,0.15)', fontSize: '0.68rem' }}>—</span>
-                    }
+                    <RotationBadge
+                      partNumber={item.part_number}
+                      value={item.rotation_class}
+                      onSaved={fetch}
+                      canEdit={userRole === 'superadmin'}
+                    />
                   </td>
                   <td style={{ padding: '8px 10px', textAlign: 'center' }}>
                     {canEdit
