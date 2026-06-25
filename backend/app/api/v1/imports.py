@@ -1652,7 +1652,7 @@ async def export_backorders(
     headers = [
         "PART NUMBER", "DESCRIPCIÓN ES", "MODELO APLICABLE",
         "QTY PENDIENTE", "PI ORIGEN", "PI ESPERADO",
-        "DÍAS DESDE ORIGEN", "FUENTE", "ESTADO", "FECHA CREACIÓN",
+        "DÍAS DESDE ORIGEN", "FUENTE", "ESTADO", "ROTACIÓN", "FECHA CREACIÓN",
     ]
     rows = []
     now = datetime.utcnow()
@@ -1671,6 +1671,7 @@ async def export_backorders(
             days,
             b.source,
             "Resuelto" if b.resolved else "Activo",
+            b.rotation_class,
             str(b.created_at)[:10] if b.created_at else None,
         ])
 
