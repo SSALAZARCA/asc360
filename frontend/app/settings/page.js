@@ -304,7 +304,7 @@ export default function SettingsPage() {
   const [pricingMsg, setPricingMsg]   = useState('');
 
   // Parámetros SUGERIDO — Ajuste de Pedidos
-  const [sugeridoParams, setSugeridoParams] = useState({ rate_alta: 20, rate_media: 10, rate_baja: 1, pending_moto_factor: 0.5, lead_time_months: 3 });
+  const [sugeridoParams, setSugeridoParams] = useState({ rate_alta: 20, rate_media: 10, rate_baja: 1, pending_moto_factor: 0.5, lead_time_months: 3, review_period_months: 3 });
   const [sugeridoSaving, setSugeridoSaving] = useState(false);
   const [sugeridoMsg, setSugeridoMsg]       = useState('');
 
@@ -745,6 +745,7 @@ export default function SettingsPage() {
       rate_baja:            parseFloat(sugeridoParams.rate_baja),
       pending_moto_factor:  parseFloat(sugeridoParams.pending_moto_factor),
       lead_time_months:     parseFloat(sugeridoParams.lead_time_months),
+      review_period_months: parseFloat(sugeridoParams.review_period_months),
     };
     if (Object.values(vals).some(v => isNaN(v) || v < 0)) {
       setSugeridoMsg('Todos los valores deben ser números positivos.');
@@ -988,6 +989,7 @@ export default function SettingsPage() {
               { key: 'rate_baja',            label: 'Tasa rotación BAJA',        hint: 'Unidades por cada 100 motos por ciclo. Ej: 1' },
               { key: 'pending_moto_factor',  label: 'Factor motos pendientes',   hint: 'Fracción de motos en tránsito a contar. Ej: 0.5 = 50%' },
               { key: 'lead_time_months',     label: 'Lead time (meses)',         hint: 'Meses desde el pedido hasta que llega al almacén. Ej: 3' },
+              { key: 'review_period_months', label: 'Ciclo de pedido (meses)',   hint: 'Cada cuántos meses se hace un nuevo pedido. Ej: 3' },
             ].map(({ key, label, hint }) => (
               <div key={key} style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
                 <label style={{ fontSize: '0.62rem', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{label}</label>

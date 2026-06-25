@@ -174,11 +174,12 @@ async def backfill_part_costs(
 
 
 SUGERIDO_DEFAULTS = {
-    "sugerido.rate_alta":           20.0,
-    "sugerido.rate_media":          10.0,
-    "sugerido.rate_baja":           1.0,
-    "sugerido.pending_moto_factor": 0.5,
-    "sugerido.lead_time_months":    3.0,
+    "sugerido.rate_alta":             20.0,
+    "sugerido.rate_media":            10.0,
+    "sugerido.rate_baja":             1.0,
+    "sugerido.pending_moto_factor":   0.5,
+    "sugerido.lead_time_months":      3.0,
+    "sugerido.review_period_months":  3.0,
 }
 
 
@@ -188,6 +189,7 @@ class SugeridoParamsResponse(BaseModel):
     rate_baja: float
     pending_moto_factor: float
     lead_time_months: float
+    review_period_months: float
 
 
 class SugeridoParamsUpdate(BaseModel):
@@ -196,6 +198,7 @@ class SugeridoParamsUpdate(BaseModel):
     rate_baja: float
     pending_moto_factor: float
     lead_time_months: float
+    review_period_months: float
 
 
 @router.get("/sugerido-params", response_model=SugeridoParamsResponse)
@@ -208,11 +211,12 @@ async def get_sugerido_params(
         raise HTTPException(status_code=403, detail="Solo superadmin")
 
     key_to_field = {
-        "sugerido.rate_alta":           "rate_alta",
-        "sugerido.rate_media":          "rate_media",
-        "sugerido.rate_baja":           "rate_baja",
-        "sugerido.pending_moto_factor": "pending_moto_factor",
-        "sugerido.lead_time_months":    "lead_time_months",
+        "sugerido.rate_alta":             "rate_alta",
+        "sugerido.rate_media":            "rate_media",
+        "sugerido.rate_baja":             "rate_baja",
+        "sugerido.pending_moto_factor":   "pending_moto_factor",
+        "sugerido.lead_time_months":      "lead_time_months",
+        "sugerido.review_period_months":  "review_period_months",
     }
 
     result = {}
@@ -238,11 +242,12 @@ async def save_sugerido_params(
         raise HTTPException(status_code=403, detail="Solo superadmin")
 
     updates = {
-        "sugerido.rate_alta":           payload.rate_alta,
-        "sugerido.rate_media":          payload.rate_media,
-        "sugerido.rate_baja":           payload.rate_baja,
-        "sugerido.pending_moto_factor": payload.pending_moto_factor,
-        "sugerido.lead_time_months":    payload.lead_time_months,
+        "sugerido.rate_alta":             payload.rate_alta,
+        "sugerido.rate_media":            payload.rate_media,
+        "sugerido.rate_baja":             payload.rate_baja,
+        "sugerido.pending_moto_factor":   payload.pending_moto_factor,
+        "sugerido.lead_time_months":      payload.lead_time_months,
+        "sugerido.review_period_months":  payload.review_period_months,
     }
 
     for key, value in updates.items():
@@ -259,4 +264,5 @@ async def save_sugerido_params(
         rate_baja=payload.rate_baja,
         pending_moto_factor=payload.pending_moto_factor,
         lead_time_months=payload.lead_time_months,
+        review_period_months=payload.review_period_months,
     )
