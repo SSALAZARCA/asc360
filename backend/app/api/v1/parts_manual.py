@@ -2680,10 +2680,9 @@ async def low_rotation_ordered_analysis(
                 COALESCE(MAX(CASE WHEN key = 'sugerido.rate_media'            THEN value::float END), 10.0) AS rate_media,
                 COALESCE(MAX(CASE WHEN key = 'sugerido.rate_baja'             THEN value::float END), 1.0)  AS rate_baja,
                 COALESCE(MAX(CASE WHEN key = 'sugerido.pending_moto_factor'   THEN value::float END), 0.5)  AS pending_moto_factor,
-                COALESCE(MAX(CASE WHEN key = 'sugerido.lead_time_months'      THEN value::float END), 3.0)  AS lead_time_months,
-                COALESCE(MAX(CASE WHEN key = 'sugerido.review_period_months'  THEN value::float END), 3.0)  AS review_period_months
+                COALESCE(MAX(CASE WHEN key = 'sugerido.lead_time_months' THEN value::float END), 3.0) AS lead_time_months
             FROM system_config
-            WHERE key IN ('sugerido.rate_alta', 'sugerido.rate_media', 'sugerido.rate_baja', 'sugerido.pending_moto_factor', 'sugerido.lead_time_months', 'sugerido.review_period_months')
+            WHERE key IN ('sugerido.rate_alta', 'sugerido.rate_media', 'sugerido.rate_baja', 'sugerido.pending_moto_factor', 'sugerido.lead_time_months')
         ),
         fleet_by_model AS (
             SELECT model, SUM(fleet_count) AS fleet_count
@@ -2754,7 +2753,7 @@ async def low_rotation_ordered_analysis(
                         WHEN 'baja'  THEN sp.rate_baja
                         ELSE 0
                     END
-                    * (1.0 + sp.lead_time_months / NULLIF(sp.review_period_months, 0))
+                    * (1.0 + sp.lead_time_months / 3.0)
                 ELSE NULL
             END)::float AS demand_estimate,
             MAX(CASE
@@ -2767,7 +2766,7 @@ async def low_rotation_ordered_analysis(
                             WHEN 'baja'  THEN sp.rate_baja
                             ELSE 0
                         END
-                        * (1.0 + sp.lead_time_months / NULLIF(sp.review_period_months, 0))
+                        * (1.0 + sp.lead_time_months / 3.0)
                         - COALESCE(sc.qty_stock, 0)
                     ))
                 ELSE NULL
