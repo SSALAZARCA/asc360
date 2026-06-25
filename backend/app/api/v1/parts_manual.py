@@ -2676,12 +2676,14 @@ async def low_rotation_ordered_analysis(
         ),
         sugerido_params AS (
             SELECT
-                COALESCE(MAX(CASE WHEN key = 'sugerido.rate_alta'           THEN value::float END), 20.0) AS rate_alta,
-                COALESCE(MAX(CASE WHEN key = 'sugerido.rate_media'          THEN value::float END), 10.0) AS rate_media,
-                COALESCE(MAX(CASE WHEN key = 'sugerido.rate_baja'           THEN value::float END), 1.0)  AS rate_baja,
-                COALESCE(MAX(CASE WHEN key = 'sugerido.pending_moto_factor' THEN value::float END), 0.5)  AS pending_moto_factor
+                COALESCE(MAX(CASE WHEN key = 'sugerido.rate_alta'             THEN value::float END), 20.0) AS rate_alta,
+                COALESCE(MAX(CASE WHEN key = 'sugerido.rate_media'            THEN value::float END), 10.0) AS rate_media,
+                COALESCE(MAX(CASE WHEN key = 'sugerido.rate_baja'             THEN value::float END), 1.0)  AS rate_baja,
+                COALESCE(MAX(CASE WHEN key = 'sugerido.pending_moto_factor'   THEN value::float END), 0.5)  AS pending_moto_factor,
+                COALESCE(MAX(CASE WHEN key = 'sugerido.lead_time_months'      THEN value::float END), 3.0)  AS lead_time_months,
+                COALESCE(MAX(CASE WHEN key = 'sugerido.review_period_months'  THEN value::float END), 3.0)  AS review_period_months
             FROM system_config
-            WHERE key IN ('sugerido.rate_alta', 'sugerido.rate_media', 'sugerido.rate_baja', 'sugerido.pending_moto_factor')
+            WHERE key IN ('sugerido.rate_alta', 'sugerido.rate_media', 'sugerido.rate_baja', 'sugerido.pending_moto_factor', 'sugerido.lead_time_months', 'sugerido.review_period_months')
         ),
         fleet_by_model AS (
             SELECT model, SUM(fleet_count) AS fleet_count
@@ -2745,23 +2747,27 @@ async def low_rotation_ordered_analysis(
             MAX(fpr.flota_efectiva)::float AS flota_efectiva,
             MAX(CASE
                 WHEN fpr.flota_efectiva IS NOT NULL THEN
-                    (fpr.flota_efectiva / 100.0) * CASE pr.rotation_class
+                    (fpr.flota_efectiva / 100.0)
+                    * CASE pr.rotation_class
                         WHEN 'alta'  THEN sp.rate_alta
                         WHEN 'media' THEN sp.rate_media
                         WHEN 'baja'  THEN sp.rate_baja
                         ELSE 0
                     END
+                    * (1.0 + sp.lead_time_months / NULLIF(sp.review_period_months, 0))
                 ELSE NULL
             END)::float AS demand_estimate,
             MAX(CASE
                 WHEN fpr.flota_efectiva IS NOT NULL THEN
                     GREATEST(0, CEIL(
-                        (fpr.flota_efectiva / 100.0) * CASE pr.rotation_class
+                        (fpr.flota_efectiva / 100.0)
+                        * CASE pr.rotation_class
                             WHEN 'alta'  THEN sp.rate_alta
                             WHEN 'media' THEN sp.rate_media
                             WHEN 'baja'  THEN sp.rate_baja
                             ELSE 0
                         END
+                        * (1.0 + sp.lead_time_months / NULLIF(sp.review_period_months, 0))
                         - COALESCE(sc.qty_stock, 0)
                     ))
                 ELSE NULL
