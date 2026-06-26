@@ -268,9 +268,19 @@ export default function SettingsPage() {
         if (res.ok) {
           const data = await res.json();
           newResults.push({ filename: file.name, status: 'ok', ...data });
+        } else if (res.status === 409) {
+          const err = await res.json().catch(() => ({}));
+          const detail = typeof err.detail === 'object' ? err.detail : {};
+          newResults.push({
+            filename: file.name,
+            status: 'warn_exists',
+            existing_parts: detail.existing_parts || 0,
+            section_code: detail.section_code || '',
+          });
         } else {
           const err = await res.json().catch(() => ({ detail: 'Error desconocido' }));
-          newResults.push({ filename: file.name, status: 'error', error: err.detail });
+          const msg = typeof err.detail === 'object' ? err.detail.message : err.detail;
+          newResults.push({ filename: file.name, status: 'error', error: msg || 'Error desconocido' });
         }
       } catch (e) {
         newResults.push({ filename: file.name, status: 'error', error: e.message });
@@ -279,6 +289,29 @@ export default function SettingsPage() {
       setCatResults([...newResults]);
     }
     setCatLoading(false);
+  };
+
+  const handleForceUpload = async (filename) => {
+    const file = catFiles.find(f => f.name === filename);
+    if (!file) return;
+    setCatResults(prev => prev.map(r => r.filename === filename ? { ...r, status: 'loading' } : r));
+    const fd = new FormData();
+    fd.append('pdf_file', file);
+    fd.append('model_code', catModelCode.trim());
+    fd.append('vehicle_model', catVehicleModel);
+    fd.append('force', 'true');
+    try {
+      const res = await authFetch('/parts/admin/load-section', { method: 'POST', body: fd });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setCatResults(prev => prev.map(r => r.filename === filename ? { filename, status: 'ok', ...data } : r));
+      } else {
+        const msg = typeof data.detail === 'object' ? data.detail.message : data.detail;
+        setCatResults(prev => prev.map(r => r.filename === filename ? { filename, status: 'error', error: msg || 'Error desconocido' } : r));
+      }
+    } catch (e) {
+      setCatResults(prev => prev.map(r => r.filename === filename ? { filename, status: 'error', error: e.message } : r));
+    }
   };
 
   const catPct = catProgress.total > 0 ? Math.round((catProgress.done / catProgress.total) * 100) : 0;
@@ -1364,16 +1397,41 @@ export default function SettingsPage() {
 
           {/* Lista archivos */}
           {catFiles.length > 0 && (
-            <div style={{ marginBottom: '1rem', display: 'flex', flexDirection: 'column', gap: '0.4rem', maxHeight: '180px', overflowY: 'auto' }}>
+            <div style={{ marginBottom: '1rem', display: 'flex', flexDirection: 'column', gap: '0.4rem', maxHeight: '200px', overflowY: 'auto' }}>
               {catFiles.map((f, i) => {
                 const result = catResults.find(r => r.filename === f.name);
+                const isWarn = result?.status === 'warn_exists';
+                const isLoading = result?.status === 'loading';
+                const borderColor = result?.status === 'ok'
+                  ? 'rgba(16,185,129,0.15)'
+                  : result?.status === 'error'
+                  ? 'rgba(239,68,68,0.15)'
+                  : isWarn
+                  ? 'rgba(245,158,11,0.25)'
+                  : 'rgba(255,255,255,0.05)';
+                const iconColor = result?.status === 'ok' ? '#10b981'
+                  : result?.status === 'error' ? '#ef4444'
+                  : isWarn ? '#f59e0b'
+                  : '#606075';
                 return (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.5rem 0.75rem', borderRadius: '8px', background: 'rgba(255,255,255,0.03)', border: `1px solid ${result?.status === 'ok' ? 'rgba(16,185,129,0.15)' : result?.status === 'error' ? 'rgba(239,68,68,0.15)' : 'rgba(255,255,255,0.05)'}` }}>
-                    <FileText size={13} color={result?.status === 'ok' ? '#10b981' : result?.status === 'error' ? '#ef4444' : '#606075'} />
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.5rem 0.75rem', borderRadius: '8px', background: isWarn ? 'rgba(245,158,11,0.05)' : 'rgba(255,255,255,0.03)', border: `1px solid ${borderColor}` }}>
+                    <FileText size={13} color={iconColor} />
                     <span style={{ flex: 1, fontSize: '0.7rem', color: '#ccc', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</span>
                     {result?.status === 'ok' && <span style={{ fontSize: '0.58rem', color: '#10b981', fontWeight: 700 }}>✓ {result.parts_loaded} items</span>}
                     {result?.status === 'error' && <span style={{ fontSize: '0.58rem', color: '#ef4444', fontWeight: 700 }}>✗ {result.error}</span>}
-                    {catLoading && !result && <Loader2 size={12} color="#ff5f33" style={{ animation: 'spin 1s linear infinite', flexShrink: 0 }} />}
+                    {isWarn && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexShrink: 0 }}>
+                        <AlertCircle size={11} color="#f59e0b" />
+                        <span style={{ fontSize: '0.58rem', color: '#f59e0b', fontWeight: 700 }}>{result.existing_parts} partes existentes</span>
+                        <button
+                          onClick={() => handleForceUpload(f.name)}
+                          style={{ fontSize: '0.55rem', color: '#1e1e2e', background: '#f59e0b', border: 'none', borderRadius: '4px', padding: '2px 7px', cursor: 'pointer', fontWeight: 900, letterSpacing: '0.04em' }}
+                        >
+                          Sobreescribir
+                        </button>
+                      </div>
+                    )}
+                    {(isLoading || (catLoading && !result)) && <Loader2 size={12} color="#ff5f33" style={{ animation: 'spin 1s linear infinite', flexShrink: 0 }} />}
                   </div>
                 );
               })}

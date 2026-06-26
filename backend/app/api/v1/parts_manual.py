@@ -31,6 +31,7 @@ from app.models.logistics import PartCatalog
 from app.models.parts_manual import (
     PartsManualItem, PartsManualSection, PartsReference, VehicleCatalogMap,
     PartsCodeReviewTask, PartSubstitute, PartCostHistory, PartOrderDecision,
+    PartsManualSectionHistory,
 )
 from app.models.system_config import SystemConfig
 
@@ -1945,6 +1946,7 @@ async def load_section(
     pdf_file: UploadFile = File(...),
     model_code: str = Form(...),
     vehicle_model: str = Form(...),
+    force: bool = Form(False),
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
@@ -1962,6 +1964,53 @@ async def load_section(
         with os.fdopen(fd, "wb") as f:
             f.write(pdf_bytes)
 
+        # FIX 1+2: Parsear tabla de repuestos PRIMERO — antes de tocar la DB
+        parts: list[dict] = []
+        parse_error: str | None = None
+        try:
+            parts = _parse_parts_table(tmp_path)
+        except Exception as e:
+            parse_error = str(e)
+            logger.warning(f"load_section parse error ({filename}): {e}")
+
+        if not parts:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"No se detectaron partes en '{filename}'"
+                    + (f": {parse_error}" if parse_error else
+                       ". Verificá que el PDF contiene una tabla de partes válida.")
+                ),
+            )
+
+        # FIX 4: Verificar sección existente ANTES de destruir nada
+        existing_section = (await db.execute(
+            select(PartsManualSection).where(
+                PartsManualSection.model_code == model_code,
+                PartsManualSection.section_code == section_code,
+            )
+        )).scalar_one_or_none()
+
+        if existing_section and not force:
+            existing_count = (await db.execute(
+                select(func.count()).select_from(PartsManualItem)
+                .where(PartsManualItem.section_id == existing_section.id)
+            )).scalar_one()
+            if existing_count > 0:
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "code": "section_exists",
+                        "existing_parts": existing_count,
+                        "section_code": section_code,
+                        "section_name": existing_section.section_name,
+                        "message": (
+                            f"La sección '{section_code}' ya tiene {existing_count} partes cargadas. "
+                            "Enviá force=true para sobreescribir."
+                        ),
+                    },
+                )
+
         # 1. Extraer ilustración del PDF
         illus_bytes: bytes | None = None
         try:
@@ -1977,14 +2026,7 @@ async def load_section(
         except Exception as e:
             logger.warning(f"load_section illustration extract error ({filename}): {e}")
 
-        # 2. Parsear tabla de repuestos
-        parts: list[dict] = []
-        try:
-            parts = _parse_parts_table(tmp_path)
-        except Exception as e:
-            logger.warning(f"load_section parse error ({filename}): {e}")
-
-        # 3. Obtener logo de la configuración del sistema
+        # 2. Obtener logo de la configuración del sistema
         logo_bytes: bytes | None = None
         try:
             logo_record = await db.get(SystemConfig, "logo_base64")
@@ -1996,7 +2038,7 @@ async def load_section(
         except Exception as e:
             logger.warning(f"load_section logo fetch error: {e}")
 
-        # 4. Generar card estilizada y subir a MinIO
+        # 3. Generar card estilizada y subir a MinIO
         diagram_url = None
         png_bytes: bytes | None = None
 
@@ -2044,7 +2086,26 @@ async def load_section(
     finally:
         os.unlink(tmp_path)
 
-    # 3. Eliminar sección anterior
+    # FIX 3: Guardar snapshot histórico ANTES de eliminar la sección anterior
+    if existing_section:
+        items_snap = (await db.execute(
+            select(PartsManualItem).where(PartsManualItem.section_id == existing_section.id)
+        )).scalars().all()
+        db.add(PartsManualSectionHistory(
+            model_code=existing_section.model_code,
+            section_code=existing_section.section_code,
+            section_name=existing_section.section_name,
+            diagram_url=existing_section.diagram_url,
+            parts_count=len(items_snap),
+            snapshot=[
+                {"order_num": i.order_num, "factory_part_number": i.factory_part_number}
+                for i in items_snap
+            ],
+            replaced_at=datetime.utcnow(),
+            replaced_by=_uuid.UUID(current_user.user_id) if current_user.user_id else None,
+        ))
+
+    # Eliminar sección anterior (ahora seguro: parse fue exitoso y snapshot guardado)
     await db.execute(
         sa_delete(PartsManualSection).where(
             PartsManualSection.model_code == model_code,
@@ -2052,7 +2113,7 @@ async def load_section(
         )
     )
 
-    # 4. Insertar sección nueva
+    # Insertar sección nueva
     section = PartsManualSection(
         model_code=model_code,
         section_code=section_code,
@@ -2062,7 +2123,7 @@ async def load_section(
     db.add(section)
     await db.flush()
 
-    # 5. Upsert references + insertar items
+    # Upsert references + insertar items
     refs_new = 0
     seen_refs: set[str] = set()
     for p in parts:
@@ -2088,7 +2149,7 @@ async def load_section(
             factory_part_number=factory,
         ))
 
-    # 6. Upsert VehicleCatalogMap
+    # Upsert VehicleCatalogMap
     catalog_map = await db.get(VehicleCatalogMap, vehicle_model)
     if catalog_map:
         catalog_map.catalog_model_code = model_code
@@ -2107,6 +2168,117 @@ async def load_section(
         parts_loaded=len(parts),
         references_new=refs_new,
     )
+
+
+# ── Historial de secciones — consulta y restauración ────────────────────────
+
+@router.get("/admin/sections/{model_code}/history")
+async def get_section_history(
+    model_code: str,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Devuelve el historial de versiones anteriores de secciones para un model_code."""
+    if not current_user.is_superadmin:
+        raise HTTPException(status_code=403, detail="Solo superadmin")
+
+    result = await db.execute(
+        select(PartsManualSectionHistory)
+        .where(PartsManualSectionHistory.model_code == model_code)
+        .order_by(PartsManualSectionHistory.replaced_at.desc())
+        .limit(100)
+    )
+    return [
+        {
+            "id": str(h.id),
+            "model_code": h.model_code,
+            "section_code": h.section_code,
+            "section_name": h.section_name,
+            "parts_count": h.parts_count,
+            "replaced_at": h.replaced_at.isoformat(),
+        }
+        for h in result.scalars().all()
+    ]
+
+
+@router.post("/admin/sections/{model_code}/history/{history_id}/restore", status_code=200)
+async def restore_section_from_history(
+    model_code: str,
+    history_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Restaura una sección desde el historial. Guarda snapshot del estado actual antes de restaurar."""
+    if not current_user.is_superadmin:
+        raise HTTPException(status_code=403, detail="Solo superadmin")
+
+    try:
+        h_uuid = _uuid.UUID(history_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="history_id inválido")
+
+    entry = await db.get(PartsManualSectionHistory, h_uuid)
+    if not entry or entry.model_code != model_code:
+        raise HTTPException(status_code=404, detail="Entrada de historial no encontrada")
+
+    # Snapshot del estado actual antes de restaurar
+    current_section = (await db.execute(
+        select(PartsManualSection).where(
+            PartsManualSection.model_code == model_code,
+            PartsManualSection.section_code == entry.section_code,
+        )
+    )).scalar_one_or_none()
+
+    if current_section:
+        current_items = (await db.execute(
+            select(PartsManualItem).where(PartsManualItem.section_id == current_section.id)
+        )).scalars().all()
+        db.add(PartsManualSectionHistory(
+            model_code=current_section.model_code,
+            section_code=current_section.section_code,
+            section_name=current_section.section_name,
+            diagram_url=current_section.diagram_url,
+            parts_count=len(current_items),
+            snapshot=[
+                {"order_num": i.order_num, "factory_part_number": i.factory_part_number}
+                for i in current_items
+            ],
+            replaced_at=datetime.utcnow(),
+            replaced_by=_uuid.UUID(current_user.user_id) if current_user.user_id else None,
+        ))
+        await db.execute(
+            sa_delete(PartsManualSection).where(
+                PartsManualSection.model_code == model_code,
+                PartsManualSection.section_code == entry.section_code,
+            )
+        )
+
+    # Recrear sección desde snapshot
+    section = PartsManualSection(
+        model_code=entry.model_code,
+        section_code=entry.section_code,
+        section_name=entry.section_name,
+        diagram_url=entry.diagram_url,
+    )
+    db.add(section)
+    await db.flush()
+
+    restored = 0
+    for item_data in (entry.snapshot or []):
+        factory = str(item_data.get("factory_part_number", "")).strip()
+        if not factory:
+            continue
+        ref = await db.get(PartsReference, factory)
+        if ref:
+            db.add(PartsManualItem(
+                section_id=section.id,
+                order_num=str(item_data.get("order_num", "")),
+                factory_part_number=factory,
+            ))
+            restored += 1
+
+    await db.commit()
+    return {"restored_parts": restored, "section_code": entry.section_code, "section_name": entry.section_name}
 
 
 # ── Rotation class — bulk import, coverage dashboard, unordered export ─────────

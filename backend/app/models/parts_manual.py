@@ -112,6 +112,21 @@ class PartsCodeReviewTask(Base):
     resolved_by          = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
 
 
+class PartsManualSectionHistory(Base):
+    """Snapshot inmutable de una sección antes de ser sobreescrita."""
+    __tablename__ = "parts_manual_section_history"
+
+    id           = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    model_code   = Column(String(100), nullable=False, index=True)
+    section_code = Column(String(20),  nullable=False)
+    section_name = Column(String(255), nullable=False)
+    diagram_url  = Column(String(500), nullable=True)
+    parts_count  = Column(Integer,     nullable=False)
+    snapshot     = Column(JSONB,       nullable=False, server_default='[]')
+    replaced_at  = Column(DateTime,    nullable=False, default=datetime.utcnow)
+    replaced_by  = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+
+
 class PartOrderDecision(Base):
     """Decisión de cancelar o cambiar una referencia en un PI específico."""
     __tablename__ = "part_order_decisions"
