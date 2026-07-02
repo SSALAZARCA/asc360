@@ -1954,6 +1954,16 @@ async def load_section(
     if not current_user.is_superadmin:
         raise HTTPException(status_code=403, detail="Solo superadmin puede cargar catálogos")
 
+    vehicle_model_exists = (await db.execute(
+        select(VehicleModel.model_name).where(VehicleModel.model_name == vehicle_model)
+    )).scalar_one_or_none()
+    if not vehicle_model_exists:
+        raise HTTPException(
+            status_code=422,
+            detail=f"El modelo '{vehicle_model}' no existe en el catálogo de modelos de vehículos (vehicle_models). "
+                   "Verificá el nombre exacto o creá el modelo primero.",
+        )
+
     filename = pdf_file.filename or "unknown.pdf"
     section_code, section_name = _parse_section_filename(filename)
 
@@ -2797,11 +2807,14 @@ async def low_rotation_ordered_analysis(
             GROUP BY 1
         ),
         models_per_part AS (
+            -- Traduce el código de catálogo al nombre comercial UM vía vehicle_catalog_map,
+            -- para poder combinarlo con models_from_items (que ya usa nombres comerciales).
             SELECT
                 pmi.factory_part_number,
-                array_agg(DISTINCT pms.model_code ORDER BY pms.model_code) AS models
+                array_agg(DISTINCT vcm.vehicle_model_pattern ORDER BY vcm.vehicle_model_pattern) AS models
             FROM parts_manual_items pmi
             JOIN parts_manual_sections pms ON pms.id = pmi.section_id
+            JOIN vehicle_catalog_map vcm    ON vcm.catalog_model_code = pms.model_code
             GROUP BY pmi.factory_part_number
         ),
         part_all_codes AS (
@@ -2912,7 +2925,10 @@ async def low_rotation_ordered_analysis(
             pr.rotation_class,
             spl.lot_identifier,
             SUM(spi.qty_ordered)::int AS qty,
-            COALESCE(mfi.models, mp.models, ARRAY[]::text[]) AS models,
+            (
+                SELECT array_agg(DISTINCT m ORDER BY m)
+                FROM unnest(COALESCE(mfi.models, ARRAY[]::text[]) || COALESCE(mp.models, ARRAY[]::text[])) AS m
+            ) AS models,
             MAX(COALESCE(spi.unit_price, spi.fob_pi))::float AS fob_unit,
             MAX(COALESCE(sc.qty_stock, 0))::int AS qty_stock,
             pr.prev_codes,
@@ -2962,7 +2978,7 @@ async def low_rotation_ordered_analysis(
             pr.factory_part_number, pr.description,
             COALESCE(pr.description_es_manual, d.description_es),
             pr.rotation_class, spl.lot_identifier,
-            COALESCE(mfi.models, mp.models, ARRAY[]::text[]),
+            mfi.models, mp.models,
             pr.prev_codes
         ORDER BY pr.rotation_class, pr.factory_part_number, spl.lot_identifier
     """)
