@@ -3385,67 +3385,6 @@ async def execute_adjustments(
     }
 
 
-@router.get("/admin/analysis/debug-model-divergence")
-async def debug_model_divergence(
-    db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_user),
-):
-    """TEMPORAL: valida cuántas referencias tienen modelos en model_applicable
-    que no están cubiertos por el join de catálogo usado en fleet_per_reference.
-    Solo lectura. Eliminar después de usar."""
-    if not current_user.is_superadmin:
-        raise HTTPException(status_code=403, detail="Solo superadmin")
-
-    sql = text("""
-        WITH models_from_items AS (
-            SELECT
-                UPPER(TRIM(REPLACE(spi2.part_number, ' ', ''))) AS norm_fpn,
-                array_agg(DISTINCT spi2.model_applicable ORDER BY spi2.model_applicable)
-                    FILTER (WHERE spi2.model_applicable IS NOT NULL AND spi2.model_applicable != '') AS models
-            FROM spare_part_items spi2
-            GROUP BY 1
-        ),
-        models_per_part AS (
-            SELECT
-                pmi.factory_part_number,
-                array_agg(DISTINCT vcm.vehicle_model_pattern ORDER BY vcm.vehicle_model_pattern) AS models
-            FROM parts_manual_items pmi
-            JOIN parts_manual_sections pms ON pms.id = pmi.section_id
-            JOIN vehicle_catalog_map vcm    ON vcm.catalog_model_code = pms.model_code
-            GROUP BY pmi.factory_part_number
-        )
-        SELECT
-            pr.factory_part_number,
-            mfi.models AS models_desde_items,
-            mp.models  AS models_desde_catalogo,
-            (SELECT array_agg(m) FROM unnest(mfi.models) m
-             WHERE m NOT IN (SELECT unnest(COALESCE(mp.models, ARRAY[]::text[])))) AS modelos_faltantes_en_flota
-        FROM parts_references pr
-        LEFT JOIN models_from_items mfi ON mfi.norm_fpn = UPPER(TRIM(pr.factory_part_number))
-        LEFT JOIN models_per_part mp    ON mp.factory_part_number = pr.factory_part_number
-        WHERE pr.rotation_class IN ('baja','media','alta')
-          AND mfi.models IS NOT NULL
-          AND EXISTS (
-              SELECT 1 FROM unnest(mfi.models) m
-              WHERE m NOT IN (SELECT unnest(COALESCE(mp.models, ARRAY[]::text[])))
-          )
-        ORDER BY pr.factory_part_number
-    """)
-    rows = (await db.execute(sql)).all()
-    return {
-        "total_referencias_con_divergencia": len(rows),
-        "detalle": [
-            {
-                "factory_part_number": r.factory_part_number,
-                "models_desde_items": r.models_desde_items,
-                "models_desde_catalogo": r.models_desde_catalogo,
-                "modelos_faltantes_en_flota": r.modelos_faltantes_en_flota,
-            }
-            for r in rows
-        ],
-    }
-
-
 class _ExportRequest(BaseModel):
     marked: dict[str, str] = {}  # { "fpn::lot_id": "cancelar" | "cambiar" }
 
