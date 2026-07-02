@@ -438,13 +438,14 @@ async def despachar(
     # Assign remision_number: REM-{YYYY}-{MAX(seq)+1:04d} under the same lock
     year = now.year
     prefix = f"REM-{year}-"
+    _seq_start = len(prefix) + 1
     seq_result = await db.execute(
         text(
-            "SELECT MAX(CAST(SUBSTRING(remision_number FROM :start) AS INTEGER)) "
+            f"SELECT MAX(CAST(SUBSTRING(remision_number FROM {_seq_start}) AS INTEGER)) "
             "FROM inventory_remisions "
             "WHERE remision_number LIKE :prefix"
         ),
-        {"start": len(prefix) + 1, "prefix": f"{prefix}%"},
+        {"prefix": f"{prefix}%"},
     )
     current_max = seq_result.scalar()
     next_seq = (current_max or 0) + 1
