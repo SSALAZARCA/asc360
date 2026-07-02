@@ -2919,7 +2919,7 @@ async def low_rotation_ordered_analysis(
                 FROM fleet_by_model fbm
                 JOIN spare_part_items spi ON LOWER(TRIM(spi.model_applicable)) = LOWER(TRIM(fbm.model))
                 JOIN parts_references pr_mfi
-                    ON UPPER(TRIM(REPLACE(spi.part_number, ' ', ''))) = UPPER(TRIM(pr_mfi.factory_part_number))
+                    ON UPPER(TRIM(REPLACE(spi.part_number, ' ', ''))) = UPPER(TRIM(REPLACE(pr_mfi.factory_part_number, ' ', '')))
                 WHERE spi.model_applicable IS NOT NULL AND spi.model_applicable != ''
             ) deduped
             GROUP BY fpn
