@@ -2897,6 +2897,10 @@ async def low_rotation_ordered_analysis(
             GROUP BY model
         ),
         fleet_per_reference AS (
+            -- Modelos que aplican a cada referencia = catálogo (manual PDF) UNIDO con
+            -- model_applicable (modelo declarado al importar el pedido de repuestos).
+            -- UNION (no ALL) evita sumar la misma flota dos veces cuando el modelo
+            -- coincide en ambas fuentes para la misma referencia.
             SELECT fpn AS factory_part_number, SUM(fleet_count) AS flota_efectiva
             FROM (
                 SELECT DISTINCT pmi.factory_part_number AS fpn,
@@ -2906,6 +2910,17 @@ async def low_rotation_ordered_analysis(
                 JOIN vehicle_catalog_map vcm ON LOWER(TRIM(vcm.vehicle_model_pattern)) = LOWER(TRIM(fbm.model))
                 JOIN parts_manual_sections pms ON pms.model_code = vcm.catalog_model_code
                 JOIN parts_manual_items pmi ON pmi.section_id = pms.id
+
+                UNION
+
+                SELECT DISTINCT pr_mfi.factory_part_number AS fpn,
+                                fbm.model,
+                                fbm.fleet_count
+                FROM fleet_by_model fbm
+                JOIN spare_part_items spi ON LOWER(TRIM(spi.model_applicable)) = LOWER(TRIM(fbm.model))
+                JOIN parts_references pr_mfi
+                    ON UPPER(TRIM(REPLACE(spi.part_number, ' ', ''))) = UPPER(TRIM(pr_mfi.factory_part_number))
+                WHERE spi.model_applicable IS NOT NULL AND spi.model_applicable != ''
             ) deduped
             GROUP BY fpn
         ),
