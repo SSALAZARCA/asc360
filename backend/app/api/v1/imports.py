@@ -1166,18 +1166,8 @@ async def upload_lot_packing_list(
     return result
 
 
-@router.get("/spare-part-lots/{lot_id}/reconciliation", response_model=list[ReconciliationResultRead])
-async def get_reconciliation_results(
-    lot_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user),
-):
-    _require_imports_editor(current_user)
-
-    lot = await db.get(SparePartLot, lot_id)
-    if not lot:
-        raise HTTPException(status_code=404, detail={"detail": "Lote no encontrado", "code": "LOT_NOT_FOUND"})
-
+async def _fetch_enriched_reconciliation(db: AsyncSession, lot_id: uuid.UUID) -> list[dict]:
+    """Cruza ReconciliationResult con SparePartItem para completar descripción/modelo."""
     stmt = (
         select(ReconciliationResult)
         .where(ReconciliationResult.lot_id == lot_id)
@@ -1185,7 +1175,6 @@ async def get_reconciliation_results(
     )
     results = (await db.execute(stmt)).scalars().all()
 
-    # Enriquecer con descripción y modelo del SparePartItem
     item_ids = [r.spare_part_item_id for r in results if r.spare_part_item_id]
     items_map = {}
     if item_ids:
@@ -1198,20 +1187,69 @@ async def get_reconciliation_results(
     for r in results:
         sp = items_map.get(r.spare_part_item_id)
         # Para EXTRAs puros (sin SparePartItem), usar los valores guardados en el propio resultado
-        description_es = sp.description_es if sp else r.description_es
-        model_applicable = sp.model_applicable if sp else r.model_applicable
-        data = {
+        enriched.append({
             "id": r.id, "lot_id": r.lot_id, "packing_list_id": r.packing_list_id,
             "spare_part_item_id": r.spare_part_item_id, "part_number": r.part_number,
-            "description_es": description_es,
-            "model_applicable": model_applicable,
+            "description_es": sp.description_es if sp else r.description_es,
+            "model_applicable": sp.model_applicable if sp else r.model_applicable,
             "qty_ordered": r.qty_ordered, "qty_in_packing": r.qty_in_packing,
             "qty_physical": r.qty_physical,
             "result": r.result, "confirmed_by": r.confirmed_by,
             "confirmed_at": r.confirmed_at, "created_at": r.created_at,
-        }
-        enriched.append(ReconciliationResultRead.model_validate(data, from_attributes=False))
+        })
     return enriched
+
+
+@router.get("/spare-part-lots/{lot_id}/reconciliation", response_model=list[ReconciliationResultRead])
+async def get_reconciliation_results(
+    lot_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    _require_imports_editor(current_user)
+
+    lot = await db.get(SparePartLot, lot_id)
+    if not lot:
+        raise HTTPException(status_code=404, detail={"detail": "Lote no encontrado", "code": "LOT_NOT_FOUND"})
+
+    enriched = await _fetch_enriched_reconciliation(db, lot_id)
+    return [ReconciliationResultRead.model_validate(data, from_attributes=False) for data in enriched]
+
+
+_RECONCILIATION_RESULT_LABELS = {
+    "COMPLETE": "Completo", "PARTIAL": "Parcial", "MISSING": "Faltante",
+    "EXTRA": "Extra", "EXTRA_APPLIED": "Extra -> Backorder",
+}
+
+
+@router.get("/spare-part-lots/{lot_id}/reconciliation/export")
+async def export_lot_reconciliation(
+    lot_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    _require_imports_editor(current_user)
+
+    lot = await db.get(SparePartLot, lot_id)
+    if not lot:
+        raise HTTPException(status_code=404, detail={"detail": "Lote no encontrado", "code": "LOT_NOT_FOUND"})
+
+    enriched = await _fetch_enriched_reconciliation(db, lot_id)
+
+    headers = ["Parte #", "Descripcion", "Moto", "Qty Ordenado", "Qty Packing List", "Diferencia", "Resultado"]
+    rows = []
+    for r in enriched:
+        qty_ordered = r["qty_ordered"]
+        qty_pl = r["qty_in_packing"] or 0
+        diff = qty_pl - qty_ordered if qty_ordered is not None else qty_pl
+        rows.append([
+            r["part_number"], r["description_es"], r["model_applicable"],
+            qty_ordered, qty_pl, diff,
+            _RECONCILIATION_RESULT_LABELS.get(r["result"], r["result"]),
+        ])
+
+    filename = f"reconciliacion_{lot.lot_identifier}_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    return _excel_response("Reconciliacion", headers, rows, filename)
 
 
 @router.post("/spare-part-lots/{lot_id}/reconciliation/confirm", status_code=status.HTTP_200_OK)

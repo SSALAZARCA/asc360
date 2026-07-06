@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import { authFetch } from '../../lib/authFetch';
 import { getApiUrl } from '../../lib/api';
-import { X, CheckCircle, AlertCircle, XCircle, Plus, Upload, RefreshCw, Search } from 'lucide-react';
+import { X, CheckCircle, AlertCircle, XCircle, Plus, Upload, RefreshCw, Search, Download } from 'lucide-react';
 import { toast } from '../../lib/toast';
 
 const RESULT_CFG = {
@@ -102,6 +102,7 @@ export default function ReconciliationModal({ lot, onClose, onConfirmed }) {
   const [filterResult, setFilterResult] = useState('');
   const [search, setSearch] = useState('');
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   const fetchResults = async () => {
     setLoading(true);
@@ -139,6 +140,25 @@ export default function ReconciliationModal({ lot, onClose, onConfirmed }) {
     } finally {
       setUploading(false);
       e.target.value = '';
+    }
+  };
+
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const res = await authFetch(`${getApiUrl()}/imports/spare-part-lots/${lot.id}/reconciliation/export`);
+      if (!res.ok) return;
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `reconciliacion_${lot.lot_identifier}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      toast.error('Error al exportar la reconciliación');
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -217,6 +237,22 @@ export default function ReconciliationModal({ lot, onClose, onConfirmed }) {
             {hasResults && (
               <button onClick={fetchResults} style={{ padding: '7px 9px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)', cursor: 'pointer', color: '#9ca3af' }}>
                 <RefreshCw size={12} />
+              </button>
+            )}
+            {hasResults && (
+              <button
+                onClick={handleExport}
+                disabled={exporting}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '6px',
+                  padding: '7px 14px', borderRadius: '8px',
+                  background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)',
+                  color: '#9ca3af', fontSize: '11px', fontWeight: 700,
+                  cursor: exporting ? 'not-allowed' : 'pointer',
+                }}
+              >
+                <Download size={12} />
+                {exporting ? 'Exportando...' : 'Descargar Excel'}
               </button>
             )}
             {uploadResult?.error && (
