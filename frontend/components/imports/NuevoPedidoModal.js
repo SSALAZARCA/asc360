@@ -248,7 +248,7 @@ export default function NuevoPedidoModal({ isOpen, onClose, onSuccess }) {
                     <p style={{ color: '#9ca3af', fontSize: '11px', margin: 0, lineHeight: 1.8 }}>
                       <span style={{ color: '#ff5f33' }}>Codigo Parte</span> &nbsp;|&nbsp;
                       <span style={{ color: '#ff5f33' }}>Cantidad</span> &nbsp;|&nbsp;
-                      Nombre &nbsp;|&nbsp; Moto Aplica
+                      Nombre &nbsp;|&nbsp; Moto Aplica &nbsp;|&nbsp; Unit Price
                     </p>
                   ) : (
                     <p style={{ color: '#9ca3af', fontSize: '11px', margin: 0, lineHeight: 1.8 }}>

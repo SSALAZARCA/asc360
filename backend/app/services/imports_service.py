@@ -893,9 +893,10 @@ async def create_sp_order_from_excel(
 
     inserted = updated = skipped = 0
     errors = []
+    parts_with_price: set[str] = set()
 
     # --- Primer pase: agregar por (part_number, modelo) — misma ref en distintos modelos = filas separadas ---
-    aggregated: dict[tuple, dict] = {}  # (part_number, modelo) → {qty, nombre, modelo_moto}
+    aggregated: dict[tuple, dict] = {}  # (part_number, modelo) → {qty, nombre, modelo_moto, unit_price}
     for row_idx in range(header_row + 1, sheet.max_row + 1):
         try:
             part_raw = _cell(sheet, row_idx, col_map,
@@ -922,14 +923,23 @@ async def create_sp_order_from_excel(
             )
             modelo_str = modelo_moto
 
+            unit_price_raw = _cell(sheet, row_idx, col_map, "unit price", "precio unitario", "precio", "fob")
+            try:
+                unit_price = float(str(unit_price_raw).replace("$", "").replace(",", "").strip()) if unit_price_raw else None
+            except (ValueError, TypeError):
+                unit_price = None
+
             agg_key = (part_number, modelo_str)
             if agg_key in aggregated:
                 aggregated[agg_key]["qty"] += qty  # sumar solo si misma referencia Y mismo modelo
+                if aggregated[agg_key]["unit_price"] is None and unit_price is not None:
+                    aggregated[agg_key]["unit_price"] = unit_price
             else:
                 aggregated[agg_key] = {
                     "qty": qty,
                     "nombre": str(nombre).strip() if nombre else None,
                     "modelo_moto": modelo_str,
+                    "unit_price": unit_price,
                 }
         except Exception as e:
             errors.append({"row": row_idx, "reason": str(e)})
@@ -939,6 +949,8 @@ async def create_sp_order_from_excel(
         qty = data["qty"]
         nombre = data["nombre"]
         modelo_moto = data["modelo_moto"]
+        unit_price = data["unit_price"]
+        amount = round(unit_price * qty, 4) if unit_price is not None else None
 
         existing = items_with_backorders.get((part_number, modelo_moto))
         if existing:
@@ -946,6 +958,10 @@ async def create_sp_order_from_excel(
             existing.qty_ordered = qty
             if nombre:
                 existing.description_es = nombre
+            if unit_price is not None:
+                existing.unit_price = unit_price
+                existing.amount = amount
+                parts_with_price.add(part_number)
             existing.updated_at = datetime.utcnow()
             updated += 1
         else:
@@ -957,10 +973,14 @@ async def create_sp_order_from_excel(
                 qty_ordered=qty,
                 qty_received=0,
                 qty_pending=qty,
+                unit_price=unit_price,
+                amount=amount,
                 status="PENDING",
                 created_at=datetime.utcnow(),
             )
             db.add(item)
+            if unit_price is not None:
+                parts_with_price.add(part_number)
             inserted += 1
 
     if inserted > 0 or updated > 0:
@@ -968,6 +988,12 @@ async def create_sp_order_from_excel(
         lot.updated_at = datetime.utcnow() if hasattr(lot, 'updated_at') else None
 
     await db.flush()
+
+    if parts_with_price:
+        from app.services.pricing_service import recalculate_part_cost
+        for pn in parts_with_price:
+            await recalculate_part_cost(db, pn, lot_identifier=lot.lot_identifier)
+
     return {
         "inserted": inserted,
         "updated": updated,
