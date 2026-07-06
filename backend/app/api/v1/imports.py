@@ -1194,7 +1194,7 @@ async def _fetch_enriched_reconciliation(db: AsyncSession, lot_id: uuid.UUID) ->
             "model_applicable": sp.model_applicable if sp else r.model_applicable,
             "qty_ordered": r.qty_ordered, "qty_in_packing": r.qty_in_packing,
             "qty_physical": r.qty_physical,
-            "unit_price": sp.unit_price if sp else None,
+            "unit_price": r.unit_price if r.unit_price is not None else (sp.unit_price if sp else None),
             "result": r.result, "confirmed_by": r.confirmed_by,
             "confirmed_at": r.confirmed_at, "created_at": r.created_at,
         })

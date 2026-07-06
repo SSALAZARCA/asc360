@@ -311,6 +311,7 @@ class ReconciliationResult(Base):
     qty_ordered = Column(Integer, nullable=True)
     qty_in_packing = Column(Integer, nullable=True)
     qty_physical = Column(Integer, nullable=True)   # NULL = no inspeccionado aún
+    unit_price = Column(Numeric(12, 2), nullable=True)  # Precio tomado directamente del packing list/invoice de esta fila
     result = Column(String(20), nullable=False)  # COMPLETE / PARTIAL / MISSING / EXTRA
 
     confirmed_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)

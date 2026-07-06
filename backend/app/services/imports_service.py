@@ -1406,8 +1406,9 @@ async def reconcile_lot_packing_list(
         # Datos de descripción/modelo desde la invoice si están disponibles
         pl_desc_es = None
         pl_model_display = pl_model
+        pl_unit_price = None
         if is_invoice and (part_number, pl_model) in pl_prices:
-            _, _, _, pl_desc_es, pl_model_display = pl_prices[(part_number, pl_model)]
+            pl_unit_price, _, _, pl_desc_es, pl_model_display = pl_prices[(part_number, pl_model)]
 
         # Buscar SparePartItem:
         # 1. Si el PL trae modelo Y la orden tiene ese part con modelo → cruce exacto por (part, model)
@@ -1434,6 +1435,7 @@ async def reconcile_lot_packing_list(
                 model_applicable=pl_model_display,
                 qty_ordered=None,
                 qty_in_packing=qty_in_pl,
+                unit_price=pl_unit_price,
                 result="EXTRA",
             )
             db.add(rr)
@@ -1458,6 +1460,7 @@ async def reconcile_lot_packing_list(
                 part_number=part_number,
                 qty_ordered=qty_ordered,
                 qty_in_packing=qty_in_pl,
+                unit_price=pl_unit_price,
                 result=result_code,
             )
             db.add(rr)
