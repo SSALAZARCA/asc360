@@ -1282,6 +1282,7 @@ async def reconcile_lot_packing_list(
         return {"error": "No se encontraron cabeceras válidas. El archivo debe tener columnas: Part #, Qty(PCS), y Unit Price o N.W"}
 
     col_map = _build_col_map(target_sheet, header_row)
+    models_map = await _load_models_map(db)
 
     # Eliminar resultados anteriores para este lote (re-conciliación)
     old_results = (await db.execute(
@@ -1340,7 +1341,7 @@ async def reconcile_lot_packing_list(
 
         if is_invoice:
             model_raw = _cell(target_sheet, row_idx, col_map, "model", "modelo")
-            model_val = str(model_raw).strip() if model_raw else None
+            model_val = _normalize_model(model_raw, models_map)
 
             desc_es_raw = _cell(target_sheet, row_idx, col_map, "spanish description", "descripcion")
             desc_es = str(desc_es_raw).strip() if desc_es_raw else None
