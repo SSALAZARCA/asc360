@@ -1194,6 +1194,7 @@ async def _fetch_enriched_reconciliation(db: AsyncSession, lot_id: uuid.UUID) ->
             "model_applicable": sp.model_applicable if sp else r.model_applicable,
             "qty_ordered": r.qty_ordered, "qty_in_packing": r.qty_in_packing,
             "qty_physical": r.qty_physical,
+            "unit_price": sp.unit_price if sp else None,
             "result": r.result, "confirmed_by": r.confirmed_by,
             "confirmed_at": r.confirmed_at, "created_at": r.created_at,
         })
@@ -1236,15 +1237,18 @@ async def export_lot_reconciliation(
 
     enriched = await _fetch_enriched_reconciliation(db, lot_id)
 
-    headers = ["Parte #", "Descripcion", "Moto", "Qty Ordenado", "Qty Packing List", "Diferencia", "Resultado"]
+    headers = ["Parte #", "Descripcion", "Moto", "Qty Ordenado", "Qty Packing List", "Diferencia", "Costo Unitario", "Costo Total", "Resultado"]
     rows = []
     for r in enriched:
         qty_ordered = r["qty_ordered"]
         qty_pl = r["qty_in_packing"] or 0
         diff = qty_pl - qty_ordered if qty_ordered is not None else qty_pl
+        unit_price = r["unit_price"]
+        total_cost = float(unit_price) * qty_pl if unit_price is not None else None
         rows.append([
             r["part_number"], r["description_es"], r["model_applicable"],
             qty_ordered, qty_pl, diff,
+            float(unit_price) if unit_price is not None else None, total_cost,
             _RECONCILIATION_RESULT_LABELS.get(r["result"], r["result"]),
         ])
 
