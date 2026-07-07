@@ -189,6 +189,7 @@ class SparePartLot(Base):
     packing_lists = relationship("PackingList", back_populates="lot", cascade="all, delete-orphan")
     reconciliation_results = relationship("ReconciliationResult", back_populates="lot")
     attachments = relationship("ImportAttachment", back_populates="lot")
+    backorder_reconciliations = relationship("BackorderReconciliation", back_populates="lot", cascade="all, delete-orphan")
 
 
 # ---------------------------------------------------------------------------
@@ -358,6 +359,72 @@ class Backorder(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     spare_part_item = relationship("SparePartItem", back_populates="backorders")
+    backorder_reconciliation_results = relationship("BackorderReconciliationResult", back_populates="backorder")
+
+
+# ---------------------------------------------------------------------------
+# Backorder Reconciliations — cabecera del cruce de un packing list remanente
+# contra los Backorder abiertos de un lote (flujo separado del reconciliation
+# original: compara contra qty_pending, no contra qty_ordered)
+# ---------------------------------------------------------------------------
+class BackorderReconciliation(Base):
+    __tablename__ = "backorder_reconciliations"
+    __table_args__ = (
+        Index("ix_br_lot_status", "lot_id", "status"),
+        Index("ix_br_lot_content_hash", "lot_id", "content_hash"),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    lot_id = Column(UUID(as_uuid=True), ForeignKey("spare_part_lots.id"), nullable=False)
+    uploaded_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+
+    file_name = Column(String(500), nullable=False)
+    content_hash = Column(String(64), nullable=False)  # sha256 del archivo, para detección de duplicados
+    minio_object_name = Column(String(1000), nullable=False)
+
+    # PENDING = recién subido, reemplazable por un nuevo upload | CONFIRMED = ya aplicado, inmutable
+    status = Column(String(20), nullable=False, default="PENDING")
+    is_invoice = Column(Boolean, default=False, nullable=False)
+
+    uploaded_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    confirmed_at = Column(DateTime, nullable=True)
+
+    # Relaciones
+    lot = relationship("SparePartLot", back_populates="backorder_reconciliations")
+    results = relationship("BackorderReconciliationResult", back_populates="reconciliation", cascade="all, delete-orphan")
+
+
+# ---------------------------------------------------------------------------
+# Backorder Reconciliation Results — líneas del cruce packing list remanente
+# vs Backorder.qty_pending
+# ---------------------------------------------------------------------------
+class BackorderReconciliationResult(Base):
+    __tablename__ = "backorder_reconciliation_results"
+    __table_args__ = (
+        Index("ix_brr_reconciliation", "reconciliation_id"),
+        Index("ix_brr_backorder", "backorder_id"),
+        Index("ix_brr_result", "result"),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    reconciliation_id = Column(UUID(as_uuid=True), ForeignKey("backorder_reconciliations.id", ondelete="CASCADE"), nullable=False)
+    backorder_id = Column(UUID(as_uuid=True), ForeignKey("backorders.id"), nullable=True)  # NULL para EXTRA
+    spare_part_item_id = Column(UUID(as_uuid=True), ForeignKey("spare_part_items.id"), nullable=True)  # NULL para EXTRA
+
+    part_number = Column(String(100), nullable=False)  # Desnormalizado para consulta rápida
+    model_applicable = Column(String(255), nullable=True)
+    qty_pending_snapshot = Column(Integer, nullable=True)  # Backorder.qty_pending al momento del cruce
+    qty_in_packing = Column(Integer, nullable=True)        # Cantidad reportada en el packing list remanente
+    qty_applied = Column(Integer, nullable=True)           # Cantidad que se aplicará a qty_received al confirmar
+    unit_price = Column(Numeric(12, 2), nullable=True)     # Precio tomado directamente del packing list/invoice de esta fila
+    result = Column(String(20), nullable=False)  # COMPLETE / PARTIAL / MISSING / EXTRA
+
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    # Relaciones
+    reconciliation = relationship("BackorderReconciliation", back_populates="results")
+    backorder = relationship("Backorder", back_populates="backorder_reconciliation_results")
+    spare_part_item = relationship("SparePartItem")
 
 
 # ---------------------------------------------------------------------------
