@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import AdminLayout from '../admin-layout';
-import { UploadCloud, Image as ImageIcon, Save, Trash2, Clock, Bike, Plus, Pencil, X, AlertCircle, BookOpen, Upload, FileText, Loader2, ChevronDown, ScanSearch, Shield, RefreshCw } from 'lucide-react';
+import { UploadCloud, Image as ImageIcon, Save, Trash2, Clock, Bike, Plus, Pencil, X, AlertCircle, AlertTriangle, BookOpen, Upload, FileText, Loader2, ChevronDown, ScanSearch, Shield, RefreshCw } from 'lucide-react';
 import { authFetch } from '../../lib/authFetch';
 import { getApiUrl } from '../../lib/api';
 import ConfirmModal from '../../components/ConfirmModal';
@@ -346,6 +346,7 @@ export default function SettingsPage() {
   const [backfillMsg, setBackfillMsg] = useState('');
 
   const [pendingConfirm, setPendingConfirm] = useState(null);
+  const [resettingSpareParts, setResettingSpareParts] = useState(false);
 
   // Modelos de Vehículos
   const [vehicleModels, setVehicleModels] = useState([]);
@@ -1664,6 +1665,65 @@ export default function SettingsPage() {
                 style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '7px 14px', borderRadius: '8px', border: 'none', background: observationCreating || !newObservationName.trim() ? 'rgba(251,146,60,0.08)' : 'rgba(251,146,60,0.18)', color: observationCreating || !newObservationName.trim() ? '#606075' : '#fb923c', fontSize: '12px', fontWeight: 700, cursor: observationCreating || !newObservationName.trim() ? 'not-allowed' : 'pointer', letterSpacing: '0.04em' }}
               >
                 <Plus size={13} /> {observationCreating ? 'Guardando...' : 'Agregar'}
+              </button>
+            </div>
+          </section>
+        )}
+
+        {/* Zona de Peligro — acciones destructivas e irreversibles, solo superadmin */}
+        {userRole === 'superadmin' && (
+          <section className="glass p-6" style={{ border: '1px solid rgba(248,113,113,0.3)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '1rem', paddingBottom: '0.75rem', borderBottom: '1px solid rgba(248,113,113,0.15)' }}>
+              <AlertTriangle size={16} style={{ color: '#f87171', flexShrink: 0 }} />
+              <h2 style={{ fontSize: '0.8rem', fontWeight: 700, color: '#f87171', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Zona de Peligro</h2>
+            </div>
+            <p style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.4)', margin: '0 0 1rem', lineHeight: 1.7 }}>
+              Acciones destructivas e irreversibles sobre datos de producción. Usar solo si sabés exactamente lo que estás haciendo.
+            </p>
+
+            <div style={{ padding: '14px 16px', borderRadius: '10px', background: 'rgba(248,113,113,0.06)', border: '1px solid rgba(248,113,113,0.2)' }}>
+              <p style={{ margin: '0 0 4px', fontSize: '12px', fontWeight: 700, color: '#fff' }}>Reset total de repuestos</p>
+              <p style={{ margin: '0 0 12px', fontSize: '11px', color: 'rgba(255,255,255,0.4)', lineHeight: 1.6 }}>
+                Borra TODOS los lotes, ítems, backorders, packing lists y reconciliaciones de repuestos. Los pedidos (shipment orders) se conservan. No se puede deshacer.
+              </p>
+              <button
+                onClick={() => setPendingConfirm({
+                  title: '⚠️ Reset total de repuestos',
+                  message: 'Esto borrará TODOS los lotes, ítems, backorders, packing lists y reconciliaciones de repuestos. Los pedidos (shipment orders) se conservan.\n\nEsta acción NO se puede deshacer.',
+                  danger: true,
+                  confirmLabel: 'Sí, borrar todo',
+                  action: async () => {
+                    setResettingSpareParts(true);
+                    try {
+                      const res = await authFetch(`${getApiUrl()}/imports/spare-parts/reset-detail`, { method: 'POST' });
+                      if (!res.ok) {
+                        const data = await res.json().catch(() => ({}));
+                        const detail = data?.detail;
+                        throw new Error(typeof detail === 'string' ? detail : detail?.detail || 'Error al ejecutar el reset');
+                      }
+                      const data = await res.json();
+                      const msg = Object.entries(data.deleted).map(([k, v]) => `${k}: ${v}`).join(', ');
+                      toast.success(`Reset completo. Eliminados → ${msg}`);
+                    } catch (err) {
+                      toast.error(err.message || 'Error al ejecutar el reset');
+                    } finally {
+                      setResettingSpareParts(false);
+                    }
+                  },
+                })}
+                disabled={resettingSpareParts}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '6px',
+                  padding: '8px 16px', borderRadius: '8px',
+                  border: '1px solid rgba(248,113,113,0.35)',
+                  background: resettingSpareParts ? 'rgba(248,113,113,0.05)' : 'rgba(248,113,113,0.12)',
+                  color: resettingSpareParts ? '#606075' : '#f87171',
+                  fontSize: '12px', fontWeight: 700,
+                  cursor: resettingSpareParts ? 'not-allowed' : 'pointer',
+                }}
+              >
+                <AlertTriangle size={13} />
+                {resettingSpareParts ? 'Reseteando...' : 'Reset total de repuestos'}
               </button>
             </div>
           </section>

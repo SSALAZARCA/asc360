@@ -776,8 +776,7 @@ function LotRow({ lot, userRole, onReconcile, onReconcileBackorders }) {
           </button>
         )}
 
-        {/* TEMPORAL: botón deduplicar — solo superadmin (oculto, cambiar false→true para activar) */}
-        {false && userRole === 'superadmin' && (
+        {userRole === 'superadmin' && (
           <button
             onClick={handleDeduplicate}
             disabled={deduplicating}
@@ -795,8 +794,6 @@ function LotRow({ lot, userRole, onReconcile, onReconcileBackorders }) {
             {deduplicating ? 'Limpiando...' : 'Fix duplic.'}
           </button>
         )}
-
-
       </div>
 
       {/* Contenido expandido */}
@@ -829,7 +826,6 @@ export default function SparePartsTab({ userRole }) {
   const [lotStats, setLotStats] = useState({ unique_refs: null, declared_refs: null });
   const [reconcileLot, setReconcileLot] = useState(null);
   const [reconcileBackorderLot, setReconcileBackorderLot] = useState(null);
-  const [resetting, setResetting] = useState(false);
   const [repairingExtras, setRepairingExtras] = useState(false);
   const [repairingBackorders, setRepairingBackorders] = useState(false);
   const [exportingRepuestos, setExportingRepuestos] = useState(false);
@@ -915,29 +911,6 @@ export default function SparePartsTab({ userRole }) {
           fetchLots(); fetchStats();
         } catch { toast.error('Error en la reparación'); }
         finally { setRepairingBackorders(false); }
-      },
-    });
-  };
-
-  const handleResetDetail = () => {
-    setPendingConfirm({
-      title: '⚠️ Reset total de repuestos',
-      message: 'Esto borrará TODOS los lotes, ítems, backorders, packing lists y reconciliaciones de repuestos. Los pedidos (shipment orders) se conservan.\n\nEsta acción NO se puede deshacer.',
-      danger: true,
-      confirmLabel: 'Sí, borrar todo',
-      action: async () => {
-        setResetting(true);
-        try {
-          const res = await authFetch(`${getApiUrl()}/imports/spare-parts/reset-detail`, { method: 'POST' });
-          const data = await res.json();
-          const msg = Object.entries(data.deleted).map(([k, v]) => `${k}: ${v}`).join(', ');
-          toast.success(`Reset completo. Eliminados → ${msg}`);
-          fetchLots(); fetchStats();
-        } catch {
-          toast.error('Error al ejecutar el reset');
-        } finally {
-          setResetting(false);
-        }
       },
     });
   };
@@ -1117,20 +1090,6 @@ export default function SparePartsTab({ userRole }) {
           </button>
         )}
 
-        {/* TEMPORAL: reset completo — solo superadmin (oculto, cambiar false→true para activar) */}
-        {false && userRole === 'superadmin' && (
-          <button
-            onClick={handleResetDetail}
-            disabled={resetting}
-            style={{
-              padding: '7px 12px', borderRadius: '8px', border: '1px solid rgba(248,113,113,0.3)',
-              background: 'rgba(248,113,113,0.08)', color: resetting ? '#606075' : '#f87171',
-              fontSize: '11px', fontWeight: 700, cursor: resetting ? 'not-allowed' : 'pointer',
-            }}
-          >
-            {resetting ? 'Reseteando...' : '⚠ Reset detalle'}
-          </button>
-        )}
       </div>
 
       {/* Resultados de búsqueda por referencia */}
