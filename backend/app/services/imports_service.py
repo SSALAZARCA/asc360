@@ -2,6 +2,7 @@ import io
 import re
 import uuid
 import logging
+from dataclasses import dataclass, field as _dc_field
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -1240,21 +1241,52 @@ async def load_order_detail_excel(
 
 
 # ---------------------------------------------------------------------------
+# Parser puro de Packing List / Invoice de repuestos (sin acceso a DB)
+#
+# Extraído de `reconcile_lot_packing_list` para ser reutilizado también por el
+# flujo de reconciliación de backorders. `parse_packing_list_workbook` es la
+# función de conveniencia (todo-en-uno) para llamadores nuevos; internamente
+# se apoya en `_locate_packing_list_sheet` y `_extract_packing_list_rows` para
+# que `reconcile_lot_packing_list` pueda preservar EXACTAMENTE el orden
+# original de pasos (detectar cabeceras → validar → recién ahí cargar
+# `models_map` desde DB), sin ejecutar una consulta extra cuando el archivo no
+# tiene cabeceras válidas.
+# ---------------------------------------------------------------------------
 
-async def reconcile_lot_packing_list(
-    db: AsyncSession,
-    lot: SparePartLot,
-    file_bytes: bytes,
-    file_name: str,
-    minio_object_name: str,
-    actor: CurrentUser,
-) -> dict:
+@dataclass
+class PackingListSheetLocation:
+    """Resultado puro de ubicar la hoja/cabecera correcta dentro del workbook."""
+    sheet: any = None
+    header_row: Optional[int] = None
+    col_map: dict = _dc_field(default_factory=dict)
+    is_invoice: bool = False
+    error: Optional[str] = None
+
+
+@dataclass
+class ParsedPackingListRow:
+    """Una fila parseada del Packing List/Invoice, tal como se persiste en `PackingListItem`."""
+    part_number: str
+    description: Optional[str]
+    qty: int
+
+
+@dataclass
+class ParsedPackingList:
+    """Resultado puro y completo del parseo de un Packing List/Invoice."""
+    error: Optional[str] = None
+    is_invoice: bool = False
+    rows: list = _dc_field(default_factory=list)
+    items: dict = _dc_field(default_factory=dict)
+    prices: dict = _dc_field(default_factory=dict)
+
+
+def _locate_packing_list_sheet(file_bytes: bytes, lot_identifier: str) -> PackingListSheetLocation:
     """
-    Acepta tanto el formato Packing List como el formato Invoice del proveedor.
-    Cruza contra SparePartItems del lote y genera ReconciliationResult + Backorders.
-    Si el archivo es una invoice, además actualiza unit_price y amount en los ítems.
+    Abre el workbook y localiza la hoja + fila de cabecera correctas para el
+    formato Packing List o Invoice de repuestos. No accede a DB.
+    Si no encuentra cabeceras válidas, retorna `.error` seteado.
     """
-    import re as _re
     wb = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True)
 
     # Buscar hoja que coincida con PL o Invoice; priorizar la que tenga el PI del lote
@@ -1264,7 +1296,7 @@ async def reconcile_lot_packing_list(
         t = _detect_sheet_type(s)
         if t in ("sp_packing_list", "sp_invoice"):
             # Preferir la hoja que mencione el PI del lote en su nombre o contenido
-            if lot.lot_identifier.replace("-SP", "") in name.upper() or lot.lot_identifier in name.upper():
+            if lot_identifier.replace("-SP", "") in name.upper() or lot_identifier in name.upper():
                 target_sheet = s
                 break
             if target_sheet is None:
@@ -1279,9 +1311,150 @@ async def reconcile_lot_packing_list(
     if not is_invoice:
         header_row = _find_header_row(target_sheet, SP_PL_EXPECTED_COLS)
     if header_row is None:
-        return {"error": "No se encontraron cabeceras válidas. El archivo debe tener columnas: Part #, Qty(PCS), y Unit Price o N.W"}
+        return PackingListSheetLocation(
+            error="No se encontraron cabeceras válidas. El archivo debe tener columnas: Part #, Qty(PCS), y Unit Price o N.W"
+        )
 
     col_map = _build_col_map(target_sheet, header_row)
+    return PackingListSheetLocation(
+        sheet=target_sheet,
+        header_row=header_row,
+        col_map=col_map,
+        is_invoice=is_invoice,
+        error=None,
+    )
+
+
+def _extract_packing_list_rows(
+    sheet,
+    header_row: int,
+    col_map: dict,
+    is_invoice: bool,
+    models_map: dict[str, str],
+) -> tuple[list, dict, dict]:
+    """
+    Parsea las filas de datos de `sheet` (a partir de `header_row + 1`) y
+    retorna `(rows, items, prices)`:
+    - rows: lista de `ParsedPackingListRow`, una por fila válida, en orden.
+    - items: dict {(part_number, model_or_none): qty_acumulado}.
+    - prices: dict {(part_number, model_or_none): (unit_price, amount, desc_en, desc_es, model)},
+      solo poblado cuando `is_invoice` es True.
+    No accede a DB.
+    """
+    pl_items: dict[tuple, int] = {}
+    pl_prices: dict[tuple, tuple] = {}
+    rows: list[ParsedPackingListRow] = []
+
+    for row_idx in range(header_row + 1, sheet.max_row + 1):
+        part_raw = _cell(sheet, row_idx, col_map, "part #", "part#")
+        if not part_raw:
+            continue
+        part_number = normalize_part_number(str(part_raw))
+        if not part_number:
+            continue
+
+        qty_raw = _cell(sheet, row_idx, col_map, "qty(pcs)", "qty (pcs)", "qty")
+        try:
+            qty = int(float(str(qty_raw))) if qty_raw is not None else 0
+        except (ValueError, TypeError):
+            qty = 0
+
+        desc_raw = _cell(sheet, row_idx, col_map, "complete description", "description")
+        desc = str(desc_raw).strip() if desc_raw else None
+
+        # Extraer modelo de fila (solo disponible en invoice)
+        model_val = None
+        desc_es = None
+        unit_price = None
+        amount = None
+
+        if is_invoice:
+            model_raw = _cell(sheet, row_idx, col_map, "model", "modelo")
+            model_val = _normalize_model(model_raw, models_map)
+
+            desc_es_raw = _cell(sheet, row_idx, col_map, "spanish description", "descripcion")
+            desc_es = str(desc_es_raw).strip() if desc_es_raw else None
+
+            price_raw = _cell(sheet, row_idx, col_map, "unit price", "unit_price", "price")
+            try:
+                unit_price = float(price_raw) if price_raw is not None else None
+            except (ValueError, TypeError):
+                unit_price = None
+
+            amount_raw = _cell(sheet, row_idx, col_map, "amount", "total")
+            try:
+                amount = float(amount_raw) if amount_raw is not None else None
+            except (ValueError, TypeError):
+                amount = None
+
+        pl_key = (part_number, model_val)
+        pl_items[pl_key] = pl_items.get(pl_key, 0) + qty
+
+        if is_invoice:
+            if pl_key in pl_prices:
+                prev = pl_prices[pl_key]
+                new_amount = (prev[1] or 0) + (amount or 0) if (prev[1] is not None or amount is not None) else None
+                pl_prices[pl_key] = (prev[0] or unit_price, new_amount, prev[2] or desc, prev[3] or desc_es, model_val)
+            else:
+                pl_prices[pl_key] = (unit_price, amount, desc, desc_es, model_val)
+
+        rows.append(ParsedPackingListRow(part_number=part_number, description=desc, qty=qty))
+
+    return rows, pl_items, pl_prices
+
+
+def parse_packing_list_workbook(
+    file_bytes: bytes,
+    lot_identifier: str,
+    models_map: dict[str, str],
+) -> ParsedPackingList:
+    """
+    Parser PURO (sin acceso a DB, sin creación de registros) del Packing List
+    o Invoice de repuestos. Detecta la hoja/cabecera correcta y parsea todas
+    las filas de datos en un solo paso.
+
+    Retorna un `ParsedPackingList` con `.error` seteado (y el resto de campos
+    en sus defaults vacíos) cuando no se encuentra una fila de cabecera
+    válida. Reutilizable tanto por `reconcile_lot_packing_list` (flujo legacy)
+    como por el flujo de reconciliación de backorders.
+    """
+    location = _locate_packing_list_sheet(file_bytes, lot_identifier)
+    if location.error:
+        return ParsedPackingList(error=location.error)
+
+    rows, items, prices = _extract_packing_list_rows(
+        location.sheet, location.header_row, location.col_map, location.is_invoice, models_map
+    )
+    return ParsedPackingList(
+        error=None,
+        is_invoice=location.is_invoice,
+        rows=rows,
+        items=items,
+        prices=prices,
+    )
+
+
+async def reconcile_lot_packing_list(
+    db: AsyncSession,
+    lot: SparePartLot,
+    file_bytes: bytes,
+    file_name: str,
+    minio_object_name: str,
+    actor: CurrentUser,
+) -> dict:
+    """
+    Acepta tanto el formato Packing List como el formato Invoice del proveedor.
+    Cruza contra SparePartItems del lote y genera ReconciliationResult + Backorders.
+    Si el archivo es una invoice, además actualiza unit_price y amount en los ítems.
+    """
+    location = _locate_packing_list_sheet(file_bytes, lot.lot_identifier)
+    if location.error:
+        return {"error": location.error}
+
+    target_sheet = location.sheet
+    header_row = location.header_row
+    col_map = location.col_map
+    is_invoice = location.is_invoice
     models_map = await _load_models_map(db)
 
     # Eliminar resultados anteriores para este lote (re-conciliación)
@@ -1312,69 +1485,19 @@ async def reconcile_lot_packing_list(
     await db.flush()
 
     # Parsear filas → clave (part_number, model_or_none) para separar misma referencia en distintos modelos
-    pl_items: dict[tuple, int] = {}        # (part_number, model_or_none) → qty
-    pl_prices: dict[tuple, tuple] = {}    # (part_number, model_or_none) → (unit_price, amount, desc_en, desc_es, model)
-    pl_item_records: list[PackingListItem] = []
+    parsed_rows, pl_items, pl_prices = _extract_packing_list_rows(
+        target_sheet, header_row, col_map, is_invoice, models_map
+    )
 
-    for row_idx in range(header_row + 1, target_sheet.max_row + 1):
-        part_raw = _cell(target_sheet, row_idx, col_map, "part #", "part#")
-        if not part_raw:
-            continue
-        part_number = normalize_part_number(str(part_raw))
-        if not part_number:
-            continue
-
-        qty_raw = _cell(target_sheet, row_idx, col_map, "qty(pcs)", "qty (pcs)", "qty")
-        try:
-            qty = int(float(str(qty_raw))) if qty_raw is not None else 0
-        except (ValueError, TypeError):
-            qty = 0
-
-        desc_raw = _cell(target_sheet, row_idx, col_map, "complete description", "description")
-        desc = str(desc_raw).strip() if desc_raw else None
-
-        # Extraer modelo de fila (solo disponible en invoice)
-        model_val = None
-        desc_es = None
-        unit_price = None
-        amount = None
-
-        if is_invoice:
-            model_raw = _cell(target_sheet, row_idx, col_map, "model", "modelo")
-            model_val = _normalize_model(model_raw, models_map)
-
-            desc_es_raw = _cell(target_sheet, row_idx, col_map, "spanish description", "descripcion")
-            desc_es = str(desc_es_raw).strip() if desc_es_raw else None
-
-            price_raw = _cell(target_sheet, row_idx, col_map, "unit price", "unit_price", "price")
-            try:
-                unit_price = float(price_raw) if price_raw is not None else None
-            except (ValueError, TypeError):
-                unit_price = None
-
-            amount_raw = _cell(target_sheet, row_idx, col_map, "amount", "total")
-            try:
-                amount = float(amount_raw) if amount_raw is not None else None
-            except (ValueError, TypeError):
-                amount = None
-
-        pl_key = (part_number, model_val)
-        pl_items[pl_key] = pl_items.get(pl_key, 0) + qty
-
-        if is_invoice:
-            if pl_key in pl_prices:
-                prev = pl_prices[pl_key]
-                new_amount = (prev[1] or 0) + (amount or 0) if (prev[1] is not None or amount is not None) else None
-                pl_prices[pl_key] = (prev[0] or unit_price, new_amount, prev[2] or desc, prev[3] or desc_es, model_val)
-            else:
-                pl_prices[pl_key] = (unit_price, amount, desc, desc_es, model_val)
-
-        pl_item_records.append(PackingListItem(
+    pl_item_records: list[PackingListItem] = [
+        PackingListItem(
             packing_list_id=pl_record.id,
-            part_number=part_number,
-            description=desc,
-            qty=qty,
-        ))
+            part_number=row.part_number,
+            description=row.description,
+            qty=row.qty,
+        )
+        for row in parsed_rows
+    ]
 
     for pli in pl_item_records:
         db.add(pli)
