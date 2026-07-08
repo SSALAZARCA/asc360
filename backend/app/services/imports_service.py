@@ -1,3 +1,4 @@
+import hashlib
 import io
 import re
 import uuid
@@ -7,6 +8,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 import openpyxl
+from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
@@ -14,9 +16,11 @@ from app.models.imports import (
     ShipmentOrder, ShipmentMotoUnit, SparePartLot, SparePartItem,
     PackingList, PackingListItem, ReconciliationResult, Backorder, ImportAuditLog,
     ColorRuntMapping, VehicleModel,
+    BackorderReconciliation, BackorderReconciliationResult,
 )
 from app.api.deps import CurrentUser
 from app.schemas.imports import ImportExcelResult
+from app.services import storage_service
 
 logger = logging.getLogger(__name__)
 
@@ -2156,6 +2160,406 @@ async def list_backorders(
         result.append(d)
 
     return result
+
+
+# ---------------------------------------------------------------------------
+# Backorder Reconciliation — cruce de un packing list remanente contra los
+# `Backorder` abiertos de un lote. Flujo separado y aditivo del reconciliation
+# original: compara contra `Backorder.qty_pending` (nunca `qty_ordered`) y
+# ADD (nunca sobrescribe) `SparePartItem.qty_received` al confirmar.
+#
+# Contrato de `reconcile_backorder_packing_list`: reutiliza
+# `parse_packing_list_workbook` (helper puro compartido con el flujo legacy).
+# Crea un `BackorderReconciliation` header en PENDING junto con sus líneas;
+# si ya existía un batch PENDING previo del lote lo reemplaza (recompute, no
+# acumula) — los CONFIRMED son inmutables. Retorna `{"error":
+# "NO_OPEN_BACKORDERS"}` si el lote no tiene backorders abiertos (chequeado
+# ANTES de parsear), o `{"error": <msg>}` si el archivo no tiene cabeceras
+# válidas. El caller (endpoint) debe llamar a `precheck_backorder_upload`
+# ANTES de subir el archivo a MinIO, para no dejar blobs huérfanos si la
+# validación falla.
+# ---------------------------------------------------------------------------
+
+def _hash_file_bytes(file_bytes: bytes) -> str:
+    """sha256 hexdigest del contenido del archivo, usado para detección de
+    duplicados (no bloqueante) entre uploads de packing lists remanentes."""
+    return hashlib.sha256(file_bytes).hexdigest()
+
+
+async def _fetch_open_backorders_for_lot(db: AsyncSession, lot_id) -> list["Backorder"]:
+    """Backorders con `resolved = False` cuyo `SparePartItem` pertenece al lote.
+    Ordenado por antigüedad (`created_at`, luego `id` como desempate estable)
+    para que el cruce sea determinístico cuando dos backorders abiertos
+    comparten `(part_number, model)` — ver `_index_open_backorders`."""
+    return (await db.execute(
+        select(Backorder)
+        .join(SparePartItem, Backorder.spare_part_item_id == SparePartItem.id)
+        .where(SparePartItem.lot_id == lot_id, Backorder.resolved == False)
+        .order_by(Backorder.created_at, Backorder.id)
+    )).scalars().all()
+
+
+def _detect_duplicate_warnings(prior_batches: list, content_hash: str, file_name: str) -> list[str]:
+    """`content_hash` igual a un batch previo -> `duplicate_content` (autoritativo);
+    mismo `file_name` con hash distinto -> `duplicate_filename` (suave). Advisory-only."""
+    if any(b.content_hash == content_hash for b in prior_batches):
+        return ["duplicate_content"]
+    if any(b.file_name == file_name for b in prior_batches):
+        return ["duplicate_filename"]
+    return []
+
+
+async def _replace_pending_batch(db: AsyncSession, prior_batches: list) -> None:
+    """Elimina el batch PENDING previo del lote (si existe) — recompute, no
+    acumula. Los CONFIRMED son inmutables y nunca se tocan. También borra su
+    blob en MinIO (best-effort, igual que `delete_attachment`) para no dejar
+    archivos huérfanos cada vez que se reemplaza un upload."""
+    for b in prior_batches:
+        if b.status == "PENDING":
+            try:
+                storage_service.minio_client.remove_object(storage_service.IMPORTS_BUCKET, b.minio_object_name)
+            except Exception:
+                pass  # Si ya no existe en MinIO, igual eliminamos el registro
+            logger.info(f"Batch PENDING reemplazado por nuevo upload: lot_id={b.lot_id} file={b.file_name}")
+            await db.delete(b)
+    await db.flush()
+
+
+@dataclass
+class _OpenBackorderIndex:
+    """Índices para el cruce: por (part_number, model) exacto, y por
+    part_number como fallback (mismo criterio que `reconcile_lot_packing_list`
+    usa para su propio cruce PL-vs-lote — ver esa función para el original;
+    NO se comparte código a propósito: son flujos deliberadamente aislados,
+    y ese otro cruce está fuera de scope de este cambio)."""
+    by_model: dict = _dc_field(default_factory=dict)      # (part_number, model) -> list[Backorder], FIFO por antigüedad
+    by_part_number: dict = _dc_field(default_factory=dict)  # part_number -> list[Backorder], FIFO por antigüedad
+    parts_with_model: set = _dc_field(default_factory=set)
+
+
+def _index_open_backorders(open_backorders: list, items_by_id: dict) -> _OpenBackorderIndex:
+    """Construye los índices de cruce. `open_backorders` debe venir ordenado
+    por antigüedad (ver `_fetch_open_backorders_for_lot`): cuando dos
+    backorders abiertos comparten `(part_number, model)`, ambos quedan en la
+    lista de ese key (nunca se pisan) y se consumen en orden FIFO desde
+    `_match_backorder_for_pl_line` — el más antiguo primero."""
+    index = _OpenBackorderIndex()
+    for bo in open_backorders:
+        item = items_by_id.get(bo.spare_part_item_id)
+        model = item.model_applicable if item else None
+        if model:
+            index.by_model.setdefault((bo.part_number, model), []).append(bo)
+        index.by_part_number.setdefault(bo.part_number, []).append(bo)
+    index.parts_with_model = {pn for (pn, _m) in index.by_model}
+    return index
+
+
+def _match_backorder_for_pl_line(
+    part_number: str, pl_model, index: _OpenBackorderIndex, matched_bo_ids: set,
+):
+    if pl_model and part_number in index.parts_with_model:
+        # Cruce exacto por (part, model) — sin coincidencia es EXTRA puro, sin fallback
+        for candidate in index.by_model.get((part_number, pl_model), []):
+            if candidate.id not in matched_bo_ids:
+                return candidate
+        return None
+    for candidate in index.by_part_number.get(part_number, []):
+        if candidate.id not in matched_bo_ids:
+            return candidate
+    return None
+
+
+def _classify_against_pending(qty_in_pl: int, pending: int) -> tuple[str, int]:
+    """`qty_in_pl >= pending` -> COMPLETE (aplicado tope = pending);
+    `0 < qty_in_pl < pending` -> PARTIAL; `qty_in_pl == 0` -> MISSING."""
+    if qty_in_pl >= pending:
+        return "COMPLETE", pending
+    if qty_in_pl > 0:
+        return "PARTIAL", qty_in_pl
+    return "MISSING", 0
+
+
+def _build_matched_lines(
+    batch_id, parsed: "ParsedPackingList", items_by_id: dict, index: _OpenBackorderIndex,
+) -> tuple[list, set, dict]:
+    """Cruza cada fila del PL remanente contra los backorders abiertos ya
+    indexados. Retorna (lines, matched_bo_ids, counts)."""
+    counts = {"complete": 0, "partial": 0, "missing": 0, "extra": 0}
+    matched_bo_ids: set = set()
+    lines: list["BackorderReconciliationResult"] = []
+
+    for (part_number, pl_model), qty_in_pl in parsed.items.items():
+        pl_unit_price = None
+        pl_model_display = pl_model
+        if parsed.is_invoice and (part_number, pl_model) in parsed.prices:
+            pl_unit_price, _, _, _desc_es, pl_model_display = parsed.prices[(part_number, pl_model)]
+
+        bo = _match_backorder_for_pl_line(part_number, pl_model, index, matched_bo_ids)
+
+        if bo is None:
+            # EXTRA: viene en el PL remanente pero no hay backorder abierto para esa parte
+            counts["extra"] += 1
+            lines.append(BackorderReconciliationResult(
+                reconciliation_id=batch_id, backorder_id=None, spare_part_item_id=None,
+                part_number=part_number, model_applicable=pl_model_display,
+                qty_pending_snapshot=None, qty_in_packing=qty_in_pl, qty_applied=0,
+                unit_price=pl_unit_price, result="EXTRA",
+            ))
+            continue
+
+        matched_bo_ids.add(bo.id)
+        item = items_by_id.get(bo.spare_part_item_id)
+        result_code, qty_applied = _classify_against_pending(qty_in_pl, bo.qty_pending)
+        counts[result_code.lower()] += 1
+        lines.append(BackorderReconciliationResult(
+            reconciliation_id=batch_id, backorder_id=bo.id, spare_part_item_id=bo.spare_part_item_id,
+            part_number=part_number, model_applicable=(item.model_applicable if item else pl_model_display),
+            qty_pending_snapshot=bo.qty_pending, qty_in_packing=qty_in_pl, qty_applied=qty_applied,
+            unit_price=pl_unit_price, result=result_code,
+        ))
+
+    return lines, matched_bo_ids, counts
+
+
+def _build_missing_lines_for_unmatched(batch_id, open_backorders: list, matched_bo_ids: set, items_by_id: dict) -> list:
+    """Backorders abiertos que el PL remanente ni siquiera menciona -> MISSING."""
+    lines = []
+    for bo in open_backorders:
+        if bo.id in matched_bo_ids:
+            continue
+        item = items_by_id.get(bo.spare_part_item_id)
+        lines.append(BackorderReconciliationResult(
+            reconciliation_id=batch_id, backorder_id=bo.id, spare_part_item_id=bo.spare_part_item_id,
+            part_number=bo.part_number, model_applicable=item.model_applicable if item else None,
+            qty_pending_snapshot=bo.qty_pending, qty_in_packing=0, qty_applied=0, result="MISSING",
+        ))
+    return lines
+
+
+async def _create_pending_batch(
+    db: AsyncSession, lot: SparePartLot, file_name: str, content_hash: str, minio_object_name: str, is_invoice: bool,
+    actor: CurrentUser,
+) -> BackorderReconciliation:
+    batch = BackorderReconciliation(
+        lot_id=lot.id,
+        uploaded_by=uuid.UUID(actor.user_id) if actor.user_id else None,
+        file_name=file_name,
+        content_hash=content_hash,
+        minio_object_name=minio_object_name,
+        status="PENDING",
+        is_invoice=is_invoice,
+        uploaded_at=datetime.utcnow(),
+    )
+    db.add(batch)
+    await db.flush()
+    return batch
+
+
+async def _fetch_items_by_id(db: AsyncSession, item_ids: set) -> dict:
+    items_list = (await db.execute(
+        select(SparePartItem).where(SparePartItem.id.in_(item_ids))
+    )).scalars().all()
+    return {i.id: i for i in items_list}
+
+
+async def precheck_backorder_upload(db: AsyncSession, lot: SparePartLot, file_bytes: bytes) -> Optional[str]:
+    """
+    Valida un upload de packing list remanente ANTES de que el caller lo
+    suba a almacenamiento — para no dejar blobs huérfanos en MinIO cuando la
+    validación falla (ver `upload_lot_backorder_packing_list`). Retorna
+    `"NO_OPEN_BACKORDERS"`, el mensaje de error del parseo, o `None` si es
+    válido. Repite el mismo chequeo que hace `reconcile_backorder_packing_list`
+    al arrancar — barato (una query + un parseo) y deliberadamente redundante
+    para mantener esa función con su contrato/orden de queries intacto.
+    """
+    open_backorders = await _fetch_open_backorders_for_lot(db, lot.id)
+    if not open_backorders:
+        return "NO_OPEN_BACKORDERS"
+    models_map = await _load_models_map(db)
+    parsed = parse_packing_list_workbook(file_bytes, lot.lot_identifier, models_map)
+    return parsed.error
+
+
+async def reconcile_backorder_packing_list(
+    db: AsyncSession,
+    lot: SparePartLot,
+    file_bytes: bytes,
+    file_name: str,
+    minio_object_name: str,
+    actor: CurrentUser,
+) -> dict:
+    """Cruza el PL remanente contra los backorders abiertos del lote y
+    persiste el batch PENDING + sus líneas (ver banner del módulo para el
+    contrato completo). Re-chequea NO_OPEN_BACKORDERS/parseo por si se llama
+    sin pasar antes por `precheck_backorder_upload`."""
+    open_backorders = await _fetch_open_backorders_for_lot(db, lot.id)
+    if not open_backorders:
+        return {"error": "NO_OPEN_BACKORDERS"}
+
+    models_map = await _load_models_map(db)
+    parsed = parse_packing_list_workbook(file_bytes, lot.lot_identifier, models_map)
+    if parsed.error:
+        return {"error": parsed.error}
+
+    content_hash = _hash_file_bytes(file_bytes)
+    prior_batches = (await db.execute(
+        select(BackorderReconciliation).where(BackorderReconciliation.lot_id == lot.id)
+    )).scalars().all()
+    warnings = _detect_duplicate_warnings(prior_batches, content_hash, file_name)
+    await _replace_pending_batch(db, prior_batches)
+
+    batch = await _create_pending_batch(db, lot, file_name, content_hash, minio_object_name, parsed.is_invoice, actor)
+
+    item_ids = {bo.spare_part_item_id for bo in open_backorders}
+    items_by_id = await _fetch_items_by_id(db, item_ids)
+
+    index = _index_open_backorders(open_backorders, items_by_id)
+    matched_lines, matched_bo_ids, counts = _build_matched_lines(batch.id, parsed, items_by_id, index)
+    missing_lines = _build_missing_lines_for_unmatched(batch.id, open_backorders, matched_bo_ids, items_by_id)
+    counts["missing"] += len(missing_lines)
+
+    all_lines = matched_lines + missing_lines
+    for line in all_lines:
+        db.add(line)
+    await db.flush()
+
+    return {
+        "batch_id": str(batch.id),
+        "is_invoice": parsed.is_invoice,
+        "counts": counts,
+        "lines": all_lines,
+        "warnings": warnings,
+    }
+
+
+def _apply_backorder_confirm_line(item: SparePartItem, bo: "Backorder", applied: int, batch_id, now: datetime) -> bool:
+    """
+    Aplica una línea confirmada: SUMA `applied` a `item.qty_received` (nunca
+    sobrescribe), resta de `bo.qty_pending`, resuelve el backorder a cero.
+    Retorna True si el backorder quedó recién resuelto en esta llamada.
+    """
+    item.qty_received = (item.qty_received or 0) + applied
+    item.qty_pending = max(0, (item.qty_ordered or 0) - item.qty_received)
+    item.status = "RECEIVED" if item.qty_pending == 0 else "PARTIAL"
+    item.updated_at = now
+
+    bo.qty_pending = max(0, (bo.qty_pending or 0) - applied)
+    just_resolved = bo.qty_pending == 0 and not bo.resolved
+    history = list(bo.history or [])
+    history.append({
+        "date": now.isoformat(),
+        "event": "RESOLVED_BY_BACKORDER_PL" if bo.qty_pending == 0 else "PARTIAL_FILL_BY_BACKORDER_PL",
+        "qty_applied": applied,
+        "batch_id": str(batch_id),
+    })
+    bo.history = history
+    bo.updated_at = now
+    if just_resolved:
+        bo.resolved = True
+        bo.resolved_at = now
+
+    return just_resolved
+
+
+async def _claim_pending_batch(db: AsyncSession, batch: BackorderReconciliation, now: datetime) -> bool:
+    """
+    Marca el batch como CONFIRMED con un UPDATE atómico `WHERE status =
+    'PENDING'`. Si dos requests confirman el mismo batch en paralelo, sólo
+    uno gana la fila — el otro ve 0 filas afectadas (`claimed` vacío) y debe
+    tratarlo como ya-confirmado, sin aplicar nada dos veces.
+    """
+    claimed = (await db.execute(
+        update(BackorderReconciliation)
+        .where(BackorderReconciliation.id == batch.id, BackorderReconciliation.status == "PENDING")
+        .values(status="CONFIRMED", confirmed_at=now)
+        .returning(BackorderReconciliation.id)
+    )).scalars().all()
+    if not claimed:
+        return False
+    batch.status = "CONFIRMED"
+    batch.confirmed_at = now
+    return True
+
+
+async def _apply_confirmed_lines(db: AsyncSession, batch: BackorderReconciliation, now: datetime) -> dict:
+    """Aplica cada línea del batch ya reclamado (ver `_claim_pending_batch`)
+    a `SparePartItem`/`Backorder`. Líneas cuyo item/backorder ya no existe se
+    omiten y quedan logueadas para revisión manual, sin abortar el resto."""
+    lines = (await db.execute(
+        select(BackorderReconciliationResult).where(
+            BackorderReconciliationResult.reconciliation_id == batch.id
+        )
+    )).scalars().all()
+
+    qty_applied_total = 0
+    backorders_resolved = 0
+    backorders_updated = 0
+
+    for line in lines:
+        if line.backorder_id is None:
+            continue  # EXTRA sin backorder abierto: no hay nada que aplicar
+        applied = line.qty_applied or 0
+        if applied <= 0:
+            continue  # MISSING (o EXTRA sin excedente): sin cantidad a sumar
+
+        item = await db.get(SparePartItem, line.spare_part_item_id)
+        bo = await db.get(Backorder, line.backorder_id)
+        if item is None or bo is None:
+            logger.warning(
+                f"confirm_backorder_reconciliation: línea {line.id} del batch {batch.id} "
+                f"referencia un SparePartItem/Backorder inexistente — se omite sin aplicar "
+                f"qty_applied={applied}. Revisar manualmente."
+            )
+            continue
+
+        if _apply_backorder_confirm_line(item, bo, applied, batch.id, now):
+            backorders_resolved += 1
+        qty_applied_total += applied
+        backorders_updated += 1
+
+    return {
+        "qty_applied": qty_applied_total,
+        "backorders_resolved": backorders_resolved,
+        "backorders_updated": backorders_updated,
+    }
+
+
+async def confirm_backorder_reconciliation(
+    db: AsyncSession,
+    batch: BackorderReconciliation,
+    actor: CurrentUser,
+) -> dict:
+    """
+    Confirma un `BackorderReconciliation` en PENDING: por cada línea con
+    backorder asociado, SUMA `qty_applied` a `SparePartItem.qty_received`
+    (nunca sobrescribe) y RESTA de `Backorder.qty_pending`, marcando
+    `resolved = True` con `resolved_at` cuando llega a 0. Todo dentro de la
+    misma transacción de sesión (rollback delegado a `get_db`).
+
+    Retorna `{"error": "ALREADY_CONFIRMED"}` si el batch ya estaba CONFIRMED
+    (o si perdió la carrera contra otro confirm concurrente — ver
+    `_claim_pending_batch`), sin modificar nada.
+    """
+    if batch.status == "CONFIRMED":
+        return {"error": "ALREADY_CONFIRMED"}
+
+    now = datetime.utcnow()
+    if not await _claim_pending_batch(db, batch, now):
+        return {"error": "ALREADY_CONFIRMED"}
+
+    counts = await _apply_confirmed_lines(db, batch, now)
+
+    logger.info(
+        f"Batch {batch.id} confirmado: qty_applied={counts['qty_applied']} "
+        f"backorders_resolved={counts['backorders_resolved']} "
+        f"backorders_updated={counts['backorders_updated']}"
+    )
+
+    return {
+        "confirmed": True,
+        "batch_id": str(batch.id),
+        **counts,
+    }
 
 
 # ---------------------------------------------------------------------------

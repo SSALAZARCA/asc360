@@ -433,6 +433,47 @@ class BackorderBulkRollbackRequest(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Backorder Reconciliation — cruce de packing list remanente vs Backorder.qty_pending
+# (flujo separado y aditivo del reconciliation original)
+# ---------------------------------------------------------------------------
+class BackorderReconciliationResultRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    reconciliation_id: uuid.UUID
+    backorder_id: Optional[uuid.UUID] = None
+    spare_part_item_id: Optional[uuid.UUID] = None
+    part_number: str
+    model_applicable: Optional[str] = None
+    qty_pending_snapshot: Optional[int] = None
+    qty_in_packing: Optional[int] = None
+    qty_applied: Optional[int] = None
+    unit_price: Optional[float] = None
+    result: str
+    created_at: datetime
+
+
+class BackorderReconciliationUploadResult(BaseModel):
+    batch_id: uuid.UUID
+    is_invoice: bool
+    counts: dict
+    lines: List[BackorderReconciliationResultRead] = []
+    warnings: List[str] = []
+
+
+class BackorderReconciliationConfirmRequest(BaseModel):
+    batch_id: uuid.UUID
+
+
+class BackorderReconciliationConfirmResult(BaseModel):
+    confirmed: bool
+    qty_applied: int
+    backorders_resolved: int
+    backorders_updated: int
+    batch_id: uuid.UUID
+
+
+# ---------------------------------------------------------------------------
 # Physical Inspection Upload
 # ---------------------------------------------------------------------------
 class PhysicalInspectionApplyEntry(BaseModel):

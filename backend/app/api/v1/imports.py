@@ -14,7 +14,7 @@ from starlette.responses import StreamingResponse
 
 from app.database import get_db
 from app.api.deps import get_current_user, CurrentUser
-from app.models.imports import ShipmentOrder, SparePartLot, ShipmentMotoUnit, ImportAttachment, SparePartItem, ReconciliationResult, Backorder, VehicleModel, MotoLocation, MotoObservation
+from app.models.imports import ShipmentOrder, SparePartLot, ShipmentMotoUnit, ImportAttachment, SparePartItem, ReconciliationResult, Backorder, VehicleModel, MotoLocation, MotoObservation, BackorderReconciliation
 from app.models.tenant import Tenant, EstadoRed
 from app.schemas.imports import (
     ShipmentOrderRead, ShipmentOrderCreate, ShipmentOrderUpdate, ShipmentOrderListResponse,
@@ -23,6 +23,8 @@ from app.schemas.imports import (
     SparePartLotRead, SparePartItemRead, SparePartItemUpdate,
     ReconciliationResultRead, ReconciliationResultUpdate, BackorderRead, BackorderUpdate,
     BackorderBulkUpdatePI, BackorderBulkRollbackRequest, PhysicalInspectionApplyPayload,
+    BackorderReconciliationUploadResult, BackorderReconciliationConfirmRequest,
+    BackorderReconciliationConfirmResult,
     MotoLocationCreate, MotoLocationRead,
     MotoObservationCreate, MotoObservationRead,
 )
@@ -1269,6 +1271,117 @@ async def confirm_lot_reconciliation(
         raise HTTPException(status_code=404, detail={"detail": "Lote no encontrado", "code": "LOT_NOT_FOUND"})
 
     result = await imports_service.confirm_reconciliation(db, lot, current_user)
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Backorder Reconciliation — cruce de packing list remanente contra los
+# Backorder abiertos de un lote (flujo separado y aditivo, NO toca
+# reconcile_lot_packing_list/confirm_reconciliation ni sus datos)
+# ---------------------------------------------------------------------------
+
+MAX_BACKORDER_PL_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB, mismo límite que uploads.py
+
+
+@router.post(
+    "/spare-part-lots/{lot_id}/backorder-packing-list",
+    response_model=BackorderReconciliationUploadResult,
+    status_code=status.HTTP_200_OK,
+)
+async def upload_lot_backorder_packing_list(
+    lot_id: uuid.UUID,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    _require_imports_editor(current_user)
+
+    if not file.filename.endswith(".xlsx"):
+        raise HTTPException(status_code=422, detail={"detail": "Solo se aceptan archivos .xlsx", "code": "INVALID_FILE_TYPE"})
+
+    lot = await db.get(SparePartLot, lot_id)
+    if not lot:
+        raise HTTPException(status_code=404, detail={"detail": "Lote no encontrado", "code": "LOT_NOT_FOUND"})
+
+    file_bytes = await file.read()
+    if len(file_bytes) > MAX_BACKORDER_PL_SIZE_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail={"detail": "El archivo supera el límite de 10 MB", "code": "FILE_TOO_LARGE"},
+        )
+
+    # Validar ANTES de subir a MinIO — si esto falla no queremos un blob
+    # huérfano sin ninguna fila de DB que lo referencie.
+    precheck_error = await imports_service.precheck_backorder_upload(db, lot, file_bytes)
+    if precheck_error == "NO_OPEN_BACKORDERS":
+        raise HTTPException(
+            status_code=422,
+            detail={"detail": "El lote no tiene backorders abiertos para reconciliar", "code": "NO_OPEN_BACKORDERS"},
+        )
+    if precheck_error:
+        raise HTTPException(
+            status_code=422,
+            detail={"detail": precheck_error, "code": "INVALID_PACKING_LIST"},
+        )
+
+    object_name = f"lots/{lot_id}/backorder-packing-lists/{uuid.uuid4()}_{file.filename}"
+
+    await storage_service.upload_bytes(
+        storage_service.IMPORTS_BUCKET,
+        object_name,
+        file_bytes,
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+    result = await imports_service.reconcile_backorder_packing_list(
+        db, lot, file_bytes, file.filename, object_name, current_user
+    )
+
+    if result.get("error") == "NO_OPEN_BACKORDERS":
+        raise HTTPException(
+            status_code=422,
+            detail={"detail": "El lote no tiene backorders abiertos para reconciliar", "code": "NO_OPEN_BACKORDERS"},
+        )
+    if result.get("error"):
+        raise HTTPException(
+            status_code=422,
+            detail={"detail": result["error"], "code": "INVALID_PACKING_LIST"},
+        )
+
+    await db.commit()
+    return result
+
+
+@router.post(
+    "/spare-part-lots/{lot_id}/backorder-reconciliation/confirm",
+    response_model=BackorderReconciliationConfirmResult,
+    status_code=status.HTTP_200_OK,
+)
+async def confirm_lot_backorder_reconciliation(
+    lot_id: uuid.UUID,
+    payload: BackorderReconciliationConfirmRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    _require_imports_editor(current_user)
+
+    lot = await db.get(SparePartLot, lot_id)
+    if not lot:
+        raise HTTPException(status_code=404, detail={"detail": "Lote no encontrado", "code": "LOT_NOT_FOUND"})
+
+    batch = await db.get(BackorderReconciliation, payload.batch_id)
+    if not batch or batch.lot_id != lot_id:
+        raise HTTPException(status_code=404, detail={"detail": "Batch de reconciliación no encontrado", "code": "BATCH_NOT_FOUND"})
+
+    result = await imports_service.confirm_backorder_reconciliation(db, batch, current_user)
+
+    if result.get("error") == "ALREADY_CONFIRMED":
+        raise HTTPException(
+            status_code=409,
+            detail={"detail": "Este batch ya fue confirmado", "code": "ALREADY_CONFIRMED"},
+        )
+
+    await db.commit()
     return result
 
 

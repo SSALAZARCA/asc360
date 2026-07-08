@@ -129,6 +129,43 @@ def make_spare_part_item(
     return item
 
 
+def make_backorder(
+    spare_part_item_id,
+    part_number: str,
+    origin_pi: str,
+    qty_pending: int,
+    resolved: bool = False,
+) -> "Backorder":
+    from app.models.imports import Backorder
+    return Backorder(
+        id=uuid.uuid4(),
+        spare_part_item_id=spare_part_item_id,
+        part_number=part_number,
+        origin_pi=origin_pi,
+        qty_pending=qty_pending,
+        resolved=resolved,
+        history=[],
+    )
+
+
+def make_backorder_reconciliation(
+    lot_id,
+    file_name: str = "remainder.xlsx",
+    content_hash: str = "hash",
+    status: str = "PENDING",
+) -> "BackorderReconciliation":
+    from app.models.imports import BackorderReconciliation
+    return BackorderReconciliation(
+        id=uuid.uuid4(),
+        lot_id=lot_id,
+        file_name=file_name,
+        content_hash=content_hash,
+        minio_object_name=f"minio/{file_name}",
+        status=status,
+        is_invoice=False,
+    )
+
+
 def make_actor(user_id: Optional[str] = None) -> "CurrentUser":
     from app.api.deps import CurrentUser
     return CurrentUser(
@@ -177,11 +214,15 @@ class FakeAsyncSession:
     to not reorder or alter any DB interaction.
     """
 
-    def __init__(self, execute_queue: list[list]):
+    def __init__(self, execute_queue: list[list], get_objects: Optional[list] = None):
         self._execute_queue = list(execute_queue)
         self.added: list = []
         self.deleted: list = []
         self.flush_count = 0
+        # Objects reachable via `db.get(Model, id)` — used by tests exercising
+        # functions that fetch rows by primary key instead of `select(...)`
+        # (e.g. `confirm_backorder_reconciliation`).
+        self._get_objects: list = list(get_objects or [])
 
     async def execute(self, stmt):
         if not self._execute_queue:
@@ -201,6 +242,12 @@ class FakeAsyncSession:
 
     async def flush(self):
         self.flush_count += 1
+
+    async def get(self, model_cls, obj_id):
+        for obj in self._get_objects + self.added:
+            if isinstance(obj, model_cls) and obj.id == obj_id:
+                return obj
+        return None
 
     def added_of_type(self, cls) -> list:
         return [o for o in self.added if isinstance(o, cls)]
