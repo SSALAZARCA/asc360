@@ -176,6 +176,23 @@ def make_actor(user_id: Optional[str] = None) -> "CurrentUser":
     )
 
 
+def make_imports_editor(role: str = "administrativo", user_id: Optional[str] = None) -> "CurrentUser":
+    """
+    GOTCHA: every imports endpoint calls `_require_imports_editor`, which
+    requires `role in ("superadmin", "proveedor", "administrativo")`.
+    `make_actor()` defaults to role=`jefe_taller`, which is NOT an editor
+    and 403s here (see `test_imports_editor_role_regression.py`). Use this
+    factory instead of `make_actor()` for any imports-endpoint HTTP test.
+    """
+    from app.api.deps import CurrentUser
+    return CurrentUser(
+        user_id=user_id or str(uuid.uuid4()),
+        role=role,
+        tenant_id=None,
+        name="Test Imports Editor",
+    )
+
+
 # ---------------------------------------------------------------------------
 # Fake AsyncSession — simulates just enough of AsyncSession's surface for
 # `reconcile_lot_packing_list` to run end-to-end without a live database.
@@ -190,11 +207,40 @@ class _ScalarsResult:
 
 
 class _ExecuteResult:
+    """
+    Fakes the subset of SQLAlchemy's `CursorResult`/`ChunkedIteratorResult`
+    surface this project's endpoints call on `await db.execute(stmt)`:
+    `.scalars().all()` (ORM entities), `.all()` (multi-column `Row` tuples,
+    e.g. `select(Model.col_a, Model.col_b)`), and `.scalar_one()`/
+    `.scalar_one_or_none()` (single-column, single-row results, e.g.
+    `select(func.count())`). All four read the SAME queued `items` payload
+    — the caller queues the right shape (list of ORM objects/Rows, or a
+    1-item list for scalar_one) for whichever call the endpoint makes.
+    """
+
     def __init__(self, items: list):
         self._items = items
 
     def scalars(self):
         return _ScalarsResult(self._items)
+
+    def all(self):
+        return list(self._items)
+
+    def scalar_one(self):
+        if len(self._items) != 1:
+            raise AssertionError(
+                f"scalar_one() expects exactly 1 queued row, got {len(self._items)} "
+                "— check the execute_queue entry for this call."
+            )
+        return self._items[0]
+
+    def scalar_one_or_none(self):
+        if len(self._items) > 1:
+            raise AssertionError(
+                f"scalar_one_or_none() expects at most 1 queued row, got {len(self._items)}."
+            )
+        return self._items[0] if self._items else None
 
 
 class FakeAsyncSession:

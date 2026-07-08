@@ -1,16 +1,29 @@
 """
-Shared fixtures for remisiones tests.
+Top-level pytest conftest — auto-loaded for every test module in `tests/`.
 
-These tests follow the project's established pattern of pure unit tests
-using MagicMock / AsyncMock objects — no live database required.
-This avoids needing a test DATABASE_URL in CI and keeps tests fast.
+Holds two kinds of shared plumbing:
+1. Remisiones fixtures (pure unit tests using MagicMock/AsyncMock — no live
+   database required, keeps tests fast, no test DATABASE_URL needed).
+2. The project's first HTTP-layer test harness (`make_test_client`): a
+   `starlette.testclient.TestClient` factory wrapping `app.main.app` with
+   `get_db`/`get_current_user` overridden via FastAPI's
+   `app.dependency_overrides` — real routing/DI, no live DB, no live HTTP
+   server. Lives here (not in `tests/imports/conftest.py`) specifically so
+   any future tier/module can `from tests.conftest import make_test_client`.
 
 To run: pytest backend/tests/ -v
 """
 import uuid
 import pytest
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, AsyncMock
+
+from fastapi.testclient import TestClient
+
+from app.main import app
+from app.database import get_db
+from app.api.deps import get_current_user
 
 
 # ---------------------------------------------------------------------------
@@ -92,3 +105,42 @@ def make_remision(
     r.items = items if items is not None else []
     r.movements = movements if movements is not None else []
     return r
+
+
+# ---------------------------------------------------------------------------
+# HTTP-layer test harness — TestClient + FastAPI dependency overrides.
+# Reused by any test module/tier: `from tests.conftest import make_test_client`.
+# ---------------------------------------------------------------------------
+
+@contextmanager
+def make_test_client(current_user, fake_db_session):
+    """
+    Yields a `TestClient` for `app.main.app` with `get_db` and
+    `get_current_user` overridden — real FastAPI routing/DI, no live DB,
+    no JWT/auth header needed.
+
+    `current_user`: a `CurrentUser` instance (see `make_actor`/
+    `make_imports_editor` in module-specific conftests) returned directly
+    by the `get_current_user` override.
+
+    `fake_db_session`: any object exposing the subset of `AsyncSession`'s
+    surface the endpoint under test needs (e.g. `imports.conftest.
+    FakeAsyncSession`), yielded directly by the `get_db` override.
+
+    Overrides are removed on exit so later tests/modules start clean, even
+    if the caller's `with` block raises.
+    """
+    async def _override_get_db():
+        yield fake_db_session
+
+    async def _override_get_current_user():
+        return current_user
+
+    app.dependency_overrides[get_db] = _override_get_db
+    app.dependency_overrides[get_current_user] = _override_get_current_user
+    try:
+        with TestClient(app) as client:
+            yield client
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+        app.dependency_overrides.pop(get_current_user, None)
