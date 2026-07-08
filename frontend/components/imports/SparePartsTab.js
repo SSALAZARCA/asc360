@@ -48,13 +48,21 @@ function EditableCell({ itemId, field, current, type = 'text', align = 'left', c
     const parsed = type === 'number' ? (value === '' ? null : parseFloat(value)) : (String(value).trim() || null);
     if (parsed === (current ?? null)) return;
     try {
-      await authFetch(`${getApiUrl()}/imports/spare-part-items/${itemId}`, {
+      const res = await authFetch(`${getApiUrl()}/imports/spare-part-items/${itemId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ [field]: parsed }),
       });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        const detail = data?.detail;
+        throw new Error(typeof detail === 'string' ? detail : detail?.detail || 'Error al guardar');
+      }
       onSaved?.();
-    } catch { setValue(current ?? ''); }
+    } catch (err) {
+      toast.error(err.message || 'Error al guardar');
+      setValue(current ?? '');
+    }
   };
 
   if (editing) {
@@ -104,16 +112,25 @@ function EditableStatus({ itemId, current, onSaved }) {
   const [value, setValue] = useState(current);
 
   const save = async (newVal) => {
+    const previous = value;
     setValue(newVal);
     setEditing(false);
     try {
-      await authFetch(`${getApiUrl()}/imports/spare-part-items/${itemId}`, {
+      const res = await authFetch(`${getApiUrl()}/imports/spare-part-items/${itemId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newVal }),
       });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        const detail = data?.detail;
+        throw new Error(typeof detail === 'string' ? detail : detail?.detail || 'Error al guardar el estado');
+      }
       onSaved?.();
-    } catch { /* silencioso */ }
+    } catch (err) {
+      toast.error(err.message || 'Error al guardar el estado');
+      setValue(previous);
+    }
   };
 
   if (!editing) {
@@ -148,13 +165,21 @@ function EditableQty({ itemId, current, max, onSaved }) {
     const num = parseInt(value, 10);
     if (isNaN(num) || num === current) return;
     try {
-      await authFetch(`${getApiUrl()}/imports/spare-part-items/${itemId}`, {
+      const res = await authFetch(`${getApiUrl()}/imports/spare-part-items/${itemId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ qty_received: num }),
       });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        const detail = data?.detail;
+        throw new Error(typeof detail === 'string' ? detail : detail?.detail || 'Error al guardar la cantidad');
+      }
       onSaved?.();
-    } catch { setValue(current); }
+    } catch (err) {
+      toast.error(err.message || 'Error al guardar la cantidad');
+      setValue(current);
+    }
   };
 
   if (!editing) {
@@ -479,9 +504,17 @@ function LotItemsTable({ lotId, userRole, isConfirmed }) {
                             confirmLabel: 'Sí, cancelar',
                             action: async () => {
                               try {
-                                await authFetch(`${getApiUrl()}/imports/spare-part-items/${item.id}/cancel-pending`, { method: 'POST' });
+                                const res = await authFetch(`${getApiUrl()}/imports/spare-part-items/${item.id}/cancel-pending`, { method: 'POST' });
+                                if (!res.ok) {
+                                  const data = await res.json().catch(() => ({}));
+                                  const detail = data?.detail;
+                                  const message = typeof detail === 'string' ? detail : detail?.detail || 'Error al cancelar las unidades pendientes';
+                                  throw new Error(message);
+                                }
                                 fetch();
-                              } catch { /* error silencioso */ }
+                              } catch (err) {
+                                toast.error(err.message || 'Error al cancelar las unidades pendientes');
+                              }
                             },
                           });
                         }}
@@ -798,6 +831,7 @@ export default function SparePartsTab({ userRole }) {
   const [reconcileBackorderLot, setReconcileBackorderLot] = useState(null);
   const [resetting, setResetting] = useState(false);
   const [repairingExtras, setRepairingExtras] = useState(false);
+  const [repairingBackorders, setRepairingBackorders] = useState(false);
   const [exportingRepuestos, setExportingRepuestos] = useState(false);
   const [pendingConfirm, setPendingConfirm] = useState(null);
 
@@ -862,6 +896,25 @@ export default function SparePartsTab({ userRole }) {
           fetchLots(); fetchStats();
         } catch { toast.error('Error en la reparación'); }
         finally { setRepairingExtras(false); }
+      },
+    });
+  };
+
+  const handleRepairUnresolvedBackorders = () => {
+    setPendingConfirm({
+      title: 'Reparar backorders sin cerrar',
+      message: 'Cierra (resolved=true) los backorders que ya llegaron a 0 pendientes por un cruce de EXTRA pero quedaron abiertos por un bug ya corregido. ¿Continuar?',
+      danger: false,
+      confirmLabel: 'Sí, reparar',
+      action: async () => {
+        setRepairingBackorders(true);
+        try {
+          const res = await authFetch(`${getApiUrl()}/imports/backorders/repair-unresolved-zero-pending`, { method: 'POST' });
+          const data = await res.json();
+          toast.success(`Reparación completa: ${data.fixed} backorder${data.fixed !== 1 ? 's' : ''} cerrado${data.fixed !== 1 ? 's' : ''}`);
+          fetchLots(); fetchStats();
+        } catch { toast.error('Error en la reparación'); }
+        finally { setRepairingBackorders(false); }
       },
     });
   };
@@ -1050,6 +1103,17 @@ export default function SparePartsTab({ userRole }) {
             style={{ padding: '7px 12px', borderRadius: '8px', border: '1px solid rgba(52,211,153,0.3)', background: 'rgba(52,211,153,0.08)', color: repairingExtras ? '#606075' : '#34d399', fontSize: '11px', fontWeight: 700, cursor: repairingExtras ? 'not-allowed' : 'pointer' }}
           >
             {repairingExtras ? 'Reparando...' : '⚙ Reparar Pcs Rec. extras'}
+          </button>
+        )}
+
+        {userRole === 'superadmin' && (
+          <button
+            onClick={handleRepairUnresolvedBackorders}
+            disabled={repairingBackorders}
+            title="Cierra backorders que llegaron a 0 pendientes por cruce EXTRA pero quedaron abiertos por un bug ya corregido"
+            style={{ padding: '7px 12px', borderRadius: '8px', border: '1px solid rgba(52,211,153,0.3)', background: 'rgba(52,211,153,0.08)', color: repairingBackorders ? '#606075' : '#34d399', fontSize: '11px', fontWeight: 700, cursor: repairingBackorders ? 'not-allowed' : 'pointer' }}
+          >
+            {repairingBackorders ? 'Reparando...' : '⚙ Reparar backorders sin cerrar'}
           </button>
         )}
 

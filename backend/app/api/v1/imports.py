@@ -1,5 +1,6 @@
 import uuid
 import io
+import logging
 import mimetypes
 from datetime import datetime
 from typing import Optional
@@ -34,6 +35,7 @@ from app.services import storage_service
 from app.services import dim_parser_service, certificate_service
 
 router = APIRouter(prefix="/imports", tags=["Imports"])
+logger = logging.getLogger(__name__)
 
 ALLOWED_EXCEL_TYPES = (
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -614,6 +616,7 @@ async def list_attachments(
                 storage_service.IMPORTS_BUCKET, att.minio_object_name
             )
         except Exception:
+            logger.warning(f"No se pudo generar presigned_url para adjunto {att.id} ({att.minio_object_name})", exc_info=True)
             read.presigned_url = None
         result.append(read)
 
@@ -666,6 +669,7 @@ async def upload_attachment(
             storage_service.IMPORTS_BUCKET, object_name
         )
     except Exception:
+        logger.warning(f"No se pudo generar presigned_url para adjunto recién subido {attachment.id} ({object_name})", exc_info=True)
         read.presigned_url = None
 
     return read
@@ -686,7 +690,7 @@ async def delete_attachment(
     try:
         storage_service.minio_client.remove_object(storage_service.IMPORTS_BUCKET, att.minio_object_name)
     except Exception:
-        pass  # Si ya no existe en MinIO, igual eliminamos el registro
+        logger.warning(f"No se pudo borrar de MinIO el adjunto {att.id} ({att.minio_object_name}) — se elimina igual el registro", exc_info=True)
 
     await db.delete(att)
     await db.commit()
@@ -1571,6 +1575,25 @@ async def repair_extra_received(
 
     await db.commit()
     return {"fixed": fixed, "errors": errors}
+
+
+@router.post("/backorders/repair-unresolved-zero-pending")
+async def repair_unresolved_zero_pending(
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """
+    Retroactivo: marca resolved=True en backorders que ya llegaron a
+    qty_pending=0 por el cruce EXTRA-vs-backorder de confirm_reconciliation,
+    pero nunca se cerraron por el bug corregido en ese mismo flujo. Solo
+    superadmin.
+    """
+    if current_user.role != "superadmin":
+        raise HTTPException(status_code=403, detail="Solo superadmin puede ejecutar reparación")
+
+    result = await imports_service.repair_unresolved_zero_pending_backorders(db)
+    await db.commit()
+    return result
 
 
 @router.get("/spare-parts/export")
@@ -2624,7 +2647,6 @@ async def get_disponibles_matrix(
     units = (await db.execute(stmt)).scalars().all()
 
     # Agrupar: model → location_name → color_runt → count
-    from collections import defaultdict
     matrix: dict = {}  # model → {location → {color → count}}
 
     for u in units:
@@ -2680,7 +2702,6 @@ async def get_facturadas_matrix(
     )
     units = (await db.execute(stmt)).scalars().all()
 
-    from collections import defaultdict
     # distribuidor → model → count
     matrix: dict = {}
 

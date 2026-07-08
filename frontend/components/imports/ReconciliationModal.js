@@ -44,13 +44,21 @@ function EditableReconciliationCell({ resultId, field, current, type = 'text', a
     const parsed = type === 'number' ? (value === '' ? null : parseInt(value, 10)) : (String(value).trim() || null);
     if (parsed === (current ?? null)) return;
     try {
-      await authFetch(`${getApiUrl()}/imports/reconciliation-results/${resultId}`, {
+      const res = await authFetch(`${getApiUrl()}/imports/reconciliation-results/${resultId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ [field]: parsed }),
       });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        const detail = data?.detail;
+        throw new Error(typeof detail === 'string' ? detail : detail?.detail || 'Error al guardar');
+      }
       onSaved?.();
-    } catch { setValue(current ?? ''); }
+    } catch (err) {
+      toast.error(err.message || 'Error al guardar');
+      setValue(current ?? '');
+    }
   };
 
   if (editing) {
@@ -132,7 +140,11 @@ export default function ReconciliationModal({ lot, onClose, onConfirmed }) {
         { method: 'POST', body: formData, headers: {} }
       );
       const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || 'Error al procesar el archivo');
+      if (!res.ok) {
+        const detail = data.detail;
+        const message = typeof detail === 'string' ? detail : detail?.detail || 'Error al procesar el archivo';
+        throw new Error(message);
+      }
       setUploadResult(data);
       await fetchResults();
     } catch (err) {

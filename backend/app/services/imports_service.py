@@ -1753,6 +1753,11 @@ async def confirm_reconciliation(
             bo.updated_at = now
             applied_any = True
 
+            if bo.qty_pending == 0 and not bo.resolved:
+                bo.resolved = True
+                bo.resolved_at = now
+                backorders_resolved_by_extra += 1
+
         if applied_any:
             rr.result = "EXTRA_APPLIED"
 
@@ -1918,6 +1923,29 @@ async def _resolve_backorders_for_item(
         bo.updated_at = now
 
     return len(open_bos)
+
+
+async def repair_unresolved_zero_pending_backorders(db: AsyncSession) -> dict:
+    """
+    Retroactivo: cierra `Backorder`s que ya llegaron a `qty_pending <= 0`
+    pero quedaron con `resolved = False` — bug del cruce EXTRA-vs-backorder
+    en `confirm_reconciliation`, que restaba `qty_pending` sin marcar
+    `resolved` (corregido; esto repara los datos previos al fix).
+    """
+    backorders = (await db.execute(
+        select(Backorder).where(Backorder.resolved == False, Backorder.qty_pending <= 0)
+    )).scalars().all()
+
+    now = datetime.utcnow()
+    for bo in backorders:
+        bo.resolved = True
+        bo.resolved_at = now
+        history = list(bo.history or [])
+        history.append({"date": now.isoformat(), "event": "REPAIR_RESOLVED_ZERO_PENDING"})
+        bo.history = history
+        bo.updated_at = now
+
+    return {"fixed": len(backorders)}
 
 
 async def bulk_resolve_compute(
