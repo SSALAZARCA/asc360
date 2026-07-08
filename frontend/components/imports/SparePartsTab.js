@@ -2,10 +2,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { authFetch } from '../../lib/authFetch';
 import { getApiUrl } from '../../lib/api';
-import { ChevronDown, ChevronRight, Search, RefreshCw, Package, ClipboardCheck, XCircle, UploadCloud, FileSpreadsheet } from 'lucide-react';
+import { ChevronDown, ChevronRight, Search, RefreshCw, Package, ClipboardCheck, XCircle, UploadCloud, FileSpreadsheet, AlertTriangle } from 'lucide-react';
 import { toast } from '../../lib/toast';
 import ExcelUploadModal from './ExcelUploadModal';
 import ReconciliationModal from './ReconciliationModal';
+import BackorderReconciliationModal from './BackorderReconciliationModal';
 import PhysicalInventoryUploadModal from './PhysicalInventoryUploadModal';
 import ConfirmModal from '../ConfirmModal';
 
@@ -517,12 +518,22 @@ function LotItemsTable({ lotId, userRole, isConfirmed }) {
 // ---------------------------------------------------------------------------
 // Fila de un lote (expandible)
 // ---------------------------------------------------------------------------
-function LotRow({ lot, userRole, onReconcile }) {
+function LotRow({ lot, userRole, onReconcile, onReconcileBackorders }) {
   const [expanded, setExpanded] = useState(false);
   const [deduplicating, setDeduplicating] = useState(false);
   const [pendingConfirm, setPendingConfirm] = useState(null);
+  const [openBackordersCount, setOpenBackordersCount] = useState(0);
 
   const pctColor = lot.pct_received >= 100 ? '#22c55e' : lot.pct_received > 0 ? '#fb923c' : '#606075';
+
+  useEffect(() => {
+    let cancelled = false;
+    authFetch(`${getApiUrl()}/imports/backorders?origin_pi=${encodeURIComponent(lot.lot_identifier)}&resolved=false`)
+      .then(res => res.ok ? res.json() : [])
+      .then(data => { if (!cancelled) setOpenBackordersCount(Array.isArray(data) ? data.length : 0); })
+      .catch(() => { if (!cancelled) setOpenBackordersCount(0); });
+    return () => { cancelled = true; };
+  }, [lot.lot_identifier]);
 
   const handleRollback = (e) => {
     e.stopPropagation();
@@ -695,6 +706,23 @@ function LotRow({ lot, userRole, onReconcile }) {
           {lot.packing_list_received ? 'Ver PL' : 'Packing List'}
         </button>
 
+        {/* Botón reconciliación de backorders — sólo si el lote tiene backorders abiertos */}
+        {openBackordersCount > 0 && (
+          <button
+            onClick={e => { e.stopPropagation(); onReconcileBackorders(lot); }}
+            title="Reconciliar packing list remanente contra los backorders abiertos"
+            style={{
+              display: 'flex', alignItems: 'center', gap: '5px',
+              padding: '5px 10px', borderRadius: '7px', border: 'none',
+              background: 'rgba(248,113,113,0.1)', color: '#f87171',
+              fontSize: '10px', fontWeight: 700, cursor: 'pointer', flexShrink: 0,
+            }}
+          >
+            <AlertTriangle size={12} />
+            Backorders ({openBackordersCount})
+          </button>
+        )}
+
         {/* TEMPORAL: rollback de lote — solo superadmin */}
         {userRole === 'superadmin' && (
           <button
@@ -767,6 +795,7 @@ export default function SparePartsTab({ userRole }) {
   const [partSearchResults, setPartSearchResults] = useState(null);
   const [lotStats, setLotStats] = useState({ unique_refs: null, declared_refs: null });
   const [reconcileLot, setReconcileLot] = useState(null);
+  const [reconcileBackorderLot, setReconcileBackorderLot] = useState(null);
   const [resetting, setResetting] = useState(false);
   const [repairingExtras, setRepairingExtras] = useState(false);
   const [exportingRepuestos, setExportingRepuestos] = useState(false);
@@ -1090,6 +1119,7 @@ export default function SparePartsTab({ userRole }) {
               lot={lot}
               userRole={userRole}
               onReconcile={setReconcileLot}
+              onReconcileBackorders={setReconcileBackorderLot}
             />
           ))}
         </div>
@@ -1101,6 +1131,15 @@ export default function SparePartsTab({ userRole }) {
           lot={reconcileLot}
           onClose={() => setReconcileLot(null)}
           onConfirmed={() => { fetchLots(); fetchStats(); setReconcileLot(null); }}
+        />
+      )}
+
+      {/* Modal de reconciliación de backorders */}
+      {reconcileBackorderLot && (
+        <BackorderReconciliationModal
+          lot={reconcileBackorderLot}
+          onClose={() => setReconcileBackorderLot(null)}
+          onConfirmed={() => { fetchLots(); fetchStats(); }}
         />
       )}
 
