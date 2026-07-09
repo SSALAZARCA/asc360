@@ -2050,26 +2050,20 @@ async def backorder_bulk_resolve_rollback(
 # Dashboard
 # ---------------------------------------------------------------------------
 
-@router.get("/dashboard")
-async def get_imports_dashboard(
-    db: AsyncSession = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user),
-    is_spare_part: Optional[bool] = Query(None),
-):
-    _require_imports_editor(current_user)
+def _sp_filter(is_spare_part: Optional[bool]) -> list:
+    """WHERE-clause fragment for `ShipmentOrder.is_spare_part`; empty when unset."""
+    if is_spare_part is None:
+        return []
+    return [ShipmentOrder.is_spare_part == is_spare_part]
 
-    from sqlalchemy import case, and_
-    from datetime import timedelta
-    from app.schemas.imports import ImportDashboardSummary
 
-    now = datetime.utcnow()
-    in_60_days = now + timedelta(days=60)
-
-    def _sp_filter():
-        if is_spare_part is None:
-            return []
-        return [ShipmentOrder.is_spare_part == is_spare_part]
-
+async def _query_status_counts(db: AsyncSession, is_spare_part: Optional[bool]) -> tuple[dict, dict]:
+    """
+    Returns (motos_status_map, spare_part_status_map). Both queries run
+    unconditionally today, regardless of `is_spare_part` — the parameter is
+    kept to mirror the other dashboard query helpers' shape; the actual
+    per-mode selection happens in `_resolve_status_map`.
+    """
     from sqlalchemy import distinct as _distinct
 
     # Motos: siempre COUNT(DISTINCT pi_number) — un pedido puede tener N modelos
@@ -2078,7 +2072,7 @@ async def get_imports_dashboard(
         .where(ShipmentOrder.is_spare_part == False)
         .group_by(ShipmentOrder.computed_status)
     )).all()
-    motos_st_map = {r.computed_status: r.cnt for r in motos_st_rows}
+    motos_map = {r.computed_status: r.cnt for r in motos_st_rows}
 
     # Repuestos: COUNT(*) por estado
     sp_st_rows = (await db.execute(
@@ -2086,39 +2080,51 @@ async def get_imports_dashboard(
         .where(ShipmentOrder.is_spare_part == True)
         .group_by(ShipmentOrder.computed_status)
     )).all()
-    sp_st_map = {r.computed_status: r.cnt for r in sp_st_rows}
+    sp_map = {r.computed_status: r.cnt for r in sp_st_rows}
 
+    return motos_map, sp_map
+
+
+def _resolve_status_map(motos_map: dict, sp_map: dict, is_spare_part: Optional[bool]) -> dict:
+    """PURE: picks/merges the status-count map to report, per `is_spare_part`."""
     if is_spare_part is False:
-        status_map = motos_st_map
-    elif is_spare_part is True:
-        status_map = sp_st_map
-    else:
-        all_keys = set(motos_st_map) | set(sp_st_map)
-        status_map = {k: motos_st_map.get(k, 0) + sp_st_map.get(k, 0) for k in all_keys}
+        return motos_map
+    if is_spare_part is True:
+        return sp_map
+    all_keys = set(motos_map) | set(sp_map)
+    return {k: motos_map.get(k, 0) + sp_map.get(k, 0) for k in all_keys}
 
-    moto_count = sum(v for k, v in motos_st_map.items() if k != "completado")
-    sp_count   = sum(v for k, v in sp_st_map.items()   if k != "completado")
 
-    # Backorders activos (solo aplica a repuestos)
+async def _query_backorder_totals(db: AsyncSession, is_spare_part: Optional[bool]) -> tuple[int, int, float]:
+    """
+    Active-backorder KPIs (count, pending units, total declared value).
+    Only applies to spare parts: skipped entirely (zeros, no DB calls) when
+    `is_spare_part is False`. `total_value`'s query is NOT filtered by
+    `is_spare_part` — pre-existing behavior, preserved as-is.
+    """
+    if is_spare_part is False:
+        return 0, 0, 0.0
+
     from app.models.imports import Backorder, SparePartLot
-    if is_spare_part is False:
-        bo_count = 0
-        bo_units = 0
-        total_value = 0.0
-    else:
-        bo_count = (await db.execute(
-            select(func.count()).select_from(Backorder).where(Backorder.resolved == False)
-        )).scalar_one()
-        bo_units = (await db.execute(
-            select(func.coalesce(func.sum(Backorder.qty_pending), 0))
-            .where(Backorder.resolved == False)
-        )).scalar_one()
-        from sqlalchemy import Numeric as SaNumeric
-        total_value = (await db.execute(
-            select(func.coalesce(func.sum(SparePartLot.total_declared_value), 0))
-        )).scalar_one()
 
-    # Por ciclo — motos: DISTINCT pi_number; repuestos/ambos: COUNT(*)
+    bo_count = (await db.execute(
+        select(func.count()).select_from(Backorder).where(Backorder.resolved == False)
+    )).scalar_one()
+    bo_units = (await db.execute(
+        select(func.coalesce(func.sum(Backorder.qty_pending), 0))
+        .where(Backorder.resolved == False)
+    )).scalar_one()
+    total_value = (await db.execute(
+        select(func.coalesce(func.sum(SparePartLot.total_declared_value), 0))
+    )).scalar_one()
+
+    return bo_count, int(bo_units), float(total_value)
+
+
+async def _query_by_cycle(db: AsyncSession, is_spare_part: Optional[bool]) -> list[dict]:
+    """Order counts grouped by cycle (top 8): DISTINCT pi_number for motos, COUNT(*) otherwise."""
+    from sqlalchemy import distinct as _distinct
+
     if is_spare_part is False:
         cycle_rows = (await db.execute(
             select(ShipmentOrder.cycle, func.count(_distinct(ShipmentOrder.pi_number)).label("cnt"))
@@ -2130,14 +2136,33 @@ async def get_imports_dashboard(
     else:
         cycle_rows = (await db.execute(
             select(ShipmentOrder.cycle, func.count().label("cnt"))
-            .where(ShipmentOrder.cycle.isnot(None), *_sp_filter())
+            .where(ShipmentOrder.cycle.isnot(None), *_sp_filter(is_spare_part))
             .group_by(ShipmentOrder.cycle)
             .order_by(ShipmentOrder.cycle.desc())
             .limit(8)
         )).all()
-    by_cycle = [{"cycle": r.cycle, "count": r.cnt} for r in cycle_rows]
+    return [{"cycle": r.cycle, "count": r.cnt} for r in cycle_rows]
 
-    # Próximas ETAs (60 días)
+
+def _serialize_upcoming_eta(o) -> dict:
+    """PURE: maps a `ShipmentOrder` row to the dashboard's upcoming-ETA shape."""
+    return {
+        "id": str(o.id),
+        "pi_number": o.pi_number,
+        "model": o.model,
+        "eta": o.eta.isoformat() if o.eta else None,
+        "eta_raw": o.eta_raw,
+        "qty": o.qty,
+        "is_spare_part": o.is_spare_part,
+        "computed_status": o.computed_status,
+        "cycle": o.cycle,
+    }
+
+
+async def _build_upcoming_etas(
+    db: AsyncSession, now: datetime, in_60_days: datetime, is_spare_part: Optional[bool]
+) -> list[dict]:
+    """Orders with an ETA in the next 60 days, excluding `completado`, capped at 10."""
     eta_rows = (await db.execute(
         select(ShipmentOrder)
         .where(
@@ -2145,26 +2170,36 @@ async def get_imports_dashboard(
             ShipmentOrder.eta >= now,
             ShipmentOrder.eta <= in_60_days,
             ShipmentOrder.computed_status.notin_(["completado"]),
-            *_sp_filter(),
+            *_sp_filter(is_spare_part),
         )
         .order_by(ShipmentOrder.eta.asc())
         .limit(10)
     )).scalars().all()
+    return [_serialize_upcoming_eta(o) for o in eta_rows]
 
-    upcoming = [
-        {
-            "id": str(o.id),
-            "pi_number": o.pi_number,
-            "model": o.model,
-            "eta": o.eta.isoformat() if o.eta else None,
-            "eta_raw": o.eta_raw,
-            "qty": o.qty,
-            "is_spare_part": o.is_spare_part,
-            "computed_status": o.computed_status,
-            "cycle": o.cycle,
-        }
-        for o in eta_rows
-    ]
+
+@router.get("/dashboard")
+async def get_imports_dashboard(
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+    is_spare_part: Optional[bool] = Query(None),
+):
+    _require_imports_editor(current_user)
+
+    from datetime import timedelta
+    from app.schemas.imports import ImportDashboardSummary
+
+    now = datetime.utcnow()
+    in_60_days = now + timedelta(days=60)
+
+    motos_map, sp_map = await _query_status_counts(db, is_spare_part)
+    status_map = _resolve_status_map(motos_map, sp_map, is_spare_part)
+    moto_count = sum(v for k, v in motos_map.items() if k != "completado")
+    sp_count = sum(v for k, v in sp_map.items() if k != "completado")
+
+    bo_count, bo_units, total_value = await _query_backorder_totals(db, is_spare_part)
+    by_cycle = await _query_by_cycle(db, is_spare_part)
+    upcoming = await _build_upcoming_etas(db, now, in_60_days, is_spare_part)
 
     return ImportDashboardSummary(
         en_preparacion=status_map.get("en_preparacion", 0),
@@ -2179,8 +2214,8 @@ async def get_imports_dashboard(
         pending_docs_digital=0,
         pending_docs_original=0,
         active_backorders=bo_count,
-        total_backorder_units=int(bo_units),
-        total_declared_value_usd=float(total_value),
+        total_backorder_units=bo_units,
+        total_declared_value_usd=total_value,
         by_cycle=by_cycle,
         upcoming_etas=upcoming,
     )
