@@ -2225,6 +2225,131 @@ async def get_imports_dashboard(
 # Listado global de moto units (con filtros y paginación)
 # ---------------------------------------------------------------------------
 
+def _build_moto_unit_filters(
+    pi_number: Optional[str],
+    model: Optional[str],
+    vin: Optional[str],
+    engine: Optional[str],
+    certificado_generado: Optional[bool],
+    observation_id: Optional[uuid.UUID],
+    empadronamiento_fisico_enviado: Optional[bool],
+    facturado: Optional[bool],
+    cargado_runt: Optional[bool],
+) -> tuple[list, list]:
+    """
+    PURE: builds the moto-units WHERE-clause pair. `base_filters` (only
+    `is_spare_part` + `pi_number`/`model`/`vin`/`engine`) is used by the KPI
+    counts so they stay correct regardless of status filters; `filters`
+    extends it with every other query param and is used for the scoped
+    `total`/`total_global` counts and the paginated items query.
+    """
+    base_filters = [ShipmentOrder.is_spare_part == False]
+
+    if pi_number:
+        base_filters.append(ShipmentOrder.pi_number.ilike(f"%{pi_number}%"))
+    if model:
+        base_filters.append(
+            func.coalesce(ShipmentMotoUnit.model, ShipmentOrder.model).ilike(f"%{model}%")
+        )
+    if vin:
+        base_filters.append(ShipmentMotoUnit.vin_number.ilike(f"%{vin}%"))
+    if engine:
+        base_filters.append(ShipmentMotoUnit.engine_number.ilike(f"%{engine}%"))
+
+    filters = list(base_filters)
+    if certificado_generado is not None:
+        filters.append(ShipmentMotoUnit.certificado_generado == certificado_generado)
+    if observation_id is not None:
+        filters.append(ShipmentMotoUnit.observation_id == observation_id)
+    if empadronamiento_fisico_enviado is not None:
+        filters.append(ShipmentMotoUnit.empadronamiento_fisico_enviado == empadronamiento_fisico_enviado)
+    if facturado is not None:
+        filters.append(ShipmentMotoUnit.facturado == facturado)
+    if cargado_runt is not None:
+        filters.append(ShipmentMotoUnit.cargado_runt == cargado_runt)
+
+    return base_filters, filters
+
+
+async def _count_moto_units(db: AsyncSession, where_clauses: list) -> int:
+    """
+    Shared COUNT(*) helper collapsing the 5 near-identical
+    `select(func.count()).select_from(<join>.where(*w).subquery())` blocks
+    that used to be inlined in `list_all_moto_units` into one, parameterized
+    by the WHERE-clause list for each case.
+    """
+    count_stmt = select(func.count()).select_from(
+        select(ShipmentMotoUnit)
+        .join(ShipmentOrder, ShipmentMotoUnit.shipment_order_id == ShipmentOrder.id)
+        .where(*where_clauses)
+        .subquery()
+    )
+    return (await db.execute(count_stmt)).scalar_one()
+
+
+async def _fetch_moto_units_page(
+    db: AsyncSession, filters: list, skip: int, page_size: int
+) -> list:
+    """Paginated moto-units page, newest-first, with the related order/
+    location/observation eagerly loaded."""
+    stmt = (
+        select(ShipmentMotoUnit)
+        .join(ShipmentOrder, ShipmentMotoUnit.shipment_order_id == ShipmentOrder.id)
+        .where(*filters)
+        .options(
+            selectinload(ShipmentMotoUnit.shipment_order),
+            selectinload(ShipmentMotoUnit.location),
+            selectinload(ShipmentMotoUnit.observation),
+        )
+        .order_by(ShipmentMotoUnit.created_at.desc())
+        .offset(skip)
+        .limit(page_size)
+    )
+    return (await db.execute(stmt)).scalars().all()
+
+
+def _serialize_moto_unit(u) -> dict:
+    """PURE: flattens a `ShipmentMotoUnit` (with `.shipment_order`/
+    `.location`/`.observation` eagerly loaded) into the moto-units list's
+    item dict, unchanged from the original inline serialization."""
+    o = u.shipment_order
+    return {
+        "id": str(u.id),
+        "shipment_order_id": str(u.shipment_order_id),
+        "item_no": u.item_no,
+        "vin_number": u.vin_number,
+        "engine_number": u.engine_number,
+        "color": u.color,
+        "color_runt": u.color_runt,
+        "container_no": u.container_no,
+        "seal_no": u.seal_no,
+        "source_pi": u.source_pi,
+        "no_acep": u.no_acep,
+        "f_acep": str(u.f_acep) if u.f_acep else None,
+        "no_lev": u.no_lev,
+        "f_lev": str(u.f_lev) if u.f_lev else None,
+        "certificado_generado": u.certificado_generado,
+        "certificado_fecha": u.certificado_fecha.isoformat() if u.certificado_fecha else None,
+        "empadronamiento_fisico_enviado": u.empadronamiento_fisico_enviado,
+        "empadronamiento_fisico_fecha": u.empadronamiento_fisico_fecha.isoformat() if u.empadronamiento_fisico_fecha else None,
+        "empadronamiento_fisico_distribuidor_id": str(u.empadronamiento_fisico_distribuidor_id) if u.empadronamiento_fisico_distribuidor_id else None,
+        "empadronamiento_fisico_distribuidor_nombre": u.empadronamiento_fisico_distribuidor_nombre,
+        "dim_pdf_object_name": u.dim_pdf_object_name,
+        "location_id": str(u.location_id) if u.location_id else None,
+        "location_name": u.location.name if u.location else None,
+        "observation_id": str(u.observation_id) if u.observation_id else None,
+        "observation_name": u.observation.name if u.observation else None,
+        "separada_nacionalizacion": u.separada_nacionalizacion,
+        "facturado": u.facturado,
+        "cargado_runt": u.cargado_runt,
+        "created_at": u.created_at.isoformat(),
+        # Fields from the related order
+        "pi_number": o.pi_number if o else None,
+        "model": ' '.join(((u.model or (o.model if o else None)) or "").split()).upper() or None,
+        "model_year": u.model_year or (o.model_year if o else None),
+    }
+
+
 @router.get("/moto-units", status_code=200)
 async def list_all_moto_units(
     page: int = 1,
@@ -2246,140 +2371,30 @@ async def list_all_moto_units(
     page_size = min(page_size, 200)
     skip = (page - 1) * page_size
 
-    # Base join: ShipmentMotoUnit ← ShipmentOrder, only motos (not spare parts)
-    # base_filters NO incluye certificado_generado para que los KPIs globales sean correctos
-    base_filters = [ShipmentOrder.is_spare_part == False]
-
-    if pi_number:
-        base_filters.append(ShipmentOrder.pi_number.ilike(f"%{pi_number}%"))
-    if model:
-        from sqlalchemy import func as _func
-        base_filters.append(
-            _func.coalesce(ShipmentMotoUnit.model, ShipmentOrder.model).ilike(f"%{model}%")
-        )
-    if vin:
-        base_filters.append(ShipmentMotoUnit.vin_number.ilike(f"%{vin}%"))
-    if engine:
-        base_filters.append(ShipmentMotoUnit.engine_number.ilike(f"%{engine}%"))
-
-    # Filtros completos (con certificado si aplica) para la paginación
-    filters = list(base_filters)
-    if certificado_generado is not None:
-        filters.append(ShipmentMotoUnit.certificado_generado == certificado_generado)
-    if observation_id is not None:
-        filters.append(ShipmentMotoUnit.observation_id == observation_id)
-    if empadronamiento_fisico_enviado is not None:
-        filters.append(ShipmentMotoUnit.empadronamiento_fisico_enviado == empadronamiento_fisico_enviado)
-    if facturado is not None:
-        filters.append(ShipmentMotoUnit.facturado == facturado)
-    if cargado_runt is not None:
-        filters.append(ShipmentMotoUnit.cargado_runt == cargado_runt)
-
-    base_stmt = (
-        select(ShipmentMotoUnit)
-        .join(ShipmentOrder, ShipmentMotoUnit.shipment_order_id == ShipmentOrder.id)
-        .where(*filters)
+    base_filters, filters = _build_moto_unit_filters(
+        pi_number, model, vin, engine, certificado_generado,
+        observation_id, empadronamiento_fisico_enviado, facturado, cargado_runt,
     )
 
-    # Total paginado (respeta el filtro de certificado si está activo)
-    count_stmt = select(func.count()).select_from(
-        select(ShipmentMotoUnit)
-        .join(ShipmentOrder, ShipmentMotoUnit.shipment_order_id == ShipmentOrder.id)
-        .where(*filters)
-        .subquery()
+    # NOTE: `total`/`total_global` intentionally issue the SAME query twice —
+    # a known, out-of-scope redundant double-query preserved as-is (see
+    # design doc), not deduplicated by this refactor.
+    total = await _count_moto_units(db, filters)
+    total_global = await _count_moto_units(db, filters)
+    # empadronados/pendientes/facturadas usan base_filters (contexto de
+    # búsqueda sin filtros de estado) + su propia condición fija.
+    total_empadronados = await _count_moto_units(
+        db, [*base_filters, ShipmentMotoUnit.certificado_generado == True]
     )
-    total = (await db.execute(count_stmt)).scalar_one()
-
-    # total_global respeta TODOS los filtros activos
-    total_global = (await db.execute(
-        select(func.count()).select_from(
-            select(ShipmentMotoUnit)
-            .join(ShipmentOrder, ShipmentMotoUnit.shipment_order_id == ShipmentOrder.id)
-            .where(*filters)
-            .subquery()
-        )
-    )).scalar_one()
-
-    # empadronados y pendientes usan base_filters (contexto de búsqueda sin filtros de estado)
-    total_empadronados = (await db.execute(
-        select(func.count()).select_from(
-            select(ShipmentMotoUnit)
-            .join(ShipmentOrder, ShipmentMotoUnit.shipment_order_id == ShipmentOrder.id)
-            .where(*base_filters, ShipmentMotoUnit.certificado_generado == True)
-            .subquery()
-        )
-    )).scalar_one()
-
-    total_pendientes = (await db.execute(
-        select(func.count()).select_from(
-            select(ShipmentMotoUnit)
-            .join(ShipmentOrder, ShipmentMotoUnit.shipment_order_id == ShipmentOrder.id)
-            .where(*base_filters, ShipmentMotoUnit.certificado_generado == False)
-            .subquery()
-        )
-    )).scalar_one()
-
-    total_facturadas = (await db.execute(
-        select(func.count()).select_from(
-            select(ShipmentMotoUnit)
-            .join(ShipmentOrder, ShipmentMotoUnit.shipment_order_id == ShipmentOrder.id)
-            .where(*base_filters, ShipmentMotoUnit.facturado == True)
-            .subquery()
-        )
-    )).scalar_one()
-
-    # Paginated items with the related order eagerly loaded
-    stmt = (
-        base_stmt
-        .options(
-            selectinload(ShipmentMotoUnit.shipment_order),
-            selectinload(ShipmentMotoUnit.location),
-            selectinload(ShipmentMotoUnit.observation),
-        )
-        .order_by(ShipmentMotoUnit.created_at.desc())
-        .offset(skip)
-        .limit(page_size)
+    total_pendientes = await _count_moto_units(
+        db, [*base_filters, ShipmentMotoUnit.certificado_generado == False]
     )
-    units = (await db.execute(stmt)).scalars().all()
+    total_facturadas = await _count_moto_units(
+        db, [*base_filters, ShipmentMotoUnit.facturado == True]
+    )
 
-    items = []
-    for u in units:
-        o = u.shipment_order
-        items.append({
-            "id": str(u.id),
-            "shipment_order_id": str(u.shipment_order_id),
-            "item_no": u.item_no,
-            "vin_number": u.vin_number,
-            "engine_number": u.engine_number,
-            "color": u.color,
-            "color_runt": u.color_runt,
-            "container_no": u.container_no,
-            "seal_no": u.seal_no,
-            "source_pi": u.source_pi,
-            "no_acep": u.no_acep,
-            "f_acep": str(u.f_acep) if u.f_acep else None,
-            "no_lev": u.no_lev,
-            "f_lev": str(u.f_lev) if u.f_lev else None,
-            "certificado_generado": u.certificado_generado,
-            "certificado_fecha": u.certificado_fecha.isoformat() if u.certificado_fecha else None,
-            "empadronamiento_fisico_enviado": u.empadronamiento_fisico_enviado,
-            "empadronamiento_fisico_fecha": u.empadronamiento_fisico_fecha.isoformat() if u.empadronamiento_fisico_fecha else None,
-            "empadronamiento_fisico_distribuidor_id": str(u.empadronamiento_fisico_distribuidor_id) if u.empadronamiento_fisico_distribuidor_id else None,
-            "empadronamiento_fisico_distribuidor_nombre": u.empadronamiento_fisico_distribuidor_nombre,
-            "dim_pdf_object_name": u.dim_pdf_object_name,
-            "location_id": str(u.location_id) if u.location_id else None,
-            "location_name": u.location.name if u.location else None,
-            "observation_id": str(u.observation_id) if u.observation_id else None,
-            "observation_name": u.observation.name if u.observation else None,
-            "separada_nacionalizacion": u.separada_nacionalizacion,
-            "facturado": u.facturado,
-            "cargado_runt": u.cargado_runt,
-            "created_at": u.created_at.isoformat(),
-            # Fields from the related order
-            "pi_number": o.pi_number if o else None,
-            "model": ' '.join(((u.model or (o.model if o else None)) or "").split()).upper() or None,
-            "model_year": u.model_year or (o.model_year if o else None),
-        })
+    units = await _fetch_moto_units_page(db, filters, skip, page_size)
+    items = [_serialize_moto_unit(u) for u in units]
 
     return {
         "items": items,

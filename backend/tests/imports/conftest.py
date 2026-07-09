@@ -187,6 +187,95 @@ def make_backorder_reconciliation(
     )
 
 
+def make_shipment_order(
+    pi_number: str = "E0000573",
+    model: Optional[str] = None,
+    model_year: Optional[int] = None,
+    is_spare_part: bool = False,
+) -> "ShipmentOrder":
+    from app.models.imports import ShipmentOrder
+    return ShipmentOrder(
+        id=uuid.uuid4(),
+        pi_number=pi_number,
+        model=model,
+        model_year=model_year,
+        is_spare_part=is_spare_part,
+    )
+
+
+def make_moto_location(name: str = "BODEGA CENTRAL") -> "MotoLocation":
+    from app.models.imports import MotoLocation
+    return MotoLocation(id=uuid.uuid4(), name=name)
+
+
+def make_moto_observation(name: str = "PENDIENTE REVISION") -> "MotoObservation":
+    from app.models.imports import MotoObservation
+    return MotoObservation(id=uuid.uuid4(), name=name)
+
+
+def make_moto_unit(
+    shipment_order: Optional["ShipmentOrder"] = None,
+    location: Optional["MotoLocation"] = None,
+    observation: Optional["MotoObservation"] = None,
+    vin_number: str = "VIN0001",
+    engine_number: str = "ENG0001",
+    model: Optional[str] = None,
+    model_year: Optional[int] = None,
+    created_at: Optional[datetime] = None,
+    **kwargs,
+) -> "ShipmentMotoUnit":
+    """
+    Real `ShipmentMotoUnit` ORM instance, unattached to any DB session.
+    `shipment_order`/`location`/`observation` relationships are set directly
+    (safe: `FakeAsyncSession` never triggers lazy-load, it hands back queued
+    rows verbatim) so `_serialize_moto_unit`-style code can read
+    `u.shipment_order`/`u.location`/`u.observation` without a real DB.
+    Boolean columns default to `False` here (mirrors the DB column defaults,
+    which do NOT apply to a plain unflushed Python instance).
+    """
+    from app.models.imports import ShipmentMotoUnit
+    order = shipment_order if shipment_order is not None else make_shipment_order()
+    defaults = dict(
+        item_no=1,
+        color=None,
+        color_runt=None,
+        container_no=None,
+        seal_no=None,
+        source_pi=None,
+        no_acep=None,
+        f_acep=None,
+        no_lev=None,
+        f_lev=None,
+        certificado_generado=False,
+        certificado_fecha=None,
+        empadronamiento_fisico_enviado=False,
+        empadronamiento_fisico_fecha=None,
+        empadronamiento_fisico_distribuidor_id=None,
+        empadronamiento_fisico_distribuidor_nombre=None,
+        dim_pdf_object_name=None,
+        separada_nacionalizacion=False,
+        facturado=False,
+        cargado_runt=False,
+    )
+    defaults.update(kwargs)
+    unit = ShipmentMotoUnit(
+        id=uuid.uuid4(),
+        shipment_order_id=order.id,
+        vin_number=vin_number,
+        engine_number=engine_number,
+        model=model,
+        model_year=model_year,
+        location_id=(location.id if location else None),
+        observation_id=(observation.id if observation else None),
+        created_at=created_at or datetime.utcnow(),
+        **defaults,
+    )
+    unit.shipment_order = order
+    unit.location = location
+    unit.observation = observation
+    return unit
+
+
 def make_actor(user_id: Optional[str] = None) -> "CurrentUser":
     from app.api.deps import CurrentUser
     return CurrentUser(
