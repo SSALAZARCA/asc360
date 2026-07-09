@@ -700,20 +700,8 @@ async def delete_attachment(
 # Listado de spare part lots (con conteos calculados)
 # ---------------------------------------------------------------------------
 
-@router.get("/spare-part-lots", response_model=list[SparePartLotRead])
-async def list_spare_part_lots(
-    shipment_order_id: Optional[uuid.UUID] = None,
-    detail_loaded: Optional[bool] = None,
-    has_bl: Optional[bool] = None,
-    db: AsyncSession = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user),
-):
-    _require_imports_editor(current_user)
-
-    stmt = (
-        select(SparePartLot)
-        .options(selectinload(SparePartLot.items))
-    )
+def _apply_lot_filters(stmt, shipment_order_id, detail_loaded, has_bl):
+    """WHERE/join builder for the spare-part-lots listing statement."""
     if shipment_order_id:
         stmt = stmt.where(SparePartLot.shipment_order_id == shipment_order_id)
     if detail_loaded is not None:
@@ -734,75 +722,119 @@ async def list_spare_part_lots(
                 (ShipmentOrder.bl_container == "PENDING") |
                 (ShipmentOrder.bl_container == "TBD")
             )
+    return stmt
+
+
+async def _build_rotation_map(db: AsyncSession, lots) -> dict[str, str]:
+    """Batch-query rotation_class for every part_number across all lots."""
+    from app.models.parts_manual import PartsReference
+    all_part_numbers = list({i.part_number for lot in lots for i in lot.items})
+    if not all_part_numbers:
+        return {}
+    refs = (await db.execute(
+        select(PartsReference.factory_part_number, PartsReference.rotation_class)
+        .where(PartsReference.factory_part_number.in_(all_part_numbers))
+    )).all()
+    return {r.factory_part_number: r.rotation_class for r in refs if r.rotation_class}
+
+
+def _compute_lot_fob(items) -> tuple[Optional[float], bool]:
+    """Sums FOB value across non-cancelled items; flags estimate when only fob_pi is available."""
+    fob_total = 0.0
+    has_estimate = False
+    for i in items:
+        if i.status == 'CANCELLED':
+            continue
+        price = i.unit_price if i.unit_price is not None else i.fob_pi
+        if price is not None:
+            fob_total += float(price) * (i.qty_ordered or 0)
+            if i.unit_price is None and i.fob_pi is not None:
+                has_estimate = True
+    if fob_total > 0:
+        return round(fob_total, 2), has_estimate
+    return None, False
+
+
+def _compute_lot_pl_value(lot) -> Optional[float]:
+    """Sums packing-list value for received, non-cancelled items with a confirmed unit_price."""
+    if not lot.packing_list_received:
+        return None
+    pl_total = sum(
+        float(i.unit_price) * (i.qty_received or 0)
+        for i in lot.items if i.unit_price is not None and i.status != 'CANCELLED'
+    )
+    if pl_total > 0:
+        return round(pl_total, 2)
+    return None
+
+
+def _compute_rotation_pct(items, rotation_map: dict[str, str]) -> dict:
+    """Buckets items by rotation_class percentage, grouping unmapped part_numbers as sin_clasificar."""
+    rc_counts: dict[str, int] = {}
+    sin_clasificar = 0
+    for i in items:
+        rc = rotation_map.get(i.part_number)
+        if rc:
+            rc_counts[rc] = rc_counts.get(rc, 0) + 1
+        else:
+            sin_clasificar += 1
+    total_classified = sum(rc_counts.values())
+    total_items = total_classified + sin_clasificar
+    if not total_items:
+        return {}
+    rotation_pct = {rc: round(cnt / total_items * 100, 1) for rc, cnt in rc_counts.items()}
+    if sin_clasificar:
+        rotation_pct['sin_clasificar'] = round(sin_clasificar / total_items * 100, 1)
+    return rotation_pct
+
+
+def _build_lot_summary(lot: SparePartLot, rotation_map: dict[str, str]) -> SparePartLotRead:
+    """Pure per-lot summary builder: populates a SparePartLotRead from an ORM lot + its items."""
+    read = SparePartLotRead.model_validate(lot)
+    read.items_count = len({i.part_number for i in lot.items})
+    if not lot.items:
+        return read
+
+    total_ordered = sum(i.qty_ordered for i in lot.items)
+    total_received = sum(i.qty_received for i in lot.items)
+    read.total_qty_ordered = total_ordered
+    read.pct_received = round((total_received / total_ordered * 100) if total_ordered > 0 else 0, 1)
+    read.models = sorted({i.model_applicable for i in lot.items if i.model_applicable})
+
+    fob_value, fob_is_estimate = _compute_lot_fob(lot.items)
+    if fob_value is not None:
+        read.fob_value = fob_value
+        read.fob_value_is_estimate = fob_is_estimate
+
+    pl_value = _compute_lot_pl_value(lot)
+    if pl_value is not None:
+        read.pl_value = pl_value
+
+    read.rotation_pct = _compute_rotation_pct(lot.items, rotation_map)
+    return read
+
+
+@router.get("/spare-part-lots", response_model=list[SparePartLotRead])
+async def list_spare_part_lots(
+    shipment_order_id: Optional[uuid.UUID] = None,
+    detail_loaded: Optional[bool] = None,
+    has_bl: Optional[bool] = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    _require_imports_editor(current_user)
+
+    stmt = (
+        select(SparePartLot)
+        .options(selectinload(SparePartLot.items))
+    )
+    stmt = _apply_lot_filters(stmt, shipment_order_id, detail_loaded, has_bl)
     stmt = stmt.order_by(SparePartLot.created_at.desc())
 
     lots = (await db.execute(stmt)).scalars().all()
+    rotation_map = await _build_rotation_map(db, lots)
 
-    # Batch query rotation_class para todos los part_numbers de todos los lotes
-    from app.models.parts_manual import PartsReference
-    all_part_numbers = list({i.part_number for lot in lots for i in lot.items})
-    rotation_map: dict[str, str] = {}
-    if all_part_numbers:
-        refs = (await db.execute(
-            select(PartsReference.factory_part_number, PartsReference.rotation_class)
-            .where(PartsReference.factory_part_number.in_(all_part_numbers))
-        )).all()
-        rotation_map = {r.factory_part_number: r.rotation_class for r in refs if r.rotation_class}
-
-    result = []
-    for lot in lots:
-        read = SparePartLotRead.model_validate(lot)
-        read.items_count = len({i.part_number for i in lot.items})
-        if lot.items:
-            total_ordered = sum(i.qty_ordered for i in lot.items)
-            total_received = sum(i.qty_received for i in lot.items)
-            read.total_qty_ordered = total_ordered
-            read.pct_received = round((total_received / total_ordered * 100) if total_ordered > 0 else 0, 1)
-
-            read.models = sorted({i.model_applicable for i in lot.items if i.model_applicable})
-
-            fob_total = 0.0
-            has_estimate = False
-            for i in lot.items:
-                if i.status == 'CANCELLED':
-                    continue
-                price = i.unit_price if i.unit_price is not None else i.fob_pi
-                if price is not None:
-                    fob_total += float(price) * (i.qty_ordered or 0)
-                    if i.unit_price is None and i.fob_pi is not None:
-                        has_estimate = True
-            if fob_total > 0:
-                read.fob_value = round(fob_total, 2)
-                read.fob_value_is_estimate = has_estimate
-
-            if lot.packing_list_received:
-                pl_total = sum(
-                    float(i.unit_price) * (i.qty_received or 0)
-                    for i in lot.items if i.unit_price is not None and i.status != 'CANCELLED'
-                )
-                if pl_total > 0:
-                    read.pl_value = round(pl_total, 2)
-
-            rc_counts: dict[str, int] = {}
-            sin_clasificar = 0
-            for i in lot.items:
-                rc = rotation_map.get(i.part_number)
-                if rc:
-                    rc_counts[rc] = rc_counts.get(rc, 0) + 1
-                else:
-                    sin_clasificar += 1
-            total_classified = sum(rc_counts.values())
-            total_items = total_classified + sin_clasificar
-            read.rotation_pct = {
-                rc: round(cnt / total_items * 100, 1)
-                for rc, cnt in rc_counts.items()
-            } if total_items else {}
-            if sin_clasificar:
-                read.rotation_pct['sin_clasificar'] = round(sin_clasificar / total_items * 100, 1)
-
-        result.append(read)
-
-    return result
+    return [_build_lot_summary(lot, rotation_map) for lot in lots]
 
 
 # ---------------------------------------------------------------------------

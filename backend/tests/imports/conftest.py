@@ -102,12 +102,25 @@ def build_malformed_xlsx() -> bytes:
 # are plain SQLAlchemy declarative instances, safe to construct without a DB)
 # ---------------------------------------------------------------------------
 
-def make_lot(lot_identifier: str = "E0000573-SP") -> "SparePartLot":
+def make_lot(
+    lot_identifier: str = "E0000573-SP",
+    detail_loaded: bool = False,
+    packing_list_received: bool = False,
+    created_at: Optional[datetime] = None,
+    total_declared_value: Optional[float] = None,
+    currency: Optional[str] = "USD",
+    shipment_order_id=None,
+) -> "SparePartLot":
     from app.models.imports import SparePartLot
     lot = SparePartLot(
         id=uuid.uuid4(),
-        shipment_order_id=uuid.uuid4(),
+        shipment_order_id=shipment_order_id or uuid.uuid4(),
         lot_identifier=lot_identifier,
+        detail_loaded=detail_loaded,
+        packing_list_received=packing_list_received,
+        created_at=created_at or datetime.utcnow(),
+        total_declared_value=total_declared_value,
+        currency=currency,
     )
     return lot
 
@@ -117,6 +130,10 @@ def make_spare_part_item(
     part_number: str,
     qty_ordered: int,
     model_applicable: Optional[str] = None,
+    qty_received: int = 0,
+    status: str = "PENDING",
+    unit_price: Optional[float] = None,
+    fob_pi: Optional[float] = None,
 ) -> "SparePartItem":
     from app.models.imports import SparePartItem
     item = SparePartItem(
@@ -125,6 +142,10 @@ def make_spare_part_item(
         part_number=part_number,
         qty_ordered=qty_ordered,
         model_applicable=model_applicable,
+        qty_received=qty_received,
+        status=status,
+        unit_price=unit_price,
+        fob_pi=fob_pi,
     )
     return item
 
@@ -269,6 +290,10 @@ class FakeAsyncSession:
         # functions that fetch rows by primary key instead of `select(...)`
         # (e.g. `confirm_backorder_reconciliation`).
         self._get_objects: list = list(get_objects or [])
+        # Every `stmt` passed to `execute()`, in call order — lets tests
+        # inspect the compiled SQL/params of statements built by filter
+        # helpers (e.g. `_apply_lot_filters`) without a live DB.
+        self.executed_statements: list = []
 
     async def execute(self, stmt):
         if not self._execute_queue:
@@ -276,6 +301,7 @@ class FakeAsyncSession:
                 "FakeAsyncSession.execute() called more times than expected — "
                 "the query order/count changed. Update the test's execute_queue."
             )
+        self.executed_statements.append(stmt)
         return _ExecuteResult(self._execute_queue.pop(0))
 
     def add(self, obj):
