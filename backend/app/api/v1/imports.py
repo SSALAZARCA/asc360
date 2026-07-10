@@ -2412,6 +2412,46 @@ async def list_all_moto_units(
 # Exportar motocicletas a Excel (superadmin)
 # ---------------------------------------------------------------------------
 
+_MOTO_UNIT_EXPORT_HEADERS = [
+    "PI NUMBER", "MODELO", "AÑO MODELO", "VIN", "No. MOTOR",
+    "COLOR", "COLOR RUNT", "No. LEVANTE",
+    "UBICACIÓN", "SEP. NACIONALIZACIÓN", "OBSERVACIÓN",
+    "EMPADRONADO", "FECHA EMPADRONAMIENTO",
+    "EMPADR. FÍSICO ENVIADO", "FECHA EMPADR. FÍSICO", "DISTRIBUIDOR",
+    "FACTURADO", "CARGADO RUNT",
+    "DIM CARGADO",
+]
+
+
+def _build_moto_unit_export_row(u) -> list:
+    """PURE: flattens a `ShipmentMotoUnit` (with `.shipment_order`/
+    `.location`/`.observation` eagerly loaded) into one Excel export row,
+    matching `_MOTO_UNIT_EXPORT_HEADERS` order — unchanged from the original
+    inline row-building loop."""
+    o = u.shipment_order
+    return [
+        o.pi_number if o else u.source_pi,
+        ' '.join(((u.model or (o.model if o else None)) or "").split()).upper() or None,
+        u.model_year or (o.model_year if o else None),
+        u.vin_number,
+        u.engine_number,
+        u.color,
+        u.color_runt,
+        u.no_lev,
+        u.location.name if u.location else None,
+        "Sí" if u.separada_nacionalizacion else "No",
+        u.observation.name if u.observation else None,
+        "Sí" if u.certificado_generado else "No",
+        u.certificado_fecha.strftime("%Y-%m-%d") if u.certificado_fecha else None,
+        "Sí" if u.empadronamiento_fisico_enviado else "No",
+        u.empadronamiento_fisico_fecha.strftime("%Y-%m-%d") if u.empadronamiento_fisico_fecha else None,
+        u.empadronamiento_fisico_distribuidor_nombre,
+        "Sí" if u.facturado else "No",
+        "Sí" if u.cargado_runt else "No",
+        "Sí" if u.dim_pdf_object_name else "No",
+    ]
+
+
 @router.get("/moto-units/export")
 async def export_moto_units(
     pi_number: Optional[str] = None,
@@ -2428,30 +2468,10 @@ async def export_moto_units(
 ):
     _require_superadmin(current_user)
 
-    base_filters = [ShipmentOrder.is_spare_part == False]
-    if pi_number:
-        base_filters.append(ShipmentOrder.pi_number.ilike(f"%{pi_number}%"))
-    if model:
-        from sqlalchemy import func as _func
-        base_filters.append(
-            _func.coalesce(ShipmentMotoUnit.model, ShipmentOrder.model).ilike(f"%{model}%")
-        )
-    if vin:
-        base_filters.append(ShipmentMotoUnit.vin_number.ilike(f"%{vin}%"))
-    if engine:
-        base_filters.append(ShipmentMotoUnit.engine_number.ilike(f"%{engine}%"))
-
-    filters = list(base_filters)
-    if certificado_generado is not None:
-        filters.append(ShipmentMotoUnit.certificado_generado == certificado_generado)
-    if observation_id is not None:
-        filters.append(ShipmentMotoUnit.observation_id == observation_id)
-    if empadronamiento_fisico_enviado is not None:
-        filters.append(ShipmentMotoUnit.empadronamiento_fisico_enviado == empadronamiento_fisico_enviado)
-    if facturado is not None:
-        filters.append(ShipmentMotoUnit.facturado == facturado)
-    if cargado_runt is not None:
-        filters.append(ShipmentMotoUnit.cargado_runt == cargado_runt)
+    _base_filters, filters = _build_moto_unit_filters(
+        pi_number, model, vin, engine, certificado_generado,
+        observation_id, empadronamiento_fisico_enviado, facturado, cargado_runt,
+    )
 
     stmt = (
         select(ShipmentMotoUnit)
@@ -2466,42 +2486,10 @@ async def export_moto_units(
     )
     units = (await db.execute(stmt)).scalars().all()
 
-    headers = [
-        "PI NUMBER", "MODELO", "AÑO MODELO", "VIN", "No. MOTOR",
-        "COLOR", "COLOR RUNT", "No. LEVANTE",
-        "UBICACIÓN", "SEP. NACIONALIZACIÓN", "OBSERVACIÓN",
-        "EMPADRONADO", "FECHA EMPADRONAMIENTO",
-        "EMPADR. FÍSICO ENVIADO", "FECHA EMPADR. FÍSICO", "DISTRIBUIDOR",
-        "FACTURADO", "CARGADO RUNT",
-        "DIM CARGADO",
-    ]
-    rows = []
-    for u in units:
-        o = u.shipment_order
-        rows.append([
-            o.pi_number if o else u.source_pi,
-            ' '.join(((u.model or (o.model if o else None)) or "").split()).upper() or None,
-            u.model_year or (o.model_year if o else None),
-            u.vin_number,
-            u.engine_number,
-            u.color,
-            u.color_runt,
-            u.no_lev,
-            u.location.name if u.location else None,
-            "Sí" if u.separada_nacionalizacion else "No",
-            u.observation.name if u.observation else None,
-            "Sí" if u.certificado_generado else "No",
-            u.certificado_fecha.strftime("%Y-%m-%d") if u.certificado_fecha else None,
-            "Sí" if u.empadronamiento_fisico_enviado else "No",
-            u.empadronamiento_fisico_fecha.strftime("%Y-%m-%d") if u.empadronamiento_fisico_fecha else None,
-            u.empadronamiento_fisico_distribuidor_nombre,
-            "Sí" if u.facturado else "No",
-            "Sí" if u.cargado_runt else "No",
-            "Sí" if u.dim_pdf_object_name else "No",
-        ])
+    rows = [_build_moto_unit_export_row(u) for u in units]
 
     filename = f"motocicletas_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.xlsx"
-    return _excel_response("Motocicletas", headers, rows, filename)
+    return _excel_response("Motocicletas", _MOTO_UNIT_EXPORT_HEADERS, rows, filename)
 
 
 # ---------------------------------------------------------------------------
