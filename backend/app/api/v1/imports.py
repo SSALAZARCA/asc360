@@ -1072,6 +1072,47 @@ async def update_spare_part_item(
     return SparePartItemRead.model_validate(item)
 
 
+async def _apply_qty_in_packing(db: AsyncSession, rr: ReconciliationResult, qty_in_packing: int) -> None:
+    rr.qty_in_packing = qty_in_packing
+    rr.result = _compute_reconciliation_result(rr.qty_ordered, rr.qty_in_packing)
+    if rr.spare_part_item_id:
+        item = await db.get(SparePartItem, rr.spare_part_item_id)
+        if item:
+            item.qty_received = rr.qty_in_packing
+            item.qty_pending = max(0, item.qty_ordered - item.qty_received)
+            item.updated_at = datetime.utcnow()
+
+
+async def _apply_qty_physical(db: AsyncSession, rr: ReconciliationResult, qty_physical: int) -> None:
+    lot = await db.get(SparePartLot, rr.lot_id)
+    if not lot or not lot.packing_list_received:
+        raise HTTPException(
+            status_code=400,
+            detail={"detail": "El inventario físico solo puede registrarse después de confirmar el cruce", "code": "RECONCILIATION_NOT_CONFIRMED"},
+        )
+    rr.qty_physical = qty_physical
+    await imports_service.apply_physical_inspection(db, rr, qty_physical)
+
+
+async def _apply_item_fields(db: AsyncSession, rr: ReconciliationResult, update_data: dict) -> None:
+    # Campos de descripción y modelo: en SparePartItem para no-EXTRAs, en RR para EXTRAs
+    item_fields = {"part_number", "description_es", "model_applicable"}
+    if not (item_fields & set(update_data.keys())):
+        return
+    if rr.spare_part_item_id:
+        item = await db.get(SparePartItem, rr.spare_part_item_id)
+        if item:
+            for field in item_fields & set(update_data.keys()):
+                setattr(item, field, update_data[field])
+            item.updated_at = datetime.utcnow()
+    else:
+        # EXTRA puro: guardar directamente en ReconciliationResult
+        for field in {"description_es", "model_applicable"} & set(update_data.keys()):
+            setattr(rr, field, update_data[field])
+    if "part_number" in update_data:
+        rr.part_number = update_data["part_number"]
+
+
 @router.patch("/reconciliation-results/{result_id}")
 async def update_reconciliation_result(
     result_id: uuid.UUID,
@@ -1088,40 +1129,12 @@ async def update_reconciliation_result(
     update_data = payload.model_dump(exclude_none=True)
 
     if "qty_in_packing" in update_data:
-        rr.qty_in_packing = update_data["qty_in_packing"]
-        rr.result = _compute_reconciliation_result(rr.qty_ordered, rr.qty_in_packing)
-        if rr.spare_part_item_id:
-            item = await db.get(SparePartItem, rr.spare_part_item_id)
-            if item:
-                item.qty_received = rr.qty_in_packing
-                item.qty_pending = max(0, item.qty_ordered - item.qty_received)
-                item.updated_at = datetime.utcnow()
+        await _apply_qty_in_packing(db, rr, update_data["qty_in_packing"])
 
     if "qty_physical" in update_data:
-        lot = await db.get(SparePartLot, rr.lot_id)
-        if not lot or not lot.packing_list_received:
-            raise HTTPException(
-                status_code=400,
-                detail={"detail": "El inventario físico solo puede registrarse después de confirmar el cruce", "code": "RECONCILIATION_NOT_CONFIRMED"},
-            )
-        rr.qty_physical = update_data["qty_physical"]
-        await imports_service.apply_physical_inspection(db, rr, update_data["qty_physical"])
+        await _apply_qty_physical(db, rr, update_data["qty_physical"])
 
-    # Campos de descripción y modelo: en SparePartItem para no-EXTRAs, en RR para EXTRAs
-    item_fields = {"part_number", "description_es", "model_applicable"}
-    if item_fields & set(update_data.keys()):
-        if rr.spare_part_item_id:
-            item = await db.get(SparePartItem, rr.spare_part_item_id)
-            if item:
-                for field in item_fields & set(update_data.keys()):
-                    setattr(item, field, update_data[field])
-                item.updated_at = datetime.utcnow()
-        else:
-            # EXTRA puro: guardar directamente en ReconciliationResult
-            for field in {"description_es", "model_applicable"} & set(update_data.keys()):
-                setattr(rr, field, update_data[field])
-        if "part_number" in update_data:
-            rr.part_number = update_data["part_number"]
+    await _apply_item_fields(db, rr, update_data)
 
     await db.commit()
     await db.refresh(rr)
