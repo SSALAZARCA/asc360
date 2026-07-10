@@ -2,7 +2,7 @@ import uuid
 import io
 import logging
 import mimetypes
-from datetime import datetime
+from datetime import datetime, date
 from typing import Optional
 import openpyxl
 
@@ -2844,6 +2844,42 @@ async def list_distribuidores_venta(
 # Carga de DIM PDF → actualiza datos de aduana en moto units
 # ---------------------------------------------------------------------------
 
+def _parse_dim_date(s: str) -> Optional[date]:
+    """Parses a `YYYY-MM-DD` string (as returned by `dim_parser_service`)
+    into a `date`. Silently returns `None` on malformed/empty input — this
+    is intentional (pre-existing behavior), just logged now for visibility."""
+    try:
+        return date.fromisoformat(s)
+    except Exception:
+        logger.warning(f"No se pudo parsear fecha DIM: {s!r}", exc_info=True)
+        return None
+
+
+async def _find_moto_unit_by_vin(db: AsyncSession, vin_raw: str) -> Optional[ShipmentMotoUnit]:
+    """Exact match first, then a strip/upper-normalised fallback."""
+    unit = (await db.execute(
+        select(ShipmentMotoUnit).where(ShipmentMotoUnit.vin_number == vin_raw)
+    )).scalar_one_or_none()
+
+    if unit is None:
+        vin_norm = vin_raw.strip().upper()
+        unit = (await db.execute(
+            select(ShipmentMotoUnit).where(ShipmentMotoUnit.vin_number == vin_norm)
+        )).scalar_one_or_none()
+
+    return unit
+
+
+def _apply_dim_match_to_unit(unit: ShipmentMotoUnit, v: dict, dim_object_name: str) -> None:
+    unit.no_acep = v.get("no_acep")
+    unit.f_acep = _parse_dim_date(v.get("f_acep", ""))
+    unit.no_lev = v.get("no_lev")
+    unit.f_lev = _parse_dim_date(v.get("f_lev", ""))
+    unit.certificado_generado = True
+    unit.certificado_fecha = datetime.utcnow()
+    unit.dim_pdf_object_name = dim_object_name
+
+
 @router.post("/moto-units/dim", status_code=200)
 async def upload_dim_pdf(
     file: UploadFile = File(...),
@@ -2881,40 +2917,14 @@ async def upload_dim_pdf(
 
     for v in vehicles:
         vin_raw = v["vin"]
-
-        # Exact match first
-        unit = (await db.execute(
-            select(ShipmentMotoUnit).where(ShipmentMotoUnit.vin_number == vin_raw)
-        )).scalar_one_or_none()
-
-        # Fallback: strip/upper normalisation
-        if unit is None:
-            vin_norm = vin_raw.strip().upper()
-            unit = (await db.execute(
-                select(ShipmentMotoUnit).where(ShipmentMotoUnit.vin_number == vin_norm)
-            )).scalar_one_or_none()
+        unit = await _find_moto_unit_by_vin(db, vin_raw)
 
         if unit is None:
             unmatched += 1
             unmatched_vins.append(vin_raw)
             continue
 
-        # Parse dates from YYYY-MM-DD strings returned by dim_parser_service
-        from datetime import date as _date
-
-        def _parse_date(s: str):
-            try:
-                return _date.fromisoformat(s)
-            except Exception:
-                return None
-
-        unit.no_acep = v.get("no_acep")
-        unit.f_acep = _parse_date(v.get("f_acep", ""))
-        unit.no_lev = v.get("no_lev")
-        unit.f_lev = _parse_date(v.get("f_lev", ""))
-        unit.certificado_generado = True
-        unit.certificado_fecha = datetime.utcnow()
-        unit.dim_pdf_object_name = dim_object_name
+        _apply_dim_match_to_unit(unit, v, dim_object_name)
         matched += 1
 
     await db.commit()
