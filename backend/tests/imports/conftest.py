@@ -200,6 +200,7 @@ def make_backorder_reconciliation(
     file_name: str = "remainder.xlsx",
     content_hash: str = "hash",
     status: str = "PENDING",
+    is_invoice: bool = False,
 ) -> "BackorderReconciliation":
     from app.models.imports import BackorderReconciliation
     return BackorderReconciliation(
@@ -209,7 +210,7 @@ def make_backorder_reconciliation(
         content_hash=content_hash,
         minio_object_name=f"minio/{file_name}",
         status=status,
-        is_invoice=False,
+        is_invoice=is_invoice,
     )
 
 

@@ -2491,6 +2491,36 @@ async def reconcile_backorder_packing_list(
     }
 
 
+def _blend_unit_price(
+    prior_price: Optional[float],
+    prior_qty_received: int,
+    remainder_price: Optional[float],
+    qty_applied: int,
+) -> Optional[float]:
+    """
+    Calcula el precio unitario resultante de aplicar una línea de remainder
+    con precio (`remainder_price`) sobre un `SparePartItem` que ya tenía
+    `prior_qty_received` unidades a `prior_price`. Pura, sin acceso a DB.
+
+    - `remainder_price is None` -> `None` (nada que aplicar; el caller no
+      debe llamar a esto para líneas sin precio de todos modos).
+    - Sin precio previo o sin cantidad previa recibida (`prior_qty_received
+      <= 0`) -> se toma `remainder_price` directo, sin ponderar.
+    - En otro caso -> promedio ponderado por cantidad:
+      `(prior_price*prior_qty_received + remainder_price*qty_applied) /
+      (prior_qty_received+qty_applied)`.
+
+    Redondeado a 2 decimales (matches `Numeric(12,2)` de `unit_price`).
+    """
+    if remainder_price is None:
+        return None
+    if prior_price is None or prior_qty_received <= 0:
+        return round(remainder_price, 2)
+    total_qty = prior_qty_received + qty_applied
+    weighted = (prior_price * prior_qty_received) + (remainder_price * qty_applied)
+    return round(weighted / total_qty, 2)
+
+
 def _apply_backorder_confirm_line(item: SparePartItem, bo: "Backorder", applied: int, batch_id, now: datetime) -> bool:
     """
     Aplica una línea confirmada: SUMA `applied` a `item.qty_received` (nunca
@@ -2540,10 +2570,47 @@ async def _claim_pending_batch(db: AsyncSession, batch: BackorderReconciliation,
     return True
 
 
+def _apply_line_price_blend(batch: BackorderReconciliation, item: SparePartItem, line: BackorderReconciliationResult, applied: int) -> bool:
+    """Para batches invoice, blendea `line.unit_price` hacia `item.unit_price`
+    (`_blend_unit_price`), usando el `qty_received` PREVIO a que
+    `_apply_backorder_confirm_line` lo mute — el orden acá es load-bearing,
+    por eso este helper se llama ANTES de esa mutación. No-op (retorna
+    False) para batches no-invoice. Retorna True si el precio del item
+    quedó tocado (el caller debe agregarlo a `touched_part_numbers`)."""
+    if not batch.is_invoice:
+        return False
+    prior_price = float(item.unit_price) if item.unit_price is not None else None
+    prior_qty_received = item.qty_received or 0
+    blended = _blend_unit_price(prior_price, prior_qty_received, float(line.unit_price), applied)
+    if blended is None:
+        return False
+    item.unit_price = blended
+    return True
+
+
+async def _recalculate_touched_parts(db: AsyncSession, batch: BackorderReconciliation, touched_part_numbers: set[str]) -> None:
+    """Post-loop: flush + `recalculate_part_cost` una sola vez por
+    part_number distinto tocado por el blend, igual que
+    `reconcile_lot_packing_list`. No-op si no hubo blends."""
+    if not touched_part_numbers:
+        return
+    await db.flush()
+    lot = await db.get(SparePartLot, batch.lot_id)
+    from app.services.pricing_service import recalculate_part_cost
+    for pn in touched_part_numbers:
+        await recalculate_part_cost(db, pn, lot_identifier=lot.lot_identifier if lot else None)
+
+
 async def _apply_confirmed_lines(db: AsyncSession, batch: BackorderReconciliation, now: datetime) -> dict:
     """Aplica cada línea del batch ya reclamado (ver `_claim_pending_batch`)
     a `SparePartItem`/`Backorder`. Líneas cuyo item/backorder ya no existe se
-    omiten y quedan logueadas para revisión manual, sin abortar el resto."""
+    omiten y quedan logueadas para revisión manual, sin abortar el resto.
+
+    Si el batch es invoice (`batch.is_invoice`): una línea matcheada con
+    `unit_price IS NULL` se salta por completo (ver `skipped_missing_price`);
+    una línea matcheada CON precio blendea vía `_apply_line_price_blend` y
+    dispara `_recalculate_touched_parts` al final.
+    """
     lines = (await db.execute(
         select(BackorderReconciliationResult).where(
             BackorderReconciliationResult.reconciliation_id == batch.id
@@ -2553,6 +2620,8 @@ async def _apply_confirmed_lines(db: AsyncSession, batch: BackorderReconciliatio
     qty_applied_total = 0
     backorders_resolved = 0
     backorders_updated = 0
+    skipped_missing_price: list[dict] = []
+    touched_part_numbers: set[str] = set()
 
     for line in lines:
         if line.backorder_id is None:
@@ -2560,6 +2629,13 @@ async def _apply_confirmed_lines(db: AsyncSession, batch: BackorderReconciliatio
         applied = line.qty_applied or 0
         if applied <= 0:
             continue  # MISSING (o EXTRA sin excedente): sin cantidad a sumar
+
+        if batch.is_invoice and line.unit_price is None:
+            skipped_missing_price.append({
+                "part_number": line.part_number,
+                "qty_in_packing": line.qty_in_packing,
+            })
+            continue  # invoice sin precio en esta línea: no se aplica nada
 
         item = await db.get(SparePartItem, line.spare_part_item_id)
         bo = await db.get(Backorder, line.backorder_id)
@@ -2571,15 +2647,21 @@ async def _apply_confirmed_lines(db: AsyncSession, batch: BackorderReconciliatio
             )
             continue
 
+        if _apply_line_price_blend(batch, item, line, applied):
+            touched_part_numbers.add(line.part_number)
+
         if _apply_backorder_confirm_line(item, bo, applied, batch.id, now):
             backorders_resolved += 1
         qty_applied_total += applied
         backorders_updated += 1
 
+    await _recalculate_touched_parts(db, batch, touched_part_numbers)
+
     return {
         "qty_applied": qty_applied_total,
         "backorders_resolved": backorders_resolved,
         "backorders_updated": backorders_updated,
+        "skipped_missing_price": skipped_missing_price,
     }
 
 

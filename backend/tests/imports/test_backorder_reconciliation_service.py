@@ -14,8 +14,10 @@ Follows this repo's established test pattern (tests/imports/conftest.py):
 exercise the REAL service functions against a `FakeAsyncSession`, no live
 database, no HTTP server. Excel fixtures are built with real `openpyxl`.
 """
+import asyncio
 import hashlib
 import uuid
+from unittest.mock import AsyncMock, patch
 
 from app.services.imports_service import (
     reconcile_backorder_packing_list,
@@ -23,6 +25,7 @@ from app.services.imports_service import (
     precheck_backorder_upload,
 )
 from app.models.imports import BackorderReconciliation, BackorderReconciliationResult
+from app.schemas.imports import BackorderReconciliationConfirmResult, BackorderSkippedLine
 from tests.imports.conftest import (
     build_packing_list_xlsx,
     build_invoice_xlsx,
@@ -308,10 +311,12 @@ class TestDuplicateDetection:
         assert result["warnings"] == []
 
 
-def _batch_with_line(lot, item, bo, result_code, qty_applied, qty_pending_snapshot):
+def _batch_with_line(lot, item, bo, result_code, qty_applied, qty_pending_snapshot, unit_price=None, is_invoice=False):
     """Builds a PENDING `BackorderReconciliation` header + a single matching
-    `BackorderReconciliationResult` line, for `confirm_backorder_reconciliation` tests."""
-    batch = make_backorder_reconciliation(lot.id)
+    `BackorderReconciliationResult` line, for `confirm_backorder_reconciliation` tests.
+    `unit_price`/`is_invoice` default to the plain non-invoice shape (no price
+    on any line) -- pass both to exercise the price-blending path."""
+    batch = make_backorder_reconciliation(lot.id, is_invoice=is_invoice)
     line = BackorderReconciliationResult(
         id=uuid.uuid4(),
         reconciliation_id=batch.id,
@@ -321,6 +326,7 @@ def _batch_with_line(lot, item, bo, result_code, qty_applied, qty_pending_snapsh
         qty_pending_snapshot=qty_pending_snapshot,
         qty_in_packing=qty_applied,
         qty_applied=qty_applied,
+        unit_price=unit_price,
         result=result_code,
     )
     return batch, line
@@ -451,6 +457,225 @@ class TestConfirmConcurrencyGuard:
         assert result == {"error": "ALREADY_CONFIRMED"}
         assert batch.status == "PENDING"  # no lo pisamos localmente si perdimos la carrera
         assert db.added == []
+
+
+class TestBackorderReconciliationConfirmResultSchema:
+    """`sdd/backorder-remainder-cost-blending` Phase 3: the confirm response
+    gains a `skipped_missing_price` field, backward-compatible (default []).
+
+    NOTE: plain `def test_...` (not `async def`) — this venv has no
+    pytest-asyncio installed (see module docstring / project convention),
+    but these are pure sync Pydantic construction, so no event loop needed.
+    """
+
+    def test_skipped_missing_price_defaults_to_empty_list(self):
+        result = BackorderReconciliationConfirmResult(
+            confirmed=True,
+            qty_applied=5,
+            backorders_resolved=1,
+            backorders_updated=1,
+            batch_id=uuid.uuid4(),
+        )
+        assert result.skipped_missing_price == []
+
+    def test_skipped_missing_price_serializes_part_number_and_qty(self):
+        result = BackorderReconciliationConfirmResult(
+            confirmed=True,
+            qty_applied=5,
+            backorders_resolved=0,
+            backorders_updated=1,
+            batch_id=uuid.uuid4(),
+            skipped_missing_price=[
+                BackorderSkippedLine(part_number="ABC-001", qty_in_packing=3),
+            ],
+        )
+        assert len(result.skipped_missing_price) == 1
+        assert result.skipped_missing_price[0].part_number == "ABC-001"
+        assert result.skipped_missing_price[0].qty_in_packing == 3
+
+
+class TestNonInvoiceConfirmNeverBlendsOrRecalcs:
+    """`sdd/backorder-remainder-cost-blending` Phase 1.2 (baseline safety
+    net, RED before any production change) + spec scenario 'Non-invoice
+    batch is unaffected' / 'Non-invoice batch never touches price'.
+
+    Plain `def test_...` driving `confirm_backorder_reconciliation` via
+    `asyncio.run(...)` — matches this project's established convention for
+    exercising async service code without pytest-asyncio (see module
+    docstring / `test_write_path_harness_regression.py`).
+    """
+
+    def test_non_invoice_confirm_never_blends_or_recalcs(self):
+        lot = make_lot()
+        item = make_spare_part_item(lot.id, "ABC-001", qty_ordered=10)
+        item.qty_received = 5
+        item.unit_price = 8.00  # pre-existing price; must stay untouched
+        bo = make_backorder(item.id, "ABC-001", lot.lot_identifier, qty_pending=5)
+        batch, line = _batch_with_line(
+            lot, item, bo, "COMPLETE", qty_applied=5, qty_pending_snapshot=5,
+            unit_price=None, is_invoice=False,
+        )
+        db = FakeAsyncSession(execute_queue=[[batch.id], [line]], get_objects=[item, bo])
+
+        with patch("app.services.pricing_service.recalculate_part_cost", new=AsyncMock()) as mock_recalc:
+            result = asyncio.run(confirm_backorder_reconciliation(db, batch, make_actor()))
+
+        mock_recalc.assert_not_awaited()
+        assert item.unit_price == 8.00
+        assert item.qty_received == 10  # qty application is unaffected by this change
+        assert result["skipped_missing_price"] == []
+
+
+class TestPriceBlendingOnConfirm:
+    """`sdd/backorder-remainder-cost-blending` Phase 4: `_apply_confirmed_lines`
+    wiring — skip-and-warn for priceless invoice lines, quantity-weighted
+    blend for priced ones, dedupe recalc per distinct part_number.
+
+    Plain `def test_...` + `asyncio.run(...)` — see class docstring above.
+    """
+
+    def test_invoice_line_no_prior_price_sets_directly_and_recalcs_once(self):
+        lot = make_lot()
+        item = make_spare_part_item(lot.id, "ABC-001", qty_ordered=10)
+        item.qty_received = 0
+        item.unit_price = None
+        bo = make_backorder(item.id, "ABC-001", lot.lot_identifier, qty_pending=5)
+        batch, line = _batch_with_line(
+            lot, item, bo, "COMPLETE", qty_applied=5, qty_pending_snapshot=5,
+            unit_price=12.50, is_invoice=True,
+        )
+        db = FakeAsyncSession(execute_queue=[[batch.id], [line]], get_objects=[item, bo, lot])
+
+        with patch("app.services.pricing_service.recalculate_part_cost", new=AsyncMock()) as mock_recalc:
+            result = asyncio.run(confirm_backorder_reconciliation(db, batch, make_actor()))
+
+        assert float(item.unit_price) == 12.50
+        mock_recalc.assert_awaited_once()
+        assert mock_recalc.await_args.args[1] == "ABC-001"
+        assert result["skipped_missing_price"] == []
+
+    def test_invoice_line_with_prior_price_blends_weighted_average(self):
+        lot = make_lot()
+        item = make_spare_part_item(lot.id, "ABC-001", qty_ordered=15)
+        item.qty_received = 10
+        item.unit_price = 8.00
+        bo = make_backorder(item.id, "ABC-001", lot.lot_identifier, qty_pending=5)
+        batch, line = _batch_with_line(
+            lot, item, bo, "COMPLETE", qty_applied=5, qty_pending_snapshot=5,
+            unit_price=10.00, is_invoice=True,
+        )
+        db = FakeAsyncSession(execute_queue=[[batch.id], [line]], get_objects=[item, bo, lot])
+
+        with patch("app.services.pricing_service.recalculate_part_cost", new=AsyncMock()) as mock_recalc:
+            result = asyncio.run(confirm_backorder_reconciliation(db, batch, make_actor()))
+
+        # (8.00*10 + 10.00*5) / 15 = 8.666... -> 8.67
+        assert float(item.unit_price) == 8.67
+        mock_recalc.assert_awaited_once()
+
+    def test_prior_qty_captured_before_mutation_uses_correct_denominator(self):
+        """Ordering guard: the blend's weight denominator MUST be
+        `qty_received` as it was BEFORE `_apply_backorder_confirm_line`
+        adds `applied` to it. prior_qty=5, applied=5 -> denom must be 10,
+        not 15 (which is what it would be if captured AFTER the mutation)."""
+        lot = make_lot()
+        item = make_spare_part_item(lot.id, "ABC-001", qty_ordered=20)
+        item.qty_received = 5
+        item.unit_price = 4.00
+        bo = make_backorder(item.id, "ABC-001", lot.lot_identifier, qty_pending=5)
+        batch, line = _batch_with_line(
+            lot, item, bo, "COMPLETE", qty_applied=5, qty_pending_snapshot=5,
+            unit_price=6.00, is_invoice=True,
+        )
+        db = FakeAsyncSession(execute_queue=[[batch.id], [line]], get_objects=[item, bo, lot])
+
+        with patch("app.services.pricing_service.recalculate_part_cost", new=AsyncMock()):
+            asyncio.run(confirm_backorder_reconciliation(db, batch, make_actor()))
+
+        # Correct (denom=10): (4*5 + 6*5)/10 = 5.00
+        # Wrong (denom=15, post-mutation qty_received=10+5): (4*5+6*5)/15 = 3.33
+        assert float(item.unit_price) == 5.00
+
+    def test_invoice_line_missing_price_is_skipped_other_priced_line_still_applies(self):
+        lot = make_lot()
+        item_a = make_spare_part_item(lot.id, "ABC-001", qty_ordered=10)
+        item_a.qty_received = 0
+        item_a.unit_price = None
+        bo_a = make_backorder(item_a.id, "ABC-001", lot.lot_identifier, qty_pending=5)
+
+        item_b = make_spare_part_item(lot.id, "XYZ-002", qty_ordered=8)
+        item_b.qty_received = 0
+        item_b.unit_price = None
+        bo_b = make_backorder(item_b.id, "XYZ-002", lot.lot_identifier, qty_pending=4)
+
+        batch = make_backorder_reconciliation(lot.id, is_invoice=True)
+        line_no_price = BackorderReconciliationResult(
+            id=uuid.uuid4(), reconciliation_id=batch.id, backorder_id=bo_a.id,
+            spare_part_item_id=item_a.id, part_number="ABC-001",
+            qty_pending_snapshot=5, qty_in_packing=5, qty_applied=5,
+            unit_price=None, result="COMPLETE",
+        )
+        line_priced = BackorderReconciliationResult(
+            id=uuid.uuid4(), reconciliation_id=batch.id, backorder_id=bo_b.id,
+            spare_part_item_id=item_b.id, part_number="XYZ-002",
+            qty_pending_snapshot=4, qty_in_packing=4, qty_applied=4,
+            unit_price=9.00, result="COMPLETE",
+        )
+        db = FakeAsyncSession(
+            execute_queue=[[batch.id], [line_no_price, line_priced]],
+            get_objects=[item_a, bo_a, item_b, bo_b, lot],
+        )
+
+        with patch("app.services.pricing_service.recalculate_part_cost", new=AsyncMock()) as mock_recalc:
+            result = asyncio.run(confirm_backorder_reconciliation(db, batch, make_actor()))
+
+        # Skipped line: zero side effects.
+        assert item_a.qty_received == 0
+        assert item_a.unit_price is None
+        assert bo_a.qty_pending == 5
+        assert result["skipped_missing_price"] == [
+            {"part_number": "ABC-001", "qty_in_packing": 5},
+        ]
+        # Priced line in the same batch still applies normally.
+        assert item_b.qty_received == 4
+        assert float(item_b.unit_price) == 9.00
+        assert bo_b.qty_pending == 0
+        assert batch.status == "CONFIRMED"
+        mock_recalc.assert_awaited_once()
+
+    def test_two_priced_lines_same_part_recalcs_once_deduped(self):
+        """Two confirmed lines touching the SAME part_number must trigger
+        `recalculate_part_cost` exactly once (dedupe via touched_part_numbers
+        set), not once per line."""
+        lot = make_lot()
+        item = make_spare_part_item(lot.id, "ABC-001", qty_ordered=20)
+        item.qty_received = 0
+        item.unit_price = None
+        bo = make_backorder(item.id, "ABC-001", lot.lot_identifier, qty_pending=10)
+
+        batch = make_backorder_reconciliation(lot.id, is_invoice=True)
+        line_1 = BackorderReconciliationResult(
+            id=uuid.uuid4(), reconciliation_id=batch.id, backorder_id=bo.id,
+            spare_part_item_id=item.id, part_number="ABC-001",
+            qty_pending_snapshot=10, qty_in_packing=3, qty_applied=3,
+            unit_price=5.00, result="PARTIAL",
+        )
+        line_2 = BackorderReconciliationResult(
+            id=uuid.uuid4(), reconciliation_id=batch.id, backorder_id=bo.id,
+            spare_part_item_id=item.id, part_number="ABC-001",
+            qty_pending_snapshot=10, qty_in_packing=7, qty_applied=7,
+            unit_price=6.00, result="PARTIAL",
+        )
+        db = FakeAsyncSession(
+            execute_queue=[[batch.id], [line_1, line_2]],
+            get_objects=[item, bo, lot],
+        )
+
+        with patch("app.services.pricing_service.recalculate_part_cost", new=AsyncMock()) as mock_recalc:
+            asyncio.run(confirm_backorder_reconciliation(db, batch, make_actor()))
+
+        mock_recalc.assert_awaited_once()
+        assert mock_recalc.await_args.args[1] == "ABC-001"
 
 
 class TestDuplicateBackordersSameKey:

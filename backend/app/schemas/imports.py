@@ -465,12 +465,18 @@ class BackorderReconciliationConfirmRequest(BaseModel):
     batch_id: uuid.UUID
 
 
+class BackorderSkippedLine(BaseModel):
+    part_number: str
+    qty_in_packing: Optional[int] = None
+
+
 class BackorderReconciliationConfirmResult(BaseModel):
     confirmed: bool
     qty_applied: int
     backorders_resolved: int
     backorders_updated: int
     batch_id: uuid.UUID
+    skipped_missing_price: List[BackorderSkippedLine] = []
 
 
 # ---------------------------------------------------------------------------
