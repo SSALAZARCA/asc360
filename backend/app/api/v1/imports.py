@@ -2972,6 +2972,43 @@ async def get_dim_pdf_url(
 # Descarga de certificado individual de aduanas para una moto unit
 # ---------------------------------------------------------------------------
 
+class _SpecsProxy:
+    """Adapts the dict returned by `certificate_service.encontrar_specs_para_modelo`
+    into an object with attribute access, since `generate_certificado_bytes`
+    expects a `VehicleModel`-shaped object (or `None`), not a dict."""
+
+    def __init__(self, d):
+        self.cilindrada = d.get("cilindrada")
+        self.potencia = d.get("potencia")
+        self.peso = d.get("peso")
+        self.vueltas_aire = d.get("vueltas_aire")
+        self.posicion_cortina = d.get("posicion_cortina")
+        self.sistemas_control = d.get("sistemas_control")
+        self.fuel_system = d.get("fuel_system")
+
+
+def _validate_certificado_required_fields(unit, order):
+    """Computes the unit>order fallback `model`/`model_year` and the list of
+    missing fields required to generate the empadronamiento certificate.
+    Returns `(effective_model, effective_model_year, missing)`; `missing` is
+    empty when every required field is present."""
+    effective_model = unit.model or order.model
+    effective_model_year = unit.model_year or order.model_year
+
+    missing = []
+    if not effective_model:
+        missing.append("modelo de la motocicleta")
+    if not effective_model_year:
+        missing.append("año modelo")
+    if not unit.engine_number:
+        missing.append("número de motor")
+    if not unit.vin_number:
+        missing.append("número de chasis (VIN)")
+    if not unit.color_runt:
+        missing.append(f"color '{unit.color or 'vacío'}' no registrado en tabla RUNT")
+    return effective_model, effective_model_year, missing
+
+
 @router.get("/moto-units/{unit_id}/certificado")
 async def download_certificado(
     unit_id: uuid.UUID,
@@ -2993,21 +3030,7 @@ async def download_certificado(
             detail="La DIM no ha sido cargada para esta unidad. Cargá primero el PDF de la DIM.",
         )
 
-    # Mismo fallback que el listado: unit > order
-    effective_model = unit.model or order.model
-    effective_model_year = unit.model_year or order.model_year
-
-    missing = []
-    if not effective_model:
-        missing.append("modelo de la motocicleta")
-    if not effective_model_year:
-        missing.append("año modelo")
-    if not unit.engine_number:
-        missing.append("número de motor")
-    if not unit.vin_number:
-        missing.append("número de chasis (VIN)")
-    if not unit.color_runt:
-        missing.append(f"color '{unit.color or 'vacío'}' no registrado en tabla RUNT")
+    effective_model, effective_model_year, missing = _validate_certificado_required_fields(unit, order)
     if missing:
         raise HTTPException(
             status_code=422,
@@ -3026,15 +3049,6 @@ async def download_certificado(
 
     vm_obj = None
     if matched_vm and matched_vm.get("cilindrada") != "N/A":
-        class _SpecsProxy:
-            def __init__(self, d):
-                self.cilindrada = d.get("cilindrada")
-                self.potencia = d.get("potencia")
-                self.peso = d.get("peso")
-                self.vueltas_aire = d.get("vueltas_aire")
-                self.posicion_cortina = d.get("posicion_cortina")
-                self.sistemas_control = d.get("sistemas_control")
-                self.fuel_system = d.get("fuel_system")
         vm_obj = _SpecsProxy(matched_vm)
 
     pdf_bytes = certificate_service.generate_certificado_bytes(unit, order, vm_obj, color_runt_nombre)
