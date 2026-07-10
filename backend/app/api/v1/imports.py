@@ -885,6 +885,37 @@ async def get_spare_part_lots_stats(
     return {"unique_refs": unique_refs, "declared_refs": declared_refs}
 
 
+def _lots_map_entry(lots_map: dict, lot) -> dict:
+    lid = str(lot.id)
+    if lid not in lots_map:
+        lots_map[lid] = {"lot_id": lid, "lot_identifier": lot.lot_identifier, "items": []}
+    return lots_map[lid]
+
+
+def _append_ordered_item_matches(lots_map: dict, rows) -> None:
+    for item, lot in rows:
+        _lots_map_entry(lots_map, lot)["items"].append({
+            "part_number": item.part_number,
+            "description_es": item.description_es,
+            "qty_ordered": item.qty_ordered,
+            "qty_received": item.qty_received,
+            "status": item.status,
+        })
+
+
+def _append_extra_reconciliation_matches(lots_map: dict, rows) -> None:
+    """Piezas "extra" (sobrante del packing list, sin renglón de pedido asociado):
+    no tienen SparePartItem propio, así que se buscan aparte en ReconciliationResult."""
+    for rr, lot in rows:
+        _lots_map_entry(lots_map, lot)["items"].append({
+            "part_number": rr.part_number,
+            "description_es": rr.description_es,
+            "qty_ordered": 0,
+            "qty_received": rr.qty_in_packing,
+            "status": "EXTRA",
+        })
+
+
 @router.get("/spare-parts/search")
 async def search_spare_parts(
     q: str = "",
@@ -896,30 +927,27 @@ async def search_spare_parts(
     if not q or len(q.strip()) < 2:
         raise HTTPException(status_code=422, detail="Ingresá al menos 2 caracteres")
 
-    stmt = (
+    term = f"%{q.strip()}%"
+    lots_map: dict = {}
+
+    item_stmt = (
         select(SparePartItem, SparePartLot)
         .join(SparePartLot, SparePartItem.lot_id == SparePartLot.id)
-        .where(SparePartItem.part_number.ilike(f"%{q.strip()}%"))
+        .where(SparePartItem.part_number.ilike(term))
         .order_by(SparePartLot.lot_identifier, SparePartItem.part_number)
     )
-    rows = (await db.execute(stmt)).all()
+    _append_ordered_item_matches(lots_map, (await db.execute(item_stmt)).all())
 
-    lots_map: dict = {}
-    for item, lot in rows:
-        lid = str(lot.id)
-        if lid not in lots_map:
-            lots_map[lid] = {
-                "lot_id": lid,
-                "lot_identifier": lot.lot_identifier,
-                "items": [],
-            }
-        lots_map[lid]["items"].append({
-            "part_number": item.part_number,
-            "description_es": item.description_es,
-            "qty_ordered": item.qty_ordered,
-            "qty_received": item.qty_received,
-            "status": item.status,
-        })
+    extra_stmt = (
+        select(ReconciliationResult, SparePartLot)
+        .join(SparePartLot, ReconciliationResult.lot_id == SparePartLot.id)
+        .where(
+            ReconciliationResult.spare_part_item_id.is_(None),
+            ReconciliationResult.part_number.ilike(term),
+        )
+        .order_by(SparePartLot.lot_identifier, ReconciliationResult.part_number)
+    )
+    _append_extra_reconciliation_matches(lots_map, (await db.execute(extra_stmt)).all())
 
     return list(lots_map.values())
 

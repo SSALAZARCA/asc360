@@ -150,6 +150,32 @@ def make_spare_part_item(
     return item
 
 
+def make_reconciliation_result(
+    lot_id,
+    part_number: str,
+    result: str = "EXTRA",
+    spare_part_item_id=None,
+    packing_list_id=None,
+    description_es: Optional[str] = None,
+    model_applicable: Optional[str] = None,
+    qty_ordered: Optional[int] = None,
+    qty_in_packing: Optional[int] = None,
+) -> "ReconciliationResult":
+    from app.models.imports import ReconciliationResult
+    return ReconciliationResult(
+        id=uuid.uuid4(),
+        lot_id=lot_id,
+        packing_list_id=packing_list_id or uuid.uuid4(),
+        spare_part_item_id=spare_part_item_id,
+        part_number=part_number,
+        description_es=description_es,
+        model_applicable=model_applicable,
+        qty_ordered=qty_ordered,
+        qty_in_packing=qty_in_packing,
+        result=result,
+    )
+
+
 def make_backorder(
     spare_part_item_id,
     part_number: str,

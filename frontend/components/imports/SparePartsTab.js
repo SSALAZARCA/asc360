@@ -21,6 +21,7 @@ const ITEM_STATUS = {
   BACKORDER:         { label: 'Backorder',         color: '#f87171', bg: 'rgba(248,113,113,0.12)', border: 'rgba(248,113,113,0.3)' },
   BACKORDER_PARCIAL: { label: 'Backorder Parcial', color: '#fb923c', bg: 'rgba(251,146,60,0.12)',  border: 'rgba(251,146,60,0.3)' },
   CANCELLED:         { label: 'Cancelado',         color: '#6b7280', bg: 'rgba(107,114,128,0.12)', border: 'rgba(107,114,128,0.3)' },
+  EXTRA:             { label: 'Extra (no pedido)', color: '#a78bfa', bg: 'rgba(167,139,250,0.12)', border: 'rgba(167,139,250,0.3)' },
 };
 
 function ItemStatusBadge({ status }) {
