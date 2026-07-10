@@ -1335,19 +1335,22 @@ def _extract_packing_list_rows(
     col_map: dict,
     is_invoice: bool,
     models_map: dict[str, str],
-) -> tuple[list, dict, dict]:
+) -> tuple[list, dict, dict, list]:
     """
     Parsea las filas de datos de `sheet` (a partir de `header_row + 1`) y
-    retorna `(rows, items, prices)`:
+    retorna `(rows, items, prices, unknown_models)`:
     - rows: lista de `ParsedPackingListRow`, una por fila válida, en orden.
     - items: dict {(part_number, model_or_none): qty_acumulado}.
     - prices: dict {(part_number, model_or_none): (unit_price, amount, desc_en, desc_es, model)},
       solo poblado cuando `is_invoice` es True.
+    - unknown_models: modelos (columna "model"/"modelo", solo en invoice) que no
+      coinciden con el catálogo `models_map` — mismo criterio que `_collect_unknown_models`.
     No accede a DB.
     """
     pl_items: dict[tuple, int] = {}
     pl_prices: dict[tuple, tuple] = {}
     rows: list[ParsedPackingListRow] = []
+    unknown_models: set[str] = set()
 
     for row_idx in range(header_row + 1, sheet.max_row + 1):
         part_raw = _cell(sheet, row_idx, col_map, "part #", "part#")
@@ -1375,6 +1378,10 @@ def _extract_packing_list_rows(
         if is_invoice:
             model_raw = _cell(sheet, row_idx, col_map, "model", "modelo")
             model_val = _normalize_model(model_raw, models_map)
+            if model_raw:
+                model_stripped = str(model_raw).strip()
+                if model_stripped and model_stripped.upper() not in models_map:
+                    unknown_models.add(model_stripped)
 
             desc_es_raw = _cell(sheet, row_idx, col_map, "spanish description", "descripcion")
             desc_es = str(desc_es_raw).strip() if desc_es_raw else None
@@ -1404,7 +1411,7 @@ def _extract_packing_list_rows(
 
         rows.append(ParsedPackingListRow(part_number=part_number, description=desc, qty=qty))
 
-    return rows, pl_items, pl_prices
+    return rows, pl_items, pl_prices, sorted(unknown_models)
 
 
 def parse_packing_list_workbook(
@@ -1426,9 +1433,13 @@ def parse_packing_list_workbook(
     if location.error:
         return ParsedPackingList(error=location.error)
 
-    rows, items, prices = _extract_packing_list_rows(
+    rows, items, prices, unknown_models = _extract_packing_list_rows(
         location.sheet, location.header_row, location.col_map, location.is_invoice, models_map
     )
+    if unknown_models:
+        return ParsedPackingList(
+            error=f"Modelos no reconocidos en el Excel: {', '.join(unknown_models)}. Verificá el catálogo de modelos antes de reimportar."
+        )
     return ParsedPackingList(
         error=None,
         is_invoice=location.is_invoice,
@@ -1461,6 +1472,17 @@ async def reconcile_lot_packing_list(
     is_invoice = location.is_invoice
     models_map = await _load_models_map(db)
 
+    # Parsear filas → clave (part_number, model_or_none) para separar misma referencia en distintos modelos.
+    # Se parsea ANTES de borrar nada: si hay modelos no reconocidos por el catálogo,
+    # frenamos sin tocar la reconciliación/packing list anteriores.
+    parsed_rows, pl_items, pl_prices, unknown_models = _extract_packing_list_rows(
+        target_sheet, header_row, col_map, is_invoice, models_map
+    )
+    if unknown_models:
+        return {
+            "error": f"Modelos no reconocidos en el Excel: {', '.join(unknown_models)}. Verificá el catálogo de modelos antes de reimportar."
+        }
+
     # Eliminar resultados anteriores para este lote (re-conciliación)
     old_results = (await db.execute(
         select(ReconciliationResult).where(ReconciliationResult.lot_id == lot.id)
@@ -1487,11 +1509,6 @@ async def reconcile_lot_packing_list(
     )
     db.add(pl_record)
     await db.flush()
-
-    # Parsear filas → clave (part_number, model_or_none) para separar misma referencia en distintos modelos
-    parsed_rows, pl_items, pl_prices = _extract_packing_list_rows(
-        target_sheet, header_row, col_map, is_invoice, models_map
-    )
 
     pl_item_records: list[PackingListItem] = [
         PackingListItem(
