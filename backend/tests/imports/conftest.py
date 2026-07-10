@@ -404,6 +404,22 @@ class FakeAsyncSession:
     async def flush(self):
         self.flush_count += 1
 
+    async def commit(self):
+        """No-op: write endpoints call `await db.commit()` after mutating
+        ORM instances in place; since those instances are plain unflushed
+        Python objects (no real session), there is nothing to persist."""
+        pass
+
+    async def refresh(self, obj, attribute_names=None):
+        """No-op: write endpoints call `await db.refresh(obj)` or
+        `await db.refresh(obj, [...])` (e.g. `update_moto_unit` refreshes
+        `['location', 'observation']`) to reload relationships/defaults
+        from the DB after commit. Since `obj` was never detached from a
+        real session, its current in-memory state (set directly by the
+        test factories in this module) already reflects what a refresh
+        would reload — no-op is correct."""
+        pass
+
     async def get(self, model_cls, obj_id):
         for obj in self._get_objects + self.added:
             if isinstance(obj, model_cls) and obj.id == obj_id:
