@@ -202,6 +202,20 @@ export default function BackorderReconciliationModal({ lot, onClose, onConfirmed
                   </tbody>
                 </table>
               </div>
+
+              {confirmed && confirmResult?.skipped_missing_price?.length > 0 && (
+                <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  {confirmResult.skipped_missing_price.map(s => (
+                    <div key={s.part_number} style={{
+                      display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px',
+                      borderRadius: '8px', background: 'rgba(251,191,36,0.1)', border: '1px solid rgba(251,191,36,0.25)',
+                    }}>
+                      <AlertTriangle size={13} style={{ color: '#fbbf24', flexShrink: 0 }} />
+                      <span style={{ fontSize: '11px', color: '#fbbf24' }}>{s.part_number}: sin precio en la factura — no se aplicó</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </>
           )}
         </div>
