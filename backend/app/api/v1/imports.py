@@ -1348,6 +1348,13 @@ async def confirm_lot_reconciliation(
         raise HTTPException(status_code=404, detail={"detail": "Lote no encontrado", "code": "LOT_NOT_FOUND"})
 
     result = await imports_service.confirm_reconciliation(db, lot, current_user)
+
+    if result.get("error") == "ALREADY_CONFIRMED":
+        raise HTTPException(
+            status_code=409,
+            detail={"detail": "Esta conciliación ya fue confirmada", "code": "ALREADY_CONFIRMED"},
+        )
+
     return result
 
 

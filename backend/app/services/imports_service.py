@@ -1675,7 +1675,12 @@ async def confirm_reconciliation(
     - COMPLETE → qty_received = qty_ordered, status = RECEIVED
     - PARTIAL  → qty_received = qty_in_packing, status = PARTIAL, crea Backorder por pendiente
     - MISSING  → status = BACKORDER, crea Backorder por total
-    Marca lot.packing_list_received = True.
+    Marca lot.packing_list_received = True y sella cada `ReconciliationResult`
+    con `confirmed_by`/`confirmed_at`.
+
+    Retorna `{"error": "ALREADY_CONFIRMED"}` sin modificar nada si estos
+    resultados ya habían sido confirmados antes (evita re-aplicar la
+    conciliación y pisar ajustes manuales hechos después de la primera vez).
     """
     results = (await db.execute(
         select(ReconciliationResult).where(ReconciliationResult.lot_id == lot.id)
@@ -1683,6 +1688,9 @@ async def confirm_reconciliation(
 
     if not results:
         return {"error": "No hay resultados de reconciliación para confirmar"}
+
+    if any(rr.confirmed_at is not None for rr in results):
+        return {"error": "ALREADY_CONFIRMED"}
 
     # Obtener lot_identifier (= origin_pi para backorders)
     origin_pi = lot.lot_identifier
@@ -1777,6 +1785,12 @@ async def confirm_reconciliation(
 
         if applied_any:
             rr.result = "EXTRA_APPLIED"
+
+    confirmed_by = uuid.UUID(actor.user_id) if actor.user_id else None
+    confirmed_at = datetime.utcnow()
+    for rr in results:
+        rr.confirmed_by = confirmed_by
+        rr.confirmed_at = confirmed_at
 
     lot.packing_list_received = True
     await db.commit()

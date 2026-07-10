@@ -117,7 +117,12 @@ export default function ReconciliationModal({ lot, onClose, onConfirmed }) {
     try {
       const res = await authFetch(`${getApiUrl()}/imports/spare-part-lots/${lot.id}/reconciliation`);
       const data = await res.json();
-      setResults(Array.isArray(data) ? data : []);
+      const list = Array.isArray(data) ? data : [];
+      setResults(list);
+      // El estado "confirmado" se deriva de los datos del servidor (confirmed_at
+      // en cada resultado), no de una bandera local que se pierde al cerrar/
+      // reabrir esta ventana — así el botón no vuelve a habilitarse solo.
+      setConfirmed(list.length > 0 && list.every(r => r.confirmed_at));
     } catch {
       setResults([]);
     } finally {
@@ -182,7 +187,14 @@ export default function ReconciliationModal({ lot, onClose, onConfirmed }) {
         `${getApiUrl()}/imports/spare-part-lots/${lot.id}/reconciliation/confirm`,
         { method: 'POST' }
       );
-      if (!res.ok) throw new Error('Error al confirmar');
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        if (data?.detail?.code === 'ALREADY_CONFIRMED') {
+          setConfirmed(true);
+          throw new Error('Esta conciliación ya había sido confirmada.');
+        }
+        throw new Error('Error al confirmar');
+      }
       setConfirmed(true);
       onConfirmed?.();
     } catch (err) {
