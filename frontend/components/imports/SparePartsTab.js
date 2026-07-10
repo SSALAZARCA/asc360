@@ -551,7 +551,7 @@ function LotItemsTable({ lotId, userRole, isConfirmed }) {
 // ---------------------------------------------------------------------------
 // Fila de un lote (expandible)
 // ---------------------------------------------------------------------------
-function LotRow({ lot, userRole, onReconcile, onReconcileBackorders }) {
+function LotRow({ lot, userRole, onReconcile, onReconcileBackorders, onRefresh }) {
   const [expanded, setExpanded] = useState(false);
   const [deduplicating, setDeduplicating] = useState(false);
   const [pendingConfirm, setPendingConfirm] = useState(null);
@@ -585,6 +585,7 @@ function LotRow({ lot, userRole, onReconcile, onReconcileBackorders }) {
           const data = await res.json();
           const msg = Object.entries(data.deleted).map(([k, v]) => `${k}: ${v}`).join(', ');
           toast.success(`Rollback completo. Eliminados → ${msg}`);
+          onRefresh?.();
         } catch {
           toast.error('Error al ejecutar el rollback');
         } finally {
@@ -1143,6 +1144,7 @@ export default function SparePartsTab({ userRole }) {
               userRole={userRole}
               onReconcile={setReconcileLot}
               onReconcileBackorders={setReconcileBackorderLot}
+              onRefresh={() => { fetchLots(); fetchStats(); }}
             />
           ))}
         </div>
