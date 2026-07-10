@@ -1930,6 +1930,9 @@ async def apply_physical_inspection(
             history.append({"date": now.isoformat(), "event": "RESOLVED_BY_CORRECTION"})
             existing.history = history
 
+    from app.services.pricing_service import recalculate_part_cost
+    await recalculate_part_cost(db, item.part_number, lot_identifier=origin_pi)
+
 
 async def _resolve_backorders_for_item(
     db: AsyncSession,

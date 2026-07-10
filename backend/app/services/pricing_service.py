@@ -55,6 +55,14 @@ async def _find_reference_for_part_number(
     return (await db.execute(stmt)).scalar_one_or_none()
 
 
+def _item_weight(item) -> int:
+    """Effective quantity an item contributes to the weighted FOB average:
+    physically-verified qty once an inspection exists, else the ordered qty.
+    Mirrors the business rule: uninspected items (qty_physical is None) keep
+    today's behavior byte-for-byte."""
+    return item.qty_physical if item.qty_physical is not None else item.qty_ordered
+
+
 async def recalculate_part_cost(
     db: AsyncSession,
     part_number: str,
@@ -89,8 +97,14 @@ async def recalculate_part_cost(
     if not items:
         return
 
-    total_cost = sum(float(i.unit_price) * i.qty_ordered for i in items)
-    total_qty  = sum(i.qty_ordered for i in items)
+    total_qty = sum(_item_weight(i) for i in items)
+    if total_qty <= 0:
+        logger.info(
+            "recalculate_part_cost: %s total_qty<=0 (all contributing items weigh 0), skip update",
+            part_number,
+        )
+        return
+    total_cost = sum(float(i.unit_price) * _item_weight(i) for i in items)
     new_avg    = round(total_cost / total_qty, 4)
 
     ref.avg_fob_cost      = new_avg
