@@ -2566,6 +2566,68 @@ async def export_moto_units(
 # PATCH /moto-units/{unit_id} — editar campos de una unidad
 # ---------------------------------------------------------------------------
 
+def _apply_generic_fields(unit, update_data: dict) -> None:
+    """Normalizes `model` (collapse whitespace + uppercase) if present, then
+    sets every remaining key in `update_data` directly onto `unit`."""
+    if 'model' in update_data and update_data['model']:
+        update_data['model'] = ' '.join(update_data['model'].split()).upper()
+    for field, value in update_data.items():
+        setattr(unit, field, value)
+
+
+async def _apply_color_update(db: AsyncSession, unit, new_color: Optional[str]) -> None:
+    """Sets `unit.color` and resolves `unit.color_runt` via the shared
+    `resolve_color_runt` helper. No-op when `new_color` is `None`."""
+    if new_color is not None:
+        unit.color = new_color
+        unit.color_runt = await imports_service.resolve_color_runt(db, new_color)
+
+
+async def _apply_order_transfer(db: AsyncSession, unit, new_order_id, current_user: CurrentUser) -> None:
+    """Transfers `unit` to another `ShipmentOrder` (superadmin-only).
+    No-op when `new_order_id` is unset or matches the unit's current order."""
+    if new_order_id is None or new_order_id == unit.shipment_order_id:
+        return
+    if current_user.role != "superadmin":
+        raise HTTPException(status_code=403, detail="Solo superadmin puede transferir unidades entre pedidos")
+    target_order = await db.get(ShipmentOrder, new_order_id)
+    if not target_order:
+        raise HTTPException(status_code=404, detail="Pedido destino no encontrado")
+    if target_order.is_spare_part:
+        raise HTTPException(status_code=400, detail="El pedido destino debe ser de motocicletas, no de repuestos")
+    unit.shipment_order_id = new_order_id
+    unit.source_pi = target_order.pi_number
+
+
+async def _apply_empadronamiento_fisico(db: AsyncSession, unit, update_data: dict, distribuidor_id) -> None:
+    """Handles the `empadronamiento_fisico_enviado` toggle: sets fecha (once)
+    and resolves the distribuidor when marking as sent; clears both fields
+    when unmarking."""
+    if update_data.get("empadronamiento_fisico_enviado") is True:
+        if unit.empadronamiento_fisico_fecha is None:
+            unit.empadronamiento_fisico_fecha = datetime.utcnow()
+        if distribuidor_id is not None:
+            tenant = (await db.execute(select(Tenant).where(Tenant.id == distribuidor_id))).scalar_one_or_none()
+            if tenant is None:
+                raise HTTPException(status_code=404, detail="Distribuidor no encontrado")
+            unit.empadronamiento_fisico_distribuidor_id = distribuidor_id
+            unit.empadronamiento_fisico_distribuidor_nombre = tenant.name
+
+    if update_data.get("empadronamiento_fisico_enviado") is False:
+        unit.empadronamiento_fisico_fecha = None
+        unit.empadronamiento_fisico_distribuidor_id = None
+        unit.empadronamiento_fisico_distribuidor_nombre = None
+
+
+def _apply_location_observation(unit, location_id, observation_id) -> None:
+    """Assigns `location_id`/`observation_id` only when explicitly present
+    in the payload (sentinel `...` means "field was not sent")."""
+    if location_id is not ...:
+        unit.location_id = location_id
+    if observation_id is not ...:
+        unit.observation_id = observation_id
+
+
 @router.patch("/moto-units/{unit_id}", status_code=200)
 async def update_moto_unit(
     unit_id: uuid.UUID,
@@ -2590,58 +2652,11 @@ async def update_moto_unit(
     new_order_id = update_data.pop("shipment_order_id", None)
     new_color = update_data.pop("color", None)
 
-    # Normalizar model: colapsar espacios múltiples y uppercase
-    if 'model' in update_data and update_data['model']:
-        update_data['model'] = ' '.join(update_data['model'].split()).upper()
-
-    for field, value in update_data.items():
-        setattr(unit, field, value)
-
-    # Actualizar color y resolver color_runt automáticamente
-    if new_color is not None:
-        from app.models.imports import ColorRuntMapping
-        from app.services.imports_service import _norm_color
-        unit.color = new_color
-        color_key = _norm_color(new_color)
-        mapping = (await db.execute(
-            select(ColorRuntMapping).where(ColorRuntMapping.color_key == color_key)
-        )).scalar_one_or_none()
-        unit.color_runt = mapping.nombre_runt if mapping else None
-
-    # Transferir la unidad a otro pedido (solo superadmin)
-    if new_order_id is not None and new_order_id != unit.shipment_order_id:
-        if current_user.role != "superadmin":
-            raise HTTPException(status_code=403, detail="Solo superadmin puede transferir unidades entre pedidos")
-        target_order = await db.get(ShipmentOrder, new_order_id)
-        if not target_order:
-            raise HTTPException(status_code=404, detail="Pedido destino no encontrado")
-        if target_order.is_spare_part:
-            raise HTTPException(status_code=400, detail="El pedido destino debe ser de motocicletas, no de repuestos")
-        unit.shipment_order_id = new_order_id
-        unit.source_pi = target_order.pi_number
-
-    # Si se marca el envío físico, registrar fecha y distribuidor
-    if update_data.get("empadronamiento_fisico_enviado") is True:
-        if unit.empadronamiento_fisico_fecha is None:
-            unit.empadronamiento_fisico_fecha = datetime.utcnow()
-        if distribuidor_id is not None:
-            tenant = (await db.execute(select(Tenant).where(Tenant.id == distribuidor_id))).scalar_one_or_none()
-            if tenant is None:
-                raise HTTPException(status_code=404, detail="Distribuidor no encontrado")
-            unit.empadronamiento_fisico_distribuidor_id = distribuidor_id
-            unit.empadronamiento_fisico_distribuidor_nombre = tenant.name
-
-    # Si se desmarca el envío físico, limpiar distribuidor y fecha
-    if update_data.get("empadronamiento_fisico_enviado") is False:
-        unit.empadronamiento_fisico_fecha = None
-        unit.empadronamiento_fisico_distribuidor_id = None
-        unit.empadronamiento_fisico_distribuidor_nombre = None
-
-    if location_id is not ...:
-        unit.location_id = location_id
-
-    if observation_id is not ...:
-        unit.observation_id = observation_id
+    _apply_generic_fields(unit, update_data)
+    await _apply_color_update(db, unit, new_color)
+    await _apply_order_transfer(db, unit, new_order_id, current_user)
+    await _apply_empadronamiento_fisico(db, unit, update_data, distribuidor_id)
+    _apply_location_observation(unit, location_id, observation_id)
 
     await db.commit()
     await db.refresh(unit, ['location', 'observation'])
