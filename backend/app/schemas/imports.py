@@ -479,6 +479,22 @@ class BackorderReconciliationConfirmResult(BaseModel):
     skipped_missing_price: List[BackorderSkippedLine] = []
 
 
+class BackorderReconciliationConfirmedSummary(BaseModel):
+    qty_applied: int
+    backorders_resolved: int
+    backorders_updated: int
+
+
+class BackorderReconciliationLatestResult(BaseModel):
+    batch_id: Optional[uuid.UUID] = None
+    status: Optional[str] = None
+    is_invoice: bool = False
+    counts: dict = {}
+    lines: List[BackorderReconciliationResultRead] = []
+    skipped_missing_price: List[BackorderSkippedLine] = []
+    confirmed_summary: Optional[BackorderReconciliationConfirmedSummary] = None
+
+
 # ---------------------------------------------------------------------------
 # Physical Inspection Upload
 # ---------------------------------------------------------------------------

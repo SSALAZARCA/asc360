@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { authFetch } from '../../lib/authFetch';
 import { getApiUrl } from '../../lib/api';
 import { X, CheckCircle, AlertCircle, XCircle, Plus, Upload, AlertTriangle } from 'lucide-react';
@@ -52,6 +52,46 @@ export default function BackorderReconciliationModal({ lot, onClose, onConfirmed
   const [confirming, setConfirming] = useState(false);
   const [confirmResult, setConfirmResult] = useState(null);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [loadingExisting, setLoadingExisting] = useState(true);
+
+  // Al abrir la ventana, preguntarle al servidor si ya hay un remanente
+  // cargado/confirmado para este lote — para que no arranque siempre vacía
+  // ni "olvide" que ya se confirmó, igual que la conciliación del pedido.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await authFetch(`${getApiUrl()}/imports/spare-part-lots/${lot.id}/backorder-reconciliation/latest`);
+        if (!res.ok || cancelled) return;
+        const data = await res.json();
+        if (cancelled || !data.batch_id) return;
+
+        setUploadResult({
+          batch_id: data.batch_id,
+          is_invoice: data.is_invoice,
+          counts: data.counts,
+          lines: data.lines,
+          warnings: [],
+        });
+
+        if (data.status === 'CONFIRMED' && data.confirmed_summary) {
+          setConfirmResult({
+            confirmed: true,
+            batch_id: data.batch_id,
+            qty_applied: data.confirmed_summary.qty_applied,
+            backorders_resolved: data.confirmed_summary.backorders_resolved,
+            backorders_updated: data.confirmed_summary.backorders_updated,
+            skipped_missing_price: data.skipped_missing_price || [],
+          });
+        }
+      } catch {
+        // Silencioso: si falla la consulta, la ventana arranca vacía como antes.
+      } finally {
+        if (!cancelled) setLoadingExisting(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [lot.id]);
 
   const handleUpload = async (e) => {
     const file = e.target.files?.[0];
@@ -165,7 +205,11 @@ export default function BackorderReconciliationModal({ lot, onClose, onConfirmed
 
         {/* Cuerpo */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px' }}>
-          {!hasResult ? (
+          {loadingExisting ? (
+            <div style={{ textAlign: 'center', padding: '48px 0', color: '#606075' }}>
+              <p style={{ fontSize: '12px', margin: 0 }}>Cargando...</p>
+            </div>
+          ) : !hasResult ? (
             <div style={{ textAlign: 'center', padding: '48px 0', color: '#606075' }}>
               <Upload size={32} style={{ margin: '0 auto 12px', display: 'block', opacity: 0.3 }} />
               <p style={{ fontSize: '13px', margin: 0 }}>Subí el packing list remanente para cruzarlo contra los backorders abiertos de este lote</p>

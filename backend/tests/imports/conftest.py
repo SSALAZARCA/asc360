@@ -214,6 +214,35 @@ def make_backorder_reconciliation(
     )
 
 
+def make_backorder_reconciliation_result(
+    reconciliation_id,
+    part_number: str,
+    result: str,
+    backorder_id=None,
+    spare_part_item_id=None,
+    qty_pending_snapshot: Optional[int] = None,
+    qty_in_packing: Optional[int] = None,
+    qty_applied: Optional[int] = None,
+    unit_price: Optional[float] = None,
+    model_applicable: Optional[str] = None,
+) -> "BackorderReconciliationResult":
+    from app.models.imports import BackorderReconciliationResult
+    return BackorderReconciliationResult(
+        id=uuid.uuid4(),
+        reconciliation_id=reconciliation_id,
+        backorder_id=backorder_id,
+        spare_part_item_id=spare_part_item_id,
+        part_number=part_number,
+        model_applicable=model_applicable,
+        qty_pending_snapshot=qty_pending_snapshot,
+        qty_in_packing=qty_in_packing,
+        qty_applied=qty_applied,
+        unit_price=unit_price,
+        result=result,
+        created_at=datetime.utcnow(),
+    )
+
+
 def make_shipment_order(
     pi_number: str = "E0000573",
     model: Optional[str] = None,
@@ -341,6 +370,9 @@ class _ScalarsResult:
 
     def all(self):
         return list(self._items)
+
+    def first(self):
+        return self._items[0] if self._items else None
 
 
 class _ExecuteResult:

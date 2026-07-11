@@ -25,7 +25,7 @@ from app.schemas.imports import (
     ReconciliationResultRead, ReconciliationResultUpdate, BackorderRead, BackorderUpdate,
     BackorderBulkUpdatePI, BackorderBulkRollbackRequest, PhysicalInspectionApplyPayload,
     BackorderReconciliationUploadResult, BackorderReconciliationConfirmRequest,
-    BackorderReconciliationConfirmResult,
+    BackorderReconciliationConfirmResult, BackorderReconciliationLatestResult,
     MotoLocationCreate, MotoLocationRead,
     MotoObservationCreate, MotoObservationRead,
 )
@@ -1467,6 +1467,28 @@ async def confirm_lot_backorder_reconciliation(
 
     await db.commit()
     return result
+
+
+@router.get(
+    "/spare-part-lots/{lot_id}/backorder-reconciliation/latest",
+    response_model=BackorderReconciliationLatestResult,
+    status_code=status.HTTP_200_OK,
+)
+async def get_latest_lot_backorder_reconciliation(
+    lot_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Solo lectura: para que la ventana de reconciliación de backorders
+    pueda mostrar cómo quedó el último remanente cargado/confirmado de este
+    lote al reabrirse, en vez de arrancar siempre vacía."""
+    _require_imports_editor(current_user)
+
+    lot = await db.get(SparePartLot, lot_id)
+    if not lot:
+        raise HTTPException(status_code=404, detail={"detail": "Lote no encontrado", "code": "LOT_NOT_FOUND"})
+
+    return await imports_service.get_latest_backorder_reconciliation(db, lot)
 
 
 # ---------------------------------------------------------------------------

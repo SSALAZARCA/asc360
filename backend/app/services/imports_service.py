@@ -2706,6 +2706,92 @@ async def confirm_backorder_reconciliation(
     }
 
 
+async def get_latest_backorder_reconciliation(db: AsyncSession, lot: SparePartLot) -> dict:
+    """Solo lectura: devuelve el último `BackorderReconciliation` (PENDING o
+    CONFIRMED) del lote, con sus líneas y — si ya está confirmado — un resumen
+    derivado del estado ACTUAL de los backorders vinculados (no de un
+    snapshot guardado). No muta nada. Permite que la ventana de reconciliación
+    de backorders vuelva a mostrar cómo quedó, igual que ya hace la ventana
+    de conciliación del pedido original."""
+    batch = (await db.execute(
+        select(BackorderReconciliation)
+        .where(BackorderReconciliation.lot_id == lot.id)
+        .order_by(BackorderReconciliation.uploaded_at.desc())
+        .limit(1)
+    )).scalars().first()
+
+    if batch is None:
+        return {
+            "batch_id": None, "status": None, "is_invoice": False,
+            "counts": {}, "lines": [], "skipped_missing_price": [],
+            "confirmed_summary": None,
+        }
+
+    lines = (await db.execute(
+        select(BackorderReconciliationResult).where(
+            BackorderReconciliationResult.reconciliation_id == batch.id
+        )
+    )).scalars().all()
+
+    counts = {"complete": 0, "partial": 0, "missing": 0, "extra": 0}
+    for line in lines:
+        key = (line.result or "").lower()
+        if key in counts:
+            counts[key] += 1
+
+    skipped_missing_price: list[dict] = []
+    confirmed_summary = None
+
+    if batch.status == "CONFIRMED":
+        qty_applied_total = 0
+        backorders_updated = 0
+        applied_bo_ids: set = set()
+
+        for line in lines:
+            if line.backorder_id is None:
+                continue  # EXTRA: nunca se aplicó nada
+            applied = line.qty_applied or 0
+            if applied <= 0:
+                continue  # MISSING: nunca se aplicó nada
+
+            if batch.is_invoice and line.unit_price is None:
+                # Mismo criterio de _apply_confirmed_lines: se saltó por falta de precio.
+                skipped_missing_price.append({
+                    "part_number": line.part_number,
+                    "qty_in_packing": line.qty_in_packing,
+                })
+                continue
+
+            qty_applied_total += applied
+            backorders_updated += 1
+            applied_bo_ids.add(line.backorder_id)
+
+        backorders_resolved = 0
+        if applied_bo_ids:
+            resolved_rows = (await db.execute(
+                select(Backorder.id).where(
+                    Backorder.id.in_(applied_bo_ids), Backorder.resolved == True
+                )
+            )).scalars().all()
+            backorders_resolved = len(resolved_rows)
+
+        confirmed_summary = {
+            "qty_applied": qty_applied_total,
+            "backorders_resolved": backorders_resolved,
+            "backorders_updated": backorders_updated,
+        }
+
+    return {
+        "batch_id": batch.id,
+        "status": batch.status,
+        "is_invoice": batch.is_invoice,
+        "counts": counts,
+        "lines": lines,
+        "skipped_missing_price": skipped_missing_price,
+        "confirmed_summary": confirmed_summary,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Utilidad interna: escribir audit log
 # ---------------------------------------------------------------------------
