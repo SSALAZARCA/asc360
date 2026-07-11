@@ -1805,35 +1805,19 @@ async def reconcile_lot_packing_list(
     return {**counts, "pl_id": str(pl_record.id), "total_parts_in_pl": len(pl_items), "is_invoice": is_invoice}
 
 
-async def confirm_reconciliation(
+async def _apply_reconciliation_to_items(
     db: AsyncSession,
-    lot: SparePartLot,
-    actor: CurrentUser,
-) -> dict:
+    results: list,
+    origin_pi: str,
+) -> tuple[int, int]:
+    """Pass 1: aplica cada `ReconciliationResult` al `SparePartItem` que
+    referencia (COMPLETE/PARTIAL/MISSING/EXTRA-matched), creando un
+    Backorder por el pendiente cuando corresponde. Los EXTRA sin
+    `spare_part_item_id` (pura sobra, sin item que actualizar) se saltan
+    aquí y se resuelven en `_fill_backorders_from_extras`.
+
+    Retorna `(updated, backorders_created)`.
     """
-    Aplica los resultados de reconciliación a los SparePartItems:
-    - COMPLETE → qty_received = qty_ordered, status = RECEIVED
-    - PARTIAL  → qty_received = qty_in_packing, status = PARTIAL, crea Backorder por pendiente
-    - MISSING  → status = BACKORDER, crea Backorder por total
-    Marca lot.packing_list_received = True y sella cada `ReconciliationResult`
-    con `confirmed_by`/`confirmed_at`.
-
-    Retorna `{"error": "ALREADY_CONFIRMED"}` sin modificar nada si estos
-    resultados ya habían sido confirmados antes (evita re-aplicar la
-    conciliación y pisar ajustes manuales hechos después de la primera vez).
-    """
-    results = (await db.execute(
-        select(ReconciliationResult).where(ReconciliationResult.lot_id == lot.id)
-    )).scalars().all()
-
-    if not results:
-        return {"error": "No hay resultados de reconciliación para confirmar"}
-
-    if any(rr.confirmed_at is not None for rr in results):
-        return {"error": "ALREADY_CONFIRMED"}
-
-    # Obtener lot_identifier (= origin_pi para backorders)
-    origin_pi = lot.lot_identifier
     backorders_created = 0
     updated = 0
 
@@ -1877,8 +1861,28 @@ async def confirm_reconciliation(
         item.updated_at = datetime.utcnow()
         updated += 1
 
-    # Cruzar EXTRAs contra backorders abiertos (FIFO por fecha de creación)
+    return updated, backorders_created
+
+
+async def _fill_backorders_from_extras(
+    db: AsyncSession,
+    results: list,
+    origin_pi: str,
+) -> int:
+    """Pass 2: cruza los EXTRAs puros contra backorders abiertos del mismo
+    `part_number` (FIFO por fecha de creación), sin importar de qué PI
+    originaron esos backorders — el `expected_in_pi` se reasigna a
+    `origin_pi` al aplicarse. Marca cada `ReconciliationResult` aplicado
+    como `EXTRA_APPLIED`.
+
+    Debe ejecutarse DESPUÉS de que `_apply_reconciliation_to_items` haya
+    terminado por completo: el `select(Backorder...)` de este paso necesita
+    ver los backorders que el paso 1 pudo haber creado para otras filas.
+
+    Retorna la cantidad de backorders resueltos (quedaron en `qty_pending == 0`).
+    """
     backorders_resolved_by_extra = 0
+
     for rr in results:
         if rr.result != "EXTRA":
             continue
@@ -1926,11 +1930,52 @@ async def confirm_reconciliation(
         if applied_any:
             rr.result = "EXTRA_APPLIED"
 
+    return backorders_resolved_by_extra
+
+
+def _seal_confirmed_results(results: list, actor: CurrentUser) -> None:
+    """Sella cada `ReconciliationResult` con `confirmed_by`/`confirmed_at`,
+    usando el mismo timestamp para todas las filas de esta confirmación."""
     confirmed_by = uuid.UUID(actor.user_id) if actor.user_id else None
     confirmed_at = datetime.utcnow()
     for rr in results:
         rr.confirmed_by = confirmed_by
         rr.confirmed_at = confirmed_at
+
+
+async def confirm_reconciliation(
+    db: AsyncSession,
+    lot: SparePartLot,
+    actor: CurrentUser,
+) -> dict:
+    """
+    Aplica los resultados de reconciliación a los SparePartItems:
+    - COMPLETE → qty_received = qty_ordered, status = RECEIVED
+    - PARTIAL  → qty_received = qty_in_packing, status = PARTIAL, crea Backorder por pendiente
+    - MISSING  → status = BACKORDER, crea Backorder por total
+    Marca lot.packing_list_received = True y sella cada `ReconciliationResult`
+    con `confirmed_by`/`confirmed_at`.
+
+    Retorna `{"error": "ALREADY_CONFIRMED"}` sin modificar nada si estos
+    resultados ya habían sido confirmados antes (evita re-aplicar la
+    conciliación y pisar ajustes manuales hechos después de la primera vez).
+    """
+    results = (await db.execute(
+        select(ReconciliationResult).where(ReconciliationResult.lot_id == lot.id)
+    )).scalars().all()
+
+    if not results:
+        return {"error": "No hay resultados de reconciliación para confirmar"}
+
+    if any(rr.confirmed_at is not None for rr in results):
+        return {"error": "ALREADY_CONFIRMED"}
+
+    # Obtener lot_identifier (= origin_pi para backorders)
+    origin_pi = lot.lot_identifier
+
+    updated, backorders_created = await _apply_reconciliation_to_items(db, results, origin_pi)
+    backorders_resolved_by_extra = await _fill_backorders_from_extras(db, results, origin_pi)
+    _seal_confirmed_results(results, actor)
 
     lot.packing_list_received = True
     await db.commit()
