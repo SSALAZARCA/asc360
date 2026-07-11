@@ -29,6 +29,18 @@ def _norm_color(s: str) -> str:
     return re.sub(r'\s+', ' ', str(s).upper().strip().replace('/', ' '))
 
 
+async def resolve_color_runt(db: AsyncSession, color: Optional[str]) -> Optional[str]:
+    """Resolves the RUNT-registered color name for a raw color string via
+    `ColorRuntMapping`, using the same normalization as the bulk-import
+    path. Returns `None` if `color` is falsy or no mapping exists."""
+    if not color:
+        return None
+    mapping = (await db.execute(
+        select(ColorRuntMapping).where(ColorRuntMapping.color_key == _norm_color(color))
+    )).scalar_one_or_none()
+    return mapping.nombre_runt if mapping else None
+
+
 async def _load_models_map(db: AsyncSession) -> dict[str, str]:
     """Returns {UPPER(model_name): canonical_model_name} from vehicle_models."""
     rows = (await db.execute(select(VehicleModel.model_name))).scalars().all()
@@ -552,12 +564,7 @@ async def _process_moto_packing_list(db: AsyncSession, sheet, actor: CurrentUser
         model_raw = _cell(sheet, row_idx, col_map, "model", "model name", "item description", "description")
         model = str(model_raw).strip() if model_raw else None
 
-        _color_runt = None
-        if color:
-            _cr = (await db.execute(
-                select(ColorRuntMapping).where(ColorRuntMapping.color_key == _norm_color(color))
-            )).scalar_one_or_none()
-            _color_runt = _cr.nombre_runt if _cr else None
+        _color_runt = await resolve_color_runt(db, color)
 
         if vin_clean in existing_units_map:
             # Upsert: actualizar campos del archivo, sin tocar datos de aduana/DIM
