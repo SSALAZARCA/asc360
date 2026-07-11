@@ -24,10 +24,13 @@ quirks that are locked verbatim, not fixed:
   - Note 4: MISSING's `qty_pending` computation has no `max(0, ...)` floor
     (unlike PARTIAL), and does not reset `item.status` to "BACKORDER" when
     `item.qty_received` is already nonzero.
-  - Design quirk: Pass 2 uses the FULL `rr.qty_in_packing` as backorder-fill
-    surplus for a MATCHED EXTRA row, even though Pass 1 already applied the
-    ordered portion to the item — a likely double-count. Locked as-is here;
-    to be logged to `project/lista-pendientes` (not fixed) in Phase 4.
+
+FIXED (no longer a locked quirk, see `sdd/confirm-reconciliation-extra-surplus-fix`):
+Pass 2 used to offer the FULL `rr.qty_in_packing` as backorder-fill surplus
+for a MATCHED EXTRA row, even though Pass 1 already applied the ordered
+portion to the item — a double-count. It now offers only the true excess
+(`qty_in_packing - qty_ordered`, double-clamped). See
+`TestConfirmMatchedExtraSurplusIsTrueExcess` below.
 
 These tests exercise the REAL `confirm_reconciliation` function against a
 `FakeAsyncSession` (see tests/imports/conftest.py) — no live database, no
@@ -191,16 +194,15 @@ class TestConfirmPureExtraFifoFill:
         assert rr.confirmed_at is not None  # sealed like every other row
 
 
-class TestConfirmMatchedExtraSurplusQuirk:
+class TestConfirmMatchedExtraSurplusIsTrueExcess:
 
-    async def test_matched_extra_uses_full_qty_in_packing_as_surplus(self):
-        """Locks the double-count quirk (design's 'Observed-behavior quirk'):
-        Pass 1 already applies the FULL `qty_in_packing` to the matched item
-        (not just the excess over `qty_ordered`), and Pass 2 THEN offers that
-        SAME full `qty_in_packing` as surplus to fill backorders — the
-        ordered portion effectively gets counted twice. This is a likely
-        latent bug, preserved verbatim here (not fixed); to be logged to
-        `project/lista-pendientes` in a future PR, not this one."""
+    async def test_matched_extra_offers_only_excess_over_qty_ordered(self):
+        """Fix verification: Pass 1 already applies the FULL `qty_in_packing`
+        to the matched item, so the ordered portion is already accounted for
+        there. Pass 2 must therefore only offer the TRUE excess
+        (`qty_in_packing - qty_ordered`) to fill OTHER open backorders, not
+        the full `qty_in_packing` again — otherwise the ordered portion gets
+        double-counted as surplus. See `sdd/confirm-reconciliation-extra-surplus-fix`."""
         lot = make_lot()
         item = make_spare_part_item(lot.id, "ABC-002", qty_ordered=10, qty_received=0, status="PENDING")
         rr = make_reconciliation_result(
@@ -221,14 +223,72 @@ class TestConfirmMatchedExtraSurplusQuirk:
         assert item.status == "DECLARED"
         assert result["confirmed"] == 1
 
-        # Pass 2: surplus = qty_in_packing (15), NOT qty_in_packing - qty_ordered (5).
-        assert bo.qty_pending == 5  # 20 - 15, locks the full-15-as-surplus quirk
+        # Pass 2: surplus = qty_in_packing - qty_ordered (5), true excess only.
+        assert bo.qty_pending == 15  # 20 - 5
         assert bo.resolved is False
         events = [h["event"] for h in bo.history]
         assert events[-1] == "PARTIAL_ASSIGNMENT_BY_EXTRA"
         assert rr.result == "EXTRA_APPLIED"
         assert result["backorders_assigned_by_extra"] == 0  # not fully resolved
         assert rr.confirmed_at is not None
+
+    async def test_pure_extra_surplus_unchanged_by_fix(self):
+        """Pure EXTRA (`qty_ordered is None`, no matching order item) is
+        unaffected by the matched-EXTRA fix: the full `qty_in_packing` is
+        still genuine surplus. Uses numbers distinct from the matched-EXTRA
+        test above to avoid confusion between the two paths."""
+        lot = make_lot()
+        rr = make_reconciliation_result(
+            lot.id, "ABC-003", result="EXTRA",
+            spare_part_item_id=None, qty_ordered=None, qty_in_packing=8,
+        )
+        bo = make_backorder(
+            spare_part_item_id=uuid.uuid4(), part_number="ABC-003",
+            origin_pi="OTHER-PI-222", qty_pending=20, resolved=False,
+        )
+        db = _session([rr], backorder_selects=[[bo]])
+
+        result = await confirm_reconciliation(db, lot, make_actor())
+
+        # Pure EXTRA has no spare_part_item_id -> Pass 1 skips it entirely.
+        assert result["confirmed"] == 0
+
+        # Pass 2: surplus = full qty_in_packing (8), unchanged from before the fix.
+        assert bo.qty_pending == 12  # 20 - 8
+        assert bo.resolved is False
+        events = [h["event"] for h in bo.history]
+        assert events[-1] == "PARTIAL_ASSIGNMENT_BY_EXTRA"
+        assert rr.result == "EXTRA_APPLIED"
+
+    async def test_negative_qty_ordered_clamps_surplus_to_qty_in_packing(self):
+        """Data-entry-error simulation: a matched EXTRA row with a negative
+        `qty_ordered` (unreachable via normal reconciliation-build logic, but
+        reachable via the unconstrained PATCH endpoint on SparePartItem — see
+        design's double-clamp rationale) must never let surplus exceed
+        `qty_in_packing`. Constructs the `ReconciliationResult` directly via
+        the test factory, bypassing `_build_reconciliation_result_row`."""
+        lot = make_lot()
+        item = make_spare_part_item(lot.id, "ABC-004", qty_ordered=10, qty_received=0, status="PENDING")
+        rr = make_reconciliation_result(
+            lot.id, "ABC-004", result="EXTRA",
+            spare_part_item_id=item.id, qty_ordered=-5, qty_in_packing=3,
+        )
+        bo = make_backorder(
+            spare_part_item_id=item.id, part_number="ABC-004",
+            origin_pi="OTHER-PI-333", qty_pending=10, resolved=False,
+        )
+        db = _session([rr], get_objects=[item], backorder_selects=[[bo]])
+
+        result = await confirm_reconciliation(db, lot, make_actor())
+
+        assert result["confirmed"] == 1
+
+        # Surplus offered must be capped at qty_in_packing (3), never inflated
+        # to qty_in_packing - qty_ordered = 3 - (-5) = 8.
+        assert bo.qty_pending == 7  # 10 - 3, NOT 2 (10 - 8)
+        events = [h["event"] for h in bo.history]
+        assert events[-1] == "PARTIAL_ASSIGNMENT_BY_EXTRA"
+        assert rr.result == "EXTRA_APPLIED"
 
 
 class TestConfirmAlreadyConfirmedGuard:

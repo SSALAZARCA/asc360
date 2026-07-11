@@ -1886,7 +1886,10 @@ async def _fill_backorders_from_extras(
     for rr in results:
         if rr.result != "EXTRA":
             continue
-        surplus_qty = rr.qty_in_packing or 0
+        if rr.qty_ordered is not None:  # matched EXTRA — Pass 1 already consumed qty_ordered
+            surplus_qty = max((rr.qty_in_packing or 0) - max(rr.qty_ordered, 0), 0)
+        else:                            # pure EXTRA — full packing qty is genuine surplus
+            surplus_qty = rr.qty_in_packing or 0
         if surplus_qty <= 0:
             continue
 
