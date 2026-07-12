@@ -29,12 +29,15 @@ from tests.imports.conftest import (
 )
 
 
-def _session(models_rows=None, old_results=None, old_pls=None, lot_items=None) -> FakeAsyncSession:
-    """Builds a FakeAsyncSession with the 4-call execute queue in the exact
+def _session(models_rows=None, confirmed_check=None, old_results=None, old_pls=None, lot_items=None) -> FakeAsyncSession:
+    """Builds a FakeAsyncSession with the 5-call execute queue in the exact
     order `reconcile_lot_packing_list` issues them today (see the class
-    docstring in conftest.py)."""
+    docstring in conftest.py). `confirmed_check` is the G3 defense-in-depth
+    existence check — empty for every scenario here (none involves an
+    already-confirmed lot)."""
     return FakeAsyncSession(execute_queue=[
         models_rows if models_rows is not None else [],
+        confirmed_check if confirmed_check is not None else [],
         old_results if old_results is not None else [],
         old_pls if old_pls is not None else [],
         lot_items if lot_items is not None else [],
@@ -257,3 +260,32 @@ class TestReconcileReupload:
 
         assert old_rr in db.deleted
         assert old_pl in db.deleted
+
+
+class TestReconcileAlreadyConfirmedGuard:
+    """G3: defense-in-depth check inside `reconcile_lot_packing_list` itself,
+    placed immediately before `_replace_lot_packing_list` (after model
+    loading and Excel parsing), to minimize the window where a concurrent
+    `confirm_reconciliation` commits after the endpoint-level (G1) guard
+    passed but before the delete-and-recreate cascade runs."""
+
+    async def test_confirmed_lot_mid_flight_returns_error_and_touches_nothing(self):
+        lot = make_lot()
+        item = make_spare_part_item(lot.id, "ABC-001", qty_ordered=10)
+        db = _session(confirmed_check=["some-confirmed-rr-id"], lot_items=[item])
+
+        file_bytes = build_packing_list_xlsx([
+            {"part_number": "ABC-001", "description": "Brake pad", "qty": 10},
+        ])
+
+        result = await reconcile_lot_packing_list(
+            db, lot, file_bytes, "pl.xlsx", "minio/pl.xlsx", make_actor()
+        )
+
+        assert result == {"error": "ALREADY_CONFIRMED"}
+        assert db.added == []
+        assert db.deleted == []
+        assert db.flush_count == 0
+        # Only the model-map + confirmed-check queries ran — the guard fires
+        # before old_results/old_pls/lot_items are ever queried.
+        assert db.executed_statements == db.executed_statements[:2]

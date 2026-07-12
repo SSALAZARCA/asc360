@@ -55,6 +55,24 @@ def _require_superadmin(current_user: CurrentUser) -> CurrentUser:
     return current_user
 
 
+def _confirmed_lot_message(current_user: CurrentUser, lot_identifier: str) -> str:
+    """Role-aware, neutral Latin-American Spanish message for the
+    `LOT_ALREADY_CONFIRMED` 409 family (G1/G3/G5/G6 guards). `superadmin`
+    can run the rollback itself, so the message names it directly;
+    non-superadmin editors (proveedor/administrativo) cannot, so they are
+    told to contact an administrator instead."""
+    if current_user.is_superadmin:
+        return (
+            f"El lote {lot_identifier} ya tiene una reconciliación confirmada. "
+            "Para modificarlo, primero debe ejecutarse un rollback del lote "
+            "(POST /spare-parts/rollback-lot)."
+        )
+    return (
+        f"El lote {lot_identifier} ya tiene una reconciliación confirmada y no "
+        "puede modificarse. Por favor, contacte a un administrador."
+    )
+
+
 def _excel_response(ws_title: str, headers: list, rows: list, filename: str) -> StreamingResponse:
     wb = openpyxl.Workbook()
     ws = wb.active
@@ -1228,6 +1246,15 @@ async def upload_lot_packing_list(
     if not lot:
         raise HTTPException(status_code=404, detail={"detail": "Lote no encontrado", "code": "LOT_NOT_FOUND"})
 
+    # G1: reject re-upload on an already-confirmed lot BEFORE any file read
+    # or MinIO write, so no orphaned storage object or DB row is ever
+    # created (see sdd/packing-list-reupload-requires-rollback).
+    if await imports_service.lot_has_confirmed_reconciliation(db, lot.id):
+        raise HTTPException(
+            status_code=409,
+            detail={"detail": _confirmed_lot_message(current_user, lot.lot_identifier), "code": "LOT_ALREADY_CONFIRMED"},
+        )
+
     file_bytes = await file.read()
     object_name = f"lots/{lot_id}/packing-lists/{uuid.uuid4()}_{file.filename}"
 
@@ -1241,6 +1268,15 @@ async def upload_lot_packing_list(
     result = await imports_service.reconcile_lot_packing_list(
         db, lot, file_bytes, file.filename, object_name, current_user
     )
+    # G3: defense-in-depth — the service itself re-checked immediately
+    # before the delete-and-recreate cascade (closes the race window where
+    # a concurrent confirm lands after the G1 check above passed). Translate
+    # its error dict into a real 409, never a silent HTTP 200 error body.
+    if isinstance(result, dict) and result.get("error") == "ALREADY_CONFIRMED":
+        raise HTTPException(
+            status_code=409,
+            detail={"detail": _confirmed_lot_message(current_user, lot.lot_identifier), "code": "LOT_ALREADY_CONFIRMED"},
+        )
     await db.commit()
     return result
 

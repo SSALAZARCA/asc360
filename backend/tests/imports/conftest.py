@@ -418,15 +418,21 @@ class FakeAsyncSession:
 
     `execute_queue` MUST be provided in the exact order `reconcile_lot_packing_list`
     issues its `select(...)` calls today:
-      1. `select(VehicleModel.model_name)`      (via `_load_models_map`)
-      2. `select(ReconciliationResult)...`       (old_results for the lot)
-      3. `select(PackingList)...`                (old_pls for the lot)
-      4. `select(SparePartItem)...`              (lot_items_list)
+      1. `select(VehicleModel.model_name)`       (via `_load_models_map`)
+      2. `select(ReconciliationResult.id)...`    (G3 defense-in-depth
+         confirmed-existence check, immediately before `_replace_lot_packing_list`)
+      3. `select(ReconciliationResult)...`       (old_results for the lot,
+         inside `_replace_lot_packing_list`)
+      4. `select(PackingList)...`                (old_pls for the lot)
+      5. `select(SparePartItem)...`              (lot_items_list)
 
     This positional coupling is intentional: it is exactly what task 2.1 asks
     for — a regression test that captures TODAY's behavior byte-for-byte, so
     the Phase 2 refactor (moving parsing into a pure helper) can be verified
-    to not reorder or alter any DB interaction.
+    to not reorder or alter any DB interaction. G3 (`sdd/packing-list-
+    reupload-requires-rollback`) added call #2; the 8 pre-existing pinned
+    scenarios queue an empty list there (none involve an already-confirmed
+    lot).
     """
 
     def __init__(self, execute_queue: list[list], get_objects: Optional[list] = None):

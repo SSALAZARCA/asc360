@@ -47,6 +47,23 @@ async def _load_models_map(db: AsyncSession) -> dict[str, str]:
     return {m.upper(): m for m in rows}
 
 
+async def lot_has_confirmed_reconciliation(db: AsyncSession, lot_id) -> bool:
+    """True if `lot_id` has at least one `ReconciliationResult` with
+    `confirmed_at IS NOT NULL` — the shared predicate for every
+    already-confirmed-lot guard (G1/G3/...): `_seal_confirmed_results`
+    stamps ALL rows for a lot atomically on confirm, so any confirmed row
+    means the whole lot's reconciliation is confirmed."""
+    row = (await db.execute(
+        select(ReconciliationResult.id)
+        .where(
+            ReconciliationResult.lot_id == lot_id,
+            ReconciliationResult.confirmed_at.isnot(None),
+        )
+        .limit(1)
+    )).scalars().first()
+    return row is not None
+
+
 def _normalize_model(raw: str | None, models_map: dict[str, str]) -> str | None:
     """Returns canonical model name if found (case-insensitive), None if empty."""
     if not raw:
@@ -1759,6 +1776,13 @@ async def reconcile_lot_packing_list(
         return {
             "error": f"Modelos no reconocidos en el Excel: {', '.join(unknown_models)}. Verificá el catálogo de modelos antes de reimportar."
         }
+
+    # G3: defense-in-depth re-check, immediately before the
+    # delete-and-recreate cascade — minimizes the window where a concurrent
+    # `confirm_reconciliation` commits after the endpoint's own guard (G1)
+    # passed but before this service deletes/replaces anything.
+    if await lot_has_confirmed_reconciliation(db, lot.id):
+        return {"error": "ALREADY_CONFIRMED"}
 
     # Eliminar resultados anteriores para este lote (re-conciliación) y crear
     # el nuevo PackingList + PackingListItem.
