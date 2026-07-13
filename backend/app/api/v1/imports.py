@@ -1086,6 +1086,19 @@ async def update_spare_part_item(
 
     update_data = payload.model_dump(exclude_none=True)
 
+    # G4: reject edits to packing-list-DECLARED snapshot fields once the
+    # item's lot has already been confirmed (see sdd/packing-list-
+    # reupload-requires-rollback). `qty_physical`/pricing/cosmetic fields
+    # stay editable — they are later-stage or non-snapshot data, not the
+    # confirmed packing-list declaration.
+    snapshot_fields = {"part_number", "qty_ordered", "qty_received", "status"}
+    if snapshot_fields & set(update_data.keys()):
+        if await imports_service.lot_has_confirmed_reconciliation(db, item.lot_id):
+            raise HTTPException(
+                status_code=409,
+                detail={"detail": _confirmed_lot_message(current_user), "code": "ITEM_LOT_CONFIRMED"},
+            )
+
     # qty_physical se maneja aparte — requiere cruce confirmado y dispara lógica de backorder
     qty_physical = update_data.pop("qty_physical", None)
 
