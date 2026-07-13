@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 import openpyxl
+from fastapi import HTTPException
 from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -901,6 +902,18 @@ async def create_sp_order_from_excel(
         )
         db.add(lot)
         await db.flush()
+
+    # G6: reject reusing a confirmed lot's reference for a new order-detail
+    # import — the block below deletes non-backorder items (orphaning their
+    # confirmed ReconciliationResult via FK) and mutates backorder-item
+    # qty_ordered in place, the same corruption class G1 closes for
+    # packing-list re-uploads (see sdd/packing-list-reupload-requires-rollback).
+    if await lot_has_confirmed_reconciliation(db, lot.id):
+        from app.api.v1.imports import _confirmed_lot_message
+        raise HTTPException(
+            status_code=409,
+            detail={"detail": _confirmed_lot_message(actor, lot.lot_identifier), "code": "LOT_ALREADY_CONFIRMED"},
+        )
 
     # Cargar ítems previos del lote y clasificarlos según si tienen backorders
     old_items = (await db.execute(
