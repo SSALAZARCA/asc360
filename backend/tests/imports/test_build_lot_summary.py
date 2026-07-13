@@ -20,7 +20,7 @@ def test_build_lot_summary_empty_items_returns_schema_defaults():
     lot = make_lot()
     lot.items = []
 
-    read = _build_lot_summary(lot, rotation_map={})
+    read = _build_lot_summary(lot, rotation_map={}, confirmed_lot_ids=set())
 
     assert read.items_count == 0
     assert read.total_qty_ordered == 0
@@ -37,7 +37,7 @@ def test_build_lot_summary_confirmed_unit_price_is_not_flagged_as_estimate():
     item = make_spare_part_item(lot.id, "PN-A", qty_ordered=5, unit_price=10, status="RECEIVED")
     lot.items = [item]
 
-    read = _build_lot_summary(lot, rotation_map={})
+    read = _build_lot_summary(lot, rotation_map={}, confirmed_lot_ids=set())
 
     assert read.fob_value == 50.0
     assert read.fob_value_is_estimate is False
@@ -48,7 +48,7 @@ def test_build_lot_summary_fob_pi_only_is_flagged_as_estimate():
     item = make_spare_part_item(lot.id, "PN-B", qty_ordered=2, fob_pi=8, status="PENDING")
     lot.items = [item]
 
-    read = _build_lot_summary(lot, rotation_map={})
+    read = _build_lot_summary(lot, rotation_map={}, confirmed_lot_ids=set())
 
     assert read.fob_value == 16.0
     assert read.fob_value_is_estimate is True
@@ -59,7 +59,7 @@ def test_build_lot_summary_cancelled_items_excluded_from_fob():
     item = make_spare_part_item(lot.id, "PN-C", qty_ordered=100, unit_price=999, status="CANCELLED")
     lot.items = [item]
 
-    read = _build_lot_summary(lot, rotation_map={})
+    read = _build_lot_summary(lot, rotation_map={}, confirmed_lot_ids=set())
 
     assert read.fob_value is None
     assert read.fob_value_is_estimate is False
@@ -72,7 +72,7 @@ def test_build_lot_summary_pl_value_gated_on_packing_list_received():
     )
     lot.items = [item]
 
-    read = _build_lot_summary(lot, rotation_map={})
+    read = _build_lot_summary(lot, rotation_map={}, confirmed_lot_ids=set())
 
     assert read.pl_value is None
 
@@ -84,7 +84,7 @@ def test_build_lot_summary_pl_value_computed_when_packing_list_received():
     )
     lot.items = [item]
 
-    read = _build_lot_summary(lot, rotation_map={})
+    read = _build_lot_summary(lot, rotation_map={}, confirmed_lot_ids=set())
 
     assert read.pl_value == 30.0
 
@@ -95,9 +95,27 @@ def test_build_lot_summary_sin_clasificar_bucket():
     item_b = make_spare_part_item(lot.id, "PN-B", qty_ordered=1, status="RECEIVED")
     lot.items = [item_a, item_b]
 
-    read = _build_lot_summary(lot, rotation_map={"PN-A": "FAST"})
+    read = _build_lot_summary(lot, rotation_map={"PN-A": "FAST"}, confirmed_lot_ids=set())
 
     assert read.rotation_pct == {"FAST": 50.0, "sin_clasificar": 50.0}
+
+
+def test_build_lot_summary_reconciliation_confirmed_true_when_lot_id_in_set():
+    lot = make_lot()
+    lot.items = []
+
+    read = _build_lot_summary(lot, rotation_map={}, confirmed_lot_ids={lot.id})
+
+    assert read.reconciliation_confirmed is True
+
+
+def test_build_lot_summary_reconciliation_confirmed_false_when_lot_id_not_in_set():
+    lot = make_lot()
+    lot.items = []
+
+    read = _build_lot_summary(lot, rotation_map={}, confirmed_lot_ids=set())
+
+    assert read.reconciliation_confirmed is False
 
 
 # --- Direct sub-helper tests (no lot/pydantic wrapper needed) --------------

@@ -64,6 +64,7 @@ def test_lot_summary_fields_computed_from_items():
     fake_db = FakeAsyncSession(execute_queue=[
         [lot],
         [SimpleNamespace(factory_part_number="PN-A", rotation_class="FAST")],
+        [],  # _build_confirmed_lot_ids: no confirmed ReconciliationResult for this lot
     ])
 
     with make_test_client(current_user=make_imports_editor(), fake_db_session=fake_db) as client:
@@ -79,13 +80,17 @@ def test_lot_summary_fields_computed_from_items():
     assert body["fob_value_is_estimate"] is True
     assert body["pl_value"] == 30.0
     assert body["rotation_pct"] == {"FAST": 33.3, "sin_clasificar": 66.7}
+    assert body["reconciliation_confirmed"] is False
 
 
 def test_lot_with_no_items_keeps_schema_defaults():
     """`lot.items == []` -> no rotation-map query, all computed fields stay at schema defaults."""
     lot = make_lot()
     lot.items = []
-    fake_db = FakeAsyncSession(execute_queue=[[lot]])
+    fake_db = FakeAsyncSession(execute_queue=[
+        [lot],
+        [],  # _build_confirmed_lot_ids: still queried even with zero items (queries by lot_id, not lot.items)
+    ])
 
     with make_test_client(current_user=make_imports_editor(), fake_db_session=fake_db) as client:
         response = client.get("/api/v1/imports/spare-part-lots")
@@ -100,6 +105,7 @@ def test_lot_with_no_items_keeps_schema_defaults():
     assert body["fob_value_is_estimate"] is False
     assert body["pl_value"] is None
     assert body["rotation_pct"] == {}
+    assert body["reconciliation_confirmed"] is False
 
 
 def test_shipment_order_id_filter_binds_the_uuid_param():
@@ -170,3 +176,51 @@ def test_has_bl_false_filter_matches_placeholder_bl_container():
     assert "IS NULL" in sql
     assert "IS NOT NULL" not in sql
     assert set(compiled.params.values()) == {"", "PENDING", "TBD"}
+
+
+class TestReconciliationConfirmedSignal:
+    """Regression tests for the G6-adjacent `reconciliation_confirmed`
+    field (see sdd/packing-list-reupload-requires-rollback, Phase 6): the
+    batched `_build_confirmed_lot_ids` helper, wired into
+    `_build_lot_summary`/`list_spare_part_lots`, replaces the frontend's
+    previous (wrong) use of `packing_list_received` as the confirmed
+    signal."""
+
+    def test_each_lot_gets_its_own_correct_flag_via_a_single_batched_query(self):
+        """Two lots, only one confirmed — proves per-lot correctness AND
+        that the check is a single batched query, not one-per-lot (N+1):
+        with zero items on both lots, `_build_rotation_map` never executes
+        (early-returns on an empty part-number set), so exactly 2
+        `db.execute()` calls total are expected: the lots query and ONE
+        confirmed-lot-ids query covering both lots."""
+        lot_a = make_lot(lot_identifier="LOT-A")
+        lot_a.items = []
+        lot_b = make_lot(lot_identifier="LOT-B")
+        lot_b.items = []
+        fake_db = FakeAsyncSession(execute_queue=[
+            [lot_a, lot_b],
+            [lot_b.id],  # only lot_b has a confirmed ReconciliationResult
+        ])
+
+        with make_test_client(current_user=make_imports_editor(), fake_db_session=fake_db) as client:
+            response = client.get("/api/v1/imports/spare-part-lots")
+
+        assert response.status_code == 200
+        body = response.json()
+        by_id = {row["id"]: row for row in body}
+        assert by_id[str(lot_a.id)]["reconciliation_confirmed"] is False
+        assert by_id[str(lot_b.id)]["reconciliation_confirmed"] is True
+        assert len(fake_db.executed_statements) == 2
+
+    def test_no_lots_skips_the_confirmed_lot_ids_query_entirely(self):
+        """Zero-cost when inapplicable — mirrors G4's field-scoped guard
+        pattern: an empty lot list must not issue the confirmed-lot-ids
+        query at all."""
+        fake_db = FakeAsyncSession(execute_queue=[[]])
+
+        with make_test_client(current_user=make_imports_editor(), fake_db_session=fake_db) as client:
+            response = client.get("/api/v1/imports/spare-part-lots")
+
+        assert response.status_code == 200
+        assert response.json() == []
+        assert len(fake_db.executed_statements) == 1

@@ -291,6 +291,7 @@ class SparePartLotRead(BaseModel):
     fob_value: Optional[float] = None
     fob_value_is_estimate: bool = False
     pl_value: Optional[float] = None
+    reconciliation_confirmed: bool = False
 
 
 # ---------------------------------------------------------------------------

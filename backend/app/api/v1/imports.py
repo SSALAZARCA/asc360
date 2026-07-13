@@ -761,6 +761,25 @@ async def _build_rotation_map(db: AsyncSession, lots) -> dict[str, str]:
     return {r.factory_part_number: r.rotation_class for r in refs if r.rotation_class}
 
 
+async def _build_confirmed_lot_ids(db: AsyncSession, lots) -> set:
+    """Batch-query which of `lots` have at least one confirmed
+    `ReconciliationResult` (see sdd/packing-list-reupload-requires-rollback).
+    Mirrors `_build_rotation_map`'s shape: one query for the whole page,
+    no N+1."""
+    lot_ids = [lot.id for lot in lots]
+    if not lot_ids:
+        return set()
+    rows = (await db.execute(
+        select(ReconciliationResult.lot_id)
+        .where(
+            ReconciliationResult.lot_id.in_(lot_ids),
+            ReconciliationResult.confirmed_at.isnot(None),
+        )
+        .distinct()
+    )).scalars().all()
+    return set(rows)
+
+
 def _compute_lot_fob(items) -> tuple[Optional[float], bool]:
     """Sums FOB value across non-cancelled items; flags estimate when only fob_pi is available."""
     fob_total = 0.0
@@ -811,9 +830,10 @@ def _compute_rotation_pct(items, rotation_map: dict[str, str]) -> dict:
     return rotation_pct
 
 
-def _build_lot_summary(lot: SparePartLot, rotation_map: dict[str, str]) -> SparePartLotRead:
+def _build_lot_summary(lot: SparePartLot, rotation_map: dict[str, str], confirmed_lot_ids: set) -> SparePartLotRead:
     """Pure per-lot summary builder: populates a SparePartLotRead from an ORM lot + its items."""
     read = SparePartLotRead.model_validate(lot)
+    read.reconciliation_confirmed = lot.id in confirmed_lot_ids
     read.items_count = len({i.part_number for i in lot.items})
     if not lot.items:
         return read
@@ -856,8 +876,9 @@ async def list_spare_part_lots(
 
     lots = (await db.execute(stmt)).scalars().all()
     rotation_map = await _build_rotation_map(db, lots)
+    confirmed_lot_ids = await _build_confirmed_lot_ids(db, lots)
 
-    return [_build_lot_summary(lot, rotation_map) for lot in lots]
+    return [_build_lot_summary(lot, rotation_map, confirmed_lot_ids) for lot in lots]
 
 
 # ---------------------------------------------------------------------------
