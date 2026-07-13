@@ -1248,6 +1248,16 @@ async def upload_lot_order_detail(
     if not lot:
         raise HTTPException(status_code=404, detail={"detail": "Lote no encontrado", "code": "LOT_NOT_FOUND"})
 
+    # G5: reject order-detail re-upload on an already-confirmed lot BEFORE
+    # any file read — `load_order_detail_excel` mutates qty_ordered/
+    # qty_pending on existing items, desyncing the confirmed reconciliation
+    # snapshot (see sdd/packing-list-reupload-requires-rollback).
+    if await imports_service.lot_has_confirmed_reconciliation(db, lot.id):
+        raise HTTPException(
+            status_code=409,
+            detail={"detail": _confirmed_lot_message(current_user, lot.lot_identifier), "code": "LOT_ALREADY_CONFIRMED"},
+        )
+
     file_bytes = await file.read()
     result = await imports_service.load_order_detail_excel(db, lot, file_bytes, current_user)
     await db.commit()
