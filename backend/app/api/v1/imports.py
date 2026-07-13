@@ -55,20 +55,25 @@ def _require_superadmin(current_user: CurrentUser) -> CurrentUser:
     return current_user
 
 
-def _confirmed_lot_message(current_user: CurrentUser, lot_identifier: str) -> str:
+def _confirmed_lot_message(current_user: CurrentUser, lot_identifier: Optional[str] = None) -> str:
     """Role-aware, neutral Latin-American Spanish message for the
-    `LOT_ALREADY_CONFIRMED` 409 family (G1/G3/G5/G6 guards). `superadmin`
+    already-confirmed-lot 409 family (G1/G2/G3/G4/G5/G6 guards). `superadmin`
     can run the rollback itself, so the message names it directly;
     non-superadmin editors (proveedor/administrativo) cannot, so they are
-    told to contact an administrator instead."""
+    told to contact an administrator instead. `lot_identifier` is optional:
+    callers that already hold the `SparePartLot` (G1/G3/G5/G6) pass it for a
+    more specific message; callers that only hold a row linked to the lot
+    (G2/G4) may omit it rather than issue an extra lookup just for the
+    message text."""
+    lot_ref = f"El lote {lot_identifier}" if lot_identifier else "Este lote"
     if current_user.is_superadmin:
         return (
-            f"El lote {lot_identifier} ya tiene una reconciliación confirmada. "
+            f"{lot_ref} ya tiene una reconciliación confirmada. "
             "Para modificarlo, primero debe ejecutarse un rollback del lote "
             "(POST /spare-parts/rollback-lot)."
         )
     return (
-        f"El lote {lot_identifier} ya tiene una reconciliación confirmada y no "
+        f"{lot_ref} ya tiene una reconciliación confirmada y no "
         "puede modificarse. Por favor, contacte a un administrador."
     )
 
@@ -1173,6 +1178,22 @@ async def update_reconciliation_result(
         raise HTTPException(status_code=404, detail={"detail": "Resultado no encontrado", "code": "NOT_FOUND"})
 
     update_data = payload.model_dump(exclude_none=True)
+
+    # G2: reject edits to packing-list-DECLARED snapshot fields once the
+    # lot's reconciliation has been confirmed (see sdd/packing-list-
+    # reupload-requires-rollback). `qty_physical` is intentionally excluded
+    # from this set — physical inspection is a LATER stage that happens
+    # AFTER confirmation and has its own `packing_list_received` gate below
+    # (owned by sibling change `reconciliation-result-qty-physical-fix`).
+    # A payload mixing a declared field with `qty_physical` is rejected as
+    # a whole (simpler is safer here — the one-field-per-request UI never
+    # produces that combination).
+    declared_snapshot_fields = {"part_number", "description_es", "model_applicable", "qty_in_packing"}
+    if rr.confirmed_at is not None and declared_snapshot_fields & set(update_data.keys()):
+        raise HTTPException(
+            status_code=409,
+            detail={"detail": _confirmed_lot_message(current_user), "code": "RESULT_LOT_CONFIRMED"},
+        )
 
     if "qty_in_packing" in update_data:
         await _apply_qty_in_packing(db, rr, update_data["qty_in_packing"])
