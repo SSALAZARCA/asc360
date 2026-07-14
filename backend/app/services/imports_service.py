@@ -2506,7 +2506,10 @@ async def _replace_pending_batch(db: AsyncSession, prior_batches: list) -> None:
             try:
                 storage_service.minio_client.remove_object(storage_service.IMPORTS_BUCKET, b.minio_object_name)
             except Exception:
-                pass  # Si ya no existe en MinIO, igual eliminamos el registro
+                logger.warning(
+                    f"No se pudo borrar de MinIO el batch PENDING {b.id} ({b.minio_object_name}) — se elimina igual el registro",
+                    exc_info=True,
+                )
             logger.info(f"Batch PENDING reemplazado por nuevo upload: lot_id={b.lot_id} file={b.file_name}")
             await db.delete(b)
     await db.flush()

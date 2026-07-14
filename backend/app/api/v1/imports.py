@@ -1603,7 +1603,10 @@ def _normalize_code(raw: str) -> str:
 
 def _parse_physical_inspection_excel(content: bytes) -> dict[str, int]:
     """Parsea Excel y devuelve {normalized_part_number: qty}. Ignora header automáticamente."""
-    wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+    try:
+        wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+    except Exception as e:
+        raise ValueError(f"No se pudo leer el archivo Excel: {e}")
     ws = wb.active
     result: dict[str, int] = {}
     for row in ws.iter_rows(values_only=True):
@@ -1641,7 +1644,10 @@ async def physical_inspection_preview(
         )
 
     content = await file.read()
-    excel_map = _parse_physical_inspection_excel(content)
+    try:
+        excel_map = _parse_physical_inspection_excel(content)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
 
     items = (await db.execute(
         select(SparePartItem).where(
@@ -2135,7 +2141,10 @@ _BO_BULK_HEADER_KEYS = {"part", "cod", "cantidad", "qty", "origen", "nuevo", "no
 
 
 def _parse_backorder_bulk_excel(content: bytes) -> list[dict]:
-    wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+    try:
+        wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+    except Exception as e:
+        raise ValueError(f"No se pudo leer el archivo Excel: {e}")
     ws = wb.active
     rows = []
     for row in ws.iter_rows(values_only=True):
@@ -2180,7 +2189,10 @@ async def backorder_bulk_resolve_preview(
 ):
     _require_imports_editor(current_user)
     content = await file.read()
-    rows = _parse_backorder_bulk_excel(content)
+    try:
+        rows = _parse_backorder_bulk_excel(content)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
     if not rows:
         raise HTTPException(status_code=422, detail="El Excel no contiene filas válidas. Verificá el formato: Part Number | Cantidad | PI Origen | PI Nuevo.")
     return await imports_service.bulk_resolve_compute(db, rows, apply=False)
@@ -2194,7 +2206,10 @@ async def backorder_bulk_resolve_apply(
 ):
     _require_imports_editor(current_user)
     content = await file.read()
-    rows = _parse_backorder_bulk_excel(content)
+    try:
+        rows = _parse_backorder_bulk_excel(content)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
     if not rows:
         raise HTTPException(status_code=422, detail="El Excel no contiene filas válidas.")
     result = await imports_service.bulk_resolve_compute(db, rows, apply=True)
@@ -2838,6 +2853,7 @@ async def list_moto_observations(
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
+    _require_imports_editor(current_user)
     result = await db.execute(select(MotoObservation).order_by(MotoObservation.name))
     return result.scalars().all()
 
