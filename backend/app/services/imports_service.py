@@ -823,45 +823,42 @@ SP_ORDER_COLS = {
     "part #", "referencia",
 }
 
-async def create_sp_order_from_excel(
-    db: AsyncSession,
-    reference: str,
-    file_bytes: bytes,
-    actor: CurrentUser,
-) -> dict:
-    """
-    Crea un ShipmentOrder SP + SparePartLot + SparePartItems desde el Excel
-    de solicitud de repuestos del usuario.
-    Columnas esperadas: Codigo Parte | Nombre | Cantidad | Moto Aplica
-    """
-    wb = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True)
-    sheet = None
-    header_row = None
+
+def _locate_sp_order_sheet(wb):
+    """Recorre `wb.sheetnames` en orden y retorna `(sheet, header_row)` de
+    la PRIMERA hoja donde `_find_header_row` matchea `SP_ORDER_COLS`.
+    Lanza ValueError (mensaje "columnas requeridas") si ninguna hoja
+    matchea — antes de cualquier acceso a la base de datos."""
     for name in wb.sheetnames:
         s = wb[name]
         hr = _find_header_row(s, SP_ORDER_COLS)
         if hr:
-            sheet = s
-            header_row = hr
-            break
+            return s, hr
+    raise ValueError(
+        "No se encontraron las columnas requeridas en el Excel. "
+        "Asegurate de tener al menos 3 de estas columnas (sin acentos): "
+        "Codigo Parte / Cantidad / Nombre / Moto Aplica / Part # / Qty"
+    )
 
-    if sheet is None or header_row is None:
-        raise ValueError(
-            "No se encontraron las columnas requeridas en el Excel. "
-            "Asegurate de tener al menos 3 de estas columnas (sin acentos): "
-            "Codigo Parte / Cantidad / Nombre / Moto Aplica / Part # / Qty"
-        )
 
-    col_map = _build_col_map(sheet, header_row)
-    models_map = await _load_models_map(db)
-
+def _validate_sp_order_models(sheet, header_row: int, col_map: dict, models_map: dict[str, str]) -> None:
+    """Valida que todos los valores de "Moto Aplica" presentes en el Excel
+    existan en el catálogo de modelos (`models_map`). Lanza ValueError con
+    el listado de modelos no reconocidos, ANTES de cualquier lookup u
+    operación de escritura sobre la orden/lote."""
     unknown = _collect_unknown_models(sheet, header_row, col_map, models_map, "moto aplica", "moto", "modelo moto", "modelo", "aplica")
     if unknown:
         raise ValueError(f"Modelos no reconocidos en el Excel: {', '.join(unknown)}. Verificá el catálogo de modelos antes de reimportar.")
 
-    ref = reference.strip().upper()
 
-    # Verificar si ya existe un pedido con esta referencia
+async def _upsert_sp_order_and_lot(db: AsyncSession, ref: str) -> tuple["ShipmentOrder", "SparePartLot"]:
+    """Busca un ShipmentOrder por `pi_number == ref`. Si existe, lo
+    reutiliza y crea un SparePartLot solo si aún no tiene uno (flush
+    inmediatamente después de `db.add`). Si no existe, crea tanto la orden
+    (`model="REPUESTOS"`, `is_spare_part=True`,
+    `computed_status="en_preparacion"`) como el lote, cada uno flusheado
+    inmediatamente después de `db.add` — el flush de la orden materializa
+    `order.id`, requerido para la FK del lote."""
     existing_order = (await db.execute(
         select(ShipmentOrder).where(ShipmentOrder.pi_number == ref)
     )).scalars().first()
@@ -903,11 +900,20 @@ async def create_sp_order_from_excel(
         db.add(lot)
         await db.flush()
 
-    # G6: reject reusing a confirmed lot's reference for a new order-detail
-    # import — the block below deletes non-backorder items (orphaning their
-    # confirmed ReconciliationResult via FK) and mutates backorder-item
-    # qty_ordered in place, the same corruption class G1 closes for
-    # packing-list re-uploads (see sdd/packing-list-reupload-requires-rollback).
+    return order, lot
+
+
+async def _reject_if_lot_confirmed(db: AsyncSession, lot: "SparePartLot", actor: CurrentUser) -> None:
+    """G6: rechaza la reutilización de la referencia de un lote YA
+    CONFIRMADO para una nueva importación de detalle de orden — el bloque
+    de reconciliación de ítems que sigue (`_reconcile_existing_lot_items`)
+    borra ítems sin backorder (huérfanando su ReconciliationResult
+    confirmado vía FK) y muta `qty_ordered` de ítems con backorder
+    in-place, la misma clase de corrupción que G1 cierra para
+    reimportaciones de packing list (ver
+    sdd/packing-list-reupload-requires-rollback). DEBE llamarse
+    ESTRICTAMENTE después de `_upsert_sp_order_and_lot` (necesita
+    `lot.id`) y ESTRICTAMENTE antes de `_reconcile_existing_lot_items`."""
     if await lot_has_confirmed_reconciliation(db, lot.id):
         from app.api.v1.imports import _confirmed_lot_message
         raise HTTPException(
@@ -915,13 +921,20 @@ async def create_sp_order_from_excel(
             detail={"detail": _confirmed_lot_message(actor, lot.lot_identifier), "code": "LOT_ALREADY_CONFIRMED"},
         )
 
-    # Cargar ítems previos del lote y clasificarlos según si tienen backorders
+
+async def _reconcile_existing_lot_items(db: AsyncSession, lot: "SparePartLot") -> dict[tuple, "SparePartItem"]:
+    """Carga los SparePartItem previos del lote y los clasifica: los que
+    tienen un Backorder asociado no se pueden borrar (FK NOT NULL) y se
+    indexan por `(part_number, model_applicable)` para actualizarlos
+    in-place más adelante; los que no tienen se borran para que el nuevo
+    Excel reconstruya la estructura limpia. Emite un `select(Backorder.id)`
+    POR CADA ítem previo (N+1, deliberadamente NO batcheado — ver
+    project/lista-pendientes). Un único `db.flush()` cierra el loop
+    completo."""
     old_items = (await db.execute(
         select(SparePartItem).where(SparePartItem.lot_id == lot.id)
     )).scalars().all()
 
-    # Ítems con backorders: no se pueden borrar (FK NOT NULL) → se actualizan in-place
-    # Ítems sin backorders: se borran para que el nuevo Excel reconstruya la estructura limpia
     items_with_backorders: dict[tuple, SparePartItem] = {}
     for old in old_items:
         has_bo = (await db.execute(
@@ -933,11 +946,21 @@ async def create_sp_order_from_excel(
             await db.delete(old)
     await db.flush()
 
-    inserted = updated = skipped = 0
-    errors = []
-    parts_with_price: set[str] = set()
+    return items_with_backorders
 
-    # --- Primer pase: agregar por (part_number, modelo) — misma ref en distintos modelos = filas separadas ---
+
+def _aggregate_sp_order_rows(sheet, header_row: int, col_map: dict, models_map: dict[str, str]) -> tuple[dict, int, list]:
+    """Primer pase: recorre las filas de datos y agrega por
+    `(part_number, modelo)` — la misma referencia en distintos modelos
+    genera filas separadas. Filas sin `part_number` se saltean en
+    silencio (sin contador); filas con `qty` faltante o no positiva
+    incrementan `skipped`. `unit_price` conserva el PRIMER valor no-nulo
+    visto para cada clave agregada; un valor distinto en una fila
+    posterior se ignora. Excepciones por fila se capturan y se agregan a
+    `errors` (esa fila NO se cuenta también como `skipped`). Retorna
+    `(aggregated, skipped, errors)`."""
+    skipped = 0
+    errors = []
     aggregated: dict[tuple, dict] = {}  # (part_number, modelo) → {qty, nombre, modelo_moto, unit_price}
     for row_idx in range(header_row + 1, sheet.max_row + 1):
         try:
@@ -986,7 +1009,23 @@ async def create_sp_order_from_excel(
         except Exception as e:
             errors.append({"row": row_idx, "reason": str(e)})
 
-    # --- Segundo pase: crear/actualizar SparePartItems — una fila por (part_number, modelo) ---
+    return aggregated, skipped, errors
+
+
+def _upsert_sp_order_items(db: AsyncSession, lot: "SparePartLot", aggregated: dict, items_with_backorders: dict) -> tuple[int, int, set[str]]:
+    """Segundo pase: por cada clave agregada, si existe un ítem preexistente
+    con backorder para `(part_number, modelo)` lo actualiza in-place
+    (preservando su FK); si no, inserta un `SparePartItem` nuevo
+    (`qty_received=0`, `qty_pending=qty`, `status="PENDING"`). Acumula
+    `parts_with_price` con cualquier `part_number` que reciba un
+    `unit_price is not None`, sea por insert o update. Marca
+    `lot.detail_loaded = True` solo si `inserted > 0 or updated > 0` (nunca
+    lo resetea a False). NO hace `db.add`/mutación sin `db.flush()` —
+    el flush queda a cargo del orquestador. Retorna
+    `(inserted, updated, parts_with_price)`."""
+    inserted = updated = 0
+    parts_with_price: set[str] = set()
+
     for (part_number, _modelo_key), data in aggregated.items():
         qty = data["qty"]
         nombre = data["nombre"]
@@ -1029,12 +1068,57 @@ async def create_sp_order_from_excel(
         lot.detail_loaded = True
         lot.updated_at = datetime.utcnow() if hasattr(lot, 'updated_at') else None
 
+    return inserted, updated, parts_with_price
+
+
+async def _recalculate_sp_order_pricing(db: AsyncSession, lot: "SparePartLot", parts_with_price: set[str]) -> None:
+    """Recalcula el costo FOB ponderado para cada `part_number` distinto en
+    `parts_with_price`, una vez por parte — se llama DESPUÉS del flush del
+    orquestador, que hace visibles los ítems insertados/actualizados antes
+    de que `recalculate_part_cost` los vuelva a consultar."""
+    if not parts_with_price:
+        return
+    from app.services.pricing_service import recalculate_part_cost
+    for pn in parts_with_price:
+        await recalculate_part_cost(db, pn, lot_identifier=lot.lot_identifier)
+
+
+async def create_sp_order_from_excel(
+    db: AsyncSession,
+    reference: str,
+    file_bytes: bytes,
+    actor: CurrentUser,
+) -> dict:
+    """
+    Crea un ShipmentOrder SP + SparePartLot + SparePartItems desde el Excel
+    de solicitud de repuestos del usuario.
+    Columnas esperadas: Codigo Parte | Nombre | Cantidad | Moto Aplica
+    """
+    wb = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True)
+    sheet, header_row = _locate_sp_order_sheet(wb)
+
+    col_map = _build_col_map(sheet, header_row)
+    models_map = await _load_models_map(db)
+
+    _validate_sp_order_models(sheet, header_row, col_map, models_map)
+
+    ref = reference.strip().upper()
+
+    order, lot = await _upsert_sp_order_and_lot(db, ref)
+
+    # G6 guard — MUST run strictly after the upsert above (needs `lot.id`)
+    # and strictly before _reconcile_existing_lot_items below (see that
+    # guard's docstring for the corruption class it closes).
+    await _reject_if_lot_confirmed(db, lot, actor)
+
+    items_with_backorders = await _reconcile_existing_lot_items(db, lot)
+
+    aggregated, skipped, errors = _aggregate_sp_order_rows(sheet, header_row, col_map, models_map)
+    inserted, updated, parts_with_price = _upsert_sp_order_items(db, lot, aggregated, items_with_backorders)
+
     await db.flush()
 
-    if parts_with_price:
-        from app.services.pricing_service import recalculate_part_cost
-        for pn in parts_with_price:
-            await recalculate_part_cost(db, pn, lot_identifier=lot.lot_identifier)
+    await _recalculate_sp_order_pricing(db, lot, parts_with_price)
 
     return {
         "inserted": inserted,
