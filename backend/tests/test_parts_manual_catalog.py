@@ -134,6 +134,10 @@ async def test_load_section_403_when_not_superadmin():
 async def test_load_section_422_when_pdf_yields_no_parts(tmp_pdf):
     fd, path = tmp_pdf
     db = AsyncMock(spec=AsyncSession)
+    # `vehicle_model_exists` check runs unconditionally BEFORE parsing (added
+    # in 472dba2) — the default AsyncMock return is truthy, so it passes
+    # without extra configuration.
+    db.execute = AsyncMock(side_effect=[_scalar("Renegade 200")])
 
     with patch("app.api.v1.parts_manual._parse_parts_table", return_value=[]), \
          patch("tempfile.mkstemp", return_value=(fd, path)), \
@@ -144,8 +148,9 @@ async def test_load_section_422_when_pdf_yields_no_parts(tmp_pdf):
 
     assert exc.value.status_code == 422
     assert "No se detectaron partes" in exc.value.detail
-    # DB must not be touched before a successful parse
-    db.execute.assert_not_called()
+    # DB is touched exactly once (the vehicle_model_exists check), but no
+    # further section/snapshot queries run once parsing fails.
+    assert db.execute.await_count == 1
 
 
 async def test_load_section_409_when_section_has_data_and_no_force(tmp_pdf):
@@ -156,6 +161,7 @@ async def test_load_section_409_when_section_has_data_and_no_force(tmp_pdf):
 
     db = AsyncMock(spec=AsyncSession)
     db.execute = AsyncMock(side_effect=[
+        _scalar("Renegade 200"),  # vehicle_model_exists check
         _scalar(existing),   # select section
         _scalar(5),          # count items in section
     ])
@@ -193,6 +199,7 @@ async def test_load_section_force_saves_snapshot_before_overwriting(tmp_pdf):
     db = AsyncMock(spec=AsyncSession)
     db.get = AsyncMock(return_value=None)   # SystemConfig/logo → None, refs → None, catalog map → None
     db.execute = AsyncMock(side_effect=[
+        _scalar("Renegade 200"),    # vehicle_model_exists check
         _scalar(existing),          # check if section exists
         _scalars([old_item]),       # snapshot: items in old section
         MagicMock(),                # sa_delete section
