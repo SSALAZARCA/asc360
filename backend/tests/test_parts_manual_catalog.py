@@ -134,9 +134,8 @@ async def test_load_section_403_when_not_superadmin():
 async def test_load_section_422_when_pdf_yields_no_parts(tmp_pdf):
     fd, path = tmp_pdf
     db = AsyncMock(spec=AsyncSession)
-    # `vehicle_model_exists` check runs unconditionally BEFORE parsing (added
-    # in 472dba2) — the default AsyncMock return is truthy, so it passes
-    # without extra configuration.
+    # `vehicle_model_exists` check runs unconditionally BEFORE parsing —
+    # queue a truthy result so it passes without masking the parse failure.
     db.execute = AsyncMock(side_effect=[_scalar("Renegade 200")])
 
     with patch("app.api.v1.parts_manual._parse_parts_table", return_value=[]), \
