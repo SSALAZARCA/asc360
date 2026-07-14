@@ -136,6 +136,7 @@ export default function ReconciliationModal({ lot, onClose, onConfirmed }) {
       setConfirmed(list.length > 0 && list.every(r => r.confirmed_at));
     } catch {
       setResults([]);
+      toast.error('Error al cargar los resultados de la reconciliación');
     } finally {
       setLoading(false);
     }

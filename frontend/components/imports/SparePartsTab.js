@@ -344,6 +344,7 @@ function LotItemsTable({ lotId, userRole, isConfirmed }) {
       setItems(Array.isArray(data) ? data.filter(i => i.status !== 'CANCELLED') : []);
     } catch {
       setItems([]);
+      toast.error('Error al cargar los ítems del lote');
     } finally {
       setLoading(false);
     }
@@ -899,8 +900,8 @@ export default function SparePartsTab({ userRole }) {
       a.download = `repuestos_${new Date().toISOString().slice(0, 10)}.xlsx`;
       a.click();
       URL.revokeObjectURL(url);
-    } catch (e) {
-      console.error('Error exportando repuestos:', e);
+    } catch {
+      toast.error('Error al exportar el listado de repuestos');
     } finally {
       setExportingRepuestos(false);
     }
@@ -955,6 +956,7 @@ export default function SparePartsTab({ userRole }) {
       setLots(Array.isArray(data) ? data : []);
     } catch {
       setLots([]);
+      toast.error('Error al cargar los lotes de repuestos');
     } finally {
       setLoading(false);
     }
@@ -970,6 +972,7 @@ export default function SparePartsTab({ userRole }) {
       setLotStats(data);
     } catch {
       setLotStats({ unique_refs: null, declared_refs: null });
+      toast.error('Error al cargar las estadísticas de lotes');
     }
   }, [filterLoaded, filterBL]);
 
