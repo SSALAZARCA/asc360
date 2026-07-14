@@ -78,7 +78,7 @@ async function expandLotRow(lotIdentifier) {
   const row = await screen.findByText(lotIdentifier);
   fireEvent.click(row);
   const partNumberCell = await screen.findByText('PN-001');
-  return within(partNumberCell.closest('table'));
+  return partNumberCell.closest('table');
 }
 
 beforeEach(() => {

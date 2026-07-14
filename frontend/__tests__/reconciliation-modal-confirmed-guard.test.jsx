@@ -15,7 +15,7 @@
  *     guard for the existing editable/upload behavior).
  */
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 
 const mockAuthFetch = jest.fn();
 jest.mock('../lib/authFetch', () => ({
@@ -109,8 +109,10 @@ describe('ReconciliationModal — confirmed-lot guard (G2 field-edit UI)', () =>
     expect(cell).toHaveAttribute('title', 'Reconciliación confirmada — no editable');
 
     // Clicking must NOT turn the cell into an <input> (no PATCH should ever
-    // be attempted from a read-only cell).
+    // be attempted from a read-only cell) — scoped to the results table to
+    // avoid the modal's own (unrelated) search textbox.
     fireEvent.click(cell);
-    expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+    const table = cell.closest('table');
+    expect(within(table).queryByRole('textbox')).not.toBeInTheDocument();
   });
 });
