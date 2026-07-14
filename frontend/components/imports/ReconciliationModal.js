@@ -34,10 +34,21 @@ function SummaryCard({ label, count, result }) {
   );
 }
 
-function EditableReconciliationCell({ resultId, field, current, type = 'text', align = 'left', cellStyle = {}, onSaved }) {
+function EditableReconciliationCell({ resultId, field, current, type = 'text', align = 'left', cellStyle = {}, onSaved, readOnly = false }) {
   const [editing, setEditing] = useState(false);
   const [hover, setHover] = useState(false);
   const [value, setValue] = useState(current ?? '');
+
+  if (readOnly) {
+    return (
+      <span
+        title="Reconciliación confirmada — no editable"
+        style={{ display: 'inline-flex', alignItems: 'center', padding: '2px 5px', textAlign: align, ...cellStyle }}
+      >
+        {current != null && current !== '' ? current : <span style={{ color: '#3f3f55' }}>—</span>}
+      </span>
+    );
+  }
 
   const save = async () => {
     setEditing(false);
@@ -247,17 +258,29 @@ export default function ReconciliationModal({ lot, onClose, onConfirmed }) {
 
           {/* Upload section */}
           <div style={{ marginTop: '14px', display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-            <label style={{
-              display: 'flex', alignItems: 'center', gap: '6px',
-              padding: '7px 14px', borderRadius: '8px',
-              background: uploading ? 'rgba(255,95,51,0.1)' : 'rgba(255,95,51,0.15)',
-              color: '#ff5f33', fontSize: '11px', fontWeight: 700,
-              cursor: uploading ? 'not-allowed' : 'pointer', border: 'none',
-            }}>
-              <Upload size={12} />
-              {uploading ? 'Procesando...' : hasResults ? 'Reemplazar Packing List' : 'Subir Packing List'}
-              <input type="file" accept=".xlsx" onChange={handleUpload} disabled={uploading} style={{ display: 'none' }} />
-            </label>
+            {confirmed ? (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: '6px',
+                padding: '7px 14px', borderRadius: '8px',
+                background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)',
+                color: '#9ca3af', fontSize: '11px',
+              }}>
+                <CheckCircle size={12} style={{ color: '#22c55e', flexShrink: 0 }} />
+                Reconciliación confirmada. Para reemplazar el packing list, primero debe ejecutarse un rollback del lote.
+              </div>
+            ) : (
+              <label style={{
+                display: 'flex', alignItems: 'center', gap: '6px',
+                padding: '7px 14px', borderRadius: '8px',
+                background: uploading ? 'rgba(255,95,51,0.1)' : 'rgba(255,95,51,0.15)',
+                color: '#ff5f33', fontSize: '11px', fontWeight: 700,
+                cursor: uploading ? 'not-allowed' : 'pointer', border: 'none',
+              }}>
+                <Upload size={12} />
+                {uploading ? 'Procesando...' : hasResults ? 'Reemplazar Packing List' : 'Subir Packing List'}
+                <input type="file" accept=".xlsx" onChange={handleUpload} disabled={uploading} style={{ display: 'none' }} />
+              </label>
+            )}
             {hasResults && (
               <button onClick={fetchResults} style={{ padding: '7px 9px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)', cursor: 'pointer', color: '#9ca3af' }}>
                 <RefreshCw size={12} />
@@ -378,17 +401,17 @@ export default function ReconciliationModal({ lot, onClose, onConfirmed }) {
                           onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
                           onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                           <td style={{ padding: '8px 12px', whiteSpace: 'nowrap' }}>
-                            <EditableReconciliationCell resultId={r.id} field="part_number" current={r.part_number} onSaved={fetchResults} cellStyle={{ color: '#60a5fa', fontWeight: 700, fontFamily: 'monospace' }} />
+                            <EditableReconciliationCell resultId={r.id} field="part_number" current={r.part_number} onSaved={fetchResults} readOnly={confirmed} cellStyle={{ color: '#60a5fa', fontWeight: 700, fontFamily: 'monospace' }} />
                           </td>
                           <td style={{ padding: '8px 12px', fontSize: '10px', maxWidth: 180 }}>
-                            <EditableReconciliationCell resultId={r.id} field="description_es" current={r.description_es} onSaved={fetchResults} cellStyle={{ color: '#9ca3af', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} />
+                            <EditableReconciliationCell resultId={r.id} field="description_es" current={r.description_es} onSaved={fetchResults} readOnly={confirmed} cellStyle={{ color: '#9ca3af', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} />
                           </td>
                           <td style={{ padding: '8px 12px', whiteSpace: 'nowrap' }}>
-                            <EditableReconciliationCell resultId={r.id} field="model_applicable" current={r.model_applicable} onSaved={fetchResults} cellStyle={{ fontSize: '9px', fontWeight: 700, color: '#60a5fa' }} />
+                            <EditableReconciliationCell resultId={r.id} field="model_applicable" current={r.model_applicable} onSaved={fetchResults} readOnly={confirmed} cellStyle={{ fontSize: '9px', fontWeight: 700, color: '#60a5fa' }} />
                           </td>
                           <td style={{ padding: '8px 12px', color: '#d1d5db', textAlign: 'right' }}>{r.qty_ordered ?? '—'}</td>
                           <td style={{ padding: '8px 12px', textAlign: 'right' }}>
-                            <EditableReconciliationCell resultId={r.id} field="qty_in_packing" current={r.qty_in_packing ?? 0} type="number" align="right" onSaved={fetchResults} cellStyle={{ color: '#d1d5db' }} />
+                            <EditableReconciliationCell resultId={r.id} field="qty_in_packing" current={r.qty_in_packing ?? 0} type="number" align="right" onSaved={fetchResults} readOnly={confirmed} cellStyle={{ color: '#d1d5db' }} />
                           </td>
                           <td style={{ padding: '8px 12px', color: diffColor, textAlign: 'right', fontWeight: 700 }}>
                             {r.qty_ordered == null
