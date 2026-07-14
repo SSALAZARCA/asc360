@@ -39,10 +39,21 @@ function ItemStatusBadge({ status }) {
 // ---------------------------------------------------------------------------
 // Inline editable cell genérica para texto y números
 // ---------------------------------------------------------------------------
-function EditableCell({ itemId, field, current, type = 'text', align = 'left', cellStyle = {}, onSaved }) {
+function EditableCell({ itemId, field, current, type = 'text', align = 'left', cellStyle = {}, onSaved, readOnly = false }) {
   const [editing, setEditing] = useState(false);
   const [hover, setHover] = useState(false);
   const [value, setValue] = useState(current ?? '');
+
+  if (readOnly) {
+    return (
+      <span
+        title="Reconciliación confirmada — no editable"
+        style={{ display: 'inline-flex', alignItems: 'center', padding: '2px 5px', textAlign: align, ...cellStyle }}
+      >
+        {current != null && current !== '' ? current : <span style={{ color: '#3f3f55' }}>—</span>}
+      </span>
+    );
+  }
 
   const save = async () => {
     setEditing(false);
@@ -108,9 +119,17 @@ function EditableCell({ itemId, field, current, type = 'text', align = 'left', c
 // ---------------------------------------------------------------------------
 // Inline editable cell para qty_received y status
 // ---------------------------------------------------------------------------
-function EditableStatus({ itemId, current, onSaved }) {
+function EditableStatus({ itemId, current, onSaved, readOnly = false }) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(current);
+
+  if (readOnly) {
+    return (
+      <span title="Reconciliación confirmada — no editable">
+        <ItemStatusBadge status={value} />
+      </span>
+    );
+  }
 
   const save = async (newVal) => {
     const previous = value;
@@ -157,9 +176,17 @@ function EditableStatus({ itemId, current, onSaved }) {
   );
 }
 
-function EditableQty({ itemId, current, max, onSaved }) {
+function EditableQty({ itemId, current, max, onSaved, readOnly = false }) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(current);
+
+  if (readOnly) {
+    return (
+      <span title="Reconciliación confirmada — no editable" style={{ color: value > 0 ? '#22c55e' : '#9ca3af', fontWeight: 700 }}>
+        {value}
+      </span>
+    );
+  }
 
   const save = async () => {
     setEditing(false);
@@ -399,7 +426,7 @@ function LotItemsTable({ lotId, userRole, isConfirmed }) {
                   onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                   <td style={{ padding: '8px 10px', textAlign: 'center', whiteSpace: 'nowrap' }}>
                     {canEdit
-                      ? <EditableCell itemId={item.id} field="part_number" current={item.part_number} onSaved={fetch} cellStyle={{ color: '#60a5fa', fontWeight: 700, fontFamily: 'monospace' }} />
+                      ? <EditableCell itemId={item.id} field="part_number" current={item.part_number} onSaved={fetch} readOnly={isConfirmed} cellStyle={{ color: '#60a5fa', fontWeight: 700, fontFamily: 'monospace' }} />
                       : <span style={{ color: '#60a5fa', fontWeight: 700, fontFamily: 'monospace' }}>{item.part_number}</span>
                     }
                   </td>
@@ -432,13 +459,13 @@ function LotItemsTable({ lotId, userRole, isConfirmed }) {
                   </td>
                   <td style={{ padding: '8px 10px', textAlign: 'center' }}>
                     {canEdit
-                      ? <EditableCell itemId={item.id} field="qty_ordered" current={item.qty_ordered} type="number" align="center" onSaved={fetch} cellStyle={{ color: '#d1d5db' }} />
+                      ? <EditableCell itemId={item.id} field="qty_ordered" current={item.qty_ordered} type="number" align="center" onSaved={fetch} readOnly={isConfirmed} cellStyle={{ color: '#d1d5db' }} />
                       : <span style={{ color: '#d1d5db' }}>{item.qty_ordered}</span>
                     }
                   </td>
                   <td style={{ padding: '8px 10px', textAlign: 'center' }}>
                     {canEdit
-                      ? <EditableQty itemId={item.id} current={item.qty_received} max={item.qty_ordered} onSaved={fetch} />
+                      ? <EditableQty itemId={item.id} current={item.qty_received} max={item.qty_ordered} onSaved={fetch} readOnly={isConfirmed} />
                       : <span style={{ color: item.qty_received > 0 ? '#22c55e' : '#9ca3af', fontWeight: 700 }}>{item.qty_received}</span>
                     }
                   </td>
@@ -489,7 +516,7 @@ function LotItemsTable({ lotId, userRole, isConfirmed }) {
                   </td>
                   <td style={{ padding: '8px 10px', textAlign: 'center' }}>
                     {canEdit
-                      ? <EditableStatus itemId={item.id} current={item.status} onSaved={fetch} />
+                      ? <EditableStatus itemId={item.id} current={item.status} onSaved={fetch} readOnly={isConfirmed} />
                       : <ItemStatusBadge status={item.status} />
                     }
                   </td>
@@ -799,7 +826,7 @@ function LotRow({ lot, userRole, onReconcile, onReconcileBackorders, onRefresh }
       </div>
 
       {/* Contenido expandido */}
-      {expanded && <LotItemsTable lotId={lot.id} userRole={userRole} isConfirmed={!!lot.packing_list_received} />}
+      {expanded && <LotItemsTable lotId={lot.id} userRole={userRole} isConfirmed={!!lot.reconciliation_confirmed} />}
 
       {pendingConfirm && (
         <ConfirmModal
