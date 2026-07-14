@@ -86,6 +86,34 @@ def build_invoice_xlsx(
     return buf.getvalue()
 
 
+def build_sp_order_xlsx(
+    rows: list[dict],
+    sheet_name: str = "ORDEN",
+) -> bytes:
+    """
+    Builds a minimal, valid SP-order-request .xlsx (see `SP_ORDER_COLS` in
+    `imports_service.py`, consumed by `create_sp_order_from_excel`): headers
+    `Codigo Parte`, `Nombre`, `Cantidad`, `Moto Aplica`, `Unit Price` on row
+    1, one data row per dict in `rows` (keys: part_number, nombre, qty,
+    modelo, unit_price — all optional).
+    """
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = sheet_name
+    ws.append(["Codigo Parte", "Nombre", "Cantidad", "Moto Aplica", "Unit Price"])
+    for r in rows:
+        ws.append([
+            r.get("part_number"),
+            r.get("nombre"),
+            r.get("qty"),
+            r.get("modelo"),
+            r.get("unit_price"),
+        ])
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
 def build_malformed_xlsx() -> bytes:
     """An .xlsx with no recognizable Packing List/Invoice headers at all."""
     wb = openpyxl.Workbook()
