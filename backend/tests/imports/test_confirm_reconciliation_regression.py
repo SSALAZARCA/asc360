@@ -291,6 +291,97 @@ class TestConfirmMatchedExtraSurplusIsTrueExcess:
         assert rr.result == "EXTRA_APPLIED"
 
 
+class TestConfirmExtraFillSyncsBeneficiaryItem:
+    """Per `sdd/matched-extra-qty-received-beneficiary-sync`: Pass 2
+    (`_fill_backorders_from_extras`) must additively credit the beneficiary
+    `SparePartItem` it fills a backorder for, mirroring
+    `_apply_backorder_confirm_line`, WITHOUT double-crediting an item Pass 1
+    already wrote in this same `confirm_reconciliation` call."""
+
+    async def test_matched_extra_does_not_double_credit_own_reuploaded_backorder(self):
+        """Non-vacuous double-credit guard: a stale open Backorder for the
+        SAME item a matched-EXTRA row just declared (re-upload scenario)
+        must NOT get its qty_received incremented a second time by Pass 2 —
+        Pass 1 already set the absolute qty_received for this item this
+        call. Only the backorder's own qty_pending legitimately reduces."""
+        lot = make_lot()
+        item = make_spare_part_item(lot.id, "REUP-001", qty_ordered=10, qty_received=0, status="PENDING")
+        rr = make_reconciliation_result(
+            lot.id, "REUP-001", result="EXTRA",
+            spare_part_item_id=item.id, qty_ordered=10, qty_in_packing=12,
+        )
+        bo = make_backorder(
+            spare_part_item_id=item.id, part_number="REUP-001",
+            origin_pi="OTHER-PI-444", qty_pending=4, resolved=False,
+        )
+        db = _session([rr], get_objects=[item], backorder_selects=[[bo]])
+
+        result = await confirm_reconciliation(db, lot, make_actor())
+
+        assert result["confirmed"] == 1
+        # Pass 1 already set qty_received=12 (the declared qty). Pass 2 must
+        # NOT additively credit it again to 14.
+        assert item.qty_received == 12
+        assert item.status == "DECLARED"  # NOT overwritten by Pass 2's credit path
+        # The backorder's own qty_pending still legitimately reduces by the
+        # surplus (12 - 10 = 2) applied to it — this is pre-existing Pass-2
+        # behavior, unrelated to the item-credit guard.
+        assert bo.qty_pending == 2
+        assert bo.resolved is False
+
+    async def test_pure_extra_fill_syncs_cross_lot_beneficiary_item(self):
+        """Positive case: a pure EXTRA (no matching order item, so Pass 1
+        skips it entirely) fills a cross-lot backorder — the beneficiary
+        item's qty_received/qty_pending/status must now be synced, not left
+        stale after the Backorder is marked resolved."""
+        lot = make_lot()
+        other_lot_id = uuid.uuid4()
+        item_y = make_spare_part_item(other_lot_id, "XYZ-002", qty_ordered=6, qty_received=0, status="PENDING")
+        rr = make_reconciliation_result(
+            lot.id, "XYZ-002", result="EXTRA",
+            spare_part_item_id=None, qty_ordered=None, qty_in_packing=6,
+        )
+        bo = make_backorder(
+            spare_part_item_id=item_y.id, part_number="XYZ-002",
+            origin_pi="OTHER-PI-555", qty_pending=6, resolved=False,
+        )
+        db = _session([rr], get_objects=[item_y], backorder_selects=[[bo]])
+
+        result = await confirm_reconciliation(db, lot, make_actor())
+
+        assert result["backorders_assigned_by_extra"] == 1
+        assert bo.qty_pending == 0
+        assert bo.resolved is True
+
+        assert item_y.qty_received == 6
+        assert item_y.qty_pending == 0
+        assert item_y.status == "RECEIVED"
+
+    async def test_extra_fill_additively_credits_prior_received_beneficiary(self):
+        """Additive, not overwrite: a beneficiary item that already had a
+        nonzero qty_received (e.g. partially received in a prior lot) must
+        have the newly-applied surplus ADDED, not clobber the prior value."""
+        lot = make_lot()
+        other_lot_id = uuid.uuid4()
+        item_y = make_spare_part_item(other_lot_id, "XYZ-003", qty_ordered=20, qty_received=3, status="PARTIAL")
+        rr = make_reconciliation_result(
+            lot.id, "XYZ-003", result="EXTRA",
+            spare_part_item_id=None, qty_ordered=None, qty_in_packing=5,
+        )
+        bo = make_backorder(
+            spare_part_item_id=item_y.id, part_number="XYZ-003",
+            origin_pi="OTHER-PI-666", qty_pending=17, resolved=False,
+        )
+        db = _session([rr], get_objects=[item_y], backorder_selects=[[bo]])
+
+        await confirm_reconciliation(db, lot, make_actor())
+
+        assert item_y.qty_received == 8  # 3 + 5, additive not overwritten to 5
+        assert item_y.qty_pending == 12  # 20 - 8
+        assert item_y.status == "PARTIAL"
+        assert bo.qty_pending == 12  # 17 - 5
+
+
 class TestConfirmAlreadyConfirmedGuard:
 
     async def test_already_confirmed_rejected_without_mutation(self):

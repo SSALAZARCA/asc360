@@ -1917,8 +1917,18 @@ async def _fill_backorders_from_extras(
     ver los backorders que el paso 1 pudo haber creado para otras filas.
 
     Retorna la cantidad de backorders resueltos (quedaron en `qty_pending == 0`).
+
+    Guard contra doble-crédito: `pass1_item_ids` recoge los `spare_part_item_id`
+    que el Pass 1 (`_apply_reconciliation_to_items`) ya escribió en ESTA misma
+    llamada. Cuando el backorder a llenar apunta a uno de esos items (caso
+    re-upload: el Pass 1 ya fijó `qty_received` de forma absoluta para ese
+    item), este paso se salta el crédito al item — sólo actualiza el propio
+    `Backorder` (comportamiento pre-existente, sin cambios). Para cualquier
+    otro item (beneficiario cross-lot que Pass 1 no tocó), se le acredita
+    aditivamente `qty_received`, igual que `_apply_backorder_confirm_line`.
     """
     backorders_resolved_by_extra = 0
+    pass1_item_ids = {rr.spare_part_item_id for rr in results if rr.spare_part_item_id is not None}
 
     for rr in results:
         if rr.result != "EXTRA":
@@ -1945,6 +1955,14 @@ async def _fill_backorders_from_extras(
             apply_qty = min(surplus_qty, bo.qty_pending)
             surplus_qty -= apply_qty
             bo.qty_pending -= apply_qty
+
+            if bo.spare_part_item_id not in pass1_item_ids:
+                item = await db.get(SparePartItem, bo.spare_part_item_id)
+                if item:
+                    item.qty_received = (item.qty_received or 0) + apply_qty
+                    item.qty_pending = max(0, (item.qty_ordered or 0) - item.qty_received)
+                    item.status = "RECEIVED" if item.qty_pending == 0 else "PARTIAL"
+                    item.updated_at = now
 
             history = list(bo.history or [])
             history.append({
