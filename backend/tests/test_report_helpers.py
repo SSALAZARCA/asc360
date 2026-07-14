@@ -109,27 +109,29 @@ class TestHeatStyle:
 
     def test_high_intensity_dark_orange(self):
         # 70% or more intensity → darkest shade
+        # Palette softened in 06bf6a2 (2026-06-23) — pinned values updated to
+        # match the current, intentionally lighter design (tests had drifted).
         style = _heat_style(70, 100)
-        assert '#F7C3A2' in style
-        assert '#8A3206' in style
+        assert '#F9CCAF' in style
+        assert '#B05030' in style
 
     def test_medium_high_intensity(self):
         # 40-70% → medium dark
         style = _heat_style(50, 100)
-        assert '#FBD9C4' in style
-        assert '#9C3908' in style
+        assert '#FBDECB' in style
+        assert '#C06040' in style
 
     def test_medium_low_intensity(self):
         # 20-40%
         style = _heat_style(25, 100)
-        assert '#FCE7D6' in style
-        assert '#B14709' in style
+        assert '#FDEEE4' in style
+        assert '#C87050' in style
 
     def test_low_intensity(self):
         # < 20%
         style = _heat_style(10, 100)
-        assert '#FDF1E9' in style
-        assert '#C9490A' in style
+        assert '#FEF5F0' in style
+        assert '#D08060' in style
 
     def test_returns_string(self):
         assert isinstance(_heat_style(50, 100), str)
@@ -137,7 +139,7 @@ class TestHeatStyle:
     def test_full_intensity(self):
         # value == max_val → 100% → darkest
         style = _heat_style(100, 100)
-        assert '#F7C3A2' in style
+        assert '#F9CCAF' in style
 
 
 # ---------------------------------------------------------------------------
