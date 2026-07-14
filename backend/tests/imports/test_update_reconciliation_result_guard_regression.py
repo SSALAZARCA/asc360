@@ -18,9 +18,9 @@ Covers (per spec's "Inline Edit of a ReconciliationResult Rejected
     result for a superadmin (directive rollback message) and for a
     non-superadmin editor (contact-an-administrator message).
   - A `qty_physical`-only payload on a confirmed result is NOT blocked by
-    G2 — it reaches the downstream `qty_physical` branch untouched,
-    whatever that branch does (out of scope here; the sibling change owns
-    its correctness).
+    G2 — it reaches the downstream `qty_physical` branch untouched. That
+    branch's own correctness (linked-item vs. EXTRA-row handling) is owned
+    and covered by the sibling change `reconciliation-result-qty-physical-fix`.
   - A payload mixing a declared field with `qty_physical` is rejected
     whole (409), nothing applied — matches the "simpler is safer" design
     choice, safe because `EditableReconciliationCell` only ever submits
@@ -137,26 +137,26 @@ class TestQtyPhysicalOnlyNotBlockedByG2:
         assert response.status_code == 400
         assert response.json()["detail"]["code"] == "RECONCILIATION_NOT_CONFIRMED"
 
-    def test_confirmed_result_lot_packing_list_received_hits_sibling_bug_not_g2(self):
+    def test_confirmed_result_lot_packing_list_received_reaches_downstream_branch_not_g2(self):
         """With `packing_list_received=True`, the request reaches
-        `_apply_qty_physical`, which still has sibling change
-        `reconciliation-result-qty-physical-fix`'s pre-existing (as-yet-
-        unfixed) bug: it passes `rr` instead of its linked `SparePartItem`
-        into `apply_physical_inspection`, raising AttributeError on
-        `qty_received` (a column that only exists on `SparePartItem`).
-        Documented and explicitly OUT OF SCOPE here — this test only proves
-        G2 did NOT add a 409 in front of it; a 409 would have
-        short-circuited before this AttributeError was ever reached."""
+        `_apply_qty_physical` untouched by G2 (fixed by sibling change
+        `reconciliation-result-qty-physical-fix`: this is a pure EXTRA row,
+        so the value is stored directly on `rr.qty_physical` with no
+        `SparePartItem` sync). This test only proves G2 did NOT add a 409
+        in front of it; a 409 would have short-circuited before reaching
+        the downstream branch at all."""
         lot = make_lot(packing_list_received=True)
         rr = _make_reconciliation_result(lot_id=lot.id, confirmed_at=datetime.utcnow())
         fake_db = FakeAsyncSession(execute_queue=[], get_objects=[rr, lot])
 
         with make_test_client(current_user=make_imports_editor(), fake_db_session=fake_db) as client:
-            with pytest.raises(AttributeError, match="qty_received"):
-                client.patch(
-                    f"/api/v1/imports/reconciliation-results/{rr.id}",
-                    json={"qty_physical": 5},
-                )
+            response = client.patch(
+                f"/api/v1/imports/reconciliation-results/{rr.id}",
+                json={"qty_physical": 5},
+            )
+
+        assert response.status_code == 200
+        assert rr.qty_physical == 5
 
 
 class TestMixedDeclaredAndQtyPhysicalPayloadRejectedWhole:

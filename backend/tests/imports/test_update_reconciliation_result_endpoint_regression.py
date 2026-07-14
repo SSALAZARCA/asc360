@@ -20,21 +20,15 @@ then again after Phase 3's extraction into `_apply_qty_in_packing`,
 identical responses/status codes/error strings (spec's Behavior-Preserving
 Refactor requirement).
 
-DISCOVERY (documented, NOT fixed in this phase — out of scope per the
-spec's zero-behavior-change requirement): the `qty_physical` branch calls
-`imports_service.apply_physical_inspection(db, rr, ...)` passing the
-`ReconciliationResult` itself instead of its linked `SparePartItem`.
-`apply_physical_inspection` immediately reads `item.qty_received`, a column
-that only exists on `SparePartItem`, not `ReconciliationResult` — so TODAY,
-in production, any `qty_physical` update against a lot with a CONFIRMED
-packing list crashes with `AttributeError` before ever reaching
-`db.commit()`. This test suite captures that as current (buggy) behavior;
-fixing it is a separate, dedicated change, not part of this line-count
-refactor.
+The `qty_physical` branch resolves the linked `SparePartItem` via
+`rr.spare_part_item_id` before delegating to `apply_physical_inspection`
+(fixed by `sdd/reconciliation-result-qty-physical-fix`): for a MATCHED row,
+`apply_physical_inspection` runs against the linked item; for a pure EXTRA
+row (`spare_part_item_id IS NULL`), the value is stored on `rr.qty_physical`
+directly and no item sync is attempted.
 """
 import uuid
-
-import pytest
+from unittest.mock import AsyncMock
 
 from tests.conftest import make_test_client
 from tests.imports.conftest import (
@@ -43,6 +37,7 @@ from tests.imports.conftest import (
     make_lot,
     make_spare_part_item,
 )
+from app.services import imports_service
 
 
 def _make_reconciliation_result(**kwargs):
@@ -143,24 +138,47 @@ def test_qty_physical_400_when_lot_not_confirmed():
     assert response.json()["detail"]["code"] == "RECONCILIATION_NOT_CONFIRMED"
 
 
-def test_qty_physical_confirmed_lot_raises_attribute_error_documented_bug():
-    """
-    Approval test for a PRE-EXISTING production bug (see module docstring):
-    `apply_physical_inspection` is invoked with `rr` instead of its linked
-    `SparePartItem`, and `ReconciliationResult` has no `qty_received` column.
-    This MUST still raise identically after Phase 3's extraction — fixing
-    it is explicitly out of scope for this line-count refactor.
-    """
+def test_qty_physical_confirmed_lot_linked_item_propagates(monkeypatch):
+    """MATCHED row: qty_physical propagates to the linked SparePartItem,
+    never to the ReconciliationResult itself."""
     lot = make_lot(packing_list_received=True)
-    rr = _make_reconciliation_result(lot_id=lot.id)
-    fake_db = FakeAsyncSession(execute_queue=[], get_objects=[rr, lot])
+    item = make_spare_part_item(lot_id=lot.id, part_number="PN-001", qty_ordered=10, qty_received=6)
+    rr = _make_reconciliation_result(lot_id=lot.id, spare_part_item_id=item.id)
+    fake_db = FakeAsyncSession(execute_queue=[], get_objects=[rr, lot, item])
+    mock_apply = AsyncMock()
+    monkeypatch.setattr(imports_service, "apply_physical_inspection", mock_apply)
 
     with make_test_client(current_user=make_imports_editor(), fake_db_session=fake_db) as client:
-        with pytest.raises(AttributeError, match="qty_received"):
-            client.patch(
-                f"/api/v1/imports/reconciliation-results/{rr.id}",
-                json={"qty_physical": 5},
-            )
+        response = client.patch(
+            f"/api/v1/imports/reconciliation-results/{rr.id}",
+            json={"qty_physical": 5},
+        )
+
+    assert response.status_code == 200
+    assert rr.qty_physical == 5
+    mock_apply.assert_called_once_with(fake_db, item, 5)
+
+
+def test_qty_physical_confirmed_lot_extra_row_stores_no_item_sync(monkeypatch):
+    """Pure EXTRA row (no linked SparePartItem): qty_physical is stored on
+    `rr` directly and no item lookup/sync is attempted."""
+    lot = make_lot(packing_list_received=True)
+    rr = _make_reconciliation_result(lot_id=lot.id, spare_part_item_id=None)
+    fake_db = FakeAsyncSession(execute_queue=[], get_objects=[rr, lot])
+    mock_apply = AsyncMock()
+    monkeypatch.setattr(imports_service, "apply_physical_inspection", mock_apply)
+
+    with make_test_client(current_user=make_imports_editor(), fake_db_session=fake_db) as client:
+        response = client.patch(
+            f"/api/v1/imports/reconciliation-results/{rr.id}",
+            json={"qty_physical": 5},
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["qty_physical"] == 5
+    assert rr.qty_physical == 5
+    mock_apply.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

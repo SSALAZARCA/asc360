@@ -1176,7 +1176,11 @@ async def _apply_qty_physical(db: AsyncSession, rr: ReconciliationResult, qty_ph
             detail={"detail": "El inventario físico solo puede registrarse después de confirmar el cruce", "code": "RECONCILIATION_NOT_CONFIRMED"},
         )
     rr.qty_physical = qty_physical
-    await imports_service.apply_physical_inspection(db, rr, qty_physical)
+    if rr.spare_part_item_id:
+        item = await db.get(SparePartItem, rr.spare_part_item_id)
+        if item:
+            await imports_service.apply_physical_inspection(db, item, qty_physical)
+    # EXTRA rows (spare_part_item_id IS NULL): rr.qty_physical persisted above; no item to sync.
 
 
 async def _apply_item_fields(db: AsyncSession, rr: ReconciliationResult, update_data: dict) -> None:
