@@ -238,14 +238,17 @@ def test_kpi_queries_use_base_filters_independent_of_request_filters():
         items_stmt,
     ) = fake_db.executed_statements
 
+    # SQLAlchemy compiles a literal `col == True/False` comparison as an
+    # inline SQL literal (`col = true`/`col = false`), never as a bound
+    # param — so these assert on the compiled SQL text, not `.params`.
     # total_empadronados hardcodes certificado_generado == True
-    assert True in empadronados_stmt.compile().params.values()
+    assert "certificado_generado = true" in str(empadronados_stmt.compile())
     # total_pendientes hardcodes certificado_generado == False (same as the
     # request in this case, but sourced independently — see next assertion)
-    assert False in pendientes_stmt.compile().params.values()
+    assert "certificado_generado = false" in str(pendientes_stmt.compile())
     # total_facturadas hardcodes facturado == True, even though the request
     # asked for facturado=false
-    assert True in facturadas_stmt.compile().params.values()
+    assert "facturado = true" in str(facturadas_stmt.compile())
 
 
 def test_query_param_filters_are_applied_to_scoped_total_and_items_query():
@@ -284,25 +287,33 @@ def test_query_param_filters_are_applied_to_scoped_total_and_items_query():
     assert "%VIN1%" in params
     assert "%ENG1%" in params
     assert obs_id in params
-    assert True in params  # empadronamiento_fisico_enviado / cargado_runt
+    # `empadronamiento_fisico_enviado`/`cargado_runt` compile as inline SQL
+    # literals (`col = true`), never as bound params — see the note above.
+    assert "empadronamiento_fisico_enviado = true" in sql.lower()
+    assert "cargado_runt = true" in sql.lower()
 
 
 def test_certificado_generado_filter_adds_an_extra_bound_param_on_scoped_total():
-    """`certificado_generado` request param, when set, adds ONE extra bound
-    param to the scoped `total` filters on top of the always-present
+    """`certificado_generado` request param, when set, adds ONE extra filter
+    condition to the scoped `total` filters on top of the always-present
     `is_spare_part == False` base condition (as opposed to the KPI
-    base_filters, which never see the request's `certificado_generado`)."""
+    base_filters, which never see the request's `certificado_generado`).
+    Checked via the compiled SQL text, not `.params`: SQLAlchemy compiles a
+    literal `col == True/False` comparison as an inline SQL literal, so it
+    never appears as a bound param regardless of whether the filter is
+    present."""
     fake_db_without = FakeAsyncSession(execute_queue=[[0], [0], [0], [0], [0], []])
     with make_test_client(current_user=make_imports_editor(), fake_db_session=fake_db_without) as client:
         client.get("/api/v1/imports/moto-units")
-    params_without = len(fake_db_without.executed_statements[0].compile().params)
+    sql_without = str(fake_db_without.executed_statements[0].compile())
 
     fake_db_with = FakeAsyncSession(execute_queue=[[0], [0], [0], [0], [0], []])
     with make_test_client(current_user=make_imports_editor(), fake_db_session=fake_db_with) as client:
         response = client.get(
             "/api/v1/imports/moto-units", params={"certificado_generado": "false"}
         )
-    params_with = len(fake_db_with.executed_statements[0].compile().params)
+    sql_with = str(fake_db_with.executed_statements[0].compile())
 
     assert response.status_code == 200
-    assert params_with == params_without + 1
+    assert "certificado_generado = false" not in sql_without
+    assert "certificado_generado = false" in sql_with

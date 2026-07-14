@@ -123,6 +123,9 @@ def test_shipment_order_id_filter_binds_the_uuid_param():
 
 
 def test_detail_loaded_true_filter_binds_boolean_param():
+    """Checked via the compiled SQL text, not `.params`: SQLAlchemy compiles
+    a literal `col == True/False` comparison as an inline SQL literal
+    (`col = true`), never as a bound param."""
     fake_db = FakeAsyncSession(execute_queue=[[]])
 
     with make_test_client(current_user=make_imports_editor(), fake_db_session=fake_db) as client:
@@ -131,8 +134,8 @@ def test_detail_loaded_true_filter_binds_boolean_param():
         )
 
     assert response.status_code == 200
-    compiled = fake_db.executed_statements[0].compile()
-    assert True in compiled.params.values()
+    sql = str(fake_db.executed_statements[0].compile())
+    assert "detail_loaded = true" in sql
 
 
 def test_detail_loaded_false_filter_binds_boolean_param():
@@ -144,8 +147,8 @@ def test_detail_loaded_false_filter_binds_boolean_param():
         )
 
     assert response.status_code == 200
-    compiled = fake_db.executed_statements[0].compile()
-    assert False in compiled.params.values()
+    sql = str(fake_db.executed_statements[0].compile())
+    assert "detail_loaded = false" in sql
 
 
 def test_has_bl_true_filter_requires_non_placeholder_bl_container():
