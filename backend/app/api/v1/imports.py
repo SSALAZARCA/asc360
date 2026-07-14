@@ -3120,6 +3120,9 @@ async def get_dim_pdf_url(
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
+    if current_user.role not in ("superadmin", "administrativo"):
+        raise HTTPException(status_code=403, detail="Sin permisos para descargar la DIM")
+
     unit = await db.get(ShipmentMotoUnit, unit_id)
     if not unit:
         raise HTTPException(status_code=404, detail="Unidad no encontrada")
@@ -3188,6 +3191,9 @@ async def download_certificado(
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
+    if current_user.role not in ("superadmin", "administrativo"):
+        raise HTTPException(status_code=403, detail="Sin permisos para descargar el certificado")
+
     unit = await db.get(ShipmentMotoUnit, unit_id)
     if not unit:
         raise HTTPException(status_code=404, detail="Unidad no encontrada")

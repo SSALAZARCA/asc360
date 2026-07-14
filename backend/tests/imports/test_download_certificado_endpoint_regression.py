@@ -39,6 +39,7 @@ from tests.conftest import make_test_client
 from tests.imports.conftest import (
     FakeAsyncSession,
     make_actor,
+    make_imports_editor,
     make_moto_unit,
     make_shipment_order,
 )
@@ -95,7 +96,7 @@ def _complete_unit(**overrides):
 def test_unit_not_found_404():
     fake_db = FakeAsyncSession(execute_queue=[], get_objects=[])
 
-    with make_test_client(current_user=make_actor(), fake_db_session=fake_db) as client:
+    with make_test_client(current_user=make_imports_editor(), fake_db_session=fake_db) as client:
         response = client.get(f"/api/v1/imports/moto-units/{uuid.uuid4()}/certificado")
 
     assert response.status_code == 404
@@ -108,7 +109,7 @@ def test_related_order_not_found_404():
     # must miss even though `unit.shipment_order_id` is set.
     fake_db = FakeAsyncSession(execute_queue=[], get_objects=[unit])
 
-    with make_test_client(current_user=make_actor(), fake_db_session=fake_db) as client:
+    with make_test_client(current_user=make_imports_editor(), fake_db_session=fake_db) as client:
         response = client.get(f"/api/v1/imports/moto-units/{unit.id}/certificado")
 
     assert response.status_code == 404
@@ -124,7 +125,7 @@ def test_dim_not_uploaded_422():
     unit = _complete_unit(shipment_order=order, certificado_generado=False)
     fake_db = FakeAsyncSession(execute_queue=[], get_objects=[unit, order])
 
-    with make_test_client(current_user=make_actor(), fake_db_session=fake_db) as client:
+    with make_test_client(current_user=make_imports_editor(), fake_db_session=fake_db) as client:
         response = client.get(f"/api/v1/imports/moto-units/{unit.id}/certificado")
 
     assert response.status_code == 422
@@ -150,7 +151,7 @@ def test_all_fields_missing_lists_every_missing_field_in_order():
     )
     fake_db = FakeAsyncSession(execute_queue=[], get_objects=[unit, order])
 
-    with make_test_client(current_user=make_actor(), fake_db_session=fake_db) as client:
+    with make_test_client(current_user=make_imports_editor(), fake_db_session=fake_db) as client:
         response = client.get(f"/api/v1/imports/moto-units/{unit.id}/certificado")
 
     assert response.status_code == 422
@@ -168,7 +169,7 @@ def test_color_runt_missing_reports_the_units_raw_color_value():
     unit = _complete_unit(shipment_order=order, color="AZUL PETROLEO", color_runt=None)
     fake_db = FakeAsyncSession(execute_queue=[], get_objects=[unit, order])
 
-    with make_test_client(current_user=make_actor(), fake_db_session=fake_db) as client:
+    with make_test_client(current_user=make_imports_editor(), fake_db_session=fake_db) as client:
         response = client.get(f"/api/v1/imports/moto-units/{unit.id}/certificado")
 
     assert response.status_code == 422
@@ -192,7 +193,7 @@ def test_success_falls_back_to_order_model_and_writes_fallback_onto_unit(monkeyp
     # `select(VehicleModel)` returns no rows -> no spec match -> vm_obj stays None.
     fake_db = FakeAsyncSession(execute_queue=[[]], get_objects=[unit, order])
 
-    with make_test_client(current_user=make_actor(), fake_db_session=fake_db) as client:
+    with make_test_client(current_user=make_imports_editor(), fake_db_session=fake_db) as client:
         response = client.get(f"/api/v1/imports/moto-units/{unit.id}/certificado")
 
     assert response.status_code == 200
@@ -233,7 +234,7 @@ def test_success_builds_specs_proxy_from_matched_vehicle_model(monkeypatch):
     _patch_generate_ok(monkeypatch, capture=capture)
     fake_db = FakeAsyncSession(execute_queue=[[vm]], get_objects=[unit, order])
 
-    with make_test_client(current_user=make_actor(), fake_db_session=fake_db) as client:
+    with make_test_client(current_user=make_imports_editor(), fake_db_session=fake_db) as client:
         response = client.get(f"/api/v1/imports/moto-units/{unit.id}/certificado")
 
     assert response.status_code == 200
@@ -259,7 +260,7 @@ def test_success_no_specs_proxy_when_match_has_no_cilindrada(monkeypatch):
     # No VehicleModel rows at all -> encontrar_specs_para_modelo returns defaults (cilindrada='N/A').
     fake_db = FakeAsyncSession(execute_queue=[[]], get_objects=[unit, order])
 
-    with make_test_client(current_user=make_actor(), fake_db_session=fake_db) as client:
+    with make_test_client(current_user=make_imports_editor(), fake_db_session=fake_db) as client:
         response = client.get(f"/api/v1/imports/moto-units/{unit.id}/certificado")
 
     assert response.status_code == 200
@@ -276,9 +277,50 @@ def test_success_does_not_call_commit_or_refresh_itself(monkeypatch):
     _patch_generate_ok(monkeypatch)
     fake_db = _CommitSpySession(execute_queue=[[]], get_objects=[unit, order])
 
-    with make_test_client(current_user=make_actor(), fake_db_session=fake_db) as client:
+    with make_test_client(current_user=make_imports_editor(), fake_db_session=fake_db) as client:
         response = client.get(f"/api/v1/imports/moto-units/{unit.id}/certificado")
 
     assert response.status_code == 200
     assert fake_db.commit_called is False
     assert fake_db.refresh_called is False
+
+
+# ---------------------------------------------------------------------------
+# Role guard: only superadmin/administrativo can download the certificado
+# (proveedor and every other role are explicitly excluded per business
+# decision — see sdd/packing-list-reupload-requires-rollback's PENDING
+# section, "get_dim_pdf_url/download_certificado missing authorization").
+# ---------------------------------------------------------------------------
+
+def test_superadmin_can_download():
+    unit = _complete_unit()
+    fake_db = FakeAsyncSession(execute_queue=[], get_objects=[unit])
+
+    with make_test_client(current_user=make_imports_editor(role="superadmin"), fake_db_session=fake_db) as client:
+        response = client.get(f"/api/v1/imports/moto-units/{unit.id}/certificado")
+
+    # Passes the role guard and reaches the next check (related order lookup).
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Pedido asociado no encontrado"}
+
+
+def test_proveedor_is_rejected_403():
+    fake_db = FakeAsyncSession(execute_queue=[], get_objects=[])
+
+    with make_test_client(current_user=make_imports_editor(role="proveedor"), fake_db_session=fake_db) as client:
+        response = client.get(f"/api/v1/imports/moto-units/{uuid.uuid4()}/certificado")
+
+    assert response.status_code == 403
+    assert response.json() == {"detail": "Sin permisos para descargar el certificado"}
+    # The guard runs before any DB lookup.
+    assert fake_db.executed_statements == []
+
+
+def test_non_editor_role_is_rejected_403():
+    fake_db = FakeAsyncSession(execute_queue=[], get_objects=[])
+
+    with make_test_client(current_user=make_actor(), fake_db_session=fake_db) as client:
+        response = client.get(f"/api/v1/imports/moto-units/{uuid.uuid4()}/certificado")
+
+    assert response.status_code == 403
+    assert response.json() == {"detail": "Sin permisos para descargar el certificado"}
