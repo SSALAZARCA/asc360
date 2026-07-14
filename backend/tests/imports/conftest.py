@@ -408,11 +408,14 @@ class _ExecuteResult:
     Fakes the subset of SQLAlchemy's `CursorResult`/`ChunkedIteratorResult`
     surface this project's endpoints call on `await db.execute(stmt)`:
     `.scalars().all()` (ORM entities), `.all()` (multi-column `Row` tuples,
-    e.g. `select(Model.col_a, Model.col_b)`), and `.scalar_one()`/
+    e.g. `select(Model.col_a, Model.col_b)`), `.scalar_one()`/
     `.scalar_one_or_none()` (single-column, single-row results, e.g.
-    `select(func.count())`). All four read the SAME queued `items` payload
-    — the caller queues the right shape (list of ORM objects/Rows, or a
-    1-item list for scalar_one) for whichever call the endpoint makes.
+    `select(func.count())`), and `.first()` (raw `Row`-or-`None` existence
+    checks called directly on the execute result without `.scalars()`
+    first, e.g. `create_sp_order_from_excel`'s per-item Backorder-existence
+    check). All five read the SAME queued `items` payload — the caller
+    queues the right shape (list of ORM objects/Rows, or a 1-item list for
+    scalar_one) for whichever call the endpoint makes.
     """
 
     def __init__(self, items: list):
@@ -423,6 +426,9 @@ class _ExecuteResult:
 
     def all(self):
         return list(self._items)
+
+    def first(self):
+        return self._items[0] if self._items else None
 
     def scalar_one(self):
         if len(self._items) != 1:

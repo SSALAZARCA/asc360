@@ -39,9 +39,12 @@ siblings, and test_new_order_sp_guard_regression.py, which already pins the
 G6 guard's HTTP-boundary behavior for this same function).
 """
 import io
+import uuid
+from unittest.mock import AsyncMock, patch
 
 import openpyxl
 import pytest
+from fastapi import HTTPException
 
 from app.services.imports_service import create_sp_order_from_excel
 from app.models.imports import ShipmentOrder, SparePartLot, SparePartItem
@@ -49,6 +52,7 @@ from tests.imports.conftest import (
     build_sp_order_xlsx,
     build_malformed_xlsx,
     make_lot,
+    make_spare_part_item,
     make_shipment_order,
     make_actor,
     FakeAsyncSession,
@@ -238,3 +242,242 @@ class TestSheetNotFound:
 
         assert fake_db.added == []
         assert fake_db.flush_count == 0
+
+
+# ---------------------------------------------------------------------------
+# Phase 2 — Mutation scenarios (G6 guard, delete-vs-preserve N+1, two-pass
+# aggregation, skipped/errors, pricing fan-out)
+# ---------------------------------------------------------------------------
+
+
+class TestG6ConfirmedLotGuard:
+
+    async def test_confirmed_lot_rejects_reimport_before_item_mutation(self):
+        """Scenario 5 [G]: `lot_has_confirmed_reconciliation` True ->
+        HTTPException 409/LOT_ALREADY_CONFIRMED raised strictly BEFORE any
+        old-item read/delete/update — no SparePartItem is touched."""
+        order = make_shipment_order(pi_number="E0000999-SP", is_spare_part=True)
+        lot = make_lot(lot_identifier="E0000999-SP", shipment_order_id=order.id)
+        fake_db = FakeAsyncSession(execute_queue=[
+            [],              # _load_models_map
+            [order],         # existing_order lookup -> found
+            [lot],           # lot lookup -> found
+            [uuid.uuid4()],  # G6 check -> confirmed (truthy row)
+        ])
+        file_bytes = build_sp_order_xlsx([
+            {"part_number": "ABC-001", "nombre": "x", "qty": 3},
+        ])
+
+        with pytest.raises(HTTPException) as exc_info:
+            await create_sp_order_from_excel(
+                fake_db, "e0000999-sp", file_bytes, make_actor()
+            )
+
+        assert exc_info.value.status_code == 409
+        assert exc_info.value.detail["code"] == "LOT_ALREADY_CONFIRMED"
+        assert fake_db.deleted == []
+        assert fake_db.added_of_type(SparePartItem) == []
+
+
+class TestDeleteVsPreserveWithN1Lock:
+
+    async def test_item_with_backorder_preserved_item_without_deleted(self):
+        """Scenario 6 [D]: old item WITH a Backorder is preserved and
+        updated in-place (FK intact, never `db.delete`d); old item WITHOUT
+        one is deleted. Locks the N+1 invariant: exactly one
+        `select(Backorder.id)` PER old item, in iteration order — the fake
+        session's queue is drained to exactly zero, proving no batching."""
+        order = make_shipment_order(pi_number="E0000700-SP", is_spare_part=True)
+        lot = make_lot(lot_identifier="E0000700-SP", shipment_order_id=order.id)
+        item_with_bo = make_spare_part_item(lot.id, "ABC-001", qty_ordered=5)
+        item_without_bo = make_spare_part_item(lot.id, "XYZ-002", qty_ordered=2)
+        fake_db = FakeAsyncSession(execute_queue=[
+            [],                                # _load_models_map
+            [order],                            # existing_order lookup
+            [lot],                              # lot lookup
+            [],                                 # G6 check -> not confirmed
+            [item_with_bo, item_without_bo],    # old_items load
+            [uuid.uuid4()],                      # Backorder check: item_with_bo -> has one
+            [],                                  # Backorder check: item_without_bo -> none
+        ])
+        file_bytes = build_sp_order_xlsx([
+            {"part_number": "ABC-001", "nombre": "updated name", "qty": 9},
+        ])
+
+        result = await create_sp_order_from_excel(
+            fake_db, "e0000700-sp", file_bytes, make_actor()
+        )
+
+        assert item_with_bo.qty_ordered == 9  # updated in-place
+        assert item_with_bo not in fake_db.deleted
+        assert item_without_bo in fake_db.deleted
+        assert fake_db._execute_queue == []  # exactly 2 backorder checks, no more/less
+        assert result["updated"] == 1
+        assert result["inserted"] == 0
+
+
+class TestTwoPassAggregation:
+
+    async def test_sums_qty_backfills_unit_price_leaves_stale_item_untouched(self):
+        """Scenario 7 [A], bundling the 3 aggregation scenarios:
+          - same part_number+modelo across 2 rows sums qty (3 + 5 = 8)
+          - unit_price keeps the FIRST non-null seen (10, not the second
+            row's 20) — Q3, pinned not fixed
+          - an old item preserved via backorder but whose key has no
+            matching row in the new file is left completely untouched:
+            neither updated, deleted, nor reported in errors/counters."""
+        order = make_shipment_order(pi_number="E0000800-SP", is_spare_part=True)
+        lot = make_lot(lot_identifier="E0000800-SP", shipment_order_id=order.id)
+        stale_item = make_spare_part_item(lot.id, "STALE-1", qty_ordered=1)
+        fake_db = FakeAsyncSession(execute_queue=[
+            [],                # _load_models_map
+            [order],           # existing_order lookup
+            [lot],             # lot lookup
+            [],                # G6 check
+            [stale_item],      # old_items load
+            [uuid.uuid4()],    # Backorder check: stale_item -> has one, preserved
+        ])
+        file_bytes = build_sp_order_xlsx([
+            {"part_number": "ABC-001", "nombre": "x", "qty": 3, "unit_price": 10},
+            {"part_number": "ABC-001", "nombre": "x2", "qty": 5, "unit_price": 20},
+        ])
+
+        with patch(
+            "app.services.pricing_service.recalculate_part_cost",
+            new=AsyncMock(),
+        ):
+            result = await create_sp_order_from_excel(
+                fake_db, "e0000800-sp", file_bytes, make_actor()
+            )
+
+        item = fake_db.added_of_type(SparePartItem)[0]
+        assert item.qty_ordered == 8  # 3 + 5 summed
+        assert item.unit_price == 10  # first non-null kept; 20 ignored (Q3)
+        assert stale_item.qty_ordered == 1  # untouched — no key match in new file
+        assert stale_item not in fake_db.deleted
+        assert result["errors"] == []
+        assert result["skipped"] == 0
+        assert result["inserted"] == 1
+
+
+class TestSkippedErrorsAndDetailLoadedUnchanged:
+
+    async def test_zero_valid_rows_leaves_detail_loaded_unchanged_and_shape_holds(self):
+        """Scenario 8 [F, R]: every row skipped (qty<=0 or missing) ->
+        skipped counter increments, `lot.detail_loaded` is NOT modified
+        (stays False, never reset), and the response shape holds even for a
+        zero-effect run — exactly the 7 documented keys."""
+        order = make_shipment_order(pi_number="E0000600-SP", is_spare_part=True)
+        lot = make_lot(lot_identifier="E0000600-SP", shipment_order_id=order.id, detail_loaded=False)
+        fake_db = FakeAsyncSession(execute_queue=[
+            [],       # _load_models_map
+            [order],  # existing_order lookup
+            [lot],    # lot lookup
+            [],       # G6 check
+            [],       # old_items load
+        ])
+        file_bytes = build_sp_order_xlsx([
+            {"part_number": "ABC-001", "nombre": "x", "qty": 0},     # qty<=0 -> skipped
+            {"part_number": "ABC-002", "nombre": "x", "qty": None},  # missing qty -> skipped
+        ])
+
+        result = await create_sp_order_from_excel(
+            fake_db, "e0000600-sp", file_bytes, make_actor()
+        )
+
+        assert lot.detail_loaded is False
+        assert result["skipped"] == 2
+        assert result["inserted"] == 0
+        assert result["updated"] == 0
+        assert result["errors"] == []
+        assert set(result.keys()) == {
+            "inserted", "updated", "skipped", "errors", "order_id", "lot_id", "reference",
+        }
+
+    async def test_row_parse_exception_lands_in_errors_not_double_counted_as_skipped(self):
+        """Per-row exceptions are caught and appended to `errors` (row NOT
+        also counted as skipped); other rows in the same file still
+        process normally."""
+        order = make_shipment_order(pi_number="E0000400-SP", is_spare_part=True)
+        lot = make_lot(lot_identifier="E0000400-SP", shipment_order_id=order.id)
+        fake_db = FakeAsyncSession(execute_queue=[
+            [],       # _load_models_map
+            [order],  # existing_order lookup
+            [lot],    # lot lookup
+            [],       # G6 check
+            [],       # old_items load
+        ])
+        file_bytes = build_sp_order_xlsx([
+            {"part_number": "BOOM", "nombre": "x", "qty": 3},
+            {"part_number": "OK-001", "nombre": "y", "qty": 2},
+        ])
+
+        from app.services import imports_service as svc
+        original_normalize = svc.normalize_part_number
+
+        def _boom(pn):
+            if str(pn) == "BOOM":
+                raise ValueError("simulated parse failure")
+            return original_normalize(pn)
+
+        with patch("app.services.imports_service.normalize_part_number", side_effect=_boom):
+            result = await create_sp_order_from_excel(
+                fake_db, "e0000400-sp", file_bytes, make_actor()
+            )
+
+        assert result["errors"] == [{"row": 2, "reason": "simulated parse failure"}]
+        assert result["skipped"] == 0
+        assert result["inserted"] == 1  # OK-001 still processed normally
+        item = fake_db.added_of_type(SparePartItem)[0]
+        assert item.part_number == "OK-001"
+
+
+class TestPricingFanOutOrdering:
+
+    async def test_recalc_fires_once_per_part_after_flush_even_when_price_unchanged(self):
+        """Scenario 9 [F]: `recalculate_part_cost` runs once per distinct
+        part_number in `parts_with_price` — a part lands there on ANY
+        `unit_price is not None` write, regardless of whether the value
+        actually changed. Also locks that the orchestrator's final
+        `await db.flush()` (both flushes already done: old-items-loop +
+        post-upsert) happens strictly BEFORE the recalc call."""
+        order = make_shipment_order(pi_number="E0000500-SP", is_spare_part=True)
+        lot = make_lot(lot_identifier="E0000500-SP", shipment_order_id=order.id)
+        existing_item = make_spare_part_item(
+            lot.id, "ABC-001", qty_ordered=5, unit_price=10.0
+        )
+        fake_db = FakeAsyncSession(execute_queue=[
+            [],                # _load_models_map
+            [order],           # existing_order lookup
+            [lot],             # lot lookup
+            [],                # G6 check
+            [existing_item],   # old_items load
+            [uuid.uuid4()],    # Backorder check -> has one, preserved
+        ])
+        file_bytes = build_sp_order_xlsx([
+            {"part_number": "ABC-001", "nombre": "x", "qty": 5, "unit_price": 10.0},
+        ])
+
+        recorded = {}
+
+        async def _fake_recalc(db, pn, lot_identifier=None):
+            recorded["flush_count_at_call"] = db.flush_count
+            recorded["part_number"] = pn
+            recorded["lot_identifier"] = lot_identifier
+
+        with patch(
+            "app.services.pricing_service.recalculate_part_cost",
+            new=AsyncMock(side_effect=_fake_recalc),
+        ) as mock_recalc:
+            result = await create_sp_order_from_excel(
+                fake_db, "e0000500-sp", file_bytes, make_actor()
+            )
+
+        mock_recalc.assert_awaited_once()
+        assert existing_item.unit_price == 10.0  # unchanged value, still written
+        assert result["updated"] == 1
+        assert recorded["part_number"] == "ABC-001"
+        assert recorded["lot_identifier"] == "E0000500-SP"
+        # Both flushes (old-items loop + final post-upsert) must have
+        # already happened by the time recalc runs.
+        assert recorded["flush_count_at_call"] == 2
