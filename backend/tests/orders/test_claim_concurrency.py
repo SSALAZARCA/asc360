@@ -109,8 +109,44 @@ class TestClaimEndpointConcurrency:
         assert body1["technician_id"] == str(winner_technician_id)
         assert winner_db.committed is True
 
+        added_history = winner_db.added[0]
+        assert added_history.order_id == order_id
+        assert added_history.from_status == ServiceStatus.received
+        assert added_history.to_status == ServiceStatus.in_progress
+
         assert resp2.status_code == 409
         assert resp2.json()["detail"] == "already_claimed"
+
+    def test_winning_claim_update_where_clause_includes_id_status_and_tenant(self):
+        """
+        Compiles the real `update(ServiceOrder)` statement built by
+        `claim_order` and asserts its WHERE clause AND-combines all three
+        predicates (`id`, `status == 'received'`, `tenant_id`) — the exact
+        atomicity/tenant-isolation guarantee this endpoint exists to deliver.
+        Regression target: silently dropping any one of the three from the
+        production `.where(...)` call must fail this test.
+        """
+        order_id = uuid.uuid4()
+        tenant_id = uuid.uuid4()
+
+        winner_db = FakeAsyncSession(claim_rowcount=1)
+        with make_test_client(current_user=None, fake_db_session=winner_db) as client:
+            resp = client.post(
+                f"/api/v1/orders/{order_id}/claim",
+                json={
+                    "technician_id": str(uuid.uuid4()),
+                    "tenant_id": str(tenant_id),
+                },
+                headers={"X-Sonia-Secret": settings.SONIA_BOT_SECRET},
+            )
+
+        assert resp.status_code == 200
+        assert len(winner_db.executed_statements) >= 1
+        sql = str(winner_db.executed_statements[0].compile())
+
+        assert "service_orders.id" in sql
+        assert "service_orders.status" in sql
+        assert "service_orders.tenant_id" in sql
 
 
 class TestClaimEndpointFailureModes:

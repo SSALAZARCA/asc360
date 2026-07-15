@@ -712,12 +712,30 @@ async def claim_order(
     result = await db.execute(claim_stmt)
 
     if result.rowcount == 1:
+        claim_changed_at = datetime.utcnow()
         history_entry = OrderHistory(
             order_id=order_id,
             from_status=ServiceStatus.received,
             to_status=ServiceStatus.in_progress,
-            changed_at=datetime.utcnow(),
+            changed_at=claim_changed_at,
         )
+
+        # Calcular duración del estado anterior (mirrors update_order_status's
+        # existing "find last history row, set duration_minutes" logic — feeds
+        # the avg_time_by_status KPI, which filters on duration_minutes IS NOT NULL).
+        last_history_stmt = (
+            select(OrderHistory)
+            .where(OrderHistory.order_id == order_id)
+            .order_by(OrderHistory.changed_at.desc())
+            .limit(1)
+        )
+        last_h_res = await db.execute(last_history_stmt)
+        last_h = last_h_res.scalar_one_or_none()
+        if last_h:
+            diff = claim_changed_at - last_h.changed_at
+            last_h.duration_minutes = diff.total_seconds() / 60.0
+            db.add(last_h)
+
         db.add(history_entry)
         await db.commit()
         return {

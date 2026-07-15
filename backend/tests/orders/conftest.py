@@ -68,9 +68,11 @@ class FakeAsyncSession:
          disambiguation `SELECT ServiceOrder WHERE id` — this fake returns
          `disambiguation_order` (or `None`) via `.scalar_one_or_none()`.
 
-    Statement content is NOT inspected (unlike `tests.imports.conftest.
-    FakeAsyncSession.executed_statements`) — the claim endpoint's query
-    order is fixed and small enough that positional dispatch is sufficient.
+    Dispatch is positional (fixed 1-or-2 query shape), but — mirroring
+    `tests.imports.conftest.FakeAsyncSession.executed_statements` — every
+    statement passed to `.execute()` is also recorded on
+    `self.executed_statements`, so tests can compile and inspect the real
+    SQL (e.g. to assert the atomic UPDATE's WHERE predicates).
     """
 
     def __init__(
@@ -83,8 +85,10 @@ class FakeAsyncSession:
         self._update_consumed = False
         self.added: list = []
         self.committed = False
+        self.executed_statements: list = []
 
     async def execute(self, stmt):
+        self.executed_statements.append(stmt)
         if not self._update_consumed:
             self._update_consumed = True
             return _ClaimUpdateResult(self._claim_rowcount)
