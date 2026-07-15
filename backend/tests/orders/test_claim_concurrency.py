@@ -19,11 +19,12 @@ caveat as `test_concurrency.py`'s header). We assert the guard CONTRACT
 (rowcount -> outcome), which is what makes the atomic UPDATE race-safe.
 """
 import uuid
+from datetime import datetime, timedelta
 from types import SimpleNamespace
 
 from app.api.v1.orders import classify_claim_outcome
 from app.config import settings
-from app.models.order import ServiceStatus
+from app.models.order import OrderHistory, ServiceStatus
 
 from tests.conftest import make_test_client
 from tests.orders.conftest import FakeAsyncSession, make_claim_order
@@ -147,6 +148,54 @@ class TestClaimEndpointConcurrency:
         assert "service_orders.id" in sql
         assert "service_orders.status" in sql
         assert "service_orders.tenant_id" in sql
+
+    def test_winning_claim_backfills_duration_minutes_on_prior_history_row(self):
+        """
+        Covers `claim_order`'s winning-path `duration_minutes` backfill
+        (mirrors `update_order_status`'s existing pattern): when a prior
+        `OrderHistory` row exists for the order, its `duration_minutes`
+        must be set to the elapsed time between that row's `changed_at`
+        and the claim's timestamp, and the row must be staged via `db.add`
+        alongside the new `history_entry`.
+        """
+        order_id = uuid.uuid4()
+        tenant_id = uuid.uuid4()
+        technician_id = uuid.uuid4()
+
+        prior_changed_at = datetime.utcnow() - timedelta(minutes=5)
+        prior_history = OrderHistory(
+            order_id=order_id,
+            from_status=None,
+            to_status=ServiceStatus.received,
+            changed_at=prior_changed_at,
+        )
+
+        winner_db = FakeAsyncSession(claim_rowcount=1, prior_history=prior_history)
+        with make_test_client(current_user=None, fake_db_session=winner_db) as client:
+            resp = client.post(
+                f"/api/v1/orders/{order_id}/claim",
+                json={
+                    "technician_id": str(technician_id),
+                    "tenant_id": str(tenant_id),
+                },
+                headers={"X-Sonia-Secret": settings.SONIA_BOT_SECRET},
+            )
+
+        assert resp.status_code == 200
+
+        expected_minutes = (datetime.utcnow() - prior_changed_at).total_seconds() / 60.0
+        assert prior_history.duration_minutes is not None
+        assert abs(prior_history.duration_minutes - expected_minutes) < 0.1
+        assert prior_history.duration_minutes > 4.9
+
+        assert prior_history in winner_db.added
+        added_history_entries = [
+            item for item in winner_db.added if isinstance(item, OrderHistory) and item is not prior_history
+        ]
+        assert len(added_history_entries) == 1
+        assert added_history_entries[0].order_id == order_id
+        assert added_history_entries[0].from_status == ServiceStatus.received
+        assert added_history_entries[0].to_status == ServiceStatus.in_progress
 
 
 class TestClaimEndpointFailureModes:
