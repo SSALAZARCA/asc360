@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, Header, HTTPException, status
+from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
@@ -10,7 +11,7 @@ from app.models.order import ServiceOrder, ServiceOrderReception, ServiceType, S
 from app.models.user import User, Role
 from app.models.vehicle import Vehicle
 from app.models.tenant import Tenant
-from app.schemas.order import OrderCreate, OrderRead, WorkLogCreate, PartCreate
+from app.schemas.order import OrderCreate, OrderRead, WorkLogCreate, PartCreate, OrderClaimRequest
 from app.services.pdf_service import generate_and_upload_reception_pdf
 from app.api.deps import get_current_user, get_optional_user, CurrentUser
 from app.core.security import verify_sonia_secret
@@ -635,6 +636,109 @@ async def update_order_status(
     res = await db.execute(query)
     full_order = res.scalar_one()
     return full_order
+
+
+def classify_claim_outcome(
+    rowcount: int,
+    order: Optional[ServiceOrder],
+    expected_tenant: uuid.UUID,
+) -> str:
+    """
+    Pure classification of a `/claim` conditional UPDATE's post-write
+    result — no DB access, no exceptions raised. The caller
+    (`POST /{order_id}/claim`) maps the returned label to the actual HTTP
+    response.
+
+    `order` is the id-only disambiguation SELECT result, only meaningful
+    when `rowcount == 0` (the conditional UPDATE matched nothing). When
+    `rowcount == 1` the claim won and `order` is ignored.
+
+    Returns one of:
+      "claimed"         rowcount == 1 — the atomic UPDATE won.
+      "not_found"       order does not exist, OR exists but its status is
+                         neither `received` nor `in_progress` — never a
+                         valid claim target (spec's "Not Claimable / Not
+                         Found" requirement) -> 404 `not_claimable`.
+      "wrong_tenant"    order exists but belongs to a different tenant
+                         -> 403 `cross_tenant`.
+      "already_claimed" order exists, same tenant, already `in_progress`
+                         (another technician won the race) -> 409
+                         `already_claimed`.
+    """
+    if rowcount == 1:
+        return "claimed"
+    if order is None:
+        return "not_found"
+    if order.tenant_id != expected_tenant:
+        return "wrong_tenant"
+    if order.status != ServiceStatus.in_progress:
+        return "not_found"
+    return "already_claimed"
+
+
+@router.post("/{order_id}/claim", status_code=status.HTTP_200_OK)
+async def claim_order(
+    order_id: uuid.UUID,
+    claim_in: OrderClaimRequest,
+    db: AsyncSession = Depends(get_db),
+    x_sonia_secret: Optional[str] = Header(None),
+):
+    """
+    Self-claim de una orden `received` sin asignar por parte de cualquier
+    técnico del tenant. Único guard de la condición de carrera: un UPDATE
+    condicional atómico (`WHERE id AND status='received' AND tenant_id=:t`)
+    verificado por `rowcount` — sin SELECT previo. Deja `PUT /{order_id}/status`
+    completamente intacto; esta transición vive aislada acá.
+    Solo Sonia (X-Sonia-Secret) invoca este endpoint hoy — ver design's
+    "Open Questions".
+    """
+    from app.config import settings
+    from app.models.order import OrderHistory
+
+    is_bot_call = verify_sonia_secret(x_sonia_secret, settings.SONIA_BOT_SECRET)
+    if not is_bot_call:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="No autenticado.")
+
+    claim_stmt = (
+        update(ServiceOrder)
+        .where(
+            ServiceOrder.id == order_id,
+            ServiceOrder.status == ServiceStatus.received,
+            ServiceOrder.tenant_id == claim_in.tenant_id,
+        )
+        .values(status=ServiceStatus.in_progress, technician_id=claim_in.technician_id)
+        .execution_options(synchronize_session=False)
+    )
+    result = await db.execute(claim_stmt)
+
+    if result.rowcount == 1:
+        history_entry = OrderHistory(
+            order_id=order_id,
+            from_status=ServiceStatus.received,
+            to_status=ServiceStatus.in_progress,
+            changed_at=datetime.utcnow(),
+        )
+        db.add(history_entry)
+        await db.commit()
+        return {
+            "status": "claimed",
+            "order_id": str(order_id),
+            "new_status": ServiceStatus.in_progress.value,
+            "technician_id": str(claim_in.technician_id),
+        }
+
+    # Loss — one id-only disambiguation SELECT. No lock needed: the race was
+    # already resolved by the conditional UPDATE above.
+    disambig_stmt = select(ServiceOrder).where(ServiceOrder.id == order_id)
+    disambig_res = await db.execute(disambig_stmt)
+    order = disambig_res.scalar_one_or_none()
+
+    outcome = classify_claim_outcome(result.rowcount, order, claim_in.tenant_id)
+    if outcome == "not_found":
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="not_claimable")
+    if outcome == "wrong_tenant":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="cross_tenant")
+    raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="already_claimed")
 
 
 @router.post("/{order_id}/work-log", status_code=status.HTTP_201_CREATED)

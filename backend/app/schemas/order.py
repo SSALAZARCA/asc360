@@ -81,3 +81,15 @@ class OrderStatusUpdate(BaseModel):
     diagnosis: Optional[str] = Field(None, max_length=2000, description="Diagnóstico del técnico — crea OrderWorkLog")
     parts: Optional[List[PartCreate]] = Field(None, description="Repuestos requeridos — crea OrderPart(s)")
     recorded_by_telegram_id: Optional[str] = None
+
+
+class OrderClaimRequest(BaseModel):
+    """
+    Body de `POST /orders/{order_id}/claim`. Sonia (único caller hoy, vía
+    X-Sonia-Secret) no mantiene sesión JWT del técnico, por lo que
+    `technician_id`/`tenant_id` viajan explícitos en el body — mismo patrón
+    ya usado por `OrderCreate.technician_id` y `OrderStatusUpdate.technician_id`
+    para escrituras iniciadas por el bot.
+    """
+    technician_id: UUID
+    tenant_id: UUID
