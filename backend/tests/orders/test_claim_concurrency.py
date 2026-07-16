@@ -324,6 +324,6 @@ class TestClaimEndpointFailureModes:
                 headers={"X-Sonia-Secret": settings.SONIA_BOT_SECRET},
             )
 
-        assert resp.status_code in (404, 422)
+        assert resp.status_code == 404
         assert resp.json()["detail"] == "technician_not_found"
         assert fake_db.rolled_back is True
