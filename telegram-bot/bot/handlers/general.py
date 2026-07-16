@@ -17,6 +17,7 @@ from services.api import (
 )
 from .admin import send_welcome, show_pending_users_inner, _show_tenant_selector
 from .technician import handle_active_orders
+from .otp import BYPASS_ROLES
 
 # Placeholder para functions de Recepción
 from .reception import process_plate, send_vehicle_lifecycle, apply_correction_to_data
@@ -154,14 +155,15 @@ async def _ask_status_confirmation(update, context, placa: str, matched_order: d
 
     if not is_claim:
         # Cambio de estado genérico sobre una orden YA asignada: solo su
-        # propio técnico (o un superadmin) puede tocarla. Sin este guard,
-        # cualquier técnico del tenant podía reasignarse silenciosamente
-        # una orden ajena con solo nombrar su placa.
+        # propio técnico, o un rol con alcance sobre todo el tenant
+        # (`BYPASS_ROLES`, ver `handlers/otp.py`), puede tocarla. Sin este
+        # guard, cualquier técnico del tenant podía reasignarse
+        # silenciosamente una orden ajena con solo nombrar su placa.
         logged_in = context.user_data.get("logged_in_user", {})
         user_id = logged_in.get("id")
         user_role = logged_in.get("role")
         owner_id = matched_order.get("technician_id")
-        if owner_id is not None and str(owner_id) != str(user_id) and user_role != "superadmin":
+        if owner_id is not None and str(owner_id) != str(user_id) and user_role not in BYPASS_ROLES:
             await update.message.reply_text(
                 f"⚠️ La *{placa.upper()}* está asignada a otro técnico. No puedo cambiarle el estado.",
                 parse_mode="Markdown"
@@ -243,7 +245,7 @@ async def handle_status_confirm(update, context):
                 parse_mode="Markdown"
             )
             # Un claim exitoso también es una transición a in_progress.
-            await _schedule_diagnosis_reminder(context, query, tenant_id, pending["order_id"], pending["placa"])
+            await _schedule_diagnosis_reminder(context, query, claim_tenant_id, pending["order_id"], pending["placa"])
         elif outcome == "conflict":
             await query.edit_message_text(
                 f"⚠️ La *{pending['placa']}* ya fue tomada por otro técnico.",
@@ -260,9 +262,13 @@ async def handle_status_confirm(update, context):
             f"✅ Hecho, *{pending['placa']}* pasó a *{ESTADO_ES.get(pending['estado'], pending['estado'])}*.",
             parse_mode="Markdown"
         )
-        # Agendar recordatorio de diagnóstico si pasa a in_progress
+        # Agendar recordatorio de diagnóstico si pasa a in_progress. Usa el
+        # `tenant_id` REAL de la orden (ver comentario en el branch de claim
+        # arriba): para un superadmin actuando sobre otro tenant,
+        # `logged_in.get("tenant_id")` es None/incorrecto.
         if pending["estado"] == "in_progress":
-            await _schedule_diagnosis_reminder(context, query, tenant_id, pending["order_id"], pending["placa"])
+            reminder_tenant_id = pending.get("tenant_id") or tenant_id
+            await _schedule_diagnosis_reminder(context, query, reminder_tenant_id, pending["order_id"], pending["placa"])
     else:
         await query.edit_message_text("❌ No pude actualizar el estado. Intentá de nuevo desde el menú.")
 
