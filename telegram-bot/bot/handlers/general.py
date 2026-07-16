@@ -114,19 +114,27 @@ ESTADO_ES = {
     "rescheduled": "Reprogramada 📅",
 }
 
-async def _ask_status_confirmation(update, context, placa: str, order_id, estado: str, confidence: float = 1.0):
+async def _ask_status_confirmation(update, context, placa: str, matched_order: dict, estado: str, confidence: float = 1.0):
     """Guarda el cambio pendiente y muestra botones de confirmación."""
+    order_id = matched_order.get("id") if matched_order else None
     if not order_id:
         await update.message.reply_text(
-            f"No encontré una orden activa para la *{placa.upper()}* asignada a vos.",
+            f"No encontré una orden activa para la *{placa.upper()}*.",
             parse_mode="Markdown"
         )
         return
+
+    # Es un self-claim (no un cambio de estado genérico) cuando la orden está
+    # `received` sin tomar y la intención es pasarla a `in_progress`: cualquier
+    # técnico del tenant puede tomarla, así que enrutamos por /claim en vez de
+    # /status para resolver la condición de carrera de forma atómica.
+    is_claim = matched_order.get("status") == "received" and estado == "in_progress"
 
     context.user_data["pending_status_change"] = {
         "order_id": order_id,
         "placa": placa.upper(),
         "estado": estado,
+        "is_claim": is_claim,
     }
 
     msg = f"Entendí: cambiar la *{placa.upper()}* a *{ESTADO_ES.get(estado, estado)}*."
@@ -139,6 +147,32 @@ async def _ask_status_confirmation(update, context, placa: str, order_id, estado
         InlineKeyboardButton("❌ No", callback_data="status_confirm_no"),
     ]]
     await update.message.reply_text(msg, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(kb))
+
+
+async def _schedule_diagnosis_reminder(context, query, tenant_id, order_id: str, placa: str) -> None:
+    """Agenda (o reemplaza) el job que recuerda al técnico registrar el diagnóstico
+    de una orden que acaba de pasar a in_progress. Compartido por el path de
+    self-claim y el path genérico de cambio de estado."""
+    from services.api import get_tenant_config
+    from handlers.technician import _diagnosis_reminder_job
+    chat_id = query.message.chat_id
+    job_name = f"diagnosis_{chat_id}_{order_id}"
+    for job in context.job_queue.get_jobs_by_name(job_name):
+        job.schedule_removal()
+    reminder_minutes = 60
+    if tenant_id:
+        try:
+            config = await get_tenant_config(str(tenant_id))
+            reminder_minutes = config.get("diagnosis_reminder_minutes", 60)
+        except Exception as e:
+            logger.warning(f"_schedule_diagnosis_reminder: no pude leer config del tenant {tenant_id}: {e}")
+    context.job_queue.run_repeating(
+        _diagnosis_reminder_job,
+        interval=reminder_minutes * 60,
+        first=reminder_minutes * 60,
+        name=job_name,
+        data={"chat_id": chat_id, "order_id": order_id, "plate": placa}
+    )
 
 
 async def handle_status_confirm(update, context):
@@ -155,6 +189,27 @@ async def handle_status_confirm(update, context):
     logged_in = context.user_data.get("logged_in_user", {})
     user_id = logged_in.get("id")
     tenant_id = logged_in.get("tenant_id")
+
+    if pending.get("is_claim"):
+        from services.api import claim_order
+        outcome = await claim_order(pending["order_id"], user_id, tenant_id)
+
+        if outcome == "claimed":
+            await query.edit_message_text(
+                f"✅ Listo, la tomaste. *{pending['placa']}* pasó a *{ESTADO_ES.get(pending['estado'], pending['estado'])}*.",
+                parse_mode="Markdown"
+            )
+            # Un claim exitoso también es una transición a in_progress.
+            await _schedule_diagnosis_reminder(context, query, tenant_id, pending["order_id"], pending["placa"])
+        elif outcome == "conflict":
+            await query.edit_message_text(
+                f"⚠️ La *{pending['placa']}* ya fue tomada por otro técnico.",
+                parse_mode="Markdown"
+            )
+        else:
+            await query.edit_message_text("❌ No pude tomar la orden. Intentá de nuevo desde el menú.")
+        return
+
     success = await update_order_status(pending["order_id"], pending["estado"], user_id)
 
     if success:
@@ -164,27 +219,7 @@ async def handle_status_confirm(update, context):
         )
         # Agendar recordatorio de diagnóstico si pasa a in_progress
         if pending["estado"] == "in_progress":
-            from services.api import get_tenant_config
-            from handlers.technician import _diagnosis_reminder_job
-            chat_id = query.message.chat_id
-            order_id = pending["order_id"]
-            job_name = f"diagnosis_{chat_id}_{order_id}"
-            for job in context.job_queue.get_jobs_by_name(job_name):
-                job.schedule_removal()
-            reminder_minutes = 60
-            if tenant_id:
-                try:
-                    config = await get_tenant_config(str(tenant_id))
-                    reminder_minutes = config.get("diagnosis_reminder_minutes", 60)
-                except Exception:
-                    pass
-            context.job_queue.run_repeating(
-                _diagnosis_reminder_job,
-                interval=reminder_minutes * 60,
-                first=reminder_minutes * 60,
-                name=job_name,
-                data={"chat_id": chat_id, "order_id": order_id, "plate": pending["placa"]}
-            )
+            await _schedule_diagnosis_reminder(context, query, tenant_id, pending["order_id"], pending["placa"])
     else:
         await query.edit_message_text("❌ No pude actualizar el estado. Intentá de nuevo desde el menú.")
 
@@ -256,9 +291,9 @@ async def _route_intent(update: Update, context: ContextTypes.DEFAULT_TYPE, inte
     if intent == "CHANGE_STATUS":
         if placa and estado:
             from services.api import resolve_order_by_plate
-            user_id = context.user_data["logged_in_user"]["id"]
-            order_id = await resolve_order_by_plate(user_id, placa)
-            await _ask_status_confirmation(update, context, placa, order_id, estado, confidence)
+            tenant_id = context.user_data["logged_in_user"].get("tenant_id")
+            matched_order = await resolve_order_by_plate(tenant_id, placa)
+            await _ask_status_confirmation(update, context, placa, matched_order, estado, confidence)
         else:
             await update.message.reply_text(
                 "Para cambiar el estado necesito la placa y el nuevo estado. Ej: 'la NOI82G ya está lista'."
@@ -661,8 +696,9 @@ async def _process_text(update: Update, context: ContextTypes.DEFAULT_TYPE, raw_
 
         if intent == "CHANGE_STATUS" and placa and nuevo_estado:
             from services.api import resolve_order_by_plate
-            order_id = await resolve_order_by_plate(context.user_data["logged_in_user"]["id"], placa)
-            await _ask_status_confirmation(update, context, placa, order_id, nuevo_estado, tech_data.get("confidence", 0.5))
+            tenant_id = context.user_data["logged_in_user"].get("tenant_id")
+            matched_order = await resolve_order_by_plate(tenant_id, placa)
+            await _ask_status_confirmation(update, context, placa, matched_order, nuevo_estado, tech_data.get("confidence", 0.5))
             return ConversationHandler.END
 
     # ── Detección automática de placa (Último recurso) ────────────────────────

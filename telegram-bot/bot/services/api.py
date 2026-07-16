@@ -105,15 +105,39 @@ async def get_technician_active_orders(technician_id: str) -> list:
         except Exception:
             return None
 
-async def resolve_order_by_plate(technician_id: str, plate: str) -> str:
-    """Busca el order_id de la moto activa del técnico según su placa."""
-    orders = await get_technician_active_orders(technician_id)
+async def resolve_order_by_plate(tenant_id: str, plate: str) -> dict:
+    """Busca la orden activa del taller (tenant) según su placa. Cualquier técnico del
+    tenant puede resolver órdenes sin asignar, no solo las suyas."""
+    orders = await get_tenant_active_orders(tenant_id)
     if not orders: return None
     plate = plate.upper().strip()
     for o in orders:
         if o.get("plate", "").upper() == plate or o.get("vehicle", {}).get("plate", "").upper() == plate:
-            return o["id"]
+            return o
     return None
+
+
+async def claim_order(order_id: str, technician_id: str, tenant_id: str) -> str:
+    """Reclama atómicamente una orden `received` sin asignar vía POST /orders/{order_id}/claim.
+    Devuelve "claimed" (200), "conflict" (409, ya tomada/asignada) o "error" (404/403/timeout/etc.)."""
+    payload = {"technician_id": technician_id, "tenant_id": tenant_id}
+    async with httpx.AsyncClient() as client:
+        try:
+            res = await client.post(
+                f"{BACKEND_URL}/orders/{order_id}/claim",
+                json=payload,
+                headers={"x-sonia-secret": SONIA_BOT_SECRET},
+                timeout=10.0
+            )
+            if res.status_code == 200:
+                return "claimed"
+            if res.status_code == 409:
+                return "conflict"
+            logger.warning(f"claim_order: {res.status_code} — {res.text}")
+            return "error"
+        except Exception as e:
+            logger.error(f"Error HTTP claim_order: {e}")
+            return "error"
 
 async def update_order_status(
     order_id: str,
