@@ -212,3 +212,52 @@ class FakeActivePlateSession:
     async def execute(self, stmt):
         self.executed_statements.append(stmt)
         return _ClaimSelectResult(self._order)
+
+
+class _ScalarsAllResult:
+    """Fakes `.scalars().all()` for a SELECT result returning a list of
+    ORM rows (the candidate-pool query on `GET /orders/resolve/plate`'s
+    no-exact-match path)."""
+
+    def __init__(self, items: list):
+        self._items = items
+
+    def scalars(self):
+        return self
+
+    def all(self):
+        return self._items
+
+
+class FakeResolvePlateSession:
+    """
+    Minimal fake for `GET /orders/resolve/plate`. The endpoint issues at
+    most two SELECTs, always in this order:
+      1. Exact match (`Vehicle.plate == plate.upper()`, ordered by
+         `created_at DESC`, `LIMIT 1`) — read via `.scalar_one_or_none()`.
+      2. ONLY when (1) found nothing: the full candidate pool (same
+         tenant/status filters, no plate filter, no limit) — read via
+         `.scalars().all()`.
+
+    Dispatch here is by call order (not by statement shape), same
+    rationale as `FakeActivePlateSession`/`FakeAsyncSession` above: the
+    two queries have different result-reading conventions
+    (`scalar_one_or_none` vs `scalars().all()`), and the second is only
+    ever issued after the first returns nothing, so positional dispatch
+    is unambiguous.
+    """
+
+    def __init__(
+        self,
+        exact_match: Optional[ServiceOrder] = None,
+        pool: Optional[list] = None,
+    ):
+        self._exact_match = exact_match
+        self._pool = pool or []
+        self.executed_statements: list = []
+
+    async def execute(self, stmt):
+        self.executed_statements.append(stmt)
+        if len(self.executed_statements) == 1:
+            return _ClaimSelectResult(self._exact_match)
+        return _ScalarsAllResult(self._pool)

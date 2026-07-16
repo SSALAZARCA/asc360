@@ -4,6 +4,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
+import difflib
 import uuid
 from datetime import datetime
 from pydantic import BaseModel
@@ -12,7 +13,14 @@ from app.models.order import ServiceOrder, ServiceOrderReception, ServiceType, S
 from app.models.user import User, Role
 from app.models.vehicle import Vehicle
 from app.models.tenant import Tenant
-from app.schemas.order import OrderCreate, OrderRead, WorkLogCreate, PartCreate, OrderClaimRequest
+from app.schemas.order import (
+    OrderCreate,
+    OrderRead,
+    WorkLogCreate,
+    PartCreate,
+    OrderClaimRequest,
+    OrderPlateResolution,
+)
 from app.services.pdf_service import generate_and_upload_reception_pdf
 from app.api.deps import get_current_user, get_optional_user, CurrentUser
 from app.core.security import verify_sonia_secret
@@ -957,6 +965,90 @@ async def get_active_order_by_plate(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No hay orden activa para esta placa")
 
     return order
+
+
+@router.get("/resolve/plate", response_model=OrderPlateResolution)
+async def resolve_order_by_plate(
+    plate: str,
+    tenant_id: Optional[uuid.UUID] = None,
+    db: AsyncSession = Depends(get_db),
+    x_sonia_secret: Optional[str] = Header(None),
+):
+    """
+    Dedicated plate-resolution lookup for Sonia, separate from
+    `get_active_order_by_plate`/`get_active_orders_for_tenant` on purpose:
+    those exclude `completed` (intentionally, for the button-driven "motos
+    activas" menu in `technician.py`), which makes a `completed` order
+    unreachable for the "ya se la entregué" (-> `delivered`) transition.
+    Here the exclusion list is ONLY `[delivered, cancelled]` — a
+    `completed` order IS a valid resolution target.
+
+    Voice transcription of a spoken plate is unreliable (the same real
+    plate can arrive as several different mistyped strings), so on top of
+    the exact match this endpoint offers a same-request fallback: when no
+    exact match exists, it ranks the eligible candidate pool by
+    `difflib.SequenceMatcher` string similarity to the given plate and
+    returns up to the top 5 (ratio > 0.5), letting Sonia ask "did you mean
+    one of these?" instead of a bare 404.
+
+    `tenant_id` is optional: omit it for a superadmin (no `tenant_id` of
+    their own — see `User.tenant_id`) to search across the whole network,
+    same trust model as `get_active_order_by_plate`.
+
+    Solo Sonia (X-Sonia-Secret) invoca este endpoint hoy.
+    """
+    from app.config import settings
+
+    is_bot_call = verify_sonia_secret(x_sonia_secret, settings.SONIA_BOT_SECRET)
+    if not is_bot_call:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="No autenticado.")
+
+    exclude_statuses = [ServiceStatus.delivered, ServiceStatus.cancelled]
+    target_plate = plate.upper()
+
+    exact_stmt = (
+        select(ServiceOrder)
+        .join(Vehicle, ServiceOrder.vehicle_id == Vehicle.id)
+        .options(selectinload(ServiceOrder.vehicle))
+        .where(Vehicle.plate == target_plate)
+        .where(ServiceOrder.status.not_in(exclude_statuses))
+    )
+    if tenant_id is not None:
+        exact_stmt = exact_stmt.where(ServiceOrder.tenant_id == tenant_id)
+    exact_stmt = exact_stmt.order_by(ServiceOrder.created_at.desc()).limit(1)
+
+    exact_res = await db.execute(exact_stmt)
+    exact_order = exact_res.scalar_one_or_none()
+
+    if exact_order is not None:
+        return {"match": exact_order, "candidates": []}
+
+    pool_stmt = (
+        select(ServiceOrder)
+        .join(Vehicle, ServiceOrder.vehicle_id == Vehicle.id)
+        .options(selectinload(ServiceOrder.vehicle))
+        .where(ServiceOrder.status.not_in(exclude_statuses))
+    )
+    if tenant_id is not None:
+        pool_stmt = pool_stmt.where(ServiceOrder.tenant_id == tenant_id)
+
+    pool_res = await db.execute(pool_stmt)
+    pool = pool_res.scalars().all()
+
+    scored = []
+    for order in pool:
+        candidate_plate = order.plate
+        if not candidate_plate:
+            continue
+        ratio = difflib.SequenceMatcher(None, target_plate, candidate_plate.upper()).ratio()
+        if ratio > 0.5:
+            scored.append((ratio, order.created_at, order))
+
+    scored.sort(key=lambda item: (item[0], item[1]), reverse=True)
+    candidates = [order for _, _, order in scored[:5]]
+
+    return {"match": None, "candidates": candidates}
+
 
 @router.get("/mini-app/vehicle/{plate}")
 async def mini_app_get_vehicle(

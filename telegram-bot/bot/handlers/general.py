@@ -117,30 +117,34 @@ ESTADO_ES = {
 }
 
 async def _resolve_order_for_technician(context, placa: str) -> dict:
-    """Resuelve la orden activa para una placa según el rol del que pregunta:
-    un superadmin no tiene `tenant_id` propio (ver `User.tenant_id`), así que
-    busca en TODA la red; cualquier otro rol se resuelve tenant-scoped, con el
-    mismo fallback `tenant_id` que ya usan otros flujos de este bot
-    (ver `handlers/otp.py`)."""
+    """Resuelve la orden (match exacto + candidatos por similitud) para una
+    placa según el rol del que pregunta: un superadmin no tiene `tenant_id`
+    propio (ver `User.tenant_id`), así que busca en TODA la red; cualquier
+    otro rol se resuelve tenant-scoped, con el mismo fallback `tenant_id` que
+    ya usan otros flujos de este bot (ver `handlers/otp.py`).
+
+    Devuelve el dict completo `{"match": {...}|None, "candidates": [...]}` del
+    backend (`GET /orders/resolve/plate`), no solo la orden — la transcripción
+    de voz es poco confiable con placas colombianas, así que cuando no hay
+    match exacto el caller le muestra al usuario un picker con los candidatos
+    más parecidos en vez de simplemente fallar."""
+    from services.api import resolve_order_for_status_change
+
     logged_in = context.user_data.get("logged_in_user", {})
     if logged_in.get("role") == "superadmin":
-        from services.api import resolve_order_by_plate_any_tenant
-        return await resolve_order_by_plate_any_tenant(placa)
+        return await resolve_order_for_status_change(None, placa)
 
-    from services.api import resolve_order_by_plate
     tenant_id = logged_in.get("tenant_id") or context.user_data.get("active_tenant_id")
-    return await resolve_order_by_plate(tenant_id, placa)
+    return await resolve_order_for_status_change(tenant_id, placa)
 
 
-async def _ask_status_confirmation(update, context, placa: str, matched_order: dict, estado: str, confidence: float = 1.0):
-    """Guarda el cambio pendiente y muestra botones de confirmación."""
-    order_id = matched_order.get("id") if matched_order else None
-    if not order_id:
-        await update.message.reply_text(
-            f"No encontré una orden activa para la *{placa.upper()}*.",
-            parse_mode="Markdown"
-        )
-        return
+async def _present_status_confirmation(send_fn, context, placa: str, matched_order: dict, estado: str, confidence: float = 1.0):
+    """Guarda el cambio pendiente y muestra botones de confirmación. Recibe
+    `send_fn` (una closure sobre `update.message.reply_text` o sobre
+    `query.edit_message_text`) para poder invocarse tanto desde un mensaje de
+    texto/voz directo como desde el callback del picker de candidatos —
+    el flujo de confirmación (Sí/No) es idéntico en ambos casos."""
+    order_id = matched_order.get("id")
 
     # Es un self-claim (no un cambio de estado genérico) cuando la orden está
     # `received` sin tomar (sin técnico asignado todavía) y la intención es
@@ -165,7 +169,7 @@ async def _ask_status_confirmation(update, context, placa: str, matched_order: d
         user_role = logged_in.get("role")
         owner_id = matched_order.get("technician_id")
         if owner_id is not None and str(owner_id) != str(user_id) and user_role not in BYPASS_ROLES:
-            await update.message.reply_text(
+            await send_fn(
                 f"⚠️ La *{placa.upper()}* está asignada a otro técnico. No puedo cambiarle el estado.",
                 parse_mode="Markdown"
             )
@@ -188,7 +192,79 @@ async def _ask_status_confirmation(update, context, placa: str, matched_order: d
         InlineKeyboardButton("✅ Sí, cambiar", callback_data="status_confirm_yes"),
         InlineKeyboardButton("❌ No", callback_data="status_confirm_no"),
     ]]
-    await update.message.reply_text(msg, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(kb))
+    await send_fn(msg, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(kb))
+
+
+async def _ask_status_confirmation(update, context, placa: str, matched_order: dict, estado: str, confidence: float = 1.0, candidates: list = None):
+    """Guarda el cambio pendiente y muestra botones de confirmación.
+
+    Si no hay match exacto pero el backend devolvió `candidates` (placas
+    parecidas por similitud, ver `resolve_order_for_status_change`), muestra
+    un picker en vez de fallar directo: la transcripción de voz confunde
+    caracteres parecidos en placas colombianas, así que dejamos que el
+    usuario elija la correcta antes de seguir con la confirmación normal."""
+    order_id = matched_order.get("id") if matched_order else None
+    if not order_id:
+        if candidates:
+            context.user_data["pending_estado_candidates"] = {
+                "estado": estado,
+                "confidence": confidence,
+                "list": candidates,
+            }
+            kb = [
+                [InlineKeyboardButton(
+                    f"{c['plate']} — {ESTADO_ES.get(c['status'], c['status'])}",
+                    callback_data=f"platepick_{i}",
+                )]
+                for i, c in enumerate(candidates)
+            ]
+            await update.message.reply_text(
+                f"No encontré una *{placa.upper()}* exacta, pero hay placas parecidas. ¿Es alguna de estas?",
+                parse_mode="Markdown",
+                reply_markup=InlineKeyboardMarkup(kb),
+            )
+            return
+        await update.message.reply_text(
+            f"No encontré una orden activa para la *{placa.upper()}*.",
+            parse_mode="Markdown"
+        )
+        return
+
+    async def send_fn(text, **kwargs):
+        return await update.message.reply_text(text, **kwargs)
+
+    await _present_status_confirmation(send_fn, context, placa, matched_order, estado, confidence)
+
+
+async def handle_plate_candidate_pick(update, context):
+    """Callback del picker de candidatos por placa (pattern: ^platepick_):
+    el usuario eligió cuál de las placas parecidas era la correcta luego de
+    un mensaje/voz sin match exacto. Sigue con el flujo de confirmación
+    normal (Sí/No), idéntico al de un match exacto directo."""
+    query = update.callback_query
+    await query.answer()
+
+    match = re.match(r"^platepick_(\d+)$", query.data or "")
+    stash = context.user_data.pop("pending_estado_candidates", None)
+
+    if not match or not stash:
+        await query.edit_message_text("Esa selección ya venció, decime la placa de nuevo.")
+        return
+
+    index = int(match.group(1))
+    candidate_list = stash.get("list", [])
+    if index < 0 or index >= len(candidate_list):
+        await query.edit_message_text("Esa selección ya venció, decime la placa de nuevo.")
+        return
+
+    chosen = candidate_list[index]
+
+    async def send_fn(text, **kwargs):
+        return await query.edit_message_text(text, **kwargs)
+
+    await _present_status_confirmation(
+        send_fn, context, chosen["plate"], chosen, stash["estado"], stash["confidence"]
+    )
 
 
 async def _schedule_diagnosis_reminder(context, query, tenant_id, order_id: str, placa: str) -> None:
@@ -340,8 +416,11 @@ async def _route_intent(update: Update, context: ContextTypes.DEFAULT_TYPE, inte
 
     if intent == "CHANGE_STATUS":
         if placa and estado:
-            matched_order = await _resolve_order_for_technician(context, placa)
-            await _ask_status_confirmation(update, context, placa, matched_order, estado, confidence)
+            result = await _resolve_order_for_technician(context, placa)
+            await _ask_status_confirmation(
+                update, context, placa, result["match"], estado, confidence,
+                candidates=result["candidates"],
+            )
         else:
             await update.message.reply_text(
                 "Para cambiar el estado necesito la placa y el nuevo estado. Ej: 'la NOI82G ya está lista'."
@@ -743,8 +822,11 @@ async def _process_text(update: Update, context: ContextTypes.DEFAULT_TYPE, raw_
             return ConversationHandler.END
 
         if intent == "CHANGE_STATUS" and placa and nuevo_estado:
-            matched_order = await _resolve_order_for_technician(context, placa)
-            await _ask_status_confirmation(update, context, placa, matched_order, nuevo_estado, tech_data.get("confidence", 0.5))
+            result = await _resolve_order_for_technician(context, placa)
+            await _ask_status_confirmation(
+                update, context, placa, result["match"], nuevo_estado, tech_data.get("confidence", 0.5),
+                candidates=result["candidates"],
+            )
             return ConversationHandler.END
 
     # ── Detección automática de placa (Último recurso) ────────────────────────

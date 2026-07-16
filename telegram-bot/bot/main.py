@@ -18,7 +18,7 @@ from core.decorators import role_required, check_cancel_intent, CANCEL_PATTERN
 from keyboards.reply import get_main_keyboard
 from handlers.general import (
     handle_general_text, handle_general_voice, process_lifecycle_plate,
-    handle_status_confirm, handle_parts_callback,
+    handle_status_confirm, handle_parts_callback, handle_plate_candidate_pick,
     handle_catalog_model_callback, handle_catalog_nav_callback, handle_buscar_repuesto,
 )
 from handlers.admin import (
@@ -330,6 +330,7 @@ def main() -> None:
     application.add_handler(CallbackQueryHandler(handle_order_status_change, pattern="^ord_stat_"))
     application.add_handler(CallbackQueryHandler(handle_exit_pdf_callback, pattern="^exit_pdf_"))
     application.add_handler(CallbackQueryHandler(handle_status_confirm, pattern="^status_confirm_"))
+    application.add_handler(CallbackQueryHandler(handle_plate_candidate_pick, pattern="^platepick_"))
     application.add_handler(CallbackQueryHandler(handle_parts_callback, pattern="^parts_"))
     application.add_handler(CallbackQueryHandler(handle_catalog_model_callback, pattern="^catalog_model_"))
     application.add_handler(CallbackQueryHandler(handle_catalog_nav_callback, pattern="^cat_"))

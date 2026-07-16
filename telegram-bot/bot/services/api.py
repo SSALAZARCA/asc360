@@ -139,6 +139,31 @@ async def resolve_order_by_plate_any_tenant(plate: str) -> dict:
             return None
 
 
+async def resolve_order_for_status_change(tenant_id: str | None, plate: str) -> dict:
+    """Resuelve una orden por placa vía GET /orders/resolve/plate. Si `tenant_id`
+    es None, no se manda ese query param (búsqueda en toda la red, uso exclusivo
+    del superadmin). Incluye órdenes `completed` (excluidas: `delivered`/`cancelled`),
+    y candidatos por similitud de placa cuando no hay match exacto."""
+    params = {"plate": plate.upper().strip()}
+    if tenant_id is not None:
+        params["tenant_id"] = tenant_id
+    async with httpx.AsyncClient() as client:
+        try:
+            res = await client.get(
+                f"{BACKEND_URL}/orders/resolve/plate",
+                params=params,
+                headers={"x-sonia-secret": SONIA_BOT_SECRET},
+                timeout=10.0
+            )
+            if res.status_code == 200:
+                return res.json()
+            logger.warning(f"resolve_order_for_status_change: {res.status_code} — {res.text}")
+            return {"match": None, "candidates": []}
+        except Exception as e:
+            logger.error(f"Error HTTP resolve_order_for_status_change: {e}")
+            return {"match": None, "candidates": []}
+
+
 async def claim_order(order_id: str, technician_id: str, tenant_id: str) -> str:
     """Reclama atómicamente una orden `received` sin asignar vía POST /orders/{order_id}/claim.
     Devuelve "claimed" (200), "conflict" (409, ya tomada/asignada) o "error" (404/403/timeout/etc.)."""

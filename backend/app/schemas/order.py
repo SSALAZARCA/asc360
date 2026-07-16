@@ -100,3 +100,30 @@ class OrderClaimRequest(BaseModel):
     """
     technician_id: UUID
     tenant_id: UUID
+
+
+class OrderPlateMatch(BaseModel):
+    """
+    Minimal, flat order projection for `GET /orders/resolve/plate`.
+    Deliberately NOT `OrderRead`: that schema eager-loads
+    `reception`/`work_logs`/`parts` and carries landmines already fixed
+    once for `damage_photos_urls` — this endpoint only needs identity +
+    status fields to let Sonia disambiguate a mistyped/mis-transcribed
+    plate, so it stays minimal on purpose.
+    """
+    id: UUID
+    plate: str
+    status: ServiceStatus
+    tenant_id: UUID
+    technician_id: Optional[UUID]
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class OrderPlateResolution(BaseModel):
+    """Response body of `GET /orders/resolve/plate`: either an exact
+    `match` (candidates empty), or no match plus up to 5 ranked
+    `candidates` (by string-similarity to the given plate)."""
+    match: Optional[OrderPlateMatch] = None
+    candidates: List[OrderPlateMatch] = []
