@@ -112,6 +112,7 @@ ESTADO_ES = {
     "on_hold_client": "Esperando Cliente ⏳",
     "external_work": "Trabajo Externo 🛠️",
     "completed": "Terminada ✅",
+    "delivered": "Entregada 🏍️",
     "rescheduled": "Reprogramada 📅",
 }
 

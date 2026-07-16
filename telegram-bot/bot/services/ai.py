@@ -103,6 +103,8 @@ ESTADOS VÁLIDOS (solo para CHANGE_STATUS):
 - on_hold_client: "esperando que el cliente autorice"
 - external_work: "se fue al torno", "trabajo externo"
 - completed: "moto lista", "ya terminé", "trabajo finalizado"
+- delivered: "ya se la entregué al cliente", "el cliente ya se la llevó", "la recogieron"
+- rescheduled: "se reprogramó", "quedó reprogramada", "la reprogramamos para otro día"
 
 REGLAS:
 1. Si el usuario menciona una placa colombiana (3 letras + 2-3 números o similar, ej: NOI82G, ABC12D), extráela en "entities.placa" SIN guiones ni espacios.
@@ -185,6 +187,8 @@ ESTADOS VÁLIDOS (solo para CHANGE_STATUS):
 - on_hold_client (ej. "esperando que el cliente autorice")
 - external_work (ej. "se fue al torno/pintura")
 - completed (ej. "moto lista", "ya terminé")
+- delivered (ej. "ya se la entregué al cliente", "la recogieron")
+- rescheduled (ej. "se reprogramó", "quedó reprogramada")
 
 El campo confidence refleja tu seguridad: 1.0=seguro, 0.5=ambiguo, 0.0=no entiendo.
 
