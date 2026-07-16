@@ -114,6 +114,22 @@ ESTADO_ES = {
     "rescheduled": "Reprogramada 📅",
 }
 
+async def _resolve_order_for_technician(context, placa: str) -> dict:
+    """Resuelve la orden activa para una placa según el rol del que pregunta:
+    un superadmin no tiene `tenant_id` propio (ver `User.tenant_id`), así que
+    busca en TODA la red; cualquier otro rol se resuelve tenant-scoped, con el
+    mismo fallback `tenant_id` que ya usan otros flujos de este bot
+    (ver `handlers/otp.py`)."""
+    logged_in = context.user_data.get("logged_in_user", {})
+    if logged_in.get("role") == "superadmin":
+        from services.api import resolve_order_by_plate_any_tenant
+        return await resolve_order_by_plate_any_tenant(placa)
+
+    from services.api import resolve_order_by_plate
+    tenant_id = logged_in.get("tenant_id") or context.user_data.get("active_tenant_id")
+    return await resolve_order_by_plate(tenant_id, placa)
+
+
 async def _ask_status_confirmation(update, context, placa: str, matched_order: dict, estado: str, confidence: float = 1.0):
     """Guarda el cambio pendiente y muestra botones de confirmación."""
     order_id = matched_order.get("id") if matched_order else None
@@ -125,16 +141,39 @@ async def _ask_status_confirmation(update, context, placa: str, matched_order: d
         return
 
     # Es un self-claim (no un cambio de estado genérico) cuando la orden está
-    # `received` sin tomar y la intención es pasarla a `in_progress`: cualquier
-    # técnico del tenant puede tomarla, así que enrutamos por /claim en vez de
-    # /status para resolver la condición de carrera de forma atómica.
-    is_claim = matched_order.get("status") == "received" and estado == "in_progress"
+    # `received` sin tomar (sin técnico asignado todavía) y la intención es
+    # pasarla a `in_progress`: cualquier técnico del tenant puede tomarla, así
+    # que enrutamos por /claim en vez de /status para resolver la condición de
+    # carrera de forma atómica. Mismo guard que el WHERE-clause del backend
+    # (`ServiceOrder.technician_id.is_(None)`).
+    is_claim = (
+        matched_order.get("status") == "received"
+        and matched_order.get("technician_id") is None
+        and estado == "in_progress"
+    )
+
+    if not is_claim:
+        # Cambio de estado genérico sobre una orden YA asignada: solo su
+        # propio técnico (o un superadmin) puede tocarla. Sin este guard,
+        # cualquier técnico del tenant podía reasignarse silenciosamente
+        # una orden ajena con solo nombrar su placa.
+        logged_in = context.user_data.get("logged_in_user", {})
+        user_id = logged_in.get("id")
+        user_role = logged_in.get("role")
+        owner_id = matched_order.get("technician_id")
+        if owner_id is not None and str(owner_id) != str(user_id) and user_role != "superadmin":
+            await update.message.reply_text(
+                f"⚠️ La *{placa.upper()}* está asignada a otro técnico. No puedo cambiarle el estado.",
+                parse_mode="Markdown"
+            )
+            return
 
     context.user_data["pending_status_change"] = {
         "order_id": order_id,
         "placa": placa.upper(),
         "estado": estado,
         "is_claim": is_claim,
+        "tenant_id": matched_order.get("tenant_id"),
     }
 
     msg = f"Entendí: cambiar la *{placa.upper()}* a *{ESTADO_ES.get(estado, estado)}*."
@@ -192,7 +231,11 @@ async def handle_status_confirm(update, context):
 
     if pending.get("is_claim"):
         from services.api import claim_order
-        outcome = await claim_order(pending["order_id"], user_id, tenant_id)
+        # Usa el `tenant_id` REAL de la orden (resuelto en `_ask_status_confirmation`),
+        # no el del caller: para un superadmin, `logged_in.get("tenant_id")` es None
+        # (los superadmins no tienen tenant propio).
+        claim_tenant_id = pending.get("tenant_id") or tenant_id
+        outcome = await claim_order(pending["order_id"], user_id, claim_tenant_id)
 
         if outcome == "claimed":
             await query.edit_message_text(
@@ -290,9 +333,7 @@ async def _route_intent(update: Update, context: ContextTypes.DEFAULT_TYPE, inte
 
     if intent == "CHANGE_STATUS":
         if placa and estado:
-            from services.api import resolve_order_by_plate
-            tenant_id = context.user_data["logged_in_user"].get("tenant_id")
-            matched_order = await resolve_order_by_plate(tenant_id, placa)
+            matched_order = await _resolve_order_for_technician(context, placa)
             await _ask_status_confirmation(update, context, placa, matched_order, estado, confidence)
         else:
             await update.message.reply_text(
@@ -695,9 +736,7 @@ async def _process_text(update: Update, context: ContextTypes.DEFAULT_TYPE, raw_
             return ConversationHandler.END
 
         if intent == "CHANGE_STATUS" and placa and nuevo_estado:
-            from services.api import resolve_order_by_plate
-            tenant_id = context.user_data["logged_in_user"].get("tenant_id")
-            matched_order = await resolve_order_by_plate(tenant_id, placa)
+            matched_order = await _resolve_order_for_technician(context, placa)
             await _ask_status_confirmation(update, context, placa, matched_order, nuevo_estado, tech_data.get("confidence", 0.5))
             return ConversationHandler.END
 

@@ -117,6 +117,28 @@ async def resolve_order_by_plate(tenant_id: str, plate: str) -> dict:
     return None
 
 
+async def resolve_order_by_plate_any_tenant(plate: str) -> dict:
+    """Busca la orden activa según su placa en TODA la red, sin filtrar por tenant.
+    Uso exclusivo del superadmin (que no tiene `tenant_id` propio): `Vehicle.plate`
+    es único a nivel global, así que este lookup es seguro y no ambiguo."""
+    plate = plate.upper().strip()
+    async with httpx.AsyncClient() as client:
+        try:
+            res = await client.get(
+                f"{BACKEND_URL}/orders/active/plate/{plate}",
+                headers={"x-sonia-secret": SONIA_BOT_SECRET},
+                timeout=10.0
+            )
+            if res.status_code == 200:
+                return res.json()
+            if res.status_code != 404:
+                logger.warning(f"resolve_order_by_plate_any_tenant: {res.status_code} — {res.text}")
+            return None
+        except Exception as e:
+            logger.error(f"Error HTTP resolve_order_by_plate_any_tenant: {e}")
+            return None
+
+
 async def claim_order(order_id: str, technician_id: str, tenant_id: str) -> str:
     """Reclama atómicamente una orden `received` sin asignar vía POST /orders/{order_id}/claim.
     Devuelve "claimed" (200), "conflict" (409, ya tomada/asignada) o "error" (404/403/timeout/etc.)."""

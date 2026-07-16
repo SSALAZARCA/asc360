@@ -28,6 +28,7 @@ from sqlalchemy import Update
 from sqlalchemy.exc import IntegrityError
 
 from app.models.order import OrderHistory, ServiceOrder, ServiceStatus, ServiceType
+from app.models.vehicle import Vehicle
 
 
 def make_claim_order(
@@ -135,3 +136,60 @@ class FakeAsyncSession:
 
     async def rollback(self):
         self.rolled_back = True
+
+
+def make_active_order(
+    order_id: Optional[uuid.UUID] = None,
+    tenant_id: Optional[uuid.UUID] = None,
+    status: ServiceStatus = ServiceStatus.in_progress,
+    technician_id: Optional[uuid.UUID] = None,
+    plate: str = "ABC12D",
+    created_at: Optional[datetime] = None,
+) -> ServiceOrder:
+    """
+    Real `ServiceOrder` ORM instance (unattached to any session, same
+    convention as `make_claim_order` above), with a `vehicle` relationship
+    populated so `OrderRead.model_validate`'s `plate` hybrid property
+    (`ServiceOrder.plate` -> `self.vehicle.plate`) resolves without a lazy
+    load. Scoped to `GET /orders/active/plate/{plate}`
+    (`sdd/order-claim-plate-atomic` PR2 fix cycle).
+    """
+    vehicle_id = uuid.uuid4()
+    order = ServiceOrder(
+        id=order_id or uuid.uuid4(),
+        tenant_id=tenant_id or uuid.uuid4(),
+        vehicle_id=vehicle_id,
+        status=status,
+        technician_id=technician_id,
+        service_type=ServiceType.regular,
+        created_at=created_at or datetime.utcnow(),
+    )
+    order.vehicle = Vehicle(
+        id=vehicle_id,
+        tenant_id=order.tenant_id,
+        plate=plate.upper(),
+        brand="UM",
+        model="TEST",
+    )
+    order.reception = None
+    order.work_logs = []
+    order.parts = []
+    return order
+
+
+class FakeActivePlateSession:
+    """
+    Minimal fake for `GET /orders/active/plate/{plate}` — a single `SELECT`
+    (`ServiceOrder JOIN Vehicle`) whose result is read via
+    `.scalar_one_or_none()`. Distinct from `FakeAsyncSession` above (that one
+    is scoped to the claim endpoint's UPDATE + SELECT sequence); this
+    endpoint issues exactly one read, no writes.
+    """
+
+    def __init__(self, order: Optional[ServiceOrder] = None):
+        self._order = order
+        self.executed_statements: list = []
+
+    async def execute(self, stmt):
+        self.executed_statements.append(stmt)
+        return _ClaimSelectResult(self._order)

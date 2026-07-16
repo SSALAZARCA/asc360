@@ -907,6 +907,57 @@ async def get_active_orders_for_tenant(
     res = await db.execute(stmt)
     return res.scalars().all()
 
+
+@router.get("/active/plate/{plate}", response_model=OrderRead)
+async def get_active_order_by_plate(
+    plate: str,
+    db: AsyncSession = Depends(get_db),
+    x_sonia_secret: Optional[str] = Header(None),
+):
+    """
+    Busca la orden ACTIVA (excluye completed/delivered/cancelled) más
+    reciente para una placa, SIN filtrar por tenant. `Vehicle.plate` es
+    `unique=True` a nivel global, así que este lookup es seguro y no
+    ambiguo al nivel del vehículo.
+
+    Reemplaza, para el caso puntual de un superadmin (que no tiene
+    `tenant_id` propio — ver `User.tenant_id`), la búsqueda tenant-scoped
+    de `resolve_order_by_plate`/`active/tenant/{tenant_id}`: un superadmin
+    puede así gestionar una placa de cualquier taller de la red desde el
+    chat de Sonia.
+
+    Solo Sonia (X-Sonia-Secret) invoca este endpoint hoy — mismo trust
+    model que `POST /{order_id}/claim`.
+    """
+    from app.config import settings
+
+    is_bot_call = verify_sonia_secret(x_sonia_secret, settings.SONIA_BOT_SECRET)
+    if not is_bot_call:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="No autenticado.")
+
+    exclude_statuses = [ServiceStatus.completed, ServiceStatus.delivered, ServiceStatus.cancelled]
+    stmt = (
+        select(ServiceOrder)
+        .join(Vehicle, ServiceOrder.vehicle_id == Vehicle.id)
+        .options(
+            selectinload(ServiceOrder.reception),
+            selectinload(ServiceOrder.vehicle),
+            selectinload(ServiceOrder.work_logs),
+            selectinload(ServiceOrder.parts),
+        )
+        .where(Vehicle.plate == plate.upper())
+        .where(ServiceOrder.status.not_in(exclude_statuses))
+        .order_by(ServiceOrder.created_at.desc())
+        .limit(1)
+    )
+    res = await db.execute(stmt)
+    order = res.scalar_one_or_none()
+
+    if not order:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No hay orden activa para esta placa")
+
+    return order
+
 @router.get("/mini-app/vehicle/{plate}")
 async def mini_app_get_vehicle(
     plate: str,
