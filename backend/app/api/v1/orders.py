@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from sqlalchemy import update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
@@ -661,6 +662,12 @@ def classify_claim_outcome(
                          Found" requirement) -> 404 `not_claimable`.
       "wrong_tenant"    order exists but belongs to a different tenant
                          -> 403 `cross_tenant`.
+      "already_assigned" order exists, same tenant, still `received`, but
+                         already carries a non-null `technician_id` (e.g.
+                         auto-assigned at `OrderCreate` time, or by the OTP-
+                         acceptance flow) — the conditional UPDATE's
+                         `technician_id IS NULL` predicate rejected the
+                         claim -> 409 `already_assigned`.
       "already_claimed" order exists, same tenant, already `in_progress`
                          (another technician won the race) -> 409
                          `already_claimed`.
@@ -671,6 +678,8 @@ def classify_claim_outcome(
         return "not_found"
     if order.tenant_id != expected_tenant:
         return "wrong_tenant"
+    if order.status == ServiceStatus.received and order.technician_id is not None:
+        return "already_assigned"
     if order.status != ServiceStatus.in_progress:
         return "not_found"
     return "already_claimed"
@@ -686,8 +695,9 @@ async def claim_order(
     """
     Self-claim de una orden `received` sin asignar por parte de cualquier
     técnico del tenant. Único guard de la condición de carrera: un UPDATE
-    condicional atómico (`WHERE id AND status='received' AND tenant_id=:t`)
-    verificado por `rowcount` — sin SELECT previo. Deja `PUT /{order_id}/status`
+    condicional atómico (`WHERE id AND status='received' AND tenant_id=:t
+    AND technician_id IS NULL`) verificado por `rowcount` — sin SELECT
+    previo. Deja `PUT /{order_id}/status`
     completamente intacto; esta transición vive aislada acá.
     Solo Sonia (X-Sonia-Secret) invoca este endpoint hoy — ver design's
     "Open Questions".
@@ -705,11 +715,16 @@ async def claim_order(
             ServiceOrder.id == order_id,
             ServiceOrder.status == ServiceStatus.received,
             ServiceOrder.tenant_id == claim_in.tenant_id,
+            ServiceOrder.technician_id.is_(None),
         )
         .values(status=ServiceStatus.in_progress, technician_id=claim_in.technician_id)
         .execution_options(synchronize_session=False)
     )
-    result = await db.execute(claim_stmt)
+    try:
+        result = await db.execute(claim_stmt)
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="technician_not_found")
 
     if result.rowcount == 1:
         claim_changed_at = datetime.utcnow()
@@ -756,6 +771,8 @@ async def claim_order(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="not_claimable")
     if outcome == "wrong_tenant":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="cross_tenant")
+    if outcome == "already_assigned":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="already_assigned")
     raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="already_claimed")
 
 

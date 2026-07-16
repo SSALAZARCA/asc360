@@ -68,6 +68,24 @@ class TestClassifyClaimOutcome:
         order = SimpleNamespace(tenant_id=tenant, status=ServiceStatus.completed)
         assert classify_claim_outcome(0, order, tenant) == "not_found"
 
+    def test_rowcount_zero_and_received_with_technician_already_set_is_already_assigned(self):
+        """
+        Order exists, same tenant, still `received`, but already carries a
+        non-null `technician_id` (e.g. auto-assigned at `OrderCreate` time,
+        or set by the OTP-acceptance flow) — the conditional UPDATE's
+        `technician_id IS NULL` predicate rejects the claim (rowcount == 0).
+        This must surface as 409 `already_assigned`, distinct from 409
+        `already_claimed` (which means another technician won the race and
+        the order moved to `in_progress`).
+        """
+        tenant = uuid.uuid4()
+        order = SimpleNamespace(
+            tenant_id=tenant,
+            status=ServiceStatus.received,
+            technician_id=uuid.uuid4(),
+        )
+        assert classify_claim_outcome(0, order, tenant) == "already_assigned"
+
 
 class TestClaimEndpointConcurrency:
     """HTTP layer: two claim calls on the same order id -> exactly one 200, one 409."""
@@ -118,13 +136,14 @@ class TestClaimEndpointConcurrency:
         assert resp2.status_code == 409
         assert resp2.json()["detail"] == "already_claimed"
 
-    def test_winning_claim_update_where_clause_includes_id_status_and_tenant(self):
+    def test_winning_claim_update_where_clause_includes_id_status_tenant_and_technician(self):
         """
         Compiles the real `update(ServiceOrder)` statement built by
-        `claim_order` and asserts its WHERE clause AND-combines all three
-        predicates (`id`, `status == 'received'`, `tenant_id`) — the exact
-        atomicity/tenant-isolation guarantee this endpoint exists to deliver.
-        Regression target: silently dropping any one of the three from the
+        `claim_order` and asserts its WHERE clause AND-combines all four
+        predicates (`id`, `status == 'received'`, `tenant_id`,
+        `technician_id IS NULL`) — the exact atomicity/tenant-isolation/
+        no-overwrite guarantee this endpoint exists to deliver.
+        Regression target: silently dropping any one of the four from the
         production `.where(...)` call must fail this test.
         """
         order_id = uuid.uuid4()
@@ -148,6 +167,8 @@ class TestClaimEndpointConcurrency:
         assert "service_orders.id" in sql
         assert "service_orders.status" in sql
         assert "service_orders.tenant_id" in sql
+        assert "service_orders.technician_id" in sql
+        assert "IS NULL" in sql
 
     def test_winning_claim_backfills_duration_minutes_on_prior_history_row(self):
         """
@@ -246,3 +267,63 @@ class TestClaimEndpointFailureModes:
             )
 
         assert resp.status_code == 401
+
+    def test_already_assigned_technician_returns_409(self):
+        """
+        Regression for the auto-assignment overwrite bug: an order sitting
+        in `received` can already carry a non-null `technician_id` (set at
+        `OrderCreate` time, or by the OTP-acceptance flow, neither of which
+        touch `technician_id`). A *different* technician calling `/claim`
+        on that order must be rejected with 409 `already_assigned` — not
+        silently overwrite the existing assignment.
+        """
+        order_id = uuid.uuid4()
+        tenant_id = uuid.uuid4()
+        existing_technician_id = uuid.uuid4()
+        other_technician_id = uuid.uuid4()
+
+        already_assigned_order = make_claim_order(
+            order_id=order_id,
+            tenant_id=tenant_id,
+            status=ServiceStatus.received,
+            technician_id=existing_technician_id,
+        )
+        fake_db = FakeAsyncSession(claim_rowcount=0, disambiguation_order=already_assigned_order)
+
+        with make_test_client(current_user=None, fake_db_session=fake_db) as client:
+            resp = client.post(
+                f"/api/v1/orders/{order_id}/claim",
+                json={
+                    "technician_id": str(other_technician_id),
+                    "tenant_id": str(tenant_id),
+                },
+                headers={"X-Sonia-Secret": settings.SONIA_BOT_SECRET},
+            )
+
+        assert resp.status_code == 409
+        assert resp.json()["detail"] == "already_assigned"
+
+    def test_invalid_technician_id_returns_clean_4xx_not_500(self):
+        """
+        Regression: `technician_id` is a FK to `users.id`. If Sonia sends a
+        stale/nonexistent id, the conditional UPDATE raises `IntegrityError`
+        at the DB layer. This must be caught and surfaced as a clean 4xx —
+        not propagate uncaught to `get_db`'s generic `except Exception`
+        handler and surface as an unhandled 500.
+        """
+        order_id = uuid.uuid4()
+        fake_db = FakeAsyncSession(claim_rowcount=1, raise_integrity_error=True)
+
+        with make_test_client(current_user=None, fake_db_session=fake_db) as client:
+            resp = client.post(
+                f"/api/v1/orders/{order_id}/claim",
+                json={
+                    "technician_id": str(uuid.uuid4()),
+                    "tenant_id": str(uuid.uuid4()),
+                },
+                headers={"X-Sonia-Secret": settings.SONIA_BOT_SECRET},
+            )
+
+        assert resp.status_code in (404, 422)
+        assert resp.json()["detail"] == "technician_not_found"
+        assert fake_db.rolled_back is True

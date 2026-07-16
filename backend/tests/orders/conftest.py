@@ -25,6 +25,7 @@ from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import Update
+from sqlalchemy.exc import IntegrityError
 
 from app.models.order import OrderHistory, ServiceOrder, ServiceStatus, ServiceType
 
@@ -33,17 +34,19 @@ def make_claim_order(
     order_id: Optional[uuid.UUID] = None,
     tenant_id: Optional[uuid.UUID] = None,
     status: ServiceStatus = ServiceStatus.received,
+    technician_id: Optional[uuid.UUID] = None,
 ) -> ServiceOrder:
     """
     Real `ServiceOrder` ORM instance, unattached to any session — enough
     surface for `classify_claim_outcome`'s disambiguation read (`.tenant_id`,
-    `.status`).
+    `.status`, `.technician_id`).
     """
     return ServiceOrder(
         id=order_id or uuid.uuid4(),
         tenant_id=tenant_id or uuid.uuid4(),
         vehicle_id=uuid.uuid4(),
         status=status,
+        technician_id=technician_id,
         service_type=ServiceType.regular,
         created_at=datetime.utcnow(),
     )
@@ -101,17 +104,22 @@ class FakeAsyncSession:
         claim_rowcount: int,
         disambiguation_order: Optional[ServiceOrder] = None,
         prior_history: Optional[OrderHistory] = None,
+        raise_integrity_error: bool = False,
     ):
         self._claim_rowcount = claim_rowcount
         self._disambiguation_order = disambiguation_order
         self._prior_history = prior_history
+        self._raise_integrity_error = raise_integrity_error
         self.added: list = []
         self.committed = False
+        self.rolled_back = False
         self.executed_statements: list = []
 
     async def execute(self, stmt):
         self.executed_statements.append(stmt)
         if isinstance(stmt, Update):
+            if self._raise_integrity_error:
+                raise IntegrityError("UPDATE service_orders", {}, Exception("fk violation"))
             return _ClaimUpdateResult(self._claim_rowcount)
 
         entity = stmt.column_descriptions[0]["entity"]
@@ -124,3 +132,6 @@ class FakeAsyncSession:
 
     async def commit(self):
         self.committed = True
+
+    async def rollback(self):
+        self.rolled_back = True
