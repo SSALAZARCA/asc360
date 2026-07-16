@@ -19,7 +19,40 @@ import uuid
 from app.config import settings
 
 from tests.conftest import make_test_client
-from tests.orders.conftest import FakeActivePlateSession, make_active_order
+from tests.orders.conftest import (
+    FakeActivePlateSession,
+    attach_text_only_damage_reception,
+    make_active_order,
+)
+
+
+def test_match_found_with_text_only_damage_observation_does_not_500():
+    """
+    Regression for a production 500: `fastapi.exceptions.ResponseValidationError`
+    on `reception.damage_photos_urls` when an order's reception has a
+    text-only damage entry (`{"type": "text", "desc": ...}`) instead of a
+    plain URL string — `ReceptionBase.damage_photos_urls` was typed
+    `Optional[List[str]]`, but `app/api/v1/endpoints/uploads.py` intentionally
+    stores these as objects for damage reported without a photo. This
+    endpoint was the first to surface it (superadmin cross-tenant lookup for
+    an order carrying a text-only damage entry); any other endpoint
+    returning `OrderRead`/`ReceptionRead` for such an order would 500 the
+    same way.
+    """
+    tenant_id = uuid.uuid4()
+    order = make_active_order(tenant_id=tenant_id, plate="JEK15I")
+    attach_text_only_damage_reception(order, desc="Ninguna")
+    fake_db = FakeActivePlateSession(order=order)
+
+    with make_test_client(current_user=None, fake_db_session=fake_db) as client:
+        resp = client.get(
+            "/api/v1/orders/active/plate/JEK15I",
+            headers={"X-Sonia-Secret": settings.SONIA_BOT_SECRET},
+        )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["reception"]["damage_photos_urls"] == [{"type": "text", "desc": "Ninguna"}]
 
 
 def test_match_found_returns_order_with_its_real_tenant_id():

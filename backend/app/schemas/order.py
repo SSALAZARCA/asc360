@@ -1,6 +1,6 @@
 from pydantic import BaseModel, ConfigDict, Field
 from uuid import UUID
-from typing import Optional, List
+from typing import Optional, List, Union, Dict, Any
 from datetime import datetime
 from app.models.order import ServiceStatus, ServiceType, OrderPartType, OrderPartStatus
 
@@ -36,7 +36,14 @@ class ReceptionBase(BaseModel):
     gas_level: Optional[str] = Field(None, max_length=50, description="Lleno, Medio, 1/4, Reserva")
     customer_notes: Optional[str] = Field(None, max_length=1000, description="Motivos de ingreso combinados")
     warranty_warnings: Optional[str] = Field(None, max_length=2000, description="Soft warnings generados por Sonia")
-    damage_photos_urls: Optional[List[str]] = Field(default=[], description="URLs de MinIO de las fotos de estado")
+    damage_photos_urls: Optional[List[Union[str, Dict[str, Any]]]] = Field(
+        default=[],
+        description=(
+            "Evidencia de daños: URLs de MinIO (legacy, string plano) u objetos "
+            "{'url','desc'} para foto / {'type':'text','desc'} para observación sin foto "
+            "(ver app/api/v1/endpoints/uploads.py)"
+        ),
+    )
     intake_answers: Optional[List[dict]] = Field(default=[], description="Respuestas a preguntas según tipo de servicio")
     accessories: Optional[List[str]] = Field(default=[], description="Accesorios u objetos que el cliente deja con la moto")
     general_observations: Optional[str] = Field(None, max_length=2000, description="Observaciones generales o acuerdos del asesor")

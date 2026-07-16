@@ -27,7 +27,7 @@ from typing import Optional
 from sqlalchemy import Update
 from sqlalchemy.exc import IntegrityError
 
-from app.models.order import OrderHistory, ServiceOrder, ServiceStatus, ServiceType
+from app.models.order import OrderHistory, ServiceOrder, ServiceOrderReception, ServiceStatus, ServiceType
 from app.models.vehicle import Vehicle
 
 
@@ -175,6 +175,25 @@ def make_active_order(
     order.work_logs = []
     order.parts = []
     return order
+
+
+def attach_text_only_damage_reception(order: ServiceOrder, desc: str = "Ninguna") -> None:
+    """
+    Attaches a `ServiceOrderReception` whose `damage_photos_urls` holds a
+    text-only entry (`{"type": "text", "desc": ...}`), the shape
+    `app/api/v1/endpoints/uploads.py` intentionally writes for damage
+    observations reported without a photo. Reproduces the
+    `ResponseValidationError` seen in production on `GET
+    /orders/active/plate/{plate}` before `ReceptionBase.damage_photos_urls`
+    was widened to accept both legacy plain-string URLs and these objects.
+    """
+    order.reception = ServiceOrderReception(
+        id=uuid.uuid4(),
+        order_id=order.id,
+        mileage_km=1000,
+        damage_photos_urls=[{"type": "text", "desc": desc}],
+        created_at=datetime.utcnow(),
+    )
 
 
 class FakeActivePlateSession:
