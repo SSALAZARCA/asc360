@@ -61,13 +61,18 @@
        Usa visibility (no display) para no correr las posiciones del layout. */
     body.solo-texto * { visibility: hidden !important; }
     body.solo-texto .spec-value,
-    body.solo-texto .v-value,
-    body.solo-texto .inline-value {
+    body.solo-texto .v-value {
         visibility: visible !important;
         border: none !important;
         background: transparent !important;
     }
     body.solo-texto .security-qr { visibility: visible !important; }
+    /* Esta línea (label + valor) no está en el papel pre-impreso de litografía,
+       así que debe imprimirse completa, no solo el valor. */
+    body.solo-texto .always-show,
+    body.solo-texto .always-show * {
+        visibility: visible !important;
+    }
     /* border-collapse dibuja la línea de la celda a nivel de tabla, no de celda:
        un td en visibility:hidden no basta para quitarla, hay que anular el borde
        de la tabla entera explícitamente. */
@@ -98,7 +103,7 @@
                         <tr><td class="spec-label">NOMBRE</td><td class="spec-label">NIT</td><td class="spec-label">DIRECCIÓN</td></tr>
                         <tr><td class="spec-value">MOTORCOM S.A.S.</td><td class="spec-value">901.049.651-5</td><td class="spec-value" style="font-size:8px;">Carrera 7B # 123 - 51<br>BOGOTÁ</td></tr>
                     </table>
-                    <div style="text-align:center; padding: 4px; font-size: 8px; font-weight: bold; color: #555;"><span>SISTEMAS DE CONTROL INSTALADOS: </span><span class="inline-value">{{ sistemas }}</span></div>
+                    <div class="always-show" style="text-align:center; padding: 4px; font-size: 8px; font-weight: bold; color: #555;">SISTEMAS DE CONTROL INSTALADOS: {{ sistemas }}</div>
                 </div>
 
                 <div class="card-box">
