@@ -332,6 +332,11 @@ export default function SettingsPage() {
   const [simSaving, setSimSaving]       = useState(false);
   const [simMsg, setSimMsg]             = useState('');
 
+  // Exigir OTP al ingreso de motocicletas — interruptor único para toda la red
+  const [requireOtp, setRequireOtp]         = useState(true);
+  const [requireOtpSaving, setRequireOtpSaving] = useState(false);
+  const [requireOtpMsg, setRequireOtpMsg]       = useState('');
+
   // Factores de pricing
   const [pricing, setPricing]         = useState({ import_factor: 1.42, provider_margin: 0.35, distributor_margin: 0.35, iva_rate: 0.19, trm: 3800 });
   const [pricingSaving, setPricingSaving] = useState(false);
@@ -618,6 +623,12 @@ export default function SettingsPage() {
       .then(data => { if (data?.threshold != null) setSimThreshold(data.threshold); })
       .catch(() => {});
 
+    // Cargar interruptor de OTP al ingreso (red completa, no por taller)
+    authFetch('/settings/require-otp')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data?.require_otp != null) setRequireOtp(data.require_otp); })
+      .catch(() => {});
+
     // Cargar factores de pricing
     authFetch('/settings/pricing-factors')
       .then(r => r.ok ? r.json() : null)
@@ -723,6 +734,28 @@ export default function SettingsPage() {
     } finally {
       setReminderSaving(false);
       setTimeout(() => setReminderMsg(''), 4000);
+    }
+  };
+
+  const handleToggleRequireOtp = async () => {
+    const next = !requireOtp;
+    setRequireOtpSaving(true);
+    try {
+      const res = await authFetch('/settings/require-otp', {
+        method: 'PUT',
+        body: JSON.stringify({ require_otp: next }),
+      });
+      if (res.ok) {
+        setRequireOtp(next);
+        setRequireOtpMsg('✅ Guardado correctamente.');
+      } else {
+        setRequireOtpMsg('⚠️ Error al guardar. Intentá de nuevo.');
+      }
+    } catch {
+      setRequireOtpMsg('⚠️ Error de conexión.');
+    } finally {
+      setRequireOtpSaving(false);
+      setTimeout(() => setRequireOtpMsg(''), 4000);
     }
   };
 
@@ -946,6 +979,44 @@ export default function SettingsPage() {
                 </button>
               </div>
               {simMsg && <p style={{ color: '#4ade80', fontSize: '0.68rem', margin: 0 }}>{simMsg}</p>}
+            </div>
+
+            {/* Exigir OTP al ingreso de motocicletas — interruptor único para toda la red */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+              <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#fff', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <Shield size={14} style={{ color: '#ff5f33', flexShrink: 0 }} />
+                Exigir confirmación OTP al ingreso de motocicletas
+              </label>
+              <p style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.3)', margin: 0, lineHeight: 1.6 }}>
+                Aplica a toda la red, no a un taller en particular. Si lo apagás, las órdenes nuevas quedan
+                registradas como recibidas directamente, sin pasar por el paso de enviar y confirmar el código SMS al cliente.
+              </p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginTop: '0.25rem' }}>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={requireOtp}
+                  onClick={handleToggleRequireOtp}
+                  disabled={requireOtpSaving}
+                  style={{
+                    width: '42px', height: '24px', borderRadius: '999px', border: 'none',
+                    background: requireOtp ? '#ff5f33' : 'rgba(255,255,255,0.15)',
+                    position: 'relative', cursor: requireOtpSaving ? 'default' : 'pointer',
+                    transition: 'background 0.15s', flexShrink: 0, padding: 0,
+                    opacity: requireOtpSaving ? 0.6 : 1,
+                  }}
+                >
+                  <span style={{
+                    position: 'absolute', top: '3px', left: requireOtp ? '21px' : '3px',
+                    width: '18px', height: '18px', borderRadius: '50%', background: '#fff',
+                    transition: 'left 0.15s',
+                  }} />
+                </button>
+                <span style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.6)', fontWeight: 600 }}>
+                  {requireOtp ? 'Exigido (por defecto)' : 'Desactivado'}
+                </span>
+              </div>
+              {requireOtpMsg && <p style={{ color: '#4ade80', fontSize: '0.68rem', margin: 0 }}>{requireOtpMsg}</p>}
             </div>
           </section>
 
