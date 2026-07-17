@@ -334,6 +334,7 @@ export default function SettingsPage() {
 
   // Exigir OTP al ingreso de motocicletas — interruptor único para toda la red
   const [requireOtp, setRequireOtp]         = useState(true);
+  const [requireOtpLoaded, setRequireOtpLoaded] = useState(false);
   const [requireOtpSaving, setRequireOtpSaving] = useState(false);
   const [requireOtpMsg, setRequireOtpMsg]       = useState('');
 
@@ -627,7 +628,8 @@ export default function SettingsPage() {
     authFetch('/settings/require-otp')
       .then(r => r.ok ? r.json() : null)
       .then(data => { if (data?.require_otp != null) setRequireOtp(data.require_otp); })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setRequireOtpLoaded(true));
 
     // Cargar factores de pricing
     authFetch('/settings/pricing-factors')
@@ -997,23 +999,23 @@ export default function SettingsPage() {
                   role="switch"
                   aria-checked={requireOtp}
                   onClick={handleToggleRequireOtp}
-                  disabled={requireOtpSaving}
+                  disabled={requireOtpSaving || !requireOtpLoaded}
                   style={{
                     width: '42px', height: '24px', borderRadius: '999px', border: 'none',
-                    background: requireOtp ? '#ff5f33' : 'rgba(255,255,255,0.15)',
-                    position: 'relative', cursor: requireOtpSaving ? 'default' : 'pointer',
+                    background: !requireOtpLoaded ? 'rgba(255,255,255,0.08)' : (requireOtp ? '#ff5f33' : 'rgba(255,255,255,0.15)'),
+                    position: 'relative', cursor: (requireOtpSaving || !requireOtpLoaded) ? 'default' : 'pointer',
                     transition: 'background 0.15s', flexShrink: 0, padding: 0,
-                    opacity: requireOtpSaving ? 0.6 : 1,
+                    opacity: (requireOtpSaving || !requireOtpLoaded) ? 0.6 : 1,
                   }}
                 >
                   <span style={{
-                    position: 'absolute', top: '3px', left: requireOtp ? '21px' : '3px',
+                    position: 'absolute', top: '3px', left: (requireOtpLoaded && requireOtp) ? '21px' : '3px',
                     width: '18px', height: '18px', borderRadius: '50%', background: '#fff',
                     transition: 'left 0.15s',
                   }} />
                 </button>
                 <span style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.6)', fontWeight: 600 }}>
-                  {requireOtp ? 'Exigido (por defecto)' : 'Desactivado'}
+                  {!requireOtpLoaded ? 'Cargando...' : (requireOtp ? 'Exigido (por defecto)' : 'Desactivado')}
                 </span>
               </div>
               {requireOtpMsg && <p style={{ color: '#4ade80', fontSize: '0.68rem', margin: 0 }}>{requireOtpMsg}</p>}
