@@ -10,7 +10,7 @@ const REMISION_TYPES = [
   { value: 'PEDIDO',        label: 'Pedido' },
   { value: 'GARANTIA',      label: 'Garantía' },
   { value: 'CORTESIA',      label: 'Cortesía' },
-  { value: 'VEHICULO_PROPIO', label: 'Vehículo Propio' },
+  { value: 'VEHICULO_PROPIO', label: 'Consumo Interno' },
 ];
 
 // Minimal inline styles matching the project's dark theme

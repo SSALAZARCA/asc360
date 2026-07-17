@@ -2,38 +2,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRemisiones } from '../../lib/useRemisiones';
 import { toast } from '../../lib/toast';
-import { RefreshCw, Plus, Package } from 'lucide-react';
+import { RefreshCw, Plus, Package, Eye, Receipt, FileSpreadsheet } from 'lucide-react';
 import ConfirmModal from '../ConfirmModal';
 import RemisionForm from './RemisionForm';
-
-// ---------------------------------------------------------------------------
-// Status badge configuration
-// ---------------------------------------------------------------------------
-const STATUS_CONFIG = {
-  BORRADOR:   { label: 'Borrador',   color: '#fbbf24', bg: 'rgba(251,191,36,0.12)',  border: 'rgba(251,191,36,0.3)'  },
-  DESPACHADO: { label: 'Despachado', color: '#22c55e', bg: 'rgba(34,197,94,0.12)',   border: 'rgba(34,197,94,0.3)'   },
-  ANULADO:    { label: 'Anulado',    color: '#f87171', bg: 'rgba(248,113,113,0.12)', border: 'rgba(248,113,113,0.3)' },
-};
-
-const TYPE_LABELS = {
-  PEDIDO:         'Pedido',
-  GARANTIA:       'Garantía',
-  CORTESIA:       'Cortesía',
-  VEHICULO_PROPIO: 'Vehículo Propio',
-};
-
-function StatusBadge({ status }) {
-  const cfg = STATUS_CONFIG[status] || { label: status, color: '#9ca3af', bg: 'rgba(156,163,175,0.1)', border: 'rgba(156,163,175,0.3)' };
-  return (
-    <span style={{
-      fontSize: '9px', fontWeight: 700, padding: '2px 8px', borderRadius: '20px',
-      background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border}`,
-      textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap',
-    }}>
-      {cfg.label}
-    </span>
-  );
-}
+import RemisionDetailModal from './RemisionDetailModal';
+import RemisionesExportModal from './RemisionesExportModal';
+import { TYPE_LABELS, StatusBadge } from './remisionLabels';
 
 // ---------------------------------------------------------------------------
 // Modal: Cancel remision (requires reason)
@@ -133,6 +107,15 @@ export default function RemisionesTab({ userRole }) {
   // Confirm delete modal
   const [pendingDelete, setPendingDelete] = useState(null);
 
+  // View detail modal (DESPACHADO / ANULADO)
+  const [viewDetailId, setViewDetailId] = useState(null);
+
+  // Export to Excel modal
+  const [exportModalOpen, setExportModalOpen] = useState(false);
+
+  // Toggling invoiced flag (per-row, disables that row's toggle while in flight)
+  const [togglingInvoiced, setTogglingInvoiced] = useState(null);
+
   const isSuperadmin = userRole === 'superadmin';
 
   // -------------------------------------------------------------------------
@@ -218,6 +201,26 @@ export default function RemisionesTab({ userRole }) {
   };
 
   // -------------------------------------------------------------------------
+  // Toggle invoiced (facturada)
+  // -------------------------------------------------------------------------
+  const handleToggleInvoiced = async (remision) => {
+    setTogglingInvoiced(remision.id);
+    try {
+      const res = await api.updateInvoiced(remision.id, !remision.invoiced);
+      if (res.ok) {
+        const data = await res.json();
+        setRemisiones(prev => prev.map(r => r.id === remision.id ? { ...r, invoiced: data.invoiced } : r));
+      } else {
+        toast.error('Error al actualizar el estado de facturación');
+      }
+    } catch {
+      toast.error('Error de conexión');
+    } finally {
+      setTogglingInvoiced(null);
+    }
+  };
+
+  // -------------------------------------------------------------------------
   // Render
   // -------------------------------------------------------------------------
   return (
@@ -270,6 +273,22 @@ export default function RemisionesTab({ userRole }) {
           <RefreshCw size={14} />
         </button>
 
+        {/* Descargar Excel — superadmin only */}
+        {isSuperadmin && (
+          <button
+            onClick={() => setExportModalOpen(true)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '6px',
+              padding: '8px 14px', borderRadius: '8px',
+              background: 'rgba(255,255,255,0.05)',
+              border: '1px solid rgba(255,255,255,0.08)',
+              color: '#9ca3af', fontSize: '11px', fontWeight: 700, cursor: 'pointer',
+            }}
+          >
+            <FileSpreadsheet size={13} /> Descargar Excel
+          </button>
+        )}
+
         {/* Nueva Remisión — superadmin only */}
         {isSuperadmin && (
           <button
@@ -314,10 +333,10 @@ export default function RemisionesTab({ userRole }) {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
             <thead>
               <tr style={{ background: '#0e0e14' }}>
-                {['Número', 'Tipo', 'Fecha', 'Estado', 'Ítems', 'Acciones'].map(h => (
+                {['Número', 'Tipo', 'Fecha', 'Estado', 'Ítems', 'Facturada', 'Acciones'].map(h => (
                   <th key={h} style={{
                     padding: '10px 14px',
-                    textAlign: h === 'Acciones' ? 'center' : 'left',
+                    textAlign: (h === 'Acciones' || h === 'Facturada') ? 'center' : 'left',
                     fontSize: '9px', fontWeight: 700, color: '#606075',
                     textTransform: 'uppercase', letterSpacing: '0.07em',
                     borderBottom: '1px solid rgba(255,255,255,0.06)',
@@ -357,6 +376,37 @@ export default function RemisionesTab({ userRole }) {
                   {/* Ítems count */}
                   <td style={{ padding: '10px 14px', textAlign: 'center', color: '#9ca3af' }}>
                     {rem.items_count ?? 0}
+                  </td>
+
+                  {/* Facturada */}
+                  <td style={{ padding: '10px 14px', textAlign: 'center' }}>
+                    {isSuperadmin ? (
+                      <button
+                        title={rem.invoiced ? 'Facturada — click para desmarcar' : 'Marcar como facturada'}
+                        onClick={() => handleToggleInvoiced(rem)}
+                        disabled={togglingInvoiced === rem.id}
+                        style={{
+                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                          width: 24, height: 24, borderRadius: '50%', border: 'none',
+                          cursor: togglingInvoiced === rem.id ? 'not-allowed' : 'pointer', transition: 'all 0.15s',
+                          ...(rem.invoiced
+                            ? { background: 'rgba(59,130,246,0.15)', color: '#3b82f6', outline: '1px solid rgba(59,130,246,0.4)' }
+                            : { background: 'rgba(96,96,117,0.1)', color: '#404050', outline: '1px solid rgba(96,96,117,0.2)' }),
+                        }}
+                      >
+                        <Receipt size={13} />
+                      </button>
+                    ) : (
+                      <span title={rem.invoiced ? 'Facturada' : 'Sin facturar'} style={{
+                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                        width: 24, height: 24, borderRadius: '50%',
+                        ...(rem.invoiced
+                          ? { background: 'rgba(59,130,246,0.15)', color: '#3b82f6', border: '1px solid rgba(59,130,246,0.4)' }
+                          : { background: 'rgba(96,96,117,0.1)', color: '#404050', border: '1px solid rgba(96,96,117,0.2)' }),
+                      }}>
+                        <Receipt size={13} />
+                      </span>
+                    )}
                   </td>
 
                   {/* Acciones */}
@@ -402,22 +452,43 @@ export default function RemisionesTab({ userRole }) {
                         )}
 
                         {rem.status === 'DESPACHADO' && (
-                          <button
-                            onClick={() => setPendingCancel(rem)}
-                            style={{
-                              padding: '4px 10px', borderRadius: '6px', border: 'none',
-                              background: 'rgba(248,113,113,0.12)', color: '#f87171',
-                              fontSize: '10px', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap',
-                            }}
-                          >
-                            Anular
-                          </button>
+                          <>
+                            <button
+                              onClick={() => setViewDetailId(rem.id)}
+                              style={{
+                                padding: '4px 10px', borderRadius: '6px', border: 'none',
+                                background: 'rgba(96,165,250,0.12)', color: '#60a5fa',
+                                fontSize: '10px', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap',
+                                display: 'flex', alignItems: 'center', gap: '4px',
+                              }}
+                            >
+                              <Eye size={11} /> Ver detalle
+                            </button>
+                            <button
+                              onClick={() => setPendingCancel(rem)}
+                              style={{
+                                padding: '4px 10px', borderRadius: '6px', border: 'none',
+                                background: 'rgba(248,113,113,0.12)', color: '#f87171',
+                                fontSize: '10px', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap',
+                              }}
+                            >
+                              Anular
+                            </button>
+                          </>
                         )}
 
                         {rem.status === 'ANULADO' && (
-                          <span style={{ fontSize: '10px', color: '#606075', fontStyle: 'italic' }}>
-                            Sin acciones
-                          </span>
+                          <button
+                            onClick={() => setViewDetailId(rem.id)}
+                            style={{
+                              padding: '4px 10px', borderRadius: '6px', border: 'none',
+                              background: 'rgba(96,165,250,0.12)', color: '#60a5fa',
+                              fontSize: '10px', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap',
+                              display: 'flex', alignItems: 'center', gap: '4px',
+                            }}
+                          >
+                            <Eye size={11} /> Ver detalle
+                          </button>
                         )}
                       </div>
                     )}
@@ -466,6 +537,19 @@ export default function RemisionesTab({ userRole }) {
           onCancel={() => setPendingDelete(null)}
           onConfirm={() => handleDelete(pendingDelete)}
         />
+      )}
+
+      {/* View detail (DESPACHADO / ANULADO) */}
+      {viewDetailId && (
+        <RemisionDetailModal
+          remisionId={viewDetailId}
+          onClose={() => setViewDetailId(null)}
+        />
+      )}
+
+      {/* Export to Excel */}
+      {exportModalOpen && (
+        <RemisionesExportModal onClose={() => setExportModalOpen(false)} />
       )}
     </div>
   );

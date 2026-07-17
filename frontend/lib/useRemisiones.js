@@ -119,6 +119,18 @@ export function useRemisiones() {
   }
 
   /**
+   * Toggle the "facturada" (invoiced) flag — independent of status.
+   * @param {string} id
+   * @param {boolean} invoiced
+   */
+  async function updateInvoiced(id, invoiced) {
+    return authFetch(`${BASE()}/${id}/invoiced`, {
+      method: 'PATCH',
+      body: JSON.stringify({ invoiced }),
+    });
+  }
+
+  /**
    * Get available spare part items (qty_available > 0) for the item selector.
    * @param {Object} filters - { lot_id, part_number }
    */
@@ -141,5 +153,6 @@ export function useRemisiones() {
     cancelRemision,
     deleteRemision,
     getAvailability,
+    updateInvoiced,
   };
 }
