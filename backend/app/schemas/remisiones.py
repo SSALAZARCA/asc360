@@ -122,6 +122,7 @@ class RemisionRead(BaseModel):
     created_at: datetime
     updated_at: Optional[datetime] = None
     items_count: int = 0
+    invoiced: bool = False
 
 
 class RemisionDetail(RemisionRead):
@@ -140,6 +141,10 @@ class DispatchResponse(RemisionDetail):
 
 class CancelRequest(BaseModel):
     cancellation_reason: str = Field(..., min_length=5)
+
+
+class RemisionInvoicedUpdate(BaseModel):
+    invoiced: bool
 
 
 # ---------------------------------------------------------------------------

@@ -86,6 +86,7 @@ def make_remision(
     items: list = None,
     movements: list = None,
     created_by: uuid.UUID = None,
+    invoiced: bool = False,
 ) -> MagicMock:
     r = MagicMock()
     r.id = uuid.uuid4()
@@ -104,6 +105,7 @@ def make_remision(
     r.updated_at = None
     r.items = items if items is not None else []
     r.movements = movements if movements is not None else []
+    r.invoiced = invoiced
     return r
 
 

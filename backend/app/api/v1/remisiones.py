@@ -26,6 +26,7 @@ from app.models.imports import (
     SparePartLot,
     SparePartItem,
 )
+from app.models.user import User
 from app.schemas.remisiones import (
     RemisionCreate,
     RemisionUpdate,
@@ -38,6 +39,7 @@ from app.schemas.remisiones import (
     CancelRequest,
     AvailabilityItem,
     RemisionListResponse,
+    RemisionInvoicedUpdate,
 )
 
 router = APIRouter(prefix="/remisiones", tags=["remisiones"])
@@ -221,6 +223,109 @@ async def get_availability(
         )
         for row in rows
     ]
+
+
+# ---------------------------------------------------------------------------
+# GET /export — Excel export, one row per ITEM (remisión header fields
+# repeated per item row), date-range filtered on the remisión's created_at.
+# MUST be registered before GET /{remision_id} — same HTTP method + single
+# path segment, so route order decides which one "export" would match.
+# ---------------------------------------------------------------------------
+
+REMISION_TYPE_LABELS = {
+    "PEDIDO": "Pedido",
+    "GARANTIA": "Garantía",
+    "CORTESIA": "Cortesía",
+    "VEHICULO_PROPIO": "Consumo Interno",
+}
+
+REMISION_STATUS_LABELS = {
+    "BORRADOR": "Borrador",
+    "DESPACHADO": "Despachado",
+    "ANULADO": "Anulado",
+}
+
+
+async def _resolve_remision_actor_names(db: AsyncSession, remisiones: list) -> dict:
+    """Batch-resolves created_by/dispatched_by user ids to display names for
+    the export — one extra query total, not one per remisión."""
+    user_ids = set()
+    for r in remisiones:
+        if r.created_by:
+            user_ids.add(r.created_by)
+        if r.dispatched_by:
+            user_ids.add(r.dispatched_by)
+
+    if not user_ids:
+        return {}
+    result = await db.execute(select(User.id, User.name).where(User.id.in_(user_ids)))
+    return {row[0]: row[1] for row in result.all()}
+
+
+def _build_export_rows(remisiones: list, names_by_id: dict) -> list:
+    """One row per dispatched item; remisión-level fields repeat across all
+    of that remisión's item rows. A remisión with zero items (only possible
+    for BORRADOR) still emits one row with blank part/qty, so it isn't
+    silently dropped from the export."""
+    rows = []
+    for r in remisiones:
+        header_fields = [
+            r.remision_number,
+            REMISION_TYPE_LABELS.get(r.type, r.type),
+            REMISION_STATUS_LABELS.get(r.status, r.status),
+            "Sí" if r.invoiced else "No",
+        ]
+        trailer_fields = [
+            r.created_at.strftime("%Y-%m-%d %H:%M") if r.created_at else None,
+            names_by_id.get(r.created_by),
+            r.dispatched_at.strftime("%Y-%m-%d %H:%M") if r.dispatched_at else None,
+            names_by_id.get(r.dispatched_by) if r.dispatched_by else None,
+            r.notes,
+        ]
+        if r.items:
+            for item in r.items:
+                rows.append(header_fields + [item.part_number, item.qty_dispatched] + trailer_fields)
+        else:
+            rows.append(header_fields + [None, None] + trailer_fields)
+    return rows
+
+
+@router.get("/export")
+async def export_remisiones(
+    date_from: Optional[datetime] = Query(None),
+    date_to: Optional[datetime] = Query(None),
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    _require_superadmin(current_user)
+
+    from app.api.v1.imports import _excel_response
+
+    filters = []
+    if date_from:
+        filters.append(InventoryRemision.created_at >= date_from)
+    if date_to:
+        filters.append(InventoryRemision.created_at <= date_to)
+
+    stmt = select(InventoryRemision).options(selectinload(InventoryRemision.items))
+    if filters:
+        stmt = stmt.where(*filters)
+    stmt = stmt.order_by(InventoryRemision.created_at.desc())
+    remisiones = (await db.execute(stmt)).scalars().all()
+
+    names_by_id = await _resolve_remision_actor_names(db, remisiones)
+    headers = [
+        "Número", "Tipo", "Estado", "Facturada", "Part Number", "Cantidad Despachada",
+        "Fecha creación", "Creado por", "Fecha despacho", "Despachado por", "Notas",
+    ]
+    rows = _build_export_rows(remisiones, names_by_id)
+
+    if date_from and date_to:
+        filename = f"remisiones_{date_from.date()}_{date_to.date()}.xlsx"
+    else:
+        filename = f"remisiones_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.xlsx"
+
+    return _excel_response("Remisiones", headers, rows, filename)
 
 
 # ---------------------------------------------------------------------------
@@ -612,3 +717,25 @@ async def delete_remision(
         await db.delete(item)
     await db.delete(remision)
     await db.commit()
+
+
+# ---------------------------------------------------------------------------
+# PATCH /{id}/invoiced — toggle facturada flag (any status)
+# ---------------------------------------------------------------------------
+
+@router.patch("/{remision_id}/invoiced", response_model=RemisionRead)
+async def update_invoiced(
+    remision_id: uuid.UUID,
+    payload: RemisionInvoicedUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    _require_superadmin(current_user)
+    remision = await db.get(InventoryRemision, remision_id)
+    if remision is None:
+        raise HTTPException(status_code=404, detail="Remisión no encontrada")
+
+    remision.invoiced = payload.invoiced
+    await db.commit()
+    await db.refresh(remision)
+    return RemisionRead.model_validate(remision)

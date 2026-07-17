@@ -559,6 +559,9 @@ class InventoryRemision(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+    # Marca contable: si esta remisión ya fue facturada. Independiente del status.
+    invoiced = Column(Boolean, nullable=False, default=False)
+
     # Relaciones
     reference_lot = relationship("SparePartLot", foreign_keys=[reference_lot_id])
     items = relationship("InventoryRemisionItem", back_populates="remision", cascade="all, delete-orphan")
