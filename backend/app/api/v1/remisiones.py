@@ -262,7 +262,41 @@ async def _resolve_remision_actor_names(db: AsyncSession, remisiones: list) -> d
     return {row[0]: row[1] for row in result.all()}
 
 
-def _build_export_rows(remisiones: list, names_by_id: dict) -> list:
+async def _resolve_avg_fob_costs(db: AsyncSession, remisiones: list) -> dict:
+    """Batch-resolves each distinct dispatched part_number to its catalog
+    `avg_fob_cost` (or None if no PartsReference/cost history exists yet —
+    a real, expected case, not an error). One `_find_reference_for_part_number`
+    call per DISTINCT part_number across the whole export, not per row."""
+    from app.services.pricing_service import _find_reference_for_part_number
+
+    # Insertion-ordered de-dup (not a bare set): keeps resolution order
+    # deterministic/reproducible instead of depending on hash-seed-dependent
+    # set iteration order.
+    part_numbers = list(dict.fromkeys(item.part_number for r in remisiones for item in r.items))
+    costs_by_part: dict = {}
+    for part_number in part_numbers:
+        ref = await _find_reference_for_part_number(db, part_number)
+        costs_by_part[part_number] = ref.avg_fob_cost if ref else None
+    return costs_by_part
+
+
+def _price_column_value(remision_type: str, avg_fob_cost, factors: dict):
+    """Single price column whose meaning depends on the remisión's type:
+    - GARANTIA / VEHICULO_PROPIO (Consumo Interno): costo nacionalizado (COP).
+    - PEDIDO: valor a distribuidor (COP).
+    - CORTESIA (or anything else): blank — no price was requested for this type.
+    Blank (None) whenever there's no cost data for the part, never 0."""
+    from app.services.pricing_service import compute_prices
+
+    if remision_type not in ("GARANTIA", "VEHICULO_PROPIO", "PEDIDO"):
+        return None
+    prices = compute_prices(avg_fob_cost, factors)
+    if remision_type == "PEDIDO":
+        return prices["precio_distribuidor"]
+    return prices["costo_importado"]
+
+
+def _build_export_rows(remisiones: list, names_by_id: dict, costs_by_part: dict, factors: dict) -> list:
     """One row per dispatched item; remisión-level fields repeat across all
     of that remisión's item rows. A remisión with zero items (only possible
     for BORRADOR) still emits one row with blank part/qty, so it isn't
@@ -284,9 +318,12 @@ def _build_export_rows(remisiones: list, names_by_id: dict) -> list:
         ]
         if r.items:
             for item in r.items:
-                rows.append(header_fields + [item.part_number, item.qty_dispatched] + trailer_fields)
+                price = _price_column_value(r.type, costs_by_part.get(item.part_number), factors)
+                rows.append(
+                    header_fields + [item.part_number, item.qty_dispatched, price] + trailer_fields
+                )
         else:
-            rows.append(header_fields + [None, None] + trailer_fields)
+            rows.append(header_fields + [None, None, None] + trailer_fields)
     return rows
 
 
@@ -313,12 +350,18 @@ async def export_remisiones(
     stmt = stmt.order_by(InventoryRemision.created_at.desc())
     remisiones = (await db.execute(stmt)).scalars().all()
 
+    from app.services.pricing_service import get_pricing_factors
+
     names_by_id = await _resolve_remision_actor_names(db, remisiones)
+    costs_by_part = await _resolve_avg_fob_costs(db, remisiones)
+    factors = await get_pricing_factors(db)
+
     headers = [
         "Número", "Tipo", "Estado", "Facturada", "Part Number", "Cantidad Despachada",
+        "Costo/Valor Distribuidor (COP)",
         "Fecha creación", "Creado por", "Fecha despacho", "Despachado por", "Notas",
     ]
-    rows = _build_export_rows(remisiones, names_by_id)
+    rows = _build_export_rows(remisiones, names_by_id, costs_by_part, factors)
 
     if date_from and date_to:
         filename = f"remisiones_{date_from.date()}_{date_to.date()}.xlsx"
