@@ -13,6 +13,7 @@ from app.models.order import ServiceOrder, ServiceOrderReception, ServiceType, S
 from app.models.user import User, Role
 from app.models.vehicle import Vehicle
 from app.models.tenant import Tenant
+from app.models.system_config import SystemConfig
 from app.schemas.order import (
     OrderCreate,
     OrderRead,
@@ -30,6 +31,17 @@ from typing import Optional, List
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
 
+OTP_DISABLED_BY_NAME = "Sistema (OTP desactivado en Configuración)"
+
+
+async def _is_otp_required(db: AsyncSession) -> bool:
+    """Interruptor único de red (no por taller, ver `/settings/require-otp`).
+    Por defecto exige OTP — así una instalación que nunca tocó el ajuste
+    conserva el comportamiento de siempre."""
+    record = await db.get(SystemConfig, "require_otp")
+    return (record.value == "true") if record else True
+
+
 @router.post("/", response_model=OrderRead, status_code=status.HTTP_201_CREATED)
 async def create_service_order(
     order_in: OrderCreate,
@@ -41,6 +53,9 @@ async def create_service_order(
     if not is_bot and current_user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="No autenticado")
 
+    otp_required = await _is_otp_required(db)
+    initial_status = ServiceStatus.pending_signature if otp_required else ServiceStatus.received
+
     # 1. Crear Entidad Principal: La Orden de Servicio
     new_order = ServiceOrder(
         tenant_id=order_in.tenant_id,
@@ -48,12 +63,13 @@ async def create_service_order(
         client_id=order_in.client_id,
         service_type=order_in.service_type,
         technician_id=order_in.technician_id,
-        status=ServiceStatus.pending_signature
+        status=initial_status
     )
     db.add(new_order)
     await db.flush() # Para obtener el new_order.id
-    
+
     # 2. Crear Entidad de Recepción (Checklist de Entrada)
+    now = datetime.utcnow()
     new_reception = ServiceOrderReception(
         order_id=new_order.id,
         mileage_km=order_in.reception.mileage_km,
@@ -65,6 +81,10 @@ async def create_service_order(
         accessories=order_in.reception.accessories or [],
         general_observations=order_in.reception.general_observations,
     )
+    if not otp_required:
+        new_reception.bypass_at = now
+        new_reception.bypass_by_id = None
+        new_reception.bypass_by_name = OTP_DISABLED_BY_NAME
     db.add(new_reception)
 
     # 2.1 Registrar estado inicial en el Historial para KPIs
@@ -72,11 +92,12 @@ async def create_service_order(
     initial_history = OrderHistory(
         order_id=new_order.id,
         from_status=None,
-        to_status=ServiceStatus.pending_signature,
-        changed_at=datetime.utcnow()
+        to_status=initial_status,
+        changed_at=now,
+        comments=None if otp_required else "Orden creada sin OTP — desactivado en Configuración",
     )
     db.add(initial_history)
-    
+
     # 3. Obtener metadatos del Cliente, Vehículo y Taller para poblar el PDF
     vehicle_obj = await db.get(Vehicle, order_in.vehicle_id)
     client_obj  = await db.get(User, order_in.client_id) if order_in.client_id else None
@@ -89,6 +110,9 @@ async def create_service_order(
 
     # Pre-empacar datos como diccionarios simulando el DTO interno
     order_data = {"id": str(new_order.id), "service_type": order_in.service_type.value}
+    if not otp_required:
+        order_data["bypass_at"] = now.strftime("%Y-%m-%d %H:%M")
+        order_data["bypass_by_name"] = OTP_DISABLED_BY_NAME
     reception_data = {
         "mileage_km": order_in.reception.mileage_km,
         "gas_level": order_in.reception.gas_level,

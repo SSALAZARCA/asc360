@@ -13,6 +13,7 @@ from sqlalchemy.future import select
 
 LOGO_KEY = "logo_base64"
 PARTS_SIM_KEY = "parts_similarity_threshold"
+REQUIRE_OTP_KEY = "require_otp"
 
 
 class LogoPayload(BaseModel):
@@ -137,6 +138,42 @@ async def save_parts_similarity_threshold(
         db.add(SystemConfig(key=PARTS_SIM_KEY, value=str(value)))
     await db.commit()
     return {"threshold": value}
+
+
+class RequireOtpPayload(BaseModel):
+    require_otp: bool
+
+
+@router.get("/require-otp")
+async def get_require_otp(
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Indica si el ingreso de motocicletas exige confirmación OTP del cliente.
+    Interruptor único para toda la red (no por taller). Solo superadmin."""
+    if not current_user.is_superadmin:
+        raise HTTPException(status_code=403, detail="Solo superadmin")
+    record = await db.get(SystemConfig, REQUIRE_OTP_KEY)
+    return {"require_otp": (record.value == "true") if record else True}
+
+
+@router.put("/require-otp")
+async def save_require_otp(
+    payload: RequireOtpPayload,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Activa/desactiva la exigencia de OTP al ingreso, para toda la red. Solo superadmin."""
+    if not current_user.is_superadmin:
+        raise HTTPException(status_code=403, detail="Solo superadmin")
+    value = "true" if payload.require_otp else "false"
+    record = await db.get(SystemConfig, REQUIRE_OTP_KEY)
+    if record:
+        record.value = value
+    else:
+        db.add(SystemConfig(key=REQUIRE_OTP_KEY, value=value))
+    await db.commit()
+    return {"require_otp": payload.require_otp}
 
 
 @router.post("/backfill-part-costs")
