@@ -68,6 +68,14 @@
         background: transparent !important;
     }
     body.solo-texto .security-qr { visibility: visible !important; }
+    /* border-collapse dibuja la línea de la celda a nivel de tabla, no de celda:
+       un td en visibility:hidden no basta para quitarla, hay que anular el borde
+       de la tabla entera explícitamente. */
+    body.solo-texto table,
+    body.solo-texto td,
+    body.solo-texto th {
+        border: none !important;
+    }
 </style>
 </head>
 <body class="{{ 'solo-texto' if solo_texto else '' }}">
