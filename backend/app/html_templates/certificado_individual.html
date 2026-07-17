@@ -92,6 +92,17 @@
         position: relative;
         top: 15.67pt;
     }
+    /* Ajuste puntual del cuadro 1 (certificado de emisiones, izquierda) y su QR
+       — pedido explícito: no tocar cuadro 2 ni la tabla de vehículo/nacionalización.
+       El corrimiento de valores acá es chico (no una fila completa como en la
+       tabla de abajo), así que es un ajuste fino, a confirmar contra el papel. */
+    body.solo-texto .table-cuadro1 {
+        position: relative;
+        top: 3pt;
+    }
+    body.solo-texto .security-qr {
+        top: 12px;
+    }
 </style>
 </head>
 <body class="{{ 'solo-texto' if solo_texto else '' }}">
@@ -104,7 +115,7 @@
                         {% if logo_b64 %}<img src="data:image/png;base64,{{ logo_b64 }}">{% endif %}
                         <div>CERTIFICADO DE EMISIONES<br>DE GASES POR PRUEBA ESTÁTICA</div>
                     </div>
-                    <table>
+                    <table class="table-cuadro1">
                         <tr><td class="spec-label">MARCA</td><td class="spec-label">LÍNEA</td><td class="spec-label">CLASE</td></tr>
                         <tr><td class="spec-value">{{ marca }}</td><td class="spec-value">{{ modelo }}</td><td class="spec-value">MOTOCICLETA</td></tr>
                         <tr><td class="spec-label">CILINDRADA (cc)</td><td class="spec-label">TIEMPOS (T)</td><td class="spec-label">MODELO (AÑO)</td></tr>
