@@ -169,7 +169,7 @@ def _read_rows(content: bytes) -> list:
 
 EXPORT_HEADERS = [
     "Número", "Tipo", "Estado", "Facturada", "Part Number", "Cantidad Despachada",
-    "Costo/Valor Distribuidor (COP)",
+    "Costo/Valor Distribuidor (COP)", "Total (COP)",
     "Fecha creación", "Creado por", "Fecha despacho", "Despachado por", "Notas",
 ]
 
@@ -290,8 +290,8 @@ def test_export_one_row_per_item_header_fields_repeated():
         "Beto Dispatcher",
         "Consumo taller",
     ]
-    assert rows[1] == common + ["REF001", 3, None] + trailer
-    assert rows[2] == common + ["REF002", 7, None] + trailer
+    assert rows[1] == common + ["REF001", 3, None, None] + trailer
+    assert rows[2] == common + ["REF002", 7, None, None] + trailer
 
 
 def test_export_zero_items_remision_still_emits_one_row():
@@ -311,6 +311,7 @@ def test_export_zero_items_remision_still_emits_one_row():
     assert rows[1][4] is None  # Part Number
     assert rows[1][5] is None  # Cantidad Despachada
     assert rows[1][6] is None  # Costo/Valor Distribuidor (COP)
+    assert rows[1][7] is None  # Total (COP)
 
 
 def test_export_total_row_count_matches_total_item_count_across_remisiones():
@@ -356,6 +357,7 @@ def test_export_garantia_shows_costo_importado():
     rows = _read_rows(res.content)
     assert rows[1][6] == expected
     assert expected is not None and expected > 0
+    assert rows[1][7] == round(expected * item.qty_dispatched, 0)  # Total = unitario × cantidad
 
 
 def test_export_vehiculo_propio_shows_costo_importado():
@@ -376,6 +378,7 @@ def test_export_vehiculo_propio_shows_costo_importado():
 
     rows = _read_rows(res.content)
     assert rows[1][6] == expected
+    assert rows[1][7] == round(expected * item.qty_dispatched, 0)
 
 
 def test_export_pedido_shows_precio_distribuidor():
@@ -395,6 +398,7 @@ def test_export_pedido_shows_precio_distribuidor():
 
     rows = _read_rows(res.content)
     assert rows[1][6] == expected
+    assert rows[1][7] == round(expected * item.qty_dispatched, 0)
     # Sanity: PEDIDO's distributor price must differ from the plain landed
     # cost — proves the endpoint picked the right key, not just any price.
     assert expected != prices["costo_importado"]
@@ -415,6 +419,7 @@ def test_export_cortesia_price_column_blank():
 
     rows = _read_rows(res.content)
     assert rows[1][6] is None
+    assert rows[1][7] is None  # Total also blank — no unit price to multiply
 
 
 def test_export_no_matching_parts_reference_blank_not_error():
@@ -430,6 +435,7 @@ def test_export_no_matching_parts_reference_blank_not_error():
     assert res.status_code == 200
     rows = _read_rows(res.content)
     assert rows[1][6] is None
+    assert rows[1][7] is None
 
 
 def test_export_price_lookup_is_per_distinct_part_number_not_per_row():
@@ -455,3 +461,7 @@ def test_export_price_lookup_is_per_distinct_part_number_not_per_row():
     rows = _read_rows(res.content)
     assert rows[1][6] == expected
     assert rows[2][6] == expected
+    # Same unit price, different quantities -> different totals (2 vs 5 units)
+    assert rows[1][7] == round(expected * item1.qty_dispatched, 0)
+    assert rows[2][7] == round(expected * item2.qty_dispatched, 0)
+    assert rows[1][7] != rows[2][7]

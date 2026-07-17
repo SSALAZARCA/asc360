@@ -319,11 +319,12 @@ def _build_export_rows(remisiones: list, names_by_id: dict, costs_by_part: dict,
         if r.items:
             for item in r.items:
                 price = _price_column_value(r.type, costs_by_part.get(item.part_number), factors)
+                total = round(price * item.qty_dispatched, 0) if price is not None else None
                 rows.append(
-                    header_fields + [item.part_number, item.qty_dispatched, price] + trailer_fields
+                    header_fields + [item.part_number, item.qty_dispatched, price, total] + trailer_fields
                 )
         else:
-            rows.append(header_fields + [None, None, None] + trailer_fields)
+            rows.append(header_fields + [None, None, None, None] + trailer_fields)
     return rows
 
 
@@ -358,7 +359,7 @@ async def export_remisiones(
 
     headers = [
         "Número", "Tipo", "Estado", "Facturada", "Part Number", "Cantidad Despachada",
-        "Costo/Valor Distribuidor (COP)",
+        "Costo/Valor Distribuidor (COP)", "Total (COP)",
         "Fecha creación", "Creado por", "Fecha despacho", "Despachado por", "Notas",
     ]
     rows = _build_export_rows(remisiones, names_by_id, costs_by_part, factors)
