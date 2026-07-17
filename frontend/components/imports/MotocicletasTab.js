@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { authFetch } from '../../lib/authFetch';
 import { getApiUrl } from '../../lib/api';
-import { FileUp, Download, RefreshCw, Search, CheckCircle, Clock, Bike, X, AlertCircle, Pencil, Send, FileText, Trash2, MapPin, AlertTriangle, FileSpreadsheet, Receipt, ShieldCheck, Lock } from 'lucide-react';
+import { FileUp, Download, RefreshCw, Search, CheckCircle, Clock, Bike, X, AlertCircle, Pencil, Send, FileText, Trash2, MapPin, AlertTriangle, FileSpreadsheet, Receipt, ShieldCheck, Lock, Printer } from 'lucide-react';
 import { toast } from '../../lib/toast';
 import ConfirmModal from '../ConfirmModal';
 
@@ -910,6 +910,26 @@ export default function MotocicletasTab({ userRole }) {
     }
   };
 
+  const handleDownloadCertificadoSoloTexto = async (unit) => {
+    try {
+      const res = await authFetch(`${getApiUrl()}/imports/moto-units/${unit.id}/certificado?solo_texto=true`);
+      if (!res.ok) {
+        const err = await res.json();
+        setCertError(err.detail || 'Error al generar el certificado.');
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Certificado_${unit.vin_number}_datos.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setCertError('Error de conexión al descargar el certificado.');
+    }
+  };
+
   const handleDeleteCertificado = (unit) => {
     setPendingConfirm({
       title: 'Anular empadronamiento',
@@ -1329,6 +1349,20 @@ export default function MotocicletasTab({ userRole }) {
                           }}
                         >
                           <Download size={11} />
+                        </button>
+                      )}
+                      {unit.certificado_generado && (
+                        <button
+                          onClick={() => handleDownloadCertificadoSoloTexto(unit)}
+                          title="Imprimir solo los datos de la moto (para papel ya pre-impreso en litografía)"
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: '4px',
+                            padding: '3px 8px', borderRadius: '6px', border: 'none',
+                            background: 'rgba(96,165,250,0.1)', color: '#60a5fa',
+                            fontSize: '10px', fontWeight: 700, cursor: 'pointer',
+                          }}
+                        >
+                          <Printer size={11} />
                         </button>
                       )}
                       {unit.certificado_generado && (userRole === 'superadmin' || userRole === 'administrativo') && (
