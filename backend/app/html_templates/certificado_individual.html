@@ -63,7 +63,7 @@
     body.solo-texto .spec-value,
     body.solo-texto .v-value {
         visibility: visible !important;
-        border: none !important;
+        border-color: transparent !important;
         background: transparent !important;
     }
     body.solo-texto .security-qr { visibility: visible !important; }
@@ -74,12 +74,13 @@
         visibility: visible !important;
     }
     /* border-collapse dibuja la línea de la celda a nivel de tabla, no de celda:
-       un td en visibility:hidden no basta para quitarla, hay que anular el borde
-       de la tabla entera explícitamente. */
+       un td en visibility:hidden no basta para quitarla, hay que anular el color
+       del borde (NO el ancho/estilo — quitar el borde entero encoge la fila y
+       corre todo lo que va debajo, rompiendo el calce con el papel pre-impreso). */
     body.solo-texto table,
     body.solo-texto td,
     body.solo-texto th {
-        border: none !important;
+        border-color: transparent !important;
     }
 </style>
 </head>
