@@ -261,3 +261,34 @@ class FakeResolvePlateSession:
         if len(self.executed_statements) == 1:
             return _ClaimSelectResult(self._exact_match)
         return _ScalarsAllResult(self._pool)
+
+
+class FakeWorkLogSession:
+    """
+    Minimal fake for `POST /{order_id}/work-log` and
+    `POST /{order_id}/work-log/photos`. Both issue exactly one `SELECT
+    ServiceOrder WHERE id` (read via `.scalar_one_or_none()`), then
+    `.add()` an `OrderWorkLog` (and, best-effort, a `VehicleLifecycleEvent`),
+    `.commit()`, and `.refresh()` the work log. `.refresh()` is a no-op
+    here (mirrors `tests/imports/conftest.py`'s convention) since the fake
+    `OrderWorkLog` already has its `id`/fields set at construction time.
+    """
+
+    def __init__(self, order: Optional[ServiceOrder] = None):
+        self._order = order
+        self.executed_statements: list = []
+        self.added: list = []
+        self.committed = False
+
+    async def execute(self, stmt):
+        self.executed_statements.append(stmt)
+        return _ClaimSelectResult(self._order)
+
+    def add(self, obj):
+        self.added.append(obj)
+
+    async def commit(self):
+        self.committed = True
+
+    async def refresh(self, obj, attribute_names=None):
+        pass

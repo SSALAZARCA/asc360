@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, status, UploadFile, File, Form
 from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,12 +21,12 @@ from app.schemas.order import (
     OrderClaimRequest,
     OrderPlateResolution,
 )
-from app.services.pdf_service import generate_and_upload_reception_pdf
+from app.services.pdf_service import generate_and_upload_reception_pdf, upload_file_to_minio
 from app.api.deps import get_current_user, get_optional_user, CurrentUser
 from app.core.security import verify_sonia_secret
 from app.config import settings as app_settings
 
-from typing import Optional
+from typing import Optional, List
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
 
@@ -789,18 +789,24 @@ async def add_work_log(
     order_id: uuid.UUID,
     work_log_in: WorkLogCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user)
+    x_sonia_secret: Optional[str] = Header(None),
 ):
-    """Agrega un diagnóstico/nota de trabajo a una orden."""
+    """
+    Agrega un diagnóstico/nota de trabajo a una orden. Único caller es
+    Sonia (bot) — no hay ningún caller de frontend con JWT (verificado),
+    por lo que la autenticación es el shared secret, igual que
+    `resolve_order_by_plate`/`claim_order`, no `get_current_user`.
+    """
     from app.models.order import OrderWorkLog
+
+    if not verify_sonia_secret(x_sonia_secret, app_settings.SONIA_BOT_SECRET):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="No autenticado.")
 
     stmt = select(ServiceOrder).where(ServiceOrder.id == order_id)
     res = await db.execute(stmt)
     order = res.scalar_one_or_none()
     if not order:
         raise HTTPException(status_code=404, detail="Orden no encontrada")
-    if not current_user.is_superadmin and order.tenant_id != current_user.tenant_id:
-        raise HTTPException(status_code=403, detail="Sin permiso")
 
     work_log = OrderWorkLog(
         order_id=order_id,
@@ -830,6 +836,93 @@ async def add_work_log(
     await db.commit()
     await db.refresh(work_log)
     return {"id": str(work_log.id), "order_id": str(order_id), "diagnosis": work_log.diagnosis}
+
+
+@router.post("/{order_id}/work-log/photos", status_code=status.HTTP_201_CREATED)
+async def add_work_log_photos(
+    order_id: uuid.UUID,
+    files: List[UploadFile] = File(...),
+    diagnosis: str = Form(""),
+    recorded_by_telegram_id: Optional[str] = Form(None),
+    db: AsyncSession = Depends(get_db),
+    x_sonia_secret: Optional[str] = Header(None),
+):
+    """
+    Igual que `add_work_log` pero para evidencia fotográfica que el técnico
+    manda en cualquier momento (no solo cuando Sonia pregunta). Mismo patrón
+    de subida que `upload_reception_photos`
+    (app/api/v1/endpoints/uploads.py): valida tipo/tamaño y sube cada
+    archivo a MinIO vía `upload_file_to_minio`. `media_urls` queda como
+    lista de strings planos (ya soportado por `WorkLogCreate.media_urls`),
+    a diferencia de `damage_photos_urls` que guarda objetos {"url","desc"}.
+    """
+    from app.models.order import OrderWorkLog
+    from app.api.v1.endpoints.uploads import ALLOWED_MIME_TYPES, MAX_FILE_SIZE_BYTES
+
+    if not verify_sonia_secret(x_sonia_secret, app_settings.SONIA_BOT_SECRET):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="No autenticado.")
+
+    stmt = select(ServiceOrder).where(ServiceOrder.id == order_id)
+    res = await db.execute(stmt)
+    order = res.scalar_one_or_none()
+    if not order:
+        raise HTTPException(status_code=404, detail="Orden no encontrada")
+
+    uploaded_urls: list[str] = []
+    for file in files:
+        if file.content_type not in ALLOWED_MIME_TYPES:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Tipo de archivo no permitido: {file.content_type}. Solo se aceptan imágenes."
+            )
+        contents = await file.read()
+        if len(contents) > MAX_FILE_SIZE_BYTES:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail=f"El archivo '{file.filename}' supera el límite de 10 MB."
+            )
+        file_url = await upload_file_to_minio(
+            file_bytes=contents,
+            file_name=file.filename,
+            content_type=file.content_type
+        )
+        if file_url:
+            uploaded_urls.append(file_url)
+
+    diagnosis_text = diagnosis.strip() if diagnosis and diagnosis.strip() else "Evidencia fotográfica"
+
+    work_log = OrderWorkLog(
+        order_id=order_id,
+        diagnosis=diagnosis_text,
+        media_urls=uploaded_urls,
+        recorded_by_telegram_id=recorded_by_telegram_id,
+    )
+    db.add(work_log)
+
+    try:
+        from app.models.vehicle_lifecycle import VehicleLifecycleEvent, LifecycleEventType
+        nota = VehicleLifecycleEvent(
+            vehicle_id=order.vehicle_id,
+            event_type=LifecycleEventType.NOTA_TECNICA,
+            summary=diagnosis_text[:200],
+            details=diagnosis_text,
+            linked_order_id=order_id,
+            created_by_telegram_id=recorded_by_telegram_id,
+            is_automatic="auto"
+        )
+        db.add(nota)
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"Error creando NOTA_TECNICA: {e}")
+
+    await db.commit()
+    await db.refresh(work_log)
+    return {
+        "id": str(work_log.id),
+        "order_id": str(order_id),
+        "diagnosis": work_log.diagnosis,
+        "media_urls": uploaded_urls,
+    }
 
 
 @router.post("/{order_id}/parts", status_code=status.HTTP_201_CREATED)
