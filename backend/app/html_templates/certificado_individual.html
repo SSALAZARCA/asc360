@@ -84,6 +84,14 @@
     body.solo-texto th {
         border: none !important;
     }
+    /* La tabla de vehículo/nacionalización imprime un renglón más arriba de
+       donde va en el papel pre-impreso (confirmado con impresión física).
+       15.67pt es el alto real de un renglón de esta tabla, medido del PDF
+       (separación entre "CLASE VEHICULO" y "MARCA" en el render completo). */
+    body.solo-texto .vehicle-box {
+        position: relative;
+        top: 15.67pt;
+    }
 </style>
 </head>
 <body class="{{ 'solo-texto' if solo_texto else '' }}">
