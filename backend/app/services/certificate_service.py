@@ -124,7 +124,7 @@ def encontrar_specs_para_modelo(vehicle_models: list, modelo_str: str) -> dict:
     return defaults
 
 
-def generate_certificado_bytes(unit, order, vehicle_model, color_runt: str = '') -> bytes:
+def generate_certificado_bytes(unit, order, vehicle_model, color_runt: str = '', solo_texto: bool = False) -> bytes:
     """
     Genera el PDF del certificado individual de aduanas para una unidad.
 
@@ -133,6 +133,9 @@ def generate_certificado_bytes(unit, order, vehicle_model, color_runt: str = '')
         order: ShipmentOrder ORM object
         vehicle_model: VehicleModel ORM object o None
         color_runt: nombre RUNT del color ya validado y resuelto
+        solo_texto: si True, oculta bordes/fondos/logos/textos fijos y solo
+            imprime los valores variables + QR (para papel ya pre-impreso
+            en litografía)
 
     Returns:
         bytes del PDF generado
@@ -203,6 +206,7 @@ def generate_certificado_bytes(unit, order, vehicle_model, color_runt: str = '')
         firma_b64=firma_b64,
         qr_b64=qr_b64,
         today=today,
+        solo_texto=solo_texto,
     )
 
     # 6. WeasyPrint → PDF bytes

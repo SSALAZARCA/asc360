@@ -64,12 +64,13 @@ class _CommitSpySession(FakeAsyncSession):
 
 
 def _patch_generate_ok(monkeypatch, pdf_bytes=b"%PDF-1.4 fake certificate", capture=None):
-    def _fake_generate(unit, order, vehicle_model, color_runt=""):
+    def _fake_generate(unit, order, vehicle_model, color_runt="", solo_texto=False):
         if capture is not None:
             capture["unit"] = unit
             capture["order"] = order
             capture["vehicle_model"] = vehicle_model
             capture["color_runt"] = color_runt
+            capture["solo_texto"] = solo_texto
         return pdf_bytes
 
     monkeypatch.setattr(imports_module.certificate_service, "generate_certificado_bytes", _fake_generate)
@@ -211,6 +212,47 @@ def test_success_falls_back_to_order_model_and_writes_fallback_onto_unit(monkeyp
     assert capture["order"] is order
     assert capture["vehicle_model"] is None
     assert capture["color_runt"] == unit.color_runt
+    assert capture["solo_texto"] is False
+
+
+# ---------------------------------------------------------------------------
+# solo_texto query param — data-only print mode for pre-printed litho paper
+# ---------------------------------------------------------------------------
+
+def test_solo_texto_true_passes_flag_and_uses_datos_filename(monkeypatch):
+    order = make_shipment_order()
+    unit = _complete_unit(shipment_order=order)
+    capture = {}
+    _patch_generate_ok(monkeypatch, capture=capture)
+    fake_db = FakeAsyncSession(execute_queue=[[]], get_objects=[unit, order])
+
+    with make_test_client(current_user=make_imports_editor(), fake_db_session=fake_db) as client:
+        response = client.get(f"/api/v1/imports/moto-units/{unit.id}/certificado?solo_texto=true")
+
+    assert response.status_code == 200
+    assert capture["solo_texto"] is True
+    assert (
+        response.headers["content-disposition"]
+        == f'attachment; filename="Certificado_{unit.vin_number}_datos.pdf"'
+    )
+
+
+def test_solo_texto_omitted_defaults_to_false(monkeypatch):
+    order = make_shipment_order()
+    unit = _complete_unit(shipment_order=order)
+    capture = {}
+    _patch_generate_ok(monkeypatch, capture=capture)
+    fake_db = FakeAsyncSession(execute_queue=[[]], get_objects=[unit, order])
+
+    with make_test_client(current_user=make_imports_editor(), fake_db_session=fake_db) as client:
+        response = client.get(f"/api/v1/imports/moto-units/{unit.id}/certificado")
+
+    assert response.status_code == 200
+    assert capture["solo_texto"] is False
+    assert (
+        response.headers["content-disposition"]
+        == f'attachment; filename="Certificado_{unit.vin_number}.pdf"'
+    )
 
 
 def test_success_builds_specs_proxy_from_matched_vehicle_model(monkeypatch):

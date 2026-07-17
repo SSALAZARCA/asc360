@@ -3208,6 +3208,7 @@ def _validate_certificado_required_fields(unit, order):
 @router.get("/moto-units/{unit_id}/certificado")
 async def download_certificado(
     unit_id: uuid.UUID,
+    solo_texto: bool = False,
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
@@ -3250,12 +3251,15 @@ async def download_certificado(
     if matched_vm and matched_vm.get("cilindrada") != "N/A":
         vm_obj = _SpecsProxy(matched_vm)
 
-    pdf_bytes = certificate_service.generate_certificado_bytes(unit, order, vm_obj, color_runt_nombre)
+    pdf_bytes = certificate_service.generate_certificado_bytes(
+        unit, order, vm_obj, color_runt_nombre, solo_texto=solo_texto
+    )
 
+    filename = f"Certificado_{unit.vin_number}_datos.pdf" if solo_texto else f"Certificado_{unit.vin_number}.pdf"
     return StreamingResponse(
         io.BytesIO(pdf_bytes),
         media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="Certificado_{unit.vin_number}.pdf"'},
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 
