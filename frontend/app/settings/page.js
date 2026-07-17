@@ -377,11 +377,11 @@ export default function SettingsPage() {
 
   // Colores RUNT
   const [confirmDialog, setConfirmDialog] = useState(null);
-  const [toast, setToast] = useState(null);
+  const [localToast, setLocalToast] = useState(null);
 
   const showToast = (text, type = 'success') => {
-    setToast({ text, type });
-    setTimeout(() => setToast(null), 3500);
+    setLocalToast({ text, type });
+    setTimeout(() => setLocalToast(null), 3500);
   };
 
   const openConfirm = (title, message, confirmText, onConfirm, danger = false) => {
@@ -1804,23 +1804,23 @@ export default function SettingsPage() {
       </div>
 
       {/* Toast de notificación */}
-      {toast && (
+      {localToast && (
         <div style={{
           position: 'fixed', bottom: '28px', right: '28px', zIndex: 2000,
           display: 'flex', alignItems: 'center', gap: '10px',
           padding: '12px 18px', borderRadius: '10px',
-          background: toast.type === 'error' ? 'rgba(248,113,113,0.12)' : 'rgba(34,197,94,0.12)',
-          border: `1px solid ${toast.type === 'error' ? 'rgba(248,113,113,0.3)' : 'rgba(34,197,94,0.3)'}`,
-          color: toast.type === 'error' ? '#f87171' : '#22c55e',
+          background: localToast.type === 'error' ? 'rgba(248,113,113,0.12)' : 'rgba(34,197,94,0.12)',
+          border: `1px solid ${localToast.type === 'error' ? 'rgba(248,113,113,0.3)' : 'rgba(34,197,94,0.3)'}`,
+          color: localToast.type === 'error' ? '#f87171' : '#22c55e',
           fontSize: '13px', fontWeight: 600,
           boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
           backdropFilter: 'blur(8px)',
           maxWidth: '360px',
         }}>
-          {toast.type === 'error'
+          {localToast.type === 'error'
             ? <AlertCircle size={15} />
             : <Save size={15} />}
-          {toast.text}
+          {localToast.text}
         </div>
       )}
 
