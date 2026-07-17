@@ -230,11 +230,40 @@ async def post_work_log(order_id: str, diagnosis: str, media_urls: list = None, 
             res = await client.post(
                 f"{BACKEND_URL}/orders/{order_id}/work-log",
                 json=payload,
+                headers={"x-sonia-secret": SONIA_BOT_SECRET},
                 timeout=10.0
             )
             return res.status_code == 201
         except Exception as e:
             logger.error(f"Error post_work_log: {e}")
+            return False
+
+
+async def post_work_log_photos(order_id: str, diagnosis: str, photo_bytes_list: list, telegram_id: str = None) -> bool:
+    """Registra evidencia fotográfica (una o más fotos) en una orden, con el
+    mismo texto de diagnóstico para todas. Mismo patrón multipart que
+    `bg_upload_media_to_order` (reception.py) para `/orders/{id}/photos`,
+    pero apuntando a `/work-log/photos` (guarda en `OrderWorkLog.media_urls`,
+    no en `damage_photos_urls` de la recepción)."""
+    files = [
+        ("files", (f"work_log_photo_{i}.jpg", bytes(photo_bytes), "image/jpeg"))
+        for i, photo_bytes in enumerate(photo_bytes_list)
+    ]
+    data = {"diagnosis": diagnosis or ""}
+    if telegram_id:
+        data["recorded_by_telegram_id"] = telegram_id
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        try:
+            res = await client.post(
+                f"{BACKEND_URL}/orders/{order_id}/work-log/photos",
+                files=files,
+                data=data,
+                headers={"x-sonia-secret": SONIA_BOT_SECRET},
+            )
+            return res.status_code == 201
+        except Exception as e:
+            logger.error(f"Error post_work_log_photos: {e}")
             return False
 
 

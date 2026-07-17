@@ -17,7 +17,7 @@ from core.constants import (
 from core.decorators import role_required, check_cancel_intent, CANCEL_PATTERN
 from keyboards.reply import get_main_keyboard
 from handlers.general import (
-    handle_general_text, handle_general_voice, process_lifecycle_plate,
+    handle_general_text, handle_general_voice, handle_general_photo, process_lifecycle_plate,
     handle_status_confirm, handle_parts_callback, handle_plate_candidate_pick,
     handle_catalog_model_callback, handle_catalog_nav_callback, handle_buscar_repuesto,
 )
@@ -212,12 +212,14 @@ def main() -> None:
     
     router_text = MessageHandler(filters.TEXT & (~filters.COMMAND), handle_general_text)
     router_voice = MessageHandler(filters.VOICE, handle_general_voice)
+    router_photo = MessageHandler(filters.PHOTO, handle_general_photo)
 
     # Master Conversation: Gestiona TODO el flujo del bot de forma inteligente
     master_conv = ConversationHandler(
         entry_points=[
             router_text,
             router_voice,
+            router_photo,
             CommandHandler("recepcion", prompt_plate),
             # El botón "Nueva Recepción" es capturado por router_text por regex
         ],

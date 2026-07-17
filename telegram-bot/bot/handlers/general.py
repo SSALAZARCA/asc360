@@ -10,7 +10,7 @@ from core.constants import PLATE_REGEX, ASKING_PLATE, CORRECTING_DATA, L_ASKING_
 from core.decorators import role_required, check_cancel_intent
 from services.ai import classify_admin_intent, classify_tech_intent, classify_unified_intent, transcribe_voice, extract_data_from_text, extract_part_data
 from services.api import (
-    update_order_status, post_work_log, post_order_parts,
+    update_order_status, post_work_log, post_work_log_photos, post_order_parts,
     search_parts_catalog, get_part_by_number, get_part_by_factory_code,
     get_catalog_models_for_bot, search_parts_by_model, get_part_by_code,
     get_all_sections_for_model,
@@ -207,6 +207,7 @@ async def _ask_status_confirmation(update, context, placa: str, matched_order: d
     if not order_id:
         if candidates:
             context.user_data["pending_estado_candidates"] = {
+                "kind": "status_change",
                 "estado": estado,
                 "confidence": confidence,
                 "list": candidates,
@@ -236,11 +237,77 @@ async def _ask_status_confirmation(update, context, placa: str, matched_order: d
     await _present_status_confirmation(send_fn, context, placa, matched_order, estado, confidence)
 
 
+async def _save_work_note_for_order(send_fn, context, order_id: str, diagnosis: str, telegram_id: str, photo_file_id: str = None) -> None:
+    """Guarda una nota de trabajo (texto y/o foto) ya resuelta a una orden
+    concreta. `send_fn` es una closure sobre reply_text/edit_message_text,
+    mismo patrón que `_present_status_confirmation`, para poder invocarse
+    tanto desde un mensaje directo como desde el callback del picker."""
+    if photo_file_id:
+        photo_file = await context.bot.get_file(photo_file_id)
+        photo_bytes = await photo_file.download_as_bytearray()
+        success = await post_work_log_photos(order_id, diagnosis, [bytes(photo_bytes)], telegram_id=telegram_id)
+    else:
+        success = await post_work_log(order_id, diagnosis, telegram_id=telegram_id)
+
+    if success:
+        await send_fn("✅ Anotado. Queda en la hoja de vida.")
+    else:
+        await send_fn("⚠️ No pude guardar la nota. Intentá de nuevo.")
+
+
+async def _resolve_and_save_work_note(update, context, placa: str, diagnosis: str, telegram_id: str, photo_file_id: str = None) -> None:
+    """Resuelve la placa SIEMPRE vía `_resolve_order_for_technician` (->
+    `resolve_order_for_status_change` -> `GET /orders/resolve/plate`),
+    nunca con una búsqueda nueva — así se hereda la exclusión de
+    delivered/cancelled y la misma placa con órdenes históricas (la moto
+    vuelve varias veces) siempre resuelve a la orden activa más reciente,
+    no a una ya entregada. Guarda la nota directo si hay match exacto,
+    ofrece un picker si solo hay candidatos por similitud, o avisa que no
+    encontró la placa."""
+    result = await _resolve_order_for_technician(context, placa)
+    match = result["match"]
+    candidates = result["candidates"]
+
+    if match:
+        async def send_fn(text, **kwargs):
+            return await update.message.reply_text(text, **kwargs)
+        await _save_work_note_for_order(send_fn, context, match.get("id"), diagnosis, telegram_id, photo_file_id)
+        return
+
+    if candidates:
+        context.user_data["pending_estado_candidates"] = {
+            "kind": "work_note_photo" if photo_file_id else "work_note",
+            "diagnosis": diagnosis,
+            "telegram_id": telegram_id,
+            "photo_file_id": photo_file_id,
+            "list": candidates,
+        }
+        kb = [
+            [InlineKeyboardButton(
+                f"{c['plate']} — {ESTADO_ES.get(c['status'], c['status'])}",
+                callback_data=f"platepick_{i}",
+            )]
+            for i, c in enumerate(candidates)
+        ]
+        await update.message.reply_text(
+            f"No encontré una *{placa.upper()}* exacta, pero hay placas parecidas. ¿Es alguna de estas?",
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup(kb),
+        )
+        return
+
+    await update.message.reply_text(f"No encontré una orden activa para la *{placa.upper()}*.", parse_mode="Markdown")
+
+
 async def handle_plate_candidate_pick(update, context):
     """Callback del picker de candidatos por placa (pattern: ^platepick_):
     el usuario eligió cuál de las placas parecidas era la correcta luego de
-    un mensaje/voz sin match exacto. Sigue con el flujo de confirmación
-    normal (Sí/No), idéntico al de un match exacto directo."""
+    un mensaje/voz/foto sin match exacto. El stash trae un discriminador
+    `kind` para saber qué hacer con la orden elegida: seguir con la
+    confirmación normal de cambio de estado (`status_change`, comportamiento
+    original), o guardar directamente una nota de trabajo con o sin foto
+    (`work_note`/`work_note_photo`, sin paso de confirmación — no es un
+    cambio de estado, solo una anotación)."""
     query = update.callback_query
     await query.answer()
 
@@ -258,9 +325,17 @@ async def handle_plate_candidate_pick(update, context):
         return
 
     chosen = candidate_list[index]
+    kind = stash.get("kind", "status_change")
 
     async def send_fn(text, **kwargs):
         return await query.edit_message_text(text, **kwargs)
+
+    if kind in ("work_note", "work_note_photo"):
+        await _save_work_note_for_order(
+            send_fn, context, chosen.get("id"), stash["diagnosis"], stash.get("telegram_id"),
+            stash.get("photo_file_id"),
+        )
+        return
 
     await _present_status_confirmation(
         send_fn, context, chosen["plate"], chosen, stash["estado"], stash["confidence"]
@@ -427,6 +502,17 @@ async def _route_intent(update: Update, context: ContextTypes.DEFAULT_TYPE, inte
             )
         return ConversationHandler.END
 
+    if intent == "WORK_NOTE":
+        diagnostico = entities.get("diagnostico")
+        if placa and diagnostico:
+            telegram_id = str(update.message.from_user.id)
+            await _resolve_and_save_work_note(update, context, placa, diagnostico, telegram_id)
+        else:
+            await update.message.reply_text(
+                "Contame la placa y qué encontraste o hiciste. Ej: 'en la NOI82G cambié el filtro de aire'."
+            )
+        return ConversationHandler.END
+
     if intent == "PENDING_USERS":
         await show_pending_users_inner(update.message, context)
         return ConversationHandler.END
@@ -504,6 +590,26 @@ async def _check_awaiting_states(update: Update, context: ContextTypes.DEFAULT_T
             )
         else:
             await update.message.reply_text("⚠️ No pude guardar el diagnóstico. Intentá de nuevo.")
+        return True
+
+    # ── awaiting_photo_plate (foto mandada sin placa en el caption) ───────────
+    awaiting_photo = user_data.get("awaiting_photo_plate")
+    if awaiting_photo:
+        photo_file_id = awaiting_photo.get("file_id")
+        caption = awaiting_photo.get("caption", "")
+        user_data.pop("awaiting_photo_plate", None)
+
+        cleaned = "".join(text.upper().split())
+        plate_match = PLATE_REGEX.search(cleaned)
+        if not plate_match:
+            await update.message.reply_text(
+                "No reconocí una placa ahí. Decime solo la placa (ej. NOI82G) o mandá la foto de nuevo."
+            )
+            return True
+
+        placa = plate_match.group(0)
+        diagnosis = caption or "Evidencia fotográfica"
+        await _resolve_and_save_work_note(update, context, placa, diagnosis, telegram_id, photo_file_id=photo_file_id)
         return True
 
     # ── awaiting_part_info ────────────────────────────────────────────────────
@@ -829,6 +935,11 @@ async def _process_text(update: Update, context: ContextTypes.DEFAULT_TYPE, raw_
             )
             return ConversationHandler.END
 
+        if intent == "WORK_NOTE" and placa and tech_data.get("diagnostico"):
+            telegram_id = str(update.message.from_user.id)
+            await _resolve_and_save_work_note(update, context, placa, tech_data.get("diagnostico"), telegram_id)
+            return ConversationHandler.END
+
     # ── Detección automática de placa (Último recurso) ────────────────────────
     plate_match = PLATE_REGEX.search(text.replace(" ", ""))
     if plate_match:
@@ -875,6 +986,42 @@ async def handle_general_voice(update: Update, context: ContextTypes.DEFAULT_TYP
         return await _route_intent(update, context, intent_data)
 
     return await _process_text(update, context, transcript)
+
+
+@role_required()
+async def handle_general_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """
+    Punto de entrada para fotos mandadas fuera del flujo de recepción: el
+    técnico puede mandar evidencia de un hallazgo/intervención en cualquier
+    momento, no solo cuando Sonia pregunta (`awaiting_diagnosis`). Antes de
+    este handler, una foto fuera de la recepción se perdía en silencio —
+    `master_conv` no tenía ningún entry point para PHOTO.
+
+    SIEMPRE exige que la placa venga en el mismo mensaje (caption) o en la
+    respuesta inmediata que se le pide (`awaiting_photo_plate`, ver
+    `_check_awaiting_states`) — decisión explícita para evitar ambigüedad
+    sobre a qué orden pertenece una foto sin contexto (la misma placa puede
+    tener varias órdenes históricas).
+    """
+    caption = update.message.caption or ""
+    telegram_id = str(update.message.from_user.id)
+    photo_file_id = update.message.photo[-1].file_id
+
+    cleaned = "".join(caption.upper().split())
+    plate_match = PLATE_REGEX.search(cleaned)
+
+    if not plate_match:
+        context.user_data["awaiting_photo_plate"] = {
+            "file_id": photo_file_id,
+            "caption": caption.strip(),
+        }
+        await update.message.reply_text("¿De qué moto es esta foto? Decime la placa.")
+        return ConversationHandler.END
+
+    placa = plate_match.group(0)
+    diagnosis = caption.strip() or "Evidencia fotográfica"
+    await _resolve_and_save_work_note(update, context, placa, diagnosis, telegram_id, photo_file_id=photo_file_id)
+    return ConversationHandler.END
 
 # ── Manejadores del Estado L_ASKING_PLATE (Hoja de Vida) ──
 async def handle_parts_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):

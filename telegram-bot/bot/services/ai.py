@@ -64,16 +64,16 @@ async def _call_openai_with_retry(coro_factory, max_retries: int = None):
 # Intenciones disponibles por rol
 ROLE_INTENTS = {
     "superadmin": [
-        "START_RECEPTION", "VIEW_LIFECYCLE", "ACTIVE_ORDERS", "CHANGE_STATUS",
+        "START_RECEPTION", "VIEW_LIFECYCLE", "ACTIVE_ORDERS", "CHANGE_STATUS", "WORK_NOTE",
         "PENDING_USERS", "APPROVE_USER", "REJECT_USER", "LOAD_TENANTS", "OPEN_PANEL",
         "GREETING", "CANCEL", "UNKNOWN"
     ],
     "jefe_taller": [
-        "START_RECEPTION", "VIEW_LIFECYCLE", "ACTIVE_ORDERS", "CHANGE_STATUS",
+        "START_RECEPTION", "VIEW_LIFECYCLE", "ACTIVE_ORDERS", "CHANGE_STATUS", "WORK_NOTE",
         "GREETING", "CANCEL", "UNKNOWN"
     ],
     "technician": [
-        "START_RECEPTION", "ACTIVE_ORDERS", "CHANGE_STATUS",
+        "START_RECEPTION", "ACTIVE_ORDERS", "CHANGE_STATUS", "WORK_NOTE",
         "GREETING", "CANCEL", "UNKNOWN"
     ],
 }
@@ -88,6 +88,7 @@ CATÁLOGO DE INTENCIONES:
 - VIEW_LIFECYCLE: Quiere consultar la hoja de vida o historial de una moto. Extrae la placa si la menciona.
 - ACTIVE_ORDERS: Quiere ver sus órdenes activas, pendientes o motos asignadas.
 - CHANGE_STATUS: Quiere cambiar el estado de una orden. REQUIERE placa y estado. Ej: "la NOI82G ya está lista".
+- WORK_NOTE: El técnico cuenta un diagnóstico, hallazgo o intervención en una moto SIN pedir cambiar su estado (no hay verbo de cambio de estado como empezar/terminar/pausar/entregar/reprogramar). Ej: "en la ABC12D encontré que el freno trasero está gastado", "en la XYZ99A voy a cambiar el filtro de aire". REQUIERE placa. Extrae el hallazgo/acción en "entities.diagnostico".
 - PENDING_USERS: Quiere revisar solicitudes de ingreso pendientes.
 - APPROVE_USER: Quiere aprobar a alguien. Extrae el nombre en target_name.
 - REJECT_USER: Quiere rechazar a alguien. Extrae el nombre en target_name.
@@ -110,10 +111,11 @@ REGLAS:
 1. Si el usuario menciona una placa colombiana (3 letras + 2-3 números o similar, ej: NOI82G, ABC12D), extráela en "entities.placa" SIN guiones ni espacios.
 2. Si deletrea la placa con espacios ("N O I 8 2 G"), júntala: "NOI82G".
 3. Para CHANGE_STATUS es OBLIGATORIO extraer placa Y estado. Si falta alguno, clasifica como UNKNOWN.
-4. El campo confidence refleja tu seguridad: 1.0=seguro, 0.5=ambiguo, 0.0=no entiendo.
+4. Para WORK_NOTE es OBLIGATORIO extraer placa Y el hallazgo/acción en "entities.diagnostico". Si el mensaje SÍ trae un verbo de cambio de estado, clasifícalo como CHANGE_STATUS en su lugar, no WORK_NOTE.
+5. El campo confidence refleja tu seguridad: 1.0=seguro, 0.5=ambiguo, 0.0=no entiendo.
 
 Responde ÚNICAMENTE con JSON válido:
-{{"intent": "...", "confidence": 0.0, "entities": {{"placa": null, "estado": null, "target_name": null}}}}"""
+{{"intent": "...", "confidence": 0.0, "entities": {{"placa": null, "estado": null, "target_name": null, "diagnostico": null}}}}"""
 
 
 async def classify_unified_intent(text: str, user_role: str) -> dict:
@@ -162,15 +164,16 @@ async def classify_unified_intent(text: str, user_role: str) -> dict:
             "entities": {
                 "placa": placa,
                 "estado": entities.get("estado"),
-                "target_name": entities.get("target_name")
+                "target_name": entities.get("target_name"),
+                "diagnostico": entities.get("diagnostico"),
             }
         }
     except AIServiceError:
         logger.error("classify_unified_intent: OpenAI agotó reintentos")
-        return {"intent": "UNKNOWN", "confidence": 0.0, "entities": {"placa": None, "estado": None, "target_name": None}}
+        return {"intent": "UNKNOWN", "confidence": 0.0, "entities": {"placa": None, "estado": None, "target_name": None, "diagnostico": None}}
     except Exception as e:
         logger.error(f"classify_unified_intent error inesperado: {e}")
-        return {"intent": "UNKNOWN", "confidence": 0.0, "entities": {"placa": None, "estado": None, "target_name": None}}
+        return {"intent": "UNKNOWN", "confidence": 0.0, "entities": {"placa": None, "estado": None, "target_name": None, "diagnostico": None}}
 
 TECH_INTENT_SYSTEM_PROMPT = """
 Eres un clasificador de intenciones para técnicos y administradores de taller de motocicletas.
@@ -179,7 +182,8 @@ El usuario te hablará para gestionar reparaciones o consultar información.
 INTENCIONES:
 1. CHANGE_STATUS: Cambiar el estado de una moto. Requiere PLACA (ej. NOI82G) y ESTADO.
 2. ACTIVE_ORDERS: Consultar órdenes activas, pendientes o qué motos tiene asignadas (ej: "muéstrame mis órdenes", "órdenes activas", "qué tengo pendiente").
-3. UNKNOWN: Otros temas.
+3. WORK_NOTE: Cuenta un diagnóstico, hallazgo o intervención en una moto SIN pedir cambiar su estado (sin verbo de cambio de estado como empezar/terminar/pausar/entregar/reprogramar). Requiere PLACA y el hallazgo/acción en "diagnostico". Ej: "en la ABC12D encontré el freno trasero gastado".
+4. UNKNOWN: Otros temas.
 
 ESTADOS VÁLIDOS (solo para CHANGE_STATUS):
 - in_progress (ej. "empiezo revisión", "trabajando en la placa")
@@ -196,6 +200,8 @@ Responde ÚNICAMENTE en JSON:
 {"intent": "CHANGE_STATUS", "confidence": 0.9, "placa": "XYZ123", "estado": "in_progress"}
 o
 {"intent": "ACTIVE_ORDERS", "confidence": 1.0, "placa": null, "estado": null}
+o
+{"intent": "WORK_NOTE", "confidence": 0.9, "placa": "XYZ123", "estado": null, "diagnostico": "encontré el freno trasero gastado"}
 """
 
 async def classify_tech_intent(text: str) -> dict:
@@ -217,10 +223,11 @@ async def classify_tech_intent(text: str) -> dict:
             "confidence": float(data.get("confidence", 0.5)),
             "placa": data.get("placa"),
             "estado": data.get("estado"),
+            "diagnostico": data.get("diagnostico"),
         }
     except Exception as e:
         logger.error(f"Error AI classify_tech_intent: {e}")
-        return {"intent": "UNKNOWN", "confidence": 0.0, "placa": None, "estado": None}
+        return {"intent": "UNKNOWN", "confidence": 0.0, "placa": None, "estado": None, "diagnostico": None}
 
 async def extract_data_from_image(image_url: str) -> dict:
     """
