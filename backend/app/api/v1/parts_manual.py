@@ -3619,7 +3619,7 @@ async def export_unordered(
         ]
         aligns = [left, left, left, center, center, center, left]
 
-        for ci, (val, aln) in enumerate(values, 1):
+        for ci, (val, aln) in enumerate(zip(values, aligns), 1):
             cell = ws.cell(row=ri, column=ci, value=val)
             cell.alignment = aln
             cell.font = Font(size=9, color="FCD34D" if is_prel and ci == 6 else "FFFFFF")
