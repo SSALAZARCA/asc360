@@ -26,6 +26,7 @@ from app.core.security import verify_sonia_secret
 from app.config import settings
 from app.database import get_db, async_session_maker
 from app.models.order import ServiceOrder
+from app.models.vehicle import Vehicle
 from app.models.imports import VehicleModel, SparePartItem
 from app.models.logistics import PartCatalog
 from app.models.parts_manual import (
