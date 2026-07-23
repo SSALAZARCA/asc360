@@ -152,6 +152,12 @@ def compute_prices(avg_fob_cost: float | None, factors: dict) -> dict:
     Calcula la cadena de precios en COP a partir del FOB promedio (USD) y los factores.
     La conversión USD → COP se aplica con el TRM configurado.
     Ningún precio se almacena — se deriva on-the-fly.
+
+    El IVA de cada etapa se aplica sobre la base NETA (sin impuesto) de esa
+    etapa, nunca sobre un precio que ya incluye el IVA de la etapa anterior —
+    así como el IVA colombiano no se acumula en cascada gracias al crédito
+    fiscal descontable. El margen del distribuidor se calcula sobre el costo
+    neto del proveedor, no sobre el precio ya facturado con IVA incluido.
     """
     if avg_fob_cost is None:
         return {
@@ -161,9 +167,11 @@ def compute_prices(avg_fob_cost: float | None, factors: dict) -> dict:
         }
     f   = factors
     trm = f["trm"]
-    costo_importado_usd  = float(avg_fob_cost) * f["import_factor"]
-    precio_dist_usd      = costo_importado_usd * (1 + f["provider_margin"]) * (1 + f["iva_rate"])
-    precio_publico_usd   = precio_dist_usd     * (1 + f["distributor_margin"]) * (1 + f["iva_rate"])
+    costo_importado_usd     = float(avg_fob_cost) * f["import_factor"]
+    precio_dist_neto_usd    = costo_importado_usd  * (1 + f["provider_margin"])
+    precio_dist_usd         = precio_dist_neto_usd * (1 + f["iva_rate"])
+    precio_publico_neto_usd = precio_dist_neto_usd * (1 + f["distributor_margin"])
+    precio_publico_usd      = precio_publico_neto_usd * (1 + f["iva_rate"])
     return {
         "costo_importado":     round(costo_importado_usd * trm, 0),
         "precio_distribuidor": round(precio_dist_usd     * trm, 0),
