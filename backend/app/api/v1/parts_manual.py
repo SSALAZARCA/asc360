@@ -1135,7 +1135,6 @@ async def _list_catalog_impl(
     k_publico = (
         _pf["import_factor"]
         * (1 + _pf["provider_margin"])
-        * (1 + _pf["iva_rate"])
         * (1 + _pf["distributor_margin"])
         * (1 + _pf["iva_rate"])
         * _pf["trm"]
@@ -1248,11 +1247,21 @@ async def _list_catalog_impl(
         is_prelim    = avg_fob is None and prelim_fob is not None
         prices       = compute_prices(fob_for_calc, pricing_factors)
         fpn = r[0]
+        public_price = float(r[3]) if r[3] is not None else None
+        precio_distribuidor = prices["precio_distribuidor"]
+        if public_price is not None:
+            # Precio Final manual reemplaza al público calculado desde el FOB.
+            # El Precio Distribuidor se deriva de ese valor manteniendo el
+            # margen del distribuidor configurado (el IVA se cancela entre
+            # ambas etapas: precio_distribuidor = precio_final / (1 + margen)).
+            precio_distribuidor = round(
+                public_price / (1 + pricing_factors["distributor_margin"]), 0
+            )
         return CatalogItemResult(
             factory_part_number=fpn,
             description=r[1],
             description_es=r[2],
-            public_price=float(r[3]) if r[3] is not None else None,
+            public_price=public_price,
             section_code=r[4],
             section_name=r[5],
             vehicle_model_name=r[7],
@@ -1263,7 +1272,7 @@ async def _list_catalog_impl(
             preliminary_fob=prelim_fob,
             fob_is_preliminary=is_prelim,
             costo_importado=prices["costo_importado"],
-            precio_distribuidor=prices["precio_distribuidor"],
+            precio_distribuidor=precio_distribuidor,
             precio_publico_calculado=prices["precio_publico"],
             substitutes=[
                 PartSubstituteOut(
