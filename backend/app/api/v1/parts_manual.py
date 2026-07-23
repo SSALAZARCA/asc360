@@ -3538,7 +3538,81 @@ async def export_unordered(
         rc_clause = "AND r.rotation_class = :rc"
         params["rc"] = rotation_class
 
+    # Misma lógica que GET /admin/coverage (score=0 == "no pedidas"): considera
+    # códigos previos/sustituidos (prev_codes), la vista real de disponibilidad
+    # (spare_part_availability, ya descuenta lo despachado por remisión), y
+    # excluye cancelados — para que este Excel coincida con la tarjeta.
     unordered_sql = text(f"""
+        WITH
+        part_all_codes AS (
+            SELECT factory_part_number,
+                   UPPER(TRIM(REPLACE(factory_part_number, ' ', ''))) AS norm_code
+            FROM parts_references
+            UNION ALL
+            SELECT pr.factory_part_number,
+                   UPPER(TRIM(REPLACE(
+                       CASE WHEN jsonb_typeof(elem) = 'string' THEN elem #>> '{{}}'
+                            ELSE elem->>'code'
+                       END, ' ', ''))) AS norm_code
+            FROM parts_references pr,
+                 jsonb_array_elements(pr.prev_codes) AS elem
+            WHERE jsonb_array_length(pr.prev_codes) > 0
+              AND (
+                  (jsonb_typeof(elem) = 'string'  AND (elem #>> '{{}}') != '')
+                  OR (jsonb_typeof(elem) = 'object' AND elem->>'code' IS NOT NULL AND elem->>'code' != '')
+              )
+        ),
+        aqui AS (
+            SELECT UPPER(TRIM(REPLACE(part_number, ' ', ''))) AS pn
+            FROM spare_part_availability
+            WHERE qty_available > 0
+            GROUP BY 1
+        ),
+        en_camino AS (
+            SELECT UPPER(TRIM(REPLACE(spi.part_number, ' ', ''))) AS pn
+            FROM spare_part_items spi
+            JOIN spare_part_lots spl ON spl.id = spi.lot_id
+            JOIN shipment_orders so  ON so.id  = spl.shipment_order_id
+            WHERE spi.qty_received > 0
+              AND spi.qty_physical IS NULL
+              AND (so.bl_container IS NOT NULL OR spl.packing_list_received = true)
+              AND UPPER(TRIM(REPLACE(spi.part_number, ' ', ''))) NOT IN (SELECT pn FROM aqui)
+            UNION
+            SELECT UPPER(TRIM(part_code)) AS pn
+            FROM part_catalog
+            WHERE public_price IS NOT NULL
+              AND UPPER(TRIM(part_code)) NOT IN (SELECT pn FROM aqui)
+        ),
+        pedido AS (
+            SELECT UPPER(TRIM(REPLACE(spi.part_number, ' ', ''))) AS pn
+            FROM spare_part_items spi
+            JOIN spare_part_lots spl ON spl.id = spi.lot_id
+            WHERE (spl.packing_list_received = false OR spi.status IN ('BACKORDER', 'BACKORDER_PARCIAL'))
+              AND spi.status != 'CANCELLED'
+              AND UPPER(TRIM(REPLACE(spi.part_number, ' ', ''))) NOT IN (SELECT pn FROM aqui)
+              AND UPPER(TRIM(REPLACE(spi.part_number, ' ', ''))) NOT IN (SELECT pn FROM en_camino)
+            GROUP BY 1
+        ),
+        ref_coverage AS (
+            SELECT r.factory_part_number, r.rotation_class,
+                MAX(CASE
+                    WHEN a.pn IS NOT NULL THEN 3
+                    WHEN c.pn IS NOT NULL THEN 2
+                    WHEN p.pn IS NOT NULL THEN 1
+                    ELSE 0
+                END) AS score
+            FROM parts_references r
+            JOIN part_all_codes pac ON pac.factory_part_number = r.factory_part_number
+            LEFT JOIN aqui      a ON a.pn = pac.norm_code
+            LEFT JOIN en_camino c ON c.pn = pac.norm_code
+            LEFT JOIN pedido    p ON p.pn = pac.norm_code
+            WHERE r.rotation_class IS NOT NULL
+              AND EXISTS (
+                  SELECT 1 FROM parts_manual_items pmi
+                  WHERE pmi.factory_part_number = r.factory_part_number
+              )
+            GROUP BY r.factory_part_number, r.rotation_class
+        )
         SELECT
             r.factory_part_number,
             r.um_part_number,
@@ -3558,14 +3632,10 @@ async def export_unordered(
                 JOIN parts_manual_sections s ON s.id = i.section_id
                 WHERE i.factory_part_number = r.factory_part_number
             ) AS models
-        FROM parts_references r
-        WHERE r.rotation_class IS NOT NULL
+        FROM ref_coverage rc
+        JOIN parts_references r ON r.factory_part_number = rc.factory_part_number
+        WHERE rc.score = 0
           {rc_clause}
-          AND UPPER(TRIM(r.factory_part_number)) NOT IN (
-              SELECT DISTINCT UPPER(TRIM(REPLACE(part_number, ' ', '')))
-              FROM spare_part_items
-              WHERE qty_physical IS NOT NULL OR qty_received > 0
-          )
         ORDER BY r.rotation_class, r.factory_part_number
     """)
 
