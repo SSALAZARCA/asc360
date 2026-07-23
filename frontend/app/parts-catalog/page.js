@@ -8,9 +8,10 @@ const PAGE_SIZE = 50;
 
 const computeImpliedProviderMargin = (priceCOP, costoCOP, factors) => {
   if (!priceCOP || !costoCOP || !factors) return null;
-  const K = (1 + factors.distributor_margin) * (1 + factors.iva_rate);
-  const impliedDist = priceCOP / K;
-  const margin = (impliedDist / (costoCOP * (1 + factors.iva_rate))) - 1;
+  // Inverso de compute_prices (pricing_service.py): precio_publico = costo_importado
+  // * (1 + provider_margin) * (1 + distributor_margin) * (1 + iva_rate) — el IVA
+  // se aplica una sola vez, no dos, así que el margen se despeja con un solo factor.
+  const margin = priceCOP / (costoCOP * (1 + factors.distributor_margin) * (1 + factors.iva_rate)) - 1;
   return margin;
 };
 
