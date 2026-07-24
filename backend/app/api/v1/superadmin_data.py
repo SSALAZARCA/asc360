@@ -429,7 +429,10 @@ async def search_orders(
         order = matches[0]
     if not order:
         raise HTTPException(status_code=404, detail="Orden no encontrada")
-    return _serialize_order(order)
+    reception = (
+        await db.execute(select(ServiceOrderReception).where(ServiceOrderReception.order_id == order.id))
+    ).scalars().first()
+    return _serialize_order(order, reception)
 
 
 # Plain order date fields diffed the same simple way as Phase 2's Vehicle

@@ -13,7 +13,7 @@ import uuid
 from datetime import datetime
 
 from tests.conftest import make_test_client
-from tests.superadmin_data.conftest import FakeOrderSession, make_order, make_vehicle
+from tests.superadmin_data.conftest import FakeOrderSession, make_order, make_vehicle, make_reception
 
 
 def make_superadmin() -> "CurrentUser":
@@ -75,6 +75,22 @@ def test_search_order_by_short_id_too_short_returns_422():
         res = client.get("/api/v1/superadmin/data/orders", params={"order_id": "abc"})
 
     assert res.status_code == 422
+
+
+def test_search_order_includes_current_mileage_km_from_reception():
+    """Phase 4 taught the PUT to correct mileage_km, but the GET search
+    never fetched the reception, so the edit form always loaded empty
+    even when a real mileage was already on file."""
+    vehicle   = make_vehicle(plate="ABC123")
+    order     = make_order(vehicle=vehicle, created_at=datetime(2026, 7, 1))
+    reception = make_reception(order_id=order.id, mileage_km="15000")
+    fake_db   = FakeOrderSession(get_object=order, reception=reception)
+
+    with make_test_client(make_superadmin(), fake_db) as client:
+        res = client.get("/api/v1/superadmin/data/orders", params={"order_id": str(order.id)})
+
+    assert res.status_code == 200
+    assert res.json()["mileage_km"] == "15000"
 
 
 def test_search_order_by_plate_found_returns_200():
