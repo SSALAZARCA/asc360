@@ -62,8 +62,8 @@ function populateOrderForm(data) {
     id: data.id,
     plate: data.plate || '',
     status: data.status || '',
-    created_at: data.created_at ? data.created_at.slice(0, 10) : '',
-    delivered_at: data.delivered_at ? data.delivered_at.slice(0, 10) : '',
+    created_at: data.created_at ? data.created_at.slice(0, 16) : '',
+    delivered_at: data.delivered_at ? data.delivered_at.slice(0, 16) : '',
     mileage_km: data.mileage_km ?? '',
     service_type: data.service_type || '',
   };
@@ -430,8 +430,8 @@ function OrderTab() {
 
       {o.found && (
         <div style={fieldGridStyle}>
-          <Field label="Fecha de creación" type="date" value={o.form.created_at} onChange={(e) => o.setForm({ ...o.form, created_at: e.target.value })} />
-          <Field label="Fecha de entrega" type="date" value={o.form.delivered_at} onChange={(e) => o.setForm({ ...o.form, delivered_at: e.target.value })} />
+          <Field label="Fecha de creación" type="datetime-local" value={o.form.created_at} onChange={(e) => o.setForm({ ...o.form, created_at: e.target.value })} />
+          <Field label="Fecha de entrega" type="datetime-local" value={o.form.delivered_at} onChange={(e) => o.setForm({ ...o.form, delivered_at: e.target.value })} />
           <Field label="Kilometraje de orden" type="number" value={o.form.mileage_km} onChange={(e) => o.setForm({ ...o.form, mileage_km: e.target.value })} />
           <label style={labelStyle}>
             Tipo de servicio
