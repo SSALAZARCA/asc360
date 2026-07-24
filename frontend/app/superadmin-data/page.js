@@ -219,15 +219,15 @@ function VehicleTab() {
 // ---------------------------------------------------------------------------
 // Orden tab — same shape as Vehículo, plus the confirm-then-delete flow.
 // ---------------------------------------------------------------------------
-function useOrderQuickFix() {
+// Búsqueda (por placa u orden) + selección de coincidencia cuando la placa
+// matchea varias órdenes. `setForm`/`setFound` vienen del orquestador de
+// abajo porque el resultado de una búsqueda es lo que puebla el formulario
+// que el hook de guardado (useOrderSave) después lee y envía.
+function useOrderSearch(setForm, setFound) {
   const [searchMode, setSearchMode] = useState('plate');
   const [searchValue, setSearchValue] = useState('');
-  const [form, setForm] = useState(ORDER_FORM_DEFAULTS);
-  const [found, setFound] = useState(false);
   const [matches, setMatches] = useState(null); // list of candidates | null
   const [searching, setSearching] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [confirmState, setConfirmState] = useState(null); // { message } | null
 
   const search = async () => {
     if (!searchValue.trim()) return;
@@ -269,6 +269,15 @@ function useOrderQuickFix() {
     setMatches(null);
   };
 
+  return { searchMode, setSearchMode, searchValue, setSearchValue, matches, searching, search, selectMatch };
+}
+
+// Guardado + flujo de confirmar-antes-de-borrar. Lee/actualiza el `form`
+// compartido con useOrderSearch a través del orquestador de abajo.
+function useOrderSave(form, found, setForm) {
+  const [saving, setSaving] = useState(false);
+  const [confirmState, setConfirmState] = useState(null); // { message } | null
+
   // Shared by the first attempt (`confirm_delete_event: false`) and the
   // confirmed resubmit (`confirm_delete_event: true`) — same payload, same
   // endpoint, only the flag changes.
@@ -306,10 +315,22 @@ function useOrderQuickFix() {
   };
 
   return {
-    searchMode, setSearchMode, searchValue, setSearchValue, form, setForm,
-    found, matches, selectMatch, searching, saving, search, save,
-    confirmState, confirmDelete: () => submit(true), cancelConfirm: () => setConfirmState(null),
+    saving, save, confirmState,
+    confirmDelete: () => submit(true),
+    cancelConfirm: () => setConfirmState(null),
   };
+}
+
+// Orquestador delgado: mantiene el `form`/`found` compartido y compone los
+// dos hooks de arriba en la misma forma de API que ya consume OrderTab.
+function useOrderQuickFix() {
+  const [form, setForm] = useState(ORDER_FORM_DEFAULTS);
+  const [found, setFound] = useState(false);
+
+  const searchApi = useOrderSearch(setForm, setFound);
+  const saveApi   = useOrderSave(form, found, setForm);
+
+  return { form, setForm, found, ...searchApi, ...saveApi };
 }
 
 function serviceTypeLabel(value) {
