@@ -124,6 +124,7 @@ function KanbanCard({ order, onOpen }) {
         <span className="kcard-plate">{order.placa}</span>
         <span className="kcard-type" style={{ color: tc.color, background: tc.bg }}>{tc.letter}</span>
       </div>
+      <p className="kcard-orderid">N.° {order.order_id.slice(0, 8)}</p>
       {order.modelo && <p className="kcard-model">{order.modelo}</p>}
       <p className="kcard-center"><MapPin size={9} />{order.centro_actual}</p>
       <div className="kcard-foot">
@@ -377,6 +378,7 @@ function OrderModal({ order, onClose, onOrderAccepted }) {
         <div className="mhead" style={{ borderBottom: `2px solid ${tc.color}` }}>
           <div style={{ display:'flex', alignItems:'center', gap:'0.6rem', flexWrap:'wrap' }}>
             <span className="mplate">{order.placa}</span>
+            <span className="morderid">N.° {order.order_id.slice(0, 8)}</span>
             <span className="mtype" style={{ color: tc.color, background: tc.bg }}>{tc.label}</span>
             {col && (
               <span className="mtype" style={{ color: col.color, background: `${col.color}20`, display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
@@ -844,6 +846,7 @@ export default function KanbanPage() {
         .kcard-plate { flex:1; font-weight:900; font-size:0.82rem; color:#ff8c5a; letter-spacing:0.04em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
         .kcard-type  { font-size:0.52rem; font-weight:900; padding:1px 4px; border-radius:4px; flex-shrink:0; }
         .kcard-model { font-size:0.6rem; font-weight:700; color:rgba(255,255,255,0.55); margin:0 0 0.3rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .kcard-orderid { font-size:0.55rem; font-weight:600; color:rgba(255,255,255,0.3); font-family:monospace; margin:0 0 0.3rem; }
 
         .kcard-center {
           display: flex; align-items:center; gap:0.25rem;
@@ -898,6 +901,7 @@ export default function KanbanPage() {
           flex-shrink:0;
         }
         .mplate { font-size:1.6rem; font-weight:900; color:white; letter-spacing:0.06em; }
+        .morderid { font-size:0.62rem; font-weight:700; color:rgba(255,255,255,0.35); font-family:monospace; letter-spacing:0.03em; }
         .mtype { font-size:0.6rem; font-weight:800; padding:3px 8px; border-radius:7px; text-transform:uppercase; letter-spacing:0.07em; }
         .mclose { background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.09); border-radius:50%; width:30px; height:30px; display:flex; align-items:center; justify-content:center; cursor:pointer; color:rgba(255,255,255,0.5); transition:all 0.15s; }
         .mclose:hover { background:rgba(255,255,255,0.12); color:white; }

@@ -99,6 +99,7 @@ function OrderModal({ order, onClose }) {
         <div className="mhead" style={{ borderBottom: `2px solid ${tc.color}` }}>
           <div style={{ display:'flex', alignItems:'center', gap:'0.6rem', flexWrap:'wrap' }}>
             <span className="mplate">{order.placa}</span>
+            <span className="morderid">N.° {order.order_id.slice(0, 8)}</span>
             <span className="mtype" style={{ color: tc.color, background: tc.bg }}>{tc.label}</span>
             {col && (
               <span className="mtype" style={{ color: col.color, background: `${col.color}20`, display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
@@ -391,8 +392,9 @@ export default function ServicesPage() {
           <table className="data-table">
             <thead>
               <tr>
+                <th className="sort-head" style={{ cursor: 'default' }}>N.° Orden</th>
                 {[['placa', 'Placa'], ['modelo', 'Modelo'], ['tipo_trabajo', 'Tipo'], ['estado', 'Estado'],
-                  ['tiempo_taller_dias', 'Días'], ['kilometraje', 'KM'], ['centro_actual', 'Centro'], 
+                  ['tiempo_taller_dias', 'Días'], ['kilometraje', 'KM'], ['centro_actual', 'Centro'],
                   ['ciudad', 'Ciudad'], ['v_totales', 'Visitas (T)'], ['v_2meses', 'Visitas (2m)'], ['g_totales', 'Garantías']].map(([col, lbl]) => (
                   <th key={col} onClick={() => toggleSort(col)} className="sort-head">
                     {lbl} <SortIcon col={col} />
@@ -403,9 +405,9 @@ export default function ServicesPage() {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan="11" className="td-empty">Sincronizando expedientes...</td></tr>
+                <tr><td colSpan="12" className="td-empty">Sincronizando expedientes...</td></tr>
               ) : filtered.length === 0 ? (
-                <tr><td colSpan="11" className="td-empty">No se encontraron expedientes activos</td></tr>
+                <tr><td colSpan="12" className="td-empty">No se encontraron expedientes activos</td></tr>
               ) : filtered.map((s, i) => {
                 const st = STATES[s.estado] || { name: s.estado };
                 const tc = TYPE_CFG[s.tipo_trabajo] || TYPE_CFG.regular;
@@ -413,6 +415,7 @@ export default function ServicesPage() {
                 
                 return (
                   <tr key={s.order_id} className="row-item" onClick={() => setSelectedOrder(s)} style={{ animationDelay: `${i * 0.02}s` }}>
+                    <td className="td-dim" style={{ fontFamily: 'monospace', fontSize: '0.62rem' }}>{s.order_id.slice(0, 8)}</td>
                     <td className="td-plate">{s.placa}</td>
                     <td className="td-dim"><span className="cell-truncate" title={s.modelo || '-'}>{s.modelo || '-'}</span></td>
                     <td><span className="badge-type" style={{ color: tc.color, background: tc.bg }}>{tc.label}</span></td>
@@ -523,6 +526,7 @@ export default function ServicesPage() {
         @keyframes mup { from{opacity:0;transform:translateY(20px) scale(0.97);} to{opacity:1;transform:none;} }
         .mhead { display:flex; align-items:flex-start; justify-content:space-between; padding:1.25rem 1.5rem; background:rgba(255,255,255,0.02); }
         .mplate { font-size:1.6rem; font-weight:900; color:#ff8c5a; letter-spacing:0.05em; line-height:1; }
+        .morderid { font-size:0.62rem; font-weight:700; color:rgba(255,255,255,0.35); font-family:monospace; letter-spacing:0.03em; }
         .mtype { font-size:0.6rem; font-weight:900; padding:3px 8px; border-radius:6px; text-transform:uppercase; }
         .mclose { background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); width:28px; height:28px; border-radius:8px; color:rgba(255,255,255,0.6); display:flex; align-items:center; justify-content:center; cursor:pointer; transition:all 0.15s; }
         .mclose:hover { background:rgba(255,255,255,0.1); color:white; transform:rotate(90deg); }
