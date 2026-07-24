@@ -390,34 +390,55 @@ export default function AnalisisRepuestosTab({ userRole }) {
 
   const handleSaveDetails = async (det) => {
     const { key, fpn, lotId } = changeModal;
+    const prevDet = details[key];
     setChangeModal(null);
     setDetails(prev => ({ ...prev, [key]: det }));
-    await authFetch('/parts/admin/analysis/decisions', {
-      method: 'POST',
-      body: JSON.stringify({
-        factory_part_number: fpn,
-        lot_identifier:      lotId,
-        decision:            'cambiar',
-        new_quantity:        det.new_quantity,
-        original_quantity:   det.original_quantity ?? null,
-        change_note:         det.change_note || null,
-      }),
-    });
+    try {
+      const res = await authFetch('/parts/admin/analysis/decisions', {
+        method: 'POST',
+        body: JSON.stringify({
+          factory_part_number: fpn,
+          lot_identifier:      lotId,
+          decision:            'cambiar',
+          new_quantity:        det.new_quantity,
+          original_quantity:   det.original_quantity ?? null,
+          change_note:         det.change_note || null,
+        }),
+      });
+      if (!res.ok) throw new Error('save failed');
+    } catch {
+      setDetails(prev => {
+        const copy = { ...prev };
+        if (prevDet === undefined) delete copy[key]; else copy[key] = prevDet;
+        return copy;
+      });
+      toast.error('No se pudo guardar el ajuste. Intentá de nuevo.');
+    }
   };
 
   const handleUnmarkFromModal = async () => {
     const { key, fpn, lotId } = changeModal;
+    const prevMarked = marked[key];
+    const prevDet    = details[key];
     setChangeModal(null);
     setMarked(prev => { const c = { ...prev }; delete c[key]; return c; });
     setDetails(prev => { const c = { ...prev }; delete c[key]; return c; });
-    await authFetch('/parts/admin/analysis/decisions', {
-      method: 'POST',
-      body: JSON.stringify({ factory_part_number: fpn, lot_identifier: lotId, decision: '' }),
-    });
+    try {
+      const res = await authFetch('/parts/admin/analysis/decisions', {
+        method: 'POST',
+        body: JSON.stringify({ factory_part_number: fpn, lot_identifier: lotId, decision: '' }),
+      });
+      if (!res.ok) throw new Error('unmark failed');
+    } catch {
+      setMarked(prev => (prevMarked === undefined ? prev : { ...prev, [key]: prevMarked }));
+      setDetails(prev => (prevDet === undefined ? prev : { ...prev, [key]: prevDet }));
+      toast.error('No se pudo quitar la marca. Intentá de nuevo.');
+    }
   };
 
   const handleSaveDesc = async (fpn, value) => {
-    const trimmed = value.trim();
+    const trimmed  = value.trim();
+    const prevDesc = data?.items.find(i => i.factory_part_number === fpn)?.description_es ?? null;
     setEditingDesc(null);
     setData(prev => prev ? {
       ...prev,
@@ -425,13 +446,25 @@ export default function AnalisisRepuestosTab({ userRole }) {
         i.factory_part_number === fpn ? { ...i, description_es: trimmed || null } : i
       ),
     } : prev);
-    await authFetch(`/parts/admin/catalog/${encodeURIComponent(fpn)}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ description_es_manual: trimmed || null }),
-    }).catch(() => {});
+    try {
+      const res = await authFetch(`/parts/admin/catalog/${encodeURIComponent(fpn)}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ description_es_manual: trimmed || null }),
+      });
+      if (!res.ok) throw new Error('save failed');
+    } catch {
+      setData(prev => prev ? {
+        ...prev,
+        items: prev.items.map(i =>
+          i.factory_part_number === fpn ? { ...i, description_es: prevDesc } : i
+        ),
+      } : prev);
+      toast.error('No se pudo guardar la descripción. Intentá de nuevo.');
+    }
   };
 
   const handleSaveCodes = async (fpn, codes) => {
+    const prevCodes = data?.items.find(i => i.factory_part_number === fpn)?.prev_codes ?? [];
     setCodesModal(null);
     setData(prev => prev ? {
       ...prev,
@@ -439,10 +472,21 @@ export default function AnalisisRepuestosTab({ userRole }) {
         i.factory_part_number === fpn ? { ...i, prev_codes: codes } : i
       ),
     } : prev);
-    await authFetch(`/parts/admin/catalog/${encodeURIComponent(fpn)}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ prev_codes: codes }),
-    }).catch(() => {});
+    try {
+      const res = await authFetch(`/parts/admin/catalog/${encodeURIComponent(fpn)}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ prev_codes: codes }),
+      });
+      if (!res.ok) throw new Error('save failed');
+    } catch {
+      setData(prev => prev ? {
+        ...prev,
+        items: prev.items.map(i =>
+          i.factory_part_number === fpn ? { ...i, prev_codes: prevCodes } : i
+        ),
+      } : prev);
+      toast.error('No se pudieron guardar los códigos relacionados. Intentá de nuevo.');
+    }
   };
 
   const handleExecuteAdjustments = async () => {
