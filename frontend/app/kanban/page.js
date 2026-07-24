@@ -628,14 +628,24 @@ export default function KanbanPage() {
     if (!destCol || !srcOrder || destCol === srcOrder.estado) return;
     if (srcOrder.estado === 'pending_signature') return; // Bloqueado hasta validar OTP
 
+    const prevEstado = srcOrder.estado;
     setOrders(prev => prev.map(o => o.order_id === active.id ? { ...o, estado: destCol } : o));
 
     try {
-      await authFetch(`/orders/${active.id}/status`, {
+      const res = await authFetch(`/orders/${active.id}/status`, {
         method:  'PUT',
         body:    JSON.stringify({ status: destCol }),
       });
-    } catch (e) { console.error('Error actualizando estado:', e); }
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setOrders(prev => prev.map(o => o.order_id === active.id ? { ...o, estado: prevEstado } : o));
+        toast.error(data.detail || 'No se pudo cambiar el estado de la orden.');
+      }
+    } catch (e) {
+      console.error('Error actualizando estado:', e);
+      setOrders(prev => prev.map(o => o.order_id === active.id ? { ...o, estado: prevEstado } : o));
+      toast.error('Error de conexión al cambiar el estado.');
+    }
   };
 
   return (

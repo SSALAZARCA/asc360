@@ -280,10 +280,16 @@ export default function ServicesPage() {
     const fetchServices = async () => {
       try {
         const response = await authFetch('/orders/analytics/services');
+        if (!response.ok) {
+          toast.error('No se pudieron cargar las órdenes. Intentá de nuevo.');
+          setServices([]);
+          return;
+        }
         const data = await response.json();
         setServices(Array.isArray(data) ? data : []);
       } catch (e) {
         console.error("Error cargando servicios:", e);
+        toast.error('Error de conexión al cargar las órdenes.');
       } finally {
         setLoading(false);
       }
