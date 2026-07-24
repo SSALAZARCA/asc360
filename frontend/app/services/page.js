@@ -372,7 +372,7 @@ export default function ServicesPage() {
             <Activity size={12} className="icon-muted" />
             <select className="filter-sel" value={filterState} onChange={e => setFilterState(e.target.value)}>
               <option value="all">Estado: Todos</option>
-              {Object.entries(STATES).map(([k, v]) => <option key={k} value={k}>{v.emoji} {v.name}</option>)}
+              {Object.entries(STATES).map(([k, v]) => <option key={k} value={k}>{v.name}</option>)}
             </select>
           </div>
 
