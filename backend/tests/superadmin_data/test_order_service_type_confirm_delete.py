@@ -175,8 +175,13 @@ def test_away_from_event_type_with_confirmation_deletes_event_and_applies_change
     assert fake_db.committed is True
 
     audit = next(a.payload["service_type"] for a in fake_db.added if "service_type" in a.payload)
-    assert audit["old"] == ServiceType.km_review
-    assert audit["new"] == ServiceType.regular
+    # Plain enum members aren't JSON-serializable -- ImportAuditLog.payload
+    # is a real JSONB column, so the audit dict must hold `.value` strings,
+    # not the enum objects themselves (this crashed with a 500 in
+    # production against a real DB; the fakes here never serialize
+    # anything, so this assertion is the only thing that catches it).
+    assert audit["old"] == "km_review"
+    assert audit["new"] == "regular"
     assert audit["lifecycle_event_deleted"] == {
         "id": str(mantenimiento_event.id),
         "event_type": "MANTENIMIENTO",

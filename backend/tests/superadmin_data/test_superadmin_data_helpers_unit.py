@@ -11,8 +11,10 @@ only exercised indirectly through the integration tests:
 - `_needs_delete_confirmation` — truth table for the confirm-then-delete
   gate (Phase 5's new predicate).
 """
+import json
 import uuid
 from datetime import datetime
+from decimal import Decimal
 
 import pytest
 from fastapi import HTTPException
@@ -22,8 +24,10 @@ from app.api.v1.superadmin_data import (
     _ensure_delivered_after_created,
     _resync_recepcion_summary,
     _needs_delete_confirmation,
+    _apply_mileage_correction,
+    _apply_service_type_correction,
 )
-from app.models.order import ServiceOrder, ServiceStatus, ServiceType
+from app.models.order import ServiceOrder, ServiceOrderReception, ServiceStatus, ServiceType
 from app.models.vehicle_lifecycle import VehicleLifecycleEvent, LifecycleEventType
 
 
@@ -36,6 +40,15 @@ def _make_order(created_at, delivered_at=None) -> ServiceOrder:
         service_type=ServiceType.regular,
         created_at=created_at,
         delivered_at=delivered_at,
+    )
+
+
+def _make_reception(mileage_km) -> ServiceOrderReception:
+    return ServiceOrderReception(
+        id=uuid.uuid4(),
+        order_id=uuid.uuid4(),
+        mileage_km=Decimal(str(mileage_km)),
+        created_at=datetime(2026, 7, 1),
     )
 
 
@@ -62,7 +75,11 @@ class TestDiffDateFields:
         changes = _diff_date_fields(order, {"created_at": datetime(2026, 7, 2)})
 
         assert set(changes.keys()) == {"created_at"}
-        assert changes["created_at"] == {"old": datetime(2026, 7, 1), "new": datetime(2026, 7, 2)}
+        # `datetime` objects aren't JSON-serializable -- ImportAuditLog.payload
+        # is a real JSONB column, so the audit dict must hold isoformat
+        # strings (this crashed with a 500 in production against a real DB).
+        # `order.created_at` itself still gets the real datetime (below).
+        assert changes["created_at"] == {"old": "2026-07-01T00:00:00", "new": "2026-07-02T00:00:00"}
         assert order.created_at == datetime(2026, 7, 2)
         assert order.delivered_at == datetime(2026, 7, 3)  # untouched -- never in `provided`
 
@@ -175,3 +192,87 @@ class TestNeedsDeleteConfirmation:
         argument here since this predicate is only ever called with the
         order's CURRENT completion event, which is `None` in that case."""
         assert _needs_delete_confirmation(ServiceType.regular, ServiceType.warranty, None) is False
+
+
+# ---------------------------------------------------------------------------
+# _apply_mileage_correction — audit payload must be JSON-serializable
+# (ImportAuditLog.payload is a real JSONB column; a raw Decimal crashes the
+# commit with an unhandled TypeError, seen as a live 500 in production), and
+# the no-op check must compare Decimal VALUES, not their string formatting:
+# Decimal("6245") vs Decimal("6245.00") are equal but format differently, so
+# a str()-based no-op check treated a same-value resubmit as a real change.
+# ---------------------------------------------------------------------------
+
+class TestApplyMileageCorrection:
+    def test_real_change_returns_json_serializable_str_values(self):
+        reception = _make_reception(1000)
+        change = _apply_mileage_correction(reception, Decimal("1500"), None, None)
+
+        assert change == {"old": "1000", "new": "1500"}
+        assert reception.mileage_km == Decimal("1500")
+        json.dumps(change)  # must not raise -- this is the exact production crash
+
+    def test_mathematically_equal_value_with_different_decimal_precision_is_a_no_op(self):
+        """The value the frontend round-trips (a plain JSON number, e.g.
+        6245) parses to Decimal("6245"), while the DB's Numeric(10,2)
+        column holds Decimal("6245.00") -- same value, different string
+        precision. A str()-based no-op check treats this as a real change,
+        needlessly resyncing lifecycle events and writing an audit row (and,
+        before the JSON fix above, crashing outright)."""
+        reception = _make_reception("6245.00")
+        change = _apply_mileage_correction(reception, Decimal("6245"), None, None)
+
+        assert change is None
+        assert reception.mileage_km == Decimal("6245.00")  # untouched
+
+    def test_syncs_recepcion_and_mantenimiento_events_with_json_serializable_change(self):
+        recepcion_event = _make_event(LifecycleEventType.RECEPCION)
+        recepcion_event.summary = "Recepción en taller. KM: 1000. Cliente: Juan."
+        mantenimiento_event = _make_event(LifecycleEventType.MANTENIMIENTO)
+        reception = _make_reception(1000)
+
+        change = _apply_mileage_correction(reception, Decimal("1500"), recepcion_event, mantenimiento_event)
+
+        assert recepcion_event.km_at_event == Decimal("1500")
+        assert mantenimiento_event.km_at_event == Decimal("1500")
+        assert change["lifecycle_event_synced"] == [str(recepcion_event.id), str(mantenimiento_event.id)]
+        json.dumps(change)
+
+
+# ---------------------------------------------------------------------------
+# _apply_service_type_correction — same JSON-serializability requirement:
+# a raw `ServiceType` enum member in the audit payload crashes the JSONB
+# commit the same way a raw Decimal does.
+# ---------------------------------------------------------------------------
+
+class TestApplyServiceTypeCorrection:
+    def test_real_change_returns_json_serializable_value_strings(self):
+        order = _make_order(created_at=datetime(2026, 7, 1))
+        order.service_type = ServiceType.regular
+
+        change = _apply_service_type_correction(order, ServiceType.quick, None, None)
+
+        assert change == {"old": "regular", "new": "quick"}
+        assert order.service_type == ServiceType.quick
+        json.dumps(change)  # must not raise -- this is the exact production crash
+
+    def test_same_value_is_a_no_op(self):
+        order = _make_order(created_at=datetime(2026, 7, 1))
+        order.service_type = ServiceType.regular
+
+        change = _apply_service_type_correction(order, ServiceType.regular, None, None)
+
+        assert change is None
+
+    def test_warranty_to_km_review_conversion_change_is_json_serializable(self):
+        order = _make_order(created_at=datetime(2026, 7, 1))
+        order.service_type = ServiceType.warranty
+        garantia_event = _make_event(LifecycleEventType.GARANTIA)
+        reception = _make_reception(500)
+
+        change = _apply_service_type_correction(order, ServiceType.km_review, reception, garantia_event)
+
+        assert change["old"] == "warranty"
+        assert change["new"] == "km_review"
+        assert garantia_event.event_type == LifecycleEventType.MANTENIMIENTO
+        json.dumps(change)

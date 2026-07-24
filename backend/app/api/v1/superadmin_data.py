@@ -233,7 +233,12 @@ def _apply_mileage_correction(
     a `km_at_event`). Returns the audit change dict for `mileage_km`, or
     `None` if the new value equals the current one (no-op, no audit row)."""
     old_mileage = reception.mileage_km
-    if str(old_mileage) == str(new_mileage):
+    # Compare as Decimal VALUES, not string formatting -- Decimal("6245")
+    # (a plain JSON number round-tripped from the frontend) and
+    # Decimal("6245.00") (the DB's Numeric(10,2) precision) are the same
+    # value but format differently, so a str()-based check treated an
+    # unchanged resubmit as a real correction.
+    if old_mileage == new_mileage:
         return None
 
     reception.mileage_km = new_mileage
@@ -248,7 +253,10 @@ def _apply_mileage_correction(
         completion_event.km_at_event = new_mileage
         synced_event_ids.append(str(completion_event.id))
 
-    change = {"old": old_mileage, "new": new_mileage}
+    # `ImportAuditLog.payload` is a real JSONB column -- a raw `Decimal` in
+    # the audit dict crashes the commit with an unhandled `TypeError`
+    # (confirmed live: a 500 in production).
+    change = {"old": str(old_mileage), "new": str(new_mileage)}
     if synced_event_ids:
         change["lifecycle_event_synced"] = synced_event_ids
     return change
@@ -347,10 +355,13 @@ def _apply_service_type_correction(
     as the effective (already-corrected, if applicable) value for the new
     event's `km_at_event`."""
     old_service_type = order.service_type
-    if str(old_service_type) == str(new_service_type):
+    if old_service_type == new_service_type:
         return None
 
-    change = {"old": old_service_type, "new": new_service_type}
+    # `ImportAuditLog.payload` is a real JSONB column -- a raw `ServiceType`
+    # enum member in the audit dict crashes the commit with an unhandled
+    # `TypeError` (confirmed live: a 500 in production).
+    change = {"old": old_service_type.value, "new": new_service_type.value}
     order.service_type = new_service_type
 
     old_event_type = _EVENT_PRODUCING_SERVICE_TYPES.get(old_service_type)
@@ -493,7 +504,13 @@ def _diff_date_fields(order: ServiceOrder, provided: dict) -> dict:
         new_value = provided[field_name]
         old_value = getattr(order, field_name)
         if str(old_value) != str(new_value):
-            changes[field_name] = {"old": old_value, "new": new_value}
+            # `ImportAuditLog.payload` is a real JSONB column -- a raw
+            # `datetime` object in the audit dict crashes the commit with an
+            # unhandled `TypeError` (confirmed live: a 500 in production).
+            changes[field_name] = {
+                "old": old_value.isoformat() if old_value else None,
+                "new": new_value.isoformat() if new_value else None,
+            }
             setattr(order, field_name, new_value)
     return changes
 

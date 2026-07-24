@@ -78,10 +78,15 @@ def test_update_order_mileage_and_service_type_persist_status_unchanged():
 
     audit_by_field = {list(a.payload.keys())[0]: a.payload for a in fake_db.added}
     assert set(audit_by_field.keys()) == {"mileage_km", "service_type"}
-    assert audit_by_field["mileage_km"]["mileage_km"]["old"] == Decimal("1000")
-    assert audit_by_field["mileage_km"]["mileage_km"]["new"] == Decimal("1500")
-    assert audit_by_field["service_type"]["service_type"]["old"] == ServiceType.regular
-    assert audit_by_field["service_type"]["service_type"]["new"] == ServiceType.quick
+    # `Decimal`/enum members aren't JSON-serializable -- ImportAuditLog.payload
+    # is a real JSONB column, so the audit dict must hold plain str values,
+    # not the raw types (this crashed with a 500 in production against a
+    # real DB; the fakes here never serialize anything, so these
+    # assertions are the only thing that catches it).
+    assert audit_by_field["mileage_km"]["mileage_km"]["old"] == "1000"
+    assert audit_by_field["mileage_km"]["mileage_km"]["new"] == "1500"
+    assert audit_by_field["service_type"]["service_type"]["old"] == "regular"
+    assert audit_by_field["service_type"]["service_type"]["new"] == "quick"
     for row in fake_db.added:
         assert row.action == "SUPERADMIN_DATA_FIX"
         assert row.entity_type == "ServiceOrder"

@@ -296,7 +296,9 @@ def test_update_order_explicit_null_delivered_at_clears_it_and_audits():
 
     audit_payloads = [a.payload for a in fake_db.added]
     assert len(audit_payloads) == 1
-    assert audit_payloads[0]["delivered_at"] == {"old": datetime(2026, 7, 3), "new": None}
+    # `datetime` objects aren't JSON-serializable -- ImportAuditLog.payload
+    # is a real JSONB column, so the audit dict must hold isoformat strings.
+    assert audit_payloads[0]["delivered_at"] == {"old": "2026-07-03T00:00:00", "new": None}
 
 
 def test_update_order_created_at_moved_after_existing_delivered_at_returns_422_even_when_delivered_at_omitted():
