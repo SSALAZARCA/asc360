@@ -107,9 +107,13 @@ def test_put_order_rejects_non_superadmin_with_no_db_touch():
 
 
 def test_superadmin_passes_guard_and_reaches_not_implemented_stub():
-    """Phase 1 only wires the guard + schemas; the actual GET/PUT logic
-    lands in Phase 2/3. A superadmin caller should clear the guard and hit
-    the not-yet-implemented stub (501), never a 403."""
+    """Vehicle routes got their real implementation in Phase 2 (see
+    `test_vehicle_quick_fix.py`); Order routes are still guarded stubs
+    until Phase 3/4/5. A superadmin caller should clear the guard and hit
+    the not-yet-implemented stub (501) on the Order routes, never a 403."""
     with make_test_client(make_superadmin(), NoTouchSession()) as client:
-        res = client.get("/api/v1/superadmin/data/vehicles", params={"plate": "ABC123"})
+        res = client.get(
+            "/api/v1/superadmin/data/orders",
+            params={"plate": "ABC123", "order_id": str(uuid.uuid4())},
+        )
         assert res.status_code == 501
