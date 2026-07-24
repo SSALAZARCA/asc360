@@ -5,7 +5,7 @@ import AdminLayout from '../admin-layout';
 import { authFetch } from '../../lib/authFetch';
 import { toast } from '../../lib/toast';
 import ConfirmModal from '../../components/ConfirmModal';
-import { Search, Save, Wand2 } from 'lucide-react';
+import { Search, Save, Wand2, ArrowRight } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
 // Whitelisted field sets — MUST mirror the backend's Pydantic schemas
@@ -15,12 +15,14 @@ import { Search, Save, Wand2 } from 'lucide-react';
 const VEHICLE_FORM_DEFAULTS = { id: '', plate: '', vin: '', brand: '', model: '', color: '', year: '', mileage: '' };
 const ORDER_FORM_DEFAULTS = { id: '', plate: '', status: '', created_at: '', delivered_at: '', mileage_km: '', service_type: '' };
 
+// Mismos colores que TYPE_CFG en services/page.js — mantener consistencia
+// visual con el resto de la app para el mismo dato (tipo de servicio).
 const SERVICE_TYPE_OPTIONS = [
-  { value: 'regular', label: 'Regular' },
-  { value: 'warranty', label: 'Garantía' },
-  { value: 'km_review', label: 'Revisión por Kilometraje' },
-  { value: 'quick', label: 'Rápido' },
-  { value: 'pdi', label: 'PDI' },
+  { value: 'regular', label: 'Regular', color: '#3b82f6', bg: 'rgba(59,130,246,0.15)' },
+  { value: 'warranty', label: 'Garantía', color: '#eab308', bg: 'rgba(234,179,8,0.15)' },
+  { value: 'km_review', label: 'Revisión por Kilometraje', color: '#22c55e', bg: 'rgba(34,197,94,0.15)' },
+  { value: 'quick', label: 'Rápido', color: '#a855f7', bg: 'rgba(168,85,247,0.15)' },
+  { value: 'pdi', label: 'PDI', color: '#f97316', bg: 'rgba(249,115,22,0.15)' },
 ];
 
 // ---------------------------------------------------------------------------
@@ -314,23 +316,56 @@ function serviceTypeLabel(value) {
   return SERVICE_TYPE_OPTIONS.find((opt) => opt.value === value)?.label || value || '-';
 }
 
+function OrderMatchRow({ match, onSelect }) {
+  const tc = SERVICE_TYPE_OPTIONS.find((opt) => opt.value === match.service_type);
+  return (
+    <button
+      onClick={() => onSelect(match)}
+      style={{
+        display: 'flex', alignItems: 'center', gap: '0.9rem',
+        width: '100%', textAlign: 'left', cursor: 'pointer',
+        padding: '0.7rem 0.9rem', borderRadius: '10px',
+        background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)',
+        transition: 'background 0.15s, border-color 0.15s',
+      }}
+      onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.16)'; }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.03)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)'; }}
+    >
+      <span style={{
+        fontFamily: 'monospace', fontSize: '0.68rem', fontWeight: 700,
+        color: 'rgba(255,255,255,0.5)', background: 'rgba(255,255,255,0.06)',
+        borderRadius: '6px', padding: '3px 8px', flexShrink: 0,
+      }}>
+        {match.id.slice(0, 8)}
+      </span>
+
+      <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem', color: 'rgba(255,255,255,0.75)', flex: 1 }}>
+        <span>{match.created_at ? match.created_at.slice(0, 10) : '-'}</span>
+        <ArrowRight size={12} style={{ color: 'rgba(255,255,255,0.3)', flexShrink: 0 }} />
+        <span style={{ color: match.delivered_at ? 'rgba(255,255,255,0.75)' : 'rgba(255,255,255,0.35)' }}>
+          {match.delivered_at ? match.delivered_at.slice(0, 10) : 'Sin entregar'}
+        </span>
+      </span>
+
+      <span style={{
+        fontSize: '0.62rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.03em',
+        color: tc?.color || 'rgba(255,255,255,0.5)', background: tc?.bg || 'rgba(255,255,255,0.06)',
+        borderRadius: '6px', padding: '3px 9px', whiteSpace: 'nowrap', flexShrink: 0,
+      }}>
+        {serviceTypeLabel(match.service_type)}
+      </span>
+    </button>
+  );
+}
+
 function OrderMatchPicker({ matches, onSelect }) {
   return (
-    <div style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', maxWidth: '520px' }}>
+    <div style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', maxWidth: '560px' }}>
       <p style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.6)' }}>
         Esta placa tiene varias órdenes — elegí cuál corregir:
       </p>
       {matches.map((m) => (
-        <button
-          key={m.id}
-          className="btn"
-          onClick={() => onSelect(m)}
-          style={{ textAlign: 'left', display: 'flex', justifyContent: 'space-between', gap: '0.75rem', padding: '0.6rem 0.85rem' }}
-        >
-          <span>{m.id.slice(0, 8)}</span>
-          <span>{m.created_at ? m.created_at.slice(0, 10) : '-'} → {m.delivered_at ? m.delivered_at.slice(0, 10) : 'sin entregar'}</span>
-          <span>{serviceTypeLabel(m.service_type)}</span>
-        </button>
+        <OrderMatchRow key={m.id} match={m} onSelect={onSelect} />
       ))}
     </div>
   );
