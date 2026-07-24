@@ -1,6 +1,7 @@
 """
-Shared fixtures for Phase 2 (Vehicle quick-fix) and Phase 3 (Order
-quick-fix — dates) tests on `app/api/v1/superadmin_data.py`.
+Shared fixtures for Phase 2 (Vehicle quick-fix), Phase 3 (Order quick-fix —
+dates), and Phase 4 (Order quick-fix — mileage_km/service_type + lifecycle
+sync) tests on `app/api/v1/superadmin_data.py`.
 
 Follows the project's established fake-`AsyncSession` convention (see
 `tests/orders/conftest.py`, `tests/imports/conftest.py`): real ORM instances
@@ -139,18 +140,67 @@ def make_order(
     return order
 
 
+def make_reception(
+    order_id: Optional[uuid.UUID] = None,
+    reception_id: Optional[uuid.UUID] = None,
+    mileage_km=None,
+) -> "ServiceOrderReception":
+    from decimal import Decimal
+    from app.models.order import ServiceOrderReception
+    return ServiceOrderReception(
+        id=reception_id or uuid.uuid4(),
+        order_id=order_id or uuid.uuid4(),
+        mileage_km=Decimal(str(mileage_km)) if mileage_km is not None else Decimal("1000"),
+        created_at=datetime(2026, 7, 1),
+    )
+
+
+def make_lifecycle_event(
+    vehicle_id: Optional[uuid.UUID] = None,
+    event_id: Optional[uuid.UUID] = None,
+    event_type=None,
+    km_at_event=None,
+    summary: str = "",
+    linked_order_id: Optional[uuid.UUID] = None,
+) -> "VehicleLifecycleEvent":
+    from app.models.vehicle_lifecycle import VehicleLifecycleEvent, LifecycleEventType
+    return VehicleLifecycleEvent(
+        id=event_id or uuid.uuid4(),
+        vehicle_id=vehicle_id or uuid.uuid4(),
+        event_type=event_type or LifecycleEventType.RECEPCION,
+        event_date=datetime(2026, 7, 1),
+        km_at_event=km_at_event,
+        summary=summary,
+        linked_order_id=linked_order_id,
+        is_automatic="auto",
+    )
+
+
 class FakeOrderSession:
     """
-    Minimal fake `AsyncSession` for the Order quick-fix (dates) routes.
+    Minimal fake `AsyncSession` for the Order quick-fix routes (Phase 3
+    dates + Phase 4 mileage_km/service_type + lifecycle sync).
 
-    - `search_result`: rows returned by the single `db.execute(select(
-      ServiceOrder)...)` call the GET route issues (empty list = miss ->
-      404).
+    - `search_result`: rows returned by the `db.execute(select(ServiceOrder)
+      ...)` call the GET route issues (empty list = miss -> 404).
     - `get_object`: the `ServiceOrder` returned by `db.get(ServiceOrder,
       order_id)` in the PUT route (`None` = miss -> 404).
+    - `reception`: the `ServiceOrderReception` returned by the PUT route's
+      `select(ServiceOrderReception).where(order_id == ...)` query — only
+      issued when `mileage_km`/`service_type` is actually being corrected.
+      `None` (default) mirrors an order the PUT route never needed to
+      fetch a reception for (pure date edits).
+    - `lifecycle_events`: rows returned by the PUT route's
+      `select(VehicleLifecycleEvent).where(linked_order_id == ...)` query,
+      same gating as `reception`.
     - `raise_integrity_error`: same contract as `FakeVehicleSession` — kept
-      for parity even though the Order dates PUT has no unique-constraint
+      for parity even though the Order PUT has no unique-constraint
       conflict path today.
+
+    Dispatch for `execute()` is by the statement's target entity (mirrors
+    `tests.orders.conftest.FakeAsyncSession`), NOT by call order, since the
+    production route may issue the reception query, the lifecycle-events
+    query, or neither, depending on which fields are being corrected.
     """
 
     def __init__(
@@ -158,16 +208,28 @@ class FakeOrderSession:
         search_result: Optional[list] = None,
         get_object=None,
         raise_integrity_error: bool = False,
+        reception: Optional["ServiceOrderReception"] = None,
+        lifecycle_events: Optional[list] = None,
     ):
         self._search_result = search_result or []
         self._get_object = get_object
         self._raise_integrity_error = raise_integrity_error
+        self._reception = reception
+        self._lifecycle_events = lifecycle_events or []
         self.added: list = []
         self.committed = False
         self.rolled_back = False
         self.refreshed: list = []
 
     async def execute(self, stmt):
+        from app.models.order import ServiceOrderReception
+        from app.models.vehicle_lifecycle import VehicleLifecycleEvent
+
+        entity = stmt.column_descriptions[0]["entity"]
+        if entity is ServiceOrderReception:
+            return _ExecuteResult([self._reception] if self._reception is not None else [])
+        if entity is VehicleLifecycleEvent:
+            return _ExecuteResult(list(self._lifecycle_events))
         return _ExecuteResult(self._search_result)
 
     async def get(self, model_cls, obj_id):

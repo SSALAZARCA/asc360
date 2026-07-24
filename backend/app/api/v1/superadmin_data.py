@@ -12,15 +12,22 @@ Phase 1: router registration + both request schemas + guarded route stubs.
 Phase 2: Vehicle quick-fix GET/PUT — whitelist diff per field, one audit
 row per changed field, 409 on duplicate-plate conflict, no audit row on a
 no-op submission.
-Phase 3 (this batch): Order quick-fix — dates only (`created_at`,
-`delivered_at`). Same whitelist-diff-audit pattern as Vehicle, plus an
-unconditional 422 block when the resulting `delivered_at` would precede
-the resulting `created_at` — no exceptions, per the spec's
-"Delivered-Before-Created Is Blocked Unconditionally" requirement.
-`mileage_km`/`service_type` and the confirm-then-delete lifecycle sync
-(Phase 4/Phase 5) are still no-ops on this route and land in later apply
-batches.
+Phase 3: Order quick-fix — dates only (`created_at`, `delivered_at`). Same
+whitelist-diff-audit pattern as Vehicle, plus an unconditional 422 block
+when the resulting `delivered_at` would precede the resulting `created_at`
+— no exceptions, per the spec's "Delivered-Before-Created Is Blocked
+Unconditionally" requirement.
+Phase 4 (this batch): Order quick-fix — `mileage_km` (lives on
+`ServiceOrderReception`) and `service_type`, kept in sync with the
+vehicle's lifecycle events: the `RECEPCION` event (always exists) resyncs
+`km_at_event`/`summary` on any mileage correction; a linked completion
+event (`GARANTIA`/`MANTENIMIENTO`, if one already exists) resyncs its `km`
+on a mileage correction, or converts in place on a warranty<->km_review
+`service_type` correction. The away-from-event-producing-type case (which
+needs the confirm-then-delete flow) is Phase 5 and is intentionally left
+untouched here.
 """
+import re
 from decimal import Decimal
 from datetime import datetime
 from typing import Optional
@@ -34,8 +41,9 @@ from pydantic import BaseModel, Field
 
 from app.database import get_db
 from app.api.deps import get_current_user, CurrentUser
-from app.models.order import ServiceOrder, ServiceType
+from app.models.order import ServiceOrder, ServiceOrderReception, ServiceType
 from app.models.vehicle import Vehicle
+from app.models.vehicle_lifecycle import VehicleLifecycleEvent, LifecycleEventType
 from app.services.imports_service import _log_audit
 
 router = APIRouter(prefix="/superadmin/data", tags=["superadmin_data"])
@@ -69,6 +77,19 @@ class OrderQuickFixUpdate(BaseModel):
 def _require_superadmin(current_user: CurrentUser) -> None:
     if not current_user.is_superadmin:
         raise HTTPException(status_code=403, detail="Solo superadmin")
+
+
+def _log_field_changes(
+    db: AsyncSession, current_user: CurrentUser, entity_type: str, entity_id: str, changes: dict
+) -> None:
+    """One `_log_audit` row per changed field -- shared by both quick-fix
+    routes so the "one row per field, skipped entirely on no-op" contract
+    lives in a single place."""
+    for field_name, change in changes.items():
+        _log_audit(
+            db, current_user, "SUPERADMIN_DATA_FIX", entity_type, entity_id,
+            {field_name: change},
+        )
 
 
 def _serialize_vehicle(vehicle: Vehicle) -> dict:
@@ -132,11 +153,7 @@ async def update_vehicle(
             changes[field_name] = {"old": old_value, "new": new_value}
             setattr(vehicle, field_name, new_value)
 
-    for field_name, change in changes.items():
-        _log_audit(
-            db, current_user, "SUPERADMIN_DATA_FIX", "Vehicle", str(vehicle.id),
-            {field_name: change},
-        )
+    _log_field_changes(db, current_user, "Vehicle", str(vehicle.id), changes)
 
     try:
         await db.commit()
@@ -151,7 +168,7 @@ async def update_vehicle(
     return _serialize_vehicle(vehicle)
 
 
-def _serialize_order(order: ServiceOrder) -> dict:
+def _serialize_order(order: ServiceOrder, reception: Optional[ServiceOrderReception] = None) -> dict:
     return {
         "id": str(order.id),
         "plate": order.plate,
@@ -159,7 +176,116 @@ def _serialize_order(order: ServiceOrder) -> dict:
         "service_type": order.service_type.value if order.service_type else None,
         "created_at": order.created_at.isoformat() if order.created_at else None,
         "delivered_at": order.delivered_at.isoformat() if order.delivered_at else None,
+        "mileage_km": str(reception.mileage_km) if reception is not None and reception.mileage_km is not None else None,
     }
+
+
+# Service types whose completion creates a GARANTIA/MANTENIMIENTO lifecycle
+# event (mirrors `orders.py` ~L616-639). Used to detect the warranty<->
+# km_review auto-remap case (Phase 4 scope) -- correcting AWAY from an
+# event-producing type while a completion event still exists is Phase 5's
+# confirm-then-delete flow and is NOT handled by this route yet.
+_EVENT_PRODUCING_SERVICE_TYPES = {
+    ServiceType.warranty: LifecycleEventType.GARANTIA,
+    ServiceType.km_review: LifecycleEventType.MANTENIMIENTO,
+}
+
+
+def _garantia_summary(order_id) -> str:
+    return f"Garantía aplicada. Orden {str(order_id)[:8]}."
+
+
+def _mantenimiento_summary(order_id) -> str:
+    return f"Mantenimiento por kilometraje realizado. Orden {str(order_id)[:8]}."
+
+
+def _resync_recepcion_summary(summary: Optional[str], new_mileage) -> Optional[str]:
+    """Replace the `KM: <value>` token embedded in the RECEPCION event's
+    summary (see `orders.py` ~L160: `f"Recepción en taller. KM: {mileage}...."`)
+    with the corrected mileage. If the token is absent, the summary is left
+    untouched (the caller still updates `km_at_event` regardless)."""
+    if not summary:
+        return summary
+    # `\d+(?:\.\d+)?` (not the greedier `[\d.]+`) so a decimal fraction is
+    # consumed but the sentence-ending period after a bare integer (e.g.
+    # "KM: 20000. Cliente: ...") is left untouched.
+    return re.sub(r"KM:\s*\d+(?:\.\d+)?", f"KM: {new_mileage}", summary)
+
+
+def _apply_mileage_correction(
+    reception: ServiceOrderReception,
+    new_mileage: Decimal,
+    recepcion_event: Optional[VehicleLifecycleEvent],
+    completion_event: Optional[VehicleLifecycleEvent],
+) -> Optional[dict]:
+    """Applies a `mileage_km` correction to `reception` and resyncs, in
+    place, the linked RECEPCION event (always exists) and the MANTENIMIENTO
+    completion event (only if one already exists -- GARANTIA never carries
+    a `km_at_event`). Returns the audit change dict for `mileage_km`, or
+    `None` if the new value equals the current one (no-op, no audit row)."""
+    old_mileage = reception.mileage_km
+    if str(old_mileage) == str(new_mileage):
+        return None
+
+    reception.mileage_km = new_mileage
+    synced_event_ids: list = []
+
+    if recepcion_event is not None:
+        recepcion_event.km_at_event = new_mileage
+        recepcion_event.summary = _resync_recepcion_summary(recepcion_event.summary, new_mileage)
+        synced_event_ids.append(str(recepcion_event.id))
+
+    if completion_event is not None and completion_event.event_type == LifecycleEventType.MANTENIMIENTO:
+        completion_event.km_at_event = new_mileage
+        synced_event_ids.append(str(completion_event.id))
+
+    change = {"old": old_mileage, "new": new_mileage}
+    if synced_event_ids:
+        change["lifecycle_event_synced"] = synced_event_ids
+    return change
+
+
+def _apply_service_type_correction(
+    order: ServiceOrder,
+    new_service_type: ServiceType,
+    reception: Optional[ServiceOrderReception],
+    completion_event: Optional[VehicleLifecycleEvent],
+) -> Optional[dict]:
+    """Applies a `service_type` correction to `order`. ONLY the warranty<->
+    km_review auto-remap converts the linked completion event in place (a
+    valid target event type always exists, so no confirmation is needed).
+    Any other transition -- including away from an event-producing type
+    while a completion event still exists -- is Phase 5's confirm-then-
+    delete flow and is deliberately left untouched here; likewise, no
+    completion event at all means there is nothing to sync. Returns the
+    audit change dict for `service_type`, or `None` if the new value equals
+    the current one (no-op, no audit row).
+
+    Callers MUST apply any `mileage_km` correction to `reception` BEFORE
+    calling this -- the MANTENIMIENTO conversion reads `reception.mileage_km`
+    as the effective (already-corrected, if applicable) value for the new
+    event's `km_at_event`."""
+    old_service_type = order.service_type
+    if str(old_service_type) == str(new_service_type):
+        return None
+
+    change = {"old": old_service_type, "new": new_service_type}
+    order.service_type = new_service_type
+
+    old_event_type = _EVENT_PRODUCING_SERVICE_TYPES.get(old_service_type)
+    new_event_type = _EVENT_PRODUCING_SERVICE_TYPES.get(new_service_type)
+
+    if old_event_type is not None and new_event_type is not None and completion_event is not None:
+        completion_event.event_type = new_event_type
+        if new_event_type == LifecycleEventType.MANTENIMIENTO:
+            completion_event.km_at_event = reception.mileage_km if reception is not None else None
+            completion_event.summary = _mantenimiento_summary(order.id)
+        else:
+            completion_event.km_at_event = None
+            completion_event.summary = _garantia_summary(order.id)
+        change["lifecycle_event_synced"] = [str(completion_event.id)]
+
+    return change
 
 
 @router.get("/orders")
@@ -191,11 +317,67 @@ async def search_orders(
     return _serialize_order(order)
 
 
-# Fields corrected by this route today (Phase 3). `mileage_km`/`service_type`
-# are already part of `OrderQuickFixUpdate` (Phase 1) but are intentionally
-# NOT diffed/applied here — they map to `ServiceOrderReception`/lifecycle
-# events and land in Phase 4/Phase 5.
+# Plain order date fields diffed the same simple way as Phase 2's Vehicle
+# fields. `mileage_km`/`service_type` need reception/lifecycle-event lookups
+# and are handled separately below (Phase 4).
 _ORDER_DATE_FIELDS = ("created_at", "delivered_at")
+
+
+def _ensure_delivered_after_created(provided: dict, order: ServiceOrder) -> None:
+    """Unconditional 422 block: the resulting `delivered_at` (merged with
+    the DB value when omitted from the request) must never precede the
+    resulting `created_at` -- no exceptions."""
+    effective_created_at = provided.get("created_at", order.created_at)
+    effective_delivered_at = (
+        provided["delivered_at"] if "delivered_at" in provided else order.delivered_at
+    )
+    if effective_delivered_at is not None and effective_delivered_at < effective_created_at:
+        raise HTTPException(
+            status_code=422,
+            detail="La fecha de entrega no puede ser anterior a la fecha de creación",
+        )
+
+
+async def _load_lifecycle_correction_context(
+    db: AsyncSession, order: ServiceOrder, new_mileage, new_service_type
+) -> tuple:
+    """Fetches `order`'s `ServiceOrderReception` and linked lifecycle events
+    -- ONLY when a `mileage_km`/`service_type` correction is actually being
+    requested, to avoid the extra queries on plain date edits. Returns
+    `(reception, recepcion_event, completion_event)`; all `None`/empty when
+    neither field is being corrected or no such rows exist."""
+    if new_mileage is None and new_service_type is None:
+        return None, None, None
+
+    reception = (
+        await db.execute(select(ServiceOrderReception).where(ServiceOrderReception.order_id == order.id))
+    ).scalars().first()
+    lifecycle_events = (
+        await db.execute(select(VehicleLifecycleEvent).where(VehicleLifecycleEvent.linked_order_id == order.id))
+    ).scalars().all()
+
+    recepcion_event = next((e for e in lifecycle_events if e.event_type == LifecycleEventType.RECEPCION), None)
+    completion_event = next(
+        (e for e in lifecycle_events if e.event_type in (LifecycleEventType.GARANTIA, LifecycleEventType.MANTENIMIENTO)),
+        None,
+    )
+    return reception, recepcion_event, completion_event
+
+
+def _diff_date_fields(order: ServiceOrder, provided: dict) -> dict:
+    """Diffs `_ORDER_DATE_FIELDS` (only the keys actually present in
+    `provided`, per the `exclude_unset` field-presence contract) against
+    `order`, applying and returning changes for the ones that differ."""
+    changes: dict = {}
+    for field_name in _ORDER_DATE_FIELDS:
+        if field_name not in provided:
+            continue
+        new_value = provided[field_name]
+        old_value = getattr(order, field_name)
+        if str(old_value) != str(new_value):
+            changes[field_name] = {"old": old_value, "new": new_value}
+            setattr(order, field_name, new_value)
+    return changes
 
 
 @router.put("/orders/{order_id}")
@@ -205,13 +387,21 @@ async def update_order(
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
-    """Corrección de fechas de orden (`created_at`/`delivered_at`): diff
-    por campo contra la base, una fila de auditoría por campo cambiado,
-    sin fila de auditoría si la petición es un no-op, y bloqueo
-    incondicional (422) si la fecha de entrega resultante quedara antes
-    que la fecha de creación resultante — sin excepciones.
-    `mileage_km`/`service_type` y el sync de ciclo de vida se implementan
-    en Fases 4-5."""
+    """Corrección de orden: fechas (`created_at`/`delivered_at`), kilometraje
+    (`mileage_km`, vive en `ServiceOrderReception`) y `service_type` — diff
+    por campo contra la base, una fila de auditoría por campo cambiado, sin
+    fila de auditoría si la petición es un no-op, y bloqueo incondicional
+    (422) si la fecha de entrega resultante quedara antes que la fecha de
+    creación resultante — sin excepciones.
+    Una corrección de `mileage_km` resincroniza, en la misma transacción,
+    el evento RECEPCION (siempre existe) y el evento de finalización
+    MANTENIMIENTO (si ya existe). Una corrección de `service_type` que
+    alterna entre `warranty` y `km_review` convierte el evento de
+    finalización existente in place (GARANTIA<->MANTENIMIENTO) sin pedir
+    confirmación. El caso de corregir `service_type` ALEJÁNDOSE de un tipo
+    que genera evento (warranty/km_review) hacia uno que no (regular/quick/
+    pdi) mientras un evento de finalización ya existe requiere el flujo de
+    confirmar-y-eliminar de la Fase 5 y NO se maneja en esta ruta todavía."""
     _require_superadmin(current_user)
     order = await db.get(ServiceOrder, order_id)
     if not order:
@@ -223,33 +413,35 @@ async def update_order(
     # value for that field. `created_at` is required (no default) so it is
     # always present here; `delivered_at` may legitimately be absent.
     provided = payload.model_dump(exclude_unset=True)
+    _ensure_delivered_after_created(provided, order)
 
-    effective_created_at = provided.get("created_at", order.created_at)
-    effective_delivered_at = (
-        provided["delivered_at"] if "delivered_at" in provided else order.delivered_at
+    # `mileage_km`/`service_type` are NOT NULL at the DB level (unlike
+    # `delivered_at`) -- there is no legitimate "clear it" use case, so an
+    # explicit `null` is treated the same as "field omitted": only a real
+    # value triggers a correction and the reception/lifecycle-events lookup.
+    new_mileage = provided.get("mileage_km")
+    new_service_type = provided.get("service_type")
+    reception, recepcion_event, completion_event = await _load_lifecycle_correction_context(
+        db, order, new_mileage, new_service_type
     )
-    if effective_delivered_at is not None and effective_delivered_at < effective_created_at:
-        raise HTTPException(
-            status_code=422,
-            detail="La fecha de entrega no puede ser anterior a la fecha de creación",
-        )
 
-    changes: dict = {}
-    for field_name in _ORDER_DATE_FIELDS:
-        if field_name not in provided:
-            continue
-        new_value = provided[field_name]
-        old_value = getattr(order, field_name)
-        if str(old_value) != str(new_value):
-            changes[field_name] = {"old": old_value, "new": new_value}
-            setattr(order, field_name, new_value)
+    changes = _diff_date_fields(order, provided)
 
-    for field_name, change in changes.items():
-        _log_audit(
-            db, current_user, "SUPERADMIN_DATA_FIX", "ServiceOrder", str(order.id),
-            {field_name: change},
-        )
+    # Mileage MUST be applied before service_type: the warranty->km_review
+    # conversion below reads `reception.mileage_km` as the effective value
+    # for the (new) MANTENIMIENTO event's `km_at_event`.
+    if reception is not None and new_mileage is not None:
+        mileage_change = _apply_mileage_correction(reception, new_mileage, recepcion_event, completion_event)
+        if mileage_change is not None:
+            changes["mileage_km"] = mileage_change
+
+    if new_service_type is not None:
+        service_type_change = _apply_service_type_correction(order, new_service_type, reception, completion_event)
+        if service_type_change is not None:
+            changes["service_type"] = service_type_change
+
+    _log_field_changes(db, current_user, "ServiceOrder", str(order.id), changes)
 
     await db.commit()
     await db.refresh(order)
-    return _serialize_order(order)
+    return _serialize_order(order, reception)
