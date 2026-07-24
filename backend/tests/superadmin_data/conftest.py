@@ -217,6 +217,7 @@ class FakeOrderSession:
         self._reception = reception
         self._lifecycle_events = lifecycle_events or []
         self.added: list = []
+        self.deleted: list = []
         self.committed = False
         self.rolled_back = False
         self.refreshed: list = []
@@ -239,6 +240,9 @@ class FakeOrderSession:
 
     def add(self, obj):
         self.added.append(obj)
+
+    async def delete(self, obj):
+        self.deleted.append(obj)
 
     async def commit(self):
         if self._raise_integrity_error:

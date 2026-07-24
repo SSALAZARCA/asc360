@@ -17,15 +17,24 @@ whitelist-diff-audit pattern as Vehicle, plus an unconditional 422 block
 when the resulting `delivered_at` would precede the resulting `created_at`
 — no exceptions, per the spec's "Delivered-Before-Created Is Blocked
 Unconditionally" requirement.
-Phase 4 (this batch): Order quick-fix — `mileage_km` (lives on
+Phase 4: Order quick-fix — `mileage_km` (lives on
 `ServiceOrderReception`) and `service_type`, kept in sync with the
 vehicle's lifecycle events: the `RECEPCION` event (always exists) resyncs
 `km_at_event`/`summary` on any mileage correction; a linked completion
 event (`GARANTIA`/`MANTENIMIENTO`, if one already exists) resyncs its `km`
 on a mileage correction, or converts in place on a warranty<->km_review
-`service_type` correction. The away-from-event-producing-type case (which
-needs the confirm-then-delete flow) is Phase 5 and is intentionally left
-untouched here.
+`service_type` correction.
+Phase 5 (this batch): the one remaining `service_type` transition —
+correcting AWAY from an event-producing type (warranty/km_review) to a
+non-event type (regular/quick/pdi) while a completion event already
+exists. That transition does not update/convert history, it DELETES it,
+so it goes through an explicit confirm-then-delete flow: a first request
+without `confirm_delete_event` returns 409 `CONFIRM_DELETE_EVENT` (zero
+writes, dry-run), and a second request with `confirm_delete_event: true`
+deletes the stale event and applies the field changes in the same
+transaction, recording a `lifecycle_event_deleted` audit marker. Mirrors
+the `{"detail": ..., "code": ...}` 409 envelope already established in
+`imports.py`'s already-confirmed-lot guard family.
 """
 import re
 from decimal import Decimal
@@ -181,10 +190,9 @@ def _serialize_order(order: ServiceOrder, reception: Optional[ServiceOrderRecept
 
 
 # Service types whose completion creates a GARANTIA/MANTENIMIENTO lifecycle
-# event (mirrors `orders.py` ~L616-639). Used to detect the warranty<->
-# km_review auto-remap case (Phase 4 scope) -- correcting AWAY from an
-# event-producing type while a completion event still exists is Phase 5's
-# confirm-then-delete flow and is NOT handled by this route yet.
+# event (mirrors `orders.py` ~L616-639). Used both to detect the warranty<->
+# km_review auto-remap (Phase 4) and, in this Phase 5 batch, to detect the
+# away-from-event-producing-type transition that requires confirm-then-delete.
 _EVENT_PRODUCING_SERVICE_TYPES = {
     ServiceType.warranty: LifecycleEventType.GARANTIA,
     ServiceType.km_review: LifecycleEventType.MANTENIMIENTO,
@@ -245,6 +253,77 @@ def _apply_mileage_correction(
     return change
 
 
+def _needs_delete_confirmation(
+    old_service_type: ServiceType,
+    new_service_type: Optional[ServiceType],
+    completion_event: Optional[VehicleLifecycleEvent],
+) -> bool:
+    """`True` only for the one `service_type` transition that DELETES
+    history instead of updating/converting it in place: correcting AWAY
+    from an event-producing type (warranty/km_review) to a non-event type
+    (regular/quick/pdi) while a completion event (GARANTIA/MANTENIMIENTO)
+    still exists for this order. `False` for: no `service_type` change
+    requested, no completion event to begin with (nothing to delete), or
+    the warranty<->km_review auto-remap (a valid target event type exists,
+    so it converts in place -- see `_apply_service_type_correction`)."""
+    if new_service_type is None or completion_event is None:
+        return False
+    return (
+        old_service_type in _EVENT_PRODUCING_SERVICE_TYPES
+        and new_service_type not in _EVENT_PRODUCING_SERVICE_TYPES
+    )
+
+
+def _confirm_delete_event_message(event: VehicleLifecycleEvent, plate: Optional[str]) -> str:
+    """Describes exactly what the confirm-then-delete flow would delete --
+    event type, id, and the vehicle it belongs to -- per the spec's
+    "naming the event's id/type and the vehicle it belongs to" requirement.
+    Mirrors the wording style of `imports.py`'s `_confirmed_lot_message`."""
+    vehicle_ref = plate or "sin placa registrada"
+    return (
+        f"Esta corrección eliminará el evento {event.event_type.value} "
+        f"(id {event.id}) del historial del vehículo {vehicle_ref}. "
+        "Envíe confirm_delete_event=true para continuar."
+    )
+
+
+async def _handle_delete_confirmation(
+    db: AsyncSession,
+    order: ServiceOrder,
+    new_service_type: Optional[ServiceType],
+    completion_event: Optional[VehicleLifecycleEvent],
+    confirm_delete_event: bool,
+) -> Optional[dict]:
+    """Gate + side effect for the one `service_type` transition that DELETES
+    history instead of updating it in place. READ-ONLY (raises, no writes)
+    when confirmation is needed but `confirm_delete_event` wasn't sent --
+    the whole request is rejected wholesale, before any other field is
+    touched. When confirmed, snapshots and deletes the stale completion
+    event (in the SAME transaction the caller commits later) and returns
+    that snapshot for the audit row. Returns `None` whenever no deletion is
+    needed or performed (including the "event already gone" race case,
+    since a fresh `completion_event=None` here means nothing to delete)."""
+    if not _needs_delete_confirmation(order.service_type, new_service_type, completion_event):
+        return None
+    if not confirm_delete_event:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "detail": _confirm_delete_event_message(completion_event, order.plate),
+                "code": "CONFIRM_DELETE_EVENT",
+            },
+        )
+    # Snapshot the full event BEFORE deleting it -- the only durable
+    # recovery trail for an irreversible history removal.
+    snapshot = {
+        "id": str(completion_event.id),
+        "event_type": completion_event.event_type.value,
+        "summary": completion_event.summary,
+    }
+    await db.delete(completion_event)
+    return snapshot
+
+
 def _apply_service_type_correction(
     order: ServiceOrder,
     new_service_type: ServiceType,
@@ -254,10 +333,11 @@ def _apply_service_type_correction(
     """Applies a `service_type` correction to `order`. ONLY the warranty<->
     km_review auto-remap converts the linked completion event in place (a
     valid target event type always exists, so no confirmation is needed).
-    Any other transition -- including away from an event-producing type
-    while a completion event still exists -- is Phase 5's confirm-then-
-    delete flow and is deliberately left untouched here; likewise, no
-    completion event at all means there is nothing to sync. Returns the
+    Any other transition needs no in-place conversion here: the away-from-
+    event-producing-type case has ALREADY had its completion event deleted
+    (and `completion_event` reset to `None`) by the caller before this runs
+    -- see `update_order`'s confirm-then-delete branch -- and the case with
+    no completion event at all simply has nothing to sync. Returns the
     audit change dict for `service_type`, or `None` if the new value equals
     the current one (no-op, no audit row).
 
@@ -400,8 +480,11 @@ async def update_order(
     finalización existente in place (GARANTIA<->MANTENIMIENTO) sin pedir
     confirmación. El caso de corregir `service_type` ALEJÁNDOSE de un tipo
     que genera evento (warranty/km_review) hacia uno que no (regular/quick/
-    pdi) mientras un evento de finalización ya existe requiere el flujo de
-    confirmar-y-eliminar de la Fase 5 y NO se maneja en esta ruta todavía."""
+    pdi) mientras un evento de finalización ya existe requiere confirmación
+    explícita: sin `confirm_delete_event`, responde 409 `CONFIRM_DELETE_EVENT`
+    sin aplicar ningún cambio; con `confirm_delete_event=true`, elimina el
+    evento obsoleto y aplica los cambios en la misma transacción, dejando
+    una marca `lifecycle_event_deleted` en la auditoría."""
     _require_superadmin(current_user)
     order = await db.get(ServiceOrder, order_id)
     if not order:
@@ -425,6 +508,16 @@ async def update_order(
         db, order, new_mileage, new_service_type
     )
 
+    # Detection+delete is READ-ONLY until confirmed, and MUST run before any
+    # setattr below -- a request that needs confirmation is rejected
+    # wholesale (zero writes, not even to unrelated date fields in the same
+    # request), per the spec's dry-run requirement.
+    deleted_event_snapshot = await _handle_delete_confirmation(
+        db, order, new_service_type, completion_event, payload.confirm_delete_event
+    )
+    if deleted_event_snapshot is not None:
+        completion_event = None
+
     changes = _diff_date_fields(order, provided)
 
     # Mileage MUST be applied before service_type: the warranty->km_review
@@ -438,10 +531,24 @@ async def update_order(
     if new_service_type is not None:
         service_type_change = _apply_service_type_correction(order, new_service_type, reception, completion_event)
         if service_type_change is not None:
+            if deleted_event_snapshot is not None:
+                service_type_change["lifecycle_event_deleted"] = deleted_event_snapshot
             changes["service_type"] = service_type_change
 
     _log_field_changes(db, current_user, "ServiceOrder", str(order.id), changes)
 
-    await db.commit()
+    # Single commit boundary for the WHOLE correction (dates + mileage +
+    # service_type + any lifecycle-event sync/deletion) -- a failure here
+    # rolls back everything atomically, mirroring `update_vehicle`'s
+    # IntegrityError->409 handling instead of leaking a raw 500.
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="No fue posible guardar la corrección por un conflicto de datos",
+        )
+
     await db.refresh(order)
     return _serialize_order(order, reception)
