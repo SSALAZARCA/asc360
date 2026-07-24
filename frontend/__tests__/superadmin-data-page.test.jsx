@@ -168,10 +168,12 @@ describe('SuperadminDataPage — Orden tab', () => {
     fireEvent.change(screen.getByLabelText('Valor de búsqueda de orden'), { target: { value: 'ABC123' } });
     fireEvent.click(screen.getByRole('button', { name: 'Buscar' }));
 
+    // ORDER's dates are UTC ("...T00:00:00"); the form must show Bogotá
+    // wall-clock time (UTC-5), so they land on the PREVIOUS calendar day.
     await waitFor(() => {
-      expect(screen.getByLabelText('Fecha de creación')).toHaveValue('2026-07-01T00:00');
+      expect(screen.getByLabelText('Fecha de creación')).toHaveValue('2026-06-30T19:00');
     });
-    expect(screen.getByLabelText('Fecha de entrega')).toHaveValue('2026-07-03T00:00');
+    expect(screen.getByLabelText('Fecha de entrega')).toHaveValue('2026-07-02T19:00');
     expect(screen.getByLabelText('Kilometraje de orden')).toHaveValue(15000);
     expect(screen.getByLabelText('Tipo de servicio')).toHaveValue('km_review');
   });
@@ -197,7 +199,7 @@ describe('SuperadminDataPage — Orden tab', () => {
     fireEvent.click(screen.getByRole('button', { name: /o-old/ }));
 
     await waitFor(() => {
-      expect(screen.getByLabelText('Fecha de creación')).toHaveValue('2026-01-01T00:00');
+      expect(screen.getByLabelText('Fecha de creación')).toHaveValue('2025-12-31T19:00');
     });
     expect(screen.getByLabelText('Kilometraje de orden')).toHaveValue(9000);
     expect(mockAuthFetch.mock.calls[1][0]).toContain('order_id=o-old');
@@ -227,7 +229,7 @@ describe('SuperadminDataPage — Orden tab', () => {
     await goToOrderTab();
     fireEvent.change(screen.getByLabelText('Valor de búsqueda de orden'), { target: { value: 'ABC123' } });
     fireEvent.click(screen.getByRole('button', { name: 'Buscar' }));
-    await waitFor(() => expect(screen.getByLabelText('Fecha de creación')).toHaveValue('2026-07-01T00:00'));
+    await waitFor(() => expect(screen.getByLabelText('Fecha de creación')).toHaveValue('2026-06-30T19:00'));
 
     fireEvent.change(screen.getByLabelText('Fecha de entrega'), { target: { value: '2026-06-01T00:00' } });
     fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));

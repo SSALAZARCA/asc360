@@ -6,6 +6,7 @@ import { authFetch } from '../../lib/authFetch';
 import { toast } from '../../lib/toast';
 import ConfirmModal from '../../components/ConfirmModal';
 import { Search, Save, Wand2, ArrowRight } from 'lucide-react';
+import { utcIsoToBogotaInputValue, bogotaInputValueToUtcIso } from './bogotaTime';
 
 // ---------------------------------------------------------------------------
 // Whitelisted field sets — MUST mirror the backend's Pydantic schemas
@@ -62,8 +63,8 @@ function populateOrderForm(data) {
     id: data.id,
     plate: data.plate || '',
     status: data.status || '',
-    created_at: data.created_at ? data.created_at.slice(0, 16) : '',
-    delivered_at: data.delivered_at ? data.delivered_at.slice(0, 16) : '',
+    created_at: utcIsoToBogotaInputValue(data.created_at),
+    delivered_at: utcIsoToBogotaInputValue(data.delivered_at),
     mileage_km: data.mileage_km ?? '',
     service_type: data.service_type || '',
   };
@@ -83,8 +84,8 @@ function buildVehiclePayload(form) {
 
 function buildOrderPayload(form, confirmDeleteEvent) {
   return {
-    created_at: form.created_at,
-    delivered_at: form.delivered_at || null,
+    created_at: bogotaInputValueToUtcIso(form.created_at),
+    delivered_at: bogotaInputValueToUtcIso(form.delivered_at),
     mileage_km: form.mileage_km !== '' ? Number(form.mileage_km) : null,
     service_type: form.service_type || null,
     confirm_delete_event: confirmDeleteEvent,
@@ -377,10 +378,10 @@ function OrderMatchRow({ match, onSelect }) {
       </span>
 
       <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem', color: 'rgba(255,255,255,0.75)', flex: 1 }}>
-        <span>{match.created_at ? match.created_at.slice(0, 10) : '-'}</span>
+        <span>{match.created_at ? utcIsoToBogotaInputValue(match.created_at).slice(0, 10) : '-'}</span>
         <ArrowRight size={12} style={{ color: 'rgba(255,255,255,0.3)', flexShrink: 0 }} />
         <span style={{ color: match.delivered_at ? 'rgba(255,255,255,0.75)' : 'rgba(255,255,255,0.35)' }}>
-          {match.delivered_at ? match.delivered_at.slice(0, 10) : 'Sin entregar'}
+          {match.delivered_at ? utcIsoToBogotaInputValue(match.delivered_at).slice(0, 10) : 'Sin entregar'}
         </span>
       </span>
 
