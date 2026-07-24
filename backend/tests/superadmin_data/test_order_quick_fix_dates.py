@@ -50,6 +50,33 @@ def test_search_order_by_order_id_found_returns_200():
     assert body["created_at"].startswith("2026-07-01")
 
 
+def test_search_order_by_short_id_prefix_found_returns_200():
+    """The app only ever shows the first 8 chars of an order's id to the
+    user (PDF filenames, lifecycle summaries, the N.° Orden columns/cards
+    added 2026-07-24) — searching with that same short prefix must resolve
+    an order, not require pasting the full UUID nobody can see."""
+    vehicle = make_vehicle(plate="ABC123")
+    order = make_order(vehicle=vehicle, created_at=datetime(2026, 7, 1))
+    fake_db = FakeOrderSession(search_result=[order])
+    short_id = str(order.id)[:8]
+
+    with make_test_client(make_superadmin(), fake_db) as client:
+        res = client.get("/api/v1/superadmin/data/orders", params={"order_id": short_id})
+
+    assert res.status_code == 200
+    body = res.json()
+    assert body["id"] == str(order.id)
+
+
+def test_search_order_by_short_id_too_short_returns_422():
+    fake_db = FakeOrderSession(search_result=[])
+
+    with make_test_client(make_superadmin(), fake_db) as client:
+        res = client.get("/api/v1/superadmin/data/orders", params={"order_id": "abc"})
+
+    assert res.status_code == 422
+
+
 def test_search_order_by_plate_found_returns_200():
     vehicle = make_vehicle(plate="ABC123")
     order = make_order(vehicle=vehicle, created_at=datetime(2026, 7, 1))

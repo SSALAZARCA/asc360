@@ -45,6 +45,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import cast, String
 from sqlalchemy.future import select
 from pydantic import BaseModel, Field
 
@@ -371,17 +372,40 @@ def _apply_service_type_correction(
 @router.get("/orders")
 async def search_orders(
     plate: Optional[str] = None,
-    order_id: Optional[uuid.UUID] = None,
+    order_id: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
     """Búsqueda de orden por id (prioridad) o por placa (más reciente,
     global — sin filtro de tenant ni de estado, ya que un superadmin debe
-    poder corregir órdenes históricas en cualquier estado)."""
+    poder corregir órdenes históricas en cualquier estado).
+
+    `order_id` acepta tanto un UUID completo como el prefijo corto de 8
+    caracteres que se muestra en toda la app (columnas "N.° Orden",
+    tarjetas del Kanban, modal de expediente) — la app nunca le muestra al
+    usuario el UUID completo, así que exigirlo entero para buscar haría
+    inservible ese identificador."""
     _require_superadmin(current_user)
     order = None
     if order_id:
-        order = await db.get(ServiceOrder, order_id)
+        order_id_clean = order_id.strip()
+        if len(order_id_clean) < 6:
+            raise HTTPException(
+                status_code=422,
+                detail="El número de orden debe tener al menos 6 caracteres",
+            )
+        try:
+            order = await db.get(ServiceOrder, uuid.UUID(order_id_clean))
+        except ValueError:
+            order = None
+        if not order:
+            stmt = (
+                select(ServiceOrder)
+                .where(cast(ServiceOrder.id, String).ilike(f"{order_id_clean}%"))
+                .order_by(ServiceOrder.created_at.desc())
+                .limit(1)
+            )
+            order = (await db.execute(stmt)).scalars().first()
     elif plate:
         clean_plate = "".join(str(plate).split()).upper()
         stmt = (
