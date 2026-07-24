@@ -13,6 +13,7 @@ from app.api.v1 import color_runt_mappings as color_runt_mappings_module
 from app.api.v1 import ai_miniapp as ai_miniapp_module
 from app.api.v1 import remisiones as remisiones_module
 from app.api.v1 import reports as reports_module
+from app.api.v1 import superadmin_data as superadmin_data_module
 
 api_router = APIRouter()
 
@@ -32,3 +33,4 @@ api_router.include_router(color_runt_mappings_module.router)
 api_router.include_router(ai_miniapp_module.router)
 api_router.include_router(remisiones_module.router)
 api_router.include_router(reports_module.router)
+api_router.include_router(superadmin_data_module.router)
