@@ -3411,7 +3411,17 @@ async def execute_adjustments(
 
 
 class _ExportRequest(BaseModel):
-    marked: dict[str, str] = {}  # { "fpn::lot_id": "cancelar" | "cambiar" }
+    marked: dict[str, str] = {}  # { "fpn::lot_id": "cancelar" | "cambiar" | "revisado" }
+
+
+_DECISION_EXPORT_LABELS = {"cancelar": "CANCELAR", "cambiar": "CAMBIAR", "revisado": "APROBADO"}
+
+
+def _decision_export_label(decision: str) -> str:
+    """Etiqueta de la columna Decisión en el Excel de Ajuste de Pedidos.
+    Las referencias sin decisión tomada quedan en blanco (no un guion),
+    para distinguirlas visualmente de las que sí tienen una decisión."""
+    return _DECISION_EXPORT_LABELS.get(decision, "")
 
 
 @router.post("/admin/analysis/low-rotation-ordered/export")
@@ -3452,8 +3462,6 @@ async def export_low_rotation_ordered(
     fill_cambiar  = PatternFill("solid", fgColor="3b2e0a")
     fill_alt      = PatternFill("solid", fgColor="12121e")
 
-    DECISION_LABEL = {"cancelar": "CANCELAR", "cambiar": "CAMBIAR", "": "—"}
-
     headers = ["Rotación", "Código", "Descripción", "Modelos", "PI Number", "Cantidad", "Total ref.", "Sugerido", "Decisión", "Nueva Cant.", "Observación"]
     col_widths = [10, 20, 35, 25, 18, 10, 10, 12, 12, 12, 40]
 
@@ -3472,7 +3480,7 @@ async def export_low_rotation_ordered(
         for lot in item.lots:
             key = f"{item.factory_part_number}::{lot.lot_identifier}"
             decision = body.marked.get(key, "")
-            decision_label = DECISION_LABEL.get(decision, "—")
+            decision_label = _decision_export_label(decision)
             db_dec = db_decisions.get(key)
 
             if decision == "cancelar":
