@@ -15,6 +15,7 @@ import {
   BookOpen,
   ChevronLeft,
   ChevronRight,
+  Wand2,
 } from 'lucide-react';
 
 const ALL_ITEMS = [
@@ -25,6 +26,7 @@ const ALL_ITEMS = [
   { id: 'tenants', name: 'Red de Talleres', icon: Building2, path: '/tenants', adminOnly: true, allowAdministrativo: true },
   { id: 'users', name: 'Personal & Acceso', icon: Users, path: '/users', adminOnly: true },
   { id: 'parts-catalog', name: 'Maestro de Partes', icon: BookOpen, path: '/parts-catalog', adminOnly: true },
+  { id: 'superadmin-data', name: 'Datos Rápidos', icon: Wand2, path: '/superadmin-data', adminOnly: true },
   { id: 'settings', name: 'Configuración', icon: Settings, path: '/settings', adminOnly: true },
 ];
 
