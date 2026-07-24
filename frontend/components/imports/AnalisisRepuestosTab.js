@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { authFetch } from '../../lib/authFetch';
 import { toast } from '../../lib/toast';
 import { ArrowUp, ArrowDown, ChevronsUpDown, RefreshCw, Download, Link2 } from 'lucide-react';
+import { getUniquePedidos, filterItemsByPedido } from './pedidoFilter';
 
 const ROT = {
   baja:  { bg: 'rgba(74,222,128,0.12)',  color: '#4ade80',  border: 'rgba(74,222,128,0.3)',  label: 'BAJA'  },
@@ -304,6 +305,7 @@ export default function AnalisisRepuestosTab({ userRole }) {
   const [loading,   setLoading]   = useState(true);
   const [exporting, setExporting] = useState(false);
   const [rotFilter, setRotFilter] = useState('all');
+  const [pedidoFilter, setPedidoFilter] = useState('');
   const [sortCol,   setSortCol]   = useState('rotation');
   const [sortDir,   setSortDir]   = useState('asc');
 
@@ -485,8 +487,14 @@ export default function AnalisisRepuestosTab({ userRole }) {
     }
   };
 
+  // Vista filtrada por pedido/PI (Fase "filtro de pedido", 2026-07-24). Con
+  // pedidoFilter vacío, filterItemsByPedido devuelve la MISMA referencia que
+  // data.items — cero cambio de comportamiento cuando el filtro está apagado.
+  const pedidoOptions   = getUniquePedidos(data?.items);
+  const effectiveItems  = filterItemsByPedido(data?.items, pedidoFilter);
+
   const searchNorm = search.trim().toUpperCase();
-  const items = (data?.items || []).filter(i =>
+  const items = effectiveItems.filter(i =>
     (rotFilter === 'all' || i.rotation_class === rotFilter) &&
     (!searchNorm || i.factory_part_number.toUpperCase().includes(searchNorm))
   );
@@ -500,16 +508,27 @@ export default function AnalisisRepuestosTab({ userRole }) {
     return sortDir === 'asc' ? av - bv : bv - av;
   });
 
-  const pendingCount = (data?.items || []).filter(item =>
+  const pendingCount = effectiveItems.filter(item =>
     item.lots.some(lot => !marked[markKey(item.factory_part_number, lot.lot_identifier)])
   ).length;
 
-  const markedCancelar = Object.entries(marked)
+  // El filtro de pedido SOLO acota qué se ve en pantalla — nunca toca qué
+  // hay marcado. "Ejecutar ajustes" sigue procesando TODAS las decisiones
+  // guardadas en el servidor, sin importar el filtro. Acá solo se recorta
+  // qué entra en los totales de las tarjetas (Total ajuste) cuando hay un
+  // pedido puntual seleccionado.
+  const markedCancelarAll = Object.entries(marked)
     .filter(([, v]) => v === 'cancelar')
     .map(([k]) => { const [fpn, pi] = k.split('::'); return { fpn, pi }; });
-  const markedCambiar  = Object.entries(marked)
+  const markedCambiarAll  = Object.entries(marked)
     .filter(([, v]) => v === 'cambiar')
     .map(([k]) => { const [fpn, pi] = k.split('::'); return { fpn, pi, det: details[k] }; });
+  const markedCancelar = pedidoFilter
+    ? markedCancelarAll.filter(({ pi }) => pi === pedidoFilter)
+    : markedCancelarAll;
+  const markedCambiar = pedidoFilter
+    ? markedCambiarAll.filter(({ pi }) => pi === pedidoFilter)
+    : markedCambiarAll;
   const hasMarked = markedCancelar.length > 0 || markedCambiar.length > 0;
 
   const cancelFobTotal = markedCancelar.reduce((total, { fpn, pi }) => {
@@ -742,10 +761,10 @@ export default function AnalisisRepuestosTab({ userRole }) {
         <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
           {[
             { label: 'Para revisar',    value: pendingCount,          color: pendingCount === 0 ? '#4ade80' : '#fff' },
-            { label: 'Unidades totales', value: data.total_qty,        color: '#38bdf8' },
-            { label: 'Baja rotación',   value: data.baja_count,        color: '#4ade80' },
-            { label: 'Media rotación',  value: data.media_count,       color: '#fbbf24' },
-            { label: 'Alta rotación',   value: data.alta_count ?? 0,   color: '#f87171' },
+            { label: 'Unidades totales', value: pedidoFilter ? effectiveItems.reduce((s, i) => s + i.total_qty, 0) : data.total_qty, color: '#38bdf8' },
+            { label: 'Baja rotación',   value: pedidoFilter ? effectiveItems.filter(i => i.rotation_class === 'baja').length  : data.baja_count,      color: '#4ade80' },
+            { label: 'Media rotación',  value: pedidoFilter ? effectiveItems.filter(i => i.rotation_class === 'media').length : data.media_count,     color: '#fbbf24' },
+            { label: 'Alta rotación',   value: pedidoFilter ? effectiveItems.filter(i => i.rotation_class === 'alta').length  : (data.alta_count ?? 0), color: '#f87171' },
           ].map(({ label, value, color }) => (
             <div key={label} style={{
               background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)',
@@ -831,6 +850,23 @@ export default function AnalisisRepuestosTab({ userRole }) {
             color: '#fff', outline: 'none', width: '180px',
           }}
         />
+
+        <select
+          aria-label="Filtrar por pedido"
+          value={pedidoFilter}
+          onChange={e => setPedidoFilter(e.target.value)}
+          style={{
+            padding: '0.4rem 0.75rem', borderRadius: '8px', fontSize: '0.7rem',
+            background: pedidoFilter ? 'rgba(56,189,248,0.12)' : 'rgba(255,255,255,0.05)',
+            border: `1px solid ${pedidoFilter ? 'rgba(56,189,248,0.4)' : 'rgba(255,255,255,0.1)'}`,
+            color: pedidoFilter ? '#38bdf8' : '#fff', outline: 'none',
+          }}
+        >
+          <option value="">Todos los pedidos</option>
+          {pedidoOptions.map(pi => (
+            <option key={pi} value={pi}>{pi}</option>
+          ))}
+        </select>
 
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.62rem', color: 'rgba(255,255,255,0.3)' }}>
           <span>Click en un PI:</span>
