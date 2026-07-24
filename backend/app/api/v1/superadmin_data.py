@@ -9,11 +9,17 @@ whitelist (no dict is ever passed to a generic update helper), and a
 per-route `current_user.is_superadmin` guard.
 
 Phase 1: router registration + both request schemas + guarded route stubs.
-Phase 2 (this batch): Vehicle quick-fix GET/PUT — whitelist diff per field,
-one audit row per changed field, 409 on duplicate-plate conflict, no audit
-row on a no-op submission. Order quick-fix (Phase 3: dates, Phase 4:
-mileage/service_type + lifecycle sync, Phase 5: confirm-then-delete) still
-returns 501 and lands in later apply batches.
+Phase 2: Vehicle quick-fix GET/PUT — whitelist diff per field, one audit
+row per changed field, 409 on duplicate-plate conflict, no audit row on a
+no-op submission.
+Phase 3 (this batch): Order quick-fix — dates only (`created_at`,
+`delivered_at`). Same whitelist-diff-audit pattern as Vehicle, plus an
+unconditional 422 block when the resulting `delivered_at` would precede
+the resulting `created_at` — no exceptions, per the spec's
+"Delivered-Before-Created Is Blocked Unconditionally" requirement.
+`mileage_km`/`service_type` and the confirm-then-delete lifecycle sync
+(Phase 4/Phase 5) are still no-ops on this route and land in later apply
+batches.
 """
 from decimal import Decimal
 from datetime import datetime
@@ -28,7 +34,7 @@ from pydantic import BaseModel, Field
 
 from app.database import get_db
 from app.api.deps import get_current_user, CurrentUser
-from app.models.order import ServiceType
+from app.models.order import ServiceOrder, ServiceType
 from app.models.vehicle import Vehicle
 from app.services.imports_service import _log_audit
 
@@ -140,6 +146,17 @@ async def update_vehicle(
     return _serialize_vehicle(vehicle)
 
 
+def _serialize_order(order: ServiceOrder) -> dict:
+    return {
+        "id": str(order.id),
+        "plate": order.plate,
+        "status": order.status.value if order.status else None,
+        "service_type": order.service_type.value if order.service_type else None,
+        "created_at": order.created_at.isoformat() if order.created_at else None,
+        "delivered_at": order.delivered_at.isoformat() if order.delivered_at else None,
+    }
+
+
 @router.get("/orders")
 async def search_orders(
     plate: Optional[str] = None,
@@ -147,9 +164,33 @@ async def search_orders(
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
-    """Búsqueda de orden por placa/id. Implementación real: Fase 3."""
+    """Búsqueda de orden por id (prioridad) o por placa (más reciente,
+    global — sin filtro de tenant ni de estado, ya que un superadmin debe
+    poder corregir órdenes históricas en cualquier estado)."""
     _require_superadmin(current_user)
-    raise HTTPException(status_code=501, detail="Not implemented yet")
+    order = None
+    if order_id:
+        order = await db.get(ServiceOrder, order_id)
+    elif plate:
+        clean_plate = "".join(str(plate).split()).upper()
+        stmt = (
+            select(ServiceOrder)
+            .join(Vehicle, ServiceOrder.vehicle_id == Vehicle.id)
+            .where(Vehicle.plate == clean_plate)
+            .order_by(ServiceOrder.created_at.desc())
+            .limit(1)
+        )
+        order = (await db.execute(stmt)).scalars().first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Orden no encontrada")
+    return _serialize_order(order)
+
+
+# Fields corrected by this route today (Phase 3). `mileage_km`/`service_type`
+# are already part of `OrderQuickFixUpdate` (Phase 1) but are intentionally
+# NOT diffed/applied here — they map to `ServiceOrderReception`/lifecycle
+# events and land in Phase 4/Phase 5.
+_ORDER_DATE_FIELDS = ("created_at", "delivered_at")
 
 
 @router.put("/orders/{order_id}")
@@ -159,8 +200,38 @@ async def update_order(
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
-    """Corrección de fechas/kilometraje/tipo de servicio de orden.
-    Implementación real: Fases 3-5 (fechas, sync de ciclo de vida,
-    confirm-then-delete)."""
+    """Corrección de fechas de orden (`created_at`/`delivered_at`): diff
+    por campo contra la base, una fila de auditoría por campo cambiado,
+    sin fila de auditoría si la petición es un no-op, y bloqueo
+    incondicional (422) si la fecha de entrega resultante quedara antes
+    que la fecha de creación resultante — sin excepciones.
+    `mileage_km`/`service_type` y el sync de ciclo de vida se implementan
+    en Fases 4-5."""
     _require_superadmin(current_user)
-    raise HTTPException(status_code=501, detail="Not implemented yet")
+    order = await db.get(ServiceOrder, order_id)
+    if not order:
+        raise HTTPException(status_code=404, detail="Orden no encontrada")
+
+    if payload.delivered_at is not None and payload.delivered_at < payload.created_at:
+        raise HTTPException(
+            status_code=422,
+            detail="La fecha de entrega no puede ser anterior a la fecha de creación",
+        )
+
+    changes: dict = {}
+    for field_name in _ORDER_DATE_FIELDS:
+        new_value = getattr(payload, field_name)
+        old_value = getattr(order, field_name)
+        if str(old_value) != str(new_value):
+            changes[field_name] = {"old": old_value, "new": new_value}
+            setattr(order, field_name, new_value)
+
+    for field_name, change in changes.items():
+        _log_audit(
+            db, current_user, "SUPERADMIN_DATA_FIX", "ServiceOrder", str(order.id),
+            {field_name: change},
+        )
+
+    await db.commit()
+    await db.refresh(order)
+    return _serialize_order(order)

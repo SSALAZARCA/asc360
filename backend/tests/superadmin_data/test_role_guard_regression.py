@@ -106,14 +106,17 @@ def test_put_order_rejects_non_superadmin_with_no_db_touch():
         assert res.status_code == 403
 
 
-def test_superadmin_passes_guard_and_reaches_not_implemented_stub():
+def test_superadmin_passes_guard_and_reaches_real_search_logic():
     """Vehicle routes got their real implementation in Phase 2 (see
-    `test_vehicle_quick_fix.py`); Order routes are still guarded stubs
-    until Phase 3/4/5. A superadmin caller should clear the guard and hit
-    the not-yet-implemented stub (501) on the Order routes, never a 403."""
-    with make_test_client(make_superadmin(), NoTouchSession()) as client:
+    `test_vehicle_quick_fix.py`) and Order dates search/update in Phase 3
+    (see `test_order_quick_fix_dates.py`) — no route on this router is a
+    501 stub anymore. A superadmin caller should clear the guard and reach
+    the real search logic (404 on a miss), never a 403."""
+    from tests.superadmin_data.conftest import FakeOrderSession
+
+    with make_test_client(make_superadmin(), FakeOrderSession(search_result=[])) as client:
         res = client.get(
             "/api/v1/superadmin/data/orders",
-            params={"plate": "ABC123", "order_id": str(uuid.uuid4())},
+            params={"plate": "ZZZ999"},
         )
-        assert res.status_code == 501
+        assert res.status_code == 404

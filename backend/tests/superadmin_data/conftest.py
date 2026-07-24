@@ -1,6 +1,6 @@
 """
-Shared fixtures for Phase 2 (Vehicle quick-fix) tests on
-`app/api/v1/superadmin_data.py`.
+Shared fixtures for Phase 2 (Vehicle quick-fix) and Phase 3 (Order
+quick-fix — dates) tests on `app/api/v1/superadmin_data.py`.
 
 Follows the project's established fake-`AsyncSession` convention (see
 `tests/orders/conftest.py`, `tests/imports/conftest.py`): real ORM instances
@@ -8,6 +8,7 @@ constructed directly (no live DB), a minimal fake session exposing only the
 surface the routes under test actually call.
 """
 import uuid
+from datetime import datetime
 from typing import Optional
 
 from sqlalchemy.exc import IntegrityError
@@ -103,6 +104,85 @@ class FakeVehicleSession:
             self._raise_integrity_error = False
             raise IntegrityError(
                 "UPDATE vehicles", {}, Exception("duplicate key value violates unique constraint")
+            )
+        self.committed = True
+
+    async def rollback(self):
+        self.rolled_back = True
+        self.added = []
+
+    async def refresh(self, obj, attribute_names=None):
+        self.refreshed.append(obj)
+
+
+def make_order(
+    order_id: Optional[uuid.UUID] = None,
+    tenant_id: Optional[uuid.UUID] = None,
+    vehicle: Optional["Vehicle"] = None,
+    status=None,
+    service_type=None,
+    created_at: Optional[datetime] = None,
+    delivered_at: Optional[datetime] = None,
+) -> "ServiceOrder":
+    from app.models.order import ServiceOrder, ServiceStatus, ServiceType
+    order = ServiceOrder(
+        id=order_id or uuid.uuid4(),
+        tenant_id=tenant_id or uuid.uuid4(),
+        vehicle_id=(vehicle.id if vehicle is not None else uuid.uuid4()),
+        status=status or ServiceStatus.received,
+        service_type=service_type or ServiceType.regular,
+        created_at=created_at or datetime(2026, 7, 1),
+        delivered_at=delivered_at,
+    )
+    if vehicle is not None:
+        order.vehicle = vehicle
+    return order
+
+
+class FakeOrderSession:
+    """
+    Minimal fake `AsyncSession` for the Order quick-fix (dates) routes.
+
+    - `search_result`: rows returned by the single `db.execute(select(
+      ServiceOrder)...)` call the GET route issues (empty list = miss ->
+      404).
+    - `get_object`: the `ServiceOrder` returned by `db.get(ServiceOrder,
+      order_id)` in the PUT route (`None` = miss -> 404).
+    - `raise_integrity_error`: same contract as `FakeVehicleSession` — kept
+      for parity even though the Order dates PUT has no unique-constraint
+      conflict path today.
+    """
+
+    def __init__(
+        self,
+        search_result: Optional[list] = None,
+        get_object=None,
+        raise_integrity_error: bool = False,
+    ):
+        self._search_result = search_result or []
+        self._get_object = get_object
+        self._raise_integrity_error = raise_integrity_error
+        self.added: list = []
+        self.committed = False
+        self.rolled_back = False
+        self.refreshed: list = []
+
+    async def execute(self, stmt):
+        return _ExecuteResult(self._search_result)
+
+    async def get(self, model_cls, obj_id):
+        if self._get_object is not None and self._get_object.id == obj_id:
+            return self._get_object
+        return None
+
+    def add(self, obj):
+        self.added.append(obj)
+
+    async def commit(self):
+        if self._raise_integrity_error:
+            self._raise_integrity_error = False
+            raise IntegrityError(
+                "UPDATE service_orders", {}, Exception("integrity error")
             )
         self.committed = True
 
