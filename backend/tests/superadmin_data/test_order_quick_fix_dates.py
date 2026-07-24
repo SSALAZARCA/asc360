@@ -186,3 +186,71 @@ def test_update_order_both_dates_changed_but_order_preserved_returns_200():
     body = res.json()
     assert body["created_at"].startswith("2026-07-05")
     assert body["delivered_at"].startswith("2026-07-06")
+
+
+# ---------------------------------------------------------------------------
+# Corrective batch — field-presence-aware partial updates + 422 check must
+# compare EFFECTIVE (merged with DB) values, not raw request values.
+#
+# `delivered_at: Optional[datetime] = None` must NOT be nulled just because
+# the request omits the key entirely -- only an explicit `null` clears it.
+# ---------------------------------------------------------------------------
+
+def test_update_order_omitted_delivered_at_leaves_db_value_untouched_no_audit():
+    order = make_order(created_at=datetime(2026, 7, 1), delivered_at=datetime(2026, 7, 3))
+    fake_db = FakeOrderSession(get_object=order)
+
+    # `delivered_at` key entirely ABSENT -- only `created_at` (required) is
+    # sent, unchanged. Must be a true no-op: DB's `delivered_at` untouched,
+    # no audit row at all.
+    payload = {"created_at": "2026-07-01T00:00:00"}
+
+    with make_test_client(make_superadmin(), fake_db) as client:
+        res = client.put(f"/api/v1/superadmin/data/orders/{order.id}", json=payload)
+
+    assert res.status_code == 200
+    body = res.json()
+    assert body["delivered_at"].startswith("2026-07-03")
+    assert order.delivered_at == datetime(2026, 7, 3)
+    assert fake_db.added == []
+
+
+def test_update_order_explicit_null_delivered_at_clears_it_and_audits():
+    order = make_order(created_at=datetime(2026, 7, 1), delivered_at=datetime(2026, 7, 3))
+    fake_db = FakeOrderSession(get_object=order)
+
+    # `delivered_at` key IS present, explicitly `null` -- the one legitimate
+    # way to clear it (e.g. un-deliver a mistakenly-marked order).
+    payload = {"created_at": "2026-07-01T00:00:00", "delivered_at": None}
+
+    with make_test_client(make_superadmin(), fake_db) as client:
+        res = client.put(f"/api/v1/superadmin/data/orders/{order.id}", json=payload)
+
+    assert res.status_code == 200
+    body = res.json()
+    assert body["delivered_at"] is None
+    assert order.delivered_at is None
+
+    audit_payloads = [a.payload for a in fake_db.added]
+    assert len(audit_payloads) == 1
+    assert audit_payloads[0]["delivered_at"] == {"old": datetime(2026, 7, 3), "new": None}
+
+
+def test_update_order_created_at_moved_after_existing_delivered_at_returns_422_even_when_delivered_at_omitted():
+    # `delivered_at` is NOT part of this request at all -- the 422 check
+    # must use the order's EXISTING `delivered_at` from the DB (the
+    # "effective" value), not `None`/skip the check just because the
+    # request happens to omit that key.
+    order = make_order(created_at=datetime(2026, 7, 1), delivered_at=datetime(2026, 7, 5))
+    fake_db = FakeOrderSession(get_object=order)
+
+    payload = {"created_at": "2026-07-10T00:00:00"}
+
+    with make_test_client(make_superadmin(), fake_db) as client:
+        res = client.put(f"/api/v1/superadmin/data/orders/{order.id}", json=payload)
+
+    assert res.status_code == 422
+    assert fake_db.added == []
+    assert fake_db.committed is False
+    assert order.created_at == datetime(2026, 7, 1)
+    assert order.delivered_at == datetime(2026, 7, 5)

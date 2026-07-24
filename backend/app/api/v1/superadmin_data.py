@@ -120,8 +120,13 @@ async def update_vehicle(
     if not vehicle:
         raise HTTPException(status_code=404, detail="Vehículo no encontrado")
 
+    # `exclude_unset=True` keeps fields the request body never mentioned out
+    # of the dict entirely -- omitting an optional field must leave the DB
+    # value untouched, while explicitly sending it as `null` is the one
+    # legitimate way to clear it. Required fields (`plate`/`brand`/`model`)
+    # have no default, so they are always present here regardless.
     changes: dict = {}
-    for field_name, new_value in payload.model_dump().items():
+    for field_name, new_value in payload.model_dump(exclude_unset=True).items():
         old_value = getattr(vehicle, field_name)
         if str(old_value) != str(new_value):
             changes[field_name] = {"old": old_value, "new": new_value}
@@ -212,7 +217,18 @@ async def update_order(
     if not order:
         raise HTTPException(status_code=404, detail="Orden no encontrada")
 
-    if payload.delivered_at is not None and payload.delivered_at < payload.created_at:
+    # `exclude_unset=True` distinguishes "key absent from the request body"
+    # from "key explicitly sent as null". A field the caller never mentioned
+    # must not be diffed/applied at all -- the DB value is the effective
+    # value for that field. `created_at` is required (no default) so it is
+    # always present here; `delivered_at` may legitimately be absent.
+    provided = payload.model_dump(exclude_unset=True)
+
+    effective_created_at = provided.get("created_at", order.created_at)
+    effective_delivered_at = (
+        provided["delivered_at"] if "delivered_at" in provided else order.delivered_at
+    )
+    if effective_delivered_at is not None and effective_delivered_at < effective_created_at:
         raise HTTPException(
             status_code=422,
             detail="La fecha de entrega no puede ser anterior a la fecha de creación",
@@ -220,7 +236,9 @@ async def update_order(
 
     changes: dict = {}
     for field_name in _ORDER_DATE_FIELDS:
-        new_value = getattr(payload, field_name)
+        if field_name not in provided:
+            continue
+        new_value = provided[field_name]
         old_value = getattr(order, field_name)
         if str(old_value) != str(new_value):
             changes[field_name] = {"old": old_value, "new": new_value}

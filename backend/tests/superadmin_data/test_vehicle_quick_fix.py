@@ -149,3 +149,70 @@ def test_update_vehicle_no_op_returns_200_with_no_audit_row():
     assert res.status_code == 200
     assert fake_db.added == []
     assert fake_db.committed is True
+
+
+# ---------------------------------------------------------------------------
+# Corrective batch — field-presence-aware partial updates.
+#
+# `Optional[X] = None` fields must NOT be diffed/nulled just because the
+# caller's JSON body omits the key entirely. Pydantic v2's
+# `model_dump(exclude_unset=True)` (already the codebase's established
+# pattern -- see `app/repositories/base_repository.py`,
+# `app/api/v1/imports.py`, `app/api/v1/endpoints/users.py`) distinguishes
+# "key absent" from "key explicitly sent as null".
+# ---------------------------------------------------------------------------
+
+def test_update_vehicle_omitted_optional_field_leaves_db_value_untouched_no_audit():
+    vehicle = make_vehicle(
+        plate="ABC123", brand="UM", model="DSR", vin="VIN0001",
+        color="Rojo", year=2024, mileage=1000,
+    )
+    fake_db = FakeVehicleSession(get_object=vehicle)
+
+    # `color` key is entirely ABSENT from the request body -- must be left
+    # untouched, not silently nulled by the schema's `Optional[str] = None`
+    # default. Only `mileage` actually changes.
+    payload = {
+        "plate": "ABC123", "brand": "UM", "model": "DSR", "vin": "VIN0001",
+        "year": 2024, "mileage": 1500,
+    }
+
+    with make_test_client(make_superadmin(), fake_db) as client:
+        res = client.put(f"/api/v1/superadmin/data/vehicles/{vehicle.id}", json=payload)
+
+    assert res.status_code == 200
+    body = res.json()
+    assert body["color"] == "Rojo"
+    assert vehicle.color == "Rojo"
+
+    audit_payloads = [a.payload for a in fake_db.added]
+    changed_fields = {list(p.keys())[0] for p in audit_payloads}
+    assert changed_fields == {"mileage"}
+    assert "color" not in changed_fields
+
+
+def test_update_vehicle_explicit_null_optional_field_clears_it_and_audits():
+    vehicle = make_vehicle(
+        plate="ABC123", brand="UM", model="DSR", vin="VIN0001",
+        color="Rojo", year=2024, mileage=1000,
+    )
+    fake_db = FakeVehicleSession(get_object=vehicle)
+
+    # `color` key IS present, explicitly `null` -- this is the one legitimate
+    # way to clear an optional field, and it must be diffed/applied/audited.
+    payload = {
+        "plate": "ABC123", "brand": "UM", "model": "DSR", "vin": "VIN0001",
+        "color": None, "year": 2024, "mileage": 1000,
+    }
+
+    with make_test_client(make_superadmin(), fake_db) as client:
+        res = client.put(f"/api/v1/superadmin/data/vehicles/{vehicle.id}", json=payload)
+
+    assert res.status_code == 200
+    body = res.json()
+    assert body["color"] is None
+    assert vehicle.color is None
+
+    audit_payloads = [a.payload for a in fake_db.added]
+    assert len(audit_payloads) == 1
+    assert audit_payloads[0]["color"] == {"old": "Rojo", "new": None}
