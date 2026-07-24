@@ -323,6 +323,7 @@ export default function AnalisisRepuestosTab({ userRole }) {
 
   const [editingDesc, setEditingDesc] = useState(null); // {fpn, value}
   const [codesModal,  setCodesModal]  = useState(null); // {fpn, codes}
+  const [clearingMarks, setClearingMarks] = useState(false);
 
   const load = () => {
     setLoading(true);
@@ -358,7 +359,9 @@ export default function AnalisisRepuestosTab({ userRole }) {
     authFetch('/parts/admin/analysis/low-rotation-ordered')
       .then(r => r.ok ? r.json() : null)
       .then(fresh => { if (fresh) setData(fresh); })
-      .catch(() => {});
+      .catch(() => {
+        toast.error('La clasificación se guardó, pero no se pudo refrescar el resumen. Actualizá la página.');
+      });
   };
 
   const markKey = (fpn, lotId) => `${fpn}::${lotId}`;
@@ -503,6 +506,39 @@ export default function AnalisisRepuestosTab({ userRole }) {
       setExecResult({ error: e.message });
     } finally {
       setExecuting(false);
+    }
+  };
+
+  const handleClearMarks = async () => {
+    const keys = Object.keys(marked);
+    if (keys.length === 0) return;
+    setClearingMarks(true);
+    const results = await Promise.allSettled(keys.map(async key => {
+      const [fpn, lotId] = key.split('::');
+      const res = await authFetch('/parts/admin/analysis/decisions', {
+        method: 'POST',
+        body: JSON.stringify({ factory_part_number: fpn, lot_identifier: lotId, decision: '' }),
+      });
+      if (!res.ok) throw new Error('clear failed');
+    }));
+    // Solo se limpian del estado local las marcas cuyo POST realmente tuvo
+    // éxito — si alguna falla, se queda marcada (server y pantalla siguen
+    // de acuerdo) en vez de desaparecer en pantalla sin haberse borrado.
+    const failedKeys = keys.filter((_, i) => results[i].status === 'rejected');
+    const failedSet  = new Set(failedKeys);
+    setMarked(prev => {
+      const next = {};
+      for (const k of failedKeys) if (prev[k] !== undefined) next[k] = prev[k];
+      return next;
+    });
+    setDetails(prev => {
+      const next = {};
+      for (const k of Object.keys(prev)) if (failedSet.has(k)) next[k] = prev[k];
+      return next;
+    });
+    setClearingMarks(false);
+    if (failedKeys.length > 0) {
+      toast.error(`No se pudieron quitar ${failedKeys.length} marca(s). Intentá de nuevo.`);
     }
   };
 
@@ -1196,24 +1232,16 @@ export default function AnalisisRepuestosTab({ userRole }) {
           </button>
 
           <button
-            onClick={() => {
-              Object.keys(marked).forEach(key => {
-                const [fpn, lotId] = key.split('::');
-                authFetch('/parts/admin/analysis/decisions', {
-                  method: 'POST',
-                  body: JSON.stringify({ factory_part_number: fpn, lot_identifier: lotId, decision: '' }),
-                }).catch(() => {});
-              });
-              setMarked({});
-              setDetails({});
-            }}
+            onClick={handleClearMarks}
+            disabled={clearingMarks}
             style={{
               marginLeft: 'auto', alignSelf: 'center', padding: '0.35rem 0.75rem', borderRadius: '7px',
               background: 'none', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.3)',
-              fontSize: '0.62rem', fontWeight: 700, cursor: 'pointer',
+              fontSize: '0.62rem', fontWeight: 700, cursor: clearingMarks ? 'not-allowed' : 'pointer',
+              opacity: clearingMarks ? 0.5 : 1,
             }}
           >
-            Limpiar marcas
+            {clearingMarks ? 'Limpiando...' : 'Limpiar marcas'}
           </button>
         </div>
       )}
