@@ -124,6 +124,7 @@ function KanbanCard({ order, onOpen }) {
         <span className="kcard-plate">{order.placa}</span>
         <span className="kcard-type" style={{ color: tc.color, background: tc.bg }}>{tc.letter}</span>
       </div>
+      {order.modelo && <p className="kcard-model">{order.modelo}</p>}
       <p className="kcard-center"><MapPin size={9} />{order.centro_actual}</p>
       <div className="kcard-foot">
         <span style={{ color: dc, fontWeight: 800, fontSize: '0.6rem', display: 'flex', alignItems: 'center', gap: 3 }}>
@@ -842,6 +843,7 @@ export default function KanbanPage() {
         .kcard-top { display:flex; align-items:center; gap:0.3rem; margin-bottom:0.3rem; }
         .kcard-plate { flex:1; font-weight:900; font-size:0.82rem; color:#ff8c5a; letter-spacing:0.04em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
         .kcard-type  { font-size:0.52rem; font-weight:900; padding:1px 4px; border-radius:4px; flex-shrink:0; }
+        .kcard-model { font-size:0.6rem; font-weight:700; color:rgba(255,255,255,0.55); margin:0 0 0.3rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 
         .kcard-center {
           display: flex; align-items:center; gap:0.25rem;

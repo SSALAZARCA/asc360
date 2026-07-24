@@ -391,7 +391,7 @@ export default function ServicesPage() {
           <table className="data-table">
             <thead>
               <tr>
-                {[['placa', 'Placa'], ['tipo_trabajo', 'Tipo'], ['estado', 'Estado'], 
+                {[['placa', 'Placa'], ['modelo', 'Modelo'], ['tipo_trabajo', 'Tipo'], ['estado', 'Estado'],
                   ['tiempo_taller_dias', 'Días'], ['kilometraje', 'KM'], ['centro_actual', 'Centro'], 
                   ['ciudad', 'Ciudad'], ['v_totales', 'Visitas (T)'], ['v_2meses', 'Visitas (2m)'], ['g_totales', 'Garantías']].map(([col, lbl]) => (
                   <th key={col} onClick={() => toggleSort(col)} className="sort-head">
@@ -403,9 +403,9 @@ export default function ServicesPage() {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan="10" className="td-empty">Sincronizando expedientes...</td></tr>
+                <tr><td colSpan="11" className="td-empty">Sincronizando expedientes...</td></tr>
               ) : filtered.length === 0 ? (
-                <tr><td colSpan="10" className="td-empty">No se encontraron expedientes activos</td></tr>
+                <tr><td colSpan="11" className="td-empty">No se encontraron expedientes activos</td></tr>
               ) : filtered.map((s, i) => {
                 const st = STATES[s.estado] || { name: s.estado };
                 const tc = TYPE_CFG[s.tipo_trabajo] || TYPE_CFG.regular;
@@ -414,6 +414,7 @@ export default function ServicesPage() {
                 return (
                   <tr key={s.order_id} className="row-item" onClick={() => setSelectedOrder(s)} style={{ animationDelay: `${i * 0.02}s` }}>
                     <td className="td-plate">{s.placa}</td>
+                    <td className="td-dim"><span className="cell-truncate" title={s.modelo || '-'}>{s.modelo || '-'}</span></td>
                     <td><span className="badge-type" style={{ color: tc.color, background: tc.bg }}>{tc.label}</span></td>
                     <td>
                       {st.icon ? (

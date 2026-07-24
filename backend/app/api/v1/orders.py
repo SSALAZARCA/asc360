@@ -1374,7 +1374,8 @@ async def get_services_analytics(
             Vehicle.plate,
             Tenant.name.label("tenant_name"),
             Tenant.ciudad.label("tenant_city"),
-            ServiceOrderReception.mileage_km
+            ServiceOrderReception.mileage_km,
+            Vehicle.model
         )
         .join(Vehicle, ServiceOrder.vehicle_id == Vehicle.id)
         .join(Tenant, ServiceOrder.tenant_id == Tenant.id)
@@ -1423,6 +1424,7 @@ async def get_services_analytics(
         tenant_name = row[2]
         city_name = row[3]
         mileage = row[4]
+        model = row[5]
 
         agg = plate_metrics.get(plate)
         total_visits = agg.total_visits if agg else 0
@@ -1436,6 +1438,7 @@ async def get_services_analytics(
         services_data.append({
             "order_id": str(order.id),
             "placa": plate,
+            "modelo": model,
             "estado": order.status.value,
             "tiempo_taller_dias": time_in_taller_days,
             "kilometraje": float(mileage) if mileage else 0,
