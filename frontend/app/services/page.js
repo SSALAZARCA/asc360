@@ -445,9 +445,12 @@ export default function ServicesPage() {
                     <td className="td-dim" style={{ textAlign:'center', color: (s.g_totales||0) > 1 ? '#eab308' : undefined }}>{s.g_totales ?? '-'}</td>
                     <td onClick={e => e.stopPropagation()}>
                       {s.pdf_url ? (
-                        <a href={`${getApiUrl()}/orders/${s.order_id}/pdf?token=${typeof window !== 'undefined' ? sessionStorage.getItem('um_token') : ''}`} target="_blank" className="btn-pdf">
+                        <button
+                          onClick={() => downloadPdf(`${getApiUrl()}/orders/${s.order_id}/pdf`, `Acta_${s.order_id.slice(0, 8)}.pdf`)}
+                          className="btn-pdf"
+                        >
                           <FileDown size={14} />
-                        </a>
+                        </button>
                       ) : <span className="td-dim text-[0.6rem]">Sin PDF</span>}
                     </td>
                   </tr>
