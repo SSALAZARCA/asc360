@@ -222,6 +222,7 @@ function useOrderQuickFix() {
   const [searchValue, setSearchValue] = useState('');
   const [form, setForm] = useState(ORDER_FORM_DEFAULTS);
   const [found, setFound] = useState(false);
+  const [matches, setMatches] = useState(null); // list of candidates | null
   const [searching, setSearching] = useState(false);
   const [saving, setSaving] = useState(false);
   const [confirmState, setConfirmState] = useState(null); // { message } | null
@@ -229,14 +230,24 @@ function useOrderQuickFix() {
   const search = async () => {
     if (!searchValue.trim()) return;
     setSearching(true);
+    setMatches(null);
     try {
       const param = searchMode === 'order_id'
         ? `order_id=${encodeURIComponent(searchValue.trim())}`
         : `plate=${encodeURIComponent(searchValue.trim())}`;
       const res = await authFetch(`/superadmin/data/orders?${param}`);
       if (res.ok) {
-        setForm(populateOrderForm(await res.json()));
-        setFound(true);
+        const data = await res.json();
+        if (data.multiple_matches) {
+          // Several orders share this plate — let the caller pick instead
+          // of silently correcting whichever one happens to be newest.
+          setFound(false);
+          setForm(ORDER_FORM_DEFAULTS);
+          setMatches(data.matches);
+        } else {
+          setForm(populateOrderForm(data));
+          setFound(true);
+        }
       } else {
         const err = await res.json().catch(() => ({}));
         toast.error(extractErrorMessage(err.detail, 'Orden no encontrada'));
@@ -248,6 +259,12 @@ function useOrderQuickFix() {
     } finally {
       setSearching(false);
     }
+  };
+
+  const selectMatch = (match) => {
+    setForm(populateOrderForm(match));
+    setFound(true);
+    setMatches(null);
   };
 
   // Shared by the first attempt (`confirm_delete_event: false`) and the
@@ -288,9 +305,35 @@ function useOrderQuickFix() {
 
   return {
     searchMode, setSearchMode, searchValue, setSearchValue, form, setForm,
-    found, searching, saving, search, save,
+    found, matches, selectMatch, searching, saving, search, save,
     confirmState, confirmDelete: () => submit(true), cancelConfirm: () => setConfirmState(null),
   };
+}
+
+function serviceTypeLabel(value) {
+  return SERVICE_TYPE_OPTIONS.find((opt) => opt.value === value)?.label || value || '-';
+}
+
+function OrderMatchPicker({ matches, onSelect }) {
+  return (
+    <div style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', maxWidth: '520px' }}>
+      <p style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.6)' }}>
+        Esta placa tiene varias órdenes — elegí cuál corregir:
+      </p>
+      {matches.map((m) => (
+        <button
+          key={m.id}
+          className="btn"
+          onClick={() => onSelect(m)}
+          style={{ textAlign: 'left', display: 'flex', justifyContent: 'space-between', gap: '0.75rem', padding: '0.6rem 0.85rem' }}
+        >
+          <span>{m.id.slice(0, 8)}</span>
+          <span>{m.created_at ? m.created_at.slice(0, 10) : '-'} → {m.delivered_at ? m.delivered_at.slice(0, 10) : 'sin entregar'}</span>
+          <span>{serviceTypeLabel(m.service_type)}</span>
+        </button>
+      ))}
+    </div>
+  );
 }
 
 function OrderTab() {
@@ -310,6 +353,8 @@ function OrderTab() {
           style={inputStyle}
         />
       </SearchBar>
+
+      {o.matches && !o.found && <OrderMatchPicker matches={o.matches} onSelect={o.selectMatch} />}
 
       {o.found && (
         <div style={fieldGridStyle}>

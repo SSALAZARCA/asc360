@@ -91,6 +91,26 @@ def test_search_order_by_plate_found_returns_200():
     assert body["plate"] == "ABC123"
 
 
+def test_search_order_by_plate_with_multiple_orders_returns_match_list():
+    """A plate can have several historical orders (visits). Silently
+    correcting the MOST RECENT one when the superadmin meant an older
+    visit is a real data-corruption risk — the endpoint must surface all
+    matches and let the caller pick, instead of guessing."""
+    vehicle = make_vehicle(plate="ABC123")
+    older = make_order(vehicle=vehicle, created_at=datetime(2026, 1, 1))
+    newer = make_order(vehicle=vehicle, created_at=datetime(2026, 7, 1))
+    fake_db = FakeOrderSession(search_result=[newer, older])
+
+    with make_test_client(make_superadmin(), fake_db) as client:
+        res = client.get("/api/v1/superadmin/data/orders", params={"plate": "ABC123"})
+
+    assert res.status_code == 200
+    body = res.json()
+    assert body["multiple_matches"] is True
+    ids = {m["id"] for m in body["matches"]}
+    assert ids == {str(older.id), str(newer.id)}
+
+
 def test_search_order_miss_returns_404():
     fake_db = FakeOrderSession(search_result=[], get_object=None)
 

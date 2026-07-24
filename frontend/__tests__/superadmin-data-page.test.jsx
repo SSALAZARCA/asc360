@@ -176,6 +176,29 @@ describe('SuperadminDataPage — Orden tab', () => {
     expect(screen.getByLabelText('Tipo de servicio')).toHaveValue('km_review');
   });
 
+  it('shows a picker when the plate matches multiple orders, and selecting one loads its form', async () => {
+    const older = { ...ORDER, id: 'o-old', created_at: '2026-01-01T00:00:00', delivered_at: null, service_type: 'regular' };
+    const newer = { ...ORDER, id: 'o-new' };
+    mockAuthFetch.mockResolvedValueOnce(makeResponse(200, { multiple_matches: true, matches: [newer, older] }));
+
+    render(<SuperadminDataPage />);
+    await goToOrderTab();
+    fireEvent.change(screen.getByLabelText('Valor de búsqueda de orden'), { target: { value: 'ABC123' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Buscar' }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/varias órdenes/i)).toBeInTheDocument();
+    });
+    expect(screen.queryByLabelText('Fecha de creación')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /o-old/ }));
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Fecha de creación')).toHaveValue('2026-01-01');
+    });
+    expect(screen.queryByText(/varias órdenes/i)).not.toBeInTheDocument();
+  });
+
   it('shows an error toast when the order is not found (404)', async () => {
     mockAuthFetch.mockResolvedValueOnce(makeResponse(404, { detail: 'Orden no encontrada' }));
 

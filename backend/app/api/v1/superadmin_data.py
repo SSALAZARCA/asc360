@@ -413,9 +413,20 @@ async def search_orders(
             .join(Vehicle, ServiceOrder.vehicle_id == Vehicle.id)
             .where(Vehicle.plate == clean_plate)
             .order_by(ServiceOrder.created_at.desc())
-            .limit(1)
         )
-        order = (await db.execute(stmt)).scalars().first()
+        matches = (await db.execute(stmt)).scalars().all()
+        if not matches:
+            raise HTTPException(status_code=404, detail="Orden no encontrada")
+        if len(matches) > 1:
+            # Una placa con varias visitas es ambigua: elegir "la más
+            # reciente" a ciegas puede terminar corrigiendo una orden
+            # distinta de la que el superadmin tenía en mente. Se listan
+            # todas para que el caller elija por id (búsqueda exacta).
+            return {
+                "multiple_matches": True,
+                "matches": [_serialize_order(m) for m in matches],
+            }
+        order = matches[0]
     if not order:
         raise HTTPException(status_code=404, detail="Orden no encontrada")
     return _serialize_order(order)
