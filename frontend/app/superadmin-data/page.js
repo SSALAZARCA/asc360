@@ -263,10 +263,26 @@ function useOrderSearch(setForm, setFound) {
     }
   };
 
-  const selectMatch = (match) => {
-    setForm(populateOrderForm(match));
-    setFound(true);
+  // The multiple_matches list is a lightweight summary (no mileage_km, per
+  // design — the picker doesn't need it) — trusting it directly here would
+  // always show that field blank. Re-fetch the full order by id instead.
+  const selectMatch = async (match) => {
     setMatches(null);
+    setSearching(true);
+    try {
+      const res = await authFetch(`/superadmin/data/orders?order_id=${encodeURIComponent(match.id)}`);
+      if (res.ok) {
+        setForm(populateOrderForm(await res.json()));
+        setFound(true);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        toast.error(extractErrorMessage(err.detail, 'Orden no encontrada'));
+      }
+    } catch {
+      toast.error('Error de conexión.');
+    } finally {
+      setSearching(false);
+    }
   };
 
   return { searchMode, setSearchMode, searchValue, setSearchValue, matches, searching, search, selectMatch };

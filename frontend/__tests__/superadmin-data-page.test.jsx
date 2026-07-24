@@ -176,10 +176,13 @@ describe('SuperadminDataPage — Orden tab', () => {
     expect(screen.getByLabelText('Tipo de servicio')).toHaveValue('km_review');
   });
 
-  it('shows a picker when the plate matches multiple orders, and selecting one loads its form', async () => {
-    const older = { ...ORDER, id: 'o-old', created_at: '2026-01-01T00:00:00', delivered_at: null, service_type: 'regular' };
-    const newer = { ...ORDER, id: 'o-new' };
+  it('shows a picker when the plate matches multiple orders, and selecting one re-fetches the full order by id (so fields like mileage_km trimmed from the list come back accurate)', async () => {
+    // The multiple_matches list is intentionally lightweight (no mileage_km) —
+    // selecting an entry must re-fetch by order_id rather than trusting it.
+    const older = { ...ORDER, id: 'o-old', created_at: '2026-01-01T00:00:00', delivered_at: null, service_type: 'regular', mileage_km: null };
+    const newer = { ...ORDER, id: 'o-new', mileage_km: null };
     mockAuthFetch.mockResolvedValueOnce(makeResponse(200, { multiple_matches: true, matches: [newer, older] }));
+    mockAuthFetch.mockResolvedValueOnce(makeResponse(200, { ...older, mileage_km: '9000.00' }));
 
     render(<SuperadminDataPage />);
     await goToOrderTab();
@@ -196,6 +199,8 @@ describe('SuperadminDataPage — Orden tab', () => {
     await waitFor(() => {
       expect(screen.getByLabelText('Fecha de creación')).toHaveValue('2026-01-01');
     });
+    expect(screen.getByLabelText('Kilometraje de orden')).toHaveValue(9000);
+    expect(mockAuthFetch.mock.calls[1][0]).toContain('order_id=o-old');
     expect(screen.queryByText(/varias órdenes/i)).not.toBeInTheDocument();
   });
 
