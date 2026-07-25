@@ -25,12 +25,22 @@ export function utcIsoToBogotaInputValue(iso) {
 }
 
 // datetime-local value ("YYYY-MM-DDTHH:mm", Bogotá wall-clock) -> UTC ISO
-// string for the backend.
+// string for the backend, WITHOUT a trailing 'Z'/offset.
+//
+// The backend stores/parses NAIVE datetimes everywhere (datetime.utcnow(),
+// no tzinfo). `.toISOString()` always appends 'Z', which Pydantic parses
+// into a timezone-AWARE datetime -- mixing that with the naive values
+// already in the same DateTime column crashes asyncpg the moment it tries
+// to persist it (confirmed live in production: "TypeError: can't subtract
+// offset-naive and offset-aware datetimes"). Format manually instead, the
+// same way `utcIsoToBogotaInputValue` does, to keep the string naive.
 export function bogotaInputValueToUtcIso(value) {
   if (!value) return null;
   const [datePart, timePart] = value.split('T');
   const [year, month, day] = datePart.split('-').map(Number);
   const [hour, minute] = (timePart || '00:00').split(':').map(Number);
   const asIfUtc = Date.UTC(year, month - 1, day, hour, minute);
-  return new Date(asIfUtc + BOGOTA_OFFSET_MS).toISOString();
+  const trueUtc = new Date(asIfUtc + BOGOTA_OFFSET_MS);
+  return `${trueUtc.getUTCFullYear()}-${pad2(trueUtc.getUTCMonth() + 1)}-${pad2(trueUtc.getUTCDate())}` +
+    `T${pad2(trueUtc.getUTCHours())}:${pad2(trueUtc.getUTCMinutes())}:00`;
 }

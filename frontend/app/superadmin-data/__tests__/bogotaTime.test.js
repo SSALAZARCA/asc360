@@ -35,11 +35,21 @@ describe('utcIsoToBogotaInputValue', () => {
 
 describe('bogotaInputValueToUtcIso', () => {
   it('shifts a Bogotá wall-clock value forward 5 hours to UTC', () => {
-    expect(bogotaInputValueToUtcIso('2026-06-30T17:41')).toBe('2026-06-30T22:41:00.000Z');
+    // No trailing 'Z'/offset: the backend stores/parses NAIVE datetimes
+    // everywhere (datetime.utcnow(), no tzinfo). A timezone-AWARE string
+    // here (e.g. from .toISOString()) crashes asyncpg the moment it's
+    // mixed with the naive values already in the same DateTime column --
+    // confirmed live in production: "TypeError: can't subtract
+    // offset-naive and offset-aware datetimes".
+    expect(bogotaInputValueToUtcIso('2026-06-30T17:41')).toBe('2026-06-30T22:41:00');
   });
 
   it('rolls the calendar day forward when the Bogotá time is within 5 hours of midnight', () => {
-    expect(bogotaInputValueToUtcIso('2026-06-30T21:00')).toBe('2026-07-01T02:00:00.000Z');
+    expect(bogotaInputValueToUtcIso('2026-06-30T21:00')).toBe('2026-07-01T02:00:00');
+  });
+
+  it('never includes a timezone marker (Z or offset) in the output', () => {
+    expect(bogotaInputValueToUtcIso('2026-06-30T17:41')).not.toMatch(/Z|[+-]\d{2}:\d{2}$/);
   });
 
   it('returns null for an empty value', () => {
@@ -50,7 +60,7 @@ describe('bogotaInputValueToUtcIso', () => {
 
 describe('round-trip', () => {
   it('converting UTC -> Bogotá -> UTC returns the original instant (to the minute)', () => {
-    const originalUtc = '2026-06-30T22:41:00.000Z';
+    const originalUtc = '2026-06-30T22:41:00';
     const bogota = utcIsoToBogotaInputValue(originalUtc);
     const backToUtc = bogotaInputValueToUtcIso(bogota);
     expect(backToUtc).toBe(originalUtc);
