@@ -13,7 +13,7 @@ import { utcIsoToBogotaInputValue, bogotaInputValueToUtcIso } from './bogotaTime
 // exactly (`VehicleQuickFixUpdate` / `OrderQuickFixUpdate` in
 // backend/app/api/v1/superadmin_data.py). No other field is ever sent.
 // ---------------------------------------------------------------------------
-const VEHICLE_FORM_DEFAULTS = { id: '', plate: '', vin: '', brand: '', model: '', color: '', year: '', mileage: '' };
+const VEHICLE_FORM_DEFAULTS = { id: '', plate: '', vin: '', brand: '', model: '', color: '', year: '' };
 const ORDER_FORM_DEFAULTS = { id: '', plate: '', status: '', created_at: '', delivered_at: '', mileage_km: '', service_type: '' };
 
 // Mismos colores que TYPE_CFG en services/page.js — mantener consistencia
@@ -54,7 +54,6 @@ function populateVehicleForm(data) {
     model: data.model || '',
     color: data.color || '',
     year: data.year ?? '',
-    mileage: data.mileage ?? '',
   };
 }
 
@@ -78,7 +77,6 @@ function buildVehiclePayload(form) {
     vin: form.vin.trim() || null,
     color: form.color.trim() || null,
     year: form.year !== '' ? Number(form.year) : null,
-    mileage: form.mileage !== '' ? Number(form.mileage) : null,
   };
 }
 
@@ -209,7 +207,6 @@ function VehicleTab() {
           <Field label="Modelo" value={v.form.model} onChange={(e) => v.setForm({ ...v.form, model: e.target.value })} />
           <Field label="Color" value={v.form.color} onChange={(e) => v.setForm({ ...v.form, color: e.target.value })} />
           <Field label="Año" type="number" value={v.form.year} onChange={(e) => v.setForm({ ...v.form, year: e.target.value })} />
-          <Field label="Kilometraje" type="number" value={v.form.mileage} onChange={(e) => v.setForm({ ...v.form, mileage: e.target.value })} />
           <SaveButton onClick={v.save} saving={v.saving} />
         </div>
       )}

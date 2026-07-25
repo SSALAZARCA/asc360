@@ -133,7 +133,7 @@ describe('SuperadminDataPage — Vehículo tab', () => {
     expect(url).toContain('/superadmin/data/vehicles/v-1');
     expect(options.method).toBe('PUT');
     const sentBody = JSON.parse(options.body);
-    expect(Object.keys(sentBody).sort()).toEqual(['brand', 'color', 'mileage', 'model', 'plate', 'vin', 'year'].sort());
+    expect(Object.keys(sentBody).sort()).toEqual(['brand', 'color', 'model', 'plate', 'vin', 'year'].sort());
     expect(sentBody.plate).toBe('XYZ789');
   });
 
