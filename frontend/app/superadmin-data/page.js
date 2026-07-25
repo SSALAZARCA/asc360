@@ -19,7 +19,7 @@ const ORDER_FORM_DEFAULTS = { id: '', plate: '', status: '', created_at: '', del
 // Mismos colores que TYPE_CFG en services/page.js — mantener consistencia
 // visual con el resto de la app para el mismo dato (tipo de servicio).
 const SERVICE_TYPE_OPTIONS = [
-  { value: 'regular', label: 'Regular', color: '#3b82f6', bg: 'rgba(59,130,246,0.15)' },
+  { value: 'regular', label: 'Mec. General', color: '#3b82f6', bg: 'rgba(59,130,246,0.15)' },
   { value: 'warranty', label: 'Garantía', color: '#eab308', bg: 'rgba(234,179,8,0.15)' },
   { value: 'km_review', label: 'Revisión por Kilometraje', color: '#22c55e', bg: 'rgba(34,197,94,0.15)' },
   { value: 'quick', label: 'Rápido', color: '#a855f7', bg: 'rgba(168,85,247,0.15)' },
