@@ -276,3 +276,19 @@ class TestApplyServiceTypeCorrection:
         assert change["new"] == "km_review"
         assert garantia_event.event_type == LifecycleEventType.MANTENIMIENTO
         json.dumps(change)
+
+    def test_warranty_to_km_review_with_no_existing_completion_event_is_a_plain_no_sync_change(self):
+        """Reproduces a live-reported case: an order corrected regular->
+        warranty earlier (synthesis direction, no event created, since it
+        never reached `completed`) and then corrected warranty->km_review.
+        `completion_event` is None here -- there is nothing to convert, this
+        must NOT attempt to touch a None completion_event's attributes."""
+        order = _make_order(created_at=datetime(2026, 7, 1))
+        order.service_type = ServiceType.warranty
+        reception = _make_reception(2200)
+
+        change = _apply_service_type_correction(order, ServiceType.km_review, reception, None)
+
+        assert change == {"old": "warranty", "new": "km_review"}
+        assert order.service_type == ServiceType.km_review
+        json.dumps(change)
