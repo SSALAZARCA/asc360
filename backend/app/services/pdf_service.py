@@ -68,7 +68,7 @@ async def generate_and_upload_reception_pdf(
 
     context = {
         "order_id": order_data.get("id", "PENDING"),
-        "date": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "date": order_data.get("date") or datetime.now().strftime("%Y-%m-%d %H:%M"),
         # Taller
         "tenant_name":  tenant_data.get("name", "UM Colombia"),
         "tenant_nit":   tenant_data.get("nit", ""),
