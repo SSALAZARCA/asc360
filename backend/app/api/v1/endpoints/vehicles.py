@@ -19,9 +19,12 @@ async def get_vin_master(
     vin: str,
     db: AsyncSession = Depends(get_db),
     x_sonia_secret: Optional[str] = Header(None),
+    current_user: Optional[CurrentUser] = Depends(get_optional_user),
 ):
-    """Consulta la base maestra de VINs. Protegido por X-Sonia-Secret (uso interno del bot)."""
-    if not verify_sonia_secret(x_sonia_secret, settings.SONIA_BOT_SECRET):
+    """Consulta la base maestra de VINs. Acepta X-Sonia-Secret (bot) o JWT
+    (staff autenticado, ej. el formulario de recepción)."""
+    is_bot = verify_sonia_secret(x_sonia_secret, settings.SONIA_BOT_SECRET)
+    if not is_bot and current_user is None:
         raise HTTPException(status_code=403, detail="Acceso no autorizado.")
     vin_data = await vin_master_service.query_vin(db, vin)
     if not vin_data:

@@ -52,6 +52,10 @@ const INTAKE_QUESTIONS = {
 };
 const STORAGE_KEY = 'reception_draft';
 
+const fieldLabelStyle = { fontSize: '0.52rem', color: '#606075', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700, display: 'block', marginBottom: 4 };
+const fieldInputStyle = { width: '100%', background: '#0a0a0c', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, padding: '0.6rem 0.75rem', color: '#fff', fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box' };
+const vinHintStyle    = { margin: '0.3rem 0 0', fontSize: '0.62rem', color: '#606075' };
+
 let _msgId = 0;
 const mkBot    = (text, extra = {}) => ({ id: ++_msgId, role: 'bot',  text, ...extra });
 const mkUser   = (text)              => ({ id: ++_msgId, role: 'user', text });
@@ -91,6 +95,8 @@ export default function TgReception() {
   const [pendingPhoto,  setPendingPhoto]  = useState(null);
   const [intakeQuestions, setIntakeQuestions] = useState([]);
   const [intakeIdx,       setIntakeIdx]       = useState(0);
+  const [vehicleModels,   setVehicleModels]   = useState([]); // catálogo estandarizado (GET /vehicle-models)
+  const [vinLookupStatus, setVinLookupStatus] = useState('idle'); // idle | loading | found | not_found
 
   const bottomRef   = useRef(null);
   const inputRef    = useRef(null);
@@ -152,6 +158,37 @@ export default function TgReception() {
     setMsgs([mkBot(`Hola${u?.name ? ` ${u.name.split(' ')[0]}` : ''}! ¿Cuál es la placa de la moto?\nPodés escribirla, dictarla 🎙️ o fotografiar la tarjeta de propiedad 🪪`)]);
   }, []);
 
+  // ── Catálogo de modelos (para el select del vehículo nuevo) ─────────────────
+  useEffect(() => {
+    authFetch('/vehicle-models')
+      .then(res => (res.ok ? res.json() : []))
+      .then(data => setVehicleModels(Array.isArray(data) ? data : []))
+      .catch(() => setVehicleModels([]));
+  }, []);
+
+  // ── VIN → prefill marca/modelo/año/color desde el maestro de VINs ──────────
+  // Nunca pisa un dato que el usuario (u OCR) ya haya cargado -- solo completa
+  // los campos vacíos.
+  const lookupVin = useCallback(async (rawVin) => {
+    const vin = rawVin.trim().toUpperCase();
+    if (vin.length !== 17) { setVinLookupStatus('idle'); return; }
+    setVinLookupStatus('loading');
+    try {
+      const res = await authFetch(`/vehicles/vin/${encodeURIComponent(vin)}`);
+      if (!res.ok) { setVinLookupStatus('not_found'); return; }
+      const data = await res.json();
+      setNewVeh(v => ({
+        ...v,
+        model: v.model.trim() ? v.model : (data.model || v.model),
+        year:  v.year  ? v.year  : (data.year  ? String(data.year) : v.year),
+        color: v.color ? v.color : (data.color || v.color),
+      }));
+      setVinLookupStatus('found');
+    } catch {
+      setVinLookupStatus('not_found');
+    }
+  }, []);
+
   // ── Helpers de mensajes ───────────────────────────────────────────────────
   const pushBot  = useCallback((text, extra) => setMsgs(m => [...m, mkBot(text, extra)]), []);
   const pushUser = useCallback((text) => setMsgs(m => [...m, mkUser(text)]), []);
@@ -165,6 +202,7 @@ export default function TgReception() {
     setStep(STEP.PLATE); setMsgs([]); setInput(''); setBusy(false); setCancelPending(false);
     setOcrData(null); setVehicleId(null); setVehicleData(null); setIsNew(false);
     setNewVeh({ brand: 'UM', model: '', year: '', color: '', vin: '' });
+    setVinLookupStatus('idle');
     setClientPhone(''); setEvidenceItems([]); setPendingPhoto(null);
     setIntakeQuestions([]); setIntakeIdx(0);
     setFormData({ plate: '', km: '', gas: '', notes: '', motivos: [], serviceType: 'regular', accessories: [], observations: '', intakeAnswers: [], pdfUrl: null });
@@ -720,19 +758,60 @@ export default function TgReception() {
         {step === STEP.NEW_VEHICLE_FORM && (
           <div style={{ background: '#13131a', border: '1px solid rgba(245,158,11,0.25)', borderRadius: 14, padding: '1rem', margin: '0.25rem 0' }}>
             <p style={{ margin: '0 0 0.75rem', fontSize: '0.6rem', color: '#f59e0b', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Vehículo nuevo — {formData.plate}</p>
+
+            {/* VIN primero: si está en el maestro, completa marca/modelo/año/color solo. */}
+            <div style={{ marginBottom: '0.5rem' }}>
+              <label style={fieldLabelStyle}>VIN</label>
+              <input type="text" value={newVeh.vin}
+                onChange={e => { setNewVeh(v => ({ ...v, vin: e.target.value })); setVinLookupStatus('idle'); }}
+                onBlur={e => lookupVin(e.target.value)}
+                placeholder="17 caracteres — opcional"
+                style={fieldInputStyle} />
+              {vinLookupStatus === 'loading'    && <p style={vinHintStyle}>Buscando en el maestro de VINs…</p>}
+              {vinLookupStatus === 'found'      && <p style={{ ...vinHintStyle, color: '#22c55e' }}>✓ Datos encontrados y completados abajo.</p>}
+              {vinLookupStatus === 'not_found'  && <p style={vinHintStyle}>No está en el maestro — completá manualmente.</p>}
+            </div>
+
             {[
-              { label: 'Marca',    key: 'brand', placeholder: 'UM' },
-              { label: 'Modelo *', key: 'model', placeholder: 'Renegade 200, NKD 125…' },
-              { label: 'Año',      key: 'year',  placeholder: '2023', type: 'number' },
-              { label: 'Color',    key: 'color', placeholder: 'Rojo, Negro…' },
-              { label: 'VIN',      key: 'vin',   placeholder: 'Opcional' },
+              { label: 'Marca', key: 'brand', placeholder: 'UM' },
             ].map(f => (
               <div key={f.key} style={{ marginBottom: '0.5rem' }}>
-                <label style={{ fontSize: '0.52rem', color: '#606075', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700, display: 'block', marginBottom: 4 }}>{f.label}</label>
+                <label style={fieldLabelStyle}>{f.label}</label>
+                <input type="text" value={newVeh[f.key]}
+                  onChange={e => setNewVeh(v => ({ ...v, [f.key]: e.target.value }))}
+                  placeholder={f.placeholder}
+                  style={fieldInputStyle} />
+              </div>
+            ))}
+
+            {/* Modelo: select del catálogo estandarizado; texto libre solo si el catálogo no cargó. */}
+            <div style={{ marginBottom: '0.5rem' }}>
+              <label style={fieldLabelStyle}>Modelo *</label>
+              {vehicleModels.length > 0 ? (
+                <select value={newVeh.model} onChange={e => setNewVeh(v => ({ ...v, model: e.target.value }))} style={fieldInputStyle}>
+                  <option value="">— Seleccioná un modelo —</option>
+                  {vehicleModels.map(m => (
+                    <option key={m.id} value={m.modelo}>{m.modelo}</option>
+                  ))}
+                </select>
+              ) : (
+                <input type="text" value={newVeh.model}
+                  onChange={e => setNewVeh(v => ({ ...v, model: e.target.value }))}
+                  placeholder="Renegade 200, NKD 125…"
+                  style={fieldInputStyle} />
+              )}
+            </div>
+
+            {[
+              { label: 'Año',   key: 'year',  placeholder: '2023', type: 'number' },
+              { label: 'Color', key: 'color', placeholder: 'Rojo, Negro…' },
+            ].map(f => (
+              <div key={f.key} style={{ marginBottom: '0.5rem' }}>
+                <label style={fieldLabelStyle}>{f.label}</label>
                 <input type={f.type || 'text'} value={newVeh[f.key]}
                   onChange={e => setNewVeh(v => ({ ...v, [f.key]: e.target.value }))}
                   placeholder={f.placeholder}
-                  style={{ width: '100%', background: '#0a0a0c', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, padding: '0.6rem 0.75rem', color: '#fff', fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box' }} />
+                  style={fieldInputStyle} />
               </div>
             ))}
             <button onClick={confirmNewVehicle} disabled={busy || !newVeh.model.trim()}
