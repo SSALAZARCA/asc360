@@ -221,7 +221,6 @@ describe('SuperadminDataPage — Vehículo tab — catálogo de modelos y lookup
     await waitFor(() => expect(screen.getByLabelText('VIN')).toHaveValue('VIN0001'));
 
     fireEvent.change(screen.getByLabelText('VIN'), { target: { value: 'SD5CCML06TL000359' } });
-    fireEvent.blur(screen.getByLabelText('VIN'));
 
     await waitFor(() => expect(screen.getByLabelText('Color')).toHaveValue('Rojo'));
     expect(screen.getByLabelText('Modelo')).toHaveValue('Renegade 200');
@@ -248,7 +247,6 @@ describe('SuperadminDataPage — Vehículo tab — catálogo de modelos y lookup
     await waitFor(() => expect(screen.getByLabelText('VIN')).toHaveValue('VIN0001'));
 
     fireEvent.change(screen.getByLabelText('VIN'), { target: { value: 'SD5CCML06TL000359' } });
-    fireEvent.blur(screen.getByLabelText('VIN'));
 
     await waitFor(() => expect(screen.getByLabelText('Modelo')).toHaveValue('RENEGADE SPORT 200S'));
   });
@@ -262,7 +260,6 @@ describe('SuperadminDataPage — Vehículo tab — catálogo de modelos y lookup
     await waitFor(() => expect(screen.getByLabelText('VIN')).toHaveValue('VIN0001'));
 
     fireEvent.change(screen.getByLabelText('VIN'), { target: { value: 'ZZZZZZZZZZZZZZZZZ' } });
-    fireEvent.blur(screen.getByLabelText('VIN'));
 
     await waitFor(() => {
       expect(screen.getByText(/No está en el maestro/)).toBeInTheDocument();
@@ -270,7 +267,7 @@ describe('SuperadminDataPage — Vehículo tab — catálogo de modelos y lookup
     expect(screen.getByLabelText('Modelo')).toHaveValue('Renegade 200');
   });
 
-  it('does not trigger a VIN lookup for a partial (non-17-char) VIN', async () => {
+  it('does not trigger a VIN lookup while the VIN is still partial (fewer than 17 chars)', async () => {
     queueResponses(makeResponse(200, VEHICLE));
 
     render(<SuperadminDataPage />);
@@ -279,7 +276,6 @@ describe('SuperadminDataPage — Vehículo tab — catálogo de modelos y lookup
     await waitFor(() => expect(screen.getByLabelText('VIN')).toHaveValue('VIN0001'));
 
     fireEvent.change(screen.getByLabelText('VIN'), { target: { value: 'SD5CCML06TL' } });
-    fireEvent.blur(screen.getByLabelText('VIN'));
 
     expect(nonCatalogCalls()).toHaveLength(1);
   });

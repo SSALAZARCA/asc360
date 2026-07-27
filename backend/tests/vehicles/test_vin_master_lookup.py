@@ -2,9 +2,9 @@
 GET /vehicles/vin/{vin} — VIN lookup used by the reception flow and by
 Datos Rápidos to prefill/correct model/year/color for a vehicle.
 
-Covers three real bugs found while investigating user reports ("el
-formulario de moto nueva no completa nada aunque tengo el VIN", later
-confirmed to also affect Datos Rápidos):
+Covers four real bugs found while investigating user reports ("el formulario
+de moto nueva no completa nada aunque tengo el VIN", later confirmed to also
+affect Datos Rápidos):
   1. `VinMasterOut` (backend/app/schemas/vin_master.py) originally expected
      attributes that didn't exist on whatever ORM row it serialized --
      `from_attributes=True` would crash on any real match.
@@ -15,6 +15,15 @@ confirmed to also affect Datos Rápidos):
      populated source is `ShipmentMotoUnit` (packing-list imports, same
      table behind the Imports > Motocicletas tab). `vin_master_service`
      was repointed to query it instead.
+  4. Even against `ShipmentMotoUnit`, `model`/`model_year` frequently come
+     back empty: those columns only hold a value when that specific unit
+     overrides the shipment order's nominal model/year -- most units share
+     the order's values and leave the unit-level column NULL. The user saw
+     color/year come through but Modelo stay blank for a VIN they could see
+     fully populated in Motocicletas. Fixed by falling back to
+     `ShipmentMotoUnit.shipment_order.model`/`.model_year`, mirroring the
+     exact resolution `_serialize_moto_unit` (imports.py) already uses for
+     that tab, so both screens always agree.
 """
 import uuid
 from unittest.mock import MagicMock, AsyncMock
@@ -23,7 +32,8 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.database import get_db
 from app.api.deps import get_optional_user, CurrentUser
-from app.models.imports import ShipmentMotoUnit
+from app.models.imports import ShipmentMotoUnit, ShipmentOrder
+from app.services.vin_master_service import VinLookupResult
 import app.api.v1.endpoints.vehicles as vehicles_endpoint
 
 
@@ -38,9 +48,24 @@ def make_moto_unit(**overrides) -> ShipmentMotoUnit:
         color="Rojo",
         color_runt="Rojo",
     )
+    unit.shipment_order = None  # not relevant unless a test overrides it
     for k, v in overrides.items():
         setattr(unit, k, v)
     return unit
+
+
+def make_lookup_result(**overrides) -> VinLookupResult:
+    result = VinLookupResult(
+        id=uuid.uuid4(),
+        vin="9C6JC5820PM123456",
+        engine_number="ENG-001",
+        model="Renegade 200",
+        year=2024,
+        color="Rojo",
+    )
+    for k, v in overrides.items():
+        setattr(result, k, v)
+    return result
 
 
 def make_client(current_user):
@@ -62,12 +87,10 @@ def teardown_overrides():
 
 
 class TestVinMasterSerialization:
-    def test_serializes_a_real_vin_master_row_without_crashing(self):
-        vm = make_moto_unit()
-        # This is exactly what from_attributes=True does under the hood --
-        # asserting it directly pins the fix (the old schema raised here).
+    def test_serializes_a_resolved_lookup_result_without_crashing(self):
+        result = make_lookup_result()
         from app.schemas.vin_master import VinMasterOut
-        out = VinMasterOut.model_validate(vm)
+        out = VinMasterOut.model_validate(result)
         assert out.model == "Renegade 200"
         assert out.year == 2024
         assert out.color == "Rojo"
@@ -76,8 +99,8 @@ class TestVinMasterSerialization:
 
 class TestVinMasterLookupEndpoint:
     def test_jwt_authenticated_request_can_reach_a_found_vin(self, monkeypatch):
-        vm = make_moto_unit()
-        monkeypatch.setattr(vehicles_endpoint.vin_master_service, "query_vin", AsyncMock(return_value=vm))
+        result = make_lookup_result()
+        monkeypatch.setattr(vehicles_endpoint.vin_master_service, "query_vin", AsyncMock(return_value=result))
         user = CurrentUser(user_id=str(uuid.uuid4()), role="admin", tenant_id=str(uuid.uuid4()), name="Asesor")
         client = make_client(user)
         try:
@@ -88,7 +111,7 @@ class TestVinMasterLookupEndpoint:
         assert res.json()["model"] == "Renegade 200"
 
     def test_no_jwt_and_no_bot_secret_is_rejected(self, monkeypatch):
-        monkeypatch.setattr(vehicles_endpoint.vin_master_service, "query_vin", AsyncMock(return_value=make_moto_unit()))
+        monkeypatch.setattr(vehicles_endpoint.vin_master_service, "query_vin", AsyncMock(return_value=make_lookup_result()))
         client = make_client(None)
         try:
             res = client.get("/api/v1/vehicles/vin/9C6JC5820PM123456")
@@ -108,9 +131,10 @@ class TestVinMasterLookupEndpoint:
 
 
 class TestVinMasterServiceQuery:
-    """Pins the real root cause: `query_vin` must hit `ShipmentMotoUnit`
+    """Pins the real root causes: `query_vin` must hit `ShipmentMotoUnit`
     (the table packing-list imports actually populate), not the dead
-    `VinMaster` table that no import flow ever writes to."""
+    `VinMaster` table, AND must fall back to the parent `ShipmentOrder`'s
+    model/year when the unit itself doesn't override them."""
 
     async def test_returns_none_for_a_non_17_char_vin_without_querying_the_db(self):
         from app.services.vin_master_service import vin_master_service
@@ -129,5 +153,37 @@ class TestVinMasterServiceQuery:
 
         result = await vin_master_service.query_vin(db, " 9c6jc5820pm123456 ")
 
-        assert result is unit
+        assert result.vin == "9C6JC5820PM123456"
+        assert result.model == "RENEGADE 200"
         assert db.execute.call_count == 2
+
+    async def test_falls_back_to_the_shipment_order_model_and_year_when_the_unit_has_none(self):
+        # Real-world case that motivated this fix: most units in a shipment
+        # share the order's model/year and leave their own columns NULL.
+        from app.services.vin_master_service import vin_master_service
+        order = ShipmentOrder(id=uuid.uuid4(), pi_number="PI-1", model="Renegade Sport 200", model_year=2026)
+        unit = make_moto_unit(model=None, model_year=None, color_runt="Rojo")
+        unit.shipment_order = order
+        db_result = MagicMock(scalar_one_or_none=MagicMock(return_value=unit))
+        db = AsyncMock()
+        db.execute.return_value = db_result
+
+        result = await vin_master_service.query_vin(db, unit.vin_number)
+
+        assert result.model == "RENEGADE SPORT 200"
+        assert result.year == 2026
+        assert result.color == "Rojo"
+
+    async def test_prefers_the_unit_level_model_over_the_order_when_both_are_set(self):
+        from app.services.vin_master_service import vin_master_service
+        order = ShipmentOrder(id=uuid.uuid4(), pi_number="PI-1", model="Renegade 200", model_year=2024)
+        unit = make_moto_unit(model="Renegade Sport 200S", model_year=2026)
+        unit.shipment_order = order
+        db_result = MagicMock(scalar_one_or_none=MagicMock(return_value=unit))
+        db = AsyncMock()
+        db.execute.return_value = db_result
+
+        result = await vin_master_service.query_vin(db, unit.vin_number)
+
+        assert result.model == "RENEGADE SPORT 200S"
+        assert result.year == 2026

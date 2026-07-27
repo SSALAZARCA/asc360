@@ -250,8 +250,15 @@ function VinField({ v }) {
         aria-label="VIN"
         type="text"
         value={v.form.vin}
-        onChange={(e) => { v.setForm({ ...v.form, vin: e.target.value }); v.setVinLookupStatus('idle'); }}
-        onBlur={(e) => v.lookupVin(e.target.value)}
+        onChange={(e) => {
+          const value = e.target.value;
+          v.setForm({ ...v.form, vin: value });
+          v.setVinLookupStatus('idle');
+          // Buscar apenas se completan los 17 caracteres, sin esperar a que
+          // el usuario haga click afuera -- de lo contrario el buscador
+          // parece "colgado" mientras en realidad todavía no arrancó.
+          if (value.trim().length === 17) v.lookupVin(value);
+        }}
         style={inputStyle}
       />
       {v.vinLookupStatus === 'loading' && <p style={hintStyle}>Buscando en el maestro de VINs…</p>}
