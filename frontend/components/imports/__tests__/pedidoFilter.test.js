@@ -8,13 +8,14 @@
  * in isolation rather than through the (large, currently untested) host
  * component.
  */
-import { getUniquePedidos, filterItemsByPedido } from '../pedidoFilter';
+import { getUniquePedidos, filterItemsByPedido, getUniqueModelos, filterItemsByModelo } from '../pedidoFilter';
 
 const ITEMS = [
   {
     factory_part_number: 'FPN-1',
     rotation_class: 'baja',
     total_qty: 8,
+    models: ['XPEED 125 ADV', 'XPEED 150 ADV'],
     lots: [
       { lot_identifier: 'PI-100', qty: 5, fob_unit: 10 },
       { lot_identifier: 'PI-205', qty: 3, fob_unit: 10 },
@@ -24,6 +25,7 @@ const ITEMS = [
     factory_part_number: 'FPN-2',
     rotation_class: 'media',
     total_qty: 4,
+    models: ['ROCKVILLE 200'],
     lots: [
       { lot_identifier: 'PI-205', qty: 4, fob_unit: 20 },
     ],
@@ -32,6 +34,7 @@ const ITEMS = [
     factory_part_number: 'FPN-3',
     rotation_class: 'alta',
     total_qty: 2,
+    models: [],
     lots: [
       { lot_identifier: 'PI-300', qty: 2, fob_unit: 5 },
     ],
@@ -78,5 +81,39 @@ describe('filterItemsByPedido', () => {
     const fpn2 = result.find(i => i.factory_part_number === 'FPN-2');
     expect(fpn1.total_qty).toBe(3);
     expect(fpn2.total_qty).toBe(4);
+  });
+});
+
+describe('getUniqueModelos', () => {
+  it('collects every distinct model across all items, sorted', () => {
+    expect(getUniqueModelos(ITEMS)).toEqual(['ROCKVILLE 200', 'XPEED 125 ADV', 'XPEED 150 ADV']);
+  });
+
+  it('returns an empty list for no items', () => {
+    expect(getUniqueModelos([])).toEqual([]);
+    expect(getUniqueModelos(null)).toEqual([]);
+  });
+});
+
+describe('filterItemsByModelo', () => {
+  it('returns the items unchanged (same reference) when no modelo is selected', () => {
+    expect(filterItemsByModelo(ITEMS, '')).toBe(ITEMS);
+    expect(filterItemsByModelo(ITEMS, null)).toBe(ITEMS);
+  });
+
+  it('keeps only items whose models list includes the selected modelo', () => {
+    const result = filterItemsByModelo(ITEMS, 'ROCKVILLE 200');
+    expect(result.map(i => i.factory_part_number)).toEqual(['FPN-2']);
+  });
+
+  it('does NOT trim lots/total_qty -- models are item-level, not lot-level', () => {
+    const result = filterItemsByModelo(ITEMS, 'XPEED 125 ADV');
+    expect(result[0].total_qty).toBe(8);
+    expect(result[0].lots).toHaveLength(2);
+  });
+
+  it('excludes items with no models at all', () => {
+    const result = filterItemsByModelo(ITEMS, 'ROCKVILLE 200');
+    expect(result.some(i => i.factory_part_number === 'FPN-3')).toBe(false);
   });
 });

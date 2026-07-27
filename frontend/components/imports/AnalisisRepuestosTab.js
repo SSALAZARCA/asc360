@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { authFetch } from '../../lib/authFetch';
 import { toast } from '../../lib/toast';
 import { ArrowUp, ArrowDown, ChevronsUpDown, RefreshCw, Download, Link2 } from 'lucide-react';
-import { getUniquePedidos, filterItemsByPedido } from './pedidoFilter';
+import { getUniquePedidos, filterItemsByPedido, getUniqueModelos, filterItemsByModelo } from './pedidoFilter';
 
 const ROT = {
   baja:  { bg: 'rgba(74,222,128,0.12)',  color: '#4ade80',  border: 'rgba(74,222,128,0.3)',  label: 'BAJA'  },
@@ -306,6 +306,7 @@ export default function AnalisisRepuestosTab({ userRole }) {
   const [exporting, setExporting] = useState(false);
   const [rotFilter, setRotFilter] = useState('all');
   const [pedidoFilter, setPedidoFilter] = useState('');
+  const [modeloFilter, setModeloFilter] = useState('');
   const [sortCol,   setSortCol]   = useState('rotation');
   const [sortDir,   setSortDir]   = useState('asc');
 
@@ -567,11 +568,16 @@ export default function AnalisisRepuestosTab({ userRole }) {
     }
   };
 
-  // Vista filtrada por pedido/PI (Fase "filtro de pedido", 2026-07-24). Con
-  // pedidoFilter vacío, filterItemsByPedido devuelve la MISMA referencia que
-  // data.items — cero cambio de comportamiento cuando el filtro está apagado.
+  // Vista filtrada por pedido/PI (Fase "filtro de pedido", 2026-07-24) y por
+  // modelo de moto (2026-07-27). Con ambos filtros vacíos, cada helper
+  // devuelve la MISMA referencia recibida — cero cambio de comportamiento
+  // cuando los filtros están apagados. A diferencia del pedido (que recorta
+  // los lots de un ítem), el modelo es una propiedad del ítem completo, así
+  // que solo decide qué filas se muestran, sin tocar total_qty.
   const pedidoOptions   = getUniquePedidos(data?.items);
-  const effectiveItems  = filterItemsByPedido(data?.items, pedidoFilter);
+  const modeloOptions   = getUniqueModelos(data?.items);
+  const effectiveItems  = filterItemsByModelo(filterItemsByPedido(data?.items, pedidoFilter), modeloFilter);
+  const hasFilter       = !!(pedidoFilter || modeloFilter);
 
   const searchNorm = search.trim().toUpperCase();
   const items = effectiveItems.filter(i =>
@@ -592,23 +598,28 @@ export default function AnalisisRepuestosTab({ userRole }) {
     item.lots.some(lot => !marked[markKey(item.factory_part_number, lot.lot_identifier)])
   ).length;
 
-  // El filtro de pedido SOLO acota qué se ve en pantalla — nunca toca qué
-  // hay marcado. "Ejecutar ajustes" sigue procesando TODAS las decisiones
-  // guardadas en el servidor, sin importar el filtro. Acá solo se recorta
-  // qué entra en los totales de las tarjetas (Total ajuste) cuando hay un
-  // pedido puntual seleccionado.
+  // Los filtros de pedido y modelo SOLO acotan qué se ve en pantalla —
+  // nunca tocan qué hay marcado. "Ejecutar ajustes" sigue procesando TODAS
+  // las decisiones guardadas en el servidor, sin importar los filtros. Acá
+  // solo se recorta qué entra en los totales de las tarjetas (Total
+  // ajuste) cuando hay un pedido y/o modelo puntual seleccionado.
   const markedCancelarAll = Object.entries(marked)
     .filter(([, v]) => v === 'cancelar')
     .map(([k]) => { const [fpn, pi] = k.split('::'); return { fpn, pi }; });
   const markedCambiarAll  = Object.entries(marked)
     .filter(([, v]) => v === 'cambiar')
     .map(([k]) => { const [fpn, pi] = k.split('::'); return { fpn, pi, det: details[k] }; });
-  const markedCancelar = pedidoFilter
-    ? markedCancelarAll.filter(({ pi }) => pi === pedidoFilter)
-    : markedCancelarAll;
-  const markedCambiar = pedidoFilter
-    ? markedCambiarAll.filter(({ pi }) => pi === pedidoFilter)
-    : markedCambiarAll;
+  const matchesModeloFilter = (fpn) => {
+    if (!modeloFilter) return true;
+    const item = (data?.items || []).find(i => i.factory_part_number === fpn);
+    return (item?.models || []).includes(modeloFilter);
+  };
+  const markedCancelar = markedCancelarAll.filter(({ fpn, pi }) =>
+    (!pedidoFilter || pi === pedidoFilter) && matchesModeloFilter(fpn)
+  );
+  const markedCambiar = markedCambiarAll.filter(({ fpn, pi }) =>
+    (!pedidoFilter || pi === pedidoFilter) && matchesModeloFilter(fpn)
+  );
   const hasMarked = markedCancelar.length > 0 || markedCambiar.length > 0;
 
   const cancelFobTotal = markedCancelar.reduce((total, { fpn, pi }) => {
@@ -841,10 +852,10 @@ export default function AnalisisRepuestosTab({ userRole }) {
         <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
           {[
             { label: 'Para revisar',    value: pendingCount,          color: pendingCount === 0 ? '#4ade80' : '#fff' },
-            { label: 'Unidades totales', value: pedidoFilter ? effectiveItems.reduce((s, i) => s + i.total_qty, 0) : data.total_qty, color: '#38bdf8' },
-            { label: 'Baja rotación',   value: pedidoFilter ? effectiveItems.filter(i => i.rotation_class === 'baja').length  : data.baja_count,      color: '#4ade80' },
-            { label: 'Media rotación',  value: pedidoFilter ? effectiveItems.filter(i => i.rotation_class === 'media').length : data.media_count,     color: '#fbbf24' },
-            { label: 'Alta rotación',   value: pedidoFilter ? effectiveItems.filter(i => i.rotation_class === 'alta').length  : (data.alta_count ?? 0), color: '#f87171' },
+            { label: 'Unidades totales', value: hasFilter ? effectiveItems.reduce((s, i) => s + i.total_qty, 0) : data.total_qty, color: '#38bdf8' },
+            { label: 'Baja rotación',   value: hasFilter ? effectiveItems.filter(i => i.rotation_class === 'baja').length  : data.baja_count,      color: '#4ade80' },
+            { label: 'Media rotación',  value: hasFilter ? effectiveItems.filter(i => i.rotation_class === 'media').length : data.media_count,     color: '#fbbf24' },
+            { label: 'Alta rotación',   value: hasFilter ? effectiveItems.filter(i => i.rotation_class === 'alta').length  : (data.alta_count ?? 0), color: '#f87171' },
           ].map(({ label, value, color }) => (
             <div key={label} style={{
               background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)',
@@ -942,9 +953,31 @@ export default function AnalisisRepuestosTab({ userRole }) {
             color: pedidoFilter ? '#38bdf8' : '#fff', outline: 'none',
           }}
         >
-          <option value="">Todos los pedidos</option>
+          {/* Sin esto, la lista desplegable heredaba el texto claro del
+              <select> sobre el fondo claro por defecto del navegador --
+              invisible hasta pasar el mouse (el resaltado azul del hover
+              es lo único que generaba contraste). Cada <option> necesita
+              su propio color/fondo explícitos. */}
+          <option value="" style={{ background: '#1a1a22', color: '#fff' }}>Todos los pedidos</option>
           {pedidoOptions.map(pi => (
-            <option key={pi} value={pi}>{pi}</option>
+            <option key={pi} value={pi} style={{ background: '#1a1a22', color: '#fff' }}>{pi}</option>
+          ))}
+        </select>
+
+        <select
+          aria-label="Filtrar por modelo"
+          value={modeloFilter}
+          onChange={e => setModeloFilter(e.target.value)}
+          style={{
+            padding: '0.4rem 0.75rem', borderRadius: '8px', fontSize: '0.7rem',
+            background: modeloFilter ? 'rgba(56,189,248,0.12)' : 'rgba(255,255,255,0.05)',
+            border: `1px solid ${modeloFilter ? 'rgba(56,189,248,0.4)' : 'rgba(255,255,255,0.1)'}`,
+            color: modeloFilter ? '#38bdf8' : '#fff', outline: 'none',
+          }}
+        >
+          <option value="" style={{ background: '#1a1a22', color: '#fff' }}>Todos los modelos</option>
+          {modeloOptions.map(m => (
+            <option key={m} value={m} style={{ background: '#1a1a22', color: '#fff' }}>{m}</option>
           ))}
         </select>
 

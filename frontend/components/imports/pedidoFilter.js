@@ -31,3 +31,19 @@ export function filterItemsByPedido(items, pedido) {
   }
   return result;
 }
+
+export function getUniqueModelos(items) {
+  const seen = new Set();
+  for (const item of items || []) {
+    for (const modelo of item.models || []) seen.add(modelo);
+  }
+  return [...seen].sort();
+}
+
+// Unlike pedido, `models` is a property of the ITEM itself (which motos use
+// that part), not of an individual lot -- so this only drops non-matching
+// items, it never trims an item's lots/total_qty.
+export function filterItemsByModelo(items, modelo) {
+  if (!modelo) return items || [];
+  return (items || []).filter(item => (item.models || []).includes(modelo));
+}
