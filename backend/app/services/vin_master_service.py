@@ -5,6 +5,7 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.imports import ShipmentMotoUnit
+from app.models.vin_master import VinMaster
 
 
 @dataclass
@@ -57,7 +58,9 @@ class VinMasterService:
         # normalización que ya usa `_serialize_moto_unit` (imports.py) para
         # la pestaña Motocicletas, así ambas pantallas siempre coinciden.
         order = unit.shipment_order
-        model = ' '.join(((unit.model or (order.model if order else None)) or '').split()).upper() or None
+        order_model = order.model if order else None
+        raw_model = unit.model or order_model or ''
+        model = ' '.join(raw_model.split()).upper() or None
         year = unit.model_year or (order.model_year if order else None)
 
         return VinLookupResult(
@@ -68,6 +71,26 @@ class VinMasterService:
             year=year,
             color=unit.color_runt,
         )
+
+    async def query_warranty_vin(
+        self,
+        db: AsyncSession,
+        vin: str
+    ) -> Optional[VinMaster]:
+        """Términos de garantía por VIN (cobertura de motor/general, revisiones
+        pagas, valor de PDI). Es una tabla DISTINTA de `ShipmentMotoUnit` --
+        esta guarda reglas de negocio del fabricante, no datos del packing
+        list -- y nada la puebla todavía, así que sigue devolviendo `None`
+        siempre. Se mantiene separada de `query_vin` a propósito: mezclarlas
+        fue lo que rompió el enriquecimiento de garantía de
+        `get_vehicle_by_plate` cuando `query_vin` pasó a devolver datos reales
+        de `ShipmentMotoUnit` con otro conjunto de campos."""
+        clean_vin = str(vin).strip().upper()
+        if len(clean_vin) != 17:
+            return None
+        return (await db.execute(
+            select(VinMaster).where(VinMaster.vin == clean_vin)
+        )).scalar_one_or_none()
 
 
 vin_master_service = VinMasterService()
