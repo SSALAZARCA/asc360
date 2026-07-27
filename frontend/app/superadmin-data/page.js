@@ -242,6 +242,52 @@ function useVehicleQuickFix() {
   return { form, setForm, found, ...searchApi, ...saveApi, ...vinApi };
 }
 
+function VinField({ v }) {
+  return (
+    <label style={labelStyle}>
+      VIN
+      <input
+        aria-label="VIN"
+        type="text"
+        value={v.form.vin}
+        onChange={(e) => { v.setForm({ ...v.form, vin: e.target.value }); v.setVinLookupStatus('idle'); }}
+        onBlur={(e) => v.lookupVin(e.target.value)}
+        style={inputStyle}
+      />
+      {v.vinLookupStatus === 'loading' && <p style={hintStyle}>Buscando en el maestro de VINs…</p>}
+      {v.vinLookupStatus === 'found' && <p style={{ ...hintStyle, color: '#22c55e' }}>✓ Datos encontrados y completados abajo.</p>}
+      {v.vinLookupStatus === 'not_found' && <p style={hintStyle}>No está en el maestro — completá manualmente.</p>}
+    </label>
+  );
+}
+
+// El maestro de VINs trae el modelo tal como viene del packing list -- no
+// siempre coincide letra por letra con el catálogo estandarizado
+// ("RENEGADE SPORT 200S" vs. "Renegade 200", por ejemplo). Sin la opción
+// extra, un valor sin match exacto queda invisible en el <select> aunque el
+// dato SÍ esté guardado en el formulario -- se agrega para que el usuario lo
+// vea y decida si lo corrige a un modelo estándar.
+function ModeloField({ v }) {
+  return (
+    <label style={labelStyle}>
+      Modelo
+      {v.vehicleModels.length > 0 ? (
+        <select aria-label="Modelo" value={v.form.model} onChange={(e) => v.setForm({ ...v.form, model: e.target.value })} style={inputStyle}>
+          <option value="">— Seleccioná un modelo —</option>
+          {v.form.model && !v.vehicleModels.some((m) => m.modelo === v.form.model) && (
+            <option value={v.form.model}>{v.form.model} (no está en el catálogo estándar)</option>
+          )}
+          {v.vehicleModels.map((m) => (
+            <option key={m.id} value={m.modelo}>{m.modelo}</option>
+          ))}
+        </select>
+      ) : (
+        <input aria-label="Modelo" type="text" value={v.form.model} onChange={(e) => v.setForm({ ...v.form, model: e.target.value })} style={inputStyle} />
+      )}
+    </label>
+  );
+}
+
 function VehicleTab() {
   const v = useVehicleQuickFix();
   return (
@@ -259,38 +305,9 @@ function VehicleTab() {
       {v.found && (
         <div style={fieldGridStyle}>
           <Field label="Placa" value={v.form.plate} onChange={(e) => v.setForm({ ...v.form, plate: e.target.value })} />
-
-          <label style={labelStyle}>
-            VIN
-            <input
-              aria-label="VIN"
-              type="text"
-              value={v.form.vin}
-              onChange={(e) => { v.setForm({ ...v.form, vin: e.target.value }); v.setVinLookupStatus('idle'); }}
-              onBlur={(e) => v.lookupVin(e.target.value)}
-              style={inputStyle}
-            />
-            {v.vinLookupStatus === 'loading' && <p style={hintStyle}>Buscando en el maestro de VINs…</p>}
-            {v.vinLookupStatus === 'found' && <p style={{ ...hintStyle, color: '#22c55e' }}>✓ Datos encontrados y completados abajo.</p>}
-            {v.vinLookupStatus === 'not_found' && <p style={hintStyle}>No está en el maestro — completá manualmente.</p>}
-          </label>
-
+          <VinField v={v} />
           <Field label="Marca" value={v.form.brand} onChange={(e) => v.setForm({ ...v.form, brand: e.target.value })} />
-
-          <label style={labelStyle}>
-            Modelo
-            {v.vehicleModels.length > 0 ? (
-              <select aria-label="Modelo" value={v.form.model} onChange={(e) => v.setForm({ ...v.form, model: e.target.value })} style={inputStyle}>
-                <option value="">— Seleccioná un modelo —</option>
-                {v.vehicleModels.map((m) => (
-                  <option key={m.id} value={m.modelo}>{m.modelo}</option>
-                ))}
-              </select>
-            ) : (
-              <input aria-label="Modelo" type="text" value={v.form.model} onChange={(e) => v.setForm({ ...v.form, model: e.target.value })} style={inputStyle} />
-            )}
-          </label>
-
+          <ModeloField v={v} />
           <Field label="Color" value={v.form.color} onChange={(e) => v.setForm({ ...v.form, color: e.target.value })} />
           <Field label="Año" type="number" value={v.form.year} onChange={(e) => v.setForm({ ...v.form, year: e.target.value })} />
           <SaveButton onClick={v.save} saving={v.saving} />

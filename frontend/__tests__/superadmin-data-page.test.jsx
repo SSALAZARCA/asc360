@@ -232,6 +232,27 @@ describe('SuperadminDataPage — Vehículo tab — catálogo de modelos y lookup
     expect(url).toContain('/vehicles/vin/SD5CCML06TL000359');
   });
 
+  it('shows the VIN-matched model even when it does not exactly match any catalog entry', async () => {
+    // The VIN master returns the raw packing-list model string, which often
+    // doesn't match the standardized catalog letter-for-letter (word order,
+    // trim suffixes, etc.) -- it must still show up, not silently disappear.
+    mockVehicleModels = [{ id: 'm1', modelo: 'Renegade 200' }];
+    queueResponses(
+      makeResponse(200, { ...VEHICLE, model: '', color: '', year: '' }),
+      makeResponse(200, { model: 'RENEGADE SPORT 200S', year: 2026, color: 'Rojo' }),
+    );
+
+    render(<SuperadminDataPage />);
+    fireEvent.change(screen.getByLabelText('Buscar vehículo por placa'), { target: { value: 'ABC123' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Buscar' }));
+    await waitFor(() => expect(screen.getByLabelText('VIN')).toHaveValue('VIN0001'));
+
+    fireEvent.change(screen.getByLabelText('VIN'), { target: { value: 'SD5CCML06TL000359' } });
+    fireEvent.blur(screen.getByLabelText('VIN'));
+
+    await waitFor(() => expect(screen.getByLabelText('Modelo')).toHaveValue('RENEGADE SPORT 200S'));
+  });
+
   it('shows a not-found hint and leaves the form untouched when the VIN has no match', async () => {
     queueResponses(makeResponse(200, VEHICLE), makeResponse(404, {}));
 
