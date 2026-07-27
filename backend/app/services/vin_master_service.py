@@ -1,29 +1,39 @@
 from typing import Optional
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.repositories.vin_master_repository import vin_master_repository
-from app.models.vin_master import VinMaster
-from app.schemas.vin_master import VinMasterCreate, VinMasterUpdate
+from app.models.imports import ShipmentMotoUnit
+
 
 class VinMasterService:
-    """Capa de lógica de negocio para las maestras de VIN (Base de datos global de red)."""
+    """Búsqueda de VIN para prefill de marca/modelo/año/color.
 
-    def __init__(self):
-        self.repository = vin_master_repository
+    Consulta `ShipmentMotoUnit` (la tabla real, poblada por los packing
+    lists de motos importadas -- la misma que alimenta la pestaña
+    "Motocicletas" de Importaciones). La tabla `VinMaster` original (ver
+    `app.models.vin_master`) nunca tuvo ningún flujo de import que la
+    llenara -- toda consulta contra ella devolvía 404 sin importar el VIN.
+    """
 
     async def query_vin(
         self,
         db: AsyncSession,
         vin: str
-    ) -> Optional[VinMaster]:
-        """Consulta el maestro de motocicletas por VIN específico."""
-        # Limpieza básica
-        clean_vin = str(vin).strip().upper()
-        if len(clean_vin) != 17: # Regla estándar VIN
+    ) -> Optional[ShipmentMotoUnit]:
+        if len(vin.strip()) != 17:  # Regla estándar VIN
             return None
-        
-        return await self.repository.get_by_vin(db, clean_vin)
 
-    # TODO: Métodos para importes en lote desde Excel o WebScraping Aduanero
+        # Exact match first (packing lists a veces traen mayúsc./espacios
+        # ya normalizados), luego un fallback normalizado.
+        unit = (await db.execute(
+            select(ShipmentMotoUnit).where(ShipmentMotoUnit.vin_number == vin)
+        )).scalar_one_or_none()
+        if unit is None:
+            vin_norm = vin.strip().upper()
+            unit = (await db.execute(
+                select(ShipmentMotoUnit).where(ShipmentMotoUnit.vin_number == vin_norm)
+            )).scalar_one_or_none()
+        return unit
+
 
 vin_master_service = VinMasterService()
