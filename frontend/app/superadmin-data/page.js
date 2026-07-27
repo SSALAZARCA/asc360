@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import AdminLayout from '../admin-layout';
 import { authFetch } from '../../lib/authFetch';
 import { toast } from '../../lib/toast';
@@ -99,6 +99,7 @@ const sectionStyle = { display: 'flex', flexDirection: 'column', gap: '1rem' };
 const fieldGridStyle = { display: 'flex', flexDirection: 'column', gap: '0.9rem', maxWidth: '420px', marginTop: '1rem' };
 const labelStyle = { display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.72rem', fontWeight: 700, color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase', letterSpacing: '0.05em' };
 const inputStyle = { background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', padding: '0.6rem 0.85rem', color: '#fff', fontSize: '0.85rem', outline: 'none', textTransform: 'none' };
+const hintStyle = { margin: 0, fontSize: '0.68rem', color: 'rgba(255,255,255,0.45)', textTransform: 'none', fontWeight: 400, letterSpacing: 'normal' };
 
 function Field({ label, type = 'text', value, onChange }) {
   return (
@@ -132,16 +133,14 @@ function SaveButton({ onClick, saving }) {
 // Vehículo tab — state + API calls live in a hook so the component below is
 // pure rendering of that hook's return value.
 // ---------------------------------------------------------------------------
-function useVehicleQuickFix() {
+function useVehicleSearch(setForm, setFound, resetVinLookup) {
   const [plateQuery, setPlateQuery] = useState('');
-  const [form, setForm] = useState(VEHICLE_FORM_DEFAULTS);
-  const [found, setFound] = useState(false);
   const [searching, setSearching] = useState(false);
-  const [saving, setSaving] = useState(false);
 
   const search = async () => {
     if (!plateQuery.trim()) return;
     setSearching(true);
+    resetVinLookup();
     try {
       const res = await authFetch(`/superadmin/data/vehicles?plate=${encodeURIComponent(plateQuery.trim())}`);
       if (res.ok) {
@@ -159,6 +158,51 @@ function useVehicleQuickFix() {
       setSearching(false);
     }
   };
+
+  return { plateQuery, setPlateQuery, searching, search };
+}
+
+// Catálogo de modelos (para el <select> de Modelo) + búsqueda del maestro de
+// VINs. A diferencia del alta de moto nueva (que solo completa campos
+// vacíos), acá esto es una herramienta de CORRECCIÓN: el dato en pantalla es
+// justamente el que puede estar mal, y nada se guarda hasta tocar "Guardar"
+// -- así que sobreescribe modelo/año/color con lo que traiga el maestro.
+function useVehicleVinLookup(setForm) {
+  const [vehicleModels, setVehicleModels] = useState([]);
+  const [vinLookupStatus, setVinLookupStatus] = useState('idle'); // idle | loading | found | not_found
+
+  useEffect(() => {
+    authFetch('/vehicle-models')
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data) => setVehicleModels(Array.isArray(data) ? data : []))
+      .catch(() => setVehicleModels([]));
+  }, []);
+
+  const lookupVin = useCallback(async (rawVin) => {
+    const vin = rawVin.trim().toUpperCase();
+    if (vin.length !== 17) { setVinLookupStatus('idle'); return; }
+    setVinLookupStatus('loading');
+    try {
+      const res = await authFetch(`/vehicles/vin/${encodeURIComponent(vin)}`);
+      if (!res.ok) { setVinLookupStatus('not_found'); return; }
+      const data = await res.json();
+      setForm((f) => ({
+        ...f,
+        model: data.model || f.model,
+        year: data.year ? String(data.year) : f.year,
+        color: data.color || f.color,
+      }));
+      setVinLookupStatus('found');
+    } catch {
+      setVinLookupStatus('not_found');
+    }
+  }, [setForm]);
+
+  return { vehicleModels, vinLookupStatus, setVinLookupStatus, lookupVin };
+}
+
+function useVehicleSave(form, found, setForm) {
+  const [saving, setSaving] = useState(false);
 
   const save = async () => {
     if (!found) return;
@@ -182,7 +226,20 @@ function useVehicleQuickFix() {
     }
   };
 
-  return { plateQuery, setPlateQuery, form, setForm, found, searching, saving, search, save };
+  return { saving, save };
+}
+
+// Orquestador delgado: mismo patrón que useOrderQuickFix -- mantiene el
+// `form`/`found` compartido y compone los tres hooks de arriba.
+function useVehicleQuickFix() {
+  const [form, setForm] = useState(VEHICLE_FORM_DEFAULTS);
+  const [found, setFound] = useState(false);
+
+  const vinApi = useVehicleVinLookup(setForm);
+  const searchApi = useVehicleSearch(setForm, setFound, () => vinApi.setVinLookupStatus('idle'));
+  const saveApi = useVehicleSave(form, found, setForm);
+
+  return { form, setForm, found, ...searchApi, ...saveApi, ...vinApi };
 }
 
 function VehicleTab() {
@@ -202,9 +259,38 @@ function VehicleTab() {
       {v.found && (
         <div style={fieldGridStyle}>
           <Field label="Placa" value={v.form.plate} onChange={(e) => v.setForm({ ...v.form, plate: e.target.value })} />
-          <Field label="VIN" value={v.form.vin} onChange={(e) => v.setForm({ ...v.form, vin: e.target.value })} />
+
+          <label style={labelStyle}>
+            VIN
+            <input
+              aria-label="VIN"
+              type="text"
+              value={v.form.vin}
+              onChange={(e) => { v.setForm({ ...v.form, vin: e.target.value }); v.setVinLookupStatus('idle'); }}
+              onBlur={(e) => v.lookupVin(e.target.value)}
+              style={inputStyle}
+            />
+            {v.vinLookupStatus === 'loading' && <p style={hintStyle}>Buscando en el maestro de VINs…</p>}
+            {v.vinLookupStatus === 'found' && <p style={{ ...hintStyle, color: '#22c55e' }}>✓ Datos encontrados y completados abajo.</p>}
+            {v.vinLookupStatus === 'not_found' && <p style={hintStyle}>No está en el maestro — completá manualmente.</p>}
+          </label>
+
           <Field label="Marca" value={v.form.brand} onChange={(e) => v.setForm({ ...v.form, brand: e.target.value })} />
-          <Field label="Modelo" value={v.form.model} onChange={(e) => v.setForm({ ...v.form, model: e.target.value })} />
+
+          <label style={labelStyle}>
+            Modelo
+            {v.vehicleModels.length > 0 ? (
+              <select aria-label="Modelo" value={v.form.model} onChange={(e) => v.setForm({ ...v.form, model: e.target.value })} style={inputStyle}>
+                <option value="">— Seleccioná un modelo —</option>
+                {v.vehicleModels.map((m) => (
+                  <option key={m.id} value={m.modelo}>{m.modelo}</option>
+                ))}
+              </select>
+            ) : (
+              <input aria-label="Modelo" type="text" value={v.form.model} onChange={(e) => v.setForm({ ...v.form, model: e.target.value })} style={inputStyle} />
+            )}
+          </label>
+
           <Field label="Color" value={v.form.color} onChange={(e) => v.setForm({ ...v.form, color: e.target.value })} />
           <Field label="Año" type="number" value={v.form.year} onChange={(e) => v.setForm({ ...v.form, year: e.target.value })} />
           <SaveButton onClick={v.save} saving={v.saving} />

@@ -9,11 +9,15 @@
  *   GET  /superadmin/data/orders?plate=&order_id= -> 200 order | 404
  *   PUT  /superadmin/data/orders/{id}            -> 200 order | 404 | 422 (string detail)
  *                                                    | 409 {"detail": {"detail": msg, "code": "CONFIRM_DELETE_EVENT"}}
+ *   GET  /vehicle-models                          -> 200 [{id, modelo}, ...] (fetched on mount by the Vehículo tab)
+ *   GET  /vehicles/vin/{vin}                      -> 200 {model, year, color} | 404
  *
  * Covers:
  *   - Two-tab rendering (Vehículo / Orden)
  *   - Vehículo: search populates form; PUT sends ONLY whitelisted fields;
  *     404/409 surfaced via toast
+ *   - Vehículo: Modelo renders as a catalog <select>; VIN blur looks up the
+ *     VIN master and fills model/year/color, or shows a not-found hint
  *   - Orden: search populates form (dates + mileage_km + service_type);
  *     404/422 surfaced via toast
  *   - Orden: 409 CONFIRM_DELETE_EVENT opens ConfirmModal with the event/plate
@@ -70,8 +74,33 @@ const ORDER = {
   mileage_km: '15000.00',
 };
 
+// The Vehículo tab always fires GET /vehicle-models on mount (its Modelo
+// catalog), regardless of which tab is showing -- SuperadminDataPage mounts
+// the Vehículo tab first by default. Real test scenarios only care about the
+// OTHER calls (search/save/VIN lookup), so the mock routes by URL instead of
+// by call position: `/vehicle-models` always answers from `mockVehicleModels`
+// (defaults to an empty catalog, overridable per test), and every other call
+// consumes the given `responses` queue in order.
+let mockVehicleModels = [];
+
+function queueResponses(...responses) {
+  let i = 0;
+  mockAuthFetch.mockImplementation((url) => {
+    if (typeof url === 'string' && url.includes('/vehicle-models')) {
+      return Promise.resolve(makeResponse(200, mockVehicleModels));
+    }
+    return Promise.resolve(responses[i++]);
+  });
+}
+
+function nonCatalogCalls() {
+  return mockAuthFetch.mock.calls.filter(([url]) => !(typeof url === 'string' && url.includes('/vehicle-models')));
+}
+
 beforeEach(() => {
   mockAuthFetch.mockReset();
+  mockVehicleModels = [];
+  queueResponses();
   mockToast.error.mockReset();
   mockToast.success.mockReset();
 });
@@ -86,7 +115,7 @@ describe('SuperadminDataPage — tab structure', () => {
 
 describe('SuperadminDataPage — Vehículo tab', () => {
   it('populates the form with the found vehicle on a successful search', async () => {
-    mockAuthFetch.mockResolvedValueOnce(makeResponse(200, VEHICLE));
+    queueResponses(makeResponse(200, VEHICLE));
 
     render(<SuperadminDataPage />);
     fireEvent.change(screen.getByLabelText('Buscar vehículo por placa'), { target: { value: 'ABC123' } });
@@ -101,7 +130,7 @@ describe('SuperadminDataPage — Vehículo tab', () => {
   });
 
   it('shows an error toast and no form when the plate is not found (404)', async () => {
-    mockAuthFetch.mockResolvedValueOnce(makeResponse(404, { detail: 'Vehículo no encontrado' }));
+    queueResponses(makeResponse(404, { detail: 'Vehículo no encontrado' }));
 
     render(<SuperadminDataPage />);
     fireEvent.change(screen.getByLabelText('Buscar vehículo por placa'), { target: { value: 'ZZZ999' } });
@@ -114,8 +143,7 @@ describe('SuperadminDataPage — Vehículo tab', () => {
   });
 
   it('PUTs only the whitelisted vehicle fields on save and shows a success toast', async () => {
-    mockAuthFetch.mockResolvedValueOnce(makeResponse(200, VEHICLE));
-    mockAuthFetch.mockResolvedValueOnce(makeResponse(200, { ...VEHICLE, plate: 'XYZ789' }));
+    queueResponses(makeResponse(200, VEHICLE), makeResponse(200, { ...VEHICLE, plate: 'XYZ789' }));
 
     render(<SuperadminDataPage />);
     fireEvent.change(screen.getByLabelText('Buscar vehículo por placa'), { target: { value: 'ABC123' } });
@@ -129,7 +157,7 @@ describe('SuperadminDataPage — Vehículo tab', () => {
       expect(mockToast.success).toHaveBeenCalled();
     });
 
-    const [url, options] = mockAuthFetch.mock.calls[1];
+    const [url, options] = nonCatalogCalls()[1];
     expect(url).toContain('/superadmin/data/vehicles/v-1');
     expect(options.method).toBe('PUT');
     const sentBody = JSON.parse(options.body);
@@ -138,8 +166,10 @@ describe('SuperadminDataPage — Vehículo tab', () => {
   });
 
   it('shows the 409 duplicate-plate message via toast without clearing the loaded form', async () => {
-    mockAuthFetch.mockResolvedValueOnce(makeResponse(200, VEHICLE));
-    mockAuthFetch.mockResolvedValueOnce(makeResponse(409, { detail: 'La placa ya está registrada en otro vehículo' }));
+    queueResponses(
+      makeResponse(200, VEHICLE),
+      makeResponse(409, { detail: 'La placa ya está registrada en otro vehículo' }),
+    );
 
     render(<SuperadminDataPage />);
     fireEvent.change(screen.getByLabelText('Buscar vehículo por placa'), { target: { value: 'ABC123' } });
@@ -155,13 +185,92 @@ describe('SuperadminDataPage — Vehículo tab', () => {
   });
 });
 
+describe('SuperadminDataPage — Vehículo tab — catálogo de modelos y lookup de VIN', () => {
+  it('renders Modelo as a <select> fed by GET /vehicle-models once the catalog loads', async () => {
+    mockVehicleModels = [{ id: 'm1', modelo: 'Renegade 200' }, { id: 'm2', modelo: 'NKD 125' }];
+    queueResponses(makeResponse(200, VEHICLE));
+
+    render(<SuperadminDataPage />);
+    fireEvent.change(screen.getByLabelText('Buscar vehículo por placa'), { target: { value: 'ABC123' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Buscar' }));
+
+    await waitFor(() => expect(screen.getByLabelText('Modelo').tagName).toBe('SELECT'));
+    expect(screen.getByLabelText('Modelo')).toHaveValue('Renegade 200');
+  });
+
+  it('falls back to a free-text Modelo input when the catalog fails to load', async () => {
+    queueResponses(makeResponse(200, VEHICLE));
+
+    render(<SuperadminDataPage />);
+    fireEvent.change(screen.getByLabelText('Buscar vehículo por placa'), { target: { value: 'ABC123' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Buscar' }));
+
+    await waitFor(() => expect(screen.getByLabelText('VIN')).toHaveValue('VIN0001'));
+    expect(screen.getByLabelText('Modelo').tagName).toBe('INPUT');
+  });
+
+  it('looking up a 17-character VIN on blur fills model/year/color from the VIN master', async () => {
+    queueResponses(
+      makeResponse(200, { ...VEHICLE, model: '', color: '', year: '' }),
+      makeResponse(200, { model: 'Renegade 200', year: 2024, color: 'Rojo' }),
+    );
+
+    render(<SuperadminDataPage />);
+    fireEvent.change(screen.getByLabelText('Buscar vehículo por placa'), { target: { value: 'ABC123' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Buscar' }));
+    await waitFor(() => expect(screen.getByLabelText('VIN')).toHaveValue('VIN0001'));
+
+    fireEvent.change(screen.getByLabelText('VIN'), { target: { value: 'SD5CCML06TL000359' } });
+    fireEvent.blur(screen.getByLabelText('VIN'));
+
+    await waitFor(() => expect(screen.getByLabelText('Color')).toHaveValue('Rojo'));
+    expect(screen.getByLabelText('Modelo')).toHaveValue('Renegade 200');
+    expect(screen.getByLabelText('Año')).toHaveValue(2024);
+    expect(screen.getByText(/Datos encontrados/)).toBeInTheDocument();
+
+    const [url] = nonCatalogCalls()[1];
+    expect(url).toContain('/vehicles/vin/SD5CCML06TL000359');
+  });
+
+  it('shows a not-found hint and leaves the form untouched when the VIN has no match', async () => {
+    queueResponses(makeResponse(200, VEHICLE), makeResponse(404, {}));
+
+    render(<SuperadminDataPage />);
+    fireEvent.change(screen.getByLabelText('Buscar vehículo por placa'), { target: { value: 'ABC123' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Buscar' }));
+    await waitFor(() => expect(screen.getByLabelText('VIN')).toHaveValue('VIN0001'));
+
+    fireEvent.change(screen.getByLabelText('VIN'), { target: { value: 'ZZZZZZZZZZZZZZZZZ' } });
+    fireEvent.blur(screen.getByLabelText('VIN'));
+
+    await waitFor(() => {
+      expect(screen.getByText(/No está en el maestro/)).toBeInTheDocument();
+    });
+    expect(screen.getByLabelText('Modelo')).toHaveValue('Renegade 200');
+  });
+
+  it('does not trigger a VIN lookup for a partial (non-17-char) VIN', async () => {
+    queueResponses(makeResponse(200, VEHICLE));
+
+    render(<SuperadminDataPage />);
+    fireEvent.change(screen.getByLabelText('Buscar vehículo por placa'), { target: { value: 'ABC123' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Buscar' }));
+    await waitFor(() => expect(screen.getByLabelText('VIN')).toHaveValue('VIN0001'));
+
+    fireEvent.change(screen.getByLabelText('VIN'), { target: { value: 'SD5CCML06TL' } });
+    fireEvent.blur(screen.getByLabelText('VIN'));
+
+    expect(nonCatalogCalls()).toHaveLength(1);
+  });
+});
+
 describe('SuperadminDataPage — Orden tab', () => {
   async function goToOrderTab() {
     fireEvent.click(screen.getByRole('button', { name: 'Orden' }));
   }
 
   it('populates dates, mileage_km and service_type on a successful search', async () => {
-    mockAuthFetch.mockResolvedValueOnce(makeResponse(200, ORDER));
+    queueResponses(makeResponse(200, ORDER));
 
     render(<SuperadminDataPage />);
     await goToOrderTab();
@@ -183,8 +292,10 @@ describe('SuperadminDataPage — Orden tab', () => {
     // selecting an entry must re-fetch by order_id rather than trusting it.
     const older = { ...ORDER, id: 'o-old', created_at: '2026-01-01T00:00:00', delivered_at: null, service_type: 'regular', mileage_km: null };
     const newer = { ...ORDER, id: 'o-new', mileage_km: null };
-    mockAuthFetch.mockResolvedValueOnce(makeResponse(200, { multiple_matches: true, matches: [newer, older] }));
-    mockAuthFetch.mockResolvedValueOnce(makeResponse(200, { ...older, mileage_km: '9000.00' }));
+    queueResponses(
+      makeResponse(200, { multiple_matches: true, matches: [newer, older] }),
+      makeResponse(200, { ...older, mileage_km: '9000.00' }),
+    );
 
     render(<SuperadminDataPage />);
     await goToOrderTab();
@@ -202,12 +313,12 @@ describe('SuperadminDataPage — Orden tab', () => {
       expect(screen.getByLabelText('Fecha de creación')).toHaveValue('2025-12-31T19:00');
     });
     expect(screen.getByLabelText('Kilometraje de orden')).toHaveValue(9000);
-    expect(mockAuthFetch.mock.calls[1][0]).toContain('order_id=o-old');
+    expect(nonCatalogCalls()[1][0]).toContain('order_id=o-old');
     expect(screen.queryByText(/varias órdenes/i)).not.toBeInTheDocument();
   });
 
   it('shows an error toast when the order is not found (404)', async () => {
-    mockAuthFetch.mockResolvedValueOnce(makeResponse(404, { detail: 'Orden no encontrada' }));
+    queueResponses(makeResponse(404, { detail: 'Orden no encontrada' }));
 
     render(<SuperadminDataPage />);
     await goToOrderTab();
@@ -220,10 +331,12 @@ describe('SuperadminDataPage — Orden tab', () => {
   });
 
   it('shows the 422 date-order block message via toast', async () => {
-    mockAuthFetch.mockResolvedValueOnce(makeResponse(200, ORDER));
-    mockAuthFetch.mockResolvedValueOnce(makeResponse(422, {
-      detail: 'La fecha de entrega no puede ser anterior a la fecha de creación',
-    }));
+    queueResponses(
+      makeResponse(200, ORDER),
+      makeResponse(422, {
+        detail: 'La fecha de entrega no puede ser anterior a la fecha de creación',
+      }),
+    );
 
     render(<SuperadminDataPage />);
     await goToOrderTab();
@@ -240,14 +353,16 @@ describe('SuperadminDataPage — Orden tab', () => {
   });
 
   it('opens ConfirmModal on 409 CONFIRM_DELETE_EVENT and resubmits with confirm_delete_event=true on confirm', async () => {
-    mockAuthFetch.mockResolvedValueOnce(makeResponse(200, ORDER));
-    mockAuthFetch.mockResolvedValueOnce(makeResponse(409, {
-      detail: {
-        detail: 'Esta corrección eliminará el evento MANTENIMIENTO (id E2) del historial del vehículo ABC123.',
-        code: 'CONFIRM_DELETE_EVENT',
-      },
-    }));
-    mockAuthFetch.mockResolvedValueOnce(makeResponse(200, { ...ORDER, service_type: 'regular' }));
+    queueResponses(
+      makeResponse(200, ORDER),
+      makeResponse(409, {
+        detail: {
+          detail: 'Esta corrección eliminará el evento MANTENIMIENTO (id E2) del historial del vehículo ABC123.',
+          code: 'CONFIRM_DELETE_EVENT',
+        },
+      }),
+      makeResponse(200, { ...ORDER, service_type: 'regular' }),
+    );
 
     render(<SuperadminDataPage />);
     await goToOrderTab();
@@ -268,20 +383,22 @@ describe('SuperadminDataPage — Orden tab', () => {
       expect(mockToast.success).toHaveBeenCalled();
     });
 
-    const [, confirmedOptions] = mockAuthFetch.mock.calls[2];
+    const [, confirmedOptions] = nonCatalogCalls()[2];
     const confirmedBody = JSON.parse(confirmedOptions.body);
     expect(confirmedBody.confirm_delete_event).toBe(true);
     expect(screen.queryByText(/eliminará el evento MANTENIMIENTO/)).not.toBeInTheDocument();
   });
 
   it('sends no further request when the ConfirmModal is canceled', async () => {
-    mockAuthFetch.mockResolvedValueOnce(makeResponse(200, ORDER));
-    mockAuthFetch.mockResolvedValueOnce(makeResponse(409, {
-      detail: {
-        detail: 'Esta corrección eliminará el evento MANTENIMIENTO (id E2) del historial del vehículo ABC123.',
-        code: 'CONFIRM_DELETE_EVENT',
-      },
-    }));
+    queueResponses(
+      makeResponse(200, ORDER),
+      makeResponse(409, {
+        detail: {
+          detail: 'Esta corrección eliminará el evento MANTENIMIENTO (id E2) del historial del vehículo ABC123.',
+          code: 'CONFIRM_DELETE_EVENT',
+        },
+      }),
+    );
 
     render(<SuperadminDataPage />);
     await goToOrderTab();
