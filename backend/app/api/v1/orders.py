@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, Depends, Header, HTTPException, status, UploadFile, File, Form
 from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError
@@ -30,6 +32,7 @@ from app.config import settings as app_settings
 from typing import Optional, List
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
+logger = logging.getLogger(__name__)
 
 OTP_DISABLED_BY_NAME = "Sistema (OTP desactivado en Configuración)"
 
@@ -55,6 +58,43 @@ async def create_service_order(
 
     otp_required = await _is_otp_required(db)
     initial_status = ServiceStatus.pending_signature if otp_required else ServiceStatus.received
+
+    # 0. Guardia de conflicto de reclamo (sdd/vehicle-tenant-checkin-release
+    # PR3, Design Decision 1): el reclamo de un vehículo es una orden
+    # abierta -- la única acción que la crea es esta, así que este es el
+    # único lugar donde la guardia es correcta. Se resuelve ANTES de crear
+    # ninguna fila para que el camino perdedor no escriba nada.
+    vehicle_obj = await db.get(Vehicle, order_in.vehicle_id)
+    tenant_obj = await db.get(Tenant, order_in.tenant_id)
+
+    from app.repositories.vehicle_repository import get_open_claim
+    claim = await get_open_claim(db, order_in.vehicle_id)
+    if claim is not None and claim.tenant_id != order_in.tenant_id:
+        from app.services.notification_service import notify_claim_conflict
+        try:
+            await notify_claim_conflict(
+                db, claim, vehicle_obj.plate if vehicle_obj else "N/A", tenant_obj
+            )
+        except Exception as exc:
+            # Un fallo de Telegram NUNCA debe enmascarar ni revertir el
+            # bloqueo del conflicto -- se registra y se sigue con el 409.
+            # No usar logger.exception aqui: el texto de una excepcion de
+            # httpx puede incluir la URL completa de la petición, que lleva
+            # el token del bot incrustado.
+            logger.error(
+                "create_service_order: failed to notify claim conflict (%s)",
+                type(exc).__name__,
+            )
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "detail": (
+                    f"Este vehículo ya tiene una orden activa en "
+                    f"{claim.tenant_name or 'otro taller'}."
+                ),
+                "code": "VEHICLE_CLAIMED_BY_OTHER_TENANT",
+            },
+        )
 
     # 1. Crear Entidad Principal: La Orden de Servicio
     new_order = ServiceOrder(
@@ -98,10 +138,9 @@ async def create_service_order(
     )
     db.add(initial_history)
 
-    # 3. Obtener metadatos del Cliente, Vehículo y Taller para poblar el PDF
-    vehicle_obj = await db.get(Vehicle, order_in.vehicle_id)
-    client_obj  = await db.get(User, order_in.client_id) if order_in.client_id else None
-    tenant_obj  = await db.get(Tenant, order_in.tenant_id)
+    # 3. Obtener metadatos del Cliente para poblar el PDF (vehicle_obj y
+    # tenant_obj ya se obtuvieron arriba, en la guardia de conflicto -- PR3)
+    client_obj = await db.get(User, order_in.client_id) if order_in.client_id else None
 
     # 3.1 Actualizar teléfono del cliente si se provee en la orden
     if client_obj and order_in.client_phone and order_in.client_phone != "Registrado en BD":

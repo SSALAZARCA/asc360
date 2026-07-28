@@ -42,6 +42,7 @@ from app.models.tenant import Tenant
 from app.models.user import Role, User, UserStatus
 from app.models.vehicle import Vehicle
 from app.models.vehicle_lifecycle import LifecycleEventType, VehicleLifecycleEvent
+from app.repositories.vehicle_repository import RELEASING_STATUSES, get_open_claim
 from app.schemas.historical_order import HistoricalOrderCreate
 from app.schemas.vehicle import VehicleCreate
 from app.services.imports_service import _log_audit
@@ -153,6 +154,41 @@ async def _check_duplicate(db: AsyncSession, vehicle: Vehicle, payload: Historic
             ],
         },
     )
+
+
+# ---------------------------------------------------------------------------
+# Step 3.5 — Claim conflict check (sdd/vehicle-tenant-checkin-release PR3,
+# Design File Change #9). Same conflict rule as `POST /orders/`'s guard
+# (`api/v1/orders.py`'s `create_service_order`), but this path dispatches
+# NO Telegram alert of any kind -- superadmin is the actor here, and
+# `test_no_notifications.py` / `test_claim_conflict_guard.py`'s static
+# guard both pin that this module's source never mentions the Telegram
+# dispatcher module or its send function by name. Superadmin's escape
+# hatch for a genuine conflict is the existing Datos Rápidos
+# status-correction tool.
+# ---------------------------------------------------------------------------
+
+async def _check_claim_conflict(db: AsyncSession, vehicle: Vehicle, payload: HistoricalOrderCreate) -> None:
+    """A born-`delivered`/`cancelled` order never HOLDS a claim (see
+    `RELEASING_STATUSES`), so it can never conflict with itself -- the
+    check is skipped entirely (no `get_open_claim` query issued) for those
+    statuses. Only an open-status backdated order can claim-jump another
+    taller's still-active vehicle."""
+    if payload.status in RELEASING_STATUSES:
+        return
+
+    claim = await get_open_claim(db, vehicle.id)
+    if claim is not None and claim.tenant_id != payload.tenant_id:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "detail": (
+                    f"El vehículo {vehicle.plate} ya tiene una orden activa en "
+                    f"{claim.tenant_name or 'otro taller'}."
+                ),
+                "code": "VEHICLE_CLAIMED_BY_OTHER_TENANT",
+            },
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -576,6 +612,7 @@ async def create_historical_order(
         client = await _lookup_or_create_client(db, payload)
         vehicle = await _register_vehicle(db, payload)
         await _check_duplicate(db, vehicle, payload)
+        await _check_claim_conflict(db, vehicle, payload)
 
         order = _create_order_row(payload, vehicle, client)
         db.add(order)

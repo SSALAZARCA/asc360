@@ -223,6 +223,19 @@ class _ExecuteResult:
         return self._items[0] if self._items else None
 
 
+class _ClaimExecuteResult:
+    """Fakes the `.first()` surface `get_open_claim` reads off its
+    `SELECT (ServiceOrder, Tenant) JOIN ...` -- a `(order, tenant)` row or
+    `None` when unclaimed (`sdd/vehicle-tenant-checkin-release` PR3's
+    historical-order conflict check)."""
+
+    def __init__(self, row):
+        self._row = row
+
+    def first(self):
+        return self._row
+
+
 class FakeHistoricalOrderSession:
     """
     Minimal fake `AsyncSession` for `historical_order_service.
@@ -251,6 +264,7 @@ class FakeHistoricalOrderSession:
         tenant=None,
         raise_integrity_error: bool = False,
         raise_generic_error: bool = False,
+        claim_row=None,
     ):
         self._users = list(users or [])
         self._vehicles = list(vehicles or [])
@@ -259,16 +273,30 @@ class FakeHistoricalOrderSession:
         self._tenant = tenant
         self._raise_integrity_error = raise_integrity_error
         self._raise_generic_error = raise_generic_error
+        self._claim_row = claim_row
 
         self.added: list = []
         self.committed = False
         self.rolled_back = False
+        self.executed_statements: list = []
 
     async def execute(self, stmt):
         from app.models.user import User
         from app.models.vehicle import Vehicle
         from app.models.order import ServiceOrder
         from app.models.imports import ShipmentMotoUnit
+
+        self.executed_statements.append(stmt)
+
+        if len(stmt.column_descriptions) == 2:
+            # `get_open_claim`'s `SELECT (ServiceOrder, Tenant) JOIN ...`
+            # (sdd/vehicle-tenant-checkin-release PR3's claim conflict
+            # check) -- dispatched by column count, mirroring
+            # `tests/orders/test_mini_app_get_vehicle_claim.py`'s
+            # `FakeMiniAppSession`, since a single-column `select(
+            # ServiceOrder)` (the duplicate-order check below) would
+            # otherwise collide on `entity is ServiceOrder`.
+            return _ClaimExecuteResult(self._claim_row)
 
         entity = stmt.column_descriptions[0]["entity"]
         if entity is User:

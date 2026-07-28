@@ -25,20 +25,43 @@ from app.models.tenant import Tenant
 from app.schemas.order import OrderCreate, ReceptionBase
 
 
+class _ClaimQueryResult:
+    """Fakes the `.first()` surface `get_open_claim` reads off its
+    `SELECT (ServiceOrder, Tenant) JOIN ...` -- a `(order, tenant)` row or
+    `None` when unclaimed (`sdd/vehicle-tenant-checkin-release` PR3)."""
+
+    def __init__(self, row):
+        self._row = row
+
+    def first(self):
+        return self._row
+
+
 class FakeCreateOrderSession:
     """Minimal fake covering exactly the calls `create_service_order` makes:
     one `db.get(SystemConfig, "require_otp")` read, `db.get` for
     Vehicle/User/Tenant metadata, `db.add`/`db.flush`/`db.commit` (flush
     assigns a real `id` to added rows lacking one — bare ORM construction
     doesn't trigger the column `default=`, same quirk documented in
-    `tests/orders/conftest.py`), and the final re-`select` refetch."""
+    `tests/orders/conftest.py`), the conflict-guard's `get_open_claim`
+    read (PR3 — dispatched by column count, mirroring
+    `tests/orders/test_mini_app_get_vehicle_claim.py`'s
+    `FakeMiniAppSession`), and the final re-`select` refetch."""
 
-    def __init__(self, require_otp_value: str | None, vehicle: Vehicle, tenant: Tenant):
+    def __init__(
+        self,
+        require_otp_value: str | None,
+        vehicle: Vehicle,
+        tenant: Tenant,
+        claim_row=None,
+    ):
         self._require_otp_value = require_otp_value
         self._vehicle = vehicle
         self._tenant = tenant
+        self._claim_row = claim_row
         self.added: list = []
         self.commits = 0
+        self.executed_statements: list = []
 
     async def get(self, model, pk):
         if model is SystemConfig:
@@ -63,6 +86,12 @@ class FakeCreateOrderSession:
         self.commits += 1
 
     async def execute(self, stmt):
+        self.executed_statements.append(stmt)
+
+        if len(stmt.column_descriptions) == 2:
+            # `get_open_claim`'s `SELECT (ServiceOrder, Tenant) JOIN ...`
+            return _ClaimQueryResult(self._claim_row)
+
         order = next(o for o in self.added if isinstance(o, ServiceOrder))
         order.reception = next((o for o in self.added if isinstance(o, ServiceOrderReception)), None)
         order.vehicle = self._vehicle
