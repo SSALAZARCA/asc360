@@ -113,6 +113,10 @@ const labelStyle = { display: 'flex', flexDirection: 'column', gap: '0.35rem', f
 const inputStyle = { background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', padding: '0.6rem 0.85rem', color: '#fff', fontSize: '0.85rem', outline: 'none', textTransform: 'none' };
 const hintStyle = { margin: 0, fontSize: '0.68rem', color: 'rgba(255,255,255,0.45)', textTransform: 'none', fontWeight: 400, letterSpacing: 'normal' };
 const textareaStyle = { ...inputStyle, minHeight: '70px', resize: 'vertical', fontFamily: 'inherit' };
+// Explicit background/color on every <option> -- without it, the dropdown
+// popup inherits light text on the browser's default light background and
+// is invisible until hovered.
+const optionStyle = { background: '#1a1a22', color: '#fff' };
 
 function Field({ label, type = 'text', value, onChange, required = false }) {
   return (
@@ -262,9 +266,9 @@ function TallerField({ tenants, value, onChange }) {
     <label style={labelStyle}>
       Taller
       <select aria-label="Taller" value={value} onChange={onChange} style={inputStyle} required>
-        <option value="">— Seleccioná un taller —</option>
+        <option value="" style={optionStyle}>— Seleccioná un taller —</option>
         {tenants.map((t) => (
-          <option key={t.id} value={t.id}>{t.name}</option>
+          <option key={t.id} value={t.id} style={optionStyle}>{t.name}</option>
         ))}
       </select>
     </label>
@@ -336,7 +340,7 @@ function DatesAndStatusSection({ form, setForm }) {
         Estado
         <select aria-label="Estado" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} style={inputStyle}>
           {STATUS_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>{opt.label}</option>
+            <option key={opt.value} value={opt.value} style={optionStyle}>{opt.label}</option>
           ))}
         </select>
       </label>
@@ -344,7 +348,7 @@ function DatesAndStatusSection({ form, setForm }) {
         Tipo de servicio
         <select aria-label="Tipo de servicio" value={form.service_type} onChange={(e) => setForm({ ...form, service_type: e.target.value })} style={inputStyle}>
           {SERVICE_TYPE_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>{opt.label}</option>
+            <option key={opt.value} value={opt.value} style={optionStyle}>{opt.label}</option>
           ))}
         </select>
       </label>

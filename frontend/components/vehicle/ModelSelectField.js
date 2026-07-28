@@ -22,6 +22,8 @@
  * Falls back to a plain text <input> when `models` is empty, so the field
  * still works if the catalog fetch failed or hasn't resolved yet.
  */
+const OPTION_STYLE = { background: '#1a1a22', color: '#fff' };
+
 export default function ModelSelectField({
   models = [],
   value,
@@ -51,12 +53,15 @@ export default function ModelSelectField({
     <label style={labelStyle}>
       {label}
       <select aria-label={label} value={value} onChange={(e) => onChange(e.target.value)} style={inputStyle}>
-        <option value="">— Seleccioná un modelo —</option>
+        {/* Explicit background/color on every <option> -- without it, the
+            dropdown popup inherits light text on the browser's default
+            light background and is invisible until hovered. */}
+        <option value="" style={OPTION_STYLE}>— Seleccioná un modelo —</option>
         {value && !hasMatch && (
-          <option value={value}>{value} (no está en el catálogo estándar)</option>
+          <option value={value} style={OPTION_STYLE}>{value} (no está en el catálogo estándar)</option>
         )}
         {models.map((m) => (
-          <option key={m.id} value={m.modelo}>{m.modelo}</option>
+          <option key={m.id} value={m.modelo} style={OPTION_STYLE}>{m.modelo}</option>
         ))}
       </select>
     </label>
