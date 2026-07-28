@@ -113,7 +113,7 @@ export default function TgReception() {
     const draft = {
       step, ocrData, vehicleId, isNew, newVeh, clientPhone, formData,
       vehicleData: vehicleData
-        ? { plate: vehicleData.plate, brand: vehicleData.brand, model: vehicleData.model, year: vehicleData.year, id: vehicleData.id, tenant_id: vehicleData.tenant_id, client_id: vehicleData.client_id }
+        ? { plate: vehicleData.plate, brand: vehicleData.brand, model: vehicleData.model, year: vehicleData.year, id: vehicleData.id, client_id: vehicleData.client_id }
         : null,
       evidenceItems: evidenceItems.map(e => ({ type: e.type, desc: e.desc })),
       intakeQuestions, intakeIdx,
@@ -241,7 +241,9 @@ export default function TgReception() {
       }
       const data = await res.json();
       if (data.active_order) {
-        pushBot(`La moto *${plate}* ya tiene una orden activa. No se puede abrir otra.`);
+        const holder = data.active_order.tenant_name || 'otro taller';
+        const city   = data.active_order.tenant_city ? ` (${data.active_order.tenant_city})` : '';
+        pushBot(`La moto *${plate}* ya tiene una orden activa en ${holder}${city}. No se puede abrir otra.`);
         return;
       }
       setIsNew(false); setVehicleId(data.id); setVehicleData(data);
@@ -526,7 +528,7 @@ export default function TgReception() {
     setBusy(true);
     const tid = showTyping();
     try {
-      const tenantId = vehicleData?.tenant_id || getActiveTenantId(user);
+      const tenantId = getActiveTenantId(user);
       if (!tenantId) { removeTyping(tid); pushBot('No se pudo determinar el taller.'); setBusy(false); return; }
 
       let vid = vehicleId;
@@ -583,7 +585,9 @@ export default function TgReception() {
       if (or.status === 401) { router.replace('/tg'); return; }
       if (!or.ok) {
         const err = await or.json().catch(() => ({}));
-        pushBot(`No pude crear la orden: ${err.detail || `Error ${or.status}`}`);
+        const nestedDetail = err.detail && typeof err.detail === 'object' ? err.detail.detail : null;
+        const message = nestedDetail || (typeof err.detail === 'string' ? err.detail : `Error ${or.status}`);
+        pushBot(`No pude crear la orden: ${message}`);
         setBusy(false); return;
       }
       const orderData = await or.json();
