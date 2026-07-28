@@ -57,7 +57,7 @@ export default function AdminLayout({ children, fullWidth = false }) {
       }
       setUser(u);
 
-      const superadminOnly = ['/users', '/settings', '/superadmin-data'];
+      const superadminOnly = ['/users', '/settings', '/superadmin-data', '/historical-orders'];
       const adminOrAdministrativo = ['/tenants'];
       const dashboardRoles = ['superadmin', 'administrativo'];
 

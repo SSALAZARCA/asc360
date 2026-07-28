@@ -16,6 +16,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Wand2,
+  CalendarClock,
 } from 'lucide-react';
 
 const ALL_ITEMS = [
@@ -27,6 +28,7 @@ const ALL_ITEMS = [
   { id: 'users', name: 'Personal & Acceso', icon: Users, path: '/users', adminOnly: true },
   { id: 'parts-catalog', name: 'Maestro de Partes', icon: BookOpen, path: '/parts-catalog', adminOnly: true },
   { id: 'superadmin-data', name: 'Datos Rápidos', icon: Wand2, path: '/superadmin-data', adminOnly: true },
+  { id: 'historical-orders', name: 'Orden Histórica', icon: CalendarClock, path: '/historical-orders', adminOnly: true },
   { id: 'settings', name: 'Configuración', icon: Settings, path: '/settings', adminOnly: true },
 ];
 
