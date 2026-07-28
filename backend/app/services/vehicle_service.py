@@ -9,7 +9,7 @@ from app.services.vin_master_service import vin_master_service
 
 
 class VehicleService:
-    """Capa de lógica de negocio para los Vehículos del entorno Taller (Tenant-isolated)."""
+    """Capa de lógica de negocio para los Vehículos del entorno Taller."""
 
     def __init__(self):
         self.repository = vehicle_repository
@@ -18,17 +18,26 @@ class VehicleService:
         self,
         db: AsyncSession,
         vehicle_in: VehicleCreate,
-        tenant_id: UUID
     ) -> Vehicle:
         """Crea o actualiza un vehículo cuando entra al taller.
 
         Enriquece datos con el maestro de VINs si está disponible.
+
+        NOTE (sdd/vehicle-tenant-checkin-release, PR2): this function has
+        ZERO tenant semantics -- it never reads, sets, nor filters by any
+        tenant_id. THE LIVE BUG this fixes: `vehicle_in.tenant_id =
+        tenant_id` put `tenant_id` into `BaseRepository.update`'s
+        `model_dump(exclude_unset=True)` dump on every UPDATE, silently
+        rewriting a vehicle's owning taller any time ANY tenant serviced
+        it. Ownership is now a derived, temporary claim computed from open
+        `ServiceOrder` rows (`vehicle_repository.visible_to_tenant`/
+        `get_open_claim`), enforced only at order creation (Design
+        Decision 1) -- never here.
         """
 
         # Limpiar Placa (Quitar todos los espacios)
         clean_plate = "".join(vehicle_in.plate.split()).upper()
         vehicle_in.plate = clean_plate
-        vehicle_in.tenant_id = tenant_id
 
         # Intentar enriquecer desde el maestro de VINs (packing list) si tiene VIN.
         # No incluye marca -- el packing list no la registra por unidad, y en
@@ -41,7 +50,10 @@ class VehicleService:
                 if not vehicle_in.year:
                     vehicle_in.year = vin_data.year
 
-        existing = await self.repository.get_by_plate(db, clean_plate, tenant_id)
+        # Buscar por placa SIN filtro de tenant -- encontrar un vehículo
+        # existente no depende de quién pregunta; la visibilidad del claim
+        # se evalúa en la creación de la orden (Decision 1), no aquí.
+        existing = await self.repository.get_by_plate(db, clean_plate, None)
         if existing:
             # Update fields
             return await self.repository.update(db, existing, vehicle_in)

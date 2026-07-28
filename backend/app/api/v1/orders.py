@@ -1174,17 +1174,15 @@ async def mini_app_get_vehicle(
     current_user: CurrentUser = Depends(get_current_user),
 ):
     """Endpoint JWT para la Mini App: busca un vehículo por placa y retorna info básica + estado activo."""
-    from app.models.vehicle import Vehicle
-    from sqlalchemy.orm import selectinload
+    from app.repositories.vehicle_repository import get_open_claim, visible_to_tenant
 
     clean = "".join(plate.split()).upper()
     stmt = (
         select(Vehicle)
-        .options(selectinload(Vehicle.service_orders))
+        .options(selectinload(Vehicle.service_orders).selectinload(ServiceOrder.tenant))
         .where(Vehicle.plate == clean)
+        .where(visible_to_tenant(None if current_user.is_superadmin else current_user.tenant_id))
     )
-    if not current_user.is_superadmin and current_user.tenant_id:
-        stmt = stmt.where(Vehicle.tenant_id == current_user.tenant_id)
 
     res = await db.execute(stmt)
     vehicle = res.scalars().first()
@@ -1195,6 +1193,12 @@ async def mini_app_get_vehicle(
     CLOSED = {"completed", "delivered", "cancelled"}
     active = next((o for o in sorted(vehicle.service_orders, key=lambda o: o.created_at, reverse=True) if o.status.value not in CLOSED), None)
 
+    # sdd/vehicle-tenant-checkin-release PR2: a vehicle's tenant is a
+    # DERIVED, temporary claim -- `get_open_claim` resolves who (if
+    # anyone) currently holds it. Replaces the old stored `vehicle.
+    # tenant_id` read (unmapped from the ORM since PR1).
+    claim = await get_open_claim(db, vehicle.id)
+
     return {
         "id": str(vehicle.id),
         "plate": vehicle.plate,
@@ -1203,9 +1207,14 @@ async def mini_app_get_vehicle(
         "year": vehicle.year,
         "color": vehicle.color,
         "vin": vehicle.vin,
-        "tenant_id": str(vehicle.tenant_id),
+        "claimed_by_tenant_id": str(claim.tenant_id) if claim else None,
+        "claimed_by_tenant_name": claim.tenant_name if claim else None,
         "client_id": None,
-        "active_order": {"status": active.status.value} if active else None,
+        "active_order": {
+            "status": active.status.value,
+            "tenant_name": active.tenant.name if active.tenant else None,
+            "tenant_city": active.tenant.ciudad if active.tenant else None,
+        } if active else None,
     }
 
 

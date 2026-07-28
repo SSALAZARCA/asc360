@@ -47,8 +47,11 @@ class Tenant(Base):
     categoria = Column(String(10), nullable=True)  # A, B, C
 
     # Relaciones que aplican a todos los tenants
+    # NOTE (`sdd/vehicle-tenant-checkin-release`): no `vehicles` relationship
+    # here anymore -- `Vehicle.tenant_id` is unmapped (see
+    # `app/models/vehicle.py`'s docstring); a tenant's vehicles are derived
+    # from its open `ServiceOrder`s, not a stored FK.
     users = relationship("User", back_populates="tenant", cascade="all, delete-orphan")
-    vehicles = relationship("Vehicle", back_populates="tenant", cascade="all, delete-orphan")
     service_orders = relationship("ServiceOrder", back_populates="tenant", cascade="all, delete-orphan")
     parts_orders = relationship("PartsOrder", back_populates="tenant", cascade="all, delete-orphan")
 

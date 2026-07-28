@@ -26,8 +26,16 @@ def test_query_vin_signature_is_locked():
 
 
 def test_register_or_update_vehicle_signature_is_locked():
+    # sdd/vehicle-tenant-checkin-release PR2: `tenant_id` DELIBERATELY
+    # dropped from this signature -- it was the live tenant-theft bug's
+    # mechanism (`vehicle_in.tenant_id = tenant_id` silently rewrote a
+    # vehicle's owning taller on every update). `register_or_update_
+    # vehicle` is now a pure lookup-or-upsert with ZERO tenant semantics
+    # (Design Decision 1); the conflict check moved to order creation.
+    # Updated in the same commit as all its callers (project memory bug
+    # #7 -- never change a shared contract without checking every caller).
     sig = inspect.signature(vehicle_service.register_or_update_vehicle)
-    assert list(sig.parameters.keys()) == ["db", "vehicle_in", "tenant_id"]
+    assert list(sig.parameters.keys()) == ["db", "vehicle_in"]
 
 
 def test_get_vehicle_by_plate_signature_is_locked():

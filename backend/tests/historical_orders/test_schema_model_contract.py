@@ -27,7 +27,10 @@ from app.schemas.historical_order import (
 
 MODEL_ATTRIBUTES_THE_SERVICE_WILL_SET = {
     User: {"tenant_id", "name", "phone", "role", "status", "telegram_id"},
-    Vehicle: {"plate", "vin", "brand", "model", "year", "color", "tenant_id"},
+    # sdd/vehicle-tenant-checkin-release PR2: `tenant_id` removed -- the
+    # historical-order service no longer sets it (`_register_vehicle`);
+    # `Vehicle.tenant_id` was unmapped from the ORM entirely in PR1.
+    Vehicle: {"plate", "vin", "brand", "model", "year", "color"},
     ServiceOrder: {
         "tenant_id", "vehicle_id", "client_id", "technician_id",
         "status", "service_type", "created_at", "completed_at", "delivered_at",

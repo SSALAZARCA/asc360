@@ -103,13 +103,15 @@ async def _register_vehicle(db: AsyncSession, payload: HistoricalOrderCreate) ->
     # `model_dump(exclude_unset=True)` for the UPDATE path so an omitted
     # field never blanks an existing column on an already-registered
     # vehicle.
+    # sdd/vehicle-tenant-checkin-release PR2: no `tenant_id` set on the
+    # vehicle -- `Vehicle`/`VehicleCreate` no longer carry one (a
+    # vehicle's tenant is a derived, temporary claim, not a stored value).
     vehicle_fields = payload.vehicle.model_dump(exclude_unset=True)
-    vehicle_fields["tenant_id"] = payload.tenant_id
     if not vehicle_fields.get("brand"):
         vehicle_fields["brand"] = DEFAULT_VEHICLE_BRAND
 
     vehicle_in = VehicleCreate(**vehicle_fields)
-    return await vehicle_service.register_or_update_vehicle(db, vehicle_in, payload.tenant_id)
+    return await vehicle_service.register_or_update_vehicle(db, vehicle_in)
 
 
 # ---------------------------------------------------------------------------

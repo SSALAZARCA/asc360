@@ -90,7 +90,9 @@ def _order_payload(vehicle_id, tenant_id) -> OrderCreate:
 
 @pytest.fixture
 def vehicle_and_tenant():
-    vehicle = Vehicle(id=uuid.uuid4(), tenant_id=uuid.uuid4(), plate="ABC12D", brand="UM", model="TEST")
+    # sdd/vehicle-tenant-checkin-release PR2: `Vehicle` no longer has a
+    # `tenant_id` column/attribute (PR1 unmapped it).
+    vehicle = Vehicle(id=uuid.uuid4(), plate="ABC12D", brand="UM", model="TEST")
     tenant = Tenant(id=uuid.uuid4(), name="Taller Test", subdomain="test", tenant_type="service_center")
     return vehicle, tenant
 

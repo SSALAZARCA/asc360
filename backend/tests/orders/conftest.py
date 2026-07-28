@@ -164,9 +164,11 @@ def make_active_order(
         service_type=ServiceType.regular,
         created_at=created_at or datetime.utcnow(),
     )
+    # sdd/vehicle-tenant-checkin-release PR2: `Vehicle` no longer has a
+    # `tenant_id` column/attribute (PR1 unmapped it) -- a vehicle's tenant
+    # is a derived claim, not a stored value.
     order.vehicle = Vehicle(
         id=vehicle_id,
-        tenant_id=order.tenant_id,
         plate=plate.upper(),
         brand="UM",
         model="TEST",

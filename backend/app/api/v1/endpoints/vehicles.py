@@ -1,5 +1,9 @@
+import logging
 from typing import Optional
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, HTTPException, Header, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -12,6 +16,7 @@ from app.services.vehicle_service import vehicle_service
 from app.services.vin_master_service import vin_master_service
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 @router.get("/vin/{vin}", response_model=VinMasterOut)
@@ -44,9 +49,23 @@ async def get_vehicle_by_plate(
     is_bot = verify_sonia_secret(x_sonia_secret, settings.SONIA_BOT_SECRET)
     if not is_bot and current_user is None:
         raise HTTPException(status_code=403, detail="Acceso no autorizado.")
-    vehicle = await vehicle_service.get_vehicle_by_plate(db, plate, x_tenant_id)
+
+    tenant_uuid: Optional[UUID] = None
+    if x_tenant_id:
+        try:
+            tenant_uuid = UUID(x_tenant_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="X-Tenant-Id inválido.")
+
+    vehicle = await vehicle_service.get_vehicle_by_plate(db, plate, tenant_uuid)
     if not vehicle:
-        raise HTTPException(status_code=404, detail="Vehículo no encontrado en este Taller.")
+        # sdd/vehicle-tenant-checkin-release PR2: reworded -- a vehicle
+        # held by another taller's open order now ALSO surfaces as
+        # not-found from this tenant's perspective (claim semantics).
+        raise HTTPException(
+            status_code=404,
+            detail="Vehículo no encontrado o en servicio en otro taller.",
+        )
     return vehicle
 
 
@@ -62,7 +81,18 @@ async def create_or_update_vehicle(
     if not is_bot and (current_user is None or not current_user.is_admin):
         raise HTTPException(status_code=403, detail="Acceso no autorizado.")
     try:
-        vehicle = await vehicle_service.register_or_update_vehicle(db, vehicle_in, vehicle_in.tenant_id)
+        # sdd/vehicle-tenant-checkin-release PR2: no longer forwards a
+        # client-controlled `tenant_id` from the request body -- that was
+        # a mass-assignment / OWASP API1 BOLA gap (any caller could set
+        # `tenant_id` on the POST body). `register_or_update_vehicle` now
+        # has zero tenant semantics.
+        vehicle = await vehicle_service.register_or_update_vehicle(db, vehicle_in)
         return vehicle
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
+    except IntegrityError:
+        # Sanitized 409 -- the previous `except Exception as e: raise
+        # HTTPException(400, str(e))` leaked raw DB text to the client
+        # (verbose error message / information disclosure).
+        logger.exception("Error de integridad al registrar/actualizar vehículo")
+        raise HTTPException(status_code=409, detail="Ya existe un vehículo con esa placa.")

@@ -34,7 +34,7 @@ vms = vin_master_service_module.vin_master_service
 def make_vehicle_in(**overrides) -> VehicleCreate:
     data = dict(
         plate="ABC123", vin="9C6JC5820PM123456", brand="UM",
-        model="", color=None, year=None, tenant_id=uuid.uuid4(),
+        model="", color=None, year=None,
     )
     data.update(overrides)
     return VehicleCreate(**data)
@@ -65,7 +65,7 @@ class TestRegisterOrUpdateVehicleVinEnrichment:
 
         vehicle_in = make_vehicle_in(model="", year=None)
         result = await vehicle_service.register_or_update_vehicle(
-            AsyncMock(), vehicle_in, tenant_id=vehicle_in.tenant_id,
+            AsyncMock(), vehicle_in,
         )
 
         assert result.model == "RENEGADE SPORT 200S"
@@ -77,7 +77,7 @@ class TestRegisterOrUpdateVehicleVinEnrichment:
 
         vehicle_in = make_vehicle_in(model="NKD 125", year=2020)
         result = await vehicle_service.register_or_update_vehicle(
-            AsyncMock(), vehicle_in, tenant_id=vehicle_in.tenant_id,
+            AsyncMock(), vehicle_in,
         )
 
         assert result.model == "NKD 125"
@@ -90,7 +90,7 @@ class TestRegisterOrUpdateVehicleVinEnrichment:
 
         vehicle_in = make_vehicle_in(vin=None)
         await vehicle_service.register_or_update_vehicle(
-            AsyncMock(), vehicle_in, tenant_id=vehicle_in.tenant_id,
+            AsyncMock(), vehicle_in,
         )
 
         query_vin.assert_not_called()

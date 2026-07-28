@@ -27,9 +27,11 @@ def make_vehicle(
     tenant_id: Optional[uuid.UUID] = None,
 ) -> "Vehicle":
     from app.models.vehicle import Vehicle
+    # `tenant_id` is accepted but NOT forwarded to `Vehicle(...)` --
+    # sdd/vehicle-tenant-checkin-release PR2 unmapped that column from the
+    # ORM (a vehicle's tenant is now a derived claim).
     return Vehicle(
         id=vehicle_id or uuid.uuid4(),
-        tenant_id=tenant_id or uuid.uuid4(),
         plate=plate,
         vin=vin,
         brand=brand,
