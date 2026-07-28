@@ -163,3 +163,63 @@ class TestStatusDateMismatchIs422:
             await svc.create_historical_order(fake_db, payload, make_superadmin())
 
         assert exc_info.value.status_code == 422
+
+
+class TestOpenStatusesRequireNoClosingDates:
+    """Open statuses (in_progress, on_hold_parts, cancelled, etc.) have no
+    dedicated date field on the payload -- they're only valid when neither
+    completed_at nor delivered_at is set."""
+
+    @pytest.mark.parametrize(
+        "status",
+        [
+            ServiceStatus.pending_signature,
+            ServiceStatus.scheduled,
+            ServiceStatus.in_progress,
+            ServiceStatus.on_hold_parts,
+            ServiceStatus.on_hold_client,
+            ServiceStatus.external_work,
+            ServiceStatus.rescheduled,
+            ServiceStatus.cancelled,
+        ],
+    )
+    async def test_open_status_accepted_with_no_closing_dates(self, monkeypatch, status):
+        payload = _payload(status=status, completed_at=None, delivered_at=None)
+        order, fake_db = await _run(payload, monkeypatch)
+
+        assert order.status == status
+        rows = _history_rows(fake_db)
+        assert len(rows) == 1
+        assert (rows[0].from_status, rows[0].to_status) == (None, ServiceStatus.received)
+
+    async def test_open_status_with_completed_at_returns_422(self, monkeypatch):
+        payload = _payload(
+            status=ServiceStatus.in_progress,
+            completed_at=datetime(2025, 1, 12, 15, 0),
+        )
+        monkeypatch.setattr(
+            svc, "generate_and_upload_reception_pdf", AsyncMock(return_value="http://pdf.example/a.pdf")
+        )
+        fake_db = FakeHistoricalOrderSession(tenant=make_tenant(tenant_id=payload.tenant_id))
+
+        with pytest.raises(HTTPException) as exc_info:
+            await svc.create_historical_order(fake_db, payload, make_superadmin())
+
+        assert exc_info.value.status_code == 422
+        assert fake_db.added == []
+        assert fake_db.committed is False
+
+    async def test_cancelled_with_delivered_at_returns_422(self, monkeypatch):
+        payload = _payload(
+            status=ServiceStatus.cancelled,
+            delivered_at=datetime(2025, 1, 14, 10, 0),
+        )
+        monkeypatch.setattr(
+            svc, "generate_and_upload_reception_pdf", AsyncMock(return_value="http://pdf.example/a.pdf")
+        )
+        fake_db = FakeHistoricalOrderSession(tenant=make_tenant(tenant_id=payload.tenant_id))
+
+        with pytest.raises(HTTPException) as exc_info:
+            await svc.create_historical_order(fake_db, payload, make_superadmin())
+
+        assert exc_info.value.status_code == 422

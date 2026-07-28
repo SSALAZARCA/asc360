@@ -157,6 +157,24 @@ async def _check_duplicate(db: AsyncSession, vehicle: Vehicle, payload: Historic
 # OrderHistory chain (Decision 9 — no `in_progress` row)
 # ---------------------------------------------------------------------------
 
+# Statuses with no dedicated date field on `HistoricalOrderCreate` -- they
+# describe an order that's still open (no completion/delivery date yet),
+# just parked in a more specific live-tracking state than plain `received`.
+# `cancelled` has no closing date either, so it's grouped here too rather
+# than inventing a `cancelled_at` field this form doesn't need.
+_OPEN_STATUSES = {
+    ServiceStatus.received,
+    ServiceStatus.pending_signature,
+    ServiceStatus.scheduled,
+    ServiceStatus.in_progress,
+    ServiceStatus.on_hold_parts,
+    ServiceStatus.rescheduled,
+    ServiceStatus.on_hold_client,
+    ServiceStatus.external_work,
+    ServiceStatus.cancelled,
+}
+
+
 def _last_computed_status(payload: HistoricalOrderCreate) -> ServiceStatus:
     if payload.delivered_at is not None:
         return ServiceStatus.delivered
@@ -166,10 +184,26 @@ def _last_computed_status(payload: HistoricalOrderCreate) -> ServiceStatus:
 
 
 def _validate_status_matches_dates(payload: HistoricalOrderCreate) -> None:
-    """One-Submission Final State (spec) — `payload.status` MUST equal the
-    status the closing dates actually justify. Runs BEFORE any row is
-    created so a mismatch never leaves a partially-built order to roll
-    back."""
+    """One-Submission Final State (spec) — `payload.status` MUST agree with
+    the closing dates actually provided. Runs BEFORE any row is created so
+    a mismatch never leaves a partially-built order to roll back.
+
+    Open statuses (see `_OPEN_STATUSES`) are only valid when neither
+    closing date is set -- they have no date of their own to justify. The
+    two date-bound terminal statuses (`completed`/`delivered`) still must
+    match exactly what the provided dates justify, same as before."""
+    if payload.status in _OPEN_STATUSES:
+        if payload.completed_at is not None or payload.delivered_at is not None:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"El status '{payload.status.value}' no puede tener fecha de "
+                    "finalización ni de entrega -- esos datos corresponden a "
+                    "'completed'/'delivered'."
+                ),
+            )
+        return
+
     expected = _last_computed_status(payload)
     if payload.status != expected:
         raise HTTPException(

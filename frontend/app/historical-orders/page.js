@@ -36,12 +36,24 @@ const FORM_DEFAULTS = {
   general_observations: '',
 };
 
-// Mismos colores/labels que superadmin-data/page.js — mismo dato en dos
-// pantallas distintas, misma nomenclatura visual.
+// Los 11 estados reales de `ServiceStatus` (backend/app/models/order.py).
+// Los mismos labels que ya usa Gestión de Órdenes/Kanban (services/page.js,
+// tg/home/page.js) para el mismo dato. "Completado"/"Entregado" son los
+// únicos con fecha de cierre propia (completed_at/delivered_at) -- el resto
+// son estados abiertos (sin esas fechas), validados así en el backend
+// (`_OPEN_STATUSES`, historical_order_service.py).
 const STATUS_OPTIONS = [
   { value: 'received', label: 'Recibido' },
+  { value: 'pending_signature', label: 'Firma Pendiente' },
+  { value: 'scheduled', label: 'Agendado' },
+  { value: 'in_progress', label: 'En Proceso' },
+  { value: 'on_hold_parts', label: 'Esp. Repuestos' },
+  { value: 'on_hold_client', label: 'Esp. Cliente' },
+  { value: 'external_work', label: 'Trabajo Externo' },
+  { value: 'rescheduled', label: 'Reagendado' },
   { value: 'completed', label: 'Completado' },
   { value: 'delivered', label: 'Entregado' },
+  { value: 'cancelled', label: 'Cancelado' },
 ];
 
 const SERVICE_TYPE_OPTIONS = [
