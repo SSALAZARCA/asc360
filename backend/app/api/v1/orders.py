@@ -46,6 +46,19 @@ async def _is_otp_required(db: AsyncSession) -> bool:
     return (record.value == "true") if record else True
 
 
+def forbid_distribuidor(current_user: CurrentUser) -> None:
+    """Inverso de `distributor_deliveries.require_distribuidor`: el rol
+    Distribuidor (`parts_dealer`) queda restringido en el frontend a
+    `/distribuidor/entrega` (no ve ni puede navegar a Kanban/Gestión de
+    Órdenes), pero eso solo se enforceaba en el cliente -- un JWT válido de
+    Distribuidor podía llamar estos endpoints directo (curl/Postman),
+    salteando la UI. Se llama como primera línea dentro del cuerpo de cada
+    endpoint afectado, únicamente en el camino autenticado por JWT (nunca
+    en el camino de Sonia vía X-Sonia-Secret)."""
+    if current_user.is_distribuidor:
+        raise HTTPException(status_code=403, detail="El rol Distribuidor no tiene acceso a este recurso.")
+
+
 @router.post("/", response_model=OrderRead, status_code=status.HTTP_201_CREATED)
 async def create_service_order(
     order_in: OrderCreate,
@@ -56,6 +69,8 @@ async def create_service_order(
     is_bot = verify_sonia_secret(x_sonia_secret, app_settings.SONIA_BOT_SECRET)
     if not is_bot and current_user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="No autenticado")
+    if current_user is not None:
+        forbid_distribuidor(current_user)
 
     otp_required = await _is_otp_required(db)
     initial_status = ServiceStatus.pending_signature if otp_required else ServiceStatus.received
@@ -275,6 +290,8 @@ async def download_exit_order_pdf(
 
     if not current_user and not verify_sonia_secret(x_sonia_secret, settings.SONIA_BOT_SECRET):
         raise HTTPException(status_code=401, detail="No autenticado")
+    if current_user is not None:
+        forbid_distribuidor(current_user)
 
     stmt = (
         select(ServiceOrder)
@@ -375,9 +392,11 @@ async def download_reception_pdf(
     current_user: CurrentUser = Depends(get_current_user)
 ):
     """
-    Proxy interno para descargar el PDF. 
+    Proxy interno para descargar el PDF.
     Verifica que el usuario tenga permiso para ver esta orden.
     """
+    forbid_distribuidor(current_user)
+
     from ...services.pdf_service import get_pdf_stream_from_minio
     from fastapi.responses import StreamingResponse
     import io
@@ -434,6 +453,8 @@ async def get_order_detail(
     - Datos del cliente y técnico asignado
     - URL del acta PDF de recepción
     """
+    forbid_distribuidor(current_user)
+
     from sqlalchemy import desc
     from app.models.order import OrderHistory
     from app.models.vehicle import Vehicle
@@ -580,6 +601,8 @@ async def update_order_status(
     is_bot_call = verify_sonia_secret(x_sonia_secret, settings.SONIA_BOT_SECRET)
     if not is_bot_call and current_user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="No autenticado.")
+    if current_user is not None:
+        forbid_distribuidor(current_user)
 
     # 1. Obtener la orden
     stmt = select(ServiceOrder).where(ServiceOrder.id == order_id)
@@ -1013,6 +1036,8 @@ async def add_order_parts(
     current_user: CurrentUser = Depends(get_current_user)
 ):
     """Agrega repuestos requeridos a una orden."""
+    forbid_distribuidor(current_user)
+
     from app.models.order import OrderPart, OrderPartStatus
 
     stmt = select(ServiceOrder).where(ServiceOrder.id == order_id)
@@ -1070,9 +1095,23 @@ async def get_active_orders_for_tech(
 @router.get("/active/tenant/{tenant_id}", response_model=list[OrderRead])
 async def get_active_orders_for_tenant(
     tenant_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: Optional[CurrentUser] = Depends(get_optional_user),
+    x_sonia_secret: Optional[str] = Header(None),
 ):
-    """Filtra todas las órdenes activas de un taller específico. (Para rol Admin)."""
+    """Filtra todas las órdenes activas de un taller específico. (Para rol Admin).
+    Acepta JWT o X-Sonia-Secret (bot Sonia -- llamada real hoy desde el comando
+    "Órdenes Activas" de Telegram, sin Authorization header)."""
+    from app.config import settings
+    is_bot_call = verify_sonia_secret(x_sonia_secret, settings.SONIA_BOT_SECRET)
+    if not is_bot_call and current_user is None:
+        raise HTTPException(status_code=401, detail="No autenticado")
+
+    if current_user is not None:
+        forbid_distribuidor(current_user)
+        if not current_user.is_superadmin and current_user.tenant_id != tenant_id:
+            raise HTTPException(status_code=403, detail="No tiene permisos sobre este taller")
+
     exclude_statuses = [ServiceStatus.completed, ServiceStatus.delivered, ServiceStatus.cancelled]
     stmt = (
         select(ServiceOrder)
@@ -1345,6 +1384,8 @@ async def get_kpi_analytics(
     - superadmin: ve toda la red
     - otros roles: solo ven su propio taller
     """
+    forbid_distribuidor(current_user)
+
     from sqlalchemy import func, case, and_
     from app.models.order import OrderHistory
     from app.models.tenant import Tenant
@@ -1442,6 +1483,8 @@ async def get_services_analytics(
     El tenant_id se extrae del JWT — superadmin ve toda la red,
     rol de taller solo ve sus propias órdenes.
     """
+    forbid_distribuidor(current_user)
+
     from sqlalchemy import func, and_, select, desc
     from app.models.tenant import Tenant
     from app.models.vehicle import Vehicle
@@ -1559,6 +1602,8 @@ async def send_otp(
     Solo disponible para órdenes en estado pending_signature.
     Máximo 3 reenvíos por orden.
     """
+    forbid_distribuidor(current_user)
+
     from app.models.order import OrderOTP
     from app.services.sms_service import send_otp_sms
     from sqlalchemy import func
@@ -1630,6 +1675,8 @@ async def get_pending_otp_orders(
     is_bot_call = verify_sonia_secret(x_sonia_secret, settings.SONIA_BOT_SECRET)
     if not is_bot_call and current_user is None:
         raise HTTPException(status_code=401, detail="No autenticado")
+    if current_user is not None:
+        forbid_distribuidor(current_user)
 
     stmt = (
         select(ServiceOrder)
@@ -1666,6 +1713,8 @@ async def get_pending_otp_by_plate(
     is_bot_call = verify_sonia_secret(x_sonia_secret, settings.SONIA_BOT_SECRET)
     if not is_bot_call and current_user is None:
         raise HTTPException(status_code=401, detail="No autenticado")
+    if current_user is not None:
+        forbid_distribuidor(current_user)
 
     stmt = (
         select(ServiceOrder)
@@ -1703,6 +1752,8 @@ async def verify_otp(
     is_bot_call = verify_sonia_secret(x_sonia_secret, settings.SONIA_BOT_SECRET)
     if not is_bot_call and current_user is None:
         raise HTTPException(status_code=401, detail="No autenticado")
+    if current_user is not None:
+        forbid_distribuidor(current_user)
 
     code_input = str(body.get("code", "")).strip()
     if not code_input:
@@ -1864,6 +1915,7 @@ async def resend_otp(
         # Llamada desde Sonia — construir usuario mock con permisos de superadmin
         class _BotUser:
             is_superadmin = True
+            is_distribuidor = False
             tenant_id = None
         current_user = _BotUser()
 

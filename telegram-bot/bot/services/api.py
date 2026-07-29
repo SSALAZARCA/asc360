@@ -87,7 +87,11 @@ async def get_tenant_active_orders(tenant_id: str) -> list:
     """Órdenes activas pertenecientes a un Tenant ID (Admin Local)."""
     async with httpx.AsyncClient() as client:
         try:
-            res = await client.get(f"{BACKEND_URL}/orders/active/tenant/{tenant_id}", timeout=10.0)
+            res = await client.get(
+                f"{BACKEND_URL}/orders/active/tenant/{tenant_id}",
+                headers={"x-sonia-secret": SONIA_BOT_SECRET},
+                timeout=10.0,
+            )
             if res.status_code == 200:
                 return res.json()
             return None
