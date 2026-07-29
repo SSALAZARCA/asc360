@@ -15,6 +15,7 @@ from app.api.v1 import remisiones as remisiones_module
 from app.api.v1 import reports as reports_module
 from app.api.v1 import superadmin_data as superadmin_data_module
 from app.api.v1 import superadmin_historical_orders as superadmin_historical_orders_module
+from app.api.v1 import distributor_deliveries as distributor_deliveries_module
 
 api_router = APIRouter()
 
@@ -36,3 +37,4 @@ api_router.include_router(remisiones_module.router)
 api_router.include_router(reports_module.router)
 api_router.include_router(superadmin_data_module.router)
 api_router.include_router(superadmin_historical_orders_module.router)
+api_router.include_router(distributor_deliveries_module.router)
