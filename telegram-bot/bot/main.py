@@ -11,6 +11,7 @@ from core.constants import (
     ASKING_PHOTOS, ASKING_MOTIVE, CONFIRMING_MOTIVE, CORRECTING_MOTIVE,
     CONFIRMING_SERVICE_TYPE, ASKING_INTAKE_QUESTION, ASKING_PHOTO_DESCRIPTION,
     ASKING_ACCESSORIES, ASKING_GENERAL_OBSERVATIONS, ASKING_GAS, L_ASKING_PLATE, SELECTING_TENANT,
+    CONFIRMING_RETURNING_CLIENT, SELECTING_CLIENT_FIELD, EDITING_CLIENT_FIELD,
     O_NAME, O_PHONE, O_ROLE, O_TENANT, O_CONFIRM,
     OTP_ASKING_PLATE, OTP_ASKING_CODE, OTP_CONFIRMING
 )
@@ -33,6 +34,8 @@ from handlers.registration import (
 from handlers.reception import (
     prompt_plate, process_plate, handle_ocr_confirmation,
     apply_correction_to_data, handle_client_confirmation,
+    handle_returning_client_confirmation, handle_client_field_selection,
+    handle_client_field_value,
     handle_phone, handle_km, handle_gas, handle_photos, handle_photos_done,
     handle_photo_description, handle_photo_desc_skip, handle_obs_text_only,
     handle_accessories, handle_accessories_confirm, handle_accessories_retry,
@@ -241,6 +244,20 @@ def main() -> None:
                 cancel_text,
                 MessageHandler(filters.VOICE, cancel_voice_handler),
                 CallbackQueryHandler(handle_client_confirmation, pattern="^client_")
+            ],
+            CONFIRMING_RETURNING_CLIENT: [
+                cancel_text,
+                MessageHandler(filters.VOICE, cancel_voice_handler),
+                CallbackQueryHandler(handle_returning_client_confirmation, pattern="^client_data_")
+            ],
+            SELECTING_CLIENT_FIELD: [
+                cancel_text,
+                MessageHandler(filters.VOICE, cancel_voice_handler),
+                CallbackQueryHandler(handle_client_field_selection, pattern="^field_")
+            ],
+            EDITING_CLIENT_FIELD: [
+                btn_escape,
+                MessageHandler(filters.TEXT | filters.VOICE, handle_client_field_value)
             ],
             ASKING_PHONE: [
                 btn_escape,

@@ -35,6 +35,9 @@ ASKING_PHOTO_DESCRIPTION = 14
 ASKING_ACCESSORIES = 15
 ASKING_GENERAL_OBSERVATIONS = 16
 ASKING_GAS = 17
+CONFIRMING_RETURNING_CLIENT = 18
+SELECTING_CLIENT_FIELD = 19
+EDITING_CLIENT_FIELD = 20
 
 # ----- Estados post-recepción (ciclo de vida del técnico) -----
 AWAITING_DIAGNOSIS = 50       # Esperando diagnóstico del técnico (diferido)

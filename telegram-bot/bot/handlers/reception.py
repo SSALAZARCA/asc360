@@ -33,7 +33,10 @@ from core.constants import (
     ASKING_PHOTO_DESCRIPTION,
     ASKING_ACCESSORIES,
     ASKING_GENERAL_OBSERVATIONS,
-    ASKING_GAS
+    ASKING_GAS,
+    CONFIRMING_RETURNING_CLIENT,
+    SELECTING_CLIENT_FIELD,
+    EDITING_CLIENT_FIELD
 )
 from core.decorators import role_required, check_cancel_intent
 from keyboards.reply import get_main_keyboard
@@ -123,6 +126,35 @@ def _build_ocr_summary(ocr: dict) -> str:
     return lines
 
 
+# Campos editables del cliente vinculado a la moto (orden de despliegue del teclado)
+CLIENT_FIELDS = [
+    ("name",    "Nombre"),
+    ("phone",   "Teléfono"),
+    ("email",   "Email"),
+    ("address", "Dirección"),
+]
+CLIENT_FIELD_LABELS = dict(CLIENT_FIELDS)
+
+
+def _build_client_summary(client: dict) -> str:
+    """Construye el bloque de texto con los datos del cliente vinculado a la moto."""
+    lines = "👤 *Datos del cliente registrado:*\n"
+    for key, label in CLIENT_FIELDS:
+        value = client.get(key)
+        lines += f"• *{label}:* {value}\n" if value else f"• *{label}:* N/D\n"
+    return lines
+
+
+def _client_field_keyboard() -> InlineKeyboardMarkup:
+    """Teclado para que el asesor elija qué dato del cliente corregir."""
+    rows = [
+        [InlineKeyboardButton(label, callback_data=f"field_{key}")]
+        for key, label in CLIENT_FIELDS
+    ]
+    rows.append([InlineKeyboardButton("✅ Listo", callback_data="field_done")])
+    return InlineKeyboardMarkup(rows)
+
+
 # -------------------------------------------------------------
 # Funciones Internas de Ayuda API
 # -------------------------------------------------------------
@@ -157,6 +189,25 @@ async def fetch_vehicle_data(plate: str, vin: str = None, tenant_id: str = None)
             except Exception as e:
                 logger.error(f"❌ [API] Conexión fallida buscando VIN {vin}: {e}")
 
+    return None
+
+async def update_client_data(plate: str, edits: dict) -> dict:
+    """
+    Persiste correcciones al cliente vinculado a una moto ya registrada.
+    Llama a PATCH /vehicles/{plate}/client (auth por x-sonia-secret, igual que fetch_vehicle_data).
+    Retorna el dict actualizado {name,phone,email,address} o None si falló.
+    """
+    if not edits:
+        return None
+    headers = {"x-sonia-secret": SONIA_BOT_SECRET}
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        try:
+            res = await client.patch(f"{BACKEND_URL}/vehicles/{plate}/client", json=edits, headers=headers)
+            if res.status_code == 200:
+                return res.json()
+            logger.warning(f"⚠️ [API] Error {res.status_code} actualizando cliente de {plate}: {res.text}")
+        except Exception as e:
+            logger.error(f"❌ [API] Conexión fallida actualizando cliente de {plate}: {e}")
     return None
 
 async def create_user_and_vehicle(ocr_data: dict, plate: str, tenant_id: str = None, phone: str = None) -> dict:
@@ -675,6 +726,25 @@ async def handle_ocr_confirmation(update: Update, context: ContextTypes.DEFAULT_
                 context.user_data['vehicle_id'] = v_info.get("id")
                 marca  = v_info.get('brand') or ocr_data.get('marca') or 'UM'
                 modelo = v_info.get('model') or ocr_data.get('linea') or ''
+
+                client_info = v_info.get("client")
+                if client_info:
+                    # Moto con cliente vinculado — mostramos sus datos y pedimos confirmación
+                    context.user_data['client_edits'] = {}
+                    txt = (
+                        f"¡Esta moto ya ha estado en el taller! 🏍️\n"
+                        f"*{marca} {modelo}*\n\n"
+                        f"{_build_client_summary(client_info)}\n"
+                        f"¿Procedemos con la recepción?"
+                    )
+                    kb = [[
+                        InlineKeyboardButton("Sí, siguen correctos", callback_data="client_data_yes"),
+                        InlineKeyboardButton("No, corregir algo", callback_data="client_data_edit"),
+                    ]]
+                    await query.message.reply_text(txt, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(kb))
+                    return CONFIRMING_RETURNING_CLIENT
+
+                # Sin cliente vinculado aún — comportamiento histórico, sin cambios
                 txt = (
                     f"¡Esta moto ya ha estado en el taller! 🏍️\n"
                     f"*{marca} {modelo}*\n\n"
@@ -737,6 +807,114 @@ async def handle_client_confirmation(update: Update, context: ContextTypes.DEFAU
         )
         context.user_data['evidence_items'] = []
         return ASKING_KM
+
+@role_required()
+async def handle_returning_client_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """
+    Rama de moto conocida CON cliente vinculado (v_info['client'] no nulo).
+    'client_data_yes' → idéntico al camino sin edición: directo a ASKING_KM, sin llamadas HTTP.
+    'client_data_edit' → entra al flujo de selección de campo a corregir.
+    """
+    query = update.callback_query
+    await query.answer()
+
+    if query.data == "client_data_yes":
+        await query.edit_message_text(
+            "Perfecto, vamos con la recepción.\n\n"
+            "*¿Cuántos kilómetros tiene la moto?* Escribilo, mandame un audio o una foto del tablero.",
+            parse_mode="Markdown"
+        )
+        context.user_data['evidence_items'] = []
+        return ASKING_KM
+
+    elif query.data == "client_data_edit":
+        context.user_data['client_edits'] = {}
+        await query.edit_message_text(
+            "Dale, decime qué dato(s) del cliente querés corregir:",
+            reply_markup=_client_field_keyboard()
+        )
+        return SELECTING_CLIENT_FIELD
+
+@role_required()
+async def handle_client_field_selection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """
+    Teclado Nombre/Teléfono/Email/Dirección/Listo.
+    Un botón de campo guarda cuál se está editando y pide el valor nuevo (EDITING_CLIENT_FIELD).
+    'Listo' dispara UN solo PATCH batcheado con todo lo acumulado en client_edits y sigue a ASKING_KM.
+    """
+    query = update.callback_query
+    await query.answer()
+
+    if query.data == "field_done":
+        plate = context.user_data.get('ocr_plate')
+        edits = context.user_data.get('client_edits', {})
+        if edits and plate:
+            updated = await update_client_data(plate, edits)
+            if updated is None:
+                await query.message.reply_text(
+                    "⚠️ No pude guardar los cambios del cliente, pero seguimos con la recepción."
+                )
+        await query.edit_message_text(
+            "Perfecto, vamos con la recepción.\n\n"
+            "*¿Cuántos kilómetros tiene la moto?* Escribilo, mandame un audio o una foto del tablero.",
+            parse_mode="Markdown"
+        )
+        context.user_data['evidence_items'] = []
+        return ASKING_KM
+
+    field_key = query.data.replace("field_", "", 1)
+    label = CLIENT_FIELD_LABELS.get(field_key)
+    if not label:
+        # callback_data inesperado — permanecemos en el mismo estado
+        return SELECTING_CLIENT_FIELD
+
+    context.user_data['editing_client_field'] = field_key
+    await query.edit_message_text(
+        f"¿Cuál es el nuevo *{label.lower()}* del cliente? Escribilo o mandame un audio.",
+        parse_mode="Markdown"
+    )
+    return EDITING_CLIENT_FIELD
+
+@role_required()
+async def handle_client_field_value(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """
+    Captura el valor corregido de un campo del cliente (texto o voz, mismo patrón que handle_phone).
+    Acumula en client_edits y vuelve al teclado de selección de campo.
+    """
+    text = ""
+    if update.message.voice:
+        await update.message.reply_text("Escuchando... 🎧")
+        voice_file = await update.message.voice.get_file()
+        fd, path = tempfile.mkstemp(suffix=".ogg")
+        os.close(fd)
+        await voice_file.download_to_drive(path)
+        transcript = await transcribe_voice(path)
+        os.remove(path)
+        text = transcript or ""
+    elif update.message.text:
+        text = update.message.text
+
+    if await check_cancel_intent(update, context, text): return ConversationHandler.END
+
+    field_key = context.user_data.get('editing_client_field')
+    label = CLIENT_FIELD_LABELS.get(field_key, "dato")
+    value = text.strip()
+    if not value:
+        await update.message.reply_text(
+            f"No logré identificar el nuevo valor de *{label.lower()}*. ¿Me lo repetís?",
+            parse_mode="Markdown"
+        )
+        return EDITING_CLIENT_FIELD
+
+    context.user_data.setdefault('client_edits', {})[field_key] = value
+    context.user_data.pop('editing_client_field', None)
+
+    await update.message.reply_text(
+        f"{label} actualizado a *{value}*. ✅\n\n¿Corregís algo más?",
+        parse_mode="Markdown",
+        reply_markup=_client_field_keyboard()
+    )
+    return SELECTING_CLIENT_FIELD
 
 @role_required()
 async def handle_phone(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
