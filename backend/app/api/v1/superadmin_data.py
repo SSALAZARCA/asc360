@@ -55,6 +55,7 @@ from app.models.order import ServiceOrder, ServiceOrderReception, ServiceType
 from app.models.vehicle import Vehicle
 from app.models.vehicle_lifecycle import VehicleLifecycleEvent, LifecycleEventType
 from app.services.imports_service import _log_audit
+from app.services.warranty_validation import ensure_order_date_after_delivery
 
 router = APIRouter(prefix="/superadmin/data", tags=["superadmin_data"])
 
@@ -552,6 +553,18 @@ async def update_order(
     # always present here; `delivered_at` may legitimately be absent.
     provided = payload.model_dump(exclude_unset=True)
     _ensure_delivered_after_created(provided, order)
+
+    # sdd/distributor-vehicle-delivery PR2, Design ADR 1-3/File Changes:
+    # a backdated `created_at` (or the order's existing one, when omitted
+    # from the request) may never precede the vehicle's registered
+    # `delivery_date`. No-op when the vehicle has none. Runs BEFORE any
+    # `setattr` below, so a rejection writes nothing. Deliberately does
+    # NOT touch `client_id` (ADR 13 exclusion) -- this is a date-correction
+    # path for an EXISTING order, not a signal about current ownership.
+    vehicle = await db.get(Vehicle, order.vehicle_id)
+    ensure_order_date_after_delivery(
+        vehicle, provided.get("created_at", order.created_at)
+    )
 
     # `mileage_km`/`service_type` are NOT NULL at the DB level (unlike
     # `delivered_at`) -- there is no legitimate "clear it" use case, so an

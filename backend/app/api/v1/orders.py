@@ -25,6 +25,7 @@ from app.schemas.order import (
     OrderPlateResolution,
 )
 from app.services.pdf_service import generate_and_upload_reception_pdf, upload_file_to_minio
+from app.services.warranty_validation import ensure_order_date_after_delivery
 from app.api.deps import get_current_user, get_optional_user, CurrentUser
 from app.core.security import verify_sonia_secret
 from app.config import settings as app_settings
@@ -95,6 +96,22 @@ async def create_service_order(
                 "code": "VEHICLE_CLAIMED_BY_OTHER_TENANT",
             },
         )
+
+    # 0.1 Invariante de garantía (sdd/distributor-vehicle-delivery PR2,
+    # Design ADR 1-3): la fecha efectiva de esta orden (siempre "ahora",
+    # ya que `ServiceOrder.created_at` no es controlable por el cliente en
+    # este endpoint) nunca puede ser anterior a la fecha de entrega
+    # registrada del vehículo. No-op si el vehículo no tiene delivery_date
+    # -- comportamiento idéntico al de siempre para todo vehículo que no
+    # pasó por la pantalla Distribuidor.
+    ensure_order_date_after_delivery(vehicle_obj, datetime.utcnow())
+
+    # 0.2 Enlace oportunista vehículo-cliente (Design ADR 13b): mecanismo
+    # SECUNDARIO/bonus -- el primario es el re-registro manual vía la
+    # pantalla Distribuidor. Se sobrescribe siempre que la orden traiga un
+    # client_id (más reciente gana); no toca nada si la orden no lo trae.
+    if vehicle_obj is not None and order_in.client_id is not None:
+        vehicle_obj.client_id = order_in.client_id
 
     # 1. Crear Entidad Principal: La Orden de Servicio
     new_order = ServiceOrder(

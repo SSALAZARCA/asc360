@@ -48,6 +48,7 @@ from app.schemas.vehicle import VehicleCreate
 from app.services.imports_service import _log_audit
 from app.services.pdf_service import generate_and_upload_reception_pdf
 from app.services.vehicle_service import vehicle_service
+from app.services.warranty_validation import ensure_order_date_after_delivery
 
 logger = logging.getLogger(__name__)
 
@@ -613,6 +614,19 @@ async def create_historical_order(
         vehicle = await _register_vehicle(db, payload)
         await _check_duplicate(db, vehicle, payload)
         await _check_claim_conflict(db, vehicle, payload)
+
+        # sdd/distributor-vehicle-delivery PR2, Design ADR 1-3: narrowly
+        # supersedes this module's original "no date-range validation"
+        # non-goal -- no-op unless `vehicle` has a registered
+        # `delivery_date` (see `app/schemas/historical_order.py`'s
+        # updated docstring).
+        ensure_order_date_after_delivery(vehicle, payload.created_at)
+
+        # Enlace oportunista vehículo-cliente (Design ADR 13b): el cliente
+        # de este flujo siempre queda resuelto (lookup-or-create), así que
+        # el vehículo siempre se enlaza/actualiza -- mismo mecanismo
+        # secundario que `POST /orders/`, más reciente gana.
+        vehicle.client_id = client.id
 
         order = _create_order_row(payload, vehicle, client)
         db.add(order)

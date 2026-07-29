@@ -198,11 +198,20 @@ class FakeOrderSession:
     - `raise_integrity_error`: same contract as `FakeVehicleSession` — kept
       for parity even though the Order PUT has no unique-constraint
       conflict path today.
+    - `vehicle` (sdd/distributor-vehicle-delivery PR2): the `Vehicle`
+      returned by the PUT route's NEW `db.get(Vehicle, order.vehicle_id)`
+      read (warranty lower-bound check) when its `id` matches the
+      requested `obj_id`. `None` (default) means every existing test that
+      doesn't pass it keeps getting `None` back for that call — the
+      warranty helper then no-ops, so day-1 behaviour is unaffected.
 
     Dispatch for `execute()` is by the statement's target entity (mirrors
     `tests.orders.conftest.FakeAsyncSession`), NOT by call order, since the
     production route may issue the reception query, the lifecycle-events
     query, or neither, depending on which fields are being corrected.
+    `get()` dispatches by `model_cls` (`ServiceOrder` vs `Vehicle`), not by
+    id-matching alone, since an order and its vehicle each carry their own
+    unrelated `id`.
     """
 
     def __init__(
@@ -212,12 +221,14 @@ class FakeOrderSession:
         raise_integrity_error: bool = False,
         reception: Optional["ServiceOrderReception"] = None,
         lifecycle_events: Optional[list] = None,
+        vehicle: Optional["Vehicle"] = None,
     ):
         self._search_result = search_result or []
         self._get_object = get_object
         self._raise_integrity_error = raise_integrity_error
         self._reception = reception
         self._lifecycle_events = lifecycle_events or []
+        self._vehicle = vehicle
         self.added: list = []
         self.deleted: list = []
         self.committed = False
@@ -236,6 +247,12 @@ class FakeOrderSession:
         return _ExecuteResult(self._search_result)
 
     async def get(self, model_cls, obj_id):
+        from app.models.vehicle import Vehicle
+
+        if model_cls is Vehicle:
+            if self._vehicle is not None and self._vehicle.id == obj_id:
+                return self._vehicle
+            return None
         if self._get_object is not None and self._get_object.id == obj_id:
             return self._get_object
         return None

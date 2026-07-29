@@ -13,6 +13,12 @@ Two decided non-goals, both from the design's Architecture Decisions:
     first half-built place that starts.
   - No date-range validation (see Request Contract note) — any past/future
     date, including before the vehicle's registration date, is legal.
+    NARROWLY SUPERSEDED by `sdd/distributor-vehicle-delivery` PR2: for a
+    vehicle that HAS a registered `delivery_date` (set via the future
+    Distribuidor screen), `created_at` may not precede it — see
+    `historical_order_service.create_historical_order`'s call to
+    `ensure_order_date_after_delivery`. Vehicles without a `delivery_date`
+    (every vehicle today) keep the original, unrestricted behaviour.
 
 `tenant_id` is REQUIRED (Decision 11): a superadmin's own JWT carries
 `tenant_id=None` (`app/api/deps.py`), and `ServiceOrder.tenant_id` is NOT
