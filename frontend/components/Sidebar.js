@@ -17,6 +17,7 @@ import {
   ChevronRight,
   Wand2,
   CalendarClock,
+  Truck,
 } from 'lucide-react';
 
 const ALL_ITEMS = [
@@ -30,6 +31,10 @@ const ALL_ITEMS = [
   { id: 'superadmin-data', name: 'Datos Rápidos', icon: Wand2, path: '/superadmin-data', adminOnly: true },
   { id: 'historical-orders', name: 'Orden Histórica', icon: CalendarClock, path: '/historical-orders', adminOnly: true },
   { id: 'settings', name: 'Configuración', icon: Settings, path: '/settings', adminOnly: true },
+  // Reusable, role-based allowlist (not another *Only boolean) — a future
+  // parts-sale screen for the same `parts_dealer` role adds another entry
+  // here with the same `roles` key, zero further filter changes needed.
+  { id: 'vehicle-delivery', name: 'Entrega de Motos', icon: Truck, path: '/distribuidor/entrega', roles: ['parts_dealer', 'superadmin'] },
 ];
 
 export default function Sidebar({ collapsed = false, onToggle }) {
@@ -104,6 +109,10 @@ export default function Sidebar({ collapsed = false, onToggle }) {
   const isAdministrativo = user?.role === 'administrativo';
 
   const menuItems = ALL_ITEMS.filter(item => {
+    // Items con allowlist explícito de roles se evalúan PRIMERO y de forma
+    // exclusiva -- todo item existente carece de esta key, así que el resto
+    // del filtro (abajo) queda intacto para ellos.
+    if (item.roles) return item.roles.includes(user?.role);
     // proveedor solo ve imports
     if (isProveedor) return !!item.importsOnly;
     // administrativo: dashboard, services e imports — sin adminOnly (tenants/users/settings)
