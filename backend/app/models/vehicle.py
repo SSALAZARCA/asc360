@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import Column, String, Integer
+from sqlalchemy import Column, String, Integer, Date, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
@@ -32,6 +32,26 @@ class Vehicle(Base):
     year = Column(Integer, nullable=True)
     color = Column(String(50), nullable=True)
     mileage = Column(Integer, default=0)
+
+    # `sdd/distributor-vehicle-delivery` PR1 (migration `d7e8f9a0b1c2`):
+    # delivery/warranty fields, populated by the Distribuidor delivery flow.
+    # All nullable -- NULL means "not yet delivered through that flow", the
+    # no-op case the warranty helper (`app/services/warranty_validation.py`)
+    # relies on for byte-identical day-1 behaviour.
+    delivery_date = Column(Date, nullable=True)
+    engine_number = Column(String(100), nullable=True)
+    delivery_act_url = Column(String(500), nullable=True)
+
+    # `client_id` is the buyer's identity, set by the Distribuidor delivery
+    # flow (primary) and opportunistically refreshed by order creation
+    # (secondary, ADR 13). ONE-DIRECTIONAL on purpose, no `back_populates`:
+    # `User` has no reverse `vehicles`/`vehicles_delivered` collection today
+    # and none is needed yet (design ADR 12/14, "read-only use"). Per this
+    # project's back_populates hygiene precedent (`c6d7e8f9a0b1`'s removal of
+    # `Tenant.vehicles`), a relationship is declared on exactly the side that
+    # uses it -- not speculatively on both.
+    client_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    client = relationship("User", foreign_keys=[client_id])
 
     service_orders = relationship("ServiceOrder", back_populates="vehicle", cascade="all, delete-orphan")
     lifecycle_events = relationship("VehicleLifecycleEvent", back_populates="vehicle", cascade="all, delete-orphan", order_by="VehicleLifecycleEvent.event_date")

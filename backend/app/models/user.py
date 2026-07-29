@@ -1,6 +1,6 @@
 import uuid
 import enum
-from sqlalchemy import Column, String, Enum, ForeignKey
+from sqlalchemy import Column, String, Enum, ForeignKey, Date
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
@@ -33,6 +33,15 @@ class User(Base):
     role = Column(Enum(Role), nullable=False)
     status = Column(Enum(UserStatus), nullable=False, default=UserStatus.pending)
     service_center_name = Column(String(255), nullable=True)
+
+    # `sdd/distributor-vehicle-delivery` PR1 (migration `d7e8f9a0b1c2`): client
+    # identity fields, populated by the Distribuidor delivery flow. Nullable,
+    # PII, exposed on `UserOut` only (never `UserCreate`/`UserUpdate`).
+    identification = Column(String(50), nullable=True)  # cédula
+    birth_date = Column(Date, nullable=True)
+    city = Column(String(120), nullable=True)
+    department = Column(String(120), nullable=True)
+    address = Column(String(255), nullable=True)
 
     tenant = relationship("Tenant", back_populates="users")
     

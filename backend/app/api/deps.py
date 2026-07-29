@@ -33,6 +33,10 @@ class CurrentUser:
         return self.role == "administrativo"
 
     @property
+    def is_distribuidor(self) -> bool:
+        return self.role == "parts_dealer"
+
+    @property
     def is_imports_editor(self) -> bool:
         return self.role in ("superadmin", "proveedor", "administrativo")
 
