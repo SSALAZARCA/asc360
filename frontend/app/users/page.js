@@ -220,7 +220,7 @@ export default function UsersPage() {
                     <option value="jefe_taller">Jefe / Coordinador de Taller</option>
                     <option value="administrativo">Administrativo</option>
                     <option value="proveedor">Proveedor</option>
-                    <option value="parts_dealer">Vendedor de Repuestos</option>
+                    <option value="parts_dealer">Distribuidor</option>
                     <option value="client">Cliente</option>
                     <option value="superadmin">Super Admin (Global)</option>
                   </select>

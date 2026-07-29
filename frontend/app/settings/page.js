@@ -17,7 +17,7 @@ const PERM_ROLE_LABELS = {
   administrativo:'Administrativo',
   jefe_taller:   'Jefe Taller',
   technician:    'Técnico',
-  parts_dealer:  'Vend. Rep.',
+  parts_dealer:  'Distribuidor',
   proveedor:     'Proveedor',
   client:        'Cliente',
 };
