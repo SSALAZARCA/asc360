@@ -1235,7 +1235,14 @@ async def mini_app_get_vehicle(
     clean = "".join(plate.split()).upper()
     stmt = (
         select(Vehicle)
-        .options(selectinload(Vehicle.service_orders).selectinload(ServiceOrder.tenant))
+        .options(
+            selectinload(Vehicle.service_orders).selectinload(ServiceOrder.tenant),
+            # sdd/distributor-vehicle-delivery PR5 (design-dual-channel
+            # ADR 14): eager-load the linked buyer so the response can
+            # surface real `client`/`client_id` instead of the hardcoded
+            # `None` below.
+            selectinload(Vehicle.client),
+        )
         .where(Vehicle.plate == clean)
         .where(visible_to_tenant(None if current_user.is_superadmin else current_user.tenant_id))
     )
@@ -1265,7 +1272,18 @@ async def mini_app_get_vehicle(
         "vin": vehicle.vin,
         "claimed_by_tenant_id": str(claim.tenant_id) if claim else None,
         "claimed_by_tenant_name": claim.tenant_name if claim else None,
-        "client_id": None,
+        # sdd/distributor-vehicle-delivery PR5 (ADR 14): was hardcoded to
+        # `None` -- `Vehicle.client_id`/`Vehicle.client` (PR1) now feed a
+        # real value. `client` mirrors the SAME shape `VehicleClientOut`
+        # returns for `GET /vehicles/{plate}` (ADR 19), so both reception
+        # surfaces agree.
+        "client_id": str(vehicle.client_id) if vehicle.client_id else None,
+        "client": {
+            "name": vehicle.client.name,
+            "phone": vehicle.client.phone,
+            "email": vehicle.client.email,
+            "address": vehicle.client.address,
+        } if vehicle.client else None,
         "active_order": {
             "status": active.status.value,
             "tenant_name": active.tenant.name if active.tenant else None,

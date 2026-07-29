@@ -124,6 +124,17 @@ class VehicleRepository(BaseRepository[Vehicle, VehicleCreate, VehicleUpdate]):
                 selectinload(Vehicle.service_orders).selectinload(ServiceOrder.client),
                 selectinload(Vehicle.service_orders).selectinload(ServiceOrder.reception),
                 selectinload(Vehicle.service_orders).selectinload(ServiceOrder.tenant),
+                # sdd/distributor-vehicle-delivery PR5 (design-dual-channel
+                # ADR 19): `Vehicle.client` (added PR1) must be eager-loaded
+                # here -- `GET /vehicles/{plate}` returns this ORM object
+                # directly and relies on `VehicleOut`'s `from_attributes`
+                # conversion (no manual dict-building for this endpoint).
+                # Without this, a vehicle with `client_id` set but no
+                # `service_orders` yet (e.g. right after a Distribuidor
+                # delivery, before its first-ever service) would trigger a
+                # real lazy load outside any greenlet context and crash
+                # with `MissingGreenlet`.
+                selectinload(Vehicle.client),
             )
             .where(Vehicle.plate == plate)
             .where(visible_to_tenant(tenant_id))
@@ -133,12 +144,17 @@ class VehicleRepository(BaseRepository[Vehicle, VehicleCreate, VehicleUpdate]):
 
         if vehicle and vehicle.service_orders:
             sorted_orders = sorted(vehicle.service_orders, key=lambda o: o.created_at, reverse=True)
-            latest_order = sorted_orders[0]
 
-            # Inyectar último cliente
-            if latest_order.client:
-                setattr(vehicle, 'client', {'id': str(latest_order.client.id), 'name': latest_order.client.name, 'phone': latest_order.client.phone})
-                setattr(vehicle, 'client_id', latest_order.client.id)
+            # sdd/distributor-vehicle-delivery PR5: this used to overwrite
+            # `vehicle.client`/`client_id` with the LATEST SERVICE ORDER's
+            # client (an incomplete `{id,name,phone}` dict, no
+            # email/address) -- a different concept than the
+            # Distribuidor-delivery buyer (`Vehicle.client_id` FK, ADR
+            # 12/13), untested, and inconsistent with ADR 19's shared
+            # `{name,phone,email,address}` shape. `Vehicle.client_id` is
+            # now the single source of truth (eager-loaded above) and is
+            # itself kept in sync by order creation (ADR 13,
+            # most-recent-wins) -- no separate override needed.
 
             # KM real: de la recepción más reciente que lo tenga
             latest_km = None

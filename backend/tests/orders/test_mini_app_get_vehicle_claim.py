@@ -29,11 +29,15 @@ def make_current_user(role: str = "jefe_taller", tenant_id=None) -> CurrentUser:
     )
 
 
-def make_vehicle(vehicle_id=None, service_orders=None) -> SimpleNamespace:
+def make_vehicle(vehicle_id=None, service_orders=None, client_id=None, client=None) -> SimpleNamespace:
     return SimpleNamespace(
         id=vehicle_id or uuid.uuid4(), plate="ABC123", brand="UM", model="X",
         year=2024, color="Rojo", vin="V1",
         service_orders=service_orders if service_orders is not None else [],
+        # sdd/distributor-vehicle-delivery PR5 (ADR 14): default to
+        # unlinked so every EXISTING caller of this factory (that doesn't
+        # care about the client link) keeps working unchanged.
+        client_id=client_id, client=client,
     )
 
 

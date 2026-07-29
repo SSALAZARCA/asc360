@@ -25,6 +25,32 @@ class VehicleUpdate(VehicleBase):
 
 from typing import Optional, Any, List
 
+
+class VehicleClientOut(BaseModel):
+    """sdd/distributor-vehicle-delivery PR5 (design-dual-channel ADR 19):
+    shared shape for the linked client's contact data, returned
+    IDENTICALLY by both reception surfaces -- the Mini App's hand-built
+    dict (`mini_app_get_vehicle`, ADR 14) and the bot's `VehicleOut`
+    auto-conversion (`GET /vehicles/{plate}`, this model)."""
+    name: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    address: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ClientEditIn(BaseModel):
+    """sdd/distributor-vehicle-delivery PR5 (design-dual-channel ADR 20):
+    input for `PATCH /vehicles/{plate}/client`. All fields optional --
+    the endpoint applies only what's actually submitted
+    (`exclude_unset`)."""
+    name: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    address: Optional[str] = None
+
+
 class VehicleOut(VehicleBase):
     id: UUID
     # sdd/vehicle-tenant-checkin-release PR2: RENAMED from `tenant_id:
@@ -35,7 +61,11 @@ class VehicleOut(VehicleBase):
     # contract).
     claimed_by_tenant_id: Optional[UUID] = None
     claimed_by_tenant_name: Optional[str] = None
-    client: Optional[Any] = None
+    # sdd/distributor-vehicle-delivery PR5 (ADR 19): was `Optional[Any] =
+    # None` -- always `None` since `Vehicle` had no client relationship
+    # until PR1 added `client_id`/`client`. Now a real nested model so
+    # `from_attributes` conversion actually surfaces the linked client.
+    client: Optional[VehicleClientOut] = None
     client_id: Optional[UUID] = None
     latest_mileage: Optional[int] = None
     active_order: Optional[Any] = None

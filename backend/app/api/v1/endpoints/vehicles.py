@@ -10,7 +10,7 @@ from app.database import get_db
 from app.api.deps import get_current_user, get_optional_user, CurrentUser
 from app.config import settings
 from app.core.security import verify_sonia_secret
-from app.schemas.vehicle import VehicleOut, VehicleCreate
+from app.schemas.vehicle import VehicleOut, VehicleCreate, VehicleClientOut, ClientEditIn
 from app.schemas.vin_master import VinMasterOut
 from app.services.vehicle_service import vehicle_service
 from app.services.vin_master_service import vin_master_service
@@ -67,6 +67,57 @@ async def get_vehicle_by_plate(
             detail="Vehículo no encontrado o en servicio en otro taller.",
         )
     return vehicle
+
+
+@router.patch("/{plate}/client", response_model=VehicleClientOut)
+async def update_vehicle_client(
+    plate: str,
+    client_in: ClientEditIn,
+    db: AsyncSession = Depends(get_db),
+    x_sonia_secret: Optional[str] = Header(None),
+    x_tenant_id: Optional[str] = Header(None),
+    current_user: Optional[CurrentUser] = Depends(get_optional_user),
+):
+    """sdd/distributor-vehicle-delivery PR5 (design-dual-channel ADR 20):
+    persiste ediciones del asesor sobre el cliente vinculado a una moto
+    que regresa al taller. Endpoint COMPARTIDO por ambos canales de
+    recepción (el bot de Telegram, PR6, y la Mini App, PR8) -- ninguno
+    tiene su propia implementación.
+
+    Acepta X-Sonia-Secret (bot) o JWT (staff autenticado), mismo patrón
+    dual-auth que `GET /{plate}` (`:40-51`). Por ADR 22, esto es una
+    verificación de IDENTIDAD DE PROCESO ("esta llamada vino del bot de
+    Sonia"), no de asesor individual -- igual que cualquier otra
+    escritura originada por el bot en este código.
+    """
+    is_bot = verify_sonia_secret(x_sonia_secret, settings.SONIA_BOT_SECRET)
+    if not is_bot and current_user is None:
+        raise HTTPException(status_code=403, detail="Acceso no autorizado.")
+
+    tenant_uuid: Optional[UUID] = None
+    if x_tenant_id:
+        try:
+            tenant_uuid = UUID(x_tenant_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="X-Tenant-Id inválido.")
+
+    # Reaplica la MISMA resolución de placa + visibilidad por tenant que
+    # `GET /{plate}` (ADR 20) -- una sola implementación del lookup.
+    vehicle = await vehicle_service.get_vehicle_by_plate(db, plate, tenant_uuid)
+    if not vehicle:
+        raise HTTPException(
+            status_code=404,
+            detail="Vehículo no encontrado o en servicio en otro taller.",
+        )
+    if not vehicle.client_id or vehicle.client is None:
+        raise HTTPException(status_code=404, detail="El vehículo no tiene un cliente vinculado.")
+
+    for field, value in client_in.model_dump(exclude_unset=True).items():
+        setattr(vehicle.client, field, value)
+
+    await db.commit()
+    await db.refresh(vehicle.client)
+    return vehicle.client
 
 
 @router.post("/", response_model=VehicleOut, status_code=status.HTTP_201_CREATED)
