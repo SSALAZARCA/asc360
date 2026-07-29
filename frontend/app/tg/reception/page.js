@@ -13,6 +13,9 @@ const STEP = {
   CONFIRMING_OCR:    'CONFIRMING_OCR',
   CORRECTING_OCR:    'CORRECTING_OCR',
   CONFIRMING_CLIENT: 'CONFIRMING_CLIENT',
+  CONFIRMING_RETURNING_CLIENT: 'CONFIRMING_RETURNING_CLIENT',
+  SELECTING_CLIENT_FIELD:      'SELECTING_CLIENT_FIELD',
+  EDITING_CLIENT_FIELD:        'EDITING_CLIENT_FIELD',
   ASKING_PHONE:      'ASKING_PHONE',
   NEW_VEHICLE_FORM:  'NEW_VEHICLE_FORM',
   KM:                'KM',
@@ -52,6 +55,26 @@ const INTAKE_QUESTIONS = {
 };
 const STORAGE_KEY = 'reception_draft';
 
+// Campos editables del cliente vinculado a la moto (orden del teclado de selección).
+// Mirrors telegram-bot/bot/handlers/reception.py's CLIENT_FIELDS verbatim -- the
+// Mini App is a copy of Sonia's canonical confirm/edit flow, not the reverse.
+const CLIENT_FIELDS = [
+  ['name',    'Nombre'],
+  ['phone',   'Teléfono'],
+  ['email',   'Email'],
+  ['address', 'Dirección'],
+];
+const CLIENT_FIELD_LABELS = Object.fromEntries(CLIENT_FIELDS);
+
+function buildClientSummary(client) {
+  let lines = '👤 *Datos del cliente registrado:*\n';
+  CLIENT_FIELDS.forEach(([key, label]) => {
+    const value = client?.[key];
+    lines += `• *${label}:* ${value || 'N/D'}\n`;
+  });
+  return lines;
+}
+
 const fieldLabelStyle = { fontSize: '0.52rem', color: '#606075', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700, display: 'block', marginBottom: 4 };
 const fieldInputStyle = { width: '100%', background: '#0a0a0c', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, padding: '0.6rem 0.75rem', color: '#fff', fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box' };
 const vinHintStyle    = { margin: '0.3rem 0 0', fontSize: '0.62rem', color: '#606075' };
@@ -87,6 +110,8 @@ export default function TgReception() {
   const [isNew,       setIsNew]       = useState(false);
   const [newVeh,      setNewVeh]      = useState({ brand: 'UM', model: '', year: '', color: '', vin: '' });
   const [clientPhone, setClientPhone] = useState('');
+  const [clientEdits, setClientEdits] = useState({});
+  const [editingClientField, setEditingClientField] = useState(null);
   const [formData,    setFormData]    = useState({
     plate: '', km: '', gas: '', notes: '', motivos: [], serviceType: 'regular',
     accessories: [], observations: '', intakeAnswers: [], pdfUrl: null,
@@ -112,6 +137,7 @@ export default function TgReception() {
     if (step === STEP.PLATE) return;
     const draft = {
       step, ocrData, vehicleId, isNew, newVeh, clientPhone, formData,
+      clientEdits, editingClientField,
       vehicleData: vehicleData
         ? { plate: vehicleData.plate, brand: vehicleData.brand, model: vehicleData.model, year: vehicleData.year, id: vehicleData.id, client_id: vehicleData.client_id }
         : null,
@@ -145,6 +171,8 @@ export default function TgReception() {
           setIsNew(d.isNew || false);
           setNewVeh(d.newVeh || { brand: 'UM', model: '', year: '', color: '', vin: '' });
           setClientPhone(d.clientPhone || '');
+          setClientEdits(d.clientEdits || {});
+          setEditingClientField(d.editingClientField || null);
           setFormData(d.formData || { plate: '', km: '', gas: '', notes: '', motivos: [], serviceType: 'regular', accessories: [], observations: '', intakeAnswers: [], pdfUrl: null });
           setEvidenceItems(d.evidenceItems || []);
           setIntakeQuestions(d.intakeQuestions || []);
@@ -203,7 +231,8 @@ export default function TgReception() {
     setOcrData(null); setVehicleId(null); setVehicleData(null); setIsNew(false);
     setNewVeh({ brand: 'UM', model: '', year: '', color: '', vin: '' });
     setVinLookupStatus('idle');
-    setClientPhone(''); setEvidenceItems([]); setPendingPhoto(null);
+    setClientPhone(''); setClientEdits({}); setEditingClientField(null);
+    setEvidenceItems([]); setPendingPhoto(null);
     setIntakeQuestions([]); setIntakeIdx(0);
     setFormData({ plate: '', km: '', gas: '', notes: '', motivos: [], serviceType: 'regular', accessories: [], observations: '', intakeAnswers: [], pdfUrl: null });
     const usr = u;
@@ -248,8 +277,17 @@ export default function TgReception() {
       }
       setIsNew(false); setVehicleId(data.id); setVehicleData(data);
       const vLabel = [data.brand, data.model, data.year].filter(Boolean).join(' ');
-      pushBot(`¡Esta moto ya ha estado en el taller!\n*${plate}* — ${vLabel || '—'}\n\n¿Ingresamos al taller?`);
-      setStep(STEP.CONFIRMING_CLIENT);
+      if (data.client) {
+        // Moto con cliente vinculado -- mostramos sus datos y pedimos confirmación,
+        // mirroring the bot's handle_ocr_confirmation known-vehicle branch (ADR21).
+        setClientEdits({});
+        pushBot(`¡Esta moto ya ha estado en el taller!\n*${plate}* — ${vLabel || '—'}\n\n${buildClientSummary(data.client)}\n¿Siguen correctos estos datos?`);
+        setStep(STEP.CONFIRMING_RETURNING_CLIENT);
+      } else {
+        // Sin cliente vinculado aún -- comportamiento histórico, sin cambios (ADR16).
+        pushBot(`¡Esta moto ya ha estado en el taller!\n*${plate}* — ${vLabel || '—'}\n\n¿Ingresamos al taller?`);
+        setStep(STEP.CONFIRMING_CLIENT);
+      }
     } catch (e) {
       removeTyping(tid);
       pushBot(`Error de conexión: ${e.message}`);
@@ -293,6 +331,69 @@ export default function TgReception() {
     pushBot(`¿Cuántos kilómetros tiene la moto?\nEscribí, dictá 🎙️ o foto del tablero 📷`);
     setStep(STEP.KM);
   }, [pushUser, pushBot]);
+
+  // ── CONFIRMING_RETURNING_CLIENT / SELECTING_CLIENT_FIELD / EDITING_CLIENT_FIELD ─
+  // Mirrors the bot's handle_returning_client_confirmation / handle_client_field_selection /
+  // handle_client_field_value (PR6, telegram-bot/bot/handlers/reception.py) field-for-field:
+  // confirm-as-is is a pure no-op, edits are captured one field at a time and batched
+  // into a SINGLE PATCH /vehicles/{plate}/client call on "Listo", and a PATCH failure
+  // is surfaced but never blocks the rest of reception.
+  const confirmReturningClient = useCallback(() => {
+    pushUser('Sí, siguen correctos');
+    setEvidenceItems([]);
+    pushBot(`¿Cuántos kilómetros tiene la moto?\nEscribí, dictá 🎙️ o foto del tablero 📷`);
+    setStep(STEP.KM);
+  }, [pushUser, pushBot]);
+
+  const openClientFieldEdit = useCallback(() => {
+    pushUser('No, corregir algo');
+    pushBot('Dale, decime qué dato(s) del cliente querés corregir:');
+    setStep(STEP.SELECTING_CLIENT_FIELD);
+  }, [pushUser, pushBot]);
+
+  const selectClientField = useCallback((label) => {
+    const entry = CLIENT_FIELDS.find(([, l]) => l === label);
+    if (!entry) return;
+    const [key] = entry;
+    pushUser(label);
+    setEditingClientField(key);
+    pushBot(`¿Cuál es el nuevo *${label.toLowerCase()}* del cliente? Escribilo o dictalo 🎙️`);
+    setStep(STEP.EDITING_CLIENT_FIELD);
+  }, [pushUser, pushBot]);
+
+  const submitClientFieldValue = useCallback((raw) => {
+    const value = raw.trim();
+    const key = editingClientField;
+    const label = CLIENT_FIELD_LABELS[key] || 'dato';
+    if (!value) { pushBot(`No logré identificar el nuevo valor de *${label.toLowerCase()}*. ¿Me lo repetís?`); return; }
+    pushUser(value);
+    setClientEdits(e => ({ ...e, [key]: value }));
+    setEditingClientField(null);
+    pushBot(`${label} actualizado a *${value}*. ✅\n\n¿Corregís algo más?`);
+    setStep(STEP.SELECTING_CLIENT_FIELD);
+  }, [editingClientField, pushUser, pushBot]);
+
+  const finishClientEdits = useCallback(async () => {
+    pushUser('✅ Listo');
+    const plate = formData.plate;
+    const edits = clientEdits;
+    if (Object.keys(edits).length > 0 && plate) {
+      setBusy(true);
+      try {
+        const res = await authFetch(`/vehicles/${plate}/client`, { method: 'PATCH', body: JSON.stringify(edits) });
+        if (!res.ok) {
+          pushBot('⚠️ No pude guardar los cambios del cliente, pero seguimos con la recepción.');
+        }
+      } catch {
+        pushBot('⚠️ No pude guardar los cambios del cliente, pero seguimos con la recepción.');
+      } finally {
+        setBusy(false);
+      }
+    }
+    setEvidenceItems([]);
+    pushBot(`¿Cuántos kilómetros tiene la moto?\nEscribí, dictá 🎙️ o foto del tablero 📷`);
+    setStep(STEP.KM);
+  }, [formData.plate, clientEdits, pushUser, pushBot]);
 
   // ── ASKING_PHONE ──────────────────────────────────────────────────────────
   const handlePhone = useCallback((val) => {
@@ -653,6 +754,7 @@ export default function TgReception() {
         return;
       }
       case STEP.ASKING_PHONE:      return handlePhone(v);
+      case STEP.EDITING_CLIENT_FIELD: return submitClientFieldValue(v);
       case STEP.KM:                return submitKm(v);
       case STEP.ASKING_PHOTO_DESC: return submitPhotoDesc(v);
       case STEP.ACCESSORIES:       return submitAccessories(v);
@@ -661,7 +763,7 @@ export default function TgReception() {
       case STEP.OBSERVATIONS:      return submitObservations(v);
     }
   }, [busy, step, cancelPending, doReset, user, requestCancel, pushBot, pushUser,
-      ocrData, lookupPlate, handlePhone, submitKm,
+      ocrData, lookupPlate, handlePhone, submitClientFieldValue, submitKm,
       submitPhotoDesc, submitAccessories, submitNotes, submitIntake, submitObservations]);
 
   const handleSend = useCallback(() => {
@@ -680,6 +782,10 @@ export default function TgReception() {
     switch (step) {
       case STEP.CONFIRMING_OCR:    return val.startsWith('Confirmar') ? confirmOcr() : correctOcr();
       case STEP.CONFIRMING_CLIENT: return confirmClient();
+      case STEP.CONFIRMING_RETURNING_CLIENT:
+        return val.startsWith('Sí') ? confirmReturningClient() : openClientFieldEdit();
+      case STEP.SELECTING_CLIENT_FIELD:
+        return val.includes('Listo') ? finishClientEdits() : selectClientField(val);
       case STEP.GAS:               return submitGas(val);
       case STEP.ASKING_PHOTOS:
         if (val.includes('observación')) return addTextOnly();
@@ -695,6 +801,7 @@ export default function TgReception() {
       case STEP.OBSERVATIONS: return submitObservations('');
     }
   }, [busy, step, cancelPending, handleSendValue, confirmOcr, correctOcr, confirmClient,
+      confirmReturningClient, openClientFieldEdit, finishClientEdits, selectClientField,
       submitGas, addTextOnly, skipPhotos, skipPhotoDesc, submitAccessories,
       confirmMotive, changeSvcType, correctMotive, selectSvcType, submitObservations]);
 
@@ -703,6 +810,8 @@ export default function TgReception() {
     switch (step) {
       case STEP.CONFIRMING_OCR:    return ['Confirmar ✓', 'Corregir ✏️'];
       case STEP.CONFIRMING_CLIENT: return ['Ingresar al taller →'];
+      case STEP.CONFIRMING_RETURNING_CLIENT: return ['Sí, siguen correctos', 'No, corregir algo'];
+      case STEP.SELECTING_CLIENT_FIELD:      return [...CLIENT_FIELDS.map(([, label]) => label), '✅ Listo'];
       case STEP.GAS:               return GAS_CHIPS;
       case STEP.ASKING_PHOTOS:     return evidenceItems.length > 0
                                      ? ['📝 Solo observación', '✅ Continuar']
@@ -716,7 +825,7 @@ export default function TgReception() {
     }
   })();
 
-  const INPUT_STEPS = [STEP.PLATE, STEP.CORRECTING_OCR, STEP.ASKING_PHONE, STEP.KM,
+  const INPUT_STEPS = [STEP.PLATE, STEP.CORRECTING_OCR, STEP.ASKING_PHONE, STEP.EDITING_CLIENT_FIELD, STEP.KM,
                        STEP.ASKING_PHOTO_DESC, STEP.ACCESSORIES, STEP.NOTES, STEP.INTAKE, STEP.OBSERVATIONS];
   const showInputBar = (INPUT_STEPS.includes(step) || cancelPending) && step !== STEP.DONE;
 
@@ -994,6 +1103,7 @@ const placeholders = {
   [STEP.PLATE]:             'Ej: ABC123',
   [STEP.CORRECTING_OCR]:    'Escribí la placa correcta',
   [STEP.ASKING_PHONE]:      'Ej: 3001234567',
+  [STEP.EDITING_CLIENT_FIELD]: 'Nuevo valor…',
   [STEP.KM]:                'Ej: 12500',
   [STEP.ASKING_PHOTO_DESC]: 'Describí la foto…',
   [STEP.ACCESSORIES]:       'Casco, candado, alforjas…',
