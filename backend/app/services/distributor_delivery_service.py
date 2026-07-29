@@ -30,11 +30,12 @@ from fastapi import HTTPException, UploadFile
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.api.deps import CurrentUser
 from app.models.user import Role, User, UserStatus
 from app.models.vehicle import Vehicle
-from app.schemas.distributor_delivery import DeliveryCreate
+from app.schemas.distributor_delivery import DeliveryCreate, DeliveryEditIn, DeliveryListItemOut
 from app.schemas.vehicle import VehicleCreate
 from app.services.imports_service import _log_audit
 from app.services.pdf_service import upload_file_to_minio
@@ -159,11 +160,21 @@ async def _register_vehicle(db: AsyncSession, payload: DeliveryCreate) -> Vehicl
 # ORM instance (Design Decision 4/5)
 # ---------------------------------------------------------------------------
 
-def _apply_delivery_fields(vehicle: Vehicle, payload: DeliveryCreate, client: User) -> None:
+def _apply_delivery_fields(
+    vehicle: Vehicle, payload: DeliveryCreate, client: User, actor: CurrentUser
+) -> None:
     vehicle.delivery_date = payload.delivery_date
     if payload.vehicle.engine_number:
         vehicle.engine_number = payload.vehicle.engine_number
     vehicle.client_id = client.id
+    # Which Distribuidora registered THIS record -- the actor's own tenant,
+    # set once at creation and never changed afterward (follow-up feature,
+    # migration `c9d0e1f2a3b4`). `actor.tenant_id` is `None` for a
+    # Distribuidor with no tenant assigned yet, or for a superadmin manual
+    # legacy-vehicle backfill -- both expected, not bugs: the record simply
+    # isn't "owned" by any Distribuidora and only shows up in superadmin's
+    # unfiltered view of `GET /distributor/deliveries`.
+    vehicle.registered_by_tenant_id = actor.tenant_id
 
 
 # ---------------------------------------------------------------------------
@@ -224,7 +235,7 @@ async def create_delivery(
 
         client = await _lookup_or_create_client(db, payload, actor)
         vehicle = await _register_vehicle(db, payload)
-        _apply_delivery_fields(vehicle, payload, client)
+        _apply_delivery_fields(vehicle, payload, client, actor)
         await _attach_photo(vehicle, photo)
 
         _log_audit(
@@ -284,4 +295,125 @@ async def attach_act_photo(db: AsyncSession, vehicle: Vehicle, photo: UploadFile
         raise HTTPException(
             status_code=500,
             detail="Error interno al adjuntar el acta de entrega.",
+        )
+
+
+# ---------------------------------------------------------------------------
+# `GET /distributor/deliveries` -- the list of registrations already made
+# (follow-up feature, migration `c9d0e1f2a3b4`).
+# ---------------------------------------------------------------------------
+
+async def list_deliveries(db: AsyncSession, actor: CurrentUser) -> list[DeliveryListItemOut]:
+    """Tenant-scoped list of delivery records. Superadmin sees every
+    Distribuidora's rows (network-wide); a Distribuidor sees only rows
+    `registered_by_tenant_id == actor.tenant_id` -- shared across every
+    user at the SAME Distribuidora, not just the one who typed it in.
+
+    IMPORTANT deviation from a literal "let SQL do it naturally" reading:
+    SQLAlchemy's ORM `Column == None` compiles to `IS NULL`, NOT the raw-SQL
+    `= NULL` footgun that never matches anything. If `actor.tenant_id` is
+    `None` (Distribuidor with no tenant assigned yet) and this were left
+    unguarded, `Vehicle.registered_by_tenant_id == actor.tenant_id` would
+    compile to `registered_by_tenant_id IS NULL` and WOULD match every
+    other NULL-tenant row -- every superadmin backfill and every other
+    tenant-less Distribuidor's rows, a real data leak, not an empty list.
+    The explicit early-return below is required to make the actual
+    documented requirement ("empty list, never someone else's data") true;
+    it also means zero DB reads happen in that case, same discipline as
+    `forbid_distribuidor`.
+    """
+    if not actor.is_superadmin and actor.tenant_id is None:
+        return []
+
+    stmt = (
+        select(Vehicle)
+        .where(Vehicle.delivery_date.isnot(None))
+        .options(selectinload(Vehicle.client), selectinload(Vehicle.registered_by_tenant))
+        .order_by(Vehicle.delivery_date.desc())
+    )
+    if not actor.is_superadmin:
+        stmt = stmt.where(Vehicle.registered_by_tenant_id == actor.tenant_id)
+
+    vehicles = (await db.execute(stmt)).scalars().all()
+
+    items = []
+    for vehicle in vehicles:
+        items.append(
+            DeliveryListItemOut(
+                id=vehicle.id,
+                plate=vehicle.plate,
+                vin=vehicle.vin,
+                model=vehicle.model,
+                delivery_date=vehicle.delivery_date,
+                client_name=vehicle.client.name if vehicle.client else None,
+                registered_by_tenant_name=(
+                    vehicle.registered_by_tenant.name
+                    if actor.is_superadmin and vehicle.registered_by_tenant
+                    else None
+                ),
+            )
+        )
+    return items
+
+
+# ---------------------------------------------------------------------------
+# `PATCH /distributor/deliveries/{vehicle_id}` -- superadmin-only edit of a
+# delivery record's basic info (router enforces the superadmin-only guard,
+# NOT this function -- same "guard in the router, business logic in the
+# service" split as `create_delivery`/`require_distribuidor`).
+# ---------------------------------------------------------------------------
+
+async def edit_delivery(
+    db: AsyncSession, vehicle_id, payload: DeliveryEditIn
+) -> Vehicle:
+    vehicle = await db.get(Vehicle, vehicle_id)
+    if vehicle is None or vehicle.delivery_date is None:
+        raise HTTPException(status_code=404, detail="Registro de entrega no encontrado")
+
+    fields = payload.model_dump(exclude_unset=True)
+
+    # Validate FIRST -- zero mutations happen before a 422 is raised
+    # (Design ADR pattern reused verbatim from `_reject_future_delivery_date`,
+    # same module, no duplication needed).
+    if fields.get("delivery_date") is not None:
+        _reject_future_delivery_date(fields["delivery_date"])
+
+    try:
+        if fields.get("plate") is not None:
+            vehicle.plate = fields["plate"]
+        if "vin" in fields:
+            vehicle.vin = fields["vin"]
+        if fields.get("delivery_date") is not None:
+            vehicle.delivery_date = fields["delivery_date"]
+
+        # `client_name`/`client_phone` are silently no-op'd when the vehicle
+        # has no linked client -- not every historical row is guaranteed to
+        # have one (task requirement, not an oversight).
+        wants_client_edit = "client_name" in fields or "client_phone" in fields
+        if wants_client_edit and vehicle.client_id is not None:
+            client = await db.get(User, vehicle.client_id)
+            if client is not None:
+                if fields.get("client_name") is not None:
+                    client.name = fields["client_name"]
+                if "client_phone" in fields:
+                    client.phone = fields["client_phone"]
+
+        await db.commit()
+        return vehicle
+    except HTTPException:
+        await db.rollback()
+        raise
+    except IntegrityError:
+        logger.exception("Integrity error editing distributor delivery")
+        await db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="No fue posible editar la entrega: conflicto de datos.",
+        )
+    except Exception:
+        logger.exception("Unexpected error editing distributor delivery")
+        await db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail="Error interno al editar la entrega.",
         )

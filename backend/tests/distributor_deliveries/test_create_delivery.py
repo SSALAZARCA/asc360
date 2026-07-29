@@ -158,3 +158,39 @@ class TestFutureDeliveryDateRejected:
         assert fake_db.added == []
         assert fake_db.committed is False
         assert fake_db.rolled_back is True
+
+
+class TestRegisteredByTenantIdSetOnCreation:
+    """`registered_by_tenant_id` is the Distribuidora whose employee
+    registered this delivery -- set from the actor's OWN `tenant_id`
+    (follow-up feature, migration `c9d0e1f2a3b4`), covering all three actor
+    shapes `create_delivery` can see."""
+
+    async def test_distribuidor_with_tenant_stamps_that_tenant(self):
+        tenant_id = uuid.uuid4()
+        fake_db = FakeDeliverySession()
+        actor = make_distribuidor(tenant_id=tenant_id)
+
+        vehicle = await svc.create_delivery(fake_db, _payload(), make_valid_photo(), actor)
+
+        assert vehicle.registered_by_tenant_id == tenant_id
+
+    async def test_distribuidor_without_tenant_stamps_none(self):
+        """Expected, not a bug: nobody sees this row in the filtered
+        Distribuidor list -- only superadmin's unfiltered view does."""
+        fake_db = FakeDeliverySession()
+        actor = make_distribuidor(tenant_id=None)
+
+        vehicle = await svc.create_delivery(fake_db, _payload(), make_valid_photo(), actor)
+
+        assert vehicle.registered_by_tenant_id is None
+
+    async def test_superadmin_backfill_stamps_none(self):
+        """A superadmin manual legacy-vehicle backfill isn't "owned" by any
+        Distribuidora -- also expected, also `None`."""
+        fake_db = FakeDeliverySession()
+        actor = make_superadmin()
+
+        vehicle = await svc.create_delivery(fake_db, _payload(), make_valid_photo(), actor)
+
+        assert vehicle.registered_by_tenant_id is None

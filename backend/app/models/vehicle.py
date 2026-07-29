@@ -53,5 +53,22 @@ class Vehicle(Base):
     client_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     client = relationship("User", foreign_keys=[client_id])
 
+    # `registered_by_tenant_id` is the Distribuidora (tenant) whose employee
+    # registered THIS delivery record via `POST /distributor/deliveries` --
+    # set once at creation time (`distributor_delivery_service.
+    # _apply_delivery_fields`) and never changed afterward. This is a
+    # DIFFERENT, unrelated concept from the deliberately-unmapped
+    # `Vehicle.tenant_id` documented in this class's docstring above: that
+    # one was a temporary, derived "which taller currently holds this
+    # vehicle" claim; this one is a permanent "who registered this sale"
+    # fact, set exactly once and read back for the Distribuidor-scoped
+    # deliveries list (`sdd/distributor-vehicle-delivery` follow-up,
+    # migration `c9d0e1f2a3b4`). ONE-DIRECTIONAL relationship, no
+    # `back_populates`, same precedent as `client_id`/`client` above --
+    # needed so the deliveries list can `selectinload` the Distribuidora's
+    # name for superadmin's cross-tenant view without an N+1 query.
+    registered_by_tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=True)
+    registered_by_tenant = relationship("Tenant", foreign_keys=[registered_by_tenant_id])
+
     service_orders = relationship("ServiceOrder", back_populates="vehicle", cascade="all, delete-orphan")
     lifecycle_events = relationship("VehicleLifecycleEvent", back_populates="vehicle", cascade="all, delete-orphan", order_by="VehicleLifecycleEvent.event_date")

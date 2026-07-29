@@ -19,9 +19,12 @@ from sqlalchemy.exc import IntegrityError
 from app.api.deps import CurrentUser
 
 
-def make_distribuidor() -> CurrentUser:
+def make_distribuidor(tenant_id: Optional[uuid.UUID] = None) -> CurrentUser:
     return CurrentUser(
-        user_id=str(uuid.uuid4()), role="parts_dealer", tenant_id=None, name="Distribuidor"
+        user_id=str(uuid.uuid4()),
+        role="parts_dealer",
+        tenant_id=str(tenant_id) if tenant_id else None,
+        name="Distribuidor",
     )
 
 
@@ -138,9 +141,13 @@ def make_delivery_vehicle(
     model: str = "DSR",
     color: Optional[str] = "Rojo",
     year: Optional[int] = 2026,
+    delivery_date=None,
+    client=None,
+    registered_by_tenant_id: Optional[uuid.UUID] = None,
+    registered_by_tenant=None,
 ):
     from app.models.vehicle import Vehicle
-    return Vehicle(
+    vehicle = Vehicle(
         id=vehicle_id or uuid.uuid4(),
         plate=plate,
         vin=vin,
@@ -149,6 +156,36 @@ def make_delivery_vehicle(
         color=color,
         year=year,
         mileage=0,
+        delivery_date=delivery_date,
+        registered_by_tenant_id=registered_by_tenant_id,
+    )
+    # `.client`/`.registered_by_tenant` are relationship attrs -- set
+    # directly here to stand in for what a real `selectinload` would have
+    # populated, since `FakeDeliverySession` never runs real SQL joins.
+    vehicle.client = client
+    vehicle.registered_by_tenant = registered_by_tenant
+    return vehicle
+
+
+def make_tenant(
+    tenant_id: Optional[uuid.UUID] = None,
+    name: str = "Distribuidora Bogotá",
+    nit: str = "900123456-1",
+    phone: str = "3000000000",
+    ciudad: str = "Bogotá",
+):
+    """Mirrors `tests/historical_orders/conftest.py`'s helper of the same
+    name, but defaults `tenant_type` to `distribuidor` -- these tests are
+    exclusively about Distribuidora-scoped delivery records."""
+    from app.models.tenant import Tenant, TenantType
+    return Tenant(
+        id=tenant_id or uuid.uuid4(),
+        name=name,
+        subdomain=name.lower().replace(" ", "-"),
+        nit=nit,
+        phone=phone,
+        tenant_type=TenantType.distribuidor,
+        ciudad=ciudad,
     )
 
 
@@ -252,9 +289,12 @@ class FakeDeliverySession:
         return _ExecuteResult([])
 
     async def get(self, model_cls, obj_id):
+        from app.models.user import User
         from app.models.vehicle import Vehicle
         if model_cls is Vehicle:
             return next((v for v in self._vehicles if v.id == obj_id), None)
+        if model_cls is User:
+            return next((u for u in self._users if u.id == obj_id), None)
         return None
 
     def add(self, obj):

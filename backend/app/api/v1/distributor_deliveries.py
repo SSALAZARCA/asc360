@@ -27,6 +27,14 @@ before any DB write happens.
 replace path, kept alive alongside the inline photo field for the case
 where the inline upload fails or a superadmin decides to attach a photo
 after the fact.
+
+Follow-up feature (migration `c9d0e1f2a3b4`): `GET /deliveries` lists
+registrations already made -- Distribuidor sees only their own
+Distribuidora's rows (shared across colleagues, scoped by TENANT not by the
+individual user who typed it in), superadmin sees every Distribuidora's
+rows network-wide. `PATCH /deliveries/{vehicle_id}` edits a record's basic
+info -- superadmin ONLY, Distribuidor is explicitly excluded even for a
+record they created themselves, so it does NOT reuse `require_distribuidor`.
 """
 from typing import Optional
 from uuid import UUID
@@ -38,8 +46,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.api.deps import get_current_user, CurrentUser
 from app.models.vehicle import Vehicle
-from app.schemas.distributor_delivery import DeliveryCreate, DeliveryOut
-from app.services.distributor_delivery_service import create_delivery, attach_act_photo
+from app.schemas.distributor_delivery import (
+    DeliveryCreate,
+    DeliveryEditIn,
+    DeliveryListItemOut,
+    DeliveryOut,
+)
+from app.services.distributor_delivery_service import (
+    attach_act_photo,
+    create_delivery,
+    edit_delivery,
+    list_deliveries,
+)
 
 router = APIRouter(prefix="/distributor", tags=["distributor_deliveries"])
 
@@ -63,6 +81,32 @@ async def create_delivery_endpoint(
         raise HTTPException(status_code=422, detail=exc.errors())
 
     return await create_delivery(db, delivery_in, photo, current_user)
+
+
+@router.get("/deliveries", response_model=list[DeliveryListItemOut])
+async def list_deliveries_endpoint(
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    require_distribuidor(current_user)
+    return await list_deliveries(db, current_user)
+
+
+@router.patch("/deliveries/{vehicle_id}", response_model=DeliveryOut)
+async def edit_delivery_endpoint(
+    vehicle_id: UUID,
+    payload: DeliveryEditIn,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    # Distribuidor is explicitly EXCLUDED from editing -- even the
+    # Distribuidor who created the record -- so this does NOT reuse
+    # `require_distribuidor` (which also admits Distribuidor). Only
+    # superadmin edits.
+    if not current_user.is_superadmin:
+        raise HTTPException(status_code=403, detail="Solo superadmin puede editar")
+
+    return await edit_delivery(db, vehicle_id, payload)
 
 
 @router.post("/deliveries/{vehicle_id}/act-photo", status_code=200, response_model=DeliveryOut)

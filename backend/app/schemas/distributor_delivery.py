@@ -79,3 +79,36 @@ class DeliveryOut(BaseModel):
     client_id: Optional[UUID] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class DeliveryListItemOut(BaseModel):
+    """`GET /distributor/deliveries` row — a Distribuidor sees only their
+    own tenant's rows (`registered_by_tenant_name` left `None`, since they
+    only ever see their own Distribuidora anyway); superadmin sees every
+    Distribuidora's rows and gets `registered_by_tenant_name` populated per
+    row (`distributor_delivery_service.list_deliveries` decides this, not
+    this schema — the field is always PRESENT, just role-conditionally
+    populated)."""
+    id: UUID
+    plate: str
+    vin: Optional[str] = None
+    model: Optional[str] = None
+    delivery_date: date
+    client_name: Optional[str] = None
+    registered_by_tenant_name: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class DeliveryEditIn(BaseModel):
+    """`PATCH /distributor/deliveries/{vehicle_id}` — superadmin-only edit
+    whitelist. All fields `Optional`; the router/service applies
+    `exclude_unset` semantics so an unset field is left untouched, not
+    clobbered to `None`. `client_name`/`client_phone` update the linked
+    `User` (via `Vehicle.client_id`) if one exists; `plate`/`vin`/
+    `delivery_date` update the `Vehicle` row directly."""
+    client_name: Optional[str] = None
+    client_phone: Optional[str] = None
+    plate: Optional[str] = None
+    vin: Optional[str] = None
+    delivery_date: Optional[date] = None
