@@ -25,7 +25,7 @@ const ALL_ITEMS = [
   { id: 'kanban', name: 'Tablero Operativo', icon: LayoutDashboard, path: '/kanban' },
   { id: 'services', name: 'Gestión de Órdenes', icon: Wrench, path: '/services' },
   { id: 'imports', name: 'Estado Pedidos', icon: Ship, path: '/imports', importsOnly: true },
-  { id: 'tenants', name: 'Red de Talleres', icon: Building2, path: '/tenants', adminOnly: true, allowAdministrativo: true },
+  { id: 'tenants', name: 'Red de Tiendas', icon: Building2, path: '/tenants', adminOnly: true, allowAdministrativo: true },
   { id: 'users', name: 'Personal & Acceso', icon: Users, path: '/users', adminOnly: true },
   { id: 'parts-catalog', name: 'Maestro de Partes', icon: BookOpen, path: '/parts-catalog', adminOnly: true },
   { id: 'superadmin-data', name: 'Datos Rápidos', icon: Wand2, path: '/superadmin-data', adminOnly: true },

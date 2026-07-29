@@ -61,7 +61,7 @@ describe('Sidebar — distribuidor delivery gate', () => {
     // Every adminOnly/importsOnly entry MUST stay hidden — unchanged.
     expect(screen.queryByText(/Centro de Comando/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Estado Pedidos/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/Red de Talleres/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Red de Tiendas/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Personal & Acceso/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Maestro de Partes/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Datos Rápidos/i)).not.toBeInTheDocument();

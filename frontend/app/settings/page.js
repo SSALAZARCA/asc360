@@ -42,7 +42,7 @@ const PERM_GROUPS = [
       { label: 'Kanban / Tablero Operativo',        perms: [true,  false, true,  true,  true,  false, true ] },
       { label: 'Gestión de Órdenes de Servicio',    perms: [true,  true,  true,  true,  true,  false, true ] },
       { label: 'Estado de Pedidos (Importaciones)', perms: [true,  true,  false, false, false, true,  false] },
-      { label: 'Red de Talleres',                   perms: [true,  false, false, false, false, false, false] },
+      { label: 'Red de Tiendas',                     perms: [true,  false, false, false, false, false, false] },
       { label: 'Personal & Acceso (Usuarios)',       perms: [true,  false, false, false, false, false, false] },
       { label: 'Catálogo de Partes',                perms: [true,  false, false, false, false, false, false] },
       { label: 'Configuración del Sistema',         perms: [true,  false, false, false, false, false, false] },
