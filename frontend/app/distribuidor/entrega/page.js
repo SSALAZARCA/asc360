@@ -250,7 +250,7 @@ function PageHeader() {
     <header className="page-header">
       <div>
         <h1 className="page-title">
-          Entrega de <span style={{ fontStyle: 'italic', color: 'var(--accent-orange)', WebkitTextFillColor: 'var(--accent-orange)' }}>Motos</span>
+          Registro de <span style={{ fontStyle: 'italic', color: 'var(--accent-orange)', WebkitTextFillColor: 'var(--accent-orange)' }}>Motocicletas</span>
         </h1>
         <p className="page-subtitle">Registro de venta/entrega — uso exclusivo de Distribuidor</p>
       </div>

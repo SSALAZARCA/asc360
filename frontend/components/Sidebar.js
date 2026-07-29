@@ -34,7 +34,7 @@ const ALL_ITEMS = [
   // Reusable, role-based allowlist (not another *Only boolean) — a future
   // parts-sale screen for the same `parts_dealer` role adds another entry
   // here with the same `roles` key, zero further filter changes needed.
-  { id: 'vehicle-delivery', name: 'Entrega de Motos', icon: Truck, path: '/distribuidor/entrega', roles: ['parts_dealer', 'superadmin'] },
+  { id: 'vehicle-delivery', name: 'Registro de Motocicletas', icon: Truck, path: '/distribuidor/entrega', roles: ['parts_dealer', 'superadmin'] },
 ];
 
 export default function Sidebar({ collapsed = false, onToggle }) {

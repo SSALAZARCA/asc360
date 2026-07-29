@@ -43,9 +43,9 @@ describe('Sidebar — distribuidor delivery gate', () => {
     render(<Sidebar />);
 
     await waitFor(() => {
-      expect(screen.getByText(/Entrega de Motos/i)).toBeInTheDocument();
+      expect(screen.getByText(/Registro de Motocicletas/i)).toBeInTheDocument();
     });
-    const link = screen.getByText(/Entrega de Motos/i).closest('a');
+    const link = screen.getByText(/Registro de Motocicletas/i).closest('a');
     expect(link).toHaveAttribute('href', '/distribuidor/entrega');
   });
 
@@ -54,7 +54,7 @@ describe('Sidebar — distribuidor delivery gate', () => {
     render(<Sidebar />);
 
     await waitFor(() => {
-      expect(screen.getByText(/Entrega de Motos/i)).toBeInTheDocument();
+      expect(screen.getByText(/Registro de Motocicletas/i)).toBeInTheDocument();
     });
     expect(screen.getByText(/Tablero Operativo/i)).toBeInTheDocument();
     expect(screen.getByText(/Gestión de Órdenes/i)).toBeInTheDocument();
@@ -74,7 +74,7 @@ describe('Sidebar — distribuidor delivery gate', () => {
     render(<Sidebar />);
 
     await waitFor(() => {
-      expect(screen.getByText(/Entrega de Motos/i)).toBeInTheDocument();
+      expect(screen.getByText(/Registro de Motocicletas/i)).toBeInTheDocument();
     });
   });
 
@@ -85,6 +85,6 @@ describe('Sidebar — distribuidor delivery gate', () => {
     await waitFor(() => {
       expect(screen.getByText(/Gestión de Órdenes/i)).toBeInTheDocument();
     });
-    expect(screen.queryByText(/Entrega de Motos/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Registro de Motocicletas/i)).not.toBeInTheDocument();
   });
 });
