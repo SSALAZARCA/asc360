@@ -31,7 +31,7 @@
  *     data, Confirmación shows a correct read-only summary
  */
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 const mockAuthFetch = jest.fn();
@@ -62,12 +62,27 @@ function makeResponse(status, body) {
 
 const MODELS = [{ id: 'm-1', modelo: 'Renegade 200' }];
 let mockModels = MODELS;
+// GET /distributor/deliveries (list, exact URL + GET method) is treated as a
+// boilerplate infra call, same precedent as `/vehicle-models` above -- it
+// fires on mount (and again after a successful new-delivery submission), so
+// every test's indexed `responses` queue must stay reserved for the
+// business-action calls it already controls (VIN lookup, POST, PATCH...).
+// Read live at call-time (not captured at queueResponses() setup time), so a
+// test can mutate `mockDeliveries` between the initial mount fetch and a
+// later re-fetch to simulate the list picking up a change.
+let mockDeliveries = [];
+function isDeliveriesListGet(url, opts) {
+  return typeof url === 'string' && url === '/distributor/deliveries' && (!opts || !opts.method || opts.method === 'GET');
+}
 
 function queueResponses(...responses) {
   let i = 0;
-  mockAuthFetch.mockImplementation((url) => {
+  mockAuthFetch.mockImplementation((url, opts) => {
     if (typeof url === 'string' && url.includes('/vehicle-models')) {
       return Promise.resolve(makeResponse(200, mockModels));
+    }
+    if (isDeliveriesListGet(url, opts)) {
+      return Promise.resolve(makeResponse(200, mockDeliveries));
     }
     return Promise.resolve(responses[i++]);
   });
@@ -75,7 +90,8 @@ function queueResponses(...responses) {
 
 function nonCatalogCalls() {
   return mockAuthFetch.mock.calls.filter(
-    ([url]) => !(typeof url === 'string' && url.includes('/vehicle-models'))
+    ([url, opts]) => !(typeof url === 'string' && url.includes('/vehicle-models'))
+      && !isDeliveriesListGet(url, opts)
   );
 }
 
@@ -123,6 +139,7 @@ beforeEach(() => {
   mockToast.error.mockReset();
   mockToast.success.mockReset();
   mockModels = MODELS;
+  mockDeliveries = [];
   sessionStorage.clear();
 });
 
@@ -318,6 +335,176 @@ describe('DistribuidorEntregaPage — Entrega step validation', () => {
     await waitFor(() => {
       expect(screen.getByText(/entrega registrada correctamente/i)).toBeInTheDocument();
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Follow-up feature: "Registros Realizados" list below the wizard.
+//   GET   /distributor/deliveries              -> 200 [DeliveryListItemOut, ...]
+//   PATCH /distributor/deliveries/{vehicle_id}  -> 200 DeliveryOut (superadmin only)
+// ---------------------------------------------------------------------------
+const ROW_DISTRIBUIDOR = {
+  id: 'd-1',
+  plate: 'ABC123',
+  vin: 'VIN1234567890XYZ',
+  model: 'Renegade 200',
+  delivery_date: '2025-01-10',
+  client_name: 'Juan Pérez',
+  registered_by_tenant_name: null,
+};
+
+function findList() {
+  return screen.findByRole('heading', { name: /registros realizados/i });
+}
+
+describe('DistribuidorEntregaPage — Registros Realizados (list)', () => {
+  it('fetches and renders delivery rows on mount', async () => {
+    setUser('parts_dealer');
+    mockDeliveries = [ROW_DISTRIBUIDOR];
+    queueResponses();
+    render(<DistribuidorEntregaPage />);
+
+    await findList();
+
+    expect(await screen.findByText('Juan Pérez')).toBeInTheDocument();
+    expect(screen.getByText(/ABC123/)).toBeInTheDocument();
+    expect(screen.getByText(/Renegade 200/)).toBeInTheDocument();
+    expect(screen.getByText('VIN1234567890XYZ')).toBeInTheDocument();
+    expect(screen.getByText('2025-01-10')).toBeInTheDocument();
+  });
+
+  it('shows the loading state while the fetch is in flight', async () => {
+    setUser('parts_dealer');
+    mockDeliveries = [ROW_DISTRIBUIDOR];
+    queueResponses();
+    render(<DistribuidorEntregaPage />);
+
+    // Loading text appears before the fetch resolves.
+    expect(screen.getByText(/cargando registros/i)).toBeInTheDocument();
+    await screen.findByText('Juan Pérez');
+  });
+
+  it('renders the empty-state message when there are no registrations, without crashing', async () => {
+    setUser('parts_dealer');
+    mockDeliveries = [];
+    queueResponses();
+    render(<DistribuidorEntregaPage />);
+
+    await findList();
+    expect(await screen.findByText(/todavía no hay registros/i)).toBeInTheDocument();
+  });
+
+  it("a Distribuidor's view never shows registered_by_tenant_name or an Editar affordance, even if a row includes one", async () => {
+    setUser('parts_dealer');
+    mockDeliveries = [{ ...ROW_DISTRIBUIDOR, registered_by_tenant_name: 'Moto Total S.A.S' }];
+    queueResponses();
+    render(<DistribuidorEntregaPage />);
+
+    await screen.findByText('Juan Pérez');
+
+    expect(screen.queryByText('Moto Total S.A.S')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /editar/i })).not.toBeInTheDocument();
+  });
+
+  it("a superadmin's view shows the Distribuidora name per row and an Editar affordance", async () => {
+    setUser('superadmin');
+    mockDeliveries = [{ ...ROW_DISTRIBUIDOR, registered_by_tenant_name: 'Moto Total S.A.S' }];
+    queueResponses();
+    render(<DistribuidorEntregaPage />);
+
+    await screen.findByText('Juan Pérez');
+
+    expect(screen.getByText('Moto Total S.A.S')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /editar/i })).toBeInTheDocument();
+  });
+
+  it('after a successful new-delivery submission, the list re-fetches and shows the new entry', async () => {
+    setUser('parts_dealer');
+    mockDeliveries = [];
+    queueResponses(makeResponse(201, {
+      id: 'v-new', plate: 'ABC123', vin: null, model: null, color: null, year: null,
+      engine_number: null, delivery_date: '2025-01-10', delivery_act_url: 'https://minio/act.jpg', client_id: 'c-1',
+    }));
+    render(<DistribuidorEntregaPage />);
+
+    await findList();
+    expect(await screen.findByText(/todavía no hay registros/i)).toBeInTheDocument();
+
+    // Simulate the backend now returning the freshly-created row on the
+    // next GET, the way it would after a real POST commits.
+    mockDeliveries = [{
+      id: 'v-new', plate: 'ABC123', vin: null, model: null, delivery_date: '2025-01-10',
+      client_name: 'Juan Pérez', registered_by_tenant_name: null,
+    }];
+
+    await goToConfirmation();
+    clickSubmit();
+
+    await waitFor(() => {
+      expect(screen.getByText(/entrega registrada correctamente/i)).toBeInTheDocument();
+    });
+    await waitFor(() => {
+      expect(screen.queryByText(/todavía no hay registros/i)).not.toBeInTheDocument();
+    });
+    expect(await screen.findByText(/ABC123/)).toBeInTheDocument();
+  });
+});
+
+describe('DistribuidorEntregaPage — Registros Realizados edit (superadmin only)', () => {
+  it('opens the edit dialog pre-filled and PATCHes only the changed field(s) on save, updating the list in place', async () => {
+    setUser('superadmin');
+    mockDeliveries = [ROW_DISTRIBUIDOR];
+    queueResponses(makeResponse(200, {
+      id: 'd-1', plate: 'XYZ999', vin: 'VIN1234567890XYZ', model: 'Renegade 200', color: null, year: null,
+      engine_number: null, delivery_date: '2025-01-10', delivery_act_url: null, client_id: 'c-1',
+    }));
+    render(<DistribuidorEntregaPage />);
+
+    await screen.findByText('Juan Pérez');
+    fireEvent.click(screen.getByRole('button', { name: /editar/i }));
+
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByLabelText('Nombre del cliente').value).toBe('Juan Pérez');
+    expect(within(dialog).getByLabelText('Placa').value).toBe('ABC123');
+    expect(within(dialog).getByLabelText('VIN').value).toBe('VIN1234567890XYZ');
+    expect(within(dialog).getByLabelText('Fecha de entrega').value).toBe('2025-01-10');
+
+    fireEvent.change(within(dialog).getByLabelText('Placa'), { target: { value: 'XYZ999' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: /guardar/i }));
+
+    await waitFor(() => {
+      expect(nonCatalogCalls()).toHaveLength(1);
+    });
+    const [url, options] = nonCatalogCalls()[0];
+    expect(url).toBe('/distributor/deliveries/d-1');
+    expect(options.method).toBe('PATCH');
+    expect(JSON.parse(options.body)).toEqual({ plate: 'XYZ999' });
+
+    await waitFor(() => {
+      expect(mockToast.success).toHaveBeenCalled();
+    });
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(await screen.findByText(/XYZ999/)).toBeInTheDocument();
+  });
+
+  it('shows the backend error message via toast on a 422 (future date) and keeps the dialog open', async () => {
+    setUser('superadmin');
+    mockDeliveries = [ROW_DISTRIBUIDOR];
+    queueResponses(makeResponse(422, { detail: 'La fecha de entrega no puede ser futura.' }));
+    render(<DistribuidorEntregaPage />);
+
+    await screen.findByText('Juan Pérez');
+    fireEvent.click(screen.getByRole('button', { name: /editar/i }));
+
+    const dialog = await screen.findByRole('dialog');
+    const future = new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    fireEvent.change(within(dialog).getByLabelText('Fecha de entrega'), { target: { value: future } });
+    fireEvent.click(within(dialog).getByRole('button', { name: /guardar/i }));
+
+    await waitFor(() => {
+      expect(mockToast.error).toHaveBeenCalledWith('La fecha de entrega no puede ser futura.');
+    });
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
 });
 

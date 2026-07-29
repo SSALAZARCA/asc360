@@ -7,7 +7,7 @@ import { toast } from '../../../lib/toast';
 import VinLookupField from '../../../components/vehicle/VinLookupField';
 import ModelSelectField from '../../../components/vehicle/ModelSelectField';
 import DeliveryActUpload from '../../../components/distribuidor/DeliveryActUpload';
-import { Truck, Save } from 'lucide-react';
+import { Truck, Save, Pencil, X } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
 // Whitelisted shape — MUST mirror `DeliveryCreate`
@@ -137,6 +137,23 @@ const labelStyle = { display: 'flex', flexDirection: 'column', gap: '0.35rem', f
 const inputStyle = { background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', padding: '0.6rem 0.85rem', color: '#fff', fontSize: '0.85rem', outline: 'none', textTransform: 'none' };
 const hintStyle = { margin: 0, fontSize: '0.68rem', color: 'rgba(255,255,255,0.45)', textTransform: 'none', fontWeight: 400, letterSpacing: 'normal' };
 
+// "Registros Realizados" list + edit dialog tokens.
+const listSectionStyle = { ...sectionStyle, ...cardStyle, marginTop: '1.5rem' };
+const tableWrapStyle = { overflowX: 'auto', marginTop: '1rem' };
+const tableStyle = { width: '100%', borderCollapse: 'collapse' };
+const thStyle = { textAlign: 'left', padding: '0.7rem 0.9rem', color: 'rgba(255,255,255,0.4)', fontWeight: 700, fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid rgba(255,255,255,0.1)' };
+const tdStyle = { padding: '0.7rem 0.9rem', fontSize: '0.82rem', color: '#fff', borderBottom: '1px solid rgba(255,255,255,0.06)' };
+const emptyStateStyle = { ...hintStyle, fontSize: '0.85rem', textAlign: 'center', padding: '2rem 0' };
+const tenantBadgeStyle = { display: 'inline-block', fontSize: '0.65rem', fontWeight: 700, color: 'var(--accent-orange)', background: 'rgba(255,95,51,0.12)', padding: '2px 8px', borderRadius: '999px', textTransform: 'uppercase', letterSpacing: '0.04em' };
+const editBtnStyle = { display: 'inline-flex', alignItems: 'center', gap: '0.3rem', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', color: '#fff', borderRadius: '6px', padding: '0.35rem 0.6rem', fontSize: '0.7rem', cursor: 'pointer' };
+
+const modalBackdropStyle = { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem' };
+const modalBoxStyle = { background: '#0c0c0e', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '16px', width: '100%', maxWidth: '520px', boxShadow: '0 25px 50px rgba(0,0,0,0.8)' };
+const modalHeadStyle = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1.25rem 1.5rem', borderBottom: '1px solid rgba(255,255,255,0.05)' };
+const modalBodyStyle = { padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '0.9rem' };
+const modalFootStyle = { display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', padding: '1.25rem 1.5rem', borderTop: '1px solid rgba(255,255,255,0.05)' };
+const closeBtnStyle = { width: '28px', height: '28px', borderRadius: '8px', background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' };
+
 function Field({ label, type = 'text', value, onChange, required = false }) {
   return (
     <label style={labelStyle}>
@@ -202,7 +219,49 @@ function useVinLookup(setForm) {
   return { vinLookupStatus, setVinLookupStatus, lookupVin };
 }
 
-function useDeliverySubmit(form, photo, isSuperadmin, resetForm) {
+// "Registros Realizados" -- lists deliveries already made. A Distribuidor
+// sees only their own tenant's rows, superadmin sees every Distribuidora's
+// rows network-wide (`registered_by_tenant_name` populated per row) -- same
+// dual-role guard as create (`GET /distributor/deliveries`), the
+// role-scoping itself is decided server-side, not here.
+function useDeliveries() {
+  const [deliveries, setDeliveries] = useState([]);
+  const [loadingDeliveries, setLoadingDeliveries] = useState(true);
+
+  const fetchDeliveries = async () => {
+    setLoadingDeliveries(true);
+    try {
+      const res = await authFetch('/distributor/deliveries');
+      if (!res.ok) {
+        setDeliveries([]);
+        toast.error('No se pudieron cargar los registros.');
+        return;
+      }
+      const data = await res.json();
+      setDeliveries(Array.isArray(data) ? data : []);
+    } catch {
+      setDeliveries([]);
+      toast.error('No se pudieron cargar los registros.');
+    } finally {
+      setLoadingDeliveries(false);
+    }
+  };
+
+  useEffect(() => { fetchDeliveries(); }, []);
+
+  // Applied after a successful PATCH edit -- merges only the fields the
+  // edit dialog can change (client_name/plate/vin/delivery_date) into the
+  // existing row, cheaper than a full re-fetch (`DeliveryOut`, the PATCH
+  // response shape, doesn't even carry `client_name` -- only `client_id` --
+  // so the caller merges from the edited form values, not the response).
+  const updateDeliveryLocal = (id, patch) => {
+    setDeliveries((rows) => rows.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+  };
+
+  return { deliveries, loadingDeliveries, fetchDeliveries, updateDeliveryLocal };
+}
+
+function useDeliverySubmit(form, photo, isSuperadmin, resetForm, onSuccess) {
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(null); // { id } | null
 
@@ -219,6 +278,9 @@ function useDeliverySubmit(form, photo, isSuperadmin, resetForm) {
         setSuccess({ id: data.id });
         toast.success('Entrega registrada correctamente.');
         resetForm();
+        // Re-fetch so a freshly-created registration shows up in "Registros
+        // Realizados" without a manual page reload.
+        if (onSuccess) onSuccess();
       } else {
         const err = await res.json().catch(() => ({}));
         toast.error(extractErrorMessage(err.detail, 'Error al registrar la entrega.'));
@@ -441,23 +503,208 @@ function SuccessNotice({ submitApi }) {
   );
 }
 
-export default function DistribuidorEntregaPage() {
-  const [form, setForm] = useState(FORM_DEFAULTS);
-  const [photo, setPhoto] = useState(null);
-  const [step, setStep] = useState(STEP_CLIENT);
-  const user = useCurrentUser();
-  const isSuperadmin = user?.role === 'superadmin';
-  const vehicleModels = useVehicleModels();
-  const vinApi = useVinLookup(setForm);
-  // Resets the form data after a successful submit but deliberately stays
-  // on Confirmación so the success notice remains visible; the user can
-  // click Atrás to start a fresh entry once they've seen it.
-  const resetForm = () => {
-    setForm(FORM_DEFAULTS);
-    setPhoto(null);
-    vinApi.setVinLookupStatus('idle');
+// ---------------------------------------------------------------------------
+// "Registros Realizados" -- list of deliveries already registered, plus a
+// superadmin-only inline edit dialog (PATCH /distributor/deliveries/{id}).
+// ---------------------------------------------------------------------------
+function DeliveriesSection({ deliveries, loading, isSuperadmin, onEdit }) {
+  return (
+    <section className="glass p-6" style={listSectionStyle}>
+      <StepHeading title="Registros Realizados" />
+      {loading ? (
+        <p style={emptyStateStyle}>Cargando registros...</p>
+      ) : deliveries.length === 0 ? (
+        <p style={emptyStateStyle}>Todavía no hay registros.</p>
+      ) : (
+        <div style={tableWrapStyle}>
+          <table style={tableStyle}>
+            <thead>
+              <tr>
+                <th style={thStyle}>Cliente</th>
+                <th style={thStyle}>Moto</th>
+                <th style={thStyle}>VIN</th>
+                <th style={thStyle}>Fecha de Entrega</th>
+                {isSuperadmin && <th style={thStyle}>Distribuidora</th>}
+                {isSuperadmin && <th style={thStyle}>Acciones</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {deliveries.map((d) => (
+                <tr key={d.id}>
+                  <td style={tdStyle}>{d.client_name || '—'}</td>
+                  <td style={tdStyle}>{[d.model, d.plate].filter(Boolean).join(' — ') || '—'}</td>
+                  <td style={tdStyle}>{d.vin || '—'}</td>
+                  <td style={tdStyle}>{d.delivery_date}</td>
+                  {isSuperadmin && (
+                    <td style={tdStyle}>
+                      {d.registered_by_tenant_name && (
+                        <span style={tenantBadgeStyle}>{d.registered_by_tenant_name}</span>
+                      )}
+                    </td>
+                  )}
+                  {isSuperadmin && (
+                    <td style={tdStyle}>
+                      <button type="button" style={editBtnStyle} onClick={() => onEdit(d)}>
+                        <Pencil size={12} /> Editar
+                      </button>
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
+const EDIT_FIELDS = ['client_name', 'client_phone', 'plate', 'vin', 'delivery_date'];
+
+function originalEditValues(delivery) {
+  // `client_phone` has no server-known original value -- `DeliveryListItemOut`
+  // doesn't carry it -- so it always starts blank; if left untouched it's
+  // correctly excluded from the patch, same as every other unedited field.
+  return {
+    client_name: delivery.client_name || '',
+    client_phone: '',
+    plate: delivery.plate || '',
+    vin: delivery.vin || '',
+    delivery_date: delivery.delivery_date || '',
   };
-  const submitApi = useDeliverySubmit(form, photo, isSuperadmin, resetForm);
+}
+
+// Pure diff: only fields that actually changed vs. `original` end up in the
+// patch, so an untouched field is never sent (exclude_unset semantics on
+// the backend rely on this).
+function buildEditPatch(form, original) {
+  const patch = {};
+  for (const key of EDIT_FIELDS) {
+    const value = form[key].trim();
+    if (value !== original[key].trim()) {
+      patch[key] = value === '' ? null : value;
+    }
+  }
+  return patch;
+}
+
+async function submitEditPatch(deliveryId, patch) {
+  try {
+    const res = await authFetch(`/distributor/deliveries/${deliveryId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    });
+    if (res.ok) {
+      toast.success('Registro actualizado correctamente.');
+      return true;
+    }
+    const err = await res.json().catch(() => ({}));
+    toast.error(extractErrorMessage(err.detail, 'Error al actualizar el registro.'));
+    return false;
+  } catch {
+    toast.error('Error de conexión.');
+    return false;
+  }
+}
+
+// Superadmin-only edit dialog.
+function EditDeliveryModal({ delivery, onClose, onSaved }) {
+  const original = originalEditValues(delivery);
+  const [form, setForm] = useState(original);
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    const patch = buildEditPatch(form, original);
+    if (Object.keys(patch).length === 0) {
+      onClose();
+      return;
+    }
+    setSaving(true);
+    const ok = await submitEditPatch(delivery.id, patch);
+    setSaving(false);
+    if (ok) onSaved(patch);
+  };
+
+  return (
+    <div style={modalBackdropStyle}>
+      <div style={modalBoxStyle} role="dialog" aria-modal="true" aria-label="Editar Registro">
+        <div style={modalHeadStyle}>
+          <h2 style={stepHeadingStyle}>Editar Registro</h2>
+          <button type="button" onClick={onClose} style={closeBtnStyle} aria-label="Cerrar">
+            <X size={16} />
+          </button>
+        </div>
+        <div style={modalBodyStyle}>
+          <Field label="Nombre del cliente" value={form.client_name} onChange={(e) => setForm({ ...form, client_name: e.target.value })} />
+          <Field label="Teléfono del cliente" value={form.client_phone} onChange={(e) => setForm({ ...form, client_phone: e.target.value })} />
+          <Field label="Placa" value={form.plate} onChange={(e) => setForm({ ...form, plate: e.target.value })} />
+          <Field label="VIN" value={form.vin} onChange={(e) => setForm({ ...form, vin: e.target.value })} />
+          <Field label="Fecha de entrega" type="date" value={form.delivery_date} onChange={(e) => setForm({ ...form, delivery_date: e.target.value })} />
+        </div>
+        <div style={modalFootStyle}>
+          <button type="button" className="btn-secondary" onClick={onClose} disabled={saving}>Cancelar</button>
+          <button type="button" className="btn-primary" onClick={handleSave} disabled={saving}>
+            {saving ? 'Guardando...' : 'Guardar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// One render function per wizard step -- keeps the main component to just
+// wiring/navigation, each step's own JSX lives and reads on its own.
+function ClientStep({ form, setForm, onNext }) {
+  return (
+    <>
+      <StepHeading title="Cliente" />
+      <div style={stepFieldGridStyle}>
+        <ClientSection form={form} setForm={setForm} />
+      </div>
+      <StepNav onNext={onNext} />
+    </>
+  );
+}
+
+function VehicleStep({ form, setForm, vehicleModels, vinApi, onBack, onNext }) {
+  return (
+    <>
+      <StepHeading title="Vehículo" />
+      <div style={stepFieldGridStyle}>
+        <VehicleSection form={form} setForm={setForm} vehicleModels={vehicleModels} vinApi={vinApi} />
+      </div>
+      <StepNav onBack={onBack} onNext={onNext} />
+    </>
+  );
+}
+
+function DeliveryStep({ form, setForm, photo, setPhoto, isSuperadmin, onBack, onNext }) {
+  return (
+    <>
+      <StepHeading title="Entrega" />
+      <div style={stepFieldGridStyle}>
+        <DeliverySection form={form} setForm={setForm} photo={photo} setPhoto={setPhoto} isSuperadmin={isSuperadmin} />
+      </div>
+      <StepNav onBack={onBack} onNext={onNext} />
+    </>
+  );
+}
+
+function ConfirmStep({ form, photo, submitApi, onBack }) {
+  return (
+    <>
+      <StepHeading title="Confirmación" />
+      <ConfirmationSummary form={form} photo={photo} />
+      <StepNav onBack={onBack} submitApi={submitApi} />
+      <SuccessNotice submitApi={submitApi} />
+    </>
+  );
+}
+
+// Per-step "Siguiente"/"Atrás" navigation, kept out of the main component
+// so it stays wiring-only.
+function useWizardNavigation(form, photo, isSuperadmin) {
+  const [step, setStep] = useState(STEP_CLIENT);
 
   const stepValidators = {
     [STEP_CLIENT]: () => validateClientStep(form),
@@ -477,51 +724,75 @@ export default function DistribuidorEntregaPage() {
 
   const goBack = () => setStep((s) => Math.max(s - 1, 0));
 
+  return { step, goNext, goBack };
+}
+
+function WizardStepBody(props) {
+  const { step, onBack, onNext } = props;
+  if (step === STEP_CLIENT) return <ClientStep {...props} onNext={onNext} />;
+  if (step === STEP_VEHICLE) return <VehicleStep {...props} onBack={onBack} onNext={onNext} />;
+  if (step === STEP_DELIVERY) return <DeliveryStep {...props} onBack={onBack} onNext={onNext} />;
+  if (step === STEP_CONFIRM) return <ConfirmStep {...props} onBack={onBack} />;
+  return null;
+}
+
+export default function DistribuidorEntregaPage() {
+  const [form, setForm] = useState(FORM_DEFAULTS);
+  const [photo, setPhoto] = useState(null);
+  const user = useCurrentUser();
+  const isSuperadmin = user?.role === 'superadmin';
+  const vehicleModels = useVehicleModels();
+  const vinApi = useVinLookup(setForm);
+  const deliveriesApi = useDeliveries();
+  const [editingDelivery, setEditingDelivery] = useState(null);
+  const { step, goNext, goBack } = useWizardNavigation(form, photo, isSuperadmin);
+  // Resets the form data after a successful submit but deliberately stays
+  // on Confirmación so the success notice remains visible; the user can
+  // click Atrás to start a fresh entry once they've seen it.
+  const resetForm = () => {
+    setForm(FORM_DEFAULTS);
+    setPhoto(null);
+    vinApi.setVinLookupStatus('idle');
+  };
+  const submitApi = useDeliverySubmit(form, photo, isSuperadmin, resetForm, deliveriesApi.fetchDeliveries);
+
   return (
     <AdminLayout>
       <PageHeader />
       <section className="glass p-6" style={{ ...sectionStyle, ...cardStyle }}>
         <Stepper current={step} />
-
-        {step === STEP_CLIENT && (
-          <>
-            <StepHeading title="Cliente" />
-            <div style={stepFieldGridStyle}>
-              <ClientSection form={form} setForm={setForm} />
-            </div>
-            <StepNav onNext={goNext} />
-          </>
-        )}
-
-        {step === STEP_VEHICLE && (
-          <>
-            <StepHeading title="Vehículo" />
-            <div style={stepFieldGridStyle}>
-              <VehicleSection form={form} setForm={setForm} vehicleModels={vehicleModels} vinApi={vinApi} />
-            </div>
-            <StepNav onBack={goBack} onNext={goNext} />
-          </>
-        )}
-
-        {step === STEP_DELIVERY && (
-          <>
-            <StepHeading title="Entrega" />
-            <div style={stepFieldGridStyle}>
-              <DeliverySection form={form} setForm={setForm} photo={photo} setPhoto={setPhoto} isSuperadmin={isSuperadmin} />
-            </div>
-            <StepNav onBack={goBack} onNext={goNext} />
-          </>
-        )}
-
-        {step === STEP_CONFIRM && (
-          <>
-            <StepHeading title="Confirmación" />
-            <ConfirmationSummary form={form} photo={photo} />
-            <StepNav onBack={goBack} submitApi={submitApi} />
-            <SuccessNotice submitApi={submitApi} />
-          </>
-        )}
+        <WizardStepBody
+          step={step}
+          form={form}
+          setForm={setForm}
+          photo={photo}
+          setPhoto={setPhoto}
+          isSuperadmin={isSuperadmin}
+          vehicleModels={vehicleModels}
+          vinApi={vinApi}
+          submitApi={submitApi}
+          onBack={goBack}
+          onNext={goNext}
+        />
       </section>
+
+      <DeliveriesSection
+        deliveries={deliveriesApi.deliveries}
+        loading={deliveriesApi.loadingDeliveries}
+        isSuperadmin={isSuperadmin}
+        onEdit={setEditingDelivery}
+      />
+
+      {isSuperadmin && editingDelivery && (
+        <EditDeliveryModal
+          delivery={editingDelivery}
+          onClose={() => setEditingDelivery(null)}
+          onSaved={(patch) => {
+            deliveriesApi.updateDeliveryLocal(editingDelivery.id, patch);
+            setEditingDelivery(null);
+          }}
+        />
+      )}
     </AdminLayout>
   );
 }
