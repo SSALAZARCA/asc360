@@ -61,13 +61,22 @@ export default function AdminLayout({ children, fullWidth = false }) {
       const adminOrAdministrativo = ['/tenants'];
       const dashboardRoles = ['superadmin', 'administrativo'];
 
+      // Single source of truth for "where does this role live" -- reused by
+      // both the ROUTE_ROLES entry check below and the parts_dealer
+      // exclusive-lockdown check, so the two never drift out of sync.
+      const homeRouteFor = (role) => (
+        role === 'administrativo' ? '/' :
+        role === 'proveedor' ? '/imports' :
+        role === 'parts_dealer' ? '/distribuidor/entrega' :
+        '/kanban'
+      );
+
       // Reusable, prefix-matched role gate (Design ADR 10) -- a future
       // parts-sale screen under the same `/distribuidor/*` namespace needs
       // zero further edits here. Checked FIRST, ahead of every *Only array.
       const ROUTE_ROLES = { '/distribuidor': ['parts_dealer', 'superadmin'] };
       const routeRoleEntry = Object.entries(ROUTE_ROLES).find(([prefix]) => pathname.startsWith(prefix));
       if (routeRoleEntry && !routeRoleEntry[1].includes(u.role)) {
-        const homeRouteFor = (role) => (role === 'administrativo' ? '/' : role === 'proveedor' ? '/imports' : '/kanban');
         r.push(homeRouteFor(u.role));
         return;
       }
@@ -86,6 +95,14 @@ export default function AdminLayout({ children, fullWidth = false }) {
       }
       if (u.role === 'proveedor' && pathname !== '/imports') {
         r.push('/imports');
+        return;
+      }
+      // Distribuidor (2026-07-29, decisión explícita del usuario): puede
+      // ENTRAR a /distribuidor/* (permitido arriba), pero además está
+      // restringido a SOLO esa ruta -- no puede salir de ahí, igual que
+      // proveedor con /imports.
+      if (u.role === 'parts_dealer' && !pathname.startsWith('/distribuidor')) {
+        r.push(homeRouteFor(u.role));
         return;
       }
       setLoading(false);

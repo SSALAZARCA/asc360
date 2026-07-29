@@ -107,8 +107,15 @@ export default function Sidebar({ collapsed = false, onToggle }) {
 
   const isProveedor = user?.role === 'proveedor';
   const isAdministrativo = user?.role === 'administrativo';
+  const isDistribuidor = user?.role === 'parts_dealer';
 
   const menuItems = ALL_ITEMS.filter(item => {
+    // Distribuidor (2026-07-29, decisión explícita del usuario): solo puede
+    // ver Registro de Motocicletas por ahora -- nada más, ni Kanban ni
+    // Gestión de Órdenes (que antes veía sin restricción). Evaluado ANTES
+    // que el allowlist genérico de `roles` para que ningún otro item se
+    // cuele por él.
+    if (isDistribuidor) return !!item.roles?.includes('parts_dealer');
     // Items con allowlist explícito de roles se evalúan PRIMERO y de forma
     // exclusiva -- todo item existente carece de esta key, así que el resto
     // del filtro (abajo) queda intacto para ellos.

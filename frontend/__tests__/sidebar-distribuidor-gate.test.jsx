@@ -8,10 +8,10 @@
  * is meant to be reused, unmodified, by a future parts-sale screen for the
  * same `parts_dealer` role.
  *
- * The regression this test locks down (per spec "Existing parts_dealer
- * Access Unchanged"): for `parts_dealer` the visible id set is EXACTLY
- * {kanban, services, vehicle-delivery} — Kanban and Gestión de Órdenes
- * byte-for-byte unchanged.
+ * Updated 2026-07-29 (explicit user decision): a Distribuidor can ONLY see
+ * Registro de Motocicletas for now -- Kanban and Gestión de Órdenes (which
+ * `parts_dealer` used to see, unrestricted, before this change) are hidden
+ * too. The visible id set for `parts_dealer` is EXACTLY {vehicle-delivery}.
  */
 import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
@@ -49,15 +49,16 @@ describe('Sidebar — distribuidor delivery gate', () => {
     expect(link).toHaveAttribute('href', '/distribuidor/entrega');
   });
 
-  it('the visible id set for parts_dealer is EXACTLY kanban + services + vehicle-delivery', async () => {
+  it('the visible id set for parts_dealer is EXACTLY vehicle-delivery', async () => {
     setUser('parts_dealer');
     render(<Sidebar />);
 
     await waitFor(() => {
       expect(screen.getByText(/Registro de Motocicletas/i)).toBeInTheDocument();
     });
-    expect(screen.getByText(/Tablero Operativo/i)).toBeInTheDocument();
-    expect(screen.getByText(/Gestión de Órdenes/i)).toBeInTheDocument();
+    // Kanban and Gestión de Órdenes are hidden too, per the 2026-07-29 decision.
+    expect(screen.queryByText(/Tablero Operativo/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Gestión de Órdenes/i)).not.toBeInTheDocument();
     // Every adminOnly/importsOnly entry MUST stay hidden — unchanged.
     expect(screen.queryByText(/Centro de Comando/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Estado Pedidos/i)).not.toBeInTheDocument();

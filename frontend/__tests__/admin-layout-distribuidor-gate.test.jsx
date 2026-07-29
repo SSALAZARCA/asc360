@@ -102,4 +102,29 @@ describe('AdminLayout — /distribuidor/* route gate', () => {
       expect(pushMock).toHaveBeenCalledWith('/kanban');
     });
   });
+
+  // 2026-07-29 (explicit user decision): a Distribuidor can ONLY use
+  // Registro de Motocicletas for now -- typing any other URL directly
+  // (e.g. /kanban) must not let them in either, mirroring the existing
+  // proveedor -> /imports lockdown.
+  it('redirects a parts_dealer user away from /kanban, to /distribuidor/entrega', async () => {
+    mockPathname = '/kanban';
+    setUser('parts_dealer');
+    render(<AdminLayout><div>Contenido protegido</div></AdminLayout>);
+
+    await waitFor(() => {
+      expect(pushMock).toHaveBeenCalledWith('/distribuidor/entrega');
+    });
+    expect(screen.queryByText('Contenido protegido')).not.toBeInTheDocument();
+  });
+
+  it('redirects a parts_dealer user away from /services, to /distribuidor/entrega', async () => {
+    mockPathname = '/services';
+    setUser('parts_dealer');
+    render(<AdminLayout><div>Contenido protegido</div></AdminLayout>);
+
+    await waitFor(() => {
+      expect(pushMock).toHaveBeenCalledWith('/distribuidor/entrega');
+    });
+  });
 });
