@@ -44,10 +44,10 @@ logger = logging.getLogger(__name__)
 
 AUDIT_ACTION = "DISTRIBUTOR_VEHICLE_DELIVERY"
 
-# Same limits as `app/api/v1/endpoints/uploads.py`'s existing reception
-# damage-photo upload -- one established precedent for every MinIO image
-# upload in this codebase, not a new policy invented for this flow.
-ALLOWED_MIME_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+# Distributor delivery acts are a different document than a workshop's
+# damage-reception photos -- they're commonly scanned/signed as PDF, so PDF
+# is accepted alongside images (user decision, 2026-07-29).
+ALLOWED_MIME_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif", "application/pdf"}
 MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB
 
 # The system only ever sells UM motorcycles (`vehicle_service.py`'s own
@@ -176,7 +176,7 @@ async def _attach_photo(vehicle: Vehicle, photo: Optional[UploadFile]) -> None:
     if photo.content_type not in ALLOWED_MIME_TYPES:
         raise HTTPException(
             status_code=422,
-            detail=f"Tipo de archivo no permitido: {photo.content_type}. Solo se aceptan imágenes.",
+            detail=f"Tipo de archivo no permitido: {photo.content_type}. Solo se aceptan imágenes o PDF.",
         )
     contents = await photo.read()
     if len(contents) > MAX_FILE_SIZE_BYTES:

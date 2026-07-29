@@ -1,8 +1,12 @@
 'use client';
 
 /**
- * Photo picker + preview for the signed delivery-act photo, introduced in:
+ * File picker + preview for the signed delivery-act document, introduced in:
  *   sdd/distributor-vehicle-delivery, Phase 7 (frontend, PR7)
+ *
+ * Accepts images OR PDF (2026-07-29 decision) -- a Distribuidor's delivery
+ * act is a different document than a workshop's damage-reception photos,
+ * commonly scanned/signed as PDF.
  *
  * Pure, controlled, presentational component — no fetch/upload logic here.
  * The caller (`app/distribuidor/entrega/page.js`) owns the `File` object
@@ -41,7 +45,7 @@ export default function DeliveryActUpload({
       <input
         aria-label={label}
         type="file"
-        accept="image/*"
+        accept="image/*,application/pdf"
         onChange={handleChange}
         style={inputStyle}
       />

@@ -57,7 +57,7 @@ def test_act_photo_retry_uploads_and_persists_url():
         _teardown()
 
 
-def test_non_image_content_type_rejected_with_422():
+def test_unsupported_content_type_rejected_with_422():
     vehicle = make_delivery_vehicle()
     fake_db = FakeDeliverySession(vehicles=[vehicle])
     _override(fake_db, make_distribuidor())
@@ -66,11 +66,37 @@ def test_non_image_content_type_rejected_with_422():
         with TestClient(app) as client:
             res = client.post(
                 f"/api/v1/distributor/deliveries/{vehicle.id}/act-photo",
-                files={"photo": ("acta.pdf", b"fake-bytes", "application/pdf")},
+                files={"photo": ("acta.txt", b"fake-bytes", "text/plain")},
             )
         assert res.status_code == 422
         assert vehicle.delivery_act_url is None
         assert fake_db.committed is False
+    finally:
+        _teardown()
+
+
+def test_pdf_act_is_accepted():
+    """The acta de entrega for a NEW motorcycle sale is a different business
+    document than a workshop's damage-reception photos -- Distribuidor actas
+    are commonly scanned/signed as PDF, so PDF must be accepted alongside
+    images (user decision, 2026-07-29)."""
+    vehicle = make_delivery_vehicle()
+    fake_db = FakeDeliverySession(vehicles=[vehicle])
+    _override(fake_db, make_distribuidor())
+
+    try:
+        with patch(
+            "app.services.distributor_delivery_service.upload_file_to_minio",
+            new=AsyncMock(return_value="https://minio.local/acta-retry.pdf"),
+        ):
+            with TestClient(app) as client:
+                res = client.post(
+                    f"/api/v1/distributor/deliveries/{vehicle.id}/act-photo",
+                    files={"photo": ("acta.pdf", b"fake-bytes", "application/pdf")},
+                )
+        assert res.status_code == 200
+        assert vehicle.delivery_act_url == "https://minio.local/acta-retry.pdf"
+        assert fake_db.committed is True
     finally:
         _teardown()
 
