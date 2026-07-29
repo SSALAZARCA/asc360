@@ -12,10 +12,20 @@ export default function UsersPage() {
   const [editForm, setEditForm] = useState(null);
   const [currentUserId, setCurrentUserId] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
+  const [distribuidorTenants, setDistribuidorTenants] = useState([]);
 
   useEffect(() => {
     const stored = sessionStorage.getItem('um_user');
     if (stored) setCurrentUserId(JSON.parse(stored).id);
+  }, []);
+
+  useEffect(() => {
+    authFetch('/tenants')
+      .then(res => res.json())
+      .then(data => setDistribuidorTenants(
+        (Array.isArray(data) ? data : []).filter(t => t.tenant_type === 'distribuidor')
+      ))
+      .catch(() => setDistribuidorTenants([]));
   }, []);
 
   const fetchUsers = async () => {
@@ -61,7 +71,7 @@ export default function UsersPage() {
   };
 
   const openNew = () => {
-    setEditForm({ name: '', role: 'technician', email: '', phone: '', status: 'active', telegram_id: '', password: '' });
+    setEditForm({ name: '', role: 'technician', email: '', phone: '', status: 'active', telegram_id: '', password: '', tenant_id: null });
     setShowModal(true);
   };
 
@@ -81,6 +91,7 @@ export default function UsersPage() {
             phone: editForm.phone,
             role: editForm.role,
             telegram_id: editForm.telegram_id || null,
+            tenant_id: editForm.tenant_id || null,
           })
         });
         if (editForm.password) {
@@ -100,6 +111,7 @@ export default function UsersPage() {
             telegram_id: editForm.telegram_id || null,
             status: 'active',
             password: editForm.password || null,
+            tenant_id: editForm.tenant_id || null,
           })
         });
       }
@@ -214,8 +226,8 @@ export default function UsersPage() {
                   <input value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} placeholder="Ej: Carlos Técnico" />
                 </div>
                 <div>
-                  <label>Rol del Sistema</label>
-                  <select value={editForm.role} onChange={e => setEditForm({...editForm, role: e.target.value})}>
+                  <label htmlFor="user-role-select">Rol del Sistema</label>
+                  <select id="user-role-select" value={editForm.role} onChange={e => setEditForm({...editForm, role: e.target.value})}>
                     <option value="technician">Técnico Mecánico</option>
                     <option value="jefe_taller">Jefe / Coordinador de Taller</option>
                     <option value="administrativo">Administrativo</option>
@@ -225,6 +237,21 @@ export default function UsersPage() {
                     <option value="superadmin">Super Admin (Global)</option>
                   </select>
                 </div>
+                {editForm.role === 'parts_dealer' && (
+                  <div>
+                    <label htmlFor="user-distribuidora-select">Distribuidora</label>
+                    <select
+                      id="user-distribuidora-select"
+                      value={editForm.tenant_id || ''}
+                      onChange={e => setEditForm({...editForm, tenant_id: e.target.value || null})}
+                    >
+                      <option value="">Sin asignar</option>
+                      {distribuidorTenants.map(t => (
+                        <option key={t.id} value={t.id}>{t.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
                 <div>
                   <label>Cédula / Telegram ID</label>
                   <input value={editForm.telegram_id} onChange={e => setEditForm({...editForm, telegram_id: e.target.value})} placeholder="Opcional. Para acceso al bot" />
