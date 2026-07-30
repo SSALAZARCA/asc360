@@ -356,7 +356,12 @@ select {
 
 table th, table td { text-align: center !important; }
 
-.table-scroll-wrapper { overflow: hidden; }
+/* Horizontal scroll always enabled, not just below the tablet breakpoint --
+   a tablet wider than 1024px (e.g. landscape, or a larger device) fell back
+   to `overflow: hidden` here and lost the ability to scroll a wide table
+   sideways at all. `auto` is a no-op when content doesn't overflow, so this
+   is safe on desktop too. */
+.table-scroll-wrapper { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 
 /* 10. TABLET RESPONSIVE (768px – 1024px) */
 @media (max-width: 1024px) {
