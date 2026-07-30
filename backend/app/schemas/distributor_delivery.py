@@ -45,12 +45,17 @@ class DeliveryClientIn(BaseModel):
 
 
 class DeliveryVehicleIn(BaseModel):
-    """Vehicle fields a Distribuidor/superadmin may supply inline. Only
-    `plate` is required — everything else may come from the VIN lookup
+    """Vehicle fields a Distribuidor/superadmin may supply inline. `plate`
+    AND `vin` are both required — `vin` used to be optional, but the user
+    decided (follow-up fix, 2026-07-30) that EVERY delivery, with no
+    exception (not even superadmin's manual legacy-vehicle backfill), must
+    supply a VIN that exists in the VIN master catalog
+    (`distributor_delivery_service._require_vin_in_master`, checked before
+    any DB write). Everything else may still come from the VIN lookup
     (`vin_master_service.query_vin`, called AS-IS by
     `vehicle_service.register_or_update_vehicle` in PR4)."""
     plate: str = Field(..., min_length=1)
-    vin: Optional[str] = None
+    vin: str = Field(..., min_length=1)
     model: Optional[str] = None
     color: Optional[str] = None
     year: Optional[int] = None
@@ -88,7 +93,10 @@ class DeliveryListItemOut(BaseModel):
     Distribuidora's rows and gets `registered_by_tenant_name` populated per
     row (`distributor_delivery_service.list_deliveries` decides this, not
     this schema — the field is always PRESENT, just role-conditionally
-    populated)."""
+    populated). `delivery_act_url` is the plain, directly-fetchable static
+    MinIO URL already stored on the same `Vehicle` row (follow-up fix,
+    2026-07-30) — no signing/proxy needed, so the Distribuidor can download
+    what was uploaded straight from this list."""
     id: UUID
     plate: str
     vin: Optional[str] = None
@@ -96,6 +104,7 @@ class DeliveryListItemOut(BaseModel):
     delivery_date: date
     client_name: Optional[str] = None
     registered_by_tenant_name: Optional[str] = None
+    delivery_act_url: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -104,11 +113,27 @@ class DeliveryEditIn(BaseModel):
     """`PATCH /distributor/deliveries/{vehicle_id}` — superadmin-only edit
     whitelist. All fields `Optional`; the router/service applies
     `exclude_unset` semantics so an unset field is left untouched, not
-    clobbered to `None`. `client_name`/`client_phone` update the linked
-    `User` (via `Vehicle.client_id`) if one exists; `plate`/`vin`/
-    `delivery_date` update the `Vehicle` row directly."""
+    clobbered to `None`. `client_name`/`client_phone`/and the new
+    `client_*` fields below update the linked `User` (via
+    `Vehicle.client_id`) if one exists; `plate`/`vin`/`delivery_date` and
+    the new vehicle fields below update the `Vehicle` row directly.
+
+    Follow-up fix (2026-07-30): expanded to cover every field from the
+    original registration, not just the original 5. A `vin` change is
+    subject to the SAME master-catalog check as create
+    (`_require_vin_in_master`) — no exception anywhere in this feature."""
     client_name: Optional[str] = None
     client_phone: Optional[str] = None
+    client_identification: Optional[str] = None
+    client_birth_date: Optional[date] = None
+    client_city: Optional[str] = None
+    client_department: Optional[str] = None
+    client_address: Optional[str] = None
+    client_email: Optional[str] = None
     plate: Optional[str] = None
     vin: Optional[str] = None
+    model: Optional[str] = None
+    color: Optional[str] = None
+    year: Optional[int] = None
+    engine_number: Optional[str] = None
     delivery_date: Optional[date] = None

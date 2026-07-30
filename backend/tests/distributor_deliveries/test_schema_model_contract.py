@@ -71,6 +71,10 @@ def test_delivery_create_schema_shape():
 
     assert DeliveryClientIn.model_fields["identification"].is_required()
     assert DeliveryVehicleIn.model_fields["plate"].is_required()
+    # Follow-up fix (2026-07-30): VIN is now mandatory, no exceptions
+    # anywhere in this feature (see `distributor_delivery_service.
+    # _require_vin_in_master`).
+    assert DeliveryVehicleIn.model_fields["vin"].is_required()
     assert DeliveryCreate.model_fields["delivery_date"].is_required()
 
 

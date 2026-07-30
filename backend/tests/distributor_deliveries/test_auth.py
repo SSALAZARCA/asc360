@@ -108,6 +108,33 @@ def test_jefe_taller_is_rejected_with_no_db_touch():
         _teardown()
 
 
+def test_missing_vin_in_payload_returns_422_not_500():
+    """Follow-up fix (2026-07-30): `vin` is now a required field on
+    `DeliveryVehicleIn` -- omitting it entirely from the multipart `payload`
+    JSON must surface as the router's existing `ValidationError -> 422`
+    handling, never an unhandled 500."""
+    _override_db_only()
+
+    async def _get_current_user():
+        return make_distribuidor()
+    app.dependency_overrides[get_current_user] = _get_current_user
+
+    import json
+    data = json.loads(VALID_DELIVERY_PAYLOAD_JSON)
+    del data["vehicle"]["vin"]
+
+    try:
+        with TestClient(app) as client:
+            res = client.post(
+                "/api/v1/distributor/deliveries",
+                data={"payload": json.dumps(data)},
+                files={"photo": ("acta.jpg", b"fake-bytes", "image/jpeg")},
+            )
+        assert res.status_code == 422
+    finally:
+        _teardown()
+
+
 def test_missing_authorization_header_returns_401():
     # `get_current_user` is deliberately NOT overridden here -- this proves
     # the route depends on the REAL JWT dependency (not a mock, not

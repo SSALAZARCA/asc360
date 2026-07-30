@@ -40,6 +40,7 @@ from app.schemas.vehicle import VehicleCreate
 from app.services.imports_service import _log_audit
 from app.services.pdf_service import upload_file_to_minio
 from app.services.vehicle_service import vehicle_service
+from app.services.vin_master_service import vin_master_service
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +77,29 @@ def _require_photo_or_superadmin(actor: CurrentUser, photo: Optional[UploadFile]
             status_code=422,
             detail="El acta de entrega firmada es obligatoria.",
         )
+
+
+VIN_NOT_FOUND_DETAIL = (
+    "El VIN no fue encontrado en el maestro de motocicletas. "
+    "Verificá que esté bien digitado."
+)
+
+
+async def _require_vin_in_master(db: AsyncSession, vin: Optional[str]) -> None:
+    """Follow-up fix (2026-07-30, user decision): the VIN is mandatory AND
+    must exist in the VIN master catalog (`vin_master_service.query_vin`,
+    which already applies the 17-char VIN rule internally) -- no exception
+    anywhere in this feature, including superadmin's manual legacy-vehicle
+    backfill (unlike the mandatory-photo rule, which DOES exempt
+    superadmin). Checked BEFORE any DB write/mutation, same "validate
+    first" discipline as `_reject_future_delivery_date` -- the difference
+    is this one needs an async DB lookup, so it must be awaited inside the
+    caller, not a bare sync helper like its siblings."""
+    if not vin or not vin.strip():
+        raise HTTPException(status_code=422, detail=VIN_NOT_FOUND_DETAIL)
+    result = await vin_master_service.query_vin(db, vin)
+    if result is None:
+        raise HTTPException(status_code=422, detail=VIN_NOT_FOUND_DETAIL)
 
 
 def _reject_future_delivery_date(delivery_date: date) -> None:
@@ -228,10 +252,11 @@ async def create_delivery(
     actor: CurrentUser,
 ) -> Vehicle:
     try:
-        # Pure/no-DB validation FIRST -- both reject with ZERO writes,
-        # before the client/vehicle is ever looked-up-or-created.
+        # Validation FIRST -- all three reject with ZERO writes, before the
+        # client/vehicle is ever looked-up-or-created.
         _require_photo_or_superadmin(actor, photo)
         _reject_future_delivery_date(payload.delivery_date)
+        await _require_vin_in_master(db, payload.vehicle.vin)
 
         client = await _lookup_or_create_client(db, payload, actor)
         vehicle = await _register_vehicle(db, payload)
@@ -351,6 +376,7 @@ async def list_deliveries(db: AsyncSession, actor: CurrentUser) -> list[Delivery
                     if actor.is_superadmin and vehicle.registered_by_tenant
                     else None
                 ),
+                delivery_act_url=vehicle.delivery_act_url,
             )
         )
     return items
@@ -362,6 +388,58 @@ async def list_deliveries(db: AsyncSession, actor: CurrentUser) -> list[Delivery
 # NOT this function -- same "guard in the router, business logic in the
 # service" split as `create_delivery`/`require_distribuidor`).
 # ---------------------------------------------------------------------------
+
+def _apply_vehicle_edit_fields(vehicle: Vehicle, fields: dict) -> None:
+    if fields.get("plate") is not None:
+        vehicle.plate = fields["plate"]
+    if "vin" in fields:
+        vehicle.vin = fields["vin"]
+    if fields.get("delivery_date") is not None:
+        vehicle.delivery_date = fields["delivery_date"]
+    if fields.get("model") is not None:
+        vehicle.model = fields["model"]
+    if fields.get("color") is not None:
+        vehicle.color = fields["color"]
+    if fields.get("year") is not None:
+        vehicle.year = fields["year"]
+    if fields.get("engine_number") is not None:
+        vehicle.engine_number = fields["engine_number"]
+
+
+_CLIENT_EDIT_FIELD_KEYS = (
+    "client_name", "client_phone", "client_identification",
+    "client_birth_date", "client_city", "client_department",
+    "client_address", "client_email",
+)
+
+
+async def _apply_client_edit_fields(db: AsyncSession, vehicle: Vehicle, fields: dict) -> None:
+    """Silently no-op'd when the vehicle has no linked client -- not every
+    historical row is guaranteed to have one (task requirement, not an
+    oversight)."""
+    wants_client_edit = any(key in fields for key in _CLIENT_EDIT_FIELD_KEYS)
+    if not wants_client_edit or vehicle.client_id is None:
+        return
+    client = await db.get(User, vehicle.client_id)
+    if client is None:
+        return
+    if fields.get("client_name") is not None:
+        client.name = fields["client_name"]
+    if "client_phone" in fields:
+        client.phone = fields["client_phone"]
+    if "client_identification" in fields:
+        client.identification = fields["client_identification"]
+    if "client_birth_date" in fields:
+        client.birth_date = fields["client_birth_date"]
+    if "client_city" in fields:
+        client.city = fields["client_city"]
+    if "client_department" in fields:
+        client.department = fields["client_department"]
+    if "client_address" in fields:
+        client.address = fields["client_address"]
+    if "client_email" in fields:
+        client.email = fields["client_email"]
+
 
 async def edit_delivery(
     db: AsyncSession, vehicle_id, payload: DeliveryEditIn
@@ -378,25 +456,19 @@ async def edit_delivery(
     if fields.get("delivery_date") is not None:
         _reject_future_delivery_date(fields["delivery_date"])
 
-    try:
-        if fields.get("plate") is not None:
-            vehicle.plate = fields["plate"]
-        if "vin" in fields:
-            vehicle.vin = fields["vin"]
-        if fields.get("delivery_date") is not None:
-            vehicle.delivery_date = fields["delivery_date"]
+    # Follow-up fix (2026-07-30): a VIN change is subject to the SAME
+    # master-catalog check as create -- no exception anywhere in this
+    # feature, including edits. Untouched/no-op VINs (identical to what's
+    # already stored) are NOT re-validated -- that would retroactively
+    # force every pre-existing record to pass a rule that didn't exist when
+    # it was created; only an actual change to the `vin` value triggers the
+    # check.
+    if "vin" in fields and fields["vin"] != vehicle.vin:
+        await _require_vin_in_master(db, fields["vin"])
 
-        # `client_name`/`client_phone` are silently no-op'd when the vehicle
-        # has no linked client -- not every historical row is guaranteed to
-        # have one (task requirement, not an oversight).
-        wants_client_edit = "client_name" in fields or "client_phone" in fields
-        if wants_client_edit and vehicle.client_id is not None:
-            client = await db.get(User, vehicle.client_id)
-            if client is not None:
-                if fields.get("client_name") is not None:
-                    client.name = fields["client_name"]
-                if "client_phone" in fields:
-                    client.phone = fields["client_phone"]
+    try:
+        _apply_vehicle_edit_fields(vehicle, fields)
+        await _apply_client_edit_fields(db, vehicle, fields)
 
         await db.commit()
         return vehicle

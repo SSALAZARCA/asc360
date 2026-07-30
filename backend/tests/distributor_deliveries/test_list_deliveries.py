@@ -84,6 +84,38 @@ class TestDistribuidorSeesOnlyTheirOwnTenant:
         assert result[0].client_name is None
 
 
+class TestDeliveryActUrlExposedOnListRows:
+    """Follow-up fix (2026-07-30): `Vehicle.delivery_act_url` is a plain,
+    directly-fetchable static MinIO URL -- no signing/proxy needed -- so
+    exposing it on the list lets the Distribuidor download what was
+    uploaded."""
+
+    async def test_row_with_a_delivery_act_shows_its_url(self):
+        tenant_id = uuid.uuid4()
+        vehicle = make_delivery_vehicle(
+            plate="WITHACT1", delivery_date=date(2026, 7, 5), registered_by_tenant_id=tenant_id
+        )
+        vehicle.delivery_act_url = "https://minio.local/acta.jpg"
+        fake_db = FakeDeliverySession(vehicles=[vehicle])
+        actor = make_distribuidor(tenant_id=tenant_id)
+
+        result = await svc.list_deliveries(fake_db, actor)
+
+        assert result[0].delivery_act_url == "https://minio.local/acta.jpg"
+
+    async def test_row_with_no_delivery_act_shows_null(self):
+        tenant_id = uuid.uuid4()
+        vehicle = make_delivery_vehicle(
+            plate="NOACT1", delivery_date=date(2026, 7, 5), registered_by_tenant_id=tenant_id
+        )
+        fake_db = FakeDeliverySession(vehicles=[vehicle])
+        actor = make_distribuidor(tenant_id=tenant_id)
+
+        result = await svc.list_deliveries(fake_db, actor)
+
+        assert result[0].delivery_act_url is None
+
+
 class TestDistribuidorWithNoTenantAssignedGetsEmptyListAndZeroReads:
     async def test_no_tenant_assigned_returns_empty_list_without_touching_db(self):
         """Distribuidor with `tenant_id=None` must never see anyone else's

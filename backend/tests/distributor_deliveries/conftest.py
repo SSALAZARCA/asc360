@@ -247,7 +247,14 @@ class FakeDeliverySession:
       `select(Vehicle)` query (empty -> a new Vehicle is created), AND the
       source for `db.get(Vehicle, id)` (the act-photo retry endpoint).
     - `moto_units`: rows returned for `vin_master_service.query_vin`'s
-      `select(ShipmentMotoUnit)` query (VIN enrichment).
+      `select(ShipmentMotoUnit)` query (VIN enrichment AND, follow-up fix
+      2026-07-30, the now-mandatory VIN-in-master check on create/edit).
+      Defaults (when the argument is omitted entirely, i.e. `None`) to a
+      single unit matching `VALID_DELIVERY_PAYLOAD`'s VIN
+      ("1HGCM82633A004352") -- most tests in this package submit that
+      payload as-is and don't care about VIN-master behavior, so they'd
+      otherwise all start failing the new mandatory check. Pass an explicit
+      `moto_units=[]` to test the "VIN not found" rejection path.
     - `raise_integrity_error` / `raise_generic_error`: the FIRST `commit()`
       raises the corresponding exception -- `rollback()` records it,
       mirroring a real `AsyncSession.rollback()`.
@@ -263,7 +270,7 @@ class FakeDeliverySession:
     ):
         self._users = list(users or [])
         self._vehicles = list(vehicles or [])
-        self._moto_units = list(moto_units or [])
+        self._moto_units = [make_moto_unit()] if moto_units is None else list(moto_units)
         self._raise_integrity_error = raise_integrity_error
         self._raise_generic_error = raise_generic_error
 

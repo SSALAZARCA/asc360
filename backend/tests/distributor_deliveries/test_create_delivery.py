@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import HTTPException
+from pydantic import ValidationError
 
 from app.schemas.distributor_delivery import DeliveryCreate
 from app.services import distributor_delivery_service as svc
@@ -158,6 +159,64 @@ class TestFutureDeliveryDateRejected:
         assert fake_db.added == []
         assert fake_db.committed is False
         assert fake_db.rolled_back is True
+
+
+class TestVinRequiredAndMustBeInMaster:
+    """Follow-up fix (2026-07-30, user decision): a Distribuidor or
+    superadmin can no longer submit a typo'd or nonexistent VIN and have it
+    silently accepted -- VIN is mandatory AND must resolve against the VIN
+    master catalog, for EVERYONE, no exception (unlike the photo rule,
+    which DOES exempt superadmin)."""
+
+    async def test_vin_not_found_in_master_rejected_with_zero_writes(self):
+        fake_db = FakeDeliverySession(moto_units=[])
+        payload = _payload(vehicle={
+            "plate": "ABC123", "vin": "NOTINMASTER123456", "model": None,
+            "color": None, "year": None, "engine_number": None,
+        })
+
+        with pytest.raises(HTTPException) as exc_info:
+            await svc.create_delivery(fake_db, payload, make_valid_photo(), make_distribuidor())
+
+        assert exc_info.value.status_code == 422
+        assert fake_db.added == []
+        assert fake_db.committed is False
+        assert fake_db.rolled_back is True
+
+    async def test_vin_not_found_in_master_rejected_even_for_superadmin(self):
+        """No exception for superadmin here -- unlike the mandatory-photo
+        rule."""
+        fake_db = FakeDeliverySession(moto_units=[])
+        payload = _payload(vehicle={
+            "plate": "ABC123", "vin": "NOTINMASTER123456", "model": None,
+            "color": None, "year": None, "engine_number": None,
+        })
+
+        with pytest.raises(HTTPException) as exc_info:
+            await svc.create_delivery(fake_db, payload, None, make_superadmin())
+
+        assert exc_info.value.status_code == 422
+        assert fake_db.added == []
+        assert fake_db.committed is False
+
+    async def test_vin_found_in_master_proceeds_normally(self):
+        moto_unit = make_moto_unit(vin_number="1HGCM82633A004352")
+        fake_db = FakeDeliverySession(moto_units=[moto_unit])
+        payload = _payload()
+
+        vehicle = await svc.create_delivery(fake_db, payload, make_valid_photo(), make_distribuidor())
+
+        assert vehicle.vin == "1HGCM82633A004352"
+        assert fake_db.committed is True
+
+    def test_missing_vin_entirely_raises_pydantic_validation_error_not_500(self):
+        data = dict(VALID_DELIVERY_PAYLOAD)
+        vehicle_without_vin = dict(data["vehicle"])
+        del vehicle_without_vin["vin"]
+        data = {**data, "vehicle": vehicle_without_vin}
+
+        with pytest.raises(ValidationError):
+            DeliveryCreate(**data)
 
 
 class TestRegisteredByTenantIdSetOnCreation:
