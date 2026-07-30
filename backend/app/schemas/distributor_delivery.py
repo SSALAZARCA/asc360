@@ -93,10 +93,13 @@ class DeliveryListItemOut(BaseModel):
     Distribuidora's rows and gets `registered_by_tenant_name` populated per
     row (`distributor_delivery_service.list_deliveries` decides this, not
     this schema — the field is always PRESENT, just role-conditionally
-    populated). `delivery_act_url` is the plain, directly-fetchable static
-    MinIO URL already stored on the same `Vehicle` row (follow-up fix,
-    2026-07-30) — no signing/proxy needed, so the Distribuidor can download
-    what was uploaded straight from this list."""
+    populated). `delivery_act_url` is exposed only as a truthy signal that an
+    act was uploaded for this row — the frontend must NOT link to it
+    directly (bugfix, 2026-07-30: `pdf_service.upload_file_to_minio` stores
+    a hardcoded `localhost:9000` URL that only resolves on the SERVER, not
+    the browser). The actual download goes through
+    `GET /distributor/deliveries/{vehicle_id}/act-file`, an authenticated
+    proxy that streams the file's bytes back through the backend."""
     id: UUID
     plate: str
     vin: Optional[str] = None

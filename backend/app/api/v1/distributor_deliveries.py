@@ -35,11 +35,20 @@ individual user who typed it in), superadmin sees every Distribuidora's
 rows network-wide. `PATCH /deliveries/{vehicle_id}` edits a record's basic
 info -- superadmin ONLY, Distribuidor is explicitly excluded even for a
 record they created themselves, so it does NOT reuse `require_distribuidor`.
+Follow-up bugfix (2026-07-30): `GET /deliveries/{vehicle_id}/act-file` proxies
+the signed delivery-act file's bytes through the backend instead of letting
+the browser hit `Vehicle.delivery_act_url` directly -- that URL is built by
+`pdf_service.upload_file_to_minio` with a hardcoded `localhost:9000` host,
+which resolves to the BROWSER's own machine, not the server, in production.
+Mirrors the same proxy pattern already established by `orders.py`'s
+`download_reception_pdf` and `imports.py`'s `get_dim_pdf_url`.
 """
+import io
 from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi.responses import StreamingResponse
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -56,6 +65,7 @@ from app.services.distributor_delivery_service import (
     attach_act_photo,
     create_delivery,
     edit_delivery,
+    get_delivery_act_file,
     list_deliveries,
 )
 
@@ -122,3 +132,19 @@ async def upload_act_photo_endpoint(
         raise HTTPException(status_code=404, detail="Vehículo no encontrado")
 
     return await attach_act_photo(db, vehicle, photo)
+
+
+@router.get("/deliveries/{vehicle_id}/act-file")
+async def download_act_file_endpoint(
+    vehicle_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    require_distribuidor(current_user)
+    file_bytes, content_type, filename = await get_delivery_act_file(db, vehicle_id, current_user)
+
+    return StreamingResponse(
+        io.BytesIO(file_bytes),
+        media_type=content_type,
+        headers={"Content-Disposition": f'inline; filename="{filename}"'},
+    )

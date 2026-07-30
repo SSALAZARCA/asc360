@@ -23,8 +23,10 @@ it" helper) is reused for the audit trail, mirroring the same
 read-only-import pattern `historical_order_service` already established.
 """
 import logging
+import mimetypes
 from datetime import date, datetime
 from typing import Optional
+from uuid import UUID
 
 from fastapi import HTTPException, UploadFile
 from sqlalchemy import select
@@ -38,7 +40,7 @@ from app.models.vehicle import Vehicle
 from app.schemas.distributor_delivery import DeliveryCreate, DeliveryEditIn, DeliveryListItemOut
 from app.schemas.vehicle import VehicleCreate
 from app.services.imports_service import _log_audit
-from app.services.pdf_service import upload_file_to_minio
+from app.services.pdf_service import BUCKET_NAME, get_pdf_stream_from_minio, upload_file_to_minio
 from app.services.vehicle_service import vehicle_service
 from app.services.vin_master_service import vin_master_service
 
@@ -489,3 +491,61 @@ async def edit_delivery(
             status_code=500,
             detail="Error interno al editar la entrega.",
         )
+
+
+# ---------------------------------------------------------------------------
+# `GET /distributor/deliveries/{vehicle_id}/act-file` -- bugfix (2026-07-30):
+# `upload_file_to_minio` hardcodes `http://localhost:9000/...` as the stored
+# `Vehicle.delivery_act_url` -- that host resolves to the BROWSER's own
+# machine, not the server, so a browser can never fetch it directly in
+# production (`ERR_CONNECTION_REFUSED`). This proxy mirrors the SAME
+# already-working pattern `orders.py`'s `download_reception_pdf` and
+# `imports.py`'s `get_dim_pdf_url` already use: fetch the object's bytes
+# internally and stream them back through an authenticated route, so the
+# browser never talks to MinIO directly. The router handles the
+# `require_distribuidor` role guard (zero DB read, mirrors every other
+# endpoint in this file); this function does the rest, in the SAME order
+# `download_reception_pdf` uses -- fetch row (404) -> tenant check (403,
+# superadmin bypasses) -> file-reference-exists check (404) -> fetch bytes
+# (404 if the object itself is missing from storage).
+# ---------------------------------------------------------------------------
+
+def _object_name_from_delivery_act_url(url: str) -> str:
+    """Mirrors `orders.py`'s `download_reception_pdf` object-name recovery:
+    strip a presigned URL's query string, then the bucket-name prefix, to
+    recover MinIO's internal object key."""
+    url_path_only = url.split("?")[0]
+    try:
+        return url_path_only.split(f"{BUCKET_NAME}/")[1]
+    except IndexError:
+        raise HTTPException(status_code=500, detail="Formato de URL en BD corrupto")
+
+
+async def get_delivery_act_file(
+    db: AsyncSession, vehicle_id: UUID, actor: CurrentUser
+) -> tuple[bytes, str, str]:
+    vehicle = await db.get(Vehicle, vehicle_id)
+    if vehicle is None:
+        raise HTTPException(status_code=404, detail="Vehículo no encontrado")
+
+    # A tenant-less actor must never match a tenant-less vehicle -- `None !=
+    # None` is `False` in plain Python, so an unguarded equality check would
+    # silently let an unassigned Distribuidor through (same NULL-comparison
+    # lesson already learned in `list_deliveries`). Checked as an explicit
+    # early rejection, not implicit equality.
+    if not actor.is_superadmin and actor.tenant_id is None:
+        raise HTTPException(status_code=403, detail="No tiene permiso para acceder a esta acta")
+    if not actor.is_superadmin and vehicle.registered_by_tenant_id != actor.tenant_id:
+        raise HTTPException(status_code=403, detail="No tiene permiso para acceder a esta acta")
+
+    if not vehicle.delivery_act_url:
+        raise HTTPException(status_code=404, detail="Esta entrega no tiene acta cargada")
+
+    object_name = _object_name_from_delivery_act_url(vehicle.delivery_act_url)
+    file_bytes = await get_pdf_stream_from_minio(object_name)
+    if not file_bytes:
+        raise HTTPException(status_code=404, detail="El archivo del acta no existe en almacenamiento")
+
+    content_type, _ = mimetypes.guess_type(object_name)
+    filename = object_name.rsplit("/", 1)[-1]
+    return file_bytes, content_type or "application/octet-stream", filename

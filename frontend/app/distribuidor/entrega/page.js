@@ -516,6 +516,29 @@ function SuccessNotice({ submitApi }) {
   );
 }
 
+// Bugfix (2026-07-30): `Vehicle.delivery_act_url`
+// (`pdf_service.upload_file_to_minio`) is a hardcoded `localhost:9000` URL --
+// that host resolves to the BROWSER's own machine, not the server, so
+// linking to it directly gives `ERR_CONNECTION_REFUSED` in production.
+// Downloads now go through the authenticated proxy endpoint
+// (`GET /distributor/deliveries/{vehicle_id}/act-file`), mirroring the same
+// `res.blob()` -> `URL.createObjectURL` technique this codebase already uses
+// for `frontend/app/tg/parts/page.js`'s diagram-image fetch.
+async function downloadDeliveryAct(vehicleId) {
+  try {
+    const res = await authFetch(`/distributor/deliveries/${vehicleId}/act-file`);
+    if (!res.ok) {
+      toast.error('No se pudo descargar el acta de entrega.');
+      return;
+    }
+    const blob = await res.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    window.open(objectUrl, '_blank', 'noopener,noreferrer');
+  } catch {
+    toast.error('No se pudo descargar el acta de entrega.');
+  }
+}
+
 function DeliveryRow({ delivery: d, isSuperadmin, onEdit }) {
   return (
     <tr>
@@ -525,15 +548,14 @@ function DeliveryRow({ delivery: d, isSuperadmin, onEdit }) {
       <td style={tdStyle}>{d.delivery_date}</td>
       <td style={tdStyle}>
         {d.delivery_act_url ? (
-          <a
-            href={d.delivery_act_url}
-            target="_blank"
-            rel="noopener noreferrer"
+          <button
+            type="button"
+            onClick={() => downloadDeliveryAct(d.id)}
             aria-label="Descargar acta de entrega"
             style={actaLinkStyle}
           >
             <Download size={14} />
-          </a>
+          </button>
         ) : '—'}
       </td>
       {isSuperadmin && (

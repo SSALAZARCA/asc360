@@ -512,21 +512,55 @@ describe('DistribuidorEntregaPage — Registros Realizados (list)', () => {
     expect(screen.getByRole('button', { name: /editar/i })).toBeInTheDocument();
   });
 
-  it('renders a download link to delivery_act_url for a row that has one, opening in a new tab', async () => {
+  // Bugfix (2026-07-30): `delivery_act_url` is a raw `localhost:9000` MinIO
+  // URL that only resolves on the SERVER, never the browser -- the download
+  // control now calls the authenticated proxy endpoint
+  // (`GET /distributor/deliveries/{vehicle_id}/act-file`) via `authFetch`
+  // and opens the returned blob, instead of linking to the raw URL directly.
+  it('clicking the download control fetches the act-file proxy endpoint (not the raw delivery_act_url) and opens the blob', async () => {
     setUser('parts_dealer');
     mockDeliveries = [{ ...ROW_DISTRIBUIDOR, delivery_act_url: 'https://minio.example/act-123.jpg' }];
     queueResponses();
-    render(<DistribuidorEntregaPage />);
+    const fakeBlob = new Blob(['fake-bytes'], { type: 'image/jpeg' });
+    const originalCreateObjectURL = global.URL.createObjectURL;
+    global.URL.createObjectURL = jest.fn(() => 'blob:mock-url');
+    const originalOpen = window.open;
+    window.open = jest.fn();
 
+    mockAuthFetch.mockImplementation((url, opts) => {
+      if (typeof url === 'string' && url === `/distributor/deliveries/${ROW_DISTRIBUIDOR.id}/act-file`) {
+        return Promise.resolve({ ok: true, status: 200, blob: () => Promise.resolve(fakeBlob) });
+      }
+      if (typeof url === 'string' && url.includes('/vehicle-models')) {
+        return Promise.resolve(makeResponse(200, mockModels));
+      }
+      if (isDeliveriesListGet(url, opts)) {
+        return Promise.resolve(makeResponse(200, mockDeliveries));
+      }
+      return Promise.resolve(makeResponse(200, {}));
+    });
+
+    render(<DistribuidorEntregaPage />);
     await screen.findByText('Juan Pérez');
 
-    const link = screen.getByRole('link', { name: /descargar acta de entrega/i });
-    expect(link).toHaveAttribute('href', 'https://minio.example/act-123.jpg');
-    expect(link).toHaveAttribute('target', '_blank');
-    expect(link).toHaveAttribute('rel', expect.stringContaining('noopener'));
+    fireEvent.click(screen.getByRole('button', { name: /descargar acta de entrega/i }));
+
+    await waitFor(() => {
+      expect(mockAuthFetch).toHaveBeenCalledWith(`/distributor/deliveries/${ROW_DISTRIBUIDOR.id}/act-file`);
+    });
+    await waitFor(() => {
+      expect(window.open).toHaveBeenCalledWith('blob:mock-url', '_blank', 'noopener,noreferrer');
+    });
+    expect(global.URL.createObjectURL).toHaveBeenCalledWith(fakeBlob);
+    // Never links (or fetches) the raw stored URL directly.
+    expect(screen.queryByRole('link', { name: /descargar acta de entrega/i })).not.toBeInTheDocument();
+    expect(mockAuthFetch).not.toHaveBeenCalledWith('https://minio.example/act-123.jpg', expect.anything());
+
+    global.URL.createObjectURL = originalCreateObjectURL;
+    window.open = originalOpen;
   });
 
-  it('does not render a download link for a row without delivery_act_url', async () => {
+  it('does not render a download control for a row without delivery_act_url', async () => {
     setUser('parts_dealer');
     mockDeliveries = [ROW_DISTRIBUIDOR]; // no delivery_act_url
     queueResponses();
@@ -534,10 +568,10 @@ describe('DistribuidorEntregaPage — Registros Realizados (list)', () => {
 
     await screen.findByText('Juan Pérez');
 
-    expect(screen.queryByRole('link', { name: /descargar acta de entrega/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /descargar acta de entrega/i })).not.toBeInTheDocument();
   });
 
-  it('shows the download link for a superadmin row too (not gated by isSuperadmin)', async () => {
+  it('shows the download control for a superadmin row too (not gated by isSuperadmin)', async () => {
     setUser('superadmin');
     mockDeliveries = [{ ...ROW_DISTRIBUIDOR, registered_by_tenant_name: 'Moto Total S.A.S', delivery_act_url: 'https://minio.example/act-456.jpg' }];
     queueResponses();
@@ -545,7 +579,7 @@ describe('DistribuidorEntregaPage — Registros Realizados (list)', () => {
 
     await screen.findByText('Juan Pérez');
 
-    expect(screen.getByRole('link', { name: /descargar acta de entrega/i })).toHaveAttribute('href', 'https://minio.example/act-456.jpg');
+    expect(screen.getByRole('button', { name: /descargar acta de entrega/i })).toBeInTheDocument();
   });
 
   it('after a successful new-delivery submission, the list re-fetches and shows the new entry', async () => {
