@@ -7,7 +7,7 @@ import { toast } from '../../../lib/toast';
 import VinLookupField from '../../../components/vehicle/VinLookupField';
 import ModelSelectField from '../../../components/vehicle/ModelSelectField';
 import DeliveryActUpload from '../../../components/distribuidor/DeliveryActUpload';
-import { Truck, Save, Pencil, X } from 'lucide-react';
+import { Truck, Save, Pencil, X, Download } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
 // Whitelisted shape — MUST mirror `DeliveryCreate`
@@ -65,8 +65,16 @@ function validateClientStep(form) {
   return null;
 }
 
-function validateVehicleStep(form) {
+// Backend now REQUIRES the VIN to resolve against the VIN master catalog for
+// EVERY actor, no role exception (unlike the mandatory-photo rule below,
+// which DOES exempt superadmin) -- `_require_vin_in_master` in
+// `distributor_delivery_service.py`. Mirrored client-side via the same
+// `useVinLookup` status this page already wires into the Vehículo step.
+const VIN_NOT_IN_MASTER_MESSAGE = 'El VIN debe corresponder a una moto registrada en el maestro.';
+
+function validateVehicleStep(form, vinLookupStatus) {
   if (!form.plate.trim()) return 'La placa es obligatoria.';
+  if (vinLookupStatus !== 'found') return VIN_NOT_IN_MASTER_MESSAGE;
   return null;
 }
 
@@ -79,10 +87,10 @@ function validateDeliveryStep(form, photo, isSuperadmin) {
 
 // Full-form validation — kept as a defense-in-depth safety net at final
 // submit, combining every step's rule in the same order as before.
-function validate(form, photo, isSuperadmin) {
+function validate(form, photo, isSuperadmin, vinLookupStatus) {
   return (
     validateClientStep(form)
-    || validateVehicleStep(form)
+    || validateVehicleStep(form, vinLookupStatus)
     || validateDeliveryStep(form, photo, isSuperadmin)
   );
 }
@@ -124,9 +132,13 @@ function extractErrorMessage(detail, fallback) {
 // Shared presentational bits — dark theme, `glass` class, existing tokens.
 // ---------------------------------------------------------------------------
 const sectionStyle = { display: 'flex', flexDirection: 'column', gap: '1rem' };
-// Centered card, wide enough that the wizard doesn't look stuck to one side
-// with empty space next to it (was a flat maxWidth:480px column before).
-const cardStyle = { maxWidth: '760px', margin: '0 auto', width: '100%' };
+// Centered card. Widened from 760px (post-archive follow-up, 2026-07-30) --
+// on a wide desktop viewport the narrower card left a lot of unused space
+// beside it and `stepFieldGridStyle`'s auto-fit grid only reflows into more
+// columns once there's room to do so. 1200px keeps the wizard readable while
+// using the screen better, in line with this app's other admin panels
+// (`.main-content` caps out at 1600px, `globals.css`).
+const cardStyle = { maxWidth: '1200px', margin: '0 auto', width: '100%' };
 const stepFieldGridStyle = {
   display: 'grid',
   gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
@@ -146,6 +158,7 @@ const tdStyle = { padding: '0.7rem 0.9rem', fontSize: '0.82rem', color: '#fff', 
 const emptyStateStyle = { ...hintStyle, fontSize: '0.85rem', textAlign: 'center', padding: '2rem 0' };
 const tenantBadgeStyle = { display: 'inline-block', fontSize: '0.65rem', fontWeight: 700, color: 'var(--accent-orange)', background: 'rgba(255,95,51,0.12)', padding: '2px 8px', borderRadius: '999px', textTransform: 'uppercase', letterSpacing: '0.04em' };
 const editBtnStyle = { display: 'inline-flex', alignItems: 'center', gap: '0.3rem', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', color: '#fff', borderRadius: '6px', padding: '0.35rem 0.6rem', fontSize: '0.7rem', cursor: 'pointer' };
+const actaLinkStyle = { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', borderRadius: '6px', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', color: 'var(--accent-orange)' };
 
 const modalBackdropStyle = { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem' };
 const modalBoxStyle = { background: '#0c0c0e', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '16px', width: '100%', maxWidth: '520px', boxShadow: '0 25px 50px rgba(0,0,0,0.8)' };
@@ -261,7 +274,7 @@ function useDeliveries() {
   return { deliveries, loadingDeliveries, fetchDeliveries, updateDeliveryLocal };
 }
 
-function useDeliverySubmit(form, photo, isSuperadmin, resetForm, onSuccess) {
+function useDeliverySubmit(form, photo, isSuperadmin, vinLookupStatus, resetForm, onSuccess) {
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(null); // { id } | null
 
@@ -293,7 +306,7 @@ function useDeliverySubmit(form, photo, isSuperadmin, resetForm, onSuccess) {
   };
 
   const trySubmit = async () => {
-    const error = validate(form, photo, isSuperadmin);
+    const error = validate(form, photo, isSuperadmin, vinLookupStatus);
     if (error) {
       toast.error(error);
       return;
@@ -503,6 +516,44 @@ function SuccessNotice({ submitApi }) {
   );
 }
 
+function DeliveryRow({ delivery: d, isSuperadmin, onEdit }) {
+  return (
+    <tr>
+      <td style={tdStyle}>{d.client_name || '—'}</td>
+      <td style={tdStyle}>{[d.model, d.plate].filter(Boolean).join(' — ') || '—'}</td>
+      <td style={tdStyle}>{d.vin || '—'}</td>
+      <td style={tdStyle}>{d.delivery_date}</td>
+      <td style={tdStyle}>
+        {d.delivery_act_url ? (
+          <a
+            href={d.delivery_act_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Descargar acta de entrega"
+            style={actaLinkStyle}
+          >
+            <Download size={14} />
+          </a>
+        ) : '—'}
+      </td>
+      {isSuperadmin && (
+        <td style={tdStyle}>
+          {d.registered_by_tenant_name && (
+            <span style={tenantBadgeStyle}>{d.registered_by_tenant_name}</span>
+          )}
+        </td>
+      )}
+      {isSuperadmin && (
+        <td style={tdStyle}>
+          <button type="button" style={editBtnStyle} onClick={() => onEdit(d)}>
+            <Pencil size={12} /> Editar
+          </button>
+        </td>
+      )}
+    </tr>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // "Registros Realizados" -- list of deliveries already registered, plus a
 // superadmin-only inline edit dialog (PATCH /distributor/deliveries/{id}).
@@ -524,32 +575,14 @@ function DeliveriesSection({ deliveries, loading, isSuperadmin, onEdit }) {
                 <th style={thStyle}>Moto</th>
                 <th style={thStyle}>VIN</th>
                 <th style={thStyle}>Fecha de Entrega</th>
+                <th style={thStyle}>Acta</th>
                 {isSuperadmin && <th style={thStyle}>Distribuidora</th>}
                 {isSuperadmin && <th style={thStyle}>Acciones</th>}
               </tr>
             </thead>
             <tbody>
               {deliveries.map((d) => (
-                <tr key={d.id}>
-                  <td style={tdStyle}>{d.client_name || '—'}</td>
-                  <td style={tdStyle}>{[d.model, d.plate].filter(Boolean).join(' — ') || '—'}</td>
-                  <td style={tdStyle}>{d.vin || '—'}</td>
-                  <td style={tdStyle}>{d.delivery_date}</td>
-                  {isSuperadmin && (
-                    <td style={tdStyle}>
-                      {d.registered_by_tenant_name && (
-                        <span style={tenantBadgeStyle}>{d.registered_by_tenant_name}</span>
-                      )}
-                    </td>
-                  )}
-                  {isSuperadmin && (
-                    <td style={tdStyle}>
-                      <button type="button" style={editBtnStyle} onClick={() => onEdit(d)}>
-                        <Pencil size={12} /> Editar
-                      </button>
-                    </td>
-                  )}
-                </tr>
+                <DeliveryRow key={d.id} delivery={d} isSuperadmin={isSuperadmin} onEdit={onEdit} />
               ))}
             </tbody>
           </table>
@@ -559,31 +592,52 @@ function DeliveriesSection({ deliveries, loading, isSuperadmin, onEdit }) {
   );
 }
 
-const EDIT_FIELDS = ['client_name', 'client_phone', 'plate', 'vin', 'delivery_date'];
+// Follow-up fix (2026-07-30): expanded to cover every field from the
+// original registration (`DeliveryEditIn`, backend schema), not just the
+// original 5.
+const EDIT_FIELDS = [
+  'client_name', 'client_phone', 'client_identification', 'client_birth_date',
+  'client_city', 'client_department', 'client_address', 'client_email',
+  'plate', 'vin', 'model', 'color', 'year', 'engine_number', 'delivery_date',
+];
 
 function originalEditValues(delivery) {
-  // `client_phone` has no server-known original value -- `DeliveryListItemOut`
-  // doesn't carry it -- so it always starts blank; if left untouched it's
-  // correctly excluded from the patch, same as every other unedited field.
+  // `DeliveryListItemOut` (the list row this dialog opens from) only carries
+  // `id, plate, vin, model, delivery_date, client_name,
+  // registered_by_tenant_name, delivery_act_url` -- every other field has no
+  // server-known original value here, so it starts blank, same established
+  // pattern as `client_phone`: if left untouched it's correctly excluded
+  // from the patch, never clobbered to an empty value.
   return {
     client_name: delivery.client_name || '',
     client_phone: '',
+    client_identification: '',
+    client_birth_date: '',
+    client_city: '',
+    client_department: '',
+    client_address: '',
+    client_email: '',
     plate: delivery.plate || '',
     vin: delivery.vin || '',
+    model: delivery.model || '',
+    color: '',
+    year: '',
+    engine_number: '',
     delivery_date: delivery.delivery_date || '',
   };
 }
 
 // Pure diff: only fields that actually changed vs. `original` end up in the
 // patch, so an untouched field is never sent (exclude_unset semantics on
-// the backend rely on this).
+// the backend rely on this). `year` is sent as a number, matching
+// `buildPayload`'s treatment on create (`DeliveryEditIn.year: Optional[int]`).
 function buildEditPatch(form, original) {
   const patch = {};
   for (const key of EDIT_FIELDS) {
     const value = form[key].trim();
-    if (value !== original[key].trim()) {
-      patch[key] = value === '' ? null : value;
-    }
+    if (value === original[key].trim()) continue;
+    if (value === '') { patch[key] = null; continue; }
+    patch[key] = key === 'year' ? Number(value) : value;
   }
   return patch;
 }
@@ -607,11 +661,52 @@ async function submitEditPatch(deliveryId, patch) {
   }
 }
 
+function EditClientFields({ form, setForm }) {
+  return (
+    <>
+      <Field label="Nombre del cliente" value={form.client_name} onChange={(e) => setForm({ ...form, client_name: e.target.value })} />
+      <Field label="Cédula" value={form.client_identification} onChange={(e) => setForm({ ...form, client_identification: e.target.value })} />
+      <Field label="Fecha de nacimiento" type="date" value={form.client_birth_date} onChange={(e) => setForm({ ...form, client_birth_date: e.target.value })} />
+      <Field label="Teléfono del cliente" value={form.client_phone} onChange={(e) => setForm({ ...form, client_phone: e.target.value })} />
+      <Field label="Email" type="email" value={form.client_email} onChange={(e) => setForm({ ...form, client_email: e.target.value })} />
+      <Field label="Ciudad" value={form.client_city} onChange={(e) => setForm({ ...form, client_city: e.target.value })} />
+      <Field label="Departamento" value={form.client_department} onChange={(e) => setForm({ ...form, client_department: e.target.value })} />
+      <Field label="Dirección" value={form.client_address} onChange={(e) => setForm({ ...form, client_address: e.target.value })} />
+    </>
+  );
+}
+
+function EditVehicleFields({ form, setForm, vinApi }) {
+  return (
+    <>
+      <Field label="Placa" value={form.plate} onChange={(e) => setForm({ ...form, plate: e.target.value })} />
+      <VinLookupField
+        value={form.vin}
+        onChange={(value) => { setForm((f) => ({ ...f, vin: value })); vinApi.setVinLookupStatus('idle'); }}
+        onLookup={vinApi.lookupVin}
+        lookupStatus={vinApi.vinLookupStatus}
+        labelStyle={labelStyle}
+        inputStyle={inputStyle}
+        hintStyle={hintStyle}
+      />
+      <Field label="Modelo" value={form.model} onChange={(e) => setForm({ ...form, model: e.target.value })} />
+      <Field label="Color" value={form.color} onChange={(e) => setForm({ ...form, color: e.target.value })} />
+      <Field label="Año" type="number" value={form.year} onChange={(e) => setForm({ ...form, year: e.target.value })} />
+      <Field label="Número de motor" value={form.engine_number} onChange={(e) => setForm({ ...form, engine_number: e.target.value })} />
+      <Field label="Fecha de entrega" type="date" value={form.delivery_date} onChange={(e) => setForm({ ...form, delivery_date: e.target.value })} />
+    </>
+  );
+}
+
 // Superadmin-only edit dialog.
 function EditDeliveryModal({ delivery, onClose, onSaved }) {
   const original = originalEditValues(delivery);
   const [form, setForm] = useState(original);
   const [saving, setSaving] = useState(false);
+  // Own instance of the wizard's VIN-lookup hook -- this dialog manages
+  // separate form state from the wizard, so it needs its own autofill wiring
+  // rather than sharing the wizard's `vinApi`.
+  const vinApi = useVinLookup(setForm);
 
   const handleSave = async () => {
     const patch = buildEditPatch(form, original);
@@ -635,11 +730,8 @@ function EditDeliveryModal({ delivery, onClose, onSaved }) {
           </button>
         </div>
         <div style={modalBodyStyle}>
-          <Field label="Nombre del cliente" value={form.client_name} onChange={(e) => setForm({ ...form, client_name: e.target.value })} />
-          <Field label="Teléfono del cliente" value={form.client_phone} onChange={(e) => setForm({ ...form, client_phone: e.target.value })} />
-          <Field label="Placa" value={form.plate} onChange={(e) => setForm({ ...form, plate: e.target.value })} />
-          <Field label="VIN" value={form.vin} onChange={(e) => setForm({ ...form, vin: e.target.value })} />
-          <Field label="Fecha de entrega" type="date" value={form.delivery_date} onChange={(e) => setForm({ ...form, delivery_date: e.target.value })} />
+          <EditClientFields form={form} setForm={setForm} />
+          <EditVehicleFields form={form} setForm={setForm} vinApi={vinApi} />
         </div>
         <div style={modalFootStyle}>
           <button type="button" className="btn-secondary" onClick={onClose} disabled={saving}>Cancelar</button>
@@ -703,12 +795,12 @@ function ConfirmStep({ form, photo, submitApi, onBack }) {
 
 // Per-step "Siguiente"/"Atrás" navigation, kept out of the main component
 // so it stays wiring-only.
-function useWizardNavigation(form, photo, isSuperadmin) {
+function useWizardNavigation(form, photo, isSuperadmin, vinLookupStatus) {
   const [step, setStep] = useState(STEP_CLIENT);
 
   const stepValidators = {
     [STEP_CLIENT]: () => validateClientStep(form),
-    [STEP_VEHICLE]: () => validateVehicleStep(form),
+    [STEP_VEHICLE]: () => validateVehicleStep(form, vinLookupStatus),
     [STEP_DELIVERY]: () => validateDeliveryStep(form, photo, isSuperadmin),
   };
 
@@ -745,7 +837,7 @@ export default function DistribuidorEntregaPage() {
   const vinApi = useVinLookup(setForm);
   const deliveriesApi = useDeliveries();
   const [editingDelivery, setEditingDelivery] = useState(null);
-  const { step, goNext, goBack } = useWizardNavigation(form, photo, isSuperadmin);
+  const { step, goNext, goBack } = useWizardNavigation(form, photo, isSuperadmin, vinApi.vinLookupStatus);
   // Resets the form data after a successful submit but deliberately stays
   // on Confirmación so the success notice remains visible; the user can
   // click Atrás to start a fresh entry once they've seen it.
@@ -754,7 +846,7 @@ export default function DistribuidorEntregaPage() {
     setPhoto(null);
     vinApi.setVinLookupStatus('idle');
   };
-  const submitApi = useDeliverySubmit(form, photo, isSuperadmin, resetForm, deliveriesApi.fetchDeliveries);
+  const submitApi = useDeliverySubmit(form, photo, isSuperadmin, vinApi.vinLookupStatus, resetForm, deliveriesApi.fetchDeliveries);
 
   return (
     <AdminLayout>

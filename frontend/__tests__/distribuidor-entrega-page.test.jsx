@@ -66,13 +66,26 @@ let mockModels = MODELS;
 // boilerplate infra call, same precedent as `/vehicle-models` above -- it
 // fires on mount (and again after a successful new-delivery submission), so
 // every test's indexed `responses` queue must stay reserved for the
-// business-action calls it already controls (VIN lookup, POST, PATCH...).
+// business-action calls it already controls (POST, PATCH...).
 // Read live at call-time (not captured at queueResponses() setup time), so a
 // test can mutate `mockDeliveries` between the initial mount fetch and a
 // later re-fetch to simulate the list picking up a change.
 let mockDeliveries = [];
 function isDeliveriesListGet(url, opts) {
   return typeof url === 'string' && url === '/distributor/deliveries' && (!opts || !opts.method || opts.method === 'GET');
+}
+
+// GET /vehicles/vin/{vin} -- follow-up fix (2026-07-30): the VIN must now
+// resolve against the master catalog for EVERY actor before the Vehículo
+// step can advance, so almost every wizard-flow test needs this call to
+// succeed by default. Treated as boilerplate too, same precedent as
+// `/vehicle-models` and the deliveries list above: defaults to a "found"
+// match so existing flows don't need to wire their own response, and
+// specific tests override `mockVinLookupResult` (set to `null` to simulate
+// the 404/"not in master" case) to exercise the blocking rule itself.
+let mockVinLookupResult = { model: 'Renegade 200', year: 2023, color: 'Rojo', engine_number: 'ENG-999' };
+function isVinLookupGet(url) {
+  return typeof url === 'string' && url.startsWith('/vehicles/vin/');
 }
 
 function queueResponses(...responses) {
@@ -84,6 +97,11 @@ function queueResponses(...responses) {
     if (isDeliveriesListGet(url, opts)) {
       return Promise.resolve(makeResponse(200, mockDeliveries));
     }
+    if (isVinLookupGet(url)) {
+      return Promise.resolve(
+        mockVinLookupResult ? makeResponse(200, mockVinLookupResult) : makeResponse(404, {})
+      );
+    }
     return Promise.resolve(responses[i++]);
   });
 }
@@ -92,6 +110,7 @@ function nonCatalogCalls() {
   return mockAuthFetch.mock.calls.filter(
     ([url, opts]) => !(typeof url === 'string' && url.includes('/vehicle-models'))
       && !isDeliveriesListGet(url, opts)
+      && !isVinLookupGet(url)
   );
 }
 
@@ -112,8 +131,20 @@ async function fillClientStep({ name = 'Juan Pérez', identification = '12345678
   fireEvent.change(screen.getByLabelText('Cédula'), { target: { value: identification } });
 }
 
-async function fillVehicleStep({ plate = 'ABC123' } = {}) {
+// `vin: null` skips entering a VIN entirely (used to exercise the
+// idle/not-yet-looked-up blocking case). Any other `vin` value fires the
+// lookup and waits for it to settle (found or not_found, per
+// `mockVinLookupResult`) before returning, so callers land with a
+// deterministic `vinLookupStatus` before they act on the "Siguiente" button.
+async function fillVehicleStep({ plate = 'ABC123', vin = '1HGCM82633A004352' } = {}) {
   fireEvent.change(screen.getByLabelText('Placa'), { target: { value: plate } });
+  if (vin === null) return;
+  fireEvent.change(screen.getByLabelText('VIN'), { target: { value: vin } });
+  await waitFor(() => {
+    expect(
+      screen.queryByText(/datos encontrados/i) || screen.queryByText(/no está en el maestro/i)
+    ).toBeTruthy();
+  });
 }
 
 async function fillDeliveryStep({ delivery_date = '2025-01-10', photo = makeFile() } = {}) {
@@ -140,6 +171,7 @@ beforeEach(() => {
   mockToast.success.mockReset();
   mockModels = MODELS;
   mockDeliveries = [];
+  mockVinLookupResult = { model: 'Renegade 200', year: 2023, color: 'Rojo', engine_number: 'ENG-999' };
   sessionStorage.clear();
 });
 
@@ -236,7 +268,8 @@ describe('DistribuidorEntregaPage — wizard mechanics', () => {
 describe('DistribuidorEntregaPage — VIN lookup (Vehículo step)', () => {
   it('fires the VIN lookup at exactly 17 characters and autofills model/year/color/engine_number', async () => {
     setUser('parts_dealer');
-    queueResponses(makeResponse(200, { model: 'Renegade 200', year: 2023, color: 'Rojo', engine_number: 'ENG-999' }));
+    mockVinLookupResult = { model: 'Renegade 200', year: 2023, color: 'Rojo', engine_number: 'ENG-999' };
+    queueResponses();
     render(<DistribuidorEntregaPage />);
 
     await fillClientStep();
@@ -265,6 +298,67 @@ describe('DistribuidorEntregaPage — VIN lookup (Vehículo step)', () => {
     await waitFor(() => {
       expect(nonCatalogCalls()).toHaveLength(0);
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Follow-up fix (2026-07-30): the VIN must resolve against the master
+// catalog for EVERY actor before Vehículo → Entrega is allowed -- no role
+// exception anywhere in this feature (unlike the mandatory-photo rule, which
+// DOES exempt superadmin).
+// ---------------------------------------------------------------------------
+describe('DistribuidorEntregaPage — VIN master-catalog check blocks Vehículo → Entrega', () => {
+  it.each(['parts_dealer', 'superadmin'])(
+    'blocks "Siguiente" when the VIN has not been looked up yet (idle), for %s',
+    async (role) => {
+      setUser(role);
+      queueResponses();
+      render(<DistribuidorEntregaPage />);
+
+      await fillClientStep();
+      clickNext();
+      await fillVehicleStep({ vin: null }); // plate filled, VIN left untouched
+      clickNext();
+
+      await waitFor(() => {
+        expect(mockToast.error).toHaveBeenCalledWith('El VIN debe corresponder a una moto registrada en el maestro.');
+      });
+      expect(screen.getByRole('heading', { name: 'Vehículo' })).toBeInTheDocument();
+      expect(nonCatalogCalls()).toHaveLength(0);
+    }
+  );
+
+  it.each(['parts_dealer', 'superadmin'])(
+    'blocks "Siguiente" when the VIN lookup resolves not_found, for %s',
+    async (role) => {
+      setUser(role);
+      mockVinLookupResult = null; // GET /vehicles/vin/{vin} -> 404
+      queueResponses();
+      render(<DistribuidorEntregaPage />);
+
+      await fillClientStep();
+      clickNext();
+      await fillVehicleStep();
+      clickNext();
+
+      await waitFor(() => {
+        expect(mockToast.error).toHaveBeenCalledWith('El VIN debe corresponder a una moto registrada en el maestro.');
+      });
+      expect(screen.getByRole('heading', { name: 'Vehículo' })).toBeInTheDocument();
+    }
+  );
+
+  it('allows "Siguiente" once the VIN lookup resolves found', async () => {
+    setUser('parts_dealer');
+    queueResponses();
+    render(<DistribuidorEntregaPage />);
+
+    await fillClientStep();
+    clickNext();
+    await fillVehicleStep();
+    clickNext();
+
+    expect(screen.getByRole('heading', { name: 'Entrega' })).toBeInTheDocument();
   });
 });
 
@@ -418,6 +512,42 @@ describe('DistribuidorEntregaPage — Registros Realizados (list)', () => {
     expect(screen.getByRole('button', { name: /editar/i })).toBeInTheDocument();
   });
 
+  it('renders a download link to delivery_act_url for a row that has one, opening in a new tab', async () => {
+    setUser('parts_dealer');
+    mockDeliveries = [{ ...ROW_DISTRIBUIDOR, delivery_act_url: 'https://minio.example/act-123.jpg' }];
+    queueResponses();
+    render(<DistribuidorEntregaPage />);
+
+    await screen.findByText('Juan Pérez');
+
+    const link = screen.getByRole('link', { name: /descargar acta de entrega/i });
+    expect(link).toHaveAttribute('href', 'https://minio.example/act-123.jpg');
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('rel', expect.stringContaining('noopener'));
+  });
+
+  it('does not render a download link for a row without delivery_act_url', async () => {
+    setUser('parts_dealer');
+    mockDeliveries = [ROW_DISTRIBUIDOR]; // no delivery_act_url
+    queueResponses();
+    render(<DistribuidorEntregaPage />);
+
+    await screen.findByText('Juan Pérez');
+
+    expect(screen.queryByRole('link', { name: /descargar acta de entrega/i })).not.toBeInTheDocument();
+  });
+
+  it('shows the download link for a superadmin row too (not gated by isSuperadmin)', async () => {
+    setUser('superadmin');
+    mockDeliveries = [{ ...ROW_DISTRIBUIDOR, registered_by_tenant_name: 'Moto Total S.A.S', delivery_act_url: 'https://minio.example/act-456.jpg' }];
+    queueResponses();
+    render(<DistribuidorEntregaPage />);
+
+    await screen.findByText('Juan Pérez');
+
+    expect(screen.getByRole('link', { name: /descargar acta de entrega/i })).toHaveAttribute('href', 'https://minio.example/act-456.jpg');
+  });
+
   it('after a successful new-delivery submission, the list re-fetches and shows the new entry', async () => {
     setUser('parts_dealer');
     mockDeliveries = [];
@@ -467,6 +597,7 @@ describe('DistribuidorEntregaPage — Registros Realizados edit (superadmin only
     expect(within(dialog).getByLabelText('Nombre del cliente').value).toBe('Juan Pérez');
     expect(within(dialog).getByLabelText('Placa').value).toBe('ABC123');
     expect(within(dialog).getByLabelText('VIN').value).toBe('VIN1234567890XYZ');
+    expect(within(dialog).getByLabelText('Modelo').value).toBe('Renegade 200');
     expect(within(dialog).getByLabelText('Fecha de entrega').value).toBe('2025-01-10');
 
     fireEvent.change(within(dialog).getByLabelText('Placa'), { target: { value: 'XYZ999' } });
@@ -505,6 +636,85 @@ describe('DistribuidorEntregaPage — Registros Realizados edit (superadmin only
       expect(mockToast.error).toHaveBeenCalledWith('La fecha de entrega no puede ser futura.');
     });
     expect(screen.getByRole('dialog')).toBeInTheDocument();
+  });
+
+  it('shows every field, pre-filled from the list row where a source value exists (model) and blank otherwise', async () => {
+    setUser('superadmin');
+    mockDeliveries = [ROW_DISTRIBUIDOR];
+    queueResponses();
+    render(<DistribuidorEntregaPage />);
+
+    await screen.findByText('Juan Pérez');
+    fireEvent.click(screen.getByRole('button', { name: /editar/i }));
+    const dialog = await screen.findByRole('dialog');
+
+    // Has a source value on the list row.
+    expect(within(dialog).getByLabelText('Nombre del cliente').value).toBe('Juan Pérez');
+    expect(within(dialog).getByLabelText('Placa').value).toBe('ABC123');
+    expect(within(dialog).getByLabelText('VIN').value).toBe('VIN1234567890XYZ');
+    expect(within(dialog).getByLabelText('Modelo').value).toBe('Renegade 200');
+    expect(within(dialog).getByLabelText('Fecha de entrega').value).toBe('2025-01-10');
+
+    // No server-known original value on `DeliveryListItemOut` -- starts
+    // blank, same established pattern as `client_phone`.
+    expect(within(dialog).getByLabelText('Teléfono del cliente').value).toBe('');
+    expect(within(dialog).getByLabelText('Cédula').value).toBe('');
+    expect(within(dialog).getByLabelText('Fecha de nacimiento').value).toBe('');
+    expect(within(dialog).getByLabelText('Ciudad').value).toBe('');
+    expect(within(dialog).getByLabelText('Departamento').value).toBe('');
+    expect(within(dialog).getByLabelText('Dirección').value).toBe('');
+    expect(within(dialog).getByLabelText('Email').value).toBe('');
+    expect(within(dialog).getByLabelText('Color').value).toBe('');
+    expect(within(dialog).getByLabelText('Año').value).toBe('');
+    expect(within(dialog).getByLabelText('Número de motor').value).toBe('');
+  });
+
+  it('changing the VIN in the edit modal to a 17-char value autofills model/color/year/engine_number in that form', async () => {
+    setUser('superadmin');
+    mockDeliveries = [ROW_DISTRIBUIDOR];
+    mockVinLookupResult = { model: 'Rockville 200', year: 2024, color: 'Negro', engine_number: 'ENG-777' };
+    queueResponses();
+    render(<DistribuidorEntregaPage />);
+
+    await screen.findByText('Juan Pérez');
+    fireEvent.click(screen.getByRole('button', { name: /editar/i }));
+    const dialog = await screen.findByRole('dialog');
+
+    fireEvent.change(within(dialog).getByLabelText('VIN'), { target: { value: '9BWZZZ377VT004251' } });
+
+    await waitFor(() => {
+      expect(within(dialog).getByLabelText('Modelo').value).toBe('Rockville 200');
+    });
+    expect(within(dialog).getByLabelText('Color').value).toBe('Negro');
+    expect(within(dialog).getByLabelText('Año').value).toBe('2024');
+    expect(within(dialog).getByLabelText('Número de motor').value).toBe('ENG-777');
+  });
+
+  it('PATCHes only the new fields actually changed, in addition to the original 5', async () => {
+    setUser('superadmin');
+    mockDeliveries = [ROW_DISTRIBUIDOR];
+    queueResponses(makeResponse(200, {
+      id: 'd-1', plate: 'ABC123', vin: 'VIN1234567890XYZ', model: 'Renegade 200', color: 'Rojo', year: 2023,
+      engine_number: 'ENG-1', delivery_date: '2025-01-10', delivery_act_url: null, client_id: 'c-1',
+    }));
+    render(<DistribuidorEntregaPage />);
+
+    await screen.findByText('Juan Pérez');
+    fireEvent.click(screen.getByRole('button', { name: /editar/i }));
+    const dialog = await screen.findByRole('dialog');
+
+    fireEvent.change(within(dialog).getByLabelText('Cédula'), { target: { value: '900111222' } });
+    fireEvent.change(within(dialog).getByLabelText('Ciudad'), { target: { value: 'Bogotá' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: /guardar/i }));
+
+    await waitFor(() => {
+      expect(nonCatalogCalls()).toHaveLength(1);
+    });
+    const [, options] = nonCatalogCalls()[0];
+    expect(JSON.parse(options.body)).toEqual({
+      client_identification: '900111222',
+      client_city: 'Bogotá',
+    });
   });
 });
 
