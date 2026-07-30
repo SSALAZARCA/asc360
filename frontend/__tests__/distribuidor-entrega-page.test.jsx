@@ -88,6 +88,38 @@ function isVinLookupGet(url) {
   return typeof url === 'string' && url.startsWith('/vehicles/vin/');
 }
 
+// GET /distributor/deliveries/{id} (full-detail fetch, follow-up fix
+// 2026-07-30) -- fired when the "Editar Registro" modal opens, distinct from
+// the PATCH on the SAME url (matched by method, same precedent as the two
+// other GET-vs-mutation disambiguations above). Treated as boilerplate too:
+// defaults to a full record consistent with `ROW_DISTRIBUIDOR` below so
+// existing edit-dialog tests that don't care about the detail fetch keep
+// their original pre-fill assertions; set `mockDeliveryDetail = null` to
+// simulate a failed fetch (404).
+const DEFAULT_DELIVERY_DETAIL = {
+  id: 'd-1',
+  plate: 'ABC123',
+  vin: 'VIN1234567890XYZ',
+  model: 'Renegade 200',
+  color: null,
+  year: null,
+  engine_number: null,
+  delivery_date: '2025-01-10',
+  client_name: 'Juan Pérez',
+  client_identification: null,
+  client_birth_date: null,
+  client_city: null,
+  client_department: null,
+  client_address: null,
+  client_phone: null,
+  client_email: null,
+};
+let mockDeliveryDetail = DEFAULT_DELIVERY_DETAIL;
+function isDeliveryDetailGet(url, opts) {
+  return typeof url === 'string' && /^\/distributor\/deliveries\/[^/]+$/.test(url)
+    && (!opts || !opts.method || opts.method === 'GET');
+}
+
 function queueResponses(...responses) {
   let i = 0;
   mockAuthFetch.mockImplementation((url, opts) => {
@@ -102,6 +134,11 @@ function queueResponses(...responses) {
         mockVinLookupResult ? makeResponse(200, mockVinLookupResult) : makeResponse(404, {})
       );
     }
+    if (isDeliveryDetailGet(url, opts)) {
+      return Promise.resolve(
+        mockDeliveryDetail ? makeResponse(200, mockDeliveryDetail) : makeResponse(404, {})
+      );
+    }
     return Promise.resolve(responses[i++]);
   });
 }
@@ -111,6 +148,7 @@ function nonCatalogCalls() {
     ([url, opts]) => !(typeof url === 'string' && url.includes('/vehicle-models'))
       && !isDeliveriesListGet(url, opts)
       && !isVinLookupGet(url)
+      && !isDeliveryDetailGet(url, opts)
   );
 }
 
@@ -172,6 +210,7 @@ beforeEach(() => {
   mockModels = MODELS;
   mockDeliveries = [];
   mockVinLookupResult = { model: 'Renegade 200', year: 2023, color: 'Rojo', engine_number: 'ENG-999' };
+  mockDeliveryDetail = DEFAULT_DELIVERY_DETAIL;
   sessionStorage.clear();
 });
 
@@ -628,7 +667,7 @@ describe('DistribuidorEntregaPage — Registros Realizados edit (superadmin only
     fireEvent.click(screen.getByRole('button', { name: /editar/i }));
 
     const dialog = await screen.findByRole('dialog');
-    expect(within(dialog).getByLabelText('Nombre del cliente').value).toBe('Juan Pérez');
+    expect(await within(dialog).findByLabelText('Nombre del cliente')).toHaveValue('Juan Pérez');
     expect(within(dialog).getByLabelText('Placa').value).toBe('ABC123');
     expect(within(dialog).getByLabelText('VIN').value).toBe('VIN1234567890XYZ');
     expect(within(dialog).getByLabelText('Modelo').value).toBe('Renegade 200');
@@ -662,6 +701,7 @@ describe('DistribuidorEntregaPage — Registros Realizados edit (superadmin only
     fireEvent.click(screen.getByRole('button', { name: /editar/i }));
 
     const dialog = await screen.findByRole('dialog');
+    await within(dialog).findByLabelText('Nombre del cliente');
     const future = new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
     fireEvent.change(within(dialog).getByLabelText('Fecha de entrega'), { target: { value: future } });
     fireEvent.click(within(dialog).getByRole('button', { name: /guardar/i }));
@@ -672,7 +712,81 @@ describe('DistribuidorEntregaPage — Registros Realizados edit (superadmin only
     expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
 
-  it('shows every field, pre-filled from the list row where a source value exists (model) and blank otherwise', async () => {
+  // Bugfix (2026-07-30): the modal used to derive its "original" values from
+  // the sparse `DeliveryListItemOut` list row, which never carried most of
+  // these fields -- they showed blank even though the data already existed
+  // in the DB. It now fetches `GET /distributor/deliveries/{id}` on open and
+  // prefills EVERY field from that response.
+  it('fetches the detail endpoint on open and pre-fills EVERY field from its response, not just what the list row had', async () => {
+    setUser('superadmin');
+    mockDeliveries = [ROW_DISTRIBUIDOR];
+    mockDeliveryDetail = {
+      id: 'd-1',
+      plate: 'ABC123',
+      vin: 'VIN1234567890XYZ',
+      model: 'Renegade 200',
+      color: 'Rojo',
+      year: 2022,
+      engine_number: 'ENG-100',
+      delivery_date: '2025-01-10',
+      client_name: 'Juan Pérez',
+      client_identification: '900111222',
+      client_birth_date: '1990-05-15',
+      client_city: 'Bogotá',
+      client_department: 'Cundinamarca',
+      client_address: 'Calle 1 # 2-3',
+      client_phone: '3001234567',
+      client_email: 'juan@example.com',
+    };
+    queueResponses();
+    render(<DistribuidorEntregaPage />);
+
+    await screen.findByText('Juan Pérez');
+    fireEvent.click(screen.getByRole('button', { name: /editar/i }));
+
+    await waitFor(() => {
+      expect(mockAuthFetch).toHaveBeenCalledWith('/distributor/deliveries/d-1');
+    });
+    const dialog = await screen.findByRole('dialog');
+    await within(dialog).findByLabelText('Cédula');
+
+    expect(within(dialog).getByLabelText('Nombre del cliente').value).toBe('Juan Pérez');
+    expect(within(dialog).getByLabelText('Cédula').value).toBe('900111222');
+    expect(within(dialog).getByLabelText('Fecha de nacimiento').value).toBe('1990-05-15');
+    expect(within(dialog).getByLabelText('Teléfono del cliente').value).toBe('3001234567');
+    expect(within(dialog).getByLabelText('Email').value).toBe('juan@example.com');
+    expect(within(dialog).getByLabelText('Ciudad').value).toBe('Bogotá');
+    expect(within(dialog).getByLabelText('Departamento').value).toBe('Cundinamarca');
+    expect(within(dialog).getByLabelText('Dirección').value).toBe('Calle 1 # 2-3');
+    expect(within(dialog).getByLabelText('Placa').value).toBe('ABC123');
+    expect(within(dialog).getByLabelText('VIN').value).toBe('VIN1234567890XYZ');
+    expect(within(dialog).getByLabelText('Modelo').value).toBe('Renegade 200');
+    expect(within(dialog).getByLabelText('Color').value).toBe('Rojo');
+    expect(within(dialog).getByLabelText('Año').value).toBe('2022');
+    expect(within(dialog).getByLabelText('Número de motor').value).toBe('ENG-100');
+    expect(within(dialog).getByLabelText('Fecha de entrega').value).toBe('2025-01-10');
+  });
+
+  it('shows a toast error and closes the dialog when the detail fetch fails', async () => {
+    setUser('superadmin');
+    mockDeliveries = [ROW_DISTRIBUIDOR];
+    mockDeliveryDetail = null; // simulates the GET returning a non-2xx
+    queueResponses();
+    render(<DistribuidorEntregaPage />);
+
+    await screen.findByText('Juan Pérez');
+    fireEvent.click(screen.getByRole('button', { name: /editar/i }));
+
+    await screen.findByRole('dialog');
+    await waitFor(() => {
+      expect(mockToast.error).toHaveBeenCalledWith('No se pudo cargar el registro.');
+    });
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+  });
+
+  it('clicking the backdrop closes the dialog without saving; clicking inside the dialog box does not', async () => {
     setUser('superadmin');
     mockDeliveries = [ROW_DISTRIBUIDOR];
     queueResponses();
@@ -680,27 +794,21 @@ describe('DistribuidorEntregaPage — Registros Realizados edit (superadmin only
 
     await screen.findByText('Juan Pérez');
     fireEvent.click(screen.getByRole('button', { name: /editar/i }));
+
     const dialog = await screen.findByRole('dialog');
+    await within(dialog).findByLabelText('Nombre del cliente');
 
-    // Has a source value on the list row.
-    expect(within(dialog).getByLabelText('Nombre del cliente').value).toBe('Juan Pérez');
-    expect(within(dialog).getByLabelText('Placa').value).toBe('ABC123');
-    expect(within(dialog).getByLabelText('VIN').value).toBe('VIN1234567890XYZ');
-    expect(within(dialog).getByLabelText('Modelo').value).toBe('Renegade 200');
-    expect(within(dialog).getByLabelText('Fecha de entrega').value).toBe('2025-01-10');
+    // Click inside the box -- must NOT close.
+    fireEvent.click(within(dialog).getByText('Editar Registro'));
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
 
-    // No server-known original value on `DeliveryListItemOut` -- starts
-    // blank, same established pattern as `client_phone`.
-    expect(within(dialog).getByLabelText('Teléfono del cliente').value).toBe('');
-    expect(within(dialog).getByLabelText('Cédula').value).toBe('');
-    expect(within(dialog).getByLabelText('Fecha de nacimiento').value).toBe('');
-    expect(within(dialog).getByLabelText('Ciudad').value).toBe('');
-    expect(within(dialog).getByLabelText('Departamento').value).toBe('');
-    expect(within(dialog).getByLabelText('Dirección').value).toBe('');
-    expect(within(dialog).getByLabelText('Email').value).toBe('');
-    expect(within(dialog).getByLabelText('Color').value).toBe('');
-    expect(within(dialog).getByLabelText('Año').value).toBe('');
-    expect(within(dialog).getByLabelText('Número de motor').value).toBe('');
+    // Click the backdrop itself (the dialog's parent, outside the box) -- must close.
+    fireEvent.click(dialog.parentElement);
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+    expect(nonCatalogCalls()).toHaveLength(0);
   });
 
   it('changing the VIN in the edit modal to a 17-char value autofills model/color/year/engine_number in that form', async () => {
@@ -713,6 +821,7 @@ describe('DistribuidorEntregaPage — Registros Realizados edit (superadmin only
     await screen.findByText('Juan Pérez');
     fireEvent.click(screen.getByRole('button', { name: /editar/i }));
     const dialog = await screen.findByRole('dialog');
+    await within(dialog).findByLabelText('Nombre del cliente');
 
     fireEvent.change(within(dialog).getByLabelText('VIN'), { target: { value: '9BWZZZ377VT004251' } });
 
@@ -736,6 +845,7 @@ describe('DistribuidorEntregaPage — Registros Realizados edit (superadmin only
     await screen.findByText('Juan Pérez');
     fireEvent.click(screen.getByRole('button', { name: /editar/i }));
     const dialog = await screen.findByRole('dialog');
+    await within(dialog).findByLabelText('Nombre del cliente');
 
     fireEvent.change(within(dialog).getByLabelText('Cédula'), { target: { value: '900111222' } });
     fireEvent.change(within(dialog).getByLabelText('Ciudad'), { target: { value: 'Bogotá' } });

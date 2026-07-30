@@ -160,11 +160,20 @@ const tenantBadgeStyle = { display: 'inline-block', fontSize: '0.65rem', fontWei
 const editBtnStyle = { display: 'inline-flex', alignItems: 'center', gap: '0.3rem', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', color: '#fff', borderRadius: '6px', padding: '0.35rem 0.6rem', fontSize: '0.7rem', cursor: 'pointer' };
 const actaLinkStyle = { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', borderRadius: '6px', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', color: 'var(--accent-orange)' };
 
+// Bugfix (2026-07-30): fixed-height flex column -- header/footer are
+// `flexShrink: 0` (always visible/pinned) and only `modalBodyStyle` (the
+// field grid in the middle) scrolls (`overflowY: 'auto'`, `flex: 1`,
+// `minHeight: 0`, the standard "sticky header/footer, scrollable middle" CSS
+// pattern), so a 15-field form no longer pushes the close button or the
+// Guardar/Cancelar buttons off-screen. Widened from 520px -> 860px (bug 3)
+// so `modalBodyStyle`'s grid can reflow into 2-3 columns like the wizard's
+// `stepFieldGridStyle` already does, without being as wide as the full
+// page's 1200px `cardStyle`.
 const modalBackdropStyle = { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem' };
-const modalBoxStyle = { background: '#0c0c0e', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '16px', width: '100%', maxWidth: '520px', boxShadow: '0 25px 50px rgba(0,0,0,0.8)' };
-const modalHeadStyle = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1.25rem 1.5rem', borderBottom: '1px solid rgba(255,255,255,0.05)' };
-const modalBodyStyle = { padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '0.9rem' };
-const modalFootStyle = { display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', padding: '1.25rem 1.5rem', borderTop: '1px solid rgba(255,255,255,0.05)' };
+const modalBoxStyle = { background: '#0c0c0e', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '16px', width: '100%', maxWidth: '860px', maxHeight: '85vh', display: 'flex', flexDirection: 'column', boxShadow: '0 25px 50px rgba(0,0,0,0.8)' };
+const modalHeadStyle = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1.25rem 1.5rem', borderBottom: '1px solid rgba(255,255,255,0.05)', flexShrink: 0 };
+const modalBodyStyle = { padding: '1.5rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.9rem', overflowY: 'auto', flex: 1, minHeight: 0 };
+const modalFootStyle = { display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', padding: '1.25rem 1.5rem', borderTop: '1px solid rgba(255,255,255,0.05)', flexShrink: 0 };
 const closeBtnStyle = { width: '28px', height: '28px', borderRadius: '8px', background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' };
 
 function Field({ label, type = 'text', value, onChange, required = false }) {
@@ -623,29 +632,32 @@ const EDIT_FIELDS = [
   'plate', 'vin', 'model', 'color', 'year', 'engine_number', 'delivery_date',
 ];
 
-function originalEditValues(delivery) {
-  // `DeliveryListItemOut` (the list row this dialog opens from) only carries
-  // `id, plate, vin, model, delivery_date, client_name,
-  // registered_by_tenant_name, delivery_act_url` -- every other field has no
-  // server-known original value here, so it starts blank, same established
-  // pattern as `client_phone`: if left untouched it's correctly excluded
-  // from the patch, never clobbered to an empty value.
+// Bugfix (2026-07-30): source the "original" prefill values from the FULL
+// `DeliveryDetailOut` fetch (`GET /distributor/deliveries/{id}`), not the
+// sparse `DeliveryListItemOut` list row this dialog opens from --
+// `DeliveryListItemOut` only ever carried `id, plate, vin, model,
+// delivery_date, client_name, registered_by_tenant_name, delivery_act_url`,
+// so every other field used to start blank even though it was already saved
+// in the DB. `year` (a number on the wire) is coerced to string here, same
+// as the wizard's own form state, so `buildEditPatch`'s trim/compare logic
+// below works uniformly.
+function originalEditValues(detail) {
   return {
-    client_name: delivery.client_name || '',
-    client_phone: '',
-    client_identification: '',
-    client_birth_date: '',
-    client_city: '',
-    client_department: '',
-    client_address: '',
-    client_email: '',
-    plate: delivery.plate || '',
-    vin: delivery.vin || '',
-    model: delivery.model || '',
-    color: '',
-    year: '',
-    engine_number: '',
-    delivery_date: delivery.delivery_date || '',
+    client_name: detail.client_name || '',
+    client_phone: detail.client_phone || '',
+    client_identification: detail.client_identification || '',
+    client_birth_date: detail.client_birth_date || '',
+    client_city: detail.client_city || '',
+    client_department: detail.client_department || '',
+    client_address: detail.client_address || '',
+    client_email: detail.client_email || '',
+    plate: detail.plate || '',
+    vin: detail.vin || '',
+    model: detail.model || '',
+    color: detail.color || '',
+    year: detail.year != null ? String(detail.year) : '',
+    engine_number: detail.engine_number || '',
+    delivery_date: detail.delivery_date || '',
   };
 }
 
@@ -681,6 +693,40 @@ async function submitEditPatch(deliveryId, patch) {
     toast.error('Error de conexión.');
     return false;
   }
+}
+
+// Bugfix (2026-07-30): fetches the FULL delivery record
+// (`GET /distributor/deliveries/{id}`, superadmin-only, same 403 boundary as
+// the `PATCH` on this same path) when the edit modal opens, so the modal's
+// "original" prefill baseline is real DB data instead of the sparse list row.
+function useDeliveryDetail(deliveryId) {
+  const [detail, setDetail] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setFailed(false);
+    (async () => {
+      try {
+        const res = await authFetch(`/distributor/deliveries/${deliveryId}`);
+        if (!res.ok) {
+          if (!cancelled) setFailed(true);
+          return;
+        }
+        const data = await res.json();
+        if (!cancelled) setDetail(data);
+      } catch {
+        if (!cancelled) setFailed(true);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [deliveryId]);
+
+  return { detail, loading, failed };
 }
 
 function EditClientFields({ form, setForm }) {
@@ -720,9 +766,12 @@ function EditVehicleFields({ form, setForm, vinApi }) {
   );
 }
 
-// Superadmin-only edit dialog.
-function EditDeliveryModal({ delivery, onClose, onSaved }) {
-  const original = originalEditValues(delivery);
+// The actual edit form -- only mounts once `detail` (the
+// `GET /distributor/deliveries/{id}` response) has loaded, so its initial
+// `form` state (and the `original` diff baseline `buildEditPatch` compares
+// against) is sourced from real DB data, not a placeholder.
+function EditDeliveryForm({ deliveryId, detail, onClose, onSaved }) {
+  const original = originalEditValues(detail);
   const [form, setForm] = useState(original);
   const [saving, setSaving] = useState(false);
   // Own instance of the wizard's VIN-lookup hook -- this dialog manages
@@ -737,30 +786,60 @@ function EditDeliveryModal({ delivery, onClose, onSaved }) {
       return;
     }
     setSaving(true);
-    const ok = await submitEditPatch(delivery.id, patch);
+    const ok = await submitEditPatch(deliveryId, patch);
     setSaving(false);
     if (ok) onSaved(patch);
   };
 
   return (
-    <div style={modalBackdropStyle}>
-      <div style={modalBoxStyle} role="dialog" aria-modal="true" aria-label="Editar Registro">
+    <>
+      <div style={modalBodyStyle}>
+        <EditClientFields form={form} setForm={setForm} />
+        <EditVehicleFields form={form} setForm={setForm} vinApi={vinApi} />
+      </div>
+      <div style={modalFootStyle}>
+        <button type="button" className="btn-secondary" onClick={onClose} disabled={saving}>Cancelar</button>
+        <button type="button" className="btn-primary" onClick={handleSave} disabled={saving}>
+          {saving ? 'Guardando...' : 'Guardar'}
+        </button>
+      </div>
+    </>
+  );
+}
+
+// Superadmin-only edit dialog. Bugfix (2026-07-30): fetches the full record
+// on open instead of trusting the sparse list row (see `useDeliveryDetail`);
+// on fetch failure, shows a toast error and closes rather than risk showing
+// blank/broken data. Clicking the backdrop closes the dialog without saving
+// (same convention as `components/ConfirmModal.js`); clicking inside the box
+// does not (`stopPropagation` on the inner box).
+function EditDeliveryModal({ delivery, onClose, onSaved }) {
+  const { detail, loading, failed } = useDeliveryDetail(delivery.id);
+
+  useEffect(() => {
+    if (failed) {
+      toast.error('No se pudo cargar el registro.');
+      onClose();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [failed]);
+
+  return (
+    <div style={modalBackdropStyle} onClick={onClose}>
+      <div style={modalBoxStyle} onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Editar Registro">
         <div style={modalHeadStyle}>
           <h2 style={stepHeadingStyle}>Editar Registro</h2>
           <button type="button" onClick={onClose} style={closeBtnStyle} aria-label="Cerrar">
             <X size={16} />
           </button>
         </div>
-        <div style={modalBodyStyle}>
-          <EditClientFields form={form} setForm={setForm} />
-          <EditVehicleFields form={form} setForm={setForm} vinApi={vinApi} />
-        </div>
-        <div style={modalFootStyle}>
-          <button type="button" className="btn-secondary" onClick={onClose} disabled={saving}>Cancelar</button>
-          <button type="button" className="btn-primary" onClick={handleSave} disabled={saving}>
-            {saving ? 'Guardando...' : 'Guardar'}
-          </button>
-        </div>
+        {(loading || failed) ? (
+          <div style={modalBodyStyle}>
+            <p style={emptyStateStyle}>Cargando registro...</p>
+          </div>
+        ) : (
+          <EditDeliveryForm deliveryId={delivery.id} detail={detail} onClose={onClose} onSaved={onSaved} />
+        )}
       </div>
     </div>
   );
