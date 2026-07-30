@@ -37,7 +37,12 @@ from sqlalchemy.orm import selectinload
 from app.api.deps import CurrentUser
 from app.models.user import Role, User, UserStatus
 from app.models.vehicle import Vehicle
-from app.schemas.distributor_delivery import DeliveryCreate, DeliveryEditIn, DeliveryListItemOut
+from app.schemas.distributor_delivery import (
+    DeliveryCreate,
+    DeliveryDetailOut,
+    DeliveryEditIn,
+    DeliveryListItemOut,
+)
 from app.schemas.vehicle import VehicleCreate
 from app.services.imports_service import _log_audit
 from app.services.pdf_service import BUCKET_NAME, get_pdf_stream_from_minio, upload_file_to_minio
@@ -491,6 +496,47 @@ async def edit_delivery(
             status_code=500,
             detail="Error interno al editar la entrega.",
         )
+
+
+# ---------------------------------------------------------------------------
+# `GET /distributor/deliveries/{vehicle_id}` -- superadmin-only read of a
+# single delivery record's FULL detail (bugfix, 2026-07-30): the edit modal
+# used to prefill from `DeliveryListItemOut` (the LIST row), which never
+# carried most of the fields captured at creation time, so it opened blank.
+# Router enforces the superadmin-only guard (same as `PATCH .../{vehicle_id}`
+# -- fetch-for-editing shares the exact same access boundary as editing
+# itself, no exception), not this function.
+# ---------------------------------------------------------------------------
+
+async def get_delivery_detail(db: AsyncSession, vehicle_id: UUID) -> DeliveryDetailOut:
+    stmt = (
+        select(Vehicle)
+        .where(Vehicle.id == vehicle_id)
+        .options(selectinload(Vehicle.client))
+    )
+    vehicle = (await db.execute(stmt)).scalars().first()
+    if vehicle is None or vehicle.delivery_date is None:
+        raise HTTPException(status_code=404, detail="Registro de entrega no encontrado")
+
+    client = vehicle.client
+    return DeliveryDetailOut(
+        id=vehicle.id,
+        plate=vehicle.plate,
+        vin=vehicle.vin,
+        model=vehicle.model,
+        color=vehicle.color,
+        year=vehicle.year,
+        engine_number=vehicle.engine_number,
+        delivery_date=vehicle.delivery_date,
+        client_name=client.name if client else None,
+        client_identification=client.identification if client else None,
+        client_birth_date=client.birth_date if client else None,
+        client_city=client.city if client else None,
+        client_department=client.department if client else None,
+        client_address=client.address if client else None,
+        client_phone=client.phone if client else None,
+        client_email=client.email if client else None,
+    )
 
 
 # ---------------------------------------------------------------------------

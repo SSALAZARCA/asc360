@@ -112,6 +112,40 @@ class DeliveryListItemOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class DeliveryDetailOut(BaseModel):
+    """`GET /distributor/deliveries/{vehicle_id}` — superadmin-only, feeds
+    the "Editar Registro" edit modal on open (bugfix, 2026-07-30):
+    `DeliveryListItemOut` (the LIST row) never carried most of the fields
+    captured at creation time, so the modal opened with them blank even
+    though the data already existed in the DB. This is the FULL detail —
+    every vehicle and linked-client field the edit modal needs to prefill.
+    Built explicitly field-by-field in
+    `distributor_delivery_service.get_delivery_detail` (not a bare
+    `from_attributes` conversion off the `Vehicle` ORM row), since the
+    `client_*` fields live on the linked `User`, one relationship hop away,
+    not on `Vehicle` itself. All `client_*` fields are `None` when the
+    vehicle has no linked client (`Vehicle.client_id is None`) — same
+    no-op-not-an-error treatment `edit_delivery` already applies."""
+    id: UUID
+    plate: str
+    vin: Optional[str] = None
+    model: Optional[str] = None
+    color: Optional[str] = None
+    year: Optional[int] = None
+    engine_number: Optional[str] = None
+    delivery_date: date
+    client_name: Optional[str] = None
+    client_identification: Optional[str] = None
+    client_birth_date: Optional[date] = None
+    client_city: Optional[str] = None
+    client_department: Optional[str] = None
+    client_address: Optional[str] = None
+    client_phone: Optional[str] = None
+    client_email: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class DeliveryEditIn(BaseModel):
     """`PATCH /distributor/deliveries/{vehicle_id}` — superadmin-only edit
     whitelist. All fields `Optional`; the router/service applies

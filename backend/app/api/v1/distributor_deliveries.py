@@ -57,6 +57,7 @@ from app.api.deps import get_current_user, CurrentUser
 from app.models.vehicle import Vehicle
 from app.schemas.distributor_delivery import (
     DeliveryCreate,
+    DeliveryDetailOut,
     DeliveryEditIn,
     DeliveryListItemOut,
     DeliveryOut,
@@ -66,6 +67,7 @@ from app.services.distributor_delivery_service import (
     create_delivery,
     edit_delivery,
     get_delivery_act_file,
+    get_delivery_detail,
     list_deliveries,
 )
 
@@ -100,6 +102,21 @@ async def list_deliveries_endpoint(
 ):
     require_distribuidor(current_user)
     return await list_deliveries(db, current_user)
+
+
+@router.get("/deliveries/{vehicle_id}", response_model=DeliveryDetailOut)
+async def get_delivery_detail_endpoint(
+    vehicle_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    # Superadmin-only -- same access boundary as the `PATCH` below, not
+    # `require_distribuidor` (which also admits Distribuidor). This endpoint
+    # exists specifically to feed the superadmin-only edit modal.
+    if not current_user.is_superadmin:
+        raise HTTPException(status_code=403, detail="Solo superadmin puede ver el detalle")
+
+    return await get_delivery_detail(db, vehicle_id)
 
 
 @router.patch("/deliveries/{vehicle_id}", response_model=DeliveryOut)
