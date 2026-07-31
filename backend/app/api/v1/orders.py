@@ -433,9 +433,78 @@ async def download_reception_pdf(
          raise HTTPException(status_code=404, detail="El PDF físico no existe en MinIO")
          
     return StreamingResponse(
-        io.BytesIO(pdf_bytes), 
+        io.BytesIO(pdf_bytes),
         media_type="application/pdf",
         headers={"Content-Disposition": f"attachment; filename=Acta_{order_id.hex[:8]}.pdf"}
+    )
+
+
+@router.get("/{order_id}/evidence-photos/{index}")
+async def download_evidence_photo(
+    order_id: uuid.UUID,
+    index: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user)
+):
+    """
+    Proxy interno para descargar una foto de evidencia de daños
+    (`ServiceOrderReception.damage_photos_urls[index]`). Mismo patrón que
+    `download_reception_pdf`: el navegador nunca habla directo con MinIO,
+    el backend obtiene los bytes y los reenvía por una ruta autenticada.
+    """
+    forbid_distribuidor(current_user)
+
+    from ...services.pdf_service import get_pdf_stream_from_minio
+    from fastapi.responses import StreamingResponse
+    import io
+    import mimetypes
+
+    stmt = select(ServiceOrder).where(ServiceOrder.id == order_id).options(selectinload(ServiceOrder.reception))
+    result = await db.execute(stmt)
+    order = result.scalar_one_or_none()
+
+    if not order:
+        raise HTTPException(status_code=404, detail="Orden no encontrada")
+
+    # Seguridad Multi-tenant: Si no es superadmin, debe ser de su taller
+    if not current_user.is_superadmin and order.tenant_id != current_user.tenant_id:
+        raise HTTPException(status_code=403, detail="No tiene permiso para acceder a esta orden")
+
+    photos = order.reception.damage_photos_urls if order.reception else None
+    if not photos or index < 0 or index >= len(photos):
+        raise HTTPException(status_code=404, detail="Foto no encontrada para esta orden")
+
+    entry = photos[index]
+    if isinstance(entry, dict):
+        url_to_fetch = entry.get("url")
+    elif isinstance(entry, str):
+        url_to_fetch = entry
+    else:
+        url_to_fetch = None
+
+    if not url_to_fetch:
+        raise HTTPException(status_code=404, detail="Foto no encontrada para esta orden")
+
+    # Extraer el object_name limpio de la URL, quitando query params de firma (?X-Amz-Algorithm=...)
+    try:
+        # 1. Quitar query string de la presigned URL
+        url_path_only = url_to_fetch.split("?")[0]
+        # 2. Ahora extraer el path despues del bucket name
+        object_name = url_path_only.split("um-service-docs/")[1]
+    except IndexError:
+        raise HTTPException(status_code=500, detail="Formato de URL en BD corrupto")
+
+    # Pedir los bytes crudos a MinIO por el Backplane Docker
+    file_bytes = await get_pdf_stream_from_minio(object_name)
+    if not file_bytes:
+        raise HTTPException(status_code=404, detail="La foto física no existe en MinIO")
+
+    content_type, _ = mimetypes.guess_type(object_name)
+
+    return StreamingResponse(
+        io.BytesIO(file_bytes),
+        media_type=content_type or "application/octet-stream",
+        headers={"Content-Disposition": "inline"}
     )
 
 

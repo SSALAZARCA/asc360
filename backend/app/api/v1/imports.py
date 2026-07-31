@@ -631,19 +631,7 @@ async def list_attachments(
     )
     attachments = (await db.execute(stmt)).scalars().all()
 
-    result = []
-    for att in attachments:
-        read = ImportAttachmentRead.model_validate(att)
-        try:
-            read.presigned_url = storage_service.get_presigned_url(
-                storage_service.IMPORTS_BUCKET, att.minio_object_name
-            )
-        except Exception:
-            logger.warning(f"No se pudo generar presigned_url para adjunto {att.id} ({att.minio_object_name})", exc_info=True)
-            read.presigned_url = None
-        result.append(read)
-
-    return result
+    return [ImportAttachmentRead.model_validate(att) for att in attachments]
 
 
 @router.post("/shipment-orders/{order_id}/attachments", response_model=ImportAttachmentRead, status_code=status.HTTP_201_CREATED)
@@ -686,16 +674,40 @@ async def upload_attachment(
     await db.commit()
     await db.refresh(attachment)
 
-    read = ImportAttachmentRead.model_validate(attachment)
-    try:
-        read.presigned_url = storage_service.get_presigned_url(
-            storage_service.IMPORTS_BUCKET, object_name
-        )
-    except Exception:
-        logger.warning(f"No se pudo generar presigned_url para adjunto recién subido {attachment.id} ({object_name})", exc_info=True)
-        read.presigned_url = None
+    return ImportAttachmentRead.model_validate(attachment)
 
-    return read
+
+@router.get("/attachments/{attachment_id}/file")
+async def download_attachment_file(
+    attachment_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """
+    Proxy interno para descargar el archivo de un adjunto. Mismo patrón que
+    `get_dim_pdf_url`: el navegador nunca habla directo con MinIO, el
+    backend obtiene los bytes y los reenvía por una ruta autenticada.
+    Reemplaza el `presigned_url` muerto que dependían `list_attachments`/
+    `upload_attachment` (variable de entorno `MINIO_PUBLIC_HOST` nunca
+    declarada — infraestructura rota sin consumidores en el frontend).
+    """
+    _require_imports_editor(current_user)
+
+    attachment = await db.get(ImportAttachment, attachment_id)
+    if not attachment:
+        raise HTTPException(status_code=404, detail="Adjunto no encontrado")
+
+    file_bytes = await storage_service.get_bytes(
+        storage_service.IMPORTS_BUCKET, attachment.minio_object_name
+    )
+    if not file_bytes:
+        raise HTTPException(status_code=404, detail="Archivo no encontrado en almacenamiento")
+
+    return StreamingResponse(
+        io.BytesIO(file_bytes),
+        media_type=attachment.content_type or "application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{attachment.file_name}"'},
+    )
 
 
 @router.delete("/attachments/{attachment_id}", status_code=status.HTTP_204_NO_CONTENT)

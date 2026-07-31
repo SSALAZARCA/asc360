@@ -362,9 +362,6 @@ class ImportAttachmentRead(BaseModel):
     content_type: Optional[str] = None
     uploaded_at: datetime
 
-    # Generada en el endpoint, no viene de la DB
-    presigned_url: Optional[str] = None
-
 
 # ---------------------------------------------------------------------------
 # Reconciliation
