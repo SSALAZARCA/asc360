@@ -13,7 +13,7 @@ from services.api import (
     update_order_status, post_work_log, post_work_log_photos, post_order_parts,
     search_parts_catalog, get_part_by_number, get_part_by_factory_code,
     get_catalog_models_for_bot, search_parts_by_model, get_part_by_code,
-    get_all_sections_for_model,
+    get_all_sections_for_model, get_all_items_for_section,
 )
 from .admin import send_welcome, show_pending_users_inner, _show_tenant_selector
 from .technician import handle_active_orders
@@ -23,8 +23,38 @@ from .otp import BYPASS_ROLES
 from .reception import process_plate, send_vehicle_lifecycle, apply_correction_to_data
 
 
+def _format_price(precio_publico) -> str:
+    if precio_publico is None:
+        return "Sin precio"
+    return f"${precio_publico:,.0f}".replace(",", ".")
+
+
+def _format_items_list(items: list) -> str:
+    """Arma el mensaje de texto con la lista de piezas de una sección --
+    reemplaza la tabla que antes venía horneada dentro de la imagen del
+    diagrama (ver `diagram_styler.py`, tabla eliminada). Sin esto, el
+    técnico no tiene forma de saber qué pieza es cada número dibujado en
+    el diagrama, ya que los números solos no dicen nada."""
+    lines = ["📌 *Referencia de piezas:*"]
+    for it in items:
+        desc = it.get("description_es") or it.get("description") or "N/D"
+        code = it.get("factory_part_number", "")
+        price = _format_price(it.get("precio_publico"))
+        lines.append(f"*{it.get('order_num', '?')}.* {desc} — `{code}` — {price}")
+    text = "\n".join(lines)
+
+    # Telegram tiene un límite duro de 4096 caracteres por mensaje -- esto es
+    # una restricción real de la plataforma, no el límite artificial de 12
+    # filas que tenía la tabla horneada (esa sí se eliminó a propósito).
+    if len(text) > 3800:
+        text = text[:3800].rsplit("\n", 1)[0] + "\n_(lista recortada, hay más piezas de las que entran en un mensaje)_"
+    return text
+
+
 async def _send_diagram(message, section_id: str, caption: str) -> None:
-    """Pide la imagen al backend (que la sirve desde MinIO) y la manda a Telegram."""
+    """Pide la imagen al backend (que la sirve desde MinIO) y la manda a Telegram,
+    seguida de un mensaje de texto aparte con la lista de piezas de la sección
+    (la imagen ya no trae la tabla horneada, ver `_format_items_list`)."""
     from core.config import BACKEND_URL, SONIA_BOT_SECRET
     try:
         async with httpx.AsyncClient() as client:
@@ -38,6 +68,10 @@ async def _send_diagram(message, section_id: str, caption: str) -> None:
     except Exception as e:
         logger.warning(f"_send_diagram error (section {section_id}): {e}")
         await message.reply_text(caption + "\n_(diagrama no disponible)_", parse_mode="Markdown")
+
+    items = await get_all_items_for_section(section_id)
+    if items:
+        await message.reply_text(_format_items_list(items), parse_mode="Markdown")
 
 
 async def _show_diagrams_with_nav(message, sections: list, catalog_ctx: dict, user_data: dict) -> None:

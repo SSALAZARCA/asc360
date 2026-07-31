@@ -359,6 +359,27 @@ async def get_part_by_number(section_id: str, order_num: str) -> dict:
             return None
 
 
+async def get_all_items_for_section(section_id: str) -> list:
+    """Lista todas las piezas de una sección (posición, código, descripción,
+    precio) -- se usa para mandar el listado de referencia como mensaje de
+    texto junto a la foto del diagrama, ya que la imagen ya no trae la tabla
+    horneada."""
+    async with httpx.AsyncClient() as client:
+        try:
+            res = await client.get(
+                f"{BACKEND_URL}/parts/section/{section_id}/items",
+                headers={"x-sonia-secret": SONIA_BOT_SECRET},
+                timeout=10.0,
+            )
+            if res.status_code == 200:
+                return res.json()
+            logger.warning(f"get_all_items_for_section: {res.status_code} — {res.text}")
+            return []
+        except Exception as e:
+            logger.error(f"Error get_all_items_for_section: {e}")
+            return []
+
+
 async def get_part_by_factory_code(factory_code: str) -> dict:
     """Busca una parte por su código de fábrica (fallback cuando no se encuentra en diagrama)."""
     async with httpx.AsyncClient() as client:
