@@ -375,6 +375,139 @@ describe('DistribuidorRepuestosPage — non-goals', () => {
   });
 });
 
+describe('DistribuidorRepuestosPage — diagram viewport background (Task A)', () => {
+  it('gives the diagram viewport a white background with dark, legible empty-state text', async () => {
+    setUser();
+    queueResponses();
+    render(<DistribuidorRepuestosPage />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('option', { name: 'DSR 150' })).toBeInTheDocument();
+    });
+
+    const emptyText = screen.getByText(/Seleccion.* una motocicleta y una secci.n/i);
+    const viewport = emptyText.parentElement;
+    expect(viewport.style.background).toBe('rgb(255, 255, 255)');
+    // Not the old light-gray-on-dark hint color anymore -- must be dark enough
+    // to read against the new white background.
+    expect(emptyText.style.color).not.toBe('rgba(255,255,255,0.45)');
+  });
+});
+
+describe('DistribuidorRepuestosPage — superadmin diagram image replacement (Task B)', () => {
+  it('does not render "Reemplazar imagen" for a parts_dealer role, even with a section open', async () => {
+    setUser('parts_dealer');
+    queueResponses();
+    render(<DistribuidorRepuestosPage />);
+
+    await selectModelAndOpenSection();
+    await waitFor(() => {
+      expect(screen.getByTestId('part-card-item-1')).toBeInTheDocument();
+    });
+
+    expect(screen.queryByRole('button', { name: /reemplazar imagen/i })).not.toBeInTheDocument();
+  });
+
+  it('renders "Reemplazar imagen" for a superadmin role once a section is open', async () => {
+    setUser('superadmin');
+    queueResponses();
+    render(<DistribuidorRepuestosPage />);
+
+    // Not rendered before a section is open.
+    expect(screen.queryByRole('button', { name: /reemplazar imagen/i })).not.toBeInTheDocument();
+
+    await selectModelAndOpenSection();
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /reemplazar imagen/i })).toBeInTheDocument();
+    });
+  });
+
+  it('selecting a file POSTs a FormData body to /parts/admin/sections/{id}/diagram', async () => {
+    setUser('superadmin');
+    queueResponses();
+    render(<DistribuidorRepuestosPage />);
+
+    await selectModelAndOpenSection();
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /reemplazar imagen/i })).toBeInTheDocument();
+    });
+
+    const file = new File(['fake-image-bytes'], 'diagram.png', { type: 'image/png' });
+    fireEvent.change(screen.getByTestId('diagram-file-input'), { target: { files: [file] } });
+
+    await waitFor(() => {
+      expect(mockAuthFetch).toHaveBeenCalledWith(
+        '/parts/admin/sections/sec-1/diagram',
+        expect.objectContaining({ method: 'POST', body: expect.any(FormData) })
+      );
+    });
+  });
+
+  it('re-fetches the diagram image after a successful upload', async () => {
+    setUser('superadmin');
+    queueResponses();
+    render(<DistribuidorRepuestosPage />);
+
+    await selectModelAndOpenSection();
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /reemplazar imagen/i })).toBeInTheDocument();
+    });
+
+    const diagramCallsBefore = mockAuthFetch.mock.calls.filter(
+      ([url]) => typeof url === 'string' && url.includes('/diagram-image')
+    ).length;
+
+    const file = new File(['fake-image-bytes'], 'diagram.png', { type: 'image/png' });
+    fireEvent.change(screen.getByTestId('diagram-file-input'), { target: { files: [file] } });
+
+    await waitFor(() => {
+      const diagramCallsAfter = mockAuthFetch.mock.calls.filter(
+        ([url]) => typeof url === 'string' && url.includes('/diagram-image')
+      ).length;
+      expect(diagramCallsAfter).toBeGreaterThan(diagramCallsBefore);
+    });
+  });
+
+  it('shows an inline error message when the upload fails, without calling window.alert', async () => {
+    setUser('superadmin');
+    const alertSpy = jest.spyOn(window, 'alert').mockImplementation(() => {});
+    mockAuthFetch.mockImplementation((url, options) => {
+      if (typeof url === 'string' && url.includes('/parts/bot/catalog-models')) {
+        return Promise.resolve(makeResponse(200, MODELS));
+      }
+      if (typeof url === 'string' && url.includes('/all-sections')) {
+        return Promise.resolve(makeResponse(200, [SECTION]));
+      }
+      if (typeof url === 'string' && url.includes('/diagram-image')) {
+        return Promise.resolve(makeResponse(200, {}));
+      }
+      if (typeof url === 'string' && /\/parts\/section\/[^/]+\/items$/.test(url)) {
+        return Promise.resolve(makeResponse(200, mockItems));
+      }
+      if (typeof url === 'string' && /\/parts\/admin\/sections\/[^/]+\/diagram$/.test(url) && options?.method === 'POST') {
+        return Promise.resolve(makeResponse(500, null));
+      }
+      return Promise.resolve(makeResponse(200, {}));
+    });
+    render(<DistribuidorRepuestosPage />);
+
+    await selectModelAndOpenSection();
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /reemplazar imagen/i })).toBeInTheDocument();
+    });
+
+    const file = new File(['fake-image-bytes'], 'diagram.png', { type: 'image/png' });
+    fireEvent.change(screen.getByTestId('diagram-file-input'), { target: { files: [file] } });
+
+    await waitFor(() => {
+      expect(screen.getByText(/no se pudo reemplazar la imagen/i)).toBeInTheDocument();
+    });
+    expect(alertSpy).not.toHaveBeenCalled();
+    alertSpy.mockRestore();
+  });
+});
+
 describe('DistribuidorRepuestosPage — network failures surface an error, not a silent empty state', () => {
   it('shows an error message when the catalog-models request fails', async () => {
     setUser();

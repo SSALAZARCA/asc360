@@ -87,6 +87,66 @@ function useDescriptionSearch(modelCode) {
   return { results, loading, error, search };
 }
 
+// Copied by value from `entrega/page.js` / `settings/page.js`'s house
+// convention for reading the logged-in user -- same shape, this file's own
+// copy (see the style-token note at the top of this file for why).
+function useCurrentUser() {
+  const [user, setUser] = useState(null);
+  useEffect(() => {
+    const stored = sessionStorage.getItem('um_user');
+    if (stored) {
+      try { setUser(JSON.parse(stored)); } catch { setUser(null); }
+    }
+  }, []);
+  return user;
+}
+
+// Superadmin-only diagram-image replacement. `upload` takes an `onSuccess`
+// callback instead of owning the re-fetch itself, so it stays decoupled
+// from `useSectionDetail`'s internals -- the caller decides how to refresh.
+function useDiagramUpload() {
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState(null);
+
+  const upload = async (sectionId, file, onSuccess) => {
+    setUploading(true);
+    setUploadError(null);
+    try {
+      const fd = new FormData();
+      fd.append('image_file', file);
+      const res = await authFetch(`/parts/admin/sections/${sectionId}/diagram`, { method: 'POST', body: fd });
+      if (!res.ok) throw new Error('upload failed');
+      await onSuccess();
+    } catch {
+      setUploadError('No se pudo reemplazar la imagen.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return { uploading, uploadError, upload };
+}
+
+// Bundles the superadmin-only image-replace affordance (role check, upload
+// state, hidden file input, click/change handlers) so the page component
+// only wires one hook instead of four separate pieces of state.
+function useDiagramReplace(section, onReplaced) {
+  const user = useCurrentUser();
+  const isSuperadmin = user?.role === 'superadmin';
+  const { uploading, uploadError, upload } = useDiagramUpload();
+  const fileInputRef = useRef();
+
+  const onUploadClick = () => fileInputRef.current?.click();
+  const onFileChange = (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file || !section) return;
+    upload(section.section_id, file, onReplaced);
+  };
+
+  return { isSuperadmin, uploading, uploadError, fileInputRef, onUploadClick, onFileChange };
+}
+
 function useSectionDetail() {
   const [section, setSection] = useState(null);
   const [diagramBlob, setDiagramBlob] = useState(null);
@@ -381,9 +441,14 @@ const panelHeaderStyle = {
   padding: '1rem 1.25rem', borderBottom: '1px solid rgba(255,255,255,0.08)', flexShrink: 0,
 };
 const diagramViewportStyle = {
-  flex: 1, minHeight: 0, background: '#111116', position: 'relative',
+  flex: 1, minHeight: 0, background: '#fff', position: 'relative',
   display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem',
 };
+// `emptyStateStyle`'s light-gray-on-dark text becomes illegible once the
+// viewport background is white -- a diagram-panel-only dark variant, used
+// nowhere else, so `emptyStateStyle` itself stays unchanged for its other
+// (still dark-background) callers.
+const diagramEmptyStateStyle = { ...emptyStateStyle, color: 'rgba(20,20,26,0.65)' };
 const panelFooterStyle = {
   padding: '0.75rem 1.25rem', borderTop: '1px solid rgba(255,255,255,0.08)',
   textAlign: 'center', flexShrink: 0,
@@ -436,32 +501,70 @@ function ZoomableDiagram({ src, alt }) {
   );
 }
 
-function DiagramPanel({ section, diagramBlob, diagramError, loadingDiagram }) {
+const uploadBtnStyle = { fontSize: '0.68rem', padding: '0.3rem 0.6rem' };
+
+function DiagramViewportContent({ section, diagramBlob, diagramError, loadingDiagram }) {
+  if (!section) {
+    return <p style={diagramEmptyStateStyle}>Seleccioná una motocicleta y una sección para cargar el esquema técnico en explosión.</p>;
+  }
+  if (loadingDiagram) {
+    return <p style={diagramEmptyStateStyle}>Cargando diagrama...</p>;
+  }
+  if (diagramBlob) {
+    return <ZoomableDiagram src={diagramBlob} alt={section.section_name} />;
+  }
+  if (diagramError) {
+    return <p style={{ ...diagramEmptyStateStyle, color: '#ef4444' }}>{diagramError}</p>;
+  }
+  if (!section.diagram_url) {
+    return <p style={diagramEmptyStateStyle}>Sin diagrama disponible para esta sección.</p>;
+  }
+  return null;
+}
+
+function DiagramPanel({
+  section, diagramBlob, diagramError, loadingDiagram,
+  isSuperadmin, uploading, uploadError, fileInputRef, onUploadClick, onFileChange,
+}) {
   return (
     <div className="repuestos-panel" style={panelOuterStyle}>
       <div style={panelHeaderStyle}>
         <h3 style={{ margin: 0, fontWeight: 800, fontSize: '0.95rem', color: '#fff' }}>
           {section ? section.section_name : 'Plano de Ensamblaje'}
         </h3>
-        <span style={{ fontSize: '0.62rem', color: '#606075', textTransform: 'uppercase', letterSpacing: '0.05em', background: 'rgba(255,255,255,0.05)', padding: '0.2rem 0.5rem', borderRadius: 6, flexShrink: 0 }}>
-          Despiece Técnico
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
+          {section && isSuperadmin && (
+            <button
+              type="button"
+              className="btn-secondary"
+              style={uploadBtnStyle}
+              onClick={onUploadClick}
+              disabled={uploading}
+            >
+              {uploading ? 'Subiendo...' : 'Reemplazar imagen'}
+            </button>
+          )}
+          <span style={{ fontSize: '0.62rem', color: '#606075', textTransform: 'uppercase', letterSpacing: '0.05em', background: 'rgba(255,255,255,0.05)', padding: '0.2rem 0.5rem', borderRadius: 6, flexShrink: 0 }}>
+            Despiece Técnico
+          </span>
+        </div>
       </div>
+      {isSuperadmin && (
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/png,image/jpeg,image/webp"
+          onChange={onFileChange}
+          data-testid="diagram-file-input"
+          style={{ display: 'none' }}
+        />
+      )}
       <div style={diagramViewportStyle}>
-        {!section && (
-          <p style={emptyStateStyle}>Seleccioná una motocicleta y una sección para cargar el esquema técnico en explosión.</p>
-        )}
-        {section && loadingDiagram && <p style={emptyStateStyle}>Cargando diagrama...</p>}
-        {section && diagramBlob && (
-          <ZoomableDiagram src={diagramBlob} alt={section.section_name} />
-        )}
-        {section && !loadingDiagram && diagramError && (
-          <p style={{ ...emptyStateStyle, color: '#ef4444' }}>{diagramError}</p>
-        )}
-        {section && !loadingDiagram && !diagramBlob && !diagramError && !section.diagram_url && (
-          <p style={emptyStateStyle}>Sin diagrama disponible para esta sección.</p>
-        )}
+        <DiagramViewportContent section={section} diagramBlob={diagramBlob} diagramError={diagramError} loadingDiagram={loadingDiagram} />
       </div>
+      {uploadError && (
+        <p style={{ ...diagramEmptyStateStyle, color: '#ef4444', textAlign: 'left', padding: '0 1.25rem 0.75rem' }}>{uploadError}</p>
+      )}
     </div>
   );
 }
@@ -486,12 +589,26 @@ function ComponentsPanel({ items, loading, error }) {
 // prototype's persistent layout: ALWAYS visible, each panel showing its own
 // empty/loading/error/loaded state independently -- never a block that only
 // appears after a section is picked.
-function TwoPanelWorkspace({ section, diagramBlob, diagramError, loadingDiagram, items, itemsError, loadingItems }) {
+function TwoPanelWorkspace({
+  section, diagramBlob, diagramError, loadingDiagram, items, itemsError, loadingItems,
+  isSuperadmin, uploading, uploadError, fileInputRef, onUploadClick, onFileChange,
+}) {
   return (
     <section style={{ ...cardStyle, marginTop: '1.5rem' }}>
       <TwoPanelStyles />
       <div className="repuestos-two-panel">
-        <DiagramPanel section={section} diagramBlob={diagramBlob} diagramError={diagramError} loadingDiagram={loadingDiagram} />
+        <DiagramPanel
+          section={section}
+          diagramBlob={diagramBlob}
+          diagramError={diagramError}
+          loadingDiagram={loadingDiagram}
+          isSuperadmin={isSuperadmin}
+          uploading={uploading}
+          uploadError={uploadError}
+          fileInputRef={fileInputRef}
+          onUploadClick={onUploadClick}
+          onFileChange={onFileChange}
+        />
         <ComponentsPanel items={items} loading={loadingItems} error={itemsError} />
       </div>
     </section>
@@ -599,6 +716,7 @@ export default function DistribuidorRepuestosPage() {
     detail, selectModel, selectSection, openSection,
   } = useRepuestosSelection();
   const descApi = useDescriptionSearch(modelCode);
+  const diagramReplace = useDiagramReplace(detail.section, () => detail.open(detail.section));
 
   return (
     <AdminLayout fullWidth>
@@ -638,6 +756,12 @@ export default function DistribuidorRepuestosPage() {
         items={detail.items}
         itemsError={detail.itemsError}
         loadingItems={detail.loadingItems}
+        isSuperadmin={diagramReplace.isSuperadmin}
+        uploading={diagramReplace.uploading}
+        uploadError={diagramReplace.uploadError}
+        fileInputRef={diagramReplace.fileInputRef}
+        onUploadClick={diagramReplace.onUploadClick}
+        onFileChange={diagramReplace.onFileChange}
       />
     </AdminLayout>
   );
