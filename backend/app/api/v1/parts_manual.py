@@ -35,6 +35,7 @@ from app.models.parts_manual import (
     PartsManualSectionHistory,
 )
 from app.models.system_config import SystemConfig
+from app.services.pricing_service import get_pricing_factors, compute_prices
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/parts", tags=["Parts Manual"])
@@ -72,15 +73,28 @@ class PartItemByCodeResult(BaseModel):
     order_num: str
 
 class PartItemResult(BaseModel):
+    """Shared by `get_part_by_number` (single position, INNER JOIN + 404) and
+    `get_all_items_for_section` (full section, LEFT JOIN, never drops a row).
+    Reference-derived fields are Optional because of that LEFT JOIN: a numbered
+    position with no catalog reference still occupies its slot so the list
+    always matches the diagram legend (design ADR 3/6). Nulls stay nulls --
+    "N/D" and "Sin precio" are the frontend's job, never the API's (ADR 8).
+
+    `precio_publico` is visible to EVERY authenticated caller by design
+    (no per-screen or per-role gating anywhere): both `/distribuidor/repuestos`
+    and `/tg/parts` read this same shape."""
     id: str
     section_id: str
     section_code: str
     section_name: str
     order_num: str
     factory_part_number: str
-    um_part_number: str
-    description: str
-    unit: Optional[str]
+    um_part_number: Optional[str] = None
+    description: Optional[str] = None
+    description_es: Optional[str] = None
+    unit: Optional[str] = None
+    precio_publico: Optional[float] = None
+    precio_es_preliminar: bool = False
 
 class PartReferenceResult(BaseModel):
     factory_part_number: str
@@ -301,6 +315,38 @@ def _parse_parts_table(pdf_path: str) -> list[dict]:
                 text = page.extract_text() or ""
                 parts.extend(_parse_parts_from_text(text))
     return parts
+
+
+_NAT = re.compile(r"^([A-Za-z]*)(\d*)")
+
+
+def _natural_order_key(order_num: str) -> tuple:
+    """`order_num` is `String(20)` holding values like A1 / B3 / C12, so plain
+    lexicographic ordering yields A1, A10, A2. The whole point of the
+    Distribuidor screen is a legend that reads in the same order as the
+    numbers stamped on the diagram (design ADR 7). Sections are tens of rows
+    -- sorting in Python is free."""
+    m = _NAT.match(order_num or "")
+    alpha, digits = (m.group(1), m.group(2)) if m else ("", "")
+    return (alpha.upper(), int(digits) if digits else 0, order_num or "")
+
+
+def _resolve_public_price(ref, manual_price, factors) -> tuple[Optional[float], bool]:
+    """ONE price path for both parts-detail endpoints (design ADR 2).
+    Reproduces Maestro de Partes' hierarchy EXACTLY (`_build_item` below):
+      1. a manually set `PartCatalog.public_price` wins outright ("Precio Final");
+      2. otherwise compute from `avg_fob_cost`, falling back to `preliminary_fob`;
+      3. otherwise `None` -- never 0, never a guess.
+    Whoever quotes this number -- Distribuidor or Técnico -- must say the same
+    number the company's own price master says, or the quote is not honourable."""
+    if manual_price is not None:
+        return float(manual_price), False
+    if ref is None:
+        return None, False
+    avg    = float(ref.avg_fob_cost)    if ref.avg_fob_cost    is not None else None
+    prelim = float(ref.preliminary_fob) if ref.preliminary_fob is not None else None
+    fob    = avg if avg is not None else prelim
+    return compute_prices(fob, factors)["precio_publico"], (avg is None and prelim is not None)
 
 
 def _minio_client() -> Minio:
@@ -598,6 +644,70 @@ async def get_part_by_number(
     )
 
 
+@router.get("/section/{section_id}/items", response_model=list[PartItemResult])
+async def get_all_items_for_section(
+    section_id: str,
+    db: AsyncSession = Depends(get_db),
+    x_sonia_secret: str = Header(default=""),
+    current_user=Depends(get_optional_user),
+):
+    """Lista TODOS los repuestos numerados de una sección (para la vista de
+    Distribuidor que muestra el diagrama junto con la lista completa de
+    posiciones, en vez de buscar una sola posición por código exacto como
+    `get_part_by_number`). Sección vacía o `section_id` inexistente → lista
+    vacía, no 404 (es un listado, no una búsqueda de un único recurso).
+
+    LEFT JOIN on `PartsReference` (design ADR 6): a numbered position never
+    disappears from the list just because it has no catalog reference.
+    Results are natural-sorted by `order_num` in Python (ADR 7), not via SQL
+    `ORDER BY`. `precio_publico` is resolved once per row via the shared
+    `_resolve_public_price` path (ADR 2), fed by exactly one
+    `get_pricing_factors(db)` call and one batched `PartCatalog` lookup for
+    the whole request (ADR 5) — never per row."""
+    if not verify_sonia_secret(x_sonia_secret, settings.SONIA_BOT_SECRET) and current_user is None:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    result = await db.execute(
+        select(PartsManualItem, PartsManualSection, PartsReference)
+        .join(PartsManualSection, PartsManualItem.section_id == PartsManualSection.id)
+        .outerjoin(PartsReference, PartsManualItem.factory_part_number == PartsReference.factory_part_number)
+        .where(PartsManualItem.section_id == section_id)
+    )
+    rows = result.all()
+    rows.sort(key=lambda r: _natural_order_key(r[0].order_num))
+
+    factors = await get_pricing_factors(db)                                     # ONCE per request
+
+    codes = [item.factory_part_number for item, _, _ in rows]
+    manual_prices: dict[str, float] = {}
+    if codes:
+        catalog_result = await db.execute(
+            select(PartCatalog).where(PartCatalog.part_code.in_(codes))
+        )                                                                       # ONCE per request
+        manual_prices = {c.part_code: c.public_price for c in catalog_result.scalars()}
+
+    items = []
+    for item, section, ref in rows:
+        precio_publico, precio_es_preliminar = _resolve_public_price(
+            ref, manual_prices.get(item.factory_part_number), factors
+        )
+        items.append(PartItemResult(
+            id=str(item.id),
+            section_id=str(section.id),
+            section_code=section.section_code,
+            section_name=section.section_name,
+            order_num=item.order_num,
+            factory_part_number=item.factory_part_number,
+            um_part_number=ref.um_part_number if ref else None,
+            description=ref.description if ref else None,
+            description_es=ref.description_es_manual if ref else None,
+            unit=ref.unit if ref else None,
+            precio_publico=precio_publico,
+            precio_es_preliminar=precio_es_preliminar,
+        ))
+    return items
+
+
 @router.get("/factory/{factory_code}", response_model=PartReferenceResult)
 async def get_part_by_factory_code(
     factory_code: str,
@@ -800,7 +910,6 @@ async def _list_catalog_impl(
     page_size: int,
     db: AsyncSession,
 ) -> "CatalogListResult":
-    from app.services.pricing_service import get_pricing_factors, compute_prices
     pricing_factors = await get_pricing_factors(db)
 
     from sqlalchemy import func, or_
