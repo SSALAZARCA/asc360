@@ -29,6 +29,9 @@ export default function TgParts() {
   const [sheet, setSheet]           = useState(null);  // { section_id, section_code, section_name, diagram_url, model_code }
   const [diagramBlob, setDiagramBlob] = useState(null);
   const [loadingDiagram, setLoadingDiagram] = useState(false);
+  const [sectionItems, setSectionItems] = useState([]);
+  const [loadingItems, setLoadingItems] = useState(false);
+  const [itemsError, setItemsError]     = useState(null);
   const [posCode, setPosCode]       = useState('');
   const [partResult, setPartResult] = useState(null);
   const [partError, setPartError]   = useState(null);
@@ -77,19 +80,36 @@ export default function TgParts() {
     setSheet(s);
     setPosCode(''); setPartResult(null); setPartError(null);
     setDiagramBlob(null);
-    if (!s.diagram_url) return;
-    setLoadingDiagram(true);
-    try {
-      const res = await authFetch(`/parts/section/${s.section_id}/diagram-image`);
-      if (res.ok) {
-        const blob = await res.blob();
-        setDiagramBlob(URL.createObjectURL(blob));
-      }
-    } finally { setLoadingDiagram(false); }
+    setSectionItems([]); setItemsError(null);
+
+    const loadItems = async () => {
+      setLoadingItems(true);
+      try {
+        const res = await authFetch(`/parts/section/${s.section_id}/items`);
+        if (!res.ok) { setItemsError('Error al cargar las piezas de la sección'); return; }
+        setSectionItems(await res.json());
+      } catch (e) { setItemsError(`Error: ${e.message}`); }
+      finally { setLoadingItems(false); }
+    };
+
+    const loadDiagram = async () => {
+      if (!s.diagram_url) return;
+      setLoadingDiagram(true);
+      try {
+        const res = await authFetch(`/parts/section/${s.section_id}/diagram-image`);
+        if (res.ok) {
+          const blob = await res.blob();
+          setDiagramBlob(URL.createObjectURL(blob));
+        }
+      } finally { setLoadingDiagram(false); }
+    };
+
+    await Promise.all([loadItems(), loadDiagram()]);
   };
 
   const closeSheet = () => {
     setSheet(null); setDiagramBlob(null);
+    setSectionItems([]); setItemsError(null);
     setPosCode(''); setPartResult(null); setPartError(null);
   };
 
@@ -254,17 +274,68 @@ export default function TgParts() {
               <div style={{ textAlign: 'center', padding: '2rem 0', color: '#606075', fontSize: '0.72rem' }}>Cargando diagrama...</div>
             )}
             {diagramBlob && (
-              <img
-                src={diagramBlob}
-                alt={sheet.section_name}
-                style={{ width: '100%', borderRadius: 10, border: '1px solid rgba(255,255,255,0.06)', marginBottom: '1rem', display: 'block' }}
-              />
+              <div style={{ background: '#fff', borderRadius: 10, border: '1px solid rgba(255,255,255,0.06)', padding: '0.6rem', marginBottom: '1rem' }}>
+                <img
+                  src={diagramBlob}
+                  alt={sheet.section_name}
+                  style={{ width: '100%', borderRadius: 6, display: 'block' }}
+                />
+              </div>
             )}
             {!loadingDiagram && !diagramBlob && !sheet.diagram_url && (
               <div style={{ textAlign: 'center', padding: '1.5rem 0', color: '#606075', fontSize: '0.72rem', marginBottom: '1rem' }}>
                 Sin diagrama disponible para esta sección
               </div>
             )}
+
+            {/* Lista de piezas de la sección */}
+            <div style={{ marginBottom: '1rem' }}>
+              <p style={{ margin: '0 0 0.5rem', fontSize: '0.55rem', color: '#606075', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700 }}>
+                Piezas de esta sección
+              </p>
+              {loadingItems && (
+                <div style={{ textAlign: 'center', padding: '1rem 0', color: '#606075', fontSize: '0.72rem' }}>Cargando piezas...</div>
+              )}
+              {itemsError && (
+                <div style={{ padding: '0.6rem 0.8rem', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 10, marginBottom: '0.5rem' }}>
+                  <p style={{ margin: 0, fontSize: '0.7rem', color: '#ef4444', fontWeight: 700 }}>{itemsError}</p>
+                </div>
+              )}
+              {!loadingItems && !itemsError && sectionItems.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', maxHeight: '14rem', overflowY: 'auto' }}>
+                  {sectionItems.map(item => (
+                    <div key={item.id} style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 8, padding: '0.55rem 0.7rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem' }}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.4rem', marginBottom: 2 }}>
+                          <span style={{ fontSize: '0.6rem', fontWeight: 800, color: '#ff8c5a' }}>{item.order_num}</span>
+                          <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#e2e2f0' }}>{item.factory_part_number}</span>
+                        </div>
+                        <p style={{ margin: 0, fontSize: '0.68rem', color: '#a0a0b5', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {item.description_es || item.description || '—'}
+                        </p>
+                      </div>
+                      <div style={{ flexShrink: 0, textAlign: 'right' }}>
+                        {item.precio_publico != null ? (
+                          <p style={{ margin: 0, fontSize: '0.72rem', fontWeight: 800, color: '#ff8c5a' }}>
+                            {new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(item.precio_publico)}
+                          </p>
+                        ) : (
+                          <p style={{ margin: 0, fontSize: '0.65rem', fontWeight: 700, color: '#606075' }}>Sin precio</p>
+                        )}
+                        {item.precio_publico != null && item.precio_es_preliminar && (
+                          <span style={{ fontSize: '0.5rem', fontWeight: 700, color: '#ffb020', background: 'rgba(255,176,32,0.12)', border: '1px solid rgba(255,176,32,0.3)', borderRadius: 6, padding: '0.1rem 0.3rem', display: 'inline-block', marginTop: 2 }}>
+                            Precio preliminar
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {!loadingItems && !itemsError && sectionItems.length === 0 && (
+                <div style={{ textAlign: 'center', padding: '0.75rem 0', color: '#606075', fontSize: '0.68rem' }}>Sin piezas registradas</div>
+              )}
+            </div>
 
             {/* Buscador de pieza por código de posición */}
             <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '1rem' }}>
