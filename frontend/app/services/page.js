@@ -54,6 +54,11 @@ const TYPE_CFG = {
   pdi:       { label: 'Alistamiento',  color: '#f97316', bg: 'rgba(249,115,22,0.15)', letter: 'A' },
 };
 
+// Explicit background/color on every <option> -- without it, the dropdown
+// popup inherits light text on the browser's default light background and
+// is invisible until hovered.
+const optionStyle = { background: '#1a1a22', color: '#fff' };
+
 function dayColor(d) { return d > 5 ? '#ef4444' : d > 2 ? '#fbbf24' : '#10b981'; }
 function fmtDate(iso) {
   if (!iso) return '-';
@@ -369,24 +374,24 @@ export default function ServicesPage() {
           <div className="filter-group">
             <Filter size={12} className="icon-muted" />
             <select className="filter-sel" value={filterType} onChange={e => setFilterType(e.target.value)}>
-              <option value="all">Tipo: Todos</option>
-              {Object.entries(TYPE_CFG).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+              <option value="all" style={optionStyle}>Tipo: Todos</option>
+              {Object.entries(TYPE_CFG).map(([k, v]) => <option key={k} value={k} style={optionStyle}>{v.label}</option>)}
             </select>
           </div>
 
           <div className="filter-group">
             <Activity size={12} className="icon-muted" />
             <select className="filter-sel" value={filterState} onChange={e => setFilterState(e.target.value)}>
-              <option value="all">Estado: Todos</option>
-              {Object.entries(STATES).map(([k, v]) => <option key={k} value={k}>{v.name}</option>)}
+              <option value="all" style={optionStyle}>Estado: Todos</option>
+              {Object.entries(STATES).map(([k, v]) => <option key={k} value={k} style={optionStyle}>{v.name}</option>)}
             </select>
           </div>
 
           <div className="filter-group">
             <MapPin size={12} className="icon-muted" />
             <select className="filter-sel" value={filterCenter} onChange={e => setFilterCenter(e.target.value)}>
-              <option value="all">Centro: Todos</option>
-              {uniqueCenters.map(c => <option key={c} value={c}>{c}</option>)}
+              <option value="all" style={optionStyle}>Centro: Todos</option>
+              {uniqueCenters.map(c => <option key={c} value={c} style={optionStyle}>{c}</option>)}
             </select>
           </div>
 

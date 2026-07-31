@@ -18,6 +18,11 @@ const ESTADO_CFG = {
   retirado:   { color: '#f87171', label: 'Retirado' },
 };
 
+// Explicit background/color on every <option> -- without it, the dropdown
+// popup inherits light text on the browser's default light background and
+// is invisible until hovered.
+const optionStyle = { background: '#1a1a22', color: '#fff' };
+
 function NivelBadge({ nivel }) {
   const cfg = NIVEL_CFG[nivel] || { color: '#9ca3af', bg: 'rgba(156,163,175,0.12)', border: 'rgba(156,163,175,0.3)' };
   return (
@@ -279,15 +284,15 @@ export default function TenantsPage() {
                 <div>
                   <label>Departamento</label>
                   <select value={editForm.departamento} onChange={e => { f('departamento', e.target.value); f('ciudad', ''); fetchCities(e.target.value); }}>
-                    <option value="">— Seleccionar —</option>
-                    {departments.map(d => <option key={d} value={d}>{d}</option>)}
+                    <option value="" style={optionStyle}>— Seleccionar —</option>
+                    {departments.map(d => <option key={d} value={d} style={optionStyle}>{d}</option>)}
                   </select>
                 </div>
                 <div>
                   <label>Ciudad / Municipio</label>
                   <select value={editForm.ciudad} onChange={e => f('ciudad', e.target.value)} disabled={!editForm.departamento}>
-                    <option value="">— Seleccionar —</option>
-                    {cities.map(c => <option key={c} value={c}>{c}</option>)}
+                    <option value="" style={optionStyle}>— Seleccionar —</option>
+                    {cities.map(c => <option key={c} value={c} style={optionStyle}>{c}</option>)}
                   </select>
                 </div>
                 <div style={{ gridColumn: '1 / -1' }}>
@@ -301,10 +306,10 @@ export default function TenantsPage() {
                 <div>
                   <label>Categoría</label>
                   <select value={editForm.categoria} onChange={e => f('categoria', e.target.value)}>
-                    <option value="">— Sin categoría —</option>
-                    <option value="A">A</option>
-                    <option value="B">B</option>
-                    <option value="C">C</option>
+                    <option value="" style={optionStyle}>— Sin categoría —</option>
+                    <option value="A" style={optionStyle}>A</option>
+                    <option value="B" style={optionStyle}>B</option>
+                    <option value="C" style={optionStyle}>C</option>
                   </select>
                 </div>
                 <div>
@@ -314,9 +319,9 @@ export default function TenantsPage() {
                 <div>
                   <label>Estado en la Red</label>
                   <select value={editForm.estado_red} onChange={e => f('estado_red', e.target.value)}>
-                    <option value="activo">Activo</option>
-                    <option value="suspendido">Suspendido</option>
-                    <option value="retirado">Retirado</option>
+                    <option value="activo" style={optionStyle}>Activo</option>
+                    <option value="suspendido" style={optionStyle}>Suspendido</option>
+                    <option value="retirado" style={optionStyle}>Retirado</option>
                   </select>
                 </div>
 
@@ -337,8 +342,8 @@ export default function TenantsPage() {
                     <div>
                       <label>Tipo de Servicio</label>
                       <select value={editForm.tipo_servicio} onChange={e => f('tipo_servicio', e.target.value)}>
-                        <option value="Todos">Todos</option>
-                        <option value="Revisiones/Express">Revisiones / Express</option>
+                        <option value="Todos" style={optionStyle}>Todos</option>
+                        <option value="Revisiones/Express" style={optionStyle}>Revisiones / Express</option>
                       </select>
                     </div>
                   </>

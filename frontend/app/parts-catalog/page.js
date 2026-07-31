@@ -28,6 +28,11 @@ const rotationBadge = (rc) => {
   return { fontSize: '0.58rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', padding: '2px 8px', borderRadius: '20px', background: c.bg, color: c.color, border: `1px solid ${c.border}`, display: 'inline-block', whiteSpace: 'nowrap' };
 };
 
+// Explicit background/color on every <option> -- without it, the dropdown
+// popup inherits light text on the browser's default light background and
+// is invisible until hovered.
+const optionStyle = { background: '#1a1a22', color: '#fff' };
+
 export default function PartsCatalogPage() {
   const [items, setItems]     = useState([]);
   const [total, setTotal]     = useState(0);
@@ -457,8 +462,8 @@ export default function PartsCatalogPage() {
           onChange={e => { setModelCode(e.target.value); setPage(1); }}
           style={{ padding: '0.625rem 1rem', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px', color: modelCode ? '#fff' : 'rgba(255,255,255,0.3)', fontSize: '0.78rem', outline: 'none', cursor: 'pointer', flexShrink: 0 }}
         >
-          <option value="">Todos los modelos</option>
-          {models.map(m => <option key={m.vehicle_model} value={m.catalog_model_code}>{m.vehicle_model}</option>)}
+          <option value="" style={optionStyle}>Todos los modelos</option>
+          {models.map(m => <option key={m.vehicle_model} value={m.catalog_model_code} style={optionStyle}>{m.vehicle_model}</option>)}
         </select>
 
         <select
@@ -466,11 +471,11 @@ export default function PartsCatalogPage() {
           onChange={e => { setRotationFilter(e.target.value); setPage(1); }}
           style={{ padding: '0.625rem 1rem', background: rotationFilter ? (ROTATION_STYLES[rotationFilter]?.bg || 'rgba(255,255,255,0.04)') : 'rgba(255,255,255,0.04)', border: `1px solid ${rotationFilter ? (ROTATION_STYLES[rotationFilter]?.border || 'rgba(255,255,255,0.08)') : 'rgba(255,255,255,0.08)'}`, borderRadius: '10px', color: rotationFilter ? (ROTATION_STYLES[rotationFilter]?.color || '#fff') : 'rgba(255,255,255,0.3)', fontSize: '0.78rem', outline: 'none', cursor: 'pointer', flexShrink: 0, fontWeight: rotationFilter ? 800 : 400 }}
         >
-          <option value="">Toda rotación</option>
-          <option value="alta">Alta rotación</option>
-          <option value="media">Media rotación</option>
-          <option value="baja">Baja rotación</option>
-          <option value="none">Sin clasificar</option>
+          <option value="" style={optionStyle}>Toda rotación</option>
+          <option value="alta" style={optionStyle}>Alta rotación</option>
+          <option value="media" style={optionStyle}>Media rotación</option>
+          <option value="baja" style={optionStyle}>Baja rotación</option>
+          <option value="none" style={optionStyle}>Sin clasificar</option>
         </select>
 
         <div style={{ position: 'relative', display: 'inline-block' }}
@@ -779,10 +784,10 @@ export default function PartsCatalogPage() {
                   onChange={e => setEditForm(f => ({ ...f, rotation_class: e.target.value }))}
                   style={{ width: '100%', padding: '0.6rem 0.85rem', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: editForm.rotation_class ? '#fff' : 'rgba(255,255,255,0.3)', fontSize: '0.78rem', outline: 'none', boxSizing: 'border-box', cursor: 'pointer' }}
                 >
-                  <option value="">Sin clasificar</option>
-                  <option value="alta">Alta</option>
-                  <option value="media">Media</option>
-                  <option value="baja">Baja</option>
+                  <option value="" style={optionStyle}>Sin clasificar</option>
+                  <option value="alta" style={optionStyle}>Alta</option>
+                  <option value="media" style={optionStyle}>Media</option>
+                  <option value="baja" style={optionStyle}>Baja</option>
                 </select>
               </div>
               <div>

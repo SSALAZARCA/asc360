@@ -39,6 +39,11 @@ const SECTIONS = [
   },
 ];
 
+// Explicit background/color on every <option> -- without it, the dropdown
+// popup inherits light text on the browser's default light background and
+// is invisible until hovered.
+const optionStyle = { background: '#1a1a22', color: '#fff' };
+
 export default function TgSpecs() {
   const router = useRouter();
   const [user, setUser]         = useState(null);
@@ -115,9 +120,9 @@ export default function TgSpecs() {
                 cursor: 'pointer',
               }}
             >
-              <option value="">— Elegí un modelo —</option>
+              <option value="" style={optionStyle}>— Elegí un modelo —</option>
               {models.map(m => (
-                <option key={m.id} value={m.modelo}>{m.modelo}</option>
+                <option key={m.id} value={m.modelo} style={optionStyle}>{m.modelo}</option>
               ))}
             </select>
           )}

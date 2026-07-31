@@ -78,6 +78,10 @@ function buildClientSummary(client) {
 const fieldLabelStyle = { fontSize: '0.52rem', color: '#606075', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700, display: 'block', marginBottom: 4 };
 const fieldInputStyle = { width: '100%', background: '#0a0a0c', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, padding: '0.6rem 0.75rem', color: '#fff', fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box' };
 const vinHintStyle    = { margin: '0.3rem 0 0', fontSize: '0.62rem', color: '#606075' };
+// Explicit background/color on every <option> -- without it, the dropdown
+// popup inherits light text on the browser's default light background and
+// is invisible until hovered.
+const optionStyle = { background: '#1a1a22', color: '#fff' };
 
 let _msgId = 0;
 const mkBot    = (text, extra = {}) => ({ id: ++_msgId, role: 'bot',  text, ...extra });
@@ -902,9 +906,9 @@ export default function TgReception() {
               <label style={fieldLabelStyle}>Modelo *</label>
               {vehicleModels.length > 0 ? (
                 <select value={newVeh.model} onChange={e => setNewVeh(v => ({ ...v, model: e.target.value }))} style={fieldInputStyle}>
-                  <option value="">— Seleccioná un modelo —</option>
+                  <option value="" style={optionStyle}>— Seleccioná un modelo —</option>
                   {vehicleModels.map(m => (
-                    <option key={m.id} value={m.modelo}>{m.modelo}</option>
+                    <option key={m.id} value={m.modelo} style={optionStyle}>{m.modelo}</option>
                   ))}
                 </select>
               ) : (

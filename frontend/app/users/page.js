@@ -5,6 +5,11 @@ import { UserCheck, UserX, Shield, Briefcase, Mail, Phone, Send, Plus, Users as 
 import { authFetch } from '../../lib/authFetch';
 import { toast } from '../../lib/toast';
 
+// Explicit background/color on every <option> -- without it, the dropdown
+// popup inherits light text on the browser's default light background and
+// is invisible until hovered.
+const optionStyle = { background: '#1a1a22', color: '#fff' };
+
 export default function UsersPage() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -228,13 +233,13 @@ export default function UsersPage() {
                 <div>
                   <label htmlFor="user-role-select">Rol del Sistema</label>
                   <select id="user-role-select" value={editForm.role} onChange={e => setEditForm({...editForm, role: e.target.value})}>
-                    <option value="technician">Técnico Mecánico</option>
-                    <option value="jefe_taller">Jefe / Coordinador de Taller</option>
-                    <option value="administrativo">Administrativo</option>
-                    <option value="proveedor">Proveedor</option>
-                    <option value="parts_dealer">Distribuidor</option>
-                    <option value="client">Cliente</option>
-                    <option value="superadmin">Super Admin (Global)</option>
+                    <option value="technician" style={optionStyle}>Técnico Mecánico</option>
+                    <option value="jefe_taller" style={optionStyle}>Jefe / Coordinador de Taller</option>
+                    <option value="administrativo" style={optionStyle}>Administrativo</option>
+                    <option value="proveedor" style={optionStyle}>Proveedor</option>
+                    <option value="parts_dealer" style={optionStyle}>Distribuidor</option>
+                    <option value="client" style={optionStyle}>Cliente</option>
+                    <option value="superadmin" style={optionStyle}>Super Admin (Global)</option>
                   </select>
                 </div>
                 {editForm.role === 'parts_dealer' && (
@@ -245,9 +250,9 @@ export default function UsersPage() {
                       value={editForm.tenant_id || ''}
                       onChange={e => setEditForm({...editForm, tenant_id: e.target.value || null})}
                     >
-                      <option value="">Sin asignar</option>
+                      <option value="" style={optionStyle}>Sin asignar</option>
                       {distribuidorTenants.map(t => (
-                        <option key={t.id} value={t.id}>{t.name}</option>
+                        <option key={t.id} value={t.id} style={optionStyle}>{t.name}</option>
                       ))}
                     </select>
                   </div>

@@ -1436,9 +1436,9 @@ export default function SettingsPage() {
               ) : catalogModels.length > 0 ? (
                 <div style={{ position: 'relative' }}>
                   <select value={catVehicleModel} onChange={e => handleCatVehicleModelChange(e.target.value)} disabled={catLoading} style={{ ...catInput, appearance: 'none', paddingRight: '2.5rem', cursor: 'pointer' }}>
-                    <option value="">— Seleccioná un modelo —</option>
+                    <option value="" style={optionStyle}>— Seleccioná un modelo —</option>
                     {catalogModels.map(m => (
-                      <option key={m.vehicle_model} value={m.vehicle_model}>{m.vehicle_model}{m.catalog_model_code ? ' ✓' : ''}</option>
+                      <option key={m.vehicle_model} value={m.vehicle_model} style={optionStyle}>{m.vehicle_model}{m.catalog_model_code ? ' ✓' : ''}</option>
                     ))}
                   </select>
                   <ChevronDown size={13} color="#606075" style={{ position: 'absolute', right: '0.75rem', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
@@ -2155,8 +2155,8 @@ export default function SettingsPage() {
                     color: '#fff', outline: 'none',
                   }}
                 >
-                  <option value="CARBURADOR">CARBURADOR</option>
-                  <option value="INYECCION">INYECCION</option>
+                  <option value="CARBURADOR" style={optionStyle}>CARBURADOR</option>
+                  <option value="INYECCION" style={optionStyle}>INYECCION</option>
                 </select>
               </div>
 
@@ -2298,3 +2298,7 @@ const catInput = {
   background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
   borderRadius: '8px', color: '#fff', fontSize: '0.78rem', outline: 'none', boxSizing: 'border-box',
 };
+// Explicit background/color on every <option> -- without it, the dropdown
+// popup inherits light text on the browser's default light background and
+// is invisible until hovered.
+const optionStyle = { background: '#1a1a22', color: '#fff' };

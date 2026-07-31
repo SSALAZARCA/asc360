@@ -100,6 +100,10 @@ const fieldGridStyle = { display: 'flex', flexDirection: 'column', gap: '0.9rem'
 const labelStyle = { display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.72rem', fontWeight: 700, color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase', letterSpacing: '0.05em' };
 const inputStyle = { background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', padding: '0.6rem 0.85rem', color: '#fff', fontSize: '0.85rem', outline: 'none', textTransform: 'none' };
 const hintStyle = { margin: 0, fontSize: '0.68rem', color: 'rgba(255,255,255,0.45)', textTransform: 'none', fontWeight: 400, letterSpacing: 'normal' };
+// Explicit background/color on every <option> -- without it, the dropdown
+// popup inherits light text on the browser's default light background and
+// is invisible until hovered.
+const optionStyle = { background: '#1a1a22', color: '#fff' };
 
 function Field({ label, type = 'text', value, onChange }) {
   return (
@@ -280,12 +284,12 @@ function ModeloField({ v }) {
       Modelo
       {v.vehicleModels.length > 0 ? (
         <select aria-label="Modelo" value={v.form.model} onChange={(e) => v.setForm({ ...v.form, model: e.target.value })} style={inputStyle}>
-          <option value="">— Seleccioná un modelo —</option>
+          <option value="" style={optionStyle}>— Seleccioná un modelo —</option>
           {v.form.model && !v.vehicleModels.some((m) => m.modelo === v.form.model) && (
-            <option value={v.form.model}>{v.form.model} (no está en el catálogo estándar)</option>
+            <option value={v.form.model} style={optionStyle}>{v.form.model} (no está en el catálogo estándar)</option>
           )}
           {v.vehicleModels.map((m) => (
-            <option key={m.id} value={m.modelo}>{m.modelo}</option>
+            <option key={m.id} value={m.modelo} style={optionStyle}>{m.modelo}</option>
           ))}
         </select>
       ) : (
@@ -522,8 +526,8 @@ function OrderTab() {
     <section className="glass p-6" style={sectionStyle}>
       <SearchBar onSearch={o.search} searching={o.searching}>
         <select aria-label="Buscar por" value={o.searchMode} onChange={(e) => o.setSearchMode(e.target.value)} style={inputStyle}>
-          <option value="plate">Placa</option>
-          <option value="order_id">ID de Orden</option>
+          <option value="plate" style={optionStyle}>Placa</option>
+          <option value="order_id" style={optionStyle}>ID de Orden</option>
         </select>
         <input
           aria-label="Valor de búsqueda de orden"
@@ -545,7 +549,7 @@ function OrderTab() {
             Tipo de servicio
             <select aria-label="Tipo de servicio" value={o.form.service_type} onChange={(e) => o.setForm({ ...o.form, service_type: e.target.value })} style={inputStyle}>
               {SERVICE_TYPE_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
+                <option key={opt.value} value={opt.value} style={optionStyle}>{opt.label}</option>
               ))}
             </select>
           </label>
