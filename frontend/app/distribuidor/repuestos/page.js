@@ -377,10 +377,10 @@ function PartCard({ item }) {
       <div style={partBadgeStyle}>{item.order_num}</div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <h4 style={{ margin: 0, fontWeight: 700, fontSize: '0.85rem', color: '#fff' }}>
-          {item.description || 'N/D'}
+          {item.description_es || item.description || 'N/D'}
         </h4>
-        {item.description_es && (
-          <p style={{ ...hintStyle, marginTop: 2 }}>{item.description_es}</p>
+        {item.description_es && item.description && (
+          <p style={{ ...hintStyle, marginTop: 2 }}>{item.description}</p>
         )}
         <p style={{ ...hintStyle, marginTop: 4 }}>
           Cód. Fábrica: <strong style={{ color: '#e2e2f0' }}>{item.factory_part_number}</strong>

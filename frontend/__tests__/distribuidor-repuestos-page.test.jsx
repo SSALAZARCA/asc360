@@ -277,6 +277,69 @@ describe('DistribuidorRepuestosPage — model/section browse flow', () => {
   });
 });
 
+describe('DistribuidorRepuestosPage — Spanish name as the primary heading', () => {
+  it('shows description_es as the card heading and description (English) as the secondary line, when both exist', async () => {
+    setUser();
+    mockItems = [{
+      id: 'item-5', section_id: 'sec-1', section_code: 'A', section_name: 'Motor',
+      order_num: 'A5', factory_part_number: 'FP-005', um_part_number: 'UM-005',
+      description: 'Turn signal', description_es: 'Direccional', unit: 'UND',
+      precio_publico: 10000, precio_es_preliminar: false, inventory_status: 'disponible',
+    }];
+    queueResponses();
+    render(<DistribuidorRepuestosPage />);
+
+    await selectModelAndOpenSection();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('part-card-item-5')).toBeInTheDocument();
+    });
+    const card = screen.getByTestId('part-card-item-5');
+    expect(within(card).getByRole('heading', { name: 'Direccional' })).toBeInTheDocument();
+    expect(within(card).getByText('Turn signal')).toBeInTheDocument();
+  });
+
+  it('falls back to description (English) as the heading when there is no Spanish translation, with no secondary line', async () => {
+    setUser();
+    mockItems = [{
+      id: 'item-6', section_id: 'sec-1', section_code: 'A', section_name: 'Motor',
+      order_num: 'A6', factory_part_number: 'FP-006', um_part_number: 'UM-006',
+      description: 'Turn signal', description_es: null, unit: 'UND',
+      precio_publico: 10000, precio_es_preliminar: false, inventory_status: 'disponible',
+    }];
+    queueResponses();
+    render(<DistribuidorRepuestosPage />);
+
+    await selectModelAndOpenSection();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('part-card-item-6')).toBeInTheDocument();
+    });
+    const card = screen.getByTestId('part-card-item-6');
+    expect(within(card).getByRole('heading', { name: 'Turn signal' })).toBeInTheDocument();
+  });
+
+  it('shows "N/D" when neither description nor description_es exist', async () => {
+    setUser();
+    mockItems = [{
+      id: 'item-7', section_id: 'sec-1', section_code: 'A', section_name: 'Motor',
+      order_num: 'A7', factory_part_number: 'FP-007', um_part_number: null,
+      description: null, description_es: null, unit: null,
+      precio_publico: null, precio_es_preliminar: false, inventory_status: 'sin_stock',
+    }];
+    queueResponses();
+    render(<DistribuidorRepuestosPage />);
+
+    await selectModelAndOpenSection();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('part-card-item-7')).toBeInTheDocument();
+    });
+    const card = screen.getByTestId('part-card-item-7');
+    expect(within(card).getByRole('heading', { name: 'N/D' })).toBeInTheDocument();
+  });
+});
+
 describe('DistribuidorRepuestosPage — inventory status badge', () => {
   it('shows "Disponible" for inventory_status: "disponible"', async () => {
     setUser();
