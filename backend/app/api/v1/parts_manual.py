@@ -2202,8 +2202,6 @@ async def load_section(
                     illus_bytes=illus_bytes,
                     section_code=section_code,
                     section_name=section_name,
-                    model_name=vehicle_model,
-                    parts=parts,
                     logo_bytes=logo_bytes,
                 )
             except Exception:

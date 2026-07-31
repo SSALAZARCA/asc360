@@ -24,10 +24,8 @@ _FONT_CANDIDATES = {
 # ── Design tokens ─────────────────────────────────────────────────────────────
 BG          = (10,  15,  30)
 BG_CARD     = (17,  24,  39)
-BG_ROW_ALT  = (13,  19,  36)
 ORANGE      = (255, 95,  51)
 ORANGE_DIM  = (180, 62,  30)
-GREEN       = (16,  185, 129)
 WHITE       = (255, 255, 255)
 GRAY        = (160, 160, 176)
 GRAY_DIM    = (80,  88,  110)
@@ -35,7 +33,6 @@ DIVIDER     = (30,  40,  65)
 
 CARD_W      = 1080
 PAD         = 44
-MAX_ROWS    = 12
 
 
 def _font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont:
@@ -66,19 +63,15 @@ def create_diagram_card(
     illus_bytes: bytes,
     section_code: str,
     section_name: str,
-    model_name: str,
-    parts: list[dict],
     logo_bytes: Optional[bytes] = None,
 ) -> bytes:
     """
-    Compone la card estilizada y devuelve los bytes PNG.
+    Compone la card estilizada (encabezado + ilustración) y devuelve los bytes PNG.
 
     Args:
         illus_bytes: JPEG/PNG de la ilustración extraída del PDF.
         section_code: Ej. "B1".
         section_name: Ej. "FRAME".
-        model_name:   Ej. "RENEGADE 200 SPORT".
-        parts:        Lista de dicts con keys order_num, factory_part_number, description.
         logo_bytes:   PNG del logo de marca (fondo blanco — se eliminará).
     """
     # ── Ilustración ───────────────────────────────────────────────────────────
@@ -89,18 +82,18 @@ def create_diagram_card(
     illus_w, illus_h = illus.size
 
     # ── Alturas ───────────────────────────────────────────────────────────────
+    # Card is header + illustration ONLY. The parts table used to be baked in
+    # here too, but it duplicated (and, capped at MAX_ROWS, truncated worse
+    # than) the structured part list both consumers now render themselves
+    # (`/distribuidor/repuestos`'s own list panel, `/tg/parts`'s per-position
+    # search) -- dropping it gives the illustration the full card and makes
+    # the image's height depend only on the illustration, never on how many
+    # parts a section happens to have.
     HEADER_H  = 104
     ILLUS_PAD = 32
     ILLUS_BLOCK = illus_h + ILLUS_PAD * 2 + 28
 
-    visible_rows = min(len(parts), MAX_ROWS)
-    ROW_H      = 40
-    TH_H       = 46
-    TBL_PAD_V  = 20
-    TABLE_H    = TH_H + ROW_H * visible_rows + TBL_PAD_V * 2 + (18 if len(parts) > MAX_ROWS else 0)
-    FOOTER_H   = 58
-
-    CARD_H = HEADER_H + ILLUS_BLOCK + 8 + TABLE_H + FOOTER_H
+    CARD_H = HEADER_H + ILLUS_BLOCK + 8
 
     # ── Canvas ────────────────────────────────────────────────────────────────
     card = Image.new("RGB", (CARD_W, CARD_H), BG)
@@ -194,72 +187,6 @@ def create_diagram_card(
         radius=10, fill=(252, 252, 252),
     )
     card.paste(illus, (PAD, y_illus_inner))
-
-    # ── 3. DIVISOR ────────────────────────────────────────────────────────────
-    y_div = y_illus_inner + illus_h + ILLUS_PAD
-    draw.rectangle([0, y_div, CARD_W, y_div + 1], fill=DIVIDER)
-
-    # ── 4. TABLA DE PARTES ────────────────────────────────────────────────────
-    y_table  = y_div + 1
-    col1_w   = 90
-    col2_w   = 310
-    col3_w   = CARD_W - PAD * 2 - col1_w - col2_w
-    col_x    = [PAD + 14, PAD + col1_w, PAD + col1_w + col2_w]
-
-    font_th  = _font(14, bold=True)
-    font_tr  = _font(14)
-    font_sm  = _font(13)
-
-    th_y = y_table + TBL_PAD_V
-    draw.rectangle([0, th_y, CARD_W, th_y + TH_H], fill=BG_CARD)
-    draw.rectangle([PAD - 1, th_y, PAD + 3, th_y + TH_H], fill=ORANGE)
-
-    for i, (hdr, cx_h) in enumerate(zip(["No.", "CODIGO DE FABRICA", "DESCRIPCION"], col_x)):
-        draw.text((cx_h, th_y + (TH_H - 15) // 2 + 2), hdr,
-                  font=font_th, fill=ORANGE if i == 0 else GRAY)
-
-    draw.rectangle([PAD, th_y + TH_H, CARD_W - PAD, th_y + TH_H + 1], fill=ORANGE_DIM)
-
-    for idx, part in enumerate(parts[:MAX_ROWS]):
-        row_y  = th_y + TH_H + 1 + idx * ROW_H
-        row_bg = BG_CARD if idx % 2 == 0 else BG_ROW_ALT
-        draw.rectangle([0, row_y, CARD_W, row_y + ROW_H], fill=row_bg)
-        draw.rectangle([PAD - 1, row_y, PAD + 2, row_y + ROW_H], fill=DIVIDER)
-
-        ty = row_y + (ROW_H - 15) // 2 + 2
-        no_text  = part.get("order_num", "")
-        fac_text = part.get("factory_part_number", "")
-        desc     = part.get("description", "")
-
-        nb   = draw.textbbox((0, 0), no_text, font=font_th)
-        nw   = nb[2] - nb[0]
-        draw.text((col_x[0] + (col1_w - 14 - nw) // 2, ty), no_text, font=font_th, fill=GREEN)
-        draw.text((col_x[1], ty), fac_text, font=font_tr, fill=GRAY)
-        draw.text((col_x[2], ty), desc,     font=font_sm, fill=WHITE)
-
-    bot_y = th_y + TH_H + 1 + visible_rows * ROW_H
-    draw.rectangle([PAD, bot_y, CARD_W - PAD, bot_y + 1], fill=DIVIDER)
-
-    if len(parts) > MAX_ROWS:
-        extra_text = f"... y {len(parts) - MAX_ROWS} partes mas"
-        et_b = draw.textbbox((0, 0), extra_text, font=font_sm)
-        draw.text((CARD_W // 2 - (et_b[2] - et_b[0]) // 2, bot_y + 6),
-                  extra_text, font=font_sm, fill=GRAY_DIM)
-
-    # ── 5. FOOTER ─────────────────────────────────────────────────────────────
-    y_footer = CARD_H - FOOTER_H
-    draw.rectangle([0, y_footer, CARD_W, CARD_H], fill=BG_CARD)
-    draw.rectangle([0, y_footer, CARD_W, y_footer + 1], fill=DIVIDER)
-
-    font_fb = _font(17, bold=True)
-    font_fl = _font(15)
-    fy      = y_footer + (FOOTER_H - 18) // 2 + 2
-
-    draw.text((PAD, fy), model_name, font=font_fb, fill=GRAY)
-
-    right_label = "Manual de Partes"
-    rb2 = draw.textbbox((0, 0), right_label, font=font_fl)
-    draw.text((CARD_W - PAD - (rb2[2] - rb2[0]), fy), right_label, font=font_fl, fill=ORANGE)
 
     # ── Exportar ──────────────────────────────────────────────────────────────
     buf = io.BytesIO()
