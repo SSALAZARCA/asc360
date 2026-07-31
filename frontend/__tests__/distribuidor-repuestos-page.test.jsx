@@ -1,9 +1,22 @@
 /**
- * Tests for the new Distribuidor parts-search screen, introduced in:
+ * Tests for the Distribuidor parts-search screen, introduced in:
  *   sdd/distributor-parts-search, Phase 4 (frontend, PR4)
  *
- * Mirrors `distribuidor-entrega-page.test.jsx`'s structure (mockAuthFetch +
- * queueResponses pattern, `admin-layout` mocked away).
+ * Structure rewritten 2026-07-31 to match the user's reference prototype
+ * (`/mnt/c/proyectos IA/Pagina Servicio/repuestos.html`) more closely:
+ *   - "1. Motocicleta" + "2. Sistema / Sección" are two ALWAYS-VISIBLE
+ *     `<select>` elements (the second disabled until a model is chosen),
+ *     not a select + a clickable list of rows.
+ *   - The two-panel workspace (diagram left, parts list right) is ALWAYS
+ *     rendered, with its own empty/loading/error state per panel — never a
+ *     block that only appears after a section is picked.
+ *   - Parts render as numbered-badge CARDS (`data-testid="part-card-{id}"`),
+ *     not table rows.
+ *   - "Por Descripción" (AI search) is an additional tab, not present in the
+ *     prototype, kept separate so it never disturbs the Por Modelo structure.
+ *
+ * Mirrors `distribuidor-entrega-page.test.jsx`'s mockAuthFetch/queueResponses
+ * pattern (`admin-layout` mocked away).
  *
  * Backend contract (already landed, PR1/PR2 of this same change):
  *   GET  /parts/bot/catalog-models              -> [{ vehicle_model, catalog_model_code }]
@@ -11,18 +24,6 @@
  *   POST /parts/search-by-model                  -> [{ section_id, section_code, section_name, diagram_url, model_code }]
  *   GET  /parts/section/{id}/diagram-image       -> binary (blob)
  *   GET  /parts/section/{id}/items                -> [PartItemResult, ...] natural-sorted by order_num
- *
- * Covers:
- *   - Selecting a model populates and lists its sections.
- *   - Opening a section renders the diagram AND the full N-row item list,
- *     in `order_num` order, in the SAME view (two panels).
- *   - A null-`precio_publico` row shows "Sin precio", never `$0` (same hard
- *     rule as PR3's `/tg/parts` row).
- *   - A non-null price renders currency-formatted.
- *   - Text search, voice search, and photo search all resolve through the
- *     existing `POST /parts/search-by-model` contract unchanged.
- *   - No add/request/quote control anywhere on the screen (explicit
- *     non-goal, spec requirement).
  */
 import React from 'react';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
@@ -121,16 +122,24 @@ function setUser(role = 'parts_dealer') {
   sessionStorage.setItem('um_token', 'fake-token');
 }
 
+function modelSelect() {
+  return screen.getByLabelText(/1\. Motocicleta/i);
+}
+
+function sectionSelect() {
+  return screen.getByLabelText(/2\. Sistema \/ Sección/i);
+}
+
 async function selectModelAndOpenSection() {
   await waitFor(() => {
     expect(screen.getByRole('option', { name: 'DSR 150' })).toBeInTheDocument();
   });
-  fireEvent.change(screen.getByRole('combobox'), { target: { value: 'DSR150' } });
+  fireEvent.change(modelSelect(), { target: { value: 'DSR150' } });
 
   await waitFor(() => {
-    expect(screen.getByText('Motor')).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /Motor/i })).toBeInTheDocument();
   });
-  fireEvent.click(screen.getByText('Motor'));
+  fireEvent.change(sectionSelect(), { target: { value: 'sec-1' } });
 }
 
 let originalCreateObjectURL;
@@ -147,72 +156,8 @@ afterEach(() => {
   global.URL.createObjectURL = originalCreateObjectURL;
 });
 
-describe('DistribuidorRepuestosPage — model/section browse flow', () => {
-  it('selecting a model lists its sections', async () => {
-    setUser();
-    queueResponses();
-    render(<DistribuidorRepuestosPage />);
-
-    await selectModelAndOpenSection();
-    // Reaching this assert proves the section click was actionable -- both
-    // the list row and the opened detail heading now show "Motor".
-    expect(screen.getAllByText('Motor').length).toBeGreaterThan(0);
-  });
-
-  it('opening a section renders the diagram and the full item list in order_num order', async () => {
-    setUser();
-    queueResponses();
-    render(<DistribuidorRepuestosPage />);
-
-    await selectModelAndOpenSection();
-
-    await waitFor(() => {
-      expect(screen.getByText('FP-001')).toBeInTheDocument();
-    });
-    expect(screen.getByText('FP-002')).toBeInTheDocument();
-
-    const rows = [screen.getByText('FP-001'), screen.getByText('FP-002')];
-    const positions = rows.map((el) => el.compareDocumentPosition(rows[rows.length - 1]));
-    // FP-001 (A1) must precede FP-002 (A2) in the document.
-    // eslint-disable-next-line no-bitwise
-    expect(positions[0] & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-
-    const img = screen.getByAltText('Motor');
-    expect(img).toBeInTheDocument();
-  });
-
-  it('a null-price row shows "Sin precio", never $0', async () => {
-    setUser();
-    queueResponses();
-    render(<DistribuidorRepuestosPage />);
-
-    await selectModelAndOpenSection();
-
-    await waitFor(() => {
-      expect(screen.getByText('FP-002')).toBeInTheDocument();
-    });
-    const row2 = screen.getByText('FP-002').closest('tr') || screen.getByText('FP-002').parentElement.parentElement;
-    expect(within(row2).getByText(/sin precio/i)).toBeInTheDocument();
-    expect(within(row2).queryByText('$0')).not.toBeInTheDocument();
-  });
-
-  it('a priced row renders precio_publico formatted as currency', async () => {
-    setUser();
-    queueResponses();
-    render(<DistribuidorRepuestosPage />);
-
-    await selectModelAndOpenSection();
-
-    await waitFor(() => {
-      expect(screen.getByText('FP-001')).toBeInTheDocument();
-    });
-    const row1 = screen.getByText('FP-001').closest('tr') || screen.getByText('FP-001').parentElement.parentElement;
-    expect(within(row1).getByText(/\$\s?45[.,]000/)).toBeInTheDocument();
-  });
-});
-
-describe('DistribuidorRepuestosPage — AI description search (text/voice/photo)', () => {
-  it('text search returns sections via POST /parts/search-by-model unchanged', async () => {
+describe('DistribuidorRepuestosPage — persistent two-panel workspace (matches reference structure)', () => {
+  it('renders both panels, with empty states, before anything is selected', async () => {
     setUser();
     queueResponses();
     render(<DistribuidorRepuestosPage />);
@@ -220,8 +165,124 @@ describe('DistribuidorRepuestosPage — AI description search (text/voice/photo)
     await waitFor(() => {
       expect(screen.getByRole('option', { name: 'DSR 150' })).toBeInTheDocument();
     });
-    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'DSR150' } });
-    await waitFor(() => screen.getByText('Motor'));
+
+    // The two-panel workspace exists from the very first render -- it is not
+    // gated behind picking a section.
+    expect(screen.getByText('Plano de Ensamblaje')).toBeInTheDocument();
+    expect(screen.getByText('Listado de Componentes')).toBeInTheDocument();
+    expect(screen.getByText(/Aquí aparecerán las piezas numeradas/i)).toBeInTheDocument();
+  });
+
+  it('the "2. Sistema / Sección" select is disabled until a model is chosen', async () => {
+    setUser();
+    queueResponses();
+    render(<DistribuidorRepuestosPage />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('option', { name: 'DSR 150' })).toBeInTheDocument();
+    });
+    expect(sectionSelect()).toBeDisabled();
+
+    fireEvent.change(modelSelect(), { target: { value: 'DSR150' } });
+
+    await waitFor(() => {
+      expect(sectionSelect()).not.toBeDisabled();
+    });
+  });
+});
+
+describe('DistribuidorRepuestosPage — model/section browse flow', () => {
+  it('selecting a model populates the "2. Sistema / Sección" select', async () => {
+    setUser();
+    queueResponses();
+    render(<DistribuidorRepuestosPage />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('option', { name: 'DSR 150' })).toBeInTheDocument();
+    });
+    fireEvent.change(modelSelect(), { target: { value: 'DSR150' } });
+
+    await waitFor(() => {
+      expect(within(sectionSelect()).getByRole('option', { name: /Motor/i })).toBeInTheDocument();
+    });
+  });
+
+  it('opening a section fills the workspace: diagram + full item list in order_num order', async () => {
+    setUser();
+    queueResponses();
+    render(<DistribuidorRepuestosPage />);
+
+    await selectModelAndOpenSection();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('part-card-item-1')).toBeInTheDocument();
+    });
+    expect(screen.getByTestId('part-card-item-2')).toBeInTheDocument();
+
+    const card1 = screen.getByTestId('part-card-item-1');
+    const card2 = screen.getByTestId('part-card-item-2');
+    // eslint-disable-next-line no-bitwise
+    expect(card1.compareDocumentPosition(card2) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    // Panel title switches from the static default to the section's own name.
+    expect(screen.getByRole('heading', { name: 'Motor' })).toBeInTheDocument();
+    expect(screen.getByAltText('Motor')).toBeInTheDocument();
+  });
+
+  it('updates the "Total de Piezas Encontradas" counter once a section is open', async () => {
+    setUser();
+    queueResponses();
+    render(<DistribuidorRepuestosPage />);
+
+    expect(screen.getByText('Total de Piezas Encontradas').nextSibling).toHaveTextContent('0');
+
+    await selectModelAndOpenSection();
+
+    await waitFor(() => {
+      expect(screen.getByText('Total de Piezas Encontradas').nextSibling).toHaveTextContent('2');
+    });
+  });
+
+  it('a null-price card shows "Sin precio", never $0', async () => {
+    setUser();
+    queueResponses();
+    render(<DistribuidorRepuestosPage />);
+
+    await selectModelAndOpenSection();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('part-card-item-2')).toBeInTheDocument();
+    });
+    const card2 = screen.getByTestId('part-card-item-2');
+    expect(within(card2).getByText(/sin precio/i)).toBeInTheDocument();
+    expect(within(card2).queryByText('$0')).not.toBeInTheDocument();
+  });
+
+  it('a priced card renders precio_publico formatted as currency', async () => {
+    setUser();
+    queueResponses();
+    render(<DistribuidorRepuestosPage />);
+
+    await selectModelAndOpenSection();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('part-card-item-1')).toBeInTheDocument();
+    });
+    const card1 = screen.getByTestId('part-card-item-1');
+    expect(within(card1).getByText(/\$\s?45[.,]000/)).toBeInTheDocument();
+  });
+});
+
+describe('DistribuidorRepuestosPage — AI description search (text/voice/photo)', () => {
+  it('text search returns sections via POST /parts/search-by-model unchanged, and opens the workspace', async () => {
+    setUser();
+    queueResponses();
+    render(<DistribuidorRepuestosPage />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('option', { name: 'DSR 150' })).toBeInTheDocument();
+    });
+    fireEvent.change(modelSelect(), { target: { value: 'DSR150' } });
 
     fireEvent.click(screen.getByRole('button', { name: /por descripción/i }));
     fireEvent.change(screen.getByPlaceholderText(/bujía|freno/i), { target: { value: 'bujía' } });
@@ -235,6 +296,15 @@ describe('DistribuidorRepuestosPage — AI description search (text/voice/photo)
     });
     const call = mockAuthFetch.mock.calls.find(([url]) => url === '/parts/search-by-model');
     expect(JSON.parse(call[1].body)).toEqual({ model_code: 'DSR150', description: 'bujía' });
+
+    await waitFor(() => {
+      expect(screen.getByText('Ver sección')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByText('Ver sección'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('part-card-item-1')).toBeInTheDocument();
+    });
   });
 
   it('voice search fires the same search-by-model contract', async () => {
@@ -245,8 +315,7 @@ describe('DistribuidorRepuestosPage — AI description search (text/voice/photo)
     await waitFor(() => {
       expect(screen.getByRole('option', { name: 'DSR 150' })).toBeInTheDocument();
     });
-    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'DSR150' } });
-    await waitFor(() => screen.getByText('Motor'));
+    fireEvent.change(modelSelect(), { target: { value: 'DSR150' } });
 
     fireEvent.click(screen.getByRole('button', { name: /por descripción/i }));
     fireEvent.click(screen.getByTestId('voice-input'));
@@ -269,8 +338,7 @@ describe('DistribuidorRepuestosPage — AI description search (text/voice/photo)
     await waitFor(() => {
       expect(screen.getByRole('option', { name: 'DSR 150' })).toBeInTheDocument();
     });
-    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'DSR150' } });
-    await waitFor(() => screen.getByText('Motor'));
+    fireEvent.change(modelSelect(), { target: { value: 'DSR150' } });
 
     fireEvent.click(screen.getByRole('button', { name: /por descripción/i }));
     fireEvent.click(screen.getByTestId('camera-input'));
@@ -287,14 +355,14 @@ describe('DistribuidorRepuestosPage — AI description search (text/voice/photo)
 });
 
 describe('DistribuidorRepuestosPage — non-goals', () => {
-  it('has no add/request/quote control anywhere on the screen', async () => {
+  it('has no add/request/quote/cart control anywhere on the screen', async () => {
     setUser();
     queueResponses();
     render(<DistribuidorRepuestosPage />);
 
     await selectModelAndOpenSection();
     await waitFor(() => {
-      expect(screen.getByText('FP-001')).toBeInTheDocument();
+      expect(screen.getByTestId('part-card-item-1')).toBeInTheDocument();
     });
 
     expect(screen.queryByRole('button', { name: /agregar/i })).not.toBeInTheDocument();
@@ -389,7 +457,7 @@ describe('DistribuidorRepuestosPage — network failures surface an error, not a
     await waitFor(() => {
       expect(screen.getByRole('option', { name: 'DSR 150' })).toBeInTheDocument();
     });
-    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'DSR150' } });
+    fireEvent.change(modelSelect(), { target: { value: 'DSR150' } });
 
     await waitFor(() => {
       expect(screen.getByText(/no se pudieron cargar las secciones/i)).toBeInTheDocument();
