@@ -20,6 +20,11 @@ const hintStyle = { margin: 0, fontSize: '0.68rem', color: 'rgba(255,255,255,0.4
 const emptyStateStyle = { ...hintStyle, fontSize: '0.85rem', textAlign: 'center', padding: '2rem 0' };
 const thStyle = { textAlign: 'left', padding: '0.7rem 0.9rem', color: 'rgba(255,255,255,0.4)', fontWeight: 700, fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid rgba(255,255,255,0.1)' };
 const tdStyle = { padding: '0.7rem 0.9rem', fontSize: '0.82rem', color: '#fff', borderBottom: '1px solid rgba(255,255,255,0.06)' };
+// Explicit background/color on every <option> -- without it, the dropdown
+// popup inherits light text on the browser's default light background and
+// is invisible until hovered (matches historical-orders/page.js's fix for
+// the same bug).
+const optionStyle = { background: '#1a1a22', color: '#fff' };
 
 // ---------------------------------------------------------------------------
 // Data hooks
@@ -176,9 +181,9 @@ function ModelSelect({ models, loading, value, onChange }) {
         <p style={hintStyle}>Cargando modelos...</p>
       ) : (
         <select value={value} onChange={(e) => onChange(e.target.value)} style={inputStyle}>
-          <option value="">Seleccionar modelo...</option>
+          <option value="" style={optionStyle}>Seleccionar modelo...</option>
           {models.map((m) => (
-            <option key={m.catalog_model_code} value={m.catalog_model_code}>{m.vehicle_model}</option>
+            <option key={m.catalog_model_code} value={m.catalog_model_code} style={optionStyle}>{m.vehicle_model}</option>
           ))}
         </select>
       )}

@@ -6,6 +6,12 @@ import TgNav from '../../../components/tg/TgNav';
 import VoiceInput from '../../../components/tg/VoiceInput';
 import CameraInput from '../../../components/tg/CameraInput';
 
+// Explicit background/color on every <option> -- without it, the dropdown
+// popup inherits light text on the browser's default light background and
+// is invisible until hovered (matches historical-orders/page.js's fix for
+// the same bug).
+const optionStyle = { background: '#1a1a22', color: '#fff' };
+
 export default function TgParts() {
   const router = useRouter();
   const [user, setUser]             = useState(null);
@@ -154,9 +160,9 @@ export default function TgParts() {
             <select value={model}
               onChange={e => { setModel(e.target.value); if (e.target.value && tab === 'model') loadSections(e.target.value); }}
               style={{ width: '100%', background: '#13131a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: '0.7rem 0.9rem', color: model ? '#fff' : '#606075', fontSize: '0.82rem', outline: 'none' }}>
-              <option value="">Seleccionar modelo...</option>
+              <option value="" style={optionStyle}>Seleccionar modelo...</option>
               {models.map(m => (
-                <option key={m.catalog_model_code} value={m.catalog_model_code}>{m.vehicle_model}</option>
+                <option key={m.catalog_model_code} value={m.catalog_model_code} style={optionStyle}>{m.vehicle_model}</option>
               ))}
             </select>
           )}
