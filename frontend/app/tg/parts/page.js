@@ -300,6 +300,23 @@ export default function TgParts() {
                       </div>
                     ))}
                   </div>
+                  <div style={{ marginTop: '0.4rem', background: 'rgba(255,255,255,0.03)', borderRadius: 8, padding: '0.5rem 0.65rem' }}>
+                    <p style={{ margin: '0 0 2px', fontSize: '0.48rem', color: '#606075', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Precio Público</p>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.4rem', flexWrap: 'wrap' }}>
+                      {partResult.precio_publico != null ? (
+                        <p style={{ margin: 0, fontSize: '0.85rem', fontWeight: 800, color: '#ff8c5a' }}>
+                          {new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(partResult.precio_publico)}
+                        </p>
+                      ) : (
+                        <p style={{ margin: 0, fontSize: '0.75rem', fontWeight: 700, color: '#606075' }}>Sin precio</p>
+                      )}
+                      {partResult.precio_publico != null && partResult.precio_es_preliminar && (
+                        <span style={{ fontSize: '0.55rem', fontWeight: 700, color: '#ffb020', background: 'rgba(255,176,32,0.12)', border: '1px solid rgba(255,176,32,0.3)', borderRadius: 6, padding: '0.15rem 0.4rem' }}>
+                          Precio preliminar
+                        </span>
+                      )}
+                    </div>
+                  </div>
                   <div style={{ marginTop: '0.5rem', background: 'rgba(255,255,255,0.03)', borderRadius: 8, padding: '0.5rem 0.65rem' }}>
                     <p style={{ margin: '0 0 2px', fontSize: '0.48rem', color: '#606075', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Descripción</p>
                     <p style={{ margin: 0, fontSize: '0.75rem', fontWeight: 700, color: '#e2e2f0' }}>{partResult.description}</p>
