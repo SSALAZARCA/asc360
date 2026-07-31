@@ -1097,6 +1097,69 @@ async def add_work_log_photos(
     }
 
 
+@router.get("/work-log/{work_log_id}/photos/{index}")
+async def download_work_log_photo(
+    work_log_id: uuid.UUID,
+    index: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user)
+):
+    """
+    Proxy interno para descargar una foto de evidencia de un registro de
+    trabajo (`OrderWorkLog.media_urls[index]`). Mismo patrón que
+    `download_evidence_photo`: el navegador nunca habla directo con MinIO,
+    el backend obtiene los bytes y los reenvía por una ruta autenticada.
+    A diferencia de `damage_photos_urls`, `media_urls` guarda strings
+    planos (no objetos {"url","desc"}).
+    """
+    forbid_distribuidor(current_user)
+
+    from app.models.order import OrderWorkLog
+    from ...services.pdf_service import get_pdf_stream_from_minio
+    from fastapi.responses import StreamingResponse
+    import io
+    import mimetypes
+
+    stmt = select(OrderWorkLog).where(OrderWorkLog.id == work_log_id).options(selectinload(OrderWorkLog.order))
+    result = await db.execute(stmt)
+    work_log = result.scalar_one_or_none()
+
+    if not work_log:
+        raise HTTPException(status_code=404, detail="Registro de trabajo no encontrado")
+
+    # Seguridad Multi-tenant: Si no es superadmin, debe ser de su taller
+    if not current_user.is_superadmin and work_log.order.tenant_id != current_user.tenant_id:
+        raise HTTPException(status_code=403, detail="No tiene permiso para acceder a este registro")
+
+    media_urls = work_log.media_urls
+    if not media_urls or index < 0 or index >= len(media_urls):
+        raise HTTPException(status_code=404, detail="Foto no encontrada para este registro")
+
+    url_to_fetch = media_urls[index]
+
+    # Extraer el object_name limpio de la URL, quitando query params de firma (?X-Amz-Algorithm=...)
+    try:
+        # 1. Quitar query string de la presigned URL
+        url_path_only = url_to_fetch.split("?")[0]
+        # 2. Ahora extraer el path despues del bucket name
+        object_name = url_path_only.split("um-service-docs/")[1]
+    except IndexError:
+        raise HTTPException(status_code=500, detail="Formato de URL en BD corrupto")
+
+    # Pedir los bytes crudos a MinIO por el Backplane Docker
+    file_bytes = await get_pdf_stream_from_minio(object_name)
+    if not file_bytes:
+        raise HTTPException(status_code=404, detail="La foto física no existe en MinIO")
+
+    content_type, _ = mimetypes.guess_type(object_name)
+
+    return StreamingResponse(
+        io.BytesIO(file_bytes),
+        media_type=content_type or "application/octet-stream",
+        headers={"Content-Disposition": "inline"}
+    )
+
+
 @router.post("/{order_id}/parts", status_code=status.HTTP_201_CREATED)
 async def add_order_parts(
     order_id: uuid.UUID,
