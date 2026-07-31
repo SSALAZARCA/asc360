@@ -116,11 +116,17 @@ class FakeSectionItemsSession:
     is patched directly in every test (see `_patch_pricing_factors`), so it
     never touches this fake session -- call #1 is always the item join,
     call #2 (if any) is always the `PartCatalog` lookup. `catalog_rows`
-    defaults to empty (no manual price override for any part)."""
+    defaults to empty (no manual price override for any part). Call #3 (if
+    any) is the batched `spi_description_es` import-derived translation
+    fallback, call #4 is the `_resolve_inventory_status` coverage lookup."""
 
-    def __init__(self, rows=None, catalog_rows=None, coverage_rows=None):
+    def __init__(self, rows=None, catalog_rows=None, spi_description_es_rows=None, coverage_rows=None):
         self._rows = rows or []
         self._catalog_rows = catalog_rows or []
+        # (part_number, description_es) pairs -- import-derived translation
+        # fallback (design: `spi_description_es`, mirrors `_list_catalog_impl`'s
+        # `spi_latest` subquery).
+        self._spi_description_es_rows = spi_description_es_rows or []
         # (normalized_code, score) pairs -- score 2="disponible", 1="ingresando",
         # 0 or missing="sin_stock" (design ADR: `_resolve_inventory_status`).
         self._coverage_rows = coverage_rows or []
@@ -133,6 +139,8 @@ class FakeSectionItemsSession:
             return _AllResult(self._rows)
         if idx == 2:
             return _ScalarsResult(self._catalog_rows)
+        if idx == 3:
+            return _AllResult(self._spi_description_es_rows)
         return _AllResult(self._coverage_rows)
 
 
@@ -393,14 +401,17 @@ def test_pricing_factors_and_part_catalog_fetched_exactly_once_per_request():
         assert len(resp.json()) == 5
         mock_factors.assert_awaited_once()
 
-        # Exactly 3 `db.execute()` calls total: the item join (#1), the ONE
-        # batched `PartCatalog` manual-price lookup (#2, ADR 5), and the ONE
-        # batched `_resolve_inventory_status` coverage lookup (#3) -- never
-        # a fourth call, never one per row.
-        assert len(fake_db.executed_statements) == 3
+        # Exactly 4 `db.execute()` calls total: the item join (#1), the ONE
+        # batched `PartCatalog` manual-price lookup (#2, ADR 5), the ONE
+        # batched `spi_description_es` translation-fallback lookup (#3), and
+        # the ONE batched `_resolve_inventory_status` coverage lookup (#4) --
+        # never a fifth call, never one per row.
+        assert len(fake_db.executed_statements) == 4
         catalog_sql = str(fake_db.executed_statements[1])
         assert "part_catalog" in catalog_sql.lower()
-        coverage_sql = str(fake_db.executed_statements[2])
+        spi_desc_sql = str(fake_db.executed_statements[2])
+        assert "spare_part_items" in spi_desc_sql.lower()
+        coverage_sql = str(fake_db.executed_statements[3])
         assert "spare_part_items" in coverage_sql.lower()
     finally:
         _teardown()
@@ -516,6 +527,96 @@ def test_inventory_status_matches_via_historical_prev_code():
             resp = _get(section.id)
         assert resp.status_code == 200
         assert resp.json()[0]["inventory_status"] == "disponible"
+    finally:
+        _teardown()
+
+
+def test_description_es_manual_wins_over_import_derived_translation():
+    """`PartsReference.description_es_manual` (curated) takes priority over
+    the import-derived `SparePartItem.description_es` fallback when both
+    exist."""
+    section = _make_section()
+    ref = _make_reference(factory_part_number="UM-700", description_es_manual="Descripción curada")
+    item = _make_item(section, ref, order_num="1")
+    fake_db = FakeSectionItemsSession(
+        rows=[(item, section, ref)],
+        spi_description_es_rows=[("UM-700", "Descripción del packing list")],
+    )
+    _override_db(fake_db)
+    _override_user(make_current_user())
+
+    try:
+        with _patch_pricing_factors():
+            resp = _get(section.id)
+        assert resp.status_code == 200
+        assert resp.json()[0]["description_es"] == "Descripción curada"
+    finally:
+        _teardown()
+
+
+def test_description_es_falls_back_to_import_derived_translation_when_manual_is_missing():
+    """The original bug reported by the user: many parts already have a
+    Spanish translation from the import packing list
+    (`SparePartItem.description_es`), but the endpoint only ever read
+    `PartsReference.description_es_manual` -- which is sparse (nullable,
+    filled in by hand) -- so most existing translations never showed up.
+    Mirrors `_list_catalog_impl`'s `COALESCE(description_es_manual,
+    spi_latest.description_es)` fallback."""
+    section = _make_section()
+    ref = _make_reference(factory_part_number="UM-701", description_es_manual=None)
+    item = _make_item(section, ref, order_num="1")
+    fake_db = FakeSectionItemsSession(
+        rows=[(item, section, ref)],
+        spi_description_es_rows=[("UM-701", "Descripción del packing list")],
+    )
+    _override_db(fake_db)
+    _override_user(make_current_user())
+
+    try:
+        with _patch_pricing_factors():
+            resp = _get(section.id)
+        assert resp.status_code == 200
+        assert resp.json()[0]["description_es"] == "Descripción del packing list"
+    finally:
+        _teardown()
+
+
+def test_description_es_null_when_neither_source_has_a_translation():
+    section = _make_section()
+    ref = _make_reference(factory_part_number="UM-702", description_es_manual=None)
+    item = _make_item(section, ref, order_num="1")
+    fake_db = FakeSectionItemsSession(rows=[(item, section, ref)], spi_description_es_rows=[])
+    _override_db(fake_db)
+    _override_user(make_current_user())
+
+    try:
+        with _patch_pricing_factors():
+            resp = _get(section.id)
+        assert resp.status_code == 200
+        assert resp.json()[0]["description_es"] is None
+    finally:
+        _teardown()
+
+
+def test_description_es_import_derived_translation_applies_to_orphan_items_too():
+    """An item with no `PartsReference` row (LEFT JOIN, ADR 6) still gets the
+    import-derived translation if one exists for its factory_part_number."""
+    section = _make_section()
+    orphan_item = PartsManualItem(
+        id=uuid.uuid4(), section_id=section.id, order_num="1", factory_part_number="UM-ORPHAN-ES",
+    )
+    fake_db = FakeSectionItemsSession(
+        rows=[(orphan_item, section, None)],
+        spi_description_es_rows=[("UM-ORPHAN-ES", "Traducción de repuesto huérfano")],
+    )
+    _override_db(fake_db)
+    _override_user(make_current_user())
+
+    try:
+        with _patch_pricing_factors():
+            resp = _get(section.id)
+        assert resp.status_code == 200
+        assert resp.json()[0]["description_es"] == "Traducción de repuesto huérfano"
     finally:
         _teardown()
 

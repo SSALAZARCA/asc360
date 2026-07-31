@@ -171,13 +171,15 @@ class FakeSectionItemsSession:
     duplicated locally (not imported) so this package stays self-contained,
     matching the project's established per-module fixture convention.
 
-    Call #3 is the batched `_resolve_inventory_status` coverage lookup
-    (also via `.all()`) -- defaults to no rows, so every part resolves to
-    'sin_stock' unless a test passes `coverage_rows` explicitly."""
+    Call #3 is the batched `spi_description_es` translation-fallback lookup,
+    call #4 is the batched `_resolve_inventory_status` coverage lookup (both
+    via `.all()`) -- default to no rows unless a test passes
+    `spi_description_es_rows`/`coverage_rows` explicitly."""
 
-    def __init__(self, rows=None, catalog_rows=None, coverage_rows=None):
+    def __init__(self, rows=None, catalog_rows=None, spi_description_es_rows=None, coverage_rows=None):
         self._rows = rows or []
         self._catalog_rows = catalog_rows or []
+        self._spi_description_es_rows = spi_description_es_rows or []
         self._coverage_rows = coverage_rows or []
         self.executed_statements: list = []
 
@@ -188,4 +190,6 @@ class FakeSectionItemsSession:
             return _AllResult(self._rows)
         if idx == 2:
             return _ScalarsResult(self._catalog_rows)
+        if idx == 3:
+            return _AllResult(self._spi_description_es_rows)
         return _AllResult(self._coverage_rows)

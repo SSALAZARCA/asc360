@@ -800,7 +800,13 @@ async def get_all_items_for_section(
     `_resolve_public_price` path (ADR 2), fed by exactly one
     `get_pricing_factors(db)` call and one batched `PartCatalog` lookup for
     the whole request (ADR 5) — never per row. `inventory_status` is resolved
-    the same way, via one batched `_resolve_inventory_status` call."""
+    the same way, via one batched `_resolve_inventory_status` call.
+    `description_es` falls back to the import-derived `SparePartItem.
+    description_es` (via a batched `spi_description_es` lookup) whenever
+    `PartsReference.description_es_manual` was never filled in -- same
+    `COALESCE(description_es_manual, spi.description_es)` priority Maestro
+    de Partes' `_list_catalog_impl` already uses, so a translation that only
+    ever came from the packing list still shows up here."""
     if not verify_sonia_secret(x_sonia_secret, settings.SONIA_BOT_SECRET) and current_user is None:
         raise HTTPException(status_code=403, detail="Forbidden")
 
@@ -817,11 +823,27 @@ async def get_all_items_for_section(
 
     codes = [item.factory_part_number for item, _, _ in rows]
     manual_prices: dict[str, float] = {}
+    spi_description_es: dict[str, str] = {}
     if codes:
         catalog_result = await db.execute(
             select(PartCatalog).where(PartCatalog.part_code.in_(codes))
         )                                                                       # ONCE per request
         manual_prices = {c.part_code: c.public_price for c in catalog_result.scalars()}
+
+        # First non-empty import-derived translation per part_number -- same
+        # `spi_latest` shape/ordering as `_list_catalog_impl` (design ADR:
+        # description_es fallback), just filtered to this section's codes.
+        spi_desc_result = await db.execute(
+            select(SparePartItem.part_number, SparePartItem.description_es)
+            .where(
+                SparePartItem.part_number.in_(codes),
+                SparePartItem.description_es.isnot(None),
+                SparePartItem.description_es != "",
+            )
+            .distinct(SparePartItem.part_number)
+            .order_by(SparePartItem.part_number, SparePartItem.created_at.asc())
+        )                                                                       # ONCE per request
+        spi_description_es = dict(spi_desc_result.all())
 
     inventory_status = await _resolve_inventory_status(
         db, [(item.factory_part_number, ref) for item, _, ref in rows]
@@ -832,6 +854,7 @@ async def get_all_items_for_section(
         precio_publico, precio_es_preliminar = _resolve_public_price(
             ref, manual_prices.get(item.factory_part_number), factors
         )
+        description_es = (ref.description_es_manual if ref else None) or spi_description_es.get(item.factory_part_number)
         items.append(PartItemResult(
             id=str(item.id),
             section_id=str(section.id),
@@ -841,7 +864,7 @@ async def get_all_items_for_section(
             factory_part_number=item.factory_part_number,
             um_part_number=ref.um_part_number if ref else None,
             description=ref.description if ref else None,
-            description_es=ref.description_es_manual if ref else None,
+            description_es=description_es,
             unit=ref.unit if ref else None,
             precio_publico=precio_publico,
             precio_es_preliminar=precio_es_preliminar,
