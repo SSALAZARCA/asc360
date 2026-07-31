@@ -18,6 +18,7 @@ import {
   Wand2,
   CalendarClock,
   Truck,
+  Search,
 } from 'lucide-react';
 
 const ALL_ITEMS = [
@@ -35,6 +36,9 @@ const ALL_ITEMS = [
   // parts-sale screen for the same `parts_dealer` role adds another entry
   // here with the same `roles` key, zero further filter changes needed.
   { id: 'vehicle-delivery', name: 'Registro de Motocicletas', icon: Truck, path: '/distribuidor/entrega', roles: ['parts_dealer', 'superadmin'] },
+  // TEMP: parts_dealer intentionally excluded while this screen is
+  // tested/polished — add 'parts_dealer' back to re-enable for Distribuidor.
+  { id: 'parts-search', name: 'Consulta de Repuestos', icon: Search, path: '/distribuidor/repuestos', roles: ['superadmin'] },
 ];
 
 export default function Sidebar({ collapsed = false, onToggle }) {

@@ -12,6 +12,16 @@
  * Registro de Motocicletas for now -- Kanban and Gestión de Órdenes (which
  * `parts_dealer` used to see, unrestricted, before this change) are hidden
  * too. The visible id set for `parts_dealer` is EXACTLY {vehicle-delivery}.
+ *
+ * Updated 2026-07-31 (sdd/distributor-parts-search, PR4): a second `roles:
+ * [...]` entry (`parts-search`, "Consulta de Repuestos") has now landed in
+ * `ALL_ITEMS` right after `vehicle-delivery` -- see
+ * `sidebar-parts-search-gate.test.jsx` for its dedicated coverage. It is
+ * TEMPORARILY `roles: ['superadmin']` only (scope adjustment requested by
+ * the user this session, while the new screen is polished/tested) -- NOT
+ * `parts_dealer`, so the "EXACTLY {vehicle-delivery}" claim below still
+ * holds true for `parts_dealer` today. This will need re-verifying (not
+ * necessarily changing) once `parts_dealer` is added back to that entry.
  */
 import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
@@ -68,6 +78,9 @@ describe('Sidebar — distribuidor delivery gate', () => {
     expect(screen.queryByText(/Datos Rápidos/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Orden Histórica/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Configuración/i)).not.toBeInTheDocument();
+    // "Consulta de Repuestos" (parts-search, PR4) is temporarily
+    // superadmin-only -- a parts_dealer must not see it either.
+    expect(screen.queryByText(/Consulta de Repuestos/i)).not.toBeInTheDocument();
   });
 
   it('shows the entry link for a superadmin user', async () => {
