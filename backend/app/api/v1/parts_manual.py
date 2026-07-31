@@ -98,6 +98,11 @@ class PartItemResult(BaseModel):
     unit: Optional[str] = None
     precio_publico: Optional[float] = None
     precio_es_preliminar: bool = False
+    # "disponible" | "ingresando" | "sin_stock" | None (not computed by this
+    # endpoint -- `get_part_by_number` leaves it None, only
+    # `get_all_items_for_section` resolves it today, ADR 8's "nulls stay
+    # nulls" applies here too).
+    inventory_status: Optional[str] = None
 
 class PartReferenceResult(BaseModel):
     factory_part_number: str
@@ -385,6 +390,75 @@ def _resolve_public_price(ref, manual_price, factors) -> tuple[Optional[float], 
     prelim = float(ref.preliminary_fob) if ref.preliminary_fob is not None else None
     fob    = avg if avg is not None else prelim
     return compute_prices(fob, factors)["precio_publico"], (avg is None and prelim is not None)
+
+
+def _extract_prev_codes(prev_codes_json) -> list[str]:
+    extracted = []
+    for entry in (prev_codes_json or []):
+        if isinstance(entry, dict) and "code" in entry:
+            extracted.append(entry["code"])
+        elif isinstance(entry, str) and entry:
+            extracted.append(entry)
+    return extracted
+
+
+async def _resolve_inventory_status(db: AsyncSession, fpn_and_refs: list[tuple[str, object]]) -> dict[str, str]:
+    """Tri-state inventory badge per `factory_part_number` for the Distribuidor
+    parts-search screen: 'disponible' (certified physical stock, some
+    `spare_part_items` row has `qty_physical > 0`), 'ingresando' (received
+    but not yet physically inspected -- `qty_received > 0` and
+    `qty_physical IS NULL`), or 'sin_stock' (neither -- includes both "never
+    declared" and "ordered but nothing physical yet", the latter folded in
+    because this screen only distinguishes 3 states, unlike Maestro de
+    Partes' 4-state `coverage_status` in `_list_catalog_impl` which this
+    reuses the exact same scoring query shape from, for consistency).
+    Matches by `factory_part_number` AND any historical `prev_codes` alias.
+    ONE query for the whole request, batched, never per-row (ADR 2/5)."""
+    code_to_fpn: dict[str, str] = {}
+    for fpn, ref in fpn_and_refs:
+        code_to_fpn[fpn.upper().strip().replace(' ', '')] = fpn
+        if ref is not None:
+            for prev in _extract_prev_codes(ref.prev_codes):
+                norm = prev.upper().strip().replace(' ', '')
+                code_to_fpn.setdefault(norm, fpn)
+
+    if not code_to_fpn:
+        return {}
+
+    from app.models.imports import SparePartLot, ShipmentOrder as _SO
+    from sqlalchemy import case as sa_case, and_ as sa_and, or_ as sa_or
+
+    fn = func.upper(func.trim(func.replace(SparePartItem.part_number, ' ', '')))
+    cov_q = (
+        select(
+            fn.label('code'),
+            func.max(
+                sa_case(
+                    (sa_and(SparePartItem.qty_physical.isnot(None), SparePartItem.qty_physical > 0), 2),
+                    (sa_and(
+                        SparePartItem.qty_received > 0,
+                        SparePartItem.qty_physical.is_(None),
+                        sa_or(_SO.bl_container.isnot(None), SparePartLot.packing_list_received == True),
+                    ), 1),
+                    else_=0,
+                )
+            ).label('score'),
+        )
+        .select_from(SparePartItem)
+        .join(SparePartLot, SparePartLot.id == SparePartItem.lot_id)
+        .outerjoin(_SO, _SO.id == SparePartLot.shipment_order_id)
+        .where(fn.in_(list(code_to_fpn.keys())))
+        .group_by(fn)
+    )
+    score_to_status = {2: "disponible", 1: "ingresando", 0: "sin_stock"}
+    rank = {"disponible": 2, "ingresando": 1, "sin_stock": 0}
+    status: dict[str, str] = {}
+    for code_val, score in (await db.execute(cov_q)).all():
+        fpn = code_to_fpn.get(code_val, code_val)
+        new_status = score_to_status.get(score or 0, "sin_stock")
+        if fpn not in status or rank[new_status] > rank[status[fpn]]:
+            status[fpn] = new_status
+    return status
 
 
 def _minio_client() -> Minio:
@@ -725,7 +799,8 @@ async def get_all_items_for_section(
     `ORDER BY`. `precio_publico` is resolved once per row via the shared
     `_resolve_public_price` path (ADR 2), fed by exactly one
     `get_pricing_factors(db)` call and one batched `PartCatalog` lookup for
-    the whole request (ADR 5) — never per row."""
+    the whole request (ADR 5) — never per row. `inventory_status` is resolved
+    the same way, via one batched `_resolve_inventory_status` call."""
     if not verify_sonia_secret(x_sonia_secret, settings.SONIA_BOT_SECRET) and current_user is None:
         raise HTTPException(status_code=403, detail="Forbidden")
 
@@ -748,6 +823,10 @@ async def get_all_items_for_section(
         )                                                                       # ONCE per request
         manual_prices = {c.part_code: c.public_price for c in catalog_result.scalars()}
 
+    inventory_status = await _resolve_inventory_status(
+        db, [(item.factory_part_number, ref) for item, _, ref in rows]
+    )                                                                           # ONCE per request
+
     items = []
     for item, section, ref in rows:
         precio_publico, precio_es_preliminar = _resolve_public_price(
@@ -766,6 +845,7 @@ async def get_all_items_for_section(
             unit=ref.unit if ref else None,
             precio_publico=precio_publico,
             precio_es_preliminar=precio_es_preliminar,
+            inventory_status=inventory_status.get(item.factory_part_number, "sin_stock"),
         ))
     return items
 

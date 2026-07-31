@@ -118,16 +118,22 @@ class FakeSectionItemsSession:
     call #2 (if any) is always the `PartCatalog` lookup. `catalog_rows`
     defaults to empty (no manual price override for any part)."""
 
-    def __init__(self, rows=None, catalog_rows=None):
+    def __init__(self, rows=None, catalog_rows=None, coverage_rows=None):
         self._rows = rows or []
         self._catalog_rows = catalog_rows or []
+        # (normalized_code, score) pairs -- score 2="disponible", 1="ingresando",
+        # 0 or missing="sin_stock" (design ADR: `_resolve_inventory_status`).
+        self._coverage_rows = coverage_rows or []
         self.executed_statements: list = []
 
     async def execute(self, stmt):
         self.executed_statements.append(stmt)
-        if len(self.executed_statements) == 1:
+        idx = len(self.executed_statements)
+        if idx == 1:
             return _AllResult(self._rows)
-        return _ScalarsResult(self._catalog_rows)
+        if idx == 2:
+            return _ScalarsResult(self._catalog_rows)
+        return _AllResult(self._coverage_rows)
 
 
 def _make_section(section_id=None, section_code="B1", section_name="FRAME", model_code="RENEGADE200") -> PartsManualSection:
@@ -148,6 +154,7 @@ def _make_reference(
     avg_fob_cost=None,
     preliminary_fob=None,
     description_es_manual=None,
+    prev_codes=None,
 ) -> PartsReference:
     return PartsReference(
         factory_part_number=factory_part_number,
@@ -157,6 +164,7 @@ def _make_reference(
         avg_fob_cost=avg_fob_cost,
         preliminary_fob=preliminary_fob,
         description_es_manual=description_es_manual,
+        prev_codes=prev_codes,
     )
 
 
@@ -385,12 +393,148 @@ def test_pricing_factors_and_part_catalog_fetched_exactly_once_per_request():
         assert len(resp.json()) == 5
         mock_factors.assert_awaited_once()
 
-        # Exactly 2 `db.execute()` calls total: the item join (#1) and the
-        # ONE batched `PartCatalog` manual-price lookup (#2, ADR 5) -- never
-        # a third call, never one per row.
-        assert len(fake_db.executed_statements) == 2
+        # Exactly 3 `db.execute()` calls total: the item join (#1), the ONE
+        # batched `PartCatalog` manual-price lookup (#2, ADR 5), and the ONE
+        # batched `_resolve_inventory_status` coverage lookup (#3) -- never
+        # a fourth call, never one per row.
+        assert len(fake_db.executed_statements) == 3
         catalog_sql = str(fake_db.executed_statements[1])
         assert "part_catalog" in catalog_sql.lower()
+        coverage_sql = str(fake_db.executed_statements[2])
+        assert "spare_part_items" in coverage_sql.lower()
+    finally:
+        _teardown()
+
+
+def test_inventory_status_disponible_when_physically_certified_with_stock():
+    """Score 2 (`qty_physical IS NOT NULL AND qty_physical > 0`) -> 'disponible'."""
+    section = _make_section()
+    ref = _make_reference(factory_part_number="UM-500")
+    item = _make_item(section, ref, order_num="1")
+    fake_db = FakeSectionItemsSession(
+        rows=[(item, section, ref)],
+        coverage_rows=[("UM-500", 2)],
+    )
+    _override_db(fake_db)
+    _override_user(make_current_user())
+
+    try:
+        with _patch_pricing_factors():
+            resp = _get(section.id)
+        assert resp.status_code == 200
+        assert resp.json()[0]["inventory_status"] == "disponible"
+    finally:
+        _teardown()
+
+
+def test_inventory_status_ingresando_when_received_but_not_yet_inspected():
+    """Score 1 (`qty_received > 0 AND qty_physical IS NULL`, con BL o packing
+    list recibido) -> 'ingresando'."""
+    section = _make_section()
+    ref = _make_reference(factory_part_number="UM-501")
+    item = _make_item(section, ref, order_num="1")
+    fake_db = FakeSectionItemsSession(
+        rows=[(item, section, ref)],
+        coverage_rows=[("UM-501", 1)],
+    )
+    _override_db(fake_db)
+    _override_user(make_current_user())
+
+    try:
+        with _patch_pricing_factors():
+            resp = _get(section.id)
+        assert resp.status_code == 200
+        assert resp.json()[0]["inventory_status"] == "ingresando"
+    finally:
+        _teardown()
+
+
+def test_inventory_status_sin_stock_when_no_coverage_row_at_all():
+    """No `spare_part_items` row ever declared this part -> 'sin_stock',
+    never omitted, never null (the endpoint always resolves a concrete
+    status for every row it returns)."""
+    section = _make_section()
+    ref = _make_reference(factory_part_number="UM-502")
+    item = _make_item(section, ref, order_num="1")
+    fake_db = FakeSectionItemsSession(
+        rows=[(item, section, ref)],
+        coverage_rows=[],
+    )
+    _override_db(fake_db)
+    _override_user(make_current_user())
+
+    try:
+        with _patch_pricing_factors():
+            resp = _get(section.id)
+        assert resp.status_code == 200
+        assert resp.json()[0]["inventory_status"] == "sin_stock"
+    finally:
+        _teardown()
+
+
+def test_inventory_status_sin_stock_when_score_zero_row_present():
+    """A coverage row exists but scored 0 (e.g. only an open PO / pedido,
+    nothing physical yet) still resolves to 'sin_stock' -- this screen only
+    distinguishes 3 states, unlike Maestro de Partes' 4-state
+    `coverage_status`."""
+    section = _make_section()
+    ref = _make_reference(factory_part_number="UM-503")
+    item = _make_item(section, ref, order_num="1")
+    fake_db = FakeSectionItemsSession(
+        rows=[(item, section, ref)],
+        coverage_rows=[("UM-503", 0)],
+    )
+    _override_db(fake_db)
+    _override_user(make_current_user())
+
+    try:
+        with _patch_pricing_factors():
+            resp = _get(section.id)
+        assert resp.status_code == 200
+        assert resp.json()[0]["inventory_status"] == "sin_stock"
+    finally:
+        _teardown()
+
+
+def test_inventory_status_matches_via_historical_prev_code():
+    """A part imported under an OLD factory code (before a catalog code
+    change) must still resolve 'disponible'/'ingresando' for the CURRENT
+    code -- same `prev_codes` matching Maestro de Partes' `coverage_status`
+    already does, so the two screens never disagree about the same part."""
+    section = _make_section()
+    ref = _make_reference(factory_part_number="UM-600-NEW", prev_codes=["UM-600-OLD"])
+    item = _make_item(section, ref, order_num="1")
+    fake_db = FakeSectionItemsSession(
+        rows=[(item, section, ref)],
+        coverage_rows=[("UM-600-OLD", 2)],  # spare_part_items row still under the old code
+    )
+    _override_db(fake_db)
+    _override_user(make_current_user())
+
+    try:
+        with _patch_pricing_factors():
+            resp = _get(section.id)
+        assert resp.status_code == 200
+        assert resp.json()[0]["inventory_status"] == "disponible"
+    finally:
+        _teardown()
+
+
+def test_inventory_status_not_computed_when_section_has_zero_items():
+    """No items -> `codes` is empty -> `_resolve_inventory_status` returns
+    early without touching the DB (mirrors the existing `PartCatalog`
+    batched-lookup guard) -- only 1 `db.execute()` call total, not 3."""
+    section_id = uuid.uuid4()
+    fake_db = FakeSectionItemsSession(rows=[])
+    _override_db(fake_db)
+    _override_user(make_current_user())
+
+    try:
+        with _patch_pricing_factors():
+            resp = _get(section_id)
+        assert resp.status_code == 200
+        assert resp.json() == []
+        assert len(fake_db.executed_statements) == 1
     finally:
         _teardown()
 

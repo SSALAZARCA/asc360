@@ -169,15 +169,23 @@ class FakeSectionItemsSession:
     rows via `.all()`). Identical shape to
     `tests/test_parts_manual_section_items.py`'s session of the same name --
     duplicated locally (not imported) so this package stays self-contained,
-    matching the project's established per-module fixture convention."""
+    matching the project's established per-module fixture convention.
 
-    def __init__(self, rows=None, catalog_rows=None):
+    Call #3 is the batched `_resolve_inventory_status` coverage lookup
+    (also via `.all()`) -- defaults to no rows, so every part resolves to
+    'sin_stock' unless a test passes `coverage_rows` explicitly."""
+
+    def __init__(self, rows=None, catalog_rows=None, coverage_rows=None):
         self._rows = rows or []
         self._catalog_rows = catalog_rows or []
+        self._coverage_rows = coverage_rows or []
         self.executed_statements: list = []
 
     async def execute(self, stmt):
         self.executed_statements.append(stmt)
-        if len(self.executed_statements) == 1:
+        idx = len(self.executed_statements)
+        if idx == 1:
             return _AllResult(self._rows)
-        return _ScalarsResult(self._catalog_rows)
+        if idx == 2:
+            return _ScalarsResult(self._catalog_rows)
+        return _AllResult(self._coverage_rows)
