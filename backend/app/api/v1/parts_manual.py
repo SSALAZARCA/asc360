@@ -44,6 +44,9 @@ _openai = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
 
 PARTS_BUCKET = "parts-manuals"
 
+# Solo usado por replace_section_diagram (subida directa, sin re-procesar).
+_DIAGRAM_ALLOWED_MIME_TYPES = {"image/png", "image/jpeg", "image/webp"}
+
 
 # ── Schemas ────────────────────────────────────────────────────────────────────
 
@@ -2346,6 +2349,62 @@ async def load_section(
         parts_loaded=len(parts),
         references_new=refs_new,
     )
+
+
+@router.post("/admin/sections/{section_id}/diagram")
+async def replace_section_diagram(
+    section_id: str,
+    image_file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Reemplaza SOLO la imagen del diagrama de una sección ya existente,
+    subiendo el archivo tal cual -- sin pasar por create_diagram_card ni
+    ningún otro procesamiento con PIL (sin resize, sin recompresión).
+
+    Útil cuando el superadmin ya tiene una imagen corregida (p. ej. un PNG
+    con fondo transparente) y quiere reemplazarla sin re-parsear el PDF
+    completo de la sección. Reutiliza el mismo esquema determinístico de
+    nombre de objeto que `load_section` (`{model_code}/{section_code}.png`)
+    para sobreescribir exactamente el objeto que la sección ya referencia."""
+    if not current_user.is_superadmin:
+        raise HTTPException(status_code=403, detail="Solo superadmin")
+
+    if image_file.content_type not in _DIAGRAM_ALLOWED_MIME_TYPES:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Tipo de archivo no permitido: {image_file.content_type}. "
+                "Solo se aceptan imágenes (PNG, JPEG, WEBP)."
+            ),
+        )
+
+    try:
+        section_uuid = _uuid.UUID(section_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Sección no encontrada")
+
+    section = await db.get(PartsManualSection, section_uuid)
+    if not section:
+        raise HTTPException(status_code=404, detail="Sección no encontrada")
+
+    image_bytes = await image_file.read()
+
+    object_name = f"{section.model_code}/{section.section_code}.png"
+    client = _minio_client()
+    _ensure_parts_bucket(client)
+    client.put_object(
+        bucket_name=PARTS_BUCKET,
+        object_name=object_name,
+        data=io.BytesIO(image_bytes),
+        length=len(image_bytes),
+        content_type=image_file.content_type,
+    )
+
+    section.diagram_url = _diagram_public_url(object_name)
+    await db.commit()
+
+    return {"diagram_url": section.diagram_url}
 
 
 # ── Historial de secciones — consulta y restauración ────────────────────────
