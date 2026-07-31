@@ -3,17 +3,19 @@
  *   sdd/distributor-parts-search, Phase 4 (frontend, PR4)
  *
  * Structure rewritten 2026-07-31 to match the user's reference prototype
- * (`/mnt/c/proyectos IA/Pagina Servicio/repuestos.html`) more closely:
- *   - "1. Motocicleta" + "2. Sistema / Sección" are two ALWAYS-VISIBLE
- *     `<select>` elements (the second disabled until a model is chosen),
- *     not a select + a clickable list of rows.
+ * (`/mnt/c/proyectos IA/Pagina Servicio/repuestos.html`) closely:
+ *   - "1. Motocicleta", "2. Sistema / Sección", and the "Total de Piezas
+ *     Encontradas" counter are ALWAYS in the SAME row (the second select
+ *     disabled until a model is chosen) -- not split across tabs.
  *   - The two-panel workspace (diagram left, parts list right) is ALWAYS
- *     rendered, with its own empty/loading/error state per panel — never a
- *     block that only appears after a section is picked.
+ *     rendered, fixed-height + independently scrolling at 1024px+ (matches
+ *     the prototype's `h-[750px]` grid), each panel its own header/body/
+ *     footer -- never a block that only appears after a section is picked.
  *   - Parts render as numbered-badge CARDS (`data-testid="part-card-{id}"`),
  *     not table rows.
- *   - "Por Descripción" (AI search) is an additional tab, not present in the
- *     prototype, kept separate so it never disturbs the Por Modelo structure.
+ *   - "Buscar por descripción" (AI search) is a collapsible toggle BELOW the
+ *     Motocicleta/Sistema/Contador row, not present in the prototype at all
+ *     -- kept separate so it never disturbs that row's structure.
  *
  * Mirrors `distribuidor-entrega-page.test.jsx`'s mockAuthFetch/queueResponses
  * pattern (`admin-layout` mocked away).
@@ -284,7 +286,7 @@ describe('DistribuidorRepuestosPage — AI description search (text/voice/photo)
     });
     fireEvent.change(modelSelect(), { target: { value: 'DSR150' } });
 
-    fireEvent.click(screen.getByRole('button', { name: /por descripción/i }));
+    fireEvent.click(screen.getByRole('button', { name: /buscar por descripción/i }));
     fireEvent.change(screen.getByPlaceholderText(/bujía|freno/i), { target: { value: 'bujía' } });
     fireEvent.click(screen.getByRole('button', { name: /buscar/i }));
 
@@ -317,7 +319,7 @@ describe('DistribuidorRepuestosPage — AI description search (text/voice/photo)
     });
     fireEvent.change(modelSelect(), { target: { value: 'DSR150' } });
 
-    fireEvent.click(screen.getByRole('button', { name: /por descripción/i }));
+    fireEvent.click(screen.getByRole('button', { name: /buscar por descripción/i }));
     fireEvent.click(screen.getByTestId('voice-input'));
 
     await waitFor(() => {
@@ -340,7 +342,7 @@ describe('DistribuidorRepuestosPage — AI description search (text/voice/photo)
     });
     fireEvent.change(modelSelect(), { target: { value: 'DSR150' } });
 
-    fireEvent.click(screen.getByRole('button', { name: /por descripción/i }));
+    fireEvent.click(screen.getByRole('button', { name: /buscar por descripción/i }));
     fireEvent.click(screen.getByTestId('camera-input'));
 
     await waitFor(() => {

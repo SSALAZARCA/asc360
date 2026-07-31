@@ -335,9 +335,11 @@ function PartsList({ items, loading, error }) {
   );
 }
 
-// Pure CSS-grid breakpoint, no JS (Design ADR 12) -- 1024px matches
-// `admin-layout.js`'s own sidebar-collapse breakpoint. Diagram panel is
-// `position: sticky` only above that width.
+// Fixed-height, independently-scrolling two-panel workspace -- mirrors the
+// reference prototype's `h-auto lg:h-[750px]` grid (stacked, natural height,
+// below 1024px; both panels locked to one shared height, each scrolling on
+// its own, at 1024px+). No JS, pure CSS-grid breakpoint (Design ADR 12);
+// 1024px matches `admin-layout.js`'s own sidebar-collapse breakpoint.
 function TwoPanelStyles() {
   return (
     <style>{`
@@ -346,25 +348,125 @@ function TwoPanelStyles() {
         flex-direction: column;
         gap: 1.25rem;
       }
+      .repuestos-panel {
+        display: flex;
+        flex-direction: column;
+        min-height: 420px;
+      }
+      .repuestos-panel-body {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+      }
+      /* Zoom-on-hover, matches the reference prototype's .zoom-container */
+      .repuestos-zoom-container {
+        overflow: hidden;
+        cursor: zoom-in;
+      }
+      .repuestos-zoom-container img {
+        transition: transform 0.3s ease;
+      }
+      .repuestos-zoom-container:hover img {
+        transform: scale(1.5);
+      }
+      .repuestos-zoom-hint {
+        opacity: 0;
+        transition: opacity 0.2s ease;
+      }
+      .repuestos-panel:hover .repuestos-zoom-hint {
+        opacity: 1;
+      }
       @media (min-width: 1024px) {
         .repuestos-two-panel {
           display: grid;
           grid-template-columns: 1fr 1fr;
-          align-items: start;
+          height: 750px;
         }
-        .repuestos-diagram-panel {
-          position: sticky;
-          top: 1rem;
+        .repuestos-panel {
+          height: 100%;
         }
       }
     `}</style>
   );
 }
 
+const panelOuterStyle = {
+  background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)',
+  borderRadius: '1.25rem', overflow: 'hidden',
+};
 const panelHeaderStyle = {
   display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-  paddingBottom: '0.75rem', marginBottom: '0.75rem', borderBottom: '1px solid rgba(255,255,255,0.08)',
+  padding: '1rem 1.25rem', borderBottom: '1px solid rgba(255,255,255,0.08)', flexShrink: 0,
 };
+const diagramViewportStyle = {
+  flex: 1, minHeight: 0, background: '#111116', position: 'relative',
+  display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem',
+};
+const panelFooterStyle = {
+  padding: '0.75rem 1.25rem', borderTop: '1px solid rgba(255,255,255,0.08)',
+  textAlign: 'center', flexShrink: 0,
+};
+const zoomHintStyle = {
+  position: 'absolute', bottom: '0.75rem', left: '50%', transform: 'translateX(-50%)',
+  background: 'rgba(0,0,0,0.85)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 999,
+  padding: '0.4rem 0.8rem', fontSize: '0.6rem', color: 'rgba(255,255,255,0.6)',
+  textTransform: 'uppercase', letterSpacing: '0.05em', pointerEvents: 'none',
+};
+
+function DiagramPanel({ section, diagramBlob, diagramError, loadingDiagram }) {
+  return (
+    <div className="repuestos-panel" style={panelOuterStyle}>
+      <div style={panelHeaderStyle}>
+        <h3 style={{ margin: 0, fontWeight: 800, fontSize: '0.95rem', color: '#fff' }}>
+          {section ? section.section_name : 'Plano de Ensamblaje'}
+        </h3>
+        <span style={{ fontSize: '0.62rem', color: '#606075', textTransform: 'uppercase', letterSpacing: '0.05em', background: 'rgba(255,255,255,0.05)', padding: '0.2rem 0.5rem', borderRadius: 6, flexShrink: 0 }}>
+          Despiece Técnico
+        </span>
+      </div>
+      <div style={diagramViewportStyle}>
+        {!section && (
+          <p style={emptyStateStyle}>Seleccioná una motocicleta y una sección para cargar el esquema técnico en explosión.</p>
+        )}
+        {section && loadingDiagram && <p style={emptyStateStyle}>Cargando diagrama...</p>}
+        {section && diagramBlob && (
+          <>
+            <div className="repuestos-zoom-container" style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <img
+                src={diagramBlob}
+                alt={section.section_name}
+                style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', display: 'block' }}
+              />
+            </div>
+            <span className="repuestos-zoom-hint" style={zoomHintStyle}>Pasá el mouse para hacer zoom</span>
+          </>
+        )}
+        {section && !loadingDiagram && diagramError && (
+          <p style={{ ...emptyStateStyle, color: '#ef4444' }}>{diagramError}</p>
+        )}
+        {section && !loadingDiagram && !diagramBlob && !diagramError && !section.diagram_url && (
+          <p style={emptyStateStyle}>Sin diagrama disponible para esta sección.</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ComponentsPanel({ items, loading, error }) {
+  return (
+    <div className="repuestos-panel" style={panelOuterStyle}>
+      <div style={panelHeaderStyle}>
+        <h3 style={{ margin: 0, fontWeight: 800, fontSize: '0.95rem', color: '#fff' }}>Listado de Componentes</h3>
+      </div>
+      <div className="repuestos-panel-body" style={{ padding: '1rem' }}>
+        <PartsList items={items} loading={loading} error={error} />
+      </div>
+      <div style={panelFooterStyle}>
+        <p style={hintStyle}>Todos los componentes listados garantizan piezas 100% de fábrica</p>
+      </div>
+    </div>
+  );
+}
 
 // The two-panel workspace (diagram + parts list) mirrors the reference
 // prototype's persistent layout: ALWAYS visible, each panel showing its own
@@ -372,173 +474,146 @@ const panelHeaderStyle = {
 // appears after a section is picked.
 function TwoPanelWorkspace({ section, diagramBlob, diagramError, loadingDiagram, items, itemsError, loadingItems }) {
   return (
-    <section className="glass p-6" style={{ ...sectionStyle, ...cardStyle, marginTop: '1.5rem' }}>
+    <section style={{ ...cardStyle, marginTop: '1.5rem' }}>
       <TwoPanelStyles />
       <div className="repuestos-two-panel">
-        <div className="repuestos-diagram-panel">
-          <div style={panelHeaderStyle}>
-            <h3 style={{ margin: 0, fontWeight: 800, fontSize: '0.95rem', color: '#fff' }}>
-              {section ? section.section_name : 'Plano de Ensamblaje'}
-            </h3>
-            <span style={{ fontSize: '0.62rem', color: '#606075', textTransform: 'uppercase', letterSpacing: '0.05em', background: 'rgba(255,255,255,0.05)', padding: '0.2rem 0.5rem', borderRadius: 6 }}>
-              Despiece Técnico
-            </span>
-          </div>
-          {!section && (
-            <p style={emptyStateStyle}>Seleccioná una motocicleta y una sección para cargar el esquema técnico en explosión.</p>
-          )}
-          {section && loadingDiagram && <p style={emptyStateStyle}>Cargando diagrama...</p>}
-          {section && diagramBlob && (
-            <img
-              src={diagramBlob}
-              alt={section.section_name}
-              style={{ width: '100%', borderRadius: 10, border: '1px solid rgba(255,255,255,0.1)', display: 'block' }}
-            />
-          )}
-          {section && !loadingDiagram && diagramError && (
-            <p style={{ ...emptyStateStyle, color: '#ef4444' }}>{diagramError}</p>
-          )}
-          {section && !loadingDiagram && !diagramBlob && !diagramError && !section.diagram_url && (
-            <p style={emptyStateStyle}>Sin diagrama disponible para esta sección.</p>
-          )}
-        </div>
-        <div>
-          <div style={panelHeaderStyle}>
-            <h3 style={{ margin: 0, fontWeight: 800, fontSize: '0.95rem', color: '#fff' }}>Listado de Componentes</h3>
-          </div>
-          <PartsList items={items} loading={loadingItems} error={itemsError} />
-        </div>
+        <DiagramPanel section={section} diagramBlob={diagramBlob} diagramError={diagramError} loadingDiagram={loadingDiagram} />
+        <ComponentsPanel items={items} loading={loadingItems} error={itemsError} />
       </div>
     </section>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Tab bodies -- "Por Modelo" mirrors the reference prototype's two-select
-// bar exactly; "Por Descripción" is an additional AI search entry point
-// (text/voice/photo, already used by /tg/parts) that the prototype does not
-// have, kept separate so it never disturbs the Por Modelo structure.
-// ---------------------------------------------------------------------------
-function ModelTabContent({ modelCode, sections, loading, error, sectionId, onSectionChange }) {
+// Description search -- an AI search entry point (text/voice/photo, already
+// used by /tg/parts) that the reference prototype does not have at all. Kept
+// as a separate, collapsible block BELOW the Motocicleta/Sistema/Contador
+// row (never inside it, never replacing it), so it can never disturb that
+// row's structure -- the prototype's own 3-column bar (ADR: Motocicleta,
+// Sistema/Sección, Total de Piezas Encontradas, all in ONE row) stays intact
+// regardless of whether this block is open.
+function DescriptionSearchToggle({ open, onToggle, desc, setDesc, descApi, disabled, onOpen }) {
+  return (
+    <div style={{ marginTop: '1rem' }}>
+      <button type="button" className="btn-secondary" onClick={onToggle}>
+        {open ? 'Ocultar búsqueda por descripción' : 'Buscar por descripción'}
+      </button>
+      {open && (
+        <div style={{ ...sectionStyle, marginTop: '0.75rem' }}>
+          <DescriptionSearchBar
+            desc={desc}
+            setDesc={setDesc}
+            onSearch={descApi.search}
+            loading={descApi.loading}
+            disabled={disabled}
+          />
+          {descApi.error && (
+            <p style={{ color: '#ef4444', fontSize: '0.8rem' }}>{descApi.error}</p>
+          )}
+          <DescriptionSearchResults results={descApi.results} onOpen={onOpen} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Matches the reference prototype's single filter row: Motocicleta,
+// Sistema/Sección, and the piece counter all together, always visible --
+// never split across tabs or separate rows.
+function FilterRow({ models, loadingModels, modelsError, modelCode, onModelChange, sections, loadingSections, sectionsError, sectionId, onSectionChange, pieceCount }) {
   return (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1.5rem', alignItems: 'flex-end' }}>
-      <div style={{ flex: '1 1 260px' }}>
+      <div style={{ flex: '1 1 220px' }}>
+        <ModelSelect models={models} loading={loadingModels} value={modelCode} onChange={onModelChange} />
+        {modelsError && (
+          <p style={{ color: '#ef4444', fontSize: '0.8rem', marginTop: '0.4rem' }}>{modelsError}</p>
+        )}
+      </div>
+      <div style={{ flex: '1 1 220px' }}>
         <SectionSelect
           sections={sections}
-          loading={loading}
+          loading={loadingSections}
           modelCode={modelCode}
           value={sectionId}
           onChange={onSectionChange}
         />
-        {error && <p style={{ color: '#ef4444', fontSize: '0.8rem', marginTop: '0.4rem' }}>{error}</p>}
+        {sectionsError && (
+          <p style={{ color: '#ef4444', fontSize: '0.8rem', marginTop: '0.4rem' }}>{sectionsError}</p>
+        )}
       </div>
+      <PieceCounter count={pieceCount} />
     </div>
   );
 }
 
-function DescriptionTabContent({ desc, setDesc, descApi, disabled, onOpen }) {
-  return (
-    <div style={sectionStyle}>
-      <DescriptionSearchBar
-        desc={desc}
-        setDesc={setDesc}
-        onSearch={descApi.search}
-        loading={descApi.loading}
-        disabled={disabled}
-      />
-      {descApi.error && (
-        <p style={{ color: '#ef4444', fontSize: '0.8rem' }}>{descApi.error}</p>
-      )}
-      <DescriptionSearchResults results={descApi.results} onOpen={onOpen} />
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Main component
-// ---------------------------------------------------------------------------
-const TAB_MODEL = 'model';
-const TAB_DESC = 'desc';
-
-function TabSwitcher({ tab, onChange }) {
-  return (
-    <div style={{ display: 'flex', gap: '0.5rem' }}>
-      <button type="button" className={tab === TAB_MODEL ? 'btn-primary' : 'btn-secondary'} onClick={() => onChange(TAB_MODEL)}>
-        Por Modelo
-      </button>
-      <button type="button" className={tab === TAB_DESC ? 'btn-primary' : 'btn-secondary'} onClick={() => onChange(TAB_DESC)}>
-        Por Descripción
-      </button>
-    </div>
-  );
-}
-
-export default function DistribuidorRepuestosPage() {
-  const { models, loading: loadingModels, error: modelsError } = useCatalogModels();
+// Bundles everything about "which model/section is currently selected and
+// how the user got there" -- keeps the page component itself down to just
+// the JSX composition.
+function useRepuestosSelection() {
   const [modelCode, setModelCode] = useState('');
-  const [tab, setTab] = useState(TAB_MODEL);
-  const [desc, setDesc] = useState('');
   const [sectionId, setSectionId] = useState('');
-
   const { sections, loading: loadingSections, error: sectionsError } = useModelSections(modelCode);
-  const descApi = useDescriptionSearch(modelCode);
   const detail = useSectionDetail();
 
-  const handleModelChange = (code) => {
+  const selectModel = (code) => {
     setModelCode(code);
     setSectionId('');
     detail.close();
   };
 
-  const handleSectionChange = (id) => {
+  const selectSection = (id) => {
     setSectionId(id);
     const section = sections.find((s) => s.section_id === id);
     if (section) detail.open(section);
     else detail.close();
   };
 
-  const handleSearchResultOpen = (section) => {
+  const openSection = (section) => {
     setSectionId(section.section_id);
     detail.open(section);
   };
+
+  return { modelCode, sectionId, sections, loadingSections, sectionsError, detail, selectModel, selectSection, openSection };
+}
+
+export default function DistribuidorRepuestosPage() {
+  const { models, loading: loadingModels, error: modelsError } = useCatalogModels();
+  const [descSearchOpen, setDescSearchOpen] = useState(false);
+  const [desc, setDesc] = useState('');
+  const {
+    modelCode, sectionId, sections, loadingSections, sectionsError,
+    detail, selectModel, selectSection, openSection,
+  } = useRepuestosSelection();
+  const descApi = useDescriptionSearch(modelCode);
 
   return (
     <AdminLayout fullWidth>
       <PageHeader />
 
       <section className="glass p-6" style={{ ...sectionStyle, ...cardStyle }}>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1.5rem', alignItems: 'flex-end' }}>
-          <div style={{ flex: '1 1 260px' }}>
-            <ModelSelect models={models} loading={loadingModels} value={modelCode} onChange={handleModelChange} />
-            {modelsError && (
-              <p style={{ color: '#ef4444', fontSize: '0.8rem', marginTop: '0.4rem' }}>{modelsError}</p>
-            )}
-          </div>
-          <PieceCounter count={detail.items.length} />
-        </div>
+        <FilterRow
+          models={models}
+          loadingModels={loadingModels}
+          modelsError={modelsError}
+          modelCode={modelCode}
+          onModelChange={selectModel}
+          sections={sections}
+          loadingSections={loadingSections}
+          sectionsError={sectionsError}
+          sectionId={sectionId}
+          onSectionChange={selectSection}
+          pieceCount={detail.items.length}
+        />
 
-        <TabSwitcher tab={tab} onChange={setTab} />
-
-        {tab === TAB_MODEL && (
-          <ModelTabContent
-            modelCode={modelCode}
-            sections={sections}
-            loading={loadingSections}
-            error={sectionsError}
-            sectionId={sectionId}
-            onSectionChange={handleSectionChange}
-          />
-        )}
-
-        {tab === TAB_DESC && (
-          <DescriptionTabContent
-            desc={desc}
-            setDesc={setDesc}
-            descApi={descApi}
-            disabled={!modelCode}
-            onOpen={handleSearchResultOpen}
-          />
-        )}
+        <DescriptionSearchToggle
+          open={descSearchOpen}
+          onToggle={() => setDescSearchOpen((v) => !v)}
+          desc={desc}
+          setDesc={setDesc}
+          descApi={descApi}
+          disabled={!modelCode}
+          onOpen={openSection}
+        />
       </section>
 
       <TwoPanelWorkspace
