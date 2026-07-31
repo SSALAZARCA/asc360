@@ -88,13 +88,13 @@ const ITEMS = [
     id: 'item-1', section_id: 'sec-1', section_code: 'A', section_name: 'Motor',
     order_num: 'A1', factory_part_number: 'FP-001', um_part_number: 'UM-001',
     description: 'Tornillo', description_es: null, unit: 'UND',
-    precio_publico: 45000, precio_es_preliminar: false,
+    precio_publico: 45000, precio_es_preliminar: false, inventory_status: 'disponible',
   },
   {
     id: 'item-2', section_id: 'sec-1', section_code: 'A', section_name: 'Motor',
     order_num: 'A2', factory_part_number: 'FP-002', um_part_number: null,
     description: null, description_es: null, unit: null,
-    precio_publico: null, precio_es_preliminar: false,
+    precio_publico: null, precio_es_preliminar: false, inventory_status: 'sin_stock',
   },
 ];
 
@@ -274,6 +274,75 @@ describe('DistribuidorRepuestosPage — model/section browse flow', () => {
     });
     const card1 = screen.getByTestId('part-card-item-1');
     expect(within(card1).getByText(/\$\s?45[.,]000/)).toBeInTheDocument();
+  });
+});
+
+describe('DistribuidorRepuestosPage — inventory status badge', () => {
+  it('shows "Disponible" for inventory_status: "disponible"', async () => {
+    setUser();
+    queueResponses();
+    render(<DistribuidorRepuestosPage />);
+
+    await selectModelAndOpenSection();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('part-card-item-1')).toBeInTheDocument();
+    });
+    const card1 = screen.getByTestId('part-card-item-1');
+    expect(within(card1).getByText('Disponible')).toBeInTheDocument();
+  });
+
+  it('shows "Sin Stock" for inventory_status: "sin_stock"', async () => {
+    setUser();
+    queueResponses();
+    render(<DistribuidorRepuestosPage />);
+
+    await selectModelAndOpenSection();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('part-card-item-2')).toBeInTheDocument();
+    });
+    const card2 = screen.getByTestId('part-card-item-2');
+    expect(within(card2).getByText('Sin Stock')).toBeInTheDocument();
+  });
+
+  it('shows "Ingresando" for inventory_status: "ingresando"', async () => {
+    setUser();
+    mockItems = [{
+      id: 'item-3', section_id: 'sec-1', section_code: 'A', section_name: 'Motor',
+      order_num: 'A3', factory_part_number: 'FP-003', um_part_number: 'UM-003',
+      description: 'Empaque', description_es: null, unit: 'UND',
+      precio_publico: 12000, precio_es_preliminar: false, inventory_status: 'ingresando',
+    }];
+    queueResponses();
+    render(<DistribuidorRepuestosPage />);
+
+    await selectModelAndOpenSection();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('part-card-item-3')).toBeInTheDocument();
+    });
+    const card3 = screen.getByTestId('part-card-item-3');
+    expect(within(card3).getByText('Ingresando')).toBeInTheDocument();
+  });
+
+  it('never renders a "Precio preliminar" pill, even when precio_es_preliminar is true', async () => {
+    setUser();
+    mockItems = [{
+      id: 'item-4', section_id: 'sec-1', section_code: 'A', section_name: 'Motor',
+      order_num: 'A4', factory_part_number: 'FP-004', um_part_number: 'UM-004',
+      description: 'Stop', description_es: null, unit: 'UND',
+      precio_publico: 99876, precio_es_preliminar: true, inventory_status: 'disponible',
+    }];
+    queueResponses();
+    render(<DistribuidorRepuestosPage />);
+
+    await selectModelAndOpenSection();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('part-card-item-4')).toBeInTheDocument();
+    });
+    expect(screen.queryByText(/precio preliminar/i)).not.toBeInTheDocument();
   });
 });
 

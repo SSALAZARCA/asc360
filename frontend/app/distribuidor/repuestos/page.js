@@ -335,8 +335,26 @@ const partBadgeStyle = {
   display: 'flex', alignItems: 'center', justifyContent: 'center',
   fontWeight: 800, fontSize: '0.8rem', color: '#fff',
 };
-const priceCellStyle = { display: 'flex', alignItems: 'baseline', gap: '0.4rem', flexWrap: 'wrap', flexShrink: 0 };
-const preliminaryPillStyle = { fontSize: '0.6rem', fontWeight: 700, color: '#ffb020', background: 'rgba(255,176,32,0.12)', border: '1px solid rgba(255,176,32,0.3)', borderRadius: 6, padding: '0.15rem 0.4rem' };
+const priceCellStyle = { display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.3rem', flexWrap: 'wrap', flexShrink: 0 };
+const inventoryBadgeStyle = { fontSize: '0.6rem', fontWeight: 700, borderRadius: 6, padding: '0.15rem 0.4rem', border: '1px solid', whiteSpace: 'nowrap' };
+// "disponible" = certified physical stock (qty_physical > 0), "ingresando" =
+// received but not yet physically inspected, "sin_stock" = neither -- see
+// `_resolve_inventory_status` (backend) for the exact criteria.
+const INVENTORY_BADGE = {
+  disponible: { label: 'Disponible', color: '#22c55e', background: 'rgba(34,197,94,0.12)', border: 'rgba(34,197,94,0.3)' },
+  ingresando: { label: 'Ingresando', color: '#ffb020', background: 'rgba(255,176,32,0.12)', border: 'rgba(255,176,32,0.3)' },
+  sin_stock:  { label: 'Sin Stock',  color: '#9a9ab0', background: 'rgba(154,154,176,0.1)', border: 'rgba(154,154,176,0.25)' },
+};
+
+function InventoryBadge({ status }) {
+  const cfg = INVENTORY_BADGE[status];
+  if (!cfg) return null;
+  return (
+    <span style={{ ...inventoryBadgeStyle, color: cfg.color, background: cfg.background, borderColor: cfg.border }}>
+      {cfg.label}
+    </span>
+  );
+}
 
 function PriceCell({ item }) {
   return (
@@ -348,9 +366,7 @@ function PriceCell({ item }) {
       ) : (
         <span style={{ fontWeight: 700, color: '#606075' }}>Sin precio</span>
       )}
-      {item.precio_publico != null && item.precio_es_preliminar && (
-        <span style={preliminaryPillStyle}>Precio preliminar</span>
-      )}
+      <InventoryBadge status={item.inventory_status} />
     </div>
   );
 }
