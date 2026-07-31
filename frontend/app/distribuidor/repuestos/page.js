@@ -13,7 +13,7 @@ import CameraInput from '../../../components/tg/CameraInput';
 // copy.
 // ---------------------------------------------------------------------------
 const sectionStyle = { display: 'flex', flexDirection: 'column', gap: '1rem' };
-const cardStyle = { maxWidth: '1200px', margin: '0 auto', width: '100%' };
+const cardStyle = { maxWidth: '1600px', margin: '0 auto', width: '100%' };
 const labelStyle = { display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.72rem', fontWeight: 700, color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase', letterSpacing: '0.05em' };
 const inputStyle = { background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', padding: '0.6rem 0.85rem', color: '#fff', fontSize: '0.85rem', outline: 'none', textTransform: 'none' };
 const hintStyle = { margin: 0, fontSize: '0.68rem', color: 'rgba(255,255,255,0.45)', textTransform: 'none', fontWeight: 400, letterSpacing: 'normal' };
@@ -422,7 +422,7 @@ function TwoPanelStyles() {
         .repuestos-two-panel {
           display: grid;
           grid-template-columns: 1fr 1fr;
-          height: 750px;
+          height: 950px;
         }
         .repuestos-panel {
           height: 100%;

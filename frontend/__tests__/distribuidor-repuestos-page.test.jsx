@@ -8,8 +8,10 @@
  *     Encontradas" counter are ALWAYS in the SAME row (the second select
  *     disabled until a model is chosen) -- not split across tabs.
  *   - The two-panel workspace (diagram left, parts list right) is ALWAYS
- *     rendered, fixed-height + independently scrolling at 1024px+ (matches
- *     the prototype's `h-[750px]` grid), each panel its own header/body/
+ *     rendered, fixed-height + independently scrolling at 1024px+ (originally
+ *     matched the prototype's `h-[750px]` grid; raised to 950px on
+ *     2026-07-31 since the prototype's height was too short for
+ *     portrait-oriented real diagrams), each panel its own header/body/
  *     footer -- never a block that only appears after a section is picked.
  *   - Parts render as numbered-badge CARDS (`data-testid="part-card-{id}"`),
  *     not table rows.
