@@ -317,6 +317,41 @@ def _parse_parts_table(pdf_path: str) -> list[dict]:
     return parts
 
 
+def _extract_section_illustration(pdf_path: str) -> bytes:
+    """Extracts the exploded-view illustration from a section PDF's first
+    page as flat PNG bytes.
+
+    Some source PDFs split the illustration across MULTIPLE embedded images
+    stacked on the page (e.g. the main assembly plus a separate bracket/
+    cover placed directly below it) instead of a single image. Extracting
+    only the first embedded image (`imgs[0]`) silently drops the rest --
+    confirmed against a real source PDF where a lower bracket's own
+    separately-embedded image never made it into the generated card.
+
+    Instead of re-extracting and stitching embedded images back together,
+    this computes the union of every embedded image's on-page placement
+    rectangle and RENDERS that exact page region as one flat image --
+    correctly composited regardless of how many images (or vector graphics)
+    the source PDF actually uses. Falls back to rendering the whole page
+    when the page has no embedded images at all (pure vector content).
+    """
+    doc = fitz.open(pdf_path)
+    try:
+        page = doc[0]
+        imgs = page.get_images(full=True)
+        rects = [r for img in imgs for r in page.get_image_rects(img[0])]
+        if rects:
+            clip = rects[0]
+            for r in rects[1:]:
+                clip |= r
+            pix = page.get_pixmap(matrix=fitz.Matrix(4, 4), clip=clip)
+        else:
+            pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
+        return pix.tobytes("png")
+    finally:
+        doc.close()
+
+
 _NAT = re.compile(r"^([A-Za-z]*)(\d*)")
 
 
@@ -2167,15 +2202,7 @@ async def load_section(
         # 1. Extraer ilustración del PDF
         illus_bytes: bytes | None = None
         try:
-            doc = fitz.open(tmp_path)
-            imgs = doc[0].get_images(full=True)
-            if imgs:
-                base_img = doc.extract_image(imgs[0][0])
-                illus_bytes = base_img["image"]
-            else:
-                pix = doc[0].get_pixmap(matrix=fitz.Matrix(2, 2))
-                illus_bytes = pix.tobytes("png")
-            doc.close()
+            illus_bytes = _extract_section_illustration(tmp_path)
         except Exception as e:
             logger.warning(f"load_section illustration extract error ({filename}): {e}")
 
