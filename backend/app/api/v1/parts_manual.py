@@ -617,6 +617,16 @@ async def get_part_by_number(
     x_sonia_secret: str = Header(default=""),
     current_user=Depends(get_optional_user),
 ):
+    """Búsqueda por posición exacta (`/tg/parts` y el bot de Sonia). A
+    diferencia de `get_all_items_for_section`, sigue usando INNER JOIN y
+    404 -- una posición sin `PartsReference` es un genuino "no encontrado"
+    para una búsqueda de un único recurso (design ADR 6).
+
+    Distributor Parts Search (PR2, design ADR 1/2): resuelve `precio_publico`
+    y `description_es` por el mismo `_resolve_public_price` que usa el
+    endpoint plural, para que ambos handlers NUNCA puedan mostrar un precio
+    distinto para la misma parte. No hay gating por rol -- el campo de
+    precio es visible para cualquier llamador autenticado (o Sonia)."""
     if not verify_sonia_secret(x_sonia_secret, settings.SONIA_BOT_SECRET) and current_user is None:
         raise HTTPException(status_code=403, detail="Forbidden")
 
@@ -631,6 +641,17 @@ async def get_part_by_number(
         raise HTTPException(status_code=404, detail="Parte no encontrada")
 
     item, section, ref = row
+
+    factors = await get_pricing_factors(db)                                     # ONCE per request
+    catalog_result = await db.execute(
+        select(PartCatalog).where(PartCatalog.part_code.in_([item.factory_part_number]))
+    )                                                                           # ONCE per request
+    manual_price = next(
+        (c.public_price for c in catalog_result.scalars() if c.part_code == item.factory_part_number),
+        None,
+    )
+    precio_publico, precio_es_preliminar = _resolve_public_price(ref, manual_price, factors)
+
     return PartItemResult(
         id=str(item.id),
         section_id=str(section.id),
@@ -640,7 +661,10 @@ async def get_part_by_number(
         factory_part_number=item.factory_part_number,
         um_part_number=ref.um_part_number,
         description=ref.description,
+        description_es=ref.description_es_manual,
         unit=ref.unit,
+        precio_publico=precio_publico,
+        precio_es_preliminar=precio_es_preliminar,
     )
 
 
