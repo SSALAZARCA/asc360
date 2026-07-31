@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import AdminLayout from '../../admin-layout';
 import { authFetch } from '../../../lib/authFetch';
 import VoiceInput from '../../../components/tg/VoiceInput';
@@ -358,24 +358,6 @@ function TwoPanelStyles() {
         min-height: 0;
         overflow-y: auto;
       }
-      /* Zoom-on-hover, matches the reference prototype's .zoom-container */
-      .repuestos-zoom-container {
-        overflow: hidden;
-        cursor: zoom-in;
-      }
-      .repuestos-zoom-container img {
-        transition: transform 0.3s ease;
-      }
-      .repuestos-zoom-container:hover img {
-        transform: scale(1.5);
-      }
-      .repuestos-zoom-hint {
-        opacity: 0;
-        transition: opacity 0.2s ease;
-      }
-      .repuestos-panel:hover .repuestos-zoom-hint {
-        opacity: 1;
-      }
       @media (min-width: 1024px) {
         .repuestos-two-panel {
           display: grid;
@@ -406,12 +388,53 @@ const panelFooterStyle = {
   padding: '0.75rem 1.25rem', borderTop: '1px solid rgba(255,255,255,0.08)',
   textAlign: 'center', flexShrink: 0,
 };
-const zoomHintStyle = {
-  position: 'absolute', bottom: '0.75rem', left: '50%', transform: 'translateX(-50%)',
-  background: 'rgba(0,0,0,0.85)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 999,
-  padding: '0.4rem 0.8rem', fontSize: '0.6rem', color: 'rgba(255,255,255,0.6)',
-  textTransform: 'uppercase', letterSpacing: '0.05em', pointerEvents: 'none',
-};
+const LENS_SIZE = 170;
+const LENS_ZOOM = 2.5;
+
+// Magnifying-glass zoom: a small circular lens follows the cursor and shows
+// a magnified crop of the image at that exact position -- lets a técnico
+// inspect one numbered callout without scaling (and losing context of) the
+// whole diagram.
+function ZoomableDiagram({ src, alt }) {
+  const imgRef = useRef(null);
+  const [hovering, setHovering] = useState(false);
+  const [lens, setLens] = useState({ x: 0, y: 0, w: 0, h: 0 });
+
+  const handleMouseMove = (e) => {
+    const rect = imgRef.current.getBoundingClientRect();
+    setLens({ x: e.clientX - rect.left, y: e.clientY - rect.top, w: rect.width, h: rect.height });
+  };
+
+  const lensLeft = lens.w > 0 ? Math.max(0, Math.min(lens.x - LENS_SIZE / 2, lens.w - LENS_SIZE)) : 0;
+  const lensTop = lens.h > 0 ? Math.max(0, Math.min(lens.y - LENS_SIZE / 2, lens.h - LENS_SIZE)) : 0;
+
+  return (
+    <div style={{ position: 'relative', maxWidth: '100%', maxHeight: '100%', lineHeight: 0 }}>
+      <img
+        ref={imgRef}
+        src={src}
+        alt={alt}
+        onMouseEnter={() => setHovering(true)}
+        onMouseLeave={() => setHovering(false)}
+        onMouseMove={handleMouseMove}
+        style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', display: 'block', cursor: 'zoom-in' }}
+      />
+      {hovering && lens.w > 0 && (
+        <div
+          style={{
+            position: 'absolute', left: lensLeft, top: lensTop,
+            width: LENS_SIZE, height: LENS_SIZE, borderRadius: '50%',
+            border: '2px solid rgba(255,140,90,0.9)', boxShadow: '0 4px 24px rgba(0,0,0,0.6)',
+            pointerEvents: 'none', backgroundColor: '#fff',
+            backgroundImage: `url(${src})`, backgroundRepeat: 'no-repeat',
+            backgroundSize: `${lens.w * LENS_ZOOM}px ${lens.h * LENS_ZOOM}px`,
+            backgroundPosition: `${-(lens.x * LENS_ZOOM - LENS_SIZE / 2)}px ${-(lens.y * LENS_ZOOM - LENS_SIZE / 2)}px`,
+          }}
+        />
+      )}
+    </div>
+  );
+}
 
 function DiagramPanel({ section, diagramBlob, diagramError, loadingDiagram }) {
   return (
@@ -430,16 +453,7 @@ function DiagramPanel({ section, diagramBlob, diagramError, loadingDiagram }) {
         )}
         {section && loadingDiagram && <p style={emptyStateStyle}>Cargando diagrama...</p>}
         {section && diagramBlob && (
-          <>
-            <div className="repuestos-zoom-container" style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <img
-                src={diagramBlob}
-                alt={section.section_name}
-                style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', display: 'block' }}
-              />
-            </div>
-            <span className="repuestos-zoom-hint" style={zoomHintStyle}>Pasá el mouse para hacer zoom</span>
-          </>
+          <ZoomableDiagram src={diagramBlob} alt={section.section_name} />
         )}
         {section && !loadingDiagram && diagramError && (
           <p style={{ ...emptyStateStyle, color: '#ef4444' }}>{diagramError}</p>
