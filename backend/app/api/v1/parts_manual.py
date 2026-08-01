@@ -2892,6 +2892,48 @@ async def import_fob_preliminary(
     }
 
 
+@router.get("/admin/analysis/debug-fob-lookup")
+async def debug_fob_lookup(
+    code: str,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """TEMPORAL: estado crudo de FOB para UNA referencia -- filas de
+    `spare_part_items` (unit_price = FOB confirmado del packing list, fob_pi
+    = FOB preliminar del PI) y el valor ya propagado a `parts_references`
+    (avg_fob_cost / preliminary_fob). Investigando reporte de que una pieza
+    "en camino" ya tiene FOB cargado pero no muestra precio en Maestro de
+    Partes. Solo lectura. Eliminar después de usar."""
+    if not current_user.is_superadmin:
+        raise HTTPException(status_code=403, detail="Solo superadmin")
+
+    norm = code.strip().upper().replace(' ', '')
+
+    spi_rows = (await db.execute(text("""
+        SELECT spi.part_number, spi.qty_ordered, spi.qty_received, spi.qty_physical,
+               spi.unit_price, spi.fob_pi, spi.status,
+               spl.lot_identifier, spl.packing_list_received,
+               so.bl_container
+        FROM spare_part_items spi
+        JOIN spare_part_lots spl ON spl.id = spi.lot_id
+        LEFT JOIN shipment_orders so ON so.id = spl.shipment_order_id
+        WHERE UPPER(TRIM(REPLACE(spi.part_number, ' ', ''))) = :norm
+        ORDER BY spi.created_at
+    """), {"norm": norm})).mappings().all()
+
+    ref_rows = (await db.execute(text("""
+        SELECT factory_part_number, avg_fob_cost, preliminary_fob, total_fob_qty, last_cost_updated
+        FROM parts_references
+        WHERE UPPER(TRIM(REPLACE(factory_part_number, ' ', ''))) = :norm
+    """), {"norm": norm})).mappings().all()
+
+    return {
+        "codigo_buscado": code,
+        "en_spare_part_items": [dict(r) for r in spi_rows],
+        "en_parts_references": [dict(r) for r in ref_rows],
+    }
+
+
 # ── Coverage dashboard ─────────────────────────────────────────────────────────
 
 from pydantic import BaseModel as _BM
