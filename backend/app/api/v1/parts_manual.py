@@ -2903,51 +2903,6 @@ async def import_fob_preliminary(
     }
 
 
-@router.post("/admin/analysis/backfill-avg-fob-cost")
-async def backfill_avg_fob_cost(
-    db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_user),
-):
-    """TEMPORAL: recalcula `avg_fob_cost` para TODAS las referencias que
-    tienen algún `SparePartItem` con `unit_price` cargado, usando el mismo
-    `recalculate_part_cost` de siempre -- corrige de una sola vez los
-    precios que quedaron "atrapados" en spare_part_items sin propagarse a
-    Maestro de Partes por el bug de `confirm_reconciliation` (ya arreglado
-    para que no vuelva a pasar). No toca `rotation_class` -- eso no tiene
-    forma de recuperarse, se perdió con `replace_catalog_code` (también ya
-    arreglado) y debe reasignarse a mano. Solo superadmin. Eliminar
-    después de usar."""
-    if not current_user.is_superadmin:
-        raise HTTPException(status_code=403, detail="Solo superadmin")
-
-    from app.services.pricing_service import recalculate_part_cost
-
-    part_numbers = (await db.execute(text("""
-        SELECT DISTINCT part_number FROM spare_part_items WHERE unit_price IS NOT NULL
-    """))).scalars().all()
-
-    before_rows = (await db.execute(text(
-        "SELECT factory_part_number FROM parts_references WHERE avg_fob_cost IS NULL"
-    ))).scalars().all()
-    before_missing = set(before_rows)
-
-    for pn in part_numbers:
-        await recalculate_part_cost(db, pn)
-    await db.commit()
-
-    after_rows = (await db.execute(text(
-        "SELECT factory_part_number FROM parts_references WHERE avg_fob_cost IS NULL"
-    ))).scalars().all()
-    after_missing = set(after_rows)
-
-    return {
-        "part_numbers_procesados": len(part_numbers),
-        "sin_precio_antes": len(before_missing),
-        "sin_precio_despues": len(after_missing),
-        "recuperados": sorted(before_missing - after_missing),
-    }
-
-
 # ── Coverage dashboard ─────────────────────────────────────────────────────────
 
 from pydantic import BaseModel as _BM
