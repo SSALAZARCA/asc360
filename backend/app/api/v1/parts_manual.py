@@ -2897,46 +2897,6 @@ async def import_fob_preliminary(
 from pydantic import BaseModel as _BM
 
 
-@router.get("/admin/analysis/debug-duplicate-references")
-async def debug_duplicate_references(
-    db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_user),
-):
-    """TEMPORAL: diagnostica si hay `parts_references.factory_part_number`
-    duplicados por una diferencia de formato (mayúsculas/espacios) -- p. ej.
-    'UM-100' y 'um-100' quedarían como dos filas distintas en vez de una
-    sola, cada una con su propio `rotation_class`. Investigando el reporte
-    del usuario de que la rotación "desaparece" al re-cargar un catálogo.
-    Solo lectura. Eliminar después de usar."""
-    if not current_user.is_superadmin:
-        raise HTTPException(status_code=403, detail="Solo superadmin")
-
-    sql = text("""
-        SELECT
-            UPPER(TRIM(REPLACE(factory_part_number, ' ', ''))) AS codigo_normalizado,
-            array_agg(DISTINCT factory_part_number ORDER BY factory_part_number) AS variantes,
-            array_agg(DISTINCT COALESCE(rotation_class, '(sin asignar)') ORDER BY COALESCE(rotation_class, '(sin asignar)')) AS rotaciones,
-            count(*) AS cantidad
-        FROM parts_references
-        GROUP BY codigo_normalizado
-        HAVING count(DISTINCT factory_part_number) > 1
-        ORDER BY cantidad DESC
-    """)
-    rows = (await db.execute(sql)).all()
-    return {
-        "total_codigos_duplicados": len(rows),
-        "detalle": [
-            {
-                "codigo_normalizado": r.codigo_normalizado,
-                "variantes_encontradas": r.variantes,
-                "rotaciones_encontradas": r.rotaciones,
-                "cantidad": r.cantidad,
-            }
-            for r in rows
-        ],
-    }
-
-
 class CoverageBucket(_BM):
     rotation_class: str
     total: int
