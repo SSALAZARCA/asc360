@@ -2892,6 +2892,71 @@ async def import_fob_preliminary(
     }
 
 
+@router.get("/admin/analysis/debug-model-rotation-gaps")
+async def debug_model_rotation_gaps(
+    model_code: str,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """TEMPORAL: para TODOS los ítems actuales de un modelo cuya referencia
+    tiene `rotation_class IS NULL`, indica si ese factory_part_number YA
+    existía en algún snapshot histórico de ese modelo (pieza vieja que
+    "perdió" la clasificación) o si nunca apareció antes (pieza nueva, nunca
+    clasificada). Investigando reporte de 88 piezas de Rockville 200 que
+    aparecen sin rotación pese a haber sido clasificadas antes. Solo
+    lectura. Eliminar después de usar."""
+    if not current_user.is_superadmin:
+        raise HTTPException(status_code=403, detail="Solo superadmin")
+
+    pending_rows = (await db.execute(text("""
+        SELECT pmi.factory_part_number, pmi.order_num, pms.section_code, pms.section_name
+        FROM parts_manual_items pmi
+        JOIN parts_manual_sections pms ON pms.id = pmi.section_id
+        JOIN parts_references pr ON pr.factory_part_number = pmi.factory_part_number
+        WHERE pms.model_code = :model_code AND pr.rotation_class IS NULL
+        ORDER BY pms.section_code, pmi.order_num
+    """), {"model_code": model_code})).mappings().all()
+
+    history_rows = (await db.execute(text("""
+        SELECT section_code, snapshot
+        FROM parts_manual_section_history
+        WHERE model_code = :model_code
+    """), {"model_code": model_code})).mappings().all()
+
+    codes_en_historial_por_seccion: dict[str, set[str]] = {}
+    for h in history_rows:
+        bucket = codes_en_historial_por_seccion.setdefault(h["section_code"], set())
+        for entry in (h["snapshot"] or []):
+            fpn = entry.get("factory_part_number")
+            if fpn:
+                bucket.add(fpn)
+
+    items = []
+    nuevas = 0
+    ya_existian = 0
+    for r in pending_rows:
+        existia = r["factory_part_number"] in codes_en_historial_por_seccion.get(r["section_code"], set())
+        if existia:
+            ya_existian += 1
+        else:
+            nuevas += 1
+        items.append({
+            "factory_part_number": r["factory_part_number"],
+            "order_num": r["order_num"],
+            "section_code": r["section_code"],
+            "section_name": r["section_name"],
+            "existia_en_historial": existia,
+        })
+
+    return {
+        "model_code": model_code,
+        "total_sin_rotacion": len(items),
+        "nuevas_nunca_vistas_antes": nuevas,
+        "ya_existian_en_historial": ya_existian,
+        "items": items,
+    }
+
+
 @router.get("/admin/analysis/debug-reference-lookup")
 async def debug_reference_lookup(
     code: str,
