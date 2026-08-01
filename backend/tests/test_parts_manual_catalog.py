@@ -236,6 +236,72 @@ async def test_load_section_force_saves_snapshot_before_overwriting(tmp_pdf):
     assert result.parts_loaded == 1
 
 
+async def test_load_section_force_reload_preserves_existing_reference_fields(tmp_pdf):
+    """The guarantee behind "reloading a catalog never resets a part's
+    rotation_class/price/etc": load_section only INSERTS a new
+    PartsReference when none exists for that factory_part_number -- it
+    must never mutate an existing one. Regression pin for a user report
+    (91 Rockville 200 parts appearing "sin rotación" after a reload); a
+    manual code audit found no path that resets these fields on reload,
+    this test locks that invariant so a future change can't silently
+    break it."""
+    fd, path = tmp_pdf
+
+    existing_section = MagicMock()
+    existing_section.id = uuid.uuid4()
+    existing_section.model_code = "RENEGADE"
+    existing_section.section_code = "B01"
+    existing_section.section_name = "FRAME"
+    existing_section.diagram_url = None
+
+    old_item = MagicMock()
+    old_item.order_num = "1"
+    old_item.factory_part_number = "REF001"
+
+    existing_ref = MagicMock()
+    existing_ref.rotation_class = "alta"
+    existing_ref.avg_fob_cost = 12.5
+    existing_ref.preliminary_fob = None
+    existing_ref.description_es_manual = "Marco"
+    existing_ref.needs_price_review = True
+
+    def fake_get(model, key=None):
+        return existing_ref if model is PartsReference else None
+
+    db = AsyncMock(spec=AsyncSession)
+    db.get = AsyncMock(side_effect=fake_get)
+    db.execute = AsyncMock(side_effect=[
+        _scalar("Renegade 200"),    # vehicle_model_exists check
+        _scalar(existing_section),  # check if section exists
+        _scalars([old_item]),       # snapshot: items in old section
+        MagicMock(),                # sa_delete section
+    ])
+
+    added = []
+    db.add = MagicMock(side_effect=lambda obj: added.append(obj))
+
+    parts = [{"factory_part_number": "REF001", "order_num": "1", "description": "Frame"}]
+
+    with patch("app.api.v1.parts_manual._parse_parts_table", return_value=parts), \
+         patch("tempfile.mkstemp", return_value=(fd, path)), \
+         patch("os.unlink"), \
+         patch("fitz.open", side_effect=Exception("no fitz in test")), \
+         patch("app.api.v1.parts_manual._minio_client", side_effect=Exception("no minio in test")):
+
+        await load_section(_upload_file(), "RENEGADE", "Renegade 200", True, db, _superadmin())
+
+    # No NEW PartsReference must be created for a code that already has one.
+    refs_added = [o for o in added if isinstance(o, PartsReference)]
+    assert refs_added == [], "load_section must not insert a duplicate PartsReference when one already exists"
+
+    # The EXISTING reference's fields must be untouched -- proves load_section
+    # never mutates rotation_class/price/etc on reload.
+    assert existing_ref.rotation_class == "alta"
+    assert existing_ref.avg_fob_cost == 12.5
+    assert existing_ref.description_es_manual == "Marco"
+    assert existing_ref.needs_price_review is True
+
+
 # ---------------------------------------------------------------------------
 # Async: get_section_history
 # ---------------------------------------------------------------------------
