@@ -2892,6 +2892,53 @@ async def import_fob_preliminary(
     }
 
 
+@router.get("/admin/analysis/debug-reference-lookup")
+async def debug_reference_lookup(
+    code: str,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """TEMPORAL: estado completo de UNA referencia puntual -- fila actual en
+    `parts_references`, secciones/items que la usan hoy, y snapshots del
+    historial que la mencionen. Investigando reporte de rotación
+    "desaparecida" tras recargar un catálogo. Solo lectura. Eliminar
+    después de usar."""
+    if not current_user.is_superadmin:
+        raise HTTPException(status_code=403, detail="Solo superadmin")
+
+    norm = code.strip().upper().replace(' ', '')
+
+    ref_rows = (await db.execute(text("""
+        SELECT factory_part_number, um_part_number, description, description_es_manual,
+               rotation_class, avg_fob_cost, preliminary_fob, needs_price_review, prev_codes
+        FROM parts_references
+        WHERE UPPER(TRIM(REPLACE(factory_part_number, ' ', ''))) = :norm
+    """), {"norm": norm})).mappings().all()
+
+    item_rows = (await db.execute(text("""
+        SELECT pmi.factory_part_number, pmi.order_num, pms.model_code, pms.section_code, pms.section_name
+        FROM parts_manual_items pmi
+        JOIN parts_manual_sections pms ON pms.id = pmi.section_id
+        WHERE UPPER(TRIM(REPLACE(pmi.factory_part_number, ' ', ''))) = :norm
+    """), {"norm": norm})).mappings().all()
+
+    history_rows = (await db.execute(text("""
+        SELECT model_code, section_code, section_name, parts_count, replaced_at, snapshot
+        FROM parts_manual_section_history
+        WHERE snapshot::text ILIKE :like
+        ORDER BY replaced_at DESC
+        LIMIT 10
+    """), {"like": f"%{code}%"})).mappings().all()
+
+    return {
+        "codigo_buscado": code,
+        "codigo_normalizado": norm,
+        "en_parts_references": [dict(r) for r in ref_rows],
+        "en_secciones_actuales": [dict(r) for r in item_rows],
+        "en_historial": [dict(r) for r in history_rows],
+    }
+
+
 # ── Coverage dashboard ─────────────────────────────────────────────────────────
 
 from pydantic import BaseModel as _BM
