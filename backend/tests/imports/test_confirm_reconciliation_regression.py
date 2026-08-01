@@ -39,6 +39,7 @@ test_reconcile_lot_packing_list_regression.py, this module's sibling).
 """
 import uuid
 from datetime import datetime
+from unittest.mock import patch, AsyncMock
 
 from app.services.imports_service import confirm_reconciliation
 from app.models.imports import Backorder
@@ -82,7 +83,8 @@ class TestConfirmCompleteMatch:
         )
         db = _session([rr], get_objects=[item])
 
-        result = await confirm_reconciliation(db, lot, make_actor())
+        with patch("app.services.pricing_service.recalculate_part_cost", new=AsyncMock()):
+            result = await confirm_reconciliation(db, lot, make_actor())
 
         assert result == {
             "confirmed": 1,
@@ -109,7 +111,8 @@ class TestConfirmPartialMatch:
         )
         db = _session([rr], get_objects=[item], backorder_selects=[[]])
 
-        result = await confirm_reconciliation(db, lot, make_actor())
+        with patch("app.services.pricing_service.recalculate_part_cost", new=AsyncMock()):
+            result = await confirm_reconciliation(db, lot, make_actor())
 
         assert item.qty_received == 4
         assert item.qty_pending == 6
@@ -134,7 +137,8 @@ class TestConfirmMissingItem:
         )
         db = _session([rr], get_objects=[item], backorder_selects=[[]])
 
-        result = await confirm_reconciliation(db, lot, make_actor())
+        with patch("app.services.pricing_service.recalculate_part_cost", new=AsyncMock()):
+            result = await confirm_reconciliation(db, lot, make_actor())
 
         assert item.status == "BACKORDER"
         assert item.qty_pending == 10
@@ -152,7 +156,8 @@ class TestConfirmMissingItem:
         )
         db = _session([rr], get_objects=[item], backorder_selects=[[]])
 
-        result = await confirm_reconciliation(db, lot, make_actor())
+        with patch("app.services.pricing_service.recalculate_part_cost", new=AsyncMock()):
+            result = await confirm_reconciliation(db, lot, make_actor())
 
         assert item.status == "PARTIAL"  # NOT forced to "BACKORDER"
         assert item.qty_pending == 7  # 10 - 3, unfloored
@@ -215,7 +220,8 @@ class TestConfirmMatchedExtraSurplusIsTrueExcess:
         )
         db = _session([rr], get_objects=[item], backorder_selects=[[bo]])
 
-        result = await confirm_reconciliation(db, lot, make_actor())
+        with patch("app.services.pricing_service.recalculate_part_cost", new=AsyncMock()):
+            result = await confirm_reconciliation(db, lot, make_actor())
 
         # Pass 1: matched EXTRA applies the full declared qty to the item.
         assert item.qty_received == 15
@@ -279,7 +285,8 @@ class TestConfirmMatchedExtraSurplusIsTrueExcess:
         )
         db = _session([rr], get_objects=[item], backorder_selects=[[bo]])
 
-        result = await confirm_reconciliation(db, lot, make_actor())
+        with patch("app.services.pricing_service.recalculate_part_cost", new=AsyncMock()):
+            result = await confirm_reconciliation(db, lot, make_actor())
 
         assert result["confirmed"] == 1
 
@@ -316,7 +323,8 @@ class TestConfirmExtraFillSyncsBeneficiaryItem:
         )
         db = _session([rr], get_objects=[item], backorder_selects=[[bo]])
 
-        result = await confirm_reconciliation(db, lot, make_actor())
+        with patch("app.services.pricing_service.recalculate_part_cost", new=AsyncMock()):
+            result = await confirm_reconciliation(db, lot, make_actor())
 
         assert result["confirmed"] == 1
         # Pass 1 already set qty_received=12 (the declared qty). Pass 2 must
@@ -398,6 +406,49 @@ class TestConfirmAlreadyConfirmedGuard:
         assert result == {"error": "ALREADY_CONFIRMED"}
         assert lot.packing_list_received is False
         assert db.added == []
+
+
+class TestConfirmTriggersPriceRecalculation:
+    """Regression: confirming a reconciliation must recalculate the catalog's
+    avg_fob_cost for every part touched -- previously this step was missing
+    entirely, so a price declared on a packing list (SparePartItem.unit_price)
+    never propagated to PartsReference, leaving Maestro de Partes showing no
+    price even though the underlying data existed."""
+
+    async def test_recalculate_called_once_per_distinct_part_number(self):
+        lot = make_lot()
+        item_a = make_spare_part_item(lot.id, "ABC-001", qty_ordered=10, qty_received=0, status="PENDING")
+        item_b = make_spare_part_item(lot.id, "ABC-001", qty_ordered=5, qty_received=0, status="PENDING")
+        rr_a = make_reconciliation_result(
+            lot.id, "ABC-001", result="COMPLETE",
+            spare_part_item_id=item_a.id, qty_ordered=10, qty_in_packing=10,
+        )
+        rr_b = make_reconciliation_result(
+            lot.id, "ABC-001", result="COMPLETE",
+            spare_part_item_id=item_b.id, qty_ordered=5, qty_in_packing=5,
+        )
+        db = _session([rr_a, rr_b], get_objects=[item_a, item_b])
+
+        with patch("app.services.pricing_service.recalculate_part_cost", new=AsyncMock()) as mocked_recalc:
+            await confirm_reconciliation(db, lot, make_actor())
+
+        # Same part_number on two rows -> recalculated once, not twice.
+        mocked_recalc.assert_awaited_once_with(db, "ABC-001", lot_identifier=lot.lot_identifier)
+
+    async def test_recalculate_not_called_for_pure_extra_with_no_item(self):
+        """A pure EXTRA (no spare_part_item_id) never touched a
+        SparePartItem's price, so there's nothing to recalculate."""
+        lot = make_lot()
+        rr = make_reconciliation_result(
+            lot.id, "XYZ-001", result="EXTRA",
+            spare_part_item_id=None, qty_ordered=None, qty_in_packing=6,
+        )
+        db = _session([rr], backorder_selects=[[]])
+
+        with patch("app.services.pricing_service.recalculate_part_cost", new=AsyncMock()) as mocked_recalc:
+            await confirm_reconciliation(db, lot, make_actor())
+
+        mocked_recalc.assert_not_awaited()
 
 
 class TestConfirmNoResults:

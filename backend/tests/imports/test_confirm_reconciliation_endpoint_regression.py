@@ -22,6 +22,7 @@ Covers:
 """
 import uuid
 from datetime import datetime
+from unittest.mock import patch, AsyncMock
 
 from tests.conftest import make_test_client
 from tests.imports.conftest import (
@@ -58,7 +59,8 @@ def test_first_confirm_stamps_confirmed_by_and_at_on_every_result_including_pure
         get_objects=[lot, item],
     )
 
-    resp = _confirm(lot, fake_db)
+    with patch("app.services.pricing_service.recalculate_part_cost", new=AsyncMock()):
+        resp = _confirm(lot, fake_db)
 
     assert resp.status_code == 200
     assert complete_rr.confirmed_at is not None

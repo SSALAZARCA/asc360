@@ -1985,6 +1985,23 @@ async def _apply_reconciliation_to_items(
     return updated, backorders_created
 
 
+async def _recalculate_prices_for_confirmed_results(
+    db: AsyncSession,
+    results: list,
+    origin_pi: str,
+) -> None:
+    """Recalcula el costo promedio del catálogo para cada parte tocada por
+    esta confirmación -- sin esto el precio declarado en el packing list
+    nunca se propaga a PartsReference.avg_fob_cost (queda "atrapado" en
+    spare_part_items, invisible en Maestro de Partes). Una sola vez por
+    part_number, no por cada ReconciliationResult (misma parte puede
+    repetirse por lote)."""
+    from app.services.pricing_service import recalculate_part_cost
+    touched_part_numbers = {rr.part_number for rr in results if rr.spare_part_item_id is not None}
+    for pn in touched_part_numbers:
+        await recalculate_part_cost(db, pn, lot_identifier=origin_pi)
+
+
 async def _fill_backorders_from_extras(
     db: AsyncSession,
     results: list,
@@ -2092,7 +2109,7 @@ async def confirm_reconciliation(
 ) -> dict:
     """
     Aplica los resultados de reconciliación a los SparePartItems:
-    - COMPLETE → qty_received = qty_ordered, status = RECEIVED
+    - COMPLETE → qty_received = qty_ordered, status = DECLARED
     - PARTIAL  → qty_received = qty_in_packing, status = PARTIAL, crea Backorder por pendiente
     - MISSING  → status = BACKORDER, crea Backorder por total
     Marca lot.packing_list_received = True y sella cada `ReconciliationResult`
@@ -2118,6 +2135,7 @@ async def confirm_reconciliation(
     updated, backorders_created = await _apply_reconciliation_to_items(db, results, origin_pi)
     backorders_resolved_by_extra = await _fill_backorders_from_extras(db, results, origin_pi)
     _seal_confirmed_results(results, actor)
+    await _recalculate_prices_for_confirmed_results(db, results, origin_pi)
 
     lot.packing_list_received = True
     await db.commit()
