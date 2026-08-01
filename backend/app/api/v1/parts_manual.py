@@ -2930,19 +2930,12 @@ async def debug_reference_lookup(
         LIMIT 10
     """), {"like": f"%{code}%"})).mappings().all()
 
-    catalog_rows = (await db.execute(text("""
-        SELECT part_code, description, public_price, is_wear_part
-        FROM part_catalog
-        WHERE UPPER(TRIM(REPLACE(part_code, ' ', ''))) = :norm
-    """), {"norm": norm})).mappings().all()
-
     return {
         "codigo_buscado": code,
         "codigo_normalizado": norm,
         "en_parts_references": [dict(r) for r in ref_rows],
         "en_secciones_actuales": [dict(r) for r in item_rows],
         "en_historial": [dict(r) for r in history_rows],
-        "en_part_catalog_precio_manual": [dict(r) for r in catalog_rows],
     }
 
 
