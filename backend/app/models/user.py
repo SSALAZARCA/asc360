@@ -36,7 +36,9 @@ class User(Base):
 
     # `sdd/distributor-vehicle-delivery` PR1 (migration `d7e8f9a0b1c2`): client
     # identity fields, populated by the Distribuidor delivery flow. Nullable,
-    # PII, exposed on `UserOut` only (never `UserCreate`/`UserUpdate`).
+    # PII. `identification` is also accepted on `UserCreate` (not `UserUpdate`)
+    # to dedup clients by cedula on service-reception intake -- see
+    # `create_user`'s identification lookup.
     identification = Column(String(50), nullable=True)  # cédula
     birth_date = Column(Date, nullable=True)
     city = Column(String(120), nullable=True)

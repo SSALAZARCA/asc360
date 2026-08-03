@@ -43,6 +43,19 @@ async def create_user(
         if existing_user:
             return existing_user
 
+    # Dedup de clientes por cédula (reception "moto nueva" flow): sin esto,
+    # un cliente que ya existe -- con otra moto, o con una placa que no
+    # coincidió -- se duplicaba en cada alta. No toca otros roles/llamadores
+    # que no envían `identification`.
+    if user_in.identification and user_in.role == Role.client:
+        stmt = select(User).where(
+            User.role == Role.client,
+            User.identification == user_in.identification,
+        )
+        existing_client = (await db.execute(stmt)).scalar_one_or_none()
+        if existing_client:
+            return existing_client
+
     user_data = user_in.model_dump(exclude={"password"})
     new_user = User(**user_data)
     if user_in.password:

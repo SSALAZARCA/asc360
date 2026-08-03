@@ -18,6 +18,10 @@ class UserBase(BaseModel):
 class UserCreate(UserBase):
     tenant_id: Optional[UUID] = None
     password: Optional[str] = None
+    # Cedula, used only to dedup an existing `role=client` row before
+    # inserting a new one (service reception "isNew" flow). See
+    # `create_user`'s identification lookup.
+    identification: Optional[str] = None
 
 # Para actualizar
 class UserUpdate(BaseModel):

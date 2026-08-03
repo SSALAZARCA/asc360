@@ -17,6 +17,7 @@ const STEP = {
   SELECTING_CLIENT_FIELD:      'SELECTING_CLIENT_FIELD',
   EDITING_CLIENT_FIELD:        'EDITING_CLIENT_FIELD',
   ASKING_PHONE:      'ASKING_PHONE',
+  ASKING_CEDULA:     'ASKING_CEDULA',
   NEW_VEHICLE_FORM:  'NEW_VEHICLE_FORM',
   KM:                'KM',
   GAS:               'GAS',
@@ -114,6 +115,7 @@ export default function TgReception() {
   const [isNew,       setIsNew]       = useState(false);
   const [newVeh,      setNewVeh]      = useState({ brand: 'UM', model: '', year: '', color: '', vin: '' });
   const [clientPhone, setClientPhone] = useState('');
+  const [clientIdentification, setClientIdentification] = useState('');
   const [clientEdits, setClientEdits] = useState({});
   const [editingClientField, setEditingClientField] = useState(null);
   const [formData,    setFormData]    = useState({
@@ -140,7 +142,7 @@ export default function TgReception() {
     if (step === STEP.DONE) { sessionStorage.removeItem(STORAGE_KEY); return; }
     if (step === STEP.PLATE) return;
     const draft = {
-      step, ocrData, vehicleId, isNew, newVeh, clientPhone, formData,
+      step, ocrData, vehicleId, isNew, newVeh, clientPhone, clientIdentification, formData,
       clientEdits, editingClientField,
       vehicleData: vehicleData
         ? { plate: vehicleData.plate, brand: vehicleData.brand, model: vehicleData.model, year: vehicleData.year, id: vehicleData.id, client_id: vehicleData.client_id }
@@ -175,6 +177,7 @@ export default function TgReception() {
           setIsNew(d.isNew || false);
           setNewVeh(d.newVeh || { brand: 'UM', model: '', year: '', color: '', vin: '' });
           setClientPhone(d.clientPhone || '');
+          setClientIdentification(d.clientIdentification || '');
           setClientEdits(d.clientEdits || {});
           setEditingClientField(d.editingClientField || null);
           setFormData(d.formData || { plate: '', km: '', gas: '', notes: '', motivos: [], serviceType: 'regular', accessories: [], observations: '', intakeAnswers: [], pdfUrl: null });
@@ -235,7 +238,7 @@ export default function TgReception() {
     setOcrData(null); setVehicleId(null); setVehicleData(null); setIsNew(false);
     setNewVeh({ brand: 'UM', model: '', year: '', color: '', vin: '' });
     setVinLookupStatus('idle');
-    setClientPhone(''); setClientEdits({}); setEditingClientField(null);
+    setClientPhone(''); setClientIdentification(''); setClientEdits({}); setEditingClientField(null);
     setEvidenceItems([]); setPendingPhoto(null);
     setIntakeQuestions([]); setIntakeIdx(0);
     setFormData({ plate: '', km: '', gas: '', notes: '', motivos: [], serviceType: 'regular', accessories: [], observations: '', intakeAnswers: [], pdfUrl: null });
@@ -400,17 +403,39 @@ export default function TgReception() {
   }, [formData.plate, clientEdits, pushUser, pushBot]);
 
   // ── ASKING_PHONE ──────────────────────────────────────────────────────────
-  const handlePhone = useCallback((val) => {
-    const phone = val.trim().replace(/\s/g, '');
-    if (!phone) { pushBot('Necesito el teléfono del cliente para continuar.'); return; }
-    pushUser(phone);
-    setClientPhone(phone);
+  const goToVehicleForm = useCallback(() => {
     const hasOcr = ocrData && (ocrData.linea || ocrData.marca);
     pushBot(hasOcr
       ? 'Revisá y completá los datos del vehículo (el modelo es obligatorio):'
       : 'Completá los datos del vehículo nuevo (el modelo es obligatorio):');
     setStep(STEP.NEW_VEHICLE_FORM);
-  }, [pushUser, pushBot, ocrData]);
+  }, [pushBot, ocrData]);
+
+  const handlePhone = useCallback((val) => {
+    const phone = val.trim().replace(/\s/g, '');
+    if (!phone) { pushBot('Necesito el teléfono del cliente para continuar.'); return; }
+    pushUser(phone);
+    setClientPhone(phone);
+    // La cédula ya vino de la tarjeta de propiedad leída por OCR -- no hace
+    // falta pedirla de nuevo. Si no, se pide a mano (única forma hoy de
+    // identificar a un cliente que ya existe con otra moto).
+    if (ocrData?.numero_documento_propietario) {
+      setClientIdentification(ocrData.numero_documento_propietario);
+      goToVehicleForm();
+      return;
+    }
+    pushBot('¿Cuál es la *cédula del cliente*? Dictala 🎙️ o escribila.');
+    setStep(STEP.ASKING_CEDULA);
+  }, [pushUser, pushBot, ocrData, goToVehicleForm]);
+
+  // ── ASKING_CEDULA ─────────────────────────────────────────────────────────
+  const handleCedula = useCallback((val) => {
+    const cedula = val.trim().replace(/\s/g, '');
+    if (!cedula) { pushBot('Necesito la cédula del cliente para continuar.'); return; }
+    pushUser(cedula);
+    setClientIdentification(cedula);
+    goToVehicleForm();
+  }, [pushUser, pushBot, goToVehicleForm]);
 
   // ── NEW_VEHICLE_FORM — vehículo NO se crea aquí, se crea al final ─────────
   const confirmNewVehicle = useCallback(() => {
@@ -645,10 +670,17 @@ export default function TgReception() {
           const cr = await authFetch('/users/', { method: 'POST', body: JSON.stringify({
             name: ocrData?.propietario || 'Desconocido',
             role: 'client', tenant_id: tenantId,
-            phone: clientPhone || ocrData?.numero_documento_propietario || null,
+            phone: clientPhone || null,
+            identification: clientIdentification || ocrData?.numero_documento_propietario || null,
           })});
-          if (cr.ok || cr.status === 409) cid = (await cr.json().catch(() => ({}))).id || null;
-        } catch {}
+          if (cr.ok || cr.status === 409) {
+            cid = (await cr.json().catch(() => ({}))).id || null;
+          } else {
+            pushBot('⚠️ No pude registrar el cliente, pero seguimos con la recepción.');
+          }
+        } catch {
+          pushBot('⚠️ No pude registrar el cliente, pero seguimos con la recepción.');
+        }
 
         const vr = await authFetch('/vehicles/', { method: 'POST', body: JSON.stringify({
           plate: formData.plate, brand: newVeh.brand || 'UM', model: newVeh.model.trim(),
@@ -720,7 +752,7 @@ export default function TgReception() {
       pushBot(`Error: ${e.message}`);
       setBusy(false);
     } finally { setBusy(false); }
-  }, [vehicleId, vehicleData, user, isNew, newVeh, ocrData, clientPhone, formData, evidenceItems, pushBot, showTyping, removeTyping, router]);
+  }, [vehicleId, vehicleData, user, isNew, newVeh, ocrData, clientPhone, clientIdentification, formData, evidenceItems, pushBot, showTyping, removeTyping, router]);
 
   // ── handleSendValue ───────────────────────────────────────────────────────
   const handleSendValue = useCallback((val) => {
@@ -758,6 +790,7 @@ export default function TgReception() {
         return;
       }
       case STEP.ASKING_PHONE:      return handlePhone(v);
+      case STEP.ASKING_CEDULA:     return handleCedula(v);
       case STEP.EDITING_CLIENT_FIELD: return submitClientFieldValue(v);
       case STEP.KM:                return submitKm(v);
       case STEP.ASKING_PHOTO_DESC: return submitPhotoDesc(v);
@@ -767,7 +800,7 @@ export default function TgReception() {
       case STEP.OBSERVATIONS:      return submitObservations(v);
     }
   }, [busy, step, cancelPending, doReset, user, requestCancel, pushBot, pushUser,
-      ocrData, lookupPlate, handlePhone, submitClientFieldValue, submitKm,
+      ocrData, lookupPlate, handlePhone, handleCedula, submitClientFieldValue, submitKm,
       submitPhotoDesc, submitAccessories, submitNotes, submitIntake, submitObservations]);
 
   const handleSend = useCallback(() => {
@@ -829,7 +862,7 @@ export default function TgReception() {
     }
   })();
 
-  const INPUT_STEPS = [STEP.PLATE, STEP.CORRECTING_OCR, STEP.ASKING_PHONE, STEP.EDITING_CLIENT_FIELD, STEP.KM,
+  const INPUT_STEPS = [STEP.PLATE, STEP.CORRECTING_OCR, STEP.ASKING_PHONE, STEP.ASKING_CEDULA, STEP.EDITING_CLIENT_FIELD, STEP.KM,
                        STEP.ASKING_PHOTO_DESC, STEP.ACCESSORIES, STEP.NOTES, STEP.INTAKE, STEP.OBSERVATIONS];
   const showInputBar = (INPUT_STEPS.includes(step) || cancelPending) && step !== STEP.DONE;
 
