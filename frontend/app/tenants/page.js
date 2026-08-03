@@ -212,6 +212,7 @@ export default function TenantsPage() {
                         <NivelBadge nivel={t.nivel_red} />
                         <span style={{ fontSize: 9, color: estado.color, fontWeight: 700, textTransform: 'uppercase' }}>{estado.label}</span>
                         {t.categoria && <span style={{ fontSize: 9, color: '#9ca3af', fontWeight: 700 }}>Cat. {t.categoria}</span>}
+                        {t.ciudad && <span style={{ fontSize: 9, color: '#9ca3af', fontWeight: 700 }}>{t.ciudad}</span>}
                       </div>
                     </div>
                   </div>
