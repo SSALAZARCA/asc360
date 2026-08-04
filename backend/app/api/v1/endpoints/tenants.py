@@ -4,7 +4,7 @@ from sqlalchemy.future import select
 from sqlalchemy import or_, func
 from app.database import get_db
 from app.models.tenant import Tenant, TenantType, EstadoRed
-from app.services.divipola_service import validate_ciudad_dpto, search_municipios
+from app.services.divipola_service import search_municipios, resolve_geo
 from pydantic import BaseModel, ConfigDict
 from typing import Optional, List
 from starlette.responses import StreamingResponse
@@ -121,16 +121,6 @@ class TenantUpdate(BaseModel):
     fecha_vinculacion: Optional[datetime.date] = None
     estado_red: Optional[str] = None
     categoria: Optional[str] = None
-
-
-def _resolve_geo(ciudad: Optional[str], departamento: Optional[str]):
-    if not ciudad:
-        return ciudad, departamento
-    try:
-        resultado = validate_ciudad_dpto(ciudad, departamento or "")
-        return resultado["municipio"], resultado["departamento"]
-    except ValueError:
-        return ciudad, departamento
 
 
 def _resolve_tenant_type(value: str) -> TenantType:
@@ -279,7 +269,7 @@ async def create_tenant(
         subdomain = f"{base_sub}-{counter}"
         counter += 1
 
-    ciudad_oficial, dpto_oficial = _resolve_geo(data.ciudad, data.departamento)
+    ciudad_oficial, dpto_oficial = resolve_geo(data.ciudad, data.departamento)
 
     tipo_srv = data.tipo_servicio.strip() if data.tipo_servicio else None
     if tipo_srv and tipo_srv not in TIPO_SERVICIO_VALIDOS:
@@ -368,7 +358,7 @@ async def update_tenant(
     if data.ciudad is not None or data.departamento is not None:
         ciudad = data.ciudad if data.ciudad is not None else tenant.ciudad
         dpto = data.departamento if data.departamento is not None else tenant.departamento
-        tenant.ciudad, tenant.departamento = _resolve_geo(ciudad, dpto)
+        tenant.ciudad, tenant.departamento = resolve_geo(ciudad, dpto)
 
     await db.commit()
     await db.refresh(tenant)

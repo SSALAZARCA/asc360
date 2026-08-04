@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import AdminLayout from '../../admin-layout';
 import { authFetch } from '../../../lib/authFetch';
+import { getApiUrl } from '../../../lib/api';
 import { toast } from '../../../lib/toast';
 import VinLookupField from '../../../components/vehicle/VinLookupField';
 import ModelSelectField from '../../../components/vehicle/ModelSelectField';
@@ -148,6 +149,10 @@ const stepFieldGridStyle = {
 const labelStyle = { display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.72rem', fontWeight: 700, color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase', letterSpacing: '0.05em' };
 const inputStyle = { background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', padding: '0.6rem 0.85rem', color: '#fff', fontSize: '0.85rem', outline: 'none', textTransform: 'none' };
 const hintStyle = { margin: 0, fontSize: '0.68rem', color: 'rgba(255,255,255,0.45)', textTransform: 'none', fontWeight: 400, letterSpacing: 'normal' };
+// Explicit background/color on every <option> -- without it, the dropdown
+// popup inherits light text on the browser's default light background and
+// is invisible until hovered (same convention as `frontend/app/tenants/page.js`).
+const optionStyle = { background: '#1a1a22', color: '#fff' };
 
 // "Registros Realizados" list + edit dialog tokens.
 const listSectionStyle = { ...sectionStyle, ...cardStyle, marginTop: '1.5rem' };
@@ -185,6 +190,48 @@ function Field({ label, type = 'text', value, onChange, required = false }) {
   );
 }
 
+// Department -> city cascading selects backed by the DIVIPOLA catalog
+// (`GET /tenants/divipola/departments`, `GET /tenants/divipola/cities`) --
+// same catalog and UX as `frontend/app/tenants/page.js`, so client
+// geography is never free text. `departmentField`/`cityField` are the
+// `form` keys to read/write (`client_department`/`client_city` in both the
+// wizard and the edit dialog).
+function GeoFields({ form, setForm, geo, departmentField = 'client_department', cityField = 'client_city' }) {
+  return (
+    <>
+      <label style={labelStyle}>
+        Departamento
+        <select
+          aria-label="Departamento"
+          value={form[departmentField]}
+          onChange={(e) => {
+            const dpto = e.target.value;
+            setForm({ ...form, [departmentField]: dpto, [cityField]: '' });
+            geo.fetchCities(dpto);
+          }}
+          style={inputStyle}
+        >
+          <option value="" style={optionStyle}>— Seleccionar —</option>
+          {geo.departments.map((d) => <option key={d} value={d} style={optionStyle}>{d}</option>)}
+        </select>
+      </label>
+      <label style={labelStyle}>
+        Ciudad
+        <select
+          aria-label="Ciudad"
+          value={form[cityField]}
+          onChange={(e) => setForm({ ...form, [cityField]: e.target.value })}
+          disabled={!form[departmentField]}
+          style={inputStyle}
+        >
+          <option value="" style={optionStyle}>— Seleccionar —</option>
+          {geo.cities.map((c) => <option key={c} value={c} style={optionStyle}>{c}</option>)}
+        </select>
+      </label>
+    </>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Data hooks
 // ---------------------------------------------------------------------------
@@ -197,6 +244,38 @@ function useCurrentUser() {
     }
   }, []);
   return user;
+}
+
+// DIVIPOLA department/city catalog -- mirrors `frontend/app/tenants/page.js`'s
+// `fetchDepartments`/`fetchCities` (public endpoints, plain `fetch`, no
+// auth needed). `initialDepartment` pre-loads that department's cities once
+// on mount, for the edit dialog opening on a delivery that already has a
+// `client_department` set (so the current city renders as selected).
+function useGeo(initialDepartment) {
+  const [departments, setDepartments] = useState([]);
+  const [cities, setCities] = useState([]);
+
+  useEffect(() => {
+    fetch(`${getApiUrl()}/tenants/divipola/departments`)
+      .then((res) => res.json())
+      .then((data) => setDepartments(Array.isArray(data) ? data : []))
+      .catch(() => setDepartments([]));
+  }, []);
+
+  const fetchCities = async (dpto) => {
+    if (!dpto) { setCities([]); return; }
+    try {
+      const res = await fetch(`${getApiUrl()}/tenants/divipola/cities?departamento=${encodeURIComponent(dpto)}`);
+      setCities(await res.json());
+    } catch { setCities([]); }
+  };
+
+  useEffect(() => {
+    if (initialDepartment) fetchCities(initialDepartment);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return { departments, cities, fetchCities };
 }
 
 function useVehicleModels() {
@@ -414,7 +493,7 @@ function StepNav({ onBack, onNext, submitApi }) {
   );
 }
 
-function ClientSection({ form, setForm }) {
+function ClientSection({ form, setForm, geoApi }) {
   return (
     <>
       <Field label="Nombre del cliente" value={form.client_name} onChange={(e) => setForm({ ...form, client_name: e.target.value })} required />
@@ -422,8 +501,7 @@ function ClientSection({ form, setForm }) {
       <Field label="Fecha de nacimiento" type="date" value={form.client_birth_date} onChange={(e) => setForm({ ...form, client_birth_date: e.target.value })} />
       <Field label="Teléfono" value={form.client_phone} onChange={(e) => setForm({ ...form, client_phone: e.target.value })} />
       <Field label="Email" type="email" value={form.client_email} onChange={(e) => setForm({ ...form, client_email: e.target.value })} />
-      <Field label="Ciudad" value={form.client_city} onChange={(e) => setForm({ ...form, client_city: e.target.value })} />
-      <Field label="Departamento" value={form.client_department} onChange={(e) => setForm({ ...form, client_department: e.target.value })} />
+      <GeoFields form={form} setForm={setForm} geo={geoApi} />
       <Field label="Dirección" value={form.client_address} onChange={(e) => setForm({ ...form, client_address: e.target.value })} />
     </>
   );
@@ -729,7 +807,7 @@ function useDeliveryDetail(deliveryId) {
   return { detail, loading, failed };
 }
 
-function EditClientFields({ form, setForm }) {
+function EditClientFields({ form, setForm, geoApi }) {
   return (
     <>
       <Field label="Nombre del cliente" value={form.client_name} onChange={(e) => setForm({ ...form, client_name: e.target.value })} />
@@ -737,8 +815,7 @@ function EditClientFields({ form, setForm }) {
       <Field label="Fecha de nacimiento" type="date" value={form.client_birth_date} onChange={(e) => setForm({ ...form, client_birth_date: e.target.value })} />
       <Field label="Teléfono del cliente" value={form.client_phone} onChange={(e) => setForm({ ...form, client_phone: e.target.value })} />
       <Field label="Email" type="email" value={form.client_email} onChange={(e) => setForm({ ...form, client_email: e.target.value })} />
-      <Field label="Ciudad" value={form.client_city} onChange={(e) => setForm({ ...form, client_city: e.target.value })} />
-      <Field label="Departamento" value={form.client_department} onChange={(e) => setForm({ ...form, client_department: e.target.value })} />
+      <GeoFields form={form} setForm={setForm} geo={geoApi} />
       <Field label="Dirección" value={form.client_address} onChange={(e) => setForm({ ...form, client_address: e.target.value })} />
     </>
   );
@@ -778,6 +855,10 @@ function EditDeliveryForm({ deliveryId, detail, onClose, onSaved }) {
   // separate form state from the wizard, so it needs its own autofill wiring
   // rather than sharing the wizard's `vinApi`.
   const vinApi = useVinLookup(setForm);
+  // Own instance of the geo hook too, seeded with the record's current
+  // department so its city options are pre-loaded and the stored city
+  // renders as selected instead of blank.
+  const geoApi = useGeo(original.client_department);
 
   const handleSave = async () => {
     const patch = buildEditPatch(form, original);
@@ -794,7 +875,7 @@ function EditDeliveryForm({ deliveryId, detail, onClose, onSaved }) {
   return (
     <>
       <div style={modalBodyStyle}>
-        <EditClientFields form={form} setForm={setForm} />
+        <EditClientFields form={form} setForm={setForm} geoApi={geoApi} />
         <EditVehicleFields form={form} setForm={setForm} vinApi={vinApi} />
       </div>
       <div style={modalFootStyle}>
@@ -847,12 +928,12 @@ function EditDeliveryModal({ delivery, onClose, onSaved }) {
 
 // One render function per wizard step -- keeps the main component to just
 // wiring/navigation, each step's own JSX lives and reads on its own.
-function ClientStep({ form, setForm, onNext }) {
+function ClientStep({ form, setForm, geoApi, onNext }) {
   return (
     <>
       <StepHeading title="Cliente" />
       <div style={stepFieldGridStyle}>
-        <ClientSection form={form} setForm={setForm} />
+        <ClientSection form={form} setForm={setForm} geoApi={geoApi} />
       </div>
       <StepNav onNext={onNext} />
     </>
@@ -936,6 +1017,7 @@ export default function DistribuidorEntregaPage() {
   const isSuperadmin = user?.role === 'superadmin';
   const vehicleModels = useVehicleModels();
   const vinApi = useVinLookup(setForm);
+  const geoApi = useGeo();
   const deliveriesApi = useDeliveries();
   const [editingDelivery, setEditingDelivery] = useState(null);
   const { step, goNext, goBack } = useWizardNavigation(form, photo, isSuperadmin, vinApi.vinLookupStatus);
@@ -963,6 +1045,7 @@ export default function DistribuidorEntregaPage() {
           isSuperadmin={isSuperadmin}
           vehicleModels={vehicleModels}
           vinApi={vinApi}
+          geoApi={geoApi}
           submitApi={submitApi}
           onBack={goBack}
           onNext={goNext}

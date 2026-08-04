@@ -44,6 +44,7 @@ from app.schemas.distributor_delivery import (
     DeliveryListItemOut,
 )
 from app.schemas.vehicle import VehicleCreate
+from app.services.divipola_service import resolve_geo
 from app.services.imports_service import _log_audit
 from app.services.pdf_service import BUCKET_NAME, get_pdf_stream_from_minio, upload_file_to_minio
 from app.services.vehicle_service import vehicle_service
@@ -137,6 +138,7 @@ async def _lookup_or_create_client(
         User.identification == identification,
     )
     client = (await db.execute(stmt)).scalars().first()
+    city, department = resolve_geo(payload.client.city, payload.client.department)
     if client:
         # Most-recent-submission wins (user decision, 2026-07-28): a
         # re-delivery for an existing cedula refreshes the stored client's
@@ -146,8 +148,8 @@ async def _lookup_or_create_client(
         client.phone = payload.client.phone
         client.email = payload.client.email
         client.birth_date = payload.client.birth_date
-        client.city = payload.client.city
-        client.department = payload.client.department
+        client.city = city
+        client.department = department
         client.address = payload.client.address
         return client
 
@@ -161,8 +163,8 @@ async def _lookup_or_create_client(
         telegram_id=None,
         identification=identification,
         birth_date=payload.client.birth_date,
-        city=payload.client.city,
-        department=payload.client.department,
+        city=city,
+        department=department,
         address=payload.client.address,
     )
     db.add(client)
@@ -438,10 +440,10 @@ async def _apply_client_edit_fields(db: AsyncSession, vehicle: Vehicle, fields: 
         client.identification = fields["client_identification"]
     if "client_birth_date" in fields:
         client.birth_date = fields["client_birth_date"]
-    if "client_city" in fields:
-        client.city = fields["client_city"]
-    if "client_department" in fields:
-        client.department = fields["client_department"]
+    if "client_city" in fields or "client_department" in fields:
+        city = fields.get("client_city", client.city)
+        department = fields.get("client_department", client.department)
+        client.city, client.department = resolve_geo(city, department)
     if "client_address" in fields:
         client.address = fields["client_address"]
     if "client_email" in fields:

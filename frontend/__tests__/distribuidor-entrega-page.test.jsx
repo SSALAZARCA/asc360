@@ -60,6 +60,30 @@ function makeResponse(status, body) {
   };
 }
 
+// The client Ciudad/Departamento fields are DIVIPOLA-backed cascading
+// selects (`GET /tenants/divipola/departments`, `GET /tenants/divipola/
+// cities?departamento=...`), same catalog/UX as `frontend/app/tenants/
+// page.js` -- fetched via plain global `fetch` (public, no auth), not
+// `authFetch`. Treated as boilerplate infra, same precedent as
+// `/vehicle-models`: every test gets a default catalog so tests that don't
+// care about geography aren't affected.
+const mockFetch = jest.fn();
+global.fetch = (...args) => mockFetch(...args);
+const DEFAULT_DEPARTMENTS = ['Cundinamarca', 'Antioquia'];
+const DEFAULT_CITIES = { Cundinamarca: ['Bogotá'], Antioquia: ['Medellín'] };
+function queueGeoResponses() {
+  mockFetch.mockImplementation((url) => {
+    if (typeof url === 'string' && url.includes('/tenants/divipola/departments')) {
+      return Promise.resolve(makeResponse(200, DEFAULT_DEPARTMENTS));
+    }
+    if (typeof url === 'string' && url.includes('/tenants/divipola/cities')) {
+      const dpto = decodeURIComponent(url.split('departamento=')[1] || '');
+      return Promise.resolve(makeResponse(200, DEFAULT_CITIES[dpto] || []));
+    }
+    return Promise.resolve(makeResponse(200, []));
+  });
+}
+
 const MODELS = [{ id: 'm-1', modelo: 'Renegade 200' }];
 let mockModels = MODELS;
 // GET /distributor/deliveries (list, exact URL + GET method) is treated as a
@@ -205,6 +229,8 @@ async function goToConfirmation(opts = {}) {
 
 beforeEach(() => {
   mockAuthFetch.mockReset();
+  mockFetch.mockReset();
+  queueGeoResponses();
   mockToast.error.mockReset();
   mockToast.success.mockReset();
   mockModels = MODELS;
@@ -755,8 +781,15 @@ describe('DistribuidorEntregaPage — Registros Realizados edit (superadmin only
     expect(within(dialog).getByLabelText('Fecha de nacimiento').value).toBe('1990-05-15');
     expect(within(dialog).getByLabelText('Teléfono del cliente').value).toBe('3001234567');
     expect(within(dialog).getByLabelText('Email').value).toBe('juan@example.com');
-    expect(within(dialog).getByLabelText('Ciudad').value).toBe('Bogotá');
-    expect(within(dialog).getByLabelText('Departamento').value).toBe('Cundinamarca');
+    // Ciudad/Departamento are DIVIPOLA selects -- their options load
+    // asynchronously (own catalog fetch), so their values settle after the
+    // synchronous fields above already do.
+    await waitFor(() => {
+      expect(within(dialog).getByLabelText('Departamento').value).toBe('Cundinamarca');
+    });
+    await waitFor(() => {
+      expect(within(dialog).getByLabelText('Ciudad').value).toBe('Bogotá');
+    });
     expect(within(dialog).getByLabelText('Dirección').value).toBe('Calle 1 # 2-3');
     expect(within(dialog).getByLabelText('Placa').value).toBe('ABC123');
     expect(within(dialog).getByLabelText('VIN').value).toBe('VIN1234567890XYZ');
@@ -848,6 +881,12 @@ describe('DistribuidorEntregaPage — Registros Realizados edit (superadmin only
     await within(dialog).findByLabelText('Nombre del cliente');
 
     fireEvent.change(within(dialog).getByLabelText('Cédula'), { target: { value: '900111222' } });
+    // Ciudad is a cascading select disabled until a Departamento is picked
+    // (Cundinamarca's cities load from the mocked DIVIPOLA catalog).
+    fireEvent.change(within(dialog).getByLabelText('Departamento'), { target: { value: 'Cundinamarca' } });
+    await waitFor(() => {
+      expect(within(dialog).getByLabelText('Ciudad')).not.toBeDisabled();
+    });
     fireEvent.change(within(dialog).getByLabelText('Ciudad'), { target: { value: 'Bogotá' } });
     fireEvent.click(within(dialog).getByRole('button', { name: /guardar/i }));
 
@@ -857,6 +896,7 @@ describe('DistribuidorEntregaPage — Registros Realizados edit (superadmin only
     const [, options] = nonCatalogCalls()[0];
     expect(JSON.parse(options.body)).toEqual({
       client_identification: '900111222',
+      client_department: 'Cundinamarca',
       client_city: 'Bogotá',
     });
   });

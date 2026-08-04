@@ -74,6 +74,20 @@ def validate_ciudad_dpto(ciudad: str, departamento: str) -> dict:
     }
 
 
+def resolve_geo(ciudad, departamento):
+    """Normalizes a (ciudad, departamento) pair to its official DIVIPOLA
+    spelling/casing. Soft fallback: returns the raw input unchanged if it
+    doesn't match anything, never raises -- callers persist best-effort data
+    rather than hard-blocking on an unrecognized city."""
+    if not ciudad:
+        return ciudad, departamento
+    try:
+        resultado = validate_ciudad_dpto(ciudad, departamento or "")
+        return resultado["municipio"], resultado["departamento"]
+    except ValueError:
+        return ciudad, departamento
+
+
 def search_municipios(q: str, limit: int = 8) -> list:
     """
     Búsqueda de municipios por texto parcial (sin tildes).

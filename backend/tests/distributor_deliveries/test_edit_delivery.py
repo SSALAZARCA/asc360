@@ -81,8 +81,11 @@ class TestSuperadminCanEditAllFields:
 
         assert client.identification == "987654321"
         assert client.birth_date == date(1985, 3, 20)
-        assert client.city == "Medellín"
-        assert client.department == "Antioquia"
+        # DIVIPOLA-normalized casing, not the raw submitted "Medellín"/
+        # "Antioquia" -- city/department now go through `resolve_geo` the
+        # same way `tenants.py` already does on create AND update.
+        assert client.city == "MEDELLÍN"
+        assert client.department == "ANTIOQUIA"
         assert client.address == "Carrera 50 # 10-20"
         assert client.email == "nuevo@example.com"
         assert result.model == "DSR PRO"
