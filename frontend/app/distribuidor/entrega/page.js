@@ -8,7 +8,7 @@ import { toast } from '../../../lib/toast';
 import VinLookupField from '../../../components/vehicle/VinLookupField';
 import ModelSelectField from '../../../components/vehicle/ModelSelectField';
 import DeliveryActUpload from '../../../components/distribuidor/DeliveryActUpload';
-import { Truck, Save, Pencil, X, Download } from 'lucide-react';
+import { Save, Pencil, X, Download } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
 // Whitelisted shape — MUST mirror `DeliveryCreate`
@@ -364,7 +364,6 @@ function useDeliveries() {
 
 function useDeliverySubmit(form, photo, isSuperadmin, vinLookupStatus, resetForm, onSuccess) {
   const [saving, setSaving] = useState(false);
-  const [success, setSuccess] = useState(null); // { id } | null
 
   const submit = async () => {
     setSaving(true);
@@ -375,8 +374,6 @@ function useDeliverySubmit(form, photo, isSuperadmin, vinLookupStatus, resetForm
 
       const res = await authFetch('/distributor/deliveries', { method: 'POST', body: fd });
       if (res.ok) {
-        const data = await res.json();
-        setSuccess({ id: data.id });
         toast.success('Entrega registrada correctamente.');
         resetForm();
         // Re-fetch so a freshly-created registration shows up in "Registros
@@ -402,7 +399,7 @@ function useDeliverySubmit(form, photo, isSuperadmin, vinLookupStatus, resetForm
     await submit();
   };
 
-  return { saving, success, trySubmit };
+  return { saving, trySubmit };
 }
 
 // ---------------------------------------------------------------------------
@@ -590,16 +587,6 @@ function ConfirmationSummary({ form, photo }) {
       <SummaryRow label="Fecha de entrega" value={form.delivery_date} />
       <SummaryRow label="Acta de entrega" value={photo ? photo.name : null} />
     </div>
-  );
-}
-
-function SuccessNotice({ submitApi }) {
-  if (!submitApi.success) return null;
-  return (
-    <p style={{ ...hintStyle, color: '#22c55e', fontSize: '0.8rem', marginTop: '1rem' }}>
-      <Truck size={13} style={{ verticalAlign: 'middle', marginRight: 4 }} />
-      Entrega registrada correctamente.
-    </p>
   );
 }
 
@@ -970,7 +957,6 @@ function ConfirmStep({ form, photo, submitApi, onBack }) {
       <StepHeading title="Confirmación" />
       <ConfirmationSummary form={form} photo={photo} />
       <StepNav onBack={onBack} submitApi={submitApi} />
-      <SuccessNotice submitApi={submitApi} />
     </>
   );
 }
@@ -998,7 +984,9 @@ function useWizardNavigation(form, photo, isSuperadmin, vinLookupStatus) {
 
   const goBack = () => setStep((s) => Math.max(s - 1, 0));
 
-  return { step, goNext, goBack };
+  const resetStep = () => setStep(STEP_CLIENT);
+
+  return { step, goNext, goBack, resetStep };
 }
 
 function WizardStepBody(props) {
@@ -1020,14 +1008,14 @@ export default function DistribuidorEntregaPage() {
   const geoApi = useGeo();
   const deliveriesApi = useDeliveries();
   const [editingDelivery, setEditingDelivery] = useState(null);
-  const { step, goNext, goBack } = useWizardNavigation(form, photo, isSuperadmin, vinApi.vinLookupStatus);
-  // Resets the form data after a successful submit but deliberately stays
-  // on Confirmación so the success notice remains visible; the user can
-  // click Atrás to start a fresh entry once they've seen it.
+  const { step, goNext, goBack, resetStep } = useWizardNavigation(form, photo, isSuperadmin, vinApi.vinLookupStatus);
+  // Resets the form data AND returns to Cliente after a successful submit,
+  // so staff can start registering the next delivery right away.
   const resetForm = () => {
     setForm(FORM_DEFAULTS);
     setPhoto(null);
     vinApi.setVinLookupStatus('idle');
+    resetStep();
   };
   const submitApi = useDeliverySubmit(form, photo, isSuperadmin, vinApi.vinLookupStatus, resetForm, deliveriesApi.fetchDeliveries);
 

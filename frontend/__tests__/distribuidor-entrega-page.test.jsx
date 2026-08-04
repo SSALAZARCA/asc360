@@ -492,8 +492,9 @@ describe('DistribuidorEntregaPage — Entrega step validation', () => {
       expect(nonCatalogCalls()).toHaveLength(1);
     });
     await waitFor(() => {
-      expect(screen.getByText(/entrega registrada correctamente/i)).toBeInTheDocument();
+      expect(mockToast.success).toHaveBeenCalledWith('Entrega registrada correctamente.');
     });
+    expect(screen.getByRole('heading', { name: 'Cliente' })).toBeInTheDocument();
   });
 });
 
@@ -670,12 +671,13 @@ describe('DistribuidorEntregaPage — Registros Realizados (list)', () => {
     clickSubmit();
 
     await waitFor(() => {
-      expect(screen.getByText(/entrega registrada correctamente/i)).toBeInTheDocument();
+      expect(mockToast.success).toHaveBeenCalledWith('Entrega registrada correctamente.');
     });
     await waitFor(() => {
       expect(screen.queryByText(/todavía no hay registros/i)).not.toBeInTheDocument();
     });
     expect(await screen.findByText(/ABC123/)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Cliente' })).toBeInTheDocument();
   });
 });
 
@@ -933,7 +935,8 @@ describe('DistribuidorEntregaPage — successful multipart submission from Confi
     expect(options.body.get('photo')).toBeTruthy();
 
     await waitFor(() => {
-      expect(screen.getByText(/entrega registrada correctamente/i)).toBeInTheDocument();
+      expect(mockToast.success).toHaveBeenCalledWith('Entrega registrada correctamente.');
     });
+    expect(screen.getByRole('heading', { name: 'Cliente' })).toBeInTheDocument();
   });
 });
