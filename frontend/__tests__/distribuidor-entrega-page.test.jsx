@@ -144,6 +144,16 @@ function isDeliveryDetailGet(url, opts) {
     && (!opts || !opts.method || opts.method === 'GET');
 }
 
+// GET /tenants -- superadmin's "Tienda" select (create wizard AND the edit
+// modal). Fetched via `authFetch`, only when the actor is superadmin
+// (`useTenants(enabled)`). Treated as boilerplate too, same precedent as
+// `/vehicle-models`: defaults to a single tenant so every superadmin flow
+// test can select one without wiring its own response.
+let mockTenants = [{ id: 't-1', name: 'Moto Total S.A.S' }];
+function isTenantsListGet(url, opts) {
+  return typeof url === 'string' && url === '/tenants' && (!opts || !opts.method || opts.method === 'GET');
+}
+
 function queueResponses(...responses) {
   let i = 0;
   mockAuthFetch.mockImplementation((url, opts) => {
@@ -163,6 +173,9 @@ function queueResponses(...responses) {
         mockDeliveryDetail ? makeResponse(200, mockDeliveryDetail) : makeResponse(404, {})
       );
     }
+    if (isTenantsListGet(url, opts)) {
+      return Promise.resolve(makeResponse(200, mockTenants));
+    }
     return Promise.resolve(responses[i++]);
   });
 }
@@ -173,6 +186,7 @@ function nonCatalogCalls() {
       && !isDeliveriesListGet(url, opts)
       && !isVinLookupGet(url)
       && !isDeliveryDetailGet(url, opts)
+      && !isTenantsListGet(url, opts)
   );
 }
 
@@ -209,8 +223,21 @@ async function fillVehicleStep({ plate = 'ABC123', vin = '1HGCM82633A004352' } =
   });
 }
 
-async function fillDeliveryStep({ delivery_date = '2025-01-10', photo = makeFile() } = {}) {
+// `tienda` only applies when the "Tienda" field is the superadmin `<select>`
+// variant (a Distribuidor's is a read-only, non-`<select>` `<input>` --
+// nothing to pick). Defaults to the first mocked tenant so every existing
+// superadmin flow keeps working without each test wiring its own selection;
+// waits for the fetched options first, same "wait before acting" discipline
+// as `fillVehicleStep`'s VIN-lookup wait.
+async function fillDeliveryStep({ delivery_date = '2025-01-10', photo = makeFile(), tienda } = {}) {
   fireEvent.change(screen.getByLabelText('Fecha de entrega'), { target: { value: delivery_date } });
+  const tiendaField = screen.queryByLabelText('Tienda');
+  if (tiendaField && tiendaField.tagName === 'SELECT') {
+    await waitFor(() => {
+      expect(within(tiendaField).getAllByRole('option').length).toBeGreaterThan(1);
+    });
+    fireEvent.change(tiendaField, { target: { value: tienda ?? mockTenants[0]?.id ?? '' } });
+  }
   if (photo) {
     await userEvent.upload(screen.getByLabelText(/acta de entrega/i), photo);
   }
@@ -237,6 +264,7 @@ beforeEach(() => {
   mockDeliveries = [];
   mockVinLookupResult = { model: 'Renegade 200', year: 2023, color: 'Rojo', engine_number: 'ENG-999' };
   mockDeliveryDetail = DEFAULT_DELIVERY_DETAIL;
+  mockTenants = [{ id: 't-1', name: 'Moto Total S.A.S' }];
   sessionStorage.clear();
 });
 
@@ -938,5 +966,123 @@ describe('DistribuidorEntregaPage — successful multipart submission from Confi
       expect(mockToast.success).toHaveBeenCalledWith('Entrega registrada correctamente.');
     });
     expect(screen.getByRole('heading', { name: 'Cliente' })).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// "Tienda" field (which Distribuidora made the sale) -- read-only for a
+// tenant user (their own store, implicit), a required editable select for
+// superadmin (GET /tenants, no tenant of their own).
+// ---------------------------------------------------------------------------
+describe('DistribuidorEntregaPage — Tienda field on the Entrega step', () => {
+  it("shows the tenant user's own store, read-only", async () => {
+    sessionStorage.setItem('um_user', JSON.stringify({ name: 'Test User', role: 'parts_dealer', tenant_name: 'Moto Total S.A.S' }));
+    queueResponses();
+    render(<DistribuidorEntregaPage />);
+
+    await fillClientStep();
+    clickNext();
+    await fillVehicleStep();
+    clickNext();
+
+    const tiendaField = screen.getByLabelText('Tienda');
+    expect(tiendaField.tagName).toBe('INPUT');
+    expect(tiendaField).toBeDisabled();
+    expect(tiendaField).toHaveValue('Moto Total S.A.S');
+  });
+
+  it('shows a required editable select of network tenants for superadmin', async () => {
+    setUser('superadmin');
+    queueResponses();
+    render(<DistribuidorEntregaPage />);
+
+    await fillClientStep();
+    clickNext();
+    await fillVehicleStep();
+    clickNext();
+
+    const tiendaField = screen.getByLabelText('Tienda');
+    expect(tiendaField.tagName).toBe('SELECT');
+    await waitFor(() => {
+      expect(within(tiendaField).getAllByRole('option').length).toBeGreaterThan(1);
+    });
+    expect(within(tiendaField).getByText('Moto Total S.A.S')).toBeInTheDocument();
+  });
+
+  it('blocks advancing past Entrega for superadmin with no tienda selected', async () => {
+    setUser('superadmin');
+    queueResponses();
+    render(<DistribuidorEntregaPage />);
+
+    await fillClientStep();
+    clickNext();
+    await fillVehicleStep();
+    clickNext();
+    fireEvent.change(screen.getByLabelText('Fecha de entrega'), { target: { value: '2025-01-10' } });
+    clickNext();
+
+    await waitFor(() => {
+      expect(mockToast.error).toHaveBeenCalledWith('Debe seleccionar la tienda que realizó la venta.');
+    });
+    expect(screen.getByRole('heading', { name: 'Entrega' })).toBeInTheDocument();
+    expect(nonCatalogCalls()).toHaveLength(0);
+  });
+
+  it("includes the selected tienda's id in the create payload for superadmin", async () => {
+    setUser('superadmin');
+    queueResponses(makeResponse(201, {
+      id: 'v-1', plate: 'ABC123', vin: null, model: null, color: null, year: null,
+      engine_number: null, delivery_date: '2025-01-10', delivery_act_url: null, client_id: 'c-1',
+    }));
+    render(<DistribuidorEntregaPage />);
+
+    await goToConfirmation();
+    clickSubmit();
+
+    await waitFor(() => {
+      expect(nonCatalogCalls()).toHaveLength(1);
+    });
+    const [, options] = nonCatalogCalls()[0];
+    const payload = JSON.parse(options.body.get('payload'));
+    expect(payload.registered_by_tenant_id).toBe('t-1');
+  });
+
+  it('shows the resolved Tienda name on the Confirmación summary', async () => {
+    setUser('superadmin');
+    queueResponses();
+    render(<DistribuidorEntregaPage />);
+
+    await goToConfirmation();
+
+    expect(screen.getByText('Moto Total S.A.S')).toBeInTheDocument();
+  });
+
+  it('the edit modal shows an editable Tienda select, prefilled, and PATCHes only when changed', async () => {
+    setUser('superadmin');
+    mockDeliveries = [ROW_DISTRIBUIDOR];
+    mockTenants = [
+      { id: 't-1', name: 'Vieja Distribuidora' },
+      { id: 't-2', name: 'Nueva Distribuidora' },
+    ];
+    mockDeliveryDetail = { ...DEFAULT_DELIVERY_DETAIL, registered_by_tenant_id: 't-1' };
+    queueResponses();
+    render(<DistribuidorEntregaPage />);
+
+    await screen.findByText('Juan Pérez');
+    fireEvent.click(screen.getByRole('button', { name: /editar/i }));
+    const dialog = await screen.findByRole('dialog');
+    const tiendaSelect = await within(dialog).findByLabelText('Tienda');
+    await waitFor(() => {
+      expect(tiendaSelect).toHaveValue('t-1');
+    });
+
+    fireEvent.change(tiendaSelect, { target: { value: 't-2' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: /guardar/i }));
+
+    await waitFor(() => {
+      expect(nonCatalogCalls()).toHaveLength(1);
+    });
+    const [, options] = nonCatalogCalls()[0];
+    expect(JSON.parse(options.body)).toEqual({ registered_by_tenant_id: 't-2' });
   });
 });

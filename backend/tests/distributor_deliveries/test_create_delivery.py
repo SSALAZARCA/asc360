@@ -23,6 +23,7 @@ from tests.distributor_deliveries.conftest import (
     make_valid_photo,
     make_distribuidor,
     make_superadmin,
+    make_tenant,
     VALID_DELIVERY_PAYLOAD,
 )
 
@@ -119,8 +120,9 @@ class TestExistingVehicleReused:
         duplicate `Vehicle` is created."""
         existing_vehicle = make_delivery_vehicle(plate="ABC123")
         existing_vehicle.delivery_date = None
-        fake_db = FakeDeliverySession(vehicles=[existing_vehicle])
-        payload = _payload()
+        tenant = make_tenant()
+        fake_db = FakeDeliverySession(vehicles=[existing_vehicle], tenants=[tenant])
+        payload = _payload(registered_by_tenant_id=str(tenant.id))
 
         vehicle = await svc.create_delivery(fake_db, payload, make_valid_photo(), make_superadmin())
 
@@ -244,12 +246,20 @@ class TestRegisteredByTenantIdSetOnCreation:
 
         assert vehicle.registered_by_tenant_id is None
 
-    async def test_superadmin_backfill_stamps_none(self):
-        """A superadmin manual legacy-vehicle backfill isn't "owned" by any
-        Distribuidora -- also expected, also `None`."""
-        fake_db = FakeDeliverySession()
+    async def test_superadmin_must_explicitly_select_a_tenant(self):
+        """Follow-up feature (2026-08-04, user decision): superadmin has no
+        tenant of their own, so unlike a Distribuidor they can NOT rely on
+        an implicit `actor.tenant_id` -- every superadmin registration,
+        including a manual legacy-vehicle backfill, must now explicitly
+        attribute the sale to a real Distribuidora via
+        `registered_by_tenant_id`. See `test_registered_by_tenant.py` for
+        the full spoof-prevention and validation coverage."""
+        tenant = make_tenant()
+        fake_db = FakeDeliverySession(tenants=[tenant])
         actor = make_superadmin()
 
-        vehicle = await svc.create_delivery(fake_db, _payload(), make_valid_photo(), actor)
+        vehicle = await svc.create_delivery(
+            fake_db, _payload(registered_by_tenant_id=str(tenant.id)), make_valid_photo(), actor
+        )
 
-        assert vehicle.registered_by_tenant_id is None
+        assert vehicle.registered_by_tenant_id == tenant.id

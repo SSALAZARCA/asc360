@@ -7,6 +7,7 @@ from sqlalchemy.orm import selectinload
 from pydantic import BaseModel, EmailStr
 from typing import Optional
 from app.database import get_db
+from app.models.tenant import Tenant
 from app.models.user import User, UserStatus, Role
 from app.core.security import verify_password, create_access_token, get_password_hash, verify_sonia_secret, verify_telegram_initdata
 from app.config import settings
@@ -48,8 +49,20 @@ class TelegramMiniAppRequest(BaseModel):
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
-def _build_token_and_user(user: User) -> dict:
-    """Genera el JWT y el dict de respuesta estandarizado para un usuario."""
+async def _build_token_and_user(user: User, db: AsyncSession) -> dict:
+    """Genera el JWT y el dict de respuesta estandarizado para un usuario.
+
+    `tenant_name` is resolved with its own small explicit query rather than
+    relying on `user.tenant` (a lazy `relationship`) -- the 4 callers below
+    fetch `user` via different queries, not all of which eager-load
+    `tenant`, and touching a lazy relationship after the original query
+    completed raises `MissingGreenlet` under async SQLAlchemy. A dedicated
+    query sidesteps that regardless of how the caller fetched `user`."""
+    tenant_name = None
+    if user.tenant_id:
+        stmt = select(Tenant.name).where(Tenant.id == user.tenant_id)
+        tenant_name = (await db.execute(stmt)).scalar_one_or_none()
+
     access_token = create_access_token(
         data={
             "sub": str(user.id),
@@ -68,6 +81,7 @@ def _build_token_and_user(user: User) -> dict:
             "email": user.email,
             "role": user.role.value,
             "tenant_id": str(user.tenant_id) if user.tenant_id else None,
+            "tenant_name": tenant_name,
         }
     }
 
@@ -111,7 +125,7 @@ async def login_for_access_token(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    return _build_token_and_user(user)
+    return await _build_token_and_user(user, db)
 
 
 # ─── Endpoint 2: Auth Telegram / Sonia (Híbrido) ─────────────────────────────
@@ -153,7 +167,7 @@ async def telegram_auth(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Este usuario ha sido bloqueado por el administrador."
             )
-        return _build_token_and_user(user)
+        return await _build_token_and_user(user, db)
 
     # 2. Usuario nuevo → crear cuenta provisional vinculada al Telegram ID
     new_user = User(
@@ -168,7 +182,7 @@ async def telegram_auth(
     await db.commit()
     await db.refresh(new_user)
 
-    return _build_token_and_user(new_user)
+    return await _build_token_and_user(new_user, db)
 
 
 # ─── Endpoint 3: Vincular Telegram a usuario Web existente ────────────────────
@@ -301,7 +315,7 @@ async def telegram_mini_app_auth(
             detail="Tu cuenta está pendiente de aprobación. Contactá al administrador del taller.",
         )
 
-    return _build_token_and_user(user)
+    return await _build_token_and_user(user, db)
 
 
 # ─── Endpoint 6: Cambio de contraseña propia ─────────────────────────────────

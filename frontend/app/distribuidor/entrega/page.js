@@ -30,6 +30,10 @@ const FORM_DEFAULTS = {
   year: '',
   engine_number: '',
   delivery_date: '',
+  // Which Distribuidora made the sale. Meaningless/ignored by the backend
+  // for a tenant-scoped actor (their own tenant is forced server-side) --
+  // only superadmin's selection here actually matters.
+  registered_by_tenant_id: '',
 };
 
 // 4-step wizard (Cliente → Vehículo → Entrega → Confirmación), per the
@@ -83,6 +87,11 @@ function validateDeliveryStep(form, photo, isSuperadmin) {
   if (!form.delivery_date) return 'La fecha de entrega es obligatoria.';
   if (isFutureDate(form.delivery_date)) return 'La fecha de entrega no puede ser futura.';
   if (!photo && !isSuperadmin) return 'El acta de entrega firmada es obligatoria.';
+  // Superadmin has no tenant of their own -- unlike a Distribuidor, who
+  // gets their own tienda attributed implicitly, superadmin MUST explicitly
+  // say which Distribuidora made the sale (mirrors the backend's own
+  // rejection in `_resolve_registered_by_tenant_id`).
+  if (isSuperadmin && !form.registered_by_tenant_id) return 'Debe seleccionar la tienda que realizó la venta.';
   return null;
 }
 
@@ -120,6 +129,7 @@ function buildPayload(form) {
     // conversion, which would shift the day. `delivery_date` is a DATE
     // column, day precision only (Design ADR 2).
     delivery_date: form.delivery_date,
+    registered_by_tenant_id: form.registered_by_tenant_id || null,
   };
 }
 
@@ -181,11 +191,39 @@ const modalBodyStyle = { padding: '1.5rem', display: 'grid', gridTemplateColumns
 const modalFootStyle = { display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', padding: '1.25rem 1.5rem', borderTop: '1px solid rgba(255,255,255,0.05)', flexShrink: 0 };
 const closeBtnStyle = { width: '28px', height: '28px', borderRadius: '8px', background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' };
 
-function Field({ label, type = 'text', value, onChange, required = false }) {
+function Field({ label, type = 'text', value, onChange, required = false, disabled = false }) {
   return (
     <label style={labelStyle}>
       {label}
-      <input aria-label={label} type={type} value={value} onChange={onChange} style={inputStyle} required={required} />
+      <input
+        aria-label={label}
+        type={type}
+        value={value}
+        onChange={onChange}
+        style={disabled ? { ...inputStyle, opacity: 0.6, cursor: 'not-allowed' } : inputStyle}
+        required={required}
+        disabled={disabled}
+      />
+    </label>
+  );
+}
+
+// Shared by the wizard's Entrega step (superadmin only) and the edit modal
+// (always superadmin, per its own access boundary) -- a Distribuidor never
+// sees this select, their own tienda is implicit and read-only instead.
+function TenantSelect({ value, onChange, tenants }) {
+  return (
+    <label style={labelStyle}>
+      Tienda
+      <select
+        aria-label="Tienda"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        style={inputStyle}
+      >
+        <option value="" style={optionStyle}>— Seleccionar —</option>
+        {tenants.map((t) => <option key={t.id} value={t.id} style={optionStyle}>{t.name}</option>)}
+      </select>
     </label>
   );
 }
@@ -276,6 +314,24 @@ function useGeo(initialDepartment) {
   }, []);
 
   return { departments, cities, fetchCities };
+}
+
+// Network-wide tenant list for superadmin's "Tienda" select (create wizard
+// AND the edit modal, both superadmin-only) -- reuses `GET /tenants`
+// verbatim (`frontend/app/tenants/page.js`'s own fetch), no parallel
+// endpoint. Only fetched when `enabled` (superadmin) -- a Distribuidor has
+// no access to this endpoint (403) and doesn't need the list anyway, their
+// own tienda is shown read-only instead.
+function useTenants(enabled) {
+  const [tenants, setTenants] = useState([]);
+  useEffect(() => {
+    if (!enabled) return;
+    authFetch('/tenants')
+      .then((res) => { if (!res.ok) throw new Error('tenants fetch failed'); return res.json(); })
+      .then((data) => setTenants(Array.isArray(data) ? data : []))
+      .catch(() => setTenants([]));
+  }, [enabled]);
+  return tenants;
 }
 
 function useVehicleModels() {
@@ -531,10 +587,19 @@ function VehicleSection({ form, setForm, vehicleModels, vinApi }) {
   );
 }
 
-function DeliverySection({ form, setForm, photo, setPhoto, isSuperadmin }) {
+function DeliverySection({ form, setForm, photo, setPhoto, isSuperadmin, user, tenants }) {
   return (
     <>
       <Field label="Fecha de entrega" type="date" value={form.delivery_date} onChange={(e) => setForm({ ...form, delivery_date: e.target.value })} required />
+      {isSuperadmin ? (
+        <TenantSelect
+          value={form.registered_by_tenant_id}
+          onChange={(v) => setForm({ ...form, registered_by_tenant_id: v })}
+          tenants={tenants}
+        />
+      ) : (
+        <Field label="Tienda" value={user?.tenant_name || ''} onChange={() => {}} disabled />
+      )}
       <DeliveryActUpload
         value={photo}
         onChange={setPhoto}
@@ -562,7 +627,10 @@ function SummaryRow({ label, value }) {
 }
 
 // Read-only review of everything entered across the 3 previous steps.
-function ConfirmationSummary({ form, photo }) {
+function ConfirmationSummary({ form, photo, isSuperadmin, user, tenants }) {
+  const tiendaLabel = isSuperadmin
+    ? (tenants.find((t) => t.id === form.registered_by_tenant_id)?.name || null)
+    : (user?.tenant_name || null);
   return (
     <div style={summaryListStyle}>
       <p style={summaryGroupTitleStyle}>Cliente</p>
@@ -585,6 +653,7 @@ function ConfirmationSummary({ form, photo }) {
 
       <p style={summaryGroupTitleStyle}>Entrega</p>
       <SummaryRow label="Fecha de entrega" value={form.delivery_date} />
+      <SummaryRow label="Tienda" value={tiendaLabel} />
       <SummaryRow label="Acta de entrega" value={photo ? photo.name : null} />
     </div>
   );
@@ -695,6 +764,7 @@ const EDIT_FIELDS = [
   'client_name', 'client_phone', 'client_identification', 'client_birth_date',
   'client_city', 'client_department', 'client_address', 'client_email',
   'plate', 'vin', 'model', 'color', 'year', 'engine_number', 'delivery_date',
+  'registered_by_tenant_id',
 ];
 
 // Bugfix (2026-07-30): source the "original" prefill values from the FULL
@@ -723,6 +793,7 @@ function originalEditValues(detail) {
     year: detail.year != null ? String(detail.year) : '',
     engine_number: detail.engine_number || '',
     delivery_date: detail.delivery_date || '',
+    registered_by_tenant_id: detail.registered_by_tenant_id || '',
   };
 }
 
@@ -808,7 +879,7 @@ function EditClientFields({ form, setForm, geoApi }) {
   );
 }
 
-function EditVehicleFields({ form, setForm, vinApi }) {
+function EditVehicleFields({ form, setForm, vinApi, tenants }) {
   return (
     <>
       <Field label="Placa" value={form.plate} onChange={(e) => setForm({ ...form, plate: e.target.value })} />
@@ -826,6 +897,11 @@ function EditVehicleFields({ form, setForm, vinApi }) {
       <Field label="Año" type="number" value={form.year} onChange={(e) => setForm({ ...form, year: e.target.value })} />
       <Field label="Número de motor" value={form.engine_number} onChange={(e) => setForm({ ...form, engine_number: e.target.value })} />
       <Field label="Fecha de entrega" type="date" value={form.delivery_date} onChange={(e) => setForm({ ...form, delivery_date: e.target.value })} />
+      <TenantSelect
+        value={form.registered_by_tenant_id}
+        onChange={(v) => setForm({ ...form, registered_by_tenant_id: v })}
+        tenants={tenants}
+      />
     </>
   );
 }
@@ -834,7 +910,7 @@ function EditVehicleFields({ form, setForm, vinApi }) {
 // `GET /distributor/deliveries/{id}` response) has loaded, so its initial
 // `form` state (and the `original` diff baseline `buildEditPatch` compares
 // against) is sourced from real DB data, not a placeholder.
-function EditDeliveryForm({ deliveryId, detail, onClose, onSaved }) {
+function EditDeliveryForm({ deliveryId, detail, tenants, onClose, onSaved }) {
   const original = originalEditValues(detail);
   const [form, setForm] = useState(original);
   const [saving, setSaving] = useState(false);
@@ -863,7 +939,7 @@ function EditDeliveryForm({ deliveryId, detail, onClose, onSaved }) {
     <>
       <div style={modalBodyStyle}>
         <EditClientFields form={form} setForm={setForm} geoApi={geoApi} />
-        <EditVehicleFields form={form} setForm={setForm} vinApi={vinApi} />
+        <EditVehicleFields form={form} setForm={setForm} vinApi={vinApi} tenants={tenants} />
       </div>
       <div style={modalFootStyle}>
         <button type="button" className="btn-secondary" onClick={onClose} disabled={saving}>Cancelar</button>
@@ -881,7 +957,7 @@ function EditDeliveryForm({ deliveryId, detail, onClose, onSaved }) {
 // blank/broken data. Clicking the backdrop closes the dialog without saving
 // (same convention as `components/ConfirmModal.js`); clicking inside the box
 // does not (`stopPropagation` on the inner box).
-function EditDeliveryModal({ delivery, onClose, onSaved }) {
+function EditDeliveryModal({ delivery, tenants, onClose, onSaved }) {
   const { detail, loading, failed } = useDeliveryDetail(delivery.id);
 
   useEffect(() => {
@@ -906,7 +982,7 @@ function EditDeliveryModal({ delivery, onClose, onSaved }) {
             <p style={emptyStateStyle}>Cargando registro...</p>
           </div>
         ) : (
-          <EditDeliveryForm deliveryId={delivery.id} detail={detail} onClose={onClose} onSaved={onSaved} />
+          <EditDeliveryForm deliveryId={delivery.id} detail={detail} tenants={tenants} onClose={onClose} onSaved={onSaved} />
         )}
       </div>
     </div>
@@ -939,23 +1015,23 @@ function VehicleStep({ form, setForm, vehicleModels, vinApi, onBack, onNext }) {
   );
 }
 
-function DeliveryStep({ form, setForm, photo, setPhoto, isSuperadmin, onBack, onNext }) {
+function DeliveryStep({ form, setForm, photo, setPhoto, isSuperadmin, user, tenants, onBack, onNext }) {
   return (
     <>
       <StepHeading title="Entrega" />
       <div style={stepFieldGridStyle}>
-        <DeliverySection form={form} setForm={setForm} photo={photo} setPhoto={setPhoto} isSuperadmin={isSuperadmin} />
+        <DeliverySection form={form} setForm={setForm} photo={photo} setPhoto={setPhoto} isSuperadmin={isSuperadmin} user={user} tenants={tenants} />
       </div>
       <StepNav onBack={onBack} onNext={onNext} />
     </>
   );
 }
 
-function ConfirmStep({ form, photo, submitApi, onBack }) {
+function ConfirmStep({ form, photo, submitApi, isSuperadmin, user, tenants, onBack }) {
   return (
     <>
       <StepHeading title="Confirmación" />
-      <ConfirmationSummary form={form} photo={photo} />
+      <ConfirmationSummary form={form} photo={photo} isSuperadmin={isSuperadmin} user={user} tenants={tenants} />
       <StepNav onBack={onBack} submitApi={submitApi} />
     </>
   );
@@ -1006,6 +1082,7 @@ export default function DistribuidorEntregaPage() {
   const vehicleModels = useVehicleModels();
   const vinApi = useVinLookup(setForm);
   const geoApi = useGeo();
+  const tenants = useTenants(isSuperadmin);
   const deliveriesApi = useDeliveries();
   const [editingDelivery, setEditingDelivery] = useState(null);
   const { step, goNext, goBack, resetStep } = useWizardNavigation(form, photo, isSuperadmin, vinApi.vinLookupStatus);
@@ -1031,6 +1108,8 @@ export default function DistribuidorEntregaPage() {
           photo={photo}
           setPhoto={setPhoto}
           isSuperadmin={isSuperadmin}
+          user={user}
+          tenants={tenants}
           vehicleModels={vehicleModels}
           vinApi={vinApi}
           geoApi={geoApi}
@@ -1050,6 +1129,7 @@ export default function DistribuidorEntregaPage() {
       {isSuperadmin && editingDelivery && (
         <EditDeliveryModal
           delivery={editingDelivery}
+          tenants={tenants}
           onClose={() => setEditingDelivery(null)}
           onSaved={(patch) => {
             deliveriesApi.updateDeliveryLocal(editingDelivery.id, patch);

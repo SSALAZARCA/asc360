@@ -66,6 +66,12 @@ class DeliveryCreate(BaseModel):
     client: DeliveryClientIn
     vehicle: DeliveryVehicleIn
     delivery_date: date
+    # Which Distribuidora made the sale. IGNORED for a non-superadmin actor
+    # (the service always forces `actor.tenant_id` instead -- never trust a
+    # client-supplied tenant for a tenant-scoped actor). REQUIRED for
+    # superadmin, who has no tenant of their own and must explicitly say
+    # which one sold it.
+    registered_by_tenant_id: Optional[UUID] = None
 
 
 class DeliveryOut(BaseModel):
@@ -142,6 +148,8 @@ class DeliveryDetailOut(BaseModel):
     client_address: Optional[str] = None
     client_phone: Optional[str] = None
     client_email: Optional[str] = None
+    registered_by_tenant_id: Optional[UUID] = None
+    registered_by_tenant_name: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -174,3 +182,7 @@ class DeliveryEditIn(BaseModel):
     year: Optional[int] = None
     engine_number: Optional[str] = None
     delivery_date: Optional[date] = None
+    # Superadmin-only re-attribution of which Distribuidora made the sale --
+    # the router already restricts the whole PATCH to superadmin, so no
+    # additional role check is needed here, only tenant-existence validation.
+    registered_by_tenant_id: Optional[UUID] = None

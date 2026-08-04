@@ -20,12 +20,16 @@ from app.database import get_db
 from app.api.deps import get_current_user
 from app.services import distributor_delivery_service as svc
 
+import json
+
 from tests.distributor_deliveries.conftest import (
     FakeDeliverySession,
     make_distribuidor,
     make_superadmin,
     make_jefe_taller,
+    make_tenant,
     NoTouchSession,
+    VALID_DELIVERY_PAYLOAD,
     VALID_DELIVERY_PAYLOAD_JSON,
 )
 
@@ -47,11 +51,11 @@ def _teardown():
     app.dependency_overrides.pop(get_current_user, None)
 
 
-def _post(files=None):
+def _post(files=None, payload_json=VALID_DELIVERY_PAYLOAD_JSON):
     with TestClient(app) as client:
         return client.post(
             "/api/v1/distributor/deliveries",
-            data={"payload": VALID_DELIVERY_PAYLOAD_JSON},
+            data={"payload": payload_json},
             files=files,
         )
 
@@ -79,15 +83,21 @@ def test_distribuidor_reaches_the_real_service_and_gets_201(monkeypatch):
 
 
 def test_superadmin_reaches_the_real_service_and_gets_201():
-    fake_db = FakeDeliverySession()
+    # Superadmin has no tenant of their own, so `registered_by_tenant_id`
+    # must be explicitly present in the payload -- the guard-clearing
+    # assertion here needs a real tenant, same reasoning as the
+    # Distribuidor case above needing a photo attached.
+    tenant = make_tenant()
+    fake_db = FakeDeliverySession(tenants=[tenant])
     _override_db_with(fake_db)
+    payload = dict(VALID_DELIVERY_PAYLOAD, registered_by_tenant_id=str(tenant.id))
 
     async def _get_current_user():
         return make_superadmin()
     app.dependency_overrides[get_current_user] = _get_current_user
 
     try:
-        res = _post()
+        res = _post(payload_json=json.dumps(payload))
         assert res.status_code == 201
         assert res.json()["plate"] == "ABC123"
     finally:

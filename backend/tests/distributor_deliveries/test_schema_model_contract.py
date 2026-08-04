@@ -67,7 +67,7 @@ def test_delivery_create_schema_shape():
     assert vehicle_fields == {"plate", "vin", "model", "color", "year", "engine_number"}
 
     create_fields = set(DeliveryCreate.model_fields.keys())
-    assert create_fields == {"client", "vehicle", "delivery_date"}
+    assert create_fields == {"client", "vehicle", "delivery_date", "registered_by_tenant_id"}
 
     assert DeliveryClientIn.model_fields["identification"].is_required()
     assert DeliveryVehicleIn.model_fields["plate"].is_required()

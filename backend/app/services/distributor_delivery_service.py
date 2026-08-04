@@ -35,6 +35,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import CurrentUser
+from app.models.tenant import Tenant
 from app.models.user import Role, User, UserStatus
 from app.models.vehicle import Vehicle
 from app.schemas.distributor_delivery import (
@@ -108,6 +109,28 @@ async def _require_vin_in_master(db: AsyncSession, vin: Optional[str]) -> None:
     result = await vin_master_service.query_vin(db, vin)
     if result is None:
         raise HTTPException(status_code=422, detail=VIN_NOT_FOUND_DETAIL)
+
+
+async def _resolve_registered_by_tenant_id(
+    db: AsyncSession, payload: DeliveryCreate, actor: CurrentUser
+) -> Optional[UUID]:
+    """Which Distribuidora gets attributed this sale. A non-superadmin
+    actor's OWN tenant is used unconditionally -- `payload.
+    registered_by_tenant_id` is never even read in that branch, so a
+    Distribuidor can never attribute a sale to a different Distribuidora by
+    sending an arbitrary id. Superadmin has no tenant of their own, so they
+    MUST explicitly choose a real one."""
+    if not actor.is_superadmin:
+        return actor.tenant_id
+    if payload.registered_by_tenant_id is None:
+        raise HTTPException(
+            status_code=422,
+            detail="Debe seleccionar la tienda que realizó la venta.",
+        )
+    tenant = await db.get(Tenant, payload.registered_by_tenant_id)
+    if tenant is None:
+        raise HTTPException(status_code=422, detail="La tienda seleccionada no existe.")
+    return tenant.id
 
 
 def _reject_future_delivery_date(delivery_date: date) -> None:
@@ -194,20 +217,22 @@ async def _register_vehicle(db: AsyncSession, payload: DeliveryCreate) -> Vehicl
 # ---------------------------------------------------------------------------
 
 def _apply_delivery_fields(
-    vehicle: Vehicle, payload: DeliveryCreate, client: User, actor: CurrentUser
+    vehicle: Vehicle,
+    payload: DeliveryCreate,
+    client: User,
+    registered_by_tenant_id: Optional[UUID],
 ) -> None:
     vehicle.delivery_date = payload.delivery_date
     if payload.vehicle.engine_number:
         vehicle.engine_number = payload.vehicle.engine_number
     vehicle.client_id = client.id
-    # Which Distribuidora registered THIS record -- the actor's own tenant,
-    # set once at creation and never changed afterward (follow-up feature,
-    # migration `c9d0e1f2a3b4`). `actor.tenant_id` is `None` for a
-    # Distribuidor with no tenant assigned yet, or for a superadmin manual
-    # legacy-vehicle backfill -- both expected, not bugs: the record simply
-    # isn't "owned" by any Distribuidora and only shows up in superadmin's
-    # unfiltered view of `GET /distributor/deliveries`.
-    vehicle.registered_by_tenant_id = actor.tenant_id
+    # Which Distribuidora registered THIS record -- resolved by
+    # `_resolve_registered_by_tenant_id` (the actor's own tenant for a
+    # tenant-scoped actor, or superadmin's explicit selection). `None` only
+    # for a Distribuidor with no tenant assigned yet -- expected, not a bug:
+    # the record simply isn't "owned" by any Distribuidora and only shows up
+    # in superadmin's unfiltered view of `GET /distributor/deliveries`.
+    vehicle.registered_by_tenant_id = registered_by_tenant_id
 
 
 # ---------------------------------------------------------------------------
@@ -266,10 +291,11 @@ async def create_delivery(
         _require_photo_or_superadmin(actor, photo)
         _reject_future_delivery_date(payload.delivery_date)
         await _require_vin_in_master(db, payload.vehicle.vin)
+        registered_by_tenant_id = await _resolve_registered_by_tenant_id(db, payload, actor)
 
         client = await _lookup_or_create_client(db, payload, actor)
         vehicle = await _register_vehicle(db, payload)
-        _apply_delivery_fields(vehicle, payload, client, actor)
+        _apply_delivery_fields(vehicle, payload, client, registered_by_tenant_id)
         await _attach_photo(vehicle, photo)
 
         _log_audit(
@@ -413,6 +439,8 @@ def _apply_vehicle_edit_fields(vehicle: Vehicle, fields: dict) -> None:
         vehicle.year = fields["year"]
     if fields.get("engine_number") is not None:
         vehicle.engine_number = fields["engine_number"]
+    if "registered_by_tenant_id" in fields:
+        vehicle.registered_by_tenant_id = fields["registered_by_tenant_id"]
 
 
 _CLIENT_EDIT_FIELD_KEYS = (
@@ -475,6 +503,11 @@ async def edit_delivery(
     if "vin" in fields and fields["vin"] != vehicle.vin:
         await _require_vin_in_master(db, fields["vin"])
 
+    if fields.get("registered_by_tenant_id") is not None:
+        tenant = await db.get(Tenant, fields["registered_by_tenant_id"])
+        if tenant is None:
+            raise HTTPException(status_code=422, detail="La tienda seleccionada no existe.")
+
     try:
         _apply_vehicle_edit_fields(vehicle, fields)
         await _apply_client_edit_fields(db, vehicle, fields)
@@ -514,7 +547,7 @@ async def get_delivery_detail(db: AsyncSession, vehicle_id: UUID) -> DeliveryDet
     stmt = (
         select(Vehicle)
         .where(Vehicle.id == vehicle_id)
-        .options(selectinload(Vehicle.client))
+        .options(selectinload(Vehicle.client), selectinload(Vehicle.registered_by_tenant))
     )
     vehicle = (await db.execute(stmt)).scalars().first()
     if vehicle is None or vehicle.delivery_date is None:
@@ -538,6 +571,10 @@ async def get_delivery_detail(db: AsyncSession, vehicle_id: UUID) -> DeliveryDet
         client_address=client.address if client else None,
         client_phone=client.phone if client else None,
         client_email=client.email if client else None,
+        registered_by_tenant_id=vehicle.registered_by_tenant_id,
+        registered_by_tenant_name=(
+            vehicle.registered_by_tenant.name if vehicle.registered_by_tenant else None
+        ),
     )
 
 

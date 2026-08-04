@@ -265,12 +265,14 @@ class FakeDeliverySession:
         users: Optional[list] = None,
         vehicles: Optional[list] = None,
         moto_units: Optional[list] = None,
+        tenants: Optional[list] = None,
         raise_integrity_error: bool = False,
         raise_generic_error: bool = False,
     ):
         self._users = list(users or [])
         self._vehicles = list(vehicles or [])
         self._moto_units = [make_moto_unit()] if moto_units is None else list(moto_units)
+        self._tenants = list(tenants or [])
         self._raise_integrity_error = raise_integrity_error
         self._raise_generic_error = raise_generic_error
 
@@ -298,10 +300,13 @@ class FakeDeliverySession:
     async def get(self, model_cls, obj_id):
         from app.models.user import User
         from app.models.vehicle import Vehicle
+        from app.models.tenant import Tenant
         if model_cls is Vehicle:
             return next((v for v in self._vehicles if v.id == obj_id), None)
         if model_cls is User:
             return next((u for u in self._users if u.id == obj_id), None)
+        if model_cls is Tenant:
+            return next((t for t in self._tenants if t.id == obj_id), None)
         return None
 
     def add(self, obj):

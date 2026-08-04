@@ -17,6 +17,7 @@ from tests.distributor_deliveries.conftest import (
     make_valid_photo,
     make_distribuidor,
     make_superadmin,
+    make_tenant,
     VALID_DELIVERY_PAYLOAD,
 )
 
@@ -28,8 +29,9 @@ def _payload(**overrides) -> DeliveryCreate:
 
 
 async def test_superadmin_without_photo_succeeds_with_null_delivery_act_url():
-    fake_db = FakeDeliverySession()
-    payload = _payload()
+    tenant = make_tenant()
+    fake_db = FakeDeliverySession(tenants=[tenant])
+    payload = _payload(registered_by_tenant_id=str(tenant.id))
 
     vehicle = await svc.create_delivery(fake_db, payload, None, make_superadmin())
 
