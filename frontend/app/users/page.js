@@ -366,10 +366,9 @@ export default function UsersPage() {
       )}
 
       <style jsx>{`
-        .tabs-row { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
-        .tab-btn { background: transparent; border: 1px solid rgba(255,255,255,0.1); color: rgba(255,255,255,0.5); padding: 0.6rem 1.1rem; border-radius: 10px; font-weight: 800; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; cursor: pointer; transition: all 0.2s; }
-        .tab-btn:hover { background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.8); }
-        .tab-btn.active { background: rgba(255,95,51,0.12); border-color: rgba(255,95,51,0.4); color: #ff5f33; }
+        .tabs-row { display: flex; gap: 4px; margin-bottom: 1rem; border-bottom: 1px solid rgba(255,255,255,0.06); padding-bottom: 0; }
+        .tab-btn { background: transparent; border: none; border-bottom: 2px solid transparent; color: #606075; padding: 10px 20px; font-weight: 700; font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; cursor: pointer; transition: all 0.2s; }
+        .tab-btn.active { color: #ff5f33; border-bottom: 2px solid #ff5f33; }
         .master-table { width: 100%; border-collapse: collapse; }
         .master-table th { text-align: left; padding: 1.25rem 1.5rem; color: rgba(255,255,255,0.4); font-weight: 800; border-bottom: 1px solid rgba(255,255,255,0.05); text-transform: uppercase; font-size: 0.65rem; letter-spacing: 0.05em; background: rgba(0,0,0,0.2); }
         .master-table td { padding: 1rem 1.5rem; }
