@@ -14,6 +14,7 @@ from app.schemas.vehicle import VehicleOut, VehicleCreate, VehicleClientOut, Cli
 from app.schemas.vin_master import VinMasterOut
 from app.services.vehicle_service import vehicle_service
 from app.services.vin_master_service import vin_master_service
+from app.repositories.vehicle_repository import vehicle_repository
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -34,7 +35,33 @@ async def get_vin_master(
     vin_data = await vin_master_service.query_vin(db, vin)
     if not vin_data:
         raise HTTPException(status_code=404, detail="VIN no encontrado en el Maestro.")
-    return vin_data
+
+    # Enriquecimiento aditivo (Orden Histórica): si esta VIN ya tiene un
+    # `Vehicle` registrado (entrega/recepción previa), su marca y -- si
+    # tiene un cliente vinculado -- el nombre/teléfono de ese cliente. El
+    # packing list que resuelve model/year/color arriba nunca trae esos
+    # datos. `None` si todavía no existe un `Vehicle` para esta VIN.
+    brand = None
+    client_name = None
+    client_phone = None
+    existing_vehicle = await vehicle_repository.get_by_vin(db, vin, None)
+    if existing_vehicle:
+        brand = existing_vehicle.brand
+        if existing_vehicle.client_id and existing_vehicle.client:
+            client_name = existing_vehicle.client.name
+            client_phone = existing_vehicle.client.phone
+
+    return VinMasterOut(
+        id=vin_data.id,
+        vin=vin_data.vin,
+        engine_number=vin_data.engine_number,
+        model=vin_data.model,
+        year=vin_data.year,
+        color=vin_data.color,
+        brand=brand,
+        client_name=client_name,
+        client_phone=client_phone,
+    )
 
 
 @router.get("/{plate}", response_model=VehicleOut)

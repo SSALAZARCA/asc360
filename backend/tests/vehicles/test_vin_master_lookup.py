@@ -33,6 +33,7 @@ from app.main import app
 from app.database import get_db
 from app.api.deps import get_optional_user, CurrentUser
 from app.models.imports import ShipmentMotoUnit, ShipmentOrder
+from app.models.vehicle import Vehicle
 from app.services.vin_master_service import VinLookupResult
 import app.api.v1.endpoints.vehicles as vehicles_endpoint
 
@@ -101,6 +102,7 @@ class TestVinMasterLookupEndpoint:
     def test_jwt_authenticated_request_can_reach_a_found_vin(self, monkeypatch):
         result = make_lookup_result()
         monkeypatch.setattr(vehicles_endpoint.vin_master_service, "query_vin", AsyncMock(return_value=result))
+        monkeypatch.setattr(vehicles_endpoint.vehicle_repository, "get_by_vin", AsyncMock(return_value=None))
         user = CurrentUser(user_id=str(uuid.uuid4()), role="admin", tenant_id=str(uuid.uuid4()), name="Asesor")
         client = make_client(user)
         try:
@@ -128,6 +130,100 @@ class TestVinMasterLookupEndpoint:
         finally:
             teardown_overrides()
         assert res.status_code == 404
+
+
+class TestVinMasterLookupEnrichment:
+    """`GET /vehicles/vin/{vin}` also enriches the packing-list result with
+    `brand`/`client_name`/`client_phone` from an already-registered
+    `Vehicle` for that VIN (if one exists) -- used by Orden Histórica to
+    prefill both the brand (never present in the packing-list data itself)
+    and the linked client's contact info when the VIN was already
+    delivered/serviced under this system. Purely additive on the existing
+    200 path; the 404 path (`test_unknown_vin_returns_404` above) is
+    unchanged."""
+
+    def _client_for(self, result, user, vehicle):
+        async def _override_get_db():
+            yield MagicMock()
+
+        async def _override_get_optional_user():
+            return user
+
+        app.dependency_overrides[get_db] = _override_get_db
+        app.dependency_overrides[get_optional_user] = _override_get_optional_user
+        return TestClient(app)
+
+    def test_enriches_brand_and_client_when_an_existing_vehicle_has_a_linked_client(self, monkeypatch):
+        result = make_lookup_result()
+        client_user = MagicMock(name="Juan Pérez", phone="3001234567")
+        client_user.name = "Juan Pérez"
+        client_user.phone = "3001234567"
+        vehicle = MagicMock(spec=Vehicle)
+        vehicle.brand = "UM"
+        vehicle.client_id = uuid.uuid4()
+        vehicle.client = client_user
+        monkeypatch.setattr(vehicles_endpoint.vin_master_service, "query_vin", AsyncMock(return_value=result))
+        monkeypatch.setattr(vehicles_endpoint.vehicle_repository, "get_by_vin", AsyncMock(return_value=vehicle))
+        user = CurrentUser(user_id=str(uuid.uuid4()), role="admin", tenant_id=str(uuid.uuid4()), name="Asesor")
+        client = self._client_for(result, user, vehicle)
+        try:
+            res = client.get("/api/v1/vehicles/vin/9C6JC5820PM123456", headers={"Authorization": "Bearer fake"})
+        finally:
+            teardown_overrides()
+        assert res.status_code == 200
+        body = res.json()
+        assert body["brand"] == "UM"
+        assert body["client_name"] == "Juan Pérez"
+        assert body["client_phone"] == "3001234567"
+
+    def test_enriches_brand_only_when_the_existing_vehicle_has_no_linked_client(self, monkeypatch):
+        result = make_lookup_result()
+        vehicle = MagicMock(spec=Vehicle)
+        vehicle.brand = "UM"
+        vehicle.client_id = None
+        vehicle.client = None
+        monkeypatch.setattr(vehicles_endpoint.vin_master_service, "query_vin", AsyncMock(return_value=result))
+        monkeypatch.setattr(vehicles_endpoint.vehicle_repository, "get_by_vin", AsyncMock(return_value=vehicle))
+        user = CurrentUser(user_id=str(uuid.uuid4()), role="admin", tenant_id=str(uuid.uuid4()), name="Asesor")
+        client = self._client_for(result, user, vehicle)
+        try:
+            res = client.get("/api/v1/vehicles/vin/9C6JC5820PM123456", headers={"Authorization": "Bearer fake"})
+        finally:
+            teardown_overrides()
+        assert res.status_code == 200
+        body = res.json()
+        assert body["brand"] == "UM"
+        assert body["client_name"] is None
+        assert body["client_phone"] is None
+
+    def test_leaves_brand_and_client_blank_when_no_vehicle_is_registered_for_this_vin_yet(self, monkeypatch):
+        result = make_lookup_result()
+        monkeypatch.setattr(vehicles_endpoint.vin_master_service, "query_vin", AsyncMock(return_value=result))
+        monkeypatch.setattr(vehicles_endpoint.vehicle_repository, "get_by_vin", AsyncMock(return_value=None))
+        user = CurrentUser(user_id=str(uuid.uuid4()), role="admin", tenant_id=str(uuid.uuid4()), name="Asesor")
+        client = self._client_for(result, user, None)
+        try:
+            res = client.get("/api/v1/vehicles/vin/9C6JC5820PM123456", headers={"Authorization": "Bearer fake"})
+        finally:
+            teardown_overrides()
+        assert res.status_code == 200
+        body = res.json()
+        assert body["brand"] is None
+        assert body["client_name"] is None
+        assert body["client_phone"] is None
+
+    def test_unknown_vin_still_404s_and_never_reaches_vehicle_lookup(self, monkeypatch):
+        get_by_vin_mock = AsyncMock(return_value=None)
+        monkeypatch.setattr(vehicles_endpoint.vin_master_service, "query_vin", AsyncMock(return_value=None))
+        monkeypatch.setattr(vehicles_endpoint.vehicle_repository, "get_by_vin", get_by_vin_mock)
+        user = CurrentUser(user_id=str(uuid.uuid4()), role="admin", tenant_id=str(uuid.uuid4()), name="Asesor")
+        client = self._client_for(None, user, None)
+        try:
+            res = client.get("/api/v1/vehicles/vin/0000000000000000X", headers={"Authorization": "Bearer fake"})
+        finally:
+            teardown_overrides()
+        assert res.status_code == 404
+        get_by_vin_mock.assert_not_called()
 
 
 class TestVinMasterServiceQuery:

@@ -191,6 +191,61 @@ describe('HistoricalOrdersPage — VIN lookup + Modelo select', () => {
     });
     expect(screen.getByText(/RENEGADE SPORT 200S \(no está en el catálogo estándar\)/i)).toBeInTheDocument();
   });
+
+  it('also autofills brand and client name/phone when the VIN already has a registered vehicle+client', async () => {
+    queueResponses(makeResponse(200, {
+      model: 'Renegade 200', year: 2023, color: 'Rojo',
+      brand: 'UM', client_name: 'Juan Pérez', client_phone: '3001234567',
+    }));
+    render(<HistoricalOrdersPage />);
+    await waitFor(() => expect(screen.getByLabelText('VIN')).toBeInTheDocument());
+
+    fireEvent.change(screen.getByLabelText('VIN'), { target: { value: '1HGCM82633A004352' } });
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Modelo').value).toBe('Renegade 200');
+    });
+    expect(screen.getByLabelText('Marca').value).toBe('UM');
+    expect(screen.getByLabelText('Nombre del cliente').value).toBe('Juan Pérez');
+    expect(screen.getByLabelText('Teléfono del cliente').value).toBe('3001234567');
+  });
+
+  it('leaves brand and client name/phone blank when the VIN has no registered vehicle yet', async () => {
+    queueResponses(makeResponse(200, { model: 'Renegade 200', year: 2023, color: 'Rojo' }));
+    render(<HistoricalOrdersPage />);
+    await waitFor(() => expect(screen.getByLabelText('VIN')).toBeInTheDocument());
+
+    fireEvent.change(screen.getByLabelText('VIN'), { target: { value: '1HGCM82633A004352' } });
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Modelo').value).toBe('Renegade 200');
+    });
+    expect(screen.getByLabelText('Marca').value).toBe('');
+    expect(screen.getByLabelText('Nombre del cliente').value).toBe('');
+    expect(screen.getByLabelText('Teléfono del cliente').value).toBe('');
+  });
+
+  it('keeps whatever was already typed in brand/client name/phone when the lookup has nothing to enrich with', async () => {
+    // Same fallback-only-if-empty semantics already used for model/year/color
+    // (`data.model || f.model`) -- a lookup response with no brand/client
+    // data (VIN not yet registered to a vehicle) must not blank out fields
+    // the user already filled in by hand.
+    queueResponses(makeResponse(200, { model: 'Renegade 200', year: 2023, color: 'Rojo' }));
+    render(<HistoricalOrdersPage />);
+    await waitFor(() => expect(screen.getByLabelText('VIN')).toBeInTheDocument());
+
+    fireEvent.change(screen.getByLabelText('Marca'), { target: { value: 'Yamaha' } });
+    fireEvent.change(screen.getByLabelText('Nombre del cliente'), { target: { value: 'Pedro Gómez' } });
+    fireEvent.change(screen.getByLabelText('Teléfono del cliente'), { target: { value: '3009999999' } });
+    fireEvent.change(screen.getByLabelText('VIN'), { target: { value: '1HGCM82633A004352' } });
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Modelo').value).toBe('Renegade 200');
+    });
+    expect(screen.getByLabelText('Marca').value).toBe('Yamaha');
+    expect(screen.getByLabelText('Nombre del cliente').value).toBe('Pedro Gómez');
+    expect(screen.getByLabelText('Teléfono del cliente').value).toBe('3009999999');
+  });
 });
 
 describe('HistoricalOrdersPage — duplicate warning flow', () => {

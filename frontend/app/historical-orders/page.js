@@ -203,6 +203,12 @@ function useVinLookup(setForm) {
         model: data.model || f.model,
         year: data.year ? String(data.year) : f.year,
         color: data.color || f.color,
+        // Additive enrichment -- only present when this VIN already has a
+        // registered `Vehicle` (brand) and, if it has one, a linked client
+        // (name/phone). Never overwrites what the user already typed.
+        brand: data.brand || f.brand,
+        client_name: data.client_name || f.client_name,
+        client_phone: data.client_phone || f.client_phone,
       }));
       setVinLookupStatus('found');
     } catch {

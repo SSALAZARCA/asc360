@@ -39,3 +39,10 @@ class VinMasterOut(BaseModel):
     model: Optional[str] = None
     year: Optional[int] = None
     color: Optional[str] = None
+    # Additive enrichment (Orden Histórica): populated from an already
+    # -registered `Vehicle` for this VIN, if one exists -- the packing-list
+    # data behind `model`/`year`/`color` above never carries brand or
+    # client info. `None` when no `Vehicle` is registered for this VIN yet.
+    brand: Optional[str] = None
+    client_name: Optional[str] = None
+    client_phone: Optional[str] = None

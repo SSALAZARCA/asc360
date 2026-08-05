@@ -196,16 +196,18 @@ class VehicleRepository(BaseRepository[Vehicle, VehicleCreate, VehicleUpdate]):
     async def get_by_vin(self, db: AsyncSession, vin: str, tenant_id: Optional[UUID] = None) -> Optional[Vehicle]:
         """Obtener vehículo por VIN físico. `tenant_id=None` busca en toda
         la red; de lo contrario, aplica `visible_to_tenant` (mismo
-        criterio de claim que `get_by_plate`). Nota: sin llamadores reales
-        verificados hoy -- reescrito por consistencia
-        (sdd/vehicle-tenant-checkin-release PR2)."""
+        criterio de claim que `get_by_plate`). Eager-carga `.client` --
+        primer llamador real es el enriquecimiento de `GET
+        /vehicles/vin/{vin}` (Orden Histórica), que necesita leer
+        `vehicle.client` sin un segundo round-trip ni el riesgo de
+        `MissingGreenlet` de una relationship lazy en SQLAlchemy async."""
         if isinstance(tenant_id, str):
             tenant_id = UUID(tenant_id)
         result = await db.execute(
             select(Vehicle).where(
                 Vehicle.vin == vin,
                 visible_to_tenant(tenant_id),
-            )
+            ).options(selectinload(Vehicle.client))
         )
         return result.scalars().first()
 
