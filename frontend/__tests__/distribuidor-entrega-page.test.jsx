@@ -804,6 +804,144 @@ describe('DistribuidorEntregaPage — Registros Realizados search + counter', ()
   });
 });
 
+// GET /distributor/deliveries/export -- mirrors the act-file download
+// test's mocking convention above (a dedicated `mockAuthFetch`
+// implementation, not added to the shared `queueResponses` boilerplate,
+// same precedent as `/distributor/deliveries/{id}/act-file`).
+describe('DistribuidorEntregaPage — Registros Realizados Excel export', () => {
+  it('clicking "Exportar Excel" fetches the export endpoint and downloads the returned blob', async () => {
+    setUser('parts_dealer');
+    mockDeliveries = [ROW_DISTRIBUIDOR];
+    const fakeBlob = new Blob(['fake-xlsx-bytes'], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+    const originalCreateObjectURL = global.URL.createObjectURL;
+    const originalRevokeObjectURL = global.URL.revokeObjectURL;
+    global.URL.createObjectURL = jest.fn(() => 'blob:mock-export-url');
+    global.URL.revokeObjectURL = jest.fn();
+
+    mockAuthFetch.mockImplementation((url, opts) => {
+      if (url === '/distributor/deliveries/export') {
+        return Promise.resolve({ ok: true, status: 200, blob: () => Promise.resolve(fakeBlob) });
+      }
+      if (typeof url === 'string' && url.includes('/vehicle-models')) {
+        return Promise.resolve(makeResponse(200, mockModels));
+      }
+      if (isDeliveriesListGet(url, opts)) {
+        return Promise.resolve(makeResponse(200, mockDeliveries));
+      }
+      return Promise.resolve(makeResponse(200, {}));
+    });
+
+    render(<DistribuidorEntregaPage />);
+    await screen.findByText('Juan Pérez');
+
+    fireEvent.click(screen.getByRole('button', { name: /exportar excel/i }));
+
+    await waitFor(() => {
+      expect(mockAuthFetch).toHaveBeenCalledWith('/distributor/deliveries/export');
+    });
+    await waitFor(() => {
+      expect(global.URL.createObjectURL).toHaveBeenCalledWith(fakeBlob);
+    });
+    expect(global.URL.revokeObjectURL).toHaveBeenCalledWith('blob:mock-export-url');
+
+    global.URL.createObjectURL = originalCreateObjectURL;
+    global.URL.revokeObjectURL = originalRevokeObjectURL;
+  });
+
+  it('is available to a Distribuidor, not just superadmin', async () => {
+    setUser('parts_dealer');
+    mockDeliveries = [ROW_DISTRIBUIDOR];
+    queueResponses();
+    render(<DistribuidorEntregaPage />);
+
+    await screen.findByText('Juan Pérez');
+    expect(screen.getByRole('button', { name: /exportar excel/i })).toBeInTheDocument();
+  });
+
+  it('disables the button and shows a loading label while the export is in flight', async () => {
+    setUser('parts_dealer');
+    mockDeliveries = [ROW_DISTRIBUIDOR];
+    let resolveExport;
+    const exportPromise = new Promise((resolve) => { resolveExport = resolve; });
+    const fakeBlob = new Blob(['fake-xlsx-bytes']);
+    const originalCreateObjectURL = global.URL.createObjectURL;
+    const originalRevokeObjectURL = global.URL.revokeObjectURL;
+    global.URL.createObjectURL = jest.fn(() => 'blob:mock-export-url');
+    global.URL.revokeObjectURL = jest.fn();
+
+    mockAuthFetch.mockImplementation((url, opts) => {
+      if (url === '/distributor/deliveries/export') return exportPromise;
+      if (typeof url === 'string' && url.includes('/vehicle-models')) {
+        return Promise.resolve(makeResponse(200, mockModels));
+      }
+      if (isDeliveriesListGet(url, opts)) {
+        return Promise.resolve(makeResponse(200, mockDeliveries));
+      }
+      return Promise.resolve(makeResponse(200, {}));
+    });
+
+    render(<DistribuidorEntregaPage />);
+    await screen.findByText('Juan Pérez');
+
+    fireEvent.click(screen.getByRole('button', { name: /exportar excel/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /exportando/i })).toBeDisabled();
+    });
+
+    resolveExport({ ok: true, status: 200, blob: () => Promise.resolve(fakeBlob) });
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /exportar excel/i })).not.toBeDisabled();
+    });
+
+    global.URL.createObjectURL = originalCreateObjectURL;
+    global.URL.revokeObjectURL = originalRevokeObjectURL;
+  });
+
+  it('shows an error toast and re-enables the button when the export request fails', async () => {
+    setUser('parts_dealer');
+    mockDeliveries = [ROW_DISTRIBUIDOR];
+    mockAuthFetch.mockImplementation((url, opts) => {
+      if (url === '/distributor/deliveries/export') {
+        return Promise.resolve({ ok: false, status: 500, json: () => Promise.resolve({}) });
+      }
+      if (typeof url === 'string' && url.includes('/vehicle-models')) {
+        return Promise.resolve(makeResponse(200, mockModels));
+      }
+      if (isDeliveriesListGet(url, opts)) {
+        return Promise.resolve(makeResponse(200, mockDeliveries));
+      }
+      return Promise.resolve(makeResponse(200, {}));
+    });
+
+    render(<DistribuidorEntregaPage />);
+    await screen.findByText('Juan Pérez');
+
+    fireEvent.click(screen.getByRole('button', { name: /exportar excel/i }));
+
+    await waitFor(() => {
+      expect(mockToast.error).toHaveBeenCalledWith('No se pudieron exportar los registros.');
+    });
+    expect(screen.getByRole('button', { name: /exportar excel/i })).not.toBeDisabled();
+  });
+
+  it('does not interfere with the search box or the delivery-list boilerplate call', async () => {
+    setUser('parts_dealer');
+    mockDeliveries = [ROW_DISTRIBUIDOR, ROW_B];
+    queueResponses();
+    render(<DistribuidorEntregaPage />);
+
+    await screen.findByText('Juan Pérez');
+    fireEvent.change(screen.getByLabelText(/buscar por cédula, vin o placa/i), { target: { value: 'XYZ999' } });
+
+    expect(screen.getByText('Ana Gómez')).toBeInTheDocument();
+    expect(screen.queryByText('Juan Pérez')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /exportar excel/i })).toBeInTheDocument();
+  });
+});
+
 describe('DistribuidorEntregaPage — Registros Realizados edit (superadmin only)', () => {
   it('opens the edit dialog pre-filled and PATCHes only the changed field(s) on save, updating the list in place', async () => {
     setUser('superadmin');

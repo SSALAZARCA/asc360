@@ -22,14 +22,16 @@ Only `_log_audit` (`imports_service.py`, a pure "build a row and `db.add`
 it" helper) is reused for the audit trail, mirroring the same
 read-only-import pattern `historical_order_service` already established.
 """
+import io
 import logging
 import mimetypes
 from datetime import date, datetime
 from typing import Optional
 from uuid import UUID
 
+import openpyxl
 from fastapi import HTTPException, UploadFile
-from sqlalchemy import or_, select
+from sqlalchemy import Select, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -415,27 +417,33 @@ async def attach_act_photo(db: AsyncSession, vehicle: Vehicle, photo: UploadFile
 # (follow-up feature, migration `c9d0e1f2a3b4`).
 # ---------------------------------------------------------------------------
 
-async def list_deliveries(db: AsyncSession, actor: CurrentUser) -> list[DeliveryListItemOut]:
-    """Tenant-scoped list of delivery records. Superadmin sees every
-    Distribuidora's rows (network-wide); a Distribuidor sees only rows
-    `registered_by_tenant_id == actor.tenant_id` -- shared across every
-    user at the SAME Distribuidora, not just the one who typed it in.
+def _scoped_delivery_vehicles_query(actor: CurrentUser) -> Optional[Select]:
+    """The SINGLE source of truth for which delivery rows an actor may see
+    -- both `list_deliveries` (the on-screen table) and `export_deliveries`
+    (the Excel download) call this instead of building their own query, so
+    there is exactly one place that decides visibility. Superadmin sees
+    every Distribuidora's rows (network-wide); a Distribuidor sees only
+    rows `registered_by_tenant_id == actor.tenant_id` -- shared across
+    every user at the SAME Distribuidora, not just the one who typed it in.
+
+    Returns `None` when the actor must see NOTHING at all (a Distribuidor
+    with no tenant assigned yet) -- callers must short-circuit to an empty
+    result without ever calling `db.execute()` in that case, same
+    discipline as `forbid_distribuidor`.
 
     IMPORTANT deviation from a literal "let SQL do it naturally" reading:
     SQLAlchemy's ORM `Column == None` compiles to `IS NULL`, NOT the raw-SQL
     `= NULL` footgun that never matches anything. If `actor.tenant_id` is
-    `None` (Distribuidor with no tenant assigned yet) and this were left
-    unguarded, `Vehicle.registered_by_tenant_id == actor.tenant_id` would
-    compile to `registered_by_tenant_id IS NULL` and WOULD match every
-    other NULL-tenant row -- every superadmin backfill and every other
-    tenant-less Distribuidor's rows, a real data leak, not an empty list.
-    The explicit early-return below is required to make the actual
-    documented requirement ("empty list, never someone else's data") true;
-    it also means zero DB reads happen in that case, same discipline as
-    `forbid_distribuidor`.
+    `None` and this were left unguarded, `Vehicle.registered_by_tenant_id
+    == actor.tenant_id` would compile to `registered_by_tenant_id IS NULL`
+    and WOULD match every other NULL-tenant row -- every superadmin
+    backfill and every other tenant-less Distribuidor's rows, a real data
+    leak, not an empty list. The explicit `None` return below is what makes
+    the actual documented requirement ("empty output, never someone else's
+    data") true.
     """
     if not actor.is_superadmin and actor.tenant_id is None:
-        return []
+        return None
 
     stmt = (
         select(Vehicle)
@@ -445,6 +453,15 @@ async def list_deliveries(db: AsyncSession, actor: CurrentUser) -> list[Delivery
     )
     if not actor.is_superadmin:
         stmt = stmt.where(Vehicle.registered_by_tenant_id == actor.tenant_id)
+    return stmt
+
+
+async def list_deliveries(db: AsyncSession, actor: CurrentUser) -> list[DeliveryListItemOut]:
+    """Tenant-scoped list of delivery records -- see
+    `_scoped_delivery_vehicles_query` for the actual visibility rule."""
+    stmt = _scoped_delivery_vehicles_query(actor)
+    if stmt is None:
+        return []
 
     vehicles = (await db.execute(stmt)).scalars().all()
 
@@ -468,6 +485,67 @@ async def list_deliveries(db: AsyncSession, actor: CurrentUser) -> list[Delivery
             )
         )
     return items
+
+
+EXPORT_HEADERS = [
+    "Nombre", "Cédula", "Fecha de nacimiento", "Teléfono", "Email",
+    "Ciudad", "Departamento", "Dirección",
+    "Placa", "VIN", "Modelo", "Color", "Año", "Número de motor",
+    "Fecha de entrega", "Distribuidora", "Acta de entrega",
+]
+
+
+async def export_deliveries(db: AsyncSession, actor: CurrentUser) -> io.BytesIO:
+    """Full-detail Excel export of every delivery record the actor is
+    scoped to see -- same visibility rule as `list_deliveries`
+    (`_scoped_delivery_vehicles_query`), just richer columns (every client
+    and vehicle field captured at registration, not only what the
+    on-screen table shows).
+
+    `delivery_act_url` NEVER appears here as a raw value -- only a Sí/No
+    signal, same discipline `DeliveryListItemOut`'s docstring already
+    establishes for the on-screen table (the URL is a broken
+    `localhost:9000` host in production, see
+    `distributor_deliveries.py`'s module docstring)."""
+    stmt = _scoped_delivery_vehicles_query(actor)
+    vehicles = (await db.execute(stmt)).scalars().all() if stmt is not None else []
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Entregas Registradas"
+    ws.append(EXPORT_HEADERS)
+
+    for vehicle in vehicles:
+        client = vehicle.client
+        tenant_name = (
+            vehicle.registered_by_tenant.name
+            if actor.is_superadmin and vehicle.registered_by_tenant
+            else ""
+        )
+        ws.append([
+            client.name if client else "",
+            client.identification if client else "",
+            str(client.birth_date) if client and client.birth_date else "",
+            client.phone if client else "",
+            client.email if client else "",
+            client.city if client else "",
+            client.department if client else "",
+            client.address if client else "",
+            vehicle.plate,
+            vehicle.vin or "",
+            vehicle.model or "",
+            vehicle.color or "",
+            vehicle.year or "",
+            vehicle.engine_number or "",
+            str(vehicle.delivery_date) if vehicle.delivery_date else "",
+            tenant_name,
+            "Sí" if vehicle.delivery_act_url else "No",
+        ])
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return buf
 
 
 # ---------------------------------------------------------------------------

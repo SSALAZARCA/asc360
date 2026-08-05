@@ -737,9 +737,36 @@ function matchesDeliverySearch(delivery, query) {
 const deliveriesSearchRowStyle = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', marginTop: '1rem', flexWrap: 'wrap' };
 const deliveriesSearchInputStyle = { ...inputStyle, minWidth: '280px', flex: '1 1 320px' };
 const deliveriesCountStyle = { ...hintStyle, fontSize: '0.75rem', whiteSpace: 'nowrap' };
+const exportBtnStyle = { display: 'inline-flex', alignItems: 'center', gap: '0.35rem', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', color: '#fff', borderRadius: '6px', padding: '0.35rem 0.7rem', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' };
+
+// Mirrors `frontend/app/tenants/page.js`'s `handleExport` exactly (blob ->
+// object URL -> synthetic <a download> click) -- same download mechanics,
+// different endpoint/filename.
+async function exportDeliveries(setExporting) {
+  setExporting(true);
+  try {
+    const res = await authFetch('/distributor/deliveries/export');
+    if (!res.ok) {
+      toast.error('No se pudieron exportar los registros.');
+      return;
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `entregas_registradas_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch {
+    toast.error('No se pudieron exportar los registros.');
+  } finally {
+    setExporting(false);
+  }
+}
 
 function DeliveriesSection({ deliveries, loading, isSuperadmin, onEdit }) {
   const [search, setSearch] = useState('');
+  const [exporting, setExporting] = useState(false);
   const filtered = deliveries.filter((d) => matchesDeliverySearch(d, search));
   const isSearching = search.trim() !== '';
 
@@ -759,6 +786,14 @@ function DeliveriesSection({ deliveries, loading, isSuperadmin, onEdit }) {
             ? `Mostrando ${filtered.length} de ${deliveries.length} registros`
             : `${deliveries.length} registros`}
         </span>
+        <button
+          type="button"
+          onClick={() => exportDeliveries(setExporting)}
+          disabled={exporting}
+          style={{ ...exportBtnStyle, opacity: exporting ? 0.6 : 1, cursor: exporting ? 'wait' : 'pointer' }}
+        >
+          <Download size={13} /> {exporting ? 'Exportando...' : 'Exportar Excel'}
+        </button>
       </div>
       {loading ? (
         <p style={emptyStateStyle}>Cargando registros...</p>

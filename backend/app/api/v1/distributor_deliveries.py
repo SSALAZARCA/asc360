@@ -44,6 +44,7 @@ Mirrors the same proxy pattern already established by `orders.py`'s
 `download_reception_pdf` and `imports.py`'s `get_dim_pdf_url`.
 """
 import io
+from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
@@ -66,6 +67,7 @@ from app.services.distributor_delivery_service import (
     attach_act_photo,
     create_delivery,
     edit_delivery,
+    export_deliveries,
     get_delivery_act_file,
     get_delivery_detail,
     list_deliveries,
@@ -102,6 +104,23 @@ async def list_deliveries_endpoint(
 ):
     require_distribuidor(current_user)
     return await list_deliveries(db, current_user)
+
+
+@router.get("/deliveries/export")
+async def export_deliveries_endpoint(
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    # Same audience as the on-screen list -- Distribuidor exports only
+    # their own Distribuidora's rows, superadmin exports everything.
+    require_distribuidor(current_user)
+    buf = await export_deliveries(db, current_user)
+    filename = f"entregas_registradas_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.get("/deliveries/{vehicle_id}", response_model=DeliveryDetailOut)
