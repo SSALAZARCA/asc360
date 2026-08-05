@@ -251,6 +251,48 @@ export default function PartsCatalogPage() {
     });
   };
 
+  // Inline edit for "Descripción ES" -- avoids opening the full edit modal
+  // just to correct a Spanish name. Writes `description_es_manual` (the
+  // writable override column), not `description_es` (the read-only,
+  // server-computed COALESCE the table displays) -- same field-name mapping
+  // `handleEditSave` already uses.
+  const [editingEsCell, setEditingEsCell] = useState(null); // factory_part_number | null
+  const [esDraft, setEsDraft] = useState('');
+  const [esCellError, setEsCellError] = useState({}); // { [factory_part_number]: message }
+
+  const startEditDescriptionEs = (item) => {
+    setEsCellError(prev => { const next = { ...prev }; delete next[item.factory_part_number]; return next; });
+    setEsDraft(item.description_es || '');
+    setEditingEsCell(item.factory_part_number);
+  };
+
+  const cancelEditDescriptionEs = () => {
+    setEditingEsCell(null);
+    setEsDraft('');
+  };
+
+  const saveDescriptionEs = async (item) => {
+    const newVal = esDraft.trim() || null;
+    const prevVal = item.description_es;
+    setEditingEsCell(null);
+    if (newVal === (prevVal || null)) return;
+    setItems(prev => prev.map(i => i.factory_part_number === item.factory_part_number ? { ...i, description_es: newVal } : i));
+    try {
+      const res = await authFetch(`/parts/admin/catalog/${encodeURIComponent(item.factory_part_number)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ description_es_manual: newVal }),
+      });
+      if (!res.ok) {
+        setItems(prev => prev.map(i => i.factory_part_number === item.factory_part_number ? { ...i, description_es: prevVal } : i));
+        setEsCellError(prev => ({ ...prev, [item.factory_part_number]: 'Error al guardar.' }));
+      }
+    } catch {
+      setItems(prev => prev.map(i => i.factory_part_number === item.factory_part_number ? { ...i, description_es: prevVal } : i));
+      setEsCellError(prev => ({ ...prev, [item.factory_part_number]: 'Error de conexión.' }));
+    }
+  };
+
   const openEdit = (item) => {
     setEditMsg('');
     const defaultPrice = item.public_price != null
@@ -595,10 +637,36 @@ export default function PartsCatalogPage() {
                   <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.description || '—'}</span>
                 </td>
                 <td style={{ maxWidth: '220px' }}>
-                  {item.description_es
-                    ? <span style={{ color: '#4ade80', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.description_es}</span>
-                    : <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: '0.68rem' }}>—</span>
-                  }
+                  {editingEsCell === item.factory_part_number ? (
+                    <input
+                      autoFocus
+                      aria-label="Descripción ES"
+                      value={esDraft}
+                      onChange={e => setEsDraft(e.target.value)}
+                      onBlur={() => saveDescriptionEs(item)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); }
+                        else if (e.key === 'Escape') { e.preventDefault(); cancelEditDescriptionEs(); }
+                      }}
+                      style={{ width: '100%', background: '#151518', border: '1px solid rgba(74,222,128,0.4)', borderRadius: 6, padding: '3px 6px', color: '#fff', fontSize: '0.78rem', outline: 'none', boxSizing: 'border-box' }}
+                    />
+                  ) : (
+                    <div
+                      onClick={() => startEditDescriptionEs(item)}
+                      title="Click para editar"
+                      className="es-cell-editable"
+                      style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, borderRadius: 6, padding: '2px 4px', margin: '-2px -4px' }}
+                    >
+                      {item.description_es
+                        ? <span style={{ color: '#4ade80', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.description_es}</span>
+                        : <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: '0.68rem' }}>—</span>
+                      }
+                      <Pencil size={10} style={{ opacity: 0.25, flexShrink: 0 }} />
+                    </div>
+                  )}
+                  {esCellError[item.factory_part_number] && (
+                    <span style={{ display: 'block', color: '#ef4444', fontSize: '0.6rem', marginTop: 2 }}>{esCellError[item.factory_part_number]}</span>
+                  )}
                 </td>
                 <td><span className="cell-truncate" style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.7)', fontWeight: 600 }} title={item.vehicle_model_name || '—'}>{item.vehicle_model_name || '—'}</span></td>
                 <td>
@@ -1111,6 +1179,7 @@ export default function PartsCatalogPage() {
         .master-table td { padding: 0.7rem 1rem; font-size: 0.68rem; }
         .sort-head { padding: 0.7rem 1rem; font-size: 0.58rem; font-weight: 800; color: rgba(255,255,255,0.4); text-transform: uppercase; letter-spacing: 0.1em; border-bottom: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.015); backdrop-filter: blur(10px); cursor: pointer; white-space: nowrap; text-align: left; user-select: none; position: sticky; top: 0; z-index: 10; }
         .sort-head:hover { color: #fff; background: rgba(255,255,255,0.03); }
+        .es-cell-editable:hover { background: rgba(255,255,255,0.04); }
         select option { background: #0c0c0e; color: #fff; }
       `}</style>
     </AdminLayout>
