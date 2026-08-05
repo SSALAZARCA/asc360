@@ -29,7 +29,7 @@ from typing import Optional
 from uuid import UUID
 
 from fastapi import HTTPException, UploadFile
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -196,6 +196,55 @@ async def _lookup_or_create_client(
 
 
 # ---------------------------------------------------------------------------
+# Step 1.5 — Vehicle-ownership conflict check. `vehicle_service.
+# register_or_update_vehicle` (Step 2, below) finds an existing `Vehicle` by
+# plate and silently UPDATES it in place if found -- correct for its other
+# callers (e.g. reception, where re-touching a known vehicle is expected),
+# but here it means a delivery submitted with a plate/VIN that already
+# belongs to a DIFFERENT client would silently steal that vehicle's
+# ownership with zero warning (`plate`'s DB `unique=True` constraint never
+# even fires, since this is a find-then-update, not a bare insert -- and
+# `vin` has no uniqueness constraint at all). This check runs BEFORE
+# `_register_vehicle` mutates anything, and only blocks when the matched
+# vehicle already has a DIFFERENT client attached -- a vehicle with no
+# client yet (`client_id IS NULL`, e.g. legacy-imported data) or the SAME
+# client resubmitting (the legitimate re-delivery/backfill case, Design
+# ADR 11) must keep working exactly as before.
+# ---------------------------------------------------------------------------
+
+async def _reject_if_vehicle_owned_by_another_client(
+    db: AsyncSession,
+    plate: str,
+    vin: Optional[str],
+    client_id: Optional[UUID],
+    exclude_vehicle_id: Optional[UUID] = None,
+) -> None:
+    clean_plate = "".join(plate.split()).upper()
+    conditions = [Vehicle.plate == clean_plate]
+    if vin:
+        conditions.append(Vehicle.vin == vin)
+
+    stmt = select(Vehicle).where(or_(*conditions))
+    candidates = (await db.execute(stmt)).scalars().all()
+
+    for existing in candidates:
+        if exclude_vehicle_id is not None and existing.id == exclude_vehicle_id:
+            continue
+        if existing.plate != clean_plate and existing.vin != vin:
+            continue
+        if existing.client_id is not None and existing.client_id != client_id:
+            owner = await db.get(User, existing.client_id)
+            owner_name = owner.name if owner else "otro cliente"
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"La placa o el VIN ya está registrada a nombre de {owner_name}. "
+                    "Si esto es un error, corríjalo desde la opción Editar."
+                ),
+            )
+
+
+# ---------------------------------------------------------------------------
 # Step 2 — Vehicle lookup-or-create (AS-IS call into vehicle_service)
 # ---------------------------------------------------------------------------
 
@@ -294,6 +343,9 @@ async def create_delivery(
         registered_by_tenant_id = await _resolve_registered_by_tenant_id(db, payload, actor)
 
         client = await _lookup_or_create_client(db, payload, actor)
+        await _reject_if_vehicle_owned_by_another_client(
+            db, payload.vehicle.plate, payload.vehicle.vin, client.id
+        )
         vehicle = await _register_vehicle(db, payload)
         _apply_delivery_fields(vehicle, payload, client, registered_by_tenant_id)
         await _attach_photo(vehicle, photo)
@@ -478,18 +530,10 @@ async def _apply_client_edit_fields(db: AsyncSession, vehicle: Vehicle, fields: 
         client.email = fields["client_email"]
 
 
-async def edit_delivery(
-    db: AsyncSession, vehicle_id, payload: DeliveryEditIn
-) -> Vehicle:
-    vehicle = await db.get(Vehicle, vehicle_id)
-    if vehicle is None or vehicle.delivery_date is None:
-        raise HTTPException(status_code=404, detail="Registro de entrega no encontrado")
-
-    fields = payload.model_dump(exclude_unset=True)
-
-    # Validate FIRST -- zero mutations happen before a 422 is raised
-    # (Design ADR pattern reused verbatim from `_reject_future_delivery_date`,
-    # same module, no duplication needed).
+async def _validate_edit_fields(db: AsyncSession, vehicle: Vehicle, fields: dict) -> None:
+    """All pre-mutation edit validation, grouped so `edit_delivery` stays a
+    thin orchestrator -- same "validate FIRST, zero mutations happen before
+    a 422" discipline as `create_delivery`'s `_require_*`/`_reject_*` calls."""
     if fields.get("delivery_date") is not None:
         _reject_future_delivery_date(fields["delivery_date"])
 
@@ -503,10 +547,38 @@ async def edit_delivery(
     if "vin" in fields and fields["vin"] != vehicle.vin:
         await _require_vin_in_master(db, fields["vin"])
 
+    # Same ownership-conflict guard as create (see `_reject_if_vehicle_
+    # owned_by_another_client`'s docstring) -- only re-checked when the
+    # plate or VIN is actually CHANGING to a new value, same "no
+    # retroactive re-validation of untouched fields" discipline as the
+    # VIN-master check above. The vehicle being edited is excluded from its
+    # own conflict check.
+    plate_changing = "plate" in fields and fields["plate"] != vehicle.plate
+    vin_changing = "vin" in fields and fields["vin"] != vehicle.vin
+    if plate_changing or vin_changing:
+        await _reject_if_vehicle_owned_by_another_client(
+            db,
+            fields.get("plate", vehicle.plate),
+            fields.get("vin", vehicle.vin),
+            vehicle.client_id,
+            exclude_vehicle_id=vehicle.id,
+        )
+
     if fields.get("registered_by_tenant_id") is not None:
         tenant = await db.get(Tenant, fields["registered_by_tenant_id"])
         if tenant is None:
             raise HTTPException(status_code=422, detail="La tienda seleccionada no existe.")
+
+
+async def edit_delivery(
+    db: AsyncSession, vehicle_id, payload: DeliveryEditIn
+) -> Vehicle:
+    vehicle = await db.get(Vehicle, vehicle_id)
+    if vehicle is None or vehicle.delivery_date is None:
+        raise HTTPException(status_code=404, detail="Registro de entrega no encontrado")
+
+    fields = payload.model_dump(exclude_unset=True)
+    await _validate_edit_fields(db, vehicle, fields)
 
     try:
         _apply_vehicle_edit_fields(vehicle, fields)

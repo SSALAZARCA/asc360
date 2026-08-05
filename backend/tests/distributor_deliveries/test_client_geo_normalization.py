@@ -7,6 +7,9 @@ both branches (new client, existing client reused) via `create_delivery`,
 plus the `PATCH /distributor/deliveries/{id}` edit path.
 """
 from datetime import date
+from unittest.mock import AsyncMock
+
+import pytest
 
 from app.schemas.distributor_delivery import DeliveryEditIn
 from app.services import distributor_delivery_service as svc
@@ -19,6 +22,13 @@ from tests.distributor_deliveries.conftest import (
     make_valid_photo,
     VALID_DELIVERY_PAYLOAD,
 )
+
+
+@pytest.fixture(autouse=True)
+def _no_real_minio_upload(monkeypatch):
+    monkeypatch.setattr(
+        svc, "upload_file_to_minio", AsyncMock(return_value="https://minio.local/acta.jpg")
+    )
 
 
 def _payload_with_geo(city: str, department: str):
