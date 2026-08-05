@@ -184,3 +184,23 @@ async def download_act_file_endpoint(
         media_type=content_type,
         headers={"Content-Disposition": f'inline; filename="{filename}"'},
     )
+
+
+# TEMPORARY debug endpoint -- diagnosing a 500 on act-file download for one
+# specific vehicle (2026-08-06). Read-only, superadmin-only. Remove after use.
+@router.get("/deliveries/{vehicle_id}/debug-act-url")
+async def debug_act_url_endpoint(
+    vehicle_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    if not current_user.is_superadmin:
+        raise HTTPException(status_code=403, detail="Solo superadmin")
+    vehicle = await db.get(Vehicle, vehicle_id)
+    if vehicle is None:
+        raise HTTPException(status_code=404, detail="Vehículo no encontrado")
+    return {
+        "plate": vehicle.plate,
+        "delivery_act_url": vehicle.delivery_act_url,
+        "registered_by_tenant_id": str(vehicle.registered_by_tenant_id) if vehicle.registered_by_tenant_id else None,
+    }
