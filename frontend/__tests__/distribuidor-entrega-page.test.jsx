@@ -538,6 +538,7 @@ const ROW_DISTRIBUIDOR = {
   model: 'Renegade 200',
   delivery_date: '2025-01-10',
   client_name: 'Juan Pérez',
+  client_identification: '900555111',
   registered_by_tenant_name: null,
 };
 
@@ -706,6 +707,100 @@ describe('DistribuidorEntregaPage — Registros Realizados (list)', () => {
     });
     expect(await screen.findByText(/ABC123/)).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Cliente' })).toBeInTheDocument();
+  });
+});
+
+const ROW_B = {
+  id: 'd-2',
+  plate: 'XYZ999',
+  vin: 'VIN0987654321ABC',
+  model: 'Xpeed 150',
+  delivery_date: '2025-02-01',
+  client_name: 'Ana Gómez',
+  client_identification: '111222333',
+  registered_by_tenant_name: null,
+};
+
+describe('DistribuidorEntregaPage — Registros Realizados search + counter', () => {
+  it('shows the total record count even with no search active', async () => {
+    setUser('parts_dealer');
+    mockDeliveries = [ROW_DISTRIBUIDOR, ROW_B];
+    queueResponses();
+    render(<DistribuidorEntregaPage />);
+
+    await screen.findByText('Juan Pérez');
+    expect(screen.getByText('2 registros')).toBeInTheDocument();
+  });
+
+  it('filters by a cédula substring', async () => {
+    setUser('parts_dealer');
+    mockDeliveries = [ROW_DISTRIBUIDOR, ROW_B];
+    queueResponses();
+    render(<DistribuidorEntregaPage />);
+
+    await screen.findByText('Juan Pérez');
+    fireEvent.change(screen.getByLabelText(/buscar por cédula, vin o placa/i), { target: { value: '900555' } });
+
+    expect(screen.getByText('Juan Pérez')).toBeInTheDocument();
+    expect(screen.queryByText('Ana Gómez')).not.toBeInTheDocument();
+    expect(screen.getByText('Mostrando 1 de 2 registros')).toBeInTheDocument();
+  });
+
+  it('filters by a VIN substring, case-insensitively', async () => {
+    setUser('parts_dealer');
+    mockDeliveries = [ROW_DISTRIBUIDOR, ROW_B];
+    queueResponses();
+    render(<DistribuidorEntregaPage />);
+
+    await screen.findByText('Juan Pérez');
+    fireEvent.change(screen.getByLabelText(/buscar por cédula, vin o placa/i), { target: { value: 'vin0987' } });
+
+    expect(screen.getByText('Ana Gómez')).toBeInTheDocument();
+    expect(screen.queryByText('Juan Pérez')).not.toBeInTheDocument();
+  });
+
+  it('filters by a placa substring', async () => {
+    setUser('parts_dealer');
+    mockDeliveries = [ROW_DISTRIBUIDOR, ROW_B];
+    queueResponses();
+    render(<DistribuidorEntregaPage />);
+
+    await screen.findByText('Juan Pérez');
+    fireEvent.change(screen.getByLabelText(/buscar por cédula, vin o placa/i), { target: { value: 'XYZ999' } });
+
+    expect(screen.getByText('Ana Gómez')).toBeInTheDocument();
+    expect(screen.queryByText('Juan Pérez')).not.toBeInTheDocument();
+  });
+
+  it('shows a distinct empty-state message when the search matches nothing, without hiding the total count', async () => {
+    setUser('parts_dealer');
+    mockDeliveries = [ROW_DISTRIBUIDOR, ROW_B];
+    queueResponses();
+    render(<DistribuidorEntregaPage />);
+
+    await screen.findByText('Juan Pérez');
+    fireEvent.change(screen.getByLabelText(/buscar por cédula, vin o placa/i), { target: { value: 'nada-existe' } });
+
+    expect(screen.getByText(/sin resultados para tu búsqueda/i)).toBeInTheDocument();
+    expect(screen.queryByText(/todavía no hay registros/i)).not.toBeInTheDocument();
+    expect(screen.getByText('Mostrando 0 de 2 registros')).toBeInTheDocument();
+  });
+
+  it('clearing the search restores the full list', async () => {
+    setUser('parts_dealer');
+    mockDeliveries = [ROW_DISTRIBUIDOR, ROW_B];
+    queueResponses();
+    render(<DistribuidorEntregaPage />);
+
+    await screen.findByText('Juan Pérez');
+    const input = screen.getByLabelText(/buscar por cédula, vin o placa/i);
+    fireEvent.change(input, { target: { value: 'XYZ999' } });
+    expect(screen.queryByText('Juan Pérez')).not.toBeInTheDocument();
+
+    fireEvent.change(input, { target: { value: '' } });
+    expect(screen.getByText('Juan Pérez')).toBeInTheDocument();
+    expect(screen.getByText('Ana Gómez')).toBeInTheDocument();
+    expect(screen.getByText('2 registros')).toBeInTheDocument();
   });
 });
 

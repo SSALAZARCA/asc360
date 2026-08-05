@@ -458,6 +458,7 @@ async def list_deliveries(db: AsyncSession, actor: CurrentUser) -> list[Delivery
                 model=vehicle.model,
                 delivery_date=vehicle.delivery_date,
                 client_name=vehicle.client.name if vehicle.client else None,
+                client_identification=vehicle.client.identification if vehicle.client else None,
                 registered_by_tenant_name=(
                     vehicle.registered_by_tenant.name
                     if actor.is_superadmin and vehicle.registered_by_tenant

@@ -723,14 +723,49 @@ function DeliveryRow({ delivery: d, isSuperadmin, onEdit }) {
 // "Registros Realizados" -- list of deliveries already registered, plus a
 // superadmin-only inline edit dialog (PATCH /distributor/deliveries/{id}).
 // ---------------------------------------------------------------------------
+// A delivery matches the search box if the query is a substring (case
+// insensitive) of its cédula, VIN, or placa -- any one of the three is
+// enough, no need to match all.
+function matchesDeliverySearch(delivery, query) {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  return [delivery.client_identification, delivery.vin, delivery.plate].some(
+    (value) => (value || '').toLowerCase().includes(q)
+  );
+}
+
+const deliveriesSearchRowStyle = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', marginTop: '1rem', flexWrap: 'wrap' };
+const deliveriesSearchInputStyle = { ...inputStyle, minWidth: '280px', flex: '1 1 320px' };
+const deliveriesCountStyle = { ...hintStyle, fontSize: '0.75rem', whiteSpace: 'nowrap' };
+
 function DeliveriesSection({ deliveries, loading, isSuperadmin, onEdit }) {
+  const [search, setSearch] = useState('');
+  const filtered = deliveries.filter((d) => matchesDeliverySearch(d, search));
+  const isSearching = search.trim() !== '';
+
   return (
     <section className="glass p-6" style={listSectionStyle}>
       <StepHeading title="Registros Realizados" />
+      <div style={deliveriesSearchRowStyle}>
+        <input
+          aria-label="Buscar por cédula, VIN o placa"
+          placeholder="Buscar por cédula, VIN o placa…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          style={deliveriesSearchInputStyle}
+        />
+        <span style={deliveriesCountStyle}>
+          {isSearching
+            ? `Mostrando ${filtered.length} de ${deliveries.length} registros`
+            : `${deliveries.length} registros`}
+        </span>
+      </div>
       {loading ? (
         <p style={emptyStateStyle}>Cargando registros...</p>
       ) : deliveries.length === 0 ? (
         <p style={emptyStateStyle}>Todavía no hay registros.</p>
+      ) : filtered.length === 0 ? (
+        <p style={emptyStateStyle}>Sin resultados para tu búsqueda.</p>
       ) : (
         <div style={tableWrapStyle}>
           <table style={tableStyle}>
@@ -746,7 +781,7 @@ function DeliveriesSection({ deliveries, loading, isSuperadmin, onEdit }) {
               </tr>
             </thead>
             <tbody>
-              {deliveries.map((d) => (
+              {filtered.map((d) => (
                 <DeliveryRow key={d.id} delivery={d} isSuperadmin={isSuperadmin} onEdit={onEdit} />
               ))}
             </tbody>

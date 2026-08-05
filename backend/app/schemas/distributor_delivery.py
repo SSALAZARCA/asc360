@@ -112,6 +112,7 @@ class DeliveryListItemOut(BaseModel):
     model: Optional[str] = None
     delivery_date: date
     client_name: Optional[str] = None
+    client_identification: Optional[str] = None
     registered_by_tenant_name: Optional[str] = None
     delivery_act_url: Optional[str] = None
 

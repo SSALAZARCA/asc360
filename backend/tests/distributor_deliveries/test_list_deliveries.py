@@ -83,6 +83,32 @@ class TestDistribuidorSeesOnlyTheirOwnTenant:
 
         assert result[0].client_name is None
 
+    async def test_returns_client_identification_for_search(self):
+        tenant_id = uuid.uuid4()
+        client = make_client_user(name="Juan Perez", identification="900555111")
+        vehicle = make_delivery_vehicle(
+            plate="ABC123", delivery_date=date(2026, 7, 20), client=client,
+            registered_by_tenant_id=tenant_id,
+        )
+        fake_db = FakeDeliverySession(vehicles=[vehicle])
+        actor = make_distribuidor(tenant_id=tenant_id)
+
+        result = await svc.list_deliveries(fake_db, actor)
+
+        assert result[0].client_identification == "900555111"
+
+    async def test_vehicle_with_no_client_link_has_null_client_identification(self):
+        tenant_id = uuid.uuid4()
+        vehicle = make_delivery_vehicle(
+            plate="NOCLIENT2", delivery_date=date(2026, 7, 6), registered_by_tenant_id=tenant_id
+        )
+        fake_db = FakeDeliverySession(vehicles=[vehicle])
+        actor = make_distribuidor(tenant_id=tenant_id)
+
+        result = await svc.list_deliveries(fake_db, actor)
+
+        assert result[0].client_identification is None
+
 
 class TestDeliveryActUrlExposedOnListRows:
     """Follow-up fix (2026-07-30): `Vehicle.delivery_act_url` is a plain,
