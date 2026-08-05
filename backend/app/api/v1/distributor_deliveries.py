@@ -46,6 +46,7 @@ Mirrors the same proxy pattern already established by `orders.py`'s
 import io
 from datetime import datetime
 from typing import Optional
+from urllib.parse import quote
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
@@ -79,6 +80,18 @@ router = APIRouter(prefix="/distributor", tags=["distributor_deliveries"])
 def require_distribuidor(current_user: CurrentUser) -> None:
     if not (current_user.is_distribuidor or current_user.is_superadmin):
         raise HTTPException(status_code=403, detail="Solo Distribuidor o superadmin")
+
+
+def _content_disposition(disposition: str, filename: str) -> str:
+    """Bugfix (2026-08-06): a raw non-ASCII filename (e.g. an accented
+    client name baked into the act's object key) breaks HTTP header
+    encoding -- headers must be Latin-1, so a literal 'í'/'á' crashes the
+    response with an unhandled 500 AFTER the file was already fetched
+    successfully. RFC 5987's `filename*=UTF-8''...` carries the real name
+    for modern browsers; the quoted `filename=` stays as an ASCII-only
+    fallback for anything that doesn't understand `filename*`."""
+    ascii_fallback = filename.encode("ascii", "ignore").decode("ascii") or "acta.pdf"
+    return f"{disposition}; filename=\"{ascii_fallback}\"; filename*=UTF-8''{quote(filename)}"
 
 
 @router.post("/deliveries", status_code=201, response_model=DeliveryOut)
@@ -182,25 +195,5 @@ async def download_act_file_endpoint(
     return StreamingResponse(
         io.BytesIO(file_bytes),
         media_type=content_type,
-        headers={"Content-Disposition": f'inline; filename="{filename}"'},
+        headers={"Content-Disposition": _content_disposition("inline", filename)},
     )
-
-
-# TEMPORARY debug endpoint -- diagnosing a 500 on act-file download for one
-# specific vehicle (2026-08-06). Read-only, superadmin-only. Remove after use.
-@router.get("/deliveries/{vehicle_id}/debug-act-url")
-async def debug_act_url_endpoint(
-    vehicle_id: UUID,
-    db: AsyncSession = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user),
-):
-    if not current_user.is_superadmin:
-        raise HTTPException(status_code=403, detail="Solo superadmin")
-    vehicle = await db.get(Vehicle, vehicle_id)
-    if vehicle is None:
-        raise HTTPException(status_code=404, detail="Vehículo no encontrado")
-    return {
-        "plate": vehicle.plate,
-        "delivery_act_url": vehicle.delivery_act_url,
-        "registered_by_tenant_id": str(vehicle.registered_by_tenant_id) if vehicle.registered_by_tenant_id else None,
-    }

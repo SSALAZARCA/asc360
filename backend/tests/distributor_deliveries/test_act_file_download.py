@@ -190,6 +190,44 @@ class TestDistribuidorWithNoTenantAssignedIsForbidden:
             _teardown()
 
 
+class TestNonAsciiFilenameDoesNotCrashTheResponse:
+    """Bugfix (2026-08-06): a client's name gets baked into the act's object
+    key at upload time (e.g. `..._Iván Darío Ávila Jiménez IMC19I.pdf`). A
+    raw non-ASCII filename in `Content-Disposition` used to crash with an
+    unhandled 500 AFTER the file bytes were already fetched successfully --
+    HTTP headers must be Latin-1, and 'í'/'á' aren't. Real production
+    report: this specific accented name 500'd while an unaccented one on a
+    different vehicle downloaded fine."""
+
+    def test_returns_200_with_rfc5987_encoded_filename(self):
+        tenant_id = uuid.uuid4()
+        vehicle = make_delivery_vehicle(registered_by_tenant_id=tenant_id)
+        vehicle.delivery_act_url = (
+            "http://localhost:9000/um-service-docs/evidences/2026/7/"
+            "20260806_477931268_Iván Darío Ávila Jiménez IMC19I.pdf"
+        )
+        fake_db = FakeDeliverySession(vehicles=[vehicle])
+        _override(fake_db, make_distribuidor(tenant_id=tenant_id))
+
+        try:
+            with patch.object(
+                svc, "get_pdf_stream_from_minio", new=AsyncMock(return_value=b"fake-pdf-bytes")
+            ):
+                res = _get(vehicle.id)
+            assert res.status_code == 200
+            assert res.content == b"fake-pdf-bytes"
+            disposition = res.headers["content-disposition"]
+            # ASCII-only ` filename=` fallback (no raw accented bytes -- a
+            # header with them would have crashed the response entirely).
+            ascii_part = disposition.split("filename=")[1].split(";")[0]
+            assert ascii_part.isascii()
+            # RFC 5987 `filename*=UTF-8''...` carries the real accented name.
+            assert "filename*=UTF-8''" in disposition
+            assert "Jim%C3%A9nez" in disposition
+        finally:
+            _teardown()
+
+
 class TestNonDistribuidorNonSuperadminGets403WithZeroDbTouch:
     def test_jefe_taller_gets_403_with_no_db_touch(self):
         _override(NoTouchSession(), make_jefe_taller())
