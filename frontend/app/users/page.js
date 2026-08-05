@@ -367,7 +367,8 @@ export default function UsersPage() {
 
       <style jsx>{`
         .tabs-row { display: flex; gap: 4px; margin-bottom: 1rem; border-bottom: 1px solid rgba(255,255,255,0.06); padding-bottom: 0; }
-        .tab-btn { background: transparent; border: none; border-bottom: 2px solid transparent; color: #606075; padding: 10px 20px; font-weight: 700; font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; cursor: pointer; transition: all 0.2s; }
+        .tab-btn { appearance: none; -webkit-appearance: none; outline: none; background: transparent; border: none; border-bottom: 2px solid transparent; color: #606075; padding: 10px 20px; font-weight: 700; font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; cursor: pointer; transition: all 0.2s; }
+        .tab-btn:focus-visible { border-bottom: 2px solid #ff5f33; }
         .tab-btn.active { color: #ff5f33; border-bottom: 2px solid #ff5f33; }
         .master-table { width: 100%; border-collapse: collapse; }
         .master-table th { text-align: left; padding: 1.25rem 1.5rem; color: rgba(255,255,255,0.4); font-weight: 800; border-bottom: 1px solid rgba(255,255,255,0.05); text-transform: uppercase; font-size: 0.65rem; letter-spacing: 0.05em; background: rgba(0,0,0,0.2); }
