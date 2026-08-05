@@ -1,9 +1,17 @@
 'use client';
 import { useState, useEffect } from 'react';
 import AdminLayout from '../admin-layout';
-import { UserCheck, UserX, Shield, Briefcase, Mail, Phone, Send, Plus, Users as UsersIcon, Edit, X, Trash2 } from 'lucide-react';
+import { UserCheck, UserX, Shield, Briefcase, Mail, Phone, Send, Plus, Users as UsersIcon, Edit, X, Trash2, Download } from 'lucide-react';
 import { authFetch } from '../../lib/authFetch';
 import { toast } from '../../lib/toast';
+
+// Tab order is deliberate: "Usuarios del Sistema" first/default -- staff
+// access management is the primary use of this screen, "Clientes" is the
+// secondary view split out of the same combined table.
+const TABS = [
+  { id: 'staff', label: 'Usuarios del Sistema' },
+  { id: 'clients', label: 'Clientes' },
+];
 
 // Explicit background/color on every <option> -- without it, the dropdown
 // popup inherits light text on the browser's default light background and
@@ -18,6 +26,29 @@ export default function UsersPage() {
   const [currentUserId, setCurrentUserId] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [distribuidorTenants, setDistribuidorTenants] = useState([]);
+  const [activeTab, setActiveTab] = useState('staff');
+  const [exporting, setExporting] = useState(false);
+
+  const visibleUsers = users.filter((u) => (activeTab === 'clients' ? u.role === 'client' : u.role !== 'client'));
+
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const res = await authFetch(`/users/export?scope=${activeTab}`);
+      if (!res.ok) { toast.error('No se pudo exportar el Excel.'); return; }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${activeTab === 'clients' ? 'clientes' : 'usuarios_sistema'}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      toast.error('Error de conexión al exportar.');
+    } finally {
+      setExporting(false);
+    }
+  };
 
   useEffect(() => {
     const stored = sessionStorage.getItem('um_user');
@@ -76,7 +107,7 @@ export default function UsersPage() {
   };
 
   const openNew = () => {
-    setEditForm({ name: '', role: 'technician', email: '', phone: '', status: 'active', telegram_id: '', password: '', tenant_id: null });
+    setEditForm({ name: '', role: activeTab === 'clients' ? 'client' : 'technician', email: '', phone: '', status: 'active', telegram_id: '', password: '', tenant_id: null });
     setShowModal(true);
   };
 
@@ -135,10 +166,34 @@ export default function UsersPage() {
           <h1 className="page-title">Personal y <span style={{ fontStyle: 'italic', color: 'var(--accent-orange)', WebkitTextFillColor: 'var(--accent-orange)' }}>Acceso</span></h1>
           <p className="page-subtitle">Gestión de identidad, roles de seguridad y acceso web/telegram</p>
         </div>
-        <button className="btn-primary" onClick={openNew}>
-          <Plus size={16} /> Invitar Personal
-        </button>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button
+            className="btn-secondary"
+            onClick={handleExport}
+            disabled={exporting}
+            style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+          >
+            <Download size={14} /> {exporting ? 'Exportando...' : 'Exportar Excel'}
+          </button>
+          <button className="btn-primary" onClick={openNew}>
+            <Plus size={16} /> Invitar Personal
+          </button>
+        </div>
       </header>
+
+      <div className="tabs-row" role="tablist">
+        {TABS.map((t) => (
+          <button
+            key={t.id}
+            role="tab"
+            aria-selected={activeTab === t.id}
+            className={`tab-btn ${activeTab === t.id ? 'active' : ''}`}
+            onClick={() => setActiveTab(t.id)}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
 
       <div className="glass table-scroll-wrapper rounded-2xl border border-white/5 shadow-2xl">
         <table className="master-table">
@@ -155,7 +210,11 @@ export default function UsersPage() {
           <tbody>
             {loading ? (
               <tr><td colSpan="6" className="text-center py-20 text-white/50 animate-pulse font-bold uppercase tracking-wider text-sm">Validando biometría y accesos...</td></tr>
-            ) : users.map((u) => (
+            ) : visibleUsers.length === 0 ? (
+              <tr><td colSpan="6" className="text-center py-20 text-white/40 font-bold uppercase tracking-wider text-sm">
+                {activeTab === 'clients' ? 'Todavía no hay clientes.' : 'Todavía no hay usuarios del sistema.'}
+              </td></tr>
+            ) : visibleUsers.map((u) => (
               <tr key={u.id} className="hover:bg-white/5 transition-colors border-b border-white/5">
                 <td className="py-4">
                   <div className="flex items-center gap-4 min-w-0">
@@ -307,6 +366,10 @@ export default function UsersPage() {
       )}
 
       <style jsx>{`
+        .tabs-row { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
+        .tab-btn { background: transparent; border: 1px solid rgba(255,255,255,0.1); color: rgba(255,255,255,0.5); padding: 0.6rem 1.1rem; border-radius: 10px; font-weight: 800; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; cursor: pointer; transition: all 0.2s; }
+        .tab-btn:hover { background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.8); }
+        .tab-btn.active { background: rgba(255,95,51,0.12); border-color: rgba(255,95,51,0.4); color: #ff5f33; }
         .master-table { width: 100%; border-collapse: collapse; }
         .master-table th { text-align: left; padding: 1.25rem 1.5rem; color: rgba(255,255,255,0.4); font-weight: 800; border-bottom: 1px solid rgba(255,255,255,0.05); text-transform: uppercase; font-size: 0.65rem; letter-spacing: 0.05em; background: rgba(0,0,0,0.2); }
         .master-table td { padding: 1rem 1.5rem; }

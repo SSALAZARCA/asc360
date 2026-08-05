@@ -1,9 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Header
+from fastapi import APIRouter, Depends, HTTPException, Query, status, Header
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import List, Optional
 from sqlalchemy.future import select
 from sqlalchemy import update as sql_update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 from app.database import get_db
 from app.models.user import User, UserStatus, Role
 from app.schemas.user import UserCreate, UserOut, UserStatusUpdate, UserUpdate
@@ -11,9 +13,39 @@ from app.core.security import get_password_hash, verify_sonia_secret
 from app.api.deps import get_current_user, get_optional_user, CurrentUser
 from uuid import UUID
 import uuid
+import io
+import datetime
+import openpyxl
 from app.config import settings
 
 router = APIRouter()
+
+STATUS_LABELS = {
+    UserStatus.active: "Activo",
+    UserStatus.pending: "Pendiente",
+    UserStatus.rejected: "Rechazado",
+}
+
+ROLE_LABELS = {
+    Role.superadmin: "Super Admin",
+    Role.jefe_taller: "Jefe de Taller",
+    Role.technician: "Técnico",
+    Role.client: "Cliente",
+    Role.parts_dealer: "Distribuidor",
+    Role.proveedor: "Proveedor",
+    Role.administrativo: "Administrativo",
+}
+
+
+def _scoped_users_query(current_user: CurrentUser):
+    """Same visibility rule shared by `list_users` and `export_users`:
+    SuperAdmin sees every user network-wide, anyone else only their own
+    tenant's. Kept in one place so the two callers can never diverge."""
+    stmt = select(User)
+    if not current_user.is_superadmin:
+        stmt = stmt.where(User.tenant_id == current_user.tenant_id)
+    return stmt
+
 
 @router.post("/", response_model=UserOut, status_code=status.HTTP_201_CREATED)
 async def create_user(
@@ -81,12 +113,87 @@ async def list_users(
     - SuperAdmin: Ve todos los usuarios de la red.
     - Admin: Ve solo los usuarios de su mismo taller (tenant).
     """
-    stmt = select(User)
-    if not current_user.is_superadmin:
-        stmt = stmt.where(User.tenant_id == current_user.tenant_id)
-        
+    stmt = _scoped_users_query(current_user)
     result = await db.execute(stmt)
     return result.scalars().all()
+
+
+def _build_users_workbook(users: list, scope: str) -> io.BytesIO:
+    """Pure Excel-building step, split out from `export_users` so it can be
+    unit-tested (openpyxl round-trip) without a DB/HTTP layer involved."""
+    wb = openpyxl.Workbook()
+    ws = wb.active
+
+    if scope == "clients":
+        ws.title = "Clientes"
+        ws.append([
+            "Nombre", "Cédula", "Teléfono", "Email", "Fecha de nacimiento",
+            "Ciudad", "Departamento", "Dirección", "Estado", "Telegram Vinculado",
+        ])
+        for u in users:
+            ws.append([
+                u.name,
+                u.identification or "",
+                u.phone or "",
+                u.email or "",
+                str(u.birth_date) if u.birth_date else "",
+                u.city or "",
+                u.department or "",
+                u.address or "",
+                STATUS_LABELS.get(u.status, u.status.value if u.status else ""),
+                "Sí" if u.telegram_id else "No",
+            ])
+    else:
+        ws.title = "Usuarios del Sistema"
+        ws.append(["Nombre", "Rol", "Email", "Teléfono", "Taller Asignado", "Estado", "Telegram Vinculado"])
+        for u in users:
+            taller = u.service_center_name or (u.tenant.name if u.tenant else None) or "Acceso Global"
+            ws.append([
+                u.name,
+                ROLE_LABELS.get(u.role, u.role.value if u.role else ""),
+                u.email or "",
+                u.phone or "",
+                taller,
+                STATUS_LABELS.get(u.status, u.status.value if u.status else ""),
+                "Sí" if u.telegram_id else "No",
+            ])
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return buf
+
+
+@router.get("/export")
+async def export_users(
+    scope: str = Query(..., pattern="^(clients|staff)$"),
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Excel export mirroring `list_users`'s exact visibility scope
+    (`_scoped_users_query`) -- a non-superadmin only ever exports their own
+    tenant's users, same as the on-screen table.
+
+    `scope=clients` -> only `role=client` rows, full client PII columns
+    (cédula, ciudad, etc.). `scope=staff` -> every other role, system-access
+    columns (rol, taller asignado) instead."""
+    stmt = _scoped_users_query(current_user).options(selectinload(User.tenant))
+    if scope == "clients":
+        stmt = stmt.where(User.role == Role.client)
+    else:
+        stmt = stmt.where(User.role != Role.client)
+
+    users = (await db.execute(stmt)).scalars().all()
+    buf = _build_users_workbook(users, scope)
+
+    filename_prefix = "clientes" if scope == "clients" else "usuarios_sistema"
+    filename = f"{filename_prefix}_{datetime.datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
 
 @router.get("/telegram/{telegram_id}", response_model=UserOut)
 async def get_user_by_telegram_id(
