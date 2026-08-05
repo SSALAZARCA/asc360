@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import AdminLayout from '../admin-layout';
 import { authFetch } from '../../lib/authFetch';
+import { toast } from '../../lib/toast';
 import { Search, ChevronLeft, ChevronRight, X, ArrowUp, ArrowDown, ChevronsUpDown, AlertTriangle, CheckCircle2, ShieldX, Pencil, UploadCloud, BarChart3, Download, Flag, Trash2 } from 'lucide-react';
 
 const PAGE_SIZE = 50;
@@ -97,7 +98,7 @@ export default function PartsCatalogPage() {
         coverage_status: coverageFilter,
       });
       const res = await authFetch(`/parts/admin/catalog/export?${params}`);
-      if (!res.ok) return;
+      if (!res.ok) { toast.error('No se pudo exportar el Excel.'); return; }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const fname = `maestro_partes${modelCode ? '_' + modelCode : ''}${search ? '_filtrado' : ''}.xlsx`;
@@ -106,7 +107,7 @@ export default function PartsCatalogPage() {
       a.download = fname;
       a.click();
       URL.revokeObjectURL(url);
-    } catch { /* silently fail */ }
+    } catch { toast.error('No se pudo exportar el Excel.'); }
     finally { setExporting(false); }
   };
 
@@ -131,14 +132,14 @@ export default function PartsCatalogPage() {
     authFetch('/parts/admin/vehicle-models')
       .then(r => r.ok ? r.json() : [])
       .then(data => setModels((Array.isArray(data) ? data : []).filter(m => m.catalog_model_code)))
-      .catch(() => {});
+      .catch(() => toast.error('No se pudieron cargar los modelos de vehículo.'));
   }, []);
 
   useEffect(() => {
     authFetch('/settings/pricing-factors')
       .then(r => r.ok ? r.json() : null)
       .then(data => { if (data) setPricingFactors(data); })
-      .catch(() => {});
+      .catch(() => toast.error('No se pudieron cargar los factores de precio.'));
   }, []);
 
   useEffect(() => {
@@ -146,7 +147,7 @@ export default function PartsCatalogPage() {
     authFetch(`/parts/admin/coverage${qs}`)
       .then(r => r.ok ? r.json() : null)
       .then(data => { if (data) setCoverage(data); })
-      .catch(() => {});
+      .catch(() => toast.error('No se pudo cargar la cobertura.'));
   }, [modelCode]);
 
   const fetchData = useCallback(async () => {
@@ -172,9 +173,11 @@ export default function PartsCatalogPage() {
       } else {
         const errText = await res.text().catch(() => '');
         console.error('[catalog] error', res.status, errText, params.toString());
+        toast.error('No se pudo cargar el catálogo de repuestos.');
       }
     } catch (e) {
       console.error('[catalog] exception', e);
+      toast.error('No se pudo cargar el catálogo de repuestos.');
     } finally {
       setLoading(false);
     }
@@ -233,22 +236,37 @@ export default function PartsCatalogPage() {
 
   const togglePriceReview = async (item) => {
     const newVal = !item.needs_price_review;
-    await authFetch(`/parts/admin/catalog/${encodeURIComponent(item.factory_part_number)}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ needs_price_review: newVal }),
-    });
-    fetchData();
+    try {
+      const res = await authFetch(`/parts/admin/catalog/${encodeURIComponent(item.factory_part_number)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ needs_price_review: newVal }),
+      });
+      if (!res.ok) { toast.error('No se pudo actualizar la revisión de precio.'); return; }
+      fetchData();
+    } catch {
+      toast.error('No se pudo actualizar la revisión de precio.');
+    }
   };
 
   const updateRotation = async (item, rc) => {
-    const newVal = item.rotation_class === rc ? null : rc;
+    const prevVal = item.rotation_class;
+    const newVal = prevVal === rc ? null : rc;
     setItems(prev => prev.map(i => i.factory_part_number === item.factory_part_number ? { ...i, rotation_class: newVal } : i));
-    await authFetch(`/parts/admin/catalog/${encodeURIComponent(item.factory_part_number)}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ rotation_class: newVal }),
-    });
+    try {
+      const res = await authFetch(`/parts/admin/catalog/${encodeURIComponent(item.factory_part_number)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rotation_class: newVal }),
+      });
+      if (!res.ok) {
+        setItems(prev => prev.map(i => i.factory_part_number === item.factory_part_number ? { ...i, rotation_class: prevVal } : i));
+        toast.error('No se pudo actualizar la rotación.');
+      }
+    } catch {
+      setItems(prev => prev.map(i => i.factory_part_number === item.factory_part_number ? { ...i, rotation_class: prevVal } : i));
+      toast.error('No se pudo actualizar la rotación.');
+    }
   };
 
   // Inline edit for "Descripción ES" -- avoids opening the full edit modal
@@ -375,7 +393,7 @@ export default function PartsCatalogPage() {
       setRotationResult(data);
       fetchData();
       const qs = modelCode ? `?model_code=${encodeURIComponent(modelCode)}` : '';
-      authFetch(`/parts/admin/coverage${qs}`).then(r => r.ok ? r.json() : null).then(d => { if (d) setCoverage(d); }).catch(() => {});
+      authFetch(`/parts/admin/coverage${qs}`).then(r => r.ok ? r.json() : null).then(d => { if (d) setCoverage(d); }).catch(() => toast.error('No se pudo actualizar el panel de cobertura.'));
     } catch { setRotationResult({ error: 'Error de conexión' }); }
     finally { setRotationUploading(false); }
   };
@@ -458,11 +476,15 @@ export default function PartsCatalogPage() {
                 </div>
                 <button
                   onClick={async () => {
-                    const res = await authFetch(`/parts/admin/coverage/unordered?rotation_class=${b.rotation_class}`);
-                    if (!res.ok) return;
-                    const blob = await res.blob();
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a'); a.href = url; a.download = `no_pedidas_${b.rotation_class}.xlsx`; a.click(); URL.revokeObjectURL(url);
+                    try {
+                      const res = await authFetch(`/parts/admin/coverage/unordered?rotation_class=${b.rotation_class}`);
+                      if (!res.ok) { toast.error('No se pudo exportar las partes no pedidas.'); return; }
+                      const blob = await res.blob();
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a'); a.href = url; a.download = `no_pedidas_${b.rotation_class}.xlsx`; a.click(); URL.revokeObjectURL(url);
+                    } catch {
+                      toast.error('No se pudo exportar las partes no pedidas.');
+                    }
                   }}
                   style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.58rem', fontWeight: 700, color: 'rgba(255,255,255,0.3)', background: 'none', border: 'none', cursor: 'pointer', marginTop: '0.1rem', padding: 0 }}
                 >
