@@ -386,9 +386,9 @@ export default function UsersPage() {
         .client { color: #94a3b8; background: rgba(148, 163, 184, 0.1); border: 1px solid rgba(148, 163, 184, 0.3); }
 
         .status-point { display: inline-block; width: 6px; height: 6px; border-radius: 50%; }
-        .active { background: #10b981; box-shadow: 0 0 10px #10b981; }
-        .pending { background: #f59e0b; box-shadow: 0 0 10px #f59e0b; }
-        .rejected, .inactive { background: #ef4444; box-shadow: 0 0 10px #ef4444; }
+        .status-point.active { background: #10b981; box-shadow: 0 0 10px #10b981; }
+        .status-point.pending { background: #f59e0b; box-shadow: 0 0 10px #f59e0b; }
+        .status-point.rejected, .status-point.inactive { background: #ef4444; box-shadow: 0 0 10px #ef4444; }
 
         .action-btn { width: 32px; height: 32px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; border: none; cursor: pointer; transition: all 0.2s; }
         .action-btn:hover { transform: translateY(-2px); }
