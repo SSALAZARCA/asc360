@@ -201,28 +201,43 @@ export default function TgReception() {
       .catch(() => setVehicleModels([]));
   }, []);
 
-  // ── VIN → prefill marca/modelo/año/color desde el maestro de VINs ──────────
-  // Nunca pisa un dato que el usuario (u OCR) ya haya cargado -- solo completa
-  // los campos vacíos.
+  // ── VIN → maestro de VINs ────────────────────────────────────────────────
+  // Fetch+parse compartido. Cuando el VIN resuelve en el maestro, ese dato de
+  // base de datos REEMPLAZA lo que haya en el formulario (tipeado a mano o
+  // leído por OCR de la tarjeta de propiedad) -- mismo criterio "el maestro
+  // de VINs siempre gana cuando está presente" ya usado por
+  // `distribuidor/entrega` y `historical-orders` (`data.field || f.field`).
+  // Decisión de producto explícita (2026-08-06): "el sistema lee el numero
+  // de chasis o vin, lo busca los datos en la base de datos y eso son los
+  // datos del vehiculo" -- el texto leído por OCR es inherentemente
+  // impreciso (calidad de foto, letra manuscrita) y nunca debe pisar el dato
+  // oficial del maestro.
+  const fetchVinMasterData = useCallback(async (rawVin) => {
+    const vin = (rawVin || '').trim().toUpperCase();
+    if (vin.length !== 17) return null;
+    try {
+      const res = await authFetch(`/vehicles/vin/${encodeURIComponent(vin)}`);
+      if (!res.ok) return null;
+      return await res.json();
+    } catch {
+      return null;
+    }
+  }, []);
+
   const lookupVin = useCallback(async (rawVin) => {
     const vin = rawVin.trim().toUpperCase();
     if (vin.length !== 17) { setVinLookupStatus('idle'); return; }
     setVinLookupStatus('loading');
-    try {
-      const res = await authFetch(`/vehicles/vin/${encodeURIComponent(vin)}`);
-      if (!res.ok) { setVinLookupStatus('not_found'); return; }
-      const data = await res.json();
-      setNewVeh(v => ({
-        ...v,
-        model: v.model.trim() ? v.model : (data.model || v.model),
-        year:  v.year  ? v.year  : (data.year  ? String(data.year) : v.year),
-        color: v.color ? v.color : (data.color || v.color),
-      }));
-      setVinLookupStatus('found');
-    } catch {
-      setVinLookupStatus('not_found');
-    }
-  }, []);
+    const data = await fetchVinMasterData(vin);
+    if (!data) { setVinLookupStatus('not_found'); return; }
+    setNewVeh(v => ({
+      ...v,
+      model: data.model || v.model,
+      year:  data.year ? String(data.year) : v.year,
+      color: data.color || v.color,
+    }));
+    setVinLookupStatus('found');
+  }, [fetchVinMasterData]);
 
   // ── Helpers de mensajes ───────────────────────────────────────────────────
   const pushBot  = useCallback((text, extra) => setMsgs(m => [...m, mkBot(text, extra)]), []);
@@ -265,7 +280,27 @@ export default function TgReception() {
 
       if (res.status === 404) {
         setIsNew(true); setVehicleId(null); setVehicleData({ plate });
-        if (docData) setNewVeh({ brand: docData.marca || 'UM', model: docData.linea || '', year: docData.modelo || '', color: docData.color || '', vin: docData.vin || '' });
+        if (docData) {
+          // El VIN leído por OCR sí se confía como identificador -- pero
+          // marca/modelo/año/color NO: si ese VIN resuelve en el maestro,
+          // el dato de base de datos reemplaza por completo el texto leído
+          // de la foto. Solo si el VIN no resuelve (unidad todavía no
+          // importada, u OCR no capturó VIN) se usa el texto del OCR como
+          // respaldo, editable a mano en el formulario.
+          const vinMaster = await fetchVinMasterData(docData.vin);
+          if (vinMaster) {
+            setVinLookupStatus('found');
+            setNewVeh({
+              brand: vinMaster.brand || docData.marca || 'UM',
+              model: vinMaster.model || '',
+              year:  vinMaster.year ? String(vinMaster.year) : '',
+              color: vinMaster.color || '',
+              vin:   docData.vin || '',
+            });
+          } else {
+            setNewVeh({ brand: docData.marca || 'UM', model: docData.linea || '', year: docData.modelo || '', color: docData.color || '', vin: docData.vin || '' });
+          }
+        }
         pushBot(`La placa *${plate}* no está registrada. Es una moto nueva.\n¿Cuál es el *teléfono del cliente*? Dictalo 🎙️ o escribilo.`);
         setStep(STEP.ASKING_PHONE);
         return;
@@ -301,7 +336,7 @@ export default function TgReception() {
     } finally {
       setBusy(false);
     }
-  }, [pushBot, showTyping, removeTyping, router]);
+  }, [pushBot, showTyping, removeTyping, router, fetchVinMasterData]);
 
   // ── OCR documento ─────────────────────────────────────────────────────────
   const onDocumentPhoto = useCallback((data) => {
