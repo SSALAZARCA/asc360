@@ -16,6 +16,7 @@ from starlette.responses import StreamingResponse
 from app.database import get_db
 from app.api.deps import get_current_user, CurrentUser
 from app.models.imports import ShipmentOrder, SparePartLot, ShipmentMotoUnit, ImportAttachment, SparePartItem, ReconciliationResult, Backorder, VehicleModel, MotoLocation, MotoObservation, BackorderReconciliation
+from app.models.parts_manual import PartsReference
 from app.models.tenant import Tenant, EstadoRed
 from app.schemas.imports import (
     ShipmentOrderRead, ShipmentOrderCreate, ShipmentOrderUpdate, ShipmentOrderListResponse,
@@ -1857,20 +1858,35 @@ async def export_spare_parts(
     stmt = stmt.order_by(SparePartLot.created_at.desc())
     lots = (await db.execute(stmt)).scalars().all()
 
+    # Rotation lives on `PartsReference` (Maestro de Partes), keyed by
+    # `factory_part_number` -- not on `SparePartItem` itself. One batched
+    # IN-query for every part number in this export, same "no N+1" discipline
+    # `export_catalog_excel` already uses for its own `extra` lookup.
+    part_numbers = {item.part_number for lot in lots for item in lot.items}
+    rotation_by_part: dict[str, str] = {}
+    if part_numbers:
+        for fpn, rotation_class in (await db.execute(
+            select(PartsReference.factory_part_number, PartsReference.rotation_class)
+            .where(PartsReference.factory_part_number.in_(part_numbers))
+        )).all():
+            rotation_by_part[fpn] = rotation_class
+
     headers = [
         "LOTE (PI)", "PART NUMBER", "DESCRIPCIÓN ES", "DESCRIPCIÓN EN",
-        "MODELO APLICABLE", "QTY PEDIDO", "QTY RECIBIDO", "QTY PENDIENTE",
+        "MODELO APLICABLE", "ROTACIÓN", "QTY PEDIDO", "QTY RECIBIDO", "QTY PENDIENTE",
         "STATUS", "PI BACKORDER", "PRECIO UNIT (USD)", "MONTO (USD)",
     ]
     rows = []
     for lot in lots:
         for item in lot.items:
+            rotation_class = rotation_by_part.get(item.part_number)
             rows.append([
                 lot.lot_identifier,
                 item.part_number,
                 item.description_es,
                 item.description,
                 item.model_applicable,
+                rotation_class.upper() if rotation_class else "",
                 item.qty_ordered,
                 item.qty_received,
                 item.qty_pending,
