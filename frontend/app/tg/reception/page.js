@@ -10,6 +10,7 @@ import CameraInput from '../../../components/tg/CameraInput';
 // ─── Constantes ───────────────────────────────────────────────────────────────
 const STEP = {
   PLATE:             'PLATE',
+  CONFIRMING_PLATE_FORMAT: 'CONFIRMING_PLATE_FORMAT',
   CONFIRMING_OCR:    'CONFIRMING_OCR',
   CORRECTING_OCR:    'CORRECTING_OCR',
   CONFIRMING_CLIENT: 'CONFIRMING_CLIENT',
@@ -32,6 +33,12 @@ const STEP = {
   CONFIRM:           'CONFIRM',
   DONE:              'DONE',
 };
+
+// Placas colombianas: 3 letras + 2 números + 1 letra, sin espacios (ej:
+// ABC12D). Aplicado sobre `plate` YA normalizada (trim/upper/sin espacios).
+// No bloquea -- algunas placas legítimas (diplomáticas, oficiales, motos muy
+// antiguas) no siguen este patrón; solo pide confirmación explícita.
+const PLATE_FORMAT_RE = /^[A-Z]{3}\d{2}[A-Z]$/;
 
 const GAS_CHIPS   = ['Vacío', 'Reserva', '1/4', '1/2', '3/4', 'Lleno'];
 const SVC_LABELS  = { regular: 'Mecánica General', km_review: 'Revisión KM', warranty: 'Garantía', pdi: 'Alistamiento' };
@@ -110,6 +117,11 @@ export default function TgReception() {
 
   // Datos recolectados — NADA se persiste en DB hasta el paso final
   const [ocrData,     setOcrData]     = useState(null);
+  // Placa que no matcheó `PLATE_FORMAT_RE`, en espera de confirmación
+  // explícita (STEP.CONFIRMING_PLATE_FORMAT) antes de consultarla al
+  // backend -- guarda también el `docData` del OCR (si venía de ahí) para
+  // no perderlo al retomar el flujo tras la confirmación.
+  const [pendingPlateCheck, setPendingPlateCheck] = useState(null);
   const [vehicleId,   setVehicleId]   = useState(null);
   const [vehicleData, setVehicleData] = useState(null);
   const [isNew,       setIsNew]       = useState(false);
@@ -143,7 +155,7 @@ export default function TgReception() {
     if (step === STEP.PLATE) return;
     const draft = {
       step, ocrData, vehicleId, isNew, newVeh, clientPhone, clientIdentification, formData,
-      clientEdits, editingClientField,
+      clientEdits, editingClientField, pendingPlateCheck,
       vehicleData: vehicleData
         ? { plate: vehicleData.plate, brand: vehicleData.brand, model: vehicleData.model, year: vehicleData.year, id: vehicleData.id, client_id: vehicleData.client_id }
         : null,
@@ -172,6 +184,7 @@ export default function TgReception() {
           setStep(d.step);
           setMsgs([...(d.msgs || []), mkBot('↩️ Retomamos donde quedamos.')]);
           setOcrData(d.ocrData || null);
+          setPendingPlateCheck(d.pendingPlateCheck || null);
           setVehicleId(d.vehicleId || null);
           setVehicleData(d.vehicleData || null);
           setIsNew(d.isNew || false);
@@ -250,7 +263,7 @@ export default function TgReception() {
     sessionStorage.removeItem(STORAGE_KEY);
     _msgId = 0; confirmShown.current = false;
     setStep(STEP.PLATE); setMsgs([]); setInput(''); setBusy(false); setCancelPending(false);
-    setOcrData(null); setVehicleId(null); setVehicleData(null); setIsNew(false);
+    setOcrData(null); setPendingPlateCheck(null); setVehicleId(null); setVehicleData(null); setIsNew(false);
     setNewVeh({ brand: 'UM', model: '', year: '', color: '', vin: '' });
     setVinLookupStatus('idle');
     setClientPhone(''); setClientIdentification(''); setClientEdits({}); setEditingClientField(null);
@@ -267,9 +280,11 @@ export default function TgReception() {
   }, []);
 
   // ── PLATE ─────────────────────────────────────────────────────────────────
-  const lookupPlate = useCallback(async (rawPlate, docData = null) => {
-    const plate = rawPlate.trim().toUpperCase().replace(/\s/g, '');
-    if (!plate) return;
+  // Backend lookup + response handling, separado del chequeo de formato de
+  // arriba para que tanto la placa bien formada (camino directo) como la
+  // "sí, es correcta" tras STEP.CONFIRMING_PLATE_FORMAT (override explícito)
+  // compartan la MISMA lógica, sin duplicar el authFetch/404/active_order.
+  const performPlateLookup = useCallback(async (plate, docData = null) => {
     setBusy(true);
     const tid = showTyping();
     try {
@@ -337,6 +352,38 @@ export default function TgReception() {
       setBusy(false);
     }
   }, [pushBot, showTyping, removeTyping, router, fetchVinMasterData]);
+
+  // Chequea el formato de placa colombiano ANTES de consultar el backend --
+  // si no matchea, defiere la consulta hasta que el personal confirme
+  // explícitamente (STEP.CONFIRMING_PLATE_FORMAT), sin tocar `busy`/typing
+  // (todavía no se disparó ninguna llamada de red).
+  const lookupPlate = useCallback((rawPlate, docData = null) => {
+    const plate = rawPlate.trim().toUpperCase().replace(/\s/g, '');
+    if (!plate) return;
+
+    if (!PLATE_FORMAT_RE.test(plate)) {
+      setPendingPlateCheck({ plate, docData });
+      pushBot(`La placa *${plate}* no tiene el formato esperado (3 letras + 2 números + 1 letra, ej: ABC12D). ¿Es correcta?`);
+      setStep(STEP.CONFIRMING_PLATE_FORMAT);
+      return;
+    }
+
+    performPlateLookup(plate, docData);
+  }, [pushBot, performPlateLookup]);
+
+  const confirmPlateFormat = useCallback(() => {
+    pushUser('Confirmar ✓');
+    const check = pendingPlateCheck;
+    setPendingPlateCheck(null);
+    if (check?.plate) performPlateLookup(check.plate, check.docData);
+  }, [pushUser, pendingPlateCheck, performPlateLookup]);
+
+  const correctPlateFormat = useCallback(() => {
+    pushUser('Corregir ✏️');
+    pushBot('Escribí o dictá la placa correcta:');
+    setStep(pendingPlateCheck?.docData ? STEP.CORRECTING_OCR : STEP.PLATE);
+    setPendingPlateCheck(null);
+  }, [pushUser, pushBot, pendingPlateCheck]);
 
   // ── OCR documento ─────────────────────────────────────────────────────────
   const onDocumentPhoto = useCallback((data) => {
@@ -852,6 +899,8 @@ export default function TgReception() {
     if (busy) return;
     if (cancelPending) { handleSendValue(val); return; }
     switch (step) {
+      case STEP.CONFIRMING_PLATE_FORMAT:
+        return val.startsWith('Confirmar') ? confirmPlateFormat() : correctPlateFormat();
       case STEP.CONFIRMING_OCR:    return val.startsWith('Confirmar') ? confirmOcr() : correctOcr();
       case STEP.CONFIRMING_CLIENT: return confirmClient();
       case STEP.CONFIRMING_RETURNING_CLIENT:
@@ -872,7 +921,8 @@ export default function TgReception() {
         return selectSvcType(Object.keys(SVC_LABELS).find(k => SVC_LABELS[k] === val) || 'regular');
       case STEP.OBSERVATIONS: return submitObservations('');
     }
-  }, [busy, step, cancelPending, handleSendValue, confirmOcr, correctOcr, confirmClient,
+  }, [busy, step, cancelPending, handleSendValue, confirmPlateFormat, correctPlateFormat,
+      confirmOcr, correctOcr, confirmClient,
       confirmReturningClient, openClientFieldEdit, finishClientEdits, selectClientField,
       submitGas, addTextOnly, skipPhotos, skipPhotoDesc, submitAccessories,
       confirmMotive, changeSvcType, correctMotive, selectSvcType, submitObservations]);
@@ -880,6 +930,7 @@ export default function TgReception() {
   const chips = (() => {
     if (cancelPending) return ['Sí, cancelar', 'No, continuar'];
     switch (step) {
+      case STEP.CONFIRMING_PLATE_FORMAT: return ['Confirmar ✓', 'Corregir ✏️'];
       case STEP.CONFIRMING_OCR:    return ['Confirmar ✓', 'Corregir ✏️'];
       case STEP.CONFIRMING_CLIENT: return ['Ingresar al taller →'];
       case STEP.CONFIRMING_RETURNING_CLIENT: return ['Sí, siguen correctos', 'No, corregir algo'];

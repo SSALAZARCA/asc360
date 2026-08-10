@@ -93,7 +93,7 @@ beforeEach(() => {
       return Promise.resolve(makeResponse(200, { id: 'c-new' }));
     }
     if (url === '/vehicles/' && method === 'POST') {
-      return Promise.resolve(makeResponse(200, { id: 'v-new', plate: 'XYZ999', brand: 'UM', model: 'DSR 150' }));
+      return Promise.resolve(makeResponse(200, { id: 'v-new', plate: 'XYZ99D', brand: 'UM', model: 'DSR 150' }));
     }
     return Promise.resolve(makeResponse(200, {}));
   });
@@ -160,14 +160,14 @@ describe('TgReception — tenant-precedence inversion (task 4.1/4.2)', () => {
       isNew: true,
       newVeh: { brand: 'UM', model: 'DSR 150', year: '2022', color: 'Rojo', vin: '' },
       clientPhone: '3001234567',
-      formData: { plate: 'XYZ999', km: '', gas: '', notes: '', motivos: [], serviceType: 'regular', accessories: [], observations: '', intakeAnswers: [], pdfUrl: null },
-      vehicleData: { plate: 'XYZ999', brand: 'UM', model: 'DSR 150', year: '2022', id: null, tenant_id: 'A', client_id: null },
+      formData: { plate: 'XYZ99D', km: '', gas: '', notes: '', motivos: [], serviceType: 'regular', accessories: [], observations: '', intakeAnswers: [], pdfUrl: null },
+      vehicleData: { plate: 'XYZ99D', brand: 'UM', model: 'DSR 150', year: '2022', id: null, tenant_id: 'A', client_id: null },
       evidenceItems: [],
       intakeQuestions: [],
       intakeIdx: 0,
       msgs: [
         { id: 1, role: 'bot', text: 'Hola Ana! ¿Cuál es la placa de la moto?' },
-        { id: 2, role: 'user', text: 'XYZ999' },
+        { id: 2, role: 'user', text: 'XYZ99D' },
         { id: 3, role: 'bot', text: '¿Cuántos kilómetros tiene la moto?\nEscribí, dictá 🎙️ o foto del tablero 📷' },
       ],
     }));
@@ -198,13 +198,13 @@ describe('TgReception — draft persistence omits tenant_id (task 4.3/4.4)', () 
   it('never writes a tenant_id key into the sessionStorage vehicleData snapshot', async () => {
     setSession({ id: 'u-1', name: 'Ana', role: 'jefe_taller', tenant_id: 'B' });
     vehicleLookupResponse = makeResponse(200, {
-      id: 'v-1', plate: 'ABC123', brand: 'UM', model: 'DSR 150', year: 2022,
+      id: 'v-1', plate: 'ABC12D', brand: 'UM', model: 'DSR 150', year: 2022,
       client_id: 'c-1', tenant_id: 'A', active_order: null,
     });
 
     render(<TgReception />);
     await waitFor(() => screen.getByText(/cuál es la placa/i));
-    await typeAndEnter('ABC123');
+    await typeAndEnter('ABC12D');
 
     await waitFor(() => screen.getByText(/ingresamos al taller/i));
 
@@ -225,7 +225,7 @@ describe('TgReception — conflict messaging on lookup (task 4.5)', () => {
 
     render(<TgReception />);
     await waitFor(() => screen.getByText(/cuál es la placa/i));
-    await typeAndEnter('ABC123');
+    await typeAndEnter('ABC12D');
 
     await waitFor(() => {
       expect(screen.getByText(/taller norte/i)).toBeInTheDocument();
@@ -241,7 +241,7 @@ describe('TgReception — conflict messaging on lookup (task 4.5)', () => {
 
     render(<TgReception />);
     await waitFor(() => screen.getByText(/cuál es la placa/i));
-    await typeAndEnter('ABC123');
+    await typeAndEnter('ABC12D');
 
     await waitFor(() => {
       expect(screen.getByText(/otro taller/i)).toBeInTheDocument();
@@ -254,7 +254,7 @@ describe('TgReception — structured 409 rendering on order submission (task 4.6
   it('renders the nested conflict message instead of [object Object]', async () => {
     setSession({ id: 'u-1', name: 'Ana', role: 'jefe_taller', tenant_id: 'B' });
     vehicleLookupResponse = makeResponse(200, {
-      id: 'v-1', plate: 'ABC123', brand: 'UM', model: 'DSR 150', year: 2022,
+      id: 'v-1', plate: 'ABC12D', brand: 'UM', model: 'DSR 150', year: 2022,
       client_id: 'c-1', active_order: null,
     });
     orderCreateResponse = makeResponse(409, {
@@ -266,7 +266,7 @@ describe('TgReception — structured 409 rendering on order submission (task 4.6
 
     render(<TgReception />);
     await waitFor(() => screen.getByText(/cuál es la placa/i));
-    await typeAndEnter('ABC123');
+    await typeAndEnter('ABC12D');
 
     await waitFor(() => screen.getByText(/ingresamos al taller/i));
     fireEvent.click(screen.getByRole('button', { name: /ingresar al taller/i }));

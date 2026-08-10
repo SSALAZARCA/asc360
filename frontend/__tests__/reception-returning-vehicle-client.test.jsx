@@ -67,7 +67,7 @@ beforeEach(() => {
   mockAuthFetch.mockReset();
 
   vehicleLookupResponse = makeResponse(200, {
-    id: 'v-1', plate: 'ABC123', brand: 'UM', model: 'DSR 150', year: 2022,
+    id: 'v-1', plate: 'ABC12D', brand: 'UM', model: 'DSR 150', year: 2022,
     client_id: 'c-1', active_order: null,
     client: { name: 'Carlos Pérez', phone: '3001234567', email: 'carlos@mail.com', address: 'Cra 1 # 2-3' },
   });
@@ -103,7 +103,7 @@ async function lookupReturningVehicle() {
   setSession({ id: 'u-1', name: 'Ana', role: 'jefe_taller', tenant_id: 'B' });
   render(<TgReception />);
   await waitFor(() => screen.getByText(/cuál es la placa/i));
-  await typeAndEnter('ABC123');
+  await typeAndEnter('ABC12D');
 }
 
 describe('TgReception — returning-vehicle client confirm/edit (Phase 8, task 8.1/8.2)', () => {
@@ -128,7 +128,7 @@ describe('TgReception — returning-vehicle client confirm/edit (Phase 8, task 8
     fireEvent.click(screen.getByRole('button', { name: /siguen correctos/i }));
 
     await waitFor(() => screen.getByText(/cuántos kilómetros/i));
-    expect(callsTo('/vehicles/ABC123/client', 'PATCH')).toHaveLength(0);
+    expect(callsTo('/vehicles/ABC12D/client', 'PATCH')).toHaveLength(0);
   });
 
   it('editing captures only the changed fields and fires exactly ONE batched PATCH on Listo', async () => {
@@ -153,8 +153,8 @@ describe('TgReception — returning-vehicle client confirm/edit (Phase 8, task 8
     await waitFor(() => screen.getByRole('button', { name: /listo/i }));
     fireEvent.click(screen.getByRole('button', { name: /listo/i }));
 
-    await waitFor(() => expect(callsTo('/vehicles/ABC123/client', 'PATCH')).toHaveLength(1));
-    const body = JSON.parse(callsTo('/vehicles/ABC123/client', 'PATCH')[0][1].body);
+    await waitFor(() => expect(callsTo('/vehicles/ABC12D/client', 'PATCH')).toHaveLength(1));
+    const body = JSON.parse(callsTo('/vehicles/ABC12D/client', 'PATCH')[0][1].body);
     expect(body).toEqual({ phone: '3009999999', name: 'Carlos Gómez' });
 
     await waitFor(() => screen.getByText(/cuántos kilómetros/i));
@@ -169,7 +169,7 @@ describe('TgReception — returning-vehicle client confirm/edit (Phase 8, task 8
     fireEvent.click(screen.getByRole('button', { name: /listo/i }));
 
     await waitFor(() => screen.getByText(/cuántos kilómetros/i));
-    expect(callsTo('/vehicles/ABC123/client', 'PATCH')).toHaveLength(0);
+    expect(callsTo('/vehicles/ABC12D/client', 'PATCH')).toHaveLength(0);
   });
 
   it('surfaces a PATCH failure to the advisor but still proceeds to KM (never blocks reception)', async () => {
@@ -194,7 +194,7 @@ describe('TgReception — returning-vehicle client confirm/edit (Phase 8, task 8
 
   it('behaves exactly as before this change when the vehicle has no linked client', async () => {
     vehicleLookupResponse = makeResponse(200, {
-      id: 'v-1', plate: 'ABC123', brand: 'UM', model: 'DSR 150', year: 2022,
+      id: 'v-1', plate: 'ABC12D', brand: 'UM', model: 'DSR 150', year: 2022,
       client_id: null, active_order: null, client: null,
     });
     await lookupReturningVehicle();
@@ -206,6 +206,6 @@ describe('TgReception — returning-vehicle client confirm/edit (Phase 8, task 8
 
     fireEvent.click(screen.getByRole('button', { name: /ingresar al taller/i }));
     await waitFor(() => screen.getByText(/cuántos kilómetros/i));
-    expect(callsTo('/vehicles/ABC123/client', 'PATCH')).toHaveLength(0);
+    expect(callsTo('/vehicles/ABC12D/client', 'PATCH')).toHaveLength(0);
   });
 });

@@ -90,7 +90,7 @@ beforeEach(() => {
       return Promise.resolve(makeResponse(200, { id: 'c-new' }));
     }
     if (url === '/vehicles/' && method === 'POST') {
-      return Promise.resolve(makeResponse(200, { id: 'v-new', plate: 'XYZ999', brand: 'UM', model: 'DSR 150' }));
+      return Promise.resolve(makeResponse(200, { id: 'v-new', plate: 'XYZ99D', brand: 'UM', model: 'DSR 150' }));
     }
     return Promise.resolve(makeResponse(200, {}));
   });
@@ -153,7 +153,7 @@ describe('TgReception — new-client identification capture (moto nueva)', () =>
     setSession({ id: 'u-1', name: 'Ana', role: 'jefe_taller', tenant_id: 'B' });
     render(<TgReception />);
     await waitFor(() => screen.getByText(/cuál es la placa/i));
-    await typeAndEnter('XYZ999');
+    await typeAndEnter('XYZ99D');
 
     await waitFor(() => screen.getByText(/moto nueva/i));
     await typeAndEnter('3001234567');
@@ -179,7 +179,7 @@ describe('TgReception — new-client identification capture (moto nueva)', () =>
   it('does not ask for the cedula when OCR already captured it, and uses the OCR value', async () => {
     setSession({ id: 'u-1', name: 'Ana', role: 'jefe_taller', tenant_id: 'B' });
     extractDocumentResponse = makeResponse(200, {
-      placa: 'XYZ999', marca: 'UM', linea: 'DSR 150', modelo: '2022', color: 'Rojo',
+      placa: 'XYZ99D', marca: 'UM', linea: 'DSR 150', modelo: '2022', color: 'Rojo',
       vin: '1HGCM82633A123456', propietario: 'Carlos Pérez',
       numero_documento_propietario: '999888777',
     });
