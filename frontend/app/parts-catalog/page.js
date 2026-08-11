@@ -310,10 +310,12 @@ export default function PartsCatalogPage() {
       if (!res.ok) {
         setItems(prev => prev.map(i => i.factory_part_number === item.factory_part_number ? { ...i, description_es: prevVal } : i));
         setEsCellError(prev => ({ ...prev, [item.factory_part_number]: 'Error al guardar.' }));
+        toast.error('No se pudo guardar la descripción en español.');
       }
     } catch {
       setItems(prev => prev.map(i => i.factory_part_number === item.factory_part_number ? { ...i, description_es: prevVal } : i));
       setEsCellError(prev => ({ ...prev, [item.factory_part_number]: 'Error de conexión.' }));
+      toast.error('No se pudo guardar la descripción en español.');
     }
   };
 
@@ -701,16 +703,15 @@ export default function PartsCatalogPage() {
                     />
                   ) : (
                     <div
-                      onClick={() => startEditDescriptionEs(item)}
-                      title="Click para editar"
+                      onDoubleClick={() => startEditDescriptionEs(item)}
+                      title="Doble clic para editar"
                       className="es-cell-editable"
-                      style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, borderRadius: 6, padding: '2px 4px', margin: '-2px -4px' }}
+                      style={{ cursor: 'text', display: 'flex', alignItems: 'center', gap: 4, borderRadius: 6, padding: '2px 4px', margin: '-2px -4px' }}
                     >
                       {item.description_es
                         ? <span style={{ color: '#4ade80', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.description_es}</span>
                         : <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: '0.68rem' }}>—</span>
                       }
-                      <Pencil size={10} style={{ opacity: 0.25, flexShrink: 0 }} />
                     </div>
                   )}
                   {esCellError[item.factory_part_number] && (
