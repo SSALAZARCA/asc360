@@ -2062,6 +2062,7 @@ async def debug_cost_match_single(
         select(
             SparePartItem.id, SparePartItem.part_number, SparePartItem.unit_price,
             SparePartItem.qty_ordered, SparePartItem.qty_physical, SparePartItem.qty_received,
+            SparePartItem.fob_pi,
         ).where(SparePartItem.part_number == factory_part_number)
     )).all()
 
@@ -2079,13 +2080,15 @@ async def debug_cost_match_single(
         "reference_exists": ref is not None,
         "reference_factory_part_number_repr": repr(ref.factory_part_number) if ref else None,
         "reference_avg_fob_cost": float(ref.avg_fob_cost) if ref and ref.avg_fob_cost is not None else None,
+        "reference_preliminary_fob": float(ref.preliminary_fob) if ref and ref.preliminary_fob is not None else None,
         "reference_prev_codes": ref.prev_codes if ref else None,
         "exact_match_items": [
             {
                 "id": str(i), "part_number": repr(pn), "unit_price": float(up) if up is not None else None,
                 "qty_ordered": qo, "qty_physical": qp, "qty_received": qr,
+                "fob_pi": float(fp) if fp is not None else None,
             }
-            for i, pn, up, qo, qp, qr in exact_items
+            for i, pn, up, qo, qp, qr, fp in exact_items
         ],
         "fuzzy_match_items_if_different": [
             {"id": str(i), "part_number": repr(pn), "unit_price": float(up) if up is not None else None,
