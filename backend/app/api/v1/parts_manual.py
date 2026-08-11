@@ -2045,6 +2045,56 @@ async def debug_cost_match(
     return {"missing_cost_count": len(results), "details": results}
 
 
+# TEMPORARY debug endpoint -- per-code deep dive, same investigation as above
+# but for a single reported code (2026-08-11). Read-only, superadmin-only.
+# Remove after use.
+@router.get("/admin/debug-cost-match-single/{factory_part_number}")
+async def debug_cost_match_single(
+    factory_part_number: str,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    if not current_user.is_superadmin:
+        raise HTTPException(status_code=403, detail="Solo superadmin")
+
+    ref = await db.get(PartsReference, factory_part_number)
+    exact_items = (await db.execute(
+        select(
+            SparePartItem.id, SparePartItem.part_number, SparePartItem.unit_price,
+            SparePartItem.qty_ordered, SparePartItem.qty_physical, SparePartItem.qty_received,
+        ).where(SparePartItem.part_number == factory_part_number)
+    )).all()
+
+    norm = factory_part_number.strip().upper().replace(" ", "")
+    fuzzy_items = (await db.execute(
+        select(
+            SparePartItem.id, SparePartItem.part_number, SparePartItem.unit_price,
+            SparePartItem.qty_ordered, SparePartItem.qty_physical,
+        ).where(func.upper(func.trim(SparePartItem.part_number)) == norm)
+    )).all()
+
+    return {
+        "queried_code": factory_part_number,
+        "queried_code_repr": repr(factory_part_number),
+        "reference_exists": ref is not None,
+        "reference_factory_part_number_repr": repr(ref.factory_part_number) if ref else None,
+        "reference_avg_fob_cost": float(ref.avg_fob_cost) if ref and ref.avg_fob_cost is not None else None,
+        "reference_prev_codes": ref.prev_codes if ref else None,
+        "exact_match_items": [
+            {
+                "id": str(i), "part_number": repr(pn), "unit_price": float(up) if up is not None else None,
+                "qty_ordered": qo, "qty_physical": qp, "qty_received": qr,
+            }
+            for i, pn, up, qo, qp, qr in exact_items
+        ],
+        "fuzzy_match_items_if_different": [
+            {"id": str(i), "part_number": repr(pn), "unit_price": float(up) if up is not None else None,
+             "qty_ordered": qo, "qty_physical": qp}
+            for i, pn, up, qo, qp in fuzzy_items
+        ] if len(fuzzy_items) != len(exact_items) else "same as exact_match_items",
+    }
+
+
 @router.post("/admin/detect-code-changes")
 async def detect_code_changes(
     db: AsyncSession = Depends(get_db),
