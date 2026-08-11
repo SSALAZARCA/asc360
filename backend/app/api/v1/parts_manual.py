@@ -1977,125 +1977,75 @@ async def backfill_costs(
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """Recalcula avg_fob_cost para todas las referencias sin costo que tienen precios en pedidos."""
+    """Recalcula precios para toda referencia a la que le falte avg_fob_cost
+    (costo confirmado) y/o preliminary_fob (FOB de PI) -- típicamente una
+    referencia recién creada por `load_section` para un código de fábrica
+    cuyo pedido ya traía precio desde antes.
+
+    avg_fob_cost usa `recalculate_part_cost` (`pricing_service.py`, ya
+    matchea por prev_codes). preliminary_fob usa la misma lógica de promedio
+    ponderado que `import_fob_preliminary`/`execute_adjustments` ya usan,
+    pero sin estar atada a un Excel puntual ni a una decisión de ajuste --
+    corre sobre CUALQUIER referencia, y también matchea por prev_codes.
+
+    Una referencia cuenta como "actualizada" una sola vez si CUALQUIERA de
+    los dos precios se completó -- no se reportan como dos métricas
+    separadas, es una sola acción de "completar lo que falte"."""
     if not current_user.is_superadmin:
         raise HTTPException(status_code=403, detail="Solo superadmin")
 
+    from sqlalchemy import or_
     from app.services.pricing_service import recalculate_part_cost
 
     result = await db.execute(
-        select(PartsReference.factory_part_number).where(PartsReference.avg_fob_cost.is_(None))
+        select(PartsReference).where(
+            or_(PartsReference.avg_fob_cost.is_(None), PartsReference.preliminary_fob.is_(None))
+        )
     )
-    codes = [row[0] for row in result.all()]
+    refs = result.scalars().all()
 
     updated = 0
-    for code in codes:
-        before = (await db.get(PartsReference, code))
-        await recalculate_part_cost(db, code)
-        after = (await db.get(PartsReference, code))
-        if after and after.avg_fob_cost is not None:
+    for ref in refs:
+        code = ref.factory_part_number
+        changed = False
+
+        if ref.avg_fob_cost is None:
+            await recalculate_part_cost(db, code)
+            # `recalculate_part_cost` looks the reference back up by the SAME
+            # primary key within this same session -- SQLAlchemy's identity
+            # map guarantees it mutates this exact `ref` instance, so no
+            # extra `db.get()` round-trip is needed to see the new value.
+            if ref.avg_fob_cost is not None:
+                changed = True
+
+        if ref.preliminary_fob is None:
+            all_codes = [ref.factory_part_number]
+            for entry in (ref.prev_codes or []):
+                if isinstance(entry, dict) and "code" in entry:
+                    all_codes.append(entry["code"])
+                elif isinstance(entry, str) and entry:
+                    all_codes.append(entry)
+
+            items = (await db.execute(
+                select(SparePartItem).where(
+                    SparePartItem.part_number.in_(all_codes),
+                    SparePartItem.status != 'CANCELLED',
+                    SparePartItem.fob_pi.isnot(None),
+                    SparePartItem.qty_ordered > 0,
+                )
+            )).scalars().all()
+
+            total_qty = sum(i.qty_ordered for i in items)
+            if items and total_qty > 0:
+                total_cost = sum(float(i.fob_pi) * i.qty_ordered for i in items)
+                ref.preliminary_fob = round(total_cost / total_qty, 4)
+                changed = True
+
+        if changed:
             updated += 1
 
     await db.commit()
-    return {"checked": len(codes), "updated": updated}
-
-
-# TEMPORARY debug endpoint -- diagnosing why "Recalcular costos" left many
-# freshly-loaded Xtreet 401 references without a cost (2026-08-11). Read-only,
-# superadmin-only. Remove after use.
-@router.get("/admin/debug-cost-match/{model_code}")
-async def debug_cost_match(
-    model_code: str,
-    section_code: str = "",
-    db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_user),
-):
-    if not current_user.is_superadmin:
-        raise HTTPException(status_code=403, detail="Solo superadmin")
-
-    stmt = (
-        select(PartsReference.factory_part_number, PartsReference.avg_fob_cost)
-        .join(PartsManualItem, PartsManualItem.factory_part_number == PartsReference.factory_part_number)
-        .join(PartsManualSection, PartsManualSection.id == PartsManualItem.section_id)
-        .where(PartsManualSection.model_code == model_code)
-    )
-    if section_code:
-        stmt = stmt.where(PartsManualSection.section_code == section_code)
-    refs = (await db.execute(stmt)).all()
-
-    results = []
-    for fpn, avg_fob_cost in refs:
-        if avg_fob_cost is not None:
-            continue
-        exact = (await db.execute(
-            select(func.count()).select_from(SparePartItem)
-            .where(SparePartItem.part_number == fpn, SparePartItem.unit_price.isnot(None))
-        )).scalar_one()
-        prefix = fpn.split("-")[0]
-        near = (await db.execute(
-            select(SparePartItem.part_number, SparePartItem.unit_price)
-            .where(SparePartItem.part_number.like(f"{prefix}%"))
-            .limit(5)
-        )).all()
-        results.append({
-            "factory_part_number": fpn,
-            "exact_priced_matches": exact,
-            "near_matches": [{"part_number": pn, "unit_price": float(up) if up is not None else None} for pn, up in near],
-        })
-    return {"missing_cost_count": len(results), "details": results}
-
-
-# TEMPORARY debug endpoint -- per-code deep dive, same investigation as above
-# but for a single reported code (2026-08-11). Read-only, superadmin-only.
-# Remove after use.
-@router.get("/admin/debug-cost-match-single/{factory_part_number}")
-async def debug_cost_match_single(
-    factory_part_number: str,
-    db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_user),
-):
-    if not current_user.is_superadmin:
-        raise HTTPException(status_code=403, detail="Solo superadmin")
-
-    ref = await db.get(PartsReference, factory_part_number)
-    exact_items = (await db.execute(
-        select(
-            SparePartItem.id, SparePartItem.part_number, SparePartItem.unit_price,
-            SparePartItem.qty_ordered, SparePartItem.qty_physical, SparePartItem.qty_received,
-            SparePartItem.fob_pi,
-        ).where(SparePartItem.part_number == factory_part_number)
-    )).all()
-
-    norm = factory_part_number.strip().upper().replace(" ", "")
-    fuzzy_items = (await db.execute(
-        select(
-            SparePartItem.id, SparePartItem.part_number, SparePartItem.unit_price,
-            SparePartItem.qty_ordered, SparePartItem.qty_physical,
-        ).where(func.upper(func.trim(SparePartItem.part_number)) == norm)
-    )).all()
-
-    return {
-        "queried_code": factory_part_number,
-        "queried_code_repr": repr(factory_part_number),
-        "reference_exists": ref is not None,
-        "reference_factory_part_number_repr": repr(ref.factory_part_number) if ref else None,
-        "reference_avg_fob_cost": float(ref.avg_fob_cost) if ref and ref.avg_fob_cost is not None else None,
-        "reference_preliminary_fob": float(ref.preliminary_fob) if ref and ref.preliminary_fob is not None else None,
-        "reference_prev_codes": ref.prev_codes if ref else None,
-        "exact_match_items": [
-            {
-                "id": str(i), "part_number": repr(pn), "unit_price": float(up) if up is not None else None,
-                "qty_ordered": qo, "qty_physical": qp, "qty_received": qr,
-                "fob_pi": float(fp) if fp is not None else None,
-            }
-            for i, pn, up, qo, qp, qr, fp in exact_items
-        ],
-        "fuzzy_match_items_if_different": [
-            {"id": str(i), "part_number": repr(pn), "unit_price": float(up) if up is not None else None,
-             "qty_ordered": qo, "qty_physical": qp}
-            for i, pn, up, qo, qp in fuzzy_items
-        ] if len(fuzzy_items) != len(exact_items) else "same as exact_match_items",
-    }
+    return {"checked": len(refs), "updated": updated}
 
 
 @router.post("/admin/detect-code-changes")
