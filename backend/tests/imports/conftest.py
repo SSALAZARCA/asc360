@@ -413,13 +413,21 @@ class _ExecuteResult:
     `select(func.count())`), and `.first()` (raw `Row`-or-`None` existence
     checks called directly on the execute result without `.scalars()`
     first, e.g. `create_sp_order_from_excel`'s per-item Backorder-existence
-    check). All five read the SAME queued `items` payload — the caller
-    queues the right shape (list of ORM objects/Rows, or a 1-item list for
-    scalar_one) for whichever call the endpoint makes.
+    check), and `.rowcount` (targeted `UPDATE ... WHERE ...` statements,
+    e.g. `import_rotation`/`import_description_es`'s "only fill if still
+    NULL" pattern — queue an empty list to simulate 0 rows matched/updated,
+    a 1-item list to simulate 1). All six read the SAME queued `items`
+    payload — the caller queues the right shape (list of ORM objects/Rows,
+    or a 1-item list for scalar_one/rowcount) for whichever call the
+    endpoint makes.
     """
 
     def __init__(self, items: list):
         self._items = items
+
+    @property
+    def rowcount(self) -> int:
+        return len(self._items)
 
     def scalars(self):
         return _ScalarsResult(self._items)

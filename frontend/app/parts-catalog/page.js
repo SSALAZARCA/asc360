@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import AdminLayout from '../admin-layout';
 import { authFetch } from '../../lib/authFetch';
 import { toast } from '../../lib/toast';
-import { Search, ChevronLeft, ChevronRight, X, ArrowUp, ArrowDown, ChevronsUpDown, AlertTriangle, CheckCircle2, ShieldX, Pencil, UploadCloud, BarChart3, Download, Flag, Trash2 } from 'lucide-react';
+import { Search, ChevronLeft, ChevronRight, X, ArrowUp, ArrowDown, ChevronsUpDown, AlertTriangle, CheckCircle2, ShieldX, Pencil, UploadCloud, BarChart3, Download, Flag, Trash2, Languages } from 'lucide-react';
 
 const PAGE_SIZE = 50;
 
@@ -80,6 +80,12 @@ export default function PartsCatalogPage() {
   const [rotationFile, setRotationFile] = useState(null);
   const [rotationUploading, setRotationUploading] = useState(false);
   const [rotationResult, setRotationResult] = useState(null);
+
+  // Modal de carga masiva de traducciones
+  const [showTranslationUpload, setShowTranslationUpload] = useState(false);
+  const [translationFile, setTranslationFile] = useState(null);
+  const [translationUploading, setTranslationUploading] = useState(false);
+  const [translationResult, setTranslationResult] = useState(null);
 
   // Backfill de costos
   const [backfilling, setBackfilling] = useState(false);
@@ -398,6 +404,21 @@ export default function PartsCatalogPage() {
     finally { setRotationUploading(false); }
   };
 
+  const handleTranslationImport = async () => {
+    if (!translationFile) return;
+    setTranslationUploading(true);
+    setTranslationResult(null);
+    try {
+      const fd = new FormData();
+      fd.append('file', translationFile);
+      const res = await authFetch('/parts/admin/description-es-import', { method: 'POST', body: fd });
+      const data = await res.json();
+      setTranslationResult(data);
+      fetchData();
+    } catch { setTranslationResult({ error: 'Error de conexión' }); }
+    finally { setTranslationUploading(false); }
+  };
+
   return (
     <AdminLayout>
       <header className="page-header">
@@ -419,6 +440,12 @@ export default function PartsCatalogPage() {
             style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.6rem 1.1rem', borderRadius: '10px', background: 'rgba(99,102,241,0.12)', border: '1px solid rgba(99,102,241,0.3)', color: '#818cf8', fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', cursor: 'pointer', flexShrink: 0 }}
           >
             <UploadCloud size={14} /> Clasificar rotación
+          </button>
+          <button
+            onClick={() => { setShowTranslationUpload(true); setTranslationFile(null); setTranslationResult(null); }}
+            style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.6rem 1.1rem', borderRadius: '10px', background: 'rgba(167,139,250,0.12)', border: '1px solid rgba(167,139,250,0.3)', color: '#a78bfa', fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', cursor: 'pointer', flexShrink: 0 }}
+          >
+            <Languages size={14} /> Cargar traducciones
           </button>
           <div style={{ display: 'flex', gap: '0.5rem' }}>
             <button
@@ -1088,6 +1115,79 @@ export default function PartsCatalogPage() {
                 onClick={() => setShowRotationUpload(false)}
                 disabled={rotationUploading}
                 style={{ flex: 1, background: 'rgba(255,255,255,0.03)', color: 'rgba(255,255,255,0.4)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px', padding: '0.7rem', fontWeight: 900, fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.06em', cursor: 'pointer', opacity: rotationUploading ? 0.5 : 1 }}
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de carga masiva de traducciones */}
+      {showTranslationUpload && (
+        <div onClick={() => !translationUploading && setShowTranslationUpload(false)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ background: '#0c0c0e', border: '1px solid rgba(167,139,250,0.25)', borderRadius: '16px', padding: '2rem', width: '100%', maxWidth: '440px', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <Languages size={16} color="#a78bfa" />
+              <p style={{ color: '#fff', fontWeight: 900, fontSize: '0.82rem', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>Cargar traducciones desde Excel</p>
+            </div>
+
+            <p style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.35)', margin: 0, lineHeight: 1.6 }}>
+              El Excel debe tener columnas <strong style={{ color: 'rgba(255,255,255,0.6)' }}>Código de Parte</strong> y <strong style={{ color: 'rgba(255,255,255,0.6)' }}>Descripción ES</strong>. No pisa traducciones ya cargadas a mano.
+            </p>
+
+            <label style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', padding: '1.5rem', borderRadius: '10px', border: `2px dashed ${translationFile ? 'rgba(167,139,250,0.4)' : 'rgba(255,255,255,0.1)'}`, background: translationFile ? 'rgba(167,139,250,0.05)' : 'rgba(255,255,255,0.02)', cursor: 'pointer', transition: 'all 0.2s' }}>
+              <Languages size={22} color={translationFile ? '#a78bfa' : 'rgba(255,255,255,0.2)'} />
+              <span style={{ fontSize: '0.72rem', color: translationFile ? '#a78bfa' : 'rgba(255,255,255,0.3)', fontWeight: 600 }}>
+                {translationFile ? translationFile.name : 'Seleccionar archivo .xlsx'}
+              </span>
+              <input type="file" accept=".xlsx" style={{ display: 'none' }} onChange={e => { setTranslationFile(e.target.files[0] || null); setTranslationResult(null); }} />
+            </label>
+
+            {translationResult && !translationResult.error && translationResult.updated > 0 && (
+              <div style={{ background: 'rgba(74,222,128,0.05)', border: '1px solid rgba(74,222,128,0.2)', borderRadius: '10px', padding: '0.875rem 1rem', display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                <p style={{ margin: 0, fontSize: '0.72rem', fontWeight: 700, color: '#4ade80' }}>✅ Traducciones cargadas</p>
+                <p style={{ margin: 0, fontSize: '0.68rem', color: 'rgba(255,255,255,0.45)' }}>
+                  Actualizadas: <strong style={{ color: '#fff' }}>{translationResult.updated}</strong> &nbsp;·&nbsp;
+                  Saltadas: <strong style={{ color: '#fb923c' }}>{translationResult.skipped}</strong>
+                  {translationResult.errors?.length > 0 && <> &nbsp;·&nbsp; Con error: <strong style={{ color: '#ef4444' }}>{translationResult.errors.length}</strong></>}
+                </p>
+              </div>
+            )}
+            {translationResult && !translationResult.error && translationResult.updated === 0 && (
+              <div style={{ background: 'rgba(251,146,60,0.05)', border: '1px solid rgba(251,146,60,0.3)', borderRadius: '10px', padding: '0.875rem 1rem', display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                <p style={{ margin: 0, fontSize: '0.72rem', fontWeight: 700, color: '#fb923c' }}>⚠️ Ninguna parte actualizada</p>
+                <p style={{ margin: 0, fontSize: '0.68rem', color: 'rgba(255,255,255,0.45)', lineHeight: 1.5 }}>
+                  {translationResult.skipped > 0
+                    ? <>Saltadas: <strong style={{ color: '#fff' }}>{translationResult.skipped}</strong>. Verificá que las columnas del Excel se llamen <strong style={{ color: '#fff' }}>part_code</strong> (o <strong style={{ color: '#fff' }}>codigo</strong>) y <strong style={{ color: '#fff' }}>description_es</strong> (o <strong style={{ color: '#fff' }}>traduccion</strong>), que haya un texto en cada fila, y que los códigos de parte coincidan exactamente con el catálogo. Una referencia que ya tiene traducción cargada a mano se salta a propósito.</>
+                    : 'El archivo no tenía filas de datos para procesar.'}
+                </p>
+                {translationResult.errors?.slice(0, 3).map((e, i) => (
+                  <p key={i} style={{ margin: 0, fontSize: '0.63rem', color: 'rgba(255,255,255,0.3)', fontFamily: 'monospace' }}>
+                    Fila {e.row}: {e.code || '—'} → {e.reason}
+                  </p>
+                ))}
+              </div>
+            )}
+            {translationResult?.error && (
+              <p style={{ fontSize: '0.72rem', color: '#ef4444', margin: 0 }}>⚠️ {translationResult.error}</p>
+            )}
+
+            <div style={{ display: 'flex', gap: '0.75rem' }}>
+              <button
+                onClick={handleTranslationImport}
+                disabled={!translationFile || translationUploading}
+                style={{ flex: 1, background: 'rgba(167,139,250,0.15)', color: '#a78bfa', border: '1px solid rgba(167,139,250,0.3)', borderRadius: '10px', padding: '0.7rem', fontWeight: 900, fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.06em', cursor: (!translationFile || translationUploading) ? 'not-allowed' : 'pointer', opacity: (!translationFile || translationUploading) ? 0.4 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}
+              >
+                <Languages size={13} /> {translationUploading ? 'Cargando...' : 'Cargar'}
+              </button>
+              <button
+                onClick={() => setShowTranslationUpload(false)}
+                disabled={translationUploading}
+                style={{ flex: 1, background: 'rgba(255,255,255,0.03)', color: 'rgba(255,255,255,0.4)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px', padding: '0.7rem', fontWeight: 900, fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.06em', cursor: 'pointer', opacity: translationUploading ? 0.5 : 1 }}
               >
                 Cerrar
               </button>

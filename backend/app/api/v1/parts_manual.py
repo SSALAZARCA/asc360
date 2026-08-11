@@ -2692,6 +2692,10 @@ _ROTATION_MAP = {
     "baja": "baja", "c": "baja",
 }
 
+# Shared by every bulk-import-by-part-code endpoint (rotation, description ES).
+_CODE_ALIASES = {"part_code", "factory_part_number", "codigo", "código", "codigo_parte",
+                 "referencia", "ref", "part number", "reference", "numero_parte", "numero parte"}
+
 
 def _normalize_part_code(s: str) -> str:
     return str(s).strip().upper().replace(" ", "")
@@ -2741,8 +2745,6 @@ async def import_rotation(
     wb = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
     sheet = wb.active
 
-    _CODE_ALIASES = {"part_code", "factory_part_number", "codigo", "código", "codigo_parte",
-                     "referencia", "ref", "part number", "reference", "numero_parte", "numero parte"}
     _RC_ALIASES   = {"rotation_class", "rotacion", "rotación", "clase", "clase_rotacion",
                      "clase_rotación", "clase rotacion", "clase rotación", "tipo_rotacion",
                      "tipo_rotación", "tipo rotacion"}
@@ -2794,6 +2796,87 @@ async def import_rotation(
             .where(PartsReference.factory_part_number == code_n)
             .where(PartsReference.rotation_class.is_(None))
             .values(rotation_class=rc_n)
+        )
+        if res.rowcount == 0:
+            skipped += 1
+            errors.append({"row": row_idx, "code": code_n, "reason": "part_not_found"})
+        else:
+            updated += 1
+
+    await db.commit()
+    return {"updated": updated, "skipped": skipped, "errors": errors}
+
+
+# ── Traducción a español — bulk import ──────────────────────────────────────────
+
+_DESC_ES_ALIASES = {"description_es", "descripcion_es", "descripción_es", "descripcion",
+                     "descripción", "nombre", "nombre_espanol", "nombre español",
+                     "traduccion", "traducción", "spanish", "spanish_description"}
+
+
+@router.post("/admin/description-es-import", status_code=200)
+async def import_description_es(
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Bulk-assign description_es_manual from an Excel file. Solo superadmin.
+    Nunca pisa una traducción ya cargada a mano -- solo completa referencias
+    con description_es_manual en NULL (mismo criterio que import_rotation)."""
+    if not current_user.is_superadmin:
+        raise HTTPException(status_code=403, detail="Solo superadmin")
+
+    content = await file.read()
+    wb = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
+    sheet = wb.active
+
+    expected = _CODE_ALIASES | _DESC_ES_ALIASES
+    try:
+        header_row = _find_header_row(sheet, expected)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+    col_map = _build_col_map(sheet, header_row)
+
+    has_code = any(a in col_map for a in _CODE_ALIASES)
+    has_desc = any(a in col_map for a in _DESC_ES_ALIASES)
+    if not has_code or not has_desc:
+        missing = []
+        if not has_code: missing.append("código de parte (ej: 'part_code' o 'codigo')")
+        if not has_desc: missing.append("descripción ES (ej: 'description_es' o 'traduccion')")
+        raise HTTPException(status_code=422, detail=f"Faltan columnas requeridas: {', '.join(missing)}")
+
+    code_cols = list(_CODE_ALIASES)
+    desc_cols = list(_DESC_ES_ALIASES)
+
+    updated, skipped, errors = 0, 0, []
+
+    for row_idx in range(header_row + 1, sheet.max_row + 1):
+        code_raw = _cell(sheet, row_idx, col_map, *code_cols)
+        desc_raw = _cell(sheet, row_idx, col_map, *desc_cols)
+
+        if not code_raw and not desc_raw:
+            # blank row — skip silently
+            continue
+
+        if not code_raw:
+            skipped += 1
+            errors.append({"row": row_idx, "code": None, "reason": "missing_part_code"})
+            continue
+
+        desc_n = str(desc_raw).strip() if desc_raw is not None else ""
+        if not desc_n:
+            skipped += 1
+            errors.append({"row": row_idx, "code": _normalize_part_code(code_raw), "reason": "missing_description_es"})
+            continue
+
+        code_n = _normalize_part_code(code_raw)
+
+        res = await db.execute(
+            sa_update(PartsReference)
+            .where(PartsReference.factory_part_number == code_n)
+            .where(PartsReference.description_es_manual.is_(None))
+            .values(description_es_manual=desc_n)
         )
         if res.rowcount == 0:
             skipped += 1
