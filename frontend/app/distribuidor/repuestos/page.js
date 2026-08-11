@@ -490,7 +490,16 @@ function ZoomableDiagram({ src, alt }) {
   const lensTop = lens.h > 0 ? Math.max(0, Math.min(lens.y - LENS_SIZE / 2, lens.h - LENS_SIZE)) : 0;
 
   return (
-    <div style={{ position: 'relative', maxWidth: '100%', maxHeight: '100%', lineHeight: 0 }}>
+    // `width`/`height: 100%` (not just `maxWidth`/`maxHeight`) -- a wrapper
+    // with only a max-* constraint and no explicit height has a computed
+    // height of `auto`, so a percentage `maxHeight` on the <img> below has no
+    // definite basis to resolve against and silently stops constraining it
+    // (bugfix 2026-08-11: tall/narrow diagrams, e.g. a portrait-oriented
+    // engine-crankcase exploded view, rendered at full intrinsic height and
+    // got visually cut off by this panel's `overflow: hidden` -- wide
+    // diagrams never hit this because width-driven scaling already kept
+    // their height under the panel's, masking the bug).
+    <div style={{ position: 'relative', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 0 }}>
       <img
         ref={imgRef}
         src={src}
