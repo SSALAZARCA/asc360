@@ -2000,6 +2000,51 @@ async def backfill_costs(
     return {"checked": len(codes), "updated": updated}
 
 
+# TEMPORARY debug endpoint -- diagnosing why "Recalcular costos" left many
+# freshly-loaded Xtreet 401 references without a cost (2026-08-11). Read-only,
+# superadmin-only. Remove after use.
+@router.get("/admin/debug-cost-match/{model_code}")
+async def debug_cost_match(
+    model_code: str,
+    section_code: str = "",
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    if not current_user.is_superadmin:
+        raise HTTPException(status_code=403, detail="Solo superadmin")
+
+    stmt = (
+        select(PartsReference.factory_part_number, PartsReference.avg_fob_cost)
+        .join(PartsManualItem, PartsManualItem.factory_part_number == PartsReference.factory_part_number)
+        .join(PartsManualSection, PartsManualSection.id == PartsManualItem.section_id)
+        .where(PartsManualSection.model_code == model_code)
+    )
+    if section_code:
+        stmt = stmt.where(PartsManualSection.section_code == section_code)
+    refs = (await db.execute(stmt)).all()
+
+    results = []
+    for fpn, avg_fob_cost in refs:
+        if avg_fob_cost is not None:
+            continue
+        exact = (await db.execute(
+            select(func.count()).select_from(SparePartItem)
+            .where(SparePartItem.part_number == fpn, SparePartItem.unit_price.isnot(None))
+        )).scalar_one()
+        prefix = fpn.split("-")[0]
+        near = (await db.execute(
+            select(SparePartItem.part_number, SparePartItem.unit_price)
+            .where(SparePartItem.part_number.like(f"{prefix}%"))
+            .limit(5)
+        )).all()
+        results.append({
+            "factory_part_number": fpn,
+            "exact_priced_matches": exact,
+            "near_matches": [{"part_number": pn, "unit_price": float(up) if up is not None else None} for pn, up in near],
+        })
+    return {"missing_cost_count": len(results), "details": results}
+
+
 @router.post("/admin/detect-code-changes")
 async def detect_code_changes(
     db: AsyncSession = Depends(get_db),
