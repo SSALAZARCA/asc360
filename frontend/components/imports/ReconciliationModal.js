@@ -4,6 +4,7 @@ import { authFetch } from '../../lib/authFetch';
 import { getApiUrl } from '../../lib/api';
 import { X, CheckCircle, AlertCircle, XCircle, Plus, Upload, RefreshCw, Search, Download } from 'lucide-react';
 import { toast } from '../../lib/toast';
+import { SUPERADMIN_ONLY_NAME_EDIT_MESSAGE } from './partNamePermission';
 
 const RESULT_CFG = {
   COMPLETE:      { label: 'Completo',       color: '#22c55e', bg: 'rgba(34,197,94,0.1)',    border: 'rgba(34,197,94,0.25)',   icon: CheckCircle },
@@ -34,7 +35,7 @@ function SummaryCard({ label, count, result }) {
   );
 }
 
-function EditableReconciliationCell({ resultId, field, current, type = 'text', align = 'left', cellStyle = {}, onSaved, readOnly = false }) {
+function EditableReconciliationCell({ resultId, field, current, type = 'text', align = 'left', cellStyle = {}, onSaved, readOnly = false, readOnlyTitle = 'Reconciliación confirmada — no editable' }) {
   const [editing, setEditing] = useState(false);
   const [hover, setHover] = useState(false);
   const [value, setValue] = useState(current ?? '');
@@ -42,7 +43,7 @@ function EditableReconciliationCell({ resultId, field, current, type = 'text', a
   if (readOnly) {
     return (
       <span
-        title="Reconciliación confirmada — no editable"
+        title={readOnlyTitle}
         style={{ display: 'inline-flex', alignItems: 'center', padding: '2px 5px', textAlign: align, ...cellStyle }}
       >
         {current != null && current !== '' ? current : <span style={{ color: '#3f3f55' }}>—</span>}
@@ -111,7 +112,7 @@ function EditableReconciliationCell({ resultId, field, current, type = 'text', a
   );
 }
 
-export default function ReconciliationModal({ lot, onClose, onConfirmed }) {
+export default function ReconciliationModal({ lot, userRole, onClose, onConfirmed }) {
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(true);
   const [confirming, setConfirming] = useState(false);
@@ -405,7 +406,15 @@ export default function ReconciliationModal({ lot, onClose, onConfirmed }) {
                             <EditableReconciliationCell resultId={r.id} field="part_number" current={r.part_number} onSaved={fetchResults} readOnly={confirmed} cellStyle={{ color: '#60a5fa', fontWeight: 700, fontFamily: 'monospace' }} />
                           </td>
                           <td style={{ padding: '8px 12px', fontSize: '10px', maxWidth: 180 }}>
-                            <EditableReconciliationCell resultId={r.id} field="description_es" current={r.description_es} onSaved={fetchResults} readOnly={confirmed} cellStyle={{ color: '#9ca3af', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} />
+                            <EditableReconciliationCell
+                              resultId={r.id}
+                              field="description_es"
+                              current={r.description_es}
+                              onSaved={fetchResults}
+                              readOnly={confirmed || userRole !== 'superadmin'}
+                              readOnlyTitle={confirmed ? 'Reconciliación confirmada — no editable' : SUPERADMIN_ONLY_NAME_EDIT_MESSAGE}
+                              cellStyle={{ color: '#9ca3af', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                            />
                           </td>
                           <td style={{ padding: '8px 12px', whiteSpace: 'nowrap' }}>
                             <EditableReconciliationCell resultId={r.id} field="model_applicable" current={r.model_applicable} onSaved={fetchResults} readOnly={confirmed} cellStyle={{ fontSize: '9px', fontWeight: 700, color: '#60a5fa' }} />

@@ -179,7 +179,10 @@ class TestMixedDeclaredAndQtyPhysicalPayloadRejectedWhole:
 
 class TestDeclaredFieldEditAllowedOnUnconfirmedResult:
 
-    def test_blocked_fields_still_apply_normally_when_not_confirmed(self):
+    def test_non_name_blocked_fields_still_apply_normally_when_not_confirmed(self):
+        """`part_number`/`model_applicable` are unaffected by PR2's
+        superadmin-only name gate (`sdd/parts-description-source-of-truth`)
+        — still open to any `is_imports_editor` when unconfirmed."""
         item = make_spare_part_item(lot_id=uuid.uuid4(), part_number="PN-OLD", qty_ordered=10)
         rr = _make_reconciliation_result(spare_part_item_id=item.id, part_number="PN-OLD", confirmed_at=None)
         fake_db = FakeAsyncSession(execute_queue=[], get_objects=[rr, item])
@@ -187,13 +190,38 @@ class TestDeclaredFieldEditAllowedOnUnconfirmedResult:
         with make_test_client(current_user=make_imports_editor(), fake_db_session=fake_db) as client:
             response = client.patch(
                 f"/api/v1/imports/reconciliation-results/{rr.id}",
-                json={"part_number": "PN-999", "description_es": "Nueva", "model_applicable": "MODEL-X"},
+                json={"part_number": "PN-999", "model_applicable": "MODEL-X"},
             )
 
         assert response.status_code == 200
         body = response.json()
         assert body["part_number"] == "PN-999"
         assert item.part_number == "PN-999"
+
+    def test_description_es_as_superadmin_still_applies_normally_when_not_confirmed(self):
+        """`description_es` now (PR2) requires superadmin and routes
+        through the shared write path — this proves the G2 confirmed-lot
+        freeze still does not block it on an UNCONFIRMED result."""
+        item = make_spare_part_item(lot_id=uuid.uuid4(), part_number="PN-OLD", qty_ordered=10)
+        rr = _make_reconciliation_result(spare_part_item_id=item.id, part_number="PN-OLD", confirmed_at=None)
+        from app.models.parts_manual import PartsReference
+        ref = PartsReference(
+            factory_part_number="PN-OLD",
+            um_part_number="PN-OLD",
+            description="Original",
+            description_es_manual=None,
+            prev_codes=[],
+        )
+        fake_db = FakeAsyncSession(execute_queue=[[ref], []], get_objects=[rr, item])
+
+        with make_test_client(current_user=make_imports_editor(role="superadmin"), fake_db_session=fake_db) as client:
+            response = client.patch(
+                f"/api/v1/imports/reconciliation-results/{rr.id}",
+                json={"description_es": "Nueva"},
+            )
+
+        assert response.status_code == 200
+        assert ref.description_es_manual == "Nueva"
 
 
 class TestMissingResultStill404s:

@@ -186,11 +186,28 @@ def test_qty_physical_confirmed_lot_extra_row_stores_no_item_sync(monkeypatch):
 # ---------------------------------------------------------------------------
 
 def test_item_fields_linked_item_writes_onto_item_and_mirrors_part_number():
+    """`description_es` on a linked item now (PR2, `sdd/parts-description-
+    source-of-truth`) requires superadmin and routes through the shared
+    write path (`set_description_es`), which writes
+    `parts_references.description_es_manual` — NOT `item.description_es`
+    directly. `part_number`/`model_applicable` are unaffected, still a
+    plain `setattr` on `item`."""
     item = make_spare_part_item(lot_id=uuid.uuid4(), part_number="PN-OLD", qty_ordered=10)
     rr = _make_reconciliation_result(spare_part_item_id=item.id, part_number="PN-OLD")
-    fake_db = FakeAsyncSession(execute_queue=[], get_objects=[rr, item])
+    from app.models.parts_manual import PartsReference
+    ref = PartsReference(
+        factory_part_number="PN-999",
+        um_part_number="PN-999",
+        description="Original",
+        description_es_manual=None,
+        prev_codes=[],
+    )
+    fake_db = FakeAsyncSession(
+        execute_queue=[[ref], []],  # set_description_es: 1) reference lookup hit  2) mirror UPDATE
+        get_objects=[rr, item],
+    )
 
-    with make_test_client(current_user=make_imports_editor(), fake_db_session=fake_db) as client:
+    with make_test_client(current_user=make_imports_editor(role="superadmin"), fake_db_session=fake_db) as client:
         response = client.patch(
             f"/api/v1/imports/reconciliation-results/{rr.id}",
             json={
@@ -204,15 +221,18 @@ def test_item_fields_linked_item_writes_onto_item_and_mirrors_part_number():
     body = response.json()
     assert body["part_number"] == "PN-999"
     assert item.part_number == "PN-999"
-    assert item.description_es == "Nueva descripcion"
+    assert ref.description_es_manual == "Nueva descripcion"
     assert item.model_applicable == "MODEL-X"
 
 
 def test_item_fields_extra_row_writes_directly_onto_reconciliation_result():
+    """A pure EXTRA row has no catalog identity (design D1/D22), so
+    `description_es` keeps its RR-local write even after PR2 — only the
+    superadmin gate is new here."""
     rr = _make_reconciliation_result(spare_part_item_id=None, part_number="PN-OLD")
     fake_db = FakeAsyncSession(execute_queue=[], get_objects=[rr])
 
-    with make_test_client(current_user=make_imports_editor(), fake_db_session=fake_db) as client:
+    with make_test_client(current_user=make_imports_editor(role="superadmin"), fake_db_session=fake_db) as client:
         response = client.patch(
             f"/api/v1/imports/reconciliation-results/{rr.id}",
             json={

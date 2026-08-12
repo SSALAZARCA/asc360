@@ -10,13 +10,23 @@ superadmin-only gate (D8/D9/D10) unconditionally, before any lookup or
 mutation, whenever it is called.
 
 This is the shared contract the rest of the change (PR2-5) routes through
--- it is not yet wired everywhere. PR1 (this PR) only introduces the
-module and wires `assert_prev_codes_free` into `update_catalog_item`'s
-existing `prev_codes` PATCH path. Ajuste de Pedidos, the Repuestos tab and
-the Reconciliación modal are not yet routed through `set_description_es`;
-that wiring lands in PR2-5 per the design's phased rollout. Until then,
-the superadmin-only guarantee applies only where this module is actually
-called, not across the whole application.
+-- it is not yet wired everywhere. PR1 introduced the module and wired
+`assert_prev_codes_free` into `update_catalog_item`'s existing `prev_codes`
+PATCH path. PR2 (this PR) wires the Repuestos tab
+(`update_spare_part_item`, `PATCH /imports/spare-part-items/{item_id}`)
+and the Reconciliación modal (`update_reconciliation_result` /
+`_apply_item_fields`, `PATCH /imports/reconciliation-results/{result_id}`)
+through `set_description_es` for the linked-`SparePartItem` case, with a
+field-level superadmin gate (D8/D9) on `description`/`description_es`
+only -- every other field on those endpoints keeps its existing
+`_require_imports_editor` permission. A pure EXTRA `ReconciliationResult`
+row (`spare_part_item_id IS NULL`) has no catalog identity and keeps its
+RR-local write instead (D1/D22) -- it is NOT routed through this module.
+Ajuste de Pedidos already routes through the superadmin-only
+`/parts/admin/catalog/{fpn}` endpoint directly (verified working as
+intended, not this module's concern). The not-yet-cataloged-code
+candidate flow lands in PR3; the superadmin-only guarantee elsewhere
+applies only where this module is actually called.
 
 This module also owns:
 - `assert_prev_codes_free`: the `prev_codes` collision guard reused by

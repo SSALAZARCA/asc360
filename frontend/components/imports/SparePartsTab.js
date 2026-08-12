@@ -9,6 +9,7 @@ import ReconciliationModal from './ReconciliationModal';
 import BackorderReconciliationModal from './BackorderReconciliationModal';
 import PhysicalInventoryUploadModal from './PhysicalInventoryUploadModal';
 import ConfirmModal from '../ConfirmModal';
+import { SUPERADMIN_ONLY_NAME_EDIT_MESSAGE } from './partNamePermission';
 
 // ---------------------------------------------------------------------------
 // Status badge para spare part items
@@ -39,7 +40,7 @@ function ItemStatusBadge({ status }) {
 // ---------------------------------------------------------------------------
 // Inline editable cell genérica para texto y números
 // ---------------------------------------------------------------------------
-function EditableCell({ itemId, field, current, type = 'text', align = 'left', cellStyle = {}, onSaved, readOnly = false }) {
+function EditableCell({ itemId, field, current, type = 'text', align = 'left', cellStyle = {}, onSaved, readOnly = false, readOnlyTitle = 'Reconciliación confirmada — no editable' }) {
   const [editing, setEditing] = useState(false);
   const [hover, setHover] = useState(false);
   const [value, setValue] = useState(current ?? '');
@@ -47,7 +48,7 @@ function EditableCell({ itemId, field, current, type = 'text', align = 'left', c
   if (readOnly) {
     return (
       <span
-        title="Reconciliación confirmada — no editable"
+        title={readOnlyTitle}
         style={{ display: 'inline-flex', alignItems: 'center', padding: '2px 5px', textAlign: align, ...cellStyle }}
       >
         {current != null && current !== '' ? current : <span style={{ color: '#3f3f55' }}>—</span>}
@@ -434,8 +435,35 @@ function LotItemsTable({ lotId, userRole, isConfirmed }) {
                   <td style={{ padding: '8px 10px', textAlign: 'center', color: '#d1d5db', maxWidth: 220 }}>
                     {canEdit ? (
                       <>
-                        <EditableCell itemId={item.id} field="description_es" current={item.description_es} onSaved={fetch} cellStyle={{ display: 'block' }} />
-                        <EditableCell itemId={item.id} field="description" current={item.description} onSaved={fetch} cellStyle={{ display: 'block', fontSize: '9px', color: '#606075', marginTop: 2 }} />
+                        {/* description_es is the field this change unifies: superadmin
+                            edits here get mirrored to parts_references.description_es_manual
+                            and every other row sharing this part_number (set_description_es).
+                            description (English) never propagates -- it's kept superadmin-only
+                            too, for consistency with "only superadmin edits any name/description
+                            field" (owner's explicit decision), not because it's part of the
+                            source-of-truth mirror. Unlike part_number/qty above, these two
+                            fields stay editable even after the lot's reconciliation is
+                            confirmed (backend G4 `snapshot_fields` excludes them on purpose --
+                            see sdd/parts-description-source-of-truth spec, "Repuestos
+                            confirmed-lot: no change"), so no isConfirmed readOnly here. */}
+                        <EditableCell
+                          itemId={item.id}
+                          field="description_es"
+                          current={item.description_es}
+                          onSaved={fetch}
+                          readOnly={userRole !== 'superadmin'}
+                          readOnlyTitle={SUPERADMIN_ONLY_NAME_EDIT_MESSAGE}
+                          cellStyle={{ display: 'block' }}
+                        />
+                        <EditableCell
+                          itemId={item.id}
+                          field="description"
+                          current={item.description}
+                          onSaved={fetch}
+                          readOnly={userRole !== 'superadmin'}
+                          readOnlyTitle={SUPERADMIN_ONLY_NAME_EDIT_MESSAGE}
+                          cellStyle={{ display: 'block', fontSize: '9px', color: '#606075', marginTop: 2 }}
+                        />
                       </>
                     ) : (
                       <>
@@ -1185,6 +1213,7 @@ export default function SparePartsTab({ userRole }) {
       {reconcileLot && (
         <ReconciliationModal
           lot={reconcileLot}
+          userRole={userRole}
           onClose={() => setReconcileLot(null)}
           onConfirmed={() => { fetchLots(); fetchStats(); setReconcileLot(null); }}
         />

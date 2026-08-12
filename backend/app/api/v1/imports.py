@@ -34,6 +34,7 @@ from app.services import imports_service
 from app.services.imports_service import compute_status
 from app.services import storage_service
 from app.services import dim_parser_service, certificate_service
+from app.services import parts_description_service
 
 router = APIRouter(prefix="/imports", tags=["Imports"])
 logger = logging.getLogger(__name__)
@@ -1105,6 +1106,84 @@ async def cancel_pending_backorder(
     return {"cancelled": len(open_bos), "item_status": new_status}
 
 
+#: Fields that change the part's Spanish/English display name on a
+#: `SparePartItem` (design D8/D9, spec's "Field-Level Permission Split on
+#: Repuestos/Reconciliación Endpoints" requirement). A payload touching
+#: EITHER of these is rejected WHOLE unless the caller is superadmin —
+#: every other field keeps the existing `_require_imports_editor` gate.
+#:
+#: The two fields are NOT handled symmetrically downstream, on purpose:
+#: `description_es` is popped and delegated to
+#: `parts_description_service.set_description_es`, which canonicalizes it
+#: onto `PartsReference.description_es_manual` and mirrors it to every row
+#: sharing the part's `factory_part_number`/`prev_codes` -- that's the
+#: source-of-truth field this whole change unifies. `description` (English)
+#: is intentionally left in the generic per-field `setattr` loop below and
+#: stays local to this one row -- it's the raw as-invoiced audit text
+#: (owner's decision: don't touch it, the code-change detector compares it
+#: against the catalog). It's still gated here, for consistency with "only
+#: superadmin edits any name/description field" -- not because it's part of
+#: the propagated source of truth.
+SPARE_PART_ITEM_NAME_FIELDS = {"description", "description_es"}
+
+
+def _assert_spare_part_item_name_gate(update_data: dict, current_user: CurrentUser) -> None:
+    """Field-level superadmin gate for the part's name (D8/D9/D10): whole
+    request 403, never a silent partial drop. Called at the top of the
+    endpoint, before any other guard or mutation."""
+    if SPARE_PART_ITEM_NAME_FIELDS & set(update_data.keys()):
+        parts_description_service.assert_name_editor(current_user)
+
+
+async def _assert_spare_part_item_snapshot_guard(
+    db: AsyncSession, item: SparePartItem, update_data: dict, current_user: CurrentUser,
+) -> None:
+    """G4: reject edits to packing-list-DECLARED snapshot fields once the
+    item's lot has already been confirmed (see sdd/packing-list-
+    reupload-requires-rollback). `qty_physical`/pricing/cosmetic fields
+    stay editable — they are later-stage or non-snapshot data, not the
+    confirmed packing-list declaration."""
+    snapshot_fields = {"part_number", "qty_ordered", "qty_received", "status"}
+    if snapshot_fields & set(update_data.keys()):
+        if await imports_service.lot_has_confirmed_reconciliation(db, item.lot_id):
+            raise HTTPException(
+                status_code=409,
+                detail={"detail": _confirmed_lot_message(current_user), "code": "ITEM_LOT_CONFIRMED"},
+            )
+
+
+async def _apply_spare_part_item_qty_physical(db: AsyncSession, item: SparePartItem, qty_physical: int) -> None:
+    """Requires a confirmed cruce (packing list received) and triggers
+    backorder-adjacent logic via `apply_physical_inspection`."""
+    lot = await db.get(SparePartLot, item.lot_id)
+    if not lot or not lot.packing_list_received:
+        raise HTTPException(
+            status_code=400,
+            detail={"detail": "El inventario físico solo puede registrarse después de confirmar el cruce", "code": "RECONCILIATION_NOT_CONFIRMED"},
+        )
+    await imports_service.apply_physical_inspection(db, item, qty_physical)
+
+
+async def _propagate_spare_part_item_to_reconciliation_result(
+    db: AsyncSession, item: SparePartItem, update_data: dict,
+) -> None:
+    """Mirrors `qty_ordered`/`part_number` changes onto the linked
+    `ReconciliationResult`, if one exists."""
+    propagate_fields = {"qty_ordered", "part_number"}
+    if not (propagate_fields & set(update_data.keys())):
+        return
+    rr = (await db.execute(
+        select(ReconciliationResult).where(ReconciliationResult.spare_part_item_id == item.id)
+    )).scalar_one_or_none()
+    if not rr:
+        return
+    if "qty_ordered" in update_data:
+        rr.qty_ordered = item.qty_ordered
+        rr.result = _compute_reconciliation_result(rr.qty_ordered, rr.qty_in_packing)
+    if "part_number" in update_data:
+        rr.part_number = item.part_number
+
+
 @router.patch("/spare-part-items/{item_id}", response_model=SparePartItemRead)
 async def update_spare_part_item(
     item_id: uuid.UUID,
@@ -1120,21 +1199,15 @@ async def update_spare_part_item(
 
     update_data = payload.model_dump(exclude_none=True)
 
-    # G4: reject edits to packing-list-DECLARED snapshot fields once the
-    # item's lot has already been confirmed (see sdd/packing-list-
-    # reupload-requires-rollback). `qty_physical`/pricing/cosmetic fields
-    # stay editable — they are later-stage or non-snapshot data, not the
-    # confirmed packing-list declaration.
-    snapshot_fields = {"part_number", "qty_ordered", "qty_received", "status"}
-    if snapshot_fields & set(update_data.keys()):
-        if await imports_service.lot_has_confirmed_reconciliation(db, item.lot_id):
-            raise HTTPException(
-                status_code=409,
-                detail={"detail": _confirmed_lot_message(current_user), "code": "ITEM_LOT_CONFIRMED"},
-            )
+    _assert_spare_part_item_name_gate(update_data, current_user)
+    await _assert_spare_part_item_snapshot_guard(db, item, update_data, current_user)
 
     # qty_physical se maneja aparte — requiere cruce confirmado y dispara lógica de backorder
     qty_physical = update_data.pop("qty_physical", None)
+    # description_es se delega al write path compartido (unified write path,
+    # D1/D2) en lugar del setattr genérico — mantiene
+    # `parts_references.description_es_manual` como fuente única.
+    description_es_value = update_data.pop("description_es", None)
 
     for field, value in update_data.items():
         setattr(item, field, value)
@@ -1142,27 +1215,19 @@ async def update_spare_part_item(
     if "qty_received" in update_data or "qty_ordered" in update_data:
         item.qty_pending = max(0, item.qty_ordered - item.qty_received)
 
-    if qty_physical is not None:
-        lot = await db.get(SparePartLot, item.lot_id)
-        if not lot or not lot.packing_list_received:
-            raise HTTPException(
-                status_code=400,
-                detail={"detail": "El inventario físico solo puede registrarse después de confirmar el cruce", "code": "RECONCILIATION_NOT_CONFIRMED"},
-            )
-        await imports_service.apply_physical_inspection(db, item, qty_physical)
+    if description_es_value is not None:
+        await parts_description_service.set_description_es(
+            db,
+            part_number=item.part_number,
+            value=description_es_value,
+            model_applicable=item.model_applicable,
+            current_user=current_user,
+        )
 
-    # Propagar cambios a ReconciliationResult vinculado
-    propagate_fields = {"qty_ordered", "part_number"}
-    if propagate_fields & set(update_data.keys()):
-        rr = (await db.execute(
-            select(ReconciliationResult).where(ReconciliationResult.spare_part_item_id == item.id)
-        )).scalar_one_or_none()
-        if rr:
-            if "qty_ordered" in update_data:
-                rr.qty_ordered = item.qty_ordered
-                rr.result = _compute_reconciliation_result(rr.qty_ordered, rr.qty_in_packing)
-            if "part_number" in update_data:
-                rr.part_number = item.part_number
+    if qty_physical is not None:
+        await _apply_spare_part_item_qty_physical(db, item, qty_physical)
+
+    await _propagate_spare_part_item_to_reconciliation_result(db, item, update_data)
 
     item.updated_at = datetime.utcnow()
     await db.commit()
@@ -1196,7 +1261,9 @@ async def _apply_qty_physical(db: AsyncSession, rr: ReconciliationResult, qty_ph
     # EXTRA rows (spare_part_item_id IS NULL): rr.qty_physical persisted above; no item to sync.
 
 
-async def _apply_item_fields(db: AsyncSession, rr: ReconciliationResult, update_data: dict) -> None:
+async def _apply_item_fields(
+    db: AsyncSession, rr: ReconciliationResult, update_data: dict, current_user: CurrentUser
+) -> None:
     # Campos de descripción y modelo: en SparePartItem para no-EXTRAs, en RR para EXTRAs
     item_fields = {"part_number", "description_es", "model_applicable"}
     if not (item_fields & set(update_data.keys())):
@@ -1204,11 +1271,25 @@ async def _apply_item_fields(db: AsyncSession, rr: ReconciliationResult, update_
     if rr.spare_part_item_id:
         item = await db.get(SparePartItem, rr.spare_part_item_id)
         if item:
-            for field in item_fields & set(update_data.keys()):
+            # description_es se delega al write path compartido (D1/D22):
+            # una fila con SparePartItem vinculado SÍ tiene identidad de
+            # catálogo (item.part_number), a diferencia de una fila EXTRA
+            # pura. Los demás campos siguen el setattr genérico.
+            for field in (item_fields - {"description_es"}) & set(update_data.keys()):
                 setattr(item, field, update_data[field])
             item.updated_at = datetime.utcnow()
+            if "description_es" in update_data:
+                await parts_description_service.set_description_es(
+                    db,
+                    part_number=item.part_number,
+                    value=update_data["description_es"],
+                    model_applicable=item.model_applicable,
+                    current_user=current_user,
+                )
     else:
-        # EXTRA puro: guardar directamente en ReconciliationResult
+        # EXTRA puro (spare_part_item_id IS NULL): sin identidad de catálogo
+        # replicable por el cliente (D1) — se guarda directamente en
+        # ReconciliationResult, NO se enruta por el write path compartido.
         for field in {"description_es", "model_applicable"} & set(update_data.keys()):
             setattr(rr, field, update_data[field])
     if "part_number" in update_data:
@@ -1246,13 +1327,20 @@ async def update_reconciliation_result(
             detail={"detail": _confirmed_lot_message(current_user), "code": "RESULT_LOT_CONFIRMED"},
         )
 
+    # Field-level superadmin gate for the part's name (D8/D9/D10): whole
+    # request 403, never a silent partial drop. Evaluated AFTER the
+    # confirmed-lot freeze above so a confirmed result stays 409
+    # RESULT_LOT_CONFIRMED for every role, unchanged.
+    if "description_es" in update_data:
+        parts_description_service.assert_name_editor(current_user)
+
     if "qty_in_packing" in update_data:
         await _apply_qty_in_packing(db, rr, update_data["qty_in_packing"])
 
     if "qty_physical" in update_data:
         await _apply_qty_physical(db, rr, update_data["qty_physical"])
 
-    await _apply_item_fields(db, rr, update_data)
+    await _apply_item_fields(db, rr, update_data, current_user)
 
     await db.commit()
     await db.refresh(rr)
