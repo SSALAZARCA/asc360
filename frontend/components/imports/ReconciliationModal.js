@@ -5,6 +5,7 @@ import { getApiUrl } from '../../lib/api';
 import { X, CheckCircle, AlertCircle, XCircle, Plus, Upload, RefreshCw, Search, Download } from 'lucide-react';
 import { toast } from '../../lib/toast';
 import { SUPERADMIN_ONLY_NAME_EDIT_MESSAGE } from './partNamePermission';
+import CodeCandidateModal from './CodeCandidateModal';
 
 const RESULT_CFG = {
   COMPLETE:      { label: 'Completo',       color: '#22c55e', bg: 'rgba(34,197,94,0.1)',    border: 'rgba(34,197,94,0.25)',   icon: CheckCircle },
@@ -35,7 +36,7 @@ function SummaryCard({ label, count, result }) {
   );
 }
 
-function EditableReconciliationCell({ resultId, field, current, type = 'text', align = 'left', cellStyle = {}, onSaved, readOnly = false, readOnlyTitle = 'Reconciliación confirmada — no editable' }) {
+function EditableReconciliationCell({ resultId, field, current, type = 'text', align = 'left', cellStyle = {}, onSaved, readOnly = false, readOnlyTitle = 'Reconciliación confirmada — no editable', onUncataloguedCode }) {
   const [editing, setEditing] = useState(false);
   const [hover, setHover] = useState(false);
   const [value, setValue] = useState(current ?? '');
@@ -64,6 +65,16 @@ function EditableReconciliationCell({ resultId, field, current, type = 'text', a
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         const detail = data?.detail;
+        const code = typeof detail === 'object' ? detail?.code : null;
+        // Not-yet-cataloged code (sdd/parts-description-source-of-truth
+        // PR3): hand off to the superadmin candidate-search/link/create
+        // flow instead of a generic error toast. `onUncataloguedCode` is
+        // only wired for the description_es cell.
+        if (code === 'PART_NOT_IN_CATALOG' && onUncataloguedCode) {
+          setValue(current ?? '');
+          onUncataloguedCode(parsed);
+          return;
+        }
         throw new Error(typeof detail === 'string' ? detail : detail?.detail || 'Error al guardar');
       }
       onSaved?.();
@@ -123,6 +134,10 @@ export default function ReconciliationModal({ lot, userRole, onClose, onConfirme
   const [search, setSearch] = useState('');
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [exporting, setExporting] = useState(false);
+  // Not-yet-cataloged code (sdd/parts-description-source-of-truth PR3):
+  // holds { partNumber, modelApplicable, pendingValue } while the superadmin
+  // resolves a description save that 409'd with PART_NOT_IN_CATALOG.
+  const [candidateModal, setCandidateModal] = useState(null);
 
   const fetchResults = async () => {
     setLoading(true);
@@ -414,6 +429,11 @@ export default function ReconciliationModal({ lot, userRole, onClose, onConfirme
                               readOnly={confirmed || userRole !== 'superadmin'}
                               readOnlyTitle={confirmed ? 'Reconciliación confirmada — no editable' : SUPERADMIN_ONLY_NAME_EDIT_MESSAGE}
                               cellStyle={{ color: '#9ca3af', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                              onUncataloguedCode={(pendingValue) => setCandidateModal({
+                                partNumber: r.part_number,
+                                modelApplicable: r.model_applicable,
+                                pendingValue,
+                              })}
                             />
                           </td>
                           <td style={{ padding: '8px 12px', whiteSpace: 'nowrap' }}>
@@ -545,6 +565,16 @@ export default function ReconciliationModal({ lot, userRole, onClose, onConfirme
             </div>
           </div>
         </>
+      )}
+
+      {candidateModal && (
+        <CodeCandidateModal
+          partNumber={candidateModal.partNumber}
+          modelApplicable={candidateModal.modelApplicable}
+          pendingDescription={candidateModal.pendingValue}
+          onClose={() => setCandidateModal(null)}
+          onResolved={() => { setCandidateModal(null); fetchResults(); }}
+        />
       )}
     </>
   );

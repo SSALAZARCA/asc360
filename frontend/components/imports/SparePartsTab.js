@@ -9,6 +9,7 @@ import ReconciliationModal from './ReconciliationModal';
 import BackorderReconciliationModal from './BackorderReconciliationModal';
 import PhysicalInventoryUploadModal from './PhysicalInventoryUploadModal';
 import ConfirmModal from '../ConfirmModal';
+import CodeCandidateModal from './CodeCandidateModal';
 import { SUPERADMIN_ONLY_NAME_EDIT_MESSAGE } from './partNamePermission';
 
 // ---------------------------------------------------------------------------
@@ -40,7 +41,7 @@ function ItemStatusBadge({ status }) {
 // ---------------------------------------------------------------------------
 // Inline editable cell genérica para texto y números
 // ---------------------------------------------------------------------------
-function EditableCell({ itemId, field, current, type = 'text', align = 'left', cellStyle = {}, onSaved, readOnly = false, readOnlyTitle = 'Reconciliación confirmada — no editable' }) {
+function EditableCell({ itemId, field, current, type = 'text', align = 'left', cellStyle = {}, onSaved, readOnly = false, readOnlyTitle = 'Reconciliación confirmada — no editable', onUncataloguedCode }) {
   const [editing, setEditing] = useState(false);
   const [hover, setHover] = useState(false);
   const [value, setValue] = useState(current ?? '');
@@ -69,6 +70,16 @@ function EditableCell({ itemId, field, current, type = 'text', align = 'left', c
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         const detail = data?.detail;
+        const code = typeof detail === 'object' ? detail?.code : null;
+        // Not-yet-cataloged code (sdd/parts-description-source-of-truth
+        // PR3): hand off to the superadmin candidate-search/link/create
+        // flow instead of a generic error toast. `onUncataloguedCode` is
+        // only wired for the description_es cell.
+        if (code === 'PART_NOT_IN_CATALOG' && onUncataloguedCode) {
+          setValue(current ?? '');
+          onUncataloguedCode(parsed);
+          return;
+        }
         throw new Error(typeof detail === 'string' ? detail : detail?.detail || 'Error al guardar');
       }
       onSaved?.();
@@ -333,6 +344,10 @@ function LotItemsTable({ lotId, userRole, isConfirmed }) {
   const [filterStatus, setFilterStatus] = useState('');
   const [showPhysicalUpload, setShowPhysicalUpload] = useState(false);
   const [pendingConfirm, setPendingConfirm] = useState(null);
+  // Not-yet-cataloged code (sdd/parts-description-source-of-truth PR3):
+  // holds { partNumber, modelApplicable, pendingValue } while the superadmin
+  // resolves a description save that 409'd with PART_NOT_IN_CATALOG.
+  const [candidateModal, setCandidateModal] = useState(null);
 
   const fetch = useCallback(async () => {
     setLoading(true);
@@ -454,6 +469,11 @@ function LotItemsTable({ lotId, userRole, isConfirmed }) {
                           readOnly={userRole !== 'superadmin'}
                           readOnlyTitle={SUPERADMIN_ONLY_NAME_EDIT_MESSAGE}
                           cellStyle={{ display: 'block' }}
+                          onUncataloguedCode={(pendingValue) => setCandidateModal({
+                            partNumber: item.part_number,
+                            modelApplicable: item.model_applicable,
+                            pendingValue,
+                          })}
                         />
                         <EditableCell
                           itemId={item.id}
@@ -599,6 +619,16 @@ function LotItemsTable({ lotId, userRole, isConfirmed }) {
           confirmLabel={pendingConfirm.confirmLabel}
           onCancel={() => setPendingConfirm(null)}
           onConfirm={() => { setPendingConfirm(null); pendingConfirm.action(); }}
+        />
+      )}
+
+      {candidateModal && (
+        <CodeCandidateModal
+          partNumber={candidateModal.partNumber}
+          modelApplicable={candidateModal.modelApplicable}
+          pendingDescription={candidateModal.pendingValue}
+          onClose={() => setCandidateModal(null)}
+          onResolved={() => { setCandidateModal(null); fetch(); }}
         />
       )}
     </div>

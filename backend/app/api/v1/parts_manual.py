@@ -17,6 +17,7 @@ from fastapi.responses import Response, StreamingResponse
 from minio import Minio
 from pydantic import BaseModel, Field
 from sqlalchemy import delete as sa_delete, update as sa_update, text, exists as sa_exists, func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from openai import AsyncOpenAI
@@ -36,6 +37,7 @@ from app.models.parts_manual import (
 )
 from app.models.system_config import SystemConfig
 from app.services.pricing_service import get_pricing_factors, compute_prices
+from app.services import parts_description_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/parts", tags=["Parts Manual"])
@@ -963,6 +965,83 @@ async def _detect_code_changes(db: AsyncSession) -> int:
     return result.rowcount
 
 
+async def _latest_spare_part_description(db: AsyncSession, part_number: str) -> Optional[str]:
+    """Raw (English) description most recently declared on an order for
+    `part_number`, straight from `spare_part_items` -- the source of truth
+    for `_find_code_candidates`'s similarity search AND for the no-candidate
+    creation path (`sdd/parts-description-source-of-truth` PR3 fix pass,
+    fix #3). Server-side lookup on purpose: a client-supplied English
+    description is never trusted for a new `PartsReference`."""
+    desc_result = await db.execute(text("""
+        SELECT description
+        FROM spare_part_items
+        WHERE part_number = :code AND description IS NOT NULL AND description != ''
+        ORDER BY created_at DESC LIMIT 1
+    """), {"code": part_number})
+    desc_row = desc_result.first()
+    return desc_row[0] if desc_row and desc_row[0] else None
+
+
+async def _find_code_candidates(
+    db: AsyncSession, *, part_number: str, model_applicable: str,
+) -> list[dict]:
+    """On-demand, read-only candidate search for a code with no matching
+    `PartsReference` yet (`sdd/parts-description-source-of-truth` PR3,
+    design D4). Reuses `_detect_code_changes`'s JOIN chain
+    (`vehicle_catalog_map` -> `parts_manual_sections` -> `parts_manual_items`
+    -> `parts_references`) and its `similarity()` threshold, scoped
+    STRICTLY to `model_applicable` (spec: Not-Yet-Cataloged Code —
+    Model-Scoped Candidate Search -- every order/`spare_part_items`/
+    `reconciliation_results` row is assumed to have `model_applicable`
+    populated, no cross-model fallback).
+
+    Unlike `_detect_code_changes` this is a plain SELECT: no INSERT into
+    `parts_code_review_tasks`, no commit, no "already pending" suppression
+    -- it must always return a fresh answer for the code currently being
+    edited, not defer to the batch job's dedup rules.
+    """
+    threshold_record = await db.get(SystemConfig, "parts_similarity_threshold")
+    threshold = float(threshold_record.value) if threshold_record else 0.9
+
+    order_description = await _latest_spare_part_description(db, part_number)
+    if not order_description:
+        return []
+
+    result = await db.execute(text("""
+        SELECT factory_part_number, description, description_es_manual, score
+        FROM (
+            SELECT DISTINCT ON (pr.factory_part_number)
+                pr.factory_part_number, pr.description, pr.description_es_manual,
+                similarity(:description, pr.description) AS score
+            FROM vehicle_catalog_map vcm
+            JOIN parts_manual_sections pms ON pms.model_code = vcm.catalog_model_code
+            JOIN parts_manual_items pmi ON pmi.section_id = pms.id
+            JOIN parts_references pr ON pr.factory_part_number = pmi.factory_part_number
+            WHERE vcm.vehicle_model_pattern = :model
+              AND pr.factory_part_number != :code
+              AND similarity(:description, pr.description) >= :threshold
+            ORDER BY pr.factory_part_number, score DESC
+        ) sub
+        ORDER BY score DESC
+        LIMIT 10
+    """), {
+        "description": order_description,
+        "model": model_applicable,
+        "code": part_number,
+        "threshold": threshold,
+    })
+
+    return [
+        {
+            "factory_part_number": row.factory_part_number,
+            "description": row.description,
+            "description_es_manual": row.description_es_manual,
+            "similarity_score": float(row.score),
+        }
+        for row in result.all()
+    ]
+
+
 async def run_detection_bg() -> None:
     """Wrapper para ejecutar detección en segundo plano con sesión propia."""
     async with async_session_maker() as db:
@@ -1022,6 +1101,33 @@ class ReplaceCodeRequest(BaseModel):
     description: Optional[str] = None
     description_es_manual: Optional[str] = None
     public_price: Optional[float] = None
+
+class CodeCandidateOut(BaseModel):
+    """Response shape for `GET /parts/admin/code-candidates`
+    (`sdd/parts-description-source-of-truth` PR3, design D4)."""
+    factory_part_number: str
+    description: Optional[str] = None
+    description_es_manual: Optional[str] = None
+    similarity_score: float
+
+class LinkCodeCandidateRequest(BaseModel):
+    """`part_number` is the uncatalogued code being linked -- it becomes the
+    surviving `PartsReference` (design D5's merge shape). `existing_code` is
+    the matched candidate chosen by the superadmin. `description_es_manual`,
+    when given, is the pending name edit that triggered this flow -- saved
+    through the shared write path once linking resolves, so the caller's
+    original save completes in one round trip."""
+    part_number: str
+    existing_code: str
+    description_es_manual: Optional[str] = None
+
+class CreateCodeCandidateRequest(BaseModel):
+    """`description` (English) is intentionally NOT a field here -- it is
+    always resolved server-side from the order's own `spare_part_items` row
+    (`_latest_spare_part_description`), never trusted from the client
+    (`sdd/parts-description-source-of-truth` PR3 fix pass, fix #3)."""
+    part_number: str
+    description_es_manual: Optional[str] = None
 
 class CatalogListResult(BaseModel):
     total: int
@@ -2185,6 +2291,93 @@ async def diagnose_detection(
     return results
 
 
+async def _approve_code_substitution(
+    db: AsyncSession,
+    *,
+    existing_code: str,
+    candidate_code: str,
+    actor,
+) -> PartsReference:
+    """Historied code-substitution merge (`sdd/parts-description-source-of-truth`
+    PR3, design D5), extracted verbatim from `approve_review_task`'s body.
+    `candidate_code` becomes the surviving `PartsReference`; `existing_code`'s
+    catalog items are redirected to it, its own row is deleted, and a
+    `prev_codes` history entry preserves the link (survivor's non-null value
+    wins when the candidate already exists).
+
+    Reused by two call sites with the SAME merge shape but different origin:
+    `approve_review_task` (`existing_code` = an outdated factory code,
+    `candidate_code` = an order-observed replacement detected by
+    `_detect_code_changes`) and `link_code_candidate` (`existing_code` = a
+    matched catalog reference, `candidate_code` = the not-yet-cataloged code
+    the superadmin is linking to it -- same historied-merge pattern, no
+    parallel creation path, per design D5).
+
+    Calls `recalculate_part_cost` on the surviving code exactly once
+    (FOB risk: this path moves money). Does NOT commit -- caller's
+    responsibility.
+    """
+    existing_ref = await db.get(PartsReference, existing_code)
+    if not existing_ref:
+        raise HTTPException(status_code=404, detail="Código existente no encontrado en el catálogo")
+
+    # El candidato podría ya existir (cargado por otro camino)
+    candidate_ref = await db.get(PartsReference, candidate_code)
+
+    if candidate_ref is None:
+        # Construir nuevo prev_codes: [código que sale] + prev anteriores, máx MAX_PREV_CODES
+        new_prev = (
+            [{"code": existing_code}] + list(existing_ref.prev_codes or [])
+        )[:parts_description_service.MAX_PREV_CODES]
+        candidate_ref = PartsReference(
+            factory_part_number=candidate_code,
+            um_part_number=existing_ref.um_part_number,
+            description=existing_ref.description,
+            description_es_manual=existing_ref.description_es_manual,
+            unit=existing_ref.unit,
+            prev_codes=new_prev,
+            rotation_class=existing_ref.rotation_class,
+        )
+        db.add(candidate_ref)
+        await db.flush()
+    else:
+        # El candidato ya existe — heredar campos del existente si no los tiene
+        prev = candidate_ref.prev_codes or []
+        existing_in_prev = any(
+            (e["code"] == existing_code if isinstance(e, dict) else e == existing_code)
+            for e in prev
+        )
+        if not existing_in_prev:
+            candidate_ref.prev_codes = (
+                [{"code": existing_code}] + list(prev)
+            )[:parts_description_service.MAX_PREV_CODES]
+        if candidate_ref.rotation_class is None and existing_ref.rotation_class is not None:
+            candidate_ref.rotation_class = existing_ref.rotation_class
+        if candidate_ref.description_es_manual is None and existing_ref.description_es_manual is not None:
+            candidate_ref.description_es_manual = existing_ref.description_es_manual
+
+    # Redirigir todos los items del catálogo al nuevo código
+    await db.execute(
+        sa_update(PartsManualItem)
+        .where(PartsManualItem.factory_part_number == existing_code)
+        .values(factory_part_number=candidate_code)
+    )
+    await db.flush()
+
+    # Eliminar la referencia vieja (ya no tiene items apuntando a ella)
+    await db.delete(existing_ref)
+
+    from app.services.pricing_service import recalculate_part_cost
+    await recalculate_part_cost(db, candidate_code)
+
+    logger.info(
+        "Code substitution approved: actor=%s existing_code=%s candidate_code=%s",
+        getattr(actor, "user_id", actor), existing_code, candidate_code,
+    )
+
+    return candidate_ref
+
+
 @router.post("/admin/review-tasks/{task_id}/approve", status_code=200)
 async def approve_review_task(
     task_id: str,
@@ -2199,51 +2392,9 @@ async def approve_review_task(
     if not task or task.status != "pending":
         raise HTTPException(status_code=404, detail="Tarea no encontrada o ya resuelta")
 
-    existing_ref = await db.get(PartsReference, task.existing_code)
-    if not existing_ref:
-        raise HTTPException(status_code=404, detail="Código existente no encontrado en el catálogo")
-
-    # El candidato podría ya existir (cargado por otro camino)
-    candidate_ref = await db.get(PartsReference, task.candidate_code)
-
-    if candidate_ref is None:
-        # Construir nuevo prev_codes: [código que sale] + prev anteriores, máx 5
-        new_prev = ([{"code": task.existing_code}] + list(existing_ref.prev_codes or []))[:5]
-        candidate_ref = PartsReference(
-            factory_part_number=task.candidate_code,
-            um_part_number=existing_ref.um_part_number,
-            description=existing_ref.description,
-            description_es_manual=existing_ref.description_es_manual,
-            unit=existing_ref.unit,
-            prev_codes=new_prev,
-            rotation_class=existing_ref.rotation_class,
-        )
-        db.add(candidate_ref)
-        await db.flush()
-    else:
-        # El candidato ya existe — heredar campos del existente si no los tiene
-        prev = candidate_ref.prev_codes or []
-        existing_in_prev = any(
-            (e["code"] == task.existing_code if isinstance(e, dict) else e == task.existing_code)
-            for e in prev
-        )
-        if not existing_in_prev:
-            candidate_ref.prev_codes = ([{"code": task.existing_code}] + list(prev))[:5]
-        if candidate_ref.rotation_class is None and existing_ref.rotation_class is not None:
-            candidate_ref.rotation_class = existing_ref.rotation_class
-        if candidate_ref.description_es_manual is None and existing_ref.description_es_manual is not None:
-            candidate_ref.description_es_manual = existing_ref.description_es_manual
-
-    # Redirigir todos los items del catálogo al nuevo código
-    await db.execute(
-        sa_update(PartsManualItem)
-        .where(PartsManualItem.factory_part_number == task.existing_code)
-        .values(factory_part_number=task.candidate_code)
+    await _approve_code_substitution(
+        db, existing_code=task.existing_code, candidate_code=task.candidate_code, actor=current_user,
     )
-    await db.flush()
-
-    # Eliminar la referencia vieja (ya no tiene items apuntando a ella)
-    await db.delete(existing_ref)
 
     # Resolver tarea
     task.status = "approved"
@@ -2260,9 +2411,6 @@ async def approve_review_task(
         )
         .values(status="rejected", resolved_at=datetime.utcnow())
     )
-
-    from app.services.pricing_service import recalculate_part_cost
-    await recalculate_part_cost(db, task.candidate_code)
 
     await db.commit()
     return {"ok": True, "new_code": task.candidate_code}
@@ -2287,6 +2435,157 @@ async def reject_review_task(
     task.resolved_by = current_user.user_id
     await db.commit()
     return {"ok": True}
+
+
+# ── Not-yet-cataloged code: superadmin candidate search / link / create ──────
+# `sdd/parts-description-source-of-truth` PR3 (spec: Not-Yet-Cataloged Code
+# — Model-Scoped Candidate Search / Superadmin Path; design D4/D5). The
+# non-superadmin block for this same scenario is enforced upstream by
+# `parts_description_service.assert_name_editor`, called at the very top of
+# `set_description_es` before any catalog lookup -- non-superadmins never
+# reach these endpoints' concern.
+
+@router.get("/admin/code-candidates", response_model=list[CodeCandidateOut])
+async def get_code_candidates(
+    part_number: str,
+    model_applicable: str,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Model-scoped candidate search for a code with no matching
+    `PartsReference` yet. Superadmin-only."""
+    if not current_user.is_superadmin:
+        raise HTTPException(status_code=403, detail="Solo superadmin")
+
+    candidates = await _find_code_candidates(
+        db, part_number=part_number, model_applicable=model_applicable,
+    )
+    return [CodeCandidateOut(**c) for c in candidates]
+
+
+@router.post("/admin/code-candidates/link", status_code=200)
+async def link_code_candidate(
+    payload: LinkCodeCandidateRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Links an uncatalogued code to an existing candidate `PartsReference`,
+    reusing `_approve_code_substitution`'s historied-merge pattern (design
+    D5): `part_number` becomes the surviving code, `existing_code`'s row is
+    folded into its `prev_codes` and deleted. When the request also carries
+    the pending description edit that triggered this flow, it is persisted
+    through the same shared write path (`set_description_es`) right after
+    linking resolves, so the superadmin's original save completes in one
+    call. Superadmin-only. Money-moving: this changes which
+    `PartsReference` a catalog item's FOB cost is attached to."""
+    if not current_user.is_superadmin:
+        raise HTTPException(status_code=403, detail="Solo superadmin")
+
+    if payload.existing_code == payload.part_number:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "detail": "No se puede vincular un código consigo mismo",
+                "code": "SELF_LINK_NOT_ALLOWED",
+            },
+        )
+
+    candidate_ref = await _approve_code_substitution(
+        db,
+        existing_code=payload.existing_code,
+        candidate_code=payload.part_number,
+        actor=current_user,
+    )
+
+    if payload.description_es_manual is not None:
+        await parts_description_service.set_description_es(
+            db,
+            part_number=candidate_ref.factory_part_number,
+            value=payload.description_es_manual,
+            model_applicable=None,
+            current_user=current_user,
+        )
+
+    await db.commit()
+    return {"ok": True, "factory_part_number": candidate_ref.factory_part_number}
+
+
+@router.post("/admin/code-candidates/create", status_code=200)
+async def create_code_candidate(
+    payload: CreateCodeCandidateRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """No-candidate path: creates a brand-new orphan `PartsReference` for an
+    uncatalogued code via `create_reference(source_ref=None)` (design D4,
+    built in PR1) and gives it a cost via `recalculate_part_cost` --
+    intended behavior, the new code now owns its own FOB history.
+    Superadmin-only.
+
+    `description` (English) is ALWAYS resolved server-side from the order's
+    own `spare_part_items` row (the same raw description
+    `_find_code_candidates` uses for its similarity search) -- a
+    client-supplied description is never trusted for a brand-new catalog
+    reference (`sdd/parts-description-source-of-truth` PR3 fix pass, fix
+    #3). `description_es_manual`, when given, is additionally routed
+    through `set_description_es` after creation so the
+    `spare_part_items.description_es` mirror write fires exactly like it
+    does on `link_code_candidate` (fix #4) -- `create_reference` alone only
+    sets the field on the new `PartsReference`, it never mirrors.
+
+    Wraps the actual insert in `IntegrityError` handling (fix #5): the
+    pre-check above is a courtesy fast-path, not a guarantee -- a concurrent
+    request can still win the race on `factory_part_number`'s primary key
+    between the check and the insert. That case is converted into the same
+    clean 409 instead of leaking a raw `IntegrityError` as an unhandled
+    500."""
+    if not current_user.is_superadmin:
+        raise HTTPException(status_code=403, detail="Solo superadmin")
+
+    existing = await db.get(PartsReference, payload.part_number)
+    if existing is not None:
+        raise HTTPException(
+            status_code=409,
+            detail={"detail": "El código ya existe en el catálogo", "code": "CODE_ALREADY_EXISTS"},
+        )
+
+    order_description = await _latest_spare_part_description(db, payload.part_number)
+
+    try:
+        new_ref = await parts_description_service.create_reference(
+            db,
+            factory_part_number=payload.part_number,
+            description=order_description or "",
+            description_es_manual=payload.description_es_manual,
+            source_ref=None,
+        )
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail={"detail": "El código ya existe en el catálogo", "code": "CODE_ALREADY_EXISTS"},
+        )
+
+    if payload.description_es_manual is not None:
+        await parts_description_service.set_description_es(
+            db,
+            part_number=new_ref.factory_part_number,
+            value=payload.description_es_manual,
+            model_applicable=None,
+            current_user=current_user,
+        )
+
+    from app.services.pricing_service import recalculate_part_cost
+    await recalculate_part_cost(db, new_ref.factory_part_number)
+
+    await db.commit()
+
+    logger.info(
+        "New parts reference created: actor=%s factory_part_number=%s",
+        getattr(current_user, "user_id", current_user), new_ref.factory_part_number,
+    )
+
+    return {"ok": True, "factory_part_number": new_ref.factory_part_number}
 
 
 # ── Endpoint de administración (frontend) ──────────────────────────────────────
