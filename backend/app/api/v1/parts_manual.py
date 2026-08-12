@@ -1866,8 +1866,15 @@ async def update_catalog_item(
                 ))
 
     if payload.prev_codes is not None:
-        clean = [c.strip() for c in payload.prev_codes if c.strip() and c.strip() != factory_part_number]
-        ref.prev_codes = [{"code": c} for c in clean[:5]]
+        from app.services.parts_description_service import assert_prev_codes_free, MAX_PREV_CODES
+        deduped = dict.fromkeys(
+            c.strip() for c in payload.prev_codes if c.strip() and c.strip() != factory_part_number
+        )
+        clean = list(deduped)[:MAX_PREV_CODES]
+        await assert_prev_codes_free(
+            db, factory_part_number=factory_part_number, submitted=clean, existing=ref.prev_codes,
+        )
+        ref.prev_codes = [{"code": c} for c in clean]
         from app.services.pricing_service import recalculate_part_cost
         await recalculate_part_cost(db, factory_part_number)
 
