@@ -125,6 +125,68 @@ class TestSetDescriptionEs:
             )
         recalc.assert_not_called()
 
+    async def test_whitespace_only_value_is_stored_as_null_not_whitespace(self):
+        """PR5 fix pass #9 (CRITICAL, 5th review): a whitespace-only submitted
+        name must be persisted as SQL `NULL`, never as a literal `'   '`
+        string -- otherwise it silently survives
+        `COALESCE(description_es_manual, spi_latest.description_es)` on the
+        read side (Postgres COALESCE only falls back on NULL, not on
+        empty/whitespace strings)."""
+        ref = _ref(factory_part_number="FPN-1")
+        db = AsyncMock(spec=AsyncSession)
+        with patch.object(svc, "_find_reference_for_part_number", new=AsyncMock(return_value=ref)):
+            await svc.set_description_es(
+                db,
+                part_number="FPN-1",
+                value="   ",
+                model_applicable=None,
+                current_user=_user("superadmin"),
+            )
+        assert ref.description_es_manual is None
+        db.execute.assert_awaited_once()
+        stmt = db.execute.call_args[0][0]
+        compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+        # The mirror write must also carry NULL, not a whitespace string --
+        # a bound NULL parameter compiles to the literal `NULL`, never
+        # `'   '`.
+        assert "'   '" not in compiled
+        assert "NULL" in compiled
+
+    async def test_leading_trailing_whitespace_is_trimmed(self):
+        ref = _ref(factory_part_number="FPN-1")
+        db = AsyncMock(spec=AsyncSession)
+        with patch.object(svc, "_find_reference_for_part_number", new=AsyncMock(return_value=ref)):
+            await svc.set_description_es(
+                db,
+                part_number="FPN-1",
+                value="  Filtro de aceite  ",
+                model_applicable=None,
+                current_user=_user("superadmin"),
+            )
+        assert ref.description_es_manual == "Filtro de aceite"
+
+
+# ---------------------------------------------------------------------------
+# _normalize_manual_name -- PR5 fix pass #9
+# ---------------------------------------------------------------------------
+
+class TestNormalizeManualName:
+    def test_none_stays_none(self):
+        assert svc._normalize_manual_name(None) is None
+
+    def test_empty_string_becomes_none(self):
+        assert svc._normalize_manual_name("") is None
+
+    def test_whitespace_only_becomes_none(self):
+        assert svc._normalize_manual_name("   ") is None
+        assert svc._normalize_manual_name("\t\n") is None
+
+    def test_real_value_is_trimmed(self):
+        assert svc._normalize_manual_name("  Filtro de aceite  ") == "Filtro de aceite"
+
+    def test_real_value_without_padding_is_unchanged(self):
+        assert svc._normalize_manual_name("Filtro de aceite") == "Filtro de aceite"
+
 
 # ---------------------------------------------------------------------------
 # assert_prev_codes_free -- Task 1.4
@@ -267,6 +329,41 @@ class TestCreateReference:
         assert result.description_es_manual is None
         assert result.prev_codes == []
         db.flush.assert_awaited_once()
+
+    async def test_whitespace_only_description_es_manual_stored_as_null(self):
+        """PR5 fix pass #9: `create_code_candidate`'s orphan path must never
+        persist a whitespace-only name, matching `set_description_es`."""
+        db = AsyncMock(spec=AsyncSession)
+        added = []
+        db.add = MagicMock(side_effect=lambda o: added.append(o))
+
+        result = await svc.create_reference(
+            db,
+            factory_part_number="ORPHAN-2",
+            description="Tornillo",
+            description_es_manual="   ",
+        )
+
+        assert result.description_es_manual is None
+
+    async def test_whitespace_only_with_source_ref_falls_back_to_source_value(self):
+        """A whitespace-only submission normalizes to `None`, which then
+        follows the same "inherit from source_ref" branch a genuine `None`
+        already takes -- it does not blank out the matched candidate's
+        existing confirmed name."""
+        source = _ref(factory_part_number="OLD-1", description_es_manual="Nombre confirmado")
+        db = AsyncMock(spec=AsyncSession)
+        db.add = MagicMock()
+
+        result = await svc.create_reference(
+            db,
+            factory_part_number="NEW-2",
+            description="Filtro",
+            description_es_manual="   ",
+            source_ref=source,
+        )
+
+        assert result.description_es_manual == "Nombre confirmado"
 
 
 # ---------------------------------------------------------------------------

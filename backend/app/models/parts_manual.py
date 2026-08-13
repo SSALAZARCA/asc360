@@ -25,6 +25,11 @@ class PartsReference(Base):
     preliminary_fob   = Column(Numeric(12, 4), nullable=True)  # promedio PI, solo si no hay packing list
     rotation_class      = Column(String(10), nullable=True, index=True)
     needs_price_review  = Column(Boolean, nullable=False, default=False, server_default='false')
+    # Permanent dismissal of the unconfirmed-name suggestion badge, keyed by
+    # this reference -- `sdd/parts-description-source-of-truth` PR5, design
+    # D18. Nullable, no default: NULL means "never dismissed" / "not yet
+    # evaluated"; set once and never cleared in this slice (no un-dismiss UI).
+    suggestion_dismissed_at = Column(DateTime, nullable=True)
 
     items = relationship("PartsManualItem", back_populates="reference")
     cost_history = relationship("PartCostHistory", back_populates="reference", cascade="all, delete-orphan")

@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import AdminLayout from '../admin-layout';
 import { authFetch } from '../../lib/authFetch';
 import { toast } from '../../lib/toast';
-import { Search, ChevronLeft, ChevronRight, X, ArrowUp, ArrowDown, ChevronsUpDown, AlertTriangle, CheckCircle2, ShieldX, Pencil, UploadCloud, BarChart3, Download, Flag, Trash2, Languages } from 'lucide-react';
+import { Search, ChevronLeft, ChevronRight, X, ArrowUp, ArrowDown, ChevronsUpDown, AlertTriangle, CheckCircle2, ShieldX, Pencil, UploadCloud, BarChart3, Download, Flag, Trash2, Languages, Lightbulb } from 'lucide-react';
 
 const PAGE_SIZE = 50;
 
@@ -51,8 +51,15 @@ export default function PartsCatalogPage() {
   const [models, setModels]           = useState([]);
   const [onlyPending, setOnlyPending] = useState(false);
   const [onlyPriceReview, setOnlyPriceReview] = useState(false);
+  const [onlySuggested, setOnlySuggested] = useState(false);
   const [rotationFilter, setRotationFilter] = useState('');
   const [coverageFilter, setCoverageFilter] = useState('');
+
+  // Sugerencia de nombre sin confirmar (`sdd/parts-description-source-of-truth`
+  // PR5, design D19-D22): { fpn, text, sourceCode }
+  const [suggestion, setSuggestion] = useState(null);
+  const [suggestionLoading, setSuggestionLoading] = useState(false);
+  const [suggestionMsg, setSuggestionMsg] = useState('');
 
   const [sortCol, setSortCol] = useState('section_code');
   const [sortDir, setSortDir] = useState('asc');
@@ -166,6 +173,7 @@ export default function PartsCatalogPage() {
         model_code: modelCode,
         only_pending: String(onlyPending),
         only_price_review: String(onlyPriceReview),
+        only_suggested: String(onlySuggested),
         rotation_class: rotationFilter,
         coverage_status: coverageFilter,
         sort_col: sortCol,
@@ -187,7 +195,7 @@ export default function PartsCatalogPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, search, modelCode, onlyPending, onlyPriceReview, rotationFilter, coverageFilter, sortCol, sortDir]);
+  }, [page, search, modelCode, onlyPending, onlyPriceReview, onlySuggested, rotationFilter, coverageFilter, sortCol, sortDir]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -211,6 +219,62 @@ export default function PartsCatalogPage() {
   const sortedItems = items;
 
   const pendingCount = items.filter(i => i.pending_task_id).length;
+  const suggestionCount = items.filter(i => i.has_unconfirmed_suggestion).length;
+
+  // Success/failure feedback matches `handleReviewAction`'s in-modal
+  // pattern below, not a toast (`sdd/parts-description-source-of-truth`
+  // PR5 fix pass finding #7): success shows a message and auto-closes the
+  // modal after ~1200ms, failure keeps the modal open with the error
+  // visible inside it.
+  const confirmSuggestion = async () => {
+    if (!suggestion) return;
+    setSuggestionLoading(true);
+    setSuggestionMsg('');
+    try {
+      const res = await authFetch(`/parts/admin/catalog-confirm-suggestion/${encodeURIComponent(suggestion.fpn)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ suggested_text: suggestion.text }),
+      });
+      if (res.ok) {
+        setSuggestionMsg('✅ Nombre confirmado.');
+        setTimeout(() => { setSuggestion(null); fetchData(); }, 1200);
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setSuggestionMsg(data?.detail?.code === 'SUGGESTION_STALE'
+          ? '⚠️ La sugerencia cambió, recargá la lista.'
+          : '⚠️ No se pudo confirmar la sugerencia.');
+      }
+    } catch {
+      setSuggestionMsg('⚠️ Error de conexión.');
+    } finally {
+      setSuggestionLoading(false);
+    }
+  };
+
+  const dismissSuggestion = async () => {
+    if (!suggestion) return;
+    setSuggestionLoading(true);
+    setSuggestionMsg('');
+    try {
+      const res = await authFetch(`/parts/admin/catalog-dismiss-suggestion/${encodeURIComponent(suggestion.fpn)}`, {
+        method: 'POST',
+      });
+      if (res.ok) {
+        setSuggestionMsg('✅ Sugerencia descartada.');
+        setTimeout(() => { setSuggestion(null); fetchData(); }, 1200);
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setSuggestionMsg(data?.detail?.code === 'NO_ACTIVE_SUGGESTION'
+          ? '⚠️ Ya no hay una sugerencia activa para descartar.'
+          : '⚠️ No se pudo descartar la sugerencia.');
+      }
+    } catch {
+      setSuggestionMsg('⚠️ Error de conexión.');
+    } finally {
+      setSuggestionLoading(false);
+    }
+  };
 
   const openReview = (item) => {
     setReviewMsg('');
@@ -422,6 +486,12 @@ export default function PartsCatalogPage() {
                 {pendingCount} pendiente{pendingCount > 1 ? 's' : ''} de verificación
               </span>
             )}
+            {suggestionCount > 0 && !onlySuggested && (
+              <span style={{ marginLeft: '0.75rem', fontSize: '0.68rem', fontWeight: 800, padding: '2px 10px', borderRadius: '20px', background: 'rgba(99,102,241,0.15)', color: '#818cf8', border: '1px solid rgba(99,102,241,0.3)', cursor: 'pointer' }}
+                onClick={() => { setOnlySuggested(true); setPage(1); }}>
+                {suggestionCount} sin confirmar
+              </span>
+            )}
           </p>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.4rem' }}>
@@ -584,6 +654,18 @@ export default function PartsCatalogPage() {
           >
             <Flag size={12} style={{ display: 'inline', marginRight: '0.4rem', verticalAlign: 'middle' }} />
             {onlyPriceReview ? 'Revisar precio' : 'Revisar precio'}
+          </button>
+          <button
+            onClick={() => { setOnlySuggested(p => !p); setPage(1); }}
+            title="Nombre sin confirmar — sugerido de pedidos anteriores"
+            style={{ padding: '0.625rem 1rem', borderRadius: '10px', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', cursor: 'pointer', border: '1px solid', transition: 'all 0.2s',
+              background: onlySuggested ? 'rgba(99,102,241,0.15)' : 'rgba(255,255,255,0.04)',
+              borderColor: onlySuggested ? 'rgba(99,102,241,0.4)' : 'rgba(255,255,255,0.08)',
+              color: onlySuggested ? '#818cf8' : 'rgba(255,255,255,0.5)',
+            }}
+          >
+            <Lightbulb size={12} style={{ display: 'inline', marginRight: '0.4rem', verticalAlign: 'middle' }} />
+            {onlySuggested ? 'Mostrando sin confirmar' : 'Sin confirmar'}
           </button>
           {[
             { val: 'aqui',       label: 'Aquí',       color: '#4ade80' },
@@ -800,6 +882,15 @@ export default function PartsCatalogPage() {
                 </td>
                 <td style={{ textAlign: 'center' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+                    {item.has_unconfirmed_suggestion && (
+                      <button
+                        onClick={() => { setSuggestionMsg(''); setSuggestion({ fpn: item.factory_part_number, text: item.description_es, sourceCode: item.suggestion_source_code }); }}
+                        title="Nombre sin confirmar — sugerido de pedidos anteriores"
+                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '26px', height: '26px', borderRadius: '8px', background: 'rgba(99,102,241,0.15)', color: '#818cf8', border: '1px solid rgba(99,102,241,0.35)', cursor: 'pointer', flexShrink: 0 }}
+                      >
+                        <Lightbulb size={13} />
+                      </button>
+                    )}
                     {item.pending_task_id && (
                       <button
                         onClick={() => openReview(item)}
@@ -1237,6 +1328,51 @@ export default function PartsCatalogPage() {
       )}
 
       {/* Modal de verificación de cambio de código */}
+      {suggestion && (
+        <div onClick={() => !suggestionLoading && setSuggestion(null)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ background: '#0c0c0e', border: '1px solid rgba(99,102,241,0.25)', borderRadius: '16px', padding: '2rem', width: '100%', maxWidth: '440px', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <Lightbulb size={18} color="#818cf8" />
+              <p style={{ color: '#fff', fontWeight: 900, fontSize: '0.82rem', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>Nombre sin confirmar</p>
+            </div>
+
+            <p style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.45)', margin: 0, lineHeight: 1.6 }}>
+              Encontramos &quot;{suggestion.text}&quot; usado en pedidos anteriores para este código — ¿Confirmar como nombre oficial?
+            </p>
+
+            {suggestion.sourceCode && suggestion.sourceCode !== suggestion.fpn && (
+              <p style={{ fontSize: '0.62rem', color: 'rgba(255,255,255,0.35)', margin: 0 }}>
+                Encontrado bajo el código anterior: <strong style={{ color: '#818cf8' }}>{suggestion.sourceCode}</strong>
+              </p>
+            )}
+
+            {suggestionMsg && (
+              <p style={{ fontSize: '0.72rem', color: suggestionMsg.startsWith('✅') ? '#4ade80' : '#ef4444', margin: 0, textAlign: 'center' }}>{suggestionMsg}</p>
+            )}
+
+            <div style={{ display: 'flex', gap: '0.75rem' }}>
+              <button
+                onClick={confirmSuggestion}
+                disabled={suggestionLoading}
+                style={{ flex: 1, background: 'rgba(74,222,128,0.12)', color: '#4ade80', border: '1px solid rgba(74,222,128,0.25)', borderRadius: '10px', padding: '0.7rem', fontWeight: 900, fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.06em', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', opacity: suggestionLoading ? 0.5 : 1 }}
+              >
+                <CheckCircle2 size={14} /> Confirmar
+              </button>
+              <button
+                onClick={dismissSuggestion}
+                disabled={suggestionLoading}
+                style={{ flex: 1, background: 'rgba(239,68,68,0.08)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '10px', padding: '0.7rem', fontWeight: 900, fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.06em', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', opacity: suggestionLoading ? 0.5 : 1 }}
+              >
+                <ShieldX size={14} /> Descartar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {reviewTask && (
         <div onClick={() => !reviewLoading && setReviewTask(null)}
           style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

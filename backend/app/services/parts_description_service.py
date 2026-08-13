@@ -74,6 +74,33 @@ def assert_name_editor(current_user) -> None:
         )
 
 
+def _normalize_manual_name(value: Optional[str]) -> Optional[str]:
+    """Trims `value` and converts an empty/whitespace-only result to `None`
+    so `parts_references.description_es_manual` is NEVER persisted as a
+    non-`None` whitespace-only string -- it is either real trimmed text or
+    SQL `NULL`.
+
+    Why this matters (`sdd/parts-description-source-of-truth` PR5 fix pass
+    #9, a CRITICAL finding from a 5th independent review): Postgres
+    `COALESCE(description_es_manual, spi_latest.description_es)`
+    (`parts_manual.py`'s `_list_catalog_impl`) only falls back when the
+    first argument is SQL `NULL` -- NOT when it is `''` or `'   '`. A
+    whitespace-only manual value stored verbatim would survive that
+    `COALESCE` unchanged, so the catalog would display whitespace instead
+    of falling back to the borrowed spi-latest name, and
+    `_resolve_catalog_suggestion`'s `is_confirmed` check (which DOES
+    correctly treat a whitespace manual as unconfirmed) would then attach
+    `has_unconfirmed_suggestion=True` to that garbage whitespace text
+    instead of the real suggestion. Normalizing at write time means every
+    write path that stores through this module can never introduce that
+    state again, regardless of whether the caller (or a future caller)
+    remembers to trim client input."""
+    if value is None:
+        return None
+    trimmed = value.strip()
+    return trimmed or None
+
+
 def _normalize_codes(entries) -> list[str]:
     """Tolerates both the new dict format (`{"code": "..."}`) and the legacy
     plain-string format stored in `prev_codes`."""
@@ -104,6 +131,14 @@ async def set_description_es(
     `model_applicable` is accepted for interface parity with the
     not-yet-cataloged-code flow (design D4, wired in a later PR) but is
     unused by this write path in PR1.
+
+    `value` is normalized via `_normalize_manual_name` before either write
+    (PR5 fix pass #9): a trimmed-empty/whitespace-only submission is
+    persisted as `NULL`, never as a literal whitespace string, so it can
+    never survive `COALESCE(description_es_manual, ...)` on the read side.
+    This is the single normalization point every write path funnels
+    through -- see that helper's docstring for the full CRITICAL-bug
+    rationale.
     """
     assert_name_editor(current_user)
 
@@ -117,13 +152,14 @@ async def set_description_es(
             },
         )
 
-    ref.description_es_manual = value
+    normalized_value = _normalize_manual_name(value)
+    ref.description_es_manual = normalized_value
 
     codes = [ref.factory_part_number] + _normalize_codes(ref.prev_codes)
     await db.execute(
         sa_update(SparePartItem)
         .where(SparePartItem.part_number.in_(codes))
-        .values(description_es=value)
+        .values(description_es=normalized_value)
     )
 
     return ref
@@ -197,8 +233,16 @@ async def create_reference(
     `approve_review_task` already builds. When `source_ref` is `None` (no
     candidate found), a fresh orphan `PartsReference` is created instead.
 
-    Not wired to any live endpoint yet -- intentionally unreferenced until
-    PR3 wires the not-yet-cataloged-code creation flow (design D4)."""
+    Reused by the not-yet-cataloged-code creation flow (design D4, wired in
+    PR3's `create_code_candidate`). `description_es_manual` is normalized
+    (PR5 fix pass #9, see `_normalize_manual_name`) so a whitespace-only
+    submission is stored as `NULL` here too, even though `create_code_candidate`
+    also immediately re-writes the same field through `set_description_es`
+    right after creation whenever it is non-`None` -- this keeps the row
+    correct for the brief in-transaction window between the two writes and
+    for any future caller that creates a reference without that follow-up
+    call."""
+    description_es_manual = _normalize_manual_name(description_es_manual)
     if source_ref is not None:
         new_prev = ([{"code": source_ref.factory_part_number}] + list(source_ref.prev_codes or []))[:MAX_PREV_CODES]
         new_ref = PartsReference(

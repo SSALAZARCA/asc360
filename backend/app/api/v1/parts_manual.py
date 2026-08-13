@@ -1072,6 +1072,10 @@ class CatalogItemResult(BaseModel):
     section_code: str
     section_name: str
     vehicle_model_name: Optional[str]
+    # Code-change review badge (`AlertTriangle`, orange) -- an UNRELATED
+    # badge system from `has_unconfirmed_suggestion`/`suggestion_source_code`
+    # below (design D21 rationale: the two must read as visually distinct
+    # states, not blur together on the same row).
     pending_task_id: Optional[str] = None
     pending_candidate_code: Optional[str] = None
     pending_score: Optional[float] = None
@@ -1086,6 +1090,16 @@ class CatalogItemResult(BaseModel):
     prev_codes: list[str] = []
     needs_price_review: bool = False
     coverage_status: Optional[str] = None
+    # `sdd/parts-description-source-of-truth` PR5 (design D15): flags a row
+    # whose displayed `description_es` was never ratified by a superadmin --
+    # `description_es_manual IS NULL` but the COALESCE fallback still
+    # produced text. `suggestion_source_code` is the code the text came
+    # from: the row's own `factory_part_number` for an exact match, or the
+    # `prev_codes` alias that resolved it (design D16). Both stay at their
+    # defaults (False / None) once the suggestion has been dismissed.
+    # UNRELATED to `pending_task_id` above -- see that field's own note.
+    has_unconfirmed_suggestion: bool = False
+    suggestion_source_code: Optional[str] = None
 
 class CatalogItemUpdate(BaseModel):
     description: Optional[str] = None
@@ -1134,12 +1148,22 @@ class CatalogListResult(BaseModel):
     items: list[CatalogItemResult]
 
 
+class ConfirmSuggestionRequest(BaseModel):
+    """`sdd/parts-description-source-of-truth` PR5 (design D20). Carries the
+    text the superadmin actually saw and clicked Confirmar on -- the
+    handler recomputes the suggestion server-side and 409s (`SUGGESTION_STALE`)
+    if it no longer matches, instead of blindly ratifying whatever the
+    server now finds."""
+    suggested_text: str
+
+
 @router.get("/admin/catalog", response_model=CatalogListResult)
 async def list_catalog(
     search: str = "",
     model_code: str = "",
     only_pending: bool = False,
     only_price_review: bool = False,
+    only_suggested: bool = False,
     rotation_class: str = "",
     coverage_status: str = "",
     sort_col: str = "section_code",
@@ -1157,6 +1181,7 @@ async def list_catalog(
         return await _list_catalog_impl(
             search, model_code, only_pending, only_price_review,
             rotation_class, coverage_status, sort_col, sort_dir, page, page_size, db,
+            only_suggested=only_suggested,
         )
     except HTTPException:
         raise
@@ -1166,6 +1191,81 @@ async def list_catalog(
             search, model_code, page, sort_col, sort_dir,
         )
         raise HTTPException(status_code=500, detail="Error interno al consultar el catálogo")
+
+
+def _resolve_catalog_suggestion(
+    *,
+    manual: Optional[str],
+    coalesced_description_es: Optional[str],
+    dismissed_at,
+    fpn: str,
+    alias_text: Optional[str] = None,
+    alias_source_code: Optional[str] = None,
+) -> tuple[Optional[str], bool, Optional[str]]:
+    """Single source of truth for the unconfirmed-name-suggestion rule
+    (`sdd/parts-description-source-of-truth` design D15/D16) -- used by
+    `_build_item` (list response) AND by the confirm/dismiss endpoints
+    (via `_compute_current_suggestion`, PR5 fix pass finding #2 -- both
+    now delegate to this function instead of independently reimplementing
+    the same precedence rule) so the rule only has to be expressed once on
+    the Python side. The SQL-side `only_suggested` predicate in
+    `_base_joins` (design D17) mirrors this rule independently and is the
+    one place callers must keep in sync BY HAND.
+
+    Honest caveat on the "mandatory parity test"
+    (`test_only_suggested_predicate_compiles_with_expected_sql_shape` in
+    `tests/test_catalog_suggestion_badge.py`): it only compiles the SQL
+    statement to TEXT and asserts it references the same 3 conditions this
+    function checks (`description_es_manual`, `suggestion_dismissed_at`,
+    `jsonb_array_elements`) -- it does NOT execute either side against real
+    data and therefore does NOT prove behavioral agreement, because this
+    repo has no test `DATABASE_URL` anywhere. A drift between this
+    function and the SQL predicate would NOT be caught by that test; only
+    a manual code review comparing the two `if`/`WHERE` shapes would.
+
+    Returns `(displayed_description_es, has_unconfirmed_suggestion,
+    suggestion_source_code)`.
+
+    - A confirmed name (`manual` non-empty AFTER trim) never has a
+      suggestion.
+    - Exact case: `coalesced_description_es` already carries the
+      spi-latest fallback text -- the caller's COALESCE is
+      `COALESCE(NULLIF(TRIM(description_es_manual), ''), spi_latest.description_es)`
+      (PR5 fix pass #9), so a whitespace-only `manual` never leaks through
+      as `coalesced_description_es` itself; if non-empty and not dismissed,
+      that IS the suggestion, sourced from `fpn` itself.
+    - Alias case (D16): only reachable when the exact case produced no
+      text at all -- `alias_text`/`alias_source_code` (resolved by the
+      caller from `prev_codes`) fill the display and, unless dismissed,
+      flag the suggestion sourced from the alias code.
+
+      Accepted limitation, inherited unmodified from PR1's `prev_codes`
+      collision guard (design D6, `parts_description_service.assert_prev_codes_free`):
+      collisions that predate that guard are tolerated, not backfilled or
+      audited -- only NEWLY-added colliding codes are rejected going
+      forward. In the rare case where an already-corrupted reference's
+      `prev_codes` collides with an unrelated reference's own
+      `factory_part_number`, this alias lookup could theoretically source
+      a suggestion from that unrelated part's order history. This is a
+      known, accepted gap (see the design's Named Risks table) -- fixing
+      it would require the retroactive backfill/audit this whole change
+      explicitly decided NOT to do, not something to silently patch here.
+    - Dismissed rows keep showing whatever text was resolved (D20: dismiss
+      "does NOT blank the displayed name") -- only the badge is suppressed.
+    """
+    is_confirmed = bool(manual) and bool(manual.strip())
+    if is_confirmed:
+        return coalesced_description_es, False, None
+
+    if coalesced_description_es:
+        has_suggestion = dismissed_at is None
+        return coalesced_description_es, has_suggestion, (fpn if has_suggestion else None)
+
+    if alias_text:
+        has_suggestion = dismissed_at is None
+        return alias_text, has_suggestion, (alias_source_code if has_suggestion else None)
+
+    return coalesced_description_es, False, None
 
 
 async def _list_catalog_impl(
@@ -1180,6 +1280,7 @@ async def _list_catalog_impl(
     page: int,
     page_size: int,
     db: AsyncSession,
+    only_suggested: bool = False,
 ) -> "CatalogListResult":
     pricing_factors = await get_pricing_factors(db)
 
@@ -1241,6 +1342,38 @@ async def _list_catalog_impl(
             q = q.where(pending_sq.c.task_id.isnot(None))
         if only_price_review:
             q = q.where(PartsReference.needs_price_review == True)
+        if only_suggested:
+            # Mirrors, in SQL, the exact same rule `_resolve_catalog_suggestion`
+            # applies in Python (design D15/D16) so `total` and the page rows
+            # agree -- `sdd/parts-description-source-of-truth` design D17.
+            # Kept in sync BY HAND. The "mandatory parity test"
+            # (`test_only_suggested_predicate_compiles_with_expected_sql_shape`
+            # in `tests/test_catalog_suggestion_badge.py`) only asserts this
+            # compiled statement's TEXT references the same 3 conditions --
+            # it does NOT execute either side against real data (no test
+            # `DATABASE_URL` exists in this repo), so it cannot catch every
+            # possible drift between this predicate and the Python rule; see
+            # `_resolve_catalog_suggestion`'s own docstring for the same
+            # caveat spelled out in full.
+            manual_col = PartsReference.description_es_manual
+            q = q.where(
+                or_(manual_col.is_(None), func.trim(manual_col) == ""),
+                PartsReference.suggestion_dismissed_at.is_(None),
+                or_(
+                    spi_latest.c.description_es.isnot(None),
+                    text("""EXISTS (
+                        SELECT 1 FROM jsonb_array_elements(parts_references.prev_codes) AS _pc(elem)
+                        JOIN spare_part_items _spi_sugg
+                          ON _spi_sugg.part_number = (
+                              CASE WHEN jsonb_typeof(_pc.elem) = 'string' THEN _pc.elem #>> '{}'
+                                   ELSE _pc.elem->>'code'
+                              END
+                          )
+                        WHERE _spi_sugg.description_es IS NOT NULL
+                          AND _spi_sugg.description_es != ''
+                    )"""),
+                ),
+            )
         if rotation_class == "none":
             q = q.where(PartsReference.rotation_class.is_(None))
         elif rotation_class in ("alta", "media", "baja"):
@@ -1486,7 +1619,25 @@ async def _list_catalog_impl(
         select(
             PartsReference.factory_part_number.label("fpn"),
             PartsReference.description.label("description"),
-            func.coalesce(PartsReference.description_es_manual, spi_latest.c.description_es).label("description_es"),
+            # `nullif(trim(...), '')` (PR5 fix pass #9, CRITICAL): Postgres
+            # COALESCE only falls back on SQL NULL, never on '' or a
+            # whitespace-only string. Write-time normalization
+            # (`parts_description_service._normalize_manual_name`) now stops
+            # NEW whitespace-only values from ever being stored, but this
+            # read-side guard is still required so any already-existing
+            # whitespace-only `description_es_manual` (written before this
+            # fix, or by a future direct DB write) falls back to
+            # `spi_latest.description_es` here too, instead of surfacing as
+            # a garbage "confirmed" name -- matching what
+            # `_resolve_catalog_suggestion`'s `is_confirmed` check (and
+            # `_compute_current_suggestion`'s independent single-row
+            # recompute) already treat as unconfirmed. Without this, the two
+            # could disagree on the SAME row and a confirm click would 409
+            # SUGGESTION_STALE even though nothing actually changed.
+            func.coalesce(
+                func.nullif(func.trim(PartsReference.description_es_manual), ""),
+                spi_latest.c.description_es,
+            ).label("description_es"),
             PartCatalog.public_price.label("public_price"),
             PartsManualSection.section_code.label("section_code"),
             PartsManualSection.section_name.label("section_name"),
@@ -1499,6 +1650,11 @@ async def _list_catalog_impl(
             PartsReference.rotation_class.label("rotation_class"),         # r[12]
             PartsReference.needs_price_review.label("needs_price_review"), # r[13]
             PartsReference.preliminary_fob.label("preliminary_fob"),       # r[14]
+            # PR5 (design D15): +2 columns so `_build_item` can tell a
+            # confirmed name from a borrowed one -- the COALESCE above stays
+            # UNCHANGED, no new join, no new query for the exact-code case.
+            PartsReference.description_es_manual.label("description_es_manual"),   # r[15]
+            PartsReference.suggestion_dismissed_at.label("suggestion_dismissed_at"), # r[16]
         )
         .distinct(PartsReference.factory_part_number, PartsManualSection.model_code)
     ).order_by(
@@ -1571,6 +1727,51 @@ async def _list_catalog_impl(
                     extracted.append(entry)
             prev_codes_by_fpn[fpn_r] = extracted
 
+    # Alias-aware suggestion resolution (design D16) -- only for rows whose
+    # COALESCEd `description_es` came back empty (no manual name AND no
+    # exact-code `spare_part_items` hit), reusing `prev_codes_by_fpn` just
+    # materialized above. At most ONE extra query for the whole page,
+    # issued only if at least one such row also has `prev_codes`; zero
+    # otherwise. Precedence: exact code already wins via `r[2]` above (a
+    # row that reaches this block by definition has no exact hit), then
+    # aliases in the reference's own `prev_codes` order, first non-empty
+    # wins.
+    #
+    # Accepted limitation (see `_resolve_catalog_suggestion`'s docstring for
+    # the full explanation): a `prev_codes` collision that predates PR1's
+    # `assert_prev_codes_free` guard is tolerated, not backfilled, so this
+    # lookup could in theory resolve a suggestion from an unrelated part's
+    # order history for an old, already-corrupted row.
+    alias_desc_by_fpn: dict[str, str] = {}
+    alias_source_by_fpn: dict[str, str] = {}
+    pending_alias_fpns = {
+        r[0] for r in rows if not r[2] and prev_codes_by_fpn.get(r[0])
+    }
+    if pending_alias_fpns:
+        alias_codes = sorted({
+            code
+            for fpn_p in pending_alias_fpns
+            for code in prev_codes_by_fpn.get(fpn_p, [])
+        })
+        if alias_codes:
+            alias_sq = (
+                select(SparePartItem.part_number, SparePartItem.description_es)
+                .where(SparePartItem.part_number.in_(alias_codes))
+                .where(SparePartItem.description_es.isnot(None))
+                .where(SparePartItem.description_es != "")
+                .distinct(SparePartItem.part_number)
+                .order_by(SparePartItem.part_number, SparePartItem.created_at.asc())
+            )
+            alias_desc_by_code = {
+                code: desc for code, desc in (await db.execute(alias_sq)).all()
+            }
+            for fpn_p in pending_alias_fpns:
+                for code in prev_codes_by_fpn.get(fpn_p, []):
+                    if code in alias_desc_by_code:
+                        alias_desc_by_fpn[fpn_p] = alias_desc_by_code[code]
+                        alias_source_by_fpn[fpn_p] = code
+                        break
+
     coverage_by_fpn: dict[str, str] = {}
     if fpns:
         from app.models.imports import SparePartLot, ShipmentOrder as _SO
@@ -1637,10 +1838,18 @@ async def _list_catalog_impl(
             precio_distribuidor = round(
                 public_price / (1 + pricing_factors["distributor_margin"]), 0
             )
+        description_es_val, has_suggestion, suggestion_source_code = _resolve_catalog_suggestion(
+            manual=r[15],
+            coalesced_description_es=r[2],
+            dismissed_at=r[16],
+            fpn=fpn,
+            alias_text=alias_desc_by_fpn.get(fpn),
+            alias_source_code=alias_source_by_fpn.get(fpn),
+        )
         return CatalogItemResult(
             factory_part_number=fpn,
             description=r[1],
-            description_es=r[2],
+            description_es=description_es_val,
             public_price=public_price,
             section_code=r[4],
             section_name=r[5],
@@ -1667,6 +1876,8 @@ async def _list_catalog_impl(
             prev_codes=prev_codes_by_fpn.get(fpn, []),
             needs_price_review=bool(r[13]) if r[13] is not None else False,
             coverage_status=coverage_by_fpn.get(fpn.upper().strip().replace(' ', ''), 'sin_pedido'),
+            has_unconfirmed_suggestion=has_suggestion,
+            suggestion_source_code=suggestion_source_code,
         )
 
     return CatalogListResult(
@@ -1933,7 +2144,17 @@ async def update_catalog_item(
     if payload.description is not None:
         ref.description = payload.description
     if payload.description_es_manual is not None:
-        ref.description_es_manual = payload.description_es_manual
+        # Normalize BEFORE persisting (PR5 fix pass #9): this endpoint writes
+        # `description_es_manual` directly, not through
+        # `parts_description_service.set_description_es`, so it needs its
+        # own copy of the same trim-to-None normalization -- otherwise a
+        # whitespace-only submission survives verbatim and silently breaks
+        # `COALESCE(description_es_manual, spi_latest.description_es)` on
+        # the catalog list's read side (see
+        # `parts_description_service._normalize_manual_name`'s docstring).
+        ref.description_es_manual = parts_description_service._normalize_manual_name(
+            payload.description_es_manual
+        )
 
     if payload.public_price is not None:
         catalog = await db.get(PartCatalog, factory_part_number)
@@ -2024,7 +2245,13 @@ async def replace_catalog_code(
         factory_part_number=new_code,
         um_part_number=existing_ref.um_part_number,
         description=payload.description.strip() if payload.description else existing_ref.description,
-        description_es_manual=payload.description_es_manual,
+        # Normalize BEFORE persisting (PR5 fix pass #9) -- same rationale as
+        # `update_catalog_item` above: this endpoint also writes
+        # `description_es_manual` directly, bypassing
+        # `parts_description_service.set_description_es`.
+        description_es_manual=parts_description_service._normalize_manual_name(
+            payload.description_es_manual
+        ),
         unit=existing_ref.unit,
         prev_codes=new_prev,
         # Carry over classification/pricing so replacing a factory code never
@@ -2081,6 +2308,227 @@ async def replace_catalog_code(
 
     await db.commit()
     return {"ok": True, "new_code": new_code}
+
+
+async def _compute_current_suggestion(
+    db: AsyncSession, ref: PartsReference, *, respect_dismissal: bool = False,
+) -> tuple[Optional[str], bool, Optional[str]]:
+    """Recomputes the unconfirmed-name suggestion for a SINGLE reference,
+    right now, server-side -- shared by the confirm endpoint's staleness
+    check (design D20) and the dismiss endpoint's active-suggestion guard
+    (PR5 fix pass finding #1). Fetches the raw per-row inputs (the exact
+    spi-latest hit, the alias hit) with at most two lightweight queries,
+    then DELEGATES the actual exact-then-alias precedence rule to
+    `_resolve_catalog_suggestion` (design D15/D16) instead of
+    reimplementing it (PR5 fix pass finding #2 -- this function used to be
+    an independent reimplementation of the same rule; now there is exactly
+    one place on the Python side that expresses it). Kept as a separate
+    query shape from `_list_catalog_impl` (not reused directly) because a
+    single-row lookup by primary key needs neither pagination nor the
+    6-join `_base_joins` chain.
+
+    `respect_dismissal=False` (confirm's use, the default): the suggested
+    TEXT is deterministic regardless of dismissal --
+    `_resolve_catalog_suggestion` itself still returns text for a
+    dismissed row (D20: dismiss "does NOT blank the displayed name"), so
+    confirm's staleness check always resolves with `dismissed_at=None` and
+    only reads the returned TEXT, never the flag.
+
+    `respect_dismissal=True` (dismiss's use): the "is there an active
+    suggestion to dismiss right now" check MUST honor the reference's
+    actual, current `suggestion_dismissed_at` -- an already-dismissed row
+    (or a row with no suggestion at all) has nothing left to dismiss.
+
+    Returns `(displayed_description_es, has_unconfirmed_suggestion,
+    suggestion_source_code)` -- the same 3-tuple shape
+    `_resolve_catalog_suggestion` returns.
+    """
+    manual = ref.description_es_manual
+    if manual and manual.strip():
+        return _resolve_catalog_suggestion(
+            manual=manual, coalesced_description_es=None, dismissed_at=None,
+            fpn=ref.factory_part_number,
+        )
+
+    exact_stmt = (
+        select(SparePartItem.description_es)
+        .where(SparePartItem.part_number == ref.factory_part_number)
+        .where(SparePartItem.description_es.isnot(None))
+        .where(SparePartItem.description_es != "")
+        .order_by(SparePartItem.created_at.asc())
+        .limit(1)
+    )
+    coalesced = (await db.execute(exact_stmt)).scalar_one_or_none()
+
+    alias_text: Optional[str] = None
+    alias_source_code: Optional[str] = None
+    if not coalesced:
+        # See `_resolve_catalog_suggestion`'s docstring for the accepted
+        # pre-existing-`prev_codes`-collision limitation this alias lookup
+        # inherits from PR1's `assert_prev_codes_free`.
+        prev_codes = parts_description_service._normalize_codes(ref.prev_codes)
+        if prev_codes:
+            alias_stmt = (
+                select(SparePartItem.part_number, SparePartItem.description_es)
+                .where(SparePartItem.part_number.in_(prev_codes))
+                .where(SparePartItem.description_es.isnot(None))
+                .where(SparePartItem.description_es != "")
+                .distinct(SparePartItem.part_number)
+                .order_by(SparePartItem.part_number, SparePartItem.created_at.asc())
+            )
+            alias_map = {
+                code: desc for code, desc in (await db.execute(alias_stmt)).all()
+            }
+            for code in prev_codes:
+                if code in alias_map:
+                    alias_text, alias_source_code = alias_map[code], code
+                    break
+
+    dismissed_at = ref.suggestion_dismissed_at if respect_dismissal else None
+    return _resolve_catalog_suggestion(
+        manual=manual,
+        coalesced_description_es=coalesced,
+        dismissed_at=dismissed_at,
+        fpn=ref.factory_part_number,
+        alias_text=alias_text,
+        alias_source_code=alias_source_code,
+    )
+
+
+@router.post("/admin/catalog-confirm-suggestion/{factory_part_number:path}", status_code=200)
+async def confirm_catalog_suggestion(
+    factory_part_number: str,
+    payload: ConfirmSuggestionRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Ratifies the unconfirmed-name suggestion currently shown for
+    `factory_part_number` as the official `description_es_manual`, through
+    the SAME shared write path (`set_description_es`) every other surface
+    in this change uses -- no parallel write path (design D19/D20).
+    Superadmin-only. Rejects 409 `SUGGESTION_STALE` (writer never called)
+    when the text the caller saw no longer matches what the server
+    recomputes right now -- the source row can change between render and
+    click. FOB-inert: `set_description_es` never touches pricing.
+
+    Wraps `_confirm_catalog_suggestion_impl` in the same log-then-clean-500
+    pattern `list_catalog` already uses in this file (PR5 fix pass finding
+    #4), so an unexpected failure is recorded with request context instead
+    of propagating as a bare unlogged traceback."""
+    try:
+        return await _confirm_catalog_suggestion_impl(factory_part_number, payload, db, current_user)
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception(
+            "confirm_catalog_suggestion failed: fpn=%r user=%s",
+            factory_part_number, getattr(current_user, "id", None),
+        )
+        raise HTTPException(status_code=500, detail="Error interno al confirmar la sugerencia")
+
+
+async def _confirm_catalog_suggestion_impl(
+    factory_part_number: str,
+    payload: ConfirmSuggestionRequest,
+    db: AsyncSession,
+    current_user,
+):
+    parts_description_service.assert_name_editor(current_user)
+
+    # Row lock (PR5 fix pass finding #3), mirroring
+    # `parts_description_service.assert_prev_codes_free`'s established
+    # `with_for_update()` pattern (PR1). Closes the narrow race where a
+    # concurrent manual edit via the inline editor commits between this
+    # read and `set_description_es`'s write below, which would otherwise
+    # silently lost-update-overwrite that edit with this confirm's text.
+    lock_stmt = (
+        select(PartsReference)
+        .where(PartsReference.factory_part_number == factory_part_number)
+        .with_for_update()
+    )
+    ref = (await db.execute(lock_stmt)).scalar_one_or_none()
+    if not ref:
+        raise HTTPException(status_code=404, detail="Referencia no encontrada")
+
+    current_text, _has_suggestion, _source_code = await _compute_current_suggestion(db, ref)
+    if current_text != payload.suggested_text:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "detail": "La sugerencia cambió, recargá la lista",
+                "code": "SUGGESTION_STALE",
+            },
+        )
+
+    await parts_description_service.set_description_es(
+        db,
+        part_number=factory_part_number,
+        value=payload.suggested_text,
+        model_applicable=None,
+        current_user=current_user,
+    )
+
+    await db.commit()
+    return {"ok": True}
+
+
+@router.post("/admin/catalog-dismiss-suggestion/{factory_part_number:path}", status_code=200)
+async def dismiss_catalog_suggestion(
+    factory_part_number: str,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Permanently hides the unconfirmed-name-suggestion badge for
+    `factory_part_number` (design D18/D20). Rejects 409
+    `NO_ACTIVE_SUGGESTION` (PR5 fix pass finding #1) when there is nothing
+    to dismiss right now -- either the row never had a suggestion or it was
+    already dismissed; there is no un-dismiss endpoint in this slice, so an
+    unconditional timestamp stamp here would otherwise be a permanent,
+    silent write with no guard. Does NOT touch `description_es_manual` or
+    any pricing column: the displayed name is unchanged, only the badge
+    disappears. The superadmin can still type the name through the
+    existing inline editor.
+
+    Wraps `_dismiss_catalog_suggestion_impl` in the same log-then-clean-500
+    pattern `list_catalog` already uses in this file (PR5 fix pass finding
+    #4)."""
+    try:
+        return await _dismiss_catalog_suggestion_impl(factory_part_number, db, current_user)
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception(
+            "dismiss_catalog_suggestion failed: fpn=%r user=%s",
+            factory_part_number, getattr(current_user, "id", None),
+        )
+        raise HTTPException(status_code=500, detail="Error interno al descartar la sugerencia")
+
+
+async def _dismiss_catalog_suggestion_impl(
+    factory_part_number: str, db: AsyncSession, current_user,
+):
+    parts_description_service.assert_name_editor(current_user)
+
+    ref = await db.get(PartsReference, factory_part_number)
+    if not ref:
+        raise HTTPException(status_code=404, detail="Referencia no encontrada")
+
+    _text, has_suggestion, _source_code = await _compute_current_suggestion(
+        db, ref, respect_dismissal=True,
+    )
+    if not has_suggestion:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "detail": "No hay una sugerencia activa para descartar",
+                "code": "NO_ACTIVE_SUGGESTION",
+            },
+        )
+
+    ref.suggestion_dismissed_at = datetime.utcnow()
+
+    await db.commit()
+    return {"ok": True}
 
 
 # ── Detección manual y revisión de cambios de código ─────────────────────────
