@@ -16,6 +16,15 @@ Covers:
     from `qty_in_packing`.
   - Both kinds of matches for the same query are merged under the correct
     lot rather than only one being returned.
+
+`sdd/parts-description-source-of-truth` PR4 (R5, design D11-D14): the
+ordered-item branch now issues ONE additional `resolve_names` query
+(right after the `SparePartItem` join, before the `ReconciliationResult`
+EXTRA join) to live-resolve `description_es` against the catalog's
+`description_es_manual` -- see `test_live_read_description_es.py
+::TestR5SearchSpareParts` for the dedicated manual-name-wins coverage.
+The EXTRA branch is explicitly NOT resolved (no catalog identity, D1/D22),
+so `test_pure_extra_reference_is_now_found` is unaffected.
 """
 from app.api.v1 import imports as imports_module
 from tests.conftest import make_test_client
@@ -34,6 +43,7 @@ def test_ordered_item_match_is_returned():
 
     fake_db = FakeAsyncSession(execute_queue=[
         [(item, lot)],  # SparePartItem join
+        [],             # resolve_names -- no PartsReference match, stored value stays
         [],             # ReconciliationResult EXTRA join
     ])
 
@@ -93,6 +103,7 @@ def test_ordered_item_and_extra_in_different_lots_both_returned_separately():
 
     fake_db = FakeAsyncSession(execute_queue=[
         [(item, lot_a)],
+        [],              # resolve_names -- no PartsReference match
         [(rr, lot_b)],
     ])
 

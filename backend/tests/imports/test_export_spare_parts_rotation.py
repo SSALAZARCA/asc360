@@ -8,6 +8,16 @@ lives on `PartsReference`, keyed by `factory_part_number`, not on
 `SparePartItem` itself, so this requires a second batched lookup joined by
 `part_number` -- same "one extra IN-query, not N+1" discipline
 `export_catalog_excel` already uses for its own `extra` dict.
+
+`sdd/parts-description-source-of-truth` PR4 (R4, design D11-D14) extended
+this SAME batched select to also carry `description_es_manual` -- the
+`PartsReference` query fixture below now queues a 3-tuple
+`(factory_part_number, rotation_class, description_es_manual)` instead of
+a 2-tuple. `DESCRIPCIÓN ES` now reflects the LIVE catalog name (manual
+wins over the stale stored value), not the frozen `SparePartItem
+.description_es` from import time -- see
+`test_live_read_description_es.py::TestR4SparePartsExport` for the
+dedicated manual-name-wins coverage.
 """
 import uuid
 from decimal import Decimal
@@ -74,7 +84,7 @@ class TestRotationColumn:
         lot.items = [_item(lot.id, part_number="4510A-ADAN-9000")]
         fake_db = FakeAsyncSession(execute_queue=[
             [lot],
-            [("4510A-ADAN-9000", "alta")],
+            [("4510A-ADAN-9000", "alta", None)],  # no manual name -> stored value stays
         ])
 
         with make_test_client(current_user=_superadmin(), fake_db_session=fake_db) as client:

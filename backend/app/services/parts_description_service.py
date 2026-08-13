@@ -34,8 +34,11 @@ This module also owns:
   collisions already in prod, only rejects newly-added ones.
 - `create_reference`: the safe historied-creation pattern lifted from
   `approve_review_task` (D5), reused by the not-yet-cataloged-code flow.
-- `resolve_names`: the exact-code batch resolver consumed by the live-read
-  conversion of the 6 read paths (R1-R6, D11-D14).
+- `resolve_names`: the exact-code batch resolver used by 2 of the 6
+  live-read paths (R2/R3, R5); the other 3 (R1, R4, R6) reimplement the same
+  filter rule inline instead of calling it, for performance -- see
+  `resolve_names`'s own docstring below for the full explanation and the
+  keep-in-sync warning.
 """
 import logging
 from typing import Iterable, Optional
@@ -226,11 +229,28 @@ async def create_reference(
 
 async def resolve_names(db: AsyncSession, part_numbers: Iterable[str]) -> dict[str, str]:
     """Batch-resolves `description_es_manual` for a set of `part_number`s,
-    exact-code only (no alias resolution -- D12), returning only non-empty
-    values. Consumed by the live-read conversion of R1-R6.
+    exact-code only (no alias resolution), returning only non-empty values
+    so a caller can safely do `resolved.get(code) or stored_value` and fall
+    back cleanly when there's no confirmed catalog name yet -- see
+    sdd/parts-description-source-of-truth design D12.
 
-    Not wired to any live endpoint yet -- intentionally unreferenced until
-    PR4 wires the live-read conversion (R1-R6, design D11-D14)."""
+    Called directly by only 2 of the 6 live-read paths this rule feeds:
+    `imports.py`'s `search_spare_parts` (R5) and `_fetch_enriched_reconciliation`
+    (R2/R3). The other 3 (`list_spare_part_items` / R1, `export_spare_parts`
+    / R4 in `imports.py`, and `list_backorders` / R6 in `imports_service.py`)
+    do NOT call this function -- each of them already runs a `PartsReference`
+    query for an unrelated column (`rotation_class`), so they reimplement
+    this exact same "batch-select PartsReference, keep only non-empty names"
+    logic inline, fused into that existing query, to avoid a second
+    round-trip. R2/R3 and R5 have no such existing query to fuse into, so
+    calling this shared function there costs the same one extra round-trip
+    either way.
+
+    IMPORTANT: this resolution rule now exists in 4 places (this function
+    plus 3 inline reimplementations). If the rule ever changes (e.g. the
+    fallback precedence, or which values count as "empty"), all 4 must be
+    updated together -- see the "keep in sync" comment at each of the 3
+    inline call sites (R1, R4, R6)."""
     codes = list({p for p in part_numbers if p})
     if not codes:
         return {}

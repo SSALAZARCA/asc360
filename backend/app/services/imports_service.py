@@ -2526,25 +2526,46 @@ async def list_backorders(
         )
         items_map = {i.id: i for i in items_result.scalars().all()}
 
-    # Enriquecer con rotation_class de parts_references
+    # Enriquecer con rotation_class de parts_references. The SAME batched
+    # select also carries `description_es_manual` so the confirmed-name
+    # resolution below is free -- no extra query -- see
+    # sdd/parts-description-source-of-truth design D11.
+    #
+    # NOTE: the "keep only non-empty names" filter below duplicates
+    # `parts_description_service.resolve_names`'s logic inline, purely to
+    # avoid the extra round-trip calling it here would cost. Keep both in
+    # sync if that filter rule ever changes.
     from app.models.parts_manual import PartsReference
     part_numbers = list({bo.part_number for bo in backorders if bo.part_number})
     rotation_map: dict = {}
+    name_map: dict = {}
     if part_numbers:
         refs_result = await db.execute(
-            select(PartsReference.factory_part_number, PartsReference.rotation_class)
+            select(
+                PartsReference.factory_part_number,
+                PartsReference.rotation_class,
+                PartsReference.description_es_manual,
+            )
             .where(PartsReference.factory_part_number.in_(part_numbers))
         )
-        rotation_map = {r.factory_part_number: r.rotation_class for r in refs_result.all()}
+        for r in refs_result.all():
+            rotation_map[r.factory_part_number] = r.rotation_class
+            if r.description_es_manual:
+                name_map[r.factory_part_number] = r.description_es_manual
 
     result = []
     for bo in backorders:
         sp = items_map.get(bo.spare_part_item_id)
+        # Manual catalog name wins over the stale stored value; falls back
+        # to the linked item's stored value when there's no confirmed name
+        # yet (plain `or`, not COALESCE) -- see
+        # sdd/parts-description-source-of-truth design D12.
+        stored_description_es = sp.description_es if sp else None
         d = {
             "id": bo.id,
             "spare_part_item_id": bo.spare_part_item_id,
             "part_number": bo.part_number,
-            "description_es": sp.description_es if sp else None,
+            "description_es": name_map.get(bo.part_number) or stored_description_es,
             "description": sp.description if sp else None,
             "model_applicable": sp.model_applicable if sp else None,
             "origin_pi": bo.origin_pi,

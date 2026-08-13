@@ -950,11 +950,17 @@ def _lots_map_entry(lots_map: dict, lot) -> dict:
     return lots_map[lid]
 
 
-def _append_ordered_item_matches(lots_map: dict, rows) -> None:
+def _append_ordered_item_matches(lots_map: dict, rows, name_map: dict) -> None:
     for item, lot in rows:
+        # Manual catalog name wins over the stale stored value; falls back
+        # to the stored `description_es` when there's no confirmed catalog
+        # name yet, so a manual correction nobody has made yet doesn't
+        # regress an already-decent stored name (plain `or`, not COALESCE)
+        # -- see sdd/parts-description-source-of-truth design D12.
+        description_es = name_map.get(item.part_number) or item.description_es
         _lots_map_entry(lots_map, lot)["items"].append({
             "part_number": item.part_number,
-            "description_es": item.description_es,
+            "description_es": description_es,
             "qty_ordered": item.qty_ordered,
             "qty_received": item.qty_received,
             "status": item.status,
@@ -994,7 +1000,30 @@ async def search_spare_parts(
         .where(SparePartItem.part_number.ilike(term))
         .order_by(SparePartLot.lot_identifier, SparePartItem.part_number)
     )
-    _append_ordered_item_matches(lots_map, (await db.execute(item_stmt)).all())
+    item_rows = (await db.execute(item_stmt)).all()
+    # Live-resolve the item branch's displayed name against the catalog's
+    # confirmed Spanish name -- EXTRA rows (no linked SparePartItem) have no
+    # catalog identity to resolve against, so they keep their own raw stored
+    # value instead (see `_append_extra_reconciliation_matches` below).
+    # Unlike R1/R4/R6 (which just add a column to a query the endpoint was
+    # ALREADY running), this call is a brand-new query added by this
+    # conversion with no existing fallback -- if it fails, degrade to an
+    # empty `name_map` rather than 500ing the whole search; every code then
+    # falls back to its stored `description_es` via the `or` in
+    # `_append_ordered_item_matches` below, exactly as if it were never
+    # confirmed in the catalog.
+    try:
+        name_map = await parts_description_service.resolve_names(
+            db, [item.part_number for item, _ in item_rows]
+        )
+    except Exception:
+        logger.warning(
+            "resolve_names failed while resolving spare-parts search names; "
+            "falling back to stored descriptions for this request",
+            exc_info=True,
+        )
+        name_map = {}
+    _append_ordered_item_matches(lots_map, item_rows, name_map)
 
     extra_stmt = (
         select(ReconciliationResult, SparePartLot)
@@ -1040,17 +1069,40 @@ async def list_spare_part_items(
     from app.models.parts_manual import PartsReference
     part_numbers = list({i.part_number for i in items})
     rotation_map: dict[str, str] = {}
+    # Reuses the SAME batched `PartsReference` select this endpoint already
+    # runs for `rotation_class`, adding `description_es_manual` as one more
+    # column so the confirmed-name lookup below is free -- no second
+    # round-trip to the DB -- see sdd/parts-description-source-of-truth
+    # design D11.
+    #
+    # NOTE: this "keep only non-empty names" filter below duplicates
+    # `parts_description_service.resolve_names`'s logic inline, purely to
+    # avoid the extra round-trip that calling it here would cost (it runs
+    # its own separate query). Keep both in sync if that filter rule ever
+    # changes.
+    name_map: dict[str, str] = {}
     if part_numbers:
         refs = (await db.execute(
-            select(PartsReference.factory_part_number, PartsReference.rotation_class)
+            select(
+                PartsReference.factory_part_number,
+                PartsReference.rotation_class,
+                PartsReference.description_es_manual,
+            )
             .where(PartsReference.factory_part_number.in_(part_numbers))
         )).all()
         rotation_map = {r.factory_part_number: r.rotation_class for r in refs if r.rotation_class}
+        name_map = {r.factory_part_number: r.description_es_manual for r in refs if r.description_es_manual}
 
     result = []
     for i in items:
         data = SparePartItemRead.model_validate(i)
         data.rotation_class = rotation_map.get(i.part_number)
+        # Manual catalog name wins over the stale stored value; falls back to
+        # the stored `description_es` when uncatalogued or blank -- plain
+        # `or`, not COALESCE, so a blank manual name degrades cleanly to the
+        # previous value instead of showing an empty field -- see
+        # sdd/parts-description-source-of-truth design D12.
+        data.description_es = name_map.get(i.part_number) or data.description_es
         result.append(data)
     return result
 
@@ -1271,10 +1323,12 @@ async def _apply_item_fields(
     if rr.spare_part_item_id:
         item = await db.get(SparePartItem, rr.spare_part_item_id)
         if item:
-            # description_es se delega al write path compartido (D1/D22):
-            # una fila con SparePartItem vinculado SÍ tiene identidad de
-            # catálogo (item.part_number), a diferencia de una fila EXTRA
-            # pura. Los demás campos siguen el setattr genérico.
+            # description_es se delega al write path compartido: una fila
+            # con SparePartItem vinculado SÍ tiene identidad de catálogo
+            # (item.part_number), a diferencia de una fila EXTRA pura, que
+            # guarda su propio valor local en cambio -- ver
+            # sdd/parts-description-source-of-truth design D1/D22. Los demás
+            # campos siguen el setattr genérico.
             for field in (item_fields - {"description_es"}) & set(update_data.keys()):
                 setattr(item, field, update_data[field])
             item.updated_at = datetime.utcnow()
@@ -1468,14 +1522,40 @@ async def _fetch_enriched_reconciliation(db: AsyncSession, lot_id: uuid.UUID) ->
         )).scalars().all()
         items_map = {i.id: i for i in sp_items}
 
+    # Live-resolve the linked-item rows' displayed name against the
+    # catalog's confirmed Spanish name. Pure EXTRA rows (spare_part_item_id
+    # IS NULL) have no catalog identity to resolve against, so they keep
+    # their own local stored value instead (see the `if sp else` branch
+    # below). Unlike R1/R4/R6 (which just add a column to a query the
+    # endpoint was ALREADY running), this call is a brand-new query added by
+    # this conversion with no existing fallback -- if it fails, degrade to
+    # an empty `name_map` rather than 500ing the whole reconciliation list;
+    # every linked row then falls back to its stored `description_es` via
+    # the `or` below, exactly as if it were never confirmed in the catalog.
+    try:
+        name_map = await parts_description_service.resolve_names(
+            db, [r.part_number for r in results if r.spare_part_item_id]
+        )
+    except Exception:
+        logger.warning(
+            "resolve_names failed while resolving reconciliation names; "
+            "falling back to stored descriptions for this request",
+            exc_info=True,
+        )
+        name_map = {}
+
     enriched = []
     for r in results:
         sp = items_map.get(r.spare_part_item_id)
         # Para EXTRAs puros (sin SparePartItem), usar los valores guardados en el propio resultado
+        stored_description_es = sp.description_es if sp else r.description_es
+        description_es = (
+            (name_map.get(r.part_number) or stored_description_es) if sp else stored_description_es
+        )
         enriched.append({
             "id": r.id, "lot_id": r.lot_id, "packing_list_id": r.packing_list_id,
             "spare_part_item_id": r.spare_part_item_id, "part_number": r.part_number,
-            "description_es": sp.description_es if sp else r.description_es,
+            "description_es": description_es,
             "model_applicable": sp.model_applicable if sp else r.model_applicable,
             "qty_ordered": r.qty_ordered, "qty_in_packing": r.qty_in_packing,
             "qty_physical": r.qty_physical,
@@ -1949,15 +2029,30 @@ async def export_spare_parts(
     # Rotation lives on `PartsReference` (Maestro de Partes), keyed by
     # `factory_part_number` -- not on `SparePartItem` itself. One batched
     # IN-query for every part number in this export, same "no N+1" discipline
-    # `export_catalog_excel` already uses for its own `extra` lookup.
+    # `export_catalog_excel` already uses for its own `extra` lookup. The
+    # SAME batched select also carries `description_es_manual` so the
+    # confirmed-name resolution below is free -- no extra query -- see
+    # sdd/parts-description-source-of-truth design D11.
+    #
+    # NOTE: the "keep only non-empty names" filter below duplicates
+    # `parts_description_service.resolve_names`'s logic inline, purely to
+    # avoid the extra round-trip calling it here would cost. Keep both in
+    # sync if that filter rule ever changes.
     part_numbers = {item.part_number for lot in lots for item in lot.items}
     rotation_by_part: dict[str, str] = {}
+    name_map: dict[str, str] = {}
     if part_numbers:
-        for fpn, rotation_class in (await db.execute(
-            select(PartsReference.factory_part_number, PartsReference.rotation_class)
+        for fpn, rotation_class, description_es_manual in (await db.execute(
+            select(
+                PartsReference.factory_part_number,
+                PartsReference.rotation_class,
+                PartsReference.description_es_manual,
+            )
             .where(PartsReference.factory_part_number.in_(part_numbers))
         )).all():
             rotation_by_part[fpn] = rotation_class
+            if description_es_manual:
+                name_map[fpn] = description_es_manual
 
     headers = [
         "LOTE (PI)", "PART NUMBER", "DESCRIPCIÓN ES", "DESCRIPCIÓN EN",
@@ -1968,10 +2063,15 @@ async def export_spare_parts(
     for lot in lots:
         for item in lot.items:
             rotation_class = rotation_by_part.get(item.part_number)
+            # Manual catalog name wins over the stale stored value; falls
+            # back to the stored value when there's no confirmed name yet
+            # (plain `or`, not COALESCE) -- see
+            # sdd/parts-description-source-of-truth design D12.
+            description_es = name_map.get(item.part_number) or item.description_es
             rows.append([
                 lot.lot_identifier,
                 item.part_number,
-                item.description_es,
+                description_es,
                 item.description,
                 item.model_applicable,
                 rotation_class.upper() if rotation_class else "",

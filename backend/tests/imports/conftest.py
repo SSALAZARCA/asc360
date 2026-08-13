@@ -162,7 +162,14 @@ def make_spare_part_item(
     status: str = "PENDING",
     unit_price: Optional[float] = None,
     fob_pi: Optional[float] = None,
+    description_es: Optional[str] = None,
+    created_at: Optional[datetime] = None,
 ) -> "SparePartItem":
+    # `created_at` has a Python-level `default=datetime.utcnow` on the model
+    # column, but that default only applies at INSERT/flush time, not at
+    # plain construction -- these tests never flush against a real DB, so
+    # `SparePartItemRead.created_at` (required, non-optional) would be
+    # `None` unless we set it explicitly here.
     from app.models.imports import SparePartItem
     item = SparePartItem(
         id=uuid.uuid4(),
@@ -174,6 +181,8 @@ def make_spare_part_item(
         status=status,
         unit_price=unit_price,
         fob_pi=fob_pi,
+        description_es=description_es,
+        created_at=created_at or datetime.utcnow(),
     )
     return item
 
@@ -210,7 +219,15 @@ def make_backorder(
     origin_pi: str,
     qty_pending: int,
     resolved: bool = False,
+    created_at: Optional[datetime] = None,
+    source: str = "reconciliation",
+    already_charged: bool = False,
 ) -> "Backorder":
+    # `created_at`/`source`/`already_charged` all have Python-level defaults
+    # on the model column or the `BackorderRead` schema, but neither applies
+    # at plain construction time (no flush against a real DB in these
+    # tests) -- set explicitly so `BackorderRead` (which requires
+    # `created_at: datetime`) validates.
     from app.models.imports import Backorder
     return Backorder(
         id=uuid.uuid4(),
@@ -220,6 +237,9 @@ def make_backorder(
         qty_pending=qty_pending,
         resolved=resolved,
         history=[],
+        created_at=created_at or datetime.utcnow(),
+        source=source,
+        already_charged=already_charged,
     )
 
 
