@@ -273,3 +273,25 @@ def test_query_param_filters_applied_to_the_single_query():
     where_sql = sql.split("WHERE", 1)[1]
     assert where_sql.count(" AND ") == 9
     assert where_sql.count("= true") == 4
+
+
+def test_distribuidor_id_filter_applied_to_the_single_query():
+    """`distribuidor_id` query param narrows the export's single query the
+    same way it narrows the list endpoint — Excel export must respect the
+    "filter by distributor" dropdown, not just the paginated list."""
+    distribuidor_id = uuid.uuid4()
+    fake_db = FakeAsyncSession(execute_queue=[[]])
+
+    with make_test_client(current_user=make_imports_editor(role="superadmin"), fake_db_session=fake_db) as client:
+        response = client.get(
+            "/api/v1/imports/moto-units/export",
+            params={"distribuidor_id": str(distribuidor_id)},
+        )
+
+    assert response.status_code == 200
+    stmt = fake_db.executed_statements[0]
+    sql = str(stmt.compile())
+    params = stmt.compile().params.values()
+
+    assert "empadronamiento_fisico_distribuidor_id" in sql
+    assert distribuidor_id in params

@@ -649,6 +649,7 @@ export default function MotocicletasTab({ userRole }) {
   const [filterEnviado, setFilterEnviado] = useState(''); // '', 'true', 'false'
   const [filterFacturado, setFilterFacturado] = useState(''); // '', 'true', 'false'
   const [filterCargadoRunt, setFilterCargadoRunt] = useState(''); // '', 'true', 'false'
+  const [filterDistribuidor, setFilterDistribuidor] = useState('');
 
   // DIM upload
   const [showDimUpload, setShowDimUpload] = useState(false);
@@ -675,6 +676,8 @@ export default function MotocicletasTab({ userRole }) {
   const [observations, setObservations] = useState([]);
   // Modelos de motocicletas
   const [modelOptions, setModelOptions] = useState([]);
+  // Distribuidores (empadronamiento físico)
+  const [distribuidorOptions, setDistribuidorOptions] = useState([]);
 
   const PAGE_SIZE = 50;
   const [exportingMotos, setExportingMotos] = useState(false);
@@ -692,6 +695,7 @@ export default function MotocicletasTab({ userRole }) {
       if (filterEnviado !== '') params.append('empadronamiento_fisico_enviado', filterEnviado);
       if (filterFacturado !== '') params.append('facturado', filterFacturado);
       if (filterCargadoRunt !== '') params.append('cargado_runt', filterCargadoRunt);
+      if (filterDistribuidor) params.append('distribuidor_id', filterDistribuidor);
       const res = await authFetch(`${getApiUrl()}/imports/moto-units/export?${params}`);
       if (!res.ok) return;
       const blob = await res.blob();
@@ -721,6 +725,7 @@ export default function MotocicletasTab({ userRole }) {
       if (filterEnviado !== '') params.append('empadronamiento_fisico_enviado', filterEnviado);
       if (filterFacturado !== '') params.append('facturado', filterFacturado);
       if (filterCargadoRunt !== '') params.append('cargado_runt', filterCargadoRunt);
+      if (filterDistribuidor) params.append('distribuidor_id', filterDistribuidor);
       const res = await authFetch(`${getApiUrl()}/imports/moto-units?${params}`);
       const data = await res.json();
       setUnits(data.items || []);
@@ -734,7 +739,7 @@ export default function MotocicletasTab({ userRole }) {
     } finally {
       setLoading(false);
     }
-  }, [page, filterPI, filterModel, filterVIN, filterEngine, filterCertificado, filterObservation, filterEnviado, filterFacturado, filterCargadoRunt]);
+  }, [page, filterPI, filterModel, filterVIN, filterEngine, filterCertificado, filterObservation, filterEnviado, filterFacturado, filterCargadoRunt, filterDistribuidor]);
 
   const fetchLocations = useCallback(async () => {
     try {
@@ -760,7 +765,15 @@ export default function MotocicletasTab({ userRole }) {
     } catch { setModelOptions([]); }
   }, []);
 
-  useEffect(() => { fetchUnits(); fetchLocations(); fetchObservations(); fetchModelOptions(); }, [fetchUnits, fetchLocations, fetchObservations, fetchModelOptions]);
+  const fetchDistribuidores = useCallback(async () => {
+    try {
+      const res = await authFetch(`${getApiUrl()}/imports/distribuidores-venta`);
+      const data = await res.json();
+      setDistribuidorOptions(Array.isArray(data) ? data : []);
+    } catch { setDistribuidorOptions([]); }
+  }, []);
+
+  useEffect(() => { fetchUnits(); fetchLocations(); fetchObservations(); fetchModelOptions(); fetchDistribuidores(); }, [fetchUnits, fetchLocations, fetchObservations, fetchModelOptions, fetchDistribuidores]);
 
   const handleDimUpload = async (file) => {
     setDimUploading(true);
@@ -1012,6 +1025,23 @@ export default function MotocicletasTab({ userRole }) {
           <option value="">Todos los modelos</option>
           {modelOptions.map(m => (
             <option key={m.id} value={m.modelo}>{m.modelo}</option>
+          ))}
+        </select>
+
+        {/* Distribuidor */}
+        <select
+          value={filterDistribuidor}
+          onChange={e => { setFilterDistribuidor(e.target.value); setPage(1); }}
+          style={{
+            padding: '6px 10px', borderRadius: '8px',
+            background: '#1a1a24', border: '1px solid rgba(255,255,255,0.08)',
+            color: filterDistribuidor === '' ? '#606075' : '#fff',
+            fontSize: '11px', outline: 'none',
+          }}
+        >
+          <option value="" style={{ background: '#1a1a24', color: '#fff' }}>Todos los distribuidores</option>
+          {distribuidorOptions.map(d => (
+            <option key={d.id} value={d.id} style={{ background: '#1a1a24', color: '#fff' }}>{d.name}</option>
           ))}
         </select>
 

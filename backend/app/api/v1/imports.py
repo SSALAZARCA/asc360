@@ -2641,6 +2641,7 @@ def _build_moto_unit_filters(
     empadronamiento_fisico_enviado: Optional[bool],
     facturado: Optional[bool],
     cargado_runt: Optional[bool],
+    distribuidor_id: Optional[uuid.UUID] = None,
 ) -> tuple[list, list]:
     """
     PURE: builds the moto-units WHERE-clause pair. `base_filters` (only
@@ -2673,6 +2674,8 @@ def _build_moto_unit_filters(
         filters.append(ShipmentMotoUnit.facturado == facturado)
     if cargado_runt is not None:
         filters.append(ShipmentMotoUnit.cargado_runt == cargado_runt)
+    if distribuidor_id is not None:
+        filters.append(ShipmentMotoUnit.empadronamiento_fisico_distribuidor_id == distribuidor_id)
 
     return base_filters, filters
 
@@ -2769,6 +2772,7 @@ async def list_all_moto_units(
     empadronamiento_fisico_enviado: Optional[bool] = None,
     facturado: Optional[bool] = None,
     cargado_runt: Optional[bool] = None,
+    distribuidor_id: Optional[uuid.UUID] = None,
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
@@ -2780,6 +2784,7 @@ async def list_all_moto_units(
     base_filters, filters = _build_moto_unit_filters(
         pi_number, model, vin, engine, certificado_generado,
         observation_id, empadronamiento_fisico_enviado, facturado, cargado_runt,
+        distribuidor_id,
     )
 
     # NOTE: `total`/`total_global` intentionally issue the SAME query twice —
@@ -2869,6 +2874,7 @@ async def export_moto_units(
     empadronamiento_fisico_enviado: Optional[bool] = None,
     facturado: Optional[bool] = None,
     cargado_runt: Optional[bool] = None,
+    distribuidor_id: Optional[uuid.UUID] = None,
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
@@ -2877,6 +2883,7 @@ async def export_moto_units(
     _base_filters, filters = _build_moto_unit_filters(
         pi_number, model, vin, engine, certificado_generado,
         observation_id, empadronamiento_fisico_enviado, facturado, cargado_runt,
+        distribuidor_id,
     )
 
     stmt = (

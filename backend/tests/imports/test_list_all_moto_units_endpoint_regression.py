@@ -317,3 +317,72 @@ def test_certificado_generado_filter_adds_an_extra_bound_param_on_scoped_total()
     assert response.status_code == 200
     assert "certificado_generado = false" not in sql_without
     assert "certificado_generado = false" in sql_with
+
+
+def test_distribuidor_id_filter_narrows_scoped_total_and_items_query():
+    """`distribuidor_id` query param, when set, adds a plain equality filter
+    (`ShipmentMotoUnit.empadronamiento_fisico_distribuidor_id ==
+    distribuidor_id`) to the scoped `total`/items query — this is the
+    "filter by distributor" dropdown on the Motocicletas tab, using
+    `empadronamiento_fisico_distribuidor_id` (the only per-unit distributor
+    field that exists today, set when the unit is physically sent for
+    empadronamiento)."""
+    distribuidor_id = uuid.uuid4()
+    fake_db = FakeAsyncSession(execute_queue=[[0], [0], [0], [0], [0], []])
+
+    with make_test_client(current_user=make_imports_editor(), fake_db_session=fake_db) as client:
+        response = client.get(
+            "/api/v1/imports/moto-units",
+            params={"distribuidor_id": str(distribuidor_id)},
+        )
+
+    assert response.status_code == 200
+    total_stmt = fake_db.executed_statements[0]
+    sql = str(total_stmt.compile())
+    params = total_stmt.compile().params.values()
+
+    assert "empadronamiento_fisico_distribuidor_id" in sql
+    assert distribuidor_id in params
+
+
+def test_distribuidor_id_filter_excludes_units_not_yet_sent():
+    """Plain SQL equality against a NULL column is never true — so units
+    with `empadronamiento_fisico_distribuidor_id IS NULL` (not yet marked
+    "enviado" for empadronamiento) are excluded whenever a specific
+    `distribuidor_id` filter is active. This is the explicitly accepted
+    product behavior: units not yet sent won't match any distributor
+    filter. Locked in here by asserting the generated clause is a plain
+    equality, not an `IS NULL`/`OR`-widened comparison."""
+    distribuidor_id = uuid.uuid4()
+    fake_db = FakeAsyncSession(execute_queue=[[0], [0], [0], [0], [0], []])
+
+    with make_test_client(current_user=make_imports_editor(), fake_db_session=fake_db) as client:
+        response = client.get(
+            "/api/v1/imports/moto-units",
+            params={"distribuidor_id": str(distribuidor_id)},
+        )
+
+    assert response.status_code == 200
+    total_stmt = fake_db.executed_statements[0]
+    sql = str(total_stmt.compile())
+    where_sql = sql.split("WHERE", 1)[1]
+    assert "empadronamiento_fisico_distribuidor_id =" in where_sql
+    assert "IS NULL" not in where_sql.upper()
+    assert " OR " not in where_sql.upper()
+
+
+def test_distribuidor_id_filter_absent_when_not_requested():
+    """No `distribuidor_id` param -> no distributor clause at all, matching
+    every other optional filter in this endpoint."""
+    fake_db = FakeAsyncSession(execute_queue=[[0], [0], [0], [0], [0], []])
+
+    with make_test_client(current_user=make_imports_editor(), fake_db_session=fake_db) as client:
+        response = client.get("/api/v1/imports/moto-units")
+
+    assert response.status_code == 200
+    total_stmt = fake_db.executed_statements[0]
+    sql = str(total_stmt.compile())
+    # The column is always present in the SELECT list (full-row subquery for
+    # COUNT); what must be absent is a WHERE-clause comparison on it.
+    where_sql = sql.split("WHERE", 1)[1]
+    assert "empadronamiento_fisico_distribuidor_id =" not in where_sql
