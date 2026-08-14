@@ -104,5 +104,31 @@ class VehicleService:
 
         return vehicle
 
+    async def delete_vehicle_by_plate(
+        self,
+        db: AsyncSession,
+        plate: str,
+        tenant_id: Optional[UUID] = None,
+    ) -> str:
+        """Elimina un vehículo por placa -- SOLO si no tiene
+        `service_orders`. Mecanismo de rollback (compensating
+        transaction) usado por el bot de Sonia: cuando la creación de la
+        moto tiene éxito pero la orden de servicio subsiguiente falla, el
+        bot llama a esto (vía `DELETE /vehicles/{plate}`) para deshacer la
+        moto recién creada y no dejar un `Vehicle` huérfano registrado con
+        cero órdenes.
+
+        Devuelve uno de `"deleted"` / `"not_found"` / `"has_orders"` -- el
+        endpoint traduce esto a 204 / 404 / 409 respectivamente.
+        """
+        clean_plate = "".join(str(plate).split()).upper()
+        vehicle = await self.repository.get_by_plate(db, clean_plate, tenant_id)
+        if not vehicle:
+            return "not_found"
+        if vehicle.service_orders:
+            return "has_orders"
+        await self.repository.delete_vehicle(db, vehicle)
+        return "deleted"
+
 
 vehicle_service = VehicleService()

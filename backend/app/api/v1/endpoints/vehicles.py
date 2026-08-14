@@ -147,6 +147,60 @@ async def update_vehicle_client(
     return vehicle.client
 
 
+@router.delete("/{plate}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_vehicle(
+    plate: str,
+    db: AsyncSession = Depends(get_db),
+    x_sonia_secret: Optional[str] = Header(None),
+    x_tenant_id: Optional[str] = Header(None),
+    current_user: Optional[CurrentUser] = Depends(get_optional_user),
+):
+    """Elimina una moto por placa -- mecanismo de rollback INTERNO del bot
+    de Sonia (compensating transaction para la recepción de motos nuevas),
+    NO una función de borrado administrativo general.
+
+    A diferencia de `GET /{plate}` y `PATCH /{plate}/client` (ambos
+    dual-auth: X-Sonia-Secret O JWT), este endpoint es EXCLUSIVAMENTE para
+    el bot -- `current_user` se acepta como parámetro (mismo shape de ruta
+    que el resto del archivo) pero DELIBERADAMENTE nunca participa en la
+    decisión de autorización. Un JWT de staff válido, incluso de
+    superadmin, NO es suficiente por sí solo: esto deshace la propia
+    transacción compensatoria del bot (borra un `Vehicle` que el bot
+    mismo acaba de crear segundos antes porque la orden que debía
+    seguirlo falló), no una feature de administración expuesta a
+    asesores.
+
+    Guardia de seguridad: solo borra si el vehículo tiene CERO
+    `service_orders` -- `Vehicle.service_orders` tiene
+    `cascade="all, delete-orphan"` (`app/models/vehicle.py:73`), así que
+    un DELETE sin esta guardia borraría en cascada historial de órdenes
+    real. Si tiene alguna orden, 409 en vez de proceder.
+    """
+    is_bot = verify_sonia_secret(x_sonia_secret, settings.SONIA_BOT_SECRET)
+    if not is_bot:
+        raise HTTPException(status_code=403, detail="Acceso no autorizado.")
+
+    tenant_uuid: Optional[UUID] = None
+    if x_tenant_id:
+        try:
+            tenant_uuid = UUID(x_tenant_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="X-Tenant-Id inválido.")
+
+    result = await vehicle_service.delete_vehicle_by_plate(db, plate, tenant_uuid)
+    if result == "not_found":
+        raise HTTPException(
+            status_code=404,
+            detail="Vehículo no encontrado o en servicio en otro taller.",
+        )
+    if result == "has_orders":
+        raise HTTPException(
+            status_code=409,
+            detail="No se puede eliminar: el vehículo ya tiene órdenes de servicio.",
+        )
+    return None
+
+
 @router.post("/", response_model=VehicleOut, status_code=status.HTTP_201_CREATED)
 async def create_or_update_vehicle(
     vehicle_in: VehicleCreate,

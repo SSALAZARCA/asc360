@@ -3,6 +3,7 @@ import json
 import asyncio
 import tempfile
 from datetime import datetime, timezone, timedelta
+from typing import Optional
 import httpx
 
 BOGOTA = timezone(timedelta(hours=-5))
@@ -213,7 +214,15 @@ async def update_client_data(plate: str, edits: dict) -> dict:
 async def create_user_and_vehicle(ocr_data: dict, plate: str, tenant_id: str = None, phone: str = None) -> dict:
     """
     Crea el usuario (cliente) y el vehículo en el backend usando los datos del OCR.
-    Se llama AL FINAL del flujo de recepción, cuando ya se tiene toda la información.
+
+    Se llama DESDE `background_create_order`, como primer paso dentro del
+    mismo try/except que crea la orden de servicio (para moto nueva, sin
+    `vehicle_id` conocido) -- NO como un paso separado y previo. Esto
+    permite deshacer (DELETE) el vehículo recién creado aquí si la
+    creación de la orden subsiguiente falla, evitando dejar un `Vehicle`
+    huérfano registrado con cero órdenes (ver `background_create_order` y
+    `_rollback_new_vehicle`).
+
     Las keys del dict ocr_data deben estar alineadas con el schema del backend:
       placa, vin, propietario, numero_documento_propietario, marca, linea, modelo, color
     """
@@ -268,6 +277,55 @@ async def create_user_and_vehicle(ocr_data: dict, plate: str, tenant_id: str = N
 
     return None
 
+async def _create_vehicle_for_background_order(
+    new_vehicle_data: dict, tenant_id: str, plate: str, bot, chat_id: int, user_role: str
+) -> Optional[dict]:
+    """Paso 0 de `background_create_order` para moto nueva: crea usuario+
+    vehículo y, si falla, ya le avisa al usuario y devuelve `None` (el
+    llamador solo necesita chequear el resultado, no repetir el manejo
+    de error)."""
+    new_veh = await create_user_and_vehicle(
+        new_vehicle_data.get("ocr_data", {}),
+        new_vehicle_data.get("plate", plate),
+        tenant_id=tenant_id,
+        phone=new_vehicle_data.get("phone"),
+    )
+    if not new_veh:
+        await bot.send_message(
+            chat_id=chat_id,
+            text="⚠️ No pude registrar el vehículo en el sistema. Verificá que el taller esté correctamente configurado e intentá de nuevo.",
+            reply_markup=get_main_keyboard(user_role),
+        )
+    return new_veh
+
+
+async def _rollback_new_vehicle(plate: str, tenant_id: str) -> None:
+    """Deshace (DELETE /vehicles/{plate}) un vehículo que ESTA MISMA
+    llamada de `background_create_order` acaba de crear, cuando la orden
+    de servicio subsiguiente falla — evita dejar un `Vehicle` huérfano
+    registrado con cero órdenes (la causa raíz del bug donde Sonia le
+    decía a un usuario "¡Esta moto ya ha estado en el taller!" para una
+    moto sin ninguna orden real).
+
+    Solo se debe llamar para vehículos creados EN ESTA misma llamada —
+    nunca para deshacer un vehículo preexistente y legítimamente
+    conocido solo porque un intento de orden sobre él falló.
+
+    Loguea el resultado del propio rollback por separado: si el DELETE
+    falla, eso NO debe enmascarar ni reemplazar el mensaje de error
+    original de creación de la orden que ya se le mostró al usuario.
+    """
+    headers = {"X-Tenant-ID": str(tenant_id), "x-sonia-secret": SONIA_BOT_SECRET}
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            res = await client.delete(f"{BACKEND_URL}/vehicles/{plate}", headers=headers)
+        if res.status_code == 204:
+            logger.info(f"[ROLLBACK] Vehículo {plate} eliminado tras fallo de creación de orden.")
+        else:
+            logger.error(f"[ROLLBACK] No se pudo eliminar el vehículo {plate} ({res.status_code}): {res.text[:200]}")
+    except Exception as e:
+        logger.error(f"[ROLLBACK] Excepción eliminando vehículo {plate}: {e}")
+
 async def bg_upload_media_to_order(evidence_items: list, order_id: str, tenant_id: str):
     """Sube fotos y observaciones de evidencia al backend (POST /orders/{id}/photos)."""
     if not evidence_items:
@@ -307,17 +365,46 @@ async def bg_upload_media_to_order(evidence_items: list, order_id: str, tenant_i
         except Exception as e:
             logger.error(f"[EVIDENCIA] Excepción subiendo evidencia: {e}")
 
-async def background_create_order(payload: dict, tenant_id: str, evidence_items: list, bot, chat_id: int, user_role: str, plate: str = ""):
-    """Tarea no bloqueante que crea la orden y genera el PDF de Recepción."""
+async def background_create_order(payload: dict, tenant_id: str, evidence_items: list, bot, chat_id: int, user_role: str, plate: str = "", new_vehicle_data: dict = None):
+    """Tarea no bloqueante que crea la orden y genera el PDF de Recepción.
+
+    Cuando `new_vehicle_data` no es `None` (moto nueva, sin `vehicle_id`
+    conocido de antemano), esta tarea TAMBIÉN crea el vehículo (usuario +
+    moto) como primer paso, dentro del MISMO try/except que crea la
+    orden — root-cause fix del bug de vehículos huérfanos: antes, la
+    creación del vehículo pasaba de forma síncrona y separada en
+    `_build_and_dispatch_order`, así que si esta tarea (la orden) fallaba
+    después, el `Vehicle` ya committeado quedaba registrado para siempre
+    con cero órdenes. Ahora, si la creación del vehículo falla, la orden
+    ni se intenta; y si el vehículo se crea pero la orden subsiguiente
+    falla, el vehículo recién creado se deshace (`_rollback_new_vehicle`)
+    para no dejar ese huérfano. Nunca se hace rollback de un
+    `vehicle_id` que ya venía conocido ANTES de esta llamada — esta
+    protección no cubre un crash/reinicio del propio proceso del bot a
+    mitad de tarea (se necesitaría una cola de trabajos persistente,
+    fuera de alcance).
+    """
     headers = {
         "X-Tenant-ID": str(tenant_id),
         "x-sonia-secret": SONIA_BOT_SECRET,
     }
     # La placa viene separada del payload (el payload de la orden no tiene 'plate')
     plate_label = plate.upper() if plate else "MOTO"
+    vehicle_created_this_call = False
 
     async with httpx.AsyncClient(timeout=30.0) as client:
         try:
+            # 0. Moto nueva: crear usuario+vehículo PRIMERO, dentro del
+            #    mismo try/except que la orden (compensating transaction).
+            if new_vehicle_data is not None:
+                new_veh = await _create_vehicle_for_background_order(
+                    new_vehicle_data, tenant_id, plate, bot, chat_id, user_role
+                )
+                if not new_veh:
+                    return
+                payload["vehicle_id"] = new_veh["id"]
+                vehicle_created_this_call = True
+
             # 1. Crear la Orden
             res_order = await client.post(f"{BACKEND_URL}/orders/", json=payload, headers=headers)
             logger.info(f"[ORDEN] POST /orders/ → {res_order.status_code}: {res_order.text[:200]}")
@@ -396,6 +483,8 @@ async def background_create_order(payload: dict, tenant_id: str, evidence_items:
                 )
             else:
                 logger.error(f"[ORDEN] Error {res_order.status_code}: {res_order.text}")
+                if vehicle_created_this_call:
+                    await _rollback_new_vehicle(plate, tenant_id)
                 await bot.send_message(
                     chat_id=chat_id,
                     text=f"❌ Error al crear la orden ({res_order.status_code}): {res_order.text[:200]}",
@@ -403,6 +492,8 @@ async def background_create_order(payload: dict, tenant_id: str, evidence_items:
                 )
         except Exception as e:
             logger.error(f"[ORDEN] Excepción en background_create_order: {e}", exc_info=True)
+            if vehicle_created_this_call:
+                await _rollback_new_vehicle(plate, tenant_id)
             await bot.send_message(
                 chat_id=chat_id,
                 text="❌ Ocurrió un error de conexión al crear la orden. Intentá de nuevo.",
@@ -484,18 +575,17 @@ async def _build_and_dispatch_order(context: ContextTypes.DEFAULT_TYPE, bot, cha
         )
         return False
 
+    # Moto nueva (sin `vid` conocido): la creación del usuario+vehículo ya
+    # NO pasa acá de forma síncrona. Se hace DENTRO de
+    # `background_create_order`, como primer paso del mismo try/except
+    # que crea la orden -- así, si la orden subsiguiente falla, el
+    # vehículo recién creado se puede deshacer (rollback) en vez de
+    # quedar huérfano registrado con cero órdenes. Solo armamos acá los
+    # datos que esa creación va a necesitar.
+    new_vehicle_data = None
     if not vid:
-        logger.info(f"[RECEPCIÓN] Moto nueva {plate} — creando usuario y vehículo con teléfono {client_phone}")
-        new_veh = await create_user_and_vehicle(ocr_data, plate, tenant_id=tenant_id, phone=client_phone)
-        if new_veh:
-            vid = new_veh["id"]
-            context.user_data['vehicle_id'] = vid
-        else:
-            await bot.send_message(
-                chat_id=chat_id,
-                text="⚠️ No pude registrar el vehículo en el sistema. Verificá que el taller esté correctamente configurado e intentá de nuevo."
-            )
-            return False
+        logger.info(f"[RECEPCIÓN] Moto nueva {plate} — se creará usuario y vehículo en background con teléfono {client_phone}")
+        new_vehicle_data = {"ocr_data": ocr_data, "plate": plate, "phone": client_phone}
 
     payload = {
         "tenant_id": tenant_id,
@@ -524,7 +614,10 @@ async def _build_and_dispatch_order(context: ContextTypes.DEFAULT_TYPE, bot, cha
     context.user_data.pop('general_observations', None)
 
     context.application.create_task(
-        background_create_order(payload, tenant_id, evidence_items, bot, chat_id, user_role, plate=plate)
+        background_create_order(
+            payload, tenant_id, evidence_items, bot, chat_id, user_role,
+            plate=plate, new_vehicle_data=new_vehicle_data,
+        )
     )
     return True
 
@@ -727,12 +820,26 @@ async def handle_ocr_confirmation(update: Update, context: ContextTypes.DEFAULT_
                 marca  = v_info.get('brand') or ocr_data.get('marca') or 'UM'
                 modelo = v_info.get('model') or ocr_data.get('linea') or ''
 
+                # Un Vehicle puede existir sin que ninguna recepción se haya
+                # completado nunca (ej. un intento anterior que creó el
+                # vehículo pero falló al crear la Orden en segundo plano).
+                # "¡Esta moto ya ha estado en el taller!" solo es cierto si
+                # hay al menos una orden real en el historial que ya manda
+                # el backend (`service_orders_summary`) -- no alcanza con
+                # que el registro del vehículo exista.
+                has_prior_orders = bool(v_info.get("service_orders_summary"))
+                saludo = (
+                    "¡Esta moto ya ha estado en el taller! 🏍️"
+                    if has_prior_orders
+                    else "Esta moto ya está registrada en el sistema, pero todavía no tiene ninguna recepción completa. 🏍️"
+                )
+
                 client_info = v_info.get("client")
                 if client_info:
                     # Moto con cliente vinculado — mostramos sus datos y pedimos confirmación
                     context.user_data['client_edits'] = {}
                     txt = (
-                        f"¡Esta moto ya ha estado en el taller! 🏍️\n"
+                        f"{saludo}\n"
                         f"*{marca} {modelo}*\n\n"
                         f"{_build_client_summary(client_info)}\n"
                         f"¿Procedemos con la recepción?"
@@ -746,7 +853,7 @@ async def handle_ocr_confirmation(update: Update, context: ContextTypes.DEFAULT_
 
                 # Sin cliente vinculado aún — comportamiento histórico, sin cambios
                 txt = (
-                    f"¡Esta moto ya ha estado en el taller! 🏍️\n"
+                    f"{saludo}\n"
                     f"*{marca} {modelo}*\n\n"
                     f"¿Procedemos con la recepción?"
                 )

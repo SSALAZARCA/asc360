@@ -211,4 +211,21 @@ class VehicleRepository(BaseRepository[Vehicle, VehicleCreate, VehicleUpdate]):
         )
         return result.scalars().first()
 
+    async def delete_vehicle(self, db: AsyncSession, vehicle: Vehicle) -> None:
+        """Elimina físicamente un `Vehicle` ya cargado (ej. por
+        `get_by_plate`). Usado por el mecanismo de rollback del bot de
+        Sonia: cuando la creación de la moto tiene éxito pero la orden de
+        servicio subsiguiente falla, la moto recién creada se deshace para
+        no dejar un `Vehicle` huérfano sin ninguna orden.
+
+        El llamador (`vehicle_service.delete_vehicle_by_plate`) es
+        responsable de verificar que el vehículo no tenga
+        `service_orders` ANTES de invocar este método -- `Vehicle.
+        service_orders` tiene `cascade="all, delete-orphan"`
+        (`app/models/vehicle.py`), así que un DELETE sobre un vehículo con
+        órdenes reales las borraría en cascada. Este método no repite esa
+        verificación, solo ejecuta el DELETE."""
+        await db.delete(vehicle)
+        await db.flush()
+
 vehicle_repository = VehicleRepository(Vehicle)
