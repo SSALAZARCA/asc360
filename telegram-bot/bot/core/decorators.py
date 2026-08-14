@@ -84,7 +84,12 @@ def role_required(allowed_roles=None):
 
 
 CANCEL_PATTERN = re.compile(
-    r'(?i)\b(cancelar|cancela|cancelo|cancelalo|anular|anula|abortar|no quiero|detener|salir|ya no|parar|para|quiero parar|olvida|olvidalo|olvidar|dejalo|deja|para ya|basta|terminar|stop)\b'
+    # "para", "deja", "parar" y "ya no" se sacaron de acá: son palabras muy
+    # comunes en descripciones de motivo de ingreso ("la moto se para sola",
+    # "ya no arranca", "dejala revisando") y disparaban una cancelación falsa
+    # apenas el cliente describía el problema por audio o texto. Las frases
+    # compuestas ("para ya", "quiero parar") sí quedan -- son específicas.
+    r'(?i)\b(cancelar|cancela|cancelo|cancelalo|anular|anula|abortar|no quiero|detener|salir|quiero parar|olvida|olvidalo|olvidar|para ya|basta|terminar|stop)\b'
 )
 
 async def check_cancel_intent(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str) -> bool:
