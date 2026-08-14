@@ -32,13 +32,14 @@ def _admin_current_user() -> MagicMock:
     return u
 
 
-def _existing_client(identification: str = "123456789") -> MagicMock:
+def _existing_client(identification: str = "123456789", email=None) -> MagicMock:
     client = MagicMock()
     client.id = "existing-client-id"
     client.role = Role.client
     client.identification = identification
     client.name = "Cliente Original"
     client.phone = "3000000000"
+    client.email = email
     return client
 
 
@@ -108,3 +109,79 @@ async def test_create_user_without_identification_skips_identification_lookup():
     db.execute.assert_not_called()
     db.add.assert_called_once()
     db.commit.assert_awaited_once()
+
+
+# sdd/reception-email-notification Phase 7 (design ADR 8, bug found during
+# design): the dedup-return path above returns the EXISTING row without
+# ever applying the submitted payload -- so a "new client" who is really
+# an existing client-by-cedula had their freshly-captured email silently
+# discarded. Fix: backfill ONLY when the stored email is empty/None; NEVER
+# overwrite a non-empty stored email with a request-body value (BR1, and a
+# security constraint -- a request-body value must never be able to
+# silently redirect where another client's PDF goes).
+class TestDedupEmailBackfill:
+    async def test_backfills_empty_email_from_submitted_payload(self):
+        existing = _existing_client("123456789", email=None)
+
+        db = AsyncMock(spec=AsyncSession)
+        execute_result = MagicMock()
+        execute_result.scalar_one_or_none = MagicMock(return_value=existing)
+        db.execute = AsyncMock(return_value=execute_result)
+        db.add = MagicMock()
+
+        payload = UserCreate(
+            name="Nombre Leído Por OCR",
+            role=Role.client,
+            identification="123456789",
+            email="nuevo@example.com",
+        )
+
+        result = await create_user(payload, db, None, _admin_current_user())
+
+        assert result is existing
+        assert existing.email == "nuevo@example.com"
+        db.flush.assert_awaited_once()
+
+    async def test_never_overwrites_a_non_empty_stored_email(self):
+        existing = _existing_client("123456789", email="original@example.com")
+
+        db = AsyncMock(spec=AsyncSession)
+        execute_result = MagicMock()
+        execute_result.scalar_one_or_none = MagicMock(return_value=existing)
+        db.execute = AsyncMock(return_value=execute_result)
+        db.add = MagicMock()
+
+        payload = UserCreate(
+            name="Nombre Leído Por OCR",
+            role=Role.client,
+            identification="123456789",
+            email="atacante@example.com",
+        )
+
+        result = await create_user(payload, db, None, _admin_current_user())
+
+        assert result is existing
+        assert existing.email == "original@example.com"
+        db.flush.assert_not_awaited()
+
+    async def test_empty_email_stays_empty_when_payload_has_no_email(self):
+        existing = _existing_client("123456789", email=None)
+
+        db = AsyncMock(spec=AsyncSession)
+        execute_result = MagicMock()
+        execute_result.scalar_one_or_none = MagicMock(return_value=existing)
+        db.execute = AsyncMock(return_value=execute_result)
+        db.add = MagicMock()
+
+        payload = UserCreate(
+            name="Nombre Leído Por OCR",
+            role=Role.client,
+            identification="123456789",
+        )
+
+        # Must not raise.
+        result = await create_user(payload, db, None, _admin_current_user())
+
+        assert result is existing
+        assert existing.email is None
+        db.flush.assert_not_awaited()

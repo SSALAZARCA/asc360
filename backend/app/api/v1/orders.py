@@ -1,6 +1,6 @@
 import logging
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status, UploadFile, File, Form
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, status, UploadFile, File, Form
 from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,6 +25,7 @@ from app.schemas.order import (
     OrderPlateResolution,
 )
 from app.services.pdf_service import generate_and_upload_reception_pdf, upload_file_to_minio
+from app.services.reception_email_dispatch import dispatch_reception_email
 from app.services.warranty_validation import ensure_order_date_after_delivery
 from app.api.deps import get_current_user, get_optional_user, CurrentUser
 from app.core.security import verify_sonia_secret
@@ -46,6 +47,78 @@ async def _is_otp_required(db: AsyncSession) -> bool:
     return (record.value == "true") if record else True
 
 
+def _build_reception_pdf_context(
+    *,
+    order_id: str,
+    service_type: str,
+    reception,
+    vehicle,
+    client,
+    tenant,
+    extra_order_fields: Optional[dict] = None,
+    no_client_label: str = "N/A",
+):
+    """Arma los 5 diccionarios (order/reception/vehicle/client/tenant) que
+    alimenta `generate_and_upload_reception_pdf`. Extraído porque
+    `create_service_order`, `verify_otp` y `bypass_otp` construían el mismo
+    bloque a mano, 3 veces -- un bug real (`client_data["identification"]`
+    leyendo `client.telegram_id` en vez de `client.identification`) vivió en
+    las 3 copias hasta corregirse, mientras `download_exit_order_pdf` (el
+    4to sitio hermano) siempre tuvo el campo correcto. Sigue el mismo
+    patrón que `_build_users_workbook` en `endpoints/users.py`: función pura,
+    testeable sin DB/HTTP.
+
+    `reception`, `vehicle`, `client` y `tenant` aceptan tanto objetos ORM
+    como el schema `order_in.reception` de `create_service_order` -- solo
+    se leen atributos, y cualquiera de los 4 puede ser `None` (los 3 call
+    sites reales lo cubren en algún momento: recepción sin vehículo/cliente
+    aún vinculado, o la orden aún sin fila de recepción).
+
+    `extra_order_fields` cubre los campos de `order_data` que varían por
+    caller (`bypass_at`/`bypass_by_name` en creación sin OTP y en
+    `bypass_otp`, `accepted_at`/`accepted_phone` en `verify_otp`) sin que
+    este helper necesite conocerlos por nombre. `no_client_label` cubre la
+    única otra diferencia real entre los 3 sitios: `create_service_order`
+    usa "Cliente Pendiente" cuando la orden aún no tiene cliente vinculado;
+    `verify_otp`/`bypass_otp` usan "N/A" como el resto de los campos.
+    """
+    order_data = {"id": order_id, "service_type": service_type}
+    if extra_order_fields:
+        order_data.update(extra_order_fields)
+
+    reception_data = {
+        "mileage_km": float(reception.mileage_km) if reception else 0,
+        "gas_level": reception.gas_level if reception else "",
+        "customer_notes": reception.customer_notes if reception else "",
+        "warranty_warnings": reception.warranty_warnings if reception else "",
+        "intake_answers": reception.intake_answers or [] if reception else [],
+        "accessories": reception.accessories or [] if reception else [],
+        "general_observations": reception.general_observations if reception else None,
+        "damage_photos_urls": reception.damage_photos_urls or [] if reception else [],
+    }
+    vehicle_data = {
+        "model": vehicle.model if vehicle else "Desconocido",
+        "plate": vehicle.plate if vehicle else "N/A",
+        "vin": vehicle.vin if vehicle else "N/A",
+        "motor": getattr(vehicle, "engine_number", None),
+        "color": vehicle.color if vehicle else None,
+    }
+    client_data = {
+        "full_name": client.name if client else no_client_label,
+        "identification": client.identification if client else "N/A",
+        "email": client.email if client else None,
+        "phone": client.phone if client else None,
+    }
+    tenant_data = {
+        "name": tenant.name if tenant else "UM Colombia",
+        "nit": tenant.nit if tenant else "",
+        "phone": tenant.phone if tenant else "",
+        "city": tenant.ciudad if tenant else "",
+    }
+
+    return order_data, reception_data, vehicle_data, client_data, tenant_data
+
+
 def forbid_distribuidor(current_user: CurrentUser) -> None:
     """Inverso de `distributor_deliveries.require_distribuidor`: el rol
     Distribuidor (`parts_dealer`) queda restringido en el frontend a
@@ -65,6 +138,7 @@ async def create_service_order(
     db: AsyncSession = Depends(get_db),
     x_sonia_secret: Optional[str] = Header(None),
     current_user: Optional[CurrentUser] = Depends(get_optional_user),
+    background_tasks: BackgroundTasks = None,
 ):
     is_bot = verify_sonia_secret(x_sonia_secret, app_settings.SONIA_BOT_SECRET)
     if not is_bot and current_user is None:
@@ -180,46 +254,50 @@ async def create_service_order(
         db.add(client_obj)
 
     # Pre-empacar datos como diccionarios simulando el DTO interno
-    order_data = {"id": str(new_order.id), "service_type": order_in.service_type.value}
+    extra_order_fields = None
     if not otp_required:
-        order_data["bypass_at"] = now.strftime("%Y-%m-%d %H:%M")
-        order_data["bypass_by_name"] = OTP_DISABLED_BY_NAME
-    reception_data = {
-        "mileage_km": order_in.reception.mileage_km,
-        "gas_level": order_in.reception.gas_level,
-        "customer_notes": order_in.reception.customer_notes,
-        "warranty_warnings": order_in.reception.warranty_warnings,
-        "intake_answers": order_in.reception.intake_answers or [],
-        "accessories": order_in.reception.accessories or [],
-        "general_observations": order_in.reception.general_observations,
-        "damage_photos_urls": order_in.reception.damage_photos_urls or [],
-    }
-    vehicle_data = {
-        "model": vehicle_obj.model if vehicle_obj else "Desconocido",
-        "plate": vehicle_obj.plate if vehicle_obj else "N/A",
-        "vin": vehicle_obj.vin if vehicle_obj else "N/A",
-        "motor": getattr(vehicle_obj, "engine_number", None),
-        "color": vehicle_obj.color if vehicle_obj else None,
-    }
-    client_data = {
-        "full_name": client_obj.name if client_obj else "Cliente Pendiente",
-        "identification": client_obj.telegram_id if client_obj else "N/A",
-        "email": client_obj.email if client_obj else None,
-        "phone": client_obj.phone if client_obj else None,
-    }
-    tenant_data = {
-        "name": tenant_obj.name if tenant_obj else "UM Colombia",
-        "nit": tenant_obj.nit if tenant_obj else "",
-        "phone": tenant_obj.phone if tenant_obj else "",
-        "city": tenant_obj.ciudad if tenant_obj else "",
-    }
+        extra_order_fields = {
+            "bypass_at": now.strftime("%Y-%m-%d %H:%M"),
+            "bypass_by_name": OTP_DISABLED_BY_NAME,
+        }
+    order_data, reception_data, vehicle_data, client_data, tenant_data = _build_reception_pdf_context(
+        order_id=str(new_order.id),
+        service_type=order_in.service_type.value,
+        reception=order_in.reception,
+        vehicle=vehicle_obj,
+        client=client_obj,
+        tenant=tenant_obj,
+        extra_order_fields=extra_order_fields,
+        no_client_label="Cliente Pendiente",
+    )
 
     # 4. Generación asíncrona del PDF con WeasyPrint subida a MinIO
     pdf_url = await generate_and_upload_reception_pdf(order_data, reception_data, vehicle_data, client_data, tenant_data)
     new_reception.reception_pdf_url = pdf_url
 
     await db.commit()
-    
+
+    # 4.1 Envío en segundo plano del PDF de recepción por email
+    # (sdd/reception-email-notification, design ADR 2/ADR 5/ADR 6). Dispara
+    # SOLO en la creación inicial de la recepción (BR4) -- nunca en los
+    # puntos de regeneración de PDF (`orders.py` OTP/bypass más abajo,
+    # `historical_order_service.py`). `background_tasks` puede ser `None`
+    # en llamadas directas (tests, mismo precedente que
+    # `imports.py:1418`'s `run_detection_bg`), y `client_obj.email` puede
+    # ser `None`/vacío -- BR5 exige silencio total en ese caso, así que la
+    # tarea ni se agenda. El kill-switch (`RECEPTION_EMAIL_ENABLED`) se
+    # evalúa DENTRO de `email_service`, no aquí (ADR 5, un único gate).
+    if background_tasks is not None and client_obj and client_obj.email:
+        background_tasks.add_task(
+            dispatch_reception_email,
+            order_id=str(new_order.id),
+            plate=vehicle_data["plate"],
+            tenant_id=order_in.tenant_id,
+            recipient=client_obj.email,
+            client_name=client_obj.name,
+            pdf_url=pdf_url,
+        )
+
     # 5. Auto-registro en la Hoja de Vida del Vehículo
     try:
         from app.models.vehicle_lifecycle import VehicleLifecycleEvent, LifecycleEventType
@@ -236,8 +314,7 @@ async def create_service_order(
         db.add(lifecycle_event)
         await db.commit()
     except Exception as e:
-        import logging
-        logging.getLogger(__name__).error(f"Error registrando evento en hoja de vida: {e}")
+        logger.error(f"Error registrando evento en hoja de vida ({type(e).__name__})")
     
     stmt = (
         select(ServiceOrder)
@@ -800,8 +877,7 @@ async def update_order_status(
             await db.commit()
 
     except Exception as e:
-        import logging
-        logging.getLogger(__name__).error(f"Error auto-evento lifecycle en status update: {e}")
+        logger.error(f"Error auto-evento lifecycle en status update ({type(e).__name__})")
 
     # Recargar con relaciones para el retorno
     query = (
@@ -1002,8 +1078,7 @@ async def add_work_log(
         )
         db.add(nota)
     except Exception as e:
-        import logging
-        logging.getLogger(__name__).error(f"Error creando NOTA_TECNICA: {e}")
+        logger.error(f"Error creando NOTA_TECNICA ({type(e).__name__})")
 
     await db.commit()
     await db.refresh(work_log)
@@ -1084,8 +1159,7 @@ async def add_work_log_photos(
         )
         db.add(nota)
     except Exception as e:
-        import logging
-        logging.getLogger(__name__).error(f"Error creando NOTA_TECNICA: {e}")
+        logger.error(f"Error creando NOTA_TECNICA ({type(e).__name__})")
 
     await db.commit()
     await db.refresh(work_log)
@@ -1973,41 +2047,18 @@ async def verify_otp(
         vehicle = order.vehicle
         client  = order.client
         tenant_otp = await db.get(Tenant, order.tenant_id)
-        order_data = {
-            "id": str(order.id),
-            "service_type": order.service_type.value,
-            "accepted_at": now.strftime("%Y-%m-%d %H:%M"),
-            "accepted_phone": masked_phone,
-        }
-        reception_data = {
-            "mileage_km": float(reception.mileage_km) if reception else 0,
-            "gas_level": reception.gas_level if reception else "",
-            "customer_notes": reception.customer_notes if reception else "",
-            "warranty_warnings": reception.warranty_warnings if reception else "",
-            "intake_answers": reception.intake_answers or [] if reception else [],
-            "accessories": reception.accessories or [] if reception else [],
-            "general_observations": reception.general_observations if reception else None,
-            "damage_photos_urls": reception.damage_photos_urls or [] if reception else [],
-        }
-        vehicle_data = {
-            "model": vehicle.model if vehicle else "Desconocido",
-            "plate": vehicle.plate if vehicle else "N/A",
-            "vin": vehicle.vin if vehicle else "N/A",
-            "motor": getattr(vehicle, "engine_number", None),
-            "color": vehicle.color if vehicle else None,
-        }
-        client_data = {
-            "full_name": client.name if client else "N/A",
-            "identification": client.telegram_id if client else "N/A",
-            "email": client.email if client else None,
-            "phone": client.phone if client else None,
-        }
-        tenant_data_otp = {
-            "name": tenant_otp.name if tenant_otp else "UM Colombia",
-            "nit": tenant_otp.nit if tenant_otp else "",
-            "phone": tenant_otp.phone if tenant_otp else "",
-            "city": tenant_otp.ciudad if tenant_otp else "",
-        }
+        order_data, reception_data, vehicle_data, client_data, tenant_data_otp = _build_reception_pdf_context(
+            order_id=str(order.id),
+            service_type=order.service_type.value,
+            reception=reception,
+            vehicle=vehicle,
+            client=client,
+            tenant=tenant_otp,
+            extra_order_fields={
+                "accepted_at": now.strftime("%Y-%m-%d %H:%M"),
+                "accepted_phone": masked_phone,
+            },
+        )
         new_pdf_url = await generate_and_upload_reception_pdf(
             order_data, reception_data, vehicle_data, client_data, tenant_data_otp
         )
@@ -2016,8 +2067,7 @@ async def verify_otp(
             db.add(reception)
             await db.commit()
     except Exception as e:
-        import logging
-        logging.getLogger(__name__).error(f"Error regenerando PDF tras OTP: {e}")
+        logger.error(f"Error regenerando PDF tras OTP ({type(e).__name__})")
 
     return {
         "message": "Acta aceptada correctamente",
@@ -2130,41 +2180,18 @@ async def bypass_otp(
         vehicle = order.vehicle
         client  = order.client
         tenant_bypass = await db.get(Tenant, order.tenant_id)
-        order_data = {
-            "id": str(order.id),
-            "service_type": order.service_type.value,
-            "bypass_at": now.strftime("%Y-%m-%d %H:%M"),
-            "bypass_by_name": authorizer_name,
-        }
-        reception_data = {
-            "mileage_km": float(reception.mileage_km) if reception else 0,
-            "gas_level": reception.gas_level if reception else "",
-            "customer_notes": reception.customer_notes if reception else "",
-            "warranty_warnings": reception.warranty_warnings if reception else "",
-            "intake_answers": reception.intake_answers or [] if reception else [],
-            "accessories": reception.accessories or [] if reception else [],
-            "general_observations": reception.general_observations if reception else None,
-            "damage_photos_urls": reception.damage_photos_urls or [] if reception else [],
-        }
-        vehicle_data = {
-            "model": vehicle.model if vehicle else "Desconocido",
-            "plate": vehicle.plate if vehicle else "N/A",
-            "vin": vehicle.vin if vehicle else "N/A",
-            "motor": getattr(vehicle, "engine_number", None),
-            "color": vehicle.color if vehicle else None,
-        }
-        client_data = {
-            "full_name": client.name if client else "N/A",
-            "identification": client.telegram_id if client else "N/A",
-            "email": client.email if client else None,
-            "phone": client.phone if client else None,
-        }
-        tenant_data_bypass = {
-            "name": tenant_bypass.name if tenant_bypass else "UM Colombia",
-            "nit": tenant_bypass.nit if tenant_bypass else "",
-            "phone": tenant_bypass.phone if tenant_bypass else "",
-            "city": tenant_bypass.ciudad if tenant_bypass else "",
-        }
+        order_data, reception_data, vehicle_data, client_data, tenant_data_bypass = _build_reception_pdf_context(
+            order_id=str(order.id),
+            service_type=order.service_type.value,
+            reception=reception,
+            vehicle=vehicle,
+            client=client,
+            tenant=tenant_bypass,
+            extra_order_fields={
+                "bypass_at": now.strftime("%Y-%m-%d %H:%M"),
+                "bypass_by_name": authorizer_name,
+            },
+        )
         new_pdf_url = await generate_and_upload_reception_pdf(
             order_data, reception_data, vehicle_data, client_data, tenant_data_bypass
         )
@@ -2173,8 +2200,7 @@ async def bypass_otp(
             db.add(reception)
             await db.commit()
     except Exception as e:
-        import logging
-        logging.getLogger(__name__).error(f"Error regenerando PDF tras bypass OTP: {e}")
+        logger.error(f"Error regenerando PDF tras bypass OTP ({type(e).__name__})")
 
     return {
         "message": f"Orden autorizada sin OTP por {authorizer_name}",

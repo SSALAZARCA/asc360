@@ -86,6 +86,20 @@ async def create_user(
         )
         existing_client = (await db.execute(stmt)).scalar_one_or_none()
         if existing_client:
+            # sdd/reception-email-notification Phase 7 (design ADR 8, bug
+            # found during design): this dedup path used to return the
+            # existing row WITHOUT ever applying the submitted payload, so
+            # a "new client" who is really an existing client-by-cedula
+            # had their freshly-captured email silently discarded.
+            # Backfill ONLY when the stored email is empty/None; NEVER
+            # overwrite a non-empty stored email with a request-body value
+            # (BR1 -- also a security constraint: a request-body value
+            # must never be able to silently redirect where another
+            # client's PDF goes).
+            if user_in.email and not (existing_client.email or "").strip():
+                existing_client.email = user_in.email
+                db.add(existing_client)
+                await db.flush()
             return existing_client
 
     user_data = user_in.model_dump(exclude={"password"})
