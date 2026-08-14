@@ -153,3 +153,61 @@ async def notify_claim_conflict(
                 "notify_claim_conflict: telegram send failed (%s)",
                 type(exc).__name__,
             )
+
+
+def _email_failure_message(*, order_id, plate: str, tenant_name: Optional[str]) -> str:
+    """sdd/reception-email-notification Phase 4 (BR9): order id, plate,
+    and taller ONLY -- never the recipient address, credentials, or the
+    presigned PDF URL. Same restriction applies to any log line for the
+    failure (see `dispatch_reception_email`, which never logs the raw
+    exception either)."""
+    taller = tenant_name or "taller no identificado"
+    return (
+        "⚠️ No se pudo enviar el email de recepción\n"
+        f"Orden: {order_id}\n"
+        f"Placa: {plate}\n"
+        f"Taller: {taller}"
+    )
+
+
+async def notify_reception_email_failure(
+    db: AsyncSession,
+    *,
+    order_id,
+    plate: str,
+    tenant_id,
+    tenant_name: Optional[str],
+) -> None:
+    """Best-effort Telegram alert for a failed reception-PDF email send
+    (BR7): the order's taller active `jefe_taller`(s), plus every active
+    superadmin -- same fan-out and per-recipient isolation as
+    `notify_claim_conflict` above, reusing the same recipient-resolution
+    helpers and send primitive as-is (design explicitly rejects
+    refactoring `notify_claim_conflict` for this -- no test file covered
+    it before this PR, and extracting shared logic for ~6 duplicated
+    lines was judged unjustified risk under strict TDD).
+
+    Never raises (BR8): a failure alert that itself fails must never
+    become a failed order. Every failure mode -- resolving recipients,
+    or sending to any single recipient -- is caught and logged (type
+    name only, no PII, see `_email_failure_message`)."""
+    try:
+        holder_ids = await _get_holding_tenant_telegram_ids(db, tenant_id)
+        superadmin_ids = await _get_superadmin_telegram_ids(db)
+    except Exception as exc:
+        logger.error(
+            "notify_reception_email_failure: failed to resolve recipients (%s)",
+            type(exc).__name__,
+        )
+        return
+
+    message = _email_failure_message(order_id=order_id, plate=plate, tenant_name=tenant_name)
+
+    for chat_id in [*holder_ids, *superadmin_ids]:
+        try:
+            await _send_telegram_message(chat_id, message)
+        except Exception as exc:
+            logger.error(
+                "notify_reception_email_failure: telegram send failed (%s)",
+                type(exc).__name__,
+            )

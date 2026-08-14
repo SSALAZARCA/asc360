@@ -1,5 +1,5 @@
-from pydantic import BaseModel, ConfigDict
-from typing import Optional
+from pydantic import BaseModel, ConfigDict, EmailStr
+from typing import Any, List, Optional
 from uuid import UUID
 
 class VehicleBase(BaseModel):
@@ -23,8 +23,6 @@ class VehicleCreate(VehicleBase):
 class VehicleUpdate(VehicleBase):
     plate: Optional[str] = None
 
-from typing import Optional, Any, List
-
 
 class VehicleClientOut(BaseModel):
     """sdd/distributor-vehicle-delivery PR5 (design-dual-channel ADR 19):
@@ -44,10 +42,14 @@ class ClientEditIn(BaseModel):
     """sdd/distributor-vehicle-delivery PR5 (design-dual-channel ADR 20):
     input for `PATCH /vehicles/{plate}/client`. All fields optional --
     the endpoint applies only what's actually submitted
-    (`exclude_unset`)."""
+    (`exclude_unset`).
+
+    sdd/reception-email-notification (ADR 7): `email` is `EmailStr` so a
+    malformed address is rejected at capture time (BR3), not silently
+    stored and only discovered when the reception send fails."""
     name: Optional[str] = None
     phone: Optional[str] = None
-    email: Optional[str] = None
+    email: Optional[EmailStr] = None
     address: Optional[str] = None
 
 

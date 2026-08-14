@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, EmailStr
 from typing import Optional
 from uuid import UUID
 
@@ -22,6 +22,11 @@ class UserCreate(UserBase):
     # inserting a new one (service reception "isNew" flow). See
     # `create_user`'s identification lookup.
     identification: Optional[str] = None
+    # sdd/reception-email-notification (ADR 7): overridden here only, NOT
+    # on `UserBase` -- `UserBase` also backs `UserOut`/admin reads, where
+    # retroactive strictness could 422 rows that already exist with a
+    # malformed/legacy email value. Only the creation path validates.
+    email: Optional[EmailStr] = None
 
 # Para actualizar
 class UserUpdate(BaseModel):

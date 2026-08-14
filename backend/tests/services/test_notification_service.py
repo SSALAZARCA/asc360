@@ -243,3 +243,118 @@ class TestTokenNeverLeaksOnFailure:
         # this just pins that the message never grew one by accident.
         for forbidden in ("phone", "client_id", "order_id", "cliente"):
             assert forbidden not in message.lower()
+
+
+# sdd/reception-email-notification Phase 4: `notify_reception_email_failure`
+# reuses `_get_holding_tenant_telegram_ids`/`_get_superadmin_telegram_ids`
+# and `_send_telegram_message` exactly as `notify_claim_conflict` does above
+# -- same fan-out, same per-recipient isolation, same recipient-resolution
+# failure handling. Only the message shape (BR9: order id, plate, taller --
+# never recipient address, credentials, or PDF URL) differs.
+class TestNotifyReceptionEmailFailureRecipients:
+    async def test_alert_reaches_taller_jefe_and_every_superadmin(self, monkeypatch):
+        tenant_id = uuid.uuid4()
+        jefe = make_user(Role.jefe_taller, telegram_id="111", tenant_id=tenant_id)
+        superadmin = make_user(Role.superadmin, telegram_id="333", tenant_id=None)
+        db = FakeNotificationSession(holder_users=[jefe], superadmin_users=[superadmin])
+
+        sent = []
+
+        async def _spy(chat_id, text):
+            sent.append(chat_id)
+
+        monkeypatch.setattr(svc, "_send_telegram_message", _spy)
+
+        await svc.notify_reception_email_failure(
+            db, order_id="order-1", plate="ABC123", tenant_id=tenant_id, tenant_name="Taller B"
+        )
+
+        assert sent == ["111", "333"]
+
+    async def test_no_active_jefe_taller_still_alerts_superadmins(self, monkeypatch):
+        tenant_id = uuid.uuid4()
+        superadmin = make_user(Role.superadmin, telegram_id="333", tenant_id=None)
+        db = FakeNotificationSession(holder_users=[], superadmin_users=[superadmin])
+
+        sent = []
+
+        async def _spy(chat_id, text):
+            sent.append(chat_id)
+
+        monkeypatch.setattr(svc, "_send_telegram_message", _spy)
+
+        # Must not raise even with zero jefe_taller recipients.
+        await svc.notify_reception_email_failure(
+            db, order_id="order-1", plate="ABC123", tenant_id=tenant_id, tenant_name="Taller B"
+        )
+
+        assert sent == ["333"]
+
+
+class TestNotifyReceptionEmailFailureNeverPropagates:
+    async def test_one_recipient_failing_does_not_stop_the_others_or_raise(self, monkeypatch):
+        tenant_id = uuid.uuid4()
+        jefe = make_user(Role.jefe_taller, telegram_id="111", tenant_id=tenant_id)
+        superadmin = make_user(Role.superadmin, telegram_id="222", tenant_id=None)
+        db = FakeNotificationSession(holder_users=[jefe], superadmin_users=[superadmin])
+
+        attempted = []
+
+        async def _flaky(chat_id, text):
+            attempted.append(chat_id)
+            if chat_id == "111":
+                raise httpx.TimeoutException("boom")
+
+        monkeypatch.setattr(svc, "_send_telegram_message", _flaky)
+
+        # Must not raise.
+        await svc.notify_reception_email_failure(
+            db, order_id="order-1", plate="ABC123", tenant_id=tenant_id, tenant_name="Taller B"
+        )
+
+        assert attempted == ["111", "222"]
+
+    async def test_recipient_resolution_failure_returns_quietly(self):
+        class _ExplodingSession:
+            async def execute(self, stmt):
+                raise RuntimeError("db exploded")
+
+        # Must not raise.
+        await svc.notify_reception_email_failure(
+            _ExplodingSession(), order_id="order-1", plate="ABC123", tenant_id=uuid.uuid4(), tenant_name="Taller B"
+        )
+
+
+class TestNotifyReceptionEmailFailureMessageContent:
+    def test_message_contains_order_plate_taller_and_nothing_sensitive(self):
+        message = svc._email_failure_message(
+            order_id="order-1", plate="ABC123", tenant_name="Taller B"
+        )
+
+        assert "order-1" in message
+        assert "ABC123" in message
+        assert "Taller B" in message
+
+        # BR9: no recipient address, no presigned PDF URL, no credential.
+        for forbidden in ("@", "http://", "https://", "password", "token", "secret"):
+            assert forbidden not in message.lower()
+
+    async def test_fired_alert_payload_carries_no_sensitive_data(self, monkeypatch):
+        tenant_id = uuid.uuid4()
+        jefe = make_user(Role.jefe_taller, telegram_id="111", tenant_id=tenant_id)
+        db = FakeNotificationSession(holder_users=[jefe], superadmin_users=[])
+
+        captured = {}
+
+        async def _spy(chat_id, text):
+            captured["text"] = text
+
+        monkeypatch.setattr(svc, "_send_telegram_message", _spy)
+
+        await svc.notify_reception_email_failure(
+            db, order_id="order-1", plate="ABC123", tenant_id=tenant_id, tenant_name="Taller B"
+        )
+
+        text = captured["text"].lower()
+        for forbidden in ("@", "http://", "https://", "password", "token", "secret"):
+            assert forbidden not in text

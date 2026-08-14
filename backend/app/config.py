@@ -28,6 +28,16 @@ class Settings(BaseSettings):
     # Entorno — controla comportamiento de docs y debug
     ENVIRONMENT: str = "development"
 
+    # Email de recepción (sdd/reception-email-notification) — apagado por
+    # default hasta que se provisionen las credenciales SMTP en Coolify.
+    RECEPTION_EMAIL_ENABLED: bool = False
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM: str = ""
+    SMTP_STARTTLS: bool = True
+
     @property
     def allowed_origins_list(self) -> list:
         return [o.strip() for o in self.ALLOWED_ORIGINS.split(",") if o.strip()]
