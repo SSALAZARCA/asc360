@@ -102,6 +102,15 @@ async function typeAndEnter(text) {
   fireEvent.keyDown(box, { key: 'Enter', code: 'Enter' });
 }
 
+// sdd/reception-email-notification: the new-client path now always asks
+// for an optional email before the vehicle form (design ADR 6). Skip it
+// via the "Sin email" chip -- unrelated to VIN-master authority, which is
+// what this file locks down.
+async function skipEmailStep() {
+  await waitFor(() => screen.getByText(/email del cliente/i));
+  fireEvent.click(screen.getByRole('button', { name: /sin email/i }));
+}
+
 // Drives an OCR "tarjeta de propiedad" photo through to the new-vehicle
 // form, mirroring `reception-new-client-identification-dedup.test.jsx`'s
 // established pattern. `numero_documento_propietario` is always included so
@@ -121,6 +130,8 @@ async function uploadDocPhotoAndReachVehicleForm(container, ocrFields) {
 
   await waitFor(() => screen.getByText(/moto nueva/i));
   await typeAndEnter('3001234567');
+
+  await skipEmailStep();
 
   await waitFor(() => screen.getByText(/completá los datos del vehículo/i));
 }
@@ -206,6 +217,7 @@ describe('TgReception — manual VIN input (onBlur): master now overrides existi
     await typeAndEnter('3001234567');
     await waitFor(() => screen.getByText(/cédula del cliente/i));
     await typeAndEnter('123456789');
+    await skipEmailStep();
     await waitFor(() => screen.getByText(/completá los datos del vehículo nuevo/i));
 
     // Staff already typed something manually before the VIN lookup resolves.
@@ -234,6 +246,7 @@ describe('TgReception — manual VIN input (onBlur): master now overrides existi
     await typeAndEnter('3001234567');
     await waitFor(() => screen.getByText(/cédula del cliente/i));
     await typeAndEnter('123456789');
+    await skipEmailStep();
     await waitFor(() => screen.getByText(/completá los datos del vehículo nuevo/i));
 
     fireEvent.change(screen.getByPlaceholderText(/Renegade 200, NKD 125/i), { target: { value: 'Modelo Provisional' } });

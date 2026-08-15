@@ -107,6 +107,16 @@ async function typeAndEnter(text) {
   fireEvent.keyDown(box, { key: 'Enter', code: 'Enter' });
 }
 
+// sdd/reception-email-notification: the new-client path now always asks
+// for an optional email before the vehicle form (design ADR 6). Skip it
+// via the "Sin email" chip -- these tests aren't about the email capture
+// itself (see test_bot_miniapp_copy_parity.py / the reception-email-*
+// jest coverage for that).
+async function skipEmailStep() {
+  await waitFor(() => screen.getByText(/email del cliente/i));
+  fireEvent.click(screen.getByRole('button', { name: /sin email/i }));
+}
+
 // Fills the minimal required field (model) on the new-vehicle form and
 // continues -- the catalog is mocked empty, so it's the free-text fallback.
 async function fillVehicleFormAndContinue() {
@@ -162,6 +172,8 @@ describe('TgReception — new-client identification capture (moto nueva)', () =>
     await waitFor(() => screen.getByText(/cédula del cliente/i));
     await typeAndEnter('123456789');
 
+    await skipEmailStep();
+
     await waitFor(() => screen.getByText(/completá los datos del vehículo nuevo/i));
     await fillVehicleFormAndContinue();
 
@@ -196,6 +208,8 @@ describe('TgReception — new-client identification capture (moto nueva)', () =>
 
     await waitFor(() => screen.getByText(/moto nueva/i));
     await typeAndEnter('3001234567');
+
+    await skipEmailStep();
 
     // Must skip straight to the vehicle form -- no cedula prompt.
     await waitFor(() => screen.getByText(/revisá y completá los datos del vehículo/i));

@@ -143,6 +143,15 @@ describe('TgReception — Colombian plate-format check (typed/dictated entry)', 
 });
 
 describe('TgReception — plate-format check on the OCR path', () => {
+  // sdd/reception-email-notification: the new-client path now always asks
+  // for an optional email before the vehicle form (design ADR 6). Skip it
+  // via the "Sin email" chip -- unrelated to plate-format checking, which
+  // is what this file locks down.
+  async function skipEmailStep() {
+    await waitFor(() => screen.getByText(/email del cliente/i));
+    fireEvent.click(screen.getByRole('button', { name: /sin email/i }));
+  }
+
   async function uploadDocPhoto(container, ocrFields) {
     extractDocumentResponse = makeResponse(200, {
       propietario: 'Carlos Pérez', numero_documento_propietario: '999888777',
@@ -173,6 +182,7 @@ describe('TgReception — plate-format check on the OCR path', () => {
     await typeAndEnter('ABC12D');
     await waitFor(() => screen.getByText(/moto nueva/i));
     await typeAndEnter('3001234567');
+    await skipEmailStep();
     await waitFor(() => screen.getByText(/completá los datos del vehículo/i));
     expect(screen.getByPlaceholderText('UM').value).toBe('UM');
     expect(screen.getByPlaceholderText(/Renegade 200, NKD 125/i).value).toBe('DSR 150');
@@ -197,6 +207,7 @@ describe('TgReception — plate-format check on the OCR path', () => {
 
     await waitFor(() => screen.getByText(/moto nueva/i));
     await typeAndEnter('3001234567');
+    await skipEmailStep();
     await waitFor(() => screen.getByText(/completá los datos del vehículo/i));
     // VIN-master data (the OTHER fix, from the previous commit) still wins
     // over the OCR text, even though this plate went through the extra

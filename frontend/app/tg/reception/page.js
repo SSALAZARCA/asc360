@@ -17,6 +17,7 @@ const STEP = {
   CONFIRMING_RETURNING_CLIENT: 'CONFIRMING_RETURNING_CLIENT',
   SELECTING_CLIENT_FIELD:      'SELECTING_CLIENT_FIELD',
   EDITING_CLIENT_FIELD:        'EDITING_CLIENT_FIELD',
+  ASKING_CLIENT_EMAIL:         'ASKING_CLIENT_EMAIL',
   ASKING_PHONE:      'ASKING_PHONE',
   ASKING_CEDULA:     'ASKING_CEDULA',
   NEW_VEHICLE_FORM:  'NEW_VEHICLE_FORM',
@@ -74,6 +75,18 @@ const CLIENT_FIELDS = [
 ];
 const CLIENT_FIELD_LABELS = Object.fromEntries(CLIENT_FIELDS);
 
+// sdd/reception-email-notification (design ADR 6): copia normativa del paso
+// de captura de email -- mirrors telegram-bot/bot/handlers/reception.py's
+// EMAIL_PROMPT/EMAIL_INVALID/EMAIL_SKIP_LABEL/EMAIL_OK/EMAIL_RE verbatim.
+// The bot is canonical, same precedent as CLIENT_FIELDS above. A
+// byte-for-byte parity test (backend/tests/reception_email/
+// test_bot_miniapp_copy_parity.py) fails if either file drifts.
+const EMAIL_PROMPT = '¿Me das el *email del cliente*? Le mandamos el comprobante de recepción en PDF. Si no tiene, tocá *Sin email*.';
+const EMAIL_INVALID = 'Ese email no parece válido. ¿Me lo escribís de nuevo? O tocá *Sin email*.';
+const EMAIL_SKIP_LABEL = 'Sin email';
+const EMAIL_OK = 'Email *{email}* registrado. ✅';
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 function buildClientSummary(client) {
   let lines = '👤 *Datos del cliente registrado:*\n';
   CLIENT_FIELDS.forEach(([key, label]) => {
@@ -130,6 +143,19 @@ export default function TgReception() {
   const [clientIdentification, setClientIdentification] = useState('');
   const [clientEdits, setClientEdits] = useState({});
   const [editingClientField, setEditingClientField] = useState(null);
+  // sdd/reception-email-notification: email opcional capturado en
+  // STEP.ASKING_CLIENT_EMAIL. `newClientEmail` viaja al POST /users/ para
+  // cliente nuevo; `pendingEmailPlate` distingue el camino (null = nuevo,
+  // placa = retornante -> PATCH directo) igual que el bot (`plate` param
+  // de `_ask_email_or_continue`).
+  const [newClientEmail, setNewClientEmail] = useState('');
+  const [pendingEmailPlate, setPendingEmailPlate] = useState(null);
+  // Qué paso sigue después del gate de email: STEP.KM para cliente
+  // retornante (mirrors the bot exactly -- there's no extra step there),
+  // STEP.NEW_VEHICLE_FORM para cliente nuevo (la Mini App, a diferencia
+  // del bot, todavía necesita el formulario de datos del vehículo antes
+  // de KM -- el bot difiere esa creación al background).
+  const [emailGateNext, setEmailGateNext] = useState(STEP.KM);
   const [formData,    setFormData]    = useState({
     plate: '', km: '', gas: '', notes: '', motivos: [], serviceType: 'regular',
     accessories: [], observations: '', intakeAnswers: [], pdfUrl: null,
@@ -156,6 +182,7 @@ export default function TgReception() {
     const draft = {
       step, ocrData, vehicleId, isNew, newVeh, clientPhone, clientIdentification, formData,
       clientEdits, editingClientField, pendingPlateCheck,
+      newClientEmail, pendingEmailPlate, emailGateNext,
       vehicleData: vehicleData
         ? { plate: vehicleData.plate, brand: vehicleData.brand, model: vehicleData.model, year: vehicleData.year, id: vehicleData.id, client_id: vehicleData.client_id }
         : null,
@@ -193,6 +220,9 @@ export default function TgReception() {
           setClientIdentification(d.clientIdentification || '');
           setClientEdits(d.clientEdits || {});
           setEditingClientField(d.editingClientField || null);
+          setNewClientEmail(d.newClientEmail || '');
+          setPendingEmailPlate(d.pendingEmailPlate ?? null);
+          setEmailGateNext(d.emailGateNext || STEP.KM);
           setFormData(d.formData || { plate: '', km: '', gas: '', notes: '', motivos: [], serviceType: 'regular', accessories: [], observations: '', intakeAnswers: [], pdfUrl: null });
           setEvidenceItems(d.evidenceItems || []);
           setIntakeQuestions(d.intakeQuestions || []);
@@ -267,6 +297,7 @@ export default function TgReception() {
     setNewVeh({ brand: 'UM', model: '', year: '', color: '', vin: '' });
     setVinLookupStatus('idle');
     setClientPhone(''); setClientIdentification(''); setClientEdits({}); setEditingClientField(null);
+    setNewClientEmail(''); setPendingEmailPlate(null); setEmailGateNext(STEP.KM);
     setEvidenceItems([]); setPendingPhoto(null);
     setIntakeQuestions([]); setIntakeIdx(0);
     setFormData({ plate: '', km: '', gas: '', notes: '', motivos: [], serviceType: 'regular', accessories: [], observations: '', intakeAnswers: [], pdfUrl: null });
@@ -421,6 +452,78 @@ export default function TgReception() {
     setStep(STEP.KM);
   }, [pushUser, pushBot]);
 
+  // ── STEP.ASKING_CLIENT_EMAIL gate (design ADR 6) ──────────────────────────
+  // Mirrors the bot's `_ask_email_or_continue` (telegram-bot/bot/handlers/
+  // reception.py) field-for-field: `client=null` -> cliente nuevo, siempre
+  // se pregunta (no hay registro previo del que leer un email); `client`
+  // con `email` vacío/null -> cliente retornante sin email, se pregunta una
+  // sola vez (BR1). `plate` decide dónde persiste la respuesta capturada:
+  // `null` = cliente nuevo (viaja en el POST /users/ body), una placa =
+  // cliente retornante (PATCH /vehicles/{plate}/client directo, igual que
+  // el resto de clientEdits). `nextStep` es a dónde seguir cuando no hace
+  // falta preguntar (o después de responder): STEP.KM para retornante --
+  // idéntico al bot -- o STEP.NEW_VEHICLE_FORM para cliente nuevo, ya que
+  // acá (a diferencia del bot) todavía falta el formulario del vehículo
+  // antes de KM.
+  const proceedAfterEmailGate = useCallback((nextStep) => {
+    if (nextStep === STEP.NEW_VEHICLE_FORM) {
+      const hasOcr = ocrData && (ocrData.linea || ocrData.marca);
+      pushBot(hasOcr
+        ? 'Revisá y completá los datos del vehículo (el modelo es obligatorio):'
+        : 'Completá los datos del vehículo nuevo (el modelo es obligatorio):');
+      setStep(STEP.NEW_VEHICLE_FORM);
+      return;
+    }
+    setEvidenceItems([]);
+    pushBot(`¿Cuántos kilómetros tiene la moto?\nEscribí, dictá 🎙️ o foto del tablero 📷`);
+    setStep(STEP.KM);
+  }, [pushBot, ocrData]);
+
+  const maybeAskEmail = useCallback((client, plate, nextStep) => {
+    const shouldAsk = !client || !(client.email || '').trim();
+    if (!shouldAsk) {
+      proceedAfterEmailGate(nextStep);
+      return;
+    }
+    setPendingEmailPlate(plate);
+    setEmailGateNext(nextStep);
+    pushBot(EMAIL_PROMPT);
+    setStep(STEP.ASKING_CLIENT_EMAIL);
+  }, [pushBot, proceedAfterEmailGate]);
+
+  const submitClientEmail = useCallback(async (raw) => {
+    const email = raw.trim();
+    if (!EMAIL_RE.test(email)) { pushBot(EMAIL_INVALID); return; }
+    pushUser(email);
+    const plate = pendingEmailPlate;
+    if (plate) {
+      setBusy(true);
+      try {
+        const res = await authFetch(`/vehicles/${plate}/client`, { method: 'PATCH', body: JSON.stringify({ email }) });
+        if (!res.ok) {
+          pushBot('⚠️ No pude guardar el email del cliente, pero seguimos con la recepción.');
+        } else {
+          setVehicleData(v => (v ? { ...v, client: { ...(v.client || {}), email } } : v));
+        }
+      } catch {
+        pushBot('⚠️ No pude guardar el email del cliente, pero seguimos con la recepción.');
+      } finally {
+        setBusy(false);
+      }
+    } else {
+      setNewClientEmail(email);
+    }
+    setPendingEmailPlate(null);
+    pushBot(EMAIL_OK.replace('{email}', email));
+    proceedAfterEmailGate(emailGateNext);
+  }, [pendingEmailPlate, emailGateNext, pushUser, pushBot, proceedAfterEmailGate]);
+
+  const skipClientEmail = useCallback(() => {
+    pushUser(EMAIL_SKIP_LABEL);
+    setPendingEmailPlate(null);
+    proceedAfterEmailGate(emailGateNext);
+  }, [pushUser, emailGateNext, proceedAfterEmailGate]);
+
   // ── CONFIRMING_RETURNING_CLIENT / SELECTING_CLIENT_FIELD / EDITING_CLIENT_FIELD ─
   // Mirrors the bot's handle_returning_client_confirmation / handle_client_field_selection /
   // handle_client_field_value (PR6, telegram-bot/bot/handlers/reception.py) field-for-field:
@@ -429,10 +532,8 @@ export default function TgReception() {
   // is surfaced but never blocks the rest of reception.
   const confirmReturningClient = useCallback(() => {
     pushUser('Sí, siguen correctos');
-    setEvidenceItems([]);
-    pushBot(`¿Cuántos kilómetros tiene la moto?\nEscribí, dictá 🎙️ o foto del tablero 📷`);
-    setStep(STEP.KM);
-  }, [pushUser, pushBot]);
+    maybeAskEmail(vehicleData?.client, formData.plate, STEP.KM);
+  }, [pushUser, maybeAskEmail, vehicleData, formData.plate]);
 
   const openClientFieldEdit = useCallback(() => {
     pushUser('No, corregir algo');
@@ -466,12 +567,17 @@ export default function TgReception() {
     pushUser('✅ Listo');
     const plate = formData.plate;
     const edits = clientEdits;
+    let clientForGate = vehicleData?.client || null;
     if (Object.keys(edits).length > 0 && plate) {
       setBusy(true);
       try {
         const res = await authFetch(`/vehicles/${plate}/client`, { method: 'PATCH', body: JSON.stringify(edits) });
         if (!res.ok) {
           pushBot('⚠️ No pude guardar los cambios del cliente, pero seguimos con la recepción.');
+        } else {
+          // PATCH devuelve el cliente ya actualizado (incluye email si se
+          // editó acá) -- usarlo para el gate en vez del dict viejo.
+          clientForGate = await res.json().catch(() => clientForGate);
         }
       } catch {
         pushBot('⚠️ No pude guardar los cambios del cliente, pero seguimos con la recepción.');
@@ -479,19 +585,16 @@ export default function TgReception() {
         setBusy(false);
       }
     }
-    setEvidenceItems([]);
-    pushBot(`¿Cuántos kilómetros tiene la moto?\nEscribí, dictá 🎙️ o foto del tablero 📷`);
-    setStep(STEP.KM);
-  }, [formData.plate, clientEdits, pushUser, pushBot]);
+    maybeAskEmail(clientForGate, plate, STEP.KM);
+  }, [formData.plate, clientEdits, vehicleData, pushUser, pushBot, maybeAskEmail]);
 
   // ── ASKING_PHONE ──────────────────────────────────────────────────────────
+  // Cliente nuevo (sin registro previo) -> el gate siempre pregunta (design
+  // ADR 6, `client=null`); recién después de responder (o saltar) se pasa a
+  // NEW_VEHICLE_FORM, el paso que este helper mostraba directamente antes.
   const goToVehicleForm = useCallback(() => {
-    const hasOcr = ocrData && (ocrData.linea || ocrData.marca);
-    pushBot(hasOcr
-      ? 'Revisá y completá los datos del vehículo (el modelo es obligatorio):'
-      : 'Completá los datos del vehículo nuevo (el modelo es obligatorio):');
-    setStep(STEP.NEW_VEHICLE_FORM);
-  }, [pushBot, ocrData]);
+    maybeAskEmail(null, null, STEP.NEW_VEHICLE_FORM);
+  }, [maybeAskEmail]);
 
   const handlePhone = useCallback((val) => {
     const phone = val.trim().replace(/\s/g, '');
@@ -754,6 +857,7 @@ export default function TgReception() {
             role: 'client', tenant_id: tenantId,
             phone: clientPhone || null,
             identification: clientIdentification || ocrData?.numero_documento_propietario || null,
+            email: newClientEmail || null,
           })});
           if (cr.ok || cr.status === 409) {
             cid = (await cr.json().catch(() => ({}))).id || null;
@@ -834,7 +938,7 @@ export default function TgReception() {
       pushBot(`Error: ${e.message}`);
       setBusy(false);
     } finally { setBusy(false); }
-  }, [vehicleId, vehicleData, user, isNew, newVeh, ocrData, clientPhone, clientIdentification, formData, evidenceItems, pushBot, showTyping, removeTyping, router]);
+  }, [vehicleId, vehicleData, user, isNew, newVeh, ocrData, clientPhone, clientIdentification, newClientEmail, formData, evidenceItems, pushBot, showTyping, removeTyping, router]);
 
   // ── handleSendValue ───────────────────────────────────────────────────────
   const handleSendValue = useCallback((val) => {
@@ -873,6 +977,7 @@ export default function TgReception() {
       }
       case STEP.ASKING_PHONE:      return handlePhone(v);
       case STEP.ASKING_CEDULA:     return handleCedula(v);
+      case STEP.ASKING_CLIENT_EMAIL: return submitClientEmail(v);
       case STEP.EDITING_CLIENT_FIELD: return submitClientFieldValue(v);
       case STEP.KM:                return submitKm(v);
       case STEP.ASKING_PHOTO_DESC: return submitPhotoDesc(v);
@@ -882,7 +987,7 @@ export default function TgReception() {
       case STEP.OBSERVATIONS:      return submitObservations(v);
     }
   }, [busy, step, cancelPending, doReset, user, requestCancel, pushBot, pushUser,
-      ocrData, lookupPlate, handlePhone, handleCedula, submitClientFieldValue, submitKm,
+      ocrData, lookupPlate, handlePhone, handleCedula, submitClientEmail, submitClientFieldValue, submitKm,
       submitPhotoDesc, submitAccessories, submitNotes, submitIntake, submitObservations]);
 
   const handleSend = useCallback(() => {
@@ -907,6 +1012,7 @@ export default function TgReception() {
         return val.startsWith('Sí') ? confirmReturningClient() : openClientFieldEdit();
       case STEP.SELECTING_CLIENT_FIELD:
         return val.includes('Listo') ? finishClientEdits() : selectClientField(val);
+      case STEP.ASKING_CLIENT_EMAIL: return skipClientEmail();
       case STEP.GAS:               return submitGas(val);
       case STEP.ASKING_PHOTOS:
         if (val.includes('observación')) return addTextOnly();
@@ -924,6 +1030,7 @@ export default function TgReception() {
   }, [busy, step, cancelPending, handleSendValue, confirmPlateFormat, correctPlateFormat,
       confirmOcr, correctOcr, confirmClient,
       confirmReturningClient, openClientFieldEdit, finishClientEdits, selectClientField,
+      skipClientEmail,
       submitGas, addTextOnly, skipPhotos, skipPhotoDesc, submitAccessories,
       confirmMotive, changeSvcType, correctMotive, selectSvcType, submitObservations]);
 
@@ -935,6 +1042,7 @@ export default function TgReception() {
       case STEP.CONFIRMING_CLIENT: return ['Ingresar al taller →'];
       case STEP.CONFIRMING_RETURNING_CLIENT: return ['Sí, siguen correctos', 'No, corregir algo'];
       case STEP.SELECTING_CLIENT_FIELD:      return [...CLIENT_FIELDS.map(([, label]) => label), '✅ Listo'];
+      case STEP.ASKING_CLIENT_EMAIL: return [EMAIL_SKIP_LABEL];
       case STEP.GAS:               return GAS_CHIPS;
       case STEP.ASKING_PHOTOS:     return evidenceItems.length > 0
                                      ? ['📝 Solo observación', '✅ Continuar']
@@ -948,7 +1056,7 @@ export default function TgReception() {
     }
   })();
 
-  const INPUT_STEPS = [STEP.PLATE, STEP.CORRECTING_OCR, STEP.ASKING_PHONE, STEP.ASKING_CEDULA, STEP.EDITING_CLIENT_FIELD, STEP.KM,
+  const INPUT_STEPS = [STEP.PLATE, STEP.CORRECTING_OCR, STEP.ASKING_PHONE, STEP.ASKING_CEDULA, STEP.ASKING_CLIENT_EMAIL, STEP.EDITING_CLIENT_FIELD, STEP.KM,
                        STEP.ASKING_PHOTO_DESC, STEP.ACCESSORIES, STEP.NOTES, STEP.INTAKE, STEP.OBSERVATIONS];
   const showInputBar = (INPUT_STEPS.includes(step) || cancelPending) && step !== STEP.DONE;
 
@@ -1226,6 +1334,7 @@ const placeholders = {
   [STEP.PLATE]:             'Ej: ABC123',
   [STEP.CORRECTING_OCR]:    'Escribí la placa correcta',
   [STEP.ASKING_PHONE]:      'Ej: 3001234567',
+  [STEP.ASKING_CLIENT_EMAIL]: 'cliente@ejemplo.com',
   [STEP.EDITING_CLIENT_FIELD]: 'Nuevo valor…',
   [STEP.KM]:                'Ej: 12500',
   [STEP.ASKING_PHOTO_DESC]: 'Describí la foto…',

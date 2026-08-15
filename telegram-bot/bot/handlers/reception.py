@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import asyncio
 import tempfile
@@ -37,7 +38,8 @@ from core.constants import (
     ASKING_GAS,
     CONFIRMING_RETURNING_CLIENT,
     SELECTING_CLIENT_FIELD,
-    EDITING_CLIENT_FIELD
+    EDITING_CLIENT_FIELD,
+    ASKING_CLIENT_EMAIL
 )
 from core.decorators import role_required, check_cancel_intent
 from keyboards.reply import get_main_keyboard
@@ -137,6 +139,23 @@ CLIENT_FIELDS = [
 CLIENT_FIELD_LABELS = dict(CLIENT_FIELDS)
 
 
+# -------------------------------------------------------------
+# sdd/reception-email-notification (design ADR 6): copia normativa del paso
+# de captura de email. El bot es la fuente canónica -- la Mini App
+# (`frontend/app/tg/reception/page.js`) copia estas mismas constantes
+# verbatim, con un comentario que nombra al bot como canónico, siguiendo el
+# mismo precedente ya existente en este repo con CLIENT_FIELDS/
+# _build_client_summary. Un test de paridad byte-a-byte
+# (`backend/tests/reception_email/test_bot_miniapp_copy_parity.py`) falla si
+# alguno de los dos archivos se desvía.
+# -------------------------------------------------------------
+EMAIL_PROMPT = "¿Me das el *email del cliente*? Le mandamos el comprobante de recepción en PDF. Si no tiene, tocá *Sin email*."
+EMAIL_INVALID = "Ese email no parece válido. ¿Me lo escribís de nuevo? O tocá *Sin email*."
+EMAIL_SKIP_LABEL = "Sin email"
+EMAIL_OK = "Email *{email}* registrado. ✅"
+EMAIL_RE = r"^[^\s@]+@[^\s@]+\.[^\s@]+$"
+
+
 def _build_client_summary(client: dict) -> str:
     """Construye el bloque de texto con los datos del cliente vinculado a la moto."""
     lines = "👤 *Datos del cliente registrado:*\n"
@@ -154,6 +173,45 @@ def _client_field_keyboard() -> InlineKeyboardMarkup:
     ]
     rows.append([InlineKeyboardButton("✅ Listo", callback_data="field_done")])
     return InlineKeyboardMarkup(rows)
+
+
+_KM_PROMPT = (
+    "Perfecto, vamos con la recepción.\n\n"
+    "*¿Cuántos kilómetros tiene la moto?* Escribilo, mandame un audio o una foto del tablero."
+)
+
+
+async def _ask_email_or_continue(context: ContextTypes.DEFAULT_TYPE, send_func, client: Optional[dict], plate: Optional[str] = None) -> int:
+    """
+    Gate único de email (design ADR 6), compartido por los DOS puntos de
+    entrada: cliente NUEVO (llamado desde `handle_phone`, `client=None` ->
+    siempre se pregunta, no hay registro previo del que leer un email) y
+    cliente RETORNANTE (llamado desde `handle_returning_client_confirmation`
+    y `handle_client_field_selection`, `client` es el dict con el email
+    actual -- se pregunta solo si está vacío, BR1).
+
+    `plate` distingue cómo se persiste la respuesta si se pregunta:
+    `None` (cliente nuevo) guarda el valor en `context.user_data
+    ['new_client_email']` para que viaje dentro del `user_payload` de
+    `create_user_and_vehicle` (creado recién en background); una placa
+    (cliente retornante) persiste con un PATCH directo a
+    `/vehicles/{plate}/client`, igual que el resto de `client_edits`.
+
+    `send_func` es el callable de Telegram a usar para el mensaje
+    (`query.edit_message_text` o `update.message.reply_text`) -- ambos
+    aceptan los mismos kwargs (`parse_mode`, `reply_markup`), así que el
+    llamador decide cuál corresponde a su tipo de update.
+    """
+    should_ask = client is None or not (client.get("email") or "").strip()
+    if not should_ask:
+        await send_func(_KM_PROMPT, parse_mode="Markdown")
+        context.user_data['evidence_items'] = []
+        return ASKING_KM
+
+    context.user_data['pending_email_plate'] = plate
+    kb = InlineKeyboardMarkup([[InlineKeyboardButton(EMAIL_SKIP_LABEL, callback_data="email_skip")]])
+    await send_func(EMAIL_PROMPT, parse_mode="Markdown", reply_markup=kb)
+    return ASKING_CLIENT_EMAIL
 
 
 # -------------------------------------------------------------
@@ -211,7 +269,7 @@ async def update_client_data(plate: str, edits: dict) -> dict:
             logger.error(f"❌ [API] Conexión fallida actualizando cliente de {plate}: {e}")
     return None
 
-async def create_user_and_vehicle(ocr_data: dict, plate: str, tenant_id: str = None, phone: str = None) -> dict:
+async def create_user_and_vehicle(ocr_data: dict, plate: str, tenant_id: str = None, phone: str = None, email: str = None) -> dict:
     """
     Crea el usuario (cliente) y el vehículo en el backend usando los datos del OCR.
 
@@ -237,6 +295,12 @@ async def create_user_and_vehicle(ocr_data: dict, plate: str, tenant_id: str = N
         "tenant_id": tenant_id,
         "phone": phone or ocr_data.get("numero_documento_propietario"),
     }
+    if email:
+        # sdd/reception-email-notification: email opcional capturado en el
+        # paso ASKING_CLIENT_EMAIL (siempre preguntado para cliente nuevo,
+        # ADR 6). Solo se agrega la key si hay valor -- `UserCreate.email`
+        # es `Optional[EmailStr]`, omitirla equivale a `None`.
+        user_payload["email"] = email
 
     async with httpx.AsyncClient(timeout=10.0) as client:
         client_id = None
@@ -289,6 +353,7 @@ async def _create_vehicle_for_background_order(
         new_vehicle_data.get("plate", plate),
         tenant_id=tenant_id,
         phone=new_vehicle_data.get("phone"),
+        email=new_vehicle_data.get("email"),
     )
     if not new_veh:
         await bot.send_message(
@@ -403,6 +468,17 @@ async def background_create_order(payload: dict, tenant_id: str, evidence_items:
                 if not new_veh:
                     return
                 payload["vehicle_id"] = new_veh["id"]
+                # sdd/reception-email-notification (bug fix, business-owner
+                # requested): `payload["client_id"]` se arma síncronamente en
+                # `_build_and_dispatch_order` (`context.user_data.get
+                # ("client_id")`), pero para moto nueva ese valor nunca se
+                # setea ahí -- recién existe DESPUÉS de que
+                # `create_user_and_vehicle` crea el cliente, en este punto.
+                # Sin este backfill, `client_id` queda `None` para toda
+                # recepción de cliente nuevo: el email de recepción nunca se
+                # dispara (`orders.py`'s `client_obj` resuelve `None`) y el
+                # PDF firmado cae al fallback "Cliente Pendiente".
+                payload["client_id"] = new_veh.get("client_id")
                 vehicle_created_this_call = True
 
             # 1. Crear la Orden
@@ -585,7 +661,12 @@ async def _build_and_dispatch_order(context: ContextTypes.DEFAULT_TYPE, bot, cha
     new_vehicle_data = None
     if not vid:
         logger.info(f"[RECEPCIÓN] Moto nueva {plate} — se creará usuario y vehículo en background con teléfono {client_phone}")
-        new_vehicle_data = {"ocr_data": ocr_data, "plate": plate, "phone": client_phone}
+        new_vehicle_data = {
+            "ocr_data": ocr_data,
+            "plate": plate,
+            "phone": client_phone,
+            "email": context.user_data.get("new_client_email"),
+        }
 
     payload = {
         "tenant_id": tenant_id,
@@ -838,6 +919,19 @@ async def handle_ocr_confirmation(update: Update, context: ContextTypes.DEFAULT_
                 if client_info:
                     # Moto con cliente vinculado — mostramos sus datos y pedimos confirmación
                     context.user_data['client_edits'] = {}
+                    # sdd/reception-email-notification: guardamos el dict del
+                    # cliente para que el gate de email (ADR 6) pueda leer su
+                    # `email` más adelante sin otra llamada HTTP.
+                    context.user_data['client_info'] = client_info
+                    # Bug fix (mismo patrón que el de `background_create_order`
+                    # para moto nueva, arriba): `VehicleOut.client_id` YA
+                    # viene en esta respuesta (`schemas/vehicle.py`), pero
+                    # nunca se leía hacia `context.user_data['client_id']` --
+                    # sin esto, el `payload["client_id"]` que arma
+                    # `_build_and_dispatch_order` quedaba `None` también para
+                    # cliente RETORNANTE, rompiendo el envío de email y el PDF
+                    # por el mismo motivo que la moto nueva.
+                    context.user_data['client_id'] = v_info.get('client_id')
                     txt = (
                         f"{saludo}\n"
                         f"*{marca} {modelo}*\n\n"
@@ -926,13 +1020,9 @@ async def handle_returning_client_confirmation(update: Update, context: ContextT
     await query.answer()
 
     if query.data == "client_data_yes":
-        await query.edit_message_text(
-            "Perfecto, vamos con la recepción.\n\n"
-            "*¿Cuántos kilómetros tiene la moto?* Escribilo, mandame un audio o una foto del tablero.",
-            parse_mode="Markdown"
-        )
-        context.user_data['evidence_items'] = []
-        return ASKING_KM
+        client_info = context.user_data.get('client_info') or {}
+        plate = context.user_data.get('ocr_plate')
+        return await _ask_email_or_continue(context, query.edit_message_text, client_info, plate=plate)
 
     elif query.data == "client_data_edit":
         context.user_data['client_edits'] = {}
@@ -955,19 +1045,18 @@ async def handle_client_field_selection(update: Update, context: ContextTypes.DE
     if query.data == "field_done":
         plate = context.user_data.get('ocr_plate')
         edits = context.user_data.get('client_edits', {})
+        client_info = context.user_data.get('client_info') or {}
         if edits and plate:
             updated = await update_client_data(plate, edits)
             if updated is None:
                 await query.message.reply_text(
                     "⚠️ No pude guardar los cambios del cliente, pero seguimos con la recepción."
                 )
-        await query.edit_message_text(
-            "Perfecto, vamos con la recepción.\n\n"
-            "*¿Cuántos kilómetros tiene la moto?* Escribilo, mandame un audio o una foto del tablero.",
-            parse_mode="Markdown"
-        )
-        context.user_data['evidence_items'] = []
-        return ASKING_KM
+            else:
+                # PATCH devolvió el cliente ya actualizado (incluye email si
+                # se editó acá) -- usarlo para el gate en vez del dict viejo.
+                client_info = updated
+        return await _ask_email_or_continue(context, query.edit_message_text, client_info, plate=plate)
 
     field_key = query.data.replace("field_", "", 1)
     label = CLIENT_FIELD_LABELS.get(field_key)
@@ -1047,13 +1136,74 @@ async def handle_phone(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
         return ASKING_PHONE
 
     context.user_data['client_phone'] = phone
+    await update.message.reply_text(f"Teléfono *{phone}* registrado. ✅", parse_mode="Markdown")
+    # Cliente nuevo (sin registro previo) -> el gate siempre pregunta
+    # (design ADR 6, `client=None`).
+    return await _ask_email_or_continue(context, update.message.reply_text, None)
+
+
+@role_required()
+async def handle_client_email(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """
+    Captura y valida el email opcional del cliente (nuevo o retornante sin
+    email registrado), mismo patrón texto/voz que el resto de la recepción.
+
+    `context.user_data['pending_email_plate']` (seteado por
+    `_ask_email_or_continue`) decide dónde se persiste: `None` -> cliente
+    nuevo, se guarda en `new_client_email` para viajar dentro del
+    `user_payload` que arma `create_user_and_vehicle` en background; una
+    placa -> cliente retornante, se persiste con un PATCH directo (mismo
+    endpoint que `client_edits`).
+    """
+    text = ""
+    if update.message.voice:
+        await update.message.reply_text("Escuchando... 🎧")
+        voice_file = await update.message.voice.get_file()
+        fd, path = tempfile.mkstemp(suffix=".ogg")
+        os.close(fd)
+        await voice_file.download_to_drive(path)
+        transcript = await transcribe_voice(path)
+        os.remove(path)
+        text = transcript or ""
+    elif update.message.text:
+        text = update.message.text
+
+    if await check_cancel_intent(update, context, text): return ConversationHandler.END
+
+    email = text.strip()
+    if not re.match(EMAIL_RE, email):
+        await update.message.reply_text(EMAIL_INVALID, parse_mode="Markdown")
+        return ASKING_CLIENT_EMAIL
+
+    plate = context.user_data.pop('pending_email_plate', None)
+    if plate:
+        updated = await update_client_data(plate, {"email": email})
+        if updated is None:
+            await update.message.reply_text(
+                "⚠️ No pude guardar el email del cliente, pero seguimos con la recepción."
+            )
+    else:
+        context.user_data['new_client_email'] = email
+
     await update.message.reply_text(
-        f"Teléfono *{phone}* registrado. ✅\n\n"
+        EMAIL_OK.format(email=email) + "\n\n"
         "*¿Cuántos kilómetros tiene la moto?* Escribilo, mandame un audio o una foto del tablero.",
         parse_mode="Markdown"
     )
     context.user_data['evidence_items'] = []
     return ASKING_KM
+
+
+@role_required()
+async def handle_client_email_skip(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Botón 'Sin email' -- no guarda nada, sigue a KM (BR2, email opcional)."""
+    query = update.callback_query
+    await query.answer()
+    context.user_data.pop('pending_email_plate', None)
+    await query.edit_message_text(_KM_PROMPT, parse_mode="Markdown")
+    context.user_data['evidence_items'] = []
+    return ASKING_KM
+
 
 GAS_OPTIONS = [
     ("🟢 Lleno",   "Lleno"),

@@ -38,6 +38,10 @@ ASKING_GAS = 17
 CONFIRMING_RETURNING_CLIENT = 18
 SELECTING_CLIENT_FIELD = 19
 EDITING_CLIENT_FIELD = 20
+# sdd/reception-email-notification (ADR 6): captura opcional del email del
+# cliente en recepción -- cliente nuevo (siempre) o retornante sin email
+# registrado (condicional).
+ASKING_CLIENT_EMAIL = 41
 
 # ----- Estados post-recepción (ciclo de vida del técnico) -----
 AWAITING_DIAGNOSIS = 50       # Esperando diagnóstico del técnico (diferido)
