@@ -89,7 +89,10 @@ CANCEL_PATTERN = re.compile(
     # "ya no arranca", "dejala revisando") y disparaban una cancelación falsa
     # apenas el cliente describía el problema por audio o texto. Las frases
     # compuestas ("para ya", "quiero parar") sí quedan -- son específicas.
-    r'(?i)\b(cancelar|cancela|cancelo|cancelalo|anular|anula|abortar|no quiero|detener|salir|quiero parar|olvida|olvidalo|olvidar|para ya|basta|terminar|stop)\b'
+    # "stop" se sacó el 2026-08-20: en Colombia es jerga común para la luz
+    # de freno ("no prende el stop", "se le dañó el stop"), y disparaba una
+    # cancelación falsa en audios describiendo ese problema.
+    r'(?i)\b(cancelar|cancela|cancelo|cancelalo|anular|anula|abortar|no quiero|detener|salir|quiero parar|olvida|olvidalo|olvidar|para ya|basta|terminar)\b'
 )
 
 async def check_cancel_intent(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str) -> bool:
