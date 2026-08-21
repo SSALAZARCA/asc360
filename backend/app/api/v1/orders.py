@@ -25,6 +25,7 @@ from app.schemas.order import (
     OrderPlateResolution,
 )
 from app.services.pdf_service import generate_and_upload_reception_pdf, upload_file_to_minio
+from app.services.excel_export import excel_response
 from app.services.reception_email_dispatch import dispatch_reception_email
 from app.services.warranty_validation import ensure_order_date_after_delivery
 from app.api.deps import get_current_user, get_optional_user, CurrentUser
@@ -1677,21 +1678,23 @@ async def get_kpi_analytics(
     }
 
 
-@router.get("/analytics/services")
-async def get_services_analytics(
+async def _fetch_services_data(
+    db: AsyncSession,
+    current_user: CurrentUser,
     service_type: Optional[ServiceType] = None,
     city: Optional[str] = None,
-    db: AsyncSession = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user)
-):
+    order_ids: Optional[List[uuid.UUID]] = None,
+) -> list:
     """
-    Retorna la Tabla Maestra para la Página 2 del Dashboard.
-    El tenant_id se extrae del JWT — superadmin ve toda la red,
-    rol de taller solo ve sus propias órdenes.
+    Query + row-shaping logic shared by `GET /analytics/services` (the
+    "Gestión de Órdenes" table) and `POST /analytics/services/export` (its
+    Excel export). `order_ids`, when given, narrows the base query to
+    `ServiceOrder.id IN (...)` instead of the full dataset — used by the
+    export endpoint so it re-fetches exactly the rows the frontend already
+    has on screen (after ITS OWN search/tipo/estado/centro filtering)
+    without duplicating that client-side filtering logic here.
     """
-    forbid_distribuidor(current_user)
-
-    from sqlalchemy import func, and_, select, desc
+    from sqlalchemy import func, select, desc
     from app.models.tenant import Tenant
     from app.models.vehicle import Vehicle
     from app.models.order import ServiceOrderReception
@@ -1717,7 +1720,7 @@ async def get_services_analytics(
 
     # Filtro por tenant extraído del JWT
     tenant_id = None if current_user.is_superadmin else current_user.tenant_id
-    
+
     # 2. Aplicar filtros dinámicos
     if tenant_id:
         stmt = stmt.where(ServiceOrder.tenant_id == tenant_id)
@@ -1725,6 +1728,8 @@ async def get_services_analytics(
         stmt = stmt.where(ServiceOrder.service_type == service_type)
     if city:
         stmt = stmt.where(Tenant.ciudad == city)
+    if order_ids is not None:
+        stmt = stmt.where(ServiceOrder.id.in_(order_ids))
 
     stmt = stmt.order_by(desc(ServiceOrder.created_at))
     res = await db.execute(stmt)
@@ -1784,6 +1789,98 @@ async def get_services_analytics(
         })
 
     return services_data
+
+
+@router.get("/analytics/services")
+async def get_services_analytics(
+    service_type: Optional[ServiceType] = None,
+    city: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user)
+):
+    """
+    Retorna la Tabla Maestra para la Página 2 del Dashboard.
+    El tenant_id se extrae del JWT — superadmin ve toda la red,
+    rol de taller solo ve sus propias órdenes.
+    """
+    forbid_distribuidor(current_user)
+    return await _fetch_services_data(db, current_user, service_type=service_type, city=city)
+
+
+class ServicesExportRequest(BaseModel):
+    order_ids: List[uuid.UUID]
+
+
+_SERVICE_TYPE_EXPORT_LABELS = {
+    "warranty": "Garantía",
+    "km_review": "Rev. KM",
+    "regular": "Mec. General",
+    "quick": "Mec. Rápida",
+    "pdi": "Alistamiento",
+}
+
+_SERVICE_STATUS_EXPORT_LABELS = {
+    "pending_signature": "Firma Pendiente",
+    "received": "Recibido",
+    "scheduled": "Agendado",
+    "in_progress": "En Proceso",
+    "on_hold_parts": "Esp. Repuestos",
+    "on_hold_client": "Esp. Cliente",
+    "external_work": "Trabajo Ext.",
+    "rescheduled": "Reagendado",
+    "completed": "Finalizado",
+    "delivered": "Entregado",
+    "cancelled": "Cancelado",
+}
+
+_SERVICES_EXPORT_HEADERS = [
+    "N.° Orden", "Placa", "Modelo", "Tipo", "Estado", "Días en Taller", "KM",
+    "Centro", "Ciudad", "Visitas Totales", "Visitas 2 Meses", "Garantías Totales",
+]
+
+
+def _build_services_export_row(s: dict) -> list:
+    """PURE: flattens one `_fetch_services_data` row-dict into an Excel
+    export row, matching `_SERVICES_EXPORT_HEADERS` order and mirroring the
+    columns shown in `frontend/app/services/page.js`'s table."""
+    return [
+        s["order_id"],
+        s["placa"],
+        s["modelo"],
+        _SERVICE_TYPE_EXPORT_LABELS.get(s["tipo_trabajo"], s["tipo_trabajo"]),
+        _SERVICE_STATUS_EXPORT_LABELS.get(s["estado"], s["estado"]),
+        s["tiempo_taller_dias"],
+        s["kilometraje"],
+        s["centro_actual"],
+        s["ciudad"],
+        s["v_totales"],
+        s["v_2meses"],
+        s["g_totales"],
+    ]
+
+
+@router.post("/analytics/services/export")
+async def export_services_analytics(
+    body: ServicesExportRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """
+    Excel export for "Gestión de Órdenes" (`/services`). Superadmin-only.
+
+    Accepts the exact list of order IDs the frontend already has on screen
+    (after its own search/tipo/estado/centro filtering) and re-fetches only
+    those rows via `_fetch_services_data`'s `order_ids` filter — the export
+    never re-implements the frontend's client-side filtering, so it can't
+    silently drift from what's rendered on screen.
+    """
+    if not current_user.is_superadmin:
+        raise HTTPException(status_code=403, detail="Solo superadmin puede exportar este reporte")
+
+    services_data = await _fetch_services_data(db, current_user, order_ids=body.order_ids)
+    rows = [_build_services_export_row(s) for s in services_data]
+    filename = f"ordenes_servicio_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    return excel_response("Ordenes", _SERVICES_EXPORT_HEADERS, rows, filename)
 
 
 # ─── OTP Endpoints ────────────────────────────────────────────────────────────

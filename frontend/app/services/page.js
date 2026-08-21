@@ -5,7 +5,7 @@ import AdminLayout from '../admin-layout';
 import {
   Search, Filter, MapPin, Wrench, Clock, X, AlertTriangle,
   CheckCircle2, ArrowUp, ArrowDown, ChevronsUpDown, FolderOpen,
-  FileDown, Activity, Info, Link as LinkIcon,
+  FileDown, FileSpreadsheet, Activity, Info, Link as LinkIcon,
   ClipboardList, CalendarDays, Hourglass, CircleHelp, Factory, RefreshCw, Handshake
 } from 'lucide-react';
 import SoftwayHelperModal from '../../components/SoftwayHelperModal';
@@ -266,19 +266,27 @@ function OrderModal({ order, onClose }) {
 export default function ServicesPage() {
   const [services, setServices] = useState([]);
   const [loading, setLoading] = useState(true);
-  
+
+  const currentUser = typeof window !== 'undefined'
+    ? JSON.parse(sessionStorage.getItem('um_user') || '{}')
+    : {};
+  const isSuperadmin = currentUser.role === 'superadmin';
+
   // Filtros
   const [filterQuery, setFilterQuery] = useState('');
   const [filterType, setFilterType] = useState('all');
   const [filterState, setFilterState] = useState('all');
   const [filterCenter, setFilterCenter] = useState('all');
-  
+
   // Sorting
   const [sortCol, setSortCol] = useState('tiempo_taller_dias');
   const [sortDir, setSortDir] = useState('desc');
 
   // Modal
   const [selectedOrder, setSelectedOrder] = useState(null);
+
+  // Exportación a Excel
+  const [exportingExcel, setExportingExcel] = useState(false);
 
   useEffect(() => {
     const fetchServices = async () => {
@@ -335,6 +343,36 @@ export default function ServicesPage() {
 
     return result;
   }, [services, filterQuery, filterType, filterState, filterCenter, sortCol, sortDir]);
+
+  // Exporta a Excel exactamente las órdenes visibles en `filtered` (ya
+  // filtradas por búsqueda/tipo/estado/centro) — nunca se re-implementan
+  // esos filtros en el backend, solo se envía la lista de IDs ya filtrada.
+  const handleExportExcel = async () => {
+    setExportingExcel(true);
+    try {
+      const orderIds = filtered.map(s => s.order_id);
+      const res = await authFetch('/orders/analytics/services/export', {
+        method: 'POST',
+        body: JSON.stringify({ order_ids: orderIds }),
+      });
+      if (!res.ok) {
+        toast.error('No se pudo exportar el Excel. Intentá de nuevo.');
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `ordenes_servicio_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error('Error exportando órdenes:', e);
+      toast.error('Error de conexión al exportar el Excel.');
+    } finally {
+      setExportingExcel(false);
+    }
+  };
 
   const SortIcon = ({ col }) => sortCol === col
     ? (sortDir === 'asc'
@@ -394,6 +432,17 @@ export default function ServicesPage() {
               {uniqueCenters.map(c => <option key={c} value={c} style={optionStyle}>{c}</option>)}
             </select>
           </div>
+
+          {isSuperadmin && (
+            <button
+              onClick={handleExportExcel}
+              disabled={exportingExcel}
+              className="btn-export-excel"
+            >
+              <FileSpreadsheet size={13} />
+              {exportingExcel ? 'Exportando...' : 'Descargar Excel'}
+            </button>
+          )}
 
         </div>
 
@@ -499,6 +548,10 @@ export default function ServicesPage() {
         .filter-group { display:flex; align-items:center; gap:0.4rem; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); border-radius:8px; padding:0 0.6rem; cursor:pointer; }
         .filter-sel { background:transparent; border:none; outline:none; font-size:0.65rem; color:rgba(255,255,255,0.7); font-family:inherit; padding:0.45rem 0; cursor:pointer; appearance:none; font-weight:600; text-transform:uppercase; letter-spacing:0.04em; }
         .filter-sel option { background:#111; color:white; }
+
+        .btn-export-excel { display:flex; align-items:center; gap:6px; padding:0 0.8rem; border-radius:8px; border:1px solid rgba(34,197,94,0.3); background:rgba(34,197,94,0.12); color:#22c55e; font-size:0.65rem; font-weight:800; text-transform:uppercase; letter-spacing:0.04em; cursor:pointer; transition:background 0.15s; }
+        .btn-export-excel:hover:not(:disabled) { background:rgba(34,197,94,0.22); }
+        .btn-export-excel:disabled { opacity:0.5; cursor:not-allowed; }
 
         /* ── Data Table ── */
         .table-container {

@@ -80,21 +80,11 @@ def _confirmed_lot_message(current_user: CurrentUser, lot_identifier: Optional[s
     )
 
 
-def _excel_response(ws_title: str, headers: list, rows: list, filename: str) -> StreamingResponse:
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = ws_title
-    ws.append(headers)
-    for row in rows:
-        ws.append(row)
-    buf = io.BytesIO()
-    wb.save(buf)
-    buf.seek(0)
-    return StreamingResponse(
-        buf,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-    )
+# Kept as `_excel_response` (leading underscore) so every existing call site
+# in this file is untouched — the actual implementation now lives in
+# `app.services.excel_export` so `app/api/v1/orders.py`'s export endpoint can
+# reuse it without importing a "private" helper from a sibling router module.
+from app.services.excel_export import excel_response as _excel_response
 
 
 # ---------------------------------------------------------------------------
