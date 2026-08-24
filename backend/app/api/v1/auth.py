@@ -96,15 +96,46 @@ async def login_for_access_token(
     """Login tradicional con email y contraseña para acceder al panel web."""
     stmt = select(User).where(User.email == login_data.email)
     res = await db.execute(stmt)
-    user = res.scalar_one_or_none()
+    candidates = res.scalars().all()
 
-    if not user:
+    if not candidates:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Credenciales incorrectas",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
+
+    # `users.email` no tiene constraint de unicidad -- a propósito: una
+    # misma persona puede ser `client` y, por separado, `parts_dealer`
+    # (distribuidor), registrada en dos filas distintas que comparten
+    # email. Regla explícita del negocio: si existe una fila `parts_dealer`
+    # entre las coincidencias, el login SIEMPRE usa esa fila -- ni se
+    # evalúa la contraseña de ninguna otra.
+    dealer = next((u for u in candidates if u.role == Role.parts_dealer), None)
+
+    if dealer is not None:
+        user = dealer
+    elif len(candidates) == 1:
+        user = candidates[0]
+    else:
+        # Caso defensivo sin patrón de negocio conocido: 2+ filas comparten
+        # email y ninguna es `parts_dealer`. En vez de crashear con
+        # `MultipleResultsFound`, probamos la contraseña contra cada una.
+        user = next(
+            (
+                u for u in candidates
+                if u.hashed_password
+                and verify_password(login_data.password, u.hashed_password)
+            ),
+            None,
+        )
+        if user is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Credenciales incorrectas",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
     if user.status != UserStatus.active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
