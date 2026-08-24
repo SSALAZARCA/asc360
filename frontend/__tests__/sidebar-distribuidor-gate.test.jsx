@@ -92,6 +92,17 @@ describe('Sidebar — distribuidor delivery gate', () => {
     });
   });
 
+  it('shows the entry link for an administrativo user (2026-08-24: administrativo now matches superadmin here)', async () => {
+    setUser('administrativo');
+    render(<Sidebar />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Registro de Motocicletas/i)).toBeInTheDocument();
+    });
+    const link = screen.getByText(/Registro de Motocicletas/i).closest('a');
+    expect(link).toHaveAttribute('href', '/distribuidor/entrega');
+  });
+
   it('hides the entry link for every other role (jefe_taller)', async () => {
     setUser('jefe_taller');
     render(<Sidebar />);

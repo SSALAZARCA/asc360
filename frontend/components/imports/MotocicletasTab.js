@@ -1182,8 +1182,8 @@ export default function MotocicletasTab({ userRole }) {
           </button>
         )}
 
-        {/* Exportar Excel (solo superadmin) */}
-        {userRole === 'superadmin' && (
+        {/* Exportar Excel (superadmin + administrativo) */}
+        {(userRole === 'superadmin' || userRole === 'administrativo') && (
           <button
             onClick={handleExportMotos}
             disabled={exportingMotos}

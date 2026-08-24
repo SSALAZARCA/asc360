@@ -78,7 +78,7 @@ router = APIRouter(prefix="/distributor", tags=["distributor_deliveries"])
 
 
 def require_distribuidor(current_user: CurrentUser) -> None:
-    if not (current_user.is_distribuidor or current_user.is_superadmin):
+    if not (current_user.is_distribuidor or current_user.is_superadmin or current_user.is_administrativo):
         raise HTTPException(status_code=403, detail="Solo Distribuidor o superadmin")
 
 
@@ -142,11 +142,12 @@ async def get_delivery_detail_endpoint(
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
-    # Superadmin-only -- same access boundary as the `PATCH` below, not
-    # `require_distribuidor` (which also admits Distribuidor). This endpoint
-    # exists specifically to feed the superadmin-only edit modal.
-    if not current_user.is_superadmin:
-        raise HTTPException(status_code=403, detail="Solo superadmin puede ver el detalle")
+    # Superadmin/administrativo-only -- same access boundary as the `PATCH`
+    # below, not `require_distribuidor` (which also admits Distribuidor).
+    # This endpoint exists specifically to feed the superadmin-only edit
+    # modal (now also available to administrativo).
+    if not (current_user.is_superadmin or current_user.is_administrativo):
+        raise HTTPException(status_code=403, detail="Solo superadmin o administrativo puede ver el detalle")
 
     return await get_delivery_detail(db, vehicle_id)
 
@@ -161,9 +162,9 @@ async def edit_delivery_endpoint(
     # Distribuidor is explicitly EXCLUDED from editing -- even the
     # Distribuidor who created the record -- so this does NOT reuse
     # `require_distribuidor` (which also admits Distribuidor). Only
-    # superadmin edits.
-    if not current_user.is_superadmin:
-        raise HTTPException(status_code=403, detail="Solo superadmin puede editar")
+    # superadmin and administrativo edit.
+    if not (current_user.is_superadmin or current_user.is_administrativo):
+        raise HTTPException(status_code=403, detail="Solo superadmin o administrativo puede editar")
 
     return await edit_delivery(db, vehicle_id, payload)
 

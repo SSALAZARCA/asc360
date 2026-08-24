@@ -46,13 +46,29 @@ from app.models.parts_manual import PartsReference, PartsCodeReviewTask
 def _superadmin() -> MagicMock:
     u = MagicMock()
     u.is_superadmin = True
+    u.is_administrativo = False
     u.user_id = "admin-1"
     return u
 
 
-def _non_superadmin() -> MagicMock:
+def _administrativo() -> MagicMock:
     u = MagicMock()
     u.is_superadmin = False
+    u.is_administrativo = True
+    u.user_id = "admin-2"
+    return u
+
+
+def _non_superadmin() -> MagicMock:
+    """A role blocked from `approve_review_task`/`reject_review_task` --
+    NOT superadmin, NOT administrativo (2026-08-24: administrativo now
+    matches superadmin here, see `_administrativo()`). Both flags must be
+    explicitly False: a bare MagicMock's un-set `.is_administrativo`
+    attribute auto-vivifies as a truthy Mock, which would silently let
+    this "blocked" actor through the widened OR gate."""
+    u = MagicMock()
+    u.is_superadmin = False
+    u.is_administrativo = False
     return u
 
 
@@ -277,6 +293,17 @@ class TestApproveReviewTaskRegression:
             await approve_review_task("task-1", db, _non_superadmin())
         assert exc.value.status_code == 403
         db.get.assert_not_called()
+
+    async def test_administrativo_passes_the_guard(self):
+        """2026-08-24 business decision: administrativo now matches
+        superadmin in Maestro de Partes, exactly."""
+        db = AsyncMock(spec=AsyncSession)
+        db.get = AsyncMock(return_value=None)
+        with pytest.raises(HTTPException) as exc:
+            await approve_review_task(str(__import__("uuid").uuid4()), db, _administrativo())
+        # Passes the role guard -- reaches the 404 (task not found) branch,
+        # not a 403.
+        assert exc.value.status_code == 404
 
     async def test_task_not_found_404(self):
         db = AsyncMock(spec=AsyncSession)

@@ -78,6 +78,43 @@ def io_from(content: bytes):
     return io.BytesIO(content)
 
 
+class TestRoleGate:
+    """2026-08-24 business decision: this endpoint was widened from
+    `_require_superadmin` to `_require_imports_editor` (superadmin |
+    proveedor | administrativo) -- the Repuestos tab itself is already
+    visible to all three via `ALL_TABS`' `roles: null`."""
+
+    def test_technician_gets_403_with_no_db_touch(self):
+        fake_db = FakeAsyncSession(execute_queue=[])
+
+        with make_test_client(current_user=make_imports_editor(role="technician"), fake_db_session=fake_db) as client:
+            response = client.get("/api/v1/imports/spare-parts/export")
+
+        assert response.status_code == 403
+        assert response.json()["detail"] == "Sin permisos para el módulo de importaciones"
+        assert fake_db.executed_statements == []
+
+    def test_administrativo_now_gets_200(self):
+        fake_db = FakeAsyncSession(execute_queue=[[], []])
+
+        with make_test_client(current_user=make_imports_editor(role="administrativo"), fake_db_session=fake_db) as client:
+            response = client.get("/api/v1/imports/spare-parts/export")
+
+        assert response.status_code == 200
+
+    def test_proveedor_still_gets_200_unchanged(self):
+        """Regression guard: `proveedor` already had access via
+        `_require_imports_editor` at other imports endpoints (e.g. the
+        reconciliation export) -- this widening must not have narrowed
+        that."""
+        fake_db = FakeAsyncSession(execute_queue=[[], []])
+
+        with make_test_client(current_user=make_imports_editor(role="proveedor"), fake_db_session=fake_db) as client:
+            response = client.get("/api/v1/imports/spare-parts/export")
+
+        assert response.status_code == 200
+
+
 class TestRotationColumn:
     def test_export_includes_rotation_class_looked_up_by_part_number(self):
         lot = _lot()

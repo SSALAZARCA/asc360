@@ -54,10 +54,15 @@ class TestNameFieldOnlyPayloadNonSuperadminRejected:
 
     @pytest.mark.parametrize("field,value", [("description_es", "Nueva descripcion"), ("description", "New description")])
     def test_403_nothing_mutated(self, field, value):
+        """`proveedor` is `is_imports_editor` (passes the outer guard) but
+        NOT `is_superadmin`/`is_administrativo` -- still blocked by
+        `assert_name_editor` after the 2026-08-24 widening (see
+        `TestAdministrativoNowPassesNameGate` below for the role that
+        changed)."""
         item = _item_and_db()
         fake_db = FakeAsyncSession(execute_queue=[], get_objects=[item])
 
-        with make_test_client(current_user=make_imports_editor(role="administrativo"), fake_db_session=fake_db) as client:
+        with make_test_client(current_user=make_imports_editor(role="proveedor"), fake_db_session=fake_db) as client:
             response = client.patch(
                 f"/api/v1/imports/spare-part-items/{item.id}",
                 json={field: value},
@@ -67,6 +72,38 @@ class TestNameFieldOnlyPayloadNonSuperadminRejected:
         body = response.json()["detail"]
         assert body["code"] == "NAME_EDIT_FORBIDDEN"
         assert getattr(item, field) != value
+
+
+class TestAdministrativoNowPassesNameGate:
+    """2026-08-24 business decision: `assert_name_editor` (shared by
+    Maestro de Partes' confirm/dismiss-suggestion endpoints AND this
+    Repuestos-tab field-level name gate) now also admits administrativo,
+    matching superadmin -- an accepted side effect of widening the shared
+    gate, not a Repuestos-tab-specific change."""
+
+    def test_description_es_edit_succeeds(self):
+        item = _item_and_db()
+        from app.models.parts_manual import PartsReference
+        ref = PartsReference(
+            factory_part_number="PN-001",
+            um_part_number="PN-001",
+            description="Original",
+            description_es_manual="Old",
+            prev_codes=[],
+        )
+        fake_db = FakeAsyncSession(
+            execute_queue=[[ref], []],  # 1) _find_reference_for_part_number hit  2) mirror UPDATE
+            get_objects=[item],
+        )
+
+        with make_test_client(current_user=make_imports_editor(role="administrativo"), fake_db_session=fake_db) as client:
+            response = client.patch(
+                f"/api/v1/imports/spare-part-items/{item.id}",
+                json={"description_es": "Nueva descripcion"},
+            )
+
+        assert response.status_code == 200
+        assert ref.description_es_manual == "Nueva descripcion"
 
 
 class TestNonNameFieldPayloadNonSuperadminStillAllowed:
@@ -91,7 +128,7 @@ class TestMixedPayloadNonSuperadminRejectedWhole:
         item = _item_and_db()
         fake_db = FakeAsyncSession(execute_queue=[], get_objects=[item])
 
-        with make_test_client(current_user=make_imports_editor(role="administrativo"), fake_db_session=fake_db) as client:
+        with make_test_client(current_user=make_imports_editor(role="proveedor"), fake_db_session=fake_db) as client:
             response = client.patch(
                 f"/api/v1/imports/spare-part-items/{item.id}",
                 json={"unit_price": 12.5, "description_es": "Nueva descripcion"},

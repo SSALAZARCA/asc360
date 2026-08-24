@@ -20,6 +20,7 @@ from app.services import distributor_delivery_service as svc
 
 from tests.distributor_deliveries.conftest import (
     FakeDeliverySession,
+    make_administrativo,
     make_client_user,
     make_delivery_vehicle,
     make_distribuidor,
@@ -93,6 +94,32 @@ class TestSuperadminMustExplicitlySelectTenant:
         payload = _payload(registered_by_tenant_id=str(tenant.id))
 
         vehicle = await svc.create_delivery(fake_db, payload, make_valid_photo(), make_superadmin())
+
+        assert vehicle.registered_by_tenant_id == tenant.id
+        assert fake_db.committed is True
+
+
+class TestAdministrativoMustExplicitlySelectTenant:
+    """2026-08-24 business decision: administrativo behaves EXACTLY like
+    superadmin here -- no implicit own-tenant, must explicitly pick a
+    Tienda."""
+
+    async def test_missing_registered_by_tenant_id_rejected(self):
+        fake_db = FakeDeliverySession()
+        payload = _payload()  # no registered_by_tenant_id
+
+        with pytest.raises(HTTPException) as exc_info:
+            await svc.create_delivery(fake_db, payload, make_valid_photo(), make_administrativo())
+
+        assert exc_info.value.status_code == 422
+        assert fake_db.committed is False
+
+    async def test_valid_registered_by_tenant_id_is_applied(self):
+        tenant = make_tenant(name="Moto Total S.A.S")
+        fake_db = FakeDeliverySession(tenants=[tenant])
+        payload = _payload(registered_by_tenant_id=str(tenant.id))
+
+        vehicle = await svc.create_delivery(fake_db, payload, make_valid_photo(), make_administrativo())
 
         assert vehicle.registered_by_tenant_id == tenant.id
         assert fake_db.committed is True

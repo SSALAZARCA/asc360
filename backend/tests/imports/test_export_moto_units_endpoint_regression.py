@@ -75,18 +75,44 @@ def _read_rows(content: bytes) -> list:
     return [list(row) for row in ws.iter_rows(values_only=True)]
 
 
-def test_non_superadmin_gets_403():
-    """`make_imports_editor()` defaults to role=administrativo — that passes
-    `_require_imports_editor` elsewhere, but this endpoint gates on
-    `_require_superadmin` specifically -> 403, no DB call."""
+def test_non_imports_editor_gets_403():
+    """2026-08-24 business decision: this endpoint was widened from
+    `_require_superadmin` to `_require_imports_editor` (superadmin |
+    proveedor | administrativo) -- the Motocicletas tab itself is already
+    visible to all three via `ALL_TABS`' `roles: null`. `technician` is
+    none of those three, so it still gets 403, no DB call. (See
+    `test_administrativo_now_gets_200` below for the role that changed.)"""
     fake_db = FakeAsyncSession(execute_queue=[])
 
-    with make_test_client(current_user=make_imports_editor(), fake_db_session=fake_db) as client:
+    with make_test_client(current_user=make_imports_editor(role="technician"), fake_db_session=fake_db) as client:
         response = client.get("/api/v1/imports/moto-units/export")
 
     assert response.status_code == 403
-    assert response.json()["detail"] == "Solo superadmin puede realizar esta acción"
+    assert response.json()["detail"] == "Sin permisos para el módulo de importaciones"
     assert fake_db.executed_statements == []
+
+
+def test_administrativo_now_gets_200():
+    """2026-08-24 business decision: administrativo now matches superadmin
+    on this Excel export (previously blocked, see the docstring above)."""
+    fake_db = FakeAsyncSession(execute_queue=[[]])  # empty result -- headers-only workbook is enough to prove 200
+
+    with make_test_client(current_user=make_imports_editor(role="administrativo"), fake_db_session=fake_db) as client:
+        response = client.get("/api/v1/imports/moto-units/export")
+
+    assert response.status_code == 200
+
+
+def test_proveedor_still_gets_200_unchanged():
+    """Regression guard: `proveedor` already had access via
+    `_require_imports_editor` at other imports endpoints (e.g. the
+    reconciliation export) -- this widening must not have narrowed that."""
+    fake_db = FakeAsyncSession(execute_queue=[[]])
+
+    with make_test_client(current_user=make_imports_editor(role="proveedor"), fake_db_session=fake_db) as client:
+        response = client.get("/api/v1/imports/moto-units/export")
+
+    assert response.status_code == 200
 
 
 def test_default_request_returns_expected_headers_and_full_row_values():

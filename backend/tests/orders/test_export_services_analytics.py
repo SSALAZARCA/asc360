@@ -132,6 +132,19 @@ def test_distribuidor_also_gets_403():
     assert fake_db.executed_statements == []
 
 
+def test_administrativo_now_gets_200():
+    """2026-08-24 business decision: administrativo now matches superadmin
+    on this Excel export (previously blocked, see `test_non_superadmin_gets_403`
+    above -- `jefe_taller` and `parts_dealer` stay blocked, unaffected by
+    this change)."""
+    fake_db = FakeExportSession(queue=[[]])
+
+    with make_test_client(current_user=make_user("administrativo"), fake_db_session=fake_db) as client:
+        response = client.post("/api/v1/orders/analytics/services/export", json={"order_ids": []})
+
+    assert response.status_code == 200
+
+
 def test_empty_id_list_returns_headers_only():
     fake_db = FakeExportSession(queue=[[]])
 
@@ -185,6 +198,59 @@ def test_returns_only_the_requested_order_ids_rows():
     stmt = fake_db.executed_statements[0]
     params = list(stmt.compile().params.values())
     assert any(order.id == p or (isinstance(p, list) and order.id in p) for p in params)
+
+
+def test_administrativo_with_tenant_id_gets_network_wide_export():
+    """2026-08-24 regression: an `administrativo` actor CAN carry a non-null
+    `tenant_id` (see `users.py:110-112` -- non-superadmin-created users
+    inherit the creating actor's tenant). The export must stay
+    network-wide for this role, matching what `services/page.js`'s
+    `(isSuperadmin || isAdministrativo)` gate promises in the UI -- NOT
+    silently narrow to the actor's own tenant like a `jefe_taller` would.
+
+    Unlike `make_user()` above (which hardcodes `tenant_id=None` for every
+    role and is exactly why this bug slipped through review), this actor
+    is built with an explicit non-null `tenant_id`.
+    """
+    actor_tenant_id = str(uuid.uuid4())
+
+    other_tenant_order = make_order(
+        status=ServiceStatus.in_progress,
+        service_type=ServiceType.regular,
+        created_at=datetime(2026, 1, 1),
+    )
+    other_tenant_order.tenant_id = uuid.uuid4()
+    assert str(other_tenant_order.tenant_id) != actor_tenant_id
+
+    main_row = (other_tenant_order, "ZZZ999", "Otro Centro", "Cali", 3000, "XPEED 125")
+    agg_row = _AggRow(plate="ZZZ999", total_visits=1, recent_visits=1, warranty_count=0)
+    fake_db = FakeExportSession(queue=[[main_row], [agg_row]])
+
+    actor = CurrentUser(
+        user_id=str(uuid.uuid4()), role="administrativo", tenant_id=actor_tenant_id, name="T"
+    )
+
+    with make_test_client(current_user=actor, fake_db_session=fake_db) as client:
+        response = client.post(
+            "/api/v1/orders/analytics/services/export",
+            json={"order_ids": [str(other_tenant_order.id)]},
+        )
+
+    assert response.status_code == 200
+
+    # The row belonging to a DIFFERENT tenant must appear -- proving the
+    # export stayed network-wide instead of narrowing to the actor's own
+    # tenant.
+    rows = _read_rows(response.content)
+    assert rows[1][0] == str(other_tenant_order.id)
+
+    # Direct proof of the fix: the query must NOT have been narrowed by the
+    # actor's own tenant_id. If it had been, `tenant_id` would show up as a
+    # bound param on the base query, silently scoping every administrativo
+    # export to their own tenant regardless of what order_ids were posted.
+    stmt = fake_db.executed_statements[0]
+    params = list(stmt.compile().params.values())
+    assert actor.tenant_id not in params
 
 
 def test_multiple_ids_narrow_the_query_and_two_orders_appear():

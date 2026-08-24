@@ -25,6 +25,26 @@ from app.models.parts_manual import PartsReference
 def _superadmin() -> MagicMock:
     u = MagicMock()
     u.is_superadmin = True
+    u.is_administrativo = False
+    return u
+
+
+def _administrativo() -> MagicMock:
+    u = MagicMock()
+    u.is_superadmin = False
+    u.is_administrativo = True
+    return u
+
+
+def _blocked() -> MagicMock:
+    """A role blocked from `update_catalog_item` -- NOT superadmin, NOT
+    administrativo (2026-08-24: administrativo now matches superadmin
+    here). Both flags must be explicitly False: a bare MagicMock's un-set
+    `.is_administrativo` attribute auto-vivifies as a truthy Mock, which
+    would silently let this "blocked" actor through the widened OR gate."""
+    u = MagicMock()
+    u.is_superadmin = False
+    u.is_administrativo = False
     return u
 
 
@@ -42,6 +62,34 @@ def _locked_select_result(return_value):
     result_mock = MagicMock()
     result_mock.scalar_one_or_none.return_value = return_value
     return result_mock
+
+
+async def test_blocked_role_gets_403_with_no_db_touch():
+    db = AsyncMock(spec=AsyncSession)
+    payload = CatalogItemUpdate(description="Nueva descripcion")
+
+    with pytest.raises(HTTPException) as exc:
+        await update_catalog_item("FPN-1", payload, db, _blocked())
+
+    assert exc.value.status_code == 403
+    db.get.assert_not_called()
+    db.commit.assert_not_called()
+
+
+async def test_administrativo_can_update_catalog_item():
+    """2026-08-24 business decision: administrativo now matches superadmin
+    in Maestro de Partes, exactly."""
+    ref = _ref(factory_part_number="FPN-1", prev_codes=[])
+    db = AsyncMock(spec=AsyncSession)
+    db.get = AsyncMock(return_value=ref)
+
+    payload = CatalogItemUpdate(description="Nueva descripcion")
+
+    result = await update_catalog_item("FPN-1", payload, db, _administrativo())
+
+    assert result == {"ok": True}
+    assert ref.description == "Nueva descripcion"
+    db.commit.assert_awaited_once()
 
 
 async def test_new_colliding_prev_code_rejected_409_no_recalculation():

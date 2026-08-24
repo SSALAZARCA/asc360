@@ -92,7 +92,7 @@ describe('SparePartsTab — description cells are superadmin-only', () => {
 
     const table = await expandLotRow();
     const cell = within(table).getByText('Repuesto');
-    expect(cell).toHaveAttribute('title', 'Solo superadmin puede editar el nombre del repuesto');
+    expect(cell).toHaveAttribute('title', 'Solo superadmin o administrativo puede editar el nombre del repuesto');
 
     const { fireEvent } = require('@testing-library/react');
     fireEvent.click(cell);
@@ -105,7 +105,7 @@ describe('SparePartsTab — description cells are superadmin-only', () => {
 
     const table = await expandLotRow();
     const cell = within(table).getByText('Spare part');
-    expect(cell).toHaveAttribute('title', 'Solo superadmin puede editar el nombre del repuesto');
+    expect(cell).toHaveAttribute('title', 'Solo superadmin o administrativo puede editar el nombre del repuesto');
   });
 
   it('a non-superadmin editor (proveedor) still edits non-name fields like part_number', async () => {

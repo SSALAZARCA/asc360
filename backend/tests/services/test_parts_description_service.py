@@ -22,6 +22,12 @@ from app.models.parts_manual import PartsReference
 def _user(role: str) -> MagicMock:
     u = MagicMock()
     u.is_superadmin = role == "superadmin"
+    # Explicitly set, not left to MagicMock auto-vivification: an unset
+    # `.is_administrativo` attribute on a bare MagicMock auto-vivifies as a
+    # truthy Mock, which would silently let EVERY role through
+    # `assert_name_editor`'s widened `is_superadmin or is_administrativo`
+    # OR gate (2026-08-24 business decision) regardless of the role string.
+    u.is_administrativo = role == "administrativo"
     u.role = role
     return u
 
@@ -38,12 +44,20 @@ def _ref(factory_part_number="FPN-1", description_es_manual=None, prev_codes=Non
 # assert_name_editor -- Task 1.1/1.2
 # ---------------------------------------------------------------------------
 
-NON_SUPERADMIN_ROLES = ["technician", "jefe_taller", "proveedor", "administrativo", "parts_dealer", "client"]
+NON_SUPERADMIN_ROLES = ["technician", "jefe_taller", "proveedor", "parts_dealer", "client"]
 
 
 class TestAssertNameEditor:
     def test_superadmin_passes(self):
         svc.assert_name_editor(_user("superadmin"))  # must not raise
+
+    def test_administrativo_passes(self):
+        """2026-08-24 business decision: administrativo now matches
+        superadmin in Maestro de Partes, exactly -- this gate is shared
+        across the confirm/dismiss-suggestion endpoints AND the
+        Repuestos-tab field-level name gate (`imports.py`), see
+        `tests/imports/test_update_spare_part_item_name_field_gate.py`."""
+        svc.assert_name_editor(_user("administrativo"))  # must not raise
 
     @pytest.mark.parametrize("role", NON_SUPERADMIN_ROLES)
     def test_non_superadmin_raises_403_name_edit_forbidden(self, role):
@@ -73,6 +87,22 @@ class TestSetDescriptionEs:
             assert exc.value.detail["code"] == "NAME_EDIT_FORBIDDEN"
             find_mock.assert_not_called()
         db.execute.assert_not_called()
+
+    async def test_administrativo_passes_the_guard_and_writes(self):
+        """2026-08-24 business decision: administrativo now matches
+        superadmin here."""
+        ref = _ref(factory_part_number="FPN-1")
+        db = AsyncMock(spec=AsyncSession)
+        with patch.object(svc, "_find_reference_for_part_number", new=AsyncMock(return_value=ref)):
+            result = await svc.set_description_es(
+                db,
+                part_number="FPN-1",
+                value="Filtro nuevo",
+                model_applicable=None,
+                current_user=_user("administrativo"),
+            )
+        assert result is ref
+        assert ref.description_es_manual == "Filtro nuevo"
 
     async def test_miss_raises_409_part_not_in_catalog_no_mirror_write(self):
         db = AsyncMock(spec=AsyncSession)

@@ -24,6 +24,7 @@ from app.services import distributor_delivery_service as svc
 from tests.distributor_deliveries.conftest import (
     FakeDeliverySession,
     NoTouchSession,
+    make_administrativo,
     make_client_user,
     make_delivery_vehicle,
     make_distribuidor,
@@ -73,6 +74,20 @@ class TestSuperadminSeesAllTenants:
     async def test_no_tenant_filter_applied_in_the_query(self):
         fake_db = FakeDeliverySession()
         actor = make_superadmin()
+
+        await svc.export_deliveries(fake_db, actor)
+
+        sql = _compiled_sql(fake_db.executed_statements[0])
+        assert "registered_by_tenant_id =" not in sql
+
+
+class TestAdministrativoSeesAllTenants:
+    """2026-08-24 business decision: administrativo behaves EXACTLY like
+    superadmin here -- network-wide visibility, not tenant-scoped."""
+
+    async def test_no_tenant_filter_applied_in_the_query(self):
+        fake_db = FakeDeliverySession()
+        actor = make_administrativo()
 
         await svc.export_deliveries(fake_db, actor)
 

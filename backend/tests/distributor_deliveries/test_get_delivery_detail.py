@@ -28,6 +28,7 @@ from app.services import distributor_delivery_service as svc
 from tests.distributor_deliveries.conftest import (
     FakeDeliverySession,
     NoTouchSession,
+    make_administrativo,
     make_client_user,
     make_delivery_vehicle,
     make_distribuidor,
@@ -116,6 +117,38 @@ class TestDistribuidorGets403WithZeroDbTouch:
             with TestClient(app) as client:
                 res = client.get(f"/api/v1/distributor/deliveries/{uuid.uuid4()}")
             assert res.status_code == 403
+        finally:
+            app.dependency_overrides.pop(get_db, None)
+            app.dependency_overrides.pop(get_current_user, None)
+
+
+class TestAdministrativoNowAllowed:
+    """2026-08-24 business decision: administrativo now matches superadmin
+    on this stricter, distribuidor-EXCLUDED gate (same access boundary as
+    the `PATCH` edit endpoint)."""
+
+    def test_administrativo_reaches_the_endpoint_and_gets_200(self):
+        vehicle = make_delivery_vehicle(
+            plate="ABC123", delivery_date=date(2026, 7, 28), client=None
+        )
+        vehicle.client_id = None
+        fake_db = FakeDeliverySession(vehicles=[vehicle])
+
+        async def _get_db():
+            yield fake_db
+
+        app.dependency_overrides[get_db] = _get_db
+
+        async def _get_current_user():
+            return make_administrativo()
+
+        app.dependency_overrides[get_current_user] = _get_current_user
+
+        try:
+            with TestClient(app) as client:
+                res = client.get(f"/api/v1/distributor/deliveries/{vehicle.id}")
+            assert res.status_code == 200
+            assert res.json()["plate"] == "ABC123"
         finally:
             app.dependency_overrides.pop(get_db, None)
             app.dependency_overrides.pop(get_current_user, None)

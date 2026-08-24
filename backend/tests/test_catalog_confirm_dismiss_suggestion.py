@@ -37,12 +37,27 @@ from app.models.parts_manual import PartsReference
 def _superadmin() -> MagicMock:
     u = MagicMock()
     u.is_superadmin = True
+    u.is_administrativo = False
+    return u
+
+
+def _administrativo() -> MagicMock:
+    u = MagicMock()
+    u.is_superadmin = False
+    u.is_administrativo = True
     return u
 
 
 def _non_superadmin() -> MagicMock:
+    """A role blocked from `assert_name_editor` -- NOT superadmin, NOT
+    administrativo (2026-08-24: administrativo now matches superadmin here,
+    see `_administrativo()`). Both flags must be explicitly False: a bare
+    MagicMock's un-set `.is_administrativo` attribute auto-vivifies as a
+    truthy Mock, which would silently let this "blocked" actor through the
+    widened `assert_name_editor` OR gate."""
     u = MagicMock()
     u.is_superadmin = False
+    u.is_administrativo = False
     return u
 
 
@@ -178,6 +193,27 @@ class TestConfirmCatalogSuggestion:
         db.execute.assert_not_called()
         set_desc_mock.assert_not_called()
         db.commit.assert_not_called()
+
+    async def test_administrativo_passes_the_guard(self):
+        """2026-08-24 business decision: administrativo now matches
+        superadmin in Maestro de Partes, exactly."""
+        db = AsyncMock(spec=AsyncSession)
+        ref = _ref(factory_part_number="FPN-1")
+        db.execute = AsyncMock(return_value=_scalar_result(ref))
+        user = _administrativo()
+        payload = ConfirmSuggestionRequest(suggested_text="Filtro de aceite")
+
+        with patch(
+            "app.api.v1.parts_manual._compute_current_suggestion",
+            new=AsyncMock(return_value=("Filtro de aceite", True, "FPN-1")),
+        ), patch(
+            "app.services.parts_description_service.set_description_es", new=AsyncMock()
+        ) as set_desc_mock:
+            result = await confirm_catalog_suggestion("FPN-1", payload, db, user)
+
+        set_desc_mock.assert_awaited_once()
+        db.commit.assert_awaited_once()
+        assert result == {"ok": True}
 
     async def test_unknown_fpn_404(self):
         db = AsyncMock(spec=AsyncSession)
@@ -319,6 +355,20 @@ class TestDismissCatalogSuggestion:
         assert exc.value.status_code == 403
         db.get.assert_not_called()
         db.commit.assert_not_called()
+
+    async def test_administrativo_passes_the_guard(self):
+        """2026-08-24 business decision: administrativo now matches
+        superadmin in Maestro de Partes, exactly."""
+        db = AsyncMock(spec=AsyncSession)
+        ref = _ref(factory_part_number="FPN-1")
+        db.get = AsyncMock(return_value=ref)
+        db.execute = AsyncMock(return_value=_scalar_result("Filtro de aceite"))
+
+        result = await dismiss_catalog_suggestion("FPN-1", db, _administrativo())
+
+        assert ref.suggestion_dismissed_at is not None
+        db.commit.assert_awaited_once()
+        assert result == {"ok": True}
 
     async def test_unknown_fpn_404(self):
         db = AsyncMock(spec=AsyncSession)

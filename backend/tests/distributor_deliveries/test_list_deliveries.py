@@ -23,6 +23,7 @@ from app.services import distributor_delivery_service as svc
 from tests.distributor_deliveries.conftest import (
     FakeDeliverySession,
     NoTouchSession,
+    make_administrativo,
     make_client_user,
     make_delivery_vehicle,
     make_distribuidor,
@@ -199,6 +200,44 @@ class TestSuperadminSeesAllTenantsWithDistribuidoraName:
         result = await svc.list_deliveries(fake_db, actor)
 
         assert result[0].registered_by_tenant_name is None
+
+
+class TestAdministrativoSeesAllTenantsWithDistribuidoraName:
+    """2026-08-24 business decision: administrativo behaves EXACTLY like
+    superadmin here -- network-wide visibility, not tenant-scoped."""
+
+    async def test_no_tenant_filter_applied_in_the_query(self):
+        fake_db = FakeDeliverySession()
+        actor = make_administrativo()
+
+        await svc.list_deliveries(fake_db, actor)
+
+        sql = _compiled_sql(fake_db.executed_statements[0])
+        assert "vehicles.delivery_date IS NOT NULL" in sql
+        assert "registered_by_tenant_id =" not in sql
+
+    async def test_returns_rows_from_multiple_tenants_with_distribuidora_name(self):
+        tenant_a = make_tenant(name="Distribuidora A")
+        tenant_b = make_tenant(name="Distribuidora B")
+        vehicle_a = make_delivery_vehicle(
+            plate="AAA111",
+            delivery_date=date(2026, 7, 10),
+            registered_by_tenant_id=tenant_a.id,
+            registered_by_tenant=tenant_a,
+        )
+        vehicle_b = make_delivery_vehicle(
+            plate="BBB222",
+            delivery_date=date(2026, 7, 20),
+            registered_by_tenant_id=tenant_b.id,
+            registered_by_tenant=tenant_b,
+        )
+        fake_db = FakeDeliverySession(vehicles=[vehicle_a, vehicle_b])
+        actor = make_administrativo()
+
+        result = await svc.list_deliveries(fake_db, actor)
+
+        names = {item.plate: item.registered_by_tenant_name for item in result}
+        assert names == {"AAA111": "Distribuidora A", "BBB222": "Distribuidora B"}
 
 
 class TestOrderingAndDeliveryDateFilterAlwaysPresent:

@@ -71,7 +71,7 @@ describe('ReconciliationModal — description_es cell is superadmin-only', () =>
     render(<ReconciliationModal lot={lot} userRole="administrativo" onClose={() => {}} />);
 
     const cell = await screen.findByText('Repuesto');
-    expect(cell).toHaveAttribute('title', 'Solo superadmin puede editar el nombre del repuesto');
+    expect(cell).toHaveAttribute('title', 'Solo superadmin o administrativo puede editar el nombre del repuesto');
 
     fireEvent.click(cell);
     const table = cell.closest('table');
@@ -93,7 +93,7 @@ describe('ReconciliationModal — description_es cell is superadmin-only', () =>
     render(<ReconciliationModal lot={lot} onClose={() => {}} />);
 
     const cell = await screen.findByText('Repuesto');
-    expect(cell).toHaveAttribute('title', 'Solo superadmin puede editar el nombre del repuesto');
+    expect(cell).toHaveAttribute('title', 'Solo superadmin o administrativo puede editar el nombre del repuesto');
   });
 
   it('shows the confirmed-lot tooltip (not the permission one) once the result is confirmed, even for superadmin', async () => {

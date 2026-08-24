@@ -32,6 +32,14 @@ def make_superadmin() -> CurrentUser:
     return CurrentUser(user_id=str(uuid.uuid4()), role="superadmin", tenant_id=None, name="Super")
 
 
+def make_administrativo() -> CurrentUser:
+    """2026-08-24 business decision: administrativo behaves EXACTLY like
+    superadmin in Registro de Motocicletas -- network-wide visibility,
+    optional photo, explicit Tienda selector (no tenant of their own,
+    mirroring superadmin's `tenant_id=None`)."""
+    return CurrentUser(user_id=str(uuid.uuid4()), role="administrativo", tenant_id=None, name="Administrativo")
+
+
 def make_jefe_taller() -> CurrentUser:
     return CurrentUser(
         user_id=str(uuid.uuid4()),

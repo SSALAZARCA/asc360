@@ -83,25 +83,25 @@ function validateVehicleStep(form, vinLookupStatus) {
   return null;
 }
 
-function validateDeliveryStep(form, photo, isSuperadmin) {
+function validateDeliveryStep(form, photo, isNetworkWide) {
   if (!form.delivery_date) return 'La fecha de entrega es obligatoria.';
   if (isFutureDate(form.delivery_date)) return 'La fecha de entrega no puede ser futura.';
-  if (!photo && !isSuperadmin) return 'El acta de entrega firmada es obligatoria.';
+  if (!photo && !isNetworkWide) return 'El acta de entrega firmada es obligatoria.';
   // Superadmin has no tenant of their own -- unlike a Distribuidor, who
   // gets their own tienda attributed implicitly, superadmin MUST explicitly
   // say which Distribuidora made the sale (mirrors the backend's own
   // rejection in `_resolve_registered_by_tenant_id`).
-  if (isSuperadmin && !form.registered_by_tenant_id) return 'Debe seleccionar la tienda que realizó la venta.';
+  if (isNetworkWide && !form.registered_by_tenant_id) return 'Debe seleccionar la tienda que realizó la venta.';
   return null;
 }
 
 // Full-form validation — kept as a defense-in-depth safety net at final
 // submit, combining every step's rule in the same order as before.
-function validate(form, photo, isSuperadmin, vinLookupStatus) {
+function validate(form, photo, isNetworkWide, vinLookupStatus) {
   return (
     validateClientStep(form)
     || validateVehicleStep(form, vinLookupStatus)
-    || validateDeliveryStep(form, photo, isSuperadmin)
+    || validateDeliveryStep(form, photo, isNetworkWide)
   );
 }
 
@@ -418,7 +418,7 @@ function useDeliveries() {
   return { deliveries, loadingDeliveries, fetchDeliveries, updateDeliveryLocal };
 }
 
-function useDeliverySubmit(form, photo, isSuperadmin, vinLookupStatus, resetForm, onSuccess) {
+function useDeliverySubmit(form, photo, isNetworkWide, vinLookupStatus, resetForm, onSuccess) {
   const [saving, setSaving] = useState(false);
 
   const submit = async () => {
@@ -447,7 +447,7 @@ function useDeliverySubmit(form, photo, isSuperadmin, vinLookupStatus, resetForm
   };
 
   const trySubmit = async () => {
-    const error = validate(form, photo, isSuperadmin, vinLookupStatus);
+    const error = validate(form, photo, isNetworkWide, vinLookupStatus);
     if (error) {
       toast.error(error);
       return;
@@ -587,11 +587,11 @@ function VehicleSection({ form, setForm, vehicleModels, vinApi }) {
   );
 }
 
-function DeliverySection({ form, setForm, photo, setPhoto, isSuperadmin, user, tenants }) {
+function DeliverySection({ form, setForm, photo, setPhoto, isNetworkWide, user, tenants }) {
   return (
     <>
       <Field label="Fecha de entrega" type="date" value={form.delivery_date} onChange={(e) => setForm({ ...form, delivery_date: e.target.value })} required />
-      {isSuperadmin ? (
+      {isNetworkWide ? (
         <TenantSelect
           value={form.registered_by_tenant_id}
           onChange={(v) => setForm({ ...form, registered_by_tenant_id: v })}
@@ -603,7 +603,7 @@ function DeliverySection({ form, setForm, photo, setPhoto, isSuperadmin, user, t
       <DeliveryActUpload
         value={photo}
         onChange={setPhoto}
-        required={!isSuperadmin}
+        required={!isNetworkWide}
         labelStyle={labelStyle}
         inputStyle={inputStyle}
         hintStyle={hintStyle}
@@ -627,8 +627,8 @@ function SummaryRow({ label, value }) {
 }
 
 // Read-only review of everything entered across the 3 previous steps.
-function ConfirmationSummary({ form, photo, isSuperadmin, user, tenants }) {
-  const tiendaLabel = isSuperadmin
+function ConfirmationSummary({ form, photo, isNetworkWide, user, tenants }) {
+  const tiendaLabel = isNetworkWide
     ? (tenants.find((t) => t.id === form.registered_by_tenant_id)?.name || null)
     : (user?.tenant_name || null);
   return (
@@ -682,7 +682,7 @@ async function downloadDeliveryAct(vehicleId) {
   }
 }
 
-function DeliveryRow({ delivery: d, isSuperadmin, onEdit }) {
+function DeliveryRow({ delivery: d, isNetworkWide, onEdit }) {
   return (
     <tr>
       <td style={tdStyle}>{d.client_name || '—'}</td>
@@ -701,14 +701,14 @@ function DeliveryRow({ delivery: d, isSuperadmin, onEdit }) {
           </button>
         ) : '—'}
       </td>
-      {isSuperadmin && (
+      {isNetworkWide && (
         <td style={tdStyle}>
           {d.registered_by_tenant_name && (
             <span style={tenantBadgeStyle}>{d.registered_by_tenant_name}</span>
           )}
         </td>
       )}
-      {isSuperadmin && (
+      {isNetworkWide && (
         <td style={tdStyle}>
           <button type="button" style={editBtnStyle} onClick={() => onEdit(d)}>
             <Pencil size={12} /> Editar
@@ -764,7 +764,7 @@ async function exportDeliveries(setExporting) {
   }
 }
 
-function DeliveriesSection({ deliveries, loading, isSuperadmin, onEdit }) {
+function DeliveriesSection({ deliveries, loading, isNetworkWide, onEdit }) {
   const [search, setSearch] = useState('');
   const [exporting, setExporting] = useState(false);
   const filtered = deliveries.filter((d) => matchesDeliverySearch(d, search));
@@ -811,13 +811,13 @@ function DeliveriesSection({ deliveries, loading, isSuperadmin, onEdit }) {
                 <th style={thStyle}>VIN</th>
                 <th style={thStyle}>Fecha de Entrega</th>
                 <th style={thStyle}>Acta</th>
-                {isSuperadmin && <th style={thStyle}>Distribuidora</th>}
-                {isSuperadmin && <th style={thStyle}>Acciones</th>}
+                {isNetworkWide && <th style={thStyle}>Distribuidora</th>}
+                {isNetworkWide && <th style={thStyle}>Acciones</th>}
               </tr>
             </thead>
             <tbody>
               {filtered.map((d) => (
-                <DeliveryRow key={d.id} delivery={d} isSuperadmin={isSuperadmin} onEdit={onEdit} />
+                <DeliveryRow key={d.id} delivery={d} isNetworkWide={isNetworkWide} onEdit={onEdit} />
               ))}
             </tbody>
           </table>
@@ -1085,23 +1085,23 @@ function VehicleStep({ form, setForm, vehicleModels, vinApi, onBack, onNext }) {
   );
 }
 
-function DeliveryStep({ form, setForm, photo, setPhoto, isSuperadmin, user, tenants, onBack, onNext }) {
+function DeliveryStep({ form, setForm, photo, setPhoto, isNetworkWide, user, tenants, onBack, onNext }) {
   return (
     <>
       <StepHeading title="Entrega" />
       <div style={stepFieldGridStyle}>
-        <DeliverySection form={form} setForm={setForm} photo={photo} setPhoto={setPhoto} isSuperadmin={isSuperadmin} user={user} tenants={tenants} />
+        <DeliverySection form={form} setForm={setForm} photo={photo} setPhoto={setPhoto} isNetworkWide={isNetworkWide} user={user} tenants={tenants} />
       </div>
       <StepNav onBack={onBack} onNext={onNext} />
     </>
   );
 }
 
-function ConfirmStep({ form, photo, submitApi, isSuperadmin, user, tenants, onBack }) {
+function ConfirmStep({ form, photo, submitApi, isNetworkWide, user, tenants, onBack }) {
   return (
     <>
       <StepHeading title="Confirmación" />
-      <ConfirmationSummary form={form} photo={photo} isSuperadmin={isSuperadmin} user={user} tenants={tenants} />
+      <ConfirmationSummary form={form} photo={photo} isNetworkWide={isNetworkWide} user={user} tenants={tenants} />
       <StepNav onBack={onBack} submitApi={submitApi} />
     </>
   );
@@ -1109,13 +1109,13 @@ function ConfirmStep({ form, photo, submitApi, isSuperadmin, user, tenants, onBa
 
 // Per-step "Siguiente"/"Atrás" navigation, kept out of the main component
 // so it stays wiring-only.
-function useWizardNavigation(form, photo, isSuperadmin, vinLookupStatus) {
+function useWizardNavigation(form, photo, isNetworkWide, vinLookupStatus) {
   const [step, setStep] = useState(STEP_CLIENT);
 
   const stepValidators = {
     [STEP_CLIENT]: () => validateClientStep(form),
     [STEP_VEHICLE]: () => validateVehicleStep(form, vinLookupStatus),
-    [STEP_DELIVERY]: () => validateDeliveryStep(form, photo, isSuperadmin),
+    [STEP_DELIVERY]: () => validateDeliveryStep(form, photo, isNetworkWide),
   };
 
   const goNext = () => {
@@ -1148,14 +1148,14 @@ export default function DistribuidorEntregaPage() {
   const [form, setForm] = useState(FORM_DEFAULTS);
   const [photo, setPhoto] = useState(null);
   const user = useCurrentUser();
-  const isSuperadmin = user?.role === 'superadmin';
+  const isNetworkWide = user?.role === 'superadmin' || user?.role === 'administrativo';
   const vehicleModels = useVehicleModels();
   const vinApi = useVinLookup(setForm);
   const geoApi = useGeo();
-  const tenants = useTenants(isSuperadmin);
+  const tenants = useTenants(isNetworkWide);
   const deliveriesApi = useDeliveries();
   const [editingDelivery, setEditingDelivery] = useState(null);
-  const { step, goNext, goBack, resetStep } = useWizardNavigation(form, photo, isSuperadmin, vinApi.vinLookupStatus);
+  const { step, goNext, goBack, resetStep } = useWizardNavigation(form, photo, isNetworkWide, vinApi.vinLookupStatus);
   // Resets the form data AND returns to Cliente after a successful submit,
   // so staff can start registering the next delivery right away.
   const resetForm = () => {
@@ -1164,7 +1164,7 @@ export default function DistribuidorEntregaPage() {
     vinApi.setVinLookupStatus('idle');
     resetStep();
   };
-  const submitApi = useDeliverySubmit(form, photo, isSuperadmin, vinApi.vinLookupStatus, resetForm, deliveriesApi.fetchDeliveries);
+  const submitApi = useDeliverySubmit(form, photo, isNetworkWide, vinApi.vinLookupStatus, resetForm, deliveriesApi.fetchDeliveries);
 
   return (
     <AdminLayout>
@@ -1177,7 +1177,7 @@ export default function DistribuidorEntregaPage() {
           setForm={setForm}
           photo={photo}
           setPhoto={setPhoto}
-          isSuperadmin={isSuperadmin}
+          isNetworkWide={isNetworkWide}
           user={user}
           tenants={tenants}
           vehicleModels={vehicleModels}
@@ -1192,11 +1192,11 @@ export default function DistribuidorEntregaPage() {
       <DeliveriesSection
         deliveries={deliveriesApi.deliveries}
         loading={deliveriesApi.loadingDeliveries}
-        isSuperadmin={isSuperadmin}
+        isNetworkWide={isNetworkWide}
         onEdit={setEditingDelivery}
       />
 
-      {isSuperadmin && editingDelivery && (
+      {isNetworkWide && editingDelivery && (
         <EditDeliveryModal
           delivery={editingDelivery}
           tenants={tenants}

@@ -499,8 +499,8 @@ async def list_vehicle_models(
     current_user=Depends(get_current_user),
 ):
     """Devuelve el catálogo de modelos UM con su catalog_model_code si ya tiene secciones cargadas."""
-    if not current_user.is_superadmin:
-        raise HTTPException(status_code=403, detail="Solo superadmin")
+    if not (current_user.is_superadmin or current_user.is_administrativo):
+        raise HTTPException(status_code=403, detail="Solo superadmin o administrativo")
 
     result = await db.execute(
         select(VehicleModel.model_name, VehicleCatalogMap.catalog_model_code)
@@ -1174,8 +1174,8 @@ async def list_catalog(
     current_user=Depends(get_current_user),
 ):
     """Devuelve todos los repuestos cargados con su sección, modelo y datos del catálogo interno."""
-    if not current_user.is_superadmin:
-        raise HTTPException(status_code=403, detail="Solo superadmin")
+    if not (current_user.is_superadmin or current_user.is_administrativo):
+        raise HTTPException(status_code=403, detail="Solo superadmin o administrativo")
 
     try:
         return await _list_catalog_impl(
@@ -1898,8 +1898,8 @@ async def export_catalog_excel(
     db: AsyncSession = Depends(get_db),
 ):
     """Descarga el maestro de partes completo como Excel con todas las columnas."""
-    if not current_user.is_superadmin:
-        raise HTTPException(status_code=403, detail="Solo superadmin")
+    if not (current_user.is_superadmin or current_user.is_administrativo):
+        raise HTTPException(status_code=403, detail="Solo superadmin o administrativo")
 
     result = await _list_catalog_impl(
         search=search,
@@ -2079,8 +2079,8 @@ async def delete_catalog_part(
     current_user=Depends(get_current_user),
 ):
     """Elimina un repuesto del catálogo. Bloqueado si tiene costos, historial o pedidos asociados."""
-    if not current_user.is_superadmin:
-        raise HTTPException(status_code=403, detail="Solo superadmin")
+    if not (current_user.is_superadmin or current_user.is_administrativo):
+        raise HTTPException(status_code=403, detail="Solo superadmin o administrativo")
 
     ref = await db.get(PartsReference, factory_part_number)
     if not ref:
@@ -2133,9 +2133,9 @@ async def update_catalog_item(
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """Actualiza descripción, descripción ES manual y/o precio público. Solo superadmin."""
-    if not current_user.is_superadmin:
-        raise HTTPException(status_code=403, detail="Solo superadmin")
+    """Actualiza descripción, descripción ES manual y/o precio público. Solo superadmin y administrativo."""
+    if not (current_user.is_superadmin or current_user.is_administrativo):
+        raise HTTPException(status_code=403, detail="Solo superadmin o administrativo")
 
     ref = await db.get(PartsReference, factory_part_number)
     if not ref:
@@ -2552,8 +2552,8 @@ async def backfill_costs(
     Una referencia cuenta como "actualizada" una sola vez si CUALQUIERA de
     los dos precios se completó -- no se reportan como dos métricas
     separadas, es una sola acción de "completar lo que falte"."""
-    if not current_user.is_superadmin:
-        raise HTTPException(status_code=403, detail="Solo superadmin")
+    if not (current_user.is_superadmin or current_user.is_administrativo):
+        raise HTTPException(status_code=403, detail="Solo superadmin o administrativo")
 
     from sqlalchemy import or_
     from app.services.pricing_service import recalculate_part_cost
@@ -2832,9 +2832,9 @@ async def approve_review_task(
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """Aprueba la sustitución de código: el candidato pasa a ser el código activo. Solo superadmin."""
-    if not current_user.is_superadmin:
-        raise HTTPException(status_code=403, detail="Solo superadmin")
+    """Aprueba la sustitución de código: el candidato pasa a ser el código activo. Solo superadmin y administrativo."""
+    if not (current_user.is_superadmin or current_user.is_administrativo):
+        raise HTTPException(status_code=403, detail="Solo superadmin o administrativo")
 
     task = await db.get(PartsCodeReviewTask, _uuid.UUID(task_id))
     if not task or task.status != "pending":
@@ -2870,9 +2870,9 @@ async def reject_review_task(
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """Descarta la sugerencia de cambio de código. Solo superadmin."""
-    if not current_user.is_superadmin:
-        raise HTTPException(status_code=403, detail="Solo superadmin")
+    """Descarta la sugerencia de cambio de código. Solo superadmin y administrativo."""
+    if not (current_user.is_superadmin or current_user.is_administrativo):
+        raise HTTPException(status_code=403, detail="Solo superadmin o administrativo")
 
     task = await db.get(PartsCodeReviewTask, _uuid.UUID(task_id))
     if not task or task.status != "pending":
@@ -3491,9 +3491,9 @@ async def import_rotation(
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """Bulk-assign rotation_class from an Excel file. Solo superadmin."""
-    if not current_user.is_superadmin:
-        raise HTTPException(status_code=403, detail="Solo superadmin")
+    """Bulk-assign rotation_class from an Excel file. Solo superadmin y administrativo."""
+    if not (current_user.is_superadmin or current_user.is_administrativo):
+        raise HTTPException(status_code=403, detail="Solo superadmin o administrativo")
 
     content = await file.read()
     wb = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
@@ -3577,8 +3577,8 @@ async def import_description_es(
     """Bulk-assign description_es_manual from an Excel file. Solo superadmin.
     Nunca pisa una traducción ya cargada a mano -- solo completa referencias
     con description_es_manual en NULL (mismo criterio que import_rotation)."""
-    if not current_user.is_superadmin:
-        raise HTTPException(status_code=403, detail="Solo superadmin")
+    if not (current_user.is_superadmin or current_user.is_administrativo):
+        raise HTTPException(status_code=403, detail="Solo superadmin o administrativo")
 
     content = await file.read()
     wb = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
@@ -3817,9 +3817,9 @@ async def get_coverage(
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """Resumen de cobertura de repuestos por rotation_class. Solo superadmin."""
-    if not current_user.is_superadmin:
-        raise HTTPException(status_code=403, detail="Solo superadmin")
+    """Resumen de cobertura de repuestos por rotation_class. Solo superadmin y administrativo."""
+    if not (current_user.is_superadmin or current_user.is_administrativo):
+        raise HTTPException(status_code=403, detail="Solo superadmin o administrativo")
 
     model_filter = """
         AND r.factory_part_number IN (
@@ -4761,9 +4761,9 @@ async def export_unordered(
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """Exporta repuestos clasificados sin SparePartItems a Excel. Solo superadmin."""
-    if not current_user.is_superadmin:
-        raise HTTPException(status_code=403, detail="Solo superadmin")
+    """Exporta repuestos clasificados sin SparePartItems a Excel. Solo superadmin y administrativo."""
+    if not (current_user.is_superadmin or current_user.is_administrativo):
+        raise HTTPException(status_code=403, detail="Solo superadmin o administrativo")
 
     params: dict = {}
     rc_clause = ""

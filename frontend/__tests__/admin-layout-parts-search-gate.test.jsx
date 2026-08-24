@@ -17,6 +17,16 @@
  * `sidebar-parts-search-gate.test.jsx`); a `parts_dealer` who knows/types
  * the URL directly is not blocked here. This is the intentionally
  * lighter-weight choice for this testing phase, not a bug.
+ *
+ * Updated 2026-08-24 (accepted side effect, same shape as
+ * `admin-layout-distribuidor-gate.test.jsx`'s update): the business-owner
+ * decision to widen `ROUTE_ROLES['/distribuidor']` for Registro de
+ * Motocicletas (Design ADR 10's shared PREFIX match) also opens THIS route
+ * to `administrativo` by construction -- the Sidebar menu entry for
+ * "Consulta de Repuestos" stays `roles: ['superadmin']` only (unchanged),
+ * so administrativo gets no menu link here, but direct URL entry is no
+ * longer blocked. Same "shared gate widens more than the one named screen"
+ * shape as Maestro de Partes' `/admin/vehicle-models` side effect.
  */
 import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
@@ -85,13 +95,14 @@ describe('AdminLayout — /distribuidor/repuestos route gate (zero admin-layout.
     expect(screen.queryByText('Contenido protegido')).not.toBeInTheDocument();
   });
 
-  it('redirects an administrativo user away from /distribuidor/repuestos, to its own home (/)', async () => {
+  it('does NOT redirect an administrativo user visiting /distribuidor/repuestos (2026-08-24: accepted side effect of the shared prefix gate, see file docstring)', async () => {
     setUser('administrativo');
     render(<AdminLayout><div>Contenido protegido</div></AdminLayout>);
 
     await waitFor(() => {
-      expect(pushMock).toHaveBeenCalledWith('/');
+      expect(screen.getByText('Contenido protegido')).toBeInTheDocument();
     });
+    expect(pushMock).not.toHaveBeenCalled();
   });
 
   it('redirects a proveedor user away from /distribuidor/repuestos, to /imports', async () => {

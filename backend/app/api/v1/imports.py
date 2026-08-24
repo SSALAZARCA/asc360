@@ -218,7 +218,10 @@ async def list_shipment_orders(
 
 
 # ---------------------------------------------------------------------------
-# Exportar pedidos a Excel (superadmin)
+# Exportar pedidos a Excel (superadmin, proveedor, administrativo -- the
+# Pedidos tab itself is already visible to all three via ALL_TABS' `roles:
+# null`, so this reuses `_require_imports_editor` instead of a narrower
+# check, matching what the frontend already exposes)
 # ---------------------------------------------------------------------------
 
 @router.get("/shipment-orders/export")
@@ -230,7 +233,7 @@ async def export_shipment_orders(
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
-    _require_superadmin(current_user)
+    _require_imports_editor(current_user)
 
     filters = []
     if cycle is not None:
@@ -1987,7 +1990,10 @@ async def export_spare_parts(
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
-    _require_superadmin(current_user)
+    # Repuestos tab itself is already visible to superadmin, proveedor and
+    # administrativo via ALL_TABS' `roles: null`, so this reuses
+    # `_require_imports_editor` instead of a narrower check.
+    _require_imports_editor(current_user)
 
     stmt = (
         select(SparePartLot)
@@ -2868,7 +2874,10 @@ async def export_moto_units(
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
-    _require_superadmin(current_user)
+    # Motocicletas tab itself is already visible to superadmin, proveedor and
+    # administrativo via ALL_TABS' `roles: null`, so this reuses
+    # `_require_imports_editor` instead of a narrower check.
+    _require_imports_editor(current_user)
 
     _base_filters, filters = _build_moto_unit_filters(
         pi_number, model, vin, engine, certificado_generado,

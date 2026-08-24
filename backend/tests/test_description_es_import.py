@@ -64,15 +64,41 @@ def _superadmin():
     return make_imports_editor(role="superadmin")
 
 
-def test_non_superadmin_gets_403_with_no_db_touch():
+def test_non_superadmin_non_administrativo_gets_403_with_no_db_touch():
+    """2026-08-24 business decision: administrativo now matches superadmin
+    here (see `test_administrativo_can_import_description_es` below) --
+    technician stays blocked, same as before."""
     file = _xlsx(["part_code", "description_es"], [["ABC-001", "Tornillo"]])
     fake_db = FakeAsyncSession(execute_queue=[])
     try:
-        asyncio.run(import_description_es(file, fake_db, make_imports_editor(role="administrativo")))
+        asyncio.run(import_description_es(file, fake_db, make_imports_editor(role="technician")))
         assert False, "expected HTTPException"
     except Exception as exc:
         assert getattr(exc, "status_code", None) == 403
     assert fake_db.executed_statements == []
+
+
+def test_client_gets_403_with_no_db_touch():
+    file = _xlsx(["part_code", "description_es"], [["ABC-001", "Tornillo"]])
+    fake_db = FakeAsyncSession(execute_queue=[])
+    try:
+        asyncio.run(import_description_es(file, fake_db, make_imports_editor(role="client")))
+        assert False, "expected HTTPException"
+    except Exception as exc:
+        assert getattr(exc, "status_code", None) == 403
+    assert fake_db.executed_statements == []
+
+
+def test_administrativo_can_import_description_es():
+    """2026-08-24 business decision: administrativo now matches superadmin
+    in Maestro de Partes, exactly."""
+    file = _xlsx(["part_code", "description_es"], [["ABC-001", "Tornillo M6"]])
+    ref = _ref("ABC-001", description_es_manual=None)
+    fake_db = FakeAsyncSession(execute_queue=[[ref]])
+
+    result = asyncio.run(import_description_es(file, fake_db, make_imports_editor(role="administrativo")))
+
+    assert result == {"updated": 1, "skipped": 0, "errors": []}
 
 
 def test_fills_description_es_when_missing():

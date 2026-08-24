@@ -61,14 +61,14 @@ MAX_PREV_CODES = 5
 
 
 def assert_name_editor(current_user) -> None:
-    """Superadmin-only gate for editing a part's Spanish display name on ANY
-    surface (D8/D9). No carve-out for already-catalogued codes -- called
-    unconditionally at the top of every write path (D10)."""
-    if not getattr(current_user, "is_superadmin", False):
+    """Superadmin/administrativo-only gate for editing a part's Spanish
+    display name on ANY surface (D8/D9). No carve-out for already-catalogued
+    codes -- called unconditionally at the top of every write path (D10)."""
+    if not (getattr(current_user, "is_superadmin", False) or getattr(current_user, "is_administrativo", False)):
         raise HTTPException(
             status_code=403,
             detail={
-                "detail": "Solo superadmin puede editar el nombre del repuesto",
+                "detail": "Solo superadmin o administrativo puede editar el nombre del repuesto",
                 "code": "NAME_EDIT_FORBIDDEN",
             },
         )

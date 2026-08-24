@@ -10,7 +10,7 @@ import BackorderReconciliationModal from './BackorderReconciliationModal';
 import PhysicalInventoryUploadModal from './PhysicalInventoryUploadModal';
 import ConfirmModal from '../ConfirmModal';
 import CodeCandidateModal from './CodeCandidateModal';
-import { SUPERADMIN_ONLY_NAME_EDIT_MESSAGE } from './partNamePermission';
+import { NAME_EDIT_FORBIDDEN_MESSAGE } from './partNamePermission';
 
 // ---------------------------------------------------------------------------
 // Status badge para spare part items
@@ -467,7 +467,7 @@ function LotItemsTable({ lotId, userRole, isConfirmed }) {
                           current={item.description_es}
                           onSaved={fetch}
                           readOnly={userRole !== 'superadmin'}
-                          readOnlyTitle={SUPERADMIN_ONLY_NAME_EDIT_MESSAGE}
+                          readOnlyTitle={NAME_EDIT_FORBIDDEN_MESSAGE}
                           cellStyle={{ display: 'block' }}
                           onUncataloguedCode={(pendingValue) => setCandidateModal({
                             partNumber: item.part_number,
@@ -481,7 +481,7 @@ function LotItemsTable({ lotId, userRole, isConfirmed }) {
                           current={item.description}
                           onSaved={fetch}
                           readOnly={userRole !== 'superadmin'}
-                          readOnlyTitle={SUPERADMIN_ONLY_NAME_EDIT_MESSAGE}
+                          readOnlyTitle={NAME_EDIT_FORBIDDEN_MESSAGE}
                           cellStyle={{ display: 'block', fontSize: '9px', color: '#606075', marginTop: 2 }}
                         />
                       </>
@@ -1119,8 +1119,8 @@ export default function SparePartsTab({ userRole }) {
           )}
         </div>
 
-        {/* Exportar Excel (solo superadmin) */}
-        {userRole === 'superadmin' && (
+        {/* Exportar Excel (superadmin + administrativo) */}
+        {(userRole === 'superadmin' || userRole === 'administrativo') && (
           <button
             onClick={handleExportRepuestos}
             disabled={exportingRepuestos}

@@ -1719,7 +1719,7 @@ async def _fetch_services_data(
     )
 
     # Filtro por tenant extraído del JWT
-    tenant_id = None if current_user.is_superadmin else current_user.tenant_id
+    tenant_id = None if (current_user.is_superadmin or current_user.is_administrativo) else current_user.tenant_id
 
     # 2. Aplicar filtros dinámicos
     if tenant_id:
@@ -1866,7 +1866,8 @@ async def export_services_analytics(
     current_user: CurrentUser = Depends(get_current_user),
 ):
     """
-    Excel export for "Gestión de Órdenes" (`/services`). Superadmin-only.
+    Excel export for "Gestión de Órdenes" (`/services`). Superadmin and
+    administrativo only.
 
     Accepts the exact list of order IDs the frontend already has on screen
     (after its own search/tipo/estado/centro filtering) and re-fetches only
@@ -1874,8 +1875,8 @@ async def export_services_analytics(
     never re-implements the frontend's client-side filtering, so it can't
     silently drift from what's rendered on screen.
     """
-    if not current_user.is_superadmin:
-        raise HTTPException(status_code=403, detail="Solo superadmin puede exportar este reporte")
+    if not (current_user.is_superadmin or current_user.is_administrativo):
+        raise HTTPException(status_code=403, detail="Solo superadmin o administrativo puede exportar este reporte")
 
     services_data = await _fetch_services_data(db, current_user, order_ids=body.order_ids)
     rows = [_build_services_export_row(s) for s in services_data]

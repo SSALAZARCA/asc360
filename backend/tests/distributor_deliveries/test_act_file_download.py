@@ -29,6 +29,7 @@ from app.services import distributor_delivery_service as svc
 from tests.distributor_deliveries.conftest import (
     FakeDeliverySession,
     NoTouchSession,
+    make_administrativo,
     make_delivery_vehicle,
     make_distribuidor,
     make_jefe_taller,
@@ -126,6 +127,32 @@ class TestSuperadminDownloadsAnyDistribuidorasAct:
         vehicle.delivery_act_url = "http://localhost:9000/um-service-docs/evidences/2026/7/x_acta.png"
         fake_db = FakeDeliverySession(vehicles=[vehicle])
         _override(fake_db, make_superadmin())
+
+        try:
+            with patch.object(
+                svc, "get_pdf_stream_from_minio", new=AsyncMock(return_value=b"fake-png-bytes")
+            ):
+                res = _get(vehicle.id)
+            assert res.status_code == 200
+            assert res.content == b"fake-png-bytes"
+            assert res.headers["content-type"] == "image/png"
+        finally:
+            _teardown()
+
+
+class TestAdministrativoDownloadsAnyDistribuidorasAct:
+    """2026-08-24 business decision: administrativo behaves EXACTLY like
+    superadmin here -- network-wide, not tenant-scoped (widened alongside
+    `list_deliveries`/`export_deliveries` for consistency, since otherwise
+    administrativo could see a row in the network-wide list but then 403
+    trying to download that same row's act)."""
+
+    def test_returns_200_regardless_of_registered_by_tenant_id(self):
+        other_tenant = uuid.uuid4()
+        vehicle = make_delivery_vehicle(registered_by_tenant_id=other_tenant)
+        vehicle.delivery_act_url = "http://localhost:9000/um-service-docs/evidences/2026/7/x_acta.png"
+        fake_db = FakeDeliverySession(vehicles=[vehicle])
+        _override(fake_db, make_administrativo())
 
         try:
             with patch.object(

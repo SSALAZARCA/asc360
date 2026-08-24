@@ -271,6 +271,7 @@ export default function ServicesPage() {
     ? JSON.parse(sessionStorage.getItem('um_user') || '{}')
     : {};
   const isSuperadmin = currentUser.role === 'superadmin';
+  const isAdministrativo = currentUser.role === 'administrativo';
 
   // Filtros
   const [filterQuery, setFilterQuery] = useState('');
@@ -433,7 +434,7 @@ export default function ServicesPage() {
             </select>
           </div>
 
-          {isSuperadmin && (
+          {(isSuperadmin || isAdministrativo) && (
             <button
               onClick={handleExportExcel}
               disabled={exportingExcel}

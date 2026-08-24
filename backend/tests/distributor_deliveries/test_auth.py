@@ -24,6 +24,7 @@ import json
 
 from tests.distributor_deliveries.conftest import (
     FakeDeliverySession,
+    make_administrativo,
     make_distribuidor,
     make_superadmin,
     make_jefe_taller,
@@ -94,6 +95,28 @@ def test_superadmin_reaches_the_real_service_and_gets_201():
 
     async def _get_current_user():
         return make_superadmin()
+    app.dependency_overrides[get_current_user] = _get_current_user
+
+    try:
+        res = _post(payload_json=json.dumps(payload))
+        assert res.status_code == 201
+        assert res.json()["plate"] == "ABC123"
+    finally:
+        _teardown()
+
+
+def test_administrativo_reaches_the_real_service_and_gets_201():
+    """2026-08-24 business decision: administrativo behaves EXACTLY like
+    superadmin here -- no tenant of their own, so `registered_by_tenant_id`
+    must be explicitly present in the payload, same as the superadmin case
+    above."""
+    tenant = make_tenant()
+    fake_db = FakeDeliverySession(tenants=[tenant])
+    _override_db_with(fake_db)
+    payload = dict(VALID_DELIVERY_PAYLOAD, registered_by_tenant_id=str(tenant.id))
+
+    async def _get_current_user():
+        return make_administrativo()
     app.dependency_overrides[get_current_user] = _get_current_user
 
     try:

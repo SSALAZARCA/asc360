@@ -4,7 +4,7 @@ import { authFetch } from '../../lib/authFetch';
 import { getApiUrl } from '../../lib/api';
 import { X, CheckCircle, AlertCircle, XCircle, Plus, Upload, RefreshCw, Search, Download } from 'lucide-react';
 import { toast } from '../../lib/toast';
-import { SUPERADMIN_ONLY_NAME_EDIT_MESSAGE } from './partNamePermission';
+import { NAME_EDIT_FORBIDDEN_MESSAGE } from './partNamePermission';
 import CodeCandidateModal from './CodeCandidateModal';
 
 const RESULT_CFG = {
@@ -427,7 +427,7 @@ export default function ReconciliationModal({ lot, userRole, onClose, onConfirme
                               current={r.description_es}
                               onSaved={fetchResults}
                               readOnly={confirmed || userRole !== 'superadmin'}
-                              readOnlyTitle={confirmed ? 'Reconciliación confirmada — no editable' : SUPERADMIN_ONLY_NAME_EDIT_MESSAGE}
+                              readOnlyTitle={confirmed ? 'Reconciliación confirmada — no editable' : NAME_EDIT_FORBIDDEN_MESSAGE}
                               cellStyle={{ color: '#9ca3af', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
                               onUncataloguedCode={(pendingValue) => setCandidateModal({
                                 partNumber: r.part_number,

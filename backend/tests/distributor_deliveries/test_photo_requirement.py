@@ -15,6 +15,7 @@ from app.services import distributor_delivery_service as svc
 from tests.distributor_deliveries.conftest import (
     FakeDeliverySession,
     make_valid_photo,
+    make_administrativo,
     make_distribuidor,
     make_superadmin,
     make_tenant,
@@ -34,6 +35,19 @@ async def test_superadmin_without_photo_succeeds_with_null_delivery_act_url():
     payload = _payload(registered_by_tenant_id=str(tenant.id))
 
     vehicle = await svc.create_delivery(fake_db, payload, None, make_superadmin())
+
+    assert vehicle.delivery_act_url is None
+    assert fake_db.committed is True
+
+
+async def test_administrativo_without_photo_succeeds_with_null_delivery_act_url():
+    """2026-08-24 business decision: administrativo behaves EXACTLY like
+    superadmin here -- photo is optional."""
+    tenant = make_tenant()
+    fake_db = FakeDeliverySession(tenants=[tenant])
+    payload = _payload(registered_by_tenant_id=str(tenant.id))
+
+    vehicle = await svc.create_delivery(fake_db, payload, None, make_administrativo())
 
     assert vehicle.delivery_act_url is None
     assert fake_db.committed is True

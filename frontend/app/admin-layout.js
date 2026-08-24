@@ -74,7 +74,7 @@ export default function AdminLayout({ children, fullWidth = false }) {
       // Reusable, prefix-matched role gate (Design ADR 10) -- a future
       // parts-sale screen under the same `/distribuidor/*` namespace needs
       // zero further edits here. Checked FIRST, ahead of every *Only array.
-      const ROUTE_ROLES = { '/distribuidor': ['parts_dealer', 'superadmin'] };
+      const ROUTE_ROLES = { '/distribuidor': ['parts_dealer', 'superadmin', 'administrativo'] };
       const routeRoleEntry = Object.entries(ROUTE_ROLES).find(([prefix]) => pathname.startsWith(prefix));
       if (routeRoleEntry && !routeRoleEntry[1].includes(u.role)) {
         r.push(homeRouteFor(u.role));

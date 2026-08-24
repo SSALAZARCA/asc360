@@ -6,7 +6,11 @@
  * checked FIRST, so a single `ROUTE_ROLES` entry covers this screen AND a
  * future parts-sale screen under the same namespace with zero further
  * edits. Every other role is redirected to its own home
- * (`administrativo` -> '/', `proveedor` -> '/imports', else -> '/kanban').
+ * (`proveedor` -> '/imports', else -> '/kanban').
+ *
+ * Updated 2026-08-24 (explicit business-owner decision): `administrativo`
+ * now behaves EXACTLY like `superadmin` on this route -- added to
+ * `ROUTE_ROLES['/distribuidor']`, so it is no longer redirected away.
  */
 import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
@@ -55,13 +59,14 @@ describe('AdminLayout — /distribuidor/* route gate', () => {
     expect(screen.queryByText('Contenido protegido')).not.toBeInTheDocument();
   });
 
-  it('redirects an administrativo user away from /distribuidor/entrega, to its own home (/)', async () => {
+  it('does NOT redirect an administrativo user visiting /distribuidor/entrega (2026-08-24: administrativo now matches superadmin here)', async () => {
     setUser('administrativo');
     render(<AdminLayout><div>Contenido protegido</div></AdminLayout>);
 
     await waitFor(() => {
-      expect(pushMock).toHaveBeenCalledWith('/');
+      expect(screen.getByText('Contenido protegido')).toBeInTheDocument();
     });
+    expect(pushMock).not.toHaveBeenCalled();
   });
 
   it('redirects a proveedor user away from /distribuidor/entrega, to /imports', async () => {

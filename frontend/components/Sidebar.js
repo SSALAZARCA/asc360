@@ -28,14 +28,14 @@ const ALL_ITEMS = [
   { id: 'imports', name: 'Estado Pedidos', icon: Ship, path: '/imports', importsOnly: true },
   { id: 'tenants', name: 'Red de Tiendas', icon: Building2, path: '/tenants', adminOnly: true, allowAdministrativo: true },
   { id: 'users', name: 'Personal & Acceso', icon: Users, path: '/users', adminOnly: true },
-  { id: 'parts-catalog', name: 'Maestro de Partes', icon: BookOpen, path: '/parts-catalog', adminOnly: true },
+  { id: 'parts-catalog', name: 'Maestro de Partes', icon: BookOpen, path: '/parts-catalog', adminOnly: true, allowAdministrativo: true },
   { id: 'superadmin-data', name: 'Datos Rápidos', icon: Wand2, path: '/superadmin-data', adminOnly: true },
   { id: 'historical-orders', name: 'Orden Histórica', icon: CalendarClock, path: '/historical-orders', adminOnly: true },
   { id: 'settings', name: 'Configuración', icon: Settings, path: '/settings', adminOnly: true },
   // Reusable, role-based allowlist (not another *Only boolean) — a future
   // parts-sale screen for the same `parts_dealer` role adds another entry
   // here with the same `roles` key, zero further filter changes needed.
-  { id: 'vehicle-delivery', name: 'Registro de Motocicletas', icon: Truck, path: '/distribuidor/entrega', roles: ['parts_dealer', 'superadmin'] },
+  { id: 'vehicle-delivery', name: 'Registro de Motocicletas', icon: Truck, path: '/distribuidor/entrega', roles: ['parts_dealer', 'superadmin', 'administrativo'] },
   // TEMP: parts_dealer intentionally excluded while this screen is
   // tested/polished — add 'parts_dealer' back to re-enable for Distribuidor.
   { id: 'parts-search', name: 'Consulta de Repuestos', icon: Search, path: '/distribuidor/repuestos', roles: ['superadmin'] },

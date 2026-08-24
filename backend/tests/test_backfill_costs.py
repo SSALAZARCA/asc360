@@ -48,14 +48,39 @@ def _superadmin():
     return make_imports_editor(role="superadmin")
 
 
-def test_non_superadmin_gets_403_with_no_db_touch():
+def test_non_superadmin_non_administrativo_gets_403_with_no_db_touch():
+    """2026-08-24 business decision: administrativo now matches superadmin
+    here (see `test_administrativo_can_backfill_costs` below) -- technician
+    stays blocked, same as before."""
     fake_db = FakeAsyncSession(execute_queue=[])
     try:
-        asyncio.run(backfill_costs(fake_db, make_imports_editor(role="administrativo")))
+        asyncio.run(backfill_costs(fake_db, make_imports_editor(role="technician")))
         assert False, "expected HTTPException"
     except Exception as exc:
         assert getattr(exc, "status_code", None) == 403
     assert fake_db.executed_statements == []
+
+
+def test_client_gets_403_with_no_db_touch():
+    fake_db = FakeAsyncSession(execute_queue=[])
+    try:
+        asyncio.run(backfill_costs(fake_db, make_imports_editor(role="client")))
+        assert False, "expected HTTPException"
+    except Exception as exc:
+        assert getattr(exc, "status_code", None) == 403
+    assert fake_db.executed_statements == []
+
+
+def test_administrativo_can_backfill_costs():
+    """2026-08-24 business decision: administrativo now matches superadmin
+    in Maestro de Partes, exactly."""
+    fake_db = FakeAsyncSession(execute_queue=[
+        [],  # nothing missing a price -- confirms the call passes the guard and completes
+    ])
+
+    result = asyncio.run(backfill_costs(fake_db, make_imports_editor(role="administrativo")))
+
+    assert result == {"checked": 0, "updated": 0}
 
 
 def test_fills_avg_fob_cost_when_missing_via_recalculate_part_cost():

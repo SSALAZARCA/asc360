@@ -261,8 +261,8 @@ export default function ImportsTabs({ userRole }) {
               <RefreshCw size={14} />
             </button>
 
-            {/* Exportar Excel (solo superadmin) */}
-            {userRole === 'superadmin' && (
+            {/* Exportar Excel (superadmin + administrativo) */}
+            {(userRole === 'superadmin' || userRole === 'administrativo') && (
               <button
                 onClick={handleExportOrders}
                 disabled={exportingOrders}

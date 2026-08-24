@@ -78,12 +78,13 @@ DEFAULT_VEHICLE_BRAND = "UM"
 
 def _require_photo_or_superadmin(actor: CurrentUser, photo: Optional[UploadFile]) -> None:
     """Distribuidor MUST always attach the signed delivery-act photo -- no
-    exception, a genuine new sale always has one. Superadmin MAY omit it,
-    to support manually re-registering a pre-existing motorcycle that
-    predates this system and has no physical signed act. Decided by ROLE,
-    never by a client-supplied flag, and checked BEFORE any DB write
-    (Design ADR 17/18)."""
-    if photo is None and not actor.is_superadmin:
+    exception, a genuine new sale always has one. Superadmin (and, per the
+    2026-08-24 business decision, administrativo) MAY omit it, to support
+    manually re-registering a pre-existing motorcycle that predates this
+    system and has no physical signed act. Decided by ROLE, never by a
+    client-supplied flag, and checked BEFORE any DB write (Design
+    ADR 17/18)."""
+    if photo is None and not (actor.is_superadmin or actor.is_administrativo):
         raise HTTPException(
             status_code=422,
             detail="El acta de entrega firmada es obligatoria.",
@@ -116,13 +117,14 @@ async def _require_vin_in_master(db: AsyncSession, vin: Optional[str]) -> None:
 async def _resolve_registered_by_tenant_id(
     db: AsyncSession, payload: DeliveryCreate, actor: CurrentUser
 ) -> Optional[UUID]:
-    """Which Distribuidora gets attributed this sale. A non-superadmin
-    actor's OWN tenant is used unconditionally -- `payload.
-    registered_by_tenant_id` is never even read in that branch, so a
-    Distribuidor can never attribute a sale to a different Distribuidora by
-    sending an arbitrary id. Superadmin has no tenant of their own, so they
-    MUST explicitly choose a real one."""
-    if not actor.is_superadmin:
+    """Which Distribuidora gets attributed this sale. A non-superadmin,
+    non-administrativo actor's OWN tenant is used unconditionally --
+    `payload.registered_by_tenant_id` is never even read in that branch, so
+    a Distribuidor can never attribute a sale to a different Distribuidora
+    by sending an arbitrary id. Superadmin has no tenant of their own, so
+    they MUST explicitly choose a real one -- per the 2026-08-24 business
+    decision, administrativo behaves identically here."""
+    if not (actor.is_superadmin or actor.is_administrativo):
         return actor.tenant_id
     if payload.registered_by_tenant_id is None:
         raise HTTPException(
@@ -421,10 +423,11 @@ def _scoped_delivery_vehicles_query(actor: CurrentUser) -> Optional[Select]:
     """The SINGLE source of truth for which delivery rows an actor may see
     -- both `list_deliveries` (the on-screen table) and `export_deliveries`
     (the Excel download) call this instead of building their own query, so
-    there is exactly one place that decides visibility. Superadmin sees
-    every Distribuidora's rows (network-wide); a Distribuidor sees only
-    rows `registered_by_tenant_id == actor.tenant_id` -- shared across
-    every user at the SAME Distribuidora, not just the one who typed it in.
+    there is exactly one place that decides visibility. Superadmin (and,
+    per the 2026-08-24 business decision, administrativo) sees every
+    Distribuidora's rows (network-wide); a Distribuidor sees only rows
+    `registered_by_tenant_id == actor.tenant_id` -- shared across every
+    user at the SAME Distribuidora, not just the one who typed it in.
 
     Returns `None` when the actor must see NOTHING at all (a Distribuidor
     with no tenant assigned yet) -- callers must short-circuit to an empty
@@ -442,7 +445,8 @@ def _scoped_delivery_vehicles_query(actor: CurrentUser) -> Optional[Select]:
     the actual documented requirement ("empty output, never someone else's
     data") true.
     """
-    if not actor.is_superadmin and actor.tenant_id is None:
+    is_network_wide = actor.is_superadmin or actor.is_administrativo
+    if not is_network_wide and actor.tenant_id is None:
         return None
 
     stmt = (
@@ -451,7 +455,7 @@ def _scoped_delivery_vehicles_query(actor: CurrentUser) -> Optional[Select]:
         .options(selectinload(Vehicle.client), selectinload(Vehicle.registered_by_tenant))
         .order_by(Vehicle.delivery_date.desc())
     )
-    if not actor.is_superadmin:
+    if not is_network_wide:
         stmt = stmt.where(Vehicle.registered_by_tenant_id == actor.tenant_id)
     return stmt
 
@@ -478,7 +482,7 @@ async def list_deliveries(db: AsyncSession, actor: CurrentUser) -> list[Delivery
                 client_identification=vehicle.client.identification if vehicle.client else None,
                 registered_by_tenant_name=(
                     vehicle.registered_by_tenant.name
-                    if actor.is_superadmin and vehicle.registered_by_tenant
+                    if (actor.is_superadmin or actor.is_administrativo) and vehicle.registered_by_tenant
                     else None
                 ),
                 delivery_act_url=vehicle.delivery_act_url,
@@ -519,7 +523,7 @@ async def export_deliveries(db: AsyncSession, actor: CurrentUser) -> io.BytesIO:
         client = vehicle.client
         tenant_name = (
             vehicle.registered_by_tenant.name
-            if actor.is_superadmin and vehicle.registered_by_tenant
+            if (actor.is_superadmin or actor.is_administrativo) and vehicle.registered_by_tenant
             else ""
         )
         ws.append([
@@ -769,9 +773,10 @@ async def get_delivery_act_file(
     # silently let an unassigned Distribuidor through (same NULL-comparison
     # lesson already learned in `list_deliveries`). Checked as an explicit
     # early rejection, not implicit equality.
-    if not actor.is_superadmin and actor.tenant_id is None:
+    is_network_wide = actor.is_superadmin or actor.is_administrativo
+    if not is_network_wide and actor.tenant_id is None:
         raise HTTPException(status_code=403, detail="No tiene permiso para acceder a esta acta")
-    if not actor.is_superadmin and vehicle.registered_by_tenant_id != actor.tenant_id:
+    if not is_network_wide and vehicle.registered_by_tenant_id != actor.tenant_id:
         raise HTTPException(status_code=403, detail="No tiene permiso para acceder a esta acta")
 
     if not vehicle.delivery_act_url:

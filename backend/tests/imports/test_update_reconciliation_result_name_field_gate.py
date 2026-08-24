@@ -52,12 +52,17 @@ def _make_reconciliation_result(**kwargs):
 
 
 class TestNameFieldOnlyPayloadNonSuperadminRejected:
+    """`proveedor` is `is_imports_editor` (passes the outer guard) but NOT
+    `is_superadmin`/`is_administrativo` -- still blocked by
+    `assert_name_editor` after the 2026-08-24 widening (see
+    `TestAdministrativoNowPassesNameGate` below for the role that
+    changed)."""
 
     def test_403_nothing_mutated_extra_row(self):
         rr = _make_reconciliation_result(spare_part_item_id=None)
         fake_db = FakeAsyncSession(execute_queue=[], get_objects=[rr])
 
-        with make_test_client(current_user=make_imports_editor(role="administrativo"), fake_db_session=fake_db) as client:
+        with make_test_client(current_user=make_imports_editor(role="proveedor"), fake_db_session=fake_db) as client:
             response = client.patch(
                 f"/api/v1/imports/reconciliation-results/{rr.id}",
                 json={"description_es": "Nueva descripcion"},
@@ -72,7 +77,7 @@ class TestNameFieldOnlyPayloadNonSuperadminRejected:
         rr = _make_reconciliation_result(spare_part_item_id=item.id)
         fake_db = FakeAsyncSession(execute_queue=[], get_objects=[rr, item])
 
-        with make_test_client(current_user=make_imports_editor(role="administrativo"), fake_db_session=fake_db) as client:
+        with make_test_client(current_user=make_imports_editor(role="proveedor"), fake_db_session=fake_db) as client:
             response = client.patch(
                 f"/api/v1/imports/reconciliation-results/{rr.id}",
                 json={"description_es": "Nueva descripcion"},
@@ -81,6 +86,39 @@ class TestNameFieldOnlyPayloadNonSuperadminRejected:
         assert response.status_code == 403
         assert response.json()["detail"]["code"] == "NAME_EDIT_FORBIDDEN"
         assert item.description_es is None
+
+
+class TestAdministrativoNowPassesNameGate:
+    """2026-08-24 business decision: `assert_name_editor` (shared by
+    Maestro de Partes' confirm/dismiss-suggestion endpoints AND this
+    Reconciliación field-level name gate) now also admits administrativo,
+    matching superadmin -- an accepted side effect of widening the shared
+    gate, not a Reconciliación-specific change."""
+
+    def test_linked_item_delegates_and_succeeds(self):
+        item = make_spare_part_item(lot_id=uuid.uuid4(), part_number="PN-001", qty_ordered=10)
+        rr = _make_reconciliation_result(spare_part_item_id=item.id, part_number="PN-001")
+        from app.models.parts_manual import PartsReference
+        ref = PartsReference(
+            factory_part_number="PN-001",
+            um_part_number="PN-001",
+            description="Original",
+            description_es_manual="Old",
+            prev_codes=[],
+        )
+        fake_db = FakeAsyncSession(
+            execute_queue=[[ref], []],  # 1) _find_reference_for_part_number hit  2) mirror UPDATE
+            get_objects=[rr, item],
+        )
+
+        with make_test_client(current_user=make_imports_editor(role="administrativo"), fake_db_session=fake_db) as client:
+            response = client.patch(
+                f"/api/v1/imports/reconciliation-results/{rr.id}",
+                json={"description_es": "Nueva descripcion"},
+            )
+
+        assert response.status_code == 200
+        assert ref.description_es_manual == "Nueva descripcion"
 
 
 class TestNonNameFieldPayloadNonSuperadminStillAllowed:
@@ -105,7 +143,7 @@ class TestMixedPayloadNonSuperadminRejectedWhole:
         rr = _make_reconciliation_result(qty_ordered=10)
         fake_db = FakeAsyncSession(execute_queue=[], get_objects=[rr])
 
-        with make_test_client(current_user=make_imports_editor(role="administrativo"), fake_db_session=fake_db) as client:
+        with make_test_client(current_user=make_imports_editor(role="proveedor"), fake_db_session=fake_db) as client:
             response = client.patch(
                 f"/api/v1/imports/reconciliation-results/{rr.id}",
                 json={"qty_in_packing": 5, "description_es": "Nueva descripcion"},
