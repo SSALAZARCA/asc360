@@ -11,9 +11,27 @@ import io
 import pdfplumber
 
 
-def limpiar_texto_continuidad(texto_pagina: str) -> str:
+def limpiar_texto_continuidad(texto_pagina: str, truncar_en_continua: bool = True) -> str:
     txt = re.sub(r'\u000C', ' ', texto_pagina)
-    txt = re.sub(r'\(continúa al respaldo\)', ' ', txt)
+    # Si el DIAN cortó un campo (p.ej. un VIN) al final de la página, la
+    # página original queda con "(continúa al respaldo)" seguido del pie de
+    # página del formulario (pagos anteriores, levante, firma, etc.). Ese
+    # pie de página no tiene nada que ver con el campo cortado y, si se
+    # deja, termina pegado al fragmento truncado en el texto final
+    # concatenado, arruinando el join con la continuación real de la
+    # página siguiente. Cortamos todo desde el marcador en adelante
+    # (truncar_en_continua=True, usado para el bloque de VINs).
+    #
+    # Ese mismo pie de página, sin embargo, es justo donde vive la
+    # metadata de aduana (no_acep/f_acep/no_lev/f_lev, campos 132-135), así
+    # que para armar el bloque de metadata (truncar_en_continua=False) solo
+    # se borra el marcador y se preserva el resto de la página.
+    if truncar_en_continua:
+        idx_continua = txt.find('(continúa al respaldo)')
+        if idx_continua != -1:
+            txt = txt[:idx_continua]
+    else:
+        txt = re.sub(r'\(continúa al respaldo\)', ' ', txt)
     if "105. Continuación descripción mercancías" in txt:
         marcador = "105. Continuación descripción mercancías"
         idx = txt.find(marcador)
@@ -67,7 +85,16 @@ def parse_dim_pdf(file_bytes: bytes) -> list:
         ValueError: Si el PDF no contiene texto digital (escaneado) o no se encontraron VINs.
     """
     vehiculos = []
+    # `formularios` acumula el texto de cada formulario ya truncado en
+    # "(continúa al respaldo)" — es lo que necesita buscar_vins_en_bloque()
+    # para que un VIN cortado en el salto de página empalme limpio con su
+    # continuación real, sin el pie de página de por medio.
     formularios = {}
+    # `formularios_meta` acumula el mismo texto pero SIN esa truncación (solo
+    # se borra el marcador): preserva el pie de página con la metadata de
+    # aduana (no_acep/f_acep/no_lev/f_lev), que en el PDF real cae justo
+    # después del marcador cuando un campo se corta.
+    formularios_meta = {}
 
     with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
         last_form_num = None
@@ -91,10 +118,13 @@ def parse_dim_pdf(file_bytes: bytes) -> list:
                 current_form_num = last_form_num
             key = current_form_num[:15]
 
-            txt_limpio = limpiar_texto_continuidad(txt)
+            txt_limpio = limpiar_texto_continuidad(txt, truncar_en_continua=True)
+            txt_limpio_meta = limpiar_texto_continuidad(txt, truncar_en_continua=False)
             if key not in formularios:
                 formularios[key] = ""
+                formularios_meta[key] = ""
             formularios[key] += " " + txt_limpio
+            formularios_meta[key] += " " + txt_limpio_meta
             last_form_num = current_form_num
 
     if not has_text:
@@ -107,21 +137,27 @@ def parse_dim_pdf(file_bytes: bytes) -> list:
 
     for key_form, full_text in formularios.items():
         full_text_norm = re.sub(r'\s+', ' ', full_text)
+        # Texto de metadata (no_acep/f_acep/no_lev/f_lev): usa la variante
+        # NO truncada en "(continúa al respaldo)", porque en el PDF real
+        # esos campos (132-135) viven en el pie de página que la variante
+        # de VINs descarta a propósito. Si por lo que sea no hubo texto
+        # acumulado para esta clave (no debería pasar), cae a full_text_norm.
+        full_text_meta_norm = re.sub(r'\s+', ' ', formularios_meta.get(key_form, full_text))
 
         # --- no_acep ---
-        m_acep = re.search(r'No\.\s*Aceptación.*?(\d{10,20})', full_text_norm)
+        m_acep = re.search(r'No\.\s*Aceptación.*?(\d{10,20})', full_text_meta_norm)
         no_acep = m_acep.group(1) if m_acep else key_form
 
         # --- f_acep (campo 133) ---
         m_f_acep = re.search(
             r'(?:133\.|Aceptaci[oó]n).*?Fe[hc]*ha.*?\s*(\d{4}\s*[-/]?\s*\d{2}\s*[-/]?\s*\d{2})',
-            full_text_norm, re.IGNORECASE
+            full_text_meta_norm, re.IGNORECASE
         )
         if not m_f_acep:
             # Fallback genérico para Aceptación
             m_f_acep = re.search(
                 r'Aceptaci[oó]n.*?(\d{4}\s*[-/]?\s*\d{2}\s*[-/]?\s*\d{2})',
-                full_text_norm, re.IGNORECASE
+                full_text_meta_norm, re.IGNORECASE
             )
 
         if m_f_acep:
@@ -131,19 +167,19 @@ def parse_dim_pdf(file_bytes: bytes) -> list:
             f_acep = datetime.date.today().strftime("%Y-%m-%d")
 
         # --- no_lev ---
-        m_lev = re.search(r'Levante\s*No\.\s*(\d{10,20})', full_text_norm, re.IGNORECASE)
+        m_lev = re.search(r'Levante\s*No\.\s*(\d{10,20})', full_text_meta_norm, re.IGNORECASE)
         no_lev = m_lev.group(1) if m_lev else "PENDIENTE"
 
         # --- f_lev (campo 135) ---
         m_f_lev = re.search(
             r'(?:135\s*\.|Fecha\s*Firma).{0,100}?(\d{4}\s*[-/]?\s*\d{2}\s*[-/]?\s*\d{2})',
-            full_text_norm, re.IGNORECASE
+            full_text_meta_norm, re.IGNORECASE
         )
         if not m_f_lev:
             # Fallback a Levante...Fecha
             m_f_lev = re.search(
                 r'Levante.{0,100}?Fe[hc]*ha.{0,100}?(\d{4}\s*[-/]?\s*\d{2}\s*[-/]?\s*\d{2})',
-                full_text_norm, re.IGNORECASE
+                full_text_meta_norm, re.IGNORECASE
             )
 
         if m_f_lev:
