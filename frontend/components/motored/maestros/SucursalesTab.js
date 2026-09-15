@@ -30,7 +30,7 @@ const emptyForm = { nombre: '', sic: '', dias_seguridad: '2.5' };
 function SucursalForm({ form, setForm, editingId, onSubmit, onCancel }) {
   return (
     <form onSubmit={onSubmit} style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
-      <label style={{ display: 'flex', flexDirection: 'column', fontSize: '0.7rem', color: 'var(--motored-text-muted, #7fa3c4)' }}>
+      <label style={{ display: 'flex', flexDirection: 'column', fontSize: '0.7rem', color: 'var(--motored-text-muted, #5a5a5a)' }}>
         Nombre
         <input
           value={form.nombre}
@@ -38,11 +38,11 @@ function SucursalForm({ form, setForm, editingId, onSubmit, onCancel }) {
           required
         />
       </label>
-      <label style={{ display: 'flex', flexDirection: 'column', fontSize: '0.7rem', color: 'var(--motored-text-muted, #7fa3c4)' }}>
+      <label style={{ display: 'flex', flexDirection: 'column', fontSize: '0.7rem', color: 'var(--motored-text-muted, #5a5a5a)' }}>
         SIC
         <input value={form.sic} onChange={(e) => setForm({ ...form, sic: e.target.value })} />
       </label>
-      <label style={{ display: 'flex', flexDirection: 'column', fontSize: '0.7rem', color: 'var(--motored-text-muted, #7fa3c4)' }}>
+      <label style={{ display: 'flex', flexDirection: 'column', fontSize: '0.7rem', color: 'var(--motored-text-muted, #5a5a5a)' }}>
         Días seguridad
         <input
           value={form.dias_seguridad}
@@ -63,7 +63,7 @@ function SucursalesTable({ sucursales, onEdit, onDeactivate }) {
   return (
     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
       <thead>
-        <tr style={{ textAlign: 'left', color: 'var(--motored-text-muted, #7fa3c4)' }}>
+        <tr style={{ textAlign: 'left', color: 'var(--motored-text-muted, #5a5a5a)' }}>
           <th>Nombre</th>
           <th>SIC</th>
           <th>Días seguridad</th>
@@ -73,7 +73,7 @@ function SucursalesTable({ sucursales, onEdit, onDeactivate }) {
       </thead>
       <tbody>
         {sucursales.map((s) => (
-          <tr key={s.id} style={{ borderTop: '1px solid var(--motored-border, rgba(148,197,255,0.12))' }}>
+          <tr key={s.id} style={{ borderTop: '1px solid var(--motored-border, #e4e4e7)' }}>
             <td>{s.nombre}</td>
             <td>{s.sic || <em>sin SIC</em>}</td>
             <td>{s.dias_seguridad}</td>
@@ -171,7 +171,7 @@ export default function SucursalesTab() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h2 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: 'var(--motored-text, #e6f4ff)' }}>
+        <h2 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: 'var(--motored-text, #1a1a18)' }}>
           Sucursales
         </h2>
         <button type="button" onClick={() => setShowBulkModal(true)}>
@@ -179,7 +179,7 @@ export default function SucursalesTab() {
         </button>
       </div>
 
-      {error && <p style={{ color: 'var(--motored-danger, #f87171)', fontSize: '0.8rem' }}>{error}</p>}
+      {error && <p style={{ color: 'var(--motored-danger, #c0392b)', fontSize: '0.8rem' }}>{error}</p>}
 
       <SucursalForm
         form={form}
@@ -190,7 +190,7 @@ export default function SucursalesTab() {
       />
 
       {loading ? (
-        <p style={{ color: 'var(--motored-text-muted, #7fa3c4)', fontSize: '0.8rem' }}>Cargando...</p>
+        <p style={{ color: 'var(--motored-text-muted, #5a5a5a)', fontSize: '0.8rem' }}>Cargando...</p>
       ) : (
         <SucursalesTable sucursales={sucursales} onEdit={startEdit} onDeactivate={deactivate} />
       )}

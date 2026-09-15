@@ -25,7 +25,7 @@ function CargaResultPanel({ resultado }) {
 
   if (resultado.ok) {
     return (
-      <div style={{ color: 'var(--motored-success, #34d399)', fontSize: '0.8rem', fontWeight: 700 }}>
+      <div style={{ color: 'var(--motored-success, #15803d)', fontSize: '0.8rem', fontWeight: 700 }}>
         OK — {resultado.total_filas} filas procesadas
         {typeof resultado.insertados === 'number' && ` (${resultado.insertados} nuevas, ${resultado.actualizados} actualizadas)`}
       </div>
@@ -34,7 +34,7 @@ function CargaResultPanel({ resultado }) {
 
   return (
     <div>
-      <p style={{ margin: '0 0 0.5rem', color: 'var(--motored-danger, #f87171)', fontSize: '0.8rem', fontWeight: 700 }}>
+      <p style={{ margin: '0 0 0.5rem', color: 'var(--motored-danger, #c0392b)', fontSize: '0.8rem', fontWeight: 700 }}>
         Archivo rechazado — {resultado.errores?.length ?? 0} fila(s) con error. No se escribió nada.
       </p>
       <ul data-testid="carga-error-list" style={{ margin: 0, padding: '0 0 0 1.25rem', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
@@ -42,7 +42,7 @@ function CargaResultPanel({ resultado }) {
           <li
             key={`${err.fila}-${idx}`}
             data-testid="carga-error-row"
-            style={{ color: 'var(--motored-text, #e6f4ff)', fontSize: '0.75rem' }}
+            style={{ color: 'var(--motored-text, #1a1a18)', fontSize: '0.75rem' }}
           >
             Fila {err.fila}: {err.motivo}
           </li>
@@ -122,8 +122,8 @@ export default function BulkUploadModal({ entidad, onClose, onSuccess }) {
     >
       <div
         style={{
-          background: 'var(--motored-surface, #101d2e)',
-          border: '1px solid var(--motored-border, rgba(148,197,255,0.12))',
+          background: 'var(--motored-surface, #ffffff)',
+          border: '1px solid var(--motored-border, #e4e4e7)',
           borderRadius: '12px',
           padding: '1.5rem',
           width: '100%',
@@ -135,11 +135,11 @@ export default function BulkUploadModal({ entidad, onClose, onSuccess }) {
           gap: '1rem',
         }}
       >
-        <h2 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: 'var(--motored-text, #e6f4ff)' }}>
+        <h2 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: 'var(--motored-text, #1a1a18)' }}>
           Carga masiva — {entidad}
         </h2>
 
-        <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--motored-text-muted, #7fa3c4)' }}>
+        <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--motored-text-muted, #5a5a5a)' }}>
           Pegá un array JSON de filas. Todo-o-nada: si una sola fila es
           inválida, no se escribe nada.
         </p>
@@ -151,18 +151,18 @@ export default function BulkUploadModal({ entidad, onClose, onSuccess }) {
           rows={8}
           style={{
             width: '100%',
-            fontFamily: 'monospace',
+            fontFamily: "var(--motored-font-mono), 'IBM Plex Mono', monospace",
             fontSize: '0.75rem',
-            background: '#0a1420',
-            color: 'var(--motored-text, #e6f4ff)',
-            border: '1px solid var(--motored-border, rgba(148,197,255,0.12))',
-            borderRadius: '8px',
+            background: 'var(--motored-surface-alt, #f4f4f5)',
+            color: 'var(--motored-text, #1a1a18)',
+            border: '1px solid var(--motored-border, #e4e4e7)',
+            borderRadius: '6px',
             padding: '0.75rem',
           }}
         />
 
         {parseError && (
-          <p style={{ margin: 0, color: 'var(--motored-danger, #f87171)', fontSize: '0.75rem' }}>{parseError}</p>
+          <p style={{ margin: 0, color: 'var(--motored-danger, #c0392b)', fontSize: '0.75rem' }}>{parseError}</p>
         )}
 
         <div style={{ display: 'flex', gap: '0.75rem' }}>

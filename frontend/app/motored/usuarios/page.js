@@ -23,23 +23,23 @@ const emptyForm = { nombre: '', email: '', password: '', role: 'CONSULTA' };
 function UsuarioForm({ form, setForm, onSubmit }) {
   return (
     <form onSubmit={onSubmit} style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
-      <label style={{ display: 'flex', flexDirection: 'column', fontSize: '0.7rem', color: 'var(--motored-text-muted, #7fa3c4)' }}>
+      <label style={{ display: 'flex', flexDirection: 'column', fontSize: '0.7rem', color: 'var(--motored-text-muted, #5a5a5a)' }}>
         Nombre
         <input value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} required />
       </label>
-      <label style={{ display: 'flex', flexDirection: 'column', fontSize: '0.7rem', color: 'var(--motored-text-muted, #7fa3c4)' }}>
+      <label style={{ display: 'flex', flexDirection: 'column', fontSize: '0.7rem', color: 'var(--motored-text-muted, #5a5a5a)' }}>
         Email
         <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required />
       </label>
-      <label style={{ display: 'flex', flexDirection: 'column', fontSize: '0.7rem', color: 'var(--motored-text-muted, #7fa3c4)' }}>
+      <label style={{ display: 'flex', flexDirection: 'column', fontSize: '0.7rem', color: 'var(--motored-text-muted, #5a5a5a)' }}>
         Password
         <input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required />
       </label>
-      <label style={{ display: 'flex', flexDirection: 'column', fontSize: '0.7rem', color: 'var(--motored-text-muted, #7fa3c4)' }}>
+      <label style={{ display: 'flex', flexDirection: 'column', fontSize: '0.7rem', color: 'var(--motored-text-muted, #5a5a5a)' }}>
         Rol
         <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
           {ROLES.map((r) => (
-            <option key={r} value={r} style={{ color: '#0a1420' }}>
+            <option key={r} value={r} style={{ color: '#1a1a18' }}>
               {r}
             </option>
           ))}
@@ -54,7 +54,7 @@ function UsuariosTable({ usuarios, onDeactivate }) {
   return (
     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
       <thead>
-        <tr style={{ textAlign: 'left', color: 'var(--motored-text-muted, #7fa3c4)' }}>
+        <tr style={{ textAlign: 'left', color: 'var(--motored-text-muted, #5a5a5a)' }}>
           <th>Nombre</th>
           <th>Email</th>
           <th>Rol</th>
@@ -64,7 +64,7 @@ function UsuariosTable({ usuarios, onDeactivate }) {
       </thead>
       <tbody>
         {usuarios.map((u) => (
-          <tr key={u.id} style={{ borderTop: '1px solid var(--motored-border, rgba(148,197,255,0.12))' }}>
+          <tr key={u.id} style={{ borderTop: '1px solid var(--motored-border, #e4e4e7)' }}>
             <td>{u.nombre}</td>
             <td>{u.email}</td>
             <td>{u.role}</td>
@@ -166,16 +166,16 @@ function UsuariosContent() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-      <h2 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: 'var(--motored-text, #e6f4ff)' }}>
+      <h2 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: 'var(--motored-text, #1a1a18)' }}>
         Usuarios
       </h2>
 
-      {error && <p style={{ color: 'var(--motored-danger, #f87171)', fontSize: '0.8rem' }}>{error}</p>}
+      {error && <p style={{ color: 'var(--motored-danger, #c0392b)', fontSize: '0.8rem' }}>{error}</p>}
 
       <UsuarioForm form={form} setForm={setForm} onSubmit={handleSubmit} />
 
       {loading ? (
-        <p style={{ color: 'var(--motored-text-muted, #7fa3c4)', fontSize: '0.8rem' }}>Cargando...</p>
+        <p style={{ color: 'var(--motored-text-muted, #5a5a5a)', fontSize: '0.8rem' }}>Cargando...</p>
       ) : (
         <UsuariosTable usuarios={usuarios} onDeactivate={deactivate} />
       )}

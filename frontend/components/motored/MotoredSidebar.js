@@ -4,17 +4,18 @@
  *
  * Motored's OWN menu (sdd/motored-pedidos-cimientos, Phase 6, design
  * ADR-7). This is NOT `components/Sidebar.js` with relabeled items -- it is
- * a separate component with a genuinely distinct visual identity (cyan/slate
- * palette from `app/motored/layout.js`'s `.motored-theme`, square corners
- * instead of asc360's rounded "glass" card, no logo-fetch/company-branding
- * concerns since Motored has no per-tenant logo), per the user's explicit
- * request that Motored's menu look and feel different from asc360's.
+ * a separate component with a genuinely distinct visual identity, sourced
+ * from Motored's real brand system (`app/motored/layout.js`'s
+ * `.motored-theme`: rojo Motored on a light surface, not asc360's orange),
+ * per the user's explicit request that Motored's menu look and feel
+ * different from asc360's.
  *
  * Reads/writes ONLY `motored_user`/`motored_token` -- never `um_user`/
  * `um_token`.
  */
 import { useRouter, usePathname } from 'next/navigation';
-import { LogOut, Warehouse, Users, ShieldCheck } from 'lucide-react';
+import Image from 'next/image';
+import { LogOut, Warehouse, Users } from 'lucide-react';
 import { MOTORED_TOKEN_KEY, MOTORED_USER_KEY } from '../../lib/motored/motoredFetch';
 
 const ALL_ITEMS = [
@@ -40,38 +41,18 @@ export default function MotoredSidebar({ user }) {
       style={{
         width: '260px',
         minHeight: '100vh',
-        background: 'var(--motored-surface, #101d2e)',
-        borderRight: '1px solid var(--motored-border, rgba(148,197,255,0.12))',
+        background: 'var(--motored-surface, #ffffff)',
+        borderRight: '1px solid var(--motored-border, #e4e4e7)',
         display: 'flex',
         flexDirection: 'column',
         flexShrink: 0,
       }}
     >
-      <div style={{ padding: '1.75rem 1.5rem', borderBottom: '1px solid var(--motored-border, rgba(148,197,255,0.12))' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <div
-            style={{
-              width: '2.75rem',
-              height: '2.75rem',
-              borderRadius: '0.5rem',
-              background: 'var(--motored-primary, #22d3ee)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              flexShrink: 0,
-            }}
-          >
-            <ShieldCheck size={20} color="#0a1420" strokeWidth={2.5} />
-          </div>
-          <div>
-            <h1 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: 'var(--motored-text, #e6f4ff)', letterSpacing: '0.02em' }}>
-              MOTORED
-            </h1>
-            <p style={{ margin: 0, fontSize: '0.625rem', fontWeight: 700, color: 'var(--motored-primary, #22d3ee)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-              Pedidos
-            </p>
-          </div>
-        </div>
+      <div style={{ padding: '1.5rem', borderBottom: '1px solid var(--motored-border, #e4e4e7)' }}>
+        <Image src="/motored-logo.png" alt="Motored" width={130} height={42} />
+        <p style={{ margin: '0.5rem 0 0', fontSize: '0.625rem', fontWeight: 700, color: 'var(--motored-primary, #e20714)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+          Pedidos
+        </p>
       </div>
 
       <nav style={{ flex: 1, padding: '1rem 0.75rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
@@ -90,8 +71,8 @@ export default function MotoredSidebar({ user }) {
                 padding: '0.75rem 1rem',
                 borderRadius: '0.5rem',
                 border: 'none',
-                background: isActive ? 'var(--motored-surface-alt, #16273b)' : 'transparent',
-                color: isActive ? 'var(--motored-primary, #22d3ee)' : 'var(--motored-text-muted, #7fa3c4)',
+                background: isActive ? 'var(--motored-surface-alt, #f4f4f5)' : 'transparent',
+                color: isActive ? 'var(--motored-primary, #e20714)' : 'var(--motored-text-muted, #5a5a5a)',
                 fontSize: '0.8rem',
                 fontWeight: 700,
                 textAlign: 'left',
@@ -105,8 +86,8 @@ export default function MotoredSidebar({ user }) {
         })}
       </nav>
 
-      <div style={{ padding: '1rem 1.5rem', borderTop: '1px solid var(--motored-border, rgba(148,197,255,0.12))' }}>
-        <p style={{ margin: '0 0 0.5rem', fontSize: '0.7rem', fontWeight: 700, color: 'var(--motored-text, #e6f4ff)' }}>
+      <div style={{ padding: '1rem 1.5rem', borderTop: '1px solid var(--motored-border, #e4e4e7)' }}>
+        <p style={{ margin: '0 0 0.5rem', fontSize: '0.7rem', fontWeight: 700, color: 'var(--motored-text, #1a1a18)' }}>
           {user?.nombre || 'Usuario'}
         </p>
         <button
@@ -118,7 +99,7 @@ export default function MotoredSidebar({ user }) {
             gap: '0.5rem',
             background: 'transparent',
             border: 'none',
-            color: 'var(--motored-text-muted, #7fa3c4)',
+            color: 'var(--motored-text-muted, #5a5a5a)',
             fontSize: '0.75rem',
             fontWeight: 700,
             cursor: 'pointer',
