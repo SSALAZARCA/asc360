@@ -12,6 +12,14 @@
  *
  * Reads/writes ONLY `motored_user`/`motored_token` -- never `um_user`/
  * `um_token`.
+ *
+ * Structure verified against the real design system's "Artboard 4 ·
+ * navegación y estructura" (screenshotted with a headless browser, since
+ * the file itself can't be read as text): 240px width (not an approximation),
+ * logo alone at the top, a small uppercase section label below it, and the
+ * active item marked with a solid red LEFT BORDER + light pink background +
+ * red text -- not a filled block, which is what this component originally
+ * (incorrectly) used.
  */
 import { useRouter, usePathname } from 'next/navigation';
 import Image from 'next/image';
@@ -22,6 +30,44 @@ const ALL_ITEMS = [
   { id: 'maestros', name: 'Maestros', icon: Warehouse, path: '/motored/maestros' },
   { id: 'usuarios', name: 'Usuarios', icon: Users, path: '/motored/usuarios', adminOnly: true },
 ];
+
+const asideStyle = {
+  width: '240px', minHeight: '100vh',
+  background: 'var(--motored-surface, #ffffff)',
+  borderRight: '1px solid var(--motored-border, #e4e4e7)',
+  display: 'flex', flexDirection: 'column', flexShrink: 0,
+};
+
+const logoBoxStyle = { padding: '1.5rem', borderBottom: '1px solid var(--motored-border, #e4e4e7)' };
+const navStyle = { flex: 1, padding: '1rem 0.75rem', display: 'flex', flexDirection: 'column', gap: '2px' };
+const navLabelStyle = { margin: '0 0 0.5rem 0.75rem', color: 'var(--motored-text-soft, #8a8a8a)' };
+const footerBoxStyle = { padding: '1rem 1.5rem', borderTop: '1px solid var(--motored-border, #e4e4e7)' };
+const userNameStyle = { margin: '0 0 0.5rem', fontSize: '0.7rem', fontWeight: 700, color: 'var(--motored-text, #1a1a18)' };
+const logoutBtnStyle = {
+  display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'transparent', border: 'none',
+  color: 'var(--motored-text-muted, #5a5a5a)', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', padding: 0,
+};
+
+function menuItemStyle(isActive) {
+  return {
+    display: 'flex', alignItems: 'center', gap: '0.75rem',
+    padding: '0.6rem 1rem 0.6rem 0.8rem', borderRadius: '0 6px 6px 0', border: 'none',
+    borderLeft: isActive ? '3px solid var(--motored-primary, #e20714)' : '3px solid transparent',
+    background: isActive ? 'var(--motored-brand-soft, #fde8ea)' : 'transparent',
+    color: isActive ? 'var(--motored-primary, #e20714)' : 'var(--motored-text-muted, #5a5a5a)',
+    fontSize: '0.8rem', fontWeight: 600, textAlign: 'left', cursor: 'pointer',
+  };
+}
+
+function MenuItem({ item, isActive, onNavigate }) {
+  const Icon = item.icon;
+  return (
+    <button type="button" onClick={() => onNavigate(item.path)} style={menuItemStyle(isActive)}>
+      <Icon size={16} />
+      {item.name}
+    </button>
+  );
+}
 
 export default function MotoredSidebar({ user }) {
   const router = useRouter();
@@ -37,75 +83,21 @@ export default function MotoredSidebar({ user }) {
   };
 
   return (
-    <aside
-      style={{
-        width: '260px',
-        minHeight: '100vh',
-        background: 'var(--motored-surface, #ffffff)',
-        borderRight: '1px solid var(--motored-border, #e4e4e7)',
-        display: 'flex',
-        flexDirection: 'column',
-        flexShrink: 0,
-      }}
-    >
-      <div style={{ padding: '1.5rem', borderBottom: '1px solid var(--motored-border, #e4e4e7)' }}>
+    <aside style={asideStyle}>
+      <div style={logoBoxStyle}>
         <Image src="/motored-logo.png" alt="Motored" width={130} height={42} />
-        <p style={{ margin: '0.5rem 0 0', fontSize: '0.625rem', fontWeight: 700, color: 'var(--motored-primary, #e20714)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-          Pedidos
-        </p>
       </div>
 
-      <nav style={{ flex: 1, padding: '1rem 0.75rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-        {menuItems.map((item) => {
-          const Icon = item.icon;
-          const isActive = pathname?.startsWith(item.path);
-          return (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => router.push(item.path)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.75rem',
-                padding: '0.75rem 1rem',
-                borderRadius: '0.5rem',
-                border: 'none',
-                background: isActive ? 'var(--motored-surface-alt, #f4f4f5)' : 'transparent',
-                color: isActive ? 'var(--motored-primary, #e20714)' : 'var(--motored-text-muted, #5a5a5a)',
-                fontSize: '0.8rem',
-                fontWeight: 700,
-                textAlign: 'left',
-                cursor: 'pointer',
-              }}
-            >
-              <Icon size={16} />
-              {item.name}
-            </button>
-          );
-        })}
+      <nav style={navStyle}>
+        <p className="motored-t-rotulo" style={navLabelStyle}>Pedidos Motored</p>
+        {menuItems.map((item) => (
+          <MenuItem key={item.id} item={item} isActive={pathname?.startsWith(item.path)} onNavigate={router.push} />
+        ))}
       </nav>
 
-      <div style={{ padding: '1rem 1.5rem', borderTop: '1px solid var(--motored-border, #e4e4e7)' }}>
-        <p style={{ margin: '0 0 0.5rem', fontSize: '0.7rem', fontWeight: 700, color: 'var(--motored-text, #1a1a18)' }}>
-          {user?.nombre || 'Usuario'}
-        </p>
-        <button
-          type="button"
-          onClick={handleLogout}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.5rem',
-            background: 'transparent',
-            border: 'none',
-            color: 'var(--motored-text-muted, #5a5a5a)',
-            fontSize: '0.75rem',
-            fontWeight: 700,
-            cursor: 'pointer',
-            padding: 0,
-          }}
-        >
+      <div style={footerBoxStyle}>
+        <p style={userNameStyle}>{user?.nombre || 'Usuario'}</p>
+        <button type="button" onClick={handleLogout} style={logoutBtnStyle}>
           <LogOut size={14} /> Salir
         </button>
       </div>

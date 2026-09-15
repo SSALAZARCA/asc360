@@ -86,32 +86,27 @@ export default function MotoredLoginPage() {
             </div>
           </div>
 
-          <button type="submit" className="motored-login-btn" disabled={loading}>
+          <button type="submit" className="motored-btn motored-btn-primary" style={{ width: '100%', height: '44px', marginTop: '0.5rem' }} disabled={loading}>
             {loading ? 'Verificando...' : <>Iniciar sesión <ArrowRight size={16} /></>}
           </button>
         </form>
       </div>
 
       <style jsx>{`
-        .motored-login-wrapper { display: flex; align-items: center; justify-content: center; min-height: 100vh; background: #f7f7f8; }
-        .motored-login-box { width: 100%; max-width: 380px; background: #ffffff; border: 1px solid #e4e4e7; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); overflow: hidden; }
+        .motored-login-wrapper { display: flex; align-items: center; justify-content: center; min-height: 100vh; background: var(--motored-bg, #f7f7f8); }
+        .motored-login-box { width: 100%; max-width: 380px; background: var(--motored-surface, #ffffff); border: 1px solid var(--motored-border, #e4e4e7); border-radius: var(--motored-radius-md, 8px); box-shadow: var(--motored-shadow, 0 1px 3px rgba(0,0,0,0.08)); overflow: hidden; }
 
-        .motored-brand-header { padding: 2.5rem 2rem 1.5rem; text-align: center; border-bottom: 1px solid #e4e4e7; display: flex; flex-direction: column; align-items: center; }
-        .motored-brand-header p { margin: 0.75rem 0 0; font-size: 0.75rem; color: #5a5a5a; text-transform: uppercase; font-weight: 600; letter-spacing: 0.05em; }
+        .motored-brand-header { padding: 2.5rem 2rem 1.5rem; text-align: center; border-bottom: 1px solid var(--motored-border, #e4e4e7); display: flex; flex-direction: column; align-items: center; }
+        .motored-brand-header p { margin: 0.75rem 0 0; font-size: 0.75rem; color: var(--motored-text-muted, #5a5a5a); text-transform: uppercase; font-weight: 600; letter-spacing: 0.05em; }
 
         .motored-login-form { padding: 2rem; display: flex; flex-direction: column; gap: 1.25rem; }
 
-        .motored-input-group label { display: block; font-size: 0.65rem; font-weight: 700; color: #5a5a5a; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.4rem; }
+        .motored-input-group label { display: block; font-size: 0.65rem; font-weight: 700; color: var(--motored-text-muted, #5a5a5a); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.4rem; }
         .motored-input-icon { position: relative; display: flex; align-items: center; }
-        .motored-input-icon :global(svg:first-child) { position: absolute; left: 1rem; color: #8a8a8a; }
-        .motored-input-icon input { width: 100%; background: #ffffff; border: 1px solid #e4e4e7; padding: 0.85rem 1rem 0.85rem 2.8rem; border-radius: 6px; color: #1a1a18; font-size: 0.85rem; outline: none; transition: all 0.2s; }
-        .motored-input-icon input:focus { border-color: #e20714; box-shadow: 0 0 0 3px #fde8ea; }
+        .motored-input-icon :global(svg:first-child) { position: absolute; left: 1rem; color: var(--motored-text-soft, #8a8a8a); }
+        .motored-input-icon :global(input) { width: 100%; padding-left: 2.8rem; }
 
-        .motored-login-btn { display: flex; align-items: center; justify-content: center; gap: 0.5rem; width: 100%; background: #e20714; color: #ffffff; border: none; padding: 1rem; border-radius: 6px; font-weight: 700; font-size: 0.85rem; letter-spacing: 0.02em; cursor: pointer; transition: all 0.2s; margin-top: 1rem; }
-        .motored-login-btn:hover:not(:disabled) { background: #b00510; }
-        .motored-login-btn:disabled { opacity: 0.7; cursor: not-allowed; }
-
-        .motored-error-box { background: #fdf3f4; border: 1px solid #fcd4d8; color: #7a1f16; padding: 0.75rem; border-radius: 6px; font-size: 0.75rem; font-weight: 700; text-align: center; }
+        .motored-error-box { background: var(--motored-danger-bg, #fdecea); border: 1px solid var(--motored-danger, #c0392b); color: var(--motored-danger, #c0392b); padding: 0.75rem; border-radius: var(--motored-radius-sm, 4px); font-size: 0.75rem; font-weight: 700; text-align: center; }
       `}</style>
     </div>
   );

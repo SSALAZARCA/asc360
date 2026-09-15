@@ -45,33 +45,41 @@ function UsuarioForm({ form, setForm, onSubmit }) {
           ))}
         </select>
       </label>
-      <button type="submit">Crear usuario</button>
+      <button type="submit" className="motored-btn motored-btn-primary">Crear usuario</button>
     </form>
   );
 }
 
 function UsuariosTable({ usuarios, onDeactivate }) {
+  const handleDeactivateClick = (u) => {
+    if (window.confirm(`¿Desactivar a "${u.nombre}"? No se elimina, queda marcado como inactivo.`)) {
+      onDeactivate(u.id);
+    }
+  };
+
   return (
-    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
+    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
       <thead>
         <tr style={{ textAlign: 'left', color: 'var(--motored-text-muted, #5a5a5a)' }}>
-          <th>Nombre</th>
-          <th>Email</th>
-          <th>Rol</th>
-          <th>Estado</th>
+          <th style={{ padding: '0 12px 8px 0' }}>Nombre</th>
+          <th style={{ padding: '0 12px 8px 0' }}>Email</th>
+          <th style={{ padding: '0 12px 8px 0' }}>Rol</th>
+          <th style={{ padding: '0 12px 8px 0' }}>Estado</th>
           <th />
         </tr>
       </thead>
       <tbody>
         {usuarios.map((u) => (
           <tr key={u.id} style={{ borderTop: '1px solid var(--motored-border, #e4e4e7)' }}>
-            <td>{u.nombre}</td>
-            <td>{u.email}</td>
-            <td>{u.role}</td>
-            <td>{u.activo ? 'Activo' : 'Inactivo'}</td>
-            <td>
+            <td style={{ padding: '10px 12px 10px 0' }}>{u.nombre}</td>
+            <td style={{ padding: '10px 12px 10px 0' }}>{u.email}</td>
+            <td style={{ padding: '10px 12px 10px 0' }}>{u.role}</td>
+            <td style={{ padding: '10px 12px 10px 0' }}>{u.activo ? 'Activo' : 'Inactivo'}</td>
+            <td style={{ padding: '10px 0' }}>
+              {/* Nunca un botón rojo dentro de una tabla -- ver
+              SucursalesTab.js para la misma regla aplicada. */}
               {u.activo && (
-                <button type="button" onClick={() => onDeactivate(u.id)}>Desactivar</button>
+                <button type="button" className="motored-row-action" onClick={() => handleDeactivateClick(u)}>Desactivar</button>
               )}
             </td>
           </tr>
@@ -166,9 +174,7 @@ function UsuariosContent() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-      <h2 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: 'var(--motored-text, #1a1a18)' }}>
-        Usuarios
-      </h2>
+      <h2 className="motored-h-seccion">Usuarios</h2>
 
       {error && <p style={{ color: 'var(--motored-danger, #c0392b)', fontSize: '0.8rem' }}>{error}</p>}
 

@@ -49,9 +49,9 @@ function SucursalForm({ form, setForm, editingId, onSubmit, onCancel }) {
           onChange={(e) => setForm({ ...form, dias_seguridad: e.target.value })}
         />
       </label>
-      <button type="submit">{editingId ? 'Guardar cambios' : 'Crear sucursal'}</button>
+      <button type="submit" className="motored-btn motored-btn-primary">{editingId ? 'Guardar cambios' : 'Crear sucursal'}</button>
       {editingId && (
-        <button type="button" onClick={onCancel}>
+        <button type="button" className="motored-btn motored-btn-secondary" onClick={onCancel}>
           Cancelar
         </button>
       )}
@@ -60,34 +60,54 @@ function SucursalForm({ form, setForm, editingId, onSubmit, onCancel }) {
 }
 
 function SucursalesTable({ sucursales, onEdit, onDeactivate }) {
+  const handleDeactivateClick = (s) => {
+    if (window.confirm(`¿Desactivar la sucursal "${s.nombre}"? No se elimina, queda marcada como inactiva.`)) {
+      onDeactivate(s.id);
+    }
+  };
+
   return (
-    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
+    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
       <thead>
         <tr style={{ textAlign: 'left', color: 'var(--motored-text-muted, #5a5a5a)' }}>
-          <th>Nombre</th>
-          <th>SIC</th>
-          <th>Días seguridad</th>
-          <th>Estado</th>
+          <th style={{ padding: '0 12px 8px 0' }}>Nombre</th>
+          <th style={{ padding: '0 12px 8px 0' }}>SIC</th>
+          <th style={{ padding: '0 12px 8px 0' }}>Días seguridad</th>
+          <th style={{ padding: '0 12px 8px 0' }}>Estado</th>
           <th />
         </tr>
       </thead>
       <tbody>
         {sucursales.map((s) => (
           <tr key={s.id} style={{ borderTop: '1px solid var(--motored-border, #e4e4e7)' }}>
-            <td>{s.nombre}</td>
-            <td>{s.sic || <em>sin SIC</em>}</td>
-            <td>{s.dias_seguridad}</td>
-            <td>{s.activa ? 'Activa' : 'Inactiva'}</td>
-            <td style={{ display: 'flex', gap: '0.5rem' }}>
-              <button type="button" onClick={() => onEdit(s)}>Editar</button>
+            <td style={{ padding: '10px 12px 10px 0' }}>{s.nombre}</td>
+            <td style={{ padding: '10px 12px 10px 0' }}>{s.sic || <em>sin SIC</em>}</td>
+            <td style={{ padding: '10px 12px 10px 0' }}>{s.dias_seguridad}</td>
+            <td style={{ padding: '10px 12px 10px 0' }}>{s.activa ? 'Activa' : 'Inactiva'}</td>
+            <td style={{ display: 'flex', gap: '1rem', padding: '10px 0' }}>
+              {/* Nunca un botón rojo dentro de una tabla (regla del sistema
+              real) -- acciones de fila usan .motored-row-action, texto
+              neutro, no el rojo destructivo. */}
+              <button type="button" className="motored-row-action" onClick={() => onEdit(s)}>Editar</button>
               {s.activa && (
-                <button type="button" onClick={() => onDeactivate(s.id)}>Desactivar</button>
+                <button type="button" className="motored-row-action" onClick={() => handleDeactivateClick(s)}>Desactivar</button>
               )}
             </td>
           </tr>
         ))}
       </tbody>
     </table>
+  );
+}
+
+function SucursalesHeader({ onOpenBulk }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <h2 className="motored-h-seccion">Sucursales</h2>
+      <button type="button" className="motored-btn motored-btn-secondary" onClick={onOpenBulk}>
+        Carga masiva
+      </button>
+    </div>
   );
 }
 
@@ -143,11 +163,9 @@ function useSucursales() {
   return { sucursales, loading, error, save, deactivate, reload: load };
 }
 
-export default function SucursalesTab() {
-  const { sucursales, loading, error, save, deactivate, reload } = useSucursales();
+function useSucursalesEditor(save) {
   const [form, setForm] = useState(emptyForm);
   const [editingId, setEditingId] = useState(null);
-  const [showBulkModal, setShowBulkModal] = useState(false);
 
   const startEdit = (s) => {
     setEditingId(s.id);
@@ -168,16 +186,17 @@ export default function SucursalesTab() {
     if (ok) cancelEdit();
   };
 
+  return { form, setForm, editingId, startEdit, cancelEdit, handleSubmit };
+}
+
+export default function SucursalesTab() {
+  const { sucursales, loading, error, save, deactivate, reload } = useSucursales();
+  const { form, setForm, editingId, startEdit, cancelEdit, handleSubmit } = useSucursalesEditor(save);
+  const [showBulkModal, setShowBulkModal] = useState(false);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h2 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: 'var(--motored-text, #1a1a18)' }}>
-          Sucursales
-        </h2>
-        <button type="button" onClick={() => setShowBulkModal(true)}>
-          Carga masiva
-        </button>
-      </div>
+      <SucursalesHeader onOpenBulk={() => setShowBulkModal(true)} />
 
       {error && <p style={{ color: 'var(--motored-danger, #c0392b)', fontSize: '0.8rem' }}>{error}</p>}
 

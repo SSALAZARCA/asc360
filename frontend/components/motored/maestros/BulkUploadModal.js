@@ -20,6 +20,73 @@
 import { useState } from 'react';
 import { validarCarga, subirCarga } from '../../../lib/motored/api';
 
+const overlayStyle = {
+  position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
+  display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200,
+};
+
+const boxStyle = {
+  background: 'var(--motored-surface, #ffffff)',
+  border: '1px solid var(--motored-border, #e4e4e7)',
+  borderRadius: 'var(--motored-radius-md, 8px)',
+  padding: '1.5rem', width: '100%', maxWidth: '560px', maxHeight: '85vh',
+  overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1rem',
+};
+
+const textareaStyle = {
+  width: '100%',
+  fontFamily: "var(--motored-font-mono), 'IBM Plex Mono', monospace",
+  fontSize: '0.75rem',
+  background: 'var(--motored-surface-alt, #f4f4f5)',
+  color: 'var(--motored-text, #1a1a18)',
+  border: '1px solid var(--motored-border, #e4e4e7)',
+  borderRadius: '6px', padding: '0.75rem',
+};
+
+function parseRows(rowsText, setParseError) {
+  try {
+    const parsed = JSON.parse(rowsText);
+    if (!Array.isArray(parsed)) {
+      setParseError('El contenido debe ser un array JSON de filas');
+      return null;
+    }
+    setParseError('');
+    return parsed;
+  } catch {
+    setParseError('JSON inválido');
+    return null;
+  }
+}
+
+function useCargaMasiva(entidad, onSuccess) {
+  const [rowsText, setRowsText] = useState('');
+  const [parseError, setParseError] = useState('');
+  const [resultado, setResultado] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  const runWith = async (apiFn, { notifyOnSuccess } = {}) => {
+    const filas = parseRows(rowsText, setParseError);
+    if (!filas) return;
+    setLoading(true);
+    setResultado(null);
+    try {
+      const res = await apiFn(entidad, filas);
+      setResultado(res);
+      if (notifyOnSuccess && res.ok) onSuccess?.(res);
+    } catch (err) {
+      setResultado({ ok: false, errores: [{ fila: 0, motivo: err.message }] });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return {
+    rowsText, setRowsText, parseError, resultado, loading,
+    runValidar: () => runWith(validarCarga),
+    runCarga: () => runWith(subirCarga, { notifyOnSuccess: true }),
+  };
+}
+
 function CargaResultPanel({ resultado }) {
   if (!resultado) return null;
 
@@ -53,88 +120,12 @@ function CargaResultPanel({ resultado }) {
 }
 
 export default function BulkUploadModal({ entidad, onClose, onSuccess }) {
-  const [rowsText, setRowsText] = useState('');
-  const [parseError, setParseError] = useState('');
-  const [resultado, setResultado] = useState(null);
-  const [loading, setLoading] = useState(false);
-
-  const parseRows = () => {
-    try {
-      const parsed = JSON.parse(rowsText);
-      if (!Array.isArray(parsed)) {
-        setParseError('El contenido debe ser un array JSON de filas');
-        return null;
-      }
-      setParseError('');
-      return parsed;
-    } catch {
-      setParseError('JSON inválido');
-      return null;
-    }
-  };
-
-  const runValidar = async () => {
-    const filas = parseRows();
-    if (!filas) return;
-    setLoading(true);
-    setResultado(null);
-    try {
-      const res = await validarCarga(entidad, filas);
-      setResultado(res);
-    } catch (e) {
-      setResultado({ ok: false, errores: [{ fila: 0, motivo: e.message }] });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const runCarga = async () => {
-    const filas = parseRows();
-    if (!filas) return;
-    setLoading(true);
-    setResultado(null);
-    try {
-      const res = await subirCarga(entidad, filas);
-      setResultado(res);
-      if (res.ok) {
-        onSuccess?.(res);
-      }
-    } catch (e) {
-      setResultado({ ok: false, errores: [{ fila: 0, motivo: e.message }] });
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { rowsText, setRowsText, parseError, resultado, loading, runValidar, runCarga } =
+    useCargaMasiva(entidad, onSuccess);
 
   return (
-    <div
-      role="dialog"
-      aria-label={`Carga masiva de ${entidad}`}
-      style={{
-        position: 'fixed',
-        inset: 0,
-        background: 'rgba(0,0,0,0.6)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 200,
-      }}
-    >
-      <div
-        style={{
-          background: 'var(--motored-surface, #ffffff)',
-          border: '1px solid var(--motored-border, #e4e4e7)',
-          borderRadius: '12px',
-          padding: '1.5rem',
-          width: '100%',
-          maxWidth: '560px',
-          maxHeight: '85vh',
-          overflowY: 'auto',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '1rem',
-        }}
-      >
+    <div role="dialog" aria-label={`Carga masiva de ${entidad}`} style={overlayStyle}>
+      <div style={boxStyle}>
         <h2 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: 'var(--motored-text, #1a1a18)' }}>
           Carga masiva — {entidad}
         </h2>
@@ -149,16 +140,7 @@ export default function BulkUploadModal({ entidad, onClose, onSuccess }) {
           onChange={(e) => setRowsText(e.target.value)}
           placeholder='[{"nombre": "CALI NORTE", "sic": "123"}]'
           rows={8}
-          style={{
-            width: '100%',
-            fontFamily: "var(--motored-font-mono), 'IBM Plex Mono', monospace",
-            fontSize: '0.75rem',
-            background: 'var(--motored-surface-alt, #f4f4f5)',
-            color: 'var(--motored-text, #1a1a18)',
-            border: '1px solid var(--motored-border, #e4e4e7)',
-            borderRadius: '6px',
-            padding: '0.75rem',
-          }}
+          style={textareaStyle}
         />
 
         {parseError && (
@@ -166,13 +148,13 @@ export default function BulkUploadModal({ entidad, onClose, onSuccess }) {
         )}
 
         <div style={{ display: 'flex', gap: '0.75rem' }}>
-          <button type="button" onClick={runValidar} disabled={loading}>
+          <button type="button" className="motored-btn motored-btn-secondary" onClick={runValidar} disabled={loading}>
             {loading ? 'Validando...' : 'Validar'}
           </button>
-          <button type="button" onClick={runCarga} disabled={loading}>
+          <button type="button" className="motored-btn motored-btn-primary" onClick={runCarga} disabled={loading}>
             {loading ? 'Cargando...' : 'Cargar'}
           </button>
-          <button type="button" onClick={onClose} disabled={loading}>
+          <button type="button" className="motored-btn motored-btn-tertiary" onClick={onClose} disabled={loading}>
             Cerrar
           </button>
         </div>
