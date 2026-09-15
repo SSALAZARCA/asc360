@@ -38,6 +38,17 @@ class Settings(BaseSettings):
     SMTP_FROM: str = ""
     SMTP_STARTTLS: bool = True
 
+    # Motored Pedidos (sdd/motored-pedidos-cimientos) — módulo hermano,
+    # aislado (DB, secreto y sesión propios). Apagado por default hasta que
+    # se aprovisione su propia base de datos en Coolify. Todos opcionales
+    # con default seguro para que el arranque de asc360 y su suite de tests
+    # (que importan `app.main.app`) no dependan de estas variables.
+    MOTORED_ENABLED: bool = False
+    MOTORED_DATABASE_URL: str = ""
+    MOTORED_SECRET_KEY: str = ""
+    MOTORED_MAX_UPLOAD_MB: int = 10
+    MOTORED_MAX_UPLOAD_ROWS: int = 50000
+
     @property
     def allowed_origins_list(self) -> list:
         return [o.strip() for o in self.ALLOWED_ORIGINS.split(",") if o.strip()]
