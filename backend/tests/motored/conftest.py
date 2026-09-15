@@ -1,6 +1,8 @@
 """
 Phase 3 "Models/Schemas/Services" — shared test plumbing
-(sdd/motored-pedidos-cimientos).
+(sdd/motored-pedidos-cimientos). Phase 4 "API + Integration" adds the HTTP
+layer helpers at the bottom (`motored_client`, `override_motored_db`,
+`override_motored_user`).
 
 Mirrors the project's established fake-session convention
 (`tests/imports/conftest.py`'s `FakeAsyncSession`/`_ExecuteResult`): no live
@@ -68,7 +70,35 @@ class FakeAsyncSession:
     def add(self, obj):
         if getattr(obj, "id", None) is None:
             obj.id = uuid.uuid4()
+        self._apply_column_defaults(obj)
         self.added.append(obj)
+
+    @staticmethod
+    def _apply_column_defaults(obj) -> None:
+        """Phase 4 addition: a real `AsyncSession` applies SQLAlchemy
+        client-side column `default=` values (scalar or callable) at flush
+        time, and — because Motored's session is built with
+        `expire_on_commit=False` — the in-memory object keeps that value
+        after `commit()`. `FakeAsyncSession` never flushes, so without this
+        an HTTP-layer test that builds a Pydantic `*Read` response straight
+        from a freshly-`add()`ed row (e.g. `sucursal.activa`) would see
+        `None` instead of the real default — a test-fake gap, not a
+        production bug. Mirrors the real flush behavior closely enough for
+        every default used in this module (booleans, `datetime.utcnow`,
+        numeric defaults)."""
+        table = getattr(obj, "__table__", None)
+        if table is None:
+            return
+        for column in table.columns:
+            if getattr(obj, column.name, None) is not None:
+                continue
+            default = column.default
+            if default is None:
+                continue
+            if getattr(default, "is_scalar", False):
+                setattr(obj, column.name, default.arg)
+            elif getattr(default, "is_callable", False):
+                setattr(obj, column.name, default.arg(None))
 
     async def commit(self):
         self.committed = True
@@ -84,3 +114,53 @@ class FakeAsyncSession:
 
     def added_of_type(self, cls) -> list:
         return [obj for obj in self.added if isinstance(obj, cls)]
+
+
+# ---------------------------------------------------------------------------
+# Phase 4 "API + Integration" — HTTP-layer helpers.
+#
+# Mirrors the design doc's own Testing Strategy line ("`tests/motored/
+# conftest.py` `make_motored_client` overriding `get_motored_db`/
+# `get_current_motored_user`"): API-layer tests use the REAL `TestClient
+# (app)` around the real mounted Motored router (Phase 4), and swap only the
+# two dependency seams that Phase 2/3 already designed to be swappable --
+# never a throwaway app object, never a monkeypatched service function.
+# ---------------------------------------------------------------------------
+import pytest
+from fastapi.testclient import TestClient
+
+from app.main import app
+from app.motored.database import get_motored_db
+from app.motored.deps import get_current_motored_user
+
+
+@pytest.fixture
+def motored_client():
+    """Real `TestClient(app)` around the real, already-mounted Motored
+    router. Cleans up both dependency-override seams after the test so one
+    test's fake session/user never leaks into the next."""
+    with TestClient(app) as client:
+        yield client
+    app.dependency_overrides.pop(get_motored_db, None)
+    app.dependency_overrides.pop(get_current_motored_user, None)
+
+
+def override_motored_db(session: "FakeAsyncSession") -> None:
+    """Swaps the innermost DB seam. `get_motored_db_or_503` (which every
+    Motored router actually depends on) itself depends on `get_motored_db`,
+    so overriding this one leaf makes every layer above it (readiness probe,
+    user lookup, business queries) transparently use `session`."""
+    app.dependency_overrides[get_motored_db] = lambda: session
+
+
+def override_motored_user(user) -> None:
+    """Swaps the resolved-user seam directly, bypassing the real DB-backed
+    lookup entirely (its own correctness is Phase 3's concern, already
+    covered by `test_usuario_lookup.py`) — this is what lets RBAC-matrix
+    tests fix a role per request without staging a matching `usuario` row
+    in `execute_queue` for every single case."""
+
+    async def _fake_current_user():
+        return user
+
+    app.dependency_overrides[get_current_motored_user] = _fake_current_user

@@ -40,3 +40,6 @@ from app.api.v1.router import api_router
 
 # Rutas se incluyen más adelante (Ej: app.include_router(api_router, prefix="/api/v1"))
 app.include_router(api_router, prefix="/api/v1")
+
+from app.motored.api.router import router as motored_router
+app.include_router(motored_router, prefix="/api/motored")
