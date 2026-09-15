@@ -8,10 +8,17 @@ auditoría) y hace el `commit()` explícito que `get_motored_db` (ADR-5)
 deliberadamente NO hace.
 
 RBAC (proposal §7.15): lectura (list/get) permitida a los 4 roles
-autenticados -- CONSULTA y SUCURSAL son read-only sobre maestros, per
-alcance de esta fase (sin filtrado por sucursal todavía, ver nota de
-alcance en el `README`/apply-progress). Escritura (create/update/
-deactivate) restringida a ADMIN|COMPRAS.
+autenticados -- CONSULTA es read-only sobre todos los maestros. SUCURSAL
+también es read-only, pero además está ESCOPEADO por sucursal (spec
+`motored-auth`, "Requirement: SUCURSAL branch scoping"; proposal, regla de
+negocio "Role `SUCURSAL` sees only its own branches"): ve únicamente sus
+propias `sucursal`/`bodega` (nunca las de otra sucursal), mientras que
+`proveedor`/`referencia` NO se filtran para ningún rol porque son catálogo
+compartido entre las ~47 sucursales, no datos propios de una sucursal
+(confirmado contra la propuesta/spec -- ninguna regla de negocio ata un
+proveedor o una referencia a una sucursal específica). Escritura
+(create/update/deactivate) restringida a ADMIN|COMPRAS, sin cambios por
+este fix.
 """
 import uuid
 from dataclasses import dataclass
@@ -105,15 +112,51 @@ def _to_read(config: _MaestroConfig, obj: Any) -> dict:
     return config.read_schema.model_validate(obj).model_dump(mode="json")
 
 
+# Entidades atadas a una sucursal específica (spec "SUCURSAL branch
+# scoping"). `proveedor`/`referencia` quedan deliberadamente fuera: son
+# catálogo compartido, no datos de una sucursal (ver módulo docstring).
+_SUCURSAL_SCOPED_ENTIDADES = {"sucursales", "bodegas"}
+
+
+def _branch_id_of(entidad: str, obj: Any) -> Any:
+    """Resuelve a qué sucursal pertenece `obj`, para scoping. Una fila
+    `sucursal` está scopeada por su propio `id`; una fila `bodega` está
+    scopeada por su FK `sucursal_id` (que puede ser `None` -- una bodega sin
+    sucursal asignada nunca es "propia" para un usuario SUCURSAL)."""
+    if entidad == "sucursales":
+        return obj.id
+    if entidad == "bodegas":
+        return obj.sucursal_id
+    return None
+
+
+def _in_sucursal_scope(entidad: str, obj: Any, user: MotoredUser) -> bool:
+    """`True` si `obj` es visible para `user`. No-op (siempre `True`) para
+    roles distintos de SUCURSAL y para entidades no scopeadas por sucursal
+    (`proveedores`, `referencias`) -- filtrado en memoria sobre el resultado
+    ya traído, deliberado: los maestros son catálogos chicos (~47 sucursales,
+    bodegas por sucursal), así que el costo de traer todas las filas y
+    filtrar en Python es despreciable, y mantiene `list_maestro`/`get_maestro`
+    simples de leer y de testear sin depender de cómo un fake de sesión
+    evalúa (o no) una cláusula SQL `WHERE`."""
+    if user.role != "SUCURSAL" or entidad not in _SUCURSAL_SCOPED_ENTIDADES:
+        return True
+    branch_id = _branch_id_of(entidad, obj)
+    if branch_id is None:
+        return False
+    return str(branch_id) in set(user.sucursal_ids)
+
+
 @router.get("/{entidad}")
 async def list_maestro(
     entidad: str,
     db: AsyncSession = Depends(get_motored_db_or_503),
-    _user: MotoredUser = Depends(get_current_motored_user),
+    user: MotoredUser = Depends(get_current_motored_user),
 ) -> List[dict]:
     config = _config_or_404(entidad)
     result = await db.execute(select(config.model))
-    return [_to_read(config, row) for row in result.scalars().all()]
+    rows = [row for row in result.scalars().all() if _in_sucursal_scope(entidad, row, user)]
+    return [_to_read(config, row) for row in rows]
 
 
 @router.get("/{entidad}/{entity_id}")
@@ -121,10 +164,15 @@ async def get_maestro(
     entidad: str,
     entity_id: uuid.UUID,
     db: AsyncSession = Depends(get_motored_db_or_503),
-    _user: MotoredUser = Depends(get_current_motored_user),
+    user: MotoredUser = Depends(get_current_motored_user),
 ) -> dict:
     config = _config_or_404(entidad)
     obj = await _get_or_404(db, config, entity_id)
+    if not _in_sucursal_scope(entidad, obj, user):
+        # Responde como si la fila no existiera (spec: "the API returns an
+        # authorization error or empty result, never B2's data") -- nunca un
+        # 403 que confirmaría que la fila de otra sucursal existe.
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No encontrado")
     return _to_read(config, obj)
 
 
