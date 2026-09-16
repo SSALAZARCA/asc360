@@ -2,9 +2,10 @@
 /**
  * frontend/app/motored/maestros/page.js
  *
- * Masters screen (sdd/motored-pedidos-cimientos). ONE page, 4 tabs per the
+ * Masters screen (sdd/motored-pedidos-cimientos). ONE page, 5 tabs per the
  * proposal (§7.12: "Maestros screen, 4 tabs: Sucursales · Bodegas ·
- * Referencias · Proveedores") -- not 4 separate sidebar entries.
+ * Referencias · Proveedores" + "Salud de maestros board", both described
+ * under the same §7.12 section) -- not separate sidebar entries.
  */
 import MotoredLayout from '../motored-layout';
 import MaestrosTabs from '../../../components/motored/maestros/MaestrosTabs';
@@ -12,12 +13,14 @@ import SucursalesTab from '../../../components/motored/maestros/SucursalesTab';
 import BodegasTab from '../../../components/motored/maestros/BodegasTab';
 import ProveedoresTab from '../../../components/motored/maestros/ProveedoresTab';
 import ReferenciasTab from '../../../components/motored/maestros/ReferenciasTab';
+import SaludTab from '../../../components/motored/maestros/SaludTab';
 
 const TABS = [
   { id: 'sucursales', label: 'Sucursales', render: () => <SucursalesTab /> },
   { id: 'bodegas', label: 'Bodegas', render: () => <BodegasTab /> },
   { id: 'proveedores', label: 'Proveedores', render: () => <ProveedoresTab /> },
   { id: 'referencias', label: 'Referencias', render: () => <ReferenciasTab /> },
+  { id: 'salud', label: 'Salud de maestros', render: () => <SaludTab /> },
 ];
 
 export default function MaestrosPage() {
