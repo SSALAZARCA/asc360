@@ -3,11 +3,10 @@
  * frontend/components/motored/maestros/BulkUploadModal.js
  *
  * Bulk-upload flow for one masters entity (sdd/motored-pedidos-cimientos,
- * Phase 6, task 6.3/6.4, design ADR-6). The backend contract (`backend/app/
- * motored/api/carga.py`) is unchanged and still deliberately simple per the
- * proposal's locked scope: `filas` is an array of already-structured row
- * objects, not a raw file (Fase 1 "carga masiva" is a small synchronous
- * JSON-rows upload, not the §5/§9 streaming pipeline).
+ * Phase 6, task 6.3/6.4, design ADR-6). `.csv` still posts JSON rows
+ * (`filas: list[dict]`) to the original endpoints, unchanged since Fase 1;
+ * `.xlsx` posts the raw file to a separate pair of endpoints added later
+ * (see the second doc block below) that parse it server-side.
  *
  * What changed: the FIRST version of this modal asked a business user to
  * type that JSON array by hand -- unusable, per direct user feedback ("no
@@ -26,10 +25,25 @@
  * reported at once (never fail-fast) -- this component's one hard
  * requirement (task 6.4) is to render EVERY row in `errores`, not just a
  * generic "upload failed" banner.
+ *
+ * `.xlsx` support (batch posterior, owner brief "Excel upload capability"):
+ * unlike `.csv`, an `.xlsx` file is NEVER parsed here -- SheetJS/`xlsx` is
+ * the only JS library that reads real Excel binaries and its npm-published
+ * build carries two unpatched HIGH advisories (ReDoS, prototype pollution)
+ * with no fixed version ever published to npm. Instead, the raw file is
+ * sent as `multipart/form-data` straight to the backend
+ * (`validarCargaArchivo`/`subirCargaArchivo`), which parses it server-side
+ * with `openpyxl` (`backend/app/motored/services/carga_excel.py`) using the
+ * SAME column/alias config as `COLUMNAS_POR_ENTIDAD` below, then feeds the
+ * result into the exact same `validate_rows`/`procesar_carga` pipeline as
+ * the `.csv` path. Selecting an `.xlsx` file triggers an immediate dry-run
+ * validate call -- there is no editable row-preview table for Excel (an
+ * accepted UX difference from `.csv`); the existing `CargaResultPanel`
+ * below doubles as that preview.
  */
 import { useState } from 'react';
 import Papa from 'papaparse';
-import { validarCarga, subirCarga } from '../../../lib/motored/api';
+import { validarCarga, subirCarga, validarCargaArchivo, subirCargaArchivo } from '../../../lib/motored/api';
 import InfoTooltip from '../InfoTooltip';
 
 // Columnas esperadas por maestro (sucursal/bodega/proveedor/referencia).
@@ -187,9 +201,55 @@ function downloadTemplate(entidad) {
   URL.revokeObjectURL(url);
 }
 
+function isExcelFile(file) {
+  return /\.xlsx$/i.test(file?.name || '');
+}
+
+function isPayloadEmpty(payload) {
+  return Array.isArray(payload) ? payload.length === 0 : !payload;
+}
+
+// Shared by both the CSV path (`payload` = filas: array) and the Excel path
+// (`payload` = file: File) -- `apiFn(entidad, payload)` is the only thing
+// that differs between validar/subir x csv/xlsx, so one function handles
+// all four combinations instead of two near-identical closures per mode.
+async function submitCarga(apiFn, entidad, payload, { onSuccess, notifyOnSuccess, setLoading, setResultado }) {
+  if (isPayloadEmpty(payload)) return;
+  setLoading(true);
+  setResultado(null);
+  try {
+    const res = await apiFn(entidad, payload);
+    setResultado(res);
+    if (notifyOnSuccess && res.ok) onSuccess?.(res);
+  } catch (err) {
+    setResultado({ ok: false, errores: [{ fila: 0, motivo: err.message }] });
+  } finally {
+    setLoading(false);
+  }
+}
+
+function parseCsvFile(entidad, file, { setFilas, setParseError }) {
+  Papa.parse(file, {
+    header: true,
+    skipEmptyLines: true,
+    complete: (results) => {
+      const rawHeaders = results.meta.fields || [];
+      const faltantes = missingRequiredColumns(entidad, rawHeaders);
+      if (faltantes.length > 0) {
+        setParseError(`Al archivo le falta la columna obligatoria: ${faltantes.join(', ')}`);
+        return;
+      }
+      setFilas(rowsToCanonical(entidad, results.data, rawHeaders));
+    },
+    error: (err) => setParseError(`No se pudo leer el archivo: ${err.message}`),
+  });
+}
+
 function useCargaMasiva(entidad, onSuccess) {
   const [fileName, setFileName] = useState('');
   const [filas, setFilas] = useState([]);
+  const [excelFile, setExcelFile] = useState(null);
+  const [isExcel, setIsExcel] = useState(false);
   const [parseError, setParseError] = useState('');
   const [resultado, setResultado] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -198,44 +258,39 @@ function useCargaMasiva(entidad, onSuccess) {
     setResultado(null);
     setParseError('');
     setFilas([]);
+    setExcelFile(null);
+    setIsExcel(false);
     if (!file) return;
     setFileName(file.name);
 
-    Papa.parse(file, {
-      header: true,
-      skipEmptyLines: true,
-      complete: (results) => {
-        const rawHeaders = results.meta.fields || [];
-        const faltantes = missingRequiredColumns(entidad, rawHeaders);
-        if (faltantes.length > 0) {
-          setParseError(`Al archivo le falta la columna obligatoria: ${faltantes.join(', ')}`);
-          return;
-        }
-        setFilas(rowsToCanonical(entidad, results.data, rawHeaders));
-      },
-      error: (err) => setParseError(`No se pudo leer el archivo: ${err.message}`),
-    });
-  };
-
-  const runWith = async (apiFn, { notifyOnSuccess } = {}) => {
-    if (filas.length === 0) return;
-    setLoading(true);
-    setResultado(null);
-    try {
-      const res = await apiFn(entidad, filas);
-      setResultado(res);
-      if (notifyOnSuccess && res.ok) onSuccess?.(res);
-    } catch (err) {
-      setResultado({ ok: false, errores: [{ fila: 0, motivo: err.message }] });
-    } finally {
-      setLoading(false);
+    if (isExcelFile(file)) {
+      // No client-side parsing at all for .xlsx -- the file goes straight
+      // to the backend, and an immediate dry-run validate doubles as the
+      // "preview" this format doesn't otherwise have.
+      setIsExcel(true);
+      setExcelFile(file);
+      submitCarga(validarCargaArchivo, entidad, file, { setLoading, setResultado });
+      return;
     }
+
+    parseCsvFile(entidad, file, { setFilas, setParseError });
   };
 
   return {
-    fileName, filas, parseError, resultado, loading, handleFile,
-    runValidar: () => runWith(validarCarga),
-    runCarga: () => runWith(subirCarga, { notifyOnSuccess: true }),
+    fileName, filas, isExcel, parseError, resultado, loading, handleFile,
+    canSubmit: isExcel ? Boolean(excelFile) : filas.length > 0,
+    runValidar: () => submitCarga(
+      isExcel ? validarCargaArchivo : validarCarga,
+      entidad,
+      isExcel ? excelFile : filas,
+      { setLoading, setResultado },
+    ),
+    runCarga: () => submitCarga(
+      isExcel ? subirCargaArchivo : subirCarga,
+      entidad,
+      isExcel ? excelFile : filas,
+      { onSuccess, notifyOnSuccess: true, setLoading, setResultado },
+    ),
   };
 }
 
@@ -268,14 +323,15 @@ function FilePicker({ fileName, onFile }) {
       }}
     >
       <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--motored-text, #1a1a18)' }}>
-        {fileName || 'Hacé clic acá para elegir el archivo CSV'}
+        {fileName || 'Hacé clic acá para elegir el archivo (CSV o Excel .xlsx)'}
       </span>
       <span style={{ fontSize: '0.7rem', color: 'var(--motored-text-muted, #5a5a5a)' }}>
-        En Excel: Archivo → Guardar como → tipo &quot;CSV (delimitado por comas)&quot;
+        En Excel: Archivo → Guardar como → tipo &quot;CSV (delimitado por comas)&quot;, o subí
+        directamente el archivo .xlsx.
       </span>
       <input
         type="file"
-        accept=".csv,text/csv"
+        accept=".csv,text/csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         style={{ display: 'none' }}
         onChange={(e) => onFile(e.target.files?.[0])}
       />
@@ -366,7 +422,7 @@ const boxStyle = {
 };
 
 export default function BulkUploadModal({ entidad, onClose, onSuccess }) {
-  const { fileName, filas, parseError, resultado, loading, handleFile, runValidar, runCarga } =
+  const { fileName, filas, isExcel, canSubmit, parseError, resultado, loading, handleFile, runValidar, runCarga } =
     useCargaMasiva(entidad, onSuccess);
 
   return (
@@ -389,6 +445,13 @@ export default function BulkUploadModal({ entidad, onClose, onSuccess }) {
 
         <FilePicker fileName={fileName} onFile={handleFile} />
 
+        {isExcel && (
+          <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--motored-text-muted, #5a5a5a)' }}>
+            Los archivos .xlsx se validan directamente en el servidor: no hay tabla editable por
+            fila, solo el resultado de la validación del archivo completo (abajo).
+          </p>
+        )}
+
         {parseError && (
           <p style={{ margin: 0, color: 'var(--motored-danger, #c0392b)', fontSize: '0.75rem' }}>{parseError}</p>
         )}
@@ -396,10 +459,10 @@ export default function BulkUploadModal({ entidad, onClose, onSuccess }) {
         <FilasPreview filas={filas} />
 
         <div style={{ display: 'flex', gap: '0.75rem' }}>
-          <button type="button" className="motored-btn motored-btn-secondary" onClick={runValidar} disabled={loading || filas.length === 0}>
+          <button type="button" className="motored-btn motored-btn-secondary" onClick={runValidar} disabled={loading || !canSubmit}>
             {loading ? 'Validando...' : 'Validar'}
           </button>
-          <button type="button" className="motored-btn motored-btn-primary" onClick={runCarga} disabled={loading || filas.length === 0}>
+          <button type="button" className="motored-btn motored-btn-primary" onClick={runCarga} disabled={loading || !canSubmit}>
             {loading ? 'Cargando...' : 'Cargar'}
           </button>
           <button type="button" className="motored-btn motored-btn-tertiary" onClick={onClose} disabled={loading}>

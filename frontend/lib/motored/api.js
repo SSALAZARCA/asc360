@@ -89,6 +89,34 @@ export async function subirCarga(entidadSingular, filas) {
 }
 
 // ---------------------------------------------------------------------------
+// Carga masiva vía archivo `.xlsx` crudo -- batch posterior a la Fase 1
+// (owner brief "Excel upload capability"). A diferencia de `validarCarga`/
+// `subirCarga` de arriba, acá NO se parsea nada en el browser: el archivo
+// entero viaja como `multipart/form-data` y `backend/app/motored/services/
+// carga_excel.py` lo parsea server-side con `openpyxl`. Distinto
+// content-type/body, por eso son funciones separadas, no una variante de
+// las de arriba.
+// ---------------------------------------------------------------------------
+
+export async function validarCargaArchivo(entidadSingular, file) {
+  const formData = new FormData();
+  formData.append('file', file);
+  return motoredFetchJson(`/maestros/${entidadSingular}/carga/excel/validar`, {
+    method: 'POST',
+    body: formData,
+  });
+}
+
+export async function subirCargaArchivo(entidadSingular, file) {
+  const formData = new FormData();
+  formData.append('file', file);
+  return motoredFetchJson(`/maestros/${entidadSingular}/carga/excel`, {
+    method: 'POST',
+    body: formData,
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Salud de maestros
 // ---------------------------------------------------------------------------
 
