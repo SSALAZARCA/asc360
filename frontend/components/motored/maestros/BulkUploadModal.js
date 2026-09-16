@@ -30,6 +30,7 @@
 import { useState } from 'react';
 import Papa from 'papaparse';
 import { validarCarga, subirCarga } from '../../../lib/motored/api';
+import InfoTooltip from '../InfoTooltip';
 
 // Columnas esperadas por maestro -- hoy solo `sucursal` tiene pantalla real
 // (SucursalesTab.js); se completa acá mismo el día que se agreguen
@@ -38,10 +39,14 @@ import { validarCarga, subirCarga } from '../../../lib/motored/api';
 const COLUMNAS_POR_ENTIDAD = {
   sucursal: [
     { key: 'nombre', label: 'Nombre', required: true, aliases: ['nombre', 'sucursal'] },
-    { key: 'sic', label: 'SIC', required: false, aliases: ['sic'] },
+    {
+      key: 'sic', label: 'SIC', required: false, aliases: ['sic'],
+      help: 'Código con el que el proveedor (HMCL) identifica esta sucursal en sus sistemas.',
+    },
     {
       key: 'dias_seguridad', label: 'Días de seguridad', required: false,
       aliases: ['dias_seguridad', 'dias seguridad', 'días de seguridad', 'días seguridad'],
+      help: 'Colchón de días extra sobre el tiempo normal de reposición, para cubrir imprevistos. Por defecto 2.5 días.',
     },
   ],
 };
@@ -156,6 +161,7 @@ function ColumnasEsperadas({ entidad }) {
           <li key={col.key}>
             <strong style={{ color: 'var(--motored-text, #1a1a18)' }}>{col.label}</strong>
             {col.required ? ' (obligatoria)' : ' (opcional)'}
+            {col.help && <InfoTooltip text={col.help} />}
           </li>
         ))}
       </ul>

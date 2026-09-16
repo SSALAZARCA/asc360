@@ -155,6 +155,26 @@ const themeCss = `
           outline: none; border-color: var(--motored-primary);
           box-shadow: 0 0 0 3px var(--motored-brand-soft);
         }
+
+        /* Tooltip de ayuda -- convención para TODO campo cuyo nombre no sea
+        obvio para alguien de negocio (p.ej. "SIC", "Días de seguridad").
+        Ver componente InfoTooltip.js en cada pantalla; esta es solo la
+        presentación compartida. */
+        .motored-theme .motored-tooltip {
+          position: relative; display: inline-flex; align-items: center;
+          margin-left: 4px; color: var(--motored-text-soft); cursor: help;
+        }
+        .motored-theme .motored-tooltip-text {
+          visibility: hidden; opacity: 0; position: absolute; bottom: 140%; left: 50%;
+          transform: translateX(-50%); background: var(--motored-text); color: #fff;
+          padding: 6px 10px; border-radius: var(--motored-radius-sm); font-size: 11px;
+          font-weight: 500; line-height: 1.4; white-space: normal; width: max-content;
+          max-width: 220px; text-align: left; transition: opacity 0.15s; z-index: 20;
+        }
+        .motored-theme .motored-tooltip:hover .motored-tooltip-text,
+        .motored-theme .motored-tooltip:focus-visible .motored-tooltip-text {
+          visibility: visible; opacity: 1;
+        }
       `;
 
 export default function MotoredRootLayout({ children }) {

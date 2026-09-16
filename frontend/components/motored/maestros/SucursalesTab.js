@@ -21,6 +21,7 @@ import {
   deactivateMaestro,
 } from '../../../lib/motored/api';
 import BulkUploadModal from './BulkUploadModal';
+import InfoTooltip from '../InfoTooltip';
 
 const ENTIDAD_PLURAL = 'sucursales';
 const ENTIDAD_SINGULAR = 'sucursal';
@@ -39,11 +40,17 @@ function SucursalForm({ form, setForm, editingId, onSubmit, onCancel }) {
         />
       </label>
       <label style={{ display: 'flex', flexDirection: 'column', fontSize: '0.7rem', color: 'var(--motored-text-muted, #5a5a5a)' }}>
-        SIC
+        <span>
+          SIC
+          <InfoTooltip text="Código con el que el proveedor (HMCL) identifica esta sucursal en sus sistemas. Sin este dato, el sistema no puede cruzar automáticamente las facturas y envíos que llegan de HMCL con la sucursal correcta." />
+        </span>
         <input value={form.sic} onChange={(e) => setForm({ ...form, sic: e.target.value })} />
       </label>
       <label style={{ display: 'flex', flexDirection: 'column', fontSize: '0.7rem', color: 'var(--motored-text-muted, #5a5a5a)' }}>
-        Días seguridad
+        <span>
+          Días seguridad
+          <InfoTooltip text="Colchón de días extra que se suma al tiempo normal de reposición (empaque + transporte) para cubrir imprevistos como demoras o picos de demanda. Por defecto 2.5 días." />
+        </span>
         <input
           value={form.dias_seguridad}
           onChange={(e) => setForm({ ...form, dias_seguridad: e.target.value })}
@@ -71,8 +78,14 @@ function SucursalesTable({ sucursales, onEdit, onDeactivate }) {
       <thead>
         <tr style={{ textAlign: 'left', color: 'var(--motored-text-muted, #5a5a5a)' }}>
           <th style={{ padding: '0 12px 8px 0' }}>Nombre</th>
-          <th style={{ padding: '0 12px 8px 0' }}>SIC</th>
-          <th style={{ padding: '0 12px 8px 0' }}>Días seguridad</th>
+          <th style={{ padding: '0 12px 8px 0' }}>
+            SIC
+            <InfoTooltip text="Código con el que el proveedor (HMCL) identifica esta sucursal en sus sistemas." />
+          </th>
+          <th style={{ padding: '0 12px 8px 0' }}>
+            Días seguridad
+            <InfoTooltip text="Colchón de días extra sobre el tiempo normal de reposición, para cubrir imprevistos. Por defecto 2.5 días." />
+          </th>
           <th style={{ padding: '0 12px 8px 0' }}>Estado</th>
           <th />
         </tr>
