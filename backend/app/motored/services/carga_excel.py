@@ -105,13 +105,12 @@ ALIASES_POR_ENTIDAD: Dict[str, List[Dict[str, Any]]] = {
     ],
     # Nota de alcance (idéntica a la del frontend): la sucursal de cada
     # bodega NO se asigna por Excel en esta carga masiva.
+    # `bodega_principal` (consolidación, spec §5.2) NO se expone acá a
+    # propósito (owner request, 2026-09-16) -- sin uso en Fase 1, la columna
+    # de la base de datos sigue existiendo para cuando la Fase 2 la necesite.
     "bodega": [
         {"key": "codigo", "label": "Código", "required": True, "aliases": ["codigo", "código", "bodega"]},
         {"key": "descripcion", "label": "Descripción", "required": False, "aliases": ["descripcion", "descripción"]},
-        {
-            "key": "bodega_principal", "label": "Bodega principal", "required": False,
-            "aliases": ["bodega_principal", "bodega principal"],
-        },
     ],
     "proveedor": [
         {"key": "codigo", "label": "Código", "required": True, "aliases": ["codigo", "código", "proveedor"]},

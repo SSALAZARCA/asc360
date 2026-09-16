@@ -93,14 +93,12 @@ const COLUMNAS_POR_ENTIDAD = {
   // su nombre, y esa resolución nombre->id todavía no existe para bodegas
   // como sí existe para `proveedor_codigo` en `referencia`). Se asigna
   // editando la bodega individualmente después de cargarla.
+  // `bodega_principal` (consolidación, spec §5.2) NO se expone acá a
+  // propósito (owner request, 2026-09-16) -- sin uso en Fase 1, la columna
+  // de la base de datos sigue existiendo para cuando la Fase 2 la necesite.
   bodega: [
     { key: 'codigo', label: 'Código', required: true, aliases: ['codigo', 'código', 'bodega'] },
     { key: 'descripcion', label: 'Descripción', required: false, aliases: ['descripcion', 'descripción'] },
-    {
-      key: 'bodega_principal', label: 'Bodega principal', required: false,
-      aliases: ['bodega_principal', 'bodega principal'],
-      help: 'Código de OTRA bodega hacia la que se consolida esta (ej: BA066 se consolida en BA061).',
-    },
   ],
   proveedor: [
     { key: 'codigo', label: 'Código', required: true, aliases: ['codigo', 'código', 'proveedor'] },

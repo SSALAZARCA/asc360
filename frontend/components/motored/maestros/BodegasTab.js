@@ -8,9 +8,12 @@
  * - `sucursal_id` is a REAL foreign key (`backend/app/motored/models/
  *   bodega.py`) -- rendered as a dropdown fed by the real sucursales list,
  *   never a free-text field a user could typo.
- * - `bodega_principal` is plain text (a bodega CODE, e.g. "BA061"), NOT a
- *   foreign key in Fase 1 -- the model's own docstring is explicit that
- *   consolidation resolution is a later phase's concern.
+ *
+ * `bodega.bodega_principal` (consolidation target, spec §5.2 -- "BA066 suma
+ * en BA061") is intentionally NOT shown here (owner request, 2026-09-16:
+ * unused today, since Fase 1 has no consolidation logic yet). The DB column
+ * is untouched -- only hidden from the form/table/bulk-upload -- so Fase 2
+ * can wire it up later without another migration.
  */
 import { useEffect, useState } from 'react';
 import {
@@ -25,7 +28,7 @@ import FormField from './FormField';
 const ENTIDAD_PLURAL = 'bodegas';
 const ENTIDAD_SINGULAR = 'bodega';
 
-const emptyForm = { codigo: '', descripcion: '', sucursal_id: '', bodega_principal: '' };
+const emptyForm = { codigo: '', descripcion: '', sucursal_id: '' };
 
 function BodegaForm({ form, setForm, editingId, sucursales, onSubmit, onCancel }) {
   return (
@@ -41,13 +44,6 @@ function BodegaForm({ form, setForm, editingId, sucursales, onSubmit, onCancel }
           ))}
         </select>
       </label>
-      <FormField
-        label="Bodega principal"
-        tooltip="Código de OTRA bodega hacia la que se consolida esta (ej: BA066 se consolida en BA061). Es solo un texto de referencia, no un vínculo automático todavía."
-        placeholder="ej: BA061"
-        value={form.bodega_principal}
-        onChange={(e) => setForm({ ...form, bodega_principal: e.target.value })}
-      />
       <button type="submit" className="motored-btn motored-btn-primary">{editingId ? 'Guardar cambios' : 'Crear bodega'}</button>
       {editingId && (
         <button type="button" className="motored-btn motored-btn-secondary" onClick={onCancel}>
@@ -72,7 +68,6 @@ function BodegasTable({ bodegas, sucursalesPorId, onEdit, onDeactivate }) {
           <th style={{ padding: '0 12px 8px 0' }}>Código</th>
           <th style={{ padding: '0 12px 8px 0' }}>Descripción</th>
           <th style={{ padding: '0 12px 8px 0' }}>Sucursal</th>
-          <th style={{ padding: '0 12px 8px 0' }}>Bodega principal</th>
           <th style={{ padding: '0 12px 8px 0' }}>Estado</th>
           <th />
         </tr>
@@ -85,7 +80,6 @@ function BodegasTable({ bodegas, sucursalesPorId, onEdit, onDeactivate }) {
             <td style={{ padding: '10px 12px 10px 0' }}>
               {b.sucursal_id ? (sucursalesPorId[b.sucursal_id] || <em>sucursal desconocida</em>) : <em>sin asignar</em>}
             </td>
-            <td style={{ padding: '10px 12px 10px 0' }}>{b.bodega_principal || <em>—</em>}</td>
             <td style={{ padding: '10px 12px 10px 0' }}>{b.activa ? 'Activa' : 'Inactiva'}</td>
             <td style={{ display: 'flex', gap: '1rem', padding: '10px 0' }}>
               <button type="button" className="motored-row-action" onClick={() => onEdit(b)}>Editar</button>
@@ -292,7 +286,6 @@ function useBodegasEditor(save) {
       codigo: b.codigo,
       descripcion: b.descripcion || '',
       sucursal_id: b.sucursal_id || '',
-      bodega_principal: b.bodega_principal || '',
     });
   };
 
@@ -303,12 +296,14 @@ function useBodegasEditor(save) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    // No se manda `bodega_principal` -- campo oculto (owner request,
+    // 2026-09-16), y con `exclude_unset=True` server-side omitirlo del
+    // payload significa "no tocar", nunca borra un valor ya cargado antes.
     const ok = await save(
       {
         codigo: form.codigo,
         descripcion: form.descripcion || null,
         sucursal_id: form.sucursal_id || null,
-        bodega_principal: form.bodega_principal || null,
       },
       editingId
     );
