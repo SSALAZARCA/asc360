@@ -22,6 +22,12 @@ from alembic import context
 
 from app.config import settings
 from app.motored.database import MotoredBase
+# Registra los 9 modelos en MotoredBase.metadata -- sin este import,
+# target_metadata queda vacío y `alembic revision --autogenerate` no ve
+# ninguna tabla que crear (bug real encontrado al generar la primera
+# migración: el import nunca se agregó pese a que el docstring de este
+# archivo y el de app/motored/models/__init__.py ya lo daban por hecho).
+import app.motored.models  # noqa: F401,E402
 
 config = context.config
 
