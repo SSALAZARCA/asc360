@@ -38,7 +38,8 @@ class Referencia(MotoredBase):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     codigo = Column(String(100), nullable=False)
     proveedor_id = Column(UUID(as_uuid=True), ForeignKey("proveedor.id"), nullable=False)
-    descripcion = Column(String(255), nullable=True)
+    nombre = Column(String(255), nullable=True)
+    linea_comercial = Column(String(60), nullable=True)
 
     unidad_empaque = Column(Integer, nullable=False, default=1)
     unidad_empaque_advertencia = Column(Boolean, nullable=False, default=False)

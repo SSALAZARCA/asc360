@@ -7,11 +7,13 @@ from pydantic import BaseModel, ConfigDict
 
 class BodegaCreate(BaseModel):
     codigo: str
+    descripcion: Optional[str] = None
     sucursal_id: Optional[uuid.UUID] = None
     bodega_principal: Optional[str] = None
 
 
 class BodegaUpdate(BaseModel):
+    descripcion: Optional[str] = None
     sucursal_id: Optional[uuid.UUID] = None
     bodega_principal: Optional[str] = None
 
@@ -21,6 +23,7 @@ class BodegaRead(BaseModel):
 
     id: uuid.UUID
     codigo: str
+    descripcion: Optional[str] = None
     sucursal_id: Optional[uuid.UUID] = None
     bodega_principal: Optional[str] = None
     activa: bool

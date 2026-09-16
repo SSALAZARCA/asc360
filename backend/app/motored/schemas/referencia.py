@@ -9,7 +9,8 @@ from pydantic import BaseModel, ConfigDict
 class ReferenciaCreate(BaseModel):
     codigo: str
     proveedor_id: uuid.UUID
-    descripcion: Optional[str] = None
+    nombre: Optional[str] = None
+    linea_comercial: Optional[str] = None
     unidad_empaque: Optional[int] = None
     precio_normal: Optional[Decimal] = None
     precio_venta: Optional[Decimal] = None
@@ -18,7 +19,8 @@ class ReferenciaCreate(BaseModel):
 
 
 class ReferenciaUpdate(BaseModel):
-    descripcion: Optional[str] = None
+    nombre: Optional[str] = None
+    linea_comercial: Optional[str] = None
     unidad_empaque: Optional[int] = None
     precio_normal: Optional[Decimal] = None
     precio_venta: Optional[Decimal] = None
@@ -32,7 +34,8 @@ class ReferenciaRead(BaseModel):
     id: uuid.UUID
     codigo: str
     proveedor_id: uuid.UUID
-    descripcion: Optional[str] = None
+    nombre: Optional[str] = None
+    linea_comercial: Optional[str] = None
     unidad_empaque: int
     unidad_empaque_advertencia: bool
     precio_normal: Optional[Decimal] = None

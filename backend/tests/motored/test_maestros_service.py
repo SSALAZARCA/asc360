@@ -190,6 +190,68 @@ class TestSoftDeleteNeverHardDeletes:
         assert delete_calls == []
 
 
+class TestNewSpecFieldsPersistOnCreate:
+    """Post-archive correction (sdd/motored-pedidos-cimientos): the 4
+    `create_*` functions build their model instance with an explicit field
+    list (this codebase's own style, no blind `**kwargs`) -- each list must
+    be extended to include the spec fields the original build dropped."""
+
+    async def test_create_sucursal_persists_the_six_new_fields(self):
+        db = FakeAsyncSession()
+        from datetime import date
+
+        data = SucursalCreate(
+            nombre="CALI NORTE",
+            dias_empaque=3,
+            dias_transito=5,
+            bodega_principal="BE051",
+            departamento="Valle del Cauca",
+            ciudad="Cali",
+            fecha_apertura=date(2020, 1, 15),
+        )
+
+        sucursal = await maestros.create_sucursal(db, data)
+
+        assert sucursal.dias_empaque == 3
+        assert sucursal.dias_transito == 5
+        assert sucursal.bodega_principal == "BE051"
+        assert sucursal.departamento == "Valle del Cauca"
+        assert sucursal.ciudad == "Cali"
+        assert sucursal.fecha_apertura == date(2020, 1, 15)
+
+    async def test_create_proveedor_persists_dias_seguridad_default(self):
+        db = FakeAsyncSession()
+        from decimal import Decimal
+
+        data = ProveedorCreate(codigo="HMCL", nombre="HMCL Colombia", dias_seguridad_default=Decimal("3.0"))
+
+        proveedor = await maestros.create_proveedor(db, data)
+
+        assert proveedor.dias_seguridad_default == Decimal("3.0")
+
+    async def test_create_bodega_persists_descripcion(self):
+        db = FakeAsyncSession()
+        data = BodegaCreate(codigo="BA061", descripcion="Bodega central")
+
+        bodega = await maestros.create_bodega(db, data)
+
+        assert bodega.descripcion == "Bodega central"
+
+    async def test_create_referencia_persists_nombre_and_linea_comercial(self):
+        db = FakeAsyncSession()
+        data = ReferenciaCreate(
+            codigo="REF1",
+            proveedor_id=uuid.uuid4(),
+            nombre="FILTRO DE ACEITE",
+            linea_comercial="REPUESTOS",
+        )
+
+        referencia, _ = await maestros.create_referencia(db, data)
+
+        assert referencia.nombre == "FILTRO DE ACEITE"
+        assert referencia.linea_comercial == "REPUESTOS"
+
+
 class TestDeactivateRecordsAuditTrail:
     async def test_deactivate_writes_an_auditoria_maestro_row(self):
         sucursal = Sucursal(id=uuid.uuid4(), nombre="CALI NORTE", activa=True)

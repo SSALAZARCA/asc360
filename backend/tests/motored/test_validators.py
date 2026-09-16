@@ -115,6 +115,43 @@ class TestValidateRowsAccumulatesAllErrors:
         assert valid[0]["unidad_empaque"] == 1
         assert valid[0]["_warnings"]
 
+    def test_bulk_upload_schema_construction_accepts_the_new_spec_fields(self):
+        """Post-archive correction: `_SCHEMA_BY_ENTIDAD` just instantiates the
+        real Pydantic `*Create` schema per entity, so the new spec fields
+        (sucursal's 6, referencia's `linea_comercial`/renamed `nombre`,
+        proveedor's `dias_seguridad_default`, bodega's `descripcion`) must be
+        accepted with zero changes to `validate_rows` itself -- this is the
+        explicit verification the task called for ("verify with a test,
+        don't just assume")."""
+        sucursal_rows = [{
+            "nombre": "CALI NORTE", "sic": "S1",
+            "dias_empaque": 3, "dias_transito": 5, "bodega_principal": "BE051",
+            "departamento": "Valle del Cauca", "ciudad": "Cali", "fecha_apertura": "2020-01-15",
+        }]
+        valid, errors = validate_rows("sucursal", sucursal_rows)
+        assert errors == []
+        assert len(valid) == 1
+
+        proveedor_rows = [{"codigo": "HMCL", "nombre": "HMCL Colombia", "dias_seguridad_default": 3.0}]
+        valid, errors = validate_rows("proveedor", proveedor_rows)
+        assert errors == []
+        assert len(valid) == 1
+
+        bodega_rows = [{"codigo": "BA061", "descripcion": "Bodega central"}]
+        valid, errors = validate_rows("bodega", bodega_rows)
+        assert errors == []
+        assert len(valid) == 1
+
+        referencia_rows = [{
+            "codigo": "REF1", "proveedor_codigo": "HMCL", "proveedor_id": str(uuid.uuid4()),
+            "nombre": "FILTRO DE ACEITE", "linea_comercial": "REPUESTOS", "unidad_empaque": 10,
+        }]
+        valid, errors = validate_rows("referencia", referencia_rows)
+        assert errors == []
+        assert len(valid) == 1
+        assert valid[0]["nombre"] == "FILTRO DE ACEITE"
+        assert valid[0]["linea_comercial"] == "REPUESTOS"
+
     def test_referencia_row_with_malformed_proveedor_id_is_a_validation_error(self):
         # A field that's present (passes the blank-check) but the wrong
         # shape (not a real UUID) must be caught HERE, during validation --

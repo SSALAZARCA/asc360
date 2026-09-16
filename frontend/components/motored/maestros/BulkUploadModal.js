@@ -32,10 +32,9 @@ import Papa from 'papaparse';
 import { validarCarga, subirCarga } from '../../../lib/motored/api';
 import InfoTooltip from '../InfoTooltip';
 
-// Columnas esperadas por maestro -- hoy solo `sucursal` tiene pantalla real
-// (SucursalesTab.js); se completa acá mismo el día que se agreguen
-// Bodegas/Proveedores/Referencias. `aliases` es case/acento-insensible:
-// cubre variantes razonables del encabezado tal como puede venir de Excel.
+// Columnas esperadas por maestro (sucursal/bodega/proveedor/referencia).
+// `aliases` es case/acento-insensible: cubre variantes razonables del
+// encabezado tal como puede venir de Excel.
 const COLUMNAS_POR_ENTIDAD = {
   sucursal: [
     { key: 'nombre', label: 'Nombre', required: true, aliases: ['nombre', 'sucursal'] },
@@ -48,6 +47,32 @@ const COLUMNAS_POR_ENTIDAD = {
       aliases: ['dias_seguridad', 'dias seguridad', 'días de seguridad', 'días seguridad'],
       help: 'Colchón de días extra sobre el tiempo normal de reposición, para cubrir imprevistos. Por defecto 2.5 días.',
     },
+    {
+      key: 'dias_empaque', label: 'Días de empaque', required: false,
+      aliases: ['dias_empaque', 'dias empaque', 'días de empaque', 'días empaque'],
+      help: 'Días propios de ESTA sucursal para armar un pedido. Si lo dejás vacío, se usa el valor por defecto del proveedor.',
+    },
+    {
+      key: 'dias_transito', label: 'Días de tránsito', required: false,
+      aliases: ['dias_transito', 'dias transito', 'días de tránsito', 'días tránsito'],
+      help: 'Días propios de ESTA sucursal para que le llegue un pedido. Si lo dejás vacío, se usa el valor por defecto del proveedor.',
+    },
+    {
+      key: 'bodega_principal', label: 'Bodega principal', required: false,
+      aliases: ['bodega_principal', 'bodega principal'],
+      help: 'Código de la bodega principal de esta sucursal (ej: BE051).',
+    },
+    {
+      key: 'departamento', label: 'Departamento', required: false, aliases: ['departamento'],
+    },
+    {
+      key: 'ciudad', label: 'Ciudad', required: false, aliases: ['ciudad'],
+    },
+    {
+      key: 'fecha_apertura', label: 'Fecha de apertura', required: false,
+      aliases: ['fecha_apertura', 'fecha apertura'],
+      help: 'Fecha en que la sucursal abrió operaciones. Se usa más adelante para no contar meses en los que todavía no existía.',
+    },
   ],
   // Nota de alcance: la sucursal de cada bodega NO se asigna por CSV en
   // esta carga masiva (el back-end espera el `id` real de la sucursal, no
@@ -56,6 +81,7 @@ const COLUMNAS_POR_ENTIDAD = {
   // editando la bodega individualmente después de cargarla.
   bodega: [
     { key: 'codigo', label: 'Código', required: true, aliases: ['codigo', 'código', 'bodega'] },
+    { key: 'descripcion', label: 'Descripción', required: false, aliases: ['descripcion', 'descripción'] },
     {
       key: 'bodega_principal', label: 'Bodega principal', required: false,
       aliases: ['bodega_principal', 'bodega principal'],
@@ -70,6 +96,11 @@ const COLUMNAS_POR_ENTIDAD = {
       aliases: ['es_principal', 'principal', 'principal (si/no)', 'principal (sí/no)'],
       help: 'Escribí "Sí" únicamente para HMCL, el proveedor principal. Dejalo vacío o "No" para el resto.',
     },
+    {
+      key: 'dias_seguridad_default', label: 'Días de seguridad (por defecto)', required: false,
+      aliases: ['dias_seguridad_default', 'dias seguridad default', 'días de seguridad (por defecto)'],
+      help: 'Colchón de días extra que se usa cuando una sucursal no tiene su propio valor cargado. Por defecto 2.5 días.',
+    },
   ],
   // `proveedor_codigo` (no el id) -- el router del backend resuelve ese
   // código al id real del proveedor antes de escribir, así que acá alcanza
@@ -81,7 +112,12 @@ const COLUMNAS_POR_ENTIDAD = {
       aliases: ['proveedor_codigo', 'codigo proveedor', 'código proveedor', 'proveedor'],
       help: 'El código del proveedor tal como aparece en la pestaña de Proveedores (ej: HMCL).',
     },
-    { key: 'descripcion', label: 'Descripción', required: false, aliases: ['descripcion', 'descripción'] },
+    { key: 'nombre', label: 'Nombre', required: false, aliases: ['nombre'] },
+    {
+      key: 'linea_comercial', label: 'Línea comercial', required: false,
+      aliases: ['linea_comercial', 'línea comercial'],
+      help: 'Ej: REPUESTOS, ACCESORIOS. No es una lista cerrada, se escribe como texto libre.',
+    },
     {
       key: 'unidad_empaque', label: 'Unidad de empaque', required: false,
       aliases: ['unidad_empaque', 'unidad de empaque'],

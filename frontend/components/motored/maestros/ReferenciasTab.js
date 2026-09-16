@@ -25,13 +25,14 @@ import {
   deactivateMaestro,
 } from '../../../lib/motored/api';
 import BulkUploadModal from './BulkUploadModal';
+import FormField from './FormField';
 import InfoTooltip from '../InfoTooltip';
 
 const ENTIDAD_PLURAL = 'referencias';
 const ENTIDAD_SINGULAR = 'referencia';
 
 const emptyForm = {
-  codigo: '', proveedor_id: '', descripcion: '', unidad_empaque: '1',
+  codigo: '', proveedor_id: '', nombre: '', linea_comercial: '', unidad_empaque: '1',
   precio_normal: '', precio_venta: '', precio_publico: '', sustituida_por: '',
 };
 
@@ -56,10 +57,7 @@ function PrecioFields({ form, setForm }) {
 function ReferenciaForm({ form, setForm, editingId, proveedores, referenciasParaSustituir, onSubmit, onCancel }) {
   return (
     <form onSubmit={onSubmit} style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
-      <label style={{ display: 'flex', flexDirection: 'column', fontSize: '0.7rem', color: 'var(--motored-text-muted, #5a5a5a)' }}>
-        Código
-        <input value={form.codigo} onChange={(e) => setForm({ ...form, codigo: e.target.value })} required />
-      </label>
+      <FormField label="Código" required value={form.codigo} onChange={(e) => setForm({ ...form, codigo: e.target.value })} />
       <label style={{ display: 'flex', flexDirection: 'column', fontSize: '0.7rem', color: 'var(--motored-text-muted, #5a5a5a)' }}>
         Proveedor
         <select value={form.proveedor_id} onChange={(e) => setForm({ ...form, proveedor_id: e.target.value })} required>
@@ -69,17 +67,19 @@ function ReferenciaForm({ form, setForm, editingId, proveedores, referenciasPara
           ))}
         </select>
       </label>
-      <label style={{ display: 'flex', flexDirection: 'column', fontSize: '0.7rem', color: 'var(--motored-text-muted, #5a5a5a)' }}>
-        Descripción
-        <input value={form.descripcion} onChange={(e) => setForm({ ...form, descripcion: e.target.value })} />
-      </label>
-      <label style={{ display: 'flex', flexDirection: 'column', fontSize: '0.7rem', color: 'var(--motored-text-muted, #5a5a5a)' }}>
-        <span>
-          Unidad de empaque
-          <InfoTooltip text="Cuántas unidades vienen por paquete del proveedor. Nunca puede ser 0: si lo dejás vacío o en 0, el sistema lo corrige automáticamente a 1 y lo marca como advertencia en el tablero de salud." />
-        </span>
-        <input value={form.unidad_empaque} onChange={(e) => setForm({ ...form, unidad_empaque: e.target.value })} />
-      </label>
+      <FormField label="Nombre" value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} />
+      <FormField
+        label="Línea comercial"
+        tooltip="Ej: REPUESTOS, ACCESORIOS. No es una lista cerrada, se escribe como texto libre."
+        value={form.linea_comercial}
+        onChange={(e) => setForm({ ...form, linea_comercial: e.target.value })}
+      />
+      <FormField
+        label="Unidad de empaque"
+        tooltip="Cuántas unidades vienen por paquete del proveedor. Nunca puede ser 0: si lo dejás vacío o en 0, el sistema lo corrige automáticamente a 1 y lo marca como advertencia en el tablero de salud."
+        value={form.unidad_empaque}
+        onChange={(e) => setForm({ ...form, unidad_empaque: e.target.value })}
+      />
       <PrecioFields form={form} setForm={setForm} />
       <label style={{ display: 'flex', flexDirection: 'column', fontSize: '0.7rem', color: 'var(--motored-text-muted, #5a5a5a)' }}>
         <span>
@@ -115,7 +115,9 @@ function ReferenciasTable({ referencias, proveedoresPorId, onEdit, onDeactivate 
       <thead>
         <tr style={{ textAlign: 'left', color: 'var(--motored-text-muted, #5a5a5a)' }}>
           <th style={{ padding: '0 12px 8px 0' }}>Código</th>
+          <th style={{ padding: '0 12px 8px 0' }}>Nombre</th>
           <th style={{ padding: '0 12px 8px 0' }}>Proveedor</th>
+          <th style={{ padding: '0 12px 8px 0' }}>Línea comercial</th>
           <th style={{ padding: '0 12px 8px 0' }}>Unidad empaque</th>
           <th style={{ padding: '0 12px 8px 0' }}>Precio normal</th>
           <th style={{ padding: '0 12px 8px 0' }}>Estado</th>
@@ -126,7 +128,9 @@ function ReferenciasTable({ referencias, proveedoresPorId, onEdit, onDeactivate 
         {referencias.map((r) => (
           <tr key={r.id} style={{ borderTop: '1px solid var(--motored-border, #e4e4e7)' }}>
             <td style={{ padding: '10px 12px 10px 0' }}>{r.codigo}</td>
+            <td style={{ padding: '10px 12px 10px 0' }}>{r.nombre || <em>sin nombre</em>}</td>
             <td style={{ padding: '10px 12px 10px 0' }}>{proveedoresPorId[r.proveedor_id] || <em>desconocido</em>}</td>
+            <td style={{ padding: '10px 12px 10px 0' }}>{r.linea_comercial || <em>—</em>}</td>
             <td style={{ padding: '10px 12px 10px 0' }}>
               {r.unidad_empaque}
               {r.unidad_empaque_advertencia && (
@@ -242,7 +246,8 @@ function useReferenciasEditor(save) {
     setForm({
       codigo: r.codigo,
       proveedor_id: r.proveedor_id,
-      descripcion: r.descripcion || '',
+      nombre: r.nombre || '',
+      linea_comercial: r.linea_comercial || '',
       unidad_empaque: String(r.unidad_empaque),
       precio_normal: r.precio_normal != null ? String(r.precio_normal) : '',
       precio_venta: r.precio_venta != null ? String(r.precio_venta) : '',
@@ -262,7 +267,8 @@ function useReferenciasEditor(save) {
       {
         codigo: form.codigo,
         proveedor_id: form.proveedor_id,
-        descripcion: form.descripcion || null,
+        nombre: form.nombre || null,
+        linea_comercial: form.linea_comercial || null,
         unidad_empaque: form.unidad_empaque ? Number(form.unidad_empaque) : null,
         precio_normal: form.precio_normal ? Number(form.precio_normal) : null,
         precio_venta: form.precio_venta ? Number(form.precio_venta) : null,

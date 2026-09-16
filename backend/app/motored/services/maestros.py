@@ -58,6 +58,7 @@ async def create_proveedor(db, data: ProveedorCreate, usuario_id: Optional[uuid.
         es_principal=data.es_principal,
         dias_empaque_default=data.dias_empaque_default,
         dias_transito_default=data.dias_transito_default,
+        dias_seguridad_default=data.dias_seguridad_default,
         created_by=usuario_id,
     )
     db.add(proveedor)
@@ -113,6 +114,12 @@ async def create_sucursal(db, data: SucursalCreate, usuario_id: Optional[uuid.UU
         nombre=normalize_sucursal_nombre(data.nombre),
         sic=data.sic,
         dias_seguridad=data.dias_seguridad,
+        dias_empaque=data.dias_empaque,
+        dias_transito=data.dias_transito,
+        bodega_principal=data.bodega_principal,
+        departamento=data.departamento,
+        ciudad=data.ciudad,
+        fecha_apertura=data.fecha_apertura,
         created_by=usuario_id,
     )
     db.add(sucursal)
@@ -161,6 +168,7 @@ async def create_bodega(db, data: BodegaCreate, usuario_id: Optional[uuid.UUID] 
     bodega = Bodega(
         id=uuid.uuid4(),
         codigo=data.codigo,
+        descripcion=data.descripcion,
         sucursal_id=data.sucursal_id,
         bodega_principal=data.bodega_principal,
         created_by=usuario_id,
@@ -215,7 +223,8 @@ async def create_referencia(
         id=uuid.uuid4(),
         codigo=data.codigo,
         proveedor_id=data.proveedor_id,
-        descripcion=data.descripcion,
+        nombre=data.nombre,
+        linea_comercial=data.linea_comercial,
         unidad_empaque=unidad_empaque,
         unidad_empaque_advertencia=bool(warning),
         precio_normal=data.precio_normal,

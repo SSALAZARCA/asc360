@@ -16,6 +16,7 @@ import {
   deactivateMaestro,
 } from '../../../lib/motored/api';
 import BulkUploadModal from './BulkUploadModal';
+import FormField from './FormField';
 import InfoTooltip from '../InfoTooltip';
 
 const ENTIDAD_PLURAL = 'proveedores';
@@ -23,40 +24,30 @@ const ENTIDAD_SINGULAR = 'proveedor';
 
 const emptyForm = {
   codigo: '', nombre: '', es_principal: false,
-  dias_empaque_default: '', dias_transito_default: '',
+  dias_empaque_default: '', dias_transito_default: '', dias_seguridad_default: '2.5',
 };
+
+const FIELDS = [
+  { key: 'codigo', label: 'Código', required: true },
+  { key: 'nombre', label: 'Nombre', required: true },
+  { key: 'dias_empaque_default', label: 'Días empaque (por defecto)', tooltip: 'Días que tarda este proveedor en armar un pedido para envío. Se usa cuando una sucursal no tiene su propio valor cargado.' },
+  { key: 'dias_transito_default', label: 'Días tránsito (por defecto)', tooltip: 'Días que tarda un pedido en llegar desde este proveedor. Se usa cuando una sucursal no tiene su propio valor cargado.' },
+  { key: 'dias_seguridad_default', label: 'Días seguridad (por defecto)', tooltip: 'Colchón de días extra que se usa cuando una sucursal no tiene su propio valor cargado. Por defecto 2.5 días.' },
+];
 
 function ProveedorForm({ form, setForm, editingId, onSubmit, onCancel }) {
   return (
     <form onSubmit={onSubmit} style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
-      <label style={{ display: 'flex', flexDirection: 'column', fontSize: '0.7rem', color: 'var(--motored-text-muted, #5a5a5a)' }}>
-        Código
-        <input value={form.codigo} onChange={(e) => setForm({ ...form, codigo: e.target.value })} required />
-      </label>
-      <label style={{ display: 'flex', flexDirection: 'column', fontSize: '0.7rem', color: 'var(--motored-text-muted, #5a5a5a)' }}>
-        Nombre
-        <input value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} required />
-      </label>
-      <label style={{ display: 'flex', flexDirection: 'column', fontSize: '0.7rem', color: 'var(--motored-text-muted, #5a5a5a)' }}>
-        <span>
-          Días empaque (por defecto)
-          <InfoTooltip text="Días que tarda este proveedor en armar un pedido para envío. Se usa cuando una sucursal no tiene su propio valor cargado." />
-        </span>
-        <input
-          value={form.dias_empaque_default}
-          onChange={(e) => setForm({ ...form, dias_empaque_default: e.target.value })}
+      {FIELDS.map((f) => (
+        <FormField
+          key={f.key}
+          label={f.label}
+          tooltip={f.tooltip}
+          required={f.required}
+          value={form[f.key]}
+          onChange={(e) => setForm({ ...form, [f.key]: e.target.value })}
         />
-      </label>
-      <label style={{ display: 'flex', flexDirection: 'column', fontSize: '0.7rem', color: 'var(--motored-text-muted, #5a5a5a)' }}>
-        <span>
-          Días tránsito (por defecto)
-          <InfoTooltip text="Días que tarda un pedido en llegar desde este proveedor. Se usa cuando una sucursal no tiene su propio valor cargado." />
-        </span>
-        <input
-          value={form.dias_transito_default}
-          onChange={(e) => setForm({ ...form, dias_transito_default: e.target.value })}
-        />
-      </label>
+      ))}
       <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.7rem', color: 'var(--motored-text-muted, #5a5a5a)' }}>
         <input
           type="checkbox"
@@ -93,6 +84,10 @@ function ProveedoresTable({ proveedores, onEdit, onDeactivate }) {
           <th style={{ padding: '0 12px 8px 0' }}>Código</th>
           <th style={{ padding: '0 12px 8px 0' }}>Nombre</th>
           <th style={{ padding: '0 12px 8px 0' }}>Principal</th>
+          <th style={{ padding: '0 12px 8px 0' }}>
+            Días seguridad (por defecto)
+            <InfoTooltip text="Colchón de días extra usado cuando una sucursal no tiene su propio valor cargado." />
+          </th>
           <th style={{ padding: '0 12px 8px 0' }}>Estado</th>
           <th />
         </tr>
@@ -103,6 +98,7 @@ function ProveedoresTable({ proveedores, onEdit, onDeactivate }) {
             <td style={{ padding: '10px 12px 10px 0' }}>{p.codigo}</td>
             <td style={{ padding: '10px 12px 10px 0' }}>{p.nombre}</td>
             <td style={{ padding: '10px 12px 10px 0' }}>{p.es_principal ? 'Sí' : 'No'}</td>
+            <td style={{ padding: '10px 12px 10px 0' }}>{p.dias_seguridad_default ?? <em>—</em>}</td>
             <td style={{ padding: '10px 12px 10px 0' }}>{p.activa ? 'Activo' : 'Inactivo'}</td>
             <td style={{ display: 'flex', gap: '1rem', padding: '10px 0' }}>
               <button type="button" className="motored-row-action" onClick={() => onEdit(p)}>Editar</button>
@@ -202,6 +198,7 @@ function useProveedoresEditor(save) {
       es_principal: p.es_principal,
       dias_empaque_default: p.dias_empaque_default != null ? String(p.dias_empaque_default) : '',
       dias_transito_default: p.dias_transito_default != null ? String(p.dias_transito_default) : '',
+      dias_seguridad_default: p.dias_seguridad_default != null ? String(p.dias_seguridad_default) : '',
     });
   };
 
@@ -219,6 +216,7 @@ function useProveedoresEditor(save) {
         es_principal: form.es_principal,
         dias_empaque_default: form.dias_empaque_default ? Number(form.dias_empaque_default) : null,
         dias_transito_default: form.dias_transito_default ? Number(form.dias_transito_default) : null,
+        dias_seguridad_default: form.dias_seguridad_default ? Number(form.dias_seguridad_default) : null,
       },
       editingId
     );

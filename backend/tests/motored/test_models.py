@@ -87,3 +87,54 @@ def test_parametro_metodologia_has_no_updated_at_column():
     # no `updated_at` to track (spec: "a change creates a new row ... the
     # prior row is left completely unmodified").
     assert "updated_at" not in ParametroMetodologia.__table__.c
+
+
+# ---------------------------------------------------------------------------
+# Post-archive correction (sdd/motored-pedidos-cimientos): 4 masters models
+# were missing fields the source spec (ESPECIFICACION_MOTORED_PEDIDOS.md
+# §4.1) requires. See sdd/motored-pedidos-cimientos/apply-progress for the
+# full audit/fix narrative.
+# ---------------------------------------------------------------------------
+
+
+def test_sucursal_has_the_six_spec_fields_added_by_the_correction():
+    columns = Sucursal.__table__.c
+    for name in (
+        "dias_empaque",
+        "dias_transito",
+        "bodega_principal",
+        "departamento",
+        "ciudad",
+        "fecha_apertura",
+    ):
+        assert name in columns, f"sucursal.{name} missing (spec §4.1)"
+        assert columns[name].nullable is True
+
+
+def test_proveedor_has_dias_seguridad_default():
+    col = Proveedor.__table__.c.dias_seguridad_default
+    assert col.nullable is True
+    assert float(col.default.arg) == 2.5
+
+
+def test_referencia_field_is_named_nombre_not_descripcion():
+    columns = Referencia.__table__.c
+    assert "nombre" in columns, "spec §4.1 names this field 'nombre', not 'descripcion'"
+    assert "descripcion" not in columns
+
+
+def test_referencia_has_linea_comercial():
+    col = Referencia.__table__.c.linea_comercial
+    assert col.nullable is True
+
+
+def test_bodega_has_descripcion():
+    col = Bodega.__table__.c.descripcion
+    assert col.nullable is True
+
+
+def test_bodega_activa_is_untouched_owner_decision_3():
+    # Not a spec §4.1 literal field, but required by owner decision #3
+    # (masters are never hard-deleted) -- explicitly NOT part of this
+    # correction's scope, kept here as a regression guard.
+    assert "activa" in Bodega.__table__.c

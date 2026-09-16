@@ -7,7 +7,7 @@ Nunca se hace hard-delete: eliminar = `activa = false` (owner decision #3).
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, Numeric, String
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.motored.database import MotoredBase
@@ -22,6 +22,7 @@ class Proveedor(MotoredBase):
     es_principal = Column(Boolean, nullable=False, default=False)
     dias_empaque_default = Column(Integer, nullable=True)
     dias_transito_default = Column(Integer, nullable=True)
+    dias_seguridad_default = Column(Numeric(5, 2), nullable=True, default=2.5)
     activa = Column(Boolean, nullable=False, default=True)
 
     created_at = Column(DateTime, default=datetime.utcnow)

@@ -20,20 +20,18 @@ import {
   deactivateMaestro,
 } from '../../../lib/motored/api';
 import BulkUploadModal from './BulkUploadModal';
-import InfoTooltip from '../InfoTooltip';
+import FormField from './FormField';
 
 const ENTIDAD_PLURAL = 'bodegas';
 const ENTIDAD_SINGULAR = 'bodega';
 
-const emptyForm = { codigo: '', sucursal_id: '', bodega_principal: '' };
+const emptyForm = { codigo: '', descripcion: '', sucursal_id: '', bodega_principal: '' };
 
 function BodegaForm({ form, setForm, editingId, sucursales, onSubmit, onCancel }) {
   return (
     <form onSubmit={onSubmit} style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
-      <label style={{ display: 'flex', flexDirection: 'column', fontSize: '0.7rem', color: 'var(--motored-text-muted, #5a5a5a)' }}>
-        Código
-        <input value={form.codigo} onChange={(e) => setForm({ ...form, codigo: e.target.value })} required />
-      </label>
+      <FormField label="Código" required value={form.codigo} onChange={(e) => setForm({ ...form, codigo: e.target.value })} />
+      <FormField label="Descripción" value={form.descripcion} onChange={(e) => setForm({ ...form, descripcion: e.target.value })} />
       <label style={{ display: 'flex', flexDirection: 'column', fontSize: '0.7rem', color: 'var(--motored-text-muted, #5a5a5a)' }}>
         Sucursal
         <select value={form.sucursal_id} onChange={(e) => setForm({ ...form, sucursal_id: e.target.value })}>
@@ -43,17 +41,13 @@ function BodegaForm({ form, setForm, editingId, sucursales, onSubmit, onCancel }
           ))}
         </select>
       </label>
-      <label style={{ display: 'flex', flexDirection: 'column', fontSize: '0.7rem', color: 'var(--motored-text-muted, #5a5a5a)' }}>
-        <span>
-          Bodega principal
-          <InfoTooltip text="Código de OTRA bodega hacia la que se consolida esta (ej: BA066 se consolida en BA061). Es solo un texto de referencia, no un vínculo automático todavía." />
-        </span>
-        <input
-          value={form.bodega_principal}
-          onChange={(e) => setForm({ ...form, bodega_principal: e.target.value })}
-          placeholder="ej: BA061"
-        />
-      </label>
+      <FormField
+        label="Bodega principal"
+        tooltip="Código de OTRA bodega hacia la que se consolida esta (ej: BA066 se consolida en BA061). Es solo un texto de referencia, no un vínculo automático todavía."
+        placeholder="ej: BA061"
+        value={form.bodega_principal}
+        onChange={(e) => setForm({ ...form, bodega_principal: e.target.value })}
+      />
       <button type="submit" className="motored-btn motored-btn-primary">{editingId ? 'Guardar cambios' : 'Crear bodega'}</button>
       {editingId && (
         <button type="button" className="motored-btn motored-btn-secondary" onClick={onCancel}>
@@ -76,6 +70,7 @@ function BodegasTable({ bodegas, sucursalesPorId, onEdit, onDeactivate }) {
       <thead>
         <tr style={{ textAlign: 'left', color: 'var(--motored-text-muted, #5a5a5a)' }}>
           <th style={{ padding: '0 12px 8px 0' }}>Código</th>
+          <th style={{ padding: '0 12px 8px 0' }}>Descripción</th>
           <th style={{ padding: '0 12px 8px 0' }}>Sucursal</th>
           <th style={{ padding: '0 12px 8px 0' }}>Bodega principal</th>
           <th style={{ padding: '0 12px 8px 0' }}>Estado</th>
@@ -86,6 +81,7 @@ function BodegasTable({ bodegas, sucursalesPorId, onEdit, onDeactivate }) {
         {bodegas.map((b) => (
           <tr key={b.id} style={{ borderTop: '1px solid var(--motored-border, #e4e4e7)' }}>
             <td style={{ padding: '10px 12px 10px 0' }}>{b.codigo}</td>
+            <td style={{ padding: '10px 12px 10px 0' }}>{b.descripcion || <em>—</em>}</td>
             <td style={{ padding: '10px 12px 10px 0' }}>
               {b.sucursal_id ? (sucursalesPorId[b.sucursal_id] || <em>sucursal desconocida</em>) : <em>sin asignar</em>}
             </td>
@@ -195,7 +191,12 @@ function useBodegasEditor(save) {
 
   const startEdit = (b) => {
     setEditingId(b.id);
-    setForm({ codigo: b.codigo, sucursal_id: b.sucursal_id || '', bodega_principal: b.bodega_principal || '' });
+    setForm({
+      codigo: b.codigo,
+      descripcion: b.descripcion || '',
+      sucursal_id: b.sucursal_id || '',
+      bodega_principal: b.bodega_principal || '',
+    });
   };
 
   const cancelEdit = () => {
@@ -208,6 +209,7 @@ function useBodegasEditor(save) {
     const ok = await save(
       {
         codigo: form.codigo,
+        descripcion: form.descripcion || null,
         sucursal_id: form.sucursal_id || null,
         bodega_principal: form.bodega_principal || null,
       },

@@ -21,6 +21,7 @@ class Bodega(MotoredBase):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     codigo = Column(String(50), unique=True, nullable=False)
+    descripcion = Column(String(255), nullable=True)
     sucursal_id = Column(UUID(as_uuid=True), ForeignKey("sucursal.id"), nullable=True)
     bodega_principal = Column(String(50), nullable=True)
     activa = Column(Boolean, nullable=False, default=True)
