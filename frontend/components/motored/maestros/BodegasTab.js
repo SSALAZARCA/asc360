@@ -100,7 +100,7 @@ function BodegasTable({ bodegas, sucursalesPorId, onEdit, onDeactivate }) {
   );
 }
 
-function BodegasHeader({ onOpenBulk }) {
+function BodegasHeader({ onOpenBulk, onGenerarDesdeSucursales, generarDisabled }) {
   return (
     <div
       style={{
@@ -115,23 +115,120 @@ function BodegasHeader({ onOpenBulk }) {
           ¿Tenés muchas bodegas para cargar de una vez? Subí un archivo CSV con "Carga masiva" en vez de crearlas una por una.
         </p>
       </div>
-      <button type="button" className="motored-btn motored-btn-secondary" onClick={onOpenBulk}>
-        Carga masiva
-      </button>
+      <div style={{ display: 'flex', gap: '0.5rem' }}>
+        <button
+          type="button"
+          className="motored-btn motored-btn-tertiary"
+          onClick={onGenerarDesdeSucursales}
+          disabled={generarDisabled}
+        >
+          Generar desde sucursales
+        </button>
+        <button type="button" className="motored-btn motored-btn-secondary" onClick={onOpenBulk}>
+          Carga masiva
+        </button>
+      </div>
     </div>
   );
 }
 
 function useSucursalesOptions() {
   const [sucursales, setSucursales] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   useEffect(() => {
     listMaestros('sucursales')
       .then(setSucursales)
-      .catch((err) => setError(err.message || 'No se pudo cargar la lista de sucursales'));
+      .catch((err) => setError(err.message || 'No se pudo cargar la lista de sucursales'))
+      .finally(() => setLoading(false));
   }, []);
   const porId = Object.fromEntries(sucursales.map((s) => [s.id, s.nombre]));
-  return { sucursales, sucursalesPorId: porId, sucursalesError: error };
+  return { sucursales, sucursalesLoading: loading, sucursalesPorId: porId, sucursalesError: error };
+}
+
+// Hoy la relación sucursal<->bodega es 1 a 1 (owner-confirmed, 2026-09-16):
+// cada sucursal ya trae el código de SU bodega en `bodega_principal` (spec
+// §4.1 "código de la bodega principal de esta sucursal"). En vez de
+// retipear las ~47 filas a mano, este botón genera una bodega por
+// sucursal usando ese mismo código -- si más adelante deja de ser 1 a 1,
+// las bodegas nuevas se siguen agregando a mano, esta función no vuelve a
+// tocar las que ya existen (salta por código repetido, es seguro repetir).
+function buildBodegasDesdeSucursales(sucursales, bodegasExistentes) {
+  const codigosExistentes = new Set(bodegasExistentes.map((b) => b.codigo));
+  const aCrear = [];
+  const omitidas = [];
+
+  sucursales.forEach((s) => {
+    const codigo = (s.bodega_principal || '').trim();
+    if (!codigo) {
+      omitidas.push({ sucursal: s.nombre, motivo: 'sin "Bodega principal" cargada' });
+      return;
+    }
+    if (codigosExistentes.has(codigo)) {
+      omitidas.push({ sucursal: s.nombre, motivo: `ya existe una bodega con código "${codigo}"` });
+      return;
+    }
+    aCrear.push({ codigo, descripcion: s.nombre, sucursal_id: s.id });
+    codigosExistentes.add(codigo);
+  });
+
+  return { aCrear, omitidas };
+}
+
+function useGenerarDesdeSucursales(sucursales, bodegas, reload) {
+  const [generando, setGenerando] = useState(false);
+  const [resultado, setResultado] = useState(null);
+
+  const ejecutar = async () => {
+    if (!window.confirm(
+      '¿Generar una bodega por cada sucursal, usando su campo "Bodega principal" como código? '
+      + 'Las sucursales sin ese campo cargado, o que ya tengan una bodega con ese código, se omiten.'
+    )) {
+      return;
+    }
+
+    const { aCrear, omitidas } = buildBodegasDesdeSucursales(sucursales, bodegas);
+    setGenerando(true);
+    setResultado(null);
+    try {
+      for (const payload of aCrear) {
+        // eslint-disable-next-line no-await-in-loop
+        await createMaestro(ENTIDAD_PLURAL, payload);
+      }
+      if (aCrear.length > 0) await reload();
+      setResultado({ creadas: aCrear.length, omitidas });
+    } catch (err) {
+      setResultado({ error: err.message || 'Error al generar bodegas desde sucursales' });
+    } finally {
+      setGenerando(false);
+    }
+  };
+
+  return { generando, resultado, ejecutar };
+}
+
+function GenerarDesdeSucursalesPanel({ resultado }) {
+  if (!resultado) return null;
+  if (resultado.error) {
+    return <p style={{ margin: 0, color: 'var(--motored-danger, #c0392b)', fontSize: '0.8rem' }}>{resultado.error}</p>;
+  }
+  return (
+    <div style={{ fontSize: '0.8rem' }}>
+      <p style={{ margin: 0, color: 'var(--motored-success, #15803d)', fontWeight: 700 }}>
+        {resultado.creadas} bodega(s) generada(s) desde sucursales.
+      </p>
+      {resultado.omitidas.length > 0 && (
+        <div style={{ marginTop: '0.4rem', color: 'var(--motored-text-muted, #5a5a5a)' }}>
+          {resultado.omitidas.length} omitida(s):
+          <ul style={{ margin: '0.25rem 0 0', paddingLeft: '1.1rem' }}>
+            {resultado.omitidas.map((o) => (
+              <li key={o.sucursal}>{o.sucursal}: {o.motivo}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function useBodegas() {
@@ -224,12 +321,17 @@ function useBodegasEditor(save) {
 export default function BodegasTab() {
   const { bodegas, loading, error, save, deactivate, reload } = useBodegas();
   const { form, setForm, editingId, startEdit, cancelEdit, handleSubmit } = useBodegasEditor(save);
-  const { sucursales, sucursalesPorId, sucursalesError } = useSucursalesOptions();
+  const { sucursales, sucursalesLoading, sucursalesPorId, sucursalesError } = useSucursalesOptions();
+  const { generando, resultado, ejecutar } = useGenerarDesdeSucursales(sucursales, bodegas, reload);
   const [showBulkModal, setShowBulkModal] = useState(false);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-      <BodegasHeader onOpenBulk={() => setShowBulkModal(true)} />
+      <BodegasHeader
+        onOpenBulk={() => setShowBulkModal(true)}
+        onGenerarDesdeSucursales={ejecutar}
+        generarDisabled={loading || sucursalesLoading || generando}
+      />
 
       {error && <p style={{ color: 'var(--motored-danger, #c0392b)', fontSize: '0.8rem' }}>{error}</p>}
       {sucursalesError && (
@@ -237,6 +339,8 @@ export default function BodegasTab() {
           No se pudo cargar la lista de sucursales para el desplegable ({sucursalesError}).
         </p>
       )}
+
+      <GenerarDesdeSucursalesPanel resultado={resultado} />
 
       <BodegaForm
         form={form}
