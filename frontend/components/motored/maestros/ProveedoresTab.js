@@ -7,6 +7,14 @@
  * tooltips hooks) -- same shape, different fields. Built before
  * `ReferenciasTab.js` on purpose: a referencia needs an existing proveedor
  * to pick from.
+ *
+ * `dias_empaque_default`/`dias_transito_default`/`dias_seguridad_default`
+ * (spec §4.1: "usado si la sucursal no tiene valor propio" -- fallback
+ * values for a future calculation engine, Fase 3) are intentionally NOT
+ * shown here (owner request, 2026-09-16: every sucursal always has its own
+ * value today, so the fallback never applies in practice). The DB columns
+ * are untouched -- only hidden from the form/table/bulk-upload -- so a
+ * later phase can use them without another migration.
  */
 import { useEffect, useState } from 'react';
 import {
@@ -22,17 +30,11 @@ import InfoTooltip from '../InfoTooltip';
 const ENTIDAD_PLURAL = 'proveedores';
 const ENTIDAD_SINGULAR = 'proveedor';
 
-const emptyForm = {
-  codigo: '', nombre: '', es_principal: false,
-  dias_empaque_default: '', dias_transito_default: '', dias_seguridad_default: '2.5',
-};
+const emptyForm = { codigo: '', nombre: '', es_principal: false };
 
 const FIELDS = [
   { key: 'codigo', label: 'Código', required: true },
   { key: 'nombre', label: 'Nombre', required: true },
-  { key: 'dias_empaque_default', label: 'Días empaque (por defecto)', tooltip: 'Días que tarda este proveedor en armar un pedido para envío. Se usa cuando una sucursal no tiene su propio valor cargado.' },
-  { key: 'dias_transito_default', label: 'Días tránsito (por defecto)', tooltip: 'Días que tarda un pedido en llegar desde este proveedor. Se usa cuando una sucursal no tiene su propio valor cargado.' },
-  { key: 'dias_seguridad_default', label: 'Días seguridad (por defecto)', tooltip: 'Colchón de días extra que se usa cuando una sucursal no tiene su propio valor cargado. Por defecto 2.5 días.' },
 ];
 
 function ProveedorForm({ form, setForm, editingId, onSubmit, onCancel }) {
@@ -84,10 +86,6 @@ function ProveedoresTable({ proveedores, onEdit, onDeactivate }) {
           <th style={{ padding: '0 12px 8px 0' }}>Código</th>
           <th style={{ padding: '0 12px 8px 0' }}>Nombre</th>
           <th style={{ padding: '0 12px 8px 0' }}>Principal</th>
-          <th style={{ padding: '0 12px 8px 0' }}>
-            Días seguridad (por defecto)
-            <InfoTooltip text="Colchón de días extra usado cuando una sucursal no tiene su propio valor cargado." />
-          </th>
           <th style={{ padding: '0 12px 8px 0' }}>Estado</th>
           <th />
         </tr>
@@ -98,7 +96,6 @@ function ProveedoresTable({ proveedores, onEdit, onDeactivate }) {
             <td style={{ padding: '10px 12px 10px 0' }}>{p.codigo}</td>
             <td style={{ padding: '10px 12px 10px 0' }}>{p.nombre}</td>
             <td style={{ padding: '10px 12px 10px 0' }}>{p.es_principal ? 'Sí' : 'No'}</td>
-            <td style={{ padding: '10px 12px 10px 0' }}>{p.dias_seguridad_default ?? <em>—</em>}</td>
             <td style={{ padding: '10px 12px 10px 0' }}>{p.activa ? 'Activo' : 'Inactivo'}</td>
             <td style={{ display: 'flex', gap: '1rem', padding: '10px 0' }}>
               <button type="button" className="motored-row-action" onClick={() => onEdit(p)}>Editar</button>
@@ -196,9 +193,6 @@ function useProveedoresEditor(save) {
       codigo: p.codigo,
       nombre: p.nombre,
       es_principal: p.es_principal,
-      dias_empaque_default: p.dias_empaque_default != null ? String(p.dias_empaque_default) : '',
-      dias_transito_default: p.dias_transito_default != null ? String(p.dias_transito_default) : '',
-      dias_seguridad_default: p.dias_seguridad_default != null ? String(p.dias_seguridad_default) : '',
     });
   };
 
@@ -209,14 +203,14 @@ function useProveedoresEditor(save) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    // No se mandan los campos "_default" -- ocultos (owner request,
+    // 2026-09-16), y con `exclude_unset=True` server-side omitirlos del
+    // payload significa "no tocar", nunca borra un valor ya cargado antes.
     const ok = await save(
       {
         codigo: form.codigo,
         nombre: form.nombre,
         es_principal: form.es_principal,
-        dias_empaque_default: form.dias_empaque_default ? Number(form.dias_empaque_default) : null,
-        dias_transito_default: form.dias_transito_default ? Number(form.dias_transito_default) : null,
-        dias_seguridad_default: form.dias_seguridad_default ? Number(form.dias_seguridad_default) : null,
       },
       editingId
     );

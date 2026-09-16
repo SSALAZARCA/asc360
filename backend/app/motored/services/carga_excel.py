@@ -112,19 +112,17 @@ ALIASES_POR_ENTIDAD: Dict[str, List[Dict[str, Any]]] = {
         {"key": "codigo", "label": "Código", "required": True, "aliases": ["codigo", "código", "bodega"]},
         {"key": "descripcion", "label": "Descripción", "required": False, "aliases": ["descripcion", "descripción"]},
     ],
+    # Los campos "_default" (dias_empaque/transito/seguridad_default) NO se
+    # exponen acá a propósito (owner request, 2026-09-16) -- toda sucursal
+    # siempre tiene su propio valor cargado hoy, así que el respaldo nunca
+    # se usa en la práctica. Las columnas de la base de datos siguen
+    # existiendo para cuando una fase futura las necesite.
     "proveedor": [
         {"key": "codigo", "label": "Código", "required": True, "aliases": ["codigo", "código", "proveedor"]},
         {"key": "nombre", "label": "Nombre", "required": True, "aliases": ["nombre"]},
         {
             "key": "es_principal", "label": "Principal (Sí/No)", "required": False, "type": "boolean",
             "aliases": ["es_principal", "principal", "principal (si/no)", "principal (sí/no)"],
-        },
-        {
-            "key": "dias_seguridad_default", "label": "Días de seguridad (por defecto)", "required": False,
-            "aliases": [
-                "dias_seguridad_default", "dias seguridad default",
-                "días de seguridad (por defecto)",
-            ],
         },
     ],
     # `proveedor_codigo` (no el id) -- igual que el camino CSV, el router de

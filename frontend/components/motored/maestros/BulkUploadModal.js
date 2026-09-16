@@ -100,6 +100,11 @@ const COLUMNAS_POR_ENTIDAD = {
     { key: 'codigo', label: 'Código', required: true, aliases: ['codigo', 'código', 'bodega'] },
     { key: 'descripcion', label: 'Descripción', required: false, aliases: ['descripcion', 'descripción'] },
   ],
+  // Los campos "_default" (dias_empaque/transito/seguridad_default) NO se
+  // exponen acá a propósito (owner request, 2026-09-16) -- toda sucursal
+  // siempre tiene su propio valor cargado hoy, así que el respaldo nunca
+  // se usa en la práctica. Las columnas de la base de datos siguen
+  // existiendo para cuando una fase futura las necesite.
   proveedor: [
     { key: 'codigo', label: 'Código', required: true, aliases: ['codigo', 'código', 'proveedor'] },
     { key: 'nombre', label: 'Nombre', required: true, aliases: ['nombre'] },
@@ -107,11 +112,6 @@ const COLUMNAS_POR_ENTIDAD = {
       key: 'es_principal', label: 'Principal (Sí/No)', required: false, type: 'boolean',
       aliases: ['es_principal', 'principal', 'principal (si/no)', 'principal (sí/no)'],
       help: 'Escribí "Sí" únicamente para HMCL, el proveedor principal. Dejalo vacío o "No" para el resto.',
-    },
-    {
-      key: 'dias_seguridad_default', label: 'Días de seguridad (por defecto)', required: false,
-      aliases: ['dias_seguridad_default', 'dias seguridad default', 'días de seguridad (por defecto)'],
-      help: 'Colchón de días extra que se usa cuando una sucursal no tiene su propio valor cargado. Por defecto 2.5 días.',
     },
   ],
   // `proveedor_codigo` (no el id) -- el router del backend resuelve ese
