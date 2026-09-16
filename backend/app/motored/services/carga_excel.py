@@ -27,12 +27,15 @@ misma `validate_rows`/`procesar_carga` que ya usa ese camino -- cero lógica
 de validación/upsert duplicada, sólo cambia cómo llegan las filas.
 """
 import io
+import re
 import unicodedata
-from typing import Any, Dict, List, Optional
+from decimal import Decimal
+from typing import Any, Dict, List, Optional, get_args
 
 import openpyxl
 
 from app.config import settings
+from app.motored.services.validators import _SCHEMA_BY_ENTIDAD
 
 
 class CargaExcelError(Exception):
@@ -130,7 +133,7 @@ ALIASES_POR_ENTIDAD: Dict[str, List[Dict[str, Any]]] = {
     "referencia": [
         {"key": "codigo", "label": "Código", "required": True, "aliases": ["codigo", "código", "referencia"]},
         {
-            "key": "proveedor_codigo", "label": "Código del proveedor", "required": True,
+            "key": "proveedor_codigo", "label": "Código del proveedor", "required": True, "type": "string",
             "aliases": ["proveedor_codigo", "codigo proveedor", "código proveedor", "proveedor"],
         },
         {"key": "nombre", "label": "Nombre", "required": False, "aliases": ["nombre"]},
@@ -150,6 +153,44 @@ ALIASES_POR_ENTIDAD: Dict[str, List[Dict[str, Any]]] = {
 }
 
 _BOOLEAN_TRUE_VALUES = {"si", "sí", "true", "1", "yes", "x"}
+_SIMPLE_COMMA_DECIMAL_RE = re.compile(r"^-?\d+,\d+$")
+
+
+def _field_kind_by_key(entidad: str) -> Dict[str, str]:
+    """Inspecciona el schema Pydantic real (`_SCHEMA_BY_ENTIDAD`) para saber
+    qué campos son texto (`str`) y cuáles numéricos (`int`/`float`/
+    `Decimal`) -- openpyxl devuelve cada celda con su tipo NATIVO (número,
+    texto, fecha), que no siempre coincide con lo que el schema espera: un
+    número real en una celda de un campo `str` (ej. `sic` escrito sin
+    comillas) rompe la validación ("Input should be a valid string") a
+    menos que se convierta a texto acá. Se usa el schema como única fuente
+    de verdad en vez de anotar el tipo una tercera vez a mano (ya vive en el
+    modelo y en el schema)."""
+    schema_cls = _SCHEMA_BY_ENTIDAD.get(entidad)
+    if schema_cls is None:
+        return {}
+
+    kinds: Dict[str, str] = {}
+    for name, field in schema_cls.model_fields.items():
+        args = [a for a in get_args(field.annotation) if a is not type(None)]
+        real_type = args[0] if args else field.annotation
+        if real_type is str:
+            kinds[name] = "string"
+        elif real_type in (int, float, Decimal):
+            kinds[name] = "numeric"
+    return kinds
+
+
+def _normalize_comma_decimal(value: str) -> str:
+    """Convierte "2,5" a "2.5" -- una celda de Excel en configuración
+    regional en español a veces queda guardada como texto literal con coma
+    decimal en vez de convertirse a un número real, y `Decimal("2,5")`
+    lanza `InvalidOperation`. Solo actúa sobre el patrón simple
+    dígitos,dígitos (sin separador de miles) para no corromper un valor con
+    formato ambiguo (ej. "15.000,50")."""
+    if _SIMPLE_COMMA_DECIMAL_RE.match(value):
+        return value.replace(",", ".")
+    return value
 
 
 def _normalize_header(value: Any) -> str:
@@ -246,11 +287,22 @@ def _read_validated_column_map(rows_iter, spec: List[Dict[str, Any]]) -> Dict[in
 
 
 def _build_canonical_rows(
-    rows_iter, spec: List[Dict[str, Any]], column_map: Dict[int, str], max_rows: int
+    rows_iter, spec: List[Dict[str, Any]], column_map: Dict[int, str], max_rows: int, field_kinds: Dict[str, str]
 ) -> List[Dict[str, Any]]:
     """Itera las filas de datos (después del encabezado) y las convierte a
     la forma canónica, enforzando `max_rows` MIENTRAS itera (streaming) --
-    aborta apenas se excede, nunca materializa de más antes de rechazar."""
+    aborta apenas se excede, nunca materializa de más antes de rechazar.
+
+    `field_kinds` normaliza el desfase de tipos entre lo que openpyxl
+    devuelve (tipo nativo de la celda) y lo que el schema espera: un valor
+    numérico en un campo `str` se convierte a texto (bug real: "sic" como
+    número entero o decimal rompía la validación sin importar el separador
+    decimal, porque el problema nunca fue el formato del número, sino que
+    dejaba de ser texto); un valor string con coma decimal en un campo
+    numérico se normaliza a punto. `type_by_key` cubre además las claves
+    que NO son un campo real del schema (ej. `proveedor_codigo`, que
+    `api/carga.py` resuelve aparte contra `Proveedor.codigo`) vía
+    `"type": "string"` explícito en `ALIASES_POR_ENTIDAD`."""
     type_by_key = {col["key"]: col.get("type") for col in spec}
 
     rows: List[Dict[str, Any]] = []
@@ -264,8 +316,16 @@ def _build_canonical_rows(
         canonical: Dict[str, Any] = {}
         for idx, key in column_map.items():
             value = row_values[idx] if idx < len(row_values) else None
+            kind = field_kinds.get(key) or (type_by_key.get(key) if type_by_key.get(key) == "string" else None)
+
+            if kind == "string" and value is not None and not isinstance(value, str):
+                value = str(value)
+
             if isinstance(value, str):
                 value = value.strip()
+                if kind == "numeric":
+                    value = _normalize_comma_decimal(value)
+
             if type_by_key.get(key) == "boolean":
                 value = _to_boolean(value)
             canonical[key] = value
@@ -287,11 +347,12 @@ def parse_excel_rows(entidad: str, filename: Optional[str], file_bytes: bytes) -
     """
     _validate_filename(filename)
     spec = _resolve_spec(entidad)
+    field_kinds = _field_kind_by_key(entidad)
     workbook = _open_workbook(file_bytes)
 
     try:
         rows_iter = workbook.active.iter_rows(values_only=True)
         column_map = _read_validated_column_map(rows_iter, spec)
-        return _build_canonical_rows(rows_iter, spec, column_map, settings.MOTORED_MAX_UPLOAD_ROWS)
+        return _build_canonical_rows(rows_iter, spec, column_map, settings.MOTORED_MAX_UPLOAD_ROWS, field_kinds)
     finally:
         workbook.close()

@@ -123,3 +123,62 @@ def test_referencia_row_maps_proveedor_codigo_for_the_router_to_resolve():
     rows = parse_excel_rows("referencia", "referencias.xlsx", file_bytes)
 
     assert rows == [{"codigo": "REF1", "proveedor_codigo": "HMCL"}]
+
+
+def test_numeric_sic_cell_is_coerced_to_string():
+    """Bug real reportado: si SIC se escribe como número en Excel (ej. una
+    celda con 12345 en vez de "12345"), openpyxl lo devuelve como int, y el
+    schema espera `str` -- sin coerción, Pydantic rechaza CADA fila con
+    "sic: Input should be a valid string"."""
+    file_bytes = _build_xlsx_bytes(
+        ["Nombre", "SIC"],
+        [["CALI NORTE", 12345]],
+    )
+
+    rows = parse_excel_rows("sucursal", "sucursales.xlsx", file_bytes)
+
+    assert rows == [{"nombre": "CALI NORTE", "sic": "12345"}]
+
+
+def test_comma_decimal_numeric_field_is_normalized_to_period():
+    """Si `dias_seguridad` queda guardado como texto con coma decimal
+    ("2,5", convención regional en español) en vez de convertirse a un
+    número real, `Decimal("2,5")` explota -- se normaliza a "2.5" antes de
+    llegar al schema."""
+    file_bytes = _build_xlsx_bytes(
+        ["Nombre", "Días de seguridad"],
+        [["CALI NORTE", "2,5"]],
+    )
+
+    rows = parse_excel_rows("sucursal", "sucursales.xlsx", file_bytes)
+
+    assert rows == [{"nombre": "CALI NORTE", "dias_seguridad": "2.5"}]
+
+
+def test_sic_as_a_decimal_number_is_also_coerced_not_just_integers():
+    """El problema nunca fue el separador decimal -- CUALQUIER número
+    (entero o con punto) deja de ser texto para Python/Pydantic. Confirma
+    que un SIC como 12345.0 (float) se corrige igual que un entero."""
+    file_bytes = _build_xlsx_bytes(
+        ["Nombre", "SIC"],
+        [["CALI NORTE", 12345.0]],
+    )
+
+    rows = parse_excel_rows("sucursal", "sucursales.xlsx", file_bytes)
+
+    assert rows[0]["sic"] in ("12345", "12345.0")
+
+
+def test_numeric_proveedor_codigo_is_coerced_to_string_for_the_router_lookup():
+    """`proveedor_codigo` no es un campo del schema Pydantic (lo resuelve
+    `api/carga.py::_resolve_proveedor_codigos` contra `Proveedor.codigo`,
+    una columna string) -- si Excel lo entrega como número, la búsqueda por
+    código fallaría en silencio sin este fix."""
+    file_bytes = _build_xlsx_bytes(
+        ["Código", "Código proveedor"],
+        [["REF1", 1234]],
+    )
+
+    rows = parse_excel_rows("referencia", "referencias.xlsx", file_bytes)
+
+    assert rows == [{"codigo": "REF1", "proveedor_codigo": "1234"}]
