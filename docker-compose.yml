@@ -46,8 +46,11 @@ services:
       retries: 3
 
   # Almacenamiento S3 (MinIO)
+  # MinIO ya no publica en Docker Hub (minio/minio dejó de existir ahí) --
+  # su registro oficial actual es quay.io. Fijamos una versión concreta,
+  # nunca `latest` (que tampoco existe), para no repetir este mismo fallo.
   minio:
-    image: minio/minio
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z.hotfix.7aa24e772
     container_name: um_minio
     restart: always
     environment:
