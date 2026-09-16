@@ -175,6 +175,23 @@ const themeCss = `
         .motored-theme .motored-tooltip:focus-visible .motored-tooltip-text {
           visibility: visible; opacity: 1;
         }
+
+        /* Pestañas -- patrón del sistema real (Artboard 2 · "Tránsitos /
+        Backorder / Conciliación"): texto gris sin línea para la inactiva,
+        texto oscuro + línea roja debajo para la activa. Usado por
+        MaestrosTabs.js para alternar entre los 4 maestros. */
+        .motored-theme .motored-tab-bar {
+          display: flex; gap: 24px; border-bottom: 1px solid var(--motored-border);
+        }
+        .motored-theme .motored-tab {
+          background: transparent; border: none; cursor: pointer; padding: 10px 0 12px;
+          font-family: inherit; font-size: 14px; font-weight: 600;
+          color: var(--motored-text-muted); border-bottom: 2px solid transparent;
+          margin-bottom: -1px;
+        }
+        .motored-theme .motored-tab.is-active {
+          color: var(--motored-text); border-bottom-color: var(--motored-primary);
+        }
       `;
 
 export default function MotoredRootLayout({ children }) {

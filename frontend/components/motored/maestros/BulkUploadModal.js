@@ -49,7 +49,55 @@ const COLUMNAS_POR_ENTIDAD = {
       help: 'Colchón de días extra sobre el tiempo normal de reposición, para cubrir imprevistos. Por defecto 2.5 días.',
     },
   ],
+  // Nota de alcance: la sucursal de cada bodega NO se asigna por CSV en
+  // esta carga masiva (el back-end espera el `id` real de la sucursal, no
+  // su nombre, y esa resolución nombre->id todavía no existe para bodegas
+  // como sí existe para `proveedor_codigo` en `referencia`). Se asigna
+  // editando la bodega individualmente después de cargarla.
+  bodega: [
+    { key: 'codigo', label: 'Código', required: true, aliases: ['codigo', 'código', 'bodega'] },
+    {
+      key: 'bodega_principal', label: 'Bodega principal', required: false,
+      aliases: ['bodega_principal', 'bodega principal'],
+      help: 'Código de OTRA bodega hacia la que se consolida esta (ej: BA066 se consolida en BA061).',
+    },
+  ],
+  proveedor: [
+    { key: 'codigo', label: 'Código', required: true, aliases: ['codigo', 'código', 'proveedor'] },
+    { key: 'nombre', label: 'Nombre', required: true, aliases: ['nombre'] },
+    {
+      key: 'es_principal', label: 'Principal (Sí/No)', required: false, type: 'boolean',
+      aliases: ['es_principal', 'principal', 'principal (si/no)', 'principal (sí/no)'],
+      help: 'Escribí "Sí" únicamente para HMCL, el proveedor principal. Dejalo vacío o "No" para el resto.',
+    },
+  ],
+  // `proveedor_codigo` (no el id) -- el router del backend resuelve ese
+  // código al id real del proveedor antes de escribir, así que acá alcanza
+  // con el código tal cual aparece en la pestaña de Proveedores.
+  referencia: [
+    { key: 'codigo', label: 'Código', required: true, aliases: ['codigo', 'código', 'referencia'] },
+    {
+      key: 'proveedor_codigo', label: 'Código del proveedor', required: true,
+      aliases: ['proveedor_codigo', 'codigo proveedor', 'código proveedor', 'proveedor'],
+      help: 'El código del proveedor tal como aparece en la pestaña de Proveedores (ej: HMCL).',
+    },
+    { key: 'descripcion', label: 'Descripción', required: false, aliases: ['descripcion', 'descripción'] },
+    {
+      key: 'unidad_empaque', label: 'Unidad de empaque', required: false,
+      aliases: ['unidad_empaque', 'unidad de empaque'],
+      help: 'Cuántas unidades vienen por paquete. Nunca 0 — si viene vacío o en 0, el sistema lo corrige a 1 automáticamente.',
+    },
+    {
+      key: 'precio_normal', label: 'Precio normal', required: false, aliases: ['precio_normal', 'precio normal'],
+      help: 'El precio que usa el sistema para calcular el valor de los pedidos.',
+    },
+  ],
 };
+
+function toBoolean(value) {
+  const v = String(value).trim().toLowerCase();
+  return ['si', 'sí', 'true', '1', 'yes', 'x'].includes(v);
+}
 
 function normalizeHeader(header) {
   return header
@@ -69,12 +117,16 @@ function buildColumnMap(entidad, rawHeaders) {
 }
 
 function rowsToCanonical(entidad, parsedRows, rawHeaders) {
+  const spec = COLUMNAS_POR_ENTIDAD[entidad] || [];
+  const typeByKey = Object.fromEntries(spec.map((col) => [col.key, col.type]));
   const columnMap = buildColumnMap(entidad, rawHeaders);
   return parsedRows.map((row) => {
     const canonical = {};
     Object.entries(row).forEach(([rawHeader, value]) => {
       const key = columnMap[rawHeader];
-      if (key) canonical[key] = typeof value === 'string' ? value.trim() : value;
+      if (!key) return;
+      const trimmed = typeof value === 'string' ? value.trim() : value;
+      canonical[key] = typeByKey[key] === 'boolean' ? toBoolean(trimmed) : trimmed;
     });
     return canonical;
   });
