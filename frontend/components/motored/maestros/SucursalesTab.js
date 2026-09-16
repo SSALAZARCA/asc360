@@ -102,8 +102,19 @@ function SucursalesTable({ sucursales, onEdit, onDeactivate }) {
 
 function SucursalesHeader({ onOpenBulk }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-      <h2 className="motored-h-seccion">Sucursales</h2>
+    <div
+      style={{
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        padding: '0.85rem 1rem', background: 'var(--motored-surface-alt, #f4f4f5)',
+        border: '1px solid var(--motored-border, #e4e4e7)', borderRadius: 'var(--motored-radius-md, 8px)',
+      }}
+    >
+      <div>
+        <h2 className="motored-h-seccion">Sucursales</h2>
+        <p style={{ margin: '0.2rem 0 0', fontSize: '0.75rem', color: 'var(--motored-text-muted, #5a5a5a)' }}>
+          ¿Tenés muchas sucursales para cargar de una vez? Subí un archivo CSV con "Carga masiva" en vez de crearlas una por una.
+        </p>
+      </div>
       <button type="button" className="motored-btn motored-btn-secondary" onClick={onOpenBulk}>
         Carga masiva
       </button>

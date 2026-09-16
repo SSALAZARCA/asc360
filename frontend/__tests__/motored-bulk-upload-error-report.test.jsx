@@ -10,6 +10,13 @@
  * all-or-nothing guarantee that ALL row errors are reported in one pass
  * (`backend/app/motored/services/carga.py::procesar_carga`, owner decision
  * #1).
+ *
+ * Drives the REAL file-upload flow (a CSV `File` fed to the hidden
+ * `<input type="file">`, parsed by the real `papaparse`), not a shortcut
+ * around it -- this modal was rewritten from a raw-JSON textarea to a real
+ * file picker specifically because the textarea version was unusable for
+ * an actual business user, so the test must exercise the same path a real
+ * user does.
  */
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
@@ -22,6 +29,16 @@ jest.mock('../lib/motored/api', () => ({
 }));
 
 import BulkUploadModal from '../components/motored/maestros/BulkUploadModal';
+
+function csvFile(content, name = 'sucursales.csv') {
+  return new File([content], name, { type: 'text/csv' });
+}
+
+async function uploadCsv(container, content) {
+  const input = container.querySelector('input[type="file"]');
+  fireEvent.change(input, { target: { files: [csvFile(content)] } });
+  await waitFor(() => expect(screen.getByText(/Vista previa/i)).toBeInTheDocument());
+}
 
 beforeEach(() => {
   mockValidarCarga.mockReset();
@@ -40,13 +57,11 @@ describe('BulkUploadModal — full error report', () => {
       ],
     });
 
-    render(<BulkUploadModal entidad="sucursal" onClose={jest.fn()} onSuccess={jest.fn()} />);
+    const { container } = render(
+      <BulkUploadModal entidad="sucursal" onClose={jest.fn()} onSuccess={jest.fn()} />
+    );
 
-    const textarea = screen.getByPlaceholderText(/CALI NORTE/i);
-    fireEvent.change(textarea, {
-      target: { value: JSON.stringify([{ nombre: 'X' }, { sic: 'Y' }, { nombre: 'Z' }]) },
-    });
-
+    await uploadCsv(container, 'Nombre,SIC,Días de seguridad\nUno,,\nDos,,\nTres,,\n');
     fireEvent.click(screen.getByText('Cargar'));
 
     await waitFor(() => {
@@ -69,16 +84,31 @@ describe('BulkUploadModal — full error report', () => {
     });
     const onSuccess = jest.fn();
 
-    render(<BulkUploadModal entidad="sucursal" onClose={jest.fn()} onSuccess={onSuccess} />);
+    const { container } = render(
+      <BulkUploadModal entidad="sucursal" onClose={jest.fn()} onSuccess={onSuccess} />
+    );
 
-    fireEvent.change(screen.getByPlaceholderText(/CALI NORTE/i), {
-      target: { value: JSON.stringify([{ nombre: 'X' }]) },
-    });
+    await uploadCsv(container, 'Nombre,SIC,Días de seguridad\nUno,,\n');
     fireEvent.click(screen.getByText('Cargar'));
 
     await waitFor(() => {
       expect(screen.getByTestId('carga-error-row')).toBeInTheDocument();
     });
     expect(onSuccess).not.toHaveBeenCalled();
+  });
+
+  it('rejects a file missing the required Nombre column before calling the API', async () => {
+    const { container } = render(
+      <BulkUploadModal entidad="sucursal" onClose={jest.fn()} onSuccess={jest.fn()} />
+    );
+
+    const input = container.querySelector('input[type="file"]');
+    fireEvent.change(input, { target: { files: [csvFile('SIC,Días de seguridad\n1,2\n')] } });
+
+    await waitFor(() => {
+      expect(screen.getByText(/falta la columna obligatoria/i)).toBeInTheDocument();
+    });
+    expect(mockValidarCarga).not.toHaveBeenCalled();
+    expect(mockSubirCarga).not.toHaveBeenCalled();
   });
 });
