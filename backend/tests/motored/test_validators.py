@@ -166,3 +166,63 @@ class TestValidateRowsAccumulatesAllErrors:
         assert valid == []
         assert len(errors) == 1
         assert errors[0]["fila"] == 1
+
+
+class TestBlankOptionalFieldsAreTreatedAsAbsent:
+    """Real bug found while answering a user question about re-uploading a
+    referencias file: `.csv` (papaparse) and `.xlsx` (openpyxl, stripped
+    strings) both hand `validate_rows` an empty string `""` for a blank
+    cell in a column that DOES have a header in the file -- not `None`,
+    not a missing key. An empty string is not a valid Decimal/int, so an
+    optional numeric column left blank on even ONE row (extremely likely
+    across ~13,200 real referencias, since only `precio_normal` is truly
+    required) either rejected the entire file (all-or-nothing) or, for
+    `unidad_empaque`, crashed with an unhandled `TypeError` comparing
+    `str <= int` inside `coerce_unidad_empaque` -- never even reaching a
+    clean validation error."""
+
+    def test_blank_optional_decimal_field_does_not_reject_the_row(self):
+        rows = [{
+            "codigo": "REF1", "proveedor_codigo": "HMCL",
+            "proveedor_id": str(uuid.uuid4()), "nombre": "FILTRO ACEITE",
+            "precio_normal": 15000, "precio_venta": "", "precio_publico": "",
+        }]
+        valid, errors = validate_rows("referencia", rows)
+        assert errors == []
+        assert len(valid) == 1
+        # La clave se OMITE por completo (no se pisa con `None`) -- así
+        # `_updateable_fields`'s `exclude_unset=True` nunca borra un valor
+        # ya cargado si se vuelve a subir el archivo sin esa columna.
+        assert "precio_venta" not in valid[0]
+        assert "precio_publico" not in valid[0]
+
+    def test_blank_unidad_empaque_coerces_to_one_instead_of_crashing(self):
+        rows = [{
+            "codigo": "REF1", "proveedor_codigo": "HMCL",
+            "proveedor_id": str(uuid.uuid4()), "unidad_empaque": "",
+        }]
+        valid, errors = validate_rows("referencia", rows)
+        assert errors == []
+        assert len(valid) == 1
+        assert valid[0]["unidad_empaque"] == 1
+        assert valid[0]["_warnings"]
+
+    def test_blank_sucursal_dias_seguridad_falls_back_to_schema_default(self):
+        rows = [{"nombre": "CALI NORTE", "sic": "S1", "dias_seguridad": ""}]
+        valid, errors = validate_rows("sucursal", rows)
+        assert errors == []
+        assert len(valid) == 1
+        assert valid[0].get("dias_seguridad") in (None, "")  # key omitted or blank -- schema applies its own default
+
+    def test_a_truly_invalid_non_blank_value_still_rejects_the_row(self):
+        """The fix must only treat BLANK values as absent -- a genuinely
+        malformed value (not empty, not parseable) must still be rejected,
+        never silently swallowed."""
+        rows = [{
+            "codigo": "REF1", "proveedor_codigo": "HMCL",
+            "proveedor_id": str(uuid.uuid4()), "precio_normal": "no-es-un-numero",
+        }]
+        valid, errors = validate_rows("referencia", rows)
+        assert len(errors) == 1
+        assert "precio_normal" in errors[0]["motivo"]
+        assert valid == []

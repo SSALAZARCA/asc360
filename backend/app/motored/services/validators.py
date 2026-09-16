@@ -75,6 +75,64 @@ def _validate_single_row(entidad: str, row: Row) -> List[str]:
     return reasons
 
 
+def _strip_blank_values(row: Row) -> Row:
+    """Una celda en blanco (columna presente en el archivo, sin valor para
+    esa fila) llega como `""`, no `None` ni ausente -- tanto `.csv`
+    (papaparse) como `.xlsx` (openpyxl con `.strip()`) producen ese mismo
+    string vacío. Sacar esas claves ACÁ, antes de cualquier coerción/
+    validación de schema, para que se traten como "no provisto" (usa el
+    default del schema o queda en None), nunca como un valor inválido --
+    real bug encontrado: "" en un campo Decimal opcional (ej.
+    `precio_venta`) rechazaba la fila entera, y "" en `unidad_empaque`
+    crasheaba `coerce_unidad_empaque` con un `TypeError` sin manejar
+    (comparaba `str <= int`)."""
+    return {k: v for k, v in row.items() if v != ""}
+
+
+def _apply_entity_normalizations(entidad: str, cleaned: Row) -> List[str]:
+    """Aplica los trims/coerciones específicos por entidad IN-PLACE sobre
+    `cleaned` y retorna las advertencias no bloqueantes resultantes."""
+    warnings: List[str] = []
+
+    if entidad == "sucursal" and isinstance(cleaned.get("nombre"), str):
+        cleaned["nombre"] = normalize_sucursal_nombre(cleaned["nombre"])
+
+    if entidad == "referencia":
+        coerced_value, warning = coerce_unidad_empaque(cleaned.get("unidad_empaque"))
+        cleaned["unidad_empaque"] = coerced_value
+        if warning:
+            warnings.append(warning)
+
+    return warnings
+
+
+def _schema_validation_error(entidad: str, cleaned: Row) -> Optional[str]:
+    """Un campo requerido presente pero con formato inválido (p.ej.
+    `proveedor_id: "no-es-un-uuid"`, `precio_normal: "abc"`) pasa el chequeo
+    de "no vacío" de `_validate_single_row`, pero rompería recién al
+    escribir -- adentro del loop de `services/carga.py::procesar_carga`,
+    DESPUÉS de haber decidido "archivo válido, proceder a escribir". Eso
+    violaría todo-o-nada: algunas filas ya habrían pasado por `db.add` antes
+    del crash. Construir el schema Pydantic ACÁ, durante la validación (y
+    descartar el resultado -- `carga.py` reconstruye el mismo schema desde
+    este mismo dict ya limpio, sin riesgo de que falle distinto la segunda
+    vez), mueve ese error al único lugar donde "todo o nada" puede
+    cumplirse: antes de tocar la sesión. Retorna el motivo del error, o
+    `None` si el schema construye sin problema."""
+    schema_cls = _SCHEMA_BY_ENTIDAD.get(entidad)
+    if schema_cls is None:
+        return None
+
+    payload = {k: v for k, v in cleaned.items() if k != "_warnings"}
+    try:
+        schema_cls(**payload)
+    except ValidationError as exc:
+        return "; ".join(
+            f"{'.'.join(str(loc) for loc in err['loc'])}: {err['msg']}" for err in exc.errors()
+        )
+    return None
+
+
 def validate_rows(entidad: str, rows: List[Row]) -> Tuple[List[Row], List[RowError]]:
     """Valida TODAS las filas de una carga masiva para `entidad` en un solo
     pase. Retorna `(filas_validas, errores)`:
@@ -90,7 +148,9 @@ def validate_rows(entidad: str, rows: List[Row]) -> Tuple[List[Row], List[RowErr
 
     Un `errores` no vacío es la señal de "todo o nada": la fila-completa
     debe rechazarse SIN escribir nada (esa decisión la toma
-    `services/carga.py`, esta función solo reporta).
+    `services/carga.py`, esta función solo reporta). Solo orquesta el
+    orden -- ver `_strip_blank_values`/`_apply_entity_normalizations`/
+    `_schema_validation_error` para el detalle de cada paso.
     """
     valid_rows: List[Row] = []
     errors: List[RowError] = []
@@ -102,40 +162,13 @@ def validate_rows(entidad: str, rows: List[Row]) -> Tuple[List[Row], List[RowErr
                 errors.append({"fila": index, "motivo": reason})
             continue
 
-        cleaned = dict(row)
-        warnings: List[str] = []
+        cleaned = _strip_blank_values(dict(row))
+        warnings = _apply_entity_normalizations(entidad, cleaned)
 
-        if entidad == "sucursal" and isinstance(cleaned.get("nombre"), str):
-            cleaned["nombre"] = normalize_sucursal_nombre(cleaned["nombre"])
-
-        if entidad == "referencia":
-            coerced_value, warning = coerce_unidad_empaque(cleaned.get("unidad_empaque"))
-            cleaned["unidad_empaque"] = coerced_value
-            if warning:
-                warnings.append(warning)
-
-        # Un campo requerido presente pero con formato inválido (p.ej.
-        # `proveedor_id: "no-es-un-uuid"`, `precio_normal: "abc"`) pasa el
-        # chequeo de "no vacío" de arriba, pero rompería recién al escribir
-        # -- adentro del loop de `services/carga.py::procesar_carga`, DESPUÉS
-        # de haber decidido "archivo válido, proceder a escribir". Eso
-        # violaría todo-o-nada: algunas filas ya habrían pasado por `db.add`
-        # antes del crash. Construir el schema Pydantic ACÁ, durante la
-        # validación (y descartar el resultado -- `carga.py` reconstruye el
-        # mismo schema desde este mismo dict ya limpio, sin riesgo de que
-        # falle distinto la segunda vez), mueve ese error al único lugar
-        # donde "todo o nada" puede cumplirse: antes de tocar la sesión.
-        schema_cls = _SCHEMA_BY_ENTIDAD.get(entidad)
-        if schema_cls is not None:
-            payload = {k: v for k, v in cleaned.items() if k != "_warnings"}
-            try:
-                schema_cls(**payload)
-            except ValidationError as exc:
-                motivo = "; ".join(
-                    f"{'.'.join(str(loc) for loc in err['loc'])}: {err['msg']}" for err in exc.errors()
-                )
-                errors.append({"fila": index, "motivo": motivo})
-                continue
+        schema_error = _schema_validation_error(entidad, cleaned)
+        if schema_error:
+            errors.append({"fila": index, "motivo": schema_error})
+            continue
 
         cleaned["_warnings"] = warnings
         valid_rows.append(cleaned)
