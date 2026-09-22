@@ -57,6 +57,13 @@ class Settings(BaseSettings):
     MOTORED_INGESTA_POLL_SEGUNDOS: int = 5
     MOTORED_INGESTA_TIMEOUT_MIN: int = 15
     MOTORED_INGESTA_PAUSA_MS: int = 0
+    MOTORED_INGESTA_LOTE: int = 2000
+    MOTORED_MINIO_BUCKET: str = "motored-cargas"
+    MOTORED_MAX_MOVIMIENTO_UPLOAD_MB: int = 150
+    MOTORED_MAX_MOVIMIENTO_ROWS: int = 500000
+    MOTORED_RETENCION_ENABLED: bool = False
+    MOTORED_RETENCION_DIAS: int = 90
+    MOTORED_INGESTA_PERIODO_TOLERANCIA_PCT: float = 0.5
 
     @property
     def allowed_origins_list(self) -> list:

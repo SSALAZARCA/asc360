@@ -28,13 +28,13 @@ de validación/upsert duplicada, sólo cambia cómo llegan las filas.
 """
 import io
 import re
-import unicodedata
 from decimal import Decimal
 from typing import Any, Dict, List, Optional, get_args
 
 import openpyxl
 
 from app.config import settings
+from app.motored.services.texto import normalizar_encabezado
 from app.motored.services.validators import _SCHEMA_BY_ENTIDAD
 
 
@@ -73,8 +73,9 @@ class LimiteFilasExcedidoError(CargaExcelError):
 # ---------------------------------------------------------------------------
 # Puerto manual de `COLUMNAS_POR_ENTIDAD` (BulkUploadModal.js) -- ver
 # docstring del módulo. `aliases` no necesita variantes sin tilde: el
-# encabezado del Excel Y cada alias se normalizan con `_normalize_header`
-# antes de compararse, así que una sola forma (con o sin tilde) alcanza.
+# encabezado del Excel Y cada alias se normalizan con
+# `texto.normalizar_encabezado` antes de compararse, así que una sola forma
+# (con o sin tilde) alcanza.
 # ---------------------------------------------------------------------------
 ALIASES_POR_ENTIDAD: Dict[str, List[Dict[str, Any]]] = {
     "sucursal": [
@@ -190,18 +191,6 @@ def _normalize_comma_decimal(value: str) -> str:
     return value
 
 
-def _normalize_header(value: Any) -> str:
-    """Mismo criterio que `normalizeHeader` en `BulkUploadModal.js`: saca
-    tildes/diacríticos, recorta espacios, pasa a minúsculas -- para que
-    "Días de seguridad", "dias_seguridad" y "DIAS SEGURIDAD" comparen
-    igual."""
-    if value is None:
-        return ""
-    decomposed = unicodedata.normalize("NFD", str(value))
-    without_accents = "".join(ch for ch in decomposed if unicodedata.category(ch) != "Mn")
-    return without_accents.strip().lower()
-
-
 def _to_boolean(value: Any) -> bool:
     """Mismo criterio que `toBoolean` en `BulkUploadModal.js`."""
     return str(value).strip().lower() in _BOOLEAN_TRUE_VALUES
@@ -210,10 +199,10 @@ def _to_boolean(value: Any) -> bool:
 def _build_column_map(spec: List[Dict[str, Any]], raw_headers: List[str]) -> Dict[int, str]:
     """Retorna {índice_de_columna (0-based) -> clave_canónica} para las
     columnas del encabezado que matchean algún alias conocido."""
-    normalized_headers = [_normalize_header(h) for h in raw_headers]
+    normalized_headers = [normalizar_encabezado(h) for h in raw_headers]
     column_map: Dict[int, str] = {}
     for col in spec:
-        normalized_aliases = {_normalize_header(a) for a in col["aliases"]}
+        normalized_aliases = {normalizar_encabezado(a) for a in col["aliases"]}
         for idx, header in enumerate(normalized_headers):
             if header in normalized_aliases:
                 column_map[idx] = col["key"]
