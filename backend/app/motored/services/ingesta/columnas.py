@@ -102,6 +102,16 @@ def encontrar_fila_encabezado(
     )
 
 
+def anio_es_plausible(anio: int) -> bool:
+    """Mismo umbral 2015-2100 que `convertir_fecha_excel`, expuesto para que
+    un caller que YA tiene un `date`/`datetime` (openpyxl con `data_only=
+    True` convierte una celda con formato de fecha directamente, sin pasar
+    por un serial -- ver `services/ingesta/ventas.py::_resolver_anio_mes`,
+    confirmado contra el workbook real de producción) no tenga que
+    reinventar el rango."""
+    return _ANIO_MINIMO_PLAUSIBLE <= anio <= _ANIO_MAXIMO_PLAUSIBLE
+
+
 def convertir_fecha_excel(valor_serial: float) -> date:
     """Convierte un serial numérico de Excel a `date`, rechazando cualquier
     resultado fuera de 2015-2100 (spec). `math.trunc` en vez de `int()`
@@ -109,7 +119,7 @@ def convertir_fecha_excel(valor_serial: float) -> date:
     negativo ya cae muy por debajo de 2015 y se rechaza igual."""
     dias = math.trunc(valor_serial)
     fecha = _EPOCA_EXCEL + timedelta(days=dias)
-    if not (_ANIO_MINIMO_PLAUSIBLE <= fecha.year <= _ANIO_MAXIMO_PLAUSIBLE):
+    if not anio_es_plausible(fecha.year):
         raise FechaExcelImplausibleError(
             f"Fecha implausible: el serial {valor_serial} convierte a {fecha.isoformat()}, "
             f"fuera del rango {_ANIO_MINIMO_PLAUSIBLE}-{_ANIO_MAXIMO_PLAUSIBLE}."
