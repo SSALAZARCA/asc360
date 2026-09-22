@@ -10,6 +10,15 @@ como (prefijo, entero), soportando números de más de 6 dígitos. `ingresada`/
 `transito_vencido`/`ingreso_parcial_sospechoso` los completa el cruce contra
 `ingreso_factura` (Fase 8) -- acá son columnas booleanas con default
 `False`, sin lógica todavía.
+
+`valor_total` (migración `3956c0ebd69c`, Phase 8): agregado junto a
+`cantidad` -- el schema original de esta fase (Phase 3) solo tenía
+`cantidad` (unidades, de la columna `Cantidad`), sin ningún campo
+monetario, pero el cruce de tránsito (spec §5.6) necesita comparar VALOR
+neto (`Vlr. Total Neto` en el archivo real), no unidades, para
+`ingreso_parcial_sospechoso`. `cantidad` mantiene su significado real
+(unidades, para la regla Parte/resta de NC); `valor_total` es la línea de
+`Vlr. Total Neto` sin transformar.
 """
 import uuid
 from datetime import datetime
@@ -52,6 +61,7 @@ class FacturaProveedorLinea(MotoredBase):
     sucursal_id = Column(UUID(as_uuid=True), ForeignKey("sucursal.id"), nullable=False)
     referencia_id = Column(UUID(as_uuid=True), ForeignKey("referencia.id"), nullable=False)
     cantidad = Column(Numeric(14, 2), nullable=False)
+    valor_total = Column(Numeric(14, 2), nullable=False)
 
     ingresada = Column(Boolean, nullable=False, default=False)
     transito_vencido = Column(Boolean, nullable=False, default=False)

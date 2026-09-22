@@ -159,16 +159,37 @@ def test_factura_proveedor_linea_has_index_ingresada_transito_vencido():
     assert len(match) == 1
 
 
-def test_ingreso_factura_has_unique_rh_sucursal_referencia():
+def test_ingreso_factura_has_unique_prefijo_rh_numero_rh():
+    # Phase 8 (migration `3956c0ebd69c`): document-level identity, not
+    # line-level — the real file has no Sucursal/Parte columns at all.
     constraints = [
         c for c in IngresoFactura.__table__.constraints if isinstance(c, UniqueConstraint)
     ]
     match = [
-        c for c in constraints
-        if {col.name for col in c.columns}
-        == {"prefijo_rh", "numero_rh", "sucursal_id", "referencia_id"}
+        c for c in constraints if {col.name for col in c.columns} == {"prefijo_rh", "numero_rh"}
     ]
     assert len(match) == 1
+
+
+def test_ingreso_factura_sucursal_referencia_are_nullable():
+    # Phase 8: the source file carries no sucursal/parte dimension to
+    # resolve — unlike NOT NULL on facturas_pedidos' line-level table.
+    assert IngresoFactura.__table__.c.sucursal_id.nullable is True
+    assert IngresoFactura.__table__.c.referencia_id.nullable is True
+
+
+def test_ingreso_factura_has_valor_neto_not_cantidad():
+    # Phase 8: this table is a financial document register (Valornetolocal),
+    # not a parts register — `cantidad` was renamed to `valor_neto`.
+    assert "valor_neto" in IngresoFactura.__table__.c
+    assert "cantidad" not in IngresoFactura.__table__.c
+
+
+def test_factura_proveedor_linea_has_valor_total_alongside_cantidad():
+    # Phase 8: the tránsito cruce's ingreso_parcial_sospechoso needs a
+    # comparable monetary figure — `cantidad` alone (units) isn't one.
+    assert "cantidad" in FacturaProveedorLinea.__table__.c
+    assert "valor_total" in FacturaProveedorLinea.__table__.c
 
 
 def test_ingreso_factura_has_no_transito_flags():
