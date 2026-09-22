@@ -68,6 +68,29 @@ def _procesar(fila_raw, **overrides):
 
 
 # ---------------------------------------------------------------------------
+# 8.1/8.2 — filtro Estado != 'Anulado' (decisión del owner, 2026-09-22)
+# ---------------------------------------------------------------------------
+
+
+def test_estado_anulado_se_descarta_en_silencio():
+    # Un ingreso anulado nunca debe contar como "recibido" en el cruce de
+    # tránsito -- ver docstring del módulo.
+    fila_staging, errores = _procesar(_fila(estado="Anulado"))
+
+    assert fila_staging is None
+    assert errores == []
+
+
+def test_estados_no_anulados_se_procesan_normalmente():
+    # Los otros 3 valores reales del archivo (verificado con openpyxl:
+    # Facturado, Contabilizado, En elaboración) no se filtran.
+    for estado in ("Facturado", "Contabilizado", "En elaboración"):
+        fila_staging, errores = _procesar(_fila(estado=estado))
+        assert fila_staging is not None
+        assert errores == []
+
+
+# ---------------------------------------------------------------------------
 # 8.1 — mapeo + fila de relleno (RED)
 # ---------------------------------------------------------------------------
 

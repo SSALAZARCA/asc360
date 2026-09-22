@@ -3,6 +3,17 @@ Motored Pedidos — Fase 2 "Ingesta", Phase 8 "FACTURAS/INGRESOS + Tránsito"
 (PR8) (sdd/motored-pedidos-ingesta, task 8.1; design ADR-9, spec
 "Tránsito cruce by RH document identity").
 
+Filtro `Estado != 'Anulado'` (decisión del owner, 2026-09-22): el archivo
+real trae 4 valores (`Facturado`, `Contabilizado`, `Anulado`, `En
+elaboración`, verificado con openpyxl -- 58 de 1 395 filas no-blanco son
+`Anulado`). Un `ingreso_factura` anulado NUNCA debe contar como "recibido"
+en el cruce de tránsito (`transito.py`): si contara, una factura genuinamente
+pendiente aparecería como `ingresada = true` sólo porque un ingreso que
+después se anuló coincidió por `(prefijo_rh, numero_rh)` -- exactamente el
+"ingreso fantasma" que el cruce existe para prevenir. Filtro de negocio, no
+un error de fila: se descarta en silencio, mismo contrato que
+`ventas._pasa_filtros_negocio`/`backorder._pasa_filtro_estado`.
+
 Compone `lector` + `columnas` + `errores` (Phase 3) +
 `transito.extraer_prefijo_numero_rh` (Phase 8, H3) en el transform de
 INGRESOS_FACTURAS. A diferencia de TODOS los demás tipos de Fase 2, este
@@ -45,10 +56,6 @@ prefijo distinto de `RH` SÍ se stagea igual (H3 solo exige el FORMATO
 Deliberadamente FUERA de alcance de esta fase (ver tasks.md Fase 9):
 - Wiring a `JobRunner`/supervisor y a la API — Fase 9.
 - El cruce de tránsito en sí — eso es `transito.py`.
-- Un posible filtro por `Estado` (el archivo real trae 57 filas
-  `'Anulado'` sobre 1 395 no-blanco) -- ni el spec ni el design lo piden
-  explícitamente; reportado como riesgo abierto en el apply-progress, no
-  implementado acá para no inventar alcance no pedido.
 """
 from __future__ import annotations
 
@@ -75,6 +82,8 @@ COLUMNAS_ESPERADAS: Tuple[str, ...] = (
 CODIGO_FECHA_INVALIDA = "FECHA_INVALIDA"
 CODIGO_VALOR_NETO_INVALIDO = "VALOR_NETO_INVALIDO"
 CODIGO_DOCUMENTO_RH_INVALIDO = "DOCUMENTO_RH_INVALIDO"
+
+ESTADO_ANULADO = "Anulado"
 
 _CLAVE_UPSERT = ("prefijo_rh", "numero_rh")
 
@@ -129,6 +138,16 @@ def _resolver_valor_neto_o_error(
         return None, error
 
 
+def _pasa_filtro_estado(fila_raw: Sequence[Any], mapa_columnas: Dict[str, int]) -> bool:
+    """`Estado == 'Anulado'` se descarta -- decisión del owner (2026-09-22):
+    un ingreso anulado NUNCA cuenta como "recibido" en el cruce de
+    tránsito (ver docstring del módulo). Filtro de negocio, no una fila
+    inválida: nunca genera `carga_error` (mismo contrato que
+    `ventas._pasa_filtros_negocio`/`backorder._pasa_filtro_estado`)."""
+    estado = _texto(_extraer(fila_raw, mapa_columnas, "Estado"))
+    return estado != ESTADO_ANULADO
+
+
 def procesar_fila(
     fila_raw: Sequence[Any],
     *,
@@ -140,6 +159,9 @@ def procesar_fila(
     """Procesa UNA fila cruda de INGRESOS_FACTURAS. Retorna `(fila_staging,
     errores)`. Nunca recibe `cache`/`proveedor_id` -- este tipo no resuelve
     sucursal ni referencia (ver docstring del módulo)."""
+    if not _pasa_filtro_estado(fila_raw, mapa_columnas):
+        return None, []
+
     documento_raw = _texto(_extraer(fila_raw, mapa_columnas, "Dct.referencia"))
     if documento_raw is None:
         # Fila de relleno -- mismo contrato de descarte silencioso que
