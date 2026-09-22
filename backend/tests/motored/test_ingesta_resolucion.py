@@ -8,6 +8,15 @@ sucursal_alias, referencia) y nunca más -- `resolver_sucursal`/
 "per-row DB lookups are forbidden"). Usa `FakeAsyncSession` de
 `tests/motored/conftest.py`, mismo patrón que el resto de la suite (sin
 Postgres real).
+
+Fase 2 "Ingesta", Phase 7 "BACKORDER + DEMANDA_PERDIDA" (PR7) extiende el
+cache con `sucursal_por_sic` (spec §5.3 BACKORDER: "SIC | sucursal (vía
+`sucursal.sic`)") -- BACKORDER es el primer y único tipo que resuelve
+sucursal por un código de OTRO sistema (el del proveedor HMCL) en vez de
+por texto/nombre, así que `resolver_sucursal` (texto) no le sirve y hace
+falta un segundo lookup puro en memoria, `resolver_sucursal_por_sic`. La
+columna extra viaja en el MISMO `SELECT Sucursal...` que ya existía --
+sigue siendo un total de 4 queries, nunca 5 (ADR-8 sigue intacto).
 """
 import uuid
 
@@ -21,7 +30,13 @@ from app.motored.services.ingesta import resolucion
 
 
 def _make_session(sucursales=(), bodegas=(), alias=(), referencias=()):
-    return FakeAsyncSession(execute_queue=[list(sucursales), list(bodegas), list(alias), list(referencias)])
+    """`sucursales` son 3-tuplas `(id, nombre, sic)` -- `sic=None` cuando el
+    test no lo ejercita, igual que cualquier sucursal real sin SIC cargado
+    (spec: "sucursales sin SIC" es un estado de datos válido, solo
+    bloqueante para tránsito/backorder, no para el resto del sistema)."""
+    return FakeAsyncSession(
+        execute_queue=[list(sucursales), list(bodegas), list(alias), list(referencias)]
+    )
 
 
 async def test_construir_cache_issues_exactly_four_queries():
@@ -34,7 +49,7 @@ async def test_construir_cache_issues_exactly_four_queries():
 
 async def test_resolver_sucursal_matches_by_trimmed_case_insensitive_name():
     sucursal_id = uuid.uuid4()
-    session = _make_session(sucursales=[(sucursal_id, "Cali Norte")])
+    session = _make_session(sucursales=[(sucursal_id, "Cali Norte", None)])
 
     cache = await resolucion.construir_cache(session)
 
@@ -75,6 +90,60 @@ async def test_bodega_secundaria_resolves_to_bodega_principal_sucursal():
     assert resolucion.resolver_sucursal(cache, "BA061") == sucursal_ba061
 
 
+# ---------------------------------------------------------------------------
+# Phase 7 (PR7) — `sucursal_por_sic` (spec §5.3 BACKORDER)
+# ---------------------------------------------------------------------------
+
+
+async def test_resolver_sucursal_por_sic_matches_exact_code():
+    sucursal_id = uuid.uuid4()
+    session = _make_session(sucursales=[(sucursal_id, "MR Soacha El Dorado", "1779")])
+
+    cache = await resolucion.construir_cache(session)
+
+    assert resolucion.resolver_sucursal_por_sic(cache, "1779") == sucursal_id
+
+
+async def test_resolver_sucursal_por_sic_trims_stray_whitespace():
+    sucursal_id = uuid.uuid4()
+    session = _make_session(sucursales=[(sucursal_id, "MR Soacha El Dorado", "1779")])
+
+    cache = await resolucion.construir_cache(session)
+
+    assert resolucion.resolver_sucursal_por_sic(cache, "  1779  ") == sucursal_id
+
+
+async def test_resolver_sucursal_por_sic_returns_none_when_nothing_matches():
+    session = _make_session(sucursales=[(uuid.uuid4(), "MR Soacha El Dorado", "1779")])
+
+    cache = await resolucion.construir_cache(session)
+
+    assert resolucion.resolver_sucursal_por_sic(cache, "9999") is None
+
+
+async def test_resolver_sucursal_por_sic_returns_none_for_sucursal_without_sic():
+    # spec: "sucursales sin SIC" es un estado de datos válido (bloqueante
+    # solo para tránsito/backorder, nunca un crash de la resolución).
+    session = _make_session(sucursales=[(uuid.uuid4(), "Cali Norte", None)])
+
+    cache = await resolucion.construir_cache(session)
+
+    assert resolucion.resolver_sucursal_por_sic(cache, None) is None
+
+
+async def test_resolver_sucursal_por_sic_never_touches_the_session_after_cache_is_built():
+    sucursal_id = uuid.uuid4()
+    session = _make_session(sucursales=[(sucursal_id, "MR Soacha El Dorado", "1779")])
+
+    cache = await resolucion.construir_cache(session)
+    queries_after_cache = len(session.executed_statements)
+
+    for _ in range(500):
+        resolucion.resolver_sucursal_por_sic(cache, "1779")
+
+    assert len(session.executed_statements) == queries_after_cache
+
+
 async def test_resolver_referencia_matches_by_codigo_and_proveedor():
     proveedor_id = uuid.uuid4()
     referencia_id = uuid.uuid4()
@@ -101,7 +170,7 @@ async def test_resolvers_never_touch_the_session_after_cache_is_built():
     referencia_id = uuid.uuid4()
     proveedor_id = uuid.uuid4()
     session = _make_session(
-        sucursales=[(sucursal_id, "Cali Norte")],
+        sucursales=[(sucursal_id, "Cali Norte", None)],
         referencias=[("REF1", proveedor_id, referencia_id)],
     )
 

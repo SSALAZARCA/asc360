@@ -16,6 +16,16 @@ Consolidación bodega-principal (`BA066 -> BA061`) se resuelve DENTRO del
 cache: una bodega secundaria resuelve a la sucursal de su bodega principal,
 no a la suya propia (design "A secondary bodega's stock rolls into the
 principal").
+
+Fase 2 "Ingesta", Phase 7 "BACKORDER + DEMANDA_PERDIDA" (PR7) agrega
+`sucursal_por_sic` (spec §5.3 BACKORDER: "SIC | sucursal (vía
+`sucursal.sic`)") -- BACKORDER es el único tipo cuyo archivo trae un código
+de OTRO sistema (el SIC/SIIC del proveedor HMCL) en vez de un texto de
+sucursal, así que `resolver_sucursal` (matching por nombre normalizado) no
+puede resolverlo: hace falta un segundo lookup puro en memoria,
+`resolver_sucursal_por_sic`, sobre la MISMA columna `Sucursal.sic` que ya
+se lee en el único `SELECT` de sucursales -- sigue sin agregar una quinta
+query (ADR-8 intacto, siguen siendo 4 en total).
 """
 from __future__ import annotations
 
@@ -56,10 +66,17 @@ def normalizar_texto_sucursal(valor: str) -> str:
 class CacheResolucion(NamedTuple):
     """Snapshot en memoria construido UNA vez por job. `sucursal_por_texto`
     ya incluye la consolidación bodega-principal y el fallback de alias --
-    el caller nunca necesita saber de dónde vino cada entrada."""
+    el caller nunca necesita saber de dónde vino cada entrada.
+    `sucursal_por_sic` (Phase 7) es un índice INDEPENDIENTE por
+    `sucursal.sic` -- no comparte namespace con `sucursal_por_texto`, un SIC
+    numérico y un nombre de sucursal nunca podrían colisionar de todos
+    modos. Default `{}` para que los callers existentes (VENTAS/INVENTARIO,
+    Phases 4/6) que construyen un `CacheResolucion` a mano en sus tests
+    sigan funcionando sin pasar este campo."""
 
     sucursal_por_texto: Dict[str, uuid.UUID]
     referencia_por_codigo_proveedor: Dict[Tuple[str, uuid.UUID], uuid.UUID]
+    sucursal_por_sic: Dict[str, uuid.UUID] = {}
 
 
 def _resolver_sucursal_de_bodega(
@@ -95,7 +112,7 @@ async def construir_cache(session: AsyncSession) -> CacheResolucion:
     mismo texto: nombre real de sucursal / código de bodega consolidada
     primero, `sucursal_alias` solo rellena lo que falte -- un alias existe
     justamente para texto que NO matcheó un maestro real."""
-    sucursales = (await session.execute(select(Sucursal.id, Sucursal.nombre))).all()
+    sucursales = (await session.execute(select(Sucursal.id, Sucursal.nombre, Sucursal.sic))).all()
     bodegas = (
         await session.execute(select(Bodega.codigo, Bodega.sucursal_id, Bodega.bodega_principal))
     ).all()
@@ -107,9 +124,12 @@ async def construir_cache(session: AsyncSession) -> CacheResolucion:
     ).all()
 
     sucursal_por_texto: Dict[str, uuid.UUID] = {}
-    for sucursal_id, nombre in sucursales:
+    sucursal_por_sic: Dict[str, uuid.UUID] = {}
+    for sucursal_id, nombre, sic in sucursales:
         if nombre:
             sucursal_por_texto[normalizar_texto_sucursal(nombre)] = sucursal_id
+        if sic:
+            sucursal_por_sic[str(sic).strip()] = sucursal_id
 
     bodega_por_codigo = {
         codigo: (sucursal_id, bodega_principal)
@@ -131,6 +151,7 @@ async def construir_cache(session: AsyncSession) -> CacheResolucion:
     return CacheResolucion(
         sucursal_por_texto=sucursal_por_texto,
         referencia_por_codigo_proveedor=referencia_por_codigo_proveedor,
+        sucursal_por_sic=sucursal_por_sic,
     )
 
 
@@ -139,6 +160,19 @@ def resolver_sucursal(cache: CacheResolucion, texto: Optional[str]) -> Optional[
     if not texto:
         return None
     return cache.sucursal_por_texto.get(normalizar_texto_sucursal(texto))
+
+
+def resolver_sucursal_por_sic(cache: CacheResolucion, sic: Optional[str]) -> Optional[uuid.UUID]:
+    """Lookup PURO en memoria por `sucursal.sic` (Phase 7, spec §5.3
+    BACKORDER) -- NUNCA toca la base de datos (ADR-8), mismo contrato que
+    `resolver_sucursal`/`resolver_referencia`. Distinto de `resolver_
+    sucursal`: el SIC es un código numérico del sistema del PROVEEDOR
+    (HMCL), sin relación con `bodega.codigo` ni con `sucursal.nombre` --
+    solo se recorta espacio en blanco, nunca se normaliza como texto de
+    sucursal (mayúsculas/tildes/prefijo `MR `)."""
+    if not sic:
+        return None
+    return cache.sucursal_por_sic.get(sic.strip())
 
 
 def resolver_referencia(
