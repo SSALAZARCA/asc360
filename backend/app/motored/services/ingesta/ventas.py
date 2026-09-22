@@ -12,11 +12,30 @@ EXCLUDED.unidades`, nunca `+=`) que hace ciertos T17 (idempotencia) y el
 caso "meses solapados reemplazan, no acumulan" por construcción: cada
 llamada sólo agrega/toca las claves presentes en SU PROPIO staging.
 
-Deliberadamente FUERA de alcance de esta fase (ver tasks.md Fase 5/9):
-- ADR-9 (declaración/validación de período): `es_mes_parcial`/
-  `dias_transcurridos` en `venta_mensual` quedan presentes-pero-sin-lógica,
-  mismo trato que Phase 3 le dio a esas columnas en el modelo.
+Fase 2 "Ingesta", Phase 5 "ADR-9 Period Module" (PR5) agrega el gate
+declarado-vs-detectado (task 5.3): `construir_filas_por_periodo` arma el
+histograma `{(anio, mes): cantidad}` leyendo el `payload` que `procesar_fila`
+YA generó para cada fila staged de ESTE lote -- nunca una segunda pasada
+sobre el archivo, el caller (Fase 9, el job real) simplemente llama esto una
+vez por lote y acumula el resultado entre lotes (`Counter`/`dict` suma).
+`evaluar_periodo_declarado`/`aplicar_con_periodo` envuelven
+`services/ingesta/periodo.py` (ADR-9): sobre un veredicto `RECHAZO`,
+`aplicar_con_periodo` no ejecuta NINGÚN `session.execute` -- ni agrega, ni
+actualiza -- lo que hace que "cero filas de `venta_mensual`" y "un agosto
+previo correcto queda intacto" sean ciertos por construcción, exactamente
+como el upsert REPLACE-not-sum de ADR-4 ya hace con las claves que NO están
+presentes en su propio staging.
+
+Deliberadamente FUERA de alcance de esta fase (ver tasks.md Fase 9):
 - Wiring a `JobRunner`/supervisor y a la API (`POST .../aplicar`) — Fase 9.
+  `aplicar_con_periodo` es el punto de integración que ese job llamará; este
+  módulo no conoce `carga_archivo` ni decide su `estado`/`log` -- eso sigue
+  siendo responsabilidad exclusiva del caller (Fase 9), igual que borrar el
+  staging tras un rechazo.
+- Persistir en `carga_error` las filas individuales de un mes adyacente
+  dentro de tolerancia (`A-CARGA-043`, veredicto `ADVERTENCIA`) — requiere
+  identificar la fila staged concreta contra la BD (Fase 9); acá solo se
+  calcula y expone el veredicto y los meses afectados.
 - Creación automática de referencia bajo `OTROS`
   (`crear_referencias_desconocidas`) — depende de `parametros.resolver()`,
   Fase 9.
@@ -36,11 +55,13 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
+from app.config import settings
 from app.motored.models.carga_error import CargaError
 from app.motored.models.carga_fila_staging import CargaFilaStaging
 from app.motored.models.venta_mensual import VentaMensual
 from app.motored.services.ingesta import columnas as columnas_mod
 from app.motored.services.ingesta import errores as errores_mod
+from app.motored.services.ingesta import periodo as periodo_mod
 from app.motored.services.ingesta.resolucion import (
     CacheResolucion,
     resolver_referencia,
@@ -317,3 +338,92 @@ async def aplicar(session, totales: Dict[ClaveVentaMensual, Decimal], carga_id: 
     stmt = construir_statement_upsert(totales, carga_id)
     if stmt is not None:
         await session.execute(stmt)
+
+
+def construir_filas_por_periodo(
+    filas_staging: Sequence[CargaFilaStaging],
+) -> Dict[Tuple[int, int], int]:
+    """Histograma `{(anio, mes): cantidad}` (ADR-9) sobre filas YA staged de
+    ESTE lote -- lee el mismo `payload["anio"/"mes"]` que `procesar_fila` ya
+    calculó, nunca vuelve a interpretar `Fecha` ni reabre el archivo. El
+    caller real (el job de Fase 9) llama esto una vez por lote, sobre las
+    filas que ya tiene en memoria de ESE lote, y suma el resultado entre
+    lotes -- por eso esto NUNCA es una segunda pasada sobre el archivo
+    completo, solo una lectura más del mismo objeto en memoria."""
+    histograma: Dict[Tuple[int, int], int] = {}
+    for fila in filas_staging:
+        clave = (fila.payload["anio"], fila.payload["mes"])
+        histograma[clave] = histograma.get(clave, 0) + 1
+    return histograma
+
+
+def evaluar_periodo_declarado(
+    filas_por_periodo: Dict[Tuple[int, int], int],
+    periodo_desde: date,
+    periodo_hasta: date,
+    tolerancia_pct: Optional[float] = None,
+) -> periodo_mod.VeredictoPeriodo:
+    """Envoltorio delgado sobre `periodo.evaluar_periodo` (ADR-9): calcula
+    el conjunto `D` de meses declarados a partir de
+    `carga_archivo.periodo_desde/hasta` (autoritativo, nunca reemplazado por
+    lo detectado) y aplica el default de `settings` cuando el caller no fija
+    una tolerancia explícita -- así un test puede fijar la tolerancia sin
+    parchear `settings`, y el job real de Fase 9 puede omitir el argumento
+    sin más."""
+    tolerancia = (
+        tolerancia_pct
+        if tolerancia_pct is not None
+        else settings.MOTORED_INGESTA_PERIODO_TOLERANCIA_PCT
+    )
+    meses_declarados = periodo_mod.meses_en_rango(periodo_desde, periodo_hasta)
+    return periodo_mod.evaluar_periodo(filas_por_periodo, meses_declarados, tolerancia)
+
+
+async def aplicar_con_periodo(
+    session,
+    filas_staging: Sequence[CargaFilaStaging],
+    periodo_desde: date,
+    periodo_hasta: date,
+    carga_id: uuid.UUID,
+    tolerancia_pct: Optional[float] = None,
+) -> periodo_mod.VeredictoPeriodo:
+    """Punto de integración de ADR-9: evalúa el período declarado contra el
+    histograma de `filas_staging` y SOLO agrega/aplica (`agregar_unidades`
+    + `aplicar`) cuando el veredicto NO es `RECHAZO`. Sobre `RECHAZO` no se
+    ejecuta ningún `session.execute` -- ni una fila de `venta_mensual` se
+    toca, lo que reproduce exactamente el comportamiento que el bug
+    histórico real necesitaba (design ADR-9, edge case E1: archivo
+    mal-etiquetado rechazado ENTERO, un agosto previo correcto queda
+    intacto porque nada lo sobrescribe).
+
+    Sobre `ADVERTENCIA` (regla 2, meses adyacentes dentro de tolerancia),
+    las filas cuyo `(anio, mes)` NO está en el período declarado se
+    EXCLUYEN de la agregación -- design regla 2, verbatim: "those rows are
+    rejected individually to carga_error ... so they never reach
+    venta_mensual; the rest applies". Sin este filtro, el upsert
+    REPLACE-not-sum de ADR-4 sobrescribiría el mes adyacente (p.ej. un
+    agosto ya correcto) con solo el puñado de filas sueltas de ESTE
+    archivo -- exactamente el tipo de corrupción silenciosa que ADR-9
+    existe para prevenir, a menor escala que el rechazo total de E1.
+
+    Deliberadamente NO decide `carga_archivo.estado`/`log`, ni borra
+    staging, ni PERSISTE el `carga_error` de cada fila excluida
+    (`A-CARGA-043`) -- eso sigue siendo responsabilidad exclusiva del
+    caller (Fase 9), que además es quien conoce `carga_id` como fila real de
+    `carga_archivo`, no solo como FK de agregación. Lo que SÍ hace esta
+    función, dentro de su propio alcance puro, es garantizar que esas filas
+    nunca lleguen a `venta_mensual`."""
+    meses_declarados = periodo_mod.meses_en_rango(periodo_desde, periodo_hasta)
+    veredicto = evaluar_periodo_declarado(
+        construir_filas_por_periodo(filas_staging), periodo_desde, periodo_hasta, tolerancia_pct
+    )
+    if veredicto.tipo == periodo_mod.TipoVeredictoPeriodo.RECHAZO:
+        return veredicto
+
+    filas_dentro_de_periodo = [
+        fila for fila in filas_staging
+        if (fila.payload["anio"], fila.payload["mes"]) in meses_declarados
+    ]
+    totales = agregar_unidades(filas_dentro_de_periodo)
+    await aplicar(session, totales, carga_id)
+    return veredicto

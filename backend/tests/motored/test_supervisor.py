@@ -14,7 +14,7 @@ pytest-asyncio, sin nunca dejar un task corriendo de fondo entre tests
 """
 import asyncio
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 import sqlalchemy as sa
@@ -132,7 +132,11 @@ async def test_claim_next_pendiente_returns_id_and_tipo_and_sets_procesando(
 ):
     carga_id = uuid.uuid4()
     async with sqlite_session_maker() as session:
-        session.add(_make_carga(id=carga_id, tipo="INVENTARIO"))
+        # INVENTARIO declara período (ADR-9) -- sin `periodo_desde` este
+        # candidato no sería reclamable, ver la sección "ADR-9" más abajo.
+        session.add(
+            _make_carga(id=carga_id, tipo="INVENTARIO", periodo_desde=date(2026, 9, 15))
+        )
         await session.commit()
 
     async with sqlite_session_maker() as session:
@@ -152,6 +156,70 @@ async def test_claim_next_pendiente_returns_none_when_nothing_is_pendiente(
         result = await supervisor.claim_next_pendiente(session)
 
     assert result is None
+
+
+# ---------------------------------------------------------------------------
+# ADR-9 — el claim gana un predicado: `tipo` resuelto y, para los tipos que
+# declaran período (VENTAS/INVENTARIO/BACKORDER/DEMANDA_PERDIDA),
+# `periodo_desde` presente. Ningún estado ni tabla nueva -- ver design
+# "Gating: how a load waits for its period (no new state)".
+# ---------------------------------------------------------------------------
+
+
+async def test_claim_next_pendiente_no_reclama_un_tipo_que_declara_sin_periodo(
+    sqlite_session_maker,
+):
+    async with sqlite_session_maker() as session:
+        session.add(_make_carga(tipo="VENTAS", periodo_desde=None))
+        await session.commit()
+
+    async with sqlite_session_maker() as session:
+        result = await supervisor.claim_next_pendiente(session)
+
+    assert result is None
+
+
+async def test_claim_next_pendiente_reclama_un_tipo_que_no_declara_sin_periodo(
+    sqlite_session_maker,
+):
+    carga_id = uuid.uuid4()
+    async with sqlite_session_maker() as session:
+        session.add(
+            _make_carga(id=carga_id, tipo="FACTURAS_PEDIDOS", periodo_desde=None)
+        )
+        await session.commit()
+
+    async with sqlite_session_maker() as session:
+        result = await supervisor.claim_next_pendiente(session)
+
+    assert result == (carga_id, "FACTURAS_PEDIDOS")
+
+
+async def test_claim_next_pendiente_no_reclama_un_tipo_sin_resolver(sqlite_session_maker):
+    async with sqlite_session_maker() as session:
+        session.add(_make_carga(tipo=None, periodo_desde=None))
+        await session.commit()
+
+    async with sqlite_session_maker() as session:
+        result = await supervisor.claim_next_pendiente(session)
+
+    assert result is None
+
+
+async def test_claim_next_pendiente_reclama_un_tipo_que_declara_con_periodo_presente(
+    sqlite_session_maker,
+):
+    carga_id = uuid.uuid4()
+    async with sqlite_session_maker() as session:
+        session.add(
+            _make_carga(id=carga_id, tipo="VENTAS", periodo_desde=date(2026, 9, 1))
+        )
+        await session.commit()
+
+    async with sqlite_session_maker() as session:
+        result = await supervisor.claim_next_pendiente(session)
+
+    assert result == (carga_id, "VENTAS")
 
 
 # ---------------------------------------------------------------------------

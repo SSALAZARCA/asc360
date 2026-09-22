@@ -18,7 +18,7 @@ from decimal import Decimal
 from tests.motored.conftest import FakeAsyncSession
 
 from app.motored.models.carga_fila_staging import CargaFilaStaging
-from app.motored.services.ingesta import columnas, ventas
+from app.motored.services.ingesta import columnas, periodo, ventas
 from app.motored.services.ingesta.resolucion import CacheResolucion
 
 CARGA_ID = uuid.uuid4()
@@ -342,3 +342,160 @@ async def test_meses_solapados_la_segunda_carga_reemplaza_no_acumula():
     insert_values = session.executed_statements[0].compile().construct_params()
     assert Decimal("3") in insert_values.values()
     assert Decimal("10") not in insert_values.values()
+
+
+# ---------------------------------------------------------------------------
+# 5.3 — ADR-9: histograma `filas_por_periodo` (misma pasada streaming, sin
+# segundo scan) + gate declarado-vs-detectado antes de aplicar (RED)
+# ---------------------------------------------------------------------------
+
+
+def test_construir_filas_por_periodo_cuenta_por_anio_mes_desde_el_payload():
+    filas = [
+        _fila_staging(SUCURSAL_ID, REFERENCIA_ID, 2026, 9, "MOSTRADOR", 10),
+        _fila_staging(SUCURSAL_ID, REFERENCIA_ID, 2026, 9, "TALLER", 3, fila=2),
+        _fila_staging(SUCURSAL_ID, REFERENCIA_ID, 2026, 8, "MOSTRADOR", 1, fila=3),
+    ]
+
+    histograma = ventas.construir_filas_por_periodo(filas)
+
+    assert histograma == {(2026, 9): 2, (2026, 8): 1}
+
+
+def test_construir_filas_por_periodo_vacio_para_lote_vacio():
+    assert ventas.construir_filas_por_periodo([]) == {}
+
+
+def test_evaluar_periodo_declarado_delega_en_periodo_module_con_tolerancia_explicita():
+    histograma = {(2026, 9): 100}
+
+    veredicto = ventas.evaluar_periodo_declarado(
+        histograma, date(2026, 9, 1), date(2026, 9, 30), tolerancia_pct=0.5
+    )
+
+    assert veredicto.tipo == periodo.TipoVeredictoPeriodo.ACEPTADO
+
+
+def test_evaluar_periodo_declarado_usa_default_de_settings_si_no_se_pasa_tolerancia(
+    monkeypatch,
+):
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "MOTORED_INGESTA_PERIODO_TOLERANCIA_PCT", 0.5)
+    # 1 fila de 200 (0.5%) en el mes adyacente, dentro de la tolerancia
+    # default: debe advertir, no rechazar, sin pasar `tolerancia_pct`.
+    histograma = {(2026, 9): 199, (2026, 8): 1}
+
+    veredicto = ventas.evaluar_periodo_declarado(histograma, date(2026, 9, 1), date(2026, 9, 30))
+
+    assert veredicto.tipo == periodo.TipoVeredictoPeriodo.ADVERTENCIA
+
+
+async def test_aplicar_con_periodo_no_ejecuta_nada_cuando_el_veredicto_es_rechazo():
+    # Regresión del bug histórico REAL (design ADR-9 / edge case E1):
+    # declarado 2026-09, TODAS las filas caen en 2026-08 -- rechazo de
+    # archivo completo, CERO sentencias ejecutadas contra `venta_mensual`
+    # (por lo tanto cero filas de staging aplicadas y cualquier agosto ya
+    # correcto queda byte-por-byte intacto, porque nada lo toca).
+    filas = [
+        _fila_staging(SUCURSAL_ID, REFERENCIA_ID, 2026, 8, "MOSTRADOR", 10, fila=n)
+        for n in range(1, 6)
+    ]
+    session = FakeAsyncSession(execute_queue=[])
+
+    veredicto = await ventas.aplicar_con_periodo(
+        session, filas, date(2026, 9, 1), date(2026, 9, 30), CARGA_ID, tolerancia_pct=0.5
+    )
+
+    assert veredicto.tipo == periodo.TipoVeredictoPeriodo.RECHAZO
+    assert veredicto.codigo_error == periodo.CODIGO_PERIODO_NO_COINCIDE
+    assert session.executed_statements == []
+
+
+async def test_aplicar_con_periodo_aplica_cuando_el_veredicto_no_es_rechazo():
+    filas = [_fila_staging(SUCURSAL_ID, REFERENCIA_ID, 2026, 9, "MOSTRADOR", 10)]
+    session = FakeAsyncSession(execute_queue=[[]])
+
+    veredicto = await ventas.aplicar_con_periodo(
+        session, filas, date(2026, 9, 1), date(2026, 9, 30), CARGA_ID, tolerancia_pct=0.5
+    )
+
+    assert veredicto.tipo == periodo.TipoVeredictoPeriodo.ACEPTADO
+    assert len(session.executed_statements) == 1
+
+
+async def test_aplicar_con_periodo_excluye_filas_fuera_de_periodo_en_advertencia():
+    # Design ADR-9 regla 2, verbatim: "those rows are rejected individually
+    # to carga_error ... so they never reach venta_mensual; the rest
+    # applies". Declarado septiembre, 199 filas de septiembre + 1 fila
+    # adyacente de agosto (0.5% <= tolerancia) -- ADVERTENCIA, pero la fila
+    # de agosto NO debe entrar al upsert: si entrara, el REPLACE-not-sum de
+    # ADR-4 sobrescribiría un agosto ya correcto con solo esa unidad suelta.
+    filas = [
+        _fila_staging(SUCURSAL_ID, REFERENCIA_ID, 2026, 9, "MOSTRADOR", 5, fila=1),
+        _fila_staging(SUCURSAL_ID, REFERENCIA_ID, 2026, 8, "MOSTRADOR", 999, fila=2),
+    ]
+    session = FakeAsyncSession(execute_queue=[[]])
+
+    veredicto = await ventas.aplicar_con_periodo(
+        session, filas, date(2026, 9, 1), date(2026, 9, 30), CARGA_ID, tolerancia_pct=50.0
+    )
+
+    assert veredicto.tipo == periodo.TipoVeredictoPeriodo.ADVERTENCIA
+    assert len(session.executed_statements) == 1
+    valores_aplicados = session.executed_statements[0].compile().construct_params()
+    assert Decimal("5") in valores_aplicados.values()
+    assert Decimal("999") not in valores_aplicados.values()
+
+
+async def test_5_4_regresion_bug_historico_mes_shifteado_deja_agosto_previo_intacto():
+    """5.4 — regresión del bug histórico REAL (design ADR-9, edge case E1):
+    el workbook legado tenía etiquetas de mes corridas una columna contra
+    las fechas reales. Reproducido acá: una carga de agosto correcta se
+    aplica primero; una carga NUEVA declarada septiembre, pero cuyas filas
+    son en realidad de agosto, debe rechazarse ENTERA (`E-CARGA-040`) sin
+    ejecutar ni una sola sentencia contra `venta_mensual` -- así que el
+    agosto ya aplicado por la primera carga queda byte-por-byte intacto,
+    nunca sobreescrito por la segunda."""
+    carga_agosto_id = uuid.uuid4()
+    carga_septiembre_mal_etiquetada_id = uuid.uuid4()
+
+    filas_agosto_correctas = [
+        _fila_staging(SUCURSAL_ID, REFERENCIA_ID, 2026, 8, "MOSTRADOR", 100, fila=n)
+        for n in range(1, 4)
+    ]
+    filas_septiembre_mal_etiquetadas = [
+        # Declaradas como septiembre por el usuario, pero TODAS las fechas
+        # reales de estas filas caen en agosto -- el mismo defecto que
+        # produjo el bug real.
+        _fila_staging(SUCURSAL_ID, REFERENCIA_ID, 2026, 8, "MOSTRADOR", 999, fila=n)
+        for n in range(1, 4)
+    ]
+
+    session = FakeAsyncSession(execute_queue=[[]])  # UNA sola respuesta esperada: la de agosto.
+
+    veredicto_agosto = await ventas.aplicar_con_periodo(
+        session,
+        filas_agosto_correctas,
+        date(2026, 8, 1),
+        date(2026, 8, 31),
+        carga_agosto_id,
+        tolerancia_pct=0.5,
+    )
+    assert veredicto_agosto.tipo == periodo.TipoVeredictoPeriodo.ACEPTADO
+    assert len(session.executed_statements) == 1
+    statement_agosto = session.executed_statements[0]
+
+    veredicto_septiembre = await ventas.aplicar_con_periodo(
+        session,
+        filas_septiembre_mal_etiquetadas,
+        date(2026, 9, 1),
+        date(2026, 9, 30),
+        carga_septiembre_mal_etiquetada_id,
+        tolerancia_pct=0.5,
+    )
+
+    assert veredicto_septiembre.tipo == periodo.TipoVeredictoPeriodo.RECHAZO
+    assert veredicto_septiembre.codigo_error == periodo.CODIGO_PERIODO_NO_COINCIDE
+    # Cero sentencias NUEVAS -- la única que existe sigue siendo la de agosto.
+    assert session.executed_statements == [statement_agosto]

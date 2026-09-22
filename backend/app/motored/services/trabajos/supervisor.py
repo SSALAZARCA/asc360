@@ -14,6 +14,12 @@ real (VENTAS, INVENTARIO, etc.) tiene todavía un handler registrado en
 `jobs.JOB_HANDLERS` -- el claim/dispatch/sweep de acá son genéricos y no
 cambian cuando la Fase 3+ registre transforms reales.
 
+Fase 5 "ADR-9 Period Module" (PR5) agrega UN predicado al SELECT de
+candidato de `claim_next_pendiente` (ver su propio docstring): una fila
+cuyo `tipo` no fue resuelto todavía, o cuyo `tipo` declara período (ADR-9)
+y todavía no tiene `periodo_desde`, sencillamente no es candidata -- sigue
+`PENDIENTE` sin ser tocada, ningún estado ni tabla nueva.
+
 Estado (ADR-1b): `PENDIENTE -> PROCESANDO -> VALIDADO | CON_ERRORES`;
 `VALIDADO ->(usuario) APLICANDO -> APLICADO`; cualquiera `-> ANULADO`.
 `latido_en` se escribe en la MISMA transacción que cualquier commit de
@@ -32,12 +38,13 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Tuple
 
-from sqlalchemy import select, update
+from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.motored.database import motored_session_maker
 from app.motored.models.carga_archivo import CargaArchivo
+from app.motored.services.ingesta.periodo import TIPOS_QUE_DECLARAN_PERIODO
 from app.motored.services.trabajos import jobs
 
 logger = logging.getLogger("motored.trabajos.supervisor")
@@ -163,14 +170,31 @@ async def _claim_by_id(
 async def claim_next_pendiente(
     session: AsyncSession, now: Optional[datetime] = None
 ) -> Optional[Tuple[uuid.UUID, str]]:
-    """Busca la fila `PENDIENTE` más antigua y la reclama atómicamente.
-    Devuelve `(carga_id, tipo)` si se reclamó algo, o `None` si no había
-    nada `PENDIENTE` o el candidato fue reclamado por otro proceso primero
-    entre el SELECT y el UPDATE."""
+    """Busca la fila `PENDIENTE` más antigua QUE YA PUEDE ser reclamada y la
+    reclama atómicamente. Devuelve `(carga_id, tipo)` si se reclamó algo, o
+    `None` si no había ningún candidato elegible o el candidato fue
+    reclamado por otro proceso primero entre el SELECT y el UPDATE.
+
+    ADR-9 (design "Gating: how a load waits for its period — no new
+    state"): un candidato solo es elegible si su `tipo` ya fue resuelto
+    (server-side, por firma de encabezado o por override del usuario vía
+    `PATCH`) Y, si ese `tipo` es de los que DECLARAN período
+    (`TIPOS_QUE_DECLARAN_PERIODO` -- VENTAS/INVENTARIO/BACKORDER/
+    DEMANDA_PERDIDA), `periodo_desde` ya está presente. Ningún estado,
+    tabla ni mecanismo nuevo: la fila simplemente sigue `PENDIENTE` --
+    "not claimable" -- hasta que el usuario la completa con `PATCH
+    /cargas/{id}` (Fase 9)."""
     now = now or _now_utc()
     candidate = await session.execute(
         select(CargaArchivo.id, CargaArchivo.tipo)
-        .where(CargaArchivo.estado == "PENDIENTE")
+        .where(
+            CargaArchivo.estado == "PENDIENTE",
+            CargaArchivo.tipo.isnot(None),
+            or_(
+                CargaArchivo.tipo.notin_(TIPOS_QUE_DECLARAN_PERIODO),
+                CargaArchivo.periodo_desde.isnot(None),
+            ),
+        )
         .order_by(CargaArchivo.created_at)
         .limit(1)
     )
