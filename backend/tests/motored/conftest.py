@@ -4,6 +4,17 @@ Phase 3 "Models/Schemas/Services" — shared test plumbing
 layer helpers at the bottom (`motored_client`, `override_motored_db`,
 `override_motored_user`).
 
+Fase 2 "Ingesta", Phase 2 "JobRunner + Supervisor" adds an autouse fixture
+(`_reset_motored_supervisor`, bottom of file): `deps.require_motored_ready`
+now calls `supervisor.ensure_started()` on every Motored request, so ANY
+test in this suite that exercises that dependency (e.g.
+`test_availability.py`'s `MOTORED_ENABLED=True` cases) can start the
+real in-process poll loop. Without a suite-wide cleanup, that task would
+leak into the next test's event loop teardown ("Task was destroyed but it
+is pending!") regardless of which test file triggered it -- this fixture
+protects the whole `tests/motored/` suite, not just the supervisor's own
+tests.
+
 Mirrors the project's established fake-session convention
 (`tests/imports/conftest.py`'s `FakeAsyncSession`/`_ExecuteResult`): no live
 database anywhere in this suite, matching `tests/conftest.py`'s own stated
@@ -151,6 +162,17 @@ def override_motored_db(session: "FakeAsyncSession") -> None:
     so overriding this one leaf makes every layer above it (readiness probe,
     user lookup, business queries) transparently use `session`."""
     app.dependency_overrides[get_motored_db] = lambda: session
+
+
+@pytest.fixture(autouse=True)
+async def _reset_motored_supervisor():
+    """Suite-wide safety net (Fase 2 "Ingesta", ADR-1): whatever a test
+    did, never leave the supervisor's poll-loop task running into the
+    next test's event loop."""
+    yield
+    from app.motored.services.trabajos import supervisor
+
+    await supervisor.reset_for_tests()
 
 
 def override_motored_user(user) -> None:

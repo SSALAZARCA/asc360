@@ -32,6 +32,7 @@ from app.config import settings
 from app.motored.auth import decode_motored_token, motored_secret_is_safe
 from app.motored.database import get_motored_db
 from app.motored.services.auth import MotoredUser, MotoredUserLookup, crear_lookup_real
+from app.motored.services.trabajos import supervisor
 
 MOTORED_UNAVAILABLE_DETAIL = {"code": "MOTORED_UNAVAILABLE"}
 MOTORED_DB_UNAVAILABLE_DETAIL = {"code": "MOTORED_DB_UNAVAILABLE"}
@@ -119,9 +120,15 @@ async def require_motored_ready() -> None:
     """Dependencia de disponibilidad (ADR-4): 503 MOTORED_UNAVAILABLE si el
     módulo está apagado (`MOTORED_ENABLED=false`) o si el guard fail-closed
     de secreto (ADR-1) no se cumple. Se usa en cada endpoint de Motored
-    antes de tocar la base de datos."""
+    antes de tocar la base de datos.
+
+    También es el seam de arranque perezoso del supervisor de Fase 2
+    "Ingesta" (sdd/motored-pedidos-ingesta, ADR-1): `ensure_started()` es
+    un chequeo O(1) después de la primera llamada, por eso `app/main.py`
+    no necesita ningún hook `lifespan` y queda byte-a-byte sin tocar."""
     if not settings.MOTORED_ENABLED or not motored_secret_is_safe():
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=MOTORED_UNAVAILABLE_DETAIL,
         )
+    supervisor.ensure_started()

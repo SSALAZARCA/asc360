@@ -49,6 +49,15 @@ class Settings(BaseSettings):
     MOTORED_MAX_UPLOAD_MB: int = 10
     MOTORED_MAX_UPLOAD_ROWS: int = 50000
 
+    # Motored Pedidos — Fase 2 "Ingesta" (sdd/motored-pedidos-ingesta,
+    # ADR-1/1b): tuning del supervisor asyncio en proceso. Todos opcionales
+    # con default seguro; ninguno tiene efecto mientras MOTORED_ENABLED sea
+    # false, porque el supervisor nunca arranca (ensure_started() es un
+    # no-op en ese caso).
+    MOTORED_INGESTA_POLL_SEGUNDOS: int = 5
+    MOTORED_INGESTA_TIMEOUT_MIN: int = 15
+    MOTORED_INGESTA_PAUSA_MS: int = 0
+
     @property
     def allowed_origins_list(self) -> list:
         return [o.strip() for o in self.ALLOWED_ORIGINS.split(",") if o.strip()]
