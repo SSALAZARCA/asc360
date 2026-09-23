@@ -2,61 +2,26 @@
 /**
  * frontend/app/motored/cargas/page.js
  *
- * Cargas screen (sdd/motored-pedidos-ingesta, Phase 10, task 10.1). Un
- * drop zone compartido + una historia compartida para los 8 `tipo` de
- * `carga_archivo` -- ver `UploadCargaModal.js`/`CargasHistoryTable.js`.
+ * Retired route (sdd/motored-cargas-tipo-declarado; design D5). The
+ * standalone "Cargas" screen was consolidated into `/motored/maestros`
+ * (6 new movement tabs, `MovimientoTab.js`) -- the sidebar entry that
+ * pointed here is gone (`MotoredSidebar.js`), but a bookmark/deep link to
+ * this URL must NOT 404 silently (spec "A bookmark / deep link to
+ * `/motored/cargas` must not 404 silently"). This page now does nothing
+ * but redirect, client-side, to the consolidated screen.
  *
- * "Subir carga" queda oculto para `SUCURSAL`/`CONSULTA` (RBAC de UI, la
- * garantía real vive server-side en `require_roles("ADMIN","COMPRAS")` --
- * mismo criterio que `/motored/usuarios` restringe su botón "Crear"): la
- * spec exige que el servidor rechace, no que el botón desaparezca, pero
- * mostrar un botón que siempre falla es una mala experiencia para esos 2
- * roles de solo lectura.
+ * `app/motored/cargas/[id]/page.js` (the generic detail view, `tipo`-
+ * agnostic) is explicitly OUT of this change's scope and stays untouched.
  */
-import { useState, useEffect, useCallback } from 'react';
-import MotoredLayout from '../motored-layout';
-import UploadCargaModal from '../../../components/motored/cargas/UploadCargaModal';
-import CargasHistoryTable from '../../../components/motored/cargas/CargasHistoryTable';
-import { getRolActual } from '../../../lib/motored/motoredFetch';
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 
-export default function CargasPage() {
-  const [showUpload, setShowUpload] = useState(false);
-  const [refreshKey, setRefreshKey] = useState(0);
-  const [puedeSubir, setPuedeSubir] = useState(false);
+export default function CargasPageRedirect() {
+  const router = useRouter();
 
   useEffect(() => {
-    const rol = getRolActual();
-    setPuedeSubir(rol === 'ADMIN' || rol === 'COMPRAS');
-  }, []);
+    router.replace('/motored/maestros');
+  }, [router]);
 
-  const handleUploaded = useCallback(() => {
-    setRefreshKey((k) => k + 1);
-  }, []);
-
-  return (
-    <MotoredLayout>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <h1 className="motored-h-pantalla">Cargas</h1>
-            <p style={{ margin: '0.35rem 0 0', fontSize: '0.8rem', color: 'var(--motored-text-muted, #5a5a5a)' }}>
-              Ventas, inventario, backorder, facturas, ingresos, demanda perdida y maestros — todo
-              entra por un mismo lugar.
-            </p>
-          </div>
-          {puedeSubir && (
-            <button type="button" className="motored-btn motored-btn-primary" onClick={() => setShowUpload(true)}>
-              Subir carga
-            </button>
-          )}
-        </div>
-
-        <CargasHistoryTable refreshKey={refreshKey} />
-      </div>
-
-      {showUpload && (
-        <UploadCargaModal onClose={() => setShowUpload(false)} onUploaded={handleUploaded} />
-      )}
-    </MotoredLayout>
-  );
+  return null;
 }

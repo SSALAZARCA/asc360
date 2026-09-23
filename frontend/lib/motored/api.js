@@ -161,9 +161,11 @@ export async function getParametroVigente(clave) {
 }
 
 // ---------------------------------------------------------------------------
-// Cargas -- Fase 2 "Ingesta" (sdd/motored-pedidos-ingesta). UN solo drop
-// zone y UNA sola historia para los 8 `tipo` de `carga_archivo` (spec
-// "Shared drop zone and history for all carga types") -- ver
+// Cargas -- Fase 2 "Ingesta" (sdd/motored-pedidos-ingesta), narrowed by
+// Fase 3 "Cargas: Tipo Declarado" (sdd/motored-cargas-tipo-declarado):
+// `tipo` es DECLARADO por la pestaña que sube el archivo, nunca inferido --
+// UNA sola historia compartida sigue existiendo para los 6 tipos de
+// movimiento (más filas históricas de `MAESTRO_*`/`NULL`) -- ver
 // `backend/app/motored/api/cargas.py` para el contrato real, NO
 // `api/carga.py` (singular, Fase 1's masters endpoint, sin relación).
 // ---------------------------------------------------------------------------
@@ -178,27 +180,20 @@ export async function listarCargas(filtros = {}) {
 }
 
 /**
- * `POST /cargas` -- multipart. `periodoDesde`/`periodoHasta` son OPCIONALES
- * (ADR-9): el usuario puede declarar el período ya al subir el archivo, sin
- * saber todavía el `tipo` (lo detecta el servidor por firma de encabezado).
- * Devuelve `{ carga_id, tipo_detectado, requiere_tipo, requiere_periodo,
- * duplicado_de }` -- `202`, nunca bloquea.
+ * `POST /cargas` -- multipart. `tipo` es OBLIGATORIO (design D1): la
+ * pestaña que llama a esto ya sabe qué está subiendo, nunca se detecta
+ * server-side. `periodoDesde`/`periodoHasta` son OPCIONALES (ADR-9), y el
+ * caller (`UploadMovimientoModal`) solo los pide cuando `tipoDeclaraPeriodo
+ * (tipo)` es `true`. Devuelve `{ carga_id, duplicado_de }` -- `202`, nunca
+ * bloquea.
  */
-export async function subirCargaMovimiento(file, { periodoDesde, periodoHasta } = {}) {
+export async function subirCargaMovimiento(file, tipo, { periodoDesde, periodoHasta } = {}) {
   const formData = new FormData();
   formData.append('file', file);
+  formData.append('tipo', tipo);
   if (periodoDesde) formData.append('periodo_desde', periodoDesde);
   if (periodoHasta) formData.append('periodo_hasta', periodoHasta);
   return motoredFetchJson('/cargas', { method: 'POST', body: formData });
-}
-
-/** `PATCH /cargas/{id}` -- completa `tipo`/período (ADR-9 gating) mientras
- * `estado === 'PENDIENTE'`; `409` en cualquier otro estado. */
-export async function completarCarga(cargaId, payload) {
-  return motoredFetchJson(`/cargas/${cargaId}`, {
-    method: 'PATCH',
-    body: JSON.stringify(payload),
-  });
 }
 
 /** `GET /cargas/{id}` -- superficie de polling (estado, filas_leidas,

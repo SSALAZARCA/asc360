@@ -20,15 +20,20 @@
  * active item marked with a solid red LEFT BORDER + light pink background +
  * red text -- not a filled block, which is what this component originally
  * (incorrectly) used.
+ *
+ * The standalone "Cargas" entry was REMOVED (sdd/motored-cargas-tipo-
+ * declarado; proposal decision #2: "ONE screen" / design D5): uploading is
+ * now one of the 10 grouped tabs inside "Maestros" (`MovimientoTab.js`),
+ * not a separate menu item. `/motored/cargas` itself still resolves (it
+ * redirects), so an old bookmark keeps working even without a nav entry.
  */
 import { useRouter, usePathname } from 'next/navigation';
 import Image from 'next/image';
-import { LogOut, Warehouse, Users, Upload } from 'lucide-react';
+import { LogOut, Warehouse, Users } from 'lucide-react';
 import { MOTORED_TOKEN_KEY, MOTORED_USER_KEY } from '../../lib/motored/motoredFetch';
 
 const ALL_ITEMS = [
   { id: 'maestros', name: 'Maestros', icon: Warehouse, path: '/motored/maestros' },
-  { id: 'cargas', name: 'Cargas', icon: Upload, path: '/motored/cargas' },
   { id: 'usuarios', name: 'Usuarios', icon: Users, path: '/motored/usuarios', adminOnly: true },
 ];
 

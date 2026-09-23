@@ -1,17 +1,19 @@
 /**
  * frontend/components/motored/cargas/tiposCarga.js
  *
- * Fuente única de los 8 `tipo` de `carga_archivo` (sdd/motored-pedidos-
- * ingesta, spec "Shared drop zone and history for all carga types"; design
- * ADR-9 tabla "¿Declara período?"). `declaraPeriodo` refleja exactamente
- * `TIPOS_QUE_DECLARAN_PERIODO` en `backend/app/motored/services/ingesta/
- * periodo.py` -- si ese set cambia en el backend, esta lista debe seguirlo.
+ * Fuente única de los 6 tipos de MOVIMIENTO de `carga_archivo`
+ * (sdd/motored-cargas-tipo-declarado; design ADR-9 tabla "¿Declara
+ * período?"). `declaraPeriodo` refleja exactamente `TIPOS_QUE_DECLARAN_
+ * PERIODO` en `backend/app/motored/services/ingesta/periodo.py` -- si ese
+ * set cambia en el backend, esta lista debe seguirlo.
  *
- * `MAESTRO_REFERENCIAS`/`MAESTRO_BODEGAS` están acá porque comparten el
- * mismo drop zone e historia (ADR-5), aunque corran síncrono y nunca
- * declaren período -- y porque `deteccion.py` los excluye a propósito de la
- * detección automática (firma "demasiado genérica"), así que SIEMPRE
- * requieren selección manual de tipo vía `PATCH`.
+ * `MAESTRO_REFERENCIAS`/`MAESTRO_BODEGAS` fueron REMOVIDOS de acá (design
+ * D1/proposal decisión #3): ya no son alcanzables desde `POST /cargas` --
+ * Bodegas/Referencias siguen viviendo, sin cambios, en su propia pestaña de
+ * Maestros (`BulkUploadModal`). `labelTipo` conserva su fallback al valor
+ * crudo para que filas HISTÓRICAS con esos dos valores (o `NULL`) sigan
+ * mostrando algo legible en la grilla compartida (spec "Historical rows
+ * with legacy or missing tipo remain servable").
  */
 export const TIPOS_CARGA = [
   { value: 'VENTAS', label: 'Ventas', declaraPeriodo: true, periodoLabel: 'mes' },
@@ -20,8 +22,6 @@ export const TIPOS_CARGA = [
   { value: 'DEMANDA_PERDIDA', label: 'Demanda perdida', declaraPeriodo: true, periodoLabel: 'fecha' },
   { value: 'FACTURAS_PEDIDOS', label: 'Facturas de pedidos', declaraPeriodo: false },
   { value: 'INGRESOS_FACTURAS', label: 'Ingresos de facturas', declaraPeriodo: false },
-  { value: 'MAESTRO_REFERENCIAS', label: 'Maestro de referencias', declaraPeriodo: false },
-  { value: 'MAESTRO_BODEGAS', label: 'Maestro de bodegas', declaraPeriodo: false },
 ];
 
 export const ESTADOS_CARGA = [
