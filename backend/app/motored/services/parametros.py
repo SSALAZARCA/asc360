@@ -103,11 +103,12 @@ DEFAULT_TIPOS_INVENTARIO_INCLUIDOS: List[str] = ["0002 - REPUESTOS"]
 CLAVE_CREAR_REFERENCIAS_DESCONOCIDAS = "crear_referencias_desconocidas"
 # Sin default explícito en la especificación fuente (verificado por
 # búsqueda directa: ninguna fila para esta clave en la tabla §6.10 ni en
-# ningún otro lugar de `ESPECIFICACION_MOTORED_PEDIDOS.md`). Se elige
-# `False` (no autocrear) como el más seguro: una referencia desconocida
-# cae a `carga_error` con una acción explícita "crear como OTROS" en vez de
-# un side-effect de escritura silencioso -- mismo criterio "off por
-# default" que `MOTORED_RETENCION_ENABLED=False` (design ADR-3).
+# ningún otro lugar de `ESPECIFICACION_MOTORED_PEDIDOS.md`). `False` (no
+# autocrear) CONFIRMADO por el owner (2026-09-22): una referencia
+# desconocida cae a `carga_error` con una acción explícita "crear como
+# OTROS" en vez de un side-effect de escritura silencioso -- mismo
+# criterio "off por default" que `MOTORED_RETENCION_ENABLED=False`
+# (design ADR-3).
 DEFAULT_CREAR_REFERENCIAS_DESCONOCIDAS: bool = False
 
 CLAVE_ESTADOS_BACKORDER_VIGENTES = "estados_backorder_vigentes"
