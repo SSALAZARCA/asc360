@@ -112,6 +112,34 @@ describe('UploadCargaModal — ADR-9 period gating', () => {
     }));
   });
 
+  it('shows period inputs when a detected type is overridden, via "Cambiar tipo", to one that declares período', async () => {
+    mockSubir.mockResolvedValue({
+      carga_id: 'c6', tipo_detectado: 'FACTURAS_PEDIDOS', requiere_tipo: false, requiere_periodo: true, duplicado_de: null,
+    });
+    mockCompletar.mockResolvedValue({ id: 'c6', estado: 'PENDIENTE' });
+
+    const { container } = render(<UploadCargaModal onClose={jest.fn()} onUploaded={jest.fn()} />);
+
+    selectFile(container, xlsxFile('confundido.xlsx'));
+    fireEvent.click(screen.getByText('Subir archivo'));
+    await waitFor(() => expect(screen.getByText(/Tipo detectado/i)).toBeInTheDocument());
+
+    fireEvent.click(screen.getByText('Cambiar tipo'));
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'VENTAS' } });
+
+    await waitFor(() => expect(screen.getByText(/Período declarado — desde/i)).toBeInTheDocument());
+
+    const dateInputs = container.querySelectorAll('input[type="date"]');
+    fireEvent.change(dateInputs[0], { target: { value: '2026-09-01' } });
+    fireEvent.click(screen.getByText('Guardar y continuar'));
+
+    await waitFor(() => expect(mockCompletar).toHaveBeenCalledWith('c6', {
+      tipo: 'VENTAS',
+      periodo_desde: '2026-09-01',
+      periodo_hasta: '2026-09-01',
+    }));
+  });
+
   it('shows the "un mes por archivo" notice when the declared range spans more than one month', async () => {
     mockSubir.mockResolvedValue({
       carga_id: 'c4', tipo_detectado: 'VENTAS', requiere_tipo: false, requiere_periodo: true, duplicado_de: null,

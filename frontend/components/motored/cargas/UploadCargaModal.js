@@ -149,7 +149,9 @@ function useCompletarCarga(subida, periodoYaDeclarado, onUploaded) {
   const [error, setError] = useState('');
   const [completo, setCompleto] = useState(false);
 
-  const tipoEfectivo = subida?.requiere_tipo ? tipoElegido : (subida?.tipo_detectado || '');
+  const tipoEfectivo = subida?.requiere_tipo
+    ? tipoElegido
+    : (cambiarTipo && tipoElegido) || subida?.tipo_detectado || '';
   const necesitaPeriodoAhora = !periodoYaDeclarado && tipoDeclaraPeriodo(tipoEfectivo);
 
   const handleCompletar = async () => {
