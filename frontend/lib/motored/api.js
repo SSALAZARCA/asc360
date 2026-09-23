@@ -159,3 +159,100 @@ export async function crearParametro(payload) {
 export async function getParametroVigente(clave) {
   return motoredFetchJson(`/parametros/${clave}/vigente`);
 }
+
+// ---------------------------------------------------------------------------
+// Cargas -- Fase 2 "Ingesta" (sdd/motored-pedidos-ingesta). UN solo drop
+// zone y UNA sola historia para los 8 `tipo` de `carga_archivo` (spec
+// "Shared drop zone and history for all carga types") -- ver
+// `backend/app/motored/api/cargas.py` para el contrato real, NO
+// `api/carga.py` (singular, Fase 1's masters endpoint, sin relación).
+// ---------------------------------------------------------------------------
+
+export async function listarCargas(filtros = {}) {
+  const params = new URLSearchParams();
+  ['tipo', 'estado', 'desde', 'hasta'].forEach((clave) => {
+    if (filtros[clave]) params.set(clave, filtros[clave]);
+  });
+  const qs = params.toString();
+  return motoredFetchJson(`/cargas${qs ? `?${qs}` : ''}`);
+}
+
+/**
+ * `POST /cargas` -- multipart. `periodoDesde`/`periodoHasta` son OPCIONALES
+ * (ADR-9): el usuario puede declarar el período ya al subir el archivo, sin
+ * saber todavía el `tipo` (lo detecta el servidor por firma de encabezado).
+ * Devuelve `{ carga_id, tipo_detectado, requiere_tipo, requiere_periodo,
+ * duplicado_de }` -- `202`, nunca bloquea.
+ */
+export async function subirCargaMovimiento(file, { periodoDesde, periodoHasta } = {}) {
+  const formData = new FormData();
+  formData.append('file', file);
+  if (periodoDesde) formData.append('periodo_desde', periodoDesde);
+  if (periodoHasta) formData.append('periodo_hasta', periodoHasta);
+  return motoredFetchJson('/cargas', { method: 'POST', body: formData });
+}
+
+/** `PATCH /cargas/{id}` -- completa `tipo`/período (ADR-9 gating) mientras
+ * `estado === 'PENDIENTE'`; `409` en cualquier otro estado. */
+export async function completarCarga(cargaId, payload) {
+  return motoredFetchJson(`/cargas/${cargaId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+/** `GET /cargas/{id}` -- superficie de polling (estado, filas_leidas,
+ * lotes_staged, latido_en). */
+export async function getCarga(cargaId) {
+  return motoredFetchJson(`/cargas/${cargaId}`);
+}
+
+export async function getInformeCarga(cargaId) {
+  return motoredFetchJson(`/cargas/${cargaId}/informe`);
+}
+
+export async function getErroresCarga(cargaId) {
+  return motoredFetchJson(`/cargas/${cargaId}/errores`);
+}
+
+export async function getPreviewCarga(cargaId, limite = 200) {
+  return motoredFetchJson(`/cargas/${cargaId}/preview?limite=${limite}`);
+}
+
+export async function resolverErroresCarga(cargaId, acciones) {
+  return motoredFetchJson(`/cargas/${cargaId}/resolver`, {
+    method: 'POST',
+    body: JSON.stringify({ acciones }),
+  });
+}
+
+export async function aplicarCarga(cargaId) {
+  return motoredFetchJson(`/cargas/${cargaId}/aplicar`, { method: 'POST' });
+}
+
+export async function anularCarga(cargaId) {
+  return motoredFetchJson(`/cargas/${cargaId}/anular`, { method: 'POST' });
+}
+
+/**
+ * `GET /cargas/{id}/errores.csv` -- NO es JSON, así que no usa
+ * `motoredFetchJson` (mismo criterio que `downloadTemplate` en
+ * `BulkUploadModal.js`, pero acá el archivo viene del servidor, no se arma
+ * en el browser, y necesita el header `Authorization` que `motoredFetch` ya
+ * agrega -- un `<a href>` plano no podría mandarlo).
+ */
+export async function descargarErroresCargaCsv(cargaId) {
+  const res = await motoredFetch(`/cargas/${cargaId}/errores.csv`);
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status}`);
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `errores_${cargaId}.csv`;
+  a.click();
+  // Revocar en el mismo tick puede cancelar la descarga en algunos
+  // navegadores si todavía no terminaron de leer el blob desde el <a>.
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}

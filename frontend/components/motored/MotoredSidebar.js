@@ -23,11 +23,12 @@
  */
 import { useRouter, usePathname } from 'next/navigation';
 import Image from 'next/image';
-import { LogOut, Warehouse, Users } from 'lucide-react';
+import { LogOut, Warehouse, Users, Upload } from 'lucide-react';
 import { MOTORED_TOKEN_KEY, MOTORED_USER_KEY } from '../../lib/motored/motoredFetch';
 
 const ALL_ITEMS = [
   { id: 'maestros', name: 'Maestros', icon: Warehouse, path: '/motored/maestros' },
+  { id: 'cargas', name: 'Cargas', icon: Upload, path: '/motored/cargas' },
   { id: 'usuarios', name: 'Usuarios', icon: Users, path: '/motored/usuarios', adminOnly: true },
 ];
 

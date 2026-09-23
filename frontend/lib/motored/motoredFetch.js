@@ -26,6 +26,24 @@ export const getMotoredApiUrl = () => {
   return httpsBase.replace(/\/api\/v1\/?$/, '/api/motored');
 };
 
+/**
+ * `role` del usuario Motored logueado, o `null` si no hay sesión o el JSON
+ * guardado es inválido (sdd/motored-pedidos-ingesta, Phase 10). Vivía
+ * copiado 3 veces (`cargas/page.js`, `ErroresTab.js`, `ResumenTab.js`,
+ * gga-driven fix) -- una sola fuente acá, mismo criterio "esta es la
+ * garantía real de sesión Motored" que ya justifica que `MOTORED_USER_KEY`
+ * viva en este módulo y no en `./api.js`.
+ */
+export function getRolActual() {
+  if (typeof window === 'undefined') return null;
+  try {
+    const stored = sessionStorage.getItem(MOTORED_USER_KEY);
+    return stored ? JSON.parse(stored).role : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function motoredFetch(path, options = {}) {
   const token = typeof window !== 'undefined' ? sessionStorage.getItem(MOTORED_TOKEN_KEY) : null;
 
