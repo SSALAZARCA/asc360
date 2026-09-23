@@ -17,7 +17,7 @@ carga[...]`), así que su posición relativa a `maestros` no importa.
 """
 from fastapi import APIRouter
 
-from app.motored.api import auth, carga, maestros, parametros, salud, usuarios
+from app.motored.api import auth, cargas, carga, maestros, parametros, salud, usuarios
 
 router = APIRouter()
 
@@ -27,3 +27,8 @@ router.include_router(maestros.router)
 router.include_router(carga.router)
 router.include_router(usuarios.router)
 router.include_router(parametros.router)
+# Fase 2 "Ingesta" (sdd/motored-pedidos-ingesta, task 9.4): `/cargas` es un
+# prefijo propio (`/api/motored/cargas`), sin superposición de path con
+# ninguno de los routers de arriba -- el orden relativo no importa acá,
+# a diferencia del caso `salud`/`maestros` documentado más arriba.
+router.include_router(cargas.router)

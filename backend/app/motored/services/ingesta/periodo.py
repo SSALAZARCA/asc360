@@ -59,6 +59,15 @@ CODIGO_PERIODO_FUTURO = "E-CARGA-042"
 CODIGO_FILA_FUERA_DE_PERIODO = "A-CARGA-043"
 CODIGO_PERIODO_SIN_DATOS = "A-CARGA-044"
 
+# Fase 9, task 9.6 (owner decision 2026-09-22): el chequeo "PARCIAL" de la
+# tabla ¿Declara?/Cross-check para BACKORDER -- advertir (nunca rechazar)
+# cuando una `Fecha Creación` es posterior al `fecha_corte` declarado (un
+# backorder no puede haberse creado después del corte). Vive acá junto al
+# resto de constantes de ADR-9 aunque quien la EMITE sea `backorder.py`
+# (`evaluar_corte_declarado`), mismo criterio que ya documenta este módulo
+# para E-CARGA-041/042.
+CODIGO_BACKORDER_CORTE_POSTERIOR = "A-CARGA-045"
+
 MesAnio = Tuple[int, int]
 
 

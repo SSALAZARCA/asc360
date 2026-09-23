@@ -290,3 +290,102 @@ async def test_una_recarga_del_mismo_fecha_corte_reemplaza_no_acumula():
 
     insert_values = session.executed_statements[0].compile().construct_params()
     assert Decimal("50") in insert_values.values()
+
+
+# ---------------------------------------------------------------------------
+# Fase 9, task 9.6 (owner decision 2026-09-22) — cross-check "PARCIAL" de
+# ADR-9: advertir (nunca rechazar) si alguna `Fecha Creación` es posterior
+# al `fecha_corte` declarado. `Fecha Creación` es OPCIONAL (no forma parte
+# de `COLUMNAS_ESPERADAS`): su ausencia nunca dispara el chequeo
+# "columna obligatoria faltante" del orquestador (Fase 9.4).
+# ---------------------------------------------------------------------------
+
+_MAPA_COLUMNAS_CON_FECHA_CREACION = dict(_MAPA_COLUMNAS, **{"Fecha Creación": 6})
+
+
+def _fila_con_fecha_creacion(fecha_creacion, **overrides):
+    base = _fila(**overrides)
+    return base + (fecha_creacion,)
+
+
+def test_fecha_creacion_se_captura_en_el_payload_cuando_la_columna_esta_presente():
+    fila_staging, errores = _procesar(
+        _fila_con_fecha_creacion(date(2026, 9, 10)),
+        mapa_columnas=_MAPA_COLUMNAS_CON_FECHA_CREACION,
+    )
+
+    assert errores == []
+    assert fila_staging.payload["fecha_creacion"] == "2026-09-10"
+
+
+def test_fecha_creacion_ausente_de_la_columna_no_rompe_el_procesamiento():
+    # `_MAPA_COLUMNAS` (sin "Fecha Creación") es el mapa REAL de un archivo
+    # que no trae esa columna opcional -- `procesar_fila` no debe romper ni
+    # exigirla.
+    fila_staging, errores = _procesar(_fila())
+
+    assert errores == []
+    assert "fecha_creacion" not in fila_staging.payload
+
+
+def test_fecha_creacion_no_interpretable_se_ignora_sin_error():
+    fila_staging, errores = _procesar(
+        _fila_con_fecha_creacion("no-es-una-fecha"),
+        mapa_columnas=_MAPA_COLUMNAS_CON_FECHA_CREACION,
+    )
+
+    assert errores == []
+    assert "fecha_creacion" not in fila_staging.payload
+
+
+def test_evaluar_corte_declarado_advierte_si_alguna_fecha_creacion_es_posterior_al_corte():
+    filas = [
+        CargaFilaStaging(
+            carga_id=CARGA_ID, fila=5, lote=1,
+            payload={"cantidad_pendiente": "10", "numero_pedido": "1",
+                     "fecha_creacion": "2026-09-20"},
+            sucursal_id=SUCURSAL_ID, referencia_id=REFERENCIA_ID,
+        ),
+        CargaFilaStaging(
+            carga_id=CARGA_ID, fila=6, lote=1,
+            payload={"cantidad_pendiente": "5", "numero_pedido": "2",
+                     "fecha_creacion": "2026-09-10"},
+            sucursal_id=SUCURSAL_ID, referencia_id=REFERENCIA_ID,
+        ),
+    ]
+
+    veredicto = backorder.evaluar_corte_declarado(filas, date(2026, 9, 15))
+
+    assert veredicto.advertencia is True
+    assert veredicto.filas_posteriores == (5,)
+
+
+def test_evaluar_corte_declarado_no_advierte_si_fechas_son_anteriores_o_iguales_al_corte():
+    filas = [
+        CargaFilaStaging(
+            carga_id=CARGA_ID, fila=1, lote=1,
+            payload={"cantidad_pendiente": "10", "numero_pedido": "1",
+                     "fecha_creacion": "2026-09-15"},
+            sucursal_id=SUCURSAL_ID, referencia_id=REFERENCIA_ID,
+        ),
+    ]
+
+    veredicto = backorder.evaluar_corte_declarado(filas, date(2026, 9, 15))
+
+    assert veredicto.advertencia is False
+    assert veredicto.filas_posteriores == ()
+
+
+def test_evaluar_corte_declarado_ignora_filas_sin_fecha_creacion_capturada():
+    filas = [
+        CargaFilaStaging(
+            carga_id=CARGA_ID, fila=1, lote=1,
+            payload={"cantidad_pendiente": "10", "numero_pedido": "1"},
+            sucursal_id=SUCURSAL_ID, referencia_id=REFERENCIA_ID,
+        ),
+    ]
+
+    veredicto = backorder.evaluar_corte_declarado(filas, date(2026, 9, 15))
+
+    assert veredicto.advertencia is False
+    assert veredicto.filas_posteriores == ()

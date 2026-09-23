@@ -111,3 +111,30 @@ def subir_archivo(
         raise SubidaArchivoError(f"No se pudo subir el archivo a MinIO: {exc}") from exc
 
     return ResultadoSubida(ruta_objeto=ruta, hash_sha256=hasher.hexdigest())
+
+
+class DescargaArchivoError(Exception):
+    """Envuelve cualquier `MinioException` (objeto inexistente, servidor
+    caído) que ocurra durante `descargar_archivo` -- mismo contrato que
+    `SubidaArchivoError`: el caller (Fase 9, `services/ingesta/
+    orquestador.py`) nunca recibe una excepción cruda del SDK de MinIO."""
+
+
+def descargar_archivo(ruta_objeto: str, client: Optional[Minio] = None) -> bytes:
+    """Contraparte de lectura de `subir_archivo` (Fase 9, task 9.4): trae de
+    vuelta el `.xlsx` ya subido para que el job de dry-run pueda parsearlo.
+    A diferencia de la subida (streameada por diseño para un archivo de
+    76 MB), acá SÍ se materializa el archivo completo en memoria -- es
+    exactamente lo que `services/ingesta/lector.py::leer_lotes` ya espera
+    recibir (`file_bytes: bytes`), y el propio lector es quien mantiene
+    acotado el uso de memoria fila a fila desde ese punto en adelante."""
+    cliente = client if client is not None else _build_client()
+    try:
+        respuesta = cliente.get_object(settings.MOTORED_MINIO_BUCKET, ruta_objeto)
+        try:
+            return respuesta.read()
+        finally:
+            respuesta.close()
+            respuesta.release_conn()
+    except MinioException as exc:
+        raise DescargaArchivoError(f"No se pudo descargar el archivo de MinIO: {exc}") from exc

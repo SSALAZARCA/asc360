@@ -48,19 +48,33 @@ caller como parámetro explícito (default `['BACKORDER']` vive en
 `parametro_metodologia`, resuelto por Fase 9), igual que VENTAS recibe
 `tipos_inventario_incluidos` -- ver `ventas.py`, sección "Deviations".
 
+Fase 2 "Ingesta", Phase 9 "Adapter + API" (PR9), task 9.6 (owner decision
+2026-09-22) agrega el chequeo "PARCIAL" de cross-check de ADR-9: advertir
+(nunca rechazar el archivo) si alguna `Fecha Creación` es posterior al
+`fecha_corte` declarado -- un backorder no puede haberse creado después del
+corte. `Fecha Creación` es OPCIONAL (`COLUMNAS_OPCIONALES`, deliberadamente
+AFUERA de `COLUMNAS_ESPERADAS`): su ausencia nunca dispara el chequeo
+"columna obligatoria faltante" (Fase 9.4, orquestador) -- este cross-check
+es "Partial" precisamente porque el archivo real puede o no traerla,
+distinto de INVENTARIO/DEMANDA_PERDIDA (que no la tienen en absoluto, sin
+declarar "Partial" en la tabla ¿Declara?/Cross-check del diseño).
+`procesar_fila` la captura en el payload SOLO si está presente y es
+interpretable como fecha -- nunca genera `carga_error` por su ausencia o
+por un valor no interpretable, coherente con que sea un chequeo
+informativo, no bloqueante. `evaluar_corte_declarado` es la función pura
+que decide la advertencia sobre filas YA staged de una carga completa --
+el caller real (Fase 9.4, `services/ingesta/orquestador.py`) es quien
+conoce `carga_archivo.log` y decide cómo surfacear la advertencia en el
+informe (declarado vs. detectado), nunca este módulo.
+
 Deliberadamente FUERA de alcance de esta fase (ver tasks.md Fase 9):
-- Wiring a `JobRunner`/supervisor y a la API — Fase 9.
-- El chequeo "PARCIAL" de cross-check de ADR-9 para BACKORDER (advertir si
-  alguna `Fecha Creación` es posterior al `fecha_corte` declarado) — no es
-  parte de la lista de tareas 7.1 de esta fase; solo INVENTARIO/DEMANDA_
-  PERDIDA/BACKORDER declaran período de forma "dura" (un solo valor
-  recibido como parámetro), el cross-check parcial de ADR-9 queda para
-  cuando Fase 9 tenga el `carga_archivo.log` real donde registrarlo.
+- Wiring a `JobRunner`/supervisor y a la API — Fase 9.4.
 - Persistencia de `sucursal_alias` al resolver un error en la UI — Fase 9.
 """
 from __future__ import annotations
 
 import uuid
+from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal, InvalidOperation
 from typing import Any, Dict, List, Optional, Sequence, Tuple
@@ -89,6 +103,10 @@ COLUMNAS_ESPERADAS: Tuple[str, ...] = (
     "Referencia Parte",
     "Cantidad Pendiente",
 )
+
+# Task 9.6: OPCIONAL -- nunca forma parte del chequeo de columna obligatoria
+# faltante (ver docstring del módulo).
+COLUMNAS_OPCIONALES: Tuple[str, ...] = ("Fecha Creación",)
 
 CODIGO_CANTIDAD_PENDIENTE_INVALIDA = "CANTIDAD_PENDIENTE_INVALIDA"
 
@@ -180,6 +198,24 @@ def _resolver_claves(
     return sucursal_id, referencia_id, errores
 
 
+def _resolver_fecha_creacion_opcional(
+    fila_raw: Sequence[Any], mapa_columnas: Dict[str, int]
+) -> Optional[date]:
+    """`Fecha Creación` (task 9.6, `COLUMNAS_OPCIONALES`) -- NUNCA genera
+    `carga_error`: ausente (columna no mapeada) o no interpretable colapsan
+    al mismo `None`, que `procesar_fila` simplemente omite del payload. Mismo
+    criterio de conversión que `ventas._resolver_anio_mes` para una celda ya
+    tipada por openpyxl (`data_only=True`), sin el chequeo de plausibilidad
+    2015-2100 -- esto es un cross-check informativo, no una validación de
+    fila que pueda rechazarla."""
+    valor = _extraer(fila_raw, mapa_columnas, "Fecha Creación")
+    if isinstance(valor, date):
+        return valor
+    if hasattr(valor, "date"):
+        return valor.date()
+    return None
+
+
 def procesar_fila(
     fila_raw: Sequence[Any],
     *,
@@ -213,6 +249,9 @@ def procesar_fila(
     )
 
     payload = {"cantidad_pendiente": str(cantidad_pendiente), "numero_pedido": numero_pedido}
+    fecha_creacion = _resolver_fecha_creacion_opcional(fila_raw, mapa_columnas)
+    if fecha_creacion is not None:
+        payload["fecha_creacion"] = fecha_creacion.isoformat()
     fila_staging = CargaFilaStaging(
         carga_id=carga_id,
         fila=numero_fila,
@@ -301,3 +340,37 @@ async def aplicar(
     stmt = construir_statement_upsert(consolidado, fecha_corte, carga_id)
     if stmt is not None:
         await session.execute(stmt)
+
+
+@dataclass(frozen=True)
+class VeredictoCorteBackorder:
+    """Resultado puro de `evaluar_corte_declarado` (task 9.6). `advertencia`
+    nunca bloquea el archivo -- ADR-9 lo describe explícitamente como
+    "Partial", no "Required": el caller (orquestador, Fase 9.4) lo agrega al
+    `log` del informe, nunca cambia `estado`."""
+
+    advertencia: bool
+    filas_posteriores: Tuple[int, ...] = field(default_factory=tuple)
+
+
+def evaluar_corte_declarado(
+    filas_staging: Sequence[CargaFilaStaging], fecha_corte: date
+) -> VeredictoCorteBackorder:
+    """Task 9.6 (owner decision 2026-09-22): ADR-9's tabla ¿Declara?/
+    Cross-check para BACKORDER -- "Partial: warn if any Fecha Creación >
+    declared corte (a backorder cannot be created after the cut)". Corre
+    sobre filas YA staged de una carga completa (el caller, `services/
+    ingesta/orquestador.py`, las consulta una única vez al final del
+    dry-run) -- puro, sin acceso a DB ni al archivo, mismo criterio que
+    `periodo.evaluar_periodo`. Una fila sin `fecha_creacion` capturada
+    (columna ausente o no interpretable) se IGNORA -- nunca cuenta como
+    'posterior', coherente con que la columna sea opcional."""
+    filas_posteriores = tuple(
+        fila.fila
+        for fila in filas_staging
+        if fila.payload.get("fecha_creacion")
+        and date.fromisoformat(fila.payload["fecha_creacion"]) > fecha_corte
+    )
+    return VeredictoCorteBackorder(
+        advertencia=bool(filas_posteriores), filas_posteriores=filas_posteriores
+    )

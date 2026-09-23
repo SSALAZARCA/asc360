@@ -62,12 +62,30 @@ class FakeAsyncSession:
     lists: each `await db.execute(stmt)` call pops the next queued list of
     rows, in the exact order the service under test issues its queries."""
 
-    def __init__(self, execute_queue: Optional[List[list]] = None):
+    def __init__(self, execute_queue: Optional[List[list]] = None, get_queue: Optional[list] = None):
         self._execute_queue = list(execute_queue or [])
+        self._get_queue = list(get_queue) if get_queue is not None else None
         self.added: List[Any] = []
         self.committed = False
         self.rolled_back = False
         self.executed_statements: List[Any] = []
+
+    async def get(self, model, ident):
+        """Stand-in for `session.get(Model, id)` -- used by the crash-safety
+        re-fetch pattern in `orquestador.py` (`ejecutar_dry_run`/`ejecutar_
+        maestro`) after a `rollback()`. `get_queue` is a plain list (one
+        item per call, not a list-of-lists like `execute_queue`, since
+        `session.get` returns a single row/`None`, never a result set).
+        Defaults to `None` (nothing configured) so a test that never
+        exercises this path doesn't need to know about it."""
+        if self._get_queue is None:
+            return None
+        if not self._get_queue:
+            raise AssertionError(
+                "FakeAsyncSession.get() called more times than expected "
+                "— update the test's get_queue."
+            )
+        return self._get_queue.pop(0)
 
     async def execute(self, stmt):
         self.executed_statements.append(stmt)
