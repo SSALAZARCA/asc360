@@ -1,12 +1,20 @@
 """
 Motored Pedidos — Fase 2 "Ingesta", Phase 9 "Adapter + API" (PR9), tasks
 9.3/9.4/9.5/9.6 (sdd/motored-pedidos-ingesta; design ADR-5/ADR-9, §API).
+Narrowed by Fase 3 "Cargas: Tipo Declarado" (sdd/motored-cargas-tipo-
+declarado; design D1): `tipo` es ahora DECLARADO por el caller en `POST
+/cargas`, nunca inferido -- ver docstring de `subir_carga` y `_despachar_
+si_completa` para el detalle de qué cambió.
 
-`/api/motored/cargas` -- el surface NUEVO de Fase 2 para los 8 `tipo` de
-`carga_archivo` (spec "Shared drop zone and history for all carga types").
-**CREATE, no MODIFY** de `api/carga.py` (singular, Fase 1's masters
-endpoint) -- confirmado por `sdd/motored-pedidos-ingesta/design-addendum`
-(Correction 1): ese archivo queda byte-a-byte sin tocar (ADR-5).
+`/api/motored/cargas` -- el surface de Fase 2 para los 6 `tipo` de
+movimiento de `carga_archivo` (spec "Per-type upload surface with shared
+carga_archivo history"). `MAESTRO_REFERENCIAS`/`MAESTRO_BODEGAS` NO son
+alcanzables acá desde este cambio -- ver `orquestador.TIPOS_MAESTRO`/
+`orquestador.ejecutar_maestro`, preservados sin modificar mas inalcanzables
+por constraint del owner (proposal, decisión #3). **CREATE, no MODIFY** de
+`api/carga.py` (singular, Fase 1's masters endpoint) -- confirmado por
+`sdd/motored-pedidos-ingesta/design-addendum` (Correction 1): ese archivo
+queda byte-a-byte sin tocar (ADR-5).
 
 RBAC (spec "RBAC on ingest endpoints"): `ADMIN`/`COMPRAS` únicamente para
 subir/completar tipo-período/resolver errores/aplicar/anular -- operaciones
@@ -48,7 +56,6 @@ una fila de otra sucursal a través de este endpoint.
 """
 from __future__ import annotations
 
-import asyncio
 import io
 import uuid
 from datetime import date
@@ -100,7 +107,6 @@ from app.motored.services.ingesta import orquestador
 from app.motored.services.ingesta import periodo as periodo_mod
 from app.motored.services.ingesta import resolucion as resolucion_mod
 from app.motored.services.trabajos.runner import JobRunner, SupervisorRunner
-from app.motored.services.trabajos.supervisor import POOL_INGESTA
 
 router = APIRouter(
     prefix="/cargas",
@@ -163,64 +169,60 @@ async def _carga_or_404(db: AsyncSession, carga_id: uuid.UUID) -> CargaArchivo:
     return carga
 
 
-def _requiere_tipo(tipo: Optional[str]) -> bool:
-    return tipo is None
-
-
 def _requiere_periodo(tipo: Optional[str], periodo_desde: Optional[date]) -> bool:
     return tipo in periodo_mod.TIPOS_QUE_DECLARAN_PERIODO and periodo_desde is None
 
 
-async def _despachar_si_completa(
-    db: AsyncSession, carga: CargaArchivo, file_bytes: Optional[bytes],
-    usuario_id: uuid.UUID, job_runner: JobRunner,
-) -> None:
-    """Único punto de decisión "¿ya se puede procesar esta carga?" -- usado
-    tanto por `POST` (recién subida) como por `PATCH` (tipo/período
-    completado después). `MAESTRO_*` corre síncrono (ADR-5); los 6 tipos de
-    movimiento se encolan vía `JobRunner` SOLO si el gate de ADR-9 ya está
-    satisfecho -- si no, la fila queda `PENDIENTE`, sin tocar.
+async def _despachar_si_completa(carga: CargaArchivo, job_runner: JobRunner) -> None:
+    """Único punto de decisión "¿ya se puede encolar esta carga?" -- usado
+    tanto por `POST` (recién subida) como por `PATCH` (período completado
+    después). `carga.tipo` es SIEMPRE uno de los 6 tipos de movimiento en
+    este flujo (ver el allow-list de `subir_carga` contra `orquestador.
+    TIPOS_MOVIMIENTO`) -- se encola vía `JobRunner` SOLO si el gate de
+    ADR-9 ya está satisfecho; si no, la fila queda `PENDIENTE`, sin tocar.
 
-    `storage.descargar_archivo` corre en `POOL_INGESTA` (gap encontrado por
-    review-resilience): es una llamada de red BLOQUEANTE al SDK de MinIO, y
-    este handler corre en el mismo event loop compartido por TODA la app
-    asc360 (no solo Motored) -- sin el executor, un MinIO lento congela cada
-    request de la aplicación completa mientras dura la descarga, mismo
-    criterio que `lector.leer_lotes` ya aplica para su propia lectura
-    bloqueante de `openpyxl`. `DescargaArchivoError` se traduce a `502`
-    (gap encontrado por gga): sin este catch, un MinIO caído en el camino
-    `PATCH` (`file_bytes is None`, siempre re-descarga) devolvía un 500
-    crudo -- mismo criterio que `subir_carga` ya aplica para `SubidaArchivoError`."""
-    if carga.tipo in orquestador.TIPOS_MAESTRO:
-        if file_bytes is None:
-            loop = asyncio.get_event_loop()
-            try:
-                file_bytes = await loop.run_in_executor(
-                    POOL_INGESTA, storage.descargar_archivo, carga.ruta_objeto
-                )
-            except storage.DescargaArchivoError as exc:
-                raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
-        await orquestador.ejecutar_maestro(db, carga, file_bytes, usuario_id)
-        return
-    if not _requiere_tipo(carga.tipo) and not _requiere_periodo(carga.tipo, carga.periodo_desde):
+    El branch `MAESTRO_*` que antes vivía acá -- despachando síncrono vía
+    `orquestador.ejecutar_maestro`, con su propia descarga desde MinIO -- es
+    ahora ESTRUCTURALMENTE INALCANZABLE (`sdd/motored-cargas-tipo-
+    declarado/proposal`, decisión #3): `MAESTRO_REFERENCIAS`/`MAESTRO_
+    BODEGAS` se rechazan en la puerta de `POST /cargas`, antes de que
+    exista una fila `carga_archivo`. `orquestador.TIPOS_MAESTRO`/
+    `orquestador.ejecutar_maestro` siguen en el repo, sin modificar, por
+    constraint del owner -- este es el pointer comment que ese constraint
+    pide dejar en el ahora-muerto call site."""
+    if not _requiere_periodo(carga.tipo, carga.periodo_desde):
         await job_runner.enqueue(carga.id, carga.tipo)
 
 
-def _detectar_tipo_o_400(file_bytes: bytes) -> Optional[str]:
-    """Detección por firma de encabezado (spec "Unrecognized headers force
-    manual selection") -- `None` es un resultado válido (el usuario
-    completa `tipo` después vía `PATCH`), nunca un error; solo un archivo
-    genuinamente ilegible por `openpyxl` es `400`."""
+def _verificar_tipo_o_400(tipo: str, file_bytes: bytes) -> None:
+    """Verificación por firma de encabezado contra el tipo DECLARADO (spec
+    "Declared type with content verification") -- reemplaza la vieja
+    `_detectar_tipo_o_400` (inferencia, spec previa "Unrecognized headers
+    force manual selection", ya no aplica: `tipo` nunca es `None` acá). Un
+    archivo genuinamente ilegible por `openpyxl` sigue siendo `400`; un
+    archivo legible que no verifica contra `tipo` también, con el detalle
+    estructurado que la spec exige ("names the declared type and the
+    specific missing expected columns")."""
     try:
         filas_muestra = deteccion_mod.extraer_filas_muestra(file_bytes)
     except lector_mod.LecturaMovimientoError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
-    return deteccion_mod.detectar_tipo(filas_muestra)
-
-
-def _subir_a_minio_o_502(carga_id: uuid.UUID, tipo_detectado: Optional[str], file_bytes: bytes):
     try:
-        return storage.subir_archivo(carga_id, tipo_detectado or "SIN_TIPO", io.BytesIO(file_bytes))
+        deteccion_mod.verificar_tipo(tipo, filas_muestra)
+    except deteccion_mod.TipoNoCoincideError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "tipo_declarado": exc.tipo_declarado,
+                "sin_coincidencia": exc.sin_coincidencia,
+                "columnas_faltantes": exc.columnas_faltantes,
+            },
+        )
+
+
+def _subir_a_minio_o_502(carga_id: uuid.UUID, tipo: str, file_bytes: bytes):
+    try:
+        return storage.subir_archivo(carga_id, tipo, io.BytesIO(file_bytes))
     except storage.SubidaArchivoError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
 
@@ -240,6 +242,7 @@ async def _buscar_duplicado(db: AsyncSession, hash_sha256: str) -> Optional[uuid
 @router.post("", status_code=status.HTTP_202_ACCEPTED, response_model=CargaArchivoSubidaResponse)
 async def subir_carga(
     request: Request,
+    tipo: str = Form(...),
     file: UploadFile = File(...),
     periodo_desde: Optional[date] = Form(None),
     periodo_hasta: Optional[date] = Form(None),
@@ -247,25 +250,39 @@ async def subir_carga(
     user: MotoredUser = Depends(_require_write),
     job_runner: JobRunner = Depends(get_job_runner),
 ):
-    """`POST /cargas` (design §API): detecta `tipo` por firma de encabezado,
-    guarda vía `services/storage.py` y crea la fila `carga_archivo`
-    (`PENDIENTE`) -- para TODOS los 8 tipos, incluidos `MAESTRO_*` (spec
-    "Shared drop zone and history for all carga types")."""
+    """`POST /cargas` (`sdd/motored-cargas-tipo-declarado/design`, D1/D3):
+    `tipo` es DECLARADO por el caller (la pestaña que inició la subida),
+    restringido a los 6 tipos de movimiento (`orquestador.TIPOS_MOVIMIENTO`)
+    -- nunca inferido, nunca `None`. Cualquier valor fuera de esa lista,
+    incluidos `MAESTRO_REFERENCIAS`/`MAESTRO_BODEGAS`, se rechaza ACÁ, antes
+    de leer el archivo, calcular su hash o subirlo a MinIO (spec "Missing
+    tipo is rejected before storage" / "A MAESTRO_* value is rejected at
+    the door"). Un archivo que no verifica contra el `tipo` declarado
+    también es `400`, con el mismo `no-write` guarantee (`_verificar_tipo_
+    o_400`)."""
     _check_content_length_guard(request)
     _check_periodo_no_futuro(periodo_desde, periodo_hasta)
+    if tipo not in orquestador.TIPOS_MOVIMIENTO:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"'{tipo}' no es un tipo de movimiento válido para este endpoint. "
+                "Bodegas y Referencias se suben desde su propia pestaña en Maestros."
+            ),
+        )
     if periodo_hasta is None:
         periodo_hasta = periodo_desde
 
     file_bytes = await file.read()
-    tipo_detectado = _detectar_tipo_o_400(file_bytes)
+    _verificar_tipo_o_400(tipo, file_bytes)
 
     carga_id = uuid.uuid4()
-    resultado_subida = _subir_a_minio_o_502(carga_id, tipo_detectado, file_bytes)
+    resultado_subida = _subir_a_minio_o_502(carga_id, tipo, file_bytes)
     duplicado_de = await _buscar_duplicado(db, resultado_subida.hash_sha256)
 
     carga = CargaArchivo(
         id=carga_id,
-        tipo=tipo_detectado,
+        tipo=tipo,
         nombre_archivo=file.filename or "archivo.xlsx",
         hash_sha256=resultado_subida.hash_sha256,
         ruta_objeto=resultado_subida.ruta_objeto,
@@ -278,13 +295,10 @@ async def subir_carga(
     db.add(carga)
     await db.commit()
 
-    await _despachar_si_completa(db, carga, file_bytes, uuid.UUID(user.user_id), job_runner)
+    await _despachar_si_completa(carga, job_runner)
 
     return CargaArchivoSubidaResponse(
         carga_id=carga.id,
-        tipo_detectado=tipo_detectado,
-        requiere_tipo=_requiere_tipo(tipo_detectado),
-        requiere_periodo=_requiere_periodo(tipo_detectado, periodo_desde),
         duplicado_de=duplicado_de,
     )
 
@@ -297,9 +311,12 @@ async def actualizar_carga(
     user: MotoredUser = Depends(_require_write),
     job_runner: JobRunner = Depends(get_job_runner),
 ):
-    """`PATCH /cargas/{id}` (ADR-9): completa `tipo`/período SOLO mientras
+    """`PATCH /cargas/{id}` (ADR-9): completa el período SOLO mientras
     `estado='PENDIENTE'` -- `409` en cualquier otro estado (E10, el período
-    queda congelado apenas empieza a parsearse)."""
+    queda congelado apenas empieza a parsearse). Ya NO completa `tipo` --
+    `tipo` se declara upfront en `POST /cargas` y nunca queda pendiente
+    (`sdd/motored-cargas-tipo-declarado/design`, D1); `CargaArchivoPatch`
+    no expone ese campo."""
     carga = await _carga_or_404(db, carga_id)
     if carga.estado != "PENDIENTE":
         raise HTTPException(
@@ -308,8 +325,6 @@ async def actualizar_carga(
         )
     _check_periodo_no_futuro(payload.periodo_desde, payload.periodo_hasta)
 
-    if payload.tipo is not None:
-        carga.tipo = payload.tipo
     if payload.periodo_desde is not None:
         carga.periodo_desde = payload.periodo_desde
         carga.periodo_hasta = payload.periodo_hasta or payload.periodo_desde
@@ -317,7 +332,7 @@ async def actualizar_carga(
         carga.periodo_hasta = payload.periodo_hasta
 
     await db.commit()
-    await _despachar_si_completa(db, carga, None, uuid.UUID(user.user_id), job_runner)
+    await _despachar_si_completa(carga, job_runner)
     return CargaArchivoRead.model_validate(carga)
 
 

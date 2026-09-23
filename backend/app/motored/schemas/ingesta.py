@@ -1,6 +1,12 @@
 """
 Motored Pedidos — Fase 2 "Ingesta", Phase 9 "Adapter + API" (PR9), task 9.4
-(sdd/motored-pedidos-ingesta; design §API, §Schema, ADR-9).
+(sdd/motored-pedidos-ingesta; design §API, §Schema, ADR-9). Narrowed by
+Fase 3 "Cargas: Tipo Declarado" (sdd/motored-cargas-tipo-declarado; design
+D1): `tipo` es DECLARADO por el caller en `POST /cargas`, nunca inferido ni
+completado después -- `CargaArchivoSubidaResponse` ya no necesita informar
+`tipo_detectado`/`requiere_tipo`/`requiere_periodo` (el caller ya sabe su
+propio `tipo`, y por lo tanto si declara período, antes de subir el
+archivo), y `CargaArchivoPatch` ya no acepta `tipo`.
 
 Formas de request/response para `/api/motored/cargas` -- separado de
 `schemas/carga.py` (Fase 1, `CargaRequest`/`CargaResultado`, filas
@@ -18,20 +24,19 @@ from pydantic import BaseModel, ConfigDict
 
 
 class CargaArchivoSubidaResponse(BaseModel):
-    """`202` de `POST /cargas` (design §API)."""
+    """`202` de `POST /cargas` (`sdd/motored-cargas-tipo-declarado/design`,
+    D3: "response narrows to `{carga_id, duplicado_de}`")."""
 
     carga_id: uuid.UUID
-    tipo_detectado: Optional[str] = None
-    requiere_tipo: bool
-    requiere_periodo: bool
     duplicado_de: Optional[uuid.UUID] = None
 
 
 class CargaArchivoPatch(BaseModel):
-    """`PATCH /cargas/{id}` -- completa `tipo`/período mientras `estado`
-    sigue `PENDIENTE` (ADR-9, E10: 409 fuera de ese estado)."""
+    """`PATCH /cargas/{id}` -- completa el período mientras `estado` sigue
+    `PENDIENTE` (ADR-9, E10: 409 fuera de ese estado). `tipo` fue removido
+    (design D1): se declara upfront en `POST /cargas`, nunca queda
+    pendiente de completar."""
 
-    tipo: Optional[str] = None
     periodo_desde: Optional[date] = None
     periodo_hasta: Optional[date] = None
 

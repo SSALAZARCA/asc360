@@ -1,6 +1,14 @@
 """
 Fase 2 "Ingesta", Phase 9 "Adapter + API" (PR9), tasks 9.3/9.4/9.5
-(sdd/motored-pedidos-ingesta) — `/api/motored/cargas`.
+(sdd/motored-pedidos-ingesta) — `/api/motored/cargas`. Narrowed by Fase 3
+"Cargas: Tipo Declarado" (sdd/motored-cargas-tipo-declarado, Phase 2, task
+2.3): `tipo` is now a REQUIRED, caller-declared `Form` field on `POST
+/cargas` -- every RBAC/PATCH-state-machine test below that used to upload
+without a `tipo` now declares one explicitly (a matching one, so the
+non-`tipo` assertion under test is not accidentally masked by a 400/422
+from the type gate). The old detection-era tests (task 9.4, "detección de
+tipo por firma de encabezado") are replaced by the declared-type contract
+tests at the bottom of this file.
 
 RBAC matrix (task 9.3, RED-before-route per this project's strict-TDD
 discipline) across EVERY endpoint of the new router: `ADMIN`/`COMPRAS` can
@@ -144,7 +152,8 @@ def test_post_cargas_restricted_to_admin_and_compras(role, monkeypatch):
     client = _client_as(role, execute_queue=[[], []])
     response = client.post(
         CARGAS_URL,
-        files={"file": ("archivo.xlsx", _ARCHIVO_SIN_TIPO_RECONOCIBLE, "application/octet-stream")},
+        files={"file": ("inventario.xlsx", _ARCHIVO_INVENTARIO, "application/octet-stream")},
+        data={"tipo": "INVENTARIO"},
     )
     if role in WRITE_ROLES:
         assert response.status_code == 202, response.text
@@ -154,9 +163,9 @@ def test_post_cargas_restricted_to_admin_and_compras(role, monkeypatch):
 
 @pytest.mark.parametrize("role", ALL_ROLES)
 def test_patch_cargas_restricted_to_admin_and_compras(role):
-    carga = _carga(estado="PENDIENTE", tipo=None)
+    carga = _carga(estado="PENDIENTE", tipo="INVENTARIO")
     client = _client_as(role, execute_queue=[[], [carga]])
-    response = client.patch(f"{CARGAS_URL}/{carga.id}", json={"tipo": "FACTURAS_PEDIDOS"})
+    response = client.patch(f"{CARGAS_URL}/{carga.id}", json={"periodo_desde": "2026-09-01"})
     if role in WRITE_ROLES:
         assert response.status_code == 200, response.text
     else:
@@ -451,82 +460,138 @@ def test_post_cargas_future_periodo_is_422_before_any_write(monkeypatch):
 
     response = client.post(
         CARGAS_URL,
-        files={"file": ("archivo.xlsx", _ARCHIVO_SIN_TIPO_RECONOCIBLE, "application/octet-stream")},
-        data={"periodo_desde": futuro},
+        files={"file": ("inventario.xlsx", _ARCHIVO_INVENTARIO, "application/octet-stream")},
+        data={"tipo": "INVENTARIO", "periodo_desde": futuro},
     )
 
     assert response.status_code == 422
     assert called["subida"] is False
 
 
-def test_patch_completes_maestro_tipo_dispatches_synchronously_not_via_job_runner(monkeypatch):
-    carga = _carga(estado="PENDIENTE", tipo=None)
-    llamado = {}
+def test_patch_no_longer_accepts_tipo_ignores_unknown_field_and_never_dispatches_maestro(monkeypatch):
+    """`sdd/motored-cargas-tipo-declarado/design`, D1: `CargaArchivoPatch`
+    dropped `tipo` -- an unknown JSON field is silently ignored by pydantic
+    (never a 422), `carga.tipo` stays whatever it was declared as at
+    upload, and `orquestador.ejecutar_maestro` -- the branch this used to
+    dispatch to -- is now structurally unreachable from this endpoint."""
+    carga = _carga(estado="PENDIENTE", tipo="INVENTARIO")
+    llamado = {"called": False}
 
-    async def _fake_ejecutar_maestro(db, carga_obj, file_bytes, usuario_id):
-        llamado["tipo"] = carga_obj.tipo
-        llamado["file_bytes"] = file_bytes
+    async def _fake_ejecutar_maestro(*args, **kwargs):
+        llamado["called"] = True
 
     monkeypatch.setattr(cargas_api.orquestador, "ejecutar_maestro", _fake_ejecutar_maestro)
-    monkeypatch.setattr(cargas_api.storage, "descargar_archivo", lambda ruta: b"contenido")
     client = _client_as("ADMIN", execute_queue=[[], [carga]])
 
     response = client.patch(f"{CARGAS_URL}/{carga.id}", json={"tipo": "MAESTRO_BODEGAS"})
 
     assert response.status_code == 200, response.text
-    assert llamado["tipo"] == "MAESTRO_BODEGAS"
-    assert llamado["file_bytes"] == b"contenido"
+    assert response.json()["tipo"] == "INVENTARIO"
+    assert llamado["called"] is False
 
 
 # ---------------------------------------------------------------------------
-# Task 9.4 — detección de tipo por firma de encabezado en `POST /cargas`
+# Fase 3 "Cargas: Tipo Declarado" (sdd/motored-cargas-tipo-declarado, Phase
+# 2, task 2.3) — `tipo` DECLARADO en `POST /cargas`, reemplaza la vieja
+# "detección de tipo por firma de encabezado".
 # ---------------------------------------------------------------------------
 
 
-def test_post_cargas_detects_known_movement_type_and_flags_requiere_periodo(monkeypatch):
+def test_post_cargas_missing_tipo_is_422_before_any_write(monkeypatch):
     _mock_subida(monkeypatch)
-    client = _client_as("ADMIN", execute_queue=[[], []])
+    called = {"subida": False}
+    monkeypatch.setattr(
+        cargas_api.storage, "subir_archivo",
+        lambda *a, **k: called.__setitem__("subida", True) or ResultadoSubida("x", "y"),
+    )
+    client = _client_as("ADMIN", execute_queue=[[]])
 
     response = client.post(
         CARGAS_URL,
         files={"file": ("inventario.xlsx", _ARCHIVO_INVENTARIO, "application/octet-stream")},
     )
 
-    assert response.status_code == 202, response.text
-    body = response.json()
-    assert body["tipo_detectado"] == "INVENTARIO"
-    assert body["requiere_tipo"] is False
-    assert body["requiere_periodo"] is True
+    assert response.status_code == 422
+    assert called["subida"] is False
 
 
-def test_post_cargas_with_periodo_does_not_require_periodo(monkeypatch):
-    _mock_subida(monkeypatch)
-    client = _client_as("ADMIN", execute_queue=[[], []])
+@pytest.mark.parametrize("tipo_maestro", ["MAESTRO_REFERENCIAS", "MAESTRO_BODEGAS"])
+def test_post_cargas_maestro_tipo_is_400_before_any_write(tipo_maestro, monkeypatch):
+    called = {"subida": False}
+    monkeypatch.setattr(
+        cargas_api.storage, "subir_archivo",
+        lambda *a, **k: called.__setitem__("subida", True) or ResultadoSubida("x", "y"),
+    )
+    client = _client_as("ADMIN", execute_queue=[[]])
 
     response = client.post(
         CARGAS_URL,
         files={"file": ("inventario.xlsx", _ARCHIVO_INVENTARIO, "application/octet-stream")},
-        data={"periodo_desde": "2026-09-15"},
+        data={"tipo": tipo_maestro},
     )
 
-    assert response.status_code == 202, response.text
-    assert response.json()["requiere_periodo"] is False
+    assert response.status_code == 400, response.text
+    assert called["subida"] is False
 
 
-def test_post_cargas_unrecognized_headers_requires_manual_type(monkeypatch):
-    _mock_subida(monkeypatch)
-    client = _client_as("ADMIN", execute_queue=[[], []])
+def test_post_cargas_tipo_mismatch_is_400_naming_missing_columns(monkeypatch):
+    """Declara VENTAS, sube un archivo de INVENTARIO -- coincidencia
+    parcial (ratio 3/8, ver `test_ingesta_deteccion.py`), rechazado
+    nombrando el tipo declarado y las columnas de VENTAS que faltaron; sin
+    escribir nada."""
+    called = {"subida": False}
+    monkeypatch.setattr(
+        cargas_api.storage, "subir_archivo",
+        lambda *a, **k: called.__setitem__("subida", True) or ResultadoSubida("x", "y"),
+    )
+    client = _client_as("ADMIN", execute_queue=[[]])
+
+    response = client.post(
+        CARGAS_URL,
+        files={"file": ("inventario.xlsx", _ARCHIVO_INVENTARIO, "application/octet-stream")},
+        data={"tipo": "VENTAS"},
+    )
+
+    assert response.status_code == 400, response.text
+    body = response.json()["detail"]
+    assert body["tipo_declarado"] == "VENTAS"
+    assert body["sin_coincidencia"] is False
+    assert len(body["columnas_faltantes"]) > 0
+    assert called["subida"] is False
+
+
+def test_post_cargas_sin_ninguna_coincidencia_is_400_distinguishable_from_mismatch(monkeypatch):
+    client = _client_as("ADMIN", execute_queue=[[]])
 
     response = client.post(
         CARGAS_URL,
         files={"file": ("archivo.xlsx", _ARCHIVO_SIN_TIPO_RECONOCIBLE, "application/octet-stream")},
+        data={"tipo": "INVENTARIO"},
+    )
+
+    assert response.status_code == 400, response.text
+    body = response.json()["detail"]
+    assert body["tipo_declarado"] == "INVENTARIO"
+    assert body["sin_coincidencia"] is True
+    assert body["columnas_faltantes"] == []
+
+
+def test_post_cargas_success_matches_declared_type_response_shape(monkeypatch):
+    """Design D3: la respuesta se angosta a `{carga_id, duplicado_de}` --
+    ya no expone `tipo_detectado`/`requiere_tipo`/`requiere_periodo`."""
+    _mock_subida(monkeypatch)
+    client = _client_as("ADMIN", execute_queue=[[], []])
+
+    response = client.post(
+        CARGAS_URL,
+        files={"file": ("inventario.xlsx", _ARCHIVO_INVENTARIO, "application/octet-stream")},
+        data={"tipo": "INVENTARIO"},
     )
 
     assert response.status_code == 202, response.text
     body = response.json()
-    assert body["tipo_detectado"] is None
-    assert body["requiere_tipo"] is True
-    assert body["requiere_periodo"] is False
+    assert set(body.keys()) == {"carga_id", "duplicado_de"}
+    assert body["duplicado_de"] is None
 
 
 def test_post_cargas_duplicate_hash_is_flagged_never_blocked(monkeypatch):
@@ -536,7 +601,8 @@ def test_post_cargas_duplicate_hash_is_flagged_never_blocked(monkeypatch):
 
     response = client.post(
         CARGAS_URL,
-        files={"file": ("archivo.xlsx", _ARCHIVO_SIN_TIPO_RECONOCIBLE, "application/octet-stream")},
+        files={"file": ("inventario.xlsx", _ARCHIVO_INVENTARIO, "application/octet-stream")},
+        data={"tipo": "INVENTARIO"},
     )
 
     assert response.status_code == 202, response.text
