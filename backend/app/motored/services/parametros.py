@@ -14,7 +14,7 @@ vigente`), sin un solo caller en todo el motor hasta ahora.
 import logging
 import uuid
 from datetime import date
-from typing import Any, List, Optional
+from typing import Any, List, NamedTuple, Optional
 
 from sqlalchemy import select
 
@@ -64,29 +64,43 @@ async def obtener_vigente(db, clave: str, en_fecha: date) -> Optional[ParametroM
 # CODIFICADO que trae el caller y deja un registro (spec: "the fact is
 # recorded in the load log, so a silent default never looks like a
 # configured choice") -- vía el `logging` estándar, que es el único log que
-# una función pura y clave-agnóstica como esta puede escribir; persistir
-# ESE hecho dentro del `carga_archivo.log` de una carga puntual es
-# responsabilidad del caller (Fase 9.4, fuera de alcance de este batch),
-# que sí sabe qué carga está resolviendo, igual que `ventas.py`/`transito.py`
+# una función pura y clave-agnóstica como esta puede escribir.
+#
+# Verify-report WARNING #2 (sdd/motored-pedidos-ingesta): ese `logging`
+# ephemeral nunca llegaba al `carga_archivo.log` que un ADMIN ve en el
+# informe -- `resolver()` ahora retorna también `fue_default` (además del
+# `logging.warning` de siempre, que se deja intacto) para que el caller
+# (orquestador.py, el único que sabe qué carga puntual está resolviendo)
+# pueda decidir persistir ese hecho, igual que `ventas.py`/`transito.py`
 # dejan la decisión de `estado`/`log` a su propio caller.
 # ---------------------------------------------------------------------------
 
 
-async def resolver(db, clave: str, en_fecha: date, default: Any) -> Any:
+class ResolverResultado(NamedTuple):
+    """`(valor, fue_default)` -- `fue_default=True` cuando no había fila
+    `parametro_metodologia` vigente para la `clave` y se usó el default
+    codificado. Un `NamedTuple` para que `valor, fue_default = await
+    resolver(...)` siga leyéndose como una tupla plana en cada call site."""
+
+    valor: Any
+    fue_default: bool
+
+
+async def resolver(db, clave: str, en_fecha: date, default: Any) -> ResolverResultado:
     """Resuelve el valor vigente de `clave` en `en_fecha`, o `default` si no
     existe ninguna fila vigente. Nunca lanza por una `clave` ausente -- un
     `parametro_metodologia` sin configurar es un caso esperado y cubierto,
     no un error (spec "A missing clave falls back and is logged")."""
     fila = await obtener_vigente(db, clave, en_fecha)
     if fila is not None:
-        return fila.valor
+        return ResolverResultado(fila.valor, False)
 
     logger.warning(
         "parametro_metodologia sin fila vigente para clave=%s en fecha=%s -- "
         "usando default codificado=%r",
         clave, en_fecha, default,
     )
-    return default
+    return ResolverResultado(default, True)
 
 
 # Los 5 claves que Fase 2 realmente consume (spec §6.10 + proposal
@@ -130,29 +144,29 @@ CLAVE_TOLERANCIA_INGRESO_PCT = "tolerancia_ingreso_pct"
 DEFAULT_TOLERANCIA_INGRESO_PCT: float = 2.0
 
 
-async def resolver_tipos_inventario_incluidos(db, en_fecha: date) -> List[str]:
+async def resolver_tipos_inventario_incluidos(db, en_fecha: date) -> ResolverResultado:
     return await resolver(
         db, CLAVE_TIPOS_INVENTARIO_INCLUIDOS, en_fecha, DEFAULT_TIPOS_INVENTARIO_INCLUIDOS
     )
 
 
-async def resolver_crear_referencias_desconocidas(db, en_fecha: date) -> bool:
+async def resolver_crear_referencias_desconocidas(db, en_fecha: date) -> ResolverResultado:
     return await resolver(
         db, CLAVE_CREAR_REFERENCIAS_DESCONOCIDAS, en_fecha, DEFAULT_CREAR_REFERENCIAS_DESCONOCIDAS
     )
 
 
-async def resolver_estados_backorder_vigentes(db, en_fecha: date) -> List[str]:
+async def resolver_estados_backorder_vigentes(db, en_fecha: date) -> ResolverResultado:
     return await resolver(
         db, CLAVE_ESTADOS_BACKORDER_VIGENTES, en_fecha, DEFAULT_ESTADOS_BACKORDER_VIGENTES
     )
 
 
-async def resolver_dias_ventana_ingresos(db, en_fecha: date) -> int:
+async def resolver_dias_ventana_ingresos(db, en_fecha: date) -> ResolverResultado:
     return await resolver(db, CLAVE_DIAS_VENTANA_INGRESOS, en_fecha, DEFAULT_DIAS_VENTANA_INGRESOS)
 
 
-async def resolver_tolerancia_ingreso_pct(db, en_fecha: date) -> float:
+async def resolver_tolerancia_ingreso_pct(db, en_fecha: date) -> ResolverResultado:
     return await resolver(
         db, CLAVE_TOLERANCIA_INGRESO_PCT, en_fecha, DEFAULT_TOLERANCIA_INGRESO_PCT
     )

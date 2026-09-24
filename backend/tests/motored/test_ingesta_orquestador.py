@@ -23,7 +23,9 @@ from tests.motored.conftest import FakeAsyncSession
 from app.motored.models.carga_archivo import CargaArchivo
 from app.motored.models.carga_error import CargaError
 from app.motored.models.carga_fila_staging import CargaFilaStaging
+from app.motored.models.parametro_metodologia import ParametroMetodologia
 from app.motored.schemas.carga import CargaResultado
+from app.motored.services import parametros
 from app.motored.services.carga_excel import ColumnaObligatoriaFaltanteError
 from app.motored.services.ingesta import maestros_adapter
 from app.motored.services.ingesta import orquestador
@@ -287,6 +289,7 @@ async def test_ejecutar_aplicar_facturas_pedidos_triggers_transito_recalculation
 
     async def _fake_recalc(session):
         llamadas["n"] += 1
+        return {}
 
     monkeypatch.setattr(orquestador, "_recalcular_transito", _fake_recalc)
     session = FakeAsyncSession(execute_queue=[[], []])  # staging select vacío + delete staging
@@ -334,7 +337,7 @@ async def test_dry_run_ventas_periodo_advertencia_emite_carga_error_por_fila_fue
         sucursal_id=SUCURSAL_ID, referencia_id=REFERENCIA_ID,
     )
     queue = _queue_cache_y_proveedor() + [
-        [],  # parametros.resolver_tipos_inventario_incluidos (usa default 0.5%)
+        [],  # parametros.resolver_tipos_inventario_incluidos (sin fila vigente -> default)
         [fila_agosto],  # re-select de staging para detectar la fila fuera de período
     ]
     session = FakeAsyncSession(execute_queue=queue)
@@ -505,3 +508,170 @@ async def test_ejecutar_aplicar_ventas_uses_aplicar_con_periodo(monkeypatch):
 
     assert llamadas["desde"] == date(2026, 9, 1)
     assert carga.estado == "APLICADO"
+
+
+# ---------------------------------------------------------------------------
+# Verify-report WARNING #2 (sdd/motored-pedidos-ingesta): un default de
+# `parametro_metodologia` usado durante una carga debe quedar registrado en
+# `carga.log["parametros_default_usados"]` -- antes de este batch solo se
+# emitía un `logging.warning` efímero (`services/parametros.py`), invisible
+# para un ADMIN vía la pantalla de informe.
+# ---------------------------------------------------------------------------
+
+
+async def test_dry_run_ventas_registra_default_usado_en_carga_log(monkeypatch):
+    """Base case del gap: `tipos_inventario_incluidos` SIN fila vigente ->
+    el dry-run de VENTAS debe dejar constancia de qué clave defaulteó y con
+    qué valor, no solo procesar la fila con el default en silencio."""
+    carga = _carga("VENTAS", periodo_desde=date(2026, 9, 1), periodo_hasta=date(2026, 9, 30))
+    serial_septiembre = 46280  # 2026-09-15
+    file_bytes = _build_xlsx_bytes(
+        [
+            ["Estado", "Módulo", "Fecha", "Cantidad inv.", "Tipo inventario",
+             "Desc.bodega", "Bodega", "Referencia"],
+            ["Aprobada", "MOSTRADOR", serial_septiembre, 10, "0002 - REPUESTOS",
+             "CALI NORTE", "BA061", "REF1"],
+        ]
+    )
+    monkeypatch.setattr(orquestador.storage, "descargar_archivo", lambda ruta: file_bytes)
+    queue = _queue_cache_y_proveedor() + [
+        [],  # parametros.resolver_tipos_inventario_incluidos -> SIN fila vigente
+    ]
+    session = FakeAsyncSession(execute_queue=queue)
+
+    await orquestador._dry_run(session, carga)
+
+    assert carga.estado == "VALIDADO"
+    assert carga.log["parametros_default_usados"] == {
+        parametros.CLAVE_TIPOS_INVENTARIO_INCLUIDOS: parametros.DEFAULT_TIPOS_INVENTARIO_INCLUIDOS,
+    }
+
+
+async def test_dry_run_ventas_no_registra_default_cuando_la_clave_esta_configurada(monkeypatch):
+    """Converse del caso anterior: con una fila `parametro_metodologia`
+    vigente para `tipos_inventario_incluidos`, `resolver()` nunca defaultea
+    -- `carga.log` no debe ganar la entrada de "default usado" para esa
+    clave."""
+    carga = _carga("VENTAS", periodo_desde=date(2026, 9, 1), periodo_hasta=date(2026, 9, 30))
+    serial_septiembre = 46280  # 2026-09-15
+    file_bytes = _build_xlsx_bytes(
+        [
+            ["Estado", "Módulo", "Fecha", "Cantidad inv.", "Tipo inventario",
+             "Desc.bodega", "Bodega", "Referencia"],
+            ["Aprobada", "MOSTRADOR", serial_septiembre, 10, "0002 - REPUESTOS",
+             "CALI NORTE", "BA061", "REF1"],
+        ]
+    )
+    monkeypatch.setattr(orquestador.storage, "descargar_archivo", lambda ruta: file_bytes)
+    fila_configurada = ParametroMetodologia(
+        id=uuid.uuid4(), clave=parametros.CLAVE_TIPOS_INVENTARIO_INCLUIDOS,
+        valor=["0002 - REPUESTOS"], vigente_desde=date(2026, 1, 1),
+    )
+    queue = _queue_cache_y_proveedor() + [
+        [fila_configurada],  # parametros.resolver_tipos_inventario_incluidos -> CONFIGURADA
+    ]
+    session = FakeAsyncSession(execute_queue=queue)
+
+    await orquestador._dry_run(session, carga)
+
+    assert carga.estado == "VALIDADO"
+    assert "parametros_default_usados" not in carga.log
+
+
+async def test_recalcular_transito_registra_defaults_usados_cuando_las_claves_no_estan_configuradas():
+    """`_recalcular_transito` (invocado desde `ejecutar_aplicar` para
+    FACTURAS_PEDIDOS/INGRESOS_FACTURAS) resuelve `dias_ventana_ingresos` y
+    `tolerancia_ingreso_pct` -- si NINGUNA tiene fila vigente, debe retornar
+    ambas en `defaults_usados` para que el caller las persista."""
+    session = FakeAsyncSession(execute_queue=[
+        [],  # parametros.resolver_dias_ventana_ingresos -> SIN fila vigente
+        [],  # parametros.resolver_tolerancia_ingreso_pct -> SIN fila vigente
+        [],  # facturas agrupadas por documento
+        [],  # ingresos agrupados por documento
+    ])
+
+    defaults_usados = await orquestador._recalcular_transito(session)
+
+    assert defaults_usados == {
+        parametros.CLAVE_DIAS_VENTANA_INGRESOS: parametros.DEFAULT_DIAS_VENTANA_INGRESOS,
+        parametros.CLAVE_TOLERANCIA_INGRESO_PCT: parametros.DEFAULT_TOLERANCIA_INGRESO_PCT,
+    }
+
+
+async def test_recalcular_transito_no_registra_defaults_cuando_ambas_claves_estan_configuradas():
+    fila_dias = ParametroMetodologia(
+        id=uuid.uuid4(), clave=parametros.CLAVE_DIAS_VENTANA_INGRESOS,
+        valor=60, vigente_desde=date(2026, 1, 1),
+    )
+    fila_tolerancia = ParametroMetodologia(
+        id=uuid.uuid4(), clave=parametros.CLAVE_TOLERANCIA_INGRESO_PCT,
+        valor=3.0, vigente_desde=date(2026, 1, 1),
+    )
+    session = FakeAsyncSession(execute_queue=[
+        [fila_dias],
+        [fila_tolerancia],
+        [],  # facturas agrupadas por documento
+        [],  # ingresos agrupados por documento
+    ])
+
+    defaults_usados = await orquestador._recalcular_transito(session)
+
+    assert defaults_usados == {}
+
+
+async def test_recalcular_transito_y_registrar_defaults_persiste_en_carga_log(monkeypatch):
+    """El envoltorio que `ejecutar_aplicar` realmente llama -- prueba el
+    merge en `carga.log`, aislado de la mecánica interna de `_recalcular_
+    transito` (ya cubierta arriba), per la regla mock-hygiene de este
+    proyecto: no hace falta re-armar todo el flujo de tránsito para probar
+    un merge de diccionario."""
+    carga = _carga("FACTURAS_PEDIDOS", estado="VALIDADO")
+    defaults_simulados = {
+        parametros.CLAVE_DIAS_VENTANA_INGRESOS: 45,
+        parametros.CLAVE_TOLERANCIA_INGRESO_PCT: 2.0,
+    }
+
+    async def _fake_recalcular_transito(session_):
+        return dict(defaults_simulados)
+
+    monkeypatch.setattr(orquestador, "_recalcular_transito", _fake_recalcular_transito)
+    session = FakeAsyncSession(execute_queue=[])
+
+    await orquestador._recalcular_transito_y_registrar_defaults(session, carga)
+
+    assert carga.log["parametros_default_usados"] == defaults_simulados
+
+
+async def test_recalcular_transito_y_registrar_defaults_no_toca_log_si_nada_defaulteo(monkeypatch):
+    carga = _carga("FACTURAS_PEDIDOS", estado="VALIDADO")
+
+    async def _fake_recalcular_transito(session_):
+        return {}
+
+    monkeypatch.setattr(orquestador, "_recalcular_transito", _fake_recalcular_transito)
+    session = FakeAsyncSession(execute_queue=[])
+
+    await orquestador._recalcular_transito_y_registrar_defaults(session, carga)
+
+    assert carga.log is None
+
+
+async def test_ejecutar_aplicar_facturas_pedidos_registra_defaults_de_transito_en_carga_log(
+    monkeypatch,
+):
+    """Punta a punta a través de `ejecutar_aplicar`: un default usado por
+    `_recalcular_transito` debe sobrevivir hasta `carga.log`, no solo hasta
+    el `dict` interno de `_recalcular_transito_y_registrar_defaults`."""
+    carga = _carga("FACTURAS_PEDIDOS", estado="VALIDADO")
+    defaults_simulados = {parametros.CLAVE_DIAS_VENTANA_INGRESOS: 45}
+
+    async def _fake_recalcular_transito(session_):
+        return dict(defaults_simulados)
+
+    monkeypatch.setattr(orquestador, "_recalcular_transito", _fake_recalcular_transito)
+    session = FakeAsyncSession(execute_queue=[[], []])  # staging select vacío + delete staging
+
+    await orquestador.ejecutar_aplicar(session, carga)
+
+    assert carga.estado == "APLICADO"
+    assert carga.log["parametros_default_usados"] == defaults_simulados

@@ -195,6 +195,53 @@ def test_get_informe_allowed_for_every_role(role):
     assert response.status_code == 200, response.text
 
 
+def test_get_informe_computa_variacion_exacta_vs_carga_aplicada_anterior_del_mismo_tipo():
+    """Verify-report WARNING #1: the ±40% variance number itself, not just
+    HTTP 200. `_carga_or_404`'s query returns the FULL `CargaArchivo` row
+    for the carga under inspection; the "anterior" query in `obtener_
+    informe` (cargas.py:389-403) is a narrower `select(CargaArchivo.filas_
+    validas)`, so its queued row is the bare `int`, not a model instance
+    (`FakeAsyncSession.execute` -> `.scalars().first()` just returns
+    whatever was queued)."""
+    filas_validas_carga_anterior = 80
+    filas_validas_carga_nueva = 50
+    carga_nueva = _carga(
+        estado="VALIDADO", tipo="INVENTARIO", filas_validas=filas_validas_carga_nueva
+    )
+    client = _client_as(
+        "ADMIN",
+        execute_queue=[[], [carga_nueva], [filas_validas_carga_anterior]],
+    )
+
+    response = client.get(f"{CARGAS_URL}/{carga_nueva.id}/informe")
+
+    assert response.status_code == 200, response.text
+    # Hand-computed: (50 - 80) / 80 * 100 = -37.5 -- a real drop, well past
+    # the frontend's -40% red-flag threshold's neighborhood (deliberately
+    # NOT exactly -40, so this test proves the raw arithmetic, independent
+    # of the separately-tested UI threshold).
+    variacion_esperada = -37.5
+    assert (
+        (filas_validas_carga_nueva - filas_validas_carga_anterior)
+        / filas_validas_carga_anterior
+        * 100
+    ) == variacion_esperada
+    assert response.json()["variacion_pct_vs_carga_anterior"] == pytest.approx(variacion_esperada)
+
+
+def test_get_informe_sin_variacion_cuando_no_hay_carga_aplicada_anterior_del_mismo_tipo():
+    """Base case: no prior `APLICADO` load of the same `tipo` exists ->
+    `anterior_result.scalars().first()` is `None` -> `variacion` stays
+    `None` (cargas.py:401-403), never a computed number."""
+    carga = _carga(estado="VALIDADO", tipo="INVENTARIO", filas_validas=50)
+    client = _client_as("ADMIN", execute_queue=[[], [carga], []])
+
+    response = client.get(f"{CARGAS_URL}/{carga.id}/informe")
+
+    assert response.status_code == 200, response.text
+    assert response.json()["variacion_pct_vs_carga_anterior"] is None
+
+
 @pytest.mark.parametrize("role", ALL_ROLES)
 def test_get_errores_allowed_for_every_role(role):
     carga = _carga()

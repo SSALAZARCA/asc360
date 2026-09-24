@@ -140,50 +140,65 @@ async def _construir_procesador_fila(
     carga_id: uuid.UUID,
     proveedor_id: uuid.UUID,
     en_fecha: date,
-) -> Callable[[Sequence[Any], int, int], Tuple[Optional[CargaFilaStaging], List[Any]]]:
+) -> Tuple[
+    Callable[[Sequence[Any], int, int], Tuple[Optional[CargaFilaStaging], List[Any]]],
+    Dict[str, Any],
+]:
     """Fábrica: resuelve los parámetros de negocio de `tipo` vía
     `parametros.py` (nunca hardcodeados, ver docstring del módulo) y arma un
     callable de firma uniforme `(fila_raw, numero_fila, lote) ->
     (fila_staging, errores)` sobre el `procesar_fila` real de cada
-    transform -- cuyas firmas difieren entre sí (ver cada módulo)."""
+    transform -- cuyas firmas difieren entre sí (ver cada módulo).
+
+    Retorna también `defaults_usados` (verify-report WARNING #2): un dict
+    `{clave: valor}` con cada `parametro_metodologia` que resolvió a su
+    default codificado (nunca uno que vino de una fila vigente) -- vacío si
+    ninguno defaulteó. El caller (`_resolver_encabezado`) lo cuelga de
+    `estado.parametros_default_usados` para que `_dry_run` lo persista en
+    `carga.log`."""
+    defaults_usados: Dict[str, Any] = {}
     if tipo == "VENTAS":
-        tipos_inventario_incluidos = await parametros.resolver_tipos_inventario_incluidos(
+        tipos_inventario_incluidos, fue_default = await parametros.resolver_tipos_inventario_incluidos(
             db, en_fecha
         )
+        if fue_default:
+            defaults_usados[parametros.CLAVE_TIPOS_INVENTARIO_INCLUIDOS] = tipos_inventario_incluidos
         return lambda fila_raw, numero_fila, lote: ventas_mod.procesar_fila(
             fila_raw, numero_fila=numero_fila, lote=lote, mapa_columnas=mapa_columnas,
             cache=cache, carga_id=carga_id, proveedor_id=proveedor_id,
             tipos_inventario_incluidos=tipos_inventario_incluidos,
-        )
+        ), defaults_usados
     if tipo == "INVENTARIO":
         return lambda fila_raw, numero_fila, lote: inventario_mod.procesar_fila(
             fila_raw, numero_fila=numero_fila, lote=lote, mapa_columnas=mapa_columnas,
             cache=cache, carga_id=carga_id, proveedor_id=proveedor_id,
-        )
+        ), defaults_usados
     if tipo == "BACKORDER":
-        estados_backorder_vigentes = await parametros.resolver_estados_backorder_vigentes(
+        estados_backorder_vigentes, fue_default = await parametros.resolver_estados_backorder_vigentes(
             db, en_fecha
         )
+        if fue_default:
+            defaults_usados[parametros.CLAVE_ESTADOS_BACKORDER_VIGENTES] = estados_backorder_vigentes
         return lambda fila_raw, numero_fila, lote: backorder_mod.procesar_fila(
             fila_raw, numero_fila=numero_fila, lote=lote, mapa_columnas=mapa_columnas,
             cache=cache, carga_id=carga_id, proveedor_id=proveedor_id,
             estados_backorder_vigentes=estados_backorder_vigentes,
-        )
+        ), defaults_usados
     if tipo == "DEMANDA_PERDIDA":
         return lambda fila_raw, numero_fila, lote: demanda_perdida_mod.procesar_fila(
             fila_raw, numero_fila=numero_fila, lote=lote, mapa_columnas=mapa_columnas,
             cache=cache, carga_id=carga_id, proveedor_id=proveedor_id,
-        )
+        ), defaults_usados
     if tipo == "FACTURAS_PEDIDOS":
         return lambda fila_raw, numero_fila, lote: facturas_mod.procesar_fila(
             fila_raw, numero_fila=numero_fila, lote=lote, mapa_columnas=mapa_columnas,
             cache=cache, carga_id=carga_id, proveedor_id=proveedor_id,
-        )
+        ), defaults_usados
     if tipo == "INGRESOS_FACTURAS":
         return lambda fila_raw, numero_fila, lote: ingresos_mod.procesar_fila(
             fila_raw, numero_fila=numero_fila, lote=lote,
             mapa_columnas=mapa_columnas, carga_id=carga_id,
-        )
+        ), defaults_usados
     raise ValueError(f"Tipo de movimiento no soportado por el orquestador: {tipo!r}")
 
 
@@ -231,6 +246,12 @@ class _EstadoLoteDryRun:
         self.filas_validas = 0
         self.filas_rechazadas = 0
         self.histograma: Dict[Tuple[int, int], int] = {}
+        # Verify-report WARNING #2: `{clave: valor}` de cada
+        # `parametro_metodologia` que resolvió a su default codificado
+        # durante este dry-run (poblado por `_construir_procesador_fila`,
+        # vía `_resolver_encabezado`) -- `_dry_run` lo vuelca a `carga.log`
+        # al cierre, mismo tratamiento que `histograma`/`filas_por_periodo`.
+        self.parametros_default_usados: Dict[str, Any] = {}
 
 
 class _ArchivoAbortado(Exception):
@@ -289,7 +310,7 @@ async def _resolver_encabezado(
         await _abortar_columna_faltante(session, carga, faltantes)
         raise _ArchivoAbortado()
 
-    estado.procesar_fila = await _construir_procesador_fila(
+    estado.procesar_fila, estado.parametros_default_usados = await _construir_procesador_fila(
         tipo, session, estado.mapa_columnas, cache, carga.id, proveedor_id, en_fecha
     )
     estado.numero_fila_absoluto += idx + 1
@@ -400,6 +421,50 @@ async def _verificar_periodo_ventas(
     return False
 
 
+async def _registrar_progreso_lote(
+    session: AsyncSession, carga: CargaArchivo, estado: "_EstadoLoteDryRun", numero_lote: int
+) -> None:
+    """Progreso persistido al cierre de CADA lote (no solo al final del
+    archivo) -- lo que le permite a `GET /cargas/{id}` reportar avance
+    parcial mientras un archivo grande sigue leyéndose (design "visible
+    progress")."""
+    carga.filas_leidas = estado.filas_leidas
+    carga.filas_validas = estado.filas_validas
+    carga.filas_rechazadas = estado.filas_rechazadas
+    carga.lotes_staged = numero_lote
+    carga.latido_en = datetime.now(timezone.utc)
+    await session.commit()
+
+
+async def _cerrar_dry_run(
+    session: AsyncSession, carga: CargaArchivo, estado: "_EstadoLoteDryRun"
+) -> None:
+    """Todo lo que pasa DESPUÉS de terminar de leer el archivo completo: el
+    abort por encabezado nunca encontrado, el volcado de `parametros_
+    default_usados` (verify-report WARNING #2) + los dos chequeos de cierre
+    de ADR-9 (corte de BACKORDER, veredicto de período de VENTAS), y el
+    estado final `CON_ERRORES`/`VALIDADO`."""
+    if estado.fila_encabezado is None:
+        carga.estado = "CON_ERRORES"
+        session.add(errores_mod.construir_error(
+            carga.id, 0, None, None, CODIGO_ENCABEZADO_NO_ENCONTRADO,
+            "No se encontró una fila de encabezado reconocible para este tipo de archivo.",
+        ))
+        await session.commit()
+        return
+
+    log: Dict[str, Any] = dict(carga.log or {})
+    if estado.parametros_default_usados:
+        log["parametros_default_usados"] = dict(estado.parametros_default_usados)
+    await _verificar_corte_backorder(session, carga, log)
+    if await _verificar_periodo_ventas(session, carga, log, estado.histograma):
+        return
+
+    carga.estado = "CON_ERRORES" if estado.filas_validas == 0 else "VALIDADO"
+    carga.log = log
+    await session.commit()
+
+
 async def _dry_run(session: AsyncSession, carga: CargaArchivo) -> None:
     tipo = carga.tipo
     columnas_esperadas = _COLUMNAS_POR_TIPO[tipo]
@@ -438,30 +503,9 @@ async def _dry_run(session: AsyncSession, carga: CargaArchivo) -> None:
             for clave, cantidad in ventas_mod.construir_filas_por_periodo(staged_del_lote).items():
                 estado.histograma[clave] = estado.histograma.get(clave, 0) + cantidad
 
-        carga.filas_leidas = estado.filas_leidas
-        carga.filas_validas = estado.filas_validas
-        carga.filas_rechazadas = estado.filas_rechazadas
-        carga.lotes_staged = numero_lote
-        carga.latido_en = datetime.now(timezone.utc)
-        await session.commit()
+        await _registrar_progreso_lote(session, carga, estado, numero_lote)
 
-    if estado.fila_encabezado is None:
-        carga.estado = "CON_ERRORES"
-        session.add(errores_mod.construir_error(
-            carga.id, 0, None, None, CODIGO_ENCABEZADO_NO_ENCONTRADO,
-            "No se encontró una fila de encabezado reconocible para este tipo de archivo.",
-        ))
-        await session.commit()
-        return
-
-    log: Dict[str, Any] = dict(carga.log or {})
-    await _verificar_corte_backorder(session, carga, log)
-    if await _verificar_periodo_ventas(session, carga, log, estado.histograma):
-        return
-
-    carga.estado = "CON_ERRORES" if estado.filas_validas == 0 else "VALIDADO"
-    carga.log = log
-    await session.commit()
+    await _cerrar_dry_run(session, carga, estado)
 
 
 async def ejecutar_maestro(
@@ -517,7 +561,7 @@ async def ejecutar_maestro(
     return resultado
 
 
-async def _recalcular_transito(session: AsyncSession) -> None:
+async def _recalcular_transito(session: AsyncSession) -> Dict[str, Any]:
     """Recalcula el cruce de tránsito completo (§5.6) -- disparado al
     aplicar CUALQUIERA de los dos tipos que lo alimentan
     (`FACTURAS_PEDIDOS`/`INGRESOS_FACTURAS`), sobre TODO lo persistido, no
@@ -528,10 +572,24 @@ async def _recalcular_transito(session: AsyncSession) -> None:
     PEDIDOS ni INGRESOS_FACTURAS declaran período (ADR-9) -- no existe una
     fuente de `fecha_corte` para este cruce en el diseño. Se usa
     `date.today()` como corte del chequeo `transito_vencido`, señalado para
-    confirmación del owner."""
+    confirmación del owner.
+
+    Retorna `defaults_usados` (verify-report WARNING #2, mismo contrato que
+    `_construir_procesador_fila`): `{clave: valor}` de cada
+    `parametro_metodologia` que resolvió a su default codificado -- el
+    caller (`ejecutar_aplicar`) lo persiste en `carga.log`."""
     hoy = date.today()
-    dias_ventana = await parametros.resolver_dias_ventana_ingresos(session, hoy)
-    tolerancia = await parametros.resolver_tolerancia_ingreso_pct(session, hoy)
+    dias_ventana, dias_ventana_fue_default = await parametros.resolver_dias_ventana_ingresos(
+        session, hoy
+    )
+    tolerancia, tolerancia_fue_default = await parametros.resolver_tolerancia_ingreso_pct(
+        session, hoy
+    )
+    defaults_usados: Dict[str, Any] = {}
+    if dias_ventana_fue_default:
+        defaults_usados[parametros.CLAVE_DIAS_VENTANA_INGRESOS] = dias_ventana
+    if tolerancia_fue_default:
+        defaults_usados[parametros.CLAVE_TOLERANCIA_INGRESO_PCT] = tolerancia
 
     facturas_result = await session.execute(
         select(
@@ -563,6 +621,25 @@ async def _recalcular_transito(session: AsyncSession) -> None:
         facturas_por_documento, ingresos_por_documento, hoy, dias_ventana, tolerancia,
     )
     await transito_mod.aplicar(session, veredictos)
+    return defaults_usados
+
+
+async def _recalcular_transito_y_registrar_defaults(
+    session: AsyncSession, carga: CargaArchivo
+) -> None:
+    """Envoltorio de `_recalcular_transito` para `ejecutar_aplicar`: además
+    de disparar el recálculo, persiste cualquier default usado dentro de
+    `carga.log["parametros_default_usados"]` -- a diferencia del dry-run
+    (que arma `log` recién al cierre), `ejecutar_aplicar` no tenía NINGÚN
+    escritor de `log` hasta este batch, así que este es el primero."""
+    defaults_usados = await _recalcular_transito(session)
+    if not defaults_usados:
+        return
+    log = dict(carga.log or {})
+    existentes = dict(log.get("parametros_default_usados", {}))
+    existentes.update(defaults_usados)
+    log["parametros_default_usados"] = existentes
+    carga.log = log
 
 
 async def ejecutar_aplicar(session: AsyncSession, carga: CargaArchivo) -> None:
@@ -606,11 +683,11 @@ async def ejecutar_aplicar(session: AsyncSession, carga: CargaArchivo) -> None:
     elif tipo == "FACTURAS_PEDIDOS":
         consolidado = facturas_mod.agregar_lineas(filas_staging)
         await facturas_mod.aplicar(session, consolidado, carga.id)
-        await _recalcular_transito(session)
+        await _recalcular_transito_y_registrar_defaults(session, carga)
     elif tipo == "INGRESOS_FACTURAS":
         consolidado = ingresos_mod.agregar_documentos(filas_staging)
         await ingresos_mod.aplicar(session, consolidado, carga.id)
-        await _recalcular_transito(session)
+        await _recalcular_transito_y_registrar_defaults(session, carga)
     else:
         raise ValueError(f"Tipo no soportado por aplicar: {tipo!r}")
 
