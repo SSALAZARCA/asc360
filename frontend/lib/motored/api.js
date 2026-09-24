@@ -146,6 +146,36 @@ export async function deactivateUsuario(id) {
 }
 
 // ---------------------------------------------------------------------------
+// Usuarios -- aprobación de solicitudes del bot Lore + vinculación de
+// Telegram (sdd/motored-ventas-perdidas-bot, Phase 4, design D5). `status`
+// es el ÚNICO filtro que este backend acepta hoy en `GET /usuarios` --
+// `listSolicitudesPendientes` es sencillamente `listUsuarios` con ese
+// filtro, no un endpoint distinto.
+// ---------------------------------------------------------------------------
+
+export async function listSolicitudesPendientes() {
+  return motoredFetchJson('/usuarios?status=pending');
+}
+
+export async function aprobarUsuario(id) {
+  return motoredFetchJson(`/usuarios/${id}/aprobar`, { method: 'POST' });
+}
+
+export async function rechazarUsuario(id) {
+  return motoredFetchJson(`/usuarios/${id}/rechazar`, { method: 'POST' });
+}
+
+/** Genera un código de un solo uso (10 min) para vincular el Telegram
+ * PROPIO del ADMIN autenticado -- nunca el de otro usuario. */
+export async function generarCodigoTelegram() {
+  return motoredFetchJson('/usuarios/me/telegram/codigo', { method: 'POST' });
+}
+
+export async function desvincularTelegram() {
+  return motoredFetchJson('/usuarios/me/telegram', { method: 'DELETE' });
+}
+
+// ---------------------------------------------------------------------------
 // Parámetros de metodología (estructura únicamente en Fase 1)
 // ---------------------------------------------------------------------------
 
