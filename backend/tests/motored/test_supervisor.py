@@ -398,17 +398,31 @@ async def test_run_forever_does_not_mark_anything_when_nothing_is_in_flight(monk
 async def test_run_tick_invoca_el_due_check_de_retencion_con_la_sesion_del_tick(
     sqlite_session_maker, monkeypatch
 ):
-    llamadas = []
+    """El nombre del test promete "con la sesión del tick" -- para probar
+    eso de verdad (no solo que se llamó una vez), también se captura la
+    sesión que `sweep_heartbeats` recibe en el MISMO tick y se compara por
+    identidad (`is`), no por igualdad de valor."""
+    sesiones_retencion = []
+    sesiones_sweep = []
 
     async def _fake_ejecutar_si_corresponde(session, now=None):
-        llamadas.append(session)
+        sesiones_retencion.append(session)
         return None
 
+    sweep_original = supervisor.sweep_heartbeats
+
+    async def _sweep_espia(session, now=None):
+        sesiones_sweep.append(session)
+        return await sweep_original(session, now=now)
+
     monkeypatch.setattr(retencion, "ejecutar_si_corresponde", _fake_ejecutar_si_corresponde)
+    monkeypatch.setattr(supervisor, "sweep_heartbeats", _sweep_espia)
 
     await supervisor.run_tick()
 
-    assert len(llamadas) == 1
+    assert len(sesiones_retencion) == 1
+    assert len(sesiones_sweep) == 1
+    assert sesiones_retencion[0] is sesiones_sweep[0]
 
 
 # ---------------------------------------------------------------------------
