@@ -14,11 +14,20 @@ diseño explícitamente NO tiene (no hay worker separado, ADR-1 Opción B).
 período declarable (`FACTURAS_PEDIDOS`/`INGRESOS_FACTURAS`, fuera de
 alcance de esta fase). `log` guarda, entre otras cosas, `periodo_detectado`
 y `filas_por_periodo` (el histograma usado por el veredicto de ADR-9).
+
+`origen` (sdd/motored-ventas-perdidas-bot, Phase 1 "Schema", design D1/D2)
+distingue filas subidas por Excel de filas nacidas de un registro del bot
+"Lore". Las filas `BOT` no traen archivo real -- por eso las 4 columnas de
+archivo se vuelven nullable, con `ck_carga_archivo_archivo_por_origen`
+garantizando en la base de datos que una fila `EXCEL` siga exigiendo las 4
+tan estricta como antes. `ck_carga_archivo_bot_tipo` limita el origen `BOT`
+a `tipo='DEMANDA_PERDIDA'` (única superficie que el bot escribe en v1).
 """
 import uuid
 from datetime import datetime
 
 from sqlalchemy import (
+    CheckConstraint,
     Column,
     Date,
     DateTime,
@@ -44,14 +53,27 @@ class CargaArchivo(MotoredBase):
             "latido_en",
             postgresql_where=text("latido_en IS NOT NULL"),
         ),
+        Index(
+            "ix_carga_archivo_origen_tipo_created_at", "origen", "tipo", "created_at",
+        ),
+        CheckConstraint("origen IN ('EXCEL', 'BOT')", name="ck_carga_archivo_origen"),
+        CheckConstraint(
+            "origen = 'BOT' OR (nombre_archivo IS NOT NULL AND hash_sha256 IS NOT NULL "
+            "AND ruta_objeto IS NOT NULL AND bytes IS NOT NULL)",
+            name="ck_carga_archivo_archivo_por_origen",
+        ),
+        CheckConstraint(
+            "origen = 'EXCEL' OR tipo = 'DEMANDA_PERDIDA'", name="ck_carga_archivo_bot_tipo",
+        ),
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tipo = Column(String(32), nullable=True)
-    nombre_archivo = Column(String(255), nullable=False)
-    hash_sha256 = Column(String(64), nullable=False)
-    ruta_objeto = Column(String(500), nullable=False)
-    bytes = Column(Integer, nullable=False)
+    origen = Column(String(8), nullable=False, default="EXCEL")
+    nombre_archivo = Column(String(255), nullable=True)
+    hash_sha256 = Column(String(64), nullable=True)
+    ruta_objeto = Column(String(500), nullable=True)
+    bytes = Column(Integer, nullable=True)
     estado = Column(String(16), nullable=False, default="PENDIENTE")
 
     filas_leidas = Column(Integer, nullable=False, default=0)

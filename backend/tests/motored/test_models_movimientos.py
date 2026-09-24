@@ -203,12 +203,15 @@ def test_ingreso_factura_has_no_transito_flags():
 # ---------------------------------------------------------------------------
 
 
-def test_demanda_perdida_has_unique_fecha_sucursal_referencia():
+def test_demanda_perdida_has_unique_fecha_sucursal_referencia_origen():
+    # Widened by sdd/motored-ventas-perdidas-bot (design D2): BOT-origin rows
+    # need their own key so they never collide with the EXCEL-origin row for
+    # the same (fecha, sucursal_id, referencia_id).
     constraints = [
         c for c in DemandaPerdida.__table__.constraints if isinstance(c, UniqueConstraint)
     ]
     match = [
         c for c in constraints
-        if {col.name for col in c.columns} == {"fecha", "sucursal_id", "referencia_id"}
+        if {col.name for col in c.columns} == {"fecha", "sucursal_id", "referencia_id", "origen"}
     ]
     assert len(match) == 1
