@@ -18,6 +18,14 @@
  *    "Cargas recurrentes: un mes por archivo" notice (unchanged wording).
  * 5. A duplicate-hash response still surfaces the informational (never
  *    blocking) duplicate notice.
+ *
+ * "Descargar plantilla" (follow-up to sdd/motored-cargas-tipo-declarado):
+ * same client-side blob/`a.download` mechanism as `BulkUploadModal.js`'s own
+ * `downloadTemplate` (no server round-trip) -- proves the button exists,
+ * clicking it builds a Blob via `URL.createObjectURL`, and the Blob content
+ * is the exact per-tipo column header row (`tiposCarga.js`'s `columnas`),
+ * checked for two different tipos to prove the per-type wiring, not just
+ * that a button exists.
  */
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
@@ -129,5 +137,80 @@ describe('UploadMovimientoModal — declared tipo, one-step upload', () => {
 
     await waitFor(() => expect(screen.getByText(/Ya existe una carga idéntica/i)).toBeInTheDocument());
     expect(screen.getByText(/Carga recibida/i)).toBeInTheDocument();
+  });
+});
+
+// jsdom's Blob polyfill has no `.text()`/`.arrayBuffer()` -- FileReader is
+// the one blob-reading API jsdom does implement, so tests read the captured
+// Blob's content through it instead.
+function leerBlob(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsText(blob);
+  });
+}
+
+describe('UploadMovimientoModal — Descargar plantilla', () => {
+  let createObjectURLMock;
+
+  beforeEach(() => {
+    createObjectURLMock = jest.fn(() => 'blob:mock-url');
+    global.URL.createObjectURL = createObjectURLMock;
+    global.URL.revokeObjectURL = jest.fn();
+  });
+
+  it('renders a "Descargar plantilla" button', () => {
+    render(
+      <UploadMovimientoModal tipo="VENTAS" label="Ventas" onClose={jest.fn()} onUploaded={jest.fn()} />
+    );
+
+    expect(screen.getByText('Descargar plantilla')).toBeInTheDocument();
+  });
+
+  it('clicking "Descargar plantilla" builds a CSV blob with the exact VENTAS columns', async () => {
+    render(
+      <UploadMovimientoModal tipo="VENTAS" label="Ventas" onClose={jest.fn()} onUploaded={jest.fn()} />
+    );
+
+    fireEvent.click(screen.getByText('Descargar plantilla'));
+
+    expect(createObjectURLMock).toHaveBeenCalledTimes(1);
+    const blob = createObjectURLMock.mock.calls[0][0];
+    const contenido = await leerBlob(blob);
+    expect(contenido).toBe(
+      'Estado,Módulo,Fecha,Cantidad inv.,Tipo inventario,Desc.bodega,Bodega,Referencia'
+    );
+  });
+
+  it('clicking "Descargar plantilla" builds a CSV blob with the exact INVENTARIO columns', async () => {
+    render(
+      <UploadMovimientoModal tipo="INVENTARIO" label="Inventario" onClose={jest.fn()} onUploaded={jest.fn()} />
+    );
+
+    fireEvent.click(screen.getByText('Descargar plantilla'));
+
+    const blob = createObjectURLMock.mock.calls[0][0];
+    const contenido = await leerBlob(blob);
+    expect(contenido).toBe('Referencia,Bodega,Desc.bodega,Existencia');
+  });
+
+  it('names the downloaded file after the lowercased tipo', () => {
+    const realCreateElement = document.createElement.bind(document);
+    const anchors = [];
+    jest.spyOn(document, 'createElement').mockImplementation((tag) => {
+      const el = realCreateElement(tag);
+      if (tag === 'a') anchors.push(el);
+      return el;
+    });
+
+    render(
+      <UploadMovimientoModal tipo="VENTAS" label="Ventas" onClose={jest.fn()} onUploaded={jest.fn()} />
+    );
+    fireEvent.click(screen.getByText('Descargar plantilla'));
+
+    expect(anchors[0].download).toBe('plantilla_ventas.csv');
+    document.createElement.mockRestore();
   });
 });

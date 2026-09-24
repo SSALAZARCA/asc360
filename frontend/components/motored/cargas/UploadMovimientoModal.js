@@ -12,11 +12,29 @@
  * up front, and `POST /cargas` either succeeds outright or is rejected
  * with a named reason -- never "PENDIENTE waiting for a human to pick a
  * type", which is structurally impossible now (design D1).
+ *
+ * "Descargar plantilla" (follow-up, self-contained): same client-side
+ * blob/`a.download` mechanism `BulkUploadModal.js`'s own `downloadTemplate`
+ * already uses (no server round-trip) -- the header row is `tiposCarga.js`'s
+ * per-tipo `columnas` list, comma-joined.
  */
 import { useState } from 'react';
 import { subirCargaMovimiento, getCarga } from '../../../lib/motored/api';
 import InfoTooltip from '../InfoTooltip';
-import { tipoDeclaraPeriodo, excedeUnMes } from './tiposCarga';
+import { tipoDeclaraPeriodo, excedeUnMes, columnasTipo } from './tiposCarga';
+
+function downloadTemplate(tipo) {
+  const csv = columnasTipo(tipo).join(',');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `plantilla_${tipo.toLowerCase()}.csv`;
+  a.click();
+  // Revocar en el mismo tick puede cancelar la descarga en algunos
+  // navegadores (mismo ajuste ya aplicado en api.js::descargarErroresCargaCsv).
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
 
 const overlayStyle = {
   position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
@@ -199,9 +217,14 @@ export default function UploadMovimientoModal({ tipo, label, onClose, onUploaded
           <h2 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: 'var(--motored-text, #1a1a18)' }}>
             Subir {label}
           </h2>
-          <button type="button" className="motored-btn motored-btn-tertiary" onClick={onClose}>
-            Cerrar
-          </button>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button type="button" className="motored-btn motored-btn-tertiary" onClick={() => downloadTemplate(tipo)}>
+              Descargar plantilla
+            </button>
+            <button type="button" className="motored-btn motored-btn-tertiary" onClick={onClose}>
+              Cerrar
+            </button>
+          </div>
         </div>
 
         {error && <p style={{ margin: 0, color: 'var(--motored-danger, #c0392b)', fontSize: '0.75rem' }}>{error}</p>}

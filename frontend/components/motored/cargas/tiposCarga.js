@@ -14,14 +14,44 @@
  * crudo para que filas HISTÓRICAS con esos dos valores (o `NULL`) sigan
  * mostrando algo legible en la grilla compartida (spec "Historical rows
  * with legacy or missing tipo remain servable").
+ *
+ * `columnas` (follow-up al cambio de arriba): fuente única de las columnas
+ * esperadas por tipo, para que `UploadMovimientoModal` pueda ofrecer
+ * "Descargar plantilla" -- copiadas EXACTAS de `COLUMNAS_ESPERADAS` en cada
+ * módulo de transform del backend (`backend/app/motored/services/ingesta/
+ * {ventas,inventario,backorder,demanda_perdida,facturas,ingresos}.py`); si
+ * ese `COLUMNAS_ESPERADAS` cambia en el backend, esta lista debe seguirlo,
+ * igual que `declaraPeriodo` sigue a `TIPOS_QUE_DECLARAN_PERIODO`.
+ * BACKORDER además incluye `Fecha Creación`, columna real que el archivo
+ * puede traer (`COLUMNAS_OPCIONALES` en `backorder.py`, task 9.6) aunque no
+ * sea obligatoria -- se ofrece en la plantilla para que el usuario sepa que
+ * puede completarla.
  */
 export const TIPOS_CARGA = [
-  { value: 'VENTAS', label: 'Ventas', declaraPeriodo: true, periodoLabel: 'mes' },
-  { value: 'INVENTARIO', label: 'Inventario', declaraPeriodo: true, periodoLabel: 'fecha de corte' },
-  { value: 'BACKORDER', label: 'Backorder', declaraPeriodo: true, periodoLabel: 'fecha de corte' },
-  { value: 'DEMANDA_PERDIDA', label: 'Demanda perdida', declaraPeriodo: true, periodoLabel: 'fecha' },
-  { value: 'FACTURAS_PEDIDOS', label: 'Facturas de pedidos', declaraPeriodo: false },
-  { value: 'INGRESOS_FACTURAS', label: 'Ingresos de facturas', declaraPeriodo: false },
+  {
+    value: 'VENTAS', label: 'Ventas', declaraPeriodo: true, periodoLabel: 'mes',
+    columnas: ['Estado', 'Módulo', 'Fecha', 'Cantidad inv.', 'Tipo inventario', 'Desc.bodega', 'Bodega', 'Referencia'],
+  },
+  {
+    value: 'INVENTARIO', label: 'Inventario', declaraPeriodo: true, periodoLabel: 'fecha de corte',
+    columnas: ['Referencia', 'Bodega', 'Desc.bodega', 'Existencia'],
+  },
+  {
+    value: 'BACKORDER', label: 'Backorder', declaraPeriodo: true, periodoLabel: 'fecha de corte',
+    columnas: ['SIC', 'Sucursal', 'Número del pedido', 'Estado del pedido', 'Referencia Parte', 'Cantidad Pendiente', 'Fecha Creación'],
+  },
+  {
+    value: 'DEMANDA_PERDIDA', label: 'Demanda perdida', declaraPeriodo: true, periodoLabel: 'fecha',
+    columnas: ['sucursal', 'sucursal Drive', 'Referencia', 'Cantidad Solicitada'],
+  },
+  {
+    value: 'FACTURAS_PEDIDOS', label: 'Facturas de pedidos', declaraPeriodo: false,
+    columnas: ['SIIC', 'Sucursal', 'Nota crédito', 'Factura', 'Fecha', 'Parte', 'Cantidad', 'Vlr. Total Neto'],
+  },
+  {
+    value: 'INGRESOS_FACTURAS', label: 'Ingresos de facturas', declaraPeriodo: false,
+    columnas: ['Nrodocumento', 'Fecha', 'Estado', 'Dct.referencia', 'Valornetolocal'],
+  },
 ];
 
 export const ESTADOS_CARGA = [
@@ -34,6 +64,10 @@ export function labelTipo(tipo) {
 
 export function tipoDeclaraPeriodo(tipo) {
   return TIPOS_CARGA.find((t) => t.value === tipo)?.declaraPeriodo ?? false;
+}
+
+export function columnasTipo(tipo) {
+  return TIPOS_CARGA.find((t) => t.value === tipo)?.columnas || [];
 }
 
 const ESTADO_COLOR = {
