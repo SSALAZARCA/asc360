@@ -2,12 +2,26 @@ import os
 import re
 import json
 import asyncio
+import base64
 import tempfile
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 import httpx
 
 BOGOTA = timezone(timedelta(hours=-5))
+
+
+async def photo_to_data_uri(photo_file) -> str:
+    """Descarga la foto y la devuelve como `data:` URI en vez de pasarle a
+    OpenAI la URL de descarga de Telegram (`photo_file.file_path`) -- esa
+    URL trae el token del bot incrustado (`.../file/bot<TOKEN>/...`), así
+    que mandarla a un tercero filtra el token en cada foto procesada.
+    Telegram siempre entrega `photo` como JPEG, sin importar el formato
+    original subido por el usuario."""
+    file_bytes = await photo_file.download_as_bytearray()
+    b64 = base64.b64encode(bytes(file_bytes)).decode()
+    return f"data:image/jpeg;base64,{b64}"
+
 
 def fmt_bogota(iso_str: str, fmt: str = "%d/%m/%Y %H:%M") -> str:
     """Convierte un string ISO UTC a hora Colombia (UTC-5)."""
@@ -840,7 +854,15 @@ async def process_plate(update: Update, context: ContextTypes.DEFAULT_TYPE, dire
     elif update.message.photo:
         await update.message.reply_text("Revisando la matrícula... dame un segundo 🔍")
         photo_file = await update.message.photo[-1].get_file()
-        extracted = await extract_data_from_image(photo_file.file_path)
+        try:
+            image_data_uri = await photo_to_data_uri(photo_file)
+        except Exception as e:
+            logger.error(f"process_plate: no se pudo descargar la foto: {e}")
+            await update.message.reply_text(
+                "No pude descargar esa foto. ¿Me la mandas de nuevo o me escribes la placa directamente?"
+            )
+            return ASKING_PLATE
+        extracted = await extract_data_from_image(image_data_uri)
 
         plate = extracted.get("placa")
         if not plate:
@@ -1225,9 +1247,18 @@ async def handle_km(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     if update.message.photo:
         await update.message.reply_text("Revisando el tablero... 🔍")
         photo_file = await update.message.photo[-1].get_file()
-        extracted = await extract_reception_data_from_image(photo_file.file_path)
-        if extracted.get("kilometraje"):
-            context.user_data['km'] = extracted["kilometraje"]
+        try:
+            image_data_uri = await photo_to_data_uri(photo_file)
+        except Exception as e:
+            logger.error(f"handle_km: no se pudo descargar la foto: {e}")
+            await update.message.reply_text(
+                "No pude descargar esa foto. Escribime el kilometraje directamente."
+            )
+            image_data_uri = None
+        if image_data_uri:
+            extracted = await extract_reception_data_from_image(image_data_uri)
+            if extracted.get("kilometraje"):
+                context.user_data['km'] = extracted["kilometraje"]
 
     elif update.message.voice:
         await update.message.reply_text("Escuchando... 🎧")
