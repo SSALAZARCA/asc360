@@ -24,6 +24,7 @@ from sqlalchemy.ext.compiler import compiles
 from app.config import settings
 from app.motored import database as motored_database
 from app.motored.models.carga_archivo import CargaArchivo
+from app.motored.services import retencion
 from app.motored.services.trabajos import jobs, supervisor
 
 
@@ -385,6 +386,29 @@ async def test_run_forever_does_not_mark_anything_when_nothing_is_in_flight(monk
         await task
 
     assert interrupted == []
+
+
+# ---------------------------------------------------------------------------
+# Fase 12 "Retention Purge" (ADR-3) — run_tick invoca el due-check de
+# retención en la MISMA sesión, después del sweep+claim. Ningún mecanismo
+# nuevo: el propio tick del supervisor es lo que la hace correr.
+# ---------------------------------------------------------------------------
+
+
+async def test_run_tick_invoca_el_due_check_de_retencion_con_la_sesion_del_tick(
+    sqlite_session_maker, monkeypatch
+):
+    llamadas = []
+
+    async def _fake_ejecutar_si_corresponde(session, now=None):
+        llamadas.append(session)
+        return None
+
+    monkeypatch.setattr(retencion, "ejecutar_si_corresponde", _fake_ejecutar_si_corresponde)
+
+    await supervisor.run_tick()
+
+    assert len(llamadas) == 1
 
 
 # ---------------------------------------------------------------------------

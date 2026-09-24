@@ -44,6 +44,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.motored.database import motored_session_maker
 from app.motored.models.carga_archivo import CargaArchivo
+from app.motored.services import retencion
 from app.motored.services.ingesta.periodo import TIPOS_QUE_DECLARAN_PERIODO
 from app.motored.services.trabajos import jobs
 
@@ -104,14 +105,20 @@ async def _run_forever() -> None:
 
 
 async def run_tick() -> None:
-    """Un tick del supervisor: sweep de heartbeat, después claim+dispatch
-    de UNA fila `PENDIENTE` si existe. Público (no `_run_tick`) para que
-    los tests puedan disparar un tick determinístico sin el loop de
-    sleep."""
+    """Un tick del supervisor: sweep de heartbeat, claim+dispatch de UNA
+    fila `PENDIENTE` si existe, y el due-check de retención (Fase 12,
+    ADR-3) -- en ESE orden, en la MISMA sesión. El due-check corre después
+    del claim a propósito: si este mismo tick acaba de reclamar una fila
+    (ahora `PROCESANDO`), `retencion.hay_job_activo` la ve y la purga se
+    salta sin ninguna coordinación adicional -- el gate "no active job" es
+    contra la base, no contra un registro en memoria de este proceso.
+    Público (no `_run_tick`) para que los tests puedan disparar un tick
+    determinístico sin el loop de sleep."""
     session_maker = motored_session_maker()
     async with session_maker() as session:
         await sweep_heartbeats(session)
         claimed = await claim_next_pendiente(session)
+        await retencion.ejecutar_si_corresponde(session)
 
     if claimed is None:
         return
