@@ -30,12 +30,18 @@ from app.motored.models.usuario import Usuario
 class MotoredUser:
     """Resultado de `get_current_motored_user`. Independiente del modelo
     ORM `Usuario` -- solo lleva lo que las dependencias de autorización
-    necesitan."""
+    necesitan.
+
+    `status` (sdd/motored-ventas-perdidas-bot, Phase 1/3, design D5) espeja
+    `Usuario.status`; el default `"approved"` mantiene sin cambios a todo
+    call site existente que construye `MotoredUser(...)` a mano sin pasar
+    `status` (RBAC/scoping tests, `test_auth_isolation.py`)."""
 
     user_id: str
     role: str
     sucursal_ids: List[str] = field(default_factory=list)
     activo: bool = True
+    status: str = "approved"
 
 
 MotoredUserLookup = Callable[[str], Awaitable[Optional[MotoredUser]]]
@@ -66,6 +72,11 @@ async def obtener_usuario_motored(db: AsyncSession, user_id: str) -> Optional[Mo
         role=role_value,
         sucursal_ids=sucursal_ids,
         activo=usuario.activo,
+        # `usuario.status` is `None` for `Usuario(...)` rows built by hand
+        # without the column's DB-level `server_default` (every pre-Phase-1
+        # test fixture in this suite) -- fall back to "approved" so those
+        # rows keep behaving exactly like a real, already-migrated row.
+        status=usuario.status or "approved",
     )
 
 

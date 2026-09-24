@@ -58,7 +58,7 @@ from __future__ import annotations
 
 import io
 import uuid
-from datetime import date
+from datetime import date, datetime, time
 from typing import Any, Dict, List, Optional
 
 from fastapi import (
@@ -98,6 +98,7 @@ from app.motored.schemas.ingesta import (
     ResolverErroresRequest,
     ResolverErroresResultado,
 )
+from app.motored.services import demanda_perdida_bot as demanda_perdida_bot_mod
 from app.motored.services import maestros as maestros_mod
 from app.motored.services import storage
 from app.motored.services.ingesta import deteccion as deteccion_mod
@@ -318,6 +319,15 @@ async def actualizar_carga(
     (`sdd/motored-cargas-tipo-declarado/design`, D1); `CargaArchivoPatch`
     no expone ese campo."""
     carga = await _carga_or_404(db, carga_id)
+    if carga.origen == "BOT":
+        # sdd/motored-ventas-perdidas-bot, design D1: un header BOT nunca
+        # declara período (nace del registro puntual del asesor, no de un
+        # archivo con período declarado) -- rechazado explícitamente,
+        # nunca dependiendo de que además nazca `estado='APLICADO'`.
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="No se puede modificar el período de una carga de origen BOT.",
+        )
     if carga.estado != "PENDIENTE":
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -336,30 +346,83 @@ async def actualizar_carga(
     return CargaArchivoRead.model_validate(carga)
 
 
+_BOT_RANGO_MAX_DIAS = 31
+
+
+def _validar_rango_bot(desde: Optional[date], hasta: Optional[date]) -> None:
+    """`origen=BOT` exige `desde`+`hasta` con un rango de a lo sumo
+    `_BOT_RANGO_MAX_DIAS` días -- un scan sin acotar de ~340k headers/año de
+    bot es exactamente el problema de volumen que esta decisión evita
+    (design D1). Extraído de `listar_cargas` (gga: single-purpose)."""
+    if desde is None or hasta is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="origen=BOT requiere 'desde' y 'hasta'.",
+        )
+    if hasta < desde:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="'hasta' no puede ser anterior a 'desde'.",
+        )
+    if (hasta - desde).days > _BOT_RANGO_MAX_DIAS:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                f"El rango 'desde'/'hasta' no puede superar "
+                f"{_BOT_RANGO_MAX_DIAS} días para origen=BOT."
+            ),
+        )
+
+
 @router.get("", response_model=List[CargaArchivoRead])
 async def listar_cargas(
     tipo: Optional[str] = None,
     estado: Optional[str] = None,
     desde: Optional[date] = None,
     hasta: Optional[date] = None,
+    origen: str = "EXCEL",
     db: AsyncSession = Depends(get_motored_db_or_503),
     user: MotoredUser = Depends(get_current_motored_user),
 ):
     """`GET /cargas` -- lista completa para los 4 roles (ver docstring del
-    módulo, "Decisión documentada -- scoping de GET /cargas")."""
-    stmt = select(CargaArchivo)
+    módulo, "Decisión documentada -- scoping de GET /cargas").
+
+    `origen` (sdd/motored-ventas-perdidas-bot, design D1, volume
+    mitigation): default `EXCEL` -- comportamiento IDÉNTICO al de hoy para
+    todo caller existente (la pantalla de Cargas), porque toda fila
+    existente es EXCEL. `origen=BOT` exige `desde`+`hasta` con un rango de
+    a lo sumo 31 días -- un scan sin acotar de ~340k headers/año de bot es
+    exactamente el problema de volumen que esta decisión evita.
+
+    Post-Phase-3 review, finding #1: un header BOT NUNCA declara período
+    (`periodo_desde`/`periodo_hasta` son siempre `NULL` -- design D1, un
+    registro puntual del asesor no es un archivo con período). Filtrar por
+    esas columnas para `origen=BOT` sería un no-op que no acota NADA
+    (`periodo_hasta IS NULL OR ...` y `periodo_desde IS NULL OR ...` son
+    ambas vacuamente verdaderas), dejando pasar cualquier fila BOT sin
+    importar el rango pedido -- exactamente el problema de volumen que este
+    guard existe para evitar. Para `origen=BOT` se filtra por `created_at`
+    en su lugar, la columna que sí tiene un valor real en cada fila BOT."""
+    if origen == "BOT":
+        _validar_rango_bot(desde, hasta)
+    stmt = select(CargaArchivo).where(CargaArchivo.origen == origen)
     if tipo:
         stmt = stmt.where(CargaArchivo.tipo == tipo)
     if estado:
         stmt = stmt.where(CargaArchivo.estado == estado)
-    if desde:
-        stmt = stmt.where(
-            (CargaArchivo.periodo_hasta.is_(None)) | (CargaArchivo.periodo_hasta >= desde)
-        )
-    if hasta:
-        stmt = stmt.where(
-            (CargaArchivo.periodo_desde.is_(None)) | (CargaArchivo.periodo_desde <= hasta)
-        )
+    if origen == "BOT":
+        desde_dt = datetime.combine(desde, time.min)
+        hasta_dt = datetime.combine(hasta, time.max)
+        stmt = stmt.where(CargaArchivo.created_at >= desde_dt, CargaArchivo.created_at <= hasta_dt)
+    else:
+        if desde:
+            stmt = stmt.where(
+                (CargaArchivo.periodo_hasta.is_(None)) | (CargaArchivo.periodo_hasta >= desde)
+            )
+        if hasta:
+            stmt = stmt.where(
+                (CargaArchivo.periodo_desde.is_(None)) | (CargaArchivo.periodo_desde <= hasta)
+            )
     stmt = stmt.order_by(CargaArchivo.created_at.desc())
     result = await db.execute(stmt)
     return [CargaArchivoRead.model_validate(row) for row in result.scalars().all()]
@@ -393,6 +456,7 @@ async def obtener_informe(
             .where(
                 CargaArchivo.tipo == carga.tipo,
                 CargaArchivo.estado == "APLICADO",
+                CargaArchivo.origen == "EXCEL",
                 CargaArchivo.id != carga.id,
             )
             .order_by(CargaArchivo.created_at.desc())
@@ -612,6 +676,30 @@ async def anular_carga(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail="La carga ya está anulada."
         )
+
+    if carga.origen == "BOT":
+        # sdd/motored-ventas-perdidas-bot, design D4: un header BOT no
+        # tiene `carga_fila_staging` que borrar -- el ADMIN web delega en
+        # el mismo servicio que usará el propio endpoint del bot
+        # (`validar_ventana=True`, Fase 6), pero sin sus reglas de
+        # propio-actor/mismo-día (`validar_ventana=False`).
+        #
+        # Post-Phase-3 review, finding #2: el guard `estado == "ANULADO"`
+        # de arriba es un SELECT + chequeo en Python, no atómico -- dos
+        # llamadas concurrentes pueden pasarlo ambas. El claim atómico real
+        # vive DENTRO de `anular_registro_bot` (única barrera común a toda
+        # llamada concurrente contra la misma fila); acá solo se traduce su
+        # `CargaYaAnuladaError` al mismo 409 que el guard de arriba ya usa.
+        try:
+            await demanda_perdida_bot_mod.anular_registro_bot(
+                db, carga, user, validar_ventana=False
+            )
+        except demanda_perdida_bot_mod.CargaYaAnuladaError:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT, detail="La carga ya está anulada."
+            )
+        await db.commit()
+        return CargaArchivoRead.model_validate(carga)
 
     # Guard de corrida CERRADA: `corrida` no existe aún -- conjunto vacío,
     # nunca bloquea (ver docstring del endpoint).

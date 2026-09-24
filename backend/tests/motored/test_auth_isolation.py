@@ -136,6 +136,47 @@ def test_motored_token_with_forged_audience_rejected_by_motored_endpoint(motored
     assert response.status_code == 401
 
 
+def test_asesor_mostrador_role_rejected_by_get_current_motored_user(motored_test_route):
+    """Task 3.11 (sdd/motored-ventas-perdidas-bot, design D5 'Web
+    hardening'): `ASESOR_MOSTRADOR` never authenticates through the web JWT
+    path -- defense-in-depth even if a well-formed token somehow decoded
+    for one (it has no `hashed_password` to log in with in the first
+    place; see `api/auth.py`'s null-password guard)."""
+    from app.motored.deps import get_motored_user_lookup
+
+    async def _lookup(user_id: str):
+        return MotoredUser(user_id=user_id, role="ASESOR_MOSTRADOR")
+
+    app.dependency_overrides[get_motored_user_lookup] = lambda: _lookup
+    token = create_motored_token(sub="advisor-1", role="ASESOR_MOSTRADOR")
+
+    with TestClient(app) as client:
+        response = client.get(
+            motored_test_route, headers={"Authorization": f"Bearer {token}"}
+        )
+
+    assert response.status_code == 401
+
+
+def test_pending_status_rejected_by_get_current_motored_user(motored_test_route):
+    """A `pending`/`rejected` account of any role must not be treated as
+    authenticated just because its token still decodes (design D5)."""
+    from app.motored.deps import get_motored_user_lookup
+
+    async def _lookup(user_id: str):
+        return MotoredUser(user_id=user_id, role="SUCURSAL", status="pending")
+
+    app.dependency_overrides[get_motored_user_lookup] = lambda: _lookup
+    token = create_motored_token(sub="pending-1", role="SUCURSAL")
+
+    with TestClient(app) as client:
+        response = client.get(
+            motored_test_route, headers={"Authorization": f"Bearer {token}"}
+        )
+
+    assert response.status_code == 401
+
+
 def test_valid_motored_token_accepted_by_motored_endpoint(motored_test_route):
     """Sanity control: the real dependency DOES accept a genuine Motored
     token via the swappable lookup seam -- proves the 401s above are about

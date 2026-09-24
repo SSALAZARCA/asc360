@@ -46,7 +46,8 @@ class CargaArchivoRead(BaseModel):
 
     id: uuid.UUID
     tipo: Optional[str]
-    nombre_archivo: str
+    origen: str = "EXCEL"
+    nombre_archivo: Optional[str]
     estado: str
     filas_leidas: int
     filas_validas: int

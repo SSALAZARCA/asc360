@@ -106,6 +106,64 @@ def test_inactive_user_returns_the_same_generic_401(monkeypatch):
     app.dependency_overrides.clear()
 
 
+def test_login_advisor_account_with_null_password_returns_401_not_a_crash(monkeypatch):
+    """Task 3.9/3.10 (sdd/motored-ventas-perdidas-bot): `ASESOR_MOSTRADOR`
+    rows (Phase 1) have `hashed_password IS NULL` -- they never get web
+    credentials. Before the guard, this would reach
+    `verify_password(payload.password, None)`, which crashes calling
+    `.encode()` on `None` (bcrypt.checkpw) instead of cleanly rejecting."""
+    monkeypatch.setattr(settings, "MOTORED_ENABLED", True)
+    monkeypatch.setattr(settings, "MOTORED_SECRET_KEY", "login-test-motored-secret")
+    monkeypatch.setattr(settings, "SECRET_KEY", "login-test-asc360-secret")
+    usuario = Usuario(
+        id=uuid.uuid4(),
+        nombre="Carlos Asesor",
+        email=None,
+        hashed_password=None,
+        role=MotoredRole.ASESOR_MOSTRADOR,
+        activo=True,
+    )
+    usuario.sucursales = []
+    override_motored_db(FakeAsyncSession(execute_queue=[[], [usuario]]))
+
+    with TestClient(app) as client:
+        response = client.post(
+            LOGIN_URL, json={"email": "carlos@x.com", "password": "cualquiera"}
+        )
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Credenciales incorrectas"
+
+    app.dependency_overrides.clear()
+
+
+def test_pending_status_account_with_valid_password_returns_401_at_login(monkeypatch):
+    """Review finding #4 (post-Phase-3): `status`'s `pending -> approved|
+    rejected` flow is schema-wide per `Usuario`'s own docstring, not
+    bot-exclusive -- a self-registered web account (any role) with a REAL
+    password and `status='pending'`/`'rejected'` currently still gets a
+    200 + valid JWT from `/login` (it only 401s later, one request after,
+    via `get_current_motored_user`). Reject it HERE too, at login itself,
+    with the same generic 401 -- defense-in-depth and a consistent,
+    non-information-leaking rejection surface."""
+    monkeypatch.setattr(settings, "MOTORED_ENABLED", True)
+    monkeypatch.setattr(settings, "MOTORED_SECRET_KEY", "login-test-motored-secret")
+    monkeypatch.setattr(settings, "SECRET_KEY", "login-test-asc360-secret")
+    usuario = _make_usuario("correcta123")
+    usuario.status = "pending"
+    override_motored_db(FakeAsyncSession(execute_queue=[[], [usuario]]))
+
+    with TestClient(app) as client:
+        response = client.post(
+            LOGIN_URL, json={"email": usuario.email, "password": "correcta123"}
+        )
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Credenciales incorrectas"
+
+    app.dependency_overrides.clear()
+
+
 def test_login_returns_503_when_motored_disabled(monkeypatch):
     monkeypatch.setattr(settings, "MOTORED_ENABLED", False)
 

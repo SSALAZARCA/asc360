@@ -97,6 +97,16 @@ async def get_current_motored_user(
     if not user or not user.activo:
         raise credentials_exception
 
+    if user.role == "ASESOR_MOSTRADOR" or user.status != "approved":
+        # sdd/motored-ventas-perdidas-bot, Phase 3, design D5 ("Web
+        # hardening"): `ASESOR_MOSTRADOR` never authenticates through the
+        # WEB JWT path (it has no `hashed_password` to log in with in the
+        # first place -- see `api/auth.py`'s null-password guard -- this is
+        # defense-in-depth against a token ever being issued for one), and
+        # a `pending`/`rejected` account of ANY role must not be treated as
+        # authenticated just because its token still decodes.
+        raise credentials_exception
+
     return user
 
 

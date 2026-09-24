@@ -30,6 +30,7 @@ separately-tested concern — see `test_ingesta_orquestador.py`).
 """
 import io
 import uuid
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
 import openpyxl
@@ -45,7 +46,12 @@ from app.motored.models.carga_fila_staging import CargaFilaStaging
 from app.motored.services.auth import MotoredUser
 from app.motored.services.storage import ResultadoSubida
 from app.motored.services.trabajos.runner import JobRunner
-from tests.motored.conftest import FakeAsyncSession, override_motored_db, override_motored_user
+from tests.motored.conftest import (
+    FakeAsyncSession,
+    _ExecuteResult,
+    override_motored_db,
+    override_motored_user,
+)
 
 ALL_ROLES = ["ADMIN", "COMPRAS", "SUCURSAL", "CONSULTA"]
 WRITE_ROLES = {"ADMIN", "COMPRAS"}
@@ -94,6 +100,7 @@ def _carga(estado="VALIDADO", tipo="INVENTARIO", **overrides) -> CargaArchivo:
     base = dict(
         id=uuid.uuid4(),
         tipo=tipo,
+        origen="EXCEL",
         nombre_archivo="archivo.xlsx",
         hash_sha256="a" * 64,
         ruta_objeto=f"{tipo or 'SIN_TIPO'}/2026/09/x.xlsx",
@@ -654,3 +661,284 @@ def test_post_cargas_duplicate_hash_is_flagged_never_blocked(monkeypatch):
 
     assert response.status_code == 202, response.text
     assert response.json()["duplicado_de"] == str(carga_previa_id)
+
+
+# ---------------------------------------------------------------------------
+# Phase 3 (sdd/motored-ventas-perdidas-bot, design D1/D4) — 4 pre-existing
+# bugfixes surfaced by the bot's `origen='BOT'` rows, plus the PATCH/anular
+# BOT guards.
+# ---------------------------------------------------------------------------
+
+
+def _client_with_session(role: str, session: "FakeAsyncSession") -> TestClient:
+    override_motored_user(MotoredUser(user_id=str(uuid.uuid4()), role=role))
+    override_motored_db(session)
+    return TestClient(app)
+
+
+def _extraer_predicados(stmt) -> list:
+    """Post-Phase-3 review, finding #3: camina el WHERE compilado (nivel
+    superior, unido por AND) de `stmt` y devuelve `(nombre_columna,
+    operador, valor)` por cada comparación DIRECTA columna-vs-literal.
+    Usado por `_FilteringFakeSession` para probar que un filtro (origen,
+    ventana de fechas) REALMENTE determina qué filas sobreviven, en vez de
+    solo verificar que un string aparece en algún bind param del statement
+    compilado -- esa aserción vieja (`"EXCEL" in stmt.compile().params.
+    values()`) pasaba igual con un filtro atado a la columna equivocada, o
+    directamente ausente (un no-op). Los nodos OR (p.ej. las cláusulas de
+    período `periodo_hasta IS NULL OR periodo_hasta >= desde`) no tienen
+    `.left`/`.right` de nivel superior -- se saltean sin error, esos casos
+    ya están cubiertos por otros tests (los `422` de rango)."""
+    whereclause = getattr(stmt, "whereclause", None)
+    if whereclause is None:
+        return []
+    clausulas = getattr(whereclause, "clauses", [whereclause])
+    predicados = []
+    for clausula in clausulas:
+        left = getattr(clausula, "left", None)
+        right = getattr(clausula, "right", None)
+        operador = getattr(clausula, "operator", None)
+        nombre_columna = getattr(left, "key", None)
+        if nombre_columna is None or operador is None or not hasattr(right, "value"):
+            continue
+        predicados.append((nombre_columna, operador, right.value))
+    return predicados
+
+
+class _FilteringFakeSession(FakeAsyncSession):
+    """Como `FakeAsyncSession`, pero filtra la página encolada por los
+    predicados REALES extraídos del `select` compilado antes de
+    devolverla -- ver `_extraer_predicados`. Una fila candidata sin el
+    atributo que un predicado necesita se excluye (fail-closed), no se deja
+    pasar por descuido."""
+
+    async def execute(self, stmt):
+        self.executed_statements.append(stmt)
+        if not self._execute_queue:
+            raise AssertionError(
+                "FakeAsyncSession.execute() called more times than expected "
+                "— update the test's execute_queue."
+            )
+        rows = self._execute_queue.pop(0)
+        predicados = _extraer_predicados(stmt)
+        if predicados:
+            rows = [
+                row for row in rows
+                if all(
+                    hasattr(row, nombre) and operador(getattr(row, nombre), valor)
+                    for nombre, operador, valor in predicados
+                )
+            ]
+        # `_CandidataAnterior` (más abajo) simula una fila de un `select`
+        # PROYECTADO (una sola columna, no la entidad completa) -- una vez
+        # filtrada, la consulta real solo devuelve el escalar, nunca el
+        # wrapper que carga los campos extra necesarios para filtrar.
+        rows = [row.valor if hasattr(row, "valor") else row for row in rows]
+        return _ExecuteResult(rows)
+
+
+def test_get_cargas_default_origen_filters_to_excel_only():
+    """Task 3.1/3.2 + review finding #3: no `origen` param -> defaults to
+    `EXCEL`. Queues BOTH an EXCEL and a BOT row as available candidates and
+    proves the response only contains the EXCEL one -- a filter bound to
+    the wrong column, or no filter at all, would leak the BOT row into this
+    response and fail this assertion."""
+    carga_excel = _carga(origen="EXCEL")
+    carga_bot = _carga(
+        origen="BOT", tipo="DEMANDA_PERDIDA", estado="APLICADO",
+        nombre_archivo=None, hash_sha256=None, ruta_objeto=None, bytes=None,
+    )
+    session = _FilteringFakeSession(execute_queue=[[], [carga_excel, carga_bot]])
+    client = _client_with_session("ADMIN", session)
+
+    response = client.get(CARGAS_URL)
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert [row["id"] for row in body] == [str(carga_excel.id)]
+    assert all(row["origen"] == "EXCEL" for row in body)
+
+
+def test_get_cargas_origen_bot_sin_desde_hasta_is_422():
+    """Task 3.1/3.2: `origen=BOT` without both `desde` and `hasta` is
+    rejected before touching the DB -- an unbounded BOT scan is exactly the
+    volume problem design D1 exists to prevent."""
+    session = FakeAsyncSession(execute_queue=[[]])
+    client = _client_with_session("ADMIN", session)
+
+    response = client.get(CARGAS_URL, params={"origen": "BOT"})
+
+    assert response.status_code == 422
+
+
+def test_get_cargas_origen_bot_con_rango_mayor_a_31_dias_is_422():
+    session = FakeAsyncSession(execute_queue=[[]])
+    client = _client_with_session("ADMIN", session)
+
+    response = client.get(
+        CARGAS_URL,
+        params={"origen": "BOT", "desde": "2026-01-01", "hasta": "2026-03-01"},
+    )
+
+    assert response.status_code == 422
+
+
+def test_get_cargas_origen_bot_hasta_anterior_a_desde_is_422():
+    """Review finding #1 (post-Phase-3): an inverted range (`hasta` before
+    `desde`) yields a NEGATIVE `(hasta - desde).days`, which silently
+    passes the `> 31` check -- must be rejected explicitly instead of
+    leaking through as a seemingly-valid, unbounded-in-practice request."""
+    session = FakeAsyncSession(execute_queue=[[]])
+    client = _client_with_session("ADMIN", session)
+
+    response = client.get(
+        CARGAS_URL,
+        params={"origen": "BOT", "desde": "2026-09-24", "hasta": "2026-09-01"},
+    )
+
+    assert response.status_code == 422
+
+
+def test_get_cargas_origen_bot_con_rango_valido_filtra_por_origen_bot():
+    """Task 3.1/3.2 + review finding #1/#3: proves BOTH that only
+    BOT-origin rows survive AND that the date window is actually bound
+    against `created_at` (the column that has a real value on every BOT
+    row) -- `periodo_desde`/`periodo_hasta` are always NULL for BOT rows
+    (design D1: a bot header never declares a period), so filtering on
+    those columns would be a no-op that bounds nothing. A BOT row created
+    OUTSIDE the requested window must be excluded."""
+    carga_excel = _carga(origen="EXCEL", created_at=datetime(2026, 9, 10))
+    carga_bot_en_rango = _carga(
+        origen="BOT", tipo="DEMANDA_PERDIDA", estado="APLICADO",
+        nombre_archivo=None, hash_sha256=None, ruta_objeto=None, bytes=None,
+        created_at=datetime(2026, 9, 10),
+    )
+    carga_bot_fuera_de_rango = _carga(
+        origen="BOT", tipo="DEMANDA_PERDIDA", estado="APLICADO",
+        nombre_archivo=None, hash_sha256=None, ruta_objeto=None, bytes=None,
+        created_at=datetime(2026, 8, 1),
+    )
+    session = _FilteringFakeSession(
+        execute_queue=[[], [carga_excel, carga_bot_en_rango, carga_bot_fuera_de_rango]]
+    )
+    client = _client_with_session("ADMIN", session)
+
+    response = client.get(
+        CARGAS_URL, params={"origen": "BOT", "desde": "2026-09-01", "hasta": "2026-09-24"}
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert [row["id"] for row in body] == [str(carga_bot_en_rango.id)]
+
+
+@dataclass
+class _CandidataAnterior:
+    """Envoltorio mínimo para simular una fila candidata de un `select`
+    PROYECTADO (`select(CargaArchivo.filas_validas)`, no la entidad
+    completa) que además expone los campos que la query realmente filtra
+    (`origen`, `tipo`, `estado`, `id`) -- necesarios para que
+    `_FilteringFakeSession` evalúe los predicados reales. Una consulta real
+    jamás ve este wrapper: el filtrado ya pasó server-side y solo llega el
+    escalar `valor`."""
+
+    origen: str
+    tipo: str
+    estado: str
+    id: uuid.UUID
+    valor: int
+
+
+def test_get_informe_variacion_query_filtra_por_origen_excel():
+    """Task 3.3/3.4 + review finding #3: queues BOTH an EXCEL and a BOT
+    candidate for the 'previous APLICADO carga' query and proves the BOT
+    one is never picked as the variance baseline -- the old test only
+    checked that 'EXCEL' appeared somewhere among the compiled bind params,
+    which would pass even if the filter were bound to `tipo`/`estado`
+    instead of `origen`."""
+    carga = _carga(estado="VALIDADO", tipo="INVENTARIO", filas_validas=50)
+    candidata_excel = _CandidataAnterior(
+        origen="EXCEL", tipo="INVENTARIO", estado="APLICADO", id=uuid.uuid4(), valor=80,
+    )
+    candidata_bot = _CandidataAnterior(
+        origen="BOT", tipo="INVENTARIO", estado="APLICADO", id=uuid.uuid4(), valor=999,
+    )
+    session = _FilteringFakeSession(
+        execute_queue=[[], [carga], [candidata_excel, candidata_bot]]
+    )
+    client = _client_with_session("ADMIN", session)
+
+    response = client.get(f"{CARGAS_URL}/{carga.id}/informe")
+
+    assert response.status_code == 200, response.text
+    # 999 (the BOT candidate) would have produced a wildly different
+    # number -- proves the EXCEL candidate (80) is the one actually used.
+    variacion_esperada = ((50 - 80) / 80) * 100
+    assert response.json()["variacion_pct_vs_carga_anterior"] == pytest.approx(variacion_esperada)
+
+
+def test_get_carga_by_id_bot_row_with_null_nombre_archivo_does_not_500():
+    """Task 3.5/3.6: Phase 1 made `nombre_archivo`/`hash_sha256`/
+    `ruta_objeto`/`bytes` nullable at the DB level for BOT rows;
+    `CargaArchivoRead.nombre_archivo` was still a required `str`, which
+    500s the instant a BOT row is read."""
+    carga_bot = _carga(
+        origen="BOT", tipo="DEMANDA_PERDIDA", estado="APLICADO",
+        nombre_archivo=None, hash_sha256=None, ruta_objeto=None, bytes=None,
+    )
+    client = _client_as("ADMIN", execute_queue=[[], [carga_bot]])
+
+    response = client.get(f"{CARGAS_URL}/{carga_bot.id}")
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["nombre_archivo"] is None
+    assert body["origen"] == "BOT"
+
+
+def test_patch_carga_bot_origin_is_409():
+    """Task 3.7/3.8 (design D1): a BOT-origin carga_archivo never declares
+    a period upfront -- PATCH must reject it explicitly, independent of
+    `estado`. Deliberately uses `estado='PENDIENTE'` (never true in
+    practice for a BOT row, born APLICADO -- design D1) so this test proves
+    a dedicated `origen` guard exists, instead of accidentally passing
+    because the pre-existing `estado != PENDIENTE` check happens to also
+    catch every real BOT row."""
+    carga_bot = _carga(
+        origen="BOT", tipo="DEMANDA_PERDIDA", estado="PENDIENTE",
+        nombre_archivo=None, hash_sha256=None, ruta_objeto=None, bytes=None,
+    )
+    client = _client_as("ADMIN", execute_queue=[[], [carga_bot]])
+
+    response = client.patch(f"{CARGAS_URL}/{carga_bot.id}", json={"periodo_desde": "2026-09-01"})
+
+    assert response.status_code == 409
+
+
+def test_anular_carga_bot_origin_delegates_to_anular_registro_bot(monkeypatch):
+    """Task 3.7/3.8 (design D4): an ADMIN web anular on a BOT row must NOT
+    run the EXCEL staging-delete flow -- it delegates to
+    `services.demanda_perdida_bot.anular_registro_bot(db, carga, actor,
+    validar_ventana=False)`."""
+    carga_bot = _carga(
+        origen="BOT", tipo="DEMANDA_PERDIDA", estado="APLICADO",
+        nombre_archivo=None, hash_sha256=None, ruta_objeto=None, bytes=None,
+    )
+    llamadas = []
+
+    async def _fake_anular_registro_bot(db, carga, actor, validar_ventana=False):
+        llamadas.append((carga.id, actor, validar_ventana))
+        carga.estado = "ANULADO"
+
+    monkeypatch.setattr(
+        cargas_api.demanda_perdida_bot_mod, "anular_registro_bot", _fake_anular_registro_bot
+    )
+    client = _client_as("ADMIN", execute_queue=[[], [carga_bot]])
+
+    response = client.post(f"{CARGAS_URL}/{carga_bot.id}/anular")
+
+    assert response.status_code == 200, response.text
+    assert response.json()["estado"] == "ANULADO"
+    assert len(llamadas) == 1
+    assert llamadas[0][0] == carga_bot.id
+    assert llamadas[0][2] is False

@@ -68,6 +68,27 @@ async def login(
     if not usuario or not usuario.activo:
         raise generic_error
 
+    if (usuario.status or "approved") != "approved":
+        # sdd/motored-ventas-perdidas-bot: `status`'s `pending ->
+        # approved|rejected` flow is schema-wide (see `Usuario`'s own
+        # docstring), not bot-exclusive -- reject HERE too, at login
+        # itself, so a self-registered `pending`/`rejected` account never
+        # gets a 200 + valid JWT one request before `get_current_motored_
+        # user`'s equivalent check (`deps.py`) would otherwise catch it.
+        # `usuario.status or "approved"` mirrors the same fallback
+        # `services/auth.py::obtener_usuario_motored` already uses: a
+        # `Usuario(...)` built by hand without `status=` (every
+        # pre-Phase-1 test fixture) has `status is None` at the Python
+        # level, not the DB's real `server_default`.
+        raise generic_error
+
+    if not usuario.hashed_password:
+        # `ASESOR_MOSTRADOR` rows (sdd/motored-ventas-perdidas-bot, Phase 1)
+        # never get web credentials -- `hashed_password` is `None`. Reject
+        # BEFORE `verify_password`, which would otherwise crash calling
+        # `.encode()` on `None` (bcrypt.checkpw needs a real hash string).
+        raise generic_error
+
     if not verify_password(payload.password, usuario.hashed_password):
         raise generic_error
 
