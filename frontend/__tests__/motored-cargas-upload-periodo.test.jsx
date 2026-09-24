@@ -205,12 +205,15 @@ describe('UploadMovimientoModal — Descargar plantilla', () => {
       return el;
     });
 
-    render(
-      <UploadMovimientoModal tipo="VENTAS" label="Ventas" onClose={jest.fn()} onUploaded={jest.fn()} />
-    );
-    fireEvent.click(screen.getByText('Descargar plantilla'));
+    try {
+      render(
+        <UploadMovimientoModal tipo="VENTAS" label="Ventas" onClose={jest.fn()} onUploaded={jest.fn()} />
+      );
+      fireEvent.click(screen.getByText('Descargar plantilla'));
 
-    expect(anchors[0].download).toBe('plantilla_ventas.csv');
-    document.createElement.mockRestore();
+      expect(anchors[0].download).toBe('plantilla_ventas.csv');
+    } finally {
+      document.createElement.mockRestore();
+    }
   });
 });
