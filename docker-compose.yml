@@ -46,11 +46,15 @@ services:
       retries: 3
 
   # Almacenamiento S3 (MinIO)
-  # MinIO ya no publica en Docker Hub (minio/minio dejó de existir ahí) --
-  # su registro oficial actual es quay.io. Fijamos una versión concreta,
-  # nunca `latest` (que tampoco existe), para no repetir este mismo fallo.
+  # MinIO ya no publica en Docker Hub, y el 2026-09-24 quay.io/minio/minio
+  # también dejó de estar disponible sin login: MinIO Inc. archivó por
+  # completo el servidor open-source (https://dl.min.io responde 410).
+  # `ghcr.io/coollabsio/minio` es el mirror que el propio equipo de Coolify
+  # publica para sus usuarios ante este mismo problema -- confirmado como
+  # repo real de esa organización, público, sin login. Fijamos una versión
+  # concreta, nunca `latest`, para no repetir este mismo fallo.
   minio:
-    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z.hotfix.7aa24e772
+    image: ghcr.io/coollabsio/minio:RELEASE.2025-10-15T17-29-55Z
     container_name: um_minio
     restart: always
     environment:
