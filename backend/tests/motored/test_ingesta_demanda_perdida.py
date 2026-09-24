@@ -285,3 +285,30 @@ async def test_una_recarga_de_la_misma_fecha_reemplaza_no_acumula():
 
     insert_values = session.executed_statements[0].compile().construct_params()
     assert Decimal("12") in insert_values.values()
+
+
+# ---------------------------------------------------------------------------
+# Phase 2 (sdd/motored-ventas-perdidas-bot, task 2.1) — el upsert EXCEL debe
+# escribir/matchear `origen='EXCEL'` explícitamente ahora que la unique key
+# de `demanda_perdida` se ensanchó a 4 columnas (Fase 1, schema). Byte a
+# byte: el REPLACE-not-sum de arriba (líneas ~244-275) queda intacto, esto
+# solo agrega la columna `origen` a las VALUES y al conflict target.
+# ---------------------------------------------------------------------------
+
+
+def test_construir_statement_upsert_incluye_origen_excel_en_los_valores():
+    totales = {(SUCURSAL_ID, REFERENCIA_ID): Decimal("8")}
+
+    stmt = demanda_perdida.construir_statement_upsert(totales, date(2026, 9, 15), CARGA_ID)
+
+    valores_compilados = stmt.compile().construct_params()
+    assert "EXCEL" in valores_compilados.values()
+
+
+def test_construir_statement_upsert_conflict_target_incluye_origen():
+    totales = {(SUCURSAL_ID, REFERENCIA_ID): Decimal("8")}
+
+    stmt = demanda_perdida.construir_statement_upsert(totales, date(2026, 9, 15), CARGA_ID)
+
+    conflict_target = list(stmt._post_values_clause.inferred_target_elements)
+    assert conflict_target == ["fecha", "sucursal_id", "referencia_id", "origen"]

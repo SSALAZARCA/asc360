@@ -72,7 +72,7 @@ COLUMNAS_ESPERADAS: Tuple[str, ...] = (
     "Cantidad Solicitada",
 )
 
-_CLAVE_UPSERT = ("fecha", "sucursal_id", "referencia_id")
+_CLAVE_UPSERT = ("fecha", "sucursal_id", "referencia_id", "origen")
 
 
 def _extraer(fila_raw: Sequence[Any], mapa: Dict[str, int], nombre: str) -> Any:
@@ -202,6 +202,7 @@ def construir_statement_upsert(
             "referencia_id": referencia_id,
             "cantidad_solicitada": cantidad_solicitada,
             "carga_id": carga_id,
+            "origen": "EXCEL",
         }
         for (sucursal_id, referencia_id), cantidad_solicitada in totales.items()
     ]
