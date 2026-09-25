@@ -631,7 +631,7 @@ async def test_alternar_seleccion_unknown_referencia_id_does_not_reedit_or_answe
     unconditionally at the top of the function) must never be called again."""
     draft = captura.Borrador()
     draft.lineas.append(captura.LineaBorrador(referencia_id=uuid.uuid4(), codigo="ABC"))
-    update = _make_update(callback_data=f"lore_cap_toggle:{__import__('uuid').uuid4()}")
+    update = _make_update(callback_data=f"lore_cap_toggle:{uuid.uuid4()}")
     context = _make_context(user_data={captura._DRAFT_KEY: draft})
 
     result = await captura.alternar_seleccion(update, context)
