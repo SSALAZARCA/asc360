@@ -64,12 +64,6 @@ def _client_with_queue(execute_queue) -> TestClient:
     return TestClient(app)
 
 
-def _client_and_session(execute_queue) -> tuple:
-    session = FakeAsyncSession(execute_queue=[[]] + list(execute_queue))
-    override_motored_db(session)
-    return TestClient(app), session
-
-
 def _asesor(**overrides) -> Usuario:
     base = dict(
         id=uuid.uuid4(), nombre="Juan Asesor", email=None, hashed_password=None,
