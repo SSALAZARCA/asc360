@@ -260,6 +260,18 @@ export async function anularCarga(cargaId) {
 }
 
 /**
+ * `GET /demanda-perdida/cobertura-bot` (sdd/motored-ventas-perdidas-bot,
+ * Phase 6/7; `backend/app/motored/api/demanda_perdida.py`) -- the most
+ * recent `origen='BOT'` date per sucursal, `[{ sucursal_id, ultima_fecha_
+ * bot }]`. Purely advisory (spec "Most-recent BOT-origin date is a
+ * non-blocking visibility aid"): the caller (`CoberturaBotIndicator`) never
+ * lets a failure here affect the Excel upload flow it sits next to.
+ */
+export async function getCoberturaBot() {
+  return motoredFetchJson('/demanda-perdida/cobertura-bot');
+}
+
+/**
  * `GET /cargas/{id}/errores.csv` -- NO es JSON, así que no usa
  * `motoredFetchJson` (mismo criterio que `downloadTemplate` en
  * `BulkUploadModal.js`, pero acá el archivo viene del servidor, no se arma

@@ -12,17 +12,24 @@
  * 3. "Subir archivo" is hidden for SUCURSAL/CONSULTA (UI-level RBAC; the
  *    real guarantee is server-side).
  * 4. A successful upload refreshes the history table underneath.
+ * 5. (sdd/motored-ventas-perdidas-bot, Phase 7) the "última carga por bot"
+ *    indicator only mounts for `tipo="DEMANDA_PERDIDA"`, and a failure in
+ *    its (unrelated) fetch never blocks the Excel upload flow above it.
  */
 import React from 'react';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 
 const mockListarCargas = jest.fn();
 const mockSubir = jest.fn();
+const mockGetCoberturaBot = jest.fn();
+const mockListMaestros = jest.fn();
 
 jest.mock('../lib/motored/api', () => ({
   listarCargas: (...args) => mockListarCargas(...args),
   subirCargaMovimiento: (...args) => mockSubir(...args),
   getCarga: jest.fn(),
+  getCoberturaBot: (...args) => mockGetCoberturaBot(...args),
+  listMaestros: (...args) => mockListMaestros(...args),
 }));
 
 jest.mock('next/navigation', () => ({
@@ -45,6 +52,8 @@ function xlsxFile(name = 'ventas.xlsx') {
 beforeEach(() => {
   mockListarCargas.mockReset().mockResolvedValue([]);
   mockSubir.mockReset();
+  mockGetCoberturaBot.mockReset().mockResolvedValue([]);
+  mockListMaestros.mockReset().mockResolvedValue([]);
   sessionStorage.clear();
 });
 
@@ -93,6 +102,50 @@ describe('MovimientoTab', () => {
 
     fireEvent.click(screen.getByText('Subir archivo'));
     const dialog = screen.getByRole('dialog');
+    const input = dialog.querySelector('input[type="file"]');
+    fireEvent.change(input, { target: { files: [xlsxFile()] } });
+    fireEvent.click(within(dialog).getByText('Subir archivo'));
+
+    await waitFor(() => expect(mockListarCargas).toHaveBeenCalledTimes(2));
+  });
+
+  it('does not fetch the bot coverage indicator for a non-DEMANDA_PERDIDA tipo', async () => {
+    setRole('CONSULTA');
+    render(<MovimientoTab tipo="VENTAS" label="Ventas" />);
+
+    await waitFor(() => expect(mockListarCargas).toHaveBeenCalled());
+    expect(mockGetCoberturaBot).not.toHaveBeenCalled();
+  });
+
+  it('shows the "última carga por bot" indicator for DEMANDA_PERDIDA when bot data exists', async () => {
+    setRole('ADMIN');
+    mockGetCoberturaBot.mockResolvedValue([
+      { sucursal_id: 'suc-1', ultima_fecha_bot: '2026-09-24' },
+    ]);
+    mockListMaestros.mockResolvedValue([{ id: 'suc-1', nombre: 'Bogotá Norte' }]);
+
+    render(<MovimientoTab tipo="DEMANDA_PERDIDA" label="Demanda perdida" />);
+
+    await waitFor(() => expect(screen.getByText(/Última carga por bot/)).toBeInTheDocument());
+    expect(screen.getByText(/Bogotá Norte/)).toBeInTheDocument();
+  });
+
+  it('keeps the Excel upload flow fully working when the bot coverage fetch fails', async () => {
+    setRole('ADMIN');
+    mockGetCoberturaBot.mockRejectedValue(new Error('backend down'));
+    mockSubir.mockResolvedValue({ carga_id: 'c1', duplicado_de: null });
+
+    render(<MovimientoTab tipo="DEMANDA_PERDIDA" label="Demanda perdida" />);
+
+    await waitFor(() => expect(mockGetCoberturaBot).toHaveBeenCalled());
+    expect(screen.queryByText(/Última carga por bot/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/no se pudo/i)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('Subir archivo'));
+    const dialog = screen.getByRole('dialog');
+    // DEMANDA_PERDIDA declares a period (tiposCarga.js), so "desde" is required.
+    const [desdeInput] = dialog.querySelectorAll('input[type="date"]');
+    fireEvent.change(desdeInput, { target: { value: '2026-09-01' } });
     const input = dialog.querySelector('input[type="file"]');
     fireEvent.change(input, { target: { files: [xlsxFile()] } });
     fireEvent.click(within(dialog).getByText('Subir archivo'));

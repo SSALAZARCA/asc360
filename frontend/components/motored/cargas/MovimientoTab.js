@@ -13,10 +13,16 @@
  * "Subir" is hidden for `SUCURSAL`/`CONSULTA` (UI-level RBAC only -- the
  * real guarantee is server-side `require_roles("ADMIN","COMPRAS")`), same
  * criterion the retired `app/motored/cargas/page.js` used to apply.
+ *
+ * `CoberturaBotIndicator` (sdd/motored-ventas-perdidas-bot, Phase 7) is
+ * mounted ONLY for `tipo="DEMANDA_PERDIDA"` -- Excel stays the contingency
+ * path there, and this is a non-blocking visibility aid, never a gate, for
+ * that tab alone.
  */
 import { useState, useEffect, useCallback } from 'react';
 import UploadMovimientoModal from './UploadMovimientoModal';
 import CargasHistoryTable from './CargasHistoryTable';
+import CoberturaBotIndicator from './CoberturaBotIndicator';
 import { getRolActual } from '../../../lib/motored/motoredFetch';
 
 export default function MovimientoTab({ tipo, label }) {
@@ -43,6 +49,8 @@ export default function MovimientoTab({ tipo, label }) {
           </button>
         )}
       </div>
+
+      {tipo === 'DEMANDA_PERDIDA' && <CoberturaBotIndicator />}
 
       <CargasHistoryTable refreshKey={refreshKey} tipoFijo={tipo} />
 
