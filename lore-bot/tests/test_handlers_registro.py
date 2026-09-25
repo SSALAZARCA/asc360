@@ -104,9 +104,11 @@ async def test_start_rejected_status_ends_conversation(monkeypatch):
     assert "rechazada" in text.lower()
 
 
-async def test_start_approved_status_greets_by_name(monkeypatch):
+async def test_start_approved_asesor_greets_by_name_and_role(monkeypatch):
     fake_client = FakeClient()
-    fake_client.yo.return_value = {"status": "approved", "nombre": "Ana"}
+    fake_client.yo.return_value = {
+        "status": "approved", "nombre": "Ana", "role": "ASESOR_MOSTRADOR",
+    }
     monkeypatch.setattr(registro, "_cliente", _fake_cliente(fake_client))
 
     update = _make_update()
@@ -115,6 +117,29 @@ async def test_start_approved_status_greets_by_name(monkeypatch):
     assert result == ConversationHandler.END
     text = update.message.reply_text.call_args.args[0]
     assert "Ana" in text
+    assert "asesor de mostrador" in text
+    assert "administrador" not in text
+
+
+async def test_start_approved_admin_greets_by_name_and_role(monkeypatch):
+    # Found via live testing right after Phase 9's first production deploy:
+    # this branch used to hardcode "asesor de mostrador" for EVERY approved
+    # role -- an ADMIN who just linked their Telegram via /vincular got told
+    # they were an asesor. Regression test for that exact scenario.
+    fake_client = FakeClient()
+    fake_client.yo.return_value = {
+        "status": "approved", "nombre": "asalazar", "role": "ADMIN",
+    }
+    monkeypatch.setattr(registro, "_cliente", _fake_cliente(fake_client))
+
+    update = _make_update()
+    result = await registro.start(update, _make_context())
+
+    assert result == ConversationHandler.END
+    text = update.message.reply_text.call_args.args[0]
+    assert "asalazar" in text
+    assert "administrador" in text
+    assert "asesor de mostrador" not in text
 
 
 async def test_start_backend_caido_ends_conversation(monkeypatch):

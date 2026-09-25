@@ -80,8 +80,17 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         )
         return ConversationHandler.END
 
+    # Bug found via live testing right after Phase 9's first production
+    # deploy: this branch used to hardcode "asesor de mostrador" regardless
+    # of the real role `/yo` returned -- an ADMIN who just linked their
+    # Telegram via /vincular got told they were an asesor. `/yo` already
+    # returns the real role; use it instead of assuming one.
+    rol_legible = {
+        "ADMIN": "administrador",
+        "ASESOR_MOSTRADOR": "asesor de mostrador",
+    }.get(data.get("role"), "usuario")
     await update.message.reply_text(
-        f"👋 ¡Hola, {data.get('nombre', '')}! Ya estás registrado como asesor de mostrador."
+        f"👋 ¡Hola, {data.get('nombre', '')}! Ya estás registrado como {rol_legible}."
     )
     return ConversationHandler.END
 
