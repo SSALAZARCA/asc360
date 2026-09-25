@@ -65,6 +65,15 @@ class Settings(BaseSettings):
     MOTORED_RETENCION_DIAS: int = 90
     MOTORED_INGESTA_PERIODO_TOLERANCIA_PCT: float = 0.5
 
+    # Motored Pedidos — bot "Lore" (sdd/motored-ventas-perdidas-bot, Phase
+    # 5, design D5): secreto compartido propio para autenticar las llamadas
+    # del bot al backend. DEBE ser distinto de `SONIA_BOT_SECRET` (Lore no
+    # comparte secretos/tokens con Sonia/UM) y de `MOTORED_SECRET_KEY`/
+    # `SECRET_KEY` — ver `app/motored/deps_bot.py::lore_bot_secret_is_safe`.
+    # Default vacío para que el arranque de asc360/backend nunca dependa de
+    # esta variable (mismo criterio que `MOTORED_SECRET_KEY`).
+    LORE_BOT_SECRET: str = ""
+
     @property
     def allowed_origins_list(self) -> list:
         return [o.strip() for o in self.ALLOWED_ORIGINS.split(",") if o.strip()]

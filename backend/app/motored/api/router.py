@@ -17,7 +17,7 @@ carga[...]`), así que su posición relativa a `maestros` no importa.
 """
 from fastapi import APIRouter
 
-from app.motored.api import auth, cargas, carga, maestros, parametros, salud, usuarios
+from app.motored.api import auth, bot, cargas, carga, maestros, parametros, salud, usuarios
 
 router = APIRouter()
 
@@ -32,3 +32,7 @@ router.include_router(parametros.router)
 # ninguno de los routers de arriba -- el orden relativo no importa acá,
 # a diferencia del caso `salud`/`maestros` documentado más arriba.
 router.include_router(cargas.router)
+# sdd/motored-ventas-perdidas-bot, Phase 5: `/bot` es también un prefijo
+# propio (`/api/motored/bot`), sin superposición con ninguno de los de
+# arriba -- el orden relativo tampoco importa acá.
+router.include_router(bot.router)

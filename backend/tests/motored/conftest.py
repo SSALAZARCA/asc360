@@ -60,11 +60,30 @@ class _ExecuteResult:
 class FakeAsyncSession:
     """Minimal stand-in for `AsyncSession`. `execute_queue` is a list of
     lists: each `await db.execute(stmt)` call pops the next queued list of
-    rows, in the exact order the service under test issues its queries."""
+    rows, in the exact order the service under test issues its queries.
 
-    def __init__(self, execute_queue: Optional[List[list]] = None, get_queue: Optional[list] = None):
+    Post-Phase-5-review addition (fix #1/#2): two opt-in ways to simulate a
+    real Postgres `IntegrityError` surfacing where it actually would in
+    production, mirroring the established convention already used by
+    `tests/historical_orders/conftest.py`/`tests/orders/conftest.py` (a
+    one-shot `raise_integrity_error` flag consumed by `commit()`), extended
+    here to also accept a specific exception instance (not just `True`) so
+    a test can control the exact `str(exc.orig)` message the production
+    code branches on (e.g. `uq_usuario_telegram_id` vs a FK constraint
+    name) -- and a matching one-shot mechanism on `execute()` itself, for
+    races that surface at the statement level (a raw `UPDATE ... RETURNING`
+    claim, like `consumir_codigo_vinculacion`'s), not at `commit()` time.
+    """
+
+    def __init__(
+        self,
+        execute_queue: Optional[List[list]] = None,
+        get_queue: Optional[list] = None,
+        raise_integrity_error: "Optional[Any]" = None,
+    ):
         self._execute_queue = list(execute_queue or [])
         self._get_queue = list(get_queue) if get_queue is not None else None
+        self._raise_integrity_error = raise_integrity_error
         self.added: List[Any] = []
         self.committed = False
         self.rolled_back = False
@@ -94,7 +113,15 @@ class FakeAsyncSession:
                 "FakeAsyncSession.execute() called more times than expected "
                 "— update the test's execute_queue."
             )
-        return _ExecuteResult(self._execute_queue.pop(0))
+        proximo = self._execute_queue.pop(0)
+        if isinstance(proximo, BaseException):
+            # Fix #2: a race that a real Postgres unique/FK constraint
+            # catches at STATEMENT-execution time (e.g. the atomic claim
+            # `UPDATE ... RETURNING` inside `consumir_codigo_vinculacion`),
+            # not at `commit()` time — queue the exception itself instead
+            # of a row list to simulate exactly that.
+            raise proximo
+        return _ExecuteResult(proximo)
 
     def add(self, obj):
         if getattr(obj, "id", None) is None:
@@ -130,6 +157,17 @@ class FakeAsyncSession:
                 setattr(obj, column.name, default.arg(None))
 
     async def commit(self):
+        if self._raise_integrity_error:
+            # Fix #1: a race that only a real Postgres unique/FK constraint
+            # would catch at flush/COMMIT time (the ORM `INSERT`s from
+            # `db.add(...)`, unlike the raw `UPDATE` above). One-shot, same
+            # convention as `tests/historical_orders/conftest.py`.
+            error, self._raise_integrity_error = self._raise_integrity_error, None
+            if error is True:
+                from sqlalchemy.exc import IntegrityError
+
+                error = IntegrityError("COMMIT", {}, Exception("duplicate key value"))
+            raise error
         self.committed = True
 
     async def rollback(self):
