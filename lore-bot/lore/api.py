@@ -57,6 +57,38 @@ class TelegramYaVinculado(LoreApiError):
     """`POST /admin/vincular`'s caller `telegram_id` is already linked to a Usuario."""
 
 
+class SucursalNoAutorizada(LoreApiError):
+    """`POST /demanda-perdida`'s `sucursal_id` is not one of the actor's own sucursales."""
+
+
+class IdempotencyKeyEnUso(LoreApiError):
+    """The `Idempotency-Key` used for `POST /demanda-perdida` already belongs to a DIFFERENT actor."""
+
+
+class RegistroInconsistente(LoreApiError):
+    """`POST /demanda-perdida` hit an unmapped `IntegrityError` on the backend (409, not a known race)."""
+
+
+class ReferenciaNoEncontrada(LoreApiError):
+    """`POST /demanda-perdida`'s `referencia_id` does not exist (a rare FK-race 404)."""
+
+
+class LineaNoEncontrada(LoreApiError):
+    """`PATCH /demanda-perdida/lineas/{id}` targets a line that doesn't exist or isn't the actor's own."""
+
+
+class LineaAnulada(LoreApiError):
+    """`PATCH /demanda-perdida/lineas/{id}` targets a line already marked ANULADA."""
+
+
+class CargaNoEncontrada(LoreApiError):
+    """`POST /demanda-perdida/{carga_id}/anular` targets a carga that doesn't exist or isn't the actor's own."""
+
+
+class YaAnulada(LoreApiError):
+    """`POST /demanda-perdida/{carga_id}/anular` targets a carga already ANULADO."""
+
+
 class BackendCaido(LoreApiError):
     """The backend is unreachable, erroring, or returned an unmapped code."""
 
@@ -70,6 +102,17 @@ _ERROR_CODE_MAP: dict[str, type[LoreApiError]] = {
     "YA_REGISTRADO": YaRegistrado,
     "CODIGO_INVALIDO": CodigoInvalido,
     "TELEGRAM_YA_VINCULADO": TelegramYaVinculado,
+    # Phase 10 additions — all raised via `_request`'s shared 401/403/409
+    # translation (see `backend/app/motored/api/bot_demanda_perdida.py` for
+    # the authoritative code list; 404 codes from that same file are handled
+    # per-method below, same convention as `registro()`'s
+    # `SUCURSAL_NO_ENCONTRADA`, since `_request` only auto-translates
+    # 401/403/409).
+    "SUCURSAL_NO_AUTORIZADA": SucursalNoAutorizada,
+    "IDEMPOTENCY_KEY_EN_USO": IdempotencyKeyEnUso,
+    "REGISTRO_INCONSISTENTE": RegistroInconsistente,
+    "LINEA_ANULADA": LineaAnulada,
+    "YA_ANULADA": YaAnulada,
 }
 
 
@@ -230,3 +273,113 @@ class BackendClient:
         """`POST /admin/solicitudes/{usuario_id}/rechazar` — see
         `aprobar_solicitud`."""
         return await self._resolver_solicitud(f"/admin/solicitudes/{usuario_id}/rechazar")
+
+    # -- Phase 10: manual capture + today-only correction --------------------
+
+    async def resolver_referencias(self, codigos: list[str]) -> dict:
+        """`POST /referencias/resolver` — `{codigos[≤30]} -> {resueltas[],
+        no_resueltas[]}` (design D5). Never raises for an unresolved code —
+        that split is the whole point of the response body; only a genuine
+        transport/backend failure raises here."""
+        response = await self._request("POST", "/referencias/resolver", json={"codigos": codigos})
+        if response.status_code != 200:
+            raise BackendCaido(f"unmapped HTTP {response.status_code}")
+        body = _safe_json(response)
+        if not isinstance(body, dict):
+            raise BackendCaido("non-JSON response body")
+        return body
+
+    async def registrar_demanda_perdida(
+        self,
+        *,
+        sucursal_id: str,
+        metodo: str,
+        lineas: list[dict],
+        idempotency_key: str,
+    ) -> dict:
+        """`POST /demanda-perdida` — `Idempotency-Key` header carries the
+        caller-fixed UUID (design D5/D7: `registro_id`, equal to the
+        eventual `carga_archivo.id`). 201 on a fresh registration, 200 on an
+        idempotent replay by the SAME actor — both are a normal return, only
+        the actual error codes documented in
+        `backend/app/motored/api/bot_demanda_perdida.py` raise. `_request`
+        already maps 403 `SUCURSAL_NO_AUTORIZADA` / 409
+        `IDEMPOTENCY_KEY_EN_USO` / 409 `REGISTRO_INCONSISTENTE` via the
+        shared code map; the 404 codes (`REFERENCIA_NO_ENCONTRADA` /
+        `SUCURSAL_NO_ENCONTRADA`) are NOT auto-mapped (`_request` only
+        intercepts 401/403/409/5xx), so they are handled here, same
+        convention as `registro()`."""
+        response = await self._request(
+            "POST",
+            "/demanda-perdida",
+            json={"sucursal_id": sucursal_id, "metodo": metodo, "lineas": lineas},
+            headers={"Idempotency-Key": idempotency_key},
+        )
+        if response.status_code == 404:
+            body = _safe_json(response)
+            raw_code = body.get("code") if isinstance(body, dict) else None
+            code = raw_code if isinstance(raw_code, str) else None
+            if code == "REFERENCIA_NO_ENCONTRADA":
+                raise ReferenciaNoEncontrada(code)
+            if code == "SUCURSAL_NO_ENCONTRADA":
+                raise SucursalNoEncontrada(code)
+            raise BackendCaido(f"unmapped HTTP 404 ({code})")
+        if response.status_code not in (200, 201):
+            raise BackendCaido(f"unmapped HTTP {response.status_code}")
+        body = _safe_json(response)
+        if not isinstance(body, dict):
+            raise BackendCaido("non-JSON response body")
+        return body
+
+    async def listar_hoy(self) -> list:
+        """`GET /demanda-perdida/hoy` — the actor's own today-only,
+        non-ANULADO registrations for the self-service correction menu."""
+        response = await self._request("GET", "/demanda-perdida/hoy")
+        if response.status_code >= 400:
+            raise BackendCaido(f"unmapped HTTP {response.status_code}")
+        body = _safe_json(response)
+        if not isinstance(body, list):
+            raise BackendCaido("non-JSON response body")
+        return body
+
+    async def editar_linea(self, linea_id: str, cantidad: int) -> dict:
+        """`PATCH /demanda-perdida/lineas/{linea_id}` — `_request` already
+        maps 409 `FUERA_DE_VENTANA`/`LINEA_ANULADA`; the 404
+        `LINEA_NO_ENCONTRADA` is handled here (same 404 convention as
+        `registrar_demanda_perdida`)."""
+        response = await self._request(
+            "PATCH", f"/demanda-perdida/lineas/{linea_id}", json={"cantidad": cantidad}
+        )
+        if response.status_code == 404:
+            body = _safe_json(response)
+            raw_code = body.get("code") if isinstance(body, dict) else None
+            code = raw_code if isinstance(raw_code, str) else None
+            if code == "LINEA_NO_ENCONTRADA":
+                raise LineaNoEncontrada(code)
+            raise BackendCaido(f"unmapped HTTP 404 ({code})")
+        if response.status_code != 200:
+            raise BackendCaido(f"unmapped HTTP {response.status_code}")
+        body = _safe_json(response)
+        if not isinstance(body, dict):
+            raise BackendCaido("non-JSON response body")
+        return body
+
+    async def anular_registro(self, carga_id: str) -> dict:
+        """`POST /demanda-perdida/{carga_id}/anular` — `_request` already
+        maps 409 `FUERA_DE_VENTANA`/`YA_ANULADA`; the 404
+        `CARGA_NO_ENCONTRADA` is handled here (same 404 convention as
+        `registrar_demanda_perdida`/`editar_linea`)."""
+        response = await self._request("POST", f"/demanda-perdida/{carga_id}/anular")
+        if response.status_code == 404:
+            body = _safe_json(response)
+            raw_code = body.get("code") if isinstance(body, dict) else None
+            code = raw_code if isinstance(raw_code, str) else None
+            if code == "CARGA_NO_ENCONTRADA":
+                raise CargaNoEncontrada(code)
+            raise BackendCaido(f"unmapped HTTP 404 ({code})")
+        if response.status_code != 200:
+            raise BackendCaido(f"unmapped HTTP {response.status_code}")
+        body = _safe_json(response)
+        if not isinstance(body, dict):
+            raise BackendCaido("non-JSON response body")
+        return body

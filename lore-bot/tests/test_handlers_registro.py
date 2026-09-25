@@ -553,6 +553,34 @@ async def test_callback_huerfano_answers_and_shows_session_expired():
     assert text == _MSG_SESION_EXPIRADA
 
 
+async def test_callback_huerfano_shows_generic_message_for_stale_captura_callback():
+    """Phase 10 fix-up finding #3: this same fallback also catches stale
+    `lore_cap_*`/`lore_cor_*` callbacks now that those conversations exist —
+    the message must be generic (never name a command wrong for those
+    flows, e.g. telling a mid-capture advisor to send /start)."""
+    update = _make_update(callback_data="lore_cap_toggle:whatever")
+    context = _make_context()
+
+    await registro.callback_huerfano(update, context)
+
+    update.callback_query.answer.assert_awaited_once()
+    text = update.callback_query.edit_message_text.call_args.args[0]
+    assert text == _MSG_SESION_EXPIRADA
+    assert "/start" not in text
+
+
+async def test_callback_huerfano_shows_generic_message_for_stale_correccion_callback():
+    update = _make_update(callback_data="lore_cor_volver")
+    context = _make_context()
+
+    await registro.callback_huerfano(update, context)
+
+    update.callback_query.answer.assert_awaited_once()
+    text = update.callback_query.edit_message_text.call_args.args[0]
+    assert text == _MSG_SESION_EXPIRADA
+    assert "/start" not in text
+
+
 # --- _escapar_markdown ---------------------------------------------------
 
 

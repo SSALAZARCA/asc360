@@ -21,10 +21,36 @@ def test_build_application_registers_registration_conversation():
     application = build_application()
     handlers = application.handlers[0]
     conv_handlers = [h for h in handlers if isinstance(h, ConversationHandler)]
-    assert len(conv_handlers) == 1
-    entry_points = conv_handlers[0].entry_points
+    # Phase 10 added 2 more ConversationHandlers (captura, correccion)
+    # alongside Phase 9's registration one.
+    assert len(conv_handlers) == 3
+    registro_conv = next(
+        h
+        for h in conv_handlers
+        if any(isinstance(ep, CommandHandler) and "start" in ep.commands for ep in h.entry_points)
+    )
+    assert registro_conv is not None
+
+
+def test_build_application_registers_captura_conversation():
+    application = build_application()
+    handlers = application.handlers[0]
+    conv_handlers = [h for h in handlers if isinstance(h, ConversationHandler)]
     assert any(
-        isinstance(ep, CommandHandler) and "start" in ep.commands for ep in entry_points
+        isinstance(ep, CommandHandler) and "registrar" in ep.commands
+        for h in conv_handlers
+        for ep in h.entry_points
+    )
+
+
+def test_build_application_registers_correccion_conversation():
+    application = build_application()
+    handlers = application.handlers[0]
+    conv_handlers = [h for h in handlers if isinstance(h, ConversationHandler)]
+    assert any(
+        isinstance(ep, CommandHandler) and "correcciones" in ep.commands
+        for h in conv_handlers
+        for ep in h.entry_points
     )
 
 

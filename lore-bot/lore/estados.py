@@ -53,14 +53,24 @@ class LineaBorrador:
     codigo: str
     nombre: Optional[str] = None
     cantidad: Optional[int] = None  # None until the advisor enters a quantity
+    # Phase 10 addition: spec's "Explicit toggle selection before
+    # confirmation" requirement applies to BOTH manual and photo entry
+    # (design D7 — CAP_SELECCION is shared "from CAP_SELECCION onward"), so
+    # every candidate line — however it was added — starts unselected until
+    # the advisor explicitly toggles it ON.
+    seleccionada: bool = False
 
 
 @dataclass
 class Borrador:
     """The draft held in `context.user_data["borrador"]` while capturing.
 
-    `registro_id` is fixed once, when the confirm screen opens, and doubles
-    as the `Idempotency-Key` sent to `POST /demanda-perdida` (design D5/D7).
+    `registro_id` is generated once, at `Borrador()` construction time (i.e.
+    when `captura.iniciar` starts a new draft) — well before the confirm
+    screen — and is never regenerated afterward. It doubles as the
+    `Idempotency-Key` sent to `POST /demanda-perdida` (design D5/D7), so a
+    retry against the SAME draft (e.g. after a `BackendCaido` on confirm)
+    reuses this same value.
     """
 
     registro_id: UUID = field(default_factory=uuid4)
