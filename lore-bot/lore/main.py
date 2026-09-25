@@ -75,7 +75,7 @@ def _build_captura_conversation() -> ConversationHandler:
         entry_points=[
             CommandHandler("registrar", captura_handlers.iniciar),
             # UX shortcut: the persistent Reply Keyboard button (see
-            # `handlers/_common.py::TECLADO_ASESOR`) is an alternate entry
+            # `handlers/_common.py::TECLADO_CAPTURA`) is an alternate entry
             # point into the SAME `iniciar` -- never a duplicated copy of its
             # logic. `filters.Text([...])` matches the message text EXACTLY,
             # same as `BOTON_REGISTRAR`'s own definition.

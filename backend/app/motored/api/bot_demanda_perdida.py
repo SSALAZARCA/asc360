@@ -20,11 +20,21 @@ prefix sin conflicto mientras sus paths no se superpongan (no lo hacen:
 `/registro`, `/admin/*` en `bot.py`). Puro reordenamiento de archivos --
 sin cambio de comportamiento.
 
-Todos los endpoints acá autenticados por `require_bot_asesor` (nunca
-`require_bot_admin`) -- son la superficie del ASESOR_MOSTRADOR, no del
-admin. Toda escritura ADITIVA de `demanda_perdida` pasa por `services/
-demanda_perdida_bot.py::aplicar_delta_demanda_perdida`, nunca una segunda
-implementación del upsert/delta acá.
+Todos los endpoints acá autenticados por `require_bot_asesor_o_admin`
+-- eran la superficie exclusiva del ASESOR_MOSTRADOR (`require_bot_asesor`)
+hasta un pedido ad-hoc del dueño del producto, POSTERIOR a la Fase 10
+(deliberadamente NO logueado contra la lista numerada de tasks): un ADMIN
+también puede registrar ventas perdidas por acá, para CUALQUIER sucursal
+activa -- a diferencia de un ASESOR_MOSTRADOR, un ADMIN no tiene filas
+`usuario_sucursal` propias, así que `registrar_demanda_perdida` SALTEA el
+chequeo `sucursal_id not in actor.sucursal_ids` para ese rol (ver su propio
+docstring), sin tocar ese chequeo para ASESOR_MOSTRADOR. El resto de la
+superficie (`hoy`/`lineas/{id}`/`{carga_id}/anular`) no necesitó ningún
+cambio adicional: ya estaba scopeada por `usuario_id`/dueño del actor, nunca
+por sucursal -- un registro propio de un ADMIN es "propio" igual que el de
+cualquier asesor. Toda escritura ADITIVA de `demanda_perdida` pasa por
+`services/demanda_perdida_bot.py::aplicar_delta_demanda_perdida`, nunca una
+segunda implementación del upsert/delta acá.
 
 **Idempotencia de `/demanda-perdida` (load-bearing, flagged explícitamente)**:
 design D7 dice "`registro_id = uuid4()` se fija cuando se abre la pantalla
@@ -58,7 +68,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.motored.deps import get_motored_db_or_503, require_motored_ready
-from app.motored.deps_bot import BotActor, require_bot_asesor, require_lore_ready
+from app.motored.deps_bot import BotActor, require_bot_asesor_o_admin, require_lore_ready
 from app.motored.models.carga_archivo import CargaArchivo
 from app.motored.models.demanda_perdida_bot_linea import DemandaPerdidaBotLinea
 from app.motored.models.referencia import Referencia
@@ -155,7 +165,7 @@ class EditarLineaRequest(BaseModel):
 @router.post("/referencias/resolver")
 async def resolver_referencias(
     payload: ResolverReferenciasRequest,
-    actor: BotActor = Depends(require_bot_asesor),
+    actor: BotActor = Depends(require_bot_asesor_o_admin),
     db: AsyncSession = Depends(get_motored_db_or_503),
 ) -> dict:
     """Task 6.5, design D3 "Reference resolution": exact match `upper(trim(
@@ -257,7 +267,7 @@ async def registrar_demanda_perdida(
     payload: RegistrarDemandaPerdidaRequest,
     response: Response,
     idempotency_key: uuid.UUID = Header(..., alias="Idempotency-Key"),
-    actor: BotActor = Depends(require_bot_asesor),
+    actor: BotActor = Depends(require_bot_asesor_o_admin),
     db: AsyncSession = Depends(get_motored_db_or_503),
 ) -> dict:
     """Task 6.6/6.7, design D3/D5: UNA transacción escribe el header
@@ -277,16 +287,107 @@ async def registrar_demanda_perdida(
     registro`) donde el concern lo amerita.
 
     Ver el docstring del módulo, sección "Idempotencia", para el contrato
-    completo de `Idempotency-Key` = `carga_archivo.id`."""
-    if str(payload.sucursal_id) not in actor.sucursal_ids:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail={"code": "SUCURSAL_NO_AUTORIZADA"}
-        )
+    completo de `Idempotency-Key` = `carga_archivo.id`.
+
+    Fix-up finding #1 del gga post-Fase-10 (function-length, converge con
+    los fix-up findings #1/#2 de la revisión de 4 lentes): el chequeo de
+    sucursal condicional por rol y su log de auditoría viven en
+    `_validar_sucursal_para_actor`; la construcción del header/líneas + el
+    delta aditivo vive en `_agregar_registro`. Ver esos dos docstrings para
+    el contrato completo de cada paso -- esta función solo orquesta: validar
+    sucursal -> replay de idempotencia -> construir registro -> commit-con-
+    recuperación-de-carrera."""
+    await _validar_sucursal_para_actor(db, payload, actor)
 
     replay = await _replay_idempotente_si_existe(db, idempotency_key, actor, response)
     if replay is not None:
         return replay
 
+    carga = await _agregar_registro(db, payload, actor, idempotency_key)
+
+    try:
+        await db.commit()
+    except IntegrityError as exc:
+        await db.rollback()
+        return await _recuperar_de_integrity_error_registro(db, exc, idempotency_key, actor, response)
+
+    return await _serializar_registro(db, carga)
+
+
+async def _validar_sucursal_para_actor(
+    db: AsyncSession, payload: "RegistrarDemandaPerdidaRequest", actor: BotActor
+) -> None:
+    """Paso 1 de `registrar_demanda_perdida` (gga post-Fase-10, function-
+    length): existencia+actividad de la sucursal, pertenencia condicional
+    por rol, y el log de auditoría del bypass de ADMIN -- extraído para que
+    el endpoint no mezcle esto con la construcción del registro ni el
+    commit. Levanta `HTTPException` directamente; no devuelve nada en el
+    camino feliz.
+
+    Chequeo de sucursal condicional por rol (ad-hoc, post-Fase-10): un
+    ASESOR_MOSTRADOR sigue restringido a `actor.sucursal_ids` (sus propias
+    filas `usuario_sucursal`), SIN CAMBIOS. Un ADMIN no tiene ninguna fila
+    `usuario_sucursal` propia -- exigirle pertenencia a una lista siempre
+    vacía lo bloquearía para TODA sucursal, el resultado opuesto al pedido
+    ("puede registrar para cualquier sucursal activa") -- así que este
+    chequeo se SALTEA por completo para ese rol. Una `sucursal_id` que no
+    existe EN ABSOLUTO sigue fallando más abajo también, vía la violación de
+    FK real -> 404 (`_recuperar_de_integrity_error_registro`), para la
+    carrera real (sucursal borrada/desactivada ENTRE el chequeo de acá y
+    el `commit()`) -- sin tocar esa ruta.
+
+    Fix-up finding #1 (WARNING, resilience): el bypass de ADMIN salteaba MÁS
+    de lo previsto -- una `sucursal_id` que EXISTE pero está DESACTIVADA
+    (`Sucursal.activa is False`) no tenía NINGÚN chequeo en este camino, para
+    NINGÚN rol (un ASESOR_MOSTRADOR cuya sucursal asignada se desactiva sin
+    borrar su fila `usuario_sucursal` tampoco quedaba cubierto). Se agrega un
+    chequeo explícito de "existe y está activa", aplicado a TODO caller sin
+    importar el rol, ANTES del chequeo condicional de pertenencia de abajo
+    -- así el bypass de ADMIN solo salta la pregunta "¿es ESTA MI sucursal?",
+    nunca la pregunta "¿esta sucursal existe y es usable?". Reutiliza el
+    MISMO código 404 `SUCURSAL_NO_ENCONTRADA` que ya devuelve la violación de
+    FK más abajo -- indistinguible para un cliente entre "nunca existió" y
+    "existe pero está desactivada"."""
+    sucursal_result = await db.execute(select(Sucursal).where(Sucursal.id == payload.sucursal_id))
+    sucursal = sucursal_result.scalars().first()
+    if sucursal is None or not sucursal.activa:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail={"code": "SUCURSAL_NO_ENCONTRADA"}
+        )
+
+    if actor.role != "ADMIN" and str(payload.sucursal_id) not in actor.sucursal_ids:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail={"code": "SUCURSAL_NO_AUTORIZADA"}
+        )
+
+    # Fix-up finding #2 (SUGGESTION, resilience): visibilidad de auditoría --
+    # cada vez que el bypass de arriba se ejerce de verdad (sucursal ya
+    # validada como existente+activa, y el actor SÍ es ADMIN), se deja
+    # rastro explícito con el usuario_id/sucursal_id involucrados.
+    if actor.role == "ADMIN":
+        logger.info(
+            "registrar_demanda_perdida: bypass de sucursal-ownership por ADMIN -- "
+            "usuario_id=%s sucursal_id=%s",
+            actor.usuario_id, payload.sucursal_id,
+        )
+
+
+async def _agregar_registro(
+    db: AsyncSession,
+    payload: "RegistrarDemandaPerdidaRequest",
+    actor: BotActor,
+    idempotency_key: uuid.UUID,
+) -> CargaArchivo:
+    """Paso 3 de `registrar_demanda_perdida` (gga post-Fase-10, function-
+    length): construye el header `carga_archivo(BOT,APLICADO)` +
+    `demanda_perdida_bot_linea[]` y aplica el delta ADITIVO de cada línea
+    (vía `aplicar_delta_demanda_perdida`, nunca una segunda implementación
+    del upsert) -- todo dentro de la MISMA sesión, sin comitear (el commit y
+    su recuperación de carrera siguen viviendo en el endpoint, junto al
+    `try/except IntegrityError` que ya los envuelve). `fecha` se computa acá
+    UNA sola vez (`hoy_bogota()`) y la comparten TODAS las líneas de esta
+    registración -- invariante del que depende `anular_registro_bot(
+    validar_ventana=True)` (ver su docstring)."""
     fecha = hoy_bogota()
     carga = CargaArchivo(
         id=idempotency_key,
@@ -318,14 +419,7 @@ async def registrar_demanda_perdida(
             delta=Decimal(linea.cantidad),
             carga_id=carga.id,
         )
-
-    try:
-        await db.commit()
-    except IntegrityError as exc:
-        await db.rollback()
-        return await _recuperar_de_integrity_error_registro(db, exc, idempotency_key, actor, response)
-
-    return await _serializar_registro(db, carga)
+    return carga
 
 
 async def _recuperar_de_integrity_error_registro(
@@ -397,7 +491,7 @@ async def _recuperar_de_integrity_error_registro(
 
 @router.get("/demanda-perdida/hoy")
 async def listar_registros_de_hoy(
-    actor: BotActor = Depends(require_bot_asesor),
+    actor: BotActor = Depends(require_bot_asesor_o_admin),
     db: AsyncSession = Depends(get_motored_db_or_503),
 ) -> List[dict]:
     """Task 6.8/6.9, design D4: SOLO los headers propios, no-ANULADO, de
@@ -508,7 +602,7 @@ def _construir_respuesta_hoy(
 async def editar_linea_demanda_perdida(
     linea_id: uuid.UUID,
     payload: EditarLineaRequest,
-    actor: BotActor = Depends(require_bot_asesor),
+    actor: BotActor = Depends(require_bot_asesor_o_admin),
     db: AsyncSession = Depends(get_motored_db_or_503),
 ) -> dict:
     """Task 6.10/6.11, design D4: no-actor's line -> 404; `fecha !=
@@ -565,7 +659,7 @@ async def editar_linea_demanda_perdida(
 @router.post("/demanda-perdida/{carga_id}/anular")
 async def anular_registro_propio(
     carga_id: uuid.UUID,
-    actor: BotActor = Depends(require_bot_asesor),
+    actor: BotActor = Depends(require_bot_asesor_o_admin),
     db: AsyncSession = Depends(get_motored_db_or_503),
 ) -> dict:
     """Task 6.12/6.13, design D4: delega TODA la lógica en `anular_

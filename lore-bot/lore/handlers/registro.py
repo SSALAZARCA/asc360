@@ -31,7 +31,7 @@ from lore.estados import RegistroEstado
 from lore.handlers._common import (
     _MSG_CONEXION,
     _MSG_SESION_EXPIRADA,
-    TECLADO_ASESOR,
+    TECLADO_CAPTURA,
     _escapar_markdown,
 )
 
@@ -96,12 +96,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         "ASESOR_MOSTRADOR": "asesor de mostrador",
     }.get(rol, "usuario")
 
-    # UX shortcut (persistent Reply Keyboard): only an approved ASESOR_MOSTRADOR
-    # gets it -- an ADMIN's welcome-back doesn't, they don't use the
-    # capture/correction flows as their own registration. Same role-aware
-    # discipline as the Phase 9 fix-up above: check the real role instead of
-    # hardcoding one branch for everyone.
-    reply_markup = TECLADO_ASESOR if rol == "ASESOR_MOSTRADOR" else None
+    # UX shortcut (persistent Reply Keyboard): ad-hoc extension (post-Phase-10,
+    # product-owner request) -- an ADMIN can now also drive `/registrar`/
+    # `/correcciones` (backend: `deps_bot.py::require_bot_asesor_o_admin`), so
+    # the keyboard now shows for BOTH approved roles, never for `pending`/
+    # `rejected` (both `return` before reaching this line) or any other role.
+    # Same role-aware discipline as the Phase 9 fix-up above: check the real
+    # role instead of hardcoding one branch for everyone.
+    reply_markup = TECLADO_CAPTURA if rol in ("ASESOR_MOSTRADOR", "ADMIN") else None
     await update.message.reply_text(
         f"👋 ¡Hola, {data.get('nombre', '')}! Ya estás registrado como {rol_legible}.",
         reply_markup=reply_markup,

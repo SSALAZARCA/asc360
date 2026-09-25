@@ -32,7 +32,7 @@ esto como open question para el dueño del spec.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import Iterable, List, Optional, Tuple
 
 from fastapi import Depends, Header, HTTPException, status
 from sqlalchemy import select
@@ -173,14 +173,27 @@ async def get_bot_actor(
     )
 
 
-def _require_bot_role(role: str):
-    """Fábrica compartida por `require_bot_asesor`/`require_bot_admin`:
-    ambas exigen exactamente la misma cascada de chequeos (existencia, rol,
-    status, activo), difiriendo únicamente en qué rol exigen -- evita
-    duplicar los 4 códigos 403."""
+def _require_bot_roles(roles: Iterable[str]):
+    """Fábrica compartida por `require_bot_asesor`/`require_bot_admin`/
+    `require_bot_asesor_o_admin`: las tres exigen exactamente la misma
+    cascada de chequeos (existencia, rol, status, activo), difiriendo
+    únicamente en QUÉ rol(es) aceptan -- evita duplicar los 4 códigos 403.
+    Generalizada (post-Phase-10, pedido directo del dueño del producto: un
+    ADMIN también puede registrar ventas perdidas) de "un único rol exacto"
+    a "cualquiera de N roles", sin tocar el contrato de las dos fábricas
+    single-role ya existentes.
+
+    Fix-up finding #3 (SUGGESTION, resilience): un `roles` vacío bloquearía
+    a CUALQUIER actor con el mismo 403 `NO_REGISTRADO` que un rol
+    inexistente -- un error de uso silencioso y engañoso en tiempo de
+    REQUEST. Falla fuerte acá, en tiempo de DEFINICIÓN de la fábrica (import
+    time), en vez de eso."""
+    roles_permitidos: Tuple[str, ...] = tuple(roles)
+    if not roles_permitidos:
+        raise ValueError("_require_bot_roles requiere al menos un rol permitido")
 
     async def _check(actor: Optional[BotActor] = Depends(get_bot_actor)) -> BotActor:
-        if actor is None or actor.role != role:
+        if actor is None or actor.role not in roles_permitidos:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN, detail={"code": "NO_REGISTRADO"}
             )
@@ -201,5 +214,13 @@ def _require_bot_role(role: str):
     return _check
 
 
-require_bot_asesor = _require_bot_role("ASESOR_MOSTRADOR")
-require_bot_admin = _require_bot_role("ADMIN")
+require_bot_asesor = _require_bot_roles(("ASESOR_MOSTRADOR",))
+require_bot_admin = _require_bot_roles(("ADMIN",))
+
+# Ad-hoc addition (post-Phase-10, product-owner request, NOT a numbered SDD
+# task): gates the demanda-perdida bot surface (`api/bot_demanda_perdida.py`)
+# for EITHER role, now that an ADMIN can also register lost sales -- for a
+# sucursal it picks explicitly, since (unlike an advisor) it has no
+# `usuario_sucursal` rows of its own. See that router's `registrar_demanda_
+# perdida` for the role-conditional sucursal-ownership check this pairs with.
+require_bot_asesor_o_admin = _require_bot_roles(("ASESOR_MOSTRADOR", "ADMIN"))

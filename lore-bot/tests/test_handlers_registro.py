@@ -13,7 +13,7 @@ from telegram.ext import ConversationHandler
 from lore.api import BackendCaido, LoreApiError, NoRegistrado, SucursalNoEncontrada, YaRegistrado
 from lore.estados import RegistroEstado
 from lore.handlers import registro
-from lore.handlers._common import TECLADO_ASESOR, _MSG_SESION_EXPIRADA, _escapar_markdown
+from lore.handlers._common import TECLADO_CAPTURA, _MSG_SESION_EXPIRADA, _escapar_markdown
 
 
 class FakeClient:
@@ -125,9 +125,9 @@ async def test_start_approved_asesor_greets_by_name_and_role(monkeypatch):
     assert "administrador" not in text
     # UX shortcut: an approved advisor's welcome-back is the ONE send-site
     # that attaches the persistent capture/correction Reply Keyboard (see
-    # `_common.py::TECLADO_ASESOR`'s docstring for why elsewhere is not
+    # `_common.py::TECLADO_CAPTURA`'s docstring for why elsewhere is not
     # needed).
-    assert update.message.reply_text.call_args.kwargs["reply_markup"] is TECLADO_ASESOR
+    assert update.message.reply_text.call_args.kwargs["reply_markup"] is TECLADO_CAPTURA
 
 
 async def test_start_approved_admin_greets_by_name_and_role(monkeypatch):
@@ -149,10 +149,12 @@ async def test_start_approved_admin_greets_by_name_and_role(monkeypatch):
     assert "asalazar" in text
     assert "administrador" in text
     assert "asesor de mostrador" not in text
-    # An ADMIN's welcome-back must NOT get the advisor-only capture/correction
-    # keyboard -- same role-aware discipline as the greeting text itself,
-    # not just a "hardcode it for everyone" shortcut.
-    assert update.message.reply_text.call_args.kwargs["reply_markup"] is None
+    # Ad-hoc extension (post-Phase-10, product-owner request): an ADMIN can
+    # now also drive `/registrar`/`/correcciones`, so its welcome-back DOES
+    # get the same persistent keyboard an approved advisor already gets --
+    # same role-aware discipline as the greeting text itself, just widened to
+    # both roles instead of "only ASESOR_MOSTRADOR".
+    assert update.message.reply_text.call_args.kwargs["reply_markup"] is TECLADO_CAPTURA
 
 
 async def test_start_backend_caido_ends_conversation(monkeypatch):

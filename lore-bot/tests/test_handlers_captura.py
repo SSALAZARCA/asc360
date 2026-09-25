@@ -2,6 +2,7 @@
 conversation (Method A only). Same pattern as `test_handlers_registro.py`:
 `_cliente` is monkeypatched to a `FakeClient` test double, no real HTTP.
 """
+import uuid
 from unittest.mock import AsyncMock, MagicMock
 
 from telegram.ext import ConversationHandler
@@ -186,6 +187,137 @@ async def test_iniciar_own_sucursal_not_in_active_list_ends_conversation(monkeyp
     assert result == ConversationHandler.END
 
 
+# --- iniciar (ADMIN) --------------------------------------------------------
+# Ad-hoc addition (post-Phase-10, product-owner request, NOT a numbered SDD
+# task): an ADMIN has no `usuario_sucursal` rows of its own -- `/yo`'s own
+# `sucursales` field is always empty for that role. Branches on `/yo`'s own
+# `role` field instead of the (always-empty) `sucursales` field.
+
+
+async def test_iniciar_admin_with_no_sucursales_shows_full_picker_not_error(monkeypatch):
+    """The old ASESOR_MOSTRADOR-only path would dead-end here with "no tenés
+    ninguna sucursal asignada" -- wrong for an ADMIN, who never has any
+    `usuario_sucursal` row by design, not by misconfiguration."""
+    fake_client = FakeClient()
+    fake_client.yo.return_value = {"sucursales": [], "role": "ADMIN"}
+    fake_client.sucursales.return_value = [
+        {"id": _S1, "nombre": "Bogotá"},
+        {"id": _S2, "nombre": "Medellín"},
+    ]
+    monkeypatch.setattr(captura, "_cliente", _fake_cliente(fake_client))
+
+    update = _make_update()
+    context = _make_context()
+    result = await captura.iniciar(update, context)
+
+    assert result == CapturaEstado.SUCURSAL
+    assert set(context.user_data[captura._SUCURSALES_KEY].keys()) == {_S1, _S2}
+
+
+async def test_iniciar_admin_single_active_sucursal_still_shows_picker_no_auto_select(monkeypatch):
+    """For an ASESOR_MOSTRADOR, exactly-one-assigned-sucursal auto-selects
+    (no real choice to make). For an ADMIN, picking WHICH sucursal to charge
+    is the whole point of asking -- auto-select must NOT apply even if only
+    one sucursal happens to be active system-wide."""
+    fake_client = FakeClient()
+    fake_client.yo.return_value = {"sucursales": [], "role": "ADMIN"}
+    fake_client.sucursales.return_value = [{"id": _S1, "nombre": "Bogotá"}]
+    monkeypatch.setattr(captura, "_cliente", _fake_cliente(fake_client))
+
+    update = _make_update()
+    context = _make_context()
+    result = await captura.iniciar(update, context)
+
+    assert result == CapturaEstado.SUCURSAL
+    assert set(context.user_data[captura._SUCURSALES_KEY].keys()) == {_S1}
+
+
+async def test_iniciar_admin_no_active_sucursales_ends_conversation(monkeypatch):
+    fake_client = FakeClient()
+    fake_client.yo.return_value = {"sucursales": [], "role": "ADMIN"}
+    fake_client.sucursales.return_value = []
+    monkeypatch.setattr(captura, "_cliente", _fake_cliente(fake_client))
+
+    update = _make_update()
+    result = await captura.iniciar(update, _make_context())
+
+    assert result == ConversationHandler.END
+
+
+async def test_iniciar_asesor_behavior_unchanged_when_role_present(monkeypatch):
+    """Regression proof: adding the ADMIN branch must not disturb the
+    ASESOR_MOSTRADOR path even when `/yo` now also returns an explicit
+    `role` field (it always did in production; only these unit tests'
+    fixtures omitted it before this change)."""
+    fake_client = FakeClient()
+    fake_client.yo.return_value = {"sucursales": [_S1], "role": "ASESOR_MOSTRADOR"}
+    fake_client.sucursales.return_value = [{"id": _S1, "nombre": "Bogotá"}]
+    monkeypatch.setattr(captura, "_cliente", _fake_cliente(fake_client))
+
+    update = _make_update()
+    context = _make_context()
+    result = await captura.iniciar(update, context)
+
+    assert result == CapturaEstado.METODO
+    assert str(context.user_data[captura._DRAFT_KEY].sucursal_id) == _S1
+
+
+# --- _obtener_sucursales_propias / _obtener_sucursales_todas ---------------
+# Approval tests for CURRENT behavior (Fix-up finding #4, pre-refactor
+# safety net): neither helper had direct coverage of its `client.sucursales()`
+# BackendCaido/LoreApiError branches before extracting the shared
+# `_fetch_sucursales_o_avisar` helper — written here BEFORE the refactor so
+# it must still pass, unchanged, AFTER it.
+
+
+async def test_obtener_sucursales_propias_backend_caido_shows_conexion_message(monkeypatch):
+    fake_client = FakeClient()
+    fake_client.sucursales.side_effect = BackendCaido("boom")
+    update = _make_update()
+
+    result = await captura._obtener_sucursales_propias(fake_client, update, {_S1})
+
+    assert result is None
+    text = update.message.reply_text.call_args.args[0]
+    assert "problema" in text.lower()
+
+
+async def test_obtener_sucursales_propias_lore_api_error_shows_conexion_message(monkeypatch):
+    fake_client = FakeClient()
+    fake_client.sucursales.side_effect = LoreApiError("unmapped")
+    update = _make_update()
+
+    result = await captura._obtener_sucursales_propias(fake_client, update, {_S1})
+
+    assert result is None
+    text = update.message.reply_text.call_args.args[0]
+    assert "problema" in text.lower()
+
+
+async def test_obtener_sucursales_todas_backend_caido_shows_conexion_message(monkeypatch):
+    fake_client = FakeClient()
+    fake_client.sucursales.side_effect = BackendCaido("boom")
+    update = _make_update()
+
+    result = await captura._obtener_sucursales_todas(fake_client, update)
+
+    assert result is None
+    text = update.message.reply_text.call_args.args[0]
+    assert "problema" in text.lower()
+
+
+async def test_obtener_sucursales_todas_lore_api_error_shows_conexion_message(monkeypatch):
+    fake_client = FakeClient()
+    fake_client.sucursales.side_effect = LoreApiError("unmapped")
+    update = _make_update()
+
+    result = await captura._obtener_sucursales_todas(fake_client, update)
+
+    assert result is None
+    text = update.message.reply_text.call_args.args[0]
+    assert "problema" in text.lower()
+
+
 # --- recibir_sucursal / recibir_metodo --------------------------------------
 
 
@@ -275,7 +407,7 @@ async def test_recibir_codigos_with_over_30_codes_warns_about_truncation(monkeyp
     resueltas = [
         {
             "entrada": codigo,
-            "referencia_id": str(__import__("uuid").uuid4()),
+            "referencia_id": str(uuid.uuid4()),
             "codigo": codigo,
             "nombre": None,
         }
@@ -345,7 +477,7 @@ async def test_recibir_correccion_no_resueltas_with_over_30_codes_warns_about_tr
     resueltas = [
         {
             "entrada": codigo,
-            "referencia_id": str(__import__("uuid").uuid4()),
+            "referencia_id": str(uuid.uuid4()),
             "codigo": codigo,
             "nombre": None,
         }
@@ -388,7 +520,7 @@ async def test_descartar_no_resuelta_removes_entry_and_moves_to_seleccion_when_l
     draft = captura.Borrador()
     draft.no_resueltas = ["ZZZ"]
     draft.lineas.append(
-        captura.LineaBorrador(referencia_id=__import__("uuid").uuid4(), codigo="ABC", nombre="Filtro")
+        captura.LineaBorrador(referencia_id=uuid.uuid4(), codigo="ABC", nombre="Filtro")
     )
     update = _make_update(callback_data=f"lore_cap_descartar:{captura._clave_descarte('ZZZ')}")
     context = _make_context(user_data={captura._DRAFT_KEY: draft})
@@ -454,7 +586,7 @@ async def test_descartar_no_resuelta_stale_tap_on_already_discarded_code_never_d
 
 
 async def test_alternar_seleccion_toggles_on_then_off():
-    referencia_id = __import__("uuid").uuid4()
+    referencia_id = uuid.uuid4()
     draft = captura.Borrador()
     draft.lineas.append(captura.LineaBorrador(referencia_id=referencia_id, codigo="ABC"))
     update = _make_update(callback_data=f"lore_cap_toggle:{referencia_id}")
@@ -470,7 +602,6 @@ async def test_alternar_seleccion_toggles_on_then_off():
 async def test_alternar_seleccion_with_multiple_lines_only_affects_the_toggled_one():
     """Phase 10 fix-up finding #11(b): toggling one entry among 3+ must never
     affect the others' selection state."""
-    import uuid
 
     ref1, ref2, ref3 = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
     draft = captura.Borrador()
@@ -499,7 +630,7 @@ async def test_alternar_seleccion_unknown_referencia_id_does_not_reedit_or_answe
     `BadRequest: message is not modified`, and `answer()` (already sent
     unconditionally at the top of the function) must never be called again."""
     draft = captura.Borrador()
-    draft.lineas.append(captura.LineaBorrador(referencia_id=__import__("uuid").uuid4(), codigo="ABC"))
+    draft.lineas.append(captura.LineaBorrador(referencia_id=uuid.uuid4(), codigo="ABC"))
     update = _make_update(callback_data=f"lore_cap_toggle:{__import__('uuid').uuid4()}")
     context = _make_context(user_data={captura._DRAFT_KEY: draft})
 
@@ -516,7 +647,7 @@ async def test_continuar_seleccion_blocks_commit_with_nothing_selected():
     this path must answer exactly once (with the alert), never an empty
     `answer()` first followed by a second alert `answer()`."""
     draft = captura.Borrador()
-    draft.lineas.append(captura.LineaBorrador(referencia_id=__import__("uuid").uuid4(), codigo="ABC"))
+    draft.lineas.append(captura.LineaBorrador(referencia_id=uuid.uuid4(), codigo="ABC"))
     update = _make_update(callback_data="lore_cap_continuar")
     context = _make_context(user_data={captura._DRAFT_KEY: draft})
 
@@ -531,7 +662,7 @@ async def test_continuar_seleccion_blocks_commit_with_nothing_selected():
 
 async def test_continuar_seleccion_moves_to_cantidad_when_selected():
     draft = captura.Borrador()
-    draft.lineas.append(captura.LineaBorrador(referencia_id=__import__("uuid").uuid4(), codigo="ABC"))
+    draft.lineas.append(captura.LineaBorrador(referencia_id=uuid.uuid4(), codigo="ABC"))
     draft.lineas[0].seleccionada = True
     update = _make_update(callback_data="lore_cap_continuar")
     context = _make_context(user_data={captura._DRAFT_KEY: draft})
@@ -548,7 +679,7 @@ async def test_continuar_seleccion_moves_to_cantidad_when_selected():
 
 async def test_recibir_cantidad_invalid_reprompts():
     draft = captura.Borrador()
-    draft.lineas.append(captura.LineaBorrador(referencia_id=__import__("uuid").uuid4(), codigo="ABC"))
+    draft.lineas.append(captura.LineaBorrador(referencia_id=uuid.uuid4(), codigo="ABC"))
     draft.lineas[0].seleccionada = True
     update = _make_update(text="0")
     context = _make_context(user_data={captura._DRAFT_KEY: draft})
@@ -561,7 +692,7 @@ async def test_recibir_cantidad_invalid_reprompts():
 
 async def test_recibir_cantidad_boundary_9999_accepted():
     draft = captura.Borrador()
-    draft.lineas.append(captura.LineaBorrador(referencia_id=__import__("uuid").uuid4(), codigo="ABC"))
+    draft.lineas.append(captura.LineaBorrador(referencia_id=uuid.uuid4(), codigo="ABC"))
     draft.lineas[0].seleccionada = True
     update = _make_update(text="9999")
     context = _make_context(user_data={captura._DRAFT_KEY: draft})
@@ -574,7 +705,7 @@ async def test_recibir_cantidad_boundary_9999_accepted():
 
 async def test_recibir_cantidad_boundary_10000_rejected():
     draft = captura.Borrador()
-    draft.lineas.append(captura.LineaBorrador(referencia_id=__import__("uuid").uuid4(), codigo="ABC"))
+    draft.lineas.append(captura.LineaBorrador(referencia_id=uuid.uuid4(), codigo="ABC"))
     draft.lineas[0].seleccionada = True
     update = _make_update(text="10000")
     context = _make_context(user_data={captura._DRAFT_KEY: draft})
@@ -585,7 +716,6 @@ async def test_recibir_cantidad_boundary_10000_rejected():
 
 
 async def test_recibir_cantidad_asks_next_pending_line_before_confirming():
-    import uuid
 
     draft = captura.Borrador()
     draft.lineas.append(captura.LineaBorrador(referencia_id=uuid.uuid4(), codigo="ABC"))
@@ -608,7 +738,6 @@ async def test_cap_seleccion_to_cap_cantidad_walks_3_selected_references_in_orde
     """Phase 10 fix-up finding #11(a): 3 selected references walked through 3
     sequential quantity prompts — each prompt must show the CORRECT
     reference's code, never a skipped/repeated/wrong one."""
-    import uuid
 
     draft = captura.Borrador()
     draft.lineas.append(captura.LineaBorrador(referencia_id=uuid.uuid4(), codigo="AAA"))
@@ -658,7 +787,6 @@ async def test_commit_is_blocked_until_every_selected_reference_has_a_quantity()
     """Spec: 'commit MUST be blocked until a quantity has been provided for
     each one'. Proven end-to-end: 2 selected lines, only 1 answered — the
     state machine must still be in CANTIDAD, never CONFIRMAR."""
-    import uuid
 
     draft = captura.Borrador()
     draft.lineas.append(captura.LineaBorrador(referencia_id=uuid.uuid4(), codigo="ABC"))
@@ -677,7 +805,6 @@ async def test_commit_is_blocked_until_every_selected_reference_has_a_quantity()
 
 
 def _draft_listo():
-    import uuid
 
     draft = captura.Borrador()
     draft.sucursal_id = uuid.UUID("11111111-1111-1111-1111-111111111111")
@@ -721,7 +848,6 @@ async def test_confirmar_success_sends_idempotency_key_equal_to_registro_id(monk
 
 
 async def test_confirmar_only_sends_selected_lines(monkeypatch):
-    import uuid
 
     fake_client = FakeClient()
     fake_client.registrar_demanda_perdida.return_value = {"carga_id": "c1"}

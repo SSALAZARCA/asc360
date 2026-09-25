@@ -90,6 +90,23 @@ def _asesor(*, telegram_id, sucursal_ids=None, **overrides) -> Usuario:
     return usuario
 
 
+def _admin(*, telegram_id, **overrides) -> Usuario:
+    """Ad-hoc addition (post-Phase-10, product-owner request): an ADMIN, per
+    `_require_bot_roles`, has NO `usuario_sucursal` rows of its own -- unlike
+    `_asesor`, this factory never accepts a `sucursal_ids` kwarg, since an
+    ADMIN's `sucursal_ids` is always empty regardless of which sucursal it
+    later picks for a given registration."""
+    base = dict(
+        id=uuid.uuid4(), nombre="Ana Admin", email="ana@motoredcolombia.com.co",
+        hashed_password="hash", role="ADMIN", activo=True, status="approved",
+        telegram_id=telegram_id,
+    )
+    base.update(overrides)
+    usuario = Usuario(**base)
+    usuario.sucursales = []
+    return usuario
+
+
 def _carga_bot(**overrides) -> CargaArchivo:
     base = dict(
         id=uuid.uuid4(), tipo="DEMANDA_PERDIDA", origen="BOT", estado="APLICADO",
@@ -99,6 +116,16 @@ def _carga_bot(**overrides) -> CargaArchivo:
     )
     base.update(overrides)
     return CargaArchivo(**base)
+
+
+def _sucursal(*, id=None, activa=True, **overrides) -> Sucursal:
+    """Fix-up finding #1: a `Sucursal` row for `registrar_demanda_perdida`'s
+    new existence+`activa` pre-check. Defaults to an existing, active
+    sucursal — tests proving the 404 path pass `activa=False` explicitly, or
+    simply never queue a row (query returns `[]` -> `None`)."""
+    base = dict(id=id or uuid.uuid4(), nombre="Sucursal Test", activa=activa)
+    base.update(overrides)
+    return Sucursal(**base)
 
 
 def _linea_bot(**overrides) -> DemandaPerdidaBotLinea:
@@ -213,6 +240,7 @@ def test_registrar_demanda_perdida_success_writes_header_lineas_and_delta():
     client, session = _client_with_queue(
         [
             [asesor],  # actor lookup
+            [_sucursal(id=sucursal_id)],  # fix-up finding #1: sucursal exists+activa
             [],  # idempotency pre-check: no existing carga
             [],  # aplicar_delta_demanda_perdida -> upsert execute
             [linea_esperada],  # _serializar_registro re-select
@@ -254,8 +282,9 @@ def test_registrar_demanda_perdida_success_writes_header_lineas_and_delta():
 
     # The additive-upsert statement carries 'BOT' origin and the exact delta.
     # executed_statements: [0]=readiness probe, [1]=actor lookup,
-    # [2]=idempotency pre-check, [3]=upsert.
-    upsert_stmt = session.executed_statements[3]
+    # [2]=sucursal existence+activa check (fix-up finding #1),
+    # [3]=idempotency pre-check, [4]=upsert.
+    upsert_stmt = session.executed_statements[4]
     valores = upsert_stmt.compile().construct_params()
     assert "BOT" in valores.values()
     assert Decimal("3") in valores.values()
@@ -263,10 +292,11 @@ def test_registrar_demanda_perdida_success_writes_header_lineas_and_delta():
 
 def test_registrar_demanda_perdida_sucursal_no_autorizada_returns_403():
     asesor = _asesor(telegram_id=1, sucursal_ids=[])
-    client, _session = _client_with_queue([[asesor]])
+    sucursal_id = uuid.uuid4()
+    client, _session = _client_with_queue([[asesor], [_sucursal(id=sucursal_id)]])
 
     payload = {
-        "sucursal_id": str(uuid.uuid4()), "metodo": "MANUAL",
+        "sucursal_id": str(sucursal_id), "metodo": "MANUAL",
         "lineas": [{"referencia_id": str(uuid.uuid4()), "cantidad": 1}],
     }
     response = client.post(
@@ -319,7 +349,7 @@ def test_registrar_demanda_perdida_idempotent_replay_same_actor_returns_200():
         referencia_id=referencia_id, cantidad=Decimal("2"),
     )
     client, session = _client_with_queue(
-        [[asesor], [carga_existente], [linea_existente]]
+        [[asesor], [_sucursal(id=sucursal_id)], [carga_existente], [linea_existente]]
     )
 
     payload = {
@@ -338,17 +368,17 @@ def test_registrar_demanda_perdida_idempotent_replay_same_actor_returns_200():
 
 def test_registrar_demanda_perdida_idempotency_key_owned_by_other_actor_returns_409():
     idempotency_key = uuid.uuid4()
-    asesor = _asesor(telegram_id=1, sucursal_ids=[uuid.uuid4()])
+    sucursal_id = uuid.uuid4()
+    asesor = _asesor(telegram_id=1, sucursal_ids=[sucursal_id])
     carga_de_otro = _carga_bot(id=idempotency_key, subido_por=uuid.uuid4())
-    client, _session = _client_with_queue([[asesor], [carga_de_otro]])
+    client, _session = _client_with_queue(
+        [[asesor], [_sucursal(id=sucursal_id)], [carga_de_otro]]
+    )
 
     payload = {
-        "sucursal_id": str(uuid.uuid4()), "metodo": "MANUAL",
+        "sucursal_id": str(sucursal_id), "metodo": "MANUAL",
         "lineas": [{"referencia_id": str(uuid.uuid4()), "cantidad": 1}],
     }
-    # sucursal check happens before the idempotency lookup, so make the
-    # payload's sucursal one the actor legitimately owns.
-    payload["sucursal_id"] = str(asesor.sucursales[0].sucursal_id)
 
     response = client.post(
         f"{BOT_URL}/demanda-perdida", json=payload, headers=_headers(1, idempotency_key=idempotency_key)
@@ -376,6 +406,7 @@ def test_registrar_demanda_perdida_concurrent_same_key_race_returns_200_not_500(
     client, session = _client_with_queue(
         [
             [asesor],  # actor lookup
+            [_sucursal(id=sucursal_id)],  # fix-up finding #1: sucursal exists+activa
             [],  # idempotency pre-check: no existing carga (both racers see this)
             [],  # aplicar_delta_demanda_perdida -> upsert execute
             [carga_repetida],  # post-IntegrityError re-select
@@ -415,7 +446,7 @@ def test_registrar_demanda_perdida_nonexistent_referencia_returns_404_not_500():
     sucursal_id = uuid.uuid4()
     asesor = _asesor(telegram_id=1, sucursal_ids=[sucursal_id])
     client, session = _client_with_queue(
-        [[asesor], [], []],
+        [[asesor], [_sucursal(id=sucursal_id)], [], []],
         raise_integrity_error=IntegrityError(
             "INSERT demanda_perdida_bot_linea", {},
             Exception(
@@ -440,11 +471,16 @@ def test_registrar_demanda_perdida_sucursal_fk_violation_returns_404_not_500():
     """Fix-up finding #7: a concurrent sucursal deactivation/deletion
     between `GET /sucursales` and this call violates the sucursal FK for
     real -- must map to `SUCURSAL_NO_ENCONTRADA`, not the referencia code
-    the old blanket `except IntegrityError` defaulted everything to."""
+    the old blanket `except IntegrityError` defaulted everything to.
+
+    Fix-up finding #1's new existence+`activa` pre-check does NOT eliminate
+    this race -- it only narrows the window: the sucursal still exists and
+    is `activa` when the pre-check runs (queued below), but gets
+    concurrently deactivated/deleted before the `INSERT` actually commits."""
     sucursal_id = uuid.uuid4()
     asesor = _asesor(telegram_id=1, sucursal_ids=[sucursal_id])
     client, session = _client_with_queue(
-        [[asesor], [], []],
+        [[asesor], [_sucursal(id=sucursal_id)], [], []],
         raise_integrity_error=IntegrityError(
             "INSERT demanda_perdida_bot_linea", {},
             Exception(
@@ -481,7 +517,7 @@ def test_registrar_demanda_perdida_unexpected_integrity_error_is_logged_and_retu
         'constraint "demanda_perdida_bot_linea_usuario_id_fkey"'
     )
     client, session = _client_with_queue(
-        [[asesor], [], []],
+        [[asesor], [_sucursal(id=sucursal_id)], [], []],
         raise_integrity_error=IntegrityError(
             "INSERT demanda_perdida_bot_linea", {}, Exception(detalle_inesperado)
         ),
@@ -529,6 +565,7 @@ def test_registrar_demanda_perdida_multiple_lineas_each_gets_own_additive_delta(
     client, session = _client_with_queue(
         [
             [asesor],  # actor lookup
+            [_sucursal(id=sucursal_id)],  # fix-up finding #1: sucursal exists+activa
             [],  # idempotency pre-check: no existing carga
             [linea_a, linea_b],  # _serializar_registro re-select
         ],
@@ -950,3 +987,253 @@ def test_edit_then_cancel_reverses_current_amount_not_original():
     assert session.cantidad_actual(
         fecha=linea.fecha, sucursal_id=linea.sucursal_id, referencia_id=linea.referencia_id
     ) == Decimal("17")
+
+
+# ---------------------------------------------------------------------------
+# Ad-hoc addition (post-Phase-10, product-owner request, NOT a numbered SDD
+# task): an ADMIN can now reach this same 5-endpoint surface, and -- unlike
+# an ASESOR_MOSTRADOR -- register for ANY active sucursal, since it has none
+# of its own. Only the role-gate + sucursal-ownership deltas are exercised
+# here; the rest of each endpoint's behavior is already covered above.
+# ---------------------------------------------------------------------------
+
+
+def test_resolver_referencias_admin_can_reach_it():
+    proveedor_id = uuid.uuid4()
+    admin = _admin(telegram_id=2)
+    client, _session = _client_with_queue([[admin], [proveedor_id], []])
+
+    response = client.post(
+        f"{BOT_URL}/referencias/resolver", json={"codigos": ["ZZZ999"]}, headers=_headers(2)
+    )
+
+    assert response.status_code == 200, response.text
+
+
+def test_registrar_demanda_perdida_admin_can_register_for_any_active_sucursal():
+    """An ADMIN has no `usuario_sucursal` rows -- the ownership check
+    `_asesor`s go through must be SKIPPED for this role, not merely relaxed
+    to an always-empty allow-list."""
+    sucursal_id = uuid.uuid4()
+    referencia_id = uuid.uuid4()
+    idempotency_key = uuid.uuid4()
+    admin = _admin(telegram_id=2)
+    linea_esperada = _linea_bot(
+        carga_id=idempotency_key, usuario_id=admin.id, sucursal_id=sucursal_id,
+        referencia_id=referencia_id, cantidad=Decimal("3"),
+    )
+    client, session = _client_with_queue(
+        [
+            [admin],  # actor lookup
+            [_sucursal(id=sucursal_id)],  # fix-up finding #1: sucursal exists+activa
+            [],  # idempotency pre-check: no existing carga
+            [],  # aplicar_delta_demanda_perdida -> upsert execute
+            [linea_esperada],  # _serializar_registro re-select
+        ]
+    )
+
+    payload = {
+        "sucursal_id": str(sucursal_id),
+        "metodo": "MANUAL",
+        "lineas": [{"referencia_id": str(referencia_id), "cantidad": 3}],
+    }
+    response = client.post(
+        f"{BOT_URL}/demanda-perdida", json=payload, headers=_headers(2, idempotency_key=idempotency_key)
+    )
+
+    assert response.status_code == 201, response.text
+    creadas = session.added_of_type(CargaArchivo)
+    assert creadas[0].subido_por == admin.id
+
+
+def test_registrar_demanda_perdida_asesor_still_rejected_for_unassigned_sucursal():
+    """Regression proof (explicitly requested): loosening the check for
+    ADMIN must NOT loosen it for ASESOR_MOSTRADOR -- an advisor submitting
+    for a sucursal outside their own assignment is still 403
+    SUCURSAL_NO_AUTORIZADA, unchanged."""
+    asesor = _asesor(telegram_id=1, sucursal_ids=[uuid.uuid4()])
+    sucursal_ajena = uuid.uuid4()
+    client, _session = _client_with_queue([[asesor], [_sucursal(id=sucursal_ajena)]])
+
+    payload = {
+        "sucursal_id": str(sucursal_ajena),  # NOT one of the asesor's own
+        "metodo": "MANUAL",
+        "lineas": [{"referencia_id": str(uuid.uuid4()), "cantidad": 1}],
+    }
+    response = client.post(
+        f"{BOT_URL}/demanda-perdida", json=payload, headers=_headers(1, idempotency_key=uuid.uuid4())
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"]["code"] == "SUCURSAL_NO_AUTORIZADA"
+
+
+# ---------------------------------------------------------------------------
+# Fix-up finding #1 (WARNING, resilience) — `registrar_demanda_perdida`'s
+# ADMIN sucursal-ownership bypass used to skip MORE than intended: a
+# `sucursal_id` that EXISTS but is DEACTIVATED (`Sucursal.activa is False`)
+# had no check anywhere in this path. An explicit "exists and is active"
+# pre-check now runs for EVERY caller, before the role-conditional ownership
+# check, reusing the SAME 404 SUCURSAL_NO_ENCONTRADA the FK-violation-at-
+# commit path already returns — indistinguishable to a client between "never
+# existed" and "exists but deactivated".
+# ---------------------------------------------------------------------------
+
+
+def test_registrar_demanda_perdida_admin_deactivated_sucursal_returns_404_not_silent_success():
+    """The ADMIN ownership bypass must only skip the "is this MY sucursal"
+    question, never the "does this sucursal exist and is it usable" one."""
+    sucursal_id = uuid.uuid4()
+    admin = _admin(telegram_id=2)
+    client, session = _client_with_queue(
+        [[admin], [_sucursal(id=sucursal_id, activa=False)]]
+    )
+
+    payload = {
+        "sucursal_id": str(sucursal_id), "metodo": "MANUAL",
+        "lineas": [{"referencia_id": str(uuid.uuid4()), "cantidad": 1}],
+    }
+    response = client.post(
+        f"{BOT_URL}/demanda-perdida", json=payload, headers=_headers(2, idempotency_key=uuid.uuid4())
+    )
+
+    assert response.status_code == 404, response.text
+    assert response.json()["detail"]["code"] == "SUCURSAL_NO_ENCONTRADA"
+    assert session.added == []  # never reached the write path
+    assert session.committed is False
+
+
+def test_registrar_demanda_perdida_asesor_deactivated_own_sucursal_returns_404_not_silent_success():
+    """Regression proof this applies to BOTH roles: an ASESOR_MOSTRADOR whose
+    own assigned sucursal was deactivated (without removing their
+    `usuario_sucursal` row) must also get the clean 404, never a silent
+    success against an inactive branch."""
+    sucursal_id = uuid.uuid4()
+    asesor = _asesor(telegram_id=1, sucursal_ids=[sucursal_id])
+    client, session = _client_with_queue(
+        [[asesor], [_sucursal(id=sucursal_id, activa=False)]]
+    )
+
+    payload = {
+        "sucursal_id": str(sucursal_id), "metodo": "MANUAL",
+        "lineas": [{"referencia_id": str(uuid.uuid4()), "cantidad": 1}],
+    }
+    response = client.post(
+        f"{BOT_URL}/demanda-perdida", json=payload, headers=_headers(1, idempotency_key=uuid.uuid4())
+    )
+
+    assert response.status_code == 404, response.text
+    assert response.json()["detail"]["code"] == "SUCURSAL_NO_ENCONTRADA"
+    assert session.added == []
+    assert session.committed is False
+
+
+# ---------------------------------------------------------------------------
+# Fix-up finding #2 (SUGGESTION, resilience) — audit visibility: log whenever
+# the ADMIN sucursal-ownership bypass is actually exercised (sucursal already
+# validated as existing+active), with the admin's usuario_id and the
+# sucursal_id charged.
+# ---------------------------------------------------------------------------
+
+
+def test_registrar_demanda_perdida_admin_bypass_is_logged(caplog):
+    sucursal_id = uuid.uuid4()
+    referencia_id = uuid.uuid4()
+    idempotency_key = uuid.uuid4()
+    admin = _admin(telegram_id=2)
+    linea_esperada = _linea_bot(
+        carga_id=idempotency_key, usuario_id=admin.id, sucursal_id=sucursal_id,
+        referencia_id=referencia_id, cantidad=Decimal("1"),
+    )
+    client, _session = _client_with_queue(
+        [
+            [admin],
+            [_sucursal(id=sucursal_id)],
+            [],
+            [],
+            [linea_esperada],
+        ]
+    )
+    payload = {
+        "sucursal_id": str(sucursal_id), "metodo": "MANUAL",
+        "lineas": [{"referencia_id": str(referencia_id), "cantidad": 1}],
+    }
+
+    with caplog.at_level("INFO", logger="motored.bot_demanda_perdida"):
+        response = client.post(
+            f"{BOT_URL}/demanda-perdida", json=payload, headers=_headers(2, idempotency_key=idempotency_key)
+        )
+
+    assert response.status_code == 201, response.text
+    assert any(
+        record.levelname == "INFO"
+        and str(admin.id) in record.getMessage()
+        and str(sucursal_id) in record.getMessage()
+        for record in caplog.records
+    )
+
+
+def test_registrar_demanda_perdida_admin_nonexistent_sucursal_returns_404_before_ownership_check():
+    """Triangulation: "doesn't exist at all" (query returns nothing) must hit
+    the SAME 404 as "exists but deactivated" — never a 403 or a 500, and
+    never reaching the idempotency/write steps below it."""
+    admin = _admin(telegram_id=2)
+    client, session = _client_with_queue([[admin], []])
+
+    payload = {
+        "sucursal_id": str(uuid.uuid4()), "metodo": "MANUAL",
+        "lineas": [{"referencia_id": str(uuid.uuid4()), "cantidad": 1}],
+    }
+    response = client.post(
+        f"{BOT_URL}/demanda-perdida", json=payload, headers=_headers(2, idempotency_key=uuid.uuid4())
+    )
+
+    assert response.status_code == 404, response.text
+    assert response.json()["detail"]["code"] == "SUCURSAL_NO_ENCONTRADA"
+    assert session.added == []
+    assert session.committed is False
+
+
+def test_listar_hoy_admin_can_reach_it():
+    admin = _admin(telegram_id=2)
+    client, _session = _client_with_queue([[admin], []])
+
+    response = client.get(f"{BOT_URL}/demanda-perdida/hoy", headers=_headers(2))
+
+    assert response.status_code == 200, response.text
+    assert response.json() == []
+
+
+def test_editar_linea_admin_can_edit_own_line():
+    admin = _admin(telegram_id=2)
+    linea = _linea_bot(usuario_id=admin.id, cantidad=Decimal("3"))
+    client, _session = _client_with_queue([[admin], [linea], []])
+
+    response = client.patch(
+        f"{BOT_URL}/demanda-perdida/lineas/{linea.id}", json={"cantidad": 5}, headers=_headers(2)
+    )
+
+    assert response.status_code == 200, response.text
+
+
+def test_anular_admin_can_anular_own_registro():
+    admin = _admin(telegram_id=2)
+    carga = _carga_bot(subido_por=admin.id)
+    linea = _linea_bot(carga_id=carga.id, usuario_id=admin.id, cantidad=Decimal("3"))
+    client, _session = _client_with_queue(
+        [
+            [admin],  # actor lookup
+            [carga],  # carga lookup (with_for_update)
+            [linea.fecha],  # _validar_ventana_propia ledger-fecha lookup
+            [carga.id],  # claim atomico
+            [linea],  # select ACTIVA lines
+        ],
+        session_cls=AdditiveDemandaPerdidaFakeSession,
+        filas_iniciales={
+            (linea.fecha, linea.sucursal_id, linea.referencia_id, "BOT"): Decimal("10"),
+        },
+    )
+
+    response = client.post(f"{BOT_URL}/demanda-perdida/{carga.id}/anular", headers=_headers(2))
+
+    assert response.status_code == 200, response.text

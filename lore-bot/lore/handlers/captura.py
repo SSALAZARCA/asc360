@@ -18,6 +18,14 @@ Using `client.sucursales()` alone would let an advisor pick a branch they
 are not assigned to, which the backend would then reject with 403
 `SUCURSAL_NO_AUTORIZADA` — never silently mislabeling that as a bug in
 `registrar_demanda_perdida`.
+
+**ADMIN branch (ad-hoc addition, post-Phase-10, product-owner request)**: an
+ADMIN has no `usuario_sucursal` rows of its own, so the "filter down to
+propios_ids" logic above does not apply to it at all — `iniciar` branches on
+`/yo`'s own `role` field and shows the FULL active-sucursal picker instead
+(`_obtener_sucursales_todas`), matching the backend's own role-conditional
+skip of the sucursal-ownership check in `registrar_demanda_perdida`
+(`backend/app/motored/api/bot_demanda_perdida.py`).
 """
 from __future__ import annotations
 
@@ -149,21 +157,36 @@ async def _verificar_actor(client: BackendClient, update: Update) -> dict | None
         return None
 
 
-async def _obtener_sucursales_propias(
-    client: BackendClient, update: Update, propios_ids: set[str]
-) -> list[dict] | None:
-    """Second concern split out of `iniciar` (Phase 10 fix-up, finding #7):
-    fetches ALL active sucursales and filters them down to `propios_ids` —
-    see the module docstring for why `/yo` alone (id-only) can't render a
-    named picker on its own. Replies and returns `None` on failure or an
-    empty intersection."""
+async def _fetch_sucursales_o_avisar(client: BackendClient, update: Update) -> list[dict] | None:
+    """Fix-up finding #4 (WARNING, readability): `_obtener_sucursales_propias`
+    and `_obtener_sucursales_todas` used to each wrap `client.sucursales()`
+    in the IDENTICAL `except BackendCaido`/`except LoreApiError` scaffolding
+    that does the exact same thing — hoisted here so both callers share ONE
+    fetch-and-error-handle step. Replies and returns `None` on failure (the
+    same `_MSG_CONEXION` both call sites already used); returns the raw list
+    on success. Callers apply their OWN post-filter/empty-check on top — this
+    helper knows nothing about "propias" vs. "todas". Pure de-duplication, no
+    behavior change."""
     try:
-        todas = await client.sucursales()
+        return await client.sucursales()
     except BackendCaido:
         await update.message.reply_text(_MSG_CONEXION)
         return None
     except LoreApiError:
         await update.message.reply_text(_MSG_CONEXION)
+        return None
+
+
+async def _obtener_sucursales_propias(
+    client: BackendClient, update: Update, propios_ids: set[str]
+) -> list[dict] | None:
+    """Second concern split out of `iniciar` (Phase 10 fix-up, finding #7):
+    fetches ALL active sucursales (via `_fetch_sucursales_o_avisar`) and
+    filters them down to `propios_ids` — see the module docstring for why
+    `/yo` alone (id-only) can't render a named picker on its own. Replies and
+    returns `None` on failure or an empty intersection."""
+    todas = await _fetch_sucursales_o_avisar(client, update)
+    if todas is None:
         return None
 
     propias = [s for s in todas if s.get("id") in propios_ids]
@@ -175,30 +198,90 @@ async def _obtener_sucursales_propias(
     return propias
 
 
+async def _obtener_sucursales_todas(client: BackendClient, update: Update) -> list[dict] | None:
+    """ADMIN counterpart of `_obtener_sucursales_propias` (ad-hoc addition,
+    post-Phase-10, product-owner request). An ADMIN has NO `usuario_sucursal`
+    rows of its own (unlike an advisor) — filtering `client.sucursales()`
+    down to "its own" ids would always yield an empty list, the OPPOSITE of
+    the request ("an admin can charge any active sucursal"). Returns EVERY
+    active sucursal unfiltered (via `_fetch_sucursales_o_avisar`). Replies and
+    returns `None` on failure or an empty result (no active sucursales at
+    all)."""
+    todas = await _fetch_sucursales_o_avisar(client, update)
+    if todas is None:
+        return None
+
+    if not todas:
+        await update.message.reply_text(
+            "⚠️ No pude cargar la lista de sucursales en este momento. Probá de nuevo con /registrar."
+        )
+        return None
+    return todas
+
+
+async def _resolver_sucursales_y_auto_seleccion(
+    client: BackendClient, update: Update, yo: dict
+) -> tuple[list[dict], bool] | None:
+    """Third concern split out of `iniciar` (Fix-up finding #5 — `iniciar`
+    was back near the ~50-line bar after finding #4's de-duplication; this
+    extracts its "get propias + decide auto_seleccionar" step). Branches on
+    `/yo`'s own `role` field (never assumed, same discipline as every other
+    role check in this codebase):
+
+    - ADMIN: NO `usuario_sucursal` rows of its own — `/yo`'s `sucursales`
+      field is always empty for that role, by design, not misconfiguration.
+      Skips the "propios_ids" derivation/empty-check entirely and shows the
+      FULL active-sucursal picker instead (`_obtener_sucursales_todas`).
+      Auto-select is intentionally NEVER applied here: which sucursal to
+      charge is the whole point of asking an admin, so it always gets the
+      picker, even with only one active sucursal system-wide.
+    - ASESOR_MOSTRADOR (or role absent, back-compat): its own assigned
+      sucursales (`_obtener_sucursales_propias`), auto-selected only when
+      exactly one exists — a real "no choice to make" case, unlike ADMIN's.
+
+    Replies and returns `None` when neither branch can proceed (delegated to
+    the helpers above, or this function's own "no tenés ninguna sucursal
+    asignada" empty-check for a non-ADMIN with zero `propios_ids`). No
+    behavior change from before this extraction."""
+    es_admin = yo.get("role") == "ADMIN"
+    if es_admin:
+        propias = await _obtener_sucursales_todas(client, update)
+        if propias is None:
+            return None
+        return propias, False
+
+    propios_ids = set(yo.get("sucursales") or [])
+    if not propios_ids:
+        await update.message.reply_text(
+            "⚠️ No tenés ninguna sucursal asignada todavía. Contactá a un administrador."
+        )
+        return None
+
+    propias = await _obtener_sucursales_propias(client, update, propios_ids)
+    if propias is None:
+        return None
+    return propias, len(propias) == 1
+
+
 async def iniciar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """`/registrar` — entry point. Auth re-check and sucursal fetching are
-    delegated to `_verificar_actor`/`_obtener_sucursales_propias`; this
-    function only decides auto-select-vs-picker UI (Phase 10 fix-up,
-    finding #7 — function-length decomposition, no behavior change)."""
+    """`/registrar` — entry point. Auth re-check and sucursal/auto-select
+    resolution are delegated to `_verificar_actor`/`_resolver_sucursales_y_
+    auto_seleccion`; this function only orchestrates: verify actor -> resolve
+    sucursales/auto-select -> render UI (Phase 10 fix-up, finding #7;
+    Fix-up finding #5 — further decomposition, no behavior change)."""
     telegram_id = update.effective_user.id
     async with _cliente(telegram_id) as client:
         yo = await _verificar_actor(client, update)
         if yo is None:
             return ConversationHandler.END
 
-        propios_ids = set(yo.get("sucursales") or [])
-        if not propios_ids:
-            await update.message.reply_text(
-                "⚠️ No tenés ninguna sucursal asignada todavía. Contactá a un administrador."
-            )
+        resultado = await _resolver_sucursales_y_auto_seleccion(client, update, yo)
+        if resultado is None:
             return ConversationHandler.END
-
-        propias = await _obtener_sucursales_propias(client, update, propios_ids)
-        if propias is None:
-            return ConversationHandler.END
+        propias, auto_seleccionar = resultado
 
     context.user_data[_DRAFT_KEY] = Borrador()
-    if len(propias) == 1:
+    if auto_seleccionar:
         _borrador(context).sucursal_id = UUID(propias[0]["id"])
         return await _pedir_metodo(update, context)
 

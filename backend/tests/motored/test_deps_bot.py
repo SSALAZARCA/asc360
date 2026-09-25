@@ -18,11 +18,13 @@ from app.config import settings
 from app.motored.deps_bot import (
     BotActor,
     LORE_UNAVAILABLE_DETAIL,
+    _require_bot_roles,
     get_bot_actor,
     get_bot_telegram_id,
     lore_bot_secret_is_safe,
     require_bot_admin,
     require_bot_asesor,
+    require_bot_asesor_o_admin,
     require_lore_ready,
 )
 from app.motored.models.usuario import Usuario
@@ -268,3 +270,70 @@ async def test_require_bot_admin_raises_403_no_registrado_when_role_is_asesor():
 async def test_require_bot_admin_returns_actor_when_role_admin_and_approved():
     actor = BotActor(usuario_id=str(uuid.uuid4()), nombre="Ana", role="ADMIN", status="approved", activo=True, telegram_id=444)
     assert await require_bot_admin(actor=actor) is actor
+
+
+# ---------------------------------------------------------------------------
+# require_bot_asesor_o_admin — ad-hoc addition (post-Phase-10, product-owner
+# request): an ADMIN must be able to reach the same bot-facing demanda-perdida
+# surface as an ASESOR_MOSTRADOR, without loosening the role gate for anyone
+# else. Same 4-check cascade (existence, role, status, activo) as
+# `require_bot_asesor`/`require_bot_admin`, just matched against EITHER role.
+# ---------------------------------------------------------------------------
+
+
+async def test_require_bot_asesor_o_admin_raises_403_no_registrado_when_actor_none():
+    with pytest.raises(HTTPException) as exc_info:
+        await require_bot_asesor_o_admin(actor=None)
+    assert exc_info.value.status_code == 403
+    assert exc_info.value.detail == {"code": "NO_REGISTRADO"}
+
+
+async def test_require_bot_asesor_o_admin_raises_403_no_registrado_when_role_is_neither():
+    actor = BotActor(usuario_id=str(uuid.uuid4()), nombre="Compras", role="COMPRAS", status="approved", activo=True, telegram_id=1)
+    with pytest.raises(HTTPException) as exc_info:
+        await require_bot_asesor_o_admin(actor=actor)
+    assert exc_info.value.detail == {"code": "NO_REGISTRADO"}
+
+
+async def test_require_bot_asesor_o_admin_raises_403_pendiente_when_status_pending():
+    actor = BotActor(usuario_id=str(uuid.uuid4()), nombre="Ana", role="ADMIN", status="pending", activo=True, telegram_id=444)
+    with pytest.raises(HTTPException) as exc_info:
+        await require_bot_asesor_o_admin(actor=actor)
+    assert exc_info.value.detail == {"code": "PENDIENTE"}
+
+
+async def test_require_bot_asesor_o_admin_raises_403_rechazado_when_status_rejected():
+    actor = BotActor(usuario_id=str(uuid.uuid4()), nombre="Juan", role="ASESOR_MOSTRADOR", status="rejected", activo=True, telegram_id=1)
+    with pytest.raises(HTTPException) as exc_info:
+        await require_bot_asesor_o_admin(actor=actor)
+    assert exc_info.value.detail == {"code": "RECHAZADO"}
+
+
+async def test_require_bot_asesor_o_admin_raises_403_inactivo_when_not_activo():
+    actor = BotActor(usuario_id=str(uuid.uuid4()), nombre="Ana", role="ADMIN", status="approved", activo=False, telegram_id=444)
+    with pytest.raises(HTTPException) as exc_info:
+        await require_bot_asesor_o_admin(actor=actor)
+    assert exc_info.value.detail == {"code": "INACTIVO"}
+
+
+async def test_require_bot_asesor_o_admin_returns_actor_when_role_asesor_and_approved():
+    actor = BotActor(usuario_id=str(uuid.uuid4()), nombre="Juan", role="ASESOR_MOSTRADOR", status="approved", activo=True, telegram_id=1)
+    assert await require_bot_asesor_o_admin(actor=actor) is actor
+
+
+async def test_require_bot_asesor_o_admin_returns_actor_when_role_admin_and_approved():
+    actor = BotActor(usuario_id=str(uuid.uuid4()), nombre="Ana", role="ADMIN", status="approved", activo=True, telegram_id=444)
+    assert await require_bot_asesor_o_admin(actor=actor) is actor
+
+
+# ---------------------------------------------------------------------------
+# Fix-up finding #3 (SUGGESTION, resilience) — `_require_bot_roles` must fail
+# LOUDLY at factory-definition time when called with an empty roles tuple,
+# instead of silently locking out every caller with a misleading
+# NO_REGISTRADO 403 at request time.
+# ---------------------------------------------------------------------------
+
+
+def test_require_bot_roles_empty_tuple_raises_value_error():
+    with pytest.raises(ValueError):
+        _require_bot_roles(())

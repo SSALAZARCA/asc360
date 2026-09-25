@@ -81,19 +81,27 @@ BOTON_CORRECCIONES = "🧾 Mis correcciones de hoy"
 # `one_time_keyboard=True`: that flag hides the keyboard again after a single
 # tap, which is the opposite of "persistent" here.
 #
-# Send-site judgment call: this is attached to exactly ONE message --
-# `registro.py::start()`'s approved-advisor welcome-back reply. A Telegram
+# Send-site judgment call: this is attached to exactly ONE message per role --
+# `registro.py::start()`'s approved-welcome-back reply. A Telegram
 # `ReplyKeyboardMarkup` is a client-side UI attachment to the CHAT, not to
 # one message: once sent, it stays in force for that chat until the bot
 # explicitly replaces it with another `reply_markup` (a different keyboard or
 # `ReplyKeyboardRemove()`). Nothing later in the capture/correction flows
-# sends either of those, so re-attaching `TECLADO_ASESOR` again after every
+# sends either of those, so re-attaching this keyboard again after every
 # capture/correction completion would be redundant, not more "persistent".
-# (Known, accepted gap: an advisor already-approved BEFORE this feature
-# shipped only gets the keyboard once they type `/start` again -- there is
-# no other trigger to backfill it, and this task's scope is additive UX, not
-# an existing-user migration.)
-TECLADO_ASESOR = ReplyKeyboardMarkup(
+# (Known, accepted gap: a user already-approved BEFORE this feature shipped
+# only gets the keyboard once they type `/start` again -- there is no other
+# trigger to backfill it, and this task's scope is additive UX, not an
+# existing-user migration.)
+#
+# Renamed from `TECLADO_ASESOR` -> `TECLADO_CAPTURA` (ad-hoc, post-Phase-10):
+# an ADMIN can now also drive `/registrar`/`/correcciones` (see
+# `deps_bot.py::require_bot_asesor_o_admin` on the backend side), so a name
+# implying "advisor-only" would be actively misleading. Only 2 non-test call
+# sites (this module + `registro.py`) plus `test_handlers_registro.py`
+# reference the old name -- small enough blast radius that a rename beats
+# leaving a stale, role-specific name on a now-role-generic constant.
+TECLADO_CAPTURA = ReplyKeyboardMarkup(
     [[BOTON_REGISTRAR], [BOTON_CORRECCIONES]],
     resize_keyboard=True,
 )
