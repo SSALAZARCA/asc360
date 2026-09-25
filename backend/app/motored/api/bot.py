@@ -1,6 +1,7 @@
 """
-Motored Pedidos — router del bot Lore (sdd/motored-ventas-perdidas-bot,
-Phase 5 "Bot auth + core router", design D5).
+Motored Pedidos — router del bot Lore, auto-registro y aprobación admin
+(sdd/motored-ventas-perdidas-bot, Phase 5 "Bot auth + core router", design
+D5).
 
 Monta `/api/motored/bot/*` -- la superficie HTTP que un futuro proceso Lore
 (`lore-bot/`, Fase 9) llamará. Este Phase NO incluye ningún proceso de bot
@@ -18,7 +19,15 @@ viene SIEMPRE de `require_bot_admin` (resuelto vía `telegram_id` -> `Usuario`
 real, verificado role=ADMIN + status=approved + activo) -- NUNCA de un id
 en el cuerpo del request, porque este router es el primer llamador de
 `resolver_solicitud` que no tiene un JWT autenticado detrás.
-"""
+
+Fix-up finding #6 (CRITICAL): la superficie de Phase 6 "Demanda perdida —
+bot write path" (`/referencias/resolver`, `/demanda-perdida`, `/demanda-
+perdida/hoy`, `PATCH .../lineas/{id}`, `POST .../{carga_id}/anular`) vivía
+acá mismo, haciendo de este archivo ~850 líneas con 2 concerns sin relación
+entre sí. Se movió a su propio router, `api/bot_demanda_perdida.py`
+(mismo prefix `/bot`, mismas dependencias de disponibilidad, montado por
+separado en `router.py`) -- ver el docstring de ese módulo para el detalle
+completo. Puro reordenamiento de archivos, sin cambio de comportamiento."""
 from __future__ import annotations
 
 import re
@@ -272,3 +281,4 @@ async def rechazar_solicitud_bot(
     db: AsyncSession = Depends(get_motored_db_or_503),
 ) -> dict:
     return await _resolver_solicitud_bot(db, usuario_id, "rejected", actor)
+

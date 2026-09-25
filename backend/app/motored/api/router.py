@@ -17,7 +17,18 @@ carga[...]`), así que su posición relativa a `maestros` no importa.
 """
 from fastapi import APIRouter
 
-from app.motored.api import auth, bot, cargas, carga, maestros, parametros, salud, usuarios
+from app.motored.api import (
+    auth,
+    bot,
+    bot_demanda_perdida,
+    cargas,
+    carga,
+    demanda_perdida,
+    maestros,
+    parametros,
+    salud,
+    usuarios,
+)
 
 router = APIRouter()
 
@@ -36,3 +47,12 @@ router.include_router(cargas.router)
 # propio (`/api/motored/bot`), sin superposición con ninguno de los de
 # arriba -- el orden relativo tampoco importa acá.
 router.include_router(bot.router)
+# sdd/motored-ventas-perdidas-bot, Phase 6 fix-up (finding #6): superficie
+# de demanda perdida del bot, extraída de `bot.py` a su propio archivo --
+# MISMO prefijo `/bot` que el router de arriba (FastAPI permite 2 routers
+# con el mismo prefix montados por separado mientras sus paths no se
+# superpongan; no lo hacen -- ver el docstring de `bot_demanda_perdida.py`).
+router.include_router(bot_demanda_perdida.router)
+# sdd/motored-ventas-perdidas-bot, Phase 6: `/demanda-perdida` es otro
+# prefijo propio (`/api/motored/demanda-perdida`), sin superposición.
+router.include_router(demanda_perdida.router)

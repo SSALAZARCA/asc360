@@ -23,8 +23,10 @@ required"). This is a Motored-local copy, deliberately not importing the
 `tests/imports` version, since the two domains have nothing in common and
 this module must stay independently readable.
 """
+import operator as _operator
 import uuid
-from typing import Any, List, Optional
+from decimal import Decimal
+from typing import Any, Dict, List, Optional, Tuple
 
 
 class _ScalarsResult:
@@ -55,6 +57,20 @@ class _ExecuteResult:
 
     def first(self):
         return self._items[0] if self._items else None
+
+    @property
+    def rowcount(self) -> int:
+        """Fase 6 fix-up (finding #1, BLOCKER): un `UPDATE`/`DELETE` real sin
+        `.returning()` no devuelve filas -- devuelve un CONTEO de filas
+        afectadas (`CursorResult.rowcount`). `FakeAsyncSession` no distingue
+        un SELECT de un UPDATE/DELETE en su cola (ambos encolan una lista),
+        así que acá se interpreta el largo de esa lista encolada como el
+        rowcount para el caller que solo necesita saber CUÁNTAS filas fueron
+        tocadas, nunca su contenido -- p.ej. `_ejecutar_delta_negativo`
+        (services/demanda_perdida_bot.py), que nunca hace `.returning()` y
+        usa el rowcount de su propio `UPDATE` para decidir si existía o no
+        una fila `demanda_perdida` para esa clave."""
+        return len(self._items)
 
 
 class FakeAsyncSession:
@@ -181,6 +197,177 @@ class FakeAsyncSession:
 
     def added_of_type(self, cls) -> list:
         return [obj for obj in self.added if isinstance(obj, cls)]
+
+
+# ---------------------------------------------------------------------------
+# Fase 6 fix-up (sdd/motored-ventas-perdidas-bot, review finding #2,
+# CRITICAL) -- `AdditiveDemandaPerdidaFakeSession`.
+#
+# Motivo: hasta acá, todo test de `services/demanda_perdida_bot.py` probaba
+# el UPSERT/UPDATE/DELETE aditivo SOLO por introspección del statement
+# compilado ("¿tiene la forma correcta?"), nunca ejecutándolo de verdad --
+# `FakeAsyncSession.execute()` simplemente devuelve la próxima página
+# encolada, sin aplicar ninguna semántica. Eso dejó pasar 3 rondas de
+# "hollow test" en este mismo feature (el upsert aditivo, el test de
+# integración edición+cancelación, el test de carrera de idempotencia).
+#
+# Esta clase SÍ aplica de verdad, contra un diccionario en memoria
+# `{(fecha, sucursal_id, referencia_id, origen): Decimal}`, los 2 shapes de
+# statement concretos que ese módulo usa para escritura ADITIVA de
+# `demanda_perdida`:
+#   - `pg_insert(...).on_conflict_do_update(...)` (el upsert, delta > 0)
+#   - `UPDATE demanda_perdida SET cantidad_solicitada = cantidad_solicitada
+#     + :delta WHERE (clave)` seguido de `DELETE ... WHERE (clave) AND
+#     cantidad_solicitada <= 0` (delta < 0, incluida la reversa de
+#     `_revertir_linea` post-BLOCKER-fix)
+#
+# Deliberadamente NO se centralizó como una convención general de
+# `FakeAsyncSession` (a diferencia de, p.ej., `_FilteringFakeSession`, que
+# cada archivo de test define localmente porque cada uno filtra columnas/
+# tablas distintas): acá los 3 archivos consumidores (`test_demanda_perdida
+# _bot_anular.py`, `test_demanda_perdida_bot_upsert.py`,
+# `test_bot_demanda_perdida_api.py`) necesitan la MISMA lógica de aritmética
+# bit-a-bit para la MISMA tabla -- triplicarla localmente solo crearía 3
+# copias que divergirían con el tiempo.
+#
+# Cualquier otro statement (SELECTs de negocio, el `UPDATE ... RETURNING`
+# del claim atómico sobre `carga_archivo`, etc.) cae al comportamiento
+# heredado de `FakeAsyncSession` (`execute_queue`), así que un test puede
+# mezclar libremente filas encoladas para sus SELECTs con aserciones reales
+# sobre `demanda_perdida`.
+# ---------------------------------------------------------------------------
+
+_CLAVE_DEMANDA_PERDIDA_BOT: Tuple[str, str, str, str] = (
+    "fecha", "sucursal_id", "referencia_id", "origen",
+)
+
+
+class _ResultadoConRowcount:
+    """Standin mínimo para el `CursorResult` que un `UPDATE`/`DELETE` real
+    sin `.returning()` devuelve -- solo expone `.rowcount`, que es lo único
+    que `_ejecutar_delta_negativo` lee del resultado del `UPDATE` para saber
+    si encontró o no una fila `demanda_perdida` existente para esa clave."""
+
+    def __init__(self, rowcount: int):
+        self.rowcount = rowcount
+
+
+def _extraer_igualdades_where(stmt) -> Dict[str, Any]:
+    """Como `_extraer_predicados` en `test_cargas_api.py`, pero devuelve un
+    dict `{nombre_columna: valor}` en vez de una lista de tuplas -- más
+    cómodo acá porque se arma una clave compuesta de 4 columnas a partir del
+    WHERE. Solo mira cláusulas de IGUALDAD de nivel superior (`==`); una
+    cláusula `cantidad_solicitada <= 0` (el DELETE condicional) queda afuera
+    a propósito -- ese umbral se evalúa aparte, contra el valor YA
+    actualizado en el diccionario en memoria, nunca releído del statement."""
+    whereclause = getattr(stmt, "whereclause", None)
+    if whereclause is None:
+        return {}
+    igualdades: Dict[str, Any] = {}
+    for clausula in getattr(whereclause, "clauses", [whereclause]):
+        if getattr(clausula, "operator", None) is not _operator.eq:
+            continue
+        columna = getattr(getattr(clausula, "left", None), "key", None)
+        valor_bind = getattr(clausula, "right", None)
+        if columna is not None and hasattr(valor_bind, "value"):
+            igualdades[columna] = valor_bind.value
+    return igualdades
+
+
+def _clave_demanda_perdida(igualdades: Dict[str, Any]) -> tuple:
+    faltantes = [c for c in _CLAVE_DEMANDA_PERDIDA_BOT if c not in igualdades]
+    if faltantes:
+        raise AssertionError(
+            f"AdditiveDemandaPerdidaFakeSession: statement sin columnas {faltantes} "
+            "en su WHERE -- forma inesperada para este fake (actualizar el fake si "
+            "el shape real del UPDATE/DELETE cambió)."
+        )
+    return tuple(igualdades[c] for c in _CLAVE_DEMANDA_PERDIDA_BOT)
+
+
+class AdditiveDemandaPerdidaFakeSession(FakeAsyncSession):
+    """Ver el comentario de sección de arriba. `filas_iniciales` siembra el
+    estado "ya existente en la base" antes de que el código bajo test emita
+    su primer statement -- `{(fecha, sucursal_id, referencia_id, origen):
+    Decimal}`. `cantidad_actual(...)` es el punto de lectura para
+    aserciones (`None` si la clave nunca existió o fue borrada por un
+    `DELETE ... WHERE cantidad_solicitada <= 0`)."""
+
+    def __init__(self, *, filas_iniciales: Optional[Dict[tuple, Decimal]] = None, **kwargs):
+        super().__init__(**kwargs)
+        self.filas_demanda_perdida: Dict[tuple, Decimal] = dict(filas_iniciales or {})
+
+    def cantidad_actual(
+        self, *, fecha, sucursal_id, referencia_id, origen: str = "BOT"
+    ) -> Optional[Decimal]:
+        return self.filas_demanda_perdida.get((fecha, sucursal_id, referencia_id, origen))
+
+    async def execute(self, stmt):
+        resultado = self._aplicar_semantica_real(stmt)
+        if resultado is not None:
+            self.executed_statements.append(stmt)
+            return resultado
+        return await super().execute(stmt)
+
+    def _aplicar_semantica_real(self, stmt):
+        tipo = type(stmt).__name__
+        tabla = getattr(getattr(stmt, "table", None), "name", None)
+        if tipo == "Insert" and getattr(stmt, "_post_values_clause", None) is not None:
+            if tabla is not None and tabla != "demanda_perdida":
+                return None
+            return self._aplicar_upsert_aditivo(stmt)
+        if tabla == "demanda_perdida" and tipo == "Update":
+            return self._aplicar_update_delta(stmt)
+        if tabla == "demanda_perdida" and tipo == "Delete":
+            return self._aplicar_delete_condicional(stmt)
+        return None
+
+    def _aplicar_upsert_aditivo(self, stmt):
+        """`pg_insert(...).on_conflict_do_update(...)`, delta > 0 -- suma
+        contra el valor existente (o lo crea, si la clave es nueva),
+        exactamente la semántica que Postgres aplicaría con el `ON CONFLICT
+        DO UPDATE SET cantidad_solicitada = demanda_perdida.
+        cantidad_solicitada + excluded.cantidad_solicitada` real."""
+        valores = stmt.compile().construct_params()
+        clave = tuple(valores[columna] for columna in _CLAVE_DEMANDA_PERDIDA_BOT)
+        delta = valores["cantidad_solicitada"]
+        actual = self.filas_demanda_perdida.get(clave, Decimal("0"))
+        self.filas_demanda_perdida[clave] = actual + delta
+        return _ExecuteResult([])
+
+    def _aplicar_update_delta(self, stmt):
+        """`UPDATE demanda_perdida SET cantidad_solicitada =
+        cantidad_solicitada + :delta WHERE (clave)` -- 0 filas afectadas
+        (rowcount) si la clave no existe todavía, nunca crea una fila (a
+        diferencia del upsert; ver `_ejecutar_delta_negativo`'s propio
+        docstring sobre por qué un delta negativo NUNCA pasa por el
+        upsert)."""
+        clave = _clave_demanda_perdida(_extraer_igualdades_where(stmt))
+        delta = None
+        for columna, expresion in stmt._values.items():
+            if columna.name == "cantidad_solicitada":
+                delta = getattr(getattr(expresion, "right", expresion), "value", expresion)
+        if delta is None:
+            raise AssertionError(
+                "AdditiveDemandaPerdidaFakeSession: UPDATE sin SET "
+                "cantidad_solicitada -- forma inesperada para este fake."
+            )
+        if clave not in self.filas_demanda_perdida:
+            return _ResultadoConRowcount(rowcount=0)
+        self.filas_demanda_perdida[clave] = self.filas_demanda_perdida[clave] + delta
+        return _ResultadoConRowcount(rowcount=1)
+
+    def _aplicar_delete_condicional(self, stmt):
+        """`DELETE ... WHERE (clave) AND cantidad_solicitada <= 0` -- el
+        umbral `<= 0` se evalúa acá contra el valor YA actualizado por el
+        `UPDATE` anterior (nunca releído del statement compilado, ver
+        `_extraer_igualdades_where`), igual que lo haría Postgres evaluando
+        el predicado contra la fila real."""
+        clave = _clave_demanda_perdida(_extraer_igualdades_where(stmt))
+        actual = self.filas_demanda_perdida.get(clave)
+        if actual is not None and actual <= 0:
+            del self.filas_demanda_perdida[clave]
+        return _ExecuteResult([])
 
 
 # ---------------------------------------------------------------------------
