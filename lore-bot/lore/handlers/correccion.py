@@ -236,7 +236,7 @@ async def recibir_cantidad(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             return CorreccionEstado.CANTIDAD
 
     await update.message.reply_text(
-        f"✅ Cantidad actualizada a {texto}. Mandá /correcciones de nuevo para seguir corrigiendo."
+        f"✅ Cantidad actualizada a {cantidad}. Mandá /correcciones de nuevo para seguir corrigiendo."
     )
     _limpiar(context)
     return ConversationHandler.END

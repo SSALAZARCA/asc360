@@ -299,6 +299,25 @@ async def test_recibir_cantidad_success_ends_and_clears_state(monkeypatch):
     assert "actualizada a 7" in text.lower()
 
 
+async def test_recibir_cantidad_success_message_shows_normalized_value_not_raw_text(monkeypatch):
+    """gga finding: the success message was built from the raw typed text
+    (`texto`), not the validated int (`cantidad`) -- an input like "007"
+    would show "actualizada a 007" instead of the normalized "7"."""
+    fake_client = FakeClient()
+    fake_client.editar_linea.return_value = {"linea_id": _LINEA_1, "cantidad": 7.0}
+    monkeypatch.setattr(correccion, "_cliente", _fake_cliente(fake_client))
+
+    update = _make_update(text="007")
+    context = _make_context(user_data={correccion._DATA_KEY: {"linea_id_actual": _LINEA_1}})
+
+    await correccion.recibir_cantidad(update, context)
+
+    fake_client.editar_linea.assert_awaited_once_with(_LINEA_1, 7)
+    text = update.message.reply_text.call_args.args[0]
+    assert "actualizada a 7." in text.lower()
+    assert "007" not in text
+
+
 async def test_recibir_cantidad_linea_no_encontrada_ends_and_clears_state(monkeypatch):
     fake_client = FakeClient()
     fake_client.editar_linea.side_effect = LineaNoEncontrada("nope")
