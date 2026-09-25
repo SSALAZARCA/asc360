@@ -100,7 +100,11 @@ class BackendClient:
 
         if response.status_code in (401, 403, 409):
             body = _safe_json(response)
-            code = body.get("code") if isinstance(body, dict) else None
+            raw_code = body.get("code") if isinstance(body, dict) else None
+            # gga finding: `code` must be hashable/comparable before it's used
+            # as a dict key -- a malformed body (`{"code": ["x"]}`) would
+            # otherwise raise a bare, uncaught TypeError from `dict.get`.
+            code = raw_code if isinstance(raw_code, str) else None
             error_cls = _ERROR_CODE_MAP.get(code, BackendCaido)
             raise error_cls(code or f"unmapped HTTP {response.status_code}")
 

@@ -90,6 +90,18 @@ async def test_yo_raises_backend_caido_on_unmapped_403_code():
             await client.yo()
 
 
+async def test_yo_raises_backend_caido_on_non_string_code():
+    # gga finding: a malformed `code` (not a string) must not crash
+    # dict.get() with an uncaught TypeError -- it must fall through to the
+    # same generic BackendCaido as an unmapped/absent code.
+    def handler(request):
+        return httpx.Response(403, json={"code": ["not", "a", "string"]})
+
+    async with _client(handler) as client:
+        with pytest.raises(BackendCaido):
+            await client.yo()
+
+
 async def test_yo_raises_backend_caido_on_unmapped_4xx():
     # gga finding: a 400/422 (never returned by /yo today, but not
     # impossible for a future backend change) must not leak a bare
