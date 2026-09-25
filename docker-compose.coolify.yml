@@ -54,7 +54,12 @@ services:
     volumes:
       - minio_data_v5:/data
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      # `ghcr.io/coollabsio/minio` no trae `curl` (confirmado en producción,
+      # 2026-09-25: "executable file not found in $PATH") -- `mc` (el
+      # cliente oficial de MinIO) sí viene incluido, y `mc ready local` es
+      # el healthcheck que la propia documentación de MinIO recomienda para
+      # este caso exacto.
+      test: ["CMD", "mc", "ready", "local"]
       interval: 30s
       timeout: 10s
       retries: 3
