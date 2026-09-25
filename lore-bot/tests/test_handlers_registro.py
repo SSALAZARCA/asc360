@@ -13,7 +13,7 @@ from telegram.ext import ConversationHandler
 from lore.api import BackendCaido, LoreApiError, NoRegistrado, SucursalNoEncontrada, YaRegistrado
 from lore.estados import RegistroEstado
 from lore.handlers import registro
-from lore.handlers._common import _MSG_SESION_EXPIRADA, _escapar_markdown
+from lore.handlers._common import TECLADO_ASESOR, _MSG_SESION_EXPIRADA, _escapar_markdown
 
 
 class FakeClient:
@@ -89,6 +89,9 @@ async def test_start_pending_status_ends_conversation(monkeypatch):
     assert result == ConversationHandler.END
     text = update.message.reply_text.call_args.args[0]
     assert "pendiente" in text.lower()
+    # A pending applicant can't use the capture/correction flows yet -- must
+    # NOT get the keyboard that shortcuts into them.
+    assert "reply_markup" not in update.message.reply_text.call_args.kwargs
 
 
 async def test_start_rejected_status_ends_conversation(monkeypatch):
@@ -102,6 +105,7 @@ async def test_start_rejected_status_ends_conversation(monkeypatch):
     assert result == ConversationHandler.END
     text = update.message.reply_text.call_args.args[0]
     assert "rechazada" in text.lower()
+    assert "reply_markup" not in update.message.reply_text.call_args.kwargs
 
 
 async def test_start_approved_asesor_greets_by_name_and_role(monkeypatch):
@@ -119,6 +123,11 @@ async def test_start_approved_asesor_greets_by_name_and_role(monkeypatch):
     assert "Ana" in text
     assert "asesor de mostrador" in text
     assert "administrador" not in text
+    # UX shortcut: an approved advisor's welcome-back is the ONE send-site
+    # that attaches the persistent capture/correction Reply Keyboard (see
+    # `_common.py::TECLADO_ASESOR`'s docstring for why elsewhere is not
+    # needed).
+    assert update.message.reply_text.call_args.kwargs["reply_markup"] is TECLADO_ASESOR
 
 
 async def test_start_approved_admin_greets_by_name_and_role(monkeypatch):
@@ -140,6 +149,10 @@ async def test_start_approved_admin_greets_by_name_and_role(monkeypatch):
     assert "asalazar" in text
     assert "administrador" in text
     assert "asesor de mostrador" not in text
+    # An ADMIN's welcome-back must NOT get the advisor-only capture/correction
+    # keyboard -- same role-aware discipline as the greeting text itself,
+    # not just a "hardcode it for everyone" shortcut.
+    assert update.message.reply_text.call_args.kwargs["reply_markup"] is None
 
 
 async def test_start_backend_caido_ends_conversation(monkeypatch):

@@ -10,6 +10,11 @@ Phase 10 adds the capture/correction handlers on top of that:
   (`handlers/captura.py`).
 - `/correcciones` begins the today-only self-service correction menu
   (`handlers/correccion.py`).
+- The persistent Reply Keyboard's 2 button labels (`handlers/_common.py`,
+  shown to an approved advisor after `/start`) are wired here as EXTRA
+  `MessageHandler` entry points into the SAME `captura`/`correccion`
+  `ConversationHandler`s their `/registrar`/`/correcciones` commands already
+  use -- tapping a button behaves identically to typing the command.
 
 Running this module for real, via the Dockerfile's `CMD`, would call
 `run_polling()` and needs a live bot token; nothing here requires that to
@@ -35,6 +40,7 @@ from lore.handlers import admin as admin_handlers
 from lore.handlers import captura as captura_handlers
 from lore.handlers import correccion as correccion_handlers
 from lore.handlers import registro as registro_handlers
+from lore.handlers._common import BOTON_CORRECCIONES, BOTON_REGISTRAR
 
 logger = logging.getLogger("lore.main")
 
@@ -66,7 +72,15 @@ def _build_captura_conversation() -> ConversationHandler:
     `CAP_*` states, Method A only; Method B/photo extends this "from
     CAP_SELECCION onward" in Phase 11)."""
     return ConversationHandler(
-        entry_points=[CommandHandler("registrar", captura_handlers.iniciar)],
+        entry_points=[
+            CommandHandler("registrar", captura_handlers.iniciar),
+            # UX shortcut: the persistent Reply Keyboard button (see
+            # `handlers/_common.py::TECLADO_ASESOR`) is an alternate entry
+            # point into the SAME `iniciar` -- never a duplicated copy of its
+            # logic. `filters.Text([...])` matches the message text EXACTLY,
+            # same as `BOTON_REGISTRAR`'s own definition.
+            MessageHandler(filters.Text([BOTON_REGISTRAR]), captura_handlers.iniciar),
+        ],
         states={
             CapturaEstado.SUCURSAL: [
                 CallbackQueryHandler(captura_handlers.recibir_sucursal, pattern=r"^lore_cap_suc:")
@@ -103,7 +117,11 @@ def _build_correccion_conversation() -> ConversationHandler:
     """Phase 10 — today-only self-service correction menu (`/correcciones`,
     design D4/D7's `COR_*` states)."""
     return ConversationHandler(
-        entry_points=[CommandHandler("correcciones", correccion_handlers.iniciar)],
+        entry_points=[
+            CommandHandler("correcciones", correccion_handlers.iniciar),
+            # Same UX-shortcut pattern as `_build_captura_conversation` above.
+            MessageHandler(filters.Text([BOTON_CORRECCIONES]), correccion_handlers.iniciar),
+        ],
         states={
             CorreccionEstado.LISTA: [
                 CallbackQueryHandler(correccion_handlers.seleccionar_carga, pattern=r"^lore_cor_carga:")

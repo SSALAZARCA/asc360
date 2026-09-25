@@ -28,7 +28,12 @@ from lore.api import (
     YaRegistrado,
 )
 from lore.estados import RegistroEstado
-from lore.handlers._common import _MSG_CONEXION, _MSG_SESION_EXPIRADA, _escapar_markdown
+from lore.handlers._common import (
+    _MSG_CONEXION,
+    _MSG_SESION_EXPIRADA,
+    TECLADO_ASESOR,
+    _escapar_markdown,
+)
 
 logger = logging.getLogger("lore.handlers.registro")
 
@@ -85,12 +90,21 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     # of the real role `/yo` returned -- an ADMIN who just linked their
     # Telegram via /vincular got told they were an asesor. `/yo` already
     # returns the real role; use it instead of assuming one.
+    rol = data.get("role")
     rol_legible = {
         "ADMIN": "administrador",
         "ASESOR_MOSTRADOR": "asesor de mostrador",
-    }.get(data.get("role"), "usuario")
+    }.get(rol, "usuario")
+
+    # UX shortcut (persistent Reply Keyboard): only an approved ASESOR_MOSTRADOR
+    # gets it -- an ADMIN's welcome-back doesn't, they don't use the
+    # capture/correction flows as their own registration. Same role-aware
+    # discipline as the Phase 9 fix-up above: check the real role instead of
+    # hardcoding one branch for everyone.
+    reply_markup = TECLADO_ASESOR if rol == "ASESOR_MOSTRADOR" else None
     await update.message.reply_text(
-        f"👋 ¡Hola, {data.get('nombre', '')}! Ya estás registrado como {rol_legible}."
+        f"👋 ¡Hola, {data.get('nombre', '')}! Ya estás registrado como {rol_legible}.",
+        reply_markup=reply_markup,
     )
     return ConversationHandler.END
 

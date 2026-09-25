@@ -14,6 +14,8 @@ from __future__ import annotations
 
 import re
 
+from telegram import ReplyKeyboardMarkup
+
 _MSG_CONEXION = "⚠️ Tuve un problema para hablar con el sistema. Probá de nuevo en unos segundos."
 
 _MSG_SESION_EXPIRADA = (
@@ -62,3 +64,36 @@ def _validar_cantidad(texto: str) -> int | None:
     if not (_CANTIDAD_MINIMA <= valor <= _CANTIDAD_MAXIMA):
         return None
     return valor
+
+
+# Persistent Reply Keyboard (UX shortcut) — lets an approved advisor TAP a
+# button instead of typing `/registrar`/`/correcciones`. Wiring detail: the
+# exact label strings below are ALSO used, byte-for-byte, as the
+# `filters.Text([...])` match in `main.py`'s extra `MessageHandler` entry
+# points for the `captura`/`correccion` `ConversationHandler`s -- both must
+# stay in sync, which is exactly why they live here as shared constants
+# instead of being duplicated as string literals in each file.
+BOTON_REGISTRAR = "📝 Registrar venta perdida"
+BOTON_CORRECCIONES = "🧾 Mis correcciones de hoy"
+
+# `resize_keyboard=True` shrinks the keyboard to fit just these 2 rows
+# instead of Telegram's oversized default. Deliberately NOT
+# `one_time_keyboard=True`: that flag hides the keyboard again after a single
+# tap, which is the opposite of "persistent" here.
+#
+# Send-site judgment call: this is attached to exactly ONE message --
+# `registro.py::start()`'s approved-advisor welcome-back reply. A Telegram
+# `ReplyKeyboardMarkup` is a client-side UI attachment to the CHAT, not to
+# one message: once sent, it stays in force for that chat until the bot
+# explicitly replaces it with another `reply_markup` (a different keyboard or
+# `ReplyKeyboardRemove()`). Nothing later in the capture/correction flows
+# sends either of those, so re-attaching `TECLADO_ASESOR` again after every
+# capture/correction completion would be redundant, not more "persistent".
+# (Known, accepted gap: an advisor already-approved BEFORE this feature
+# shipped only gets the keyboard once they type `/start` again -- there is
+# no other trigger to backfill it, and this task's scope is additive UX, not
+# an existing-user migration.)
+TECLADO_ASESOR = ReplyKeyboardMarkup(
+    [[BOTON_REGISTRAR], [BOTON_CORRECCIONES]],
+    resize_keyboard=True,
+)

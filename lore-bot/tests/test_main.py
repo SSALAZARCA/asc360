@@ -1,12 +1,15 @@
 import datetime
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from telegram import CallbackQuery, Chat, Message, Update, User
-from telegram.ext import CallbackQueryHandler, CommandHandler, ConversationHandler
+from telegram.ext import CallbackQueryHandler, CommandHandler, ConversationHandler, MessageHandler
 
 from lore import config
 from lore.estados import RegistroEstado
+from lore.handlers import captura as captura_handlers
+from lore.handlers import correccion as correccion_handlers
 from lore.handlers import registro as registro_handlers
+from lore.handlers._common import BOTON_CORRECCIONES, BOTON_REGISTRAR
 from lore.main import build_application
 
 
@@ -40,6 +43,52 @@ def test_build_application_registers_captura_conversation():
         isinstance(ep, CommandHandler) and "registrar" in ep.commands
         for h in conv_handlers
         for ep in h.entry_points
+    )
+
+
+def test_build_application_captura_conversation_has_button_entry_point():
+    # UX shortcut: the persistent Reply Keyboard's "Registrar venta perdida"
+    # button must be wired as an ADDITIONAL entry point into the SAME
+    # `captura_handlers.iniciar` the `/registrar` command already uses --
+    # never a duplicated copy of its logic.
+    application = build_application()
+    handlers = application.handlers[0]
+    conv_handlers = [h for h in handlers if isinstance(h, ConversationHandler)]
+    captura_conv = next(
+        h
+        for h in conv_handlers
+        for ep in h.entry_points
+        if isinstance(ep, CommandHandler) and "registrar" in ep.commands
+    )
+    button_entry_points = [ep for ep in captura_conv.entry_points if isinstance(ep, MessageHandler)]
+    assert len(button_entry_points) == 1
+    assert button_entry_points[0].callback is captura_handlers.iniciar
+    assert button_entry_points[0].filters.check_update(
+        _text_only_update(BOTON_REGISTRAR)
+    )
+    assert not button_entry_points[0].filters.check_update(
+        _text_only_update("cualquier otro texto")
+    )
+
+
+def test_build_application_correccion_conversation_has_button_entry_point():
+    application = build_application()
+    handlers = application.handlers[0]
+    conv_handlers = [h for h in handlers if isinstance(h, ConversationHandler)]
+    correccion_conv = next(
+        h
+        for h in conv_handlers
+        for ep in h.entry_points
+        if isinstance(ep, CommandHandler) and "correcciones" in ep.commands
+    )
+    button_entry_points = [ep for ep in correccion_conv.entry_points if isinstance(ep, MessageHandler)]
+    assert len(button_entry_points) == 1
+    assert button_entry_points[0].callback is correccion_handlers.iniciar
+    assert button_entry_points[0].filters.check_update(
+        _text_only_update(BOTON_CORRECCIONES)
+    )
+    assert not button_entry_points[0].filters.check_update(
+        _text_only_update("cualquier otro texto")
     )
 
 
@@ -87,8 +136,24 @@ def test_build_application_registers_error_handler():
     assert len(application.error_handlers) == 1
 
 
-def _make_message(chat_id: int, user: User, bot) -> Message:
-    message = Message(message_id=1, date=datetime.datetime.now(), chat=Chat(id=chat_id, type="private"))
+def _text_only_update(text: str) -> MagicMock:
+    """Bare `Update` double for exercising a `MessageHandler`'s `.filters`
+    directly (`filters.Text.filter` only ever reads `.text` off
+    `update.effective_message`) -- no bot/chat wiring needed for this,
+    unlike the full `process_update` end-to-end tests below."""
+    update = MagicMock()
+    update.effective_message.text = text
+    return update
+
+
+def _make_message(chat_id: int, user: User, bot, text: str | None = None) -> Message:
+    message = Message(
+        message_id=1,
+        date=datetime.datetime.now(),
+        chat=Chat(id=chat_id, type="private"),
+        from_user=user,
+        text=text,
+    )
     message.set_bot(bot)
     return message
 
@@ -156,3 +221,63 @@ async def test_active_conversation_callback_is_not_intercepted_by_fallback():
         text = edit_mock.await_args.kwargs["text"]
         assert "Resumen de tu solicitud" in text
         assert "expiró" not in text.lower()
+
+
+async def test_button_text_registrar_calls_the_same_iniciar_as_the_command():
+    """Requirement #3: tapping "Registrar venta perdida" must behave
+    identically to typing `/registrar` -- both dispatch to the exact same
+    `captura_handlers.iniciar`, never a duplicated copy of its logic."""
+    fake_iniciar = AsyncMock(return_value=ConversationHandler.END)
+    with patch.object(captura_handlers, "iniciar", fake_iniciar):
+        application = build_application()
+        application._initialized = True
+
+        user = User(id=11, is_bot=False, first_name="asesor")
+        message = _make_message(11, user, application.bot, text=BOTON_REGISTRAR)
+        update = Update(update_id=11, message=message)
+
+        await application.process_update(update)
+
+    fake_iniciar.assert_awaited_once()
+    awaited_update = fake_iniciar.await_args.args[0]
+    assert awaited_update.message.text == BOTON_REGISTRAR
+
+
+async def test_button_text_correcciones_calls_the_same_iniciar_as_the_command():
+    """Same proof as above for "Mis correcciones de hoy" /
+    `correccion_handlers.iniciar`."""
+    fake_iniciar = AsyncMock(return_value=ConversationHandler.END)
+    with patch.object(correccion_handlers, "iniciar", fake_iniciar):
+        application = build_application()
+        application._initialized = True
+
+        user = User(id=12, is_bot=False, first_name="asesor2")
+        message = _make_message(12, user, application.bot, text=BOTON_CORRECCIONES)
+        update = Update(update_id=12, message=message)
+
+        await application.process_update(update)
+
+    fake_iniciar.assert_awaited_once()
+    awaited_update = fake_iniciar.await_args.args[0]
+    assert awaited_update.message.text == BOTON_CORRECCIONES
+
+
+async def test_button_text_does_not_trigger_unrelated_conversations():
+    """Sanity check: arbitrary plain text (not one of the 2 exact button
+    labels, not a command) must NOT be swallowed by either new entry point."""
+    fake_captura_iniciar = AsyncMock(return_value=ConversationHandler.END)
+    fake_correccion_iniciar = AsyncMock(return_value=ConversationHandler.END)
+    with patch.object(captura_handlers, "iniciar", fake_captura_iniciar), patch.object(
+        correccion_handlers, "iniciar", fake_correccion_iniciar
+    ):
+        application = build_application()
+        application._initialized = True
+
+        user = User(id=13, is_bot=False, first_name="asesor3")
+        message = _make_message(13, user, application.bot, text="hola, tengo una duda")
+        update = Update(update_id=13, message=message)
+
+        await application.process_update(update)
+
+    fake_captura_iniciar.assert_not_awaited()
+    fake_correccion_iniciar.assert_not_awaited()
