@@ -35,6 +35,22 @@ def validar_config(env: Mapping[str, str]) -> None:
     Pure function: takes an explicit mapping instead of reading `os.environ`
     directly, so it can be unit-tested with crafted dicts without touching
     real process state.
+
+    Honesty note on checks 2/3 (Phase 9 fix-up, finding #8): in this
+    deployment's actual compose topology, none of the 3 `docker-compose*.yml`
+    files' `lore-bot` service is given `OPENAI_API_KEY`/`SONIA_BOT_SECRET` in
+    its own environment (correctly, per the isolation principle — `lore-bot`
+    should never see Sonia's live secrets at all). That means `env.get(...)`
+    for those two vars is always `None` inside THIS process, so checks 2/3
+    can never actually fire under the current compose files — they are
+    defense-in-depth for a hypothetical future misconfiguration only (e.g. a
+    stray `env_file:` directive added later that leaks Sonia's env into
+    `lore-bot`'s container), NOT a general guarantee against a `.env` typo
+    that happens to make `LORE_OPENAI_API_KEY`/`LORE_BOT_SECRET` equal to
+    Sonia's real values — this process never has visibility into Sonia's
+    actual live secret to compare against in that scenario. Do NOT "fix"
+    this by adding those secrets to `lore-bot`'s environment; that would
+    weaken isolation, the opposite of the goal.
     """
     for var in _REQUIRED_VARS:
         if not env.get(var):

@@ -1,7 +1,17 @@
 import httpx
 import pytest
 
-from lore.api import BackendCaido, BackendClient, NoRegistrado, Pendiente, YaResuelta
+from lore.api import (
+    BackendCaido,
+    BackendClient,
+    CodigoInvalido,
+    NoRegistrado,
+    Pendiente,
+    SucursalNoEncontrada,
+    TelegramYaVinculado,
+    YaRegistrado,
+    YaResuelta,
+)
 
 
 def _client(handler, telegram_id=123):
@@ -124,3 +134,194 @@ async def test_yo_raises_backend_caido_on_non_json_200_body():
     async with _client(handler) as client:
         with pytest.raises(BackendCaido):
             await client.yo()
+
+
+# --- sucursales() -----------------------------------------------------------
+
+
+async def test_sucursales_returns_the_active_branch_list():
+    def handler(request):
+        assert request.url.path == "/sucursales"
+        return httpx.Response(200, json=[{"id": "s1", "nombre": "Bogotá"}])
+
+    async with _client(handler) as client:
+        data = await client.sucursales()
+
+    assert data == [{"id": "s1", "nombre": "Bogotá"}]
+
+
+async def test_sucursales_raises_backend_caido_on_non_list_body():
+    def handler(request):
+        return httpx.Response(200, json={"not": "a list"})
+
+    async with _client(handler) as client:
+        with pytest.raises(BackendCaido):
+            await client.sucursales()
+
+
+async def test_sucursales_raises_backend_caido_on_5xx():
+    def handler(request):
+        return httpx.Response(500)
+
+    async with _client(handler) as client:
+        with pytest.raises(BackendCaido):
+            await client.sucursales()
+
+
+# --- registro() --------------------------------------------------------------
+
+
+async def test_registro_sends_payload_and_returns_body_on_201():
+    captured = {}
+
+    def handler(request):
+        captured["path"] = request.url.path
+        return httpx.Response(
+            201,
+            json={
+                "usuario": {"id": "u1", "nombre": "Ana", "role": "ASESOR_MOSTRADOR", "status": "pending"},
+                "admin_telegram_ids": [111, 222],
+            },
+        )
+
+    async with _client(handler) as client:
+        data = await client.registro(nombre="Ana", phone="3001234567", sucursal_id="s1")
+
+    assert captured["path"] == "/registro"
+    assert data["usuario"]["status"] == "pending"
+    assert data["admin_telegram_ids"] == [111, 222]
+
+
+async def test_registro_raises_ya_registrado_on_409():
+    def handler(request):
+        return httpx.Response(409, json={"code": "YA_REGISTRADO"})
+
+    async with _client(handler) as client:
+        with pytest.raises(YaRegistrado):
+            await client.registro(nombre="Ana", phone="3001234567", sucursal_id="s1")
+
+
+async def test_registro_raises_sucursal_no_encontrada_on_404():
+    def handler(request):
+        return httpx.Response(404, json={"code": "SUCURSAL_NO_ENCONTRADA"})
+
+    async with _client(handler) as client:
+        with pytest.raises(SucursalNoEncontrada):
+            await client.registro(nombre="Ana", phone="3001234567", sucursal_id="s1")
+
+
+async def test_registro_raises_backend_caido_on_unmapped_404():
+    def handler(request):
+        return httpx.Response(404, json={"code": "ALGO_INESPERADO"})
+
+    async with _client(handler) as client:
+        with pytest.raises(BackendCaido):
+            await client.registro(nombre="Ana", phone="3001234567", sucursal_id="s1")
+
+
+async def test_registro_raises_backend_caido_on_unmapped_status():
+    def handler(request):
+        return httpx.Response(422, json={"detail": "bad payload"})
+
+    async with _client(handler) as client:
+        with pytest.raises(BackendCaido):
+            await client.registro(nombre="Ana", phone="3001234567", sucursal_id="s1")
+
+
+# --- vincular() ---------------------------------------------------------------
+
+
+async def test_vincular_returns_body_on_200():
+    def handler(request):
+        return httpx.Response(200, json={"id": "u2", "nombre": "Admin Uno", "role": "ADMIN"})
+
+    async with _client(handler) as client:
+        data = await client.vincular("ABC12345")
+
+    assert data["nombre"] == "Admin Uno"
+
+
+async def test_vincular_raises_codigo_invalido_on_409():
+    def handler(request):
+        return httpx.Response(409, json={"code": "CODIGO_INVALIDO"})
+
+    async with _client(handler) as client:
+        with pytest.raises(CodigoInvalido):
+            await client.vincular("BAD")
+
+
+async def test_vincular_raises_telegram_ya_vinculado_on_409():
+    def handler(request):
+        return httpx.Response(409, json={"code": "TELEGRAM_YA_VINCULADO"})
+
+    async with _client(handler) as client:
+        with pytest.raises(TelegramYaVinculado):
+            await client.vincular("ABC12345")
+
+
+async def test_vincular_raises_backend_caido_on_unmapped_status():
+    def handler(request):
+        return httpx.Response(500)
+
+    async with _client(handler) as client:
+        with pytest.raises(BackendCaido):
+            await client.vincular("ABC12345")
+
+
+# --- aprobar_solicitud() / rechazar_solicitud() -------------------------------
+
+
+async def test_aprobar_solicitud_returns_body_on_200():
+    def handler(request):
+        assert request.url.path == "/admin/solicitudes/u1/aprobar"
+        return httpx.Response(
+            200,
+            json={"usuario_id": "u1", "status": "approved", "nombre": "Ana", "telegram_id_solicitante": 999},
+        )
+
+    async with _client(handler) as client:
+        data = await client.aprobar_solicitud("u1")
+
+    assert data["status"] == "approved"
+    assert data["telegram_id_solicitante"] == 999
+
+
+async def test_aprobar_solicitud_raises_ya_resuelta_on_409():
+    def handler(request):
+        return httpx.Response(409, json={"code": "YA_RESUELTA"})
+
+    async with _client(handler) as client:
+        with pytest.raises(YaResuelta):
+            await client.aprobar_solicitud("u1")
+
+
+async def test_rechazar_solicitud_returns_body_on_200():
+    def handler(request):
+        assert request.url.path == "/admin/solicitudes/u1/rechazar"
+        return httpx.Response(
+            200,
+            json={"usuario_id": "u1", "status": "rejected", "nombre": "Ana", "telegram_id_solicitante": 999},
+        )
+
+    async with _client(handler) as client:
+        data = await client.rechazar_solicitud("u1")
+
+    assert data["status"] == "rejected"
+
+
+async def test_rechazar_solicitud_raises_ya_resuelta_on_409():
+    def handler(request):
+        return httpx.Response(409, json={"code": "YA_RESUELTA"})
+
+    async with _client(handler) as client:
+        with pytest.raises(YaResuelta):
+            await client.rechazar_solicitud("u1")
+
+
+async def test_aprobar_solicitud_raises_backend_caido_on_unmapped_status():
+    def handler(request):
+        return httpx.Response(500)
+
+    async with _client(handler) as client:
+        with pytest.raises(BackendCaido):
+            await client.aprobar_solicitud("u1")

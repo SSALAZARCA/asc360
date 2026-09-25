@@ -95,6 +95,7 @@ services:
       - MINIO_ACCESS_KEY=${MINIO_ROOT_USER:-umadmin}
       - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:-umadmin123}
       - MINIO_SECURE=false
+      - LORE_BOT_SECRET=${LORE_BOT_SECRET}
     depends_on:
       postgres:
         condition: service_healthy
@@ -162,6 +163,27 @@ services:
       - um_backend_net
     volumes:
       - ./telegram-bot:/app
+
+  # Lore Bot (Telegram) — Motored, ventas perdidas (sdd/motored-ventas-perdidas-bot)
+  lore-bot:
+    build:
+      context: ./lore-bot
+      dockerfile: Dockerfile
+    container_name: um_lore_bot
+    restart: always
+    environment:
+      - LORE_BOT_TOKEN=${LORE_BOT_TOKEN}
+      - LORE_BOT_SECRET=${LORE_BOT_SECRET}
+      - LORE_OPENAI_API_KEY=${LORE_OPENAI_API_KEY}
+      - LORE_API_URL=http://backend:8000/api/motored/bot
+      - LORE_OPENAI_MAX_RETRIES=${LORE_OPENAI_MAX_RETRIES:-2}
+      - LORE_USER_CACHE_TTL_SECONDS=${LORE_USER_CACHE_TTL_SECONDS:-60}
+    depends_on:
+      - backend
+    networks:
+      - um_backend_net
+    volumes:
+      - ./lore-bot:/app
 
 volumes:
   postgres_data:
