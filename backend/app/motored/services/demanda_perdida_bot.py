@@ -22,8 +22,9 @@ Phase-3 docstring states this as a PERMANENT invariant ("un header BOT
 NUNCA declara período... un registro puntual del asesor no es un archivo
 con período"), not a temporary gap. Setting `periodo_desde`/`periodo_hasta`
 here to make the design's literal SQL work would silently regress that
-already-shipped invariant. Instead, this module (and `api/bot.py`'s
-`/demanda-perdida/hoy` and `/demanda-perdida/{carga_id}/anular` endpoints)
+already-shipped invariant. Instead, this module (and `api/bot_demanda_
+perdida.py`'s `/demanda-perdida/hoy` and `/demanda-perdida/{carga_id}/
+anular` endpoints -- split out of `api/bot.py` in the Phase 6 fix-up)
 use `demanda_perdida_bot_linea.fecha` as the "today" source of truth --
 the ledger is already documented (Phase 1 model docstring) as the
 authoritative record of a registration's contribution, and every line

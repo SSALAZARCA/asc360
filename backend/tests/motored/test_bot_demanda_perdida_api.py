@@ -12,6 +12,7 @@ surface of `/api/motored/bot/*`:
 Same `FakeAsyncSession`/`override_motored_db`/`_headers` convention as
 `test_bot_api.py` (Phase 5).
 """
+import datetime
 import uuid
 from decimal import Decimal
 
@@ -58,7 +59,7 @@ def _headers(telegram_id, secret=LORE_SECRET, idempotency_key=None) -> dict:
 
 def _client_with_queue(
     execute_queue, raise_integrity_error=None, session_cls=FakeAsyncSession, **session_kwargs
-) -> TestClient:
+) -> "tuple[TestClient, FakeAsyncSession]":
     """`session_cls`/`session_kwargs` (fix-up finding #2): un test que
     necesita PROBAR de verdad la aritmética aditiva de `demanda_perdida`
     (en vez de solo la forma del statement) pasa `session_cls=
@@ -490,7 +491,7 @@ def test_registrar_demanda_perdida_unexpected_integrity_error_is_logged_and_retu
         "lineas": [{"referencia_id": str(uuid.uuid4()), "cantidad": 1}],
     }
 
-    with caplog.at_level("ERROR", logger="motored.bot"):
+    with caplog.at_level("ERROR", logger="motored.bot_demanda_perdida"):
         response = client.post(
             f"{BOT_URL}/demanda-perdida", json=payload, headers=_headers(1, idempotency_key=uuid.uuid4())
         )
@@ -758,10 +759,8 @@ def test_editar_linea_not_found_returns_404():
 
 
 def test_editar_linea_stale_date_returns_409_fuera_de_ventana():
-    import datetime as _dt
-
     asesor = _asesor(telegram_id=1)
-    linea = _linea_bot(usuario_id=asesor.id, fecha=_dt.date(2020, 1, 1))
+    linea = _linea_bot(usuario_id=asesor.id, fecha=datetime.date(2020, 1, 1))
     client, _session = _client_with_queue([[asesor], [linea]])
 
     response = client.patch(
@@ -872,11 +871,9 @@ def test_anular_propio_not_owner_returns_404():
 
 
 def test_anular_propio_stale_date_returns_409_fuera_de_ventana():
-    import datetime as _dt
-
     asesor = _asesor(telegram_id=1)
     carga = _carga_bot(subido_por=asesor.id)
-    client, _session = _client_with_queue([[asesor], [carga], [_dt.date(2020, 1, 1)]])
+    client, _session = _client_with_queue([[asesor], [carga], [datetime.date(2020, 1, 1)]])
 
     response = client.post(f"{BOT_URL}/demanda-perdida/{carga.id}/anular", headers=_headers(1))
 
