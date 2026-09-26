@@ -240,6 +240,35 @@ async def test_no_active_lines_still_marks_header_anulado():
     assert carga.log["anulado_por"] == "actor-2"
 
 
+async def test_lineas_activas_select_locks_rows_with_for_update():
+    """sdd/motored-ventas-perdidas-panel, Phase 2 (design D5, real gap found
+    during that change's own design phase): the ACTIVA-lines SELECT below
+    had no row lock, so a concurrent line-level operation on the SAME
+    `demanda_perdida_bot_linea` row (a second concurrent header anular
+    today, or the panel's future PATCH/anular endpoints) could read the
+    line ACTIVA/pre-edit before this reversal commits, causing a double
+    reversal or a stale-amount reversal against the `demanda_perdida`
+    aggregate.
+
+    Mirrors `tests/test_catalog_confirm_dismiss_suggestion.py::
+    test_read_uses_row_lock_for_update`'s compiled-SQL assertion style:
+    compile the ACTUAL executed statement with literal binds and assert the
+    `FOR UPDATE` clause is present, rather than only checking the
+    function's end-to-end behavior -- FakeAsyncSession/SQLite-style unit
+    tests never enforce real locking, so "the function still returns the
+    right result" would pass identically with or without the lock."""
+    carga = _carga_bot()
+    linea = _linea(carga.id, REFERENCIA_ID_1, cantidad=4)
+    actor = MotoredUser(user_id="actor-1", role="ADMIN")
+    db = AdditiveDemandaPerdidaFakeSession(execute_queue=[[carga.id], [linea]])
+
+    await anular_registro_bot(db, carga, actor, validar_ventana=False)
+
+    lineas_select = db.executed_statements[1]
+    compiled = str(lineas_select.compile(compile_kwargs={"literal_binds": True}))
+    assert "FOR UPDATE" in compiled
+
+
 async def test_missing_demanda_row_still_marks_line_anulada_without_crashing():
     """Defensive: if the `demanda_perdida` row was already removed by some
     other path, the reversal must not crash -- the line still gets marked

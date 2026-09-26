@@ -139,17 +139,36 @@ async def anular_registro_bot(
     para el claim de jobs -- ver ese docstring) afecta como máximo una fila
     entre todos los llamadores concurrentes; el que pierde ve 0 filas
     afectadas y levanta `CargaYaAnuladaError` ANTES de tocar ninguna línea
-    del ledger."""
+    del ledger.
+
+    **Row lock en el SELECT de líneas (sdd/motored-ventas-perdidas-panel,
+    Phase 2, design D5)**: el claim atómico de arriba cierra la carrera
+    contra otra llamada a ESTA misma función, pero no contra un operador
+    a nivel de LÍNEA sobre la MISMA fila `demanda_perdida_bot_linea`
+    (p.ej. el futuro PATCH/anular del panel ADMIN). Sin lock, ese SELECT
+    podía leer una línea `ACTIVA`/cantidad-vieja justo antes de que la
+    otra transacción la editara o anulara, revirtiendo dos veces o
+    revirtiendo un monto stale contra `demanda_perdida`. `.with_for_update()`
+    hace que esta transacción bloquee sobre la fila hasta que la otra
+    haga commit; bajo READ COMMITTED, al despertar vuelve a evaluar el
+    `WHERE estado='ACTIVA'` y relee `cantidad`, así que la reversa queda
+    exacta. Sin riesgo de deadlock: el orden de locks en todo este módulo
+    (y en `PATCH .../lineas/{id}`) es siempre carga/header -> línea ->
+    fila `demanda_perdida` (ésta última nunca se lockea explícitamente,
+    solo se toca vía UPDATE/DELETE atómico column-relative), nunca al
+    revés."""
     if validar_ventana:
         await _validar_ventana_propia(db, carga, actor)
 
     await _reclamar_anulacion(db, carga)
 
     lineas_result = await db.execute(
-        select(DemandaPerdidaBotLinea).where(
+        select(DemandaPerdidaBotLinea)
+        .where(
             DemandaPerdidaBotLinea.carga_id == carga.id,
             DemandaPerdidaBotLinea.estado == "ACTIVA",
         )
+        .with_for_update()
     )
     for linea in lineas_result.scalars().all():
         await _revertir_linea(db, linea, carga.id)
