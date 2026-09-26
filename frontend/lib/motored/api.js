@@ -272,6 +272,46 @@ export async function getCoberturaBot() {
 }
 
 /**
+ * Ventas Perdidas -- panel ADMIN por línea (sdd/motored-ventas-perdidas-
+ * panel, Phase 6; backend en `backend/app/motored/api/demanda_perdida.py`,
+ * Phases 4-5). `listarBotLineas` arma la query string SOLO con las claves
+ * presentes -- mismo criterio que `listarCargas` de arriba -- traduciendo
+ * `sucursalId`/`usuarioId` (camelCase, como el resto de este archivo) a
+ * `sucursal_id`/`usuario_id` (snake_case, como el backend los espera).
+ * `desde`/`hasta` son REQUERIDOS por el backend (422 si faltan), pero acá no
+ * se valida nada -- ese chequeo vive en el caller (design D2: la pestaña que
+ * arma el filtro por fecha).
+ */
+export async function listarBotLineas({ desde, hasta, sucursalId, usuarioId, estado } = {}) {
+  const params = new URLSearchParams();
+  if (desde) params.set('desde', desde);
+  if (hasta) params.set('hasta', hasta);
+  if (sucursalId) params.set('sucursal_id', sucursalId);
+  if (usuarioId) params.set('usuario_id', usuarioId);
+  if (estado) params.set('estado', estado);
+  const qs = params.toString();
+  return motoredFetchJson(`/demanda-perdida/bot-lineas${qs ? `?${qs}` : ''}`);
+}
+
+/** `PATCH /demanda-perdida/bot-lineas/{id}` -- reusa el mismo body shape
+ * `{ cantidad }` que el `EditarLineaRequest` del bot (design D3: una sola
+ * regla de rango 1..9999, nunca una segunda regla paralela). */
+export async function editarBotLinea(lineaId, cantidad) {
+  return motoredFetchJson(`/demanda-perdida/bot-lineas/${lineaId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ cantidad }),
+  });
+}
+
+/** `POST /demanda-perdida/bot-lineas/{id}/anular` -- sin body (design D4).
+ * Devuelve `AnularLineaAdminResponse`, incluyendo `agregado_consistente`. */
+export async function anularBotLinea(lineaId) {
+  return motoredFetchJson(`/demanda-perdida/bot-lineas/${lineaId}/anular`, {
+    method: 'POST',
+  });
+}
+
+/**
  * `GET /cargas/{id}/errores.csv` -- NO es JSON, así que no usa
  * `motoredFetchJson` (mismo criterio que `downloadTemplate` en
  * `BulkUploadModal.js`, pero acá el archivo viene del servidor, no se arma
