@@ -63,7 +63,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import TYPE_CHECKING, Optional
 
@@ -106,6 +106,17 @@ class FueraDeVentanaError(Exception):
     """`validar_ventana=True`: la fecha de la registración (tomada del
     ledger `demanda_perdida_bot_linea`, ver docstring del módulo) no es la
     de hoy (Bogotá) -- se traduce a 409 `{"code": "FUERA_DE_VENTANA"}`."""
+
+
+class LineaYaAnuladaError(Exception):
+    """La línea ya estaba `ANULADA` en el momento del claim atómico de
+    `anular_linea_bot` (sdd/motored-ventas-perdidas-panel, Phase 3, design
+    D4) -- mismo criterio a nivel de línea que `CargaYaAnuladaError` a
+    nivel de header: una excepción de dominio propia del servicio,
+    traducida a `HTTPException(409)` en la capa de API del panel ADMIN
+    (`api/demanda_perdida.py`, Phase 4/5, aún no implementada), nunca
+    levantada directamente contra el cliente -- este módulo no depende de
+    FastAPI."""
 
 
 async def anular_registro_bot(
@@ -246,7 +257,7 @@ async def _reclamar_anulacion(db: AsyncSession, carga: "CargaArchivo") -> None:
 
 async def _revertir_linea(
     db: AsyncSession, linea: DemandaPerdidaBotLinea, carga_id
-) -> None:
+) -> bool:
     """Revierte, contra `demanda_perdida`, la cantidad CURRENTE que `linea`
     aportó (nunca la cantidad original si hubo una edición previa), y marca
     la línea `ANULADA`.
@@ -264,7 +275,17 @@ async def _revertir_linea(
     vez de continuar en silencio, pero no aborta el resto de la anulación
     por una sola línea huérfana. Detectado ahora vía el `rowcount` del
     `UPDATE` atómico (0 filas afectadas = no había fila para esa clave),
-    nunca vía un `SELECT` previo."""
+    nunca vía un `SELECT` previo.
+
+    Devuelve `rowcount > 0` (sdd/motored-ventas-perdidas-panel, Phase 3,
+    design D4): `True` si existía una fila `demanda_perdida` para esa clave
+    y se revirtió, `False` si ya faltaba (estado inconsistente, la línea se
+    marca ANULADA de todos modos). El único caller previo a esta fase
+    (`anular_registro_bot`, dentro de su loop de líneas) ignora este valor
+    de retorno -- este cambio es aditivo. `anular_linea_bot` (Phase 3, más
+    abajo) SÍ usa este valor: lo propaga tal cual como su propio retorno,
+    para que la futura capa de API del panel lo surface como
+    `agregado_consistente`."""
     rowcount = await _ejecutar_delta_negativo(
         db,
         fecha=linea.fecha,
@@ -280,6 +301,72 @@ async def _revertir_linea(
             linea.id, carga_id, linea.fecha, linea.sucursal_id, linea.referencia_id,
         )
     linea.estado = "ANULADA"
+    return rowcount > 0
+
+
+async def anular_linea_bot(
+    db: AsyncSession, linea: DemandaPerdidaBotLinea, actor: "MotoredUser"
+) -> bool:
+    """Anula UNA línea puntual del ledger (sdd/motored-ventas-perdidas-
+    panel, Phase 3, design D4) -- a diferencia de `anular_registro_bot`
+    (que anula TODO el header y cada una de sus líneas ACTIVA), esta
+    función solo toca la línea recibida: no cancela sus hermanas ni cambia
+    `carga.estado`. Existe para el futuro panel ADMIN (Phase 4/5, aún no
+    implementado), donde un ADMIN puede anular una registración individual
+    sin afectar el resto de la carga.
+
+    **Claim atómico (mismo idioma que `_reclamar_anulacion`, a nivel de
+    línea en vez de header)**: `UPDATE demanda_perdida_bot_linea SET
+    estado='ANULADA', anulado_por=:actor_id, anulado_en=:ahora WHERE
+    id=:linea_id AND estado='ACTIVA' RETURNING id`. Esto cierra, en UN
+    solo statement, la carrera contra: (a) otra llamada concurrente a esta
+    misma función sobre la MISMA línea (dos ADMINs anulando a la vez); (b)
+    el propio `PATCH /bot/demanda-perdida/lineas/{id}` del bot, que
+    también hace su propio claim/lock sobre la línea antes de mutarla; (c)
+    `anular_registro_bot` anulando el header completo (Phase 2 le agregó
+    `.with_for_update()` a su SELECT de líneas, así que bloquea contra
+    ESTE `UPDATE` y, tras el commit de quien gane, relee `estado` bajo
+    READ COMMITTED). El que pierde el claim ve 0 filas afectadas -- nunca
+    llega a tocar `demanda_perdida` -- y levanta `LineaYaAnuladaError`.
+
+    Los 3 valores (`estado`, `anulado_por`, `anulado_en`) se escriben
+    DENTRO del mismo `UPDATE` atómico del claim, no en una escritura
+    separada después -- evita reabrir una ventana de carrera con un
+    segundo round-trip (mismo criterio que el claim de `_reclamar_
+    anulacion` deja `carga.estado` sincronizado en memoria tras ganar, acá
+    se sincronizan en memoria `linea.anulado_por`/`linea.anulado_en`
+    inmediatamente después, siguiendo la misma convención que
+    `solicitudes.py` usa para mantener el objeto ORM en memoria alineado
+    con un `UPDATE` crudo que no pasa por el `Session` de SQLAlchemy).
+
+    Reutiliza `_revertir_linea(db, linea, linea.carga_id)` para la reversa
+    -- nunca una segunda implementación de esa aritmética -- y devuelve
+    EXACTAMENTE lo que esa función devuelve: `True` si había una fila
+    `demanda_perdida` para revertir, `False` si ya faltaba (estado
+    inconsistente, la línea igual queda ANULADA). Design D4: la futura
+    capa de API del panel expone este bool como `agregado_consistente`.
+
+    Sin parámetro `validar_ventana`/ownership a propósito (proposal
+    decisión #4): un ADMIN puede anular CUALQUIER línea sin importar la
+    fecha o el asesor original -- esa es la razón de ser del panel. El
+    chequeo ADMIN-only vive en la capa de API (Phase 5's endpoint, aún no
+    implementado), nunca acá, igual que `aplicar_delta_demanda_perdida`
+    (usada por el camino de edición) ya es agnóstica del actor."""
+    ahora = datetime.now(timezone.utc)
+    actor_id = uuid.UUID(_actor_identificador(actor))
+    claim = await db.execute(
+        update(DemandaPerdidaBotLinea)
+        .where(
+            DemandaPerdidaBotLinea.id == linea.id,
+            DemandaPerdidaBotLinea.estado == "ACTIVA",
+        )
+        .values(estado="ANULADA", anulado_por=actor_id, anulado_en=ahora)
+        .returning(DemandaPerdidaBotLinea.id)
+    )
+    if claim.scalars().first() is None:
+        raise LineaYaAnuladaError(f"La línea {linea.id} ya está anulada.")
+    linea.anulado_por, linea.anulado_en = actor_id, ahora
+    return await _revertir_linea(db, linea, linea.carga_id)
 
 
 def construir_upsert_aditivo(
