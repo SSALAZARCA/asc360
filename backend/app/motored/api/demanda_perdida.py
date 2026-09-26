@@ -30,11 +30,24 @@ design: una línea de una sucursal o asesor ya desactivado sigue apareciendo,
 editable/anulable, con su flag de actividad expuesto para que el frontend
 la etiquete en vez de ocultarla). No hay filtro explícito de `origen` porque
 `demanda_perdida_bot_linea` es estructuralmente BOT-only -- Excel nunca
-escribe en esa tabla (ver su propio docstring de modelo)."""
+escribe en esa tabla (ver su propio docstring de modelo).
+
+`PATCH /api/motored/demanda-perdida/bot-lineas/{linea_id}` y `POST
+/api/motored/demanda-perdida/bot-lineas/{linea_id}/anular` (Phase 5, S5
+commit slice, design D3/D4): edición/anulación ADMIN-only de UNA línea
+puntual, sin ownership ni ventana de fecha (a diferencia de sus equivalentes
+del bot en `api/bot_demanda_perdida.py`) -- un ADMIN actúa sobre cualquier
+línea, de cualquier asesor, cualquier fecha. El PATCH reutiliza el `EditarLineaRequest`
+del bot (design D3: "This keeps one bounds rule", nunca una segunda regla de
+rango paralela) y el mismo despachador `aplicar_delta_demanda_perdida` que
+la edición del bot ya usa. El anular delega en `anular_linea_bot` (Phase 3)
+-- NUNCA en `anular_registro_bot`, que cancelaría el header completo y sus
+líneas hermanas."""
 from __future__ import annotations
 
 import uuid
-from datetime import date
+from datetime import date, datetime, timezone
+from decimal import Decimal
 from typing import List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -42,6 +55,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
+from app.motored.api.bot_demanda_perdida import EditarLineaRequest
 from app.motored.deps import (
     MotoredUser,
     get_current_motored_user,
@@ -55,11 +69,13 @@ from app.motored.models.referencia import Referencia
 from app.motored.models.sucursal import Sucursal
 from app.motored.models.usuario import Usuario
 from app.motored.schemas.demanda_perdida_panel import (
+    AnularLineaAdminResponse,
     BotLineaAdminRead,
     PersonaRef,
     ReferenciaRef,
     SucursalRef,
 )
+from app.motored.services import demanda_perdida_bot as demanda_perdida_bot_mod
 
 router = APIRouter(
     prefix="/demanda-perdida",
@@ -127,24 +143,19 @@ def _persona_ref(
     return PersonaRef(id=id_, nombre=nombre, activo=activo)
 
 
-def _construir_stmt_bot_lineas(
-    desde: date,
-    hasta: date,
-    sucursal_id: Optional[uuid.UUID],
-    usuario_id: Optional[uuid.UUID],
-    estado: Optional[str],
-):
-    """Design D2: un único `SELECT` con joins -- `INNER JOIN` a `usuario`
-    (asesor), `sucursal`, `referencia` y `carga_archivo` (para `log->>
-    'metodo'`), más 2 `LEFT JOIN` a `usuario` aliased (editor/anulador,
-    ambos opcionales). Orden `fecha DESC, created_at DESC`, tope
-    `_LIMITE_BOT_LINEAS` filas -- sin envelope de paginación (design D2's
-    "bounded flat list, no pagination envelope")."""
+def _stmt_base_bot_lineas():
+    """Joins compartidos entre el listado (`_construir_stmt_bot_lineas`,
+    Phase 4) y el re-fetch-y-mapeo de UNA línea tras un PATCH/anular
+    (`_obtener_bot_linea_admin_read`, Phase 5) -- el mismo `SELECT` con
+    joins de design D2, sin el `WHERE`/`ORDER BY`/`LIMIT` propios de cada
+    caller: `INNER JOIN` a `usuario` (asesor), `sucursal`, `referencia` y
+    `carga_archivo` (para `log->>'metodo'`), más 2 `LEFT JOIN` a `usuario`
+    aliased (editor/anulador, ambos opcionales)."""
     asesor = aliased(Usuario)
     editor = aliased(Usuario)
     anulador = aliased(Usuario)
 
-    stmt = (
+    return (
         select(
             DemandaPerdidaBotLinea,
             Sucursal.nombre,
@@ -167,6 +178,21 @@ def _construir_stmt_bot_lineas(
         .join(CargaArchivo, CargaArchivo.id == DemandaPerdidaBotLinea.carga_id)
         .outerjoin(editor, editor.id == DemandaPerdidaBotLinea.editado_por)
         .outerjoin(anulador, anulador.id == DemandaPerdidaBotLinea.anulado_por)
+    )
+
+
+def _construir_stmt_bot_lineas(
+    desde: date,
+    hasta: date,
+    sucursal_id: Optional[uuid.UUID],
+    usuario_id: Optional[uuid.UUID],
+    estado: Optional[str],
+):
+    """Design D2: orden `fecha DESC, created_at DESC`, tope
+    `_LIMITE_BOT_LINEAS` filas -- sin envelope de paginación (design D2's
+    "bounded flat list, no pagination envelope")."""
+    stmt = (
+        _stmt_base_bot_lineas()
         .where(
             DemandaPerdidaBotLinea.fecha >= desde,
             DemandaPerdidaBotLinea.fecha <= hasta,
@@ -181,6 +207,16 @@ def _construir_stmt_bot_lineas(
     if estado is not None:
         stmt = stmt.where(DemandaPerdidaBotLinea.estado == estado)
     return stmt
+
+
+async def _obtener_bot_linea_admin_read(db: AsyncSession, linea_id: uuid.UUID) -> BotLineaAdminRead:
+    """Re-fetch-y-mapeo tras un PATCH/anular (Phase 5): mismos joins que el
+    listado (`_stmt_base_bot_lineas`), filtrados por `id`, para construir la
+    respuesta pública sin duplicar el armado de la query. Se asume que
+    `linea_id` existe -- ambos callers ya lo confirmaron antes de mutar."""
+    stmt = _stmt_base_bot_lineas().where(DemandaPerdidaBotLinea.id == linea_id)
+    result = await db.execute(stmt)
+    return _fila_a_bot_linea_admin_read(result.first())
 
 
 def _fila_a_bot_linea_admin_read(fila) -> BotLineaAdminRead:
@@ -240,3 +276,94 @@ async def listar_bot_lineas(
     stmt = _construir_stmt_bot_lineas(desde, hasta, sucursal_id, usuario_id, estado)
     result = await db.execute(stmt)
     return [_fila_a_bot_linea_admin_read(fila) for fila in result.all()]
+
+
+@router.patch("/bot-lineas/{linea_id}", response_model=BotLineaAdminRead)
+async def editar_bot_linea_admin(
+    linea_id: uuid.UUID,
+    payload: EditarLineaRequest,
+    db: AsyncSession = Depends(get_motored_db_or_503),
+    user: MotoredUser = Depends(_require_admin),
+) -> BotLineaAdminRead:
+    """Design D3: ADMIN-only, SIN ownership ni ventana de fecha (a
+    diferencia de `PATCH /bot/demanda-perdida/lineas/{id}`, cuyo `Editar
+    LineaRequest` reutiliza este endpoint para mantener una única regla de
+    rango 1..9999, nunca una segunda regla paralela). Mismos códigos
+    404/409 que ese endpoint del bot (`LINEA_NO_ENCONTRADA`/`LINEA_
+    ANULADA`), sin su chequeo de dueño/`fecha == hoy_bogota()`, que no
+    corresponde a un ADMIN.
+
+    `delta == 0` (nueva cantidad igual a la actual) NO estampa `editado_por`/
+    `editado_en` -- spec: los 4 campos de auditoría atribuyen únicamente
+    acciones REALES del panel, no un guardado sin cambios."""
+    result = await db.execute(
+        select(DemandaPerdidaBotLinea)
+        .where(DemandaPerdidaBotLinea.id == linea_id)
+        .with_for_update()
+    )
+    linea = result.scalars().first()
+    if linea is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail={"code": "LINEA_NO_ENCONTRADA"}
+        )
+    if linea.estado != "ACTIVA":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail={"code": "LINEA_ANULADA"}
+        )
+
+    nueva_cantidad = Decimal(payload.cantidad)
+    delta = nueva_cantidad - linea.cantidad
+    if delta != 0:
+        await demanda_perdida_bot_mod.aplicar_delta_demanda_perdida(
+            db,
+            fecha=linea.fecha,
+            sucursal_id=linea.sucursal_id,
+            referencia_id=linea.referencia_id,
+            delta=delta,
+            carga_id=linea.carga_id,
+        )
+        linea.cantidad = nueva_cantidad
+        linea.editado_por = uuid.UUID(user.user_id)
+        linea.editado_en = datetime.now(timezone.utc)
+
+    await db.commit()
+    return await _obtener_bot_linea_admin_read(db, linea_id)
+
+
+@router.post("/bot-lineas/{linea_id}/anular", response_model=AnularLineaAdminResponse)
+async def anular_bot_linea_admin(
+    linea_id: uuid.UUID,
+    db: AsyncSession = Depends(get_motored_db_or_503),
+    user: MotoredUser = Depends(_require_admin),
+) -> AnularLineaAdminResponse:
+    """Design D4: mirrors `anular_registro_propio` -- bloquea la línea FOR
+    UPDATE, delega TODA la lógica en `anular_linea_bot` (Phase 3), NUNCA en
+    `anular_registro_bot` (que cancelaría el header completo y sus líneas
+    hermanas). Traduce `LineaYaAnuladaError` a 409 con el MISMO código
+    `LINEA_ANULADA` que el PATCH de acá usa para el mismo estado de dominio
+    a nivel de línea (a diferencia del código `YA_ANULADA` que `anular_
+    registro_propio` usa para el header -- son entidades distintas; este
+    panel opera exclusivamente a nivel de línea)."""
+    result = await db.execute(
+        select(DemandaPerdidaBotLinea)
+        .where(DemandaPerdidaBotLinea.id == linea_id)
+        .with_for_update()
+    )
+    linea = result.scalars().first()
+    if linea is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail={"code": "LINEA_NO_ENCONTRADA"}
+        )
+
+    try:
+        agregado_consistente = await demanda_perdida_bot_mod.anular_linea_bot(db, linea, user)
+    except demanda_perdida_bot_mod.LineaYaAnuladaError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail={"code": "LINEA_ANULADA"}
+        )
+
+    await db.commit()
+    linea_read = await _obtener_bot_linea_admin_read(db, linea_id)
+    return AnularLineaAdminResponse(
+        **linea_read.model_dump(), agregado_consistente=agregado_consistente
+    )
