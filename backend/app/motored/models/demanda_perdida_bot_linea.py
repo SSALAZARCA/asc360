@@ -15,6 +15,15 @@ referencia dos veces (Fase 6, validación de duplicados en `lineas[]`).
 `estado` sigue el mismo patrón varchar+CHECK que `carga_archivo.estado`
 (nunca un enum de Postgres, para no requerir una migración de tipo si se
 agrega un estado más).
+
+`editado_por`/`editado_en`/`anulado_por`/`anulado_en` (sdd/motored-ventas-
+perdidas-panel, Phase 1, design D1): auditoría de quién editó o anuló una
+línea desde el panel ADMIN y cuándo. Migración `43191272c816`. Mismo patrón
+que `Usuario.resuelto_por`/`resuelto_en` -- FK opcional a `usuario.id`,
+timestamp con timezone, sin `server_default`. El índice sobre `fecha` existe
+porque el listado del panel filtra primero por rango de fechas, y ninguno de
+los índices compuestos existentes (que arrancan con `usuario_id`/
+`sucursal_id`) sirve a ese filtro.
 """
 import uuid
 from datetime import datetime
@@ -43,6 +52,7 @@ class DemandaPerdidaBotLinea(MotoredBase):
         ),
         Index("ix_demanda_perdida_bot_linea_usuario_id_fecha", "usuario_id", "fecha"),
         Index("ix_demanda_perdida_bot_linea_sucursal_id_fecha", "sucursal_id", "fecha"),
+        Index("ix_demanda_perdida_bot_linea_fecha", "fecha"),
         CheckConstraint("cantidad > 0", name="ck_demanda_perdida_bot_linea_cantidad_positiva"),
         CheckConstraint(
             "estado IN ('ACTIVA', 'ANULADA')", name="ck_demanda_perdida_bot_linea_estado",
@@ -57,6 +67,11 @@ class DemandaPerdidaBotLinea(MotoredBase):
     referencia_id = Column(UUID(as_uuid=True), ForeignKey("referencia.id"), nullable=False)
     cantidad = Column(Numeric(14, 2), nullable=False)
     estado = Column(String(16), nullable=False, default="ACTIVA")
+
+    editado_por = Column(UUID(as_uuid=True), ForeignKey("usuario.id"), nullable=True)
+    editado_en = Column(DateTime(timezone=True), nullable=True)
+    anulado_por = Column(UUID(as_uuid=True), ForeignKey("usuario.id"), nullable=True)
+    anulado_en = Column(DateTime(timezone=True), nullable=True)
 
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

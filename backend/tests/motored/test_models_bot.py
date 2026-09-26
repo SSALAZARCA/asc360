@@ -174,3 +174,31 @@ def test_demanda_perdida_bot_linea_has_cantidad_and_estado_checks():
     checks = _check_constraints(DemandaPerdidaBotLinea)
     assert "cantidad > 0" in checks.values()
     assert any("ACTIVA" in text and "ANULADA" in text for text in checks.values())
+
+
+# ---------------------------------------------------------------------------
+# DemandaPerdidaBotLinea audit columns (sdd/motored-ventas-perdidas-panel,
+# Phase 1, migration 43191272c816)
+# ---------------------------------------------------------------------------
+
+
+def test_demanda_perdida_bot_linea_has_edit_and_anular_audit_columns():
+    cols = DemandaPerdidaBotLinea.__table__.c
+    for name in ("editado_por", "editado_en", "anulado_por", "anulado_en"):
+        assert name in cols
+        assert cols[name].nullable is True
+
+
+def test_demanda_perdida_bot_linea_audit_columns_are_fk_to_usuario():
+    fk_columns = {
+        fk.parent.name: fk.column
+        for fk in DemandaPerdidaBotLinea.__table__.foreign_keys
+    }
+    assert fk_columns["editado_por"].table.name == "usuario"
+    assert fk_columns["anulado_por"].table.name == "usuario"
+
+
+def test_demanda_perdida_bot_linea_has_fecha_index():
+    indexes = DemandaPerdidaBotLinea.__table__.indexes
+    match = [ix for ix in indexes if [col.name for col in ix.columns] == ["fecha"]]
+    assert len(match) == 1
