@@ -29,12 +29,13 @@
  */
 import { useRouter, usePathname } from 'next/navigation';
 import Image from 'next/image';
-import { LogOut, Warehouse, Users } from 'lucide-react';
+import { LogOut, Warehouse, Users, TrendingDown } from 'lucide-react';
 import { MOTORED_TOKEN_KEY, MOTORED_USER_KEY } from '../../lib/motored/motoredFetch';
 
 const ALL_ITEMS = [
   { id: 'maestros', name: 'Maestros', icon: Warehouse, path: '/motored/maestros' },
   { id: 'usuarios', name: 'Usuarios', icon: Users, path: '/motored/usuarios', adminOnly: true },
+  { id: 'ventas-perdidas', name: 'Ventas perdidas', icon: TrendingDown, path: '/motored/ventas-perdidas', adminOnly: true },
 ];
 
 const asideStyle = {
