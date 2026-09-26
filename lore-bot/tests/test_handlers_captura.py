@@ -5,6 +5,7 @@ conversation (Method A only). Same pattern as `test_handlers_registro.py`:
 import uuid
 from unittest.mock import AsyncMock, MagicMock
 
+from telegram.error import TelegramError
 from telegram.ext import ConversationHandler
 
 from lore.api import (
@@ -19,6 +20,7 @@ from lore.api import (
     SucursalNoAutorizada,
     SucursalNoEncontrada,
 )
+from lore import vision
 from lore.estados import CapturaEstado
 from lore.handlers import captura
 
@@ -63,6 +65,23 @@ def _make_context(*, user_data=None):
     context = MagicMock()
     context.user_data = user_data if user_data is not None else {}
     return context
+
+
+def _make_photo_update(*, file=None, user_id=123):
+    """Phase 11 — a Telegram photo message. `update.message.photo[-1]` is
+    python-telegram-bot's own convention for "highest resolution" (the
+    `photo` tuple is always smallest-to-largest, verified against
+    `python-telegram-bot>=21.3`'s own API, not assumed from an older
+    version)."""
+    update = MagicMock()
+    update.effective_user.id = user_id
+    update.callback_query = None
+    photo_size = MagicMock()
+    photo_size.get_file = AsyncMock(return_value=file)
+    update.message = MagicMock()
+    update.message.photo = [MagicMock(), photo_size]  # smallest-to-largest
+    update.message.reply_text = AsyncMock()
+    return update
 
 
 # --- iniciar ---------------------------------------------------------------
@@ -352,6 +371,52 @@ async def test_recibir_metodo_sets_manual_and_moves_to_manual_state():
 
     assert result == CapturaEstado.MANUAL
     assert context.user_data[captura._DRAFT_KEY].metodo == "MANUAL"
+
+
+# --- Phase 11: FOTO button / recibir_metodo(FOTO) ---------------------------
+
+
+async def test_pedir_metodo_offers_both_manual_and_foto_buttons():
+    """Phase 10 kept `CapturaEstado.METODO` specifically so Phase 11 could
+    add a second button without reshaping the conversation (Phase 10
+    ambiguity #2) — this proves that promise was kept."""
+    update = _make_update()
+    context = _make_context(user_data={captura._DRAFT_KEY: captura.Borrador()})
+
+    await captura._pedir_metodo(update, context)
+
+    kb = update.message.reply_text.call_args.kwargs["reply_markup"]
+    callback_datas = [btn.callback_data for fila in kb.inline_keyboard for btn in fila]
+    assert callback_datas == ["lore_cap_metodo:MANUAL", "lore_cap_metodo:FOTO"]
+
+
+async def test_recibir_metodo_sets_foto_and_moves_to_foto_state():
+    update = _make_update(callback_data="lore_cap_metodo:FOTO")
+    context = _make_context(user_data={captura._DRAFT_KEY: captura.Borrador()})
+
+    result = await captura.recibir_metodo(update, context)
+
+    assert result == CapturaEstado.FOTO
+    assert context.user_data[captura._DRAFT_KEY].metodo == "FOTO"
+    texto = update.callback_query.edit_message_text.call_args.args[0]
+    # Fix-up finding #5 (WARNING, reliability): pin the FULL distinguishing
+    # text, not a hollow "foto" in texto.lower() substring check that would
+    # pass for ANY string mentioning "foto" — this project got burned before
+    # by exactly this class of weak assertion (Phase 9 role-greeting bug).
+    assert texto == "📷 Mandá una foto donde se vean los códigos de referencia."
+
+
+async def test_recibir_metodo_unknown_value_ends_conversation():
+    """A tampered/stale `callback_data` value (project discipline: every
+    callback-data-derived value must be validated before use — see
+    `recibir_sucursal`'s own unknown-id handling)."""
+    update = _make_update(callback_data="lore_cap_metodo:OTRA_COSA")
+    context = _make_context(user_data={captura._DRAFT_KEY: captura.Borrador()})
+
+    result = await captura.recibir_metodo(update, context)
+
+    assert result == ConversationHandler.END
+    assert captura._DRAFT_KEY not in context.user_data
 
 
 # --- recibir_codigos ---------------------------------------------------------
@@ -1008,3 +1073,221 @@ async def test_confirmar_retry_after_backend_caido_reuses_same_idempotency_key(m
     primera_key = llamadas[0].kwargs["idempotency_key"]
     segunda_key = llamadas[1].kwargs["idempotency_key"]
     assert primera_key == segunda_key == str(draft.registro_id)
+
+
+# --- recibir_foto (Phase 11, task 11.6) -------------------------------------
+# Reuses the EXACT SAME `_resolver_y_actualizar_borrador` helper manual entry
+# already uses (task 11.6: "do not duplicate that pipeline for photos") — a
+# resolved candidate reaches `CapturaEstado.SELECCION` exactly like a
+# manually-typed code would; an unresolved one reaches `NO_RESUELTAS`
+# exactly the same way too. Only the INPUT side (a photo instead of typed
+# text) and the two vision-specific failure modes below are new.
+
+
+async def test_recibir_foto_vision_error_falls_back_to_manual_entry(monkeypatch):
+    """Judgment call (flagged): a `VisionError` (the OpenAI call itself
+    failed) falls back FULLY to manual entry — a distinct message, never a
+    stack trace or a stuck conversation."""
+    monkeypatch.setattr(
+        vision, "extraer_referencias", AsyncMock(side_effect=vision.VisionError("boom"))
+    )
+
+    update = _make_photo_update(file=object())
+    context = _make_context(user_data={captura._DRAFT_KEY: captura.Borrador()})
+
+    result = await captura.recibir_foto(update, context)
+
+    assert result == CapturaEstado.MANUAL
+    mensajes = [call.args[0] for call in update.message.reply_text.call_args_list]
+    assert any("no pude analizar esa foto" in m.lower() for m in mensajes)
+
+
+async def test_recibir_foto_sends_ack_before_calling_vision(monkeypatch):
+    """Fix-up finding #4 (WARNING, resilience): with no timeout previously
+    set (finding #1) and no retry differentiation (finding #2), an advisor
+    with zero feedback while the vision call runs is likely to re-send the
+    photo or tap other buttons, generating extra queued updates — this bot
+    dispatches updates sequentially, so that pile-up compounds any latency.
+    An immediate acknowledgement must be sent BEFORE the vision call."""
+    llamada_orden = []
+
+    async def _fake_extraer(file):
+        llamada_orden.append("vision")
+        return []
+
+    monkeypatch.setattr(vision, "extraer_referencias", _fake_extraer)
+
+    update = _make_photo_update(file=object())
+
+    async def _fake_reply(*args, **kwargs):
+        llamada_orden.append(("reply", args[0] if args else None))
+
+    update.message.reply_text = AsyncMock(side_effect=_fake_reply)
+    context = _make_context(user_data={captura._DRAFT_KEY: captura.Borrador()})
+
+    await captura.recibir_foto(update, context)
+
+    assert llamada_orden[0][0] == "reply"
+    assert "analizando" in llamada_orden[0][1].lower()
+    assert llamada_orden[1] == "vision"
+
+
+async def test_recibir_foto_download_failure_falls_back_to_manual_entry(monkeypatch):
+    """Fix-up finding #3 (CRITICAL, reliability): a Telegram download
+    failure (expired file_id, transient network error) inside
+    `vision.extraer_referencias` now raises `VisionError` (never a raw,
+    unhandled exception) — this proves `recibir_foto`'s existing
+    `except vision.VisionError` fallback also covers THIS third failure
+    mode, not just an OpenAI-call failure."""
+    monkeypatch.setattr(
+        vision,
+        "extraer_referencias",
+        AsyncMock(side_effect=vision.VisionError("no pude descargar esa foto de Telegram")),
+    )
+
+    update = _make_photo_update(file=object())
+    context = _make_context(user_data={captura._DRAFT_KEY: captura.Borrador()})
+
+    result = await captura.recibir_foto(update, context)
+
+    assert result == CapturaEstado.MANUAL
+    mensajes = [call.args[0] for call in update.message.reply_text.call_args_list]
+    assert any("no pude analizar esa foto" in m.lower() for m in mensajes)
+
+
+async def test_recibir_foto_get_file_failure_falls_back_to_manual_entry(monkeypatch):
+    """gga post-fix-up finding: `photo.get_file()` is itself a Telegram
+    network call, made BEFORE `vision.extraer_referencias` is ever reached —
+    a `TelegramError` here (expired file_id, NetworkError, TimedOut) must
+    fall back exactly like a `VisionError` would, never escape unhandled and
+    leave the conversation stuck in `CapturaEstado.FOTO` with no reply sent."""
+    update = _make_photo_update(file=object())
+    update.message.photo[-1].get_file = AsyncMock(side_effect=TelegramError("boom"))
+    context = _make_context(user_data={captura._DRAFT_KEY: captura.Borrador()})
+
+    result = await captura.recibir_foto(update, context)
+
+    assert result == CapturaEstado.MANUAL
+    mensajes = [call.args[0] for call in update.message.reply_text.call_args_list]
+    assert any("no pude analizar esa foto" in m.lower() for m in mensajes)
+
+
+async def test_recibir_foto_zero_candidates_is_distinct_from_vision_error(monkeypatch):
+    """Judgment call (flagged): a SUCCESSFUL call recognizing nothing is a
+    DIFFERENT outcome from `VisionError` — distinct message, and the
+    advisor stays in `CapturaEstado.FOTO` (can retry with another photo or
+    switch to typing, both wired in that state — see `main.py`)."""
+    monkeypatch.setattr(vision, "extraer_referencias", AsyncMock(return_value=[]))
+
+    update = _make_photo_update(file=object())
+    context = _make_context(user_data={captura._DRAFT_KEY: captura.Borrador()})
+
+    result = await captura.recibir_foto(update, context)
+
+    assert result == CapturaEstado.FOTO
+    texto = update.message.reply_text.call_args.args[0]
+    assert "no reconocí ninguna referencia" in texto.lower()
+    # Must NOT be conflated with the VisionError message (project discipline:
+    # every text-content assertion checks DISTINGUISHING content).
+    assert "no pude analizar" not in texto.lower()
+
+
+async def test_recibir_foto_resolved_candidate_moves_to_seleccion(monkeypatch):
+    monkeypatch.setattr(
+        vision,
+        "extraer_referencias",
+        AsyncMock(return_value=[vision.Candidato(codigo="ABC", nombre="Filtro (foto)")]),
+    )
+    fake_client = FakeClient()
+    fake_client.resolver_referencias.return_value = {
+        "resueltas": [{"entrada": "ABC", "referencia_id": _R1, "codigo": "ABC", "nombre": "Filtro"}],
+        "no_resueltas": [],
+    }
+    monkeypatch.setattr(captura, "_cliente", _fake_cliente(fake_client))
+
+    update = _make_photo_update(file=object())
+    context = _make_context(user_data={captura._DRAFT_KEY: captura.Borrador()})
+
+    result = await captura.recibir_foto(update, context)
+
+    assert result == CapturaEstado.SELECCION
+    draft = context.user_data[captura._DRAFT_KEY]
+    assert len(draft.lineas) == 1
+    assert draft.lineas[0].codigo == "ABC"
+    assert draft.lineas[0].seleccionada is False  # spec: toggles start OFF
+    # Only `codigo` reaches the backend resolver — vision's own `nombre` is
+    # display-only and never sent (the master `Referencia.nombre` wins for
+    # resolved items, same as manual entry).
+    fake_client.resolver_referencias.assert_awaited_once_with(["ABC"])
+
+
+async def test_recibir_foto_unresolved_candidate_shows_no_resueltas(monkeypatch):
+    monkeypatch.setattr(
+        vision,
+        "extraer_referencias",
+        AsyncMock(return_value=[vision.Candidato(codigo="ZZZ", nombre=None)]),
+    )
+    fake_client = FakeClient()
+    fake_client.resolver_referencias.return_value = {"resueltas": [], "no_resueltas": ["ZZZ"]}
+    monkeypatch.setattr(captura, "_cliente", _fake_cliente(fake_client))
+
+    update = _make_photo_update(file=object())
+    context = _make_context(user_data={captura._DRAFT_KEY: captura.Borrador()})
+
+    result = await captura.recibir_foto(update, context)
+
+    assert result == CapturaEstado.NO_RESUELTAS
+    texto = update.message.reply_text.call_args.args[0]
+    assert "ZZZ" in texto
+    assert "no encontré" in texto.lower()
+
+
+async def test_recibir_foto_backend_caido_during_resolve_stays_in_foto(monkeypatch):
+    monkeypatch.setattr(
+        vision,
+        "extraer_referencias",
+        AsyncMock(return_value=[vision.Candidato(codigo="ABC", nombre=None)]),
+    )
+    fake_client = FakeClient()
+    fake_client.resolver_referencias.side_effect = BackendCaido("boom")
+    monkeypatch.setattr(captura, "_cliente", _fake_cliente(fake_client))
+
+    update = _make_photo_update(file=object())
+    context = _make_context(user_data={captura._DRAFT_KEY: captura.Borrador()})
+
+    result = await captura.recibir_foto(update, context)
+
+    assert result == CapturaEstado.FOTO
+    assert captura._DRAFT_KEY in context.user_data
+    # Fix-up finding #8: pin the actual message text sent, not just the
+    # resulting state — a test that only checks the state could pass even if
+    # the wrong (or no) message text were sent.
+    mensajes = [call.args[0] for call in update.message.reply_text.call_args_list]
+    assert captura._MSG_CONEXION in mensajes
+
+
+async def test_recibir_foto_lore_api_error_during_resolve_stays_in_foto(monkeypatch):
+    """Fix-up finding #7: `recibir_foto` has two structurally-identical
+    `except BackendCaido:`/`except LoreApiError:` branches around
+    `_resolver_y_actualizar_borrador` — only the BackendCaido variant had a
+    test before this fix. Mirrors
+    `test_recibir_foto_backend_caido_during_resolve_stays_in_foto`, swapping
+    the raised exception type."""
+    monkeypatch.setattr(
+        vision,
+        "extraer_referencias",
+        AsyncMock(return_value=[vision.Candidato(codigo="ABC", nombre=None)]),
+    )
+    fake_client = FakeClient()
+    fake_client.resolver_referencias.side_effect = LoreApiError("unmapped")
+    monkeypatch.setattr(captura, "_cliente", _fake_cliente(fake_client))
+
+    update = _make_photo_update(file=object())
+    context = _make_context(user_data={captura._DRAFT_KEY: captura.Borrador()})
+
+    result = await captura.recibir_foto(update, context)
+
+    assert result == CapturaEstado.FOTO
+    assert captura._DRAFT_KEY in context.user_data
+    mensajes = [call.args[0] for call in update.message.reply_text.call_args_list]
+    assert captura._MSG_CONEXION in mensajes

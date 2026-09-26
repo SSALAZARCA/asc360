@@ -1,6 +1,9 @@
-"""Manual lost-sale capture conversation (design D7's `CAP_*` states, Method
-A only — Method B/photo is Phase 11, which will extend this module "from
-CAP_SELECCION onward" per the tasks doc rather than duplicate it).
+"""Lost-sale capture conversation (design D7's `CAP_*` states) — manual entry
+(Method A) and, since Phase 11, photo/vision entry (Method B). Method B
+reuses this module's OWN `_resolver_y_actualizar_borrador`/`_mostrar_
+no_resueltas`/`_mostrar_seleccion` pipeline (see `recibir_foto`) rather than
+duplicating it — exactly the design this module's `CapturaEstado.METODO`
+state was built to support back in Phase 10.
 
 **Entry-point interpretation (flagged — the design/spec are mechanism-
 agnostic about the exact Telegram trigger)**: neither the spec nor design D7
@@ -34,8 +37,10 @@ import logging
 from uuid import UUID
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.error import TelegramError
 from telegram.ext import ContextTypes, ConversationHandler
 
+from lore import vision
 from lore.api import (
     BackendCaido,
     BackendClient,
@@ -310,11 +315,15 @@ async def recibir_sucursal(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
 
 async def _pedir_metodo(update: Update, context: ContextTypes.DEFAULT_TYPE, *, via_callback: bool = False) -> int:
-    """`CapturaEstado.METODO` — the design lists a MANUAL/FOTO choice, but
-    Method B (photo) is Phase 11's scope; only the manual button is offered
-    here. The state is kept (rather than skipped) so Phase 11 can add a
-    second button without reshaping this flow."""
-    kb = InlineKeyboardMarkup([[InlineKeyboardButton("📝 Ingresar manualmente", callback_data="lore_cap_metodo:MANUAL")]])
+    """`CapturaEstado.METODO` — Phase 10 kept this state specifically so
+    Phase 11 could add the FOTO button here without reshaping the flow
+    (Phase 10 ambiguity #2). Both MANUAL and FOTO now offered."""
+    kb = InlineKeyboardMarkup(
+        [
+            [InlineKeyboardButton("📝 Ingresar manualmente", callback_data="lore_cap_metodo:MANUAL")],
+            [InlineKeyboardButton("📷 Sacar una foto", callback_data="lore_cap_metodo:FOTO")],
+        ]
+    )
     texto = "¿Cómo querés registrar la venta perdida?"
     if via_callback:
         await update.callback_query.edit_message_text(texto, reply_markup=kb)
@@ -323,11 +332,33 @@ async def _pedir_metodo(update: Update, context: ContextTypes.DEFAULT_TYPE, *, v
     return CapturaEstado.METODO
 
 
+_METODOS_VALIDOS = ("MANUAL", "FOTO")
+
+
 async def recibir_metodo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Phase 11: branches on the tapped button. `metodo` is derived from
+    `callback_data` and validated against `_METODOS_VALIDOS` before use
+    (project discipline — every callback-data-derived value must be
+    validated, same as `recibir_sucursal`'s own unknown-id handling) —
+    a tampered or stale value ends the conversation instead of trusting
+    it silently."""
     query = update.callback_query
     await query.answer()
 
-    _borrador(context).metodo = "MANUAL"
+    metodo = query.data.replace("lore_cap_metodo:", "")
+    if metodo not in _METODOS_VALIDOS:
+        logger.warning("recibir_metodo: método desconocido %r", metodo)
+        context.user_data.pop(_DRAFT_KEY, None)
+        await query.edit_message_text("⚠️ Tu sesión anterior expiró. Mandá /registrar de nuevo.")
+        return ConversationHandler.END
+
+    _borrador(context).metodo = metodo
+    if metodo == "FOTO":
+        await query.edit_message_text(
+            "📷 Mandá una foto donde se vean los códigos de referencia."
+        )
+        return CapturaEstado.FOTO
+
     await query.edit_message_text(
         "✍️ Escribí los códigos de referencia. Podés mandar varios separados por coma o uno por línea."
     )
@@ -391,6 +422,85 @@ async def recibir_codigos(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return await _mostrar_no_resueltas(update, context)
     if not draft.lineas:
         await update.message.reply_text("No reconocí ningún código ahí. Escribí al menos uno.")
+        return CapturaEstado.MANUAL
+    return await _mostrar_seleccion(update, context)
+
+
+async def recibir_foto(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """`CapturaEstado.FOTO` — Method B (photo) entry (task 11.6). Downloads
+    the highest-resolution `PhotoSize` (`update.message.photo[-1]`,
+    python-telegram-bot's own "smallest-to-largest" convention, verified
+    against `python-telegram-bot>=21.3`'s API, not assumed from an older
+    version) and hands it to `lore.vision.extraer_referencias`.
+
+    **Three distinct failure modes (judgment call, flagged)**:
+    - `TelegramError` from `photo.get_file()` itself (gga post-fix-up
+      finding: this Telegram network call happened BEFORE the try/except
+      that already covered `vision.extraer_referencias`, so a `NetworkError`/
+      `TimedOut`/expired-`file_id` `BadRequest` here used to escape unhandled
+      — now caught alongside `VisionError` below, same fallback).
+    - `VisionError` (the OpenAI call itself failed after retries, OR the
+      Telegram download inside `vision.extraer_referencias` failed): falls
+      back FULLY to manual entry — a distinct, generic error message, then
+      `CapturaEstado.MANUAL`, since typing is the advisor's only path
+      forward at that point.
+    - An EMPTY candidate list (a SUCCESSFUL call recognizing nothing): a
+      DIFFERENT, milder outcome — a distinct "no reconocí nada" message,
+      staying in `CapturaEstado.FOTO` so the advisor can either retry with
+      another photo or switch to typing codes directly (this state accepts
+      BOTH input types — see `main.py`'s wiring for `CapturaEstado.FOTO`).
+
+    A non-empty candidate list is resolved through the EXACT SAME
+    `_resolver_y_actualizar_borrador` helper manual entry uses (task 11.6:
+    never a second implementation of that pipeline) — only each candidate's
+    `codigo` is sent to the backend; vision's own `nombre` is display-only
+    and is discarded here, exactly like `resolver_referencias`'s response
+    already replaces it with the master `Referencia.nombre` for resolved
+    items."""
+    draft = _borrador(context)
+    photo = update.message.photo[-1]
+
+    try:
+        file = await photo.get_file()
+        # Fix-up finding #4 (WARNING, resilience): an immediate
+        # acknowledgement before the (potentially slow) vision call —
+        # without it, an advisor with no feedback is likely to re-send the
+        # photo or tap other buttons, generating extra queued updates on a
+        # bot that dispatches sequentially.
+        await update.message.reply_text("📷 Analizando la foto...")
+        candidatos = await vision.extraer_referencias(file)
+    except (TelegramError, vision.VisionError):
+        logger.warning("recibir_foto: no se pudo procesar la foto, cayendo a entrada manual")
+        await update.message.reply_text(
+            "⚠️ No pude analizar esa foto. Escribí los códigos de referencia a mano."
+        )
+        return CapturaEstado.MANUAL
+
+    if not candidatos:
+        await update.message.reply_text(
+            "🔍 No reconocí ninguna referencia en esa foto. Probá con otra foto más clara, "
+            "o escribí los códigos a mano."
+        )
+        return CapturaEstado.FOTO
+
+    codigos = [candidato.codigo for candidato in candidatos]
+    telegram_id = update.effective_user.id
+    async with _cliente(telegram_id) as client:
+        try:
+            await _resolver_y_actualizar_borrador(client, draft, codigos)
+        except BackendCaido:
+            await update.message.reply_text(_MSG_CONEXION)
+            return CapturaEstado.FOTO
+        except LoreApiError:
+            await update.message.reply_text(_MSG_CONEXION)
+            return CapturaEstado.FOTO
+
+    if draft.no_resueltas:
+        return await _mostrar_no_resueltas(update, context)
+    if not draft.lineas:
+        await update.message.reply_text(
+            "No reconocí ningún código válido ahí. Escribí los códigos a mano."
+        )
         return CapturaEstado.MANUAL
     return await _mostrar_seleccion(update, context)
 

@@ -91,6 +91,16 @@ def _build_captura_conversation() -> ConversationHandler:
             CapturaEstado.MANUAL: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, captura_handlers.recibir_codigos)
             ],
+            CapturaEstado.FOTO: [
+                # Phase 11 — accepts EITHER a photo (`recibir_foto`, Method
+                # B) or typed text (`recibir_codigos`, the SAME manual-entry
+                # handler MANUAL uses — never a duplicated copy): an advisor
+                # who gets "no reconocí nada en la foto" can retry with
+                # another photo or switch to typing without leaving this
+                # state.
+                MessageHandler(filters.PHOTO, captura_handlers.recibir_foto),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, captura_handlers.recibir_codigos),
+            ],
             CapturaEstado.NO_RESUELTAS: [
                 CallbackQueryHandler(captura_handlers.descartar_no_resuelta, pattern=r"^lore_cap_descartar:"),
                 MessageHandler(
