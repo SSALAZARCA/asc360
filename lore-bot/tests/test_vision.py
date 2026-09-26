@@ -409,6 +409,33 @@ async def test_extraer_referencias_uses_expected_call_params(monkeypatch):
     assert capturado["max_tokens"] == vision._MAX_TOKENS_RESPUESTA
 
 
+async def test_extraer_referencias_returns_empty_list_when_choices_is_empty(monkeypatch):
+    """gga post-fix-up finding: `respuesta.choices[0]` would raise an
+    unhandled `IndexError` (never a `VisionError`) if OpenAI ever returned
+    zero choices (e.g. content filtered) — an empty `choices` is treated the
+    same as a successful call recognizing nothing, not a transport/service
+    failure, so it returns `[]` rather than raising."""
+
+    class _FakeEmptyChoicesResponse:
+        choices: list = []
+
+    class FakeCompletions:
+        async def create(self, **kwargs):
+            return _FakeEmptyChoicesResponse()
+
+    class FakeChat:
+        completions = FakeCompletions()
+
+    class FakeClient:
+        chat = FakeChat()
+
+    monkeypatch.setattr(vision, "_obtener_cliente", lambda: FakeClient())
+
+    resultado = await vision.extraer_referencias(_FakeFile(b"bytes"))
+
+    assert resultado == []
+
+
 async def test_extraer_referencias_raises_vision_error_when_download_fails():
     """Fix-up finding #3 (CRITICAL, reliability): `download_as_bytearray()`
     used to run outside any try/except — a Telegram download failure

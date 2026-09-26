@@ -269,6 +269,12 @@ async def extraer_referencias(file: Any) -> list[Candidato]:
         )
 
     respuesta = await _llamar_con_reintentos(_llamada)
+    # gga post-fix-up finding: `choices` could theoretically come back empty
+    # (e.g. content filtered) — treated as "recognized nothing", the SAME
+    # outcome as a successful call with an empty `referencias` list, not a
+    # `VisionError` (no OpenAI-side or transport failure actually happened).
+    if not respuesta.choices:
+        return []
     crudo = respuesta.choices[0].message.content
     return parsear_respuesta(crudo)
 
