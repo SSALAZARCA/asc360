@@ -67,7 +67,7 @@ router = APIRouter(
 _require_write = require_roles("ADMIN", "COMPRAS")
 
 
-def _entidad_or_404(entidad: str) -> str:
+def entidad_or_404(entidad: str) -> str:
     if entidad not in _SCHEMA_BY_ENTIDAD:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Maestro desconocido: '{entidad}'")
     return entidad
@@ -152,23 +152,17 @@ async def _resolve_referencia_relaciones(
     return resolved, errores_resolucion
 
 
-@router.post("/validar", response_model=CargaResultado)
-async def validar_carga(
-    entidad: str,
-    payload: CargaRequest,
-    request: Request,
-    db: AsyncSession = Depends(get_motored_db_or_503),
-    user: MotoredUser = Depends(_require_write),
-):
-    """Dry-run: SOLO valida, nunca escribe. Corre `validate_rows`
-    directamente (no `procesar_carga`, que además haría upsert+commit).
-    `errores_resolucion` (p.ej. un `sustituida_por_codigo` sin match) se
-    mezcla con los errores de `validate_rows` en la MISMA respuesta -- una
-    sola pasada, todos los errores juntos (owner decision #1)."""
-    entidad = _entidad_or_404(entidad)
-    _check_size_guards(request, payload)
-
-    filas, errores_resolucion = await _resolve_referencia_relaciones(db, entidad, payload.filas)
+async def _validar_y_construir_resultado(
+    db: AsyncSession, entidad: str, filas: List[Dict[str, Any]]
+) -> CargaResultado:
+    """Lógica compartida entre `validar_carga` y `validar_carga_excel` (ad-hoc
+    dedupe, no trackeado bajo ningún sdd/*, 2026-09-28): resolver relaciones
+    de `referencia` -> `validate_rows` -> mezclar errores -> armar
+    `CargaResultado`. Los dos endpoints solo difieren en CÓMO llegan las
+    `filas` (JSON ya estructurado vs. parseo de `.xlsx`) -- de ahí en
+    adelante es el mismo dry-run puro (nunca `procesar_carga`, que además
+    haría upsert+commit)."""
+    filas, errores_resolucion = await _resolve_referencia_relaciones(db, entidad, filas)
     _valid_rows, errors = validate_rows(entidad, filas)
     errores_totales = errores_resolucion + errors
 
@@ -181,6 +175,34 @@ async def validar_carga(
     return CargaResultado(ok=True, total_filas=len(filas))
 
 
+async def _resolver_y_procesar_carga(
+    db: AsyncSession, entidad: str, filas: List[Dict[str, Any]], usuario_id: uuid.UUID
+) -> CargaResultado:
+    """Lógica compartida entre `carga` y `carga_excel` (ad-hoc dedupe, no
+    trackeado bajo ningún sdd/*, 2026-09-28): resolver relaciones de
+    `referencia` y delegar en `procesar_carga` (upsert atómico, único
+    `db.commit()`). `errores_resolucion` viaja como `errores_previos` -- por
+    sí solo ya alcanza para bloquear TODO el archivo (todo-o-nada), exacto
+    igual que un error de `validate_rows`."""
+    filas, errores_resolucion = await _resolve_referencia_relaciones(db, entidad, filas)
+    return await procesar_carga(db, entidad, filas, usuario_id, errores_previos=errores_resolucion)
+
+
+@router.post("/validar", response_model=CargaResultado)
+async def validar_carga(
+    entidad: str,
+    payload: CargaRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_motored_db_or_503),
+    user: MotoredUser = Depends(_require_write),
+):
+    """Dry-run: SOLO valida, nunca escribe -- ver `_validar_y_construir_
+    resultado` para la lógica compartida con `validar_carga_excel`."""
+    entidad = entidad_or_404(entidad)
+    _check_size_guards(request, payload)
+    return await _validar_y_construir_resultado(db, entidad, payload.filas)
+
+
 @router.post("", response_model=CargaResultado)
 async def carga(
     entidad: str,
@@ -190,18 +212,13 @@ async def carga(
     user: MotoredUser = Depends(_require_write),
 ):
     """Re-valida ENTERO el archivo server-side (ADR-6: nunca confía en el
-    payload de `validar` del cliente) y, si es válido, hace upsert atómico
-    vía `procesar_carga` (que ya hace el único `db.commit()` -- este
-    endpoint NO commitea por su cuenta cuando delega ahí). `errores_
-    resolucion` viaja como `errores_previos`: por sí solo ya alcanza para
-    bloquear TODO el archivo (todo-o-nada), exactamente igual que un error
-    de `validate_rows`."""
-    entidad = _entidad_or_404(entidad)
+    payload de `validar` del cliente) y, si es válido, hace upsert atómico --
+    ver `_resolver_y_procesar_carga` para la lógica compartida con
+    `carga_excel`."""
+    entidad = entidad_or_404(entidad)
     _check_size_guards(request, payload)
-
-    filas, errores_resolucion = await _resolve_referencia_relaciones(db, entidad, payload.filas)
     usuario_id = uuid.UUID(user.user_id)
-    return await procesar_carga(db, entidad, filas, usuario_id, errores_previos=errores_resolucion)
+    return await _resolver_y_procesar_carga(db, entidad, payload.filas, usuario_id)
 
 
 def _check_content_length_guard(request: Request) -> None:
@@ -229,14 +246,52 @@ def _check_content_length_guard(request: Request) -> None:
         )
 
 
+_UPLOAD_READ_CHUNK_BYTES = 1024 * 1024  # 1MB -- tamaño de lectura arbitrario, no crítico
+
+
+async def _read_upload_bounded(file: UploadFile) -> bytes:
+    """Lee `file` en bloques de `_UPLOAD_READ_CHUNK_BYTES`, cortando apenas
+    el acumulado supera `settings.MOTORED_MAX_UPLOAD_MB` -- nunca mantiene en
+    memoria más que el límite configurado (más un bloque) a la vez.
+
+    Ad-hoc bugfix (no trackeado bajo ningún sdd/*, 2026-09-28):
+    `_check_content_length_guard` de arriba SOLO rechaza cuando el header
+    `Content-Length` está presente y lo supera -- un cliente con
+    chunked transfer-encoding (sin ese header) lo esquivaba por completo, y
+    el viejo `await file.read()` sin límite leía TODO el archivo a memoria
+    sin ningún tope propio. Este helper es el backstop real: el chequeo de
+    header sigue siendo el fast-path barato para el caso común, este es la
+    segunda defensa para cuando el header miente o no está."""
+    max_bytes = settings.MOTORED_MAX_UPLOAD_MB * 1024 * 1024
+    chunks: List[bytes] = []
+    total = 0
+    while True:
+        chunk = await file.read(_UPLOAD_READ_CHUNK_BYTES)
+        if not chunk:
+            break
+        chunks.append(chunk)
+        total += len(chunk)
+        if total > max_bytes:
+            raise HTTPException(
+                status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                detail=f"El archivo supera el límite de {settings.MOTORED_MAX_UPLOAD_MB}MB",
+            )
+    return b"".join(chunks)
+
+
 async def _parse_excel_upload(entidad: str, request: Request, file: UploadFile) -> List[Dict[str, Any]]:
     """Guard de tamaño + parseo, traduciendo cada subclase de
     `CargaExcelError` al status HTTP correcto: `LimiteFilasExcedidoError`
     -> 422 (mismo código que el guard de filas del camino JSON); cualquier
     otra `CargaExcelError` (columna faltante, archivo corrupto, `.xls`,
-    extensión no soportada) -> 400, nunca un 500 sin manejar."""
+    extensión no soportada) -> 400, nunca un 500 sin manejar.
+
+    `_check_content_length_guard` es un fast-path barato para el caso común
+    (header presente); `_read_upload_bounded` es el backstop real que
+    enforza el límite leyendo en bloques, sin importar si el header está,
+    falta, o miente (chunked transfer-encoding)."""
     _check_content_length_guard(request)
-    file_bytes = await file.read()
+    file_bytes = await _read_upload_bounded(file)
     try:
         return parse_excel_rows(entidad, file.filename, file_bytes)
     except LimiteFilasExcedidoError as exc:
@@ -253,22 +308,11 @@ async def validar_carga_excel(
     db: AsyncSession = Depends(get_motored_db_or_503),
     user: MotoredUser = Depends(_require_write),
 ):
-    """Variante `.xlsx` de `validar_carga`: mismo dry-run puro (`validate_
-    rows`, nunca `procesar_carga`), solo cambia cómo llegan las filas."""
-    entidad = _entidad_or_404(entidad)
+    """Variante `.xlsx` de `validar_carga`: mismo dry-run puro -- ver
+    `_validar_y_construir_resultado`, solo cambia cómo llegan las filas."""
+    entidad = entidad_or_404(entidad)
     filas = await _parse_excel_upload(entidad, request, file)
-
-    filas, errores_resolucion = await _resolve_referencia_relaciones(db, entidad, filas)
-    _valid_rows, errors = validate_rows(entidad, filas)
-    errores_totales = errores_resolucion + errors
-
-    if errores_totales:
-        return CargaResultado(
-            ok=False,
-            total_filas=len(filas),
-            errores=[{"fila": e["fila"], "motivo": e["motivo"]} for e in errores_totales],
-        )
-    return CargaResultado(ok=True, total_filas=len(filas))
+    return await _validar_y_construir_resultado(db, entidad, filas)
 
 
 @router.post("/excel", response_model=CargaResultado)
@@ -280,11 +324,10 @@ async def carga_excel(
     user: MotoredUser = Depends(_require_write),
 ):
     """Variante `.xlsx` de `carga`: re-valida TODO el archivo server-side y,
-    si es válido, hace upsert atómico vía el MISMO `procesar_carga` que usa
-    el camino JSON -- una sola fuente de verdad para todo-o-nada."""
-    entidad = _entidad_or_404(entidad)
+    si es válido, hace upsert atómico -- ver `_resolver_y_procesar_carga`,
+    la MISMA lógica que usa el camino JSON, una sola fuente de verdad para
+    todo-o-nada."""
+    entidad = entidad_or_404(entidad)
     filas = await _parse_excel_upload(entidad, request, file)
-
-    filas, errores_resolucion = await _resolve_referencia_relaciones(db, entidad, filas)
     usuario_id = uuid.UUID(user.user_id)
-    return await procesar_carga(db, entidad, filas, usuario_id, errores_previos=errores_resolucion)
+    return await _resolver_y_procesar_carga(db, entidad, filas, usuario_id)

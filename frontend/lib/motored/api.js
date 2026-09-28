@@ -312,13 +312,16 @@ export async function anularBotLinea(lineaId) {
 }
 
 /**
- * `GET /cargas/{id}/errores.csv` -- NO es JSON, así que no usa
- * `motoredFetchJson`; el archivo viene del servidor y necesita el header
- * `Authorization` que `motoredFetch` ya agrega -- un `<a href>` plano no
- * podría mandarlo. Mismo patrón que `descargarPlantilla`, más abajo.
+ * Ad-hoc dedupe (asc360, no trackeado bajo ningún sdd/*): lógica compartida
+ * por `descargarErroresCargaCsv` y `descargarPlantilla` -- ninguna de las
+ * dos respuestas es JSON, así que usan `motoredFetch` (agrega el header
+ * `Authorization`), no `motoredFetchJson`. `path` y `filename` son la única
+ * diferencia real entre ambas. Revocar el object URL en el mismo tick puede
+ * cancelar la descarga en algunos navegadores si todavía no terminaron de
+ * leer el blob desde el `<a>` -- de ahí el `setTimeout`.
  */
-export async function descargarErroresCargaCsv(cargaId) {
-  const res = await motoredFetch(`/cargas/${cargaId}/errores.csv`);
+async function _descargarBlob(path, filename) {
+  const res = await motoredFetch(path);
   if (!res.ok) {
     throw new Error(`HTTP ${res.status}`);
   }
@@ -326,11 +329,17 @@ export async function descargarErroresCargaCsv(cargaId) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `errores_${cargaId}.csv`;
+  a.download = filename;
   a.click();
-  // Revocar en el mismo tick puede cancelar la descarga en algunos
-  // navegadores si todavía no terminaron de leer el blob desde el <a>.
   setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+/**
+ * `GET /cargas/{id}/errores.csv` -- ver `_descargarBlob` para el mecanismo
+ * compartido con `descargarPlantilla`, más abajo.
+ */
+export async function descargarErroresCargaCsv(cargaId) {
+  await _descargarBlob(`/cargas/${cargaId}/errores.csv`, `errores_${cargaId}.csv`);
 }
 
 /**
@@ -340,19 +349,9 @@ export async function descargarErroresCargaCsv(cargaId) {
  * Windows mostraba acentos rotos). `entidad` es SINGULAR
  * (sucursal|bodega|proveedor|referencia), igual que `validarCarga`/
  * `subirCarga` de acá arriba -- NO la convención plural de `listMaestros`.
- * Mismo patrón que `descargarErroresCargaCsv`: no es JSON, así que usa
- * `motoredFetch` (agrega el header `Authorization`), no `motoredFetchJson`.
+ * Ver `_descargarBlob` para el mecanismo compartido con
+ * `descargarErroresCargaCsv`.
  */
 export async function descargarPlantilla(entidadSingular) {
-  const res = await motoredFetch(`/maestros/${entidadSingular}/plantilla.xlsx`);
-  if (!res.ok) {
-    throw new Error(`HTTP ${res.status}`);
-  }
-  const blob = await res.blob();
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `plantilla_${entidadSingular}.xlsx`;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 0);
+  await _descargarBlob(`/maestros/${entidadSingular}/plantilla.xlsx`, `plantilla_${entidadSingular}.xlsx`);
 }

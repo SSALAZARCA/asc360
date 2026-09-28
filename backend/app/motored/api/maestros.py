@@ -31,7 +31,7 @@ from pydantic import BaseModel, ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.motored.api.carga import _entidad_or_404
+from app.motored.api.carga import entidad_or_404
 from app.motored.deps import MotoredUser, get_current_motored_user, get_motored_db_or_503, require_motored_ready, require_roles
 from app.motored.models.bodega import Bodega
 from app.motored.models.proveedor import Proveedor
@@ -175,7 +175,7 @@ async def descargar_plantilla(
 
     `entidad` es SINGULAR (sucursal|bodega|proveedor|referencia) -- la MISMA
     convención que `api/carga.py`'s router de carga masiva ya usa
-    (`_entidad_or_404`, reusada acá tal cual), NO la convención plural
+    (`entidad_or_404`, reusada acá tal cual), NO la convención plural
     (sucursales|bodegas|...) que usan los demás endpoints CRUD de este mismo
     router (`_CONFIGS`). Ambas conviven sin choque: son rutas de distinta
     forma (`/plantilla.xlsx` vs `/{entity_id}`, este último tipado `uuid` --
@@ -184,7 +184,7 @@ async def descargar_plantilla(
     Las labels de columna, EN ORDEN, vienen de `carga_excel.py::column_
     labels` -- la MISMA lista que ya se usa para parsear un `.xlsx` subido,
     para no duplicar la definición de columnas una tercera vez."""
-    entidad = _entidad_or_404(entidad)
+    entidad = entidad_or_404(entidad)
     labels = column_labels(entidad)
 
     workbook = Workbook()
