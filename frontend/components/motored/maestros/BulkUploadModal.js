@@ -114,20 +114,24 @@ const COLUMNAS_POR_ENTIDAD = {
       help: 'Escribí "Sí" únicamente para HMCL, el proveedor principal. Dejalo vacío o "No" para el resto.',
     },
   ],
-  // `proveedor_codigo` (no el id) -- el router del backend resuelve ese
-  // código al id real del proveedor antes de escribir, así que acá alcanza
-  // con el código tal cual aparece en la pestaña de Proveedores.
+  // Layout de negocio de 9 columnas, EN ESTE ORDEN (owner request
+  // 2026-09-28) -- mismo orden/labels que `ALIASES_POR_ENTIDAD` en
+  // `backend/app/motored/services/carga_excel.py` y que la tabla de
+  // `ReferenciasTab.js`. La `label` siempre matchea sola (alias implícito en
+  // `buildColumnMap`); `aliases` cubre los encabezados snake_case y las
+  // labels de plantillas anteriores. `precio_venta` salió del layout (la
+  // columna de la base de datos se conserva).
   referencia: [
-    { key: 'codigo', label: 'Código', required: true, aliases: ['codigo', 'código', 'referencia'] },
+    { key: 'codigo', label: 'Código', required: true, aliases: ['codigo', 'referencia'] },
     {
       key: 'proveedor_codigo', label: 'Código del proveedor', required: true,
-      aliases: ['proveedor_codigo', 'codigo proveedor', 'código proveedor', 'proveedor'],
-      help: 'El código del proveedor tal como aparece en la pestaña de Proveedores (ej: HMCL).',
+      aliases: ['proveedor_codigo', 'codigo proveedor', 'codigo del proveedor', 'proveedor'],
+      help: 'El código del proveedor tal como aparece en la pestaña de Proveedores (ej: HMCL). Identifica al proveedor, no es un número de parte.',
     },
     { key: 'nombre', label: 'Nombre', required: false, aliases: ['nombre'] },
     {
       key: 'linea_comercial', label: 'Línea comercial', required: false,
-      aliases: ['linea_comercial', 'línea comercial'],
+      aliases: ['linea_comercial', 'linea comercial'],
       help: 'Ej: REPUESTOS, ACCESORIOS. No es una lista cerrada, se escribe como texto libre.',
     },
     {
@@ -136,27 +140,27 @@ const COLUMNAS_POR_ENTIDAD = {
       help: 'Cuántas unidades vienen por paquete. Nunca 0 — si viene vacío o en 0, el sistema lo corrige a 1 automáticamente.',
     },
     {
-      key: 'precio_normal', label: 'Precio normal', required: false, aliases: ['precio_normal', 'precio normal'],
-      help: 'El precio que usa el sistema para calcular el valor de los pedidos.',
+      key: 'precio_normal', label: 'Precio Normal antes de IVA', required: false,
+      aliases: ['precio_normal', 'precio normal'],
+      help: 'Precio sin IVA. Es el precio que usa el sistema para calcular el valor de los pedidos.',
     },
     {
-      key: 'precio_venta', label: 'Precio de venta', required: false,
-      aliases: ['precio_venta', 'precio venta'],
-      help: 'Informativo únicamente — no se usa para calcular el valor de los pedidos.',
-    },
-    {
-      key: 'precio_publico', label: 'Precio al público', required: false,
-      aliases: ['precio_publico', 'precio publico', 'precio público'],
-      help: 'Informativo únicamente — no se usa para calcular el valor de los pedidos.',
+      key: 'precio_publico', label: 'Precio Público antes de IVA', required: false,
+      aliases: ['precio_publico', 'precio publico', 'precio al publico'],
+      help: 'Precio al público sin IVA. Informativo únicamente — no se usa para calcular el valor de los pedidos.',
     },
     {
       key: 'sustituida_por_codigo', label: 'Código de referencia sustituta', required: false,
       aliases: [
-        'sustituida_por_codigo', 'sustituida por codigo', 'sustituida por código',
-        'codigo sustituta', 'código sustituta',
-        'codigo de referencia sustituta', 'código de referencia sustituta',
+        'sustituida_por_codigo', 'sustituida por codigo', 'codigo sustituta',
+        'codigo de referencia sustituta',
       ],
-      help: 'Si esta referencia fue reemplazada por otra YA existente, poné acá el código de esa otra referencia. Dejalo vacío si no aplica.',
+      help: 'Si esta referencia fue reemplazada por otra YA existente del MISMO proveedor, poné acá el código de esa otra referencia. Los equivalentes de otras marcas van en "Homologados otras marcas". Dejalo vacío si no aplica.',
+    },
+    {
+      key: 'homologados', label: 'Homologados otras marcas', required: false,
+      aliases: ['homologados', 'homologados otras marcas'],
+      help: 'Códigos equivalentes de otras marcas. Podés poner varios en la misma celda, separados por coma o punto y coma (ej: YAM-123; HON-456).',
     },
   ],
 };
@@ -172,15 +176,34 @@ function normalizeHeader(header) {
     .trim().toLowerCase();
 }
 
+// Indexes of every header matching `col` -- the label + aliases go through
+// the same normalization as the header, so accented aliases/labels (e.g.
+// "Línea comercial") also match.
+function matchingHeaderIndexes(col, normalizedHeaders) {
+  const aliases = [col.label, ...col.aliases].map(normalizeHeader);
+  return normalizedHeaders.flatMap((h, idx) => (aliases.includes(h) ? [idx] : []));
+}
+
 function buildColumnMap(entidad, rawHeaders) {
   const spec = COLUMNAS_POR_ENTIDAD[entidad] || [];
   const normalizedHeaders = rawHeaders.map(normalizeHeader);
   const map = {}; // rawHeader -> canonicalKey
   spec.forEach((col) => {
-    const idx = normalizedHeaders.findIndex((h) => col.aliases.includes(h));
-    if (idx !== -1) map[rawHeaders[idx]] = col.key;
+    const [idx] = matchingHeaderIndexes(col, normalizedHeaders);
+    if (idx !== undefined) map[rawHeaders[idx]] = col.key;
   });
   return map;
+}
+
+// Same rule as the backend (`carga_excel.py::ColumnaDuplicadaError`): two
+// headers mapping to the SAME field are rejected, never silently ignored.
+function duplicatedColumnsError(entidad, rawHeaders) {
+  const spec = COLUMNAS_POR_ENTIDAD[entidad] || [];
+  const normalizedHeaders = rawHeaders.map(normalizeHeader);
+  const col = spec.find((c) => matchingHeaderIndexes(c, normalizedHeaders).length > 1);
+  if (!col) return '';
+  const encabezados = matchingHeaderIndexes(col, normalizedHeaders).map((idx) => `'${rawHeaders[idx].trim()}'`);
+  return `La columna '${col.label}' aparece más de una vez en el archivo (${encabezados.join(', ')}). Dejá una sola.`;
 }
 
 function rowsToCanonical(entidad, parsedRows, rawHeaders) {
@@ -193,6 +216,12 @@ function rowsToCanonical(entidad, parsedRows, rawHeaders) {
       const key = columnMap[rawHeader];
       if (!key) return;
       const trimmed = typeof value === 'string' ? value.trim() : value;
+      if (trimmed === '' || trimmed == null) {
+        // Blank = "not provided" (the backend drops it); never coerce it,
+        // e.g. a blank "Principal" must not become an explicit false.
+        canonical[key] = '';
+        return;
+      }
       canonical[key] = typeByKey[key] === 'boolean' ? toBoolean(trimmed) : trimmed;
     });
     return canonical;
@@ -239,6 +268,11 @@ function parseCsvFile(entidad, file, { setFilas, setParseError }) {
     skipEmptyLines: true,
     complete: (results) => {
       const rawHeaders = results.meta.fields || [];
+      const duplicadas = duplicatedColumnsError(entidad, rawHeaders);
+      if (duplicadas) {
+        setParseError(duplicadas);
+        return;
+      }
       const faltantes = missingRequiredColumns(entidad, rawHeaders);
       if (faltantes.length > 0) {
         setParseError(`Al archivo le falta la columna obligatoria: ${faltantes.join(', ')}`);

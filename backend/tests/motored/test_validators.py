@@ -196,7 +196,10 @@ class TestBlankOptionalFieldsAreTreatedAsAbsent:
         assert "precio_venta" not in valid[0]
         assert "precio_publico" not in valid[0]
 
-    def test_blank_unidad_empaque_coerces_to_one_instead_of_crashing(self):
+    def test_blank_unidad_empaque_is_not_provided_instead_of_crashing(self):
+        """Blank = "not provided": the key is dropped (so an upsert-update
+        keeps the stored value). A NEW referencia still gets 1 + warning from
+        `create_referencia` (see `test_maestros_service.py`)."""
         rows = [{
             "codigo": "REF1", "proveedor_codigo": "HMCL",
             "proveedor_id": str(uuid.uuid4()), "unidad_empaque": "",
@@ -204,8 +207,17 @@ class TestBlankOptionalFieldsAreTreatedAsAbsent:
         valid, errors = validate_rows("referencia", rows)
         assert errors == []
         assert len(valid) == 1
-        assert valid[0]["unidad_empaque"] == 1
-        assert valid[0]["_warnings"]
+        assert "unidad_empaque" not in valid[0]
+
+    def test_none_values_are_dropped_like_blank_strings_for_every_entity(self):
+        valid, errors = validate_rows("sucursal", [{"nombre": "CALI NORTE", "sic": None, "ciudad": "  "}])
+        assert errors == []
+        assert "sic" not in valid[0]
+        assert "ciudad" not in valid[0]
+
+        valid, errors = validate_rows("proveedor", [{"codigo": "HMCL", "nombre": "HMCL", "es_principal": None}])
+        assert errors == []
+        assert "es_principal" not in valid[0]
 
     def test_blank_sucursal_dias_seguridad_falls_back_to_schema_default(self):
         rows = [{"nombre": "CALI NORTE", "sic": "S1", "dias_seguridad": ""}]

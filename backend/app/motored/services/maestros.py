@@ -215,9 +215,40 @@ async def get_referencia_by_codigo_proveedor(db, codigo: str, proveedor_id: uuid
     return result.scalars().first()
 
 
+class SustitutaInvalidaError(ValueError):
+    """La sustituta pedida no existe, es la misma referencia, o es de OTRO
+    proveedor. Regla de negocio (decisión del usuario, 2026-09-28): la
+    sustituta DEBE ser del mismo proveedor; un equivalente de otra marca va en
+    `homologados`. El router la traduce a 422."""
+
+
+async def _verificar_sustituta(
+    db, referencia_id: Optional[uuid.UUID], proveedor_id: uuid.UUID, sustituida_por: Optional[uuid.UUID]
+) -> None:
+    """Chequeo server-side para escrituras unitarias (formulario/API). La
+    carga masiva ya lo garantiza en `api/carga.py::_pick_sustituta` (resuelve
+    el código SOLO dentro del proveedor de la fila), así que `upsert_
+    referencia` lo saltea para no sumar un query por fila."""
+    if sustituida_por is None:
+        return
+    if referencia_id is not None and sustituida_por == referencia_id:
+        raise SustitutaInvalidaError("'Código de referencia sustituta': una referencia no puede sustituirse a sí misma.")
+    result = await db.execute(select(Referencia).where(Referencia.id == sustituida_por))
+    sustituta = result.scalars().first()
+    if sustituta is None:
+        raise SustitutaInvalidaError("'Código de referencia sustituta': la referencia elegida no existe.")
+    if sustituta.proveedor_id != proveedor_id:
+        raise SustitutaInvalidaError(
+            f"'Código de referencia sustituta': '{sustituta.codigo}' es de otro proveedor. La sustituta debe "
+            "ser del mismo proveedor; los equivalentes de otras marcas van en 'Homologados otras marcas'."
+        )
+
+
 async def create_referencia(
-    db, data: ReferenciaCreate, usuario_id: Optional[uuid.UUID] = None
+    db, data: ReferenciaCreate, usuario_id: Optional[uuid.UUID] = None, verificar_sustituta: bool = True
 ) -> Tuple[Referencia, Optional[str]]:
+    if verificar_sustituta:
+        await _verificar_sustituta(db, None, data.proveedor_id, data.sustituida_por)
     unidad_empaque, warning = coerce_unidad_empaque(data.unidad_empaque)
     referencia = Referencia(
         id=uuid.uuid4(),
@@ -231,6 +262,7 @@ async def create_referencia(
         precio_venta=data.precio_venta,
         precio_publico=data.precio_publico,
         sustituida_por=data.sustituida_por,
+        homologados=list(data.homologados),
         activa=data.sustituida_por is None,
         created_by=usuario_id,
     )
@@ -239,8 +271,13 @@ async def create_referencia(
     return referencia, warning
 
 
-async def update_referencia(db, referencia: Referencia, data: ReferenciaUpdate, usuario_id: Optional[uuid.UUID] = None) -> Referencia:
+async def update_referencia(
+    db, referencia: Referencia, data: ReferenciaUpdate, usuario_id: Optional[uuid.UUID] = None,
+    verificar_sustituta: bool = True,
+) -> Referencia:
     update_dict = data.model_dump(exclude_unset=True)
+    if verificar_sustituta:
+        await _verificar_sustituta(db, referencia.id, referencia.proveedor_id, update_dict.get("sustituida_por"))
 
     if "unidad_empaque" in update_dict:
         coerced, warning = coerce_unidad_empaque(update_dict["unidad_empaque"])
@@ -268,7 +305,10 @@ async def upsert_referencia(
     existing = await get_referencia_by_codigo_proveedor(db, data.codigo, data.proveedor_id)
     if existing:
         update_fields = _updateable_fields(data, {"codigo", "proveedor_id"})
-        updated = await update_referencia(db, existing, ReferenciaUpdate(**update_fields), usuario_id)
+        # Bulk path: same-proveedor sustituta already enforced by the resolver.
+        updated = await update_referencia(
+            db, existing, ReferenciaUpdate(**update_fields), usuario_id, verificar_sustituta=False
+        )
         return updated, None, False
-    created, warning = await create_referencia(db, data, usuario_id)
+    created, warning = await create_referencia(db, data, usuario_id, verificar_sustituta=False)
     return created, warning, True

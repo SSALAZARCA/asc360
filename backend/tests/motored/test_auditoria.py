@@ -61,3 +61,45 @@ class TestAuditCreateAndDeactivate:
         assert row.campo == "activa"
         assert row.valor_anterior == "True"
         assert row.valor_nuevo == "False"
+
+
+class TestListAndLongValues:
+    """`referencia.homologados` (2026-09-28) is the first list-valued master
+    field -- audit values must stay readable and fit `String(500)`, and
+    clipping must never hide a real change nor cut an item in half."""
+
+    def _audit(self, before, after):
+        db = FakeAsyncSession()
+        return auditoria.diff_and_audit(db, "referencia", uuid.uuid4(), None, {"homologados": before}, {"homologados": after})
+
+    def test_list_values_are_joined_readably(self):
+        rows = self._audit([], ["A", "B"])
+        assert rows[0].valor_anterior == ""
+        assert rows[0].valor_nuevo == "A, B"
+
+    def test_long_lists_fit_the_column_and_are_cut_on_item_boundaries(self):
+        items = [f"ITEM-{i:03d}-{'X' * 20}" for i in range(50)]
+        rows = self._audit([], items)
+        valor = rows[0].valor_nuevo
+        assert len(valor) <= 500
+        visible, _, marker = valor.partition(" … ")
+        assert all(part in items for part in visible.split(", "))
+        shown = len(visible.split(", "))
+        assert f"+{len(items) - shown}" in marker
+
+    def test_a_change_beyond_the_cutoff_still_produces_different_audit_values(self):
+        before = [f"ITEM-{i:03d}-{'X' * 20}" for i in range(50)]
+        after = before[:-1] + ["CHANGED"]
+        rows = self._audit(before, after)
+        assert len(rows) == 1
+        assert rows[0].valor_anterior != rows[0].valor_nuevo
+        assert len(rows[0].valor_anterior) <= 500
+        assert len(rows[0].valor_nuevo) <= 500
+
+    def test_long_scalar_strings_also_stay_distinguishable(self):
+        db = FakeAsyncSession()
+        rows = auditoria.diff_and_audit(
+            db, "referencia", uuid.uuid4(), None, {"nombre": "A" * 600}, {"nombre": "A" * 599 + "B"},
+        )
+        assert rows[0].valor_anterior != rows[0].valor_nuevo
+        assert len(rows[0].valor_nuevo) <= 500

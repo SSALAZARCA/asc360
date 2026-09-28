@@ -12,6 +12,12 @@ Reglas bloqueantes (proposal §4.1/§5.8, spec):
 - `precio_normal` es EL campo que valoriza pedidos -- distinto de
   `precio_venta`/`precio_publico` (informativos, nullable).
 - `sustituida_por` seteado -> `activa = false` (services/maestros.py).
+- `precio_venta` ya NO forma parte del layout de negocio (plantilla Excel,
+  parser de carga masiva, tabla UI -- owner request 2026-09-28), pero la
+  columna se conserva a propósito (sin pérdida de datos).
+- `homologados` ("Homologados otras marcas"): lista de códigos equivalentes
+  de otras marcas. NOT NULL con default `{}` (lista vacía) -- nunca NULL,
+  para que "sin homologados" tenga una sola representación.
 """
 import uuid
 from datetime import datetime
@@ -25,8 +31,9 @@ from sqlalchemy import (
     Numeric,
     String,
     UniqueConstraint,
+    text,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import ARRAY, UUID
 
 from app.motored.database import MotoredBase
 
@@ -50,6 +57,8 @@ class Referencia(MotoredBase):
 
     sustituida_por = Column(UUID(as_uuid=True), ForeignKey("referencia.id"), nullable=True)
     activa = Column(Boolean, nullable=False, default=True)
+
+    homologados = Column(ARRAY(String(100)), nullable=False, default=list, server_default=text("'{}'"))
 
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

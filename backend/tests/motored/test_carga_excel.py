@@ -182,3 +182,182 @@ def test_numeric_proveedor_codigo_is_coerced_to_string_for_the_router_lookup():
     rows = parse_excel_rows("referencia", "referencias.xlsx", file_bytes)
 
     assert rows == [{"codigo": "REF1", "proveedor_codigo": "1234"}]
+
+
+# ---------------------------------------------------------------------------
+# Referencia 9-column layout (owner request 2026-09-28): human headers from the
+# server-generated template, homologados multi-value cell, precio_venta dropped
+# from the Excel contract, and backward compatibility with older templates.
+# ---------------------------------------------------------------------------
+REFERENCIA_TEMPLATE_HEADERS = [
+    "Código",
+    "Código del proveedor",
+    "Nombre",
+    "Línea comercial",
+    "Unidad de empaque",
+    "Precio Normal antes de IVA",
+    "Precio Público antes de IVA",
+    "Código de referencia sustituta",
+    "Homologados otras marcas",
+]
+
+
+def test_referencia_template_headers_map_every_column_to_its_canonical_key():
+    file_bytes = _build_xlsx_bytes(
+        REFERENCIA_TEMPLATE_HEADERS,
+        [["REF1", "HMCL", "Filtro", "REPUESTOS", 2, 1000, 1500, "REF0", "YAM-1; HON-2"]],
+    )
+
+    rows = parse_excel_rows("referencia", "referencias.xlsx", file_bytes)
+
+    assert rows == [{
+        "codigo": "REF1",
+        "proveedor_codigo": "HMCL",
+        "nombre": "Filtro",
+        "linea_comercial": "REPUESTOS",
+        "unidad_empaque": 2,
+        "precio_normal": 1000,
+        "precio_publico": 1500,
+        "sustituida_por_codigo": "REF0",
+        "homologados": ["YAM-1", "HON-2"],
+    }]
+
+
+def test_referencia_template_round_trips_through_column_labels():
+    """Downloading the template and uploading it untouched must never lose a
+    column -- every label written by `column_labels` must parse back."""
+    from app.motored.services.carga_excel import column_labels
+
+    labels = column_labels("referencia")
+    assert labels == REFERENCIA_TEMPLATE_HEADERS
+
+    file_bytes = _build_xlsx_bytes(labels, [["REF1", "HMCL", None, None, None, None, None, None, None]])
+    rows = parse_excel_rows("referencia", "referencias.xlsx", file_bytes)
+
+    assert rows[0]["codigo"] == "REF1"
+    assert rows[0]["proveedor_codigo"] == "HMCL"
+    # Blank template columns must reach validation as "not provided", never
+    # as explicit values that an upsert-update would write over existing data.
+    from app.motored.services.validators import validate_rows
+
+    rows[0]["proveedor_id"] = "00000000-0000-0000-0000-000000000001"
+    valid, errors = validate_rows("referencia", rows)
+    assert errors == []
+    assert set(valid[0]) == {"codigo", "proveedor_codigo", "proveedor_id", "_warnings"}
+
+
+def test_referencia_headers_tolerate_case_and_surrounding_whitespace():
+    file_bytes = _build_xlsx_bytes(
+        ["  CÓDIGO ", "código DEL proveedor  ", " homologados OTRAS marcas"],
+        [["REF1", "HMCL", "A"]],
+    )
+
+    rows = parse_excel_rows("referencia", "referencias.xlsx", file_bytes)
+
+    assert rows == [{"codigo": "REF1", "proveedor_codigo": "HMCL", "homologados": ["A"]}]
+
+
+def test_referencia_old_snake_case_headers_still_parse():
+    file_bytes = _build_xlsx_bytes(
+        [
+            "codigo", "proveedor_codigo", "nombre", "linea_comercial", "unidad_empaque",
+            "precio_normal", "precio_publico", "sustituida_por_codigo", "homologados",
+        ],
+        [["REF1", "HMCL", "Filtro", "REPUESTOS", 1, 10, 20, "REF0", "A,B"]],
+    )
+
+    rows = parse_excel_rows("referencia", "referencias.xlsx", file_bytes)
+
+    assert rows[0]["proveedor_codigo"] == "HMCL"
+    assert rows[0]["precio_normal"] == 10
+    assert rows[0]["precio_publico"] == 20
+    assert rows[0]["sustituida_por_codigo"] == "REF0"
+    assert rows[0]["homologados"] == ["A", "B"]
+
+
+def test_referencia_previous_template_labels_still_parse():
+    """The template generated before 2026-09-28 used "Precio normal" /
+    "Precio al público" / "Precio de venta" -- a previously downloaded
+    template must still upload. `precio_venta` is no longer part of the Excel
+    contract, so that column is ignored (the DB column is kept untouched)."""
+    file_bytes = _build_xlsx_bytes(
+        ["Código", "Código del proveedor", "Precio normal", "Precio de venta", "Precio al público"],
+        [["REF1", "HMCL", 10, 15, 20]],
+    )
+
+    rows = parse_excel_rows("referencia", "referencias.xlsx", file_bytes)
+
+    assert rows == [{"codigo": "REF1", "proveedor_codigo": "HMCL", "precio_normal": 10, "precio_publico": 20}]
+
+
+def test_referencia_precio_venta_is_not_in_the_template():
+    from app.motored.services.carga_excel import column_labels
+
+    labels = column_labels("referencia")
+    assert not any("venta" in label.lower() for label in labels)
+
+
+def test_homologados_cell_splits_on_comma_and_semicolon_trims_drops_empties_and_dedupes():
+    file_bytes = _build_xlsx_bytes(
+        ["Código", "Código del proveedor", "Homologados otras marcas"],
+        [["REF1", "HMCL", " YAM-1 , HON-2;;YAM-1 ;  ; SUZ-3,"]],
+    )
+
+    rows = parse_excel_rows("referencia", "referencias.xlsx", file_bytes)
+
+    assert rows[0]["homologados"] == ["YAM-1", "HON-2", "SUZ-3"]
+
+
+def test_blank_homologados_cell_is_passed_through_like_any_other_blank_cell():
+    """Same blank-cell contract as every other optional column -- the parser
+    never turns a blank cell into a list on its own."""
+    file_bytes = _build_xlsx_bytes(
+        ["Código", "Código del proveedor", "Homologados otras marcas"],
+        [["REF1", "HMCL", None]],
+    )
+
+    rows = parse_excel_rows("referencia", "referencias.xlsx", file_bytes)
+
+    # Exactly what the CSV path produces for a blank cell -- `validate_rows`
+    # then drops it as "not provided".
+    assert rows[0]["homologados"] == ""
+
+
+def test_numeric_homologados_cell_is_coerced_to_text():
+    file_bytes = _build_xlsx_bytes(
+        ["Código", "Código del proveedor", "Homologados otras marcas"],
+        [["REF1", "HMCL", 12345]],
+    )
+
+    rows = parse_excel_rows("referencia", "referencias.xlsx", file_bytes)
+
+    assert rows[0]["homologados"] == ["12345"]
+
+
+def test_blank_boolean_cell_stays_blank_instead_of_becoming_false():
+    """A blank "Principal (Sí/No)" cell must not turn into an explicit
+    `False` that would demote an existing principal proveedor on upsert."""
+    file_bytes = _build_xlsx_bytes(["Código", "Nombre", "Principal (Sí/No)"], [["HMCL", "HMCL", None]])
+
+    rows = parse_excel_rows("proveedor", "proveedores.xlsx", file_bytes)
+
+    assert rows[0]["es_principal"] == ""
+
+
+def test_whitespace_only_cell_is_blank_too():
+    file_bytes = _build_xlsx_bytes(["Nombre", "SIC"], [["CALI NORTE", "   "]])
+
+    rows = parse_excel_rows("sucursal", "sucursales.xlsx", file_bytes)
+
+    assert rows[0]["sic"] == ""
+
+
+def test_duplicate_headers_for_the_same_field_are_rejected_with_a_clear_error():
+    from app.motored.services.carga_excel import ColumnaDuplicadaError
+
+    file_bytes = _build_xlsx_bytes(["Código", "codigo", "Código del proveedor"], [["REF1", "REF2", "HMCL"]])
+
+    with pytest.raises(ColumnaDuplicadaError) as exc_info:
+        parse_excel_rows("referencia", "referencias.xlsx", file_bytes)
+
+    assert "Código" in str(exc_info.value)

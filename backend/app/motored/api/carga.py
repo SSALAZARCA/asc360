@@ -43,7 +43,7 @@ relaciones` -> `validate_rows`/`procesar_carga`) que los endpoints de arriba
 -- cero lógica de validación/upsert duplicada.
 """
 import uuid
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from sqlalchemy import select
@@ -87,6 +87,30 @@ def _check_size_guards(request: Request, payload: CargaRequest) -> None:
         )
 
 
+def _pick_sustituta(
+    codigo: str, proveedor_id: Optional[uuid.UUID], candidatas: List[Referencia]
+) -> Tuple[Optional[uuid.UUID], Optional[str]]:
+    """Elige la referencia sustituta para `codigo` entre `candidatas` (todas
+    las referencias existentes con ese código -- la UNIQUE es
+    `(codigo, proveedor_id)`, así que puede haber varias). Regla de negocio
+    (decisión del usuario, 2026-09-28): la sustituta DEBE ser del MISMO
+    proveedor que la fila; un equivalente de otro proveedor/marca va en
+    "Homologados otras marcas", nunca como sustituta. Retorna `(id, None)` o
+    `(None, motivo_de_error)` -- nunca se descarta en silencio."""
+    for candidata in candidatas:
+        if proveedor_id is not None and candidata.proveedor_id == proveedor_id:
+            return candidata.id, None
+    if candidatas:
+        return None, (
+            f"'Código de referencia sustituta' '{codigo}' existe, pero de otro proveedor. La sustituta "
+            "debe ser del mismo proveedor; los equivalentes de otras marcas van en 'Homologados otras marcas'."
+        )
+    return None, (
+        f"'Código de referencia sustituta' '{codigo}' no corresponde a ninguna referencia existente "
+        "de este proveedor"
+    )
+
+
 async def _resolve_referencia_relaciones(
     db: AsyncSession, entidad: str, filas: List[Dict[str, Any]]
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
@@ -101,7 +125,8 @@ async def _resolve_referencia_relaciones(
       ausente de la fila -- `validate_rows` ya reporta un "campo requerido"
       claro más adelante, así que esta función no necesita generar un error
       propio para este caso.
-    - `sustituida_por_codigo` -> `sustituida_por` (FK OPCIONAL): a diferencia
+    - `sustituida_por_codigo` -> `sustituida_por` (FK OPCIONAL), elegida por
+      `_pick_sustituta` (SOLO del mismo proveedor). A diferencia
       de arriba, dejar la fila silenciosamente sin `sustituida_por` cuando el
       código no matchea violaría "todo o nada" (owner decision #1) -- un
       typo de negocio pasaría desapercibido. Por eso un código sin match acá
@@ -121,10 +146,11 @@ async def _resolve_referencia_relaciones(
         result = await db.execute(select(Proveedor).where(Proveedor.codigo.in_(proveedor_codigos)))
         proveedor_id_by_codigo = {p.codigo: p.id for p in result.scalars().all()}
 
-    referencia_id_by_codigo: Dict[str, uuid.UUID] = {}
+    referencias_by_codigo: Dict[str, List[Referencia]] = {}
     if sustituida_por_codigos:
         result = await db.execute(select(Referencia).where(Referencia.codigo.in_(sustituida_por_codigos)))
-        referencia_id_by_codigo = {r.codigo: r.id for r in result.scalars().all()}
+        for referencia in result.scalars().all():
+            referencias_by_codigo.setdefault(referencia.codigo, []).append(referencia)
 
     resolved: List[Dict[str, Any]] = []
     errores_resolucion: List[Dict[str, Any]] = []
@@ -137,16 +163,13 @@ async def _resolve_referencia_relaciones(
 
         sustituida_por_codigo = fila.get("sustituida_por_codigo")
         if sustituida_por_codigo:
-            if sustituida_por_codigo in referencia_id_by_codigo:
-                fila["sustituida_por"] = referencia_id_by_codigo[sustituida_por_codigo]
+            sustituta_id, motivo = _pick_sustituta(
+                sustituida_por_codigo, fila.get("proveedor_id"), referencias_by_codigo.get(sustituida_por_codigo, [])
+            )
+            if sustituta_id is not None:
+                fila["sustituida_por"] = sustituta_id
             else:
-                errores_resolucion.append({
-                    "fila": index,
-                    "motivo": (
-                        f"El código de 'sustituida_por' '{sustituida_por_codigo}' no corresponde "
-                        "a ninguna referencia existente"
-                    ),
-                })
+                errores_resolucion.append({"fila": index, "motivo": motivo})
 
         resolved.append(fila)
     return resolved, errores_resolucion

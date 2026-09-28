@@ -34,7 +34,7 @@ from typing import Any, Dict, List, Optional, get_args
 import openpyxl
 
 from app.config import settings
-from app.motored.services.texto import normalizar_encabezado
+from app.motored.services.texto import normalizar_encabezado, split_multivalor
 from app.motored.services.validators import _SCHEMA_BY_ENTIDAD
 
 
@@ -62,6 +62,12 @@ class FormatoNoSoportadoError(CargaExcelError):
     """Extensión no soportada. Incluye el caso explícito de `.xls` (formato
     binario legado que `openpyxl` no puede leer) -- alcance deliberadamente
     NO cubierto (no se agrega `xlrd` ni ninguna otra dependencia para eso)."""
+
+
+class ColumnaDuplicadaError(CargaExcelError):
+    """Dos encabezados del archivo apuntan al MISMO campo (p.ej. "Código" y
+    "codigo") -- se rechaza en vez de ignorar en silencio la segunda columna
+    (no hay forma segura de saber cuál de las dos es la buena)."""
 
 
 class LimiteFilasExcedidoError(CargaExcelError):
@@ -126,60 +132,57 @@ ALIASES_POR_ENTIDAD: Dict[str, List[Dict[str, Any]]] = {
             "aliases": ["es_principal", "principal", "principal (si/no)", "principal (sí/no)"],
         },
     ],
-    # `proveedor_codigo` (no el id) -- igual que el camino CSV, el router de
-    # `api/carga.py` resuelve ese código al id real antes de escribir.
+    # Layout de negocio de 9 columnas, EN ESTE ORDEN (owner request
+    # 2026-09-28) -- la `label` es el encabezado exacto de la plantilla
+    # `.xlsx` Y de la tabla de Referencias en la UI. La `label` siempre
+    # matchea sola (`_build_column_map` la trata como alias implícito); los
+    # `aliases` cubren los encabezados snake_case y las labels de plantillas
+    # anteriores, para que un archivo descargado antes siga subiendo.
+    #
+    # - `proveedor_codigo` es el código del PROVEEDOR (no un número de parte
+    #   del proveedor) -- `api/carga.py` lo resuelve a `proveedor_id`.
+    # - `sustituida_por_codigo` es el código de OTRA referencia YA existente
+    #   -- `api/carga.py` lo resuelve a `sustituida_por` SOLO dentro del
+    #   proveedor de la fila; sin match ahí es error de fila (los
+    #   equivalentes de otras marcas van en `homologados`).
+    # - `homologados` es multi-valor: una celda con valores separados por
+    #   coma o punto y coma (`texto.split_multivalor`).
+    # - `precio_venta` salió del layout (ya no se parsea ni va en la
+    #   plantilla); la columna de la base de datos se conserva.
     "referencia": [
-        {"key": "codigo", "label": "Código", "required": True, "aliases": ["codigo", "código", "referencia"]},
+        {"key": "codigo", "label": "Código", "required": True, "aliases": ["codigo", "referencia"]},
         {
             "key": "proveedor_codigo", "label": "Código del proveedor", "required": True, "type": "string",
-            "aliases": ["proveedor_codigo", "codigo proveedor", "código proveedor", "proveedor"],
+            "aliases": ["proveedor_codigo", "codigo proveedor", "codigo del proveedor", "proveedor"],
         },
         {"key": "nombre", "label": "Nombre", "required": False, "aliases": ["nombre"]},
         {
             "key": "linea_comercial", "label": "Línea comercial", "required": False,
-            "aliases": ["linea_comercial", "línea comercial"],
+            "aliases": ["linea_comercial", "linea comercial"],
         },
         {
             "key": "unidad_empaque", "label": "Unidad de empaque", "required": False,
             "aliases": ["unidad_empaque", "unidad de empaque"],
         },
         {
-            "key": "precio_normal", "label": "Precio normal", "required": False,
+            "key": "precio_normal", "label": "Precio Normal antes de IVA", "required": False,
             "aliases": ["precio_normal", "precio normal"],
         },
-        # Ad-hoc bugfix (no trackeado bajo ningún sdd/*): `precio_venta`/
-        # `precio_publico` fluyen directo (sin resolución, ya son
-        # Decimal opcionales en `ReferenciaCreate`) -- mismo shape que
-        # `precio_normal`. `sustituida_por_codigo` es el código (no el id)
-        # de OTRA referencia YA existente -- `api/carga.py`'s `_resolve_
-        # referencia_relaciones` lo resuelve a `sustituida_por` antes de
-        # escribir, igual criterio que `proveedor_codigo` -> `proveedor_id`.
         {
-            "key": "precio_venta", "label": "Precio de venta", "required": False,
-            "aliases": ["precio_venta", "precio venta"],
-        },
-        {
-            "key": "precio_publico", "label": "Precio al público", "required": False,
-            "aliases": ["precio_publico", "precio publico", "precio público"],
+            "key": "precio_publico", "label": "Precio Público antes de IVA", "required": False,
+            "aliases": ["precio_publico", "precio publico", "precio al publico"],
         },
         {
             "key": "sustituida_por_codigo", "label": "Código de referencia sustituta", "required": False,
             "type": "string",
-            # Ad-hoc bugfix (no trackeado bajo ningún sdd/*): la propia LABEL
-            # ("Código de referencia sustituta" -- el header que `column_
-            # labels`/`api/maestros.py::descargar_plantilla` escribe en la
-            # plantilla `.xlsx`) faltaba de esta lista. Sin ella, descargar
-            # la plantilla y volver a subirla SIN TOCAR el encabezado hacía
-            # que esta columna se perdiera en silencio (ningún alias
-            # matcheaba), justo el bug de "carga silenciosa" que el resto de
-            # esta función existe para evitar. `real world`: encontrado por
-            # los tests de `test_carga_api_excel.py` (`TestSustituidaPorCodigoEndToEnd`
-            # equivalente), que usan ese header exacto.
             "aliases": [
-                "sustituida_por_codigo", "sustituida por codigo", "sustituida por código",
-                "codigo sustituta", "código sustituta",
-                "codigo de referencia sustituta", "código de referencia sustituta",
+                "sustituida_por_codigo", "sustituida por codigo", "codigo sustituta",
+                "codigo de referencia sustituta",
             ],
+        },
+        {
+            "key": "homologados", "label": "Homologados otras marcas", "required": False, "type": "multivalor",
+            "aliases": ["homologados", "homologados otras marcas"],
         },
     ],
 }
@@ -232,15 +235,22 @@ def _to_boolean(value: Any) -> bool:
 
 def _build_column_map(spec: List[Dict[str, Any]], raw_headers: List[str]) -> Dict[int, str]:
     """Retorna {índice_de_columna (0-based) -> clave_canónica} para las
-    columnas del encabezado que matchean algún alias conocido."""
+    columnas del encabezado que matchean algún alias conocido (la `label`
+    cuenta como alias implícito). Lanza `ColumnaDuplicadaError` si dos
+    encabezados matchean el MISMO campo."""
     normalized_headers = [normalizar_encabezado(h) for h in raw_headers]
     column_map: Dict[int, str] = {}
     for col in spec:
-        normalized_aliases = {normalizar_encabezado(a) for a in col["aliases"]}
-        for idx, header in enumerate(normalized_headers):
-            if header in normalized_aliases:
-                column_map[idx] = col["key"]
-                break
+        normalized_aliases = {normalizar_encabezado(a) for a in [col["label"], *col["aliases"]]}
+        matches = [idx for idx, header in enumerate(normalized_headers) if header in normalized_aliases]
+        if len(matches) > 1:
+            encabezados = ", ".join(f"'{str(raw_headers[idx]).strip()}'" for idx in matches)
+            raise ColumnaDuplicadaError(
+                f"La columna '{col['label']}' aparece más de una vez en el archivo ({encabezados}). "
+                "Dejá una sola."
+            )
+        if matches:
+            column_map[matches[0]] = col["key"]
     return column_map
 
 
@@ -348,7 +358,8 @@ def _build_canonical_rows(
         canonical: Dict[str, Any] = {}
         for idx, key in column_map.items():
             value = row_values[idx] if idx < len(row_values) else None
-            kind = field_kinds.get(key) or (type_by_key.get(key) if type_by_key.get(key) == "string" else None)
+            declared_type = type_by_key.get(key)
+            kind = field_kinds.get(key) or ("string" if declared_type in ("string", "multivalor") else None)
 
             if kind == "string" and value is not None and not isinstance(value, str):
                 value = str(value)
@@ -358,8 +369,19 @@ def _build_canonical_rows(
                 if kind == "numeric":
                     value = _normalize_comma_decimal(value)
 
-            if type_by_key.get(key) == "boolean":
+            if value is None or value == "":
+                # Blank cell: openpyxl gives `None`; emit "" exactly like the
+                # CSV path (papaparse) does, so `validate_rows` drops it as
+                # "not provided" and an upsert never overwrites stored data.
+                # No boolean/multi-value coercion on blanks (a blank
+                # "Principal" must not become an explicit False).
+                canonical[key] = ""
+                continue
+
+            if declared_type == "boolean":
                 value = _to_boolean(value)
+            elif declared_type == "multivalor":
+                value = split_multivalor(value)
             canonical[key] = value
         rows.append(canonical)
 

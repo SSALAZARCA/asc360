@@ -77,16 +77,18 @@ def _validate_single_row(entidad: str, row: Row) -> List[str]:
 
 def _strip_blank_values(row: Row) -> Row:
     """Una celda en blanco (columna presente en el archivo, sin valor para
-    esa fila) llega como `""`, no `None` ni ausente -- tanto `.csv`
-    (papaparse) como `.xlsx` (openpyxl con `.strip()`) producen ese mismo
-    string vacío. Sacar esas claves ACÁ, antes de cualquier coerción/
-    validación de schema, para que se traten como "no provisto" (usa el
-    default del schema o queda en None), nunca como un valor inválido --
-    real bug encontrado: "" en un campo Decimal opcional (ej.
-    `precio_venta`) rechazaba la fila entera, y "" en `unidad_empaque`
-    crasheaba `coerce_unidad_empaque` con un `TypeError` sin manejar
-    (comparaba `str <= int`)."""
-    return {k: v for k, v in row.items() if v != ""}
+    esa fila) significa "no provisto", en TODOS los caminos: `.csv`
+    (papaparse) la entrega como `""`; `.xlsx` la entrega como `""` también
+    (`carga_excel` normaliza el `None` de openpyxl), y un cliente JSON puede
+    mandar `null`. Se sacan ACÁ las claves con `None`, `""` o solo espacios,
+    antes de cualquier coerción/validación de schema: así nunca llegan como
+    kwarg explícito al `*Create`, y el `model_dump(exclude_unset=True)` del
+    upsert NO pisa el valor ya guardado (bug real, review 2026-09-28: un
+    `None` de `.xlsx` sobrevivía y borraba `nombre`, `homologados`, etc. en
+    cada actualización). Además evita los bugs originales: "" en un Decimal
+    opcional rechazaba la fila, y "" en `unidad_empaque` crasheaba
+    `coerce_unidad_empaque` (`str <= int`)."""
+    return {k: v for k, v in row.items() if not _is_blank(v)}
 
 
 def _apply_entity_normalizations(entidad: str, cleaned: Row) -> List[str]:
@@ -97,7 +99,10 @@ def _apply_entity_normalizations(entidad: str, cleaned: Row) -> List[str]:
     if entidad == "sucursal" and isinstance(cleaned.get("nombre"), str):
         cleaned["nombre"] = normalize_sucursal_nombre(cleaned["nombre"])
 
-    if entidad == "referencia":
+    # Solo si vino un valor: un `unidad_empaque` ausente/en blanco es "no
+    # provisto" (un update conserva el guardado; `create_referencia` pone 1
+    # con advertencia para una referencia nueva).
+    if entidad == "referencia" and "unidad_empaque" in cleaned:
         coerced_value, warning = coerce_unidad_empaque(cleaned.get("unidad_empaque"))
         cleaned["unidad_empaque"] = coerced_value
         if warning:

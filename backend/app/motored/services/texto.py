@@ -15,7 +15,7 @@ seguridad").
 """
 import re
 import unicodedata
-from typing import Any
+from typing import Any, List
 
 _SEPARADORES_RE = re.compile(r"[ _\-.]")
 
@@ -42,3 +42,28 @@ def normalizar_encabezado(valor: Any, quitar_separadores: bool = False) -> str:
     if quitar_separadores:
         normalized = _SEPARADORES_RE.sub("", normalized)
     return normalized
+
+
+_MULTIVALOR_SEPARADORES_RE = re.compile(r"[,;]")
+
+
+def split_multivalor(valor: Any) -> List[str]:
+    """Normaliza un campo multi-valor (p.ej. `referencia.homologados`,
+    "Homologados otras marcas") a una lista limpia: separa por coma o punto y
+    coma, recorta espacios, descarta vacíos y deduplica preservando el orden
+    de aparición. Acepta un string (celda de Excel/CSV), una lista (JSON del
+    formulario, cuyos ítems también se separan) o un escalar no-texto (celda
+    numérica de Excel, se convierte a texto). `None` -> `[]`."""
+    if valor is None:
+        return []
+    items = valor if isinstance(valor, (list, tuple)) else [valor]
+
+    resultado: List[str] = []
+    for item in items:
+        if item is None:
+            continue
+        for parte in _MULTIVALOR_SEPARADORES_RE.split(str(item)):
+            parte = parte.strip()
+            if parte and parte not in resultado:
+                resultado.append(parte)
+    return resultado

@@ -66,10 +66,10 @@ def test_plantilla_referencia_returns_valid_xlsx_with_all_columns_in_order():
         "Nombre",
         "Línea comercial",
         "Unidad de empaque",
-        "Precio normal",
-        "Precio de venta",
-        "Precio al público",
+        "Precio Normal antes de IVA",
+        "Precio Público antes de IVA",
         "Código de referencia sustituta",
+        "Homologados otras marcas",
     ]
 
 

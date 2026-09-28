@@ -226,7 +226,10 @@ async def create_maestro(
     config = _config_or_404(entidad)
     data = _validated_or_422(config.create_schema, payload)
 
-    created = await config.create_fn(db, data, uuid.UUID(user.user_id))
+    try:
+        created = await config.create_fn(db, data, uuid.UUID(user.user_id))
+    except maestros.SustitutaInvalidaError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
     # `create_referencia` retorna `(referencia, advertencia_o_None)`; el
     # resto retorna el objeto solo -- única asimetría entre las 4 funciones
     # `create_*` de `services/maestros.py`.
@@ -248,7 +251,10 @@ async def update_maestro(
     obj = await _get_or_404(db, config, entity_id)
     data = _validated_or_422(config.update_schema, payload)
 
-    updated = await config.update_fn(db, obj, data, uuid.UUID(user.user_id))
+    try:
+        updated = await config.update_fn(db, obj, data, uuid.UUID(user.user_id))
+    except maestros.SustitutaInvalidaError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
     await db.commit()
     return _to_read(config, updated)
 

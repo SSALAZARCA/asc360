@@ -15,7 +15,7 @@
  * themselves, only through the component that calls them.
  */
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 
 const mockValidarCarga = jest.fn();
 const mockSubirCarga = jest.fn();
@@ -70,11 +70,23 @@ describe('BulkUploadModal — Descargar plantilla', () => {
     expect(await screen.findByText(/No se pudo descargar la plantilla/i)).toBeInTheDocument();
   });
 
-  it('lists precio_venta/precio_publico/sustituida_por_codigo for referencia (gga finding: CSV spec was out of sync with the backend Excel columns)', () => {
+  it('lists exactly the 9 referencia columns, in order, and no longer mentions precio de venta', () => {
     render(<BulkUploadModal entidad="referencia" onClose={jest.fn()} onSuccess={jest.fn()} />);
 
-    expect(screen.getByText('Precio de venta')).toBeInTheDocument();
-    expect(screen.getByText('Precio al público')).toBeInTheDocument();
-    expect(screen.getByText('Código de referencia sustituta')).toBeInTheDocument();
+    const list = screen.getByRole('list');
+    // Each item reads "<label> (obligatoria|opcional)" plus an optional tooltip.
+    const labels = within(list).getAllByRole('listitem').map((li) => li.textContent.split(' (')[0]);
+    expect(labels).toEqual([
+      'Código',
+      'Código del proveedor',
+      'Nombre',
+      'Línea comercial',
+      'Unidad de empaque',
+      'Precio Normal antes de IVA',
+      'Precio Público antes de IVA',
+      'Código de referencia sustituta',
+      'Homologados otras marcas',
+    ]);
+    expect(screen.queryByText(/Precio de venta/i)).not.toBeInTheDocument();
   });
 });

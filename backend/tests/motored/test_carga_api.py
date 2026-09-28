@@ -203,9 +203,10 @@ class TestResolveReferenciaRelaciones:
 
     async def test_matching_sustituida_por_codigo_resolves_to_its_id(self):
         referencia_id = uuid.uuid4()
-        referencia = Referencia(id=referencia_id, codigo="REF-OLD", proveedor_id=uuid.uuid4(), unidad_empaque=1)
-        session = FakeAsyncSession(execute_queue=[[referencia]])
-        filas = [{"codigo": "REF-NEW", "sustituida_por_codigo": "REF-OLD"}]
+        proveedor = Proveedor(id=uuid.uuid4(), codigo="HMCL", nombre="HMCL", es_principal=True)
+        referencia = Referencia(id=referencia_id, codigo="REF-OLD", proveedor_id=proveedor.id, unidad_empaque=1)
+        session = FakeAsyncSession(execute_queue=[[proveedor], [referencia]])
+        filas = [{"codigo": "REF-NEW", "proveedor_codigo": "HMCL", "sustituida_por_codigo": "REF-OLD"}]
 
         resolved, errores = await _resolve_referencia_relaciones(session, "referencia", filas)
 
@@ -347,3 +348,44 @@ class TestSustituidaPorCodigoEndToEnd:
         body = response.json()
         assert body["ok"] is True, body
         assert body["insertados"] == 1
+
+
+class TestSustitutaMustBelongToTheSameProveedor:
+    """Business rule (user decision 2026-09-28): the substitute MUST belong to
+    the same proveedor as the row. Equivalent parts from other proveedores or
+    brands go in "Homologados otras marcas", never as sustituta."""
+
+    async def test_same_proveedor_match_wins_over_other_proveedores(self):
+        hmcl_id, otros_id = uuid.uuid4(), uuid.uuid4()
+        hmcl = Proveedor(id=hmcl_id, codigo="HMCL", nombre="HMCL", es_principal=True)
+        same = Referencia(id=uuid.uuid4(), codigo="REF-OLD", proveedor_id=hmcl_id, unidad_empaque=1)
+        other = Referencia(id=uuid.uuid4(), codigo="REF-OLD", proveedor_id=otros_id, unidad_empaque=1)
+        session = FakeAsyncSession(execute_queue=[[hmcl], [other, same]])
+        filas = [{"codigo": "REF-NEW", "proveedor_codigo": "HMCL", "sustituida_por_codigo": "REF-OLD"}]
+
+        resolved, errores = await _resolve_referencia_relaciones(session, "referencia", filas)
+
+        assert errores == []
+        assert resolved[0]["sustituida_por"] == same.id
+
+    async def test_match_only_under_another_proveedor_is_a_row_error_pointing_to_homologados(self):
+        hmcl = Proveedor(id=uuid.uuid4(), codigo="HMCL", nombre="HMCL", es_principal=True)
+        other = Referencia(id=uuid.uuid4(), codigo="REF-OLD", proveedor_id=uuid.uuid4(), unidad_empaque=1)
+        session = FakeAsyncSession(execute_queue=[[hmcl], [other]])
+        filas = [{"codigo": "REF-NEW", "proveedor_codigo": "HMCL", "sustituida_por_codigo": "REF-OLD"}]
+
+        resolved, errores = await _resolve_referencia_relaciones(session, "referencia", filas)
+
+        assert len(errores) == 1
+        assert "Código de referencia sustituta" in errores[0]["motivo"]
+        assert "REF-OLD" in errores[0]["motivo"]
+        assert "Homologados otras marcas" in errores[0]["motivo"]
+        assert "sustituida_por" not in resolved[0]
+
+    async def test_unmatched_error_names_the_business_column(self):
+        session = FakeAsyncSession(execute_queue=[[]])
+        filas = [{"codigo": "REF-NEW", "sustituida_por_codigo": "GHOST"}]
+
+        _, errores = await _resolve_referencia_relaciones(session, "referencia", filas)
+
+        assert "Código de referencia sustituta" in errores[0]["motivo"]

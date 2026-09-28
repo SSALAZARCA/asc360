@@ -123,12 +123,14 @@ class TestReferenciaUpsertByCodigoProveedor:
 
 class TestReferenciaSustitucionDeactivates:
     async def test_setting_sustituida_por_deactivates_the_referencia(self):
+        proveedor_id = uuid.uuid4()
         referencia = Referencia(
-            id=uuid.uuid4(), codigo="R1", proveedor_id=uuid.uuid4(),
+            id=uuid.uuid4(), codigo="R1", proveedor_id=proveedor_id,
             unidad_empaque=1, activa=True,
         )
-        db = FakeAsyncSession()
         substitute_id = uuid.uuid4()
+        substitute = Referencia(id=substitute_id, codigo="R2", proveedor_id=proveedor_id, unidad_empaque=1)
+        db = FakeAsyncSession(execute_queue=[[substitute]])  # same-proveedor check
 
         updated = await maestros.update_referencia(
             db, referencia, ReferenciaUpdate(sustituida_por=substitute_id)

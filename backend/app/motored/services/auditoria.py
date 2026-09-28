@@ -7,14 +7,51 @@ bodega, proveedor, referencia), no un sistema de auditoría general. Cada
 llamada agrega una fila a la sesión vía `db.add(...)` -- el commit es
 responsabilidad del caller (ADR-5, sin auto-commit).
 """
+import hashlib
 import uuid
 from typing import Any, Dict, List, Optional
 
 from app.motored.models.auditoria_maestro import AuditoriaMaestro
 
 
+_VALOR_MAX_LENGTH = 500  # matches `AuditoriaMaestro.valor_anterior/valor_nuevo` String(500)
+
+
+def _digest(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:8]
+
+
+def _clip_items(items: List[str], full_text: str) -> str:
+    """Keeps whole items only (never cuts one in half) and appends a marker
+    with how many were left out plus a short hash of the FULL value, so two
+    different long values never collapse into the same audit text."""
+    shown: List[str] = []
+    for item in items:
+        candidate = ", ".join([*shown, item])
+        marker = f" … (+{len(items) - len(shown) - 1} más, #{_digest(full_text)})"
+        if len(candidate) + len(marker) > _VALOR_MAX_LENGTH:
+            break
+        shown.append(item)
+    marker = f" … (+{len(items) - len(shown)} más, #{_digest(full_text)})"
+    return ", ".join(shown) + marker
+
+
 def _stringify(value: Any) -> Optional[str]:
-    return None if value is None else str(value)
+    """List values (e.g. `referencia.homologados`) are joined readably.
+    Anything longer than the column is clipped by `_clip_items` (lists) or
+    to a prefix + hash marker (scalars), so the commit never fails and a real
+    change is never hidden by the clipping."""
+    if value is None:
+        return None
+    if isinstance(value, (list, tuple)):
+        items = [str(v) for v in value]
+        text = ", ".join(items)
+        return text if len(text) <= _VALOR_MAX_LENGTH else _clip_items(items, text)
+    text = str(value)
+    if len(text) <= _VALOR_MAX_LENGTH:
+        return text
+    marker = f" … (#{_digest(text)})"
+    return text[: _VALOR_MAX_LENGTH - len(marker)] + marker
 
 
 def _record(
