@@ -141,12 +141,14 @@ ALIASES_POR_ENTIDAD: Dict[str, List[Dict[str, Any]]] = {
     #
     # - `proveedor_codigo` es el código del PROVEEDOR (no un número de parte
     #   del proveedor) -- `api/carga.py` lo resuelve a `proveedor_id`.
-    # - `sustituida_por_codigo` es el código de OTRA referencia YA existente
-    #   -- `api/carga.py` lo resuelve a `sustituida_por` SOLO dentro del
-    #   proveedor de la fila; sin match ahí es error de fila (los
-    #   equivalentes de otras marcas van en `homologados`).
-    # - `homologados` es multi-valor: una celda con valores separados por
-    #   coma o punto y coma (`texto.split_multivalor`).
+    # - `sustituida_por_codigo` es el código de OTRA referencia del mismo
+    #   proveedor, ya existente en la base o cargada en este mismo archivo
+    #   -- `api/carga.py` la resuelve SOLO dentro del proveedor de la fila;
+    #   sin match ahí es error de fila.
+    # - `homologados`: modelos de moto de otras marcas con los que la
+    #   referencia es compatible (no códigos de repuesto). Multi-valor: una
+    #   celda con valores separados por coma o punto y coma
+    #   (`texto.split_multivalor`).
     # - `precio_venta` salió del layout (ya no se parsea ni va en la
     #   plantilla); la columna de la base de datos se conserva.
     "referencia": [

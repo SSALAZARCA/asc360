@@ -54,7 +54,7 @@ from app.motored.deps import MotoredUser, get_motored_db_or_503, require_motored
 from app.motored.models.proveedor import Proveedor
 from app.motored.models.referencia import Referencia
 from app.motored.schemas.carga import CargaRequest, CargaResultado
-from app.motored.services.carga import procesar_carga
+from app.motored.services.carga import SUSTITUTA_EN_ARCHIVO, procesar_carga
 from app.motored.services.carga_excel import CargaExcelError, LimiteFilasExcedidoError, parse_excel_rows
 from app.motored.services.validators import _SCHEMA_BY_ENTIDAD, validate_rows
 
@@ -88,54 +88,80 @@ def _check_size_guards(request: Request, payload: CargaRequest) -> None:
 
 
 def _pick_sustituta(
-    codigo: str, proveedor_id: Optional[uuid.UUID], candidatas: List[Referencia]
+    codigo: str,
+    proveedor_id: Optional[uuid.UUID],
+    candidatas: List[Referencia],
+    existe_en_archivo_otro_proveedor: bool = False,
 ) -> Tuple[Optional[uuid.UUID], Optional[str]]:
     """Elige la referencia sustituta para `codigo` entre `candidatas` (todas
     las referencias existentes con ese código -- la UNIQUE es
     `(codigo, proveedor_id)`, así que puede haber varias). Regla de negocio
     (decisión del usuario, 2026-09-28): la sustituta DEBE ser del MISMO
-    proveedor que la fila; un equivalente de otro proveedor/marca va en
-    "Homologados otras marcas", nunca como sustituta. Retorna `(id, None)` o
-    `(None, motivo_de_error)` -- nunca se descarta en silencio."""
+    proveedor que la fila. Retorna `(id, None)` o
+    `(None, motivo_de_error)` -- nunca se descarta en silencio.
+    `existe_en_archivo_otro_proveedor`: el código no está en la base bajo este
+    proveedor, pero sí aparece en el mismo archivo bajo OTRO proveedor -- el
+    motivo lo dice igual que si estuviera en la base."""
     for candidata in candidatas:
         if proveedor_id is not None and candidata.proveedor_id == proveedor_id:
             return candidata.id, None
-    if candidatas:
+    if candidatas or existe_en_archivo_otro_proveedor:
         return None, (
-            f"'Código de referencia sustituta' '{codigo}' existe, pero de otro proveedor. La sustituta "
-            "debe ser del mismo proveedor; los equivalentes de otras marcas van en 'Homologados otras marcas'."
+            f"'Código de referencia sustituta' '{codigo}' existe, pero de otro proveedor. "
+            "La referencia sustituta debe ser del mismo proveedor."
         )
     return None, (
         f"'Código de referencia sustituta' '{codigo}' no corresponde a ninguna referencia existente "
-        "de este proveedor"
+        "de este proveedor ni a otra fila del archivo"
     )
 
 
-async def _resolve_referencia_relaciones(
-    db: AsyncSession, entidad: str, filas: List[Dict[str, Any]]
-) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
-    """Para `referencia` ÚNICAMENTE: resuelve dos relaciones por código antes
-    de validar/escribir, cada una con UN query (`IN (...)`, no uno por fila)
-    -- alcance documentado en `services/carga.py`'s docstring ('la
-    resolución... es responsabilidad del llamador'). Retorna
-    `(filas_resueltas, errores_resolucion)`.
+_Llave = Tuple[str, uuid.UUID]  # (codigo, proveedor_id) -- la llave natural de `referencia`
 
-    - `proveedor_codigo` -> `proveedor_id` (FK REQUERIDA en
-      `ReferenciaCreate`): un código sin match simplemente deja `proveedor_id`
-      ausente de la fila -- `validate_rows` ya reporta un "campo requerido"
-      claro más adelante, así que esta función no necesita generar un error
-      propio para este caso.
-    - `sustituida_por_codigo` -> `sustituida_por` (FK OPCIONAL), elegida por
-      `_pick_sustituta` (SOLO del mismo proveedor). A diferencia
-      de arriba, dejar la fila silenciosamente sin `sustituida_por` cuando el
-      código no matchea violaría "todo o nada" (owner decision #1) -- un
-      typo de negocio pasaría desapercibido. Por eso un código sin match acá
-      SÍ genera una entrada en `errores_resolucion` (mismo shape `{fila,
-      motivo}` 1-indexado que `validate_rows.RowError`), que el caller
-      mezcla con los errores de validación antes de decidir todo-o-nada."""
-    if entidad != "referencia":
-        return filas, []
 
+def _ciclos_de_sustitucion(enlaces: Dict[_Llave, _Llave]) -> Dict[_Llave, List[_Llave]]:
+    """`enlaces`: fila del archivo -> sustituta que es OTRA fila del archivo.
+    Cada llave tiene a lo sumo un enlace (grafo funcional), así que basta con
+    seguir la cadena desde cada nodo. Retorna, para cada llave que forma parte
+    de un ciclo, el ciclo completo en orden (sin repetir el primero). Una
+    fila que solo APUNTA a un ciclo no es parte de él. Iterativo, O(n)."""
+    estado: Dict[_Llave, int] = {}  # 1 = en el camino actual, 2 = ya resuelto
+    ciclos: Dict[_Llave, List[_Llave]] = {}
+    for inicio in enlaces:
+        camino: List[_Llave] = []
+        nodo: Optional[_Llave] = inicio
+        while nodo is not None and nodo not in estado:
+            estado[nodo] = 1
+            camino.append(nodo)
+            nodo = enlaces.get(nodo)
+        if nodo is not None and estado.get(nodo) == 1:
+            ciclo = camino[camino.index(nodo):]
+            for miembro in ciclo:
+                ciclos[miembro] = ciclo
+        for visitado in camino:
+            estado[visitado] = 2
+    return ciclos
+
+
+def _motivo_ciclo(ciclo: List[_Llave], desde: _Llave) -> str:
+    """El ciclo contado desde la fila que recibe el error, para que cada
+    fila lea su propia cadena: 'A -> B -> C -> A'."""
+    i = ciclo.index(desde)
+    codigos = [llave[0] for llave in ciclo[i:] + ciclo[:i]]
+    return (
+        f"'Código de referencia sustituta' '{codigos[1 % len(codigos)]}' forma un ciclo de sustitución "
+        f"dentro del archivo ({' -> '.join(codigos + [codigos[0]])}). Una referencia no puede terminar "
+        "sustituyéndose a sí misma."
+    )
+
+
+async def _cargar_proveedores_y_candidatas(
+    db: AsyncSession, filas: List[Dict[str, Any]]
+) -> Tuple[Dict[str, uuid.UUID], Dict[str, List[Referencia]]]:
+    """Los DOS únicos queries de la resolución (`IN (...)`, nunca uno por
+    fila): `proveedor_codigo` -> `proveedor_id`, y todas las referencias de
+    la base cuyo código aparece como sustituta (de cualquier proveedor --
+    `_pick_sustituta` decide cuál sirve)."""
     proveedor_codigos = {fila.get("proveedor_codigo") for fila in filas if fila.get("proveedor_codigo")}
     sustituida_por_codigos = {
         fila.get("sustituida_por_codigo") for fila in filas if fila.get("sustituida_por_codigo")
@@ -152,26 +178,124 @@ async def _resolve_referencia_relaciones(
         for referencia in result.scalars().all():
             referencias_by_codigo.setdefault(referencia.codigo, []).append(referencia)
 
-    resolved: List[Dict[str, Any]] = []
-    errores_resolucion: List[Dict[str, Any]] = []
-    for index, fila in enumerate(filas, start=1):
-        fila = dict(fila)
+    return proveedor_id_by_codigo, referencias_by_codigo
 
+
+def _asignar_proveedor_id(
+    filas: List[Dict[str, Any]], proveedor_id_by_codigo: Dict[str, uuid.UUID]
+) -> List[Dict[str, Any]]:
+    """Copia cada fila y setea `proveedor_id` cuando `proveedor_codigo`
+    matchea. Sin match la fila queda sin `proveedor_id` (FK REQUERIDA en
+    `ReferenciaCreate`) y `validate_rows` ya reporta un "campo requerido"
+    claro más adelante -- acá no hace falta un error propio."""
+    resolved: List[Dict[str, Any]] = []
+    for fila in filas:
+        fila = dict(fila)
         proveedor_codigo = fila.get("proveedor_codigo")
         if proveedor_codigo in proveedor_id_by_codigo:
             fila["proveedor_id"] = proveedor_id_by_codigo[proveedor_codigo]
+        resolved.append(fila)
+    return resolved
 
+
+def _motivo_autorreferencia(codigo: str) -> str:
+    return (
+        f"'Código de referencia sustituta' '{codigo}' es el mismo código de la fila: "
+        "una referencia no puede sustituirse a sí misma."
+    )
+
+
+def _clasificar_sustitutas(
+    resolved: List[Dict[str, Any]], referencias_by_codigo: Dict[str, List[Referencia]]
+) -> Tuple[Dict[int, str], Dict[_Llave, _Llave], Dict[_Llave, List[int]]]:
+    """Clasifica cada `sustituida_por_codigo` (SOLO del mismo proveedor), en
+    este orden:
+    1. Autorreferencia -> error de fila.
+    2. Otra fila del MISMO archivo con ese código y proveedor: la fila queda
+       marcada con `SUSTITUTA_EN_ARCHIVO` y `procesar_carga` setea el enlace
+       en una segunda pasada, después de insertar todo (odd/tasks/motored-
+       sustituta-mismo-archivo.md). Se prefiere al match de base porque la
+       fila del archivo es la versión que va a quedar, y el chequeo de
+       ciclos la necesita.
+    3. La base, vía `_pick_sustituta` -> `sustituida_por` directo; sin match
+       es error de fila (nunca se descarta en silencio: "todo o nada", owner
+       decision #1).
+    Muta `resolved` in-place. Retorna `(errores_by_index, enlaces,
+    index_by_llave)`: errores por fila 1-indexada, los enlaces dentro del
+    archivo (fila -> sustituta) y qué filas corresponden a cada llave."""
+    llaves_en_archivo = {
+        (fila.get("codigo"), fila["proveedor_id"]) for fila in resolved if fila.get("proveedor_id")
+    }
+    codigos_en_archivo = {codigo for codigo, _ in llaves_en_archivo}
+
+    errores_by_index: Dict[int, str] = {}
+    enlaces: Dict[_Llave, _Llave] = {}
+    index_by_llave: Dict[_Llave, List[int]] = {}
+    for index, fila in enumerate(resolved, start=1):
         sustituida_por_codigo = fila.get("sustituida_por_codigo")
-        if sustituida_por_codigo:
+        if not sustituida_por_codigo:
+            continue
+        proveedor_id = fila.get("proveedor_id")
+        llave_sustituta = (sustituida_por_codigo, proveedor_id)
+
+        if proveedor_id is not None and sustituida_por_codigo == fila.get("codigo"):
+            errores_by_index[index] = _motivo_autorreferencia(sustituida_por_codigo)
+        elif proveedor_id is not None and llave_sustituta in llaves_en_archivo:
+            fila[SUSTITUTA_EN_ARCHIVO] = sustituida_por_codigo
+            llave = (fila.get("codigo"), proveedor_id)
+            enlaces[llave] = llave_sustituta
+            index_by_llave.setdefault(llave, []).append(index)
+        else:
             sustituta_id, motivo = _pick_sustituta(
-                sustituida_por_codigo, fila.get("proveedor_id"), referencias_by_codigo.get(sustituida_por_codigo, [])
+                sustituida_por_codigo,
+                proveedor_id,
+                referencias_by_codigo.get(sustituida_por_codigo, []),
+                existe_en_archivo_otro_proveedor=sustituida_por_codigo in codigos_en_archivo,
             )
             if sustituta_id is not None:
                 fila["sustituida_por"] = sustituta_id
             else:
-                errores_resolucion.append({"fila": index, "motivo": motivo})
+                errores_by_index[index] = motivo
 
-        resolved.append(fila)
+    return errores_by_index, enlaces, index_by_llave
+
+
+def _marcar_ciclos(
+    resolved: List[Dict[str, Any]],
+    errores_by_index: Dict[int, str],
+    enlaces: Dict[_Llave, _Llave],
+    index_by_llave: Dict[_Llave, List[int]],
+) -> None:
+    """Cada fila que forma parte de un ciclo dentro del archivo recibe su
+    error de fila (in-place en `errores_by_index`) y pierde la marca
+    `SUSTITUTA_EN_ARCHIVO` -- nunca llega a la segunda pasada."""
+    for llave, ciclo in _ciclos_de_sustitucion(enlaces).items():
+        for index in index_by_llave[llave]:
+            errores_by_index[index] = _motivo_ciclo(ciclo, llave)
+            resolved[index - 1].pop(SUSTITUTA_EN_ARCHIVO, None)
+
+
+async def _resolve_referencia_relaciones(
+    db: AsyncSession, entidad: str, filas: List[Dict[str, Any]]
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """Para `referencia` ÚNICAMENTE: resuelve `proveedor_codigo` ->
+    `proveedor_id` y `sustituida_por_codigo` -> sustituta antes de
+    validar/escribir, con dos queries en total (alcance documentado en
+    `services/carga.py`'s docstring: 'la resolución... es responsabilidad
+    del llamador'). Retorna `(filas_resueltas, errores_resolucion)`, con
+    `errores_resolucion` en el mismo shape `{fila, motivo}` 1-indexado que
+    `validate_rows.RowError`, que el caller mezcla antes de decidir
+    todo-o-nada. Como `validar` y `carga` comparten esta función, el dry-run
+    da el mismo veredicto. Detalle de cada paso en sus helpers."""
+    if entidad != "referencia":
+        return filas, []
+
+    proveedor_id_by_codigo, referencias_by_codigo = await _cargar_proveedores_y_candidatas(db, filas)
+    resolved = _asignar_proveedor_id(filas, proveedor_id_by_codigo)
+    errores_by_index, enlaces, index_by_llave = _clasificar_sustitutas(resolved, referencias_by_codigo)
+    _marcar_ciclos(resolved, errores_by_index, enlaces, index_by_llave)
+
+    errores_resolucion = [{"fila": i, "motivo": errores_by_index[i]} for i in sorted(errores_by_index)]
     return resolved, errores_resolucion
 
 

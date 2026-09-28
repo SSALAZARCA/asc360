@@ -17,11 +17,18 @@ contra un caché de proveedores). Esta función exige que la fila ya traiga
 "campo requerido".
 """
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from app.motored.schemas.carga import CargaErrorRow, CargaResultado
+from app.motored.schemas.referencia import ReferenciaUpdate
 from app.motored.services import maestros
 from app.motored.services.validators import _SCHEMA_BY_ENTIDAD, validate_rows
+
+# Clave interna de fila (nunca llega al schema Pydantic): código de la
+# sustituta cuando es OTRA fila del mismo archivo y proveedor. La setea
+# `api/carga.py::_resolve_referencia_relaciones`; la consume
+# `_enlazar_sustitutas_del_archivo` en la segunda pasada.
+SUSTITUTA_EN_ARCHIVO = "_sustituta_codigo_en_archivo"
 
 _UPSERT_BY_ENTIDAD = {
     "sucursal": maestros.upsert_sucursal,
@@ -37,14 +44,14 @@ def _row_to_schema(entidad: str, row: Dict[str, Any]):
     probó que construye sin lanzar `ValidationError`, así que esta segunda
     construcción es segura por diseño, nunca un punto nuevo de fallo."""
     schema_cls = _SCHEMA_BY_ENTIDAD[entidad]
-    payload = {k: v for k, v in row.items() if k != "_warnings"}
+    payload = {k: v for k, v in row.items() if not k.startswith("_")}
     return schema_cls(**payload)
 
 
 async def _upsert_row(
     db, entidad: str, row: Dict[str, Any], usuario_id: Optional[uuid.UUID]
 ) -> tuple:
-    """Sube UNA fila ya validada y retorna `(created, advertencias)`.
+    """Sube UNA fila ya validada y retorna `(obj, created, advertencias)`.
 
     Las 4 funciones `upsert_*` retornan `(obj, advertencia_o_None,
     created)` -- `created` es explícito, decidido por la propia rama
@@ -59,11 +66,30 @@ async def _upsert_row(
     payload = _row_to_schema(entidad, row)
 
     upsert_fn = _UPSERT_BY_ENTIDAD[entidad]
-    _obj, upsert_warning, created = await upsert_fn(db, payload, usuario_id)
+    obj, upsert_warning, created = await upsert_fn(db, payload, usuario_id)
     if upsert_warning:
         row_warnings.append(upsert_warning)
 
-    return created, row_warnings
+    return obj, created, row_warnings
+
+
+async def _enlazar_sustitutas_del_archivo(
+    db, pendientes: List[Tuple[Any, str]], objs: List[Any], usuario_id: Optional[uuid.UUID]
+) -> None:
+    """Segunda pasada: setea `sustituida_por` para las filas cuya sustituta
+    es otra fila del mismo archivo. `flush()` primero, para que todas las
+    filas nuevas ya estén insertadas cuando se escribe la FK. El resolver ya
+    garantizó que cada objetivo existe en el archivo bajo el mismo proveedor
+    y que no hay ciclos, así que la búsqueda en `por_llave` no puede fallar."""
+    if not pendientes:
+        return
+    await db.flush()
+    por_llave = {(obj.codigo, obj.proveedor_id): obj for obj in objs}
+    for obj, codigo_sustituta in pendientes:
+        sustituta = por_llave[(codigo_sustituta, obj.proveedor_id)]
+        await maestros.update_referencia(
+            db, obj, ReferenciaUpdate(sustituida_por=sustituta.id), usuario_id, verificar_sustituta=False
+        )
 
 
 async def procesar_carga(
@@ -103,8 +129,13 @@ async def procesar_carga(
     actualizados = 0
     advertencias: List[Dict[str, Any]] = []
 
+    objs: List[Any] = []
+    pendientes: List[Tuple[Any, str]] = []
     for index, row in enumerate(valid_rows, start=1):
-        created, row_warnings = await _upsert_row(db, entidad, row, usuario_id)
+        obj, created, row_warnings = await _upsert_row(db, entidad, row, usuario_id)
+        objs.append(obj)
+        if row.get(SUSTITUTA_EN_ARCHIVO):
+            pendientes.append((obj, row[SUSTITUTA_EN_ARCHIVO]))
         if created:
             insertados += 1
         else:
@@ -112,6 +143,7 @@ async def procesar_carga(
         if row_warnings:
             advertencias.append({"fila": index, "advertencias": row_warnings})
 
+    await _enlazar_sustitutas_del_archivo(db, pendientes, objs, usuario_id)
     await db.commit()
 
     return CargaResultado(

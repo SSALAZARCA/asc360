@@ -352,8 +352,9 @@ class TestSustituidaPorCodigoEndToEnd:
 
 class TestSustitutaMustBelongToTheSameProveedor:
     """Business rule (user decision 2026-09-28): the substitute MUST belong to
-    the same proveedor as the row. Equivalent parts from other proveedores or
-    brands go in "Homologados otras marcas", never as sustituta."""
+    the same proveedor as the row. The error states only that rule
+    (`homologados` holds compatible motorcycle models, not parts, so it is
+    never suggested as an alternative)."""
 
     async def test_same_proveedor_match_wins_over_other_proveedores(self):
         hmcl_id, otros_id = uuid.uuid4(), uuid.uuid4()
@@ -368,7 +369,7 @@ class TestSustitutaMustBelongToTheSameProveedor:
         assert errores == []
         assert resolved[0]["sustituida_por"] == same.id
 
-    async def test_match_only_under_another_proveedor_is_a_row_error_pointing_to_homologados(self):
+    async def test_match_only_under_another_proveedor_is_a_plain_same_proveedor_row_error(self):
         hmcl = Proveedor(id=uuid.uuid4(), codigo="HMCL", nombre="HMCL", es_principal=True)
         other = Referencia(id=uuid.uuid4(), codigo="REF-OLD", proveedor_id=uuid.uuid4(), unidad_empaque=1)
         session = FakeAsyncSession(execute_queue=[[hmcl], [other]])
@@ -379,7 +380,8 @@ class TestSustitutaMustBelongToTheSameProveedor:
         assert len(errores) == 1
         assert "Código de referencia sustituta" in errores[0]["motivo"]
         assert "REF-OLD" in errores[0]["motivo"]
-        assert "Homologados otras marcas" in errores[0]["motivo"]
+        assert "La referencia sustituta debe ser del mismo proveedor." in errores[0]["motivo"]
+        assert "Homologados" not in errores[0]["motivo"]
         assert "sustituida_por" not in resolved[0]
 
     async def test_unmatched_error_names_the_business_column(self):

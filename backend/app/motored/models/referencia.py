@@ -15,8 +15,9 @@ Reglas bloqueantes (proposal §4.1/§5.8, spec):
 - `precio_venta` ya NO forma parte del layout de negocio (plantilla Excel,
   parser de carga masiva, tabla UI -- owner request 2026-09-28), pero la
   columna se conserva a propósito (sin pérdida de datos).
-- `homologados` ("Homologados otras marcas"): lista de códigos equivalentes
-  de otras marcas. NOT NULL con default `{}` (lista vacía) -- nunca NULL,
+- `homologados` ("Homologados otras marcas"): lista de MODELOS de moto de
+  otras marcas con los que la referencia es compatible (confirmado por
+  negocio 2026-09-28) -- no son códigos de repuesto. NOT NULL con default `{}` (lista vacía) -- nunca NULL,
   para que "sin homologados" tenga una sola representación.
 """
 import uuid

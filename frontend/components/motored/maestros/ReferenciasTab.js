@@ -49,8 +49,8 @@ const HELP = {
   unidadEmpaque: 'Cuántas unidades vienen por paquete del proveedor. Nunca puede ser 0: si lo dejás vacío o en 0, el sistema lo corrige automáticamente a 1 y lo marca como advertencia en el tablero de salud.',
   precioNormal: 'Precio sin IVA. Es el precio que usa el sistema para calcular el valor de los pedidos.',
   precioPublico: 'Precio al público sin IVA. Informativo únicamente — no se usa para calcular el valor de los pedidos.',
-  sustituta: 'Si esta referencia fue reemplazada por otra del MISMO proveedor, acá va el código de esa otra referencia. Al guardar, esta referencia queda desactivada automáticamente. Los equivalentes de otras marcas van en "Homologados otras marcas".',
-  homologados: 'Códigos equivalentes de otras marcas. Podés poner varios separados por coma o punto y coma (ej: YAM-123; HON-456).',
+  sustituta: 'Si esta referencia fue reemplazada por otra del MISMO proveedor, acá va el código de esa otra referencia. Al guardar, esta referencia queda desactivada automáticamente. La referencia sustituta debe ser del mismo proveedor.',
+  homologados: 'Modelos de moto de otras marcas con los que este repuesto es compatible. Podés poner varios separados por coma o punto y coma (ej: Yamaha FZ 150; Honda CB 190R).',
 };
 
 const PRECIO_FIELDS = [
@@ -81,12 +81,8 @@ function PrecioFields({ form, setForm }) {
   ));
 }
 
-function ReferenciaForm({ form, setForm, editingId, proveedores, referencias, onSubmit, onCancel }) {
-  // Business rule (2026-09-28): the substitute MUST belong to the same
-  // proveedor (enforced server-side too). Other brands go in homologados.
-  const referenciasParaSustituir = referencias.filter(
-    (r) => r.id !== editingId && form.proveedor_id && r.proveedor_id === form.proveedor_id
-  );
+function ProveedorSelect({ form, setForm, proveedores, referencias }) {
+  // Changing the proveedor drops a sustituta that no longer matches it.
   const onProveedorChange = (proveedorId) => {
     const sustituta = referencias.find((r) => r.id === form.sustituida_por);
     const keepSustituta = sustituta && sustituta.proveedor_id === proveedorId;
@@ -94,20 +90,49 @@ function ReferenciaForm({ form, setForm, editingId, proveedores, referencias, on
   };
 
   return (
+    <label style={{ display: 'flex', flexDirection: 'column', fontSize: '0.7rem', color: 'var(--motored-text-muted, #5a5a5a)' }}>
+      <span>
+        Código del proveedor
+        <InfoTooltip text={HELP.proveedor} />
+      </span>
+      <select value={form.proveedor_id} onChange={(e) => onProveedorChange(e.target.value)} required>
+        <option value="" style={{ color: '#1a1a18' }}>— Elegir —</option>
+        {proveedores.map((p) => (
+          <option key={p.id} value={p.id} style={{ color: '#1a1a18' }}>{p.codigo} — {p.nombre}</option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function SustitutaSelect({ form, setForm, editingId, referencias }) {
+  // Business rule (2026-09-28): the substitute MUST belong to the same
+  // proveedor (enforced server-side too).
+  const referenciasParaSustituir = referencias.filter(
+    (r) => r.id !== editingId && form.proveedor_id && r.proveedor_id === form.proveedor_id
+  );
+
+  return (
+    <label style={{ display: 'flex', flexDirection: 'column', fontSize: '0.7rem', color: 'var(--motored-text-muted, #5a5a5a)' }}>
+      <span>
+        Código de referencia sustituta
+        <InfoTooltip text={HELP.sustituta} />
+      </span>
+      <select value={form.sustituida_por} onChange={(e) => setForm({ ...form, sustituida_por: e.target.value })}>
+        <option value="" style={{ color: '#1a1a18' }}>— No aplica —</option>
+        {referenciasParaSustituir.map((r) => (
+          <option key={r.id} value={r.id} style={{ color: '#1a1a18' }}>{r.codigo}</option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function ReferenciaForm({ form, setForm, editingId, proveedores, referencias, onSubmit, onCancel }) {
+  return (
     <form onSubmit={onSubmit} style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
       <FormField label="Código" required value={form.codigo} onChange={(e) => setForm({ ...form, codigo: e.target.value })} />
-      <label style={{ display: 'flex', flexDirection: 'column', fontSize: '0.7rem', color: 'var(--motored-text-muted, #5a5a5a)' }}>
-        <span>
-          Código del proveedor
-          <InfoTooltip text={HELP.proveedor} />
-        </span>
-        <select value={form.proveedor_id} onChange={(e) => onProveedorChange(e.target.value)} required>
-          <option value="" style={{ color: '#1a1a18' }}>— Elegir —</option>
-          {proveedores.map((p) => (
-            <option key={p.id} value={p.id} style={{ color: '#1a1a18' }}>{p.codigo} — {p.nombre}</option>
-          ))}
-        </select>
-      </label>
+      <ProveedorSelect form={form} setForm={setForm} proveedores={proveedores} referencias={referencias} />
       <FormField label="Nombre" value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} />
       <FormField
         label="Línea comercial"
@@ -122,23 +147,12 @@ function ReferenciaForm({ form, setForm, editingId, proveedores, referencias, on
         onChange={(e) => setForm({ ...form, unidad_empaque: e.target.value })}
       />
       <PrecioFields form={form} setForm={setForm} />
-      <label style={{ display: 'flex', flexDirection: 'column', fontSize: '0.7rem', color: 'var(--motored-text-muted, #5a5a5a)' }}>
-        <span>
-          Código de referencia sustituta
-          <InfoTooltip text={HELP.sustituta} />
-        </span>
-        <select value={form.sustituida_por} onChange={(e) => setForm({ ...form, sustituida_por: e.target.value })}>
-          <option value="" style={{ color: '#1a1a18' }}>— No aplica —</option>
-          {referenciasParaSustituir.map((r) => (
-            <option key={r.id} value={r.id} style={{ color: '#1a1a18' }}>{r.codigo}</option>
-          ))}
-        </select>
-      </label>
+      <SustitutaSelect form={form} setForm={setForm} editingId={editingId} referencias={referencias} />
       <FormField
         label="Homologados otras marcas"
         tooltip={HELP.homologados}
         value={form.homologados}
-        placeholder="YAM-123; HON-456"
+        placeholder="AK 125 FLEX, APACHE 160, CB 100"
         onChange={(e) => setForm({ ...form, homologados: e.target.value })}
       />
       <button type="submit" className="motored-btn motored-btn-primary">{editingId ? 'Guardar cambios' : 'Crear referencia'}</button>

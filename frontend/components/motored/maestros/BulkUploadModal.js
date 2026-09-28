@@ -155,12 +155,12 @@ const COLUMNAS_POR_ENTIDAD = {
         'sustituida_por_codigo', 'sustituida por codigo', 'codigo sustituta',
         'codigo de referencia sustituta',
       ],
-      help: 'Si esta referencia fue reemplazada por otra YA existente del MISMO proveedor, poné acá el código de esa otra referencia. Los equivalentes de otras marcas van en "Homologados otras marcas". Dejalo vacío si no aplica.',
+      help: 'Si esta referencia fue reemplazada por otra del MISMO proveedor (ya existente o cargada en este mismo archivo), poné acá el código de esa otra referencia. La referencia sustituta debe ser del mismo proveedor. Dejalo vacío si no aplica.',
     },
     {
       key: 'homologados', label: 'Homologados otras marcas', required: false,
       aliases: ['homologados', 'homologados otras marcas'],
-      help: 'Códigos equivalentes de otras marcas. Podés poner varios en la misma celda, separados por coma o punto y coma (ej: YAM-123; HON-456).',
+      help: 'Modelos de moto de otras marcas con los que este repuesto es compatible. Podés poner varios en la misma celda, separados por coma o punto y coma (ej: Yamaha FZ 150; Honda CB 190R).',
     },
   ],
 };

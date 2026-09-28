@@ -218,8 +218,7 @@ async def get_referencia_by_codigo_proveedor(db, codigo: str, proveedor_id: uuid
 class SustitutaInvalidaError(ValueError):
     """La sustituta pedida no existe, es la misma referencia, o es de OTRO
     proveedor. Regla de negocio (decisión del usuario, 2026-09-28): la
-    sustituta DEBE ser del mismo proveedor; un equivalente de otra marca va en
-    `homologados`. El router la traduce a 422."""
+    sustituta DEBE ser del mismo proveedor. El router la traduce a 422."""
 
 
 async def _verificar_sustituta(
@@ -239,8 +238,8 @@ async def _verificar_sustituta(
         raise SustitutaInvalidaError("'Código de referencia sustituta': la referencia elegida no existe.")
     if sustituta.proveedor_id != proveedor_id:
         raise SustitutaInvalidaError(
-            f"'Código de referencia sustituta': '{sustituta.codigo}' es de otro proveedor. La sustituta debe "
-            "ser del mismo proveedor; los equivalentes de otras marcas van en 'Homologados otras marcas'."
+            f"'Código de referencia sustituta': '{sustituta.codigo}' es de otro proveedor. "
+            "La referencia sustituta debe ser del mismo proveedor."
         )
 
 

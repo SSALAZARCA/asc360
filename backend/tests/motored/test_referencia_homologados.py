@@ -220,7 +220,9 @@ class TestSustitutaSameProveedorOnSingleRecordWrites:
 
         with pytest.raises(maestros.SustitutaInvalidaError) as exc_info:
             await maestros.create_referencia(db, data)
-        assert "Homologados otras marcas" in str(exc_info.value)
+        assert "Código de referencia sustituta" in str(exc_info.value)
+        assert "La referencia sustituta debe ser del mismo proveedor." in str(exc_info.value)
+        assert "Homologados" not in str(exc_info.value)
         assert db.added == []
 
     async def test_create_with_an_unknown_substitute_is_rejected(self):

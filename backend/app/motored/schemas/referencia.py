@@ -10,7 +10,8 @@ sustituta, Homologados otras marcas.
 but the DB column is kept, so the schemas still accept/return it for
 backward compatibility.
 
-`homologados` is multi-value: a string ("A; B, C") or a list is normalized by
+`homologados` holds compatible motorcycle MODELS of other brands (business
+confirmed 2026-09-28), not part codes. It is multi-value: a string ("A; B, C") or a list is normalized by
 `texto.split_multivalor` (split on comma/semicolon, trim, drop empties,
 dedupe preserving order). The DB column is NOT NULL with an empty-array
 default, so `None` always normalizes to `[]`.

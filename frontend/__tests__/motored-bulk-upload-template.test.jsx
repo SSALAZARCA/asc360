@@ -89,4 +89,18 @@ describe('BulkUploadModal — Descargar plantilla', () => {
     ]);
     expect(screen.queryByText(/Precio de venta/i)).not.toBeInTheDocument();
   });
+
+  it('describes homologados as compatible motorcycle models and allows a sustituta from the same file', () => {
+    render(<BulkUploadModal entidad="referencia" onClose={jest.fn()} onSuccess={jest.fn()} />);
+
+    const items = within(screen.getByRole('list')).getAllByRole('listitem');
+    const homologados = items.find((li) => li.textContent.startsWith('Homologados otras marcas')).textContent;
+    const sustituta = items.find((li) => li.textContent.startsWith('Código de referencia sustituta')).textContent;
+
+    expect(homologados).toMatch(/modelos de moto/i);
+    expect(homologados).not.toMatch(/c[oó]digos equivalentes/i);
+    expect(sustituta).toMatch(/mismo archivo/i);
+    expect(sustituta).toMatch(/mismo proveedor/i);
+    expect(sustituta).not.toMatch(/homologados/i);
+  });
 });

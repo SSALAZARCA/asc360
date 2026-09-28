@@ -120,6 +120,25 @@ describe('ReferenciasTab — table', () => {
       'Homologados otras marcas',
     ]));
   });
+  it('describes homologados as compatible motorcycle models of other brands, not part codes', async () => {
+    const table = await renderTab();
+    const header = within(table).getAllByRole('columnheader')
+      .find((th) => headerLabel(th) === 'Homologados otras marcas');
+    const tooltip = within(header).getByRole('note').textContent;
+
+    expect(tooltip).toMatch(/modelos de moto/i);
+    expect(tooltip).not.toMatch(/c[oó]digos/i);
+  });
+
+  it('the sustituta tooltip states the same-proveedor rule without pointing to homologados', async () => {
+    const table = await renderTab();
+    const header = within(table).getAllByRole('columnheader')
+      .find((th) => headerLabel(th) === 'Código de referencia sustituta');
+    const tooltip = within(header).getByRole('note').textContent;
+
+    expect(tooltip).toMatch(/mismo proveedor/i);
+    expect(tooltip).not.toMatch(/homologados/i);
+  });
 });
 
 describe('ReferenciasTab — form', () => {
