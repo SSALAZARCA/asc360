@@ -189,6 +189,49 @@ def test_carga_excel_referencia_resolves_proveedor_codigo_to_proveedor_id():
     assert body["insertados"] == 1
 
 
+def test_validar_excel_referencia_surfaces_unmatched_sustituida_por_codigo_as_resolution_error():
+    """Ad-hoc bugfix (not tracked under sdd/*): the `.xlsx` path shares the
+    exact same `_resolve_referencia_relaciones` + merge logic as the JSON
+    path -- a resolution error must surface here too, not just via
+    `test_carga_api.py`'s JSON-rows tests."""
+    session = FakeAsyncSession(execute_queue=[[], []])  # probe, sustituida_por_codigo lookup (no match)
+    override_motored_db(session)
+    file_bytes = _xlsx_bytes(
+        ["Código", "Código proveedor", "Código de referencia sustituta"],
+        [["REF1", "", "GHOST"]],
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/motored/maestros/referencia/carga/excel/validar",
+            files=_upload_file("referencias.xlsx", file_bytes),
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is False
+    assert any("GHOST" in e["motivo"] for e in body["errores"])
+    assert session.committed is False
+
+
+def test_carga_excel_referencia_blocks_whole_write_on_unmatched_sustituida_por_codigo():
+    session = FakeAsyncSession(execute_queue=[[], []])  # probe, sustituida_por_codigo lookup (no match)
+    override_motored_db(session)
+    file_bytes = _xlsx_bytes(
+        ["Código", "Código proveedor", "Código de referencia sustituta"],
+        [["REF1", "", "GHOST"]],
+    )
+
+    with TestClient(app) as client:
+        response = client.post(CARGA_EXCEL_REFERENCIA_URL, files=_upload_file("referencias.xlsx", file_bytes))
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is False
+    assert session.added == []
+    assert session.committed is False
+
+
 def test_non_admin_compras_role_is_rejected_with_403(monkeypatch):
     override_motored_user(MotoredUser(user_id=str(uuid.uuid4()), role="CONSULTA"))
     session = FakeAsyncSession(execute_queue=[[]])

@@ -67,16 +67,30 @@ async def _upsert_row(
 
 
 async def procesar_carga(
-    db, entidad: str, rows: List[Dict[str, Any]], usuario_id: Optional[uuid.UUID] = None
+    db,
+    entidad: str,
+    rows: List[Dict[str, Any]],
+    usuario_id: Optional[uuid.UUID] = None,
+    errores_previos: Optional[List[Dict[str, Any]]] = None,
 ) -> CargaResultado:
     """Valida TODO el archivo antes de escribir NADA. Si `validate_rows`
     reporta cualquier error, retorna de inmediato (`ok=False`) sin haber
     tocado la sesión -- ni un `db.add`, ni un `db.commit`. Solo si el
     archivo entero es válido se hace upsert fila por fila y se hace UN
     `commit()` al final (transacción única, spec "A fully valid file
-    commits atomically")."""
+    commits atomically").
+
+    `errores_previos` (ad-hoc bugfix, no trackeado bajo ningún sdd/*): el
+    caller (`api/carga.py`'s `_resolve_referencia_relaciones`) puede haber
+    encontrado ya un error ANTES de invocar esta función (p.ej. un
+    `sustituida_por_codigo` sin match) -- se mezcla acá con los errores de
+    `validate_rows` ANTES del chequeo todo-o-nada, así que un error de
+    resolución por sí solo alcanza para bloquear TODO el archivo, exacto
+    mismo contrato que ya promete esta función para un error de
+    validación."""
     total_filas = len(rows)
     valid_rows, row_errors = validate_rows(entidad, rows)
+    row_errors = list(errores_previos or []) + row_errors
 
     if row_errors:
         return CargaResultado(

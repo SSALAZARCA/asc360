@@ -43,7 +43,7 @@
  */
 import { useState } from 'react';
 import Papa from 'papaparse';
-import { validarCarga, subirCarga, validarCargaArchivo, subirCargaArchivo } from '../../../lib/motored/api';
+import { validarCarga, subirCarga, validarCargaArchivo, subirCargaArchivo, descargarPlantilla } from '../../../lib/motored/api';
 import InfoTooltip from '../InfoTooltip';
 
 // Columnas esperadas por maestro (sucursal/bodega/proveedor/referencia).
@@ -139,6 +139,25 @@ const COLUMNAS_POR_ENTIDAD = {
       key: 'precio_normal', label: 'Precio normal', required: false, aliases: ['precio_normal', 'precio normal'],
       help: 'El precio que usa el sistema para calcular el valor de los pedidos.',
     },
+    {
+      key: 'precio_venta', label: 'Precio de venta', required: false,
+      aliases: ['precio_venta', 'precio venta'],
+      help: 'Informativo únicamente — no se usa para calcular el valor de los pedidos.',
+    },
+    {
+      key: 'precio_publico', label: 'Precio al público', required: false,
+      aliases: ['precio_publico', 'precio publico', 'precio público'],
+      help: 'Informativo únicamente — no se usa para calcular el valor de los pedidos.',
+    },
+    {
+      key: 'sustituida_por_codigo', label: 'Código de referencia sustituta', required: false,
+      aliases: [
+        'sustituida_por_codigo', 'sustituida por codigo', 'sustituida por código',
+        'codigo sustituta', 'código sustituta',
+        'codigo de referencia sustituta', 'código de referencia sustituta',
+      ],
+      help: 'Si esta referencia fue reemplazada por otra YA existente, poné acá el código de esa otra referencia. Dejalo vacío si no aplica.',
+    },
   ],
 };
 
@@ -185,18 +204,6 @@ function missingRequiredColumns(entidad, rawHeaders) {
   const columnMap = buildColumnMap(entidad, rawHeaders);
   const presentKeys = new Set(Object.values(columnMap));
   return spec.filter((col) => col.required && !presentKeys.has(col.key)).map((col) => col.label);
-}
-
-function downloadTemplate(entidad) {
-  const spec = COLUMNAS_POR_ENTIDAD[entidad] || [];
-  const csv = Papa.unparse({ fields: spec.map((c) => c.label), data: [] });
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `plantilla_${entidad}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
 }
 
 function isExcelFile(file) {
@@ -274,9 +281,17 @@ function useCargaMasiva(entidad, onSuccess) {
     parseCsvFile(entidad, file, { setFilas, setParseError });
   };
 
+  const handleDescargarPlantilla = () => {
+    setParseError('');
+    descargarPlantilla(entidad).catch((err) => {
+      setParseError(`No se pudo descargar la plantilla: ${err.message}`);
+    });
+  };
+
   return {
     fileName, filas, isExcel, parseError, resultado, loading, handleFile,
     canSubmit: isExcel ? Boolean(excelFile) : filas.length > 0,
+    handleDescargarPlantilla,
     runValidar: () => submitCarga(
       isExcel ? validarCargaArchivo : validarCarga,
       entidad,
@@ -420,8 +435,10 @@ const boxStyle = {
 };
 
 export default function BulkUploadModal({ entidad, onClose, onSuccess }) {
-  const { fileName, filas, isExcel, canSubmit, parseError, resultado, loading, handleFile, runValidar, runCarga } =
-    useCargaMasiva(entidad, onSuccess);
+  const {
+    fileName, filas, isExcel, canSubmit, parseError, resultado, loading,
+    handleFile, handleDescargarPlantilla, runValidar, runCarga,
+  } = useCargaMasiva(entidad, onSuccess);
 
   return (
     <div role="dialog" aria-label={`Carga masiva de ${entidad}`} style={overlayStyle}>
@@ -430,8 +447,8 @@ export default function BulkUploadModal({ entidad, onClose, onSuccess }) {
           <h2 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: 'var(--motored-text, #1a1a18)' }}>
             Carga masiva — {entidad}
           </h2>
-          <button type="button" className="motored-btn motored-btn-tertiary" onClick={() => downloadTemplate(entidad)}>
-            Descargar plantilla CSV
+          <button type="button" className="motored-btn motored-btn-tertiary" onClick={handleDescargarPlantilla}>
+            Descargar plantilla Excel
           </button>
         </div>
 

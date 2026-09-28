@@ -313,10 +313,9 @@ export async function anularBotLinea(lineaId) {
 
 /**
  * `GET /cargas/{id}/errores.csv` -- NO es JSON, así que no usa
- * `motoredFetchJson` (mismo criterio que `downloadTemplate` en
- * `BulkUploadModal.js`, pero acá el archivo viene del servidor, no se arma
- * en el browser, y necesita el header `Authorization` que `motoredFetch` ya
- * agrega -- un `<a href>` plano no podría mandarlo).
+ * `motoredFetchJson`; el archivo viene del servidor y necesita el header
+ * `Authorization` que `motoredFetch` ya agrega -- un `<a href>` plano no
+ * podría mandarlo. Mismo patrón que `descargarPlantilla`, más abajo.
  */
 export async function descargarErroresCargaCsv(cargaId) {
   const res = await motoredFetch(`/cargas/${cargaId}/errores.csv`);
@@ -331,5 +330,29 @@ export async function descargarErroresCargaCsv(cargaId) {
   a.click();
   // Revocar en el mismo tick puede cancelar la descarga en algunos
   // navegadores si todavía no terminaron de leer el blob desde el <a>.
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+/**
+ * `GET /maestros/{entidad}/plantilla.xlsx` -- ad-hoc bugfix (asc360, no
+ * trackeado bajo ningún sdd/*): reemplaza el viejo `downloadTemplate` de
+ * `BulkUploadModal.js` (CSV armado en el browser, sin BOM UTF-8 -- Excel en
+ * Windows mostraba acentos rotos). `entidad` es SINGULAR
+ * (sucursal|bodega|proveedor|referencia), igual que `validarCarga`/
+ * `subirCarga` de acá arriba -- NO la convención plural de `listMaestros`.
+ * Mismo patrón que `descargarErroresCargaCsv`: no es JSON, así que usa
+ * `motoredFetch` (agrega el header `Authorization`), no `motoredFetchJson`.
+ */
+export async function descargarPlantilla(entidadSingular) {
+  const res = await motoredFetch(`/maestros/${entidadSingular}/plantilla.xlsx`);
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status}`);
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `plantilla_${entidadSingular}.xlsx`;
+  a.click();
   setTimeout(() => URL.revokeObjectURL(url), 0);
 }

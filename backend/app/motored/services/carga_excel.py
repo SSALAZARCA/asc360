@@ -147,6 +147,40 @@ ALIASES_POR_ENTIDAD: Dict[str, List[Dict[str, Any]]] = {
             "key": "precio_normal", "label": "Precio normal", "required": False,
             "aliases": ["precio_normal", "precio normal"],
         },
+        # Ad-hoc bugfix (no trackeado bajo ningún sdd/*): `precio_venta`/
+        # `precio_publico` fluyen directo (sin resolución, ya son
+        # Decimal opcionales en `ReferenciaCreate`) -- mismo shape que
+        # `precio_normal`. `sustituida_por_codigo` es el código (no el id)
+        # de OTRA referencia YA existente -- `api/carga.py`'s `_resolve_
+        # referencia_relaciones` lo resuelve a `sustituida_por` antes de
+        # escribir, igual criterio que `proveedor_codigo` -> `proveedor_id`.
+        {
+            "key": "precio_venta", "label": "Precio de venta", "required": False,
+            "aliases": ["precio_venta", "precio venta"],
+        },
+        {
+            "key": "precio_publico", "label": "Precio al público", "required": False,
+            "aliases": ["precio_publico", "precio publico", "precio público"],
+        },
+        {
+            "key": "sustituida_por_codigo", "label": "Código de referencia sustituta", "required": False,
+            "type": "string",
+            # Ad-hoc bugfix (no trackeado bajo ningún sdd/*): la propia LABEL
+            # ("Código de referencia sustituta" -- el header que `column_
+            # labels`/`api/maestros.py::descargar_plantilla` escribe en la
+            # plantilla `.xlsx`) faltaba de esta lista. Sin ella, descargar
+            # la plantilla y volver a subirla SIN TOCAR el encabezado hacía
+            # que esta columna se perdiera en silencio (ningún alias
+            # matcheaba), justo el bug de "carga silenciosa" que el resto de
+            # esta función existe para evitar. `real world`: encontrado por
+            # los tests de `test_carga_api_excel.py` (`TestSustituidaPorCodigoEndToEnd`
+            # equivalente), que usan ese header exacto.
+            "aliases": [
+                "sustituida_por_codigo", "sustituida por codigo", "sustituida por código",
+                "codigo sustituta", "código sustituta",
+                "codigo de referencia sustituta", "código de referencia sustituta",
+            ],
+        },
     ],
 }
 
@@ -237,6 +271,18 @@ def _resolve_spec(entidad: str) -> List[Dict[str, Any]]:
     if spec is None:
         raise ArchivoExcelInvalidoError(f"Maestro desconocido: '{entidad}'")
     return spec
+
+
+def column_labels(entidad: str) -> List[str]:
+    """Labels de columna, EN ORDEN, para `entidad` -- reusado por el
+    endpoint de generación de plantilla `.xlsx` (ad-hoc bugfix, no
+    trackeado bajo ningún sdd/*: `api/maestros.py::descargar_plantilla`)
+    para no duplicar la definición de columnas una tercera vez (ya vive acá
+    para PARSEAR un `.xlsx` subido, y en `COLUMNAS_POR_ENTIDAD`
+    (`BulkUploadModal.js`) para el frontend). El caller es responsable de
+    validar `entidad` primero (p.ej. vía `api/carga.py::_entidad_or_404`) --
+    esta función no atrapa el `KeyError` de una entidad desconocida."""
+    return [col["label"] for col in ALIASES_POR_ENTIDAD[entidad]]
 
 
 def _open_workbook(file_bytes: bytes):

@@ -82,3 +82,55 @@ class TestReferenciaCargaCoercesUnidadEmpaque:
 
         assert resultado.ok is True
         assert resultado.advertencias, "expected at least one warning for the coerced row"
+
+
+class TestErroresPreviosBlockEntireWriteAllOrNothing:
+    """Ad-hoc bugfix (not tracked under sdd/*): `errores_previos` lets a
+    caller (the router's `_resolve_referencia_relaciones`) inject a
+    pre-computed resolution error -- it must block the WHOLE write exactly
+    like a `validate_rows` error already does, same all-or-nothing
+    guarantee (owner decision #1), merged into ONE response."""
+
+    async def test_a_resolution_error_alone_blocks_the_whole_write(self):
+        # Zero queries expected -- the merged error list must short-circuit
+        # BEFORE any upsert lookup, even though the row itself is otherwise
+        # fully valid.
+        db = FakeAsyncSession()
+        rows = [{"nombre": "CALI NORTE", "sic": "S1"}]
+        errores_previos = [{
+            "fila": 1,
+            "motivo": "El código de 'sustituida_por' 'GHOST' no corresponde a ninguna referencia existente",
+        }]
+
+        resultado = await carga.procesar_carga(db, "sucursal", rows, errores_previos=errores_previos)
+
+        assert resultado.ok is False
+        assert len(resultado.errores) == 1
+        assert resultado.errores[0].motivo == errores_previos[0]["motivo"]
+        assert db.added == []
+        assert db.committed is False
+
+    async def test_errores_previos_merge_with_validation_errors_in_one_response(self):
+        db = FakeAsyncSession()
+        rows = [
+            {"nombre": "CALI NORTE", "sic": "S1"},  # otherwise valid, blocked only by errores_previos
+            {"nombre": ""},  # genuinely invalid on its own
+        ]
+        errores_previos = [{"fila": 1, "motivo": "resolution error"}]
+
+        resultado = await carga.procesar_carga(db, "sucursal", rows, errores_previos=errores_previos)
+
+        assert resultado.ok is False
+        filas_con_error = {e.fila for e in resultado.errores}
+        assert filas_con_error == {1, 2}
+        assert db.added == []
+        assert db.committed is False
+
+    async def test_no_errores_previos_behaves_exactly_as_before(self):
+        db = FakeAsyncSession(execute_queue=[[]])
+        rows = [{"nombre": "CALI NORTE"}]
+
+        resultado = await carga.procesar_carga(db, "sucursal", rows)
+
+        assert resultado.ok is True
+        assert db.committed is True

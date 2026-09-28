@@ -20,15 +20,18 @@ proveedor o una referencia a una sucursal específica). Escritura
 (create/update/deactivate) restringida a ADMIN|COMPRAS, sin cambios por
 este fix.
 """
+import io
 import uuid
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Type
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
+from openpyxl import Workbook
 from pydantic import BaseModel, ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.motored.api.carga import _entidad_or_404
 from app.motored.deps import MotoredUser, get_current_motored_user, get_motored_db_or_503, require_motored_ready, require_roles
 from app.motored.models.bodega import Bodega
 from app.motored.models.proveedor import Proveedor
@@ -39,6 +42,7 @@ from app.motored.schemas.proveedor import ProveedorCreate, ProveedorRead, Provee
 from app.motored.schemas.referencia import ReferenciaCreate, ReferenciaRead, ReferenciaUpdate
 from app.motored.schemas.sucursal import SucursalCreate, SucursalRead, SucursalUpdate
 from app.motored.services import maestros
+from app.motored.services.carga_excel import column_labels
 
 router = APIRouter(
     prefix="/maestros",
@@ -157,6 +161,42 @@ async def list_maestro(
     result = await db.execute(select(config.model))
     rows = [row for row in result.scalars().all() if _in_sucursal_scope(entidad, row, user)]
     return [_to_read(config, row) for row in rows]
+
+
+@router.get("/{entidad}/plantilla.xlsx")
+async def descargar_plantilla(
+    entidad: str,
+    user: MotoredUser = Depends(_require_write),
+):
+    """Ad-hoc bugfix (no trackeado bajo ningún sdd/*): genera un `.xlsx` de
+    plantilla server-side para el modal de carga masiva
+    (`BulkUploadModal.js`), reemplazando la vieja plantilla `.csv` armada en
+    el browser (sin BOM UTF-8 -- Excel en Windows mostraba acentos rotos).
+
+    `entidad` es SINGULAR (sucursal|bodega|proveedor|referencia) -- la MISMA
+    convención que `api/carga.py`'s router de carga masiva ya usa
+    (`_entidad_or_404`, reusada acá tal cual), NO la convención plural
+    (sucursales|bodegas|...) que usan los demás endpoints CRUD de este mismo
+    router (`_CONFIGS`). Ambas conviven sin choque: son rutas de distinta
+    forma (`/plantilla.xlsx` vs `/{entity_id}`, este último tipado `uuid` --
+    "plantilla.xlsx" nunca matchea ese converter).
+
+    Las labels de columna, EN ORDEN, vienen de `carga_excel.py::column_
+    labels` -- la MISMA lista que ya se usa para parsear un `.xlsx` subido,
+    para no duplicar la definición de columnas una tercera vez."""
+    entidad = _entidad_or_404(entidad)
+    labels = column_labels(entidad)
+
+    workbook = Workbook()
+    workbook.active.append(labels)
+    buffer = io.BytesIO()
+    workbook.save(buffer)
+
+    return Response(
+        content=buffer.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="plantilla_{entidad}.xlsx"'},
+    )
 
 
 @router.get("/{entidad}/{entity_id}")
