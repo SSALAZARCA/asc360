@@ -38,7 +38,10 @@ The Referencias master uses exactly these 9 fields, in this order, in the xlsx t
   - [x] **Duplicate headers:** backend `ColumnaDuplicadaError` returns 400 through `CargaExcelError`. The frontend CSV shows a parse error. **Evidence:** `test_duplicate_headers_for_the_same_field_are_rejected_with_a_clear_error` and the CSV jest test.
   - [x] **Migration:** `SET LOCAL lock_timeout = '5s'` runs before `add_column`. `env.py` wraps migrations in `context.begin_transaction()`. **Evidence:** `test_upgrade_sets_a_local_lock_timeout_before_the_alter`.
   - [x] **Frontend tests:** use `getAllByRole('columnheader' | 'row' | 'cell' | 'listitem' | 'option')`, plus `role="note"` to strip tooltip text.
-- [ ] **T3: Commit and deliver.** Delivery: the repo policy is a commit to main plus push, because Coolify auto-deploys.
+- [x] **T3: Commit and deliver.** Delivery: the repo policy is a commit to main plus push, because Coolify auto-deploys.
+  - **Commit:** `c8e2aed`, pushed with `9422c8f..c8e2aed`. gga passed.
+  - **Native RDD review:** assessed as medium, `slice_budget_reached`. The user chose to push without it. The change had already passed review-risk and review-reliability.
+  - **Pending:** the migration has not been verified against a live Postgres. Check the Coolify deploy log.
 
 ## Out of scope / noted
 - The Referencias header text still says "Subí un archivo CSV" although `.xlsx` is accepted.
