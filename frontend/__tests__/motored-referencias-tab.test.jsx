@@ -70,6 +70,11 @@ function headerLabel(header) {
   return header.textContent.replace(note ? note.textContent : '', '').trim();
 }
 
+// Intl may emit a non-breaking space between "$" and the amount.
+function normalizeSpaces(text) {
+  return text.replace(/\s+/g, ' ');
+}
+
 function headerLabels(table) {
   return within(table).getAllByRole('columnheader').map(headerLabel);
 }
@@ -100,10 +105,43 @@ describe('ReferenciasTab — table', () => {
     const cells = within(rowFor(table, 'REF-NEW')).getAllByRole('cell').map((td) => td.textContent);
 
     expect(cells[1]).toBe('HMCL');
-    expect(cells[5]).toBe('200.00');
-    expect(cells[6]).toBe('250.00');
     expect(cells[7]).toBe('REF-OLD');
     expect(cells[8]).toBe('YAM-1, HON-2');
+  });
+
+  it('shows both prices as rounded Colombian pesos, right-aligned with their headers', async () => {
+    const conPrecios = { ...REFERENCIAS[2], id: 'r-cop', codigo: 'REF-COP', precio_normal: '12746.44', precio_publico: '361815.10' };
+    mockBuscarReferencias.mockImplementation(() => pagina([...REFERENCIAS, conPrecios]));
+    const table = await renderTab();
+    const cells = within(rowFor(table, 'REF-COP')).getAllByRole('cell');
+
+    expect(normalizeSpaces(cells[5].textContent)).toBe('$ 12.746');
+    expect(normalizeSpaces(cells[6].textContent)).toBe('$ 361.815');
+    expect(cells[5]).toHaveStyle({ textAlign: 'right' });
+    expect(cells[6]).toHaveStyle({ textAlign: 'right' });
+    ['Precio Normal antes de IVA', 'Precio Público antes de IVA'].forEach((label) => {
+      const header = within(table).getAllByRole('columnheader').find((th) => headerLabel(th) === label);
+      expect(header).toHaveStyle({ textAlign: 'right' });
+    });
+  });
+
+  it('shows a dash for missing prices', async () => {
+    const table = await renderTab();
+    const cells = within(rowFor(table, 'REF-P2')).getAllByRole('cell').map((td) => td.textContent);
+
+    expect(cells[5]).toBe('—');
+    expect(cells[6]).toBe('—');
+  });
+
+  it('keeps the raw price in the edit form and sends it as a number', async () => {
+    const table = await renderTab();
+    fireEvent.click(within(rowFor(table, 'REF-NEW')).getByRole('button', { name: 'Editar' }));
+
+    expect(screen.getByLabelText(/Precio Normal antes de IVA/i, { selector: 'input' })).toHaveValue('200.00');
+    fireEvent.click(screen.getByText('Guardar cambios'));
+
+    await waitFor(() => expect(mockUpdateMaestro).toHaveBeenCalled());
+    expect(mockUpdateMaestro.mock.calls[0][2]).toMatchObject({ precio_normal: 200, precio_publico: 250 });
   });
 
   it('keeps a long homologados list on one line with a +N button instead of wrapping', async () => {

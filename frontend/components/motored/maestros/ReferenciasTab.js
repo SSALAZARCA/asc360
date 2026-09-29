@@ -42,6 +42,7 @@ import ReferenciasPaginador from './ReferenciasPaginador';
 import SustitutaTypeahead from './SustitutaTypeahead';
 import useReferenciasPagina, { useLineasComerciales } from './useReferenciasPagina';
 import InfoTooltip from '../InfoTooltip';
+import { formatCOP } from '../../../lib/motored/formatCOP';
 
 const ENTIDAD_SINGULAR = 'referencia';
 
@@ -165,8 +166,8 @@ const TABLE_COLUMNS = [
   { label: 'Nombre' },
   { label: 'Línea comercial' },
   { label: 'Unidad de empaque', help: HELP.unidadEmpaque },
-  { label: 'Precio Normal antes de IVA', help: HELP.precioNormal },
-  { label: 'Precio Público antes de IVA', help: HELP.precioPublico },
+  { label: 'Precio Normal antes de IVA', help: HELP.precioNormal, numeric: true },
+  { label: 'Precio Público antes de IVA', help: HELP.precioPublico, numeric: true },
   { label: 'Código de referencia sustituta', help: HELP.sustituta },
   { label: 'Homologados otras marcas', help: HELP.homologados },
   { label: 'Estado' },
@@ -174,6 +175,7 @@ const TABLE_COLUMNS = [
 
 const thStyle = { padding: '0 12px 8px 0' };
 const tdStyle = { padding: '10px 12px 10px 0' };
+const numericTdStyle = { ...tdStyle, textAlign: 'right', whiteSpace: 'nowrap' };
 
 function ReferenciasTable({ referencias, proveedorCodigoPorId, onEdit, onDeactivate }) {
   const handleDeactivateClick = (r) => {
@@ -186,8 +188,8 @@ function ReferenciasTable({ referencias, proveedorCodigoPorId, onEdit, onDeactiv
     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
       <thead>
         <tr style={{ textAlign: 'left', color: 'var(--motored-text-muted, #5a5a5a)' }}>
-          {TABLE_COLUMNS.map(({ label, help }) => (
-            <th key={label} style={thStyle}>
+          {TABLE_COLUMNS.map(({ label, help, numeric }) => (
+            <th key={label} style={numeric ? { ...thStyle, textAlign: 'right' } : thStyle}>
               {label}
               {help && <InfoTooltip text={help} />}
             </th>
@@ -208,8 +210,8 @@ function ReferenciasTable({ referencias, proveedorCodigoPorId, onEdit, onDeactiv
                 <span style={{ marginLeft: '0.35rem', color: 'var(--motored-warning, #d97706)', fontSize: '0.7rem' }}>(corregida)</span>
               )}
             </td>
-            <td style={tdStyle}>{r.precio_normal != null ? r.precio_normal : <em>sin precio</em>}</td>
-            <td style={tdStyle}>{r.precio_publico != null ? r.precio_publico : <em>—</em>}</td>
+            <td style={numericTdStyle}>{formatCOP(r.precio_normal)}</td>
+            <td style={numericTdStyle}>{formatCOP(r.precio_publico)}</td>
             <td style={tdStyle}>
               {r.sustituida_por ? (r.sustituta_codigo || <em>desconocida</em>) : <em>—</em>}
             </td>
