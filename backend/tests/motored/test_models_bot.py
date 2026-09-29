@@ -44,12 +44,12 @@ def test_usuario_has_telegram_and_bot_registration_columns():
     assert cols.codigo_vinculacion_expira.nullable is True
 
 
-def test_usuario_telegram_id_is_unique():
+def test_usuario_telegram_id_is_no_longer_unique_advisors_can_share_a_telegram():
     constraints = [
         c for c in Usuario.__table__.constraints if isinstance(c, UniqueConstraint)
     ]
     match = [c for c in constraints if {col.name for col in c.columns} == {"telegram_id"}]
-    assert len(match) == 1
+    assert match == []
 
 
 def test_usuario_email_and_hashed_password_are_now_nullable():

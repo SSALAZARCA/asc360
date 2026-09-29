@@ -32,7 +32,7 @@ from __future__ import annotations
 
 import re
 import uuid
-from typing import List, Optional
+from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, field_validator
@@ -44,8 +44,9 @@ from app.core.limiter import limiter
 from app.motored.deps import get_motored_db_or_503, require_motored_ready
 from app.motored.deps_bot import (
     BotActor,
-    get_bot_actor,
+    actor_desde_usuario,
     get_bot_telegram_id,
+    listar_usuarios_por_telegram,
     require_bot_admin,
     require_lore_ready,
 )
@@ -91,13 +92,20 @@ def _role_value(usuario: Usuario) -> str:
     return usuario.role.value if hasattr(usuario.role, "value") else usuario.role
 
 
-@router.get("/yo")
-async def yo(actor: Optional[BotActor] = Depends(get_bot_actor)) -> dict:
-    """El bot consulta quién es (asesor o admin) el `telegram_id` que le
-    está hablando -- 404 si ese `telegram_id` no tiene ningún `Usuario`
-    todavía (el caso esperado antes de `/registro`)."""
-    if actor is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"code": "NO_REGISTRADO"})
+def _rechazar_registro_no_permitido(existentes: List[Usuario], phone: str) -> None:
+    """Reglas de `/registro` con varios asesores por Telegram: un Telegram
+    de ADMIN no se comparte (409 TELEGRAM_ES_ADMIN) y la MISMA persona (mismo
+    Telegram y mismo celular, no rechazada) no se registra dos veces (409
+    YA_REGISTRADO). Un registro rechazado no bloquea volver a intentarlo."""
+    if any(_role_value(u) == MotoredRole.ADMIN.value for u in existentes):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail={"code": "TELEGRAM_ES_ADMIN"}
+        )
+    if any(u.phone == phone and (u.status or "approved") != "rejected" for u in existentes):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail={"code": "YA_REGISTRADO"})
+
+
+def _resumen_asesor(actor: BotActor) -> dict:
     return {
         "id": actor.usuario_id,
         "nombre": actor.nombre,
@@ -106,6 +114,26 @@ async def yo(actor: Optional[BotActor] = Depends(get_bot_actor)) -> dict:
         "activo": actor.activo,
         "sucursales": actor.sucursal_ids,
     }
+
+
+@router.get("/yo")
+async def yo(
+    telegram_id: int = Depends(get_bot_telegram_id),
+    db: AsyncSession = Depends(get_motored_db_or_503),
+) -> dict:
+    """El bot consulta quiénes (asesores o admin) son los `Usuario` de ese
+    `telegram_id` -- 404 si no tiene ninguno todavía (el caso esperado antes
+    de `/registro`). `asesores` lista TODOS (varios asesores pueden compartir
+    un Telegram); con exactamente uno se mantienen además los campos planos
+    de siempre, para que el bot ya desplegado siga funcionando. Ignora el
+    header `X-Lore-Usuario-Id`: lista, no actúa."""
+    usuarios = await listar_usuarios_por_telegram(db, telegram_id)
+    if not usuarios:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"code": "NO_REGISTRADO"})
+    resumenes = [_resumen_asesor(actor_desde_usuario(u, telegram_id)) for u in usuarios]
+    if len(resumenes) == 1:
+        return {**resumenes[0], "asesores": resumenes}
+    return {"asesores": resumenes}
 
 
 @router.get("/sucursales")
@@ -128,24 +156,27 @@ async def registrarse(
 ) -> dict:
     """Auto-registro (spec "Self-registration with status-aware re-entry"):
     crea un `Usuario` `pending` con rol `ASESOR_MOSTRADOR` + su vínculo
-    `usuario_sucursal`. 409 si el `telegram_id` ya tiene un `Usuario`
-    (cualquier rol/status) -- el flujo de re-entrada (`GET /yo`) es lo que
-    el bot debe usar en ese caso, no un segundo `/registro`.
+    `usuario_sucursal`. Varios asesores pueden compartir un mismo Telegram
+    (cada uno con su propio teléfono). `_rechazar_registro_no_permitido`
+    devuelve 409 solo en dos casos: el Telegram pertenece a un ADMIN
+    (`TELEGRAM_ES_ADMIN`), o ya existe un registro no rechazado con el MISMO
+    Telegram y el MISMO teléfono (`YA_REGISTRADO`).
 
-    El `SELECT` de arriba es un fast-path de cortesía, NO una garantía
-    (post-review fix #1, BLOCKER): dos llamadas casi simultáneas con el
-    MISMO `telegram_id` pueden pasar ambas ese chequeo antes de que
-    cualquiera haga `commit()` -- la segunda viola de verdad
-    `uq_usuario_telegram_id`. Separadamente, un `sucursal_id` que no existe
+    Ese chequeo es un fast-path de cortesía, NO una garantía: dos llamadas
+    casi simultáneas con el mismo Telegram y teléfono pueden pasarlo ambas
+    antes de que cualquiera haga `commit()` -- la segunda viola de verdad
+    el índice parcial `uq_usuario_telegram_phone_activo`. Dos asesores con
+    teléfonos distintos en el mismo Telegram NO están cubiertos por ningún
+    índice único, a propósito: es justamente el caso que se permite.
+    Separadamente, un `sucursal_id` que no existe
     (o que se desactivó entre `GET /sucursales` y esta llamada) viola la FK
     de `UsuarioSucursal`. Ambos casos son un `IntegrityError` real de
     Postgres en el `commit()`, nunca antes -- se traducen acá al mismo 4xx
     limpio que ya devuelve el chequeo secuencial, en vez de dejar escapar
     un 500 sin manejar (mismo criterio que `app/api/v1/vehicle_models.py`/
     `parts_manual.py::create_reference`)."""
-    existing = await db.execute(select(Usuario).where(Usuario.telegram_id == telegram_id))
-    if existing.scalars().first() is not None:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail={"code": "YA_REGISTRADO"})
+    existentes = await listar_usuarios_por_telegram(db, telegram_id)
+    _rechazar_registro_no_permitido(existentes, payload.phone)
 
     usuario = Usuario(
         id=uuid.uuid4(),
@@ -162,7 +193,7 @@ async def registrarse(
         await db.commit()
     except IntegrityError as exc:
         await db.rollback()
-        if "uq_usuario_telegram_id" in str(exc.orig):
+        if "uq_usuario_telegram" in str(exc.orig):
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail={"code": "YA_REGISTRADO"})
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail={"code": "SUCURSAL_NO_ENCONTRADA"}
@@ -175,7 +206,9 @@ async def registrarse(
             Usuario.activo.is_(True),
         )
     )
-    admin_telegram_ids = admin_ids_result.scalars().all()
+    # Varios `Usuario` admin pueden compartir un Telegram en datos viejos;
+    # cada Telegram se notifica una sola vez, en orden.
+    admin_telegram_ids = list(dict.fromkeys(admin_ids_result.scalars().all()))
 
     return {
         "usuario": {
@@ -184,7 +217,7 @@ async def registrarse(
             "role": _role_value(usuario),
             "status": usuario.status,
         },
-        "admin_telegram_ids": list(admin_telegram_ids),
+        "admin_telegram_ids": admin_telegram_ids,
     }
 
 
@@ -202,9 +235,9 @@ async def vincular_admin(
     ya construida y probada en Fase 4 exactamente para este endpoint (ver el
     docstring de ese módulo). El chequeo de "409 si el telegram_id ya está
     vinculado" vive ACÁ (no dentro del claim atómico de `consumir_codigo_
-    vinculacion`, que solo sabe de códigos): sin él, un `telegram_id` ya
-    vinculado a OTRO `Usuario` violaría en silencio `uq_usuario_telegram_id`
-    contra una base real.
+    vinculacion`, que solo sabe de códigos): un ADMIN nunca comparte
+    Telegram, ni con otro ADMIN ni con asesores, así que cualquier
+    `Usuario` ya vinculado a ese `telegram_id` bloquea la vinculación.
 
     Ese pre-chequeo secuencial NO cubre la carrera real (post-review fix #2,
     BLOCKER, un nivel más abajo): dos llamadas `/vincular` concurrentes
@@ -213,11 +246,15 @@ async def vincular_admin(
     ve el `telegram_id` vinculado todavía). El claim atómico de `consumir_
     codigo_vinculacion` está scoped por `codigo_vinculacion_hash`, no por
     `telegram_id` -- así que las DOS pueden ganar su propio claim, y el
-    SEGUNDO `UPDATE ... SET telegram_id=...` viola de verdad `uq_usuario_
-    telegram_id` DENTRO de esa función. El `except IntegrityError` de abajo
-    es el backstop real contra esa carrera, traduciendo al MISMO 409 que el
-    pre-chequeo ya usa para el caso simple -- sin necesitar rediseñar el
-    claim de `vinculacion.py`."""
+    SEGUNDO `UPDATE ... SET telegram_id=...` viola de verdad el índice
+    parcial `uq_usuario_telegram_admin` (único por `telegram_id` entre filas
+    ADMIN) DENTRO de esa función. El `except IntegrityError` de abajo es el
+    backstop real contra esa carrera, traduciendo al MISMO 409 que el
+    pre-chequeo ya usa para el caso simple. Límite conocido: un `/registro`
+    de asesor concurrente con esta vinculación sobre el mismo Telegram no
+    está cubierto por ningún índice (el ADMIN y el asesor tienen roles
+    distintos); el pre-chequeo secuencial de cada endpoint cubre el caso
+    normal."""
     ya_usado = await db.execute(select(Usuario).where(Usuario.telegram_id == telegram_id))
     if ya_usado.scalars().first() is not None:
         raise HTTPException(

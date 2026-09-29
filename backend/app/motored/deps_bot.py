@@ -31,6 +31,7 @@ esto como open question para el dueño del spec.
 """
 from __future__ import annotations
 
+import uuid
 from dataclasses import dataclass, field
 from typing import Iterable, List, Optional, Tuple
 
@@ -138,26 +139,8 @@ class BotActor:
     sucursal_ids: List[str] = field(default_factory=list)
 
 
-async def get_bot_actor(
-    telegram_id: int = Depends(get_bot_telegram_id),
-    db: AsyncSession = Depends(get_motored_db_or_503),
-) -> Optional[BotActor]:
-    """Búsqueda REAL por `telegram_id` en CADA llamada -- nunca cacheada
-    server-side (ADR-2), igual que `obtener_usuario_motored` hace por PK
-    para el JWT. `None` significa "ningún `Usuario` tiene este
-    `telegram_id` todavía" -- el caso esperado antes de completar
-    `POST /registro`, no un error."""
-    result = await db.execute(
-        select(Usuario)
-        .options(selectinload(Usuario.sucursales))
-        .where(Usuario.telegram_id == telegram_id)
-    )
-    usuario = result.scalars().first()
-    if usuario is None:
-        return None
-
+def actor_desde_usuario(usuario: Usuario, telegram_id: int) -> BotActor:
     role_value = usuario.role.value if hasattr(usuario.role, "value") else usuario.role
-    sucursal_ids = [str(rel.sucursal_id) for rel in (usuario.sucursales or [])]
     return BotActor(
         usuario_id=str(usuario.id),
         nombre=usuario.nombre,
@@ -169,8 +152,83 @@ async def get_bot_actor(
         status=usuario.status or "approved",
         activo=usuario.activo,
         telegram_id=telegram_id,
-        sucursal_ids=sucursal_ids,
+        sucursal_ids=[str(rel.sucursal_id) for rel in (usuario.sucursales or [])],
     )
+
+
+async def listar_usuarios_por_telegram(db: AsyncSession, telegram_id: int) -> List[Usuario]:
+    """TODOS los `Usuario` de ese `telegram_id` (varios asesores pueden
+    compartir una cuenta de Telegram). Es la ÚNICA fuente de candidatos:
+    el header `X-Lore-Usuario-Id` solo elige ENTRE estos, nunca amplía el
+    conjunto -- ese filtro por `telegram_id` es lo que impide actuar como
+    un `Usuario` ajeno."""
+    result = await db.execute(
+        select(Usuario)
+        .options(selectinload(Usuario.sucursales))
+        .where(Usuario.telegram_id == telegram_id)
+        .order_by(Usuario.created_at)
+    )
+    return list(result.scalars().all())
+
+
+def _es_utilizable(usuario: Usuario) -> bool:
+    return (usuario.status or "approved") == "approved" and bool(usuario.activo)
+
+
+def _elegir_por_header(candidatos: List[Usuario], x_lore_usuario_id: str) -> Usuario:
+    """El header debe ser un UUID bien formado Y pertenecer a `candidatos`.
+    Malformado y ajeno dan el MISMO 403 (sin oráculo de formato)."""
+    no_pertenece = HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN, detail={"code": "ASESOR_NO_PERTENECE"}
+    )
+    try:
+        elegido_id = uuid.UUID(x_lore_usuario_id.strip())
+    except (AttributeError, ValueError):
+        raise no_pertenece
+    for candidato in candidatos:
+        if candidato.id == elegido_id:
+            return candidato
+    raise no_pertenece
+
+
+def _elegir_sin_header(candidatos: List[Usuario]) -> Usuario:
+    """Sin header: un único candidato (o un único utilizable) se usa tal
+    cual -- compatible con el bot ya desplegado. Más de un utilizable exige
+    que el bot elija (409). Sin ninguno utilizable se devuelve el primero
+    solo para que `_require_bot_roles` responda su 403 con el status real."""
+    if len(candidatos) == 1:
+        return candidatos[0]
+    utilizables = [c for c in candidatos if _es_utilizable(c)]
+    if len(utilizables) > 1:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail={"code": "ASESOR_REQUERIDO"}
+        )
+    return utilizables[0] if utilizables else candidatos[0]
+
+
+async def get_bot_actor(
+    telegram_id: int = Depends(get_bot_telegram_id),
+    x_lore_usuario_id: Optional[str] = Header(None),
+    db: AsyncSession = Depends(get_motored_db_or_503),
+) -> Optional[BotActor]:
+    """Búsqueda REAL por `telegram_id` en CADA llamada -- nunca cacheada
+    server-side (ADR-2), igual que `obtener_usuario_motored` hace por PK
+    para el JWT. `None` significa "ningún `Usuario` tiene este
+    `telegram_id` todavía" -- el caso esperado antes de completar
+    `POST /registro`, no un error.
+
+    Varios asesores pueden compartir un `telegram_id`: el header opcional
+    `X-Lore-Usuario-Id` elige cuál, pero SOLO entre los candidatos de ESE
+    `telegram_id` (403 ASESOR_NO_PERTENECE si no pertenece o está mal
+    formado). Los gates de status/activo siguen aplicando al elegido."""
+    candidatos = await listar_usuarios_por_telegram(db, telegram_id)
+    if not candidatos:
+        return None
+    if x_lore_usuario_id is not None:
+        usuario = _elegir_por_header(candidatos, x_lore_usuario_id)
+    else:
+        usuario = _elegir_sin_header(candidatos)
+    return actor_desde_usuario(usuario, telegram_id)
 
 
 def _require_bot_roles(roles: Iterable[str]):

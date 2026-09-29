@@ -292,27 +292,28 @@ def test_registro_creates_pending_asesor_and_returns_admin_telegram_ids():
     assert vinculos[0].sucursal_id == sucursal_id
 
 
-def test_registro_duplicate_telegram_id_returns_409():
+def test_registro_same_telegram_and_phone_returns_409():
     existente = _asesor(telegram_id=999)
     client = _client_with_queue([[existente]])
-    payload = {"nombre": "Juan Perez", "phone": "3001234567", "sucursal_id": str(uuid.uuid4())}
+    payload = {"nombre": "Juan Perez", "phone": existente.phone, "sucursal_id": str(uuid.uuid4())}
 
     response = client.post(f"{BOT_URL}/registro", json=payload, headers=_headers(999))
 
     assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "YA_REGISTRADO"
 
 
 def test_registro_concurrent_duplicate_telegram_id_commit_race_returns_409_not_500():
     """Post-review fix #1 (BLOCKER, 2 lenses): two near-simultaneous
     `/registro` calls with the SAME `telegram_id` both pass the
     existence-check `SELECT` before either commits -- the second
-    `db.commit()` then violates `uq_usuario_telegram_id` for real. This
+    `db.commit()` then violates `uq_usuario_telegram_phone_activo` for real. This
     must become the SAME clean 409 the sequential check already returns,
     never an unhandled `IntegrityError` -> raw 500."""
     session = FakeAsyncSession(
         execute_queue=[[], []],  # readiness probe, then the pre-check finds nothing
         raise_integrity_error=IntegrityError(
-            "INSERT usuario", {}, Exception('duplicate key value violates unique constraint "uq_usuario_telegram_id"')
+            "INSERT usuario", {}, Exception('duplicate key value violates unique constraint "uq_usuario_telegram_phone_activo"')
         ),
     )
     override_motored_db(session)
@@ -409,7 +410,7 @@ def test_vincular_admin_concurrent_codes_same_telegram_id_race_returns_409_not_5
     codes for the SAME not-yet-linked `telegram_id`. Each call's own atomic
     claim (scoped by `codigo_vinculacion_hash`, not by `telegram_id`) can
     independently succeed its own `UPDATE ... RETURNING`, and the SECOND
-    one then violates `uq_usuario_telegram_id` for real. Must become the
+    one then violates `uq_usuario_telegram_admin` for real. Must become the
     SAME clean 409 `TELEGRAM_YA_VINCULADO` the pre-check already returns,
     never an unhandled `IntegrityError` -> raw 500."""
     session = FakeAsyncSession(
@@ -419,7 +420,7 @@ def test_vincular_admin_concurrent_codes_same_telegram_id_race_returns_409_not_5
             IntegrityError(
                 "UPDATE usuario",
                 {},
-                Exception('duplicate key value violates unique constraint "uq_usuario_telegram_id"'),
+                Exception('duplicate key value violates unique constraint "uq_usuario_telegram_admin"'),
             ),
         ]
     )

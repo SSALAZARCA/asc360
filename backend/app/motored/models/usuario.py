@@ -30,8 +30,9 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
+    Index,
     String,
-    UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
@@ -50,7 +51,16 @@ class MotoredRole(enum.Enum):
 class Usuario(MotoredBase):
     __tablename__ = "usuario"
     __table_args__ = (
-        UniqueConstraint("telegram_id", name="uq_usuario_telegram_id"),
+        # Several advisors may share one Telegram (migration a3f7c91d2e58).
+        Index("ix_usuario_telegram_id", "telegram_id"),
+        Index(
+            "uq_usuario_telegram_phone_activo", "telegram_id", "phone",
+            unique=True, postgresql_where=text("status <> 'rejected'"),
+        ),
+        Index(
+            "uq_usuario_telegram_admin", "telegram_id",
+            unique=True, postgresql_where=text("role = 'ADMIN'"),
+        ),
         CheckConstraint(
             "status IN ('pending', 'approved', 'rejected')", name="ck_usuario_status",
         ),

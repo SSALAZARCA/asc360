@@ -177,7 +177,7 @@ async def test_get_bot_telegram_id_bigint_max_itself_is_valid():
 
 async def test_get_bot_actor_returns_none_when_no_matching_usuario():
     db = FakeAsyncSession(execute_queue=[[]])
-    resultado = await get_bot_actor(telegram_id=999, db=db)
+    resultado = await get_bot_actor(telegram_id=999, x_lore_usuario_id=None, db=db)
     assert resultado is None
 
 
@@ -187,7 +187,7 @@ async def test_get_bot_actor_returns_botactor_with_sucursal_ids_when_found():
     usuario.sucursales = [UsuarioSucursal(id=uuid.uuid4(), usuario_id=usuario.id, sucursal_id=sucursal_id)]
     db = FakeAsyncSession(execute_queue=[[usuario]])
 
-    resultado = await get_bot_actor(telegram_id=555, db=db)
+    resultado = await get_bot_actor(telegram_id=555, x_lore_usuario_id=None, db=db)
 
     assert isinstance(resultado, BotActor)
     assert resultado.usuario_id == str(usuario.id)
@@ -207,7 +207,7 @@ async def test_get_bot_actor_falls_back_to_approved_when_status_is_none():
     usuario.sucursales = []
     db = FakeAsyncSession(execute_queue=[[usuario]])
 
-    resultado = await get_bot_actor(telegram_id=444, db=db)
+    resultado = await get_bot_actor(telegram_id=444, x_lore_usuario_id=None, db=db)
 
     assert resultado.status == "approved"
 
