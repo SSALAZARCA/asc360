@@ -303,9 +303,12 @@ async def registrar_demanda_perdida(
     if replay is not None:
         return replay
 
-    carga = await _agregar_registro(db, payload, actor, idempotency_key)
-
+    # `_agregar_registro` runs inside the `try`: it flushes the header and
+    # executes the Core upserts, so a PK race on `carga_archivo` or a FK
+    # violation can surface there, before `commit()`, and must reach the
+    # same recovery.
     try:
+        carga = await _agregar_registro(db, payload, actor, idempotency_key)
         await db.commit()
     except IntegrityError as exc:
         await db.rollback()
@@ -398,6 +401,11 @@ async def _agregar_registro(
         log={"metodo": payload.metodo},
     )
     db.add(carga)
+    # The Motored session has `autoflush=False`, and the delta below is a
+    # Core upsert that goes straight to Postgres. The header must already
+    # be INSERTed, or `demanda_perdida_carga_id_fkey` fails (production 500,
+    # 2026-09-29). Same transaction: nothing is committed here.
+    await db.flush()
     for linea in payload.lineas:
         db.add(
             DemandaPerdidaBotLinea(
