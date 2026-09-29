@@ -25,7 +25,6 @@ import {
 } from '../../../lib/motored/api';
 import BulkUploadModal from './BulkUploadModal';
 import FormField from './FormField';
-import InfoTooltip from '../InfoTooltip';
 
 const ENTIDAD_PLURAL = 'sucursales';
 const ENTIDAD_SINGULAR = 'sucursal';
@@ -73,72 +72,61 @@ function SucursalForm({ form, setForm, editingId, onSubmit, onCancel }) {
   );
 }
 
-function SucursalesTable({ sucursales, onEdit, onDeactivate, onReactivate }) {
-  const handleDeactivateClick = (s) => {
-    if (window.confirm(`¿Desactivar la sucursal "${s.nombre}"? No se elimina, queda marcada como inactiva.`)) {
-      onDeactivate(s.id);
-    }
-  };
-  const handleReactivateClick = (s) => {
-    if (window.confirm(`¿Reactivar la sucursal "${s.nombre}"? Queda marcada como activa.`)) {
-      onReactivate(s.id);
-    }
-  };
+// SIC and the three "Días" values are hidden from the table (business
+// decision) but stay as data and as form fields (FIELDS above).
+const TABLE_COLUMNS = [
+  { label: 'Nombre', cell: (s) => s.nombre },
+  { label: 'Bodega principal', cell: (s) => s.bodega_principal || <em>—</em> },
+  { label: 'Departamento', cell: (s) => s.departamento || <em>—</em> },
+  { label: 'Ciudad', cell: (s) => s.ciudad || <em>—</em> },
+  { label: 'Fecha apertura', cell: (s) => s.fecha_apertura || <em>—</em> },
+  { label: 'Estado', cell: (s) => (s.activa ? 'Activa' : 'Inactiva') },
+];
 
+const thStyle = { padding: '0 12px 8px 0' };
+const tdStyle = { padding: '10px 12px 10px 0' };
+
+function SucursalRowActions({ s, onEdit, onDeactivate, onReactivate }) {
+  const confirmThen = (verb, done) => () => {
+    const msg = verb === 'Desactivar'
+      ? `¿Desactivar la sucursal "${s.nombre}"? No se elimina, queda marcada como inactiva.`
+      : `¿Reactivar la sucursal "${s.nombre}"? Queda marcada como activa.`;
+    if (window.confirm(msg)) done(s.id);
+  };
+  return (
+    <td style={{ display: 'flex', gap: '1rem', padding: '10px 0' }}>
+      {/* Nunca un botón rojo dentro de una tabla (regla del sistema
+      real) -- acciones de fila usan MotoredIconAction, icono
+      neutro, no el rojo destructivo. */}
+      <MotoredIconAction action="Editar" onClick={() => onEdit(s)} />
+      {s.activa ? (
+        <MotoredIconAction action="Desactivar" onClick={confirmThen('Desactivar', onDeactivate)} />
+      ) : (
+        <MotoredIconAction action="Reactivar" onClick={confirmThen('Reactivar', onReactivate)} />
+      )}
+    </td>
+  );
+}
+
+function SucursalesTable({ sucursales, onEdit, onDeactivate, onReactivate }) {
   return (
     <MotoredTableScroll>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
         <thead>
           <tr style={{ textAlign: 'left', color: 'var(--motored-text-muted, #5a5a5a)' }}>
-            <th style={{ padding: '0 12px 8px 0' }}>Nombre</th>
-            <th style={{ padding: '0 12px 8px 0' }}>
-              SIC
-              <InfoTooltip text="Código con el que el proveedor (HMCL) identifica esta sucursal en sus sistemas." />
-            </th>
-            <th style={{ padding: '0 12px 8px 0' }}>
-              Días seguridad
-              <InfoTooltip text="Colchón de días extra sobre el tiempo normal de reposición, para cubrir imprevistos. Por defecto 2.5 días." />
-            </th>
-            <th style={{ padding: '0 12px 8px 0' }}>
-              Días empaque
-              <InfoTooltip text="Días propios de esta sucursal para armar un pedido (distinto del valor por defecto del proveedor)." />
-            </th>
-            <th style={{ padding: '0 12px 8px 0' }}>
-              Días tránsito
-              <InfoTooltip text="Días propios de esta sucursal para que le llegue un pedido (distinto del valor por defecto del proveedor)." />
-            </th>
-            <th style={{ padding: '0 12px 8px 0' }}>Bodega principal</th>
-            <th style={{ padding: '0 12px 8px 0' }}>Departamento</th>
-            <th style={{ padding: '0 12px 8px 0' }}>Ciudad</th>
-            <th style={{ padding: '0 12px 8px 0' }}>Fecha apertura</th>
-            <th style={{ padding: '0 12px 8px 0' }}>Estado</th>
+            {TABLE_COLUMNS.map(({ label }) => (
+              <th key={label} style={thStyle}>{label}</th>
+            ))}
             <th />
           </tr>
         </thead>
         <tbody>
           {sucursales.map((s) => (
             <tr key={s.id} style={{ borderTop: '1px solid var(--motored-border, #e4e4e7)' }}>
-              <td style={{ padding: '10px 12px 10px 0' }}>{s.nombre}</td>
-              <td style={{ padding: '10px 12px 10px 0' }}>{s.sic || <em>sin SIC</em>}</td>
-              <td style={{ padding: '10px 12px 10px 0' }}>{s.dias_seguridad}</td>
-              <td style={{ padding: '10px 12px 10px 0' }}>{s.dias_empaque ?? <em>—</em>}</td>
-              <td style={{ padding: '10px 12px 10px 0' }}>{s.dias_transito ?? <em>—</em>}</td>
-              <td style={{ padding: '10px 12px 10px 0' }}>{s.bodega_principal || <em>—</em>}</td>
-              <td style={{ padding: '10px 12px 10px 0' }}>{s.departamento || <em>—</em>}</td>
-              <td style={{ padding: '10px 12px 10px 0' }}>{s.ciudad || <em>—</em>}</td>
-              <td style={{ padding: '10px 12px 10px 0' }}>{s.fecha_apertura || <em>—</em>}</td>
-              <td style={{ padding: '10px 12px 10px 0' }}>{s.activa ? 'Activa' : 'Inactiva'}</td>
-              <td style={{ display: 'flex', gap: '1rem', padding: '10px 0' }}>
-                {/* Nunca un botón rojo dentro de una tabla (regla del sistema
-                real) -- acciones de fila usan MotoredIconAction, icono
-                neutro, no el rojo destructivo. */}
-                <MotoredIconAction action="Editar" onClick={() => onEdit(s)} />
-                {s.activa ? (
-                  <MotoredIconAction action="Desactivar" onClick={() => handleDeactivateClick(s)} />
-                ) : (
-                  <MotoredIconAction action="Reactivar" onClick={() => handleReactivateClick(s)} />
-                )}
-              </td>
+              {TABLE_COLUMNS.map(({ label, cell }) => (
+                <td key={label} style={tdStyle}>{cell(s)}</td>
+              ))}
+              <SucursalRowActions s={s} onEdit={onEdit} onDeactivate={onDeactivate} onReactivate={onReactivate} />
             </tr>
           ))}
         </tbody>
