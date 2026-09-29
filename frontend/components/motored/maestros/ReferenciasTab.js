@@ -36,6 +36,7 @@
  * (the DB column is kept untouched).
  */
 import MotoredTableScroll from '../MotoredTableScroll';
+import MotoredIconAction from '../MotoredIconAction';
 import { useEffect, useState } from 'react';
 import { listMaestros } from '../../../lib/motored/api';
 import BulkUploadModal from './BulkUploadModal';
@@ -216,9 +217,9 @@ function ReferenciasTable({ referencias, proveedorCodigoPorId, onEdit, onDeactiv
               <td style={numericTdStyle}>{formatCOP(r.precio_publico)}</td>
               <td style={tdStyle}>{r.activa ? 'Activa' : 'Inactiva'}</td>
               <td style={{ display: 'flex', gap: '1rem', padding: '10px 0' }}>
-                <button type="button" className="motored-row-action" onClick={() => onEdit(r)}>Editar</button>
+                <MotoredIconAction action="Editar" onClick={() => onEdit(r)} />
                 {r.activa && (
-                  <button type="button" className="motored-row-action" onClick={() => handleDeactivateClick(r)}>Desactivar</button>
+                  <MotoredIconAction action="Desactivar" onClick={() => handleDeactivateClick(r)} />
                 )}
               </td>
             </tr>

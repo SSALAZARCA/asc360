@@ -14,6 +14,7 @@
  * "no endpoint offers hard delete" guarantee.
  */
 import MotoredTableScroll from '../MotoredTableScroll';
+import MotoredIconAction from '../MotoredIconAction';
 import { useEffect, useState } from 'react';
 import {
   listMaestros,
@@ -123,11 +124,11 @@ function SucursalesTable({ sucursales, onEdit, onDeactivate }) {
               <td style={{ padding: '10px 12px 10px 0' }}>{s.activa ? 'Activa' : 'Inactiva'}</td>
               <td style={{ display: 'flex', gap: '1rem', padding: '10px 0' }}>
                 {/* Nunca un botón rojo dentro de una tabla (regla del sistema
-                real) -- acciones de fila usan .motored-row-action, texto
+                real) -- acciones de fila usan MotoredIconAction, icono
                 neutro, no el rojo destructivo. */}
-                <button type="button" className="motored-row-action" onClick={() => onEdit(s)}>Editar</button>
+                <MotoredIconAction action="Editar" onClick={() => onEdit(s)} />
                 {s.activa && (
-                  <button type="button" className="motored-row-action" onClick={() => handleDeactivateClick(s)}>Desactivar</button>
+                  <MotoredIconAction action="Desactivar" onClick={() => handleDeactivateClick(s)} />
                 )}
               </td>
             </tr>

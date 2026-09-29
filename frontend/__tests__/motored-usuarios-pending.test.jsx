@@ -84,6 +84,16 @@ beforeEach(() => {
 });
 
 describe('UsuariosPage — solicitudes pendientes', () => {
+  it('renders Aprobar/Rechazar/Desactivar as icon-only buttons', async () => {
+    render(<UsuariosPage />);
+    await waitFor(() => expect(screen.getByText('Juan Asesor')).toBeInTheDocument());
+    ['Aprobar', 'Rechazar', 'Vincular Telegram'].forEach((n) => {
+      const btn = screen.getByRole('button', { name: n });
+      expect(btn.textContent).toBe('');
+      expect(btn.querySelector('svg')).not.toBeNull();
+    });
+  });
+
   it('renders the pending advisor with Aprobar/Rechazar actions', async () => {
     render(<UsuariosPage />);
 

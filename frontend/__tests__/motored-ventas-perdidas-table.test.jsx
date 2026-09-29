@@ -45,6 +45,21 @@ afterEach(() => {
   confirmSpy.mockRestore();
 });
 
+describe('VentasPerdidasTable — icon actions', () => {
+  it('renders Editar/Anular as icon-only buttons (no visible text)', () => {
+    render(<VentasPerdidasTable lineas={[linea()]} onEditar={jest.fn()} onAnular={jest.fn()} />);
+    ['Editar', 'Anular'].forEach((n) => {
+      const btn = screen.getByRole('button', { name: n });
+      expect(btn.textContent).toBe('');
+      expect(btn.querySelector('svg')).not.toBeNull();
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Editar' }));
+    ['Guardar', 'Cancelar'].forEach((n) => {
+      expect(screen.getByRole('button', { name: n }).textContent).toBe('');
+    });
+  });
+});
+
 describe('VentasPerdidasTable — inline edit', () => {
   it('Editar shows a number input pre-filled with the current quantity, plus Guardar/Cancelar', () => {
     render(<VentasPerdidasTable lineas={[linea()]} onEditar={jest.fn()} onAnular={jest.fn()} />);

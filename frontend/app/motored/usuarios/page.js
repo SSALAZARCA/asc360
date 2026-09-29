@@ -28,6 +28,7 @@
  *   code (`generarCodigoTelegram`) to type into the Lore bot.
  */
 import MotoredTableScroll from '../../../components/motored/MotoredTableScroll';
+import MotoredIconAction from '../../../components/motored/MotoredIconAction';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import MotoredLayout from '../motored-layout';
@@ -106,10 +107,10 @@ function UsuariosTable({ usuarios, onDeactivate, ownUserId, onVincularTelegram, 
                 {/* Nunca un botón rojo dentro de una tabla -- ver
                 SucursalesTab.js para la misma regla aplicada. */}
                 {u.activo && (
-                  <button type="button" className="motored-row-action" onClick={() => handleDeactivateClick(u)}>Desactivar</button>
+                  <MotoredIconAction action="Desactivar" onClick={() => handleDeactivateClick(u)} />
                 )}
                 {tieneAccesoWeb(u) && (
-                  <button type="button" className="motored-row-action" onClick={() => onCambiarPassword(u)}>Cambiar contraseña</button>
+                  <MotoredIconAction action="Cambiar contraseña" onClick={() => onCambiarPassword(u)} />
                 )}
                 {/* Vincular/Desvincular Telegram SOLO en la propia fila del
                 ADMIN autenticado (sdd/motored-ventas-perdidas-bot, design D5:
@@ -117,9 +118,9 @@ function UsuariosTable({ usuarios, onDeactivate, ownUserId, onVincularTelegram, 
                 la fila de otro usuario. */}
                 {u.id === ownUserId && (
                   u.telegram_vinculado ? (
-                    <button type="button" className="motored-row-action" onClick={() => onDesvincularTelegram(u.id)}>Desvincular Telegram</button>
+                    <MotoredIconAction action="Desvincular Telegram" onClick={() => onDesvincularTelegram(u.id)} />
                   ) : (
-                    <button type="button" className="motored-row-action" onClick={() => onVincularTelegram(u.id)}>Vincular Telegram</button>
+                    <MotoredIconAction action="Vincular Telegram" onClick={() => onVincularTelegram(u.id)} />
                   )
                 )}
               </td>
@@ -152,8 +153,8 @@ function SolicitudesPendientesTable({ solicitudes, onAprobar, onRechazar }) {
               <td style={{ padding: '10px 12px 10px 0' }}>{s.nombre}</td>
               <td style={{ padding: '10px 12px 10px 0' }}>{s.phone}</td>
               <td style={{ padding: '10px 0', display: 'flex', gap: '0.5rem' }}>
-                <button type="button" className="motored-btn motored-btn-primary" onClick={() => onAprobar(s.id)}>Aprobar</button>
-                <button type="button" className="motored-row-action" onClick={() => onRechazar(s.id)}>Rechazar</button>
+                <MotoredIconAction action="Aprobar" onClick={() => onAprobar(s.id)} />
+                <MotoredIconAction action="Rechazar" onClick={() => onRechazar(s.id)} />
               </td>
             </tr>
           ))}

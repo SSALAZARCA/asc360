@@ -16,6 +16,7 @@
  * can wire it up later without another migration.
  */
 import MotoredTableScroll from '../MotoredTableScroll';
+import MotoredIconAction from '../MotoredIconAction';
 import { useEffect, useState } from 'react';
 import {
   listMaestros,
@@ -84,9 +85,9 @@ function BodegasTable({ bodegas, sucursalesPorId, onEdit, onDeactivate }) {
               </td>
               <td style={{ padding: '10px 12px 10px 0' }}>{b.activa ? 'Activa' : 'Inactiva'}</td>
               <td style={{ display: 'flex', gap: '1rem', padding: '10px 0' }}>
-                <button type="button" className="motored-row-action" onClick={() => onEdit(b)}>Editar</button>
+                <MotoredIconAction action="Editar" onClick={() => onEdit(b)} />
                 {b.activa && (
-                  <button type="button" className="motored-row-action" onClick={() => handleDeactivateClick(b)}>Desactivar</button>
+                  <MotoredIconAction action="Desactivar" onClick={() => handleDeactivateClick(b)} />
                 )}
               </td>
             </tr>

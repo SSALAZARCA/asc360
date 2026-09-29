@@ -13,7 +13,7 @@
  *   - Only one row is in edit mode at a time (mirrors the single
  *     `editandoId` piece of state below).
  * "Anular" uses `window.confirm`, same as `UsuariosTable`'s Desactivar, and
- * `motored-row-action` (never a red button, same rule as `UsuariosTable`).
+ * an icon action (never a red button, same rule as `UsuariosTable`).
  * Only an ACTIVA line exposes Editar/Anular -- an ANULADA line is read-only
  * (spec "Only ACTIVA lines are mutable").
  *

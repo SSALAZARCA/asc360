@@ -76,8 +76,8 @@ describe('ErroresTab', () => {
     render(<ErroresTab carga={{ id: 'carga-1' }} />);
 
     await waitFor(() => expect(screen.getAllByTestId('error-row')).toHaveLength(2));
-    expect(screen.queryByText('Mapear')).not.toBeInTheDocument();
-    expect(screen.queryByText('Crear como OTROS')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Mapear' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Crear como OTROS' })).not.toBeInTheDocument();
   });
 
   it('calls resolverErroresCarga with a mapear_sucursal action and reloads the grid', async () => {
@@ -89,7 +89,9 @@ describe('ErroresTab', () => {
 
     const selects = screen.getAllByRole('combobox');
     fireEvent.change(selects[0], { target: { value: 's1' } });
-    fireEvent.click(screen.getByText('Mapear'));
+    const mapear = screen.getByRole('button', { name: 'Mapear' });
+    expect(mapear.textContent).toBe('');
+    fireEvent.click(mapear);
 
     await waitFor(() => expect(mockResolver).toHaveBeenCalledWith('carga-1', [
       { codigo_error: 'SUCURSAL_NO_ENCONTRADA', valor: 'MR BUCARAMANGA LA 27', accion: 'mapear_sucursal', sucursal_id: 's1' },

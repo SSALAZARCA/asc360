@@ -20,6 +20,7 @@
  * borra, ver `resolver_errores`).
  */
 import MotoredTableScroll from '../MotoredTableScroll';
+import MotoredIconAction from '../MotoredIconAction';
 import { useEffect, useState, useCallback } from 'react';
 import { getErroresCarga, resolverErroresCarga, descargarErroresCargaCsv, listMaestros } from '../../../lib/motored/api';
 import { getRolActual } from '../../../lib/motored/motoredFetch';
@@ -74,19 +75,15 @@ function AccionFila({ error: err, puedeEscribir, sucursales, onAccion }) {
             <option key={s.id} value={s.id} style={{ color: '#1a1a18' }}>{s.nombre}</option>
           ))}
         </select>
-        <button
-          type="button" className="motored-row-action"
+        <MotoredIconAction
+          action="Mapear"
           onClick={() => onAccion({ codigo_error: err.codigo_error, valor: err.valor, accion: 'mapear_sucursal', sucursal_id: sucursalId })}
           disabled={!sucursalId}
-        >
-          Mapear
-        </button>
-        <button
-          type="button" className="motored-row-action"
+        />
+        <MotoredIconAction
+          action="Ignorar"
           onClick={() => onAccion({ codigo_error: err.codigo_error, valor: err.valor, accion: 'ignorar' })}
-        >
-          Ignorar
-        </button>
+        />
       </div>
     );
   }
@@ -94,29 +91,23 @@ function AccionFila({ error: err, puedeEscribir, sucursales, onAccion }) {
   if (err.codigo_error === 'REFERENCIA_NO_ENCONTRADA') {
     return (
       <div style={{ display: 'flex', gap: '0.4rem' }}>
-        <button
-          type="button" className="motored-row-action"
+        <MotoredIconAction
+          action="Crear como OTROS"
           onClick={() => onAccion({ codigo_error: err.codigo_error, valor: err.valor, accion: 'crear_referencia' })}
-        >
-          Crear como OTROS
-        </button>
-        <button
-          type="button" className="motored-row-action"
+        />
+        <MotoredIconAction
+          action="Ignorar"
           onClick={() => onAccion({ codigo_error: err.codigo_error, valor: err.valor, accion: 'ignorar' })}
-        >
-          Ignorar
-        </button>
+        />
       </div>
     );
   }
 
   return (
-    <button
-      type="button" className="motored-row-action"
+    <MotoredIconAction
+      action="Ignorar"
       onClick={() => onAccion({ codigo_error: err.codigo_error, valor: err.valor, accion: 'ignorar' })}
-    >
-      Ignorar
-    </button>
+    />
   );
 }
 

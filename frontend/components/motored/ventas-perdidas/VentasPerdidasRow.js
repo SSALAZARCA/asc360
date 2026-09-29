@@ -9,6 +9,8 @@
  * props, so this component has no state of its own and no behavior change
  * from the original inline version.
  */
+import MotoredIconAction from '../MotoredIconAction';
+
 const tdStyle = { padding: '10px 12px 10px 0' };
 const badgeStyle = { marginLeft: '0.4rem', fontSize: '0.7rem', color: 'var(--motored-text-muted, #5a5a5a)' };
 
@@ -70,15 +72,15 @@ export default function VentasPerdidasRow({
       <td style={{ padding: '10px 0', display: 'flex', gap: '0.5rem' }}>
         {editando && (
           <>
-            <button type="button" className="motored-btn motored-btn-primary" onClick={onGuardar}>Guardar</button>
-            <button type="button" className="motored-row-action" onClick={onCancelar}>Cancelar</button>
+            <MotoredIconAction action="Guardar" onClick={onGuardar} />
+            <MotoredIconAction action="Cancelar" onClick={onCancelar} />
           </>
         )}
         {esActiva && !editando && !bloqueadoPorOtraEdicion && (
-          <button type="button" className="motored-row-action" onClick={onIniciarEdicion}>Editar</button>
+          <MotoredIconAction action="Editar" onClick={onIniciarEdicion} />
         )}
         {esActiva && !editando && !bloqueadoPorOtraEdicion && (
-          <button type="button" className="motored-row-action" onClick={onAnular}>Anular</button>
+          <MotoredIconAction action="Anular" onClick={onAnular} />
         )}
       </td>
     </tr>
