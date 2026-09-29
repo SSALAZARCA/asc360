@@ -34,6 +34,7 @@ import {
 } from '../../../lib/motored/api';
 import BulkUploadModal from './BulkUploadModal';
 import FormField from './FormField';
+import HomologadosCell from './HomologadosCell';
 import InfoTooltip from '../InfoTooltip';
 
 const ENTIDAD_PLURAL = 'referencias';
@@ -220,7 +221,7 @@ function ReferenciasTable({ referencias, proveedorCodigoPorId, onEdit, onDeactiv
             <td style={tdStyle}>
               {r.sustituida_por ? (codigoPorReferenciaId[r.sustituida_por] || <em>desconocida</em>) : <em>—</em>}
             </td>
-            <td style={tdStyle}>{r.homologados?.length ? formatHomologados(r.homologados) : <em>—</em>}</td>
+            <td style={tdStyle}><HomologadosCell values={r.homologados} /></td>
             <td style={tdStyle}>{r.activa ? 'Activa' : 'Inactiva'}</td>
             <td style={{ display: 'flex', gap: '1rem', padding: '10px 0' }}>
               <button type="button" className="motored-row-action" onClick={() => onEdit(r)}>Editar</button>

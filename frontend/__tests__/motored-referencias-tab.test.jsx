@@ -99,6 +99,18 @@ describe('ReferenciasTab — table', () => {
     expect(cells[8]).toBe('YAM-1, HON-2');
   });
 
+  it('keeps a long homologados list on one line with a +N button instead of wrapping', async () => {
+    const largo = { ...REFERENCIAS[2], id: 'r-long', codigo: 'REF-LONG', homologados: ['A1', 'B2', 'C3', 'D4', 'E5'] };
+    mockListMaestros.mockImplementation((entidad) => (
+      Promise.resolve(entidad === 'proveedores' ? PROVEEDORES : [...REFERENCIAS, largo])
+    ));
+    const table = await renderTab();
+    const row = rowFor(table, 'REF-LONG');
+
+    expect(within(row).getByText('A1, B2, C3')).toBeInTheDocument();
+    expect(within(row).getByRole('button', { name: 'Ver los 5 modelos' })).toHaveTextContent('+2');
+  });
+
   it('no longer shows precio_venta anywhere', async () => {
     const table = await renderTab();
 
