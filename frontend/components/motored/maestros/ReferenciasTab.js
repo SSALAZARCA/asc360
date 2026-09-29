@@ -8,10 +8,17 @@
  * text, matching `BodegasTab.js`'s precedent):
  * - `proveedor_id` (required) -- fed by the real proveedores list. This is
  *   why Proveedores had to exist before this tab.
- * - `sustituida_por` (optional) -- fed only by referencias of the SELECTED
- *   proveedor (excluding the row being edited; the same-proveedor rule is
- *   also enforced server-side); setting it deactivates this
- *   referencia server-side (`services/maestros.py::update_referencia`).
+ * - `sustituida_por` (optional) -- a server-side type-ahead
+ *   (`SustitutaTypeahead.js`) limited to the SELECTED proveedor, excluding
+ *   the row being edited (the same-proveedor rule is also enforced
+ *   server-side); setting it deactivates this referencia server-side
+ *   (`services/maestros.py::update_referencia`).
+ *
+ * Pagination (`odd/tasks/motored-referencias-paginacion.md`): the catalog
+ * is too big to load at once, so only the current page is fetched
+ * (`useReferenciasPagina.js`), with server-side search and filters. Each
+ * row carries `sustituta_codigo` from the backend, since the sustituta is
+ * rarely on the same page.
  *
  * `unidad_empaque` and the price split (`precio_normal` vs. `precio_publico`)
  * are exactly the two locked business rules from the proposal most likely to
@@ -26,23 +33,21 @@
  * shown or sent (the DB column is kept untouched).
  */
 import { useEffect, useState } from 'react';
-import {
-  listMaestros,
-  createMaestro,
-  updateMaestro,
-  deactivateMaestro,
-} from '../../../lib/motored/api';
+import { listMaestros } from '../../../lib/motored/api';
 import BulkUploadModal from './BulkUploadModal';
 import FormField from './FormField';
 import HomologadosCell from './HomologadosCell';
+import ReferenciasFiltros from './ReferenciasFiltros';
+import ReferenciasPaginador from './ReferenciasPaginador';
+import SustitutaTypeahead from './SustitutaTypeahead';
+import useReferenciasPagina, { useLineasComerciales } from './useReferenciasPagina';
 import InfoTooltip from '../InfoTooltip';
 
-const ENTIDAD_PLURAL = 'referencias';
 const ENTIDAD_SINGULAR = 'referencia';
 
 const emptyForm = {
   codigo: '', proveedor_id: '', nombre: '', linea_comercial: '', unidad_empaque: '1',
-  precio_normal: '', precio_publico: '', sustituida_por: '', homologados: '',
+  precio_normal: '', precio_publico: '', sustituida_por: '', sustituta_codigo: '', homologados: '',
 };
 
 const HELP = {
@@ -82,12 +87,11 @@ function PrecioFields({ form, setForm }) {
   ));
 }
 
-function ProveedorSelect({ form, setForm, proveedores, referencias }) {
-  // Changing the proveedor drops a sustituta that no longer matches it.
+function ProveedorSelect({ form, setForm, proveedores }) {
+  // A sustituta always belongs to the proveedor it was chosen for, so
+  // changing the proveedor drops it.
   const onProveedorChange = (proveedorId) => {
-    const sustituta = referencias.find((r) => r.id === form.sustituida_por);
-    const keepSustituta = sustituta && sustituta.proveedor_id === proveedorId;
-    setForm({ ...form, proveedor_id: proveedorId, sustituida_por: keepSustituta ? form.sustituida_por : '' });
+    setForm({ ...form, proveedor_id: proveedorId, sustituida_por: '', sustituta_codigo: '' });
   };
 
   return (
@@ -106,34 +110,23 @@ function ProveedorSelect({ form, setForm, proveedores, referencias }) {
   );
 }
 
-function SustitutaSelect({ form, setForm, editingId, referencias }) {
-  // Business rule (2026-09-28): the substitute MUST belong to the same
-  // proveedor (enforced server-side too).
-  const referenciasParaSustituir = referencias.filter(
-    (r) => r.id !== editingId && form.proveedor_id && r.proveedor_id === form.proveedor_id
-  );
-
+function SustitutaField({ form, setForm, editingId }) {
   return (
-    <label style={{ display: 'flex', flexDirection: 'column', fontSize: '0.7rem', color: 'var(--motored-text-muted, #5a5a5a)' }}>
-      <span>
-        Código de referencia sustituta
-        <InfoTooltip text={HELP.sustituta} />
-      </span>
-      <select value={form.sustituida_por} onChange={(e) => setForm({ ...form, sustituida_por: e.target.value })}>
-        <option value="" style={{ color: '#1a1a18' }}>— No aplica —</option>
-        {referenciasParaSustituir.map((r) => (
-          <option key={r.id} value={r.id} style={{ color: '#1a1a18' }}>{r.codigo}</option>
-        ))}
-      </select>
-    </label>
+    <SustitutaTypeahead
+      proveedorId={form.proveedor_id}
+      excludeId={editingId}
+      help={HELP.sustituta}
+      value={{ id: form.sustituida_por, codigo: form.sustituta_codigo }}
+      onChange={({ id, codigo }) => setForm({ ...form, sustituida_por: id, sustituta_codigo: codigo })}
+    />
   );
 }
 
-function ReferenciaForm({ form, setForm, editingId, proveedores, referencias, onSubmit, onCancel }) {
+function ReferenciaForm({ form, setForm, editingId, proveedores, onSubmit, onCancel }) {
   return (
     <form onSubmit={onSubmit} style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
       <FormField label="Código" required value={form.codigo} onChange={(e) => setForm({ ...form, codigo: e.target.value })} />
-      <ProveedorSelect form={form} setForm={setForm} proveedores={proveedores} referencias={referencias} />
+      <ProveedorSelect form={form} setForm={setForm} proveedores={proveedores} />
       <FormField label="Nombre" value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} />
       <FormField
         label="Línea comercial"
@@ -148,7 +141,7 @@ function ReferenciaForm({ form, setForm, editingId, proveedores, referencias, on
         onChange={(e) => setForm({ ...form, unidad_empaque: e.target.value })}
       />
       <PrecioFields form={form} setForm={setForm} />
-      <SustitutaSelect form={form} setForm={setForm} editingId={editingId} referencias={referencias} />
+      <SustitutaField form={form} setForm={setForm} editingId={editingId} />
       <FormField
         label="Homologados otras marcas"
         tooltip={HELP.homologados}
@@ -188,7 +181,6 @@ function ReferenciasTable({ referencias, proveedorCodigoPorId, onEdit, onDeactiv
       onDeactivate(r.id);
     }
   };
-  const codigoPorReferenciaId = Object.fromEntries(referencias.map((r) => [r.id, r.codigo]));
 
   return (
     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
@@ -219,7 +211,7 @@ function ReferenciasTable({ referencias, proveedorCodigoPorId, onEdit, onDeactiv
             <td style={tdStyle}>{r.precio_normal != null ? r.precio_normal : <em>sin precio</em>}</td>
             <td style={tdStyle}>{r.precio_publico != null ? r.precio_publico : <em>—</em>}</td>
             <td style={tdStyle}>
-              {r.sustituida_por ? (codigoPorReferenciaId[r.sustituida_por] || <em>desconocida</em>) : <em>—</em>}
+              {r.sustituida_por ? (r.sustituta_codigo || <em>desconocida</em>) : <em>—</em>}
             </td>
             <td style={tdStyle}><HomologadosCell values={r.homologados} /></td>
             <td style={tdStyle}>{r.activa ? 'Activa' : 'Inactiva'}</td>
@@ -270,57 +262,6 @@ function useProveedoresOptions() {
   return { proveedores, proveedorCodigoPorId: codigoPorId, proveedoresError: error };
 }
 
-function useReferencias() {
-  const [referencias, setReferencias] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-
-  const load = async () => {
-    setLoading(true);
-    setError('');
-    try {
-      setReferencias(await listMaestros(ENTIDAD_PLURAL));
-    } catch (err) {
-      setError(err.message || 'Error al cargar referencias');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const save = async (payload, editingId) => {
-    setError('');
-    try {
-      if (editingId) {
-        await updateMaestro(ENTIDAD_PLURAL, editingId, payload);
-      } else {
-        await createMaestro(ENTIDAD_PLURAL, payload);
-      }
-      await load();
-      return true;
-    } catch (err) {
-      setError(err.message || 'Error al guardar referencia');
-      return false;
-    }
-  };
-
-  const deactivate = async (id) => {
-    setError('');
-    try {
-      await deactivateMaestro(ENTIDAD_PLURAL, id);
-      await load();
-    } catch (err) {
-      setError(err.message || 'Error al desactivar referencia');
-    }
-  };
-
-  return { referencias, loading, error, save, deactivate, reload: load };
-}
-
 function useReferenciasEditor(save) {
   const [form, setForm] = useState(emptyForm);
   const [editingId, setEditingId] = useState(null);
@@ -336,6 +277,7 @@ function useReferenciasEditor(save) {
       precio_normal: r.precio_normal != null ? String(r.precio_normal) : '',
       precio_publico: r.precio_publico != null ? String(r.precio_publico) : '',
       sustituida_por: r.sustituida_por || '',
+      sustituta_codigo: r.sustituta_codigo || '',
       homologados: formatHomologados(r.homologados),
     });
   };
@@ -367,9 +309,24 @@ function useReferenciasEditor(save) {
   return { form, setForm, editingId, startEdit, cancelEdit, handleSubmit };
 }
 
+const mutedText = { color: 'var(--motored-text-muted, #5a5a5a)', fontSize: '0.8rem' };
+
+function ReferenciasListado({ pagina, proveedorCodigoPorId, onEdit }) {
+  const { items, total, loading, page, pageSize, setPage, setPageSize, deactivate } = pagina;
+  if (loading && items.length === 0) return <p style={mutedText}>Cargando...</p>;
+  return (
+    <>
+      <ReferenciasTable referencias={items} proveedorCodigoPorId={proveedorCodigoPorId} onEdit={onEdit} onDeactivate={deactivate} />
+      {items.length === 0 && <p style={mutedText}>No hay referencias que coincidan con la búsqueda.</p>}
+      <ReferenciasPaginador page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} />
+    </>
+  );
+}
+
 export default function ReferenciasTab() {
-  const { referencias, loading, error, save, deactivate, reload } = useReferencias();
-  const { form, setForm, editingId, startEdit, cancelEdit, handleSubmit } = useReferenciasEditor(save);
+  const pagina = useReferenciasPagina();
+  const lineas = useLineasComerciales(pagina.version);
+  const { form, setForm, editingId, startEdit, cancelEdit, handleSubmit } = useReferenciasEditor(pagina.save);
   const { proveedores, proveedorCodigoPorId, proveedoresError } = useProveedoresOptions();
   const [showBulkModal, setShowBulkModal] = useState(false);
 
@@ -377,7 +334,7 @@ export default function ReferenciasTab() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
       <ReferenciasHeader onOpenBulk={() => setShowBulkModal(true)} />
 
-      {error && <p style={{ color: 'var(--motored-danger, #c0392b)', fontSize: '0.8rem' }}>{error}</p>}
+      {pagina.error && <p style={{ color: 'var(--motored-danger, #c0392b)', fontSize: '0.8rem' }}>{pagina.error}</p>}
       {proveedoresError && (
         <p style={{ color: 'var(--motored-warning, #d97706)', fontSize: '0.8rem' }}>
           No se pudo cargar la lista de proveedores para el desplegable ({proveedoresError}).
@@ -385,20 +342,12 @@ export default function ReferenciasTab() {
       )}
 
       <ReferenciaForm
-        form={form}
-        setForm={setForm}
-        editingId={editingId}
-        proveedores={proveedores}
-        referencias={referencias}
-        onSubmit={handleSubmit}
-        onCancel={cancelEdit}
+        form={form} setForm={setForm} editingId={editingId} proveedores={proveedores}
+        onSubmit={handleSubmit} onCancel={cancelEdit}
       />
 
-      {loading ? (
-        <p style={{ color: 'var(--motored-text-muted, #5a5a5a)', fontSize: '0.8rem' }}>Cargando...</p>
-      ) : (
-        <ReferenciasTable referencias={referencias} proveedorCodigoPorId={proveedorCodigoPorId} onEdit={startEdit} onDeactivate={deactivate} />
-      )}
+      <ReferenciasFiltros filtros={pagina.filtros} lineas={lineas} onChange={pagina.setFiltros} />
+      <ReferenciasListado pagina={pagina} proveedorCodigoPorId={proveedorCodigoPorId} onEdit={startEdit} />
 
       {showBulkModal && (
         <BulkUploadModal
@@ -406,7 +355,7 @@ export default function ReferenciasTab() {
           onClose={() => setShowBulkModal(false)}
           onSuccess={() => {
             setShowBulkModal(false);
-            reload();
+            pagina.reload();
           }}
         />
       )}

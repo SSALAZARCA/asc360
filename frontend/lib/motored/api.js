@@ -67,6 +67,41 @@ export async function deactivateMaestro(entidadPlural, id) {
 }
 
 // ---------------------------------------------------------------------------
+// Referencias -- lectura paginada (`backend/app/motored/api/
+// referencias_busqueda.py`). `listMaestros('referencias')` sigue existiendo
+// (lista completa sin paginar), pero la pestaña Referencias usa estas.
+// ---------------------------------------------------------------------------
+
+function _queryString(params) {
+  const search = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    const text = value == null ? '' : String(value).trim();
+    if (text !== '') search.set(key, text);
+  });
+  const qs = search.toString();
+  return qs ? `?${qs}` : '';
+}
+
+/** GET /maestros/referencias/buscar -> `{ items, total, page, page_size }`. */
+export async function buscarReferencias({ page, pageSize, q, lineaComercial, activa, proveedorId }) {
+  const qs = _queryString({
+    page, page_size: pageSize, q, linea_comercial: lineaComercial, activa, proveedor_id: proveedorId,
+  });
+  return motoredFetchJson(`/maestros/referencias/buscar${qs}`);
+}
+
+/** GET /maestros/referencias/lineas-comerciales -> valores distintos. */
+export async function listLineasComerciales() {
+  return motoredFetchJson('/maestros/referencias/lineas-comerciales');
+}
+
+/** GET /maestros/referencias/sustitutas -> `[{ id, codigo, nombre }]` (máx. 20). */
+export async function buscarSustitutas({ proveedorId, q, excludeId }) {
+  const qs = _queryString({ proveedor_id: proveedorId, q, exclude_id: excludeId });
+  return motoredFetchJson(`/maestros/referencias/sustitutas${qs}`);
+}
+
+// ---------------------------------------------------------------------------
 // Carga masiva -- `entidad` es SINGULAR acá (sucursal|bodega|proveedor|
 // referencia), igual que `backend/app/motored/api/carga.py`. Recibe filas
 // YA ESTRUCTURADAS (list[dict]) -- Fase 1 no parsea `.xlsx` en el browser

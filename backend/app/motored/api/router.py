@@ -26,6 +26,7 @@ from app.motored.api import (
     demanda_perdida,
     maestros,
     parametros,
+    referencias_busqueda,
     salud,
     usuarios,
 )
@@ -34,6 +35,9 @@ router = APIRouter()
 
 router.include_router(auth.router)
 router.include_router(salud.router)  # antes de maestros -- ver nota arriba
+# Tambien antes de maestros: `/maestros/referencias/buscar` chocaria con el
+# generico `/maestros/{entidad}/{entity_id}` (ver `referencias_busqueda.py`).
+router.include_router(referencias_busqueda.router)
 router.include_router(maestros.router)
 router.include_router(carga.router)
 router.include_router(usuarios.router)

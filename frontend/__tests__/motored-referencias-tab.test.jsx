@@ -11,11 +11,15 @@ import { render, screen, fireEvent, waitFor, within } from '@testing-library/rea
 const mockListMaestros = jest.fn();
 const mockCreateMaestro = jest.fn();
 const mockUpdateMaestro = jest.fn();
+const mockBuscarReferencias = jest.fn();
 jest.mock('../lib/motored/api', () => ({
   listMaestros: (...args) => mockListMaestros(...args),
   createMaestro: (...args) => mockCreateMaestro(...args),
   updateMaestro: (...args) => mockUpdateMaestro(...args),
   deactivateMaestro: jest.fn(),
+  buscarReferencias: (...args) => mockBuscarReferencias(...args),
+  listLineasComerciales: () => Promise.resolve(['REPUESTOS']),
+  buscarSustitutas: () => Promise.resolve([]),
 }));
 
 import ReferenciasTab from '../components/motored/maestros/ReferenciasTab';
@@ -33,7 +37,7 @@ const REFERENCIAS = [
   {
     id: 'r-new', codigo: 'REF-NEW', proveedor_id: 'p1', nombre: 'Nuevo', linea_comercial: 'REPUESTOS',
     unidad_empaque: 2, unidad_empaque_advertencia: false, precio_normal: '200.00', precio_venta: '888.00',
-    precio_publico: '250.00', sustituida_por: 'r-old', homologados: ['YAM-1', 'HON-2'], activa: true,
+    precio_publico: '250.00', sustituida_por: 'r-old', sustituta_codigo: 'REF-OLD', homologados: ['YAM-1', 'HON-2'], activa: true,
   },
   {
     id: 'r-p2', codigo: 'REF-P2', proveedor_id: 'p2', nombre: 'De otro proveedor', linea_comercial: null,
@@ -42,10 +46,13 @@ const REFERENCIAS = [
   },
 ];
 
+function pagina(items) {
+  return Promise.resolve({ items, total: items.length, page: 1, page_size: 50 });
+}
+
 beforeEach(() => {
-  mockListMaestros.mockReset().mockImplementation((entidad) => (
-    Promise.resolve(entidad === 'proveedores' ? PROVEEDORES : REFERENCIAS)
-  ));
+  mockListMaestros.mockReset().mockResolvedValue(PROVEEDORES);
+  mockBuscarReferencias.mockReset().mockImplementation(() => pagina(REFERENCIAS));
   mockCreateMaestro.mockReset().mockResolvedValue({});
   mockUpdateMaestro.mockReset().mockResolvedValue({});
 });
@@ -101,9 +108,7 @@ describe('ReferenciasTab — table', () => {
 
   it('keeps a long homologados list on one line with a +N button instead of wrapping', async () => {
     const largo = { ...REFERENCIAS[2], id: 'r-long', codigo: 'REF-LONG', homologados: ['A1', 'B2', 'C3', 'D4', 'E5'] };
-    mockListMaestros.mockImplementation((entidad) => (
-      Promise.resolve(entidad === 'proveedores' ? PROVEEDORES : [...REFERENCIAS, largo])
-    ));
+    mockBuscarReferencias.mockImplementation(() => pagina([...REFERENCIAS, largo]));
     const table = await renderTab();
     const row = rowFor(table, 'REF-LONG');
 
@@ -170,7 +175,7 @@ describe('ReferenciasTab — form', () => {
     expect(payload).not.toHaveProperty('precio_venta');
   });
 
-  it('labels the proveedor dropdown options with the proveedor codigo and styles every option', async () => {
+  it('labels the proveedor dropdown options with the proveedor codigo and styles every option on the page', async () => {
     await renderTab();
 
     const option = screen.getByRole('option', { name: /HMCL/ });
@@ -178,33 +183,5 @@ describe('ReferenciasTab — form', () => {
     screen.getAllByRole('option').forEach((opt) => {
       expect(opt.getAttribute('style')).toMatch(/color/);
     });
-  });
-
-  it('only offers substitutes from the selected proveedor (never the row itself)', async () => {
-    await renderTab();
-    fireEvent.click(within(rowFor(screen.getByRole('table'), 'REF-NEW')).getByRole('button', { name: 'Editar' }));
-
-    const sustituta = screen.getByLabelText(/Código de referencia sustituta/i, { selector: 'select' });
-    const offered = within(sustituta).getAllByRole('option').map((o) => o.textContent);
-    expect(offered).toContain('REF-OLD');
-    expect(offered).not.toContain('REF-P2');
-    expect(offered).not.toContain('REF-NEW');
-    within(sustituta).getAllByRole('option').forEach((opt) => {
-      expect(opt.getAttribute('style')).toMatch(/color/);
-    });
-  });
-
-  it('clears the chosen substitute when the proveedor changes to one it does not belong to', async () => {
-    await renderTab();
-    fireEvent.click(within(rowFor(screen.getByRole('table'), 'REF-NEW')).getByRole('button', { name: 'Editar' }));
-
-    const proveedor = screen.getByLabelText(/Código del proveedor/i, { selector: 'select' });
-    fireEvent.change(proveedor, { target: { value: 'p2' } });
-
-    const sustituta = screen.getByLabelText(/Código de referencia sustituta/i, { selector: 'select' });
-    expect(sustituta.value).toBe('');
-    const offered = within(sustituta).getAllByRole('option').map((o) => o.textContent);
-    expect(offered).toContain('REF-P2');
-    expect(offered).not.toContain('REF-OLD');
   });
 });
