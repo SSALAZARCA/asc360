@@ -49,8 +49,31 @@ import { Mulish, IBM_Plex_Mono } from 'next/font/google';
 const mulish = Mulish({ subsets: ['latin'], weight: ['500', '800'], variable: '--motored-font-body' });
 const plexMono = IBM_Plex_Mono({ subsets: ['latin'], weight: ['500', '600'], variable: '--motored-font-mono' });
 
+const MOTORED_TITLE = 'Motored Pedidos';
+const MOTORED_DESCRIPTION = 'Sistema de gestión Motored';
+
+// Link previews (WhatsApp, Telegram) need absolute image URLs; the site
+// origin is derived from the API URL the deployment already sets.
+function siteOrigin() {
+  try {
+    return new URL(process.env.NEXT_PUBLIC_API_URL).origin;
+  } catch {
+    return 'https://asc360.online';
+  }
+}
+
+// Own description and Open Graph data so shared Motored links never show
+// the inherited asc360/UM description from app/layout.js.
 export const metadata = {
-  title: 'Motored Pedidos',
+  metadataBase: new URL(siteOrigin()),
+  title: MOTORED_TITLE,
+  description: MOTORED_DESCRIPTION,
+  openGraph: {
+    title: MOTORED_TITLE,
+    description: MOTORED_DESCRIPTION,
+    siteName: 'Motored',
+    images: [{ url: '/motored-logo.png' }],
+  },
 };
 
 const themeCss = `
