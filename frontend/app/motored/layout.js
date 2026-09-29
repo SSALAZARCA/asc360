@@ -215,6 +215,58 @@ const themeCss = `
         .motored-theme .motored-tab.is-active {
           color: var(--motored-text); border-bottom-color: var(--motored-primary);
         }
+
+        /* Tablas -- contenedor de scroll horizontal compartido
+        (MotoredTableScroll.js). La tabla conserva un ancho mínimo y se
+        desplaza dentro de la caja, nunca la página completa. */
+        .motored-theme .motored-table-scroll > table { min-width: 640px; }
+
+        /* Barra superior -- solo visible bajo 1024px. */
+        .motored-theme .motored-topbar { display: none; }
+        .motored-theme .motored-backdrop { display: none; }
+
+        /* Tablet y menores: el menú lateral pasa a cajón fuera de pantalla
+        (se abre con el botón de la barra superior), los formularios y
+        filtros fluyen en varias filas y las pestañas se desplazan. Los
+        estilos en línea del aside exigen important. */
+        @media (max-width: 1023px) {
+          .motored-theme .motored-topbar {
+            display: flex; align-items: center; gap: 12px; padding: 8px 16px;
+            background: var(--motored-surface); border-bottom: 1px solid var(--motored-border);
+            position: sticky; top: 0; z-index: 30;
+          }
+          .motored-theme .motored-topbar-btn {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 44px; height: 44px; border-radius: var(--motored-radius-md);
+            background: transparent; border: 1px solid var(--motored-border);
+            color: var(--motored-text); cursor: pointer;
+          }
+          .motored-theme .motored-sidebar {
+            position: fixed !important; top: 0; left: 0; height: 100vh !important;
+            z-index: 50; transform: translateX(-100%); visibility: hidden;
+            transition: transform 0.2s ease, visibility 0.2s;
+            box-shadow: var(--motored-shadow);
+          }
+          .motored-theme .motored-sidebar.is-open { transform: translateX(0); visibility: visible; }
+          .motored-theme .motored-backdrop {
+            display: block; position: fixed; inset: 0; z-index: 40;
+            background: rgba(0, 0, 0, 0.4);
+          }
+          .motored-theme .motored-main { padding: 1.25rem !important; }
+        }
+
+        /* Pestañas -- con el menú lateral visible (1024px) las 10 pestañas
+        no caben en una fila: la barra se desplaza en horizontal en lugar de
+        ensanchar la página. La línea base pasa a sombra interior para que
+        el scroll no recorte la línea roja de la pestaña activa. */
+        @media (max-width: 1279px) {
+          .motored-theme .motored-tab-bar {
+            overflow-x: auto; gap: 16px; border-bottom: none;
+            box-shadow: inset 0 -1px 0 var(--motored-border);
+          }
+          .motored-theme .motored-tab-bar > * { flex-shrink: 0; white-space: nowrap; }
+          .motored-theme .motored-tab { margin-bottom: 0; }
+        }
       `;
 
 export default function MotoredRootLayout({ children }) {

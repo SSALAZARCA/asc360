@@ -13,6 +13,7 @@
  * to `deactivateMaestro`, never a real removal, matching the backend's own
  * "no endpoint offers hard delete" guarantee.
  */
+import MotoredTableScroll from '../MotoredTableScroll';
 import { useEffect, useState } from 'react';
 import {
   listMaestros,
@@ -78,60 +79,62 @@ function SucursalesTable({ sucursales, onEdit, onDeactivate }) {
   };
 
   return (
-    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
-      <thead>
-        <tr style={{ textAlign: 'left', color: 'var(--motored-text-muted, #5a5a5a)' }}>
-          <th style={{ padding: '0 12px 8px 0' }}>Nombre</th>
-          <th style={{ padding: '0 12px 8px 0' }}>
-            SIC
-            <InfoTooltip text="Código con el que el proveedor (HMCL) identifica esta sucursal en sus sistemas." />
-          </th>
-          <th style={{ padding: '0 12px 8px 0' }}>
-            Días seguridad
-            <InfoTooltip text="Colchón de días extra sobre el tiempo normal de reposición, para cubrir imprevistos. Por defecto 2.5 días." />
-          </th>
-          <th style={{ padding: '0 12px 8px 0' }}>
-            Días empaque
-            <InfoTooltip text="Días propios de esta sucursal para armar un pedido (distinto del valor por defecto del proveedor)." />
-          </th>
-          <th style={{ padding: '0 12px 8px 0' }}>
-            Días tránsito
-            <InfoTooltip text="Días propios de esta sucursal para que le llegue un pedido (distinto del valor por defecto del proveedor)." />
-          </th>
-          <th style={{ padding: '0 12px 8px 0' }}>Bodega principal</th>
-          <th style={{ padding: '0 12px 8px 0' }}>Departamento</th>
-          <th style={{ padding: '0 12px 8px 0' }}>Ciudad</th>
-          <th style={{ padding: '0 12px 8px 0' }}>Fecha apertura</th>
-          <th style={{ padding: '0 12px 8px 0' }}>Estado</th>
-          <th />
-        </tr>
-      </thead>
-      <tbody>
-        {sucursales.map((s) => (
-          <tr key={s.id} style={{ borderTop: '1px solid var(--motored-border, #e4e4e7)' }}>
-            <td style={{ padding: '10px 12px 10px 0' }}>{s.nombre}</td>
-            <td style={{ padding: '10px 12px 10px 0' }}>{s.sic || <em>sin SIC</em>}</td>
-            <td style={{ padding: '10px 12px 10px 0' }}>{s.dias_seguridad}</td>
-            <td style={{ padding: '10px 12px 10px 0' }}>{s.dias_empaque ?? <em>—</em>}</td>
-            <td style={{ padding: '10px 12px 10px 0' }}>{s.dias_transito ?? <em>—</em>}</td>
-            <td style={{ padding: '10px 12px 10px 0' }}>{s.bodega_principal || <em>—</em>}</td>
-            <td style={{ padding: '10px 12px 10px 0' }}>{s.departamento || <em>—</em>}</td>
-            <td style={{ padding: '10px 12px 10px 0' }}>{s.ciudad || <em>—</em>}</td>
-            <td style={{ padding: '10px 12px 10px 0' }}>{s.fecha_apertura || <em>—</em>}</td>
-            <td style={{ padding: '10px 12px 10px 0' }}>{s.activa ? 'Activa' : 'Inactiva'}</td>
-            <td style={{ display: 'flex', gap: '1rem', padding: '10px 0' }}>
-              {/* Nunca un botón rojo dentro de una tabla (regla del sistema
-              real) -- acciones de fila usan .motored-row-action, texto
-              neutro, no el rojo destructivo. */}
-              <button type="button" className="motored-row-action" onClick={() => onEdit(s)}>Editar</button>
-              {s.activa && (
-                <button type="button" className="motored-row-action" onClick={() => handleDeactivateClick(s)}>Desactivar</button>
-              )}
-            </td>
+    <MotoredTableScroll>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+        <thead>
+          <tr style={{ textAlign: 'left', color: 'var(--motored-text-muted, #5a5a5a)' }}>
+            <th style={{ padding: '0 12px 8px 0' }}>Nombre</th>
+            <th style={{ padding: '0 12px 8px 0' }}>
+              SIC
+              <InfoTooltip text="Código con el que el proveedor (HMCL) identifica esta sucursal en sus sistemas." />
+            </th>
+            <th style={{ padding: '0 12px 8px 0' }}>
+              Días seguridad
+              <InfoTooltip text="Colchón de días extra sobre el tiempo normal de reposición, para cubrir imprevistos. Por defecto 2.5 días." />
+            </th>
+            <th style={{ padding: '0 12px 8px 0' }}>
+              Días empaque
+              <InfoTooltip text="Días propios de esta sucursal para armar un pedido (distinto del valor por defecto del proveedor)." />
+            </th>
+            <th style={{ padding: '0 12px 8px 0' }}>
+              Días tránsito
+              <InfoTooltip text="Días propios de esta sucursal para que le llegue un pedido (distinto del valor por defecto del proveedor)." />
+            </th>
+            <th style={{ padding: '0 12px 8px 0' }}>Bodega principal</th>
+            <th style={{ padding: '0 12px 8px 0' }}>Departamento</th>
+            <th style={{ padding: '0 12px 8px 0' }}>Ciudad</th>
+            <th style={{ padding: '0 12px 8px 0' }}>Fecha apertura</th>
+            <th style={{ padding: '0 12px 8px 0' }}>Estado</th>
+            <th />
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {sucursales.map((s) => (
+            <tr key={s.id} style={{ borderTop: '1px solid var(--motored-border, #e4e4e7)' }}>
+              <td style={{ padding: '10px 12px 10px 0' }}>{s.nombre}</td>
+              <td style={{ padding: '10px 12px 10px 0' }}>{s.sic || <em>sin SIC</em>}</td>
+              <td style={{ padding: '10px 12px 10px 0' }}>{s.dias_seguridad}</td>
+              <td style={{ padding: '10px 12px 10px 0' }}>{s.dias_empaque ?? <em>—</em>}</td>
+              <td style={{ padding: '10px 12px 10px 0' }}>{s.dias_transito ?? <em>—</em>}</td>
+              <td style={{ padding: '10px 12px 10px 0' }}>{s.bodega_principal || <em>—</em>}</td>
+              <td style={{ padding: '10px 12px 10px 0' }}>{s.departamento || <em>—</em>}</td>
+              <td style={{ padding: '10px 12px 10px 0' }}>{s.ciudad || <em>—</em>}</td>
+              <td style={{ padding: '10px 12px 10px 0' }}>{s.fecha_apertura || <em>—</em>}</td>
+              <td style={{ padding: '10px 12px 10px 0' }}>{s.activa ? 'Activa' : 'Inactiva'}</td>
+              <td style={{ display: 'flex', gap: '1rem', padding: '10px 0' }}>
+                {/* Nunca un botón rojo dentro de una tabla (regla del sistema
+                real) -- acciones de fila usan .motored-row-action, texto
+                neutro, no el rojo destructivo. */}
+                <button type="button" className="motored-row-action" onClick={() => onEdit(s)}>Editar</button>
+                {s.activa && (
+                  <button type="button" className="motored-row-action" onClick={() => handleDeactivateClick(s)}>Desactivar</button>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </MotoredTableScroll>
   );
 }
 

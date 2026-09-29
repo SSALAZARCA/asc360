@@ -32,6 +32,7 @@
  * referencia sustituta, Homologados otras marcas. `precio_venta` is no longer
  * shown or sent (the DB column is kept untouched).
  */
+import MotoredTableScroll from '../MotoredTableScroll';
 import { useEffect, useState } from 'react';
 import { listMaestros } from '../../../lib/motored/api';
 import BulkUploadModal from './BulkUploadModal';
@@ -185,48 +186,50 @@ function ReferenciasTable({ referencias, proveedorCodigoPorId, onEdit, onDeactiv
   };
 
   return (
-    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
-      <thead>
-        <tr style={{ textAlign: 'left', color: 'var(--motored-text-muted, #5a5a5a)' }}>
-          {TABLE_COLUMNS.map(({ label, help, numeric }) => (
-            <th key={label} style={numeric ? { ...thStyle, textAlign: 'right' } : thStyle}>
-              {label}
-              {help && <InfoTooltip text={help} />}
-            </th>
-          ))}
-          <th />
-        </tr>
-      </thead>
-      <tbody>
-        {referencias.map((r) => (
-          <tr key={r.id} style={{ borderTop: '1px solid var(--motored-border, #e4e4e7)' }}>
-            <td style={tdStyle}>{r.codigo}</td>
-            <td style={tdStyle}>{proveedorCodigoPorId[r.proveedor_id] || <em>desconocido</em>}</td>
-            <td style={tdStyle}>{r.nombre || <em>sin nombre</em>}</td>
-            <td style={tdStyle}>{r.linea_comercial || <em>—</em>}</td>
-            <td style={tdStyle}>
-              {r.unidad_empaque}
-              {r.unidad_empaque_advertencia && (
-                <span style={{ marginLeft: '0.35rem', color: 'var(--motored-warning, #d97706)', fontSize: '0.7rem' }}>(corregida)</span>
-              )}
-            </td>
-            <td style={numericTdStyle}>{formatCOP(r.precio_normal)}</td>
-            <td style={numericTdStyle}>{formatCOP(r.precio_publico)}</td>
-            <td style={tdStyle}>
-              {r.sustituida_por ? (r.sustituta_codigo || <em>desconocida</em>) : <em>—</em>}
-            </td>
-            <td style={tdStyle}><HomologadosCell values={r.homologados} /></td>
-            <td style={tdStyle}>{r.activa ? 'Activa' : 'Inactiva'}</td>
-            <td style={{ display: 'flex', gap: '1rem', padding: '10px 0' }}>
-              <button type="button" className="motored-row-action" onClick={() => onEdit(r)}>Editar</button>
-              {r.activa && (
-                <button type="button" className="motored-row-action" onClick={() => handleDeactivateClick(r)}>Desactivar</button>
-              )}
-            </td>
+    <MotoredTableScroll>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+        <thead>
+          <tr style={{ textAlign: 'left', color: 'var(--motored-text-muted, #5a5a5a)' }}>
+            {TABLE_COLUMNS.map(({ label, help, numeric }) => (
+              <th key={label} style={numeric ? { ...thStyle, textAlign: 'right' } : thStyle}>
+                {label}
+                {help && <InfoTooltip text={help} />}
+              </th>
+            ))}
+            <th />
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {referencias.map((r) => (
+            <tr key={r.id} style={{ borderTop: '1px solid var(--motored-border, #e4e4e7)' }}>
+              <td style={tdStyle}>{r.codigo}</td>
+              <td style={tdStyle}>{proveedorCodigoPorId[r.proveedor_id] || <em>desconocido</em>}</td>
+              <td style={tdStyle}>{r.nombre || <em>sin nombre</em>}</td>
+              <td style={tdStyle}>{r.linea_comercial || <em>—</em>}</td>
+              <td style={tdStyle}>
+                {r.unidad_empaque}
+                {r.unidad_empaque_advertencia && (
+                  <span style={{ marginLeft: '0.35rem', color: 'var(--motored-warning, #d97706)', fontSize: '0.7rem' }}>(corregida)</span>
+                )}
+              </td>
+              <td style={numericTdStyle}>{formatCOP(r.precio_normal)}</td>
+              <td style={numericTdStyle}>{formatCOP(r.precio_publico)}</td>
+              <td style={tdStyle}>
+                {r.sustituida_por ? (r.sustituta_codigo || <em>desconocida</em>) : <em>—</em>}
+              </td>
+              <td style={tdStyle}><HomologadosCell values={r.homologados} /></td>
+              <td style={tdStyle}>{r.activa ? 'Activa' : 'Inactiva'}</td>
+              <td style={{ display: 'flex', gap: '1rem', padding: '10px 0' }}>
+                <button type="button" className="motored-row-action" onClick={() => onEdit(r)}>Editar</button>
+                {r.activa && (
+                  <button type="button" className="motored-row-action" onClick={() => handleDeactivateClick(r)}>Desactivar</button>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </MotoredTableScroll>
   );
 }
 

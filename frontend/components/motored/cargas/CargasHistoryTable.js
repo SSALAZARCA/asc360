@@ -18,6 +18,7 @@
  * completo, conservando estado/desde/hasta (spec "A per-type tab filters
  * history to its own type").
  */
+import MotoredTableScroll from '../MotoredTableScroll';
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { listarCargas } from '../../../lib/motored/api';
@@ -99,38 +100,40 @@ function useCargasHistory(refreshKey, tipoFijo) {
 
 function TablaCargas({ cargas, onFilaClick }) {
   return (
-    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
-      <thead>
-        <tr style={{ color: 'var(--motored-text-muted, #5a5a5a)' }}>
-          <th style={thStyle}>Archivo</th>
-          <th style={thStyle}>Tipo</th>
-          <th style={thStyle}>Estado</th>
-          <th style={thStyle}>Período</th>
-          <th style={thStyle} className="motored-mono">Filas leídas / válidas / rechazadas</th>
-          <th style={thStyle}>Subida</th>
-        </tr>
-      </thead>
-      <tbody>
-        {cargas.map((carga) => (
-          <tr
-            key={carga.id}
-            style={{ borderTop: '1px solid var(--motored-border, #e4e4e7)', cursor: 'pointer' }}
-            onClick={() => onFilaClick(carga.id)}
-          >
-            <td style={tdStyle}>{carga.nombre_archivo}</td>
-            <td style={tdStyle}>{labelTipo(carga.tipo)}</td>
-            <td style={tdStyle}><EstadoBadge estado={carga.estado} size="sm" /></td>
-            <td style={tdStyle} className="motored-mono">
-              {carga.periodo_desde ? `${carga.periodo_desde} → ${carga.periodo_hasta}` : <em>—</em>}
-            </td>
-            <td style={tdStyle} className="motored-mono">
-              {carga.filas_leidas} / {carga.filas_validas} / {carga.filas_rechazadas}
-            </td>
-            <td style={tdStyle}>{new Date(carga.created_at).toLocaleString('es-CO')}</td>
+    <MotoredTableScroll>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+        <thead>
+          <tr style={{ color: 'var(--motored-text-muted, #5a5a5a)' }}>
+            <th style={thStyle}>Archivo</th>
+            <th style={thStyle}>Tipo</th>
+            <th style={thStyle}>Estado</th>
+            <th style={thStyle}>Período</th>
+            <th style={thStyle} className="motored-mono">Filas leídas / válidas / rechazadas</th>
+            <th style={thStyle}>Subida</th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {cargas.map((carga) => (
+            <tr
+              key={carga.id}
+              style={{ borderTop: '1px solid var(--motored-border, #e4e4e7)', cursor: 'pointer' }}
+              onClick={() => onFilaClick(carga.id)}
+            >
+              <td style={tdStyle}>{carga.nombre_archivo}</td>
+              <td style={tdStyle}>{labelTipo(carga.tipo)}</td>
+              <td style={tdStyle}><EstadoBadge estado={carga.estado} size="sm" /></td>
+              <td style={tdStyle} className="motored-mono">
+                {carga.periodo_desde ? `${carga.periodo_desde} → ${carga.periodo_hasta}` : <em>—</em>}
+              </td>
+              <td style={tdStyle} className="motored-mono">
+                {carga.filas_leidas} / {carga.filas_validas} / {carga.filas_rechazadas}
+              </td>
+              <td style={tdStyle}>{new Date(carga.created_at).toLocaleString('es-CO')}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </MotoredTableScroll>
   );
 }
 

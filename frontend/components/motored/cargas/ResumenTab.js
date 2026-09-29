@@ -119,7 +119,7 @@ function useAccionesCarga({ cargaId, reload, onChanged }) {
 
 function AccionesCarga({ estado, accionando, onAplicar, onAnular }) {
   return (
-    <div style={{ display: 'flex', gap: '0.75rem' }}>
+    <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
       <button
         type="button" className="motored-btn motored-btn-primary"
         onClick={onAplicar} disabled={accionando || estado !== 'VALIDADO'}

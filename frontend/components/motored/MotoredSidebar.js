@@ -25,6 +25,10 @@
  * name + "Salir") stays on screen however long the page is; only the nav
  * area scrolls if it ever overflows.
  *
+ * Below 1024px the aside turns into an off-canvas drawer (`.motored-sidebar`
+ * / `.is-open` rules in the theme CSS, odd/motored-responsive-tablet); the
+ * parent owns the open state and passes `open`/`onClose`.
+ *
  * The standalone "Cargas" entry was REMOVED (sdd/motored-cargas-tipo-
  * declarado; proposal decision #2: "ONE screen" / design D5): uploading is
  * now one of the 10 grouped tabs inside "Maestros" (`MovimientoTab.js`),
@@ -80,11 +84,16 @@ function MenuItem({ item, isActive, onNavigate }) {
   );
 }
 
-export default function MotoredSidebar({ user }) {
+export default function MotoredSidebar({ user, open = false, onClose }) {
   const router = useRouter();
   const pathname = usePathname();
 
   const menuItems = ALL_ITEMS.filter((item) => !item.adminOnly || user?.role === 'ADMIN');
+
+  const navigate = (path) => {
+    onClose?.();
+    router.push(path);
+  };
 
   const handleLogout = () => {
     sessionStorage.removeItem(MOTORED_USER_KEY);
@@ -94,7 +103,7 @@ export default function MotoredSidebar({ user }) {
   };
 
   return (
-    <aside style={asideStyle}>
+    <aside className={`motored-sidebar${open ? ' is-open' : ''}`} style={asideStyle}>
       <div style={logoBoxStyle}>
         <Image src="/motored-logo.png" alt="Motored" width={130} height={42} />
       </div>
@@ -102,7 +111,7 @@ export default function MotoredSidebar({ user }) {
       <nav style={navStyle}>
         <p className="motored-t-rotulo" style={navLabelStyle}>Pedidos Motored</p>
         {menuItems.map((item) => (
-          <MenuItem key={item.id} item={item} isActive={pathname?.startsWith(item.path)} onNavigate={router.push} />
+          <MenuItem key={item.id} item={item} isActive={pathname?.startsWith(item.path)} onNavigate={navigate} />
         ))}
       </nav>
 

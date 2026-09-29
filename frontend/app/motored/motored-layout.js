@@ -21,6 +21,8 @@
 import { useEffect, useState, useRef } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import MotoredSidebar from '../../components/motored/MotoredSidebar';
+import MotoredTopBar from '../../components/motored/MotoredTopBar';
+import useDrawerMenu from '../../components/motored/useDrawerMenu';
 import { MOTORED_USER_KEY, MOTORED_TOKEN_KEY } from '../../lib/motored/motoredFetch';
 
 const VALID_ROLES = ['ADMIN', 'COMPRAS', 'SUCURSAL', 'CONSULTA'];
@@ -31,6 +33,7 @@ export default function MotoredLayout({ children }) {
   const pathname = usePathname();
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const { open, openMenu, closeMenu } = useDrawerMenu(pathname);
 
   useEffect(() => {
     routerRef.current = router;
@@ -78,9 +81,13 @@ export default function MotoredLayout({ children }) {
   if (!user) return null;
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh' }}>
-      <MotoredSidebar user={user} />
-      <main style={{ flex: 1, padding: '2rem', minWidth: 0 }}>{children}</main>
+    <div className="motored-shell" style={{ display: 'flex', minHeight: '100vh' }}>
+      <MotoredSidebar user={user} open={open} onClose={closeMenu} />
+      {open && <div className="motored-backdrop" data-testid="motored-backdrop" onClick={closeMenu} />}
+      <div className="motored-content" style={{ flex: 1, minWidth: 0 }}>
+        <MotoredTopBar onOpenMenu={openMenu} />
+        <main className="motored-main" style={{ padding: '2rem', minWidth: 0 }}>{children}</main>
+      </div>
     </div>
   );
 }

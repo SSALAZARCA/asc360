@@ -15,6 +15,7 @@
  * is untouched -- only hidden from the form/table/bulk-upload -- so Fase 2
  * can wire it up later without another migration.
  */
+import MotoredTableScroll from '../MotoredTableScroll';
 import { useEffect, useState } from 'react';
 import {
   listMaestros,
@@ -62,35 +63,37 @@ function BodegasTable({ bodegas, sucursalesPorId, onEdit, onDeactivate }) {
   };
 
   return (
-    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
-      <thead>
-        <tr style={{ textAlign: 'left', color: 'var(--motored-text-muted, #5a5a5a)' }}>
-          <th style={{ padding: '0 12px 8px 0' }}>Código</th>
-          <th style={{ padding: '0 12px 8px 0' }}>Descripción</th>
-          <th style={{ padding: '0 12px 8px 0' }}>Sucursal</th>
-          <th style={{ padding: '0 12px 8px 0' }}>Estado</th>
-          <th />
-        </tr>
-      </thead>
-      <tbody>
-        {bodegas.map((b) => (
-          <tr key={b.id} style={{ borderTop: '1px solid var(--motored-border, #e4e4e7)' }}>
-            <td style={{ padding: '10px 12px 10px 0' }}>{b.codigo}</td>
-            <td style={{ padding: '10px 12px 10px 0' }}>{b.descripcion || <em>—</em>}</td>
-            <td style={{ padding: '10px 12px 10px 0' }}>
-              {b.sucursal_id ? (sucursalesPorId[b.sucursal_id] || <em>sucursal desconocida</em>) : <em>sin asignar</em>}
-            </td>
-            <td style={{ padding: '10px 12px 10px 0' }}>{b.activa ? 'Activa' : 'Inactiva'}</td>
-            <td style={{ display: 'flex', gap: '1rem', padding: '10px 0' }}>
-              <button type="button" className="motored-row-action" onClick={() => onEdit(b)}>Editar</button>
-              {b.activa && (
-                <button type="button" className="motored-row-action" onClick={() => handleDeactivateClick(b)}>Desactivar</button>
-              )}
-            </td>
+    <MotoredTableScroll>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+        <thead>
+          <tr style={{ textAlign: 'left', color: 'var(--motored-text-muted, #5a5a5a)' }}>
+            <th style={{ padding: '0 12px 8px 0' }}>Código</th>
+            <th style={{ padding: '0 12px 8px 0' }}>Descripción</th>
+            <th style={{ padding: '0 12px 8px 0' }}>Sucursal</th>
+            <th style={{ padding: '0 12px 8px 0' }}>Estado</th>
+            <th />
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {bodegas.map((b) => (
+            <tr key={b.id} style={{ borderTop: '1px solid var(--motored-border, #e4e4e7)' }}>
+              <td style={{ padding: '10px 12px 10px 0' }}>{b.codigo}</td>
+              <td style={{ padding: '10px 12px 10px 0' }}>{b.descripcion || <em>—</em>}</td>
+              <td style={{ padding: '10px 12px 10px 0' }}>
+                {b.sucursal_id ? (sucursalesPorId[b.sucursal_id] || <em>sucursal desconocida</em>) : <em>sin asignar</em>}
+              </td>
+              <td style={{ padding: '10px 12px 10px 0' }}>{b.activa ? 'Activa' : 'Inactiva'}</td>
+              <td style={{ display: 'flex', gap: '1rem', padding: '10px 0' }}>
+                <button type="button" className="motored-row-action" onClick={() => onEdit(b)}>Editar</button>
+                {b.activa && (
+                  <button type="button" className="motored-row-action" onClick={() => handleDeactivateClick(b)}>Desactivar</button>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </MotoredTableScroll>
   );
 }
 
@@ -109,7 +112,7 @@ function BodegasHeader({ onOpenBulk, onGenerarDesdeSucursales, generarDisabled }
           ¿Tenés muchas bodegas para cargar de una vez? Subí un archivo CSV con "Carga masiva" en vez de crearlas una por una.
         </p>
       </div>
-      <div style={{ display: 'flex', gap: '0.5rem' }}>
+      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
         <button
           type="button"
           className="motored-btn motored-btn-tertiary"

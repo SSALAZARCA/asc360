@@ -19,6 +19,7 @@
  * pendiente de acción (aunque el registro histórico del error en sí no se
  * borra, ver `resolver_errores`).
  */
+import MotoredTableScroll from '../MotoredTableScroll';
 import { useEffect, useState, useCallback } from 'react';
 import { getErroresCarga, resolverErroresCarga, descargarErroresCargaCsv, listMaestros } from '../../../lib/motored/api';
 import { getRolActual } from '../../../lib/motored/motoredFetch';
@@ -66,7 +67,7 @@ function AccionFila({ error: err, puedeEscribir, sucursales, onAccion }) {
 
   if (err.codigo_error === 'SUCURSAL_NO_ENCONTRADA') {
     return (
-      <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+      <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', alignItems: 'center' }}>
         <select value={sucursalId} onChange={(e) => setSucursalId(e.target.value)}>
           <option value="" style={{ color: '#1a1a18' }}>— Mapear a —</option>
           {sucursales.map((s) => (
@@ -121,41 +122,43 @@ function AccionFila({ error: err, puedeEscribir, sucursales, onAccion }) {
 
 function ErroresGrid({ pageRows, puedeEscribir, sucursales, onAccion }) {
   return (
-    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }} data-testid="errores-grid">
-      <thead>
-        <tr style={{ color: 'var(--motored-text-muted, #5a5a5a)', textAlign: 'left' }}>
-          <th style={{ padding: '0 12px 8px 0' }}>Fila</th>
-          <th style={{ padding: '0 12px 8px 0' }}>Columna</th>
-          <th style={{ padding: '0 12px 8px 0' }}>Valor</th>
-          <th style={{ padding: '0 12px 8px 0' }}>Código</th>
-          <th style={{ padding: '0 12px 8px 0' }}>Mensaje</th>
-          {puedeEscribir && <th style={{ padding: '0 12px 8px 0' }}>Acción</th>}
-        </tr>
-      </thead>
-      <tbody>
-        {pageRows.map((err) => (
-          <tr key={err.id} style={{ borderTop: '1px solid var(--motored-border, #e4e4e7)' }} data-testid="error-row">
-            <td style={{ padding: '10px 12px 10px 0' }}>{err.fila}</td>
-            <td style={{ padding: '10px 12px 10px 0' }}>{err.columna || <em>—</em>}</td>
-            <td style={{ padding: '10px 12px 10px 0' }}>{err.valor || <em>—</em>}</td>
-            <td style={{ padding: '10px 12px 10px 0' }} className="motored-mono">{err.codigo_error}</td>
-            <td style={{ padding: '10px 12px 10px 0' }}>{err.mensaje}</td>
-            {puedeEscribir && (
-              <td style={{ padding: '10px 0' }}>
-                <AccionFila error={err} puedeEscribir={puedeEscribir} sucursales={sucursales} onAccion={onAccion} />
-              </td>
-            )}
+    <MotoredTableScroll>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }} data-testid="errores-grid">
+        <thead>
+          <tr style={{ color: 'var(--motored-text-muted, #5a5a5a)', textAlign: 'left' }}>
+            <th style={{ padding: '0 12px 8px 0' }}>Fila</th>
+            <th style={{ padding: '0 12px 8px 0' }}>Columna</th>
+            <th style={{ padding: '0 12px 8px 0' }}>Valor</th>
+            <th style={{ padding: '0 12px 8px 0' }}>Código</th>
+            <th style={{ padding: '0 12px 8px 0' }}>Mensaje</th>
+            {puedeEscribir && <th style={{ padding: '0 12px 8px 0' }}>Acción</th>}
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {pageRows.map((err) => (
+            <tr key={err.id} style={{ borderTop: '1px solid var(--motored-border, #e4e4e7)' }} data-testid="error-row">
+              <td style={{ padding: '10px 12px 10px 0' }}>{err.fila}</td>
+              <td style={{ padding: '10px 12px 10px 0' }}>{err.columna || <em>—</em>}</td>
+              <td style={{ padding: '10px 12px 10px 0' }}>{err.valor || <em>—</em>}</td>
+              <td style={{ padding: '10px 12px 10px 0' }} className="motored-mono">{err.codigo_error}</td>
+              <td style={{ padding: '10px 12px 10px 0' }}>{err.mensaje}</td>
+              {puedeEscribir && (
+                <td style={{ padding: '10px 0' }}>
+                  <AccionFila error={err} puedeEscribir={puedeEscribir} sucursales={sucursales} onAccion={onAccion} />
+                </td>
+              )}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </MotoredTableScroll>
   );
 }
 
 function Paginacion({ pagina, setPagina, totalPaginas }) {
   if (totalPaginas <= 1) return null;
   return (
-    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', fontSize: '0.75rem' }}>
+    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center', fontSize: '0.75rem' }}>
       <button type="button" className="motored-btn motored-btn-secondary" onClick={() => setPagina((p) => Math.max(0, p - 1))} disabled={pagina === 0}>
         Anterior
       </button>

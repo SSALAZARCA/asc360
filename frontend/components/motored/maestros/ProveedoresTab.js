@@ -16,6 +16,7 @@
  * are untouched -- only hidden from the form/table/bulk-upload -- so a
  * later phase can use them without another migration.
  */
+import MotoredTableScroll from '../MotoredTableScroll';
 import { useEffect, useState } from 'react';
 import {
   listMaestros,
@@ -80,33 +81,35 @@ function ProveedoresTable({ proveedores, onEdit, onDeactivate }) {
   };
 
   return (
-    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
-      <thead>
-        <tr style={{ textAlign: 'left', color: 'var(--motored-text-muted, #5a5a5a)' }}>
-          <th style={{ padding: '0 12px 8px 0' }}>Código</th>
-          <th style={{ padding: '0 12px 8px 0' }}>Nombre</th>
-          <th style={{ padding: '0 12px 8px 0' }}>Principal</th>
-          <th style={{ padding: '0 12px 8px 0' }}>Estado</th>
-          <th />
-        </tr>
-      </thead>
-      <tbody>
-        {proveedores.map((p) => (
-          <tr key={p.id} style={{ borderTop: '1px solid var(--motored-border, #e4e4e7)' }}>
-            <td style={{ padding: '10px 12px 10px 0' }}>{p.codigo}</td>
-            <td style={{ padding: '10px 12px 10px 0' }}>{p.nombre}</td>
-            <td style={{ padding: '10px 12px 10px 0' }}>{p.es_principal ? 'Sí' : 'No'}</td>
-            <td style={{ padding: '10px 12px 10px 0' }}>{p.activa ? 'Activo' : 'Inactivo'}</td>
-            <td style={{ display: 'flex', gap: '1rem', padding: '10px 0' }}>
-              <button type="button" className="motored-row-action" onClick={() => onEdit(p)}>Editar</button>
-              {p.activa && (
-                <button type="button" className="motored-row-action" onClick={() => handleDeactivateClick(p)}>Desactivar</button>
-              )}
-            </td>
+    <MotoredTableScroll>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+        <thead>
+          <tr style={{ textAlign: 'left', color: 'var(--motored-text-muted, #5a5a5a)' }}>
+            <th style={{ padding: '0 12px 8px 0' }}>Código</th>
+            <th style={{ padding: '0 12px 8px 0' }}>Nombre</th>
+            <th style={{ padding: '0 12px 8px 0' }}>Principal</th>
+            <th style={{ padding: '0 12px 8px 0' }}>Estado</th>
+            <th />
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {proveedores.map((p) => (
+            <tr key={p.id} style={{ borderTop: '1px solid var(--motored-border, #e4e4e7)' }}>
+              <td style={{ padding: '10px 12px 10px 0' }}>{p.codigo}</td>
+              <td style={{ padding: '10px 12px 10px 0' }}>{p.nombre}</td>
+              <td style={{ padding: '10px 12px 10px 0' }}>{p.es_principal ? 'Sí' : 'No'}</td>
+              <td style={{ padding: '10px 12px 10px 0' }}>{p.activa ? 'Activo' : 'Inactivo'}</td>
+              <td style={{ display: 'flex', gap: '1rem', padding: '10px 0' }}>
+                <button type="button" className="motored-row-action" onClick={() => onEdit(p)}>Editar</button>
+                {p.activa && (
+                  <button type="button" className="motored-row-action" onClick={() => handleDeactivateClick(p)}>Desactivar</button>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </MotoredTableScroll>
   );
 }
 

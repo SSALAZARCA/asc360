@@ -22,6 +22,7 @@
  * actionable, just flagged with "(inactiva)"/"(inactivo)" next to the name
  * -- same labelling convention as `VentasPerdidasFilters`'s dropdowns.
  */
+import MotoredTableScroll from '../MotoredTableScroll';
 import { useState } from 'react';
 import VentasPerdidasRow from './VentasPerdidasRow';
 
@@ -64,39 +65,41 @@ export default function VentasPerdidasTable({ lineas, onEditar, onAnular }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
-        <thead>
-          <tr style={{ color: 'var(--motored-text-muted, #5a5a5a)' }}>
-            <th style={thStyle}>Fecha</th>
-            <th style={thStyle}>Sucursal</th>
-            <th style={thStyle}>Asesor</th>
-            <th style={thStyle}>Referencia</th>
-            <th style={thStyle}>Cantidad</th>
-            <th style={thStyle}>Método</th>
-            <th style={thStyle}>Estado</th>
-            <th style={thStyle}>Editado</th>
-            <th style={thStyle}>Anulado</th>
-            <th />
-          </tr>
-        </thead>
-        <tbody>
-          {lineas.map((linea) => (
-            <VentasPerdidasRow
-              key={linea.linea_id}
-              linea={linea}
-              editando={editandoId === linea.linea_id}
-              bloqueadoPorOtraEdicion={editandoId !== null && editandoId !== linea.linea_id}
-              valorEdicion={valorEdicion}
-              errorEdicion={errorEdicion}
-              onIniciarEdicion={() => iniciarEdicion(linea)}
-              onCambiarValor={setValorEdicion}
-              onGuardar={() => guardarEdicion(linea.linea_id)}
-              onCancelar={cancelarEdicion}
-              onAnular={() => handleAnular(linea)}
-            />
-          ))}
-        </tbody>
-      </table>
+      <MotoredTableScroll>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+          <thead>
+            <tr style={{ color: 'var(--motored-text-muted, #5a5a5a)' }}>
+              <th style={thStyle}>Fecha</th>
+              <th style={thStyle}>Sucursal</th>
+              <th style={thStyle}>Asesor</th>
+              <th style={thStyle}>Referencia</th>
+              <th style={thStyle}>Cantidad</th>
+              <th style={thStyle}>Método</th>
+              <th style={thStyle}>Estado</th>
+              <th style={thStyle}>Editado</th>
+              <th style={thStyle}>Anulado</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {lineas.map((linea) => (
+              <VentasPerdidasRow
+                key={linea.linea_id}
+                linea={linea}
+                editando={editandoId === linea.linea_id}
+                bloqueadoPorOtraEdicion={editandoId !== null && editandoId !== linea.linea_id}
+                valorEdicion={valorEdicion}
+                errorEdicion={errorEdicion}
+                onIniciarEdicion={() => iniciarEdicion(linea)}
+                onCambiarValor={setValorEdicion}
+                onGuardar={() => guardarEdicion(linea.linea_id)}
+                onCancelar={cancelarEdicion}
+                onAnular={() => handleAnular(linea)}
+              />
+            ))}
+          </tbody>
+        </table>
+      </MotoredTableScroll>
       {lineas.length === LIMITE_BOT_LINEAS && (
         <p style={{ color: 'var(--motored-text-muted, #5a5a5a)', fontSize: '0.75rem' }}>
           Se alcanzó el límite de {LIMITE_BOT_LINEAS} filas. Angostá los filtros para ver el resto.

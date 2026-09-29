@@ -27,6 +27,7 @@
  *   ADMIN links only their own `telegram_id`). Vincular shows a one-time
  *   code (`generarCodigoTelegram`) to type into the Lore bot.
  */
+import MotoredTableScroll from '../../../components/motored/MotoredTableScroll';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import MotoredLayout from '../motored-layout';
@@ -83,48 +84,50 @@ function UsuariosTable({ usuarios, onDeactivate, ownUserId, onVincularTelegram, 
   };
 
   return (
-    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
-      <thead>
-        <tr style={{ textAlign: 'left', color: 'var(--motored-text-muted, #5a5a5a)' }}>
-          <th style={{ padding: '0 12px 8px 0' }}>Nombre</th>
-          <th style={{ padding: '0 12px 8px 0' }}>Email</th>
-          <th style={{ padding: '0 12px 8px 0' }}>Rol</th>
-          <th style={{ padding: '0 12px 8px 0' }}>Estado</th>
-          <th />
-        </tr>
-      </thead>
-      <tbody>
-        {usuarios.map((u) => (
-          <tr key={u.id} style={{ borderTop: '1px solid var(--motored-border, #e4e4e7)' }}>
-            <td style={{ padding: '10px 12px 10px 0' }}>{u.nombre}</td>
-            <td style={{ padding: '10px 12px 10px 0' }}>{u.email}</td>
-            <td style={{ padding: '10px 12px 10px 0' }}>{u.role}</td>
-            <td style={{ padding: '10px 12px 10px 0' }}>{u.activo ? 'Activo' : 'Inactivo'}</td>
-            <td style={{ padding: '10px 0', display: 'flex', gap: '0.5rem' }}>
-              {/* Nunca un botón rojo dentro de una tabla -- ver
-              SucursalesTab.js para la misma regla aplicada. */}
-              {u.activo && (
-                <button type="button" className="motored-row-action" onClick={() => handleDeactivateClick(u)}>Desactivar</button>
-              )}
-              {tieneAccesoWeb(u) && (
-                <button type="button" className="motored-row-action" onClick={() => onCambiarPassword(u)}>Cambiar contraseña</button>
-              )}
-              {/* Vincular/Desvincular Telegram SOLO en la propia fila del
-              ADMIN autenticado (sdd/motored-ventas-perdidas-bot, design D5:
-              "ADMIN telegram-linking independent of role") -- nunca sobre
-              la fila de otro usuario. */}
-              {u.id === ownUserId && (
-                u.telegram_vinculado ? (
-                  <button type="button" className="motored-row-action" onClick={() => onDesvincularTelegram(u.id)}>Desvincular Telegram</button>
-                ) : (
-                  <button type="button" className="motored-row-action" onClick={() => onVincularTelegram(u.id)}>Vincular Telegram</button>
-                )
-              )}
-            </td>
+    <MotoredTableScroll>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+        <thead>
+          <tr style={{ textAlign: 'left', color: 'var(--motored-text-muted, #5a5a5a)' }}>
+            <th style={{ padding: '0 12px 8px 0' }}>Nombre</th>
+            <th style={{ padding: '0 12px 8px 0' }}>Email</th>
+            <th style={{ padding: '0 12px 8px 0' }}>Rol</th>
+            <th style={{ padding: '0 12px 8px 0' }}>Estado</th>
+            <th />
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {usuarios.map((u) => (
+            <tr key={u.id} style={{ borderTop: '1px solid var(--motored-border, #e4e4e7)' }}>
+              <td style={{ padding: '10px 12px 10px 0' }}>{u.nombre}</td>
+              <td style={{ padding: '10px 12px 10px 0' }}>{u.email}</td>
+              <td style={{ padding: '10px 12px 10px 0' }}>{u.role}</td>
+              <td style={{ padding: '10px 12px 10px 0' }}>{u.activo ? 'Activo' : 'Inactivo'}</td>
+              <td style={{ padding: '10px 0', display: 'flex', gap: '0.5rem' }}>
+                {/* Nunca un botón rojo dentro de una tabla -- ver
+                SucursalesTab.js para la misma regla aplicada. */}
+                {u.activo && (
+                  <button type="button" className="motored-row-action" onClick={() => handleDeactivateClick(u)}>Desactivar</button>
+                )}
+                {tieneAccesoWeb(u) && (
+                  <button type="button" className="motored-row-action" onClick={() => onCambiarPassword(u)}>Cambiar contraseña</button>
+                )}
+                {/* Vincular/Desvincular Telegram SOLO en la propia fila del
+                ADMIN autenticado (sdd/motored-ventas-perdidas-bot, design D5:
+                "ADMIN telegram-linking independent of role") -- nunca sobre
+                la fila de otro usuario. */}
+                {u.id === ownUserId && (
+                  u.telegram_vinculado ? (
+                    <button type="button" className="motored-row-action" onClick={() => onDesvincularTelegram(u.id)}>Desvincular Telegram</button>
+                  ) : (
+                    <button type="button" className="motored-row-action" onClick={() => onVincularTelegram(u.id)}>Vincular Telegram</button>
+                  )
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </MotoredTableScroll>
   );
 }
 
@@ -134,27 +137,29 @@ function SolicitudesPendientesTable({ solicitudes, onAprobar, onRechazar }) {
   }
 
   return (
-    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
-      <thead>
-        <tr style={{ textAlign: 'left', color: 'var(--motored-text-muted, #5a5a5a)' }}>
-          <th style={{ padding: '0 12px 8px 0' }}>Nombre</th>
-          <th style={{ padding: '0 12px 8px 0' }}>Teléfono</th>
-          <th />
-        </tr>
-      </thead>
-      <tbody>
-        {solicitudes.map((s) => (
-          <tr key={s.id} style={{ borderTop: '1px solid var(--motored-border, #e4e4e7)' }}>
-            <td style={{ padding: '10px 12px 10px 0' }}>{s.nombre}</td>
-            <td style={{ padding: '10px 12px 10px 0' }}>{s.phone}</td>
-            <td style={{ padding: '10px 0', display: 'flex', gap: '0.5rem' }}>
-              <button type="button" className="motored-btn motored-btn-primary" onClick={() => onAprobar(s.id)}>Aprobar</button>
-              <button type="button" className="motored-row-action" onClick={() => onRechazar(s.id)}>Rechazar</button>
-            </td>
+    <MotoredTableScroll>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+        <thead>
+          <tr style={{ textAlign: 'left', color: 'var(--motored-text-muted, #5a5a5a)' }}>
+            <th style={{ padding: '0 12px 8px 0' }}>Nombre</th>
+            <th style={{ padding: '0 12px 8px 0' }}>Teléfono</th>
+            <th />
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {solicitudes.map((s) => (
+            <tr key={s.id} style={{ borderTop: '1px solid var(--motored-border, #e4e4e7)' }}>
+              <td style={{ padding: '10px 12px 10px 0' }}>{s.nombre}</td>
+              <td style={{ padding: '10px 12px 10px 0' }}>{s.phone}</td>
+              <td style={{ padding: '10px 0', display: 'flex', gap: '0.5rem' }}>
+                <button type="button" className="motored-btn motored-btn-primary" onClick={() => onAprobar(s.id)}>Aprobar</button>
+                <button type="button" className="motored-row-action" onClick={() => onRechazar(s.id)}>Rechazar</button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </MotoredTableScroll>
   );
 }
 
