@@ -24,6 +24,7 @@ from app.motored.api import (
     cargas,
     carga,
     demanda_perdida,
+    detractores,
     encuesta_cargas,
     encuesta_publica,
     maestros,
@@ -67,3 +68,5 @@ router.include_router(demanda_perdida.router)
 router.include_router(encuesta_cargas.router)
 # Satisfaction survey (T4): PUBLIC `/encuesta/publico` (no auth, rate-limited).
 router.include_router(encuesta_publica.router)
+# Satisfaction survey (T5): `/detractores` is its own prefix, no path overlap.
+router.include_router(detractores.router)

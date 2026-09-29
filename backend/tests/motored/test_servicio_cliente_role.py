@@ -127,7 +127,7 @@ def probe_routes():
     async def _lookalike(user: MotoredUser = Depends(get_current_motored_user)):
         return {"role": user.role}
 
-    @router.get("/api/motored/detractores/__probe__")
+    @router.get("/api/motored/detractores/__probe__/ping")
     async def _allowed_cases(user: MotoredUser = Depends(get_current_motored_user)):
         return {"role": user.role}
 
@@ -171,7 +171,7 @@ def test_servicio_cliente_is_forbidden_outside_the_allow_list(path):
 
 
 def test_servicio_cliente_reaches_encuesta_and_detractores_prefixes(probe_routes):
-    for path in ("/api/motored/encuesta/__probe__", "/api/motored/detractores/__probe__"):
+    for path in ("/api/motored/encuesta/__probe__", "/api/motored/detractores/__probe__/ping"):
         response = _request("SERVICIO_CLIENTE", path)
         assert response.status_code == 200, (path, response.text)
         assert response.json() == {"role": "SERVICIO_CLIENTE"}
