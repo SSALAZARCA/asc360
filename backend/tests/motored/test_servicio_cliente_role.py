@@ -53,7 +53,7 @@ class TestMigration:
     def test_chains_onto_current_head(self):
         assert _load_migration().down_revision == "a3f7c91d2e58"
 
-    def test_is_the_only_head_of_the_chain(self):
+    def test_is_part_of_the_linear_chain(self):
         revisions, downs = set(), set()
         for path in _VERSIONS_DIR.glob("*.py"):
             spec = importlib.util.spec_from_file_location(f"m_{path.stem}", path)
@@ -61,7 +61,9 @@ class TestMigration:
             spec.loader.exec_module(module)
             revisions.add(module.revision)
             downs.add(module.down_revision)
-        assert revisions - downs == {_load_migration().revision}
+        # Head-ness is asserted by the newest revision's own test; here we only
+        # require this revision to stay in the chain (referenced as a parent).
+        assert _load_migration().revision in downs
 
     def test_upgrade_adds_value_idempotently_inside_autocommit_block(self):
         migration = _load_migration()

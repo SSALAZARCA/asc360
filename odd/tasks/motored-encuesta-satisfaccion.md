@@ -96,8 +96,8 @@ Customers who took their motorcycle to a Motored workshop receive a WhatsApp mes
 | T9 | (moved first — blocks slice 1) Deploy readiness. Confirm how Motored migrations run in Coolify, document the steps, and check the link-preview metadata for the public page. | inline |
 
 ## Progress
-- [ ] T1
-- [ ] T2
+- [x] T1 — slice 2, commit 135276f on main. Route: delegated writer (sonnet). `MotoredRole.SERVICIO_CLIENTE`, migration `7be41d9c0a26` (autocommit ADD VALUE), confinement in `deps.get_current_motored_user` via `SERVICIO_CLIENTE_ALLOWED_PREFIXES` (/api/motored/auth, /encuesta, /detractores; segment-boundary match). TDD: RED = ImportError at collection; GREEN tests/motored 1180 passed, asc360 suite 1292 passed. gga: 1 finding fixed (dynamic import in test). RDD: medium, granted, 1-lens (reliability) approved, acknowledged (review-8098f351527b23c7).
+- [x] T2 — slice 3. Route: delegated writer (sonnet). 5 models + migration `c4e81a7d3f26` (down `7be41d9c0a26`), append-only PL/pgSQL trigger on `caso_detractor_accion`, `caso_detractor.numero` Identity. TDD: RED = 2 collection errors; GREEN tests/motored 1198 passed, asc360 1292 passed. Offline `alembic upgrade --sql` DDL inspected (valid for PG16); NOT executed on a live Postgres (no docker in WSL).
 - [ ] T3
 - [ ] T4
 - [ ] T5

@@ -11,9 +11,14 @@ from app.motored.models.backorder_linea import BackorderLinea
 from app.motored.models.bodega import Bodega
 from app.motored.models.carga_archivo import CargaArchivo
 from app.motored.models.carga_error import CargaError
+from app.motored.models.caso_detractor import CasoDetractor
+from app.motored.models.caso_detractor_accion import CasoDetractorAccion
 from app.motored.models.carga_fila_staging import CargaFilaStaging
 from app.motored.models.demanda_perdida import DemandaPerdida
 from app.motored.models.demanda_perdida_bot_linea import DemandaPerdidaBotLinea
+from app.motored.models.encuesta_carga import EncuestaCarga
+from app.motored.models.encuesta_registro import EncuestaRegistro
+from app.motored.models.encuesta_respuesta import EncuestaRespuesta
 from app.motored.models.factura_proveedor_linea import FacturaProveedorLinea
 from app.motored.models.ingreso_factura import IngresoFactura
 from app.motored.models.inventario_snapshot import InventarioSnapshot
@@ -33,9 +38,14 @@ __all__ = [
     "Bodega",
     "CargaArchivo",
     "CargaError",
+    "CasoDetractor",
+    "CasoDetractorAccion",
     "CargaFilaStaging",
     "DemandaPerdida",
     "DemandaPerdidaBotLinea",
+    "EncuestaCarga",
+    "EncuestaRegistro",
+    "EncuestaRespuesta",
     "FacturaProveedorLinea",
     "IngresoFactura",
     "InventarioSnapshot",
