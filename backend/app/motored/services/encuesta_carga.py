@@ -70,6 +70,12 @@ def _digits(value: Any) -> str:
     return re.sub(r"\D", "", text)
 
 
+def normalize_cedula(value: Any) -> str:
+    """Digits-only cedula, the exact form stored by the upload. The public
+    survey lookup reuses it so both sides always compare the same text."""
+    return _digits(value)
+
+
 def _normalize_placa(value: Any) -> str:
     return re.sub(r"[\s-]", "", str(value or "")).upper()
 
@@ -99,7 +105,7 @@ def parse_encuesta_excel(filename: Optional[str], file_bytes: bytes) -> List[Dic
 def _validate_row(raw: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
     if not str(raw.get("nombre") or "").strip():
         return None, "El campo 'Nombre' es obligatorio"
-    cedula = _digits(raw.get("cedula"))
+    cedula = normalize_cedula(raw.get("cedula"))
     if not cedula:
         return None, "El campo 'Cédula' es obligatorio y debe contener números"
     if len(cedula) > CEDULA_MAX_LENGTH:
