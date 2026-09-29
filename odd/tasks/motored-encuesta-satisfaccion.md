@@ -109,3 +109,4 @@ Customers who took their motorcycle to a Motored workshop receive a WhatsApp mes
 ## Log
 - 2026-09-29: Created the worktree and the document. Mapping done (reference HTML, spec folder, Motored module patterns).
 - 2026-09-29: user chose stacked-to-main slices; consent text company -> "Moto red Nacional"; verified Motored migrations are not auto-run on deploy.
+- 2026-09-29: slice 1 (T9) delivered to main as f924e67 (rebased twice on origin/main; tests 1157 passed after rebase). RDD: risk high (shell/start.sh), consent granted, 4-lens review approved, acknowledged (lineage review-86ef86e669950456, authority burned). Pending: user confirms prod deploy log shows "Corriendo migraciones de Motored".
