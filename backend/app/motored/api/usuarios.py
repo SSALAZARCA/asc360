@@ -191,6 +191,23 @@ async def deactivate_usuario(
     return _to_read(usuario)
 
 
+@router.post("/{usuario_id}/reactivar")
+async def reactivar_usuario(
+    usuario_id: uuid.UUID,
+    db: AsyncSession = Depends(get_motored_db_or_503),
+    user: MotoredUser = Depends(_require_admin),
+) -> dict:
+    """Inverso de `deactivate_usuario`: solo `activo = true`, jamás `status`
+    (un usuario `pending`/`rejected` sigue igual). Sin efecto si ya estaba
+    activo."""
+    usuario = await _get_or_404(db, usuario_id)
+    if not usuario.activo:
+        usuario.activo = True
+        auditoria.audit_reactivate(db, "usuario", usuario.id, uuid.UUID(user.user_id))
+        await db.commit()
+    return _to_read(usuario)
+
+
 async def _resolver_solicitud_endpoint(
     db: AsyncSession, usuario_id: uuid.UUID, decision: str, user: MotoredUser
 ) -> dict:

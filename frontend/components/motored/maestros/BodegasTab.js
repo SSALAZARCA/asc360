@@ -23,6 +23,7 @@ import {
   createMaestro,
   updateMaestro,
   deactivateMaestro,
+  reactivateMaestro,
 } from '../../../lib/motored/api';
 import BulkUploadModal from './BulkUploadModal';
 import FormField from './FormField';
@@ -56,10 +57,15 @@ function BodegaForm({ form, setForm, editingId, sucursales, onSubmit, onCancel }
   );
 }
 
-function BodegasTable({ bodegas, sucursalesPorId, onEdit, onDeactivate }) {
+function BodegasTable({ bodegas, sucursalesPorId, onEdit, onDeactivate, onReactivate }) {
   const handleDeactivateClick = (b) => {
     if (window.confirm(`¿Desactivar la bodega "${b.codigo}"? No se elimina, queda marcada como inactiva.`)) {
       onDeactivate(b.id);
+    }
+  };
+  const handleReactivateClick = (b) => {
+    if (window.confirm(`¿Reactivar la bodega "${b.codigo}"? Queda marcada como activa.`)) {
+      onReactivate(b.id);
     }
   };
 
@@ -86,8 +92,10 @@ function BodegasTable({ bodegas, sucursalesPorId, onEdit, onDeactivate }) {
               <td style={{ padding: '10px 12px 10px 0' }}>{b.activa ? 'Activa' : 'Inactiva'}</td>
               <td style={{ display: 'flex', gap: '1rem', padding: '10px 0' }}>
                 <MotoredIconAction action="Editar" onClick={() => onEdit(b)} />
-                {b.activa && (
+                {b.activa ? (
                   <MotoredIconAction action="Desactivar" onClick={() => handleDeactivateClick(b)} />
+                ) : (
+                  <MotoredIconAction action="Reactivar" onClick={() => handleReactivateClick(b)} />
                 )}
               </td>
             </tr>
@@ -277,7 +285,17 @@ function useBodegas() {
     }
   };
 
-  return { bodegas, loading, error, save, deactivate, reload: load };
+  const reactivate = async (id) => {
+    setError('');
+    try {
+      await reactivateMaestro(ENTIDAD_PLURAL, id);
+      await load();
+    } catch (err) {
+      setError(err.message || 'Error al reactivar bodega');
+    }
+  };
+
+  return { bodegas, loading, error, save, deactivate, reactivate, reload: load };
 }
 
 function useBodegasEditor(save) {
@@ -318,7 +336,7 @@ function useBodegasEditor(save) {
 }
 
 export default function BodegasTab() {
-  const { bodegas, loading, error, save, deactivate, reload } = useBodegas();
+  const { bodegas, loading, error, save, deactivate, reactivate, reload } = useBodegas();
   const { form, setForm, editingId, startEdit, cancelEdit, handleSubmit } = useBodegasEditor(save);
   const { sucursales, sucursalesLoading, sucursalesPorId, sucursalesError } = useSucursalesOptions();
   const { generando, resultado, ejecutar } = useGenerarDesdeSucursales(sucursales, bodegas, reload);
@@ -353,7 +371,7 @@ export default function BodegasTab() {
       {loading ? (
         <p style={{ color: 'var(--motored-text-muted, #5a5a5a)', fontSize: '0.8rem' }}>Cargando...</p>
       ) : (
-        <BodegasTable bodegas={bodegas} sucursalesPorId={sucursalesPorId} onEdit={startEdit} onDeactivate={deactivate} />
+        <BodegasTable bodegas={bodegas} sucursalesPorId={sucursalesPorId} onEdit={startEdit} onDeactivate={deactivate} onReactivate={reactivate} />
       )}
 
       {showBulkModal && (

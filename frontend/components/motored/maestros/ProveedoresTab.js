@@ -24,6 +24,7 @@ import {
   createMaestro,
   updateMaestro,
   deactivateMaestro,
+  reactivateMaestro,
 } from '../../../lib/motored/api';
 import BulkUploadModal from './BulkUploadModal';
 import FormField from './FormField';
@@ -74,10 +75,15 @@ function ProveedorForm({ form, setForm, editingId, onSubmit, onCancel }) {
   );
 }
 
-function ProveedoresTable({ proveedores, onEdit, onDeactivate }) {
+function ProveedoresTable({ proveedores, onEdit, onDeactivate, onReactivate }) {
   const handleDeactivateClick = (p) => {
     if (window.confirm(`¿Desactivar el proveedor "${p.nombre}"? No se elimina, queda marcado como inactivo.`)) {
       onDeactivate(p.id);
+    }
+  };
+  const handleReactivateClick = (p) => {
+    if (window.confirm(`¿Reactivar el proveedor "${p.nombre}"? Queda marcado como activo.`)) {
+      onReactivate(p.id);
     }
   };
 
@@ -102,8 +108,10 @@ function ProveedoresTable({ proveedores, onEdit, onDeactivate }) {
               <td style={{ padding: '10px 12px 10px 0' }}>{p.activa ? 'Activo' : 'Inactivo'}</td>
               <td style={{ display: 'flex', gap: '1rem', padding: '10px 0' }}>
                 <MotoredIconAction action="Editar" onClick={() => onEdit(p)} />
-                {p.activa && (
+                {p.activa ? (
                   <MotoredIconAction action="Desactivar" onClick={() => handleDeactivateClick(p)} />
+                ) : (
+                  <MotoredIconAction action="Reactivar" onClick={() => handleReactivateClick(p)} />
                 )}
               </td>
             </tr>
@@ -184,7 +192,17 @@ function useProveedores() {
     }
   };
 
-  return { proveedores, loading, error, save, deactivate, reload: load };
+  const reactivate = async (id) => {
+    setError('');
+    try {
+      await reactivateMaestro(ENTIDAD_PLURAL, id);
+      await load();
+    } catch (err) {
+      setError(err.message || 'Error al reactivar proveedor');
+    }
+  };
+
+  return { proveedores, loading, error, save, deactivate, reactivate, reload: load };
 }
 
 function useProveedoresEditor(save) {
@@ -225,7 +243,7 @@ function useProveedoresEditor(save) {
 }
 
 export default function ProveedoresTab() {
-  const { proveedores, loading, error, save, deactivate, reload } = useProveedores();
+  const { proveedores, loading, error, save, deactivate, reactivate, reload } = useProveedores();
   const { form, setForm, editingId, startEdit, cancelEdit, handleSubmit } = useProveedoresEditor(save);
   const [showBulkModal, setShowBulkModal] = useState(false);
 
@@ -246,7 +264,7 @@ export default function ProveedoresTab() {
       {loading ? (
         <p style={{ color: 'var(--motored-text-muted, #5a5a5a)', fontSize: '0.8rem' }}>Cargando...</p>
       ) : (
-        <ProveedoresTable proveedores={proveedores} onEdit={startEdit} onDeactivate={deactivate} />
+        <ProveedoresTable proveedores={proveedores} onEdit={startEdit} onDeactivate={deactivate} onReactivate={reactivate} />
       )}
 
       {showBulkModal && (

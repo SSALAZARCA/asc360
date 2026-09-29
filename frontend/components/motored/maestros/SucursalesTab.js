@@ -21,6 +21,7 @@ import {
   createMaestro,
   updateMaestro,
   deactivateMaestro,
+  reactivateMaestro,
 } from '../../../lib/motored/api';
 import BulkUploadModal from './BulkUploadModal';
 import FormField from './FormField';
@@ -72,10 +73,15 @@ function SucursalForm({ form, setForm, editingId, onSubmit, onCancel }) {
   );
 }
 
-function SucursalesTable({ sucursales, onEdit, onDeactivate }) {
+function SucursalesTable({ sucursales, onEdit, onDeactivate, onReactivate }) {
   const handleDeactivateClick = (s) => {
     if (window.confirm(`¿Desactivar la sucursal "${s.nombre}"? No se elimina, queda marcada como inactiva.`)) {
       onDeactivate(s.id);
+    }
+  };
+  const handleReactivateClick = (s) => {
+    if (window.confirm(`¿Reactivar la sucursal "${s.nombre}"? Queda marcada como activa.`)) {
+      onReactivate(s.id);
     }
   };
 
@@ -127,8 +133,10 @@ function SucursalesTable({ sucursales, onEdit, onDeactivate }) {
                 real) -- acciones de fila usan MotoredIconAction, icono
                 neutro, no el rojo destructivo. */}
                 <MotoredIconAction action="Editar" onClick={() => onEdit(s)} />
-                {s.activa && (
+                {s.activa ? (
                   <MotoredIconAction action="Desactivar" onClick={() => handleDeactivateClick(s)} />
+                ) : (
+                  <MotoredIconAction action="Reactivar" onClick={() => handleReactivateClick(s)} />
                 )}
               </td>
             </tr>
@@ -210,7 +218,17 @@ function useSucursales() {
     }
   };
 
-  return { sucursales, loading, error, save, deactivate, reload: load };
+  const reactivate = async (id) => {
+    setError('');
+    try {
+      await reactivateMaestro(ENTIDAD_PLURAL, id);
+      await load();
+    } catch (err) {
+      setError(err.message || 'Error al reactivar sucursal');
+    }
+  };
+
+  return { sucursales, loading, error, save, deactivate, reactivate, reload: load };
 }
 
 function useSucursalesEditor(save) {
@@ -260,7 +278,7 @@ function useSucursalesEditor(save) {
 }
 
 export default function SucursalesTab() {
-  const { sucursales, loading, error, save, deactivate, reload } = useSucursales();
+  const { sucursales, loading, error, save, deactivate, reactivate, reload } = useSucursales();
   const { form, setForm, editingId, startEdit, cancelEdit, handleSubmit } = useSucursalesEditor(save);
   const [showBulkModal, setShowBulkModal] = useState(false);
 
@@ -281,7 +299,7 @@ export default function SucursalesTab() {
       {loading ? (
         <p style={{ color: 'var(--motored-text-muted, #5a5a5a)', fontSize: '0.8rem' }}>Cargando...</p>
       ) : (
-        <SucursalesTable sucursales={sucursales} onEdit={startEdit} onDeactivate={deactivate} />
+        <SucursalesTable sucursales={sucursales} onEdit={startEdit} onDeactivate={deactivate} onReactivate={reactivate} />
       )}
 
       {showBulkModal && (

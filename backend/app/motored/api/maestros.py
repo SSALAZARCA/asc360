@@ -41,7 +41,7 @@ from app.motored.schemas.bodega import BodegaCreate, BodegaRead, BodegaUpdate
 from app.motored.schemas.proveedor import ProveedorCreate, ProveedorRead, ProveedorUpdate
 from app.motored.schemas.referencia import ReferenciaCreate, ReferenciaRead, ReferenciaUpdate
 from app.motored.schemas.sucursal import SucursalCreate, SucursalRead, SucursalUpdate
-from app.motored.services import maestros
+from app.motored.services import auditoria, maestros
 from app.motored.services.carga_excel import column_labels
 
 router = APIRouter(
@@ -274,3 +274,27 @@ async def deactivate_maestro(
     deactivated = await config.deactivate_fn(db, obj, uuid.UUID(user.user_id))
     await db.commit()
     return _to_read(config, deactivated)
+
+
+_AUDIT_ENTIDAD = {
+    "proveedores": "proveedor", "sucursales": "sucursal", "bodegas": "bodega", "referencias": "referencia",
+}
+
+
+@router.post("/{entidad}/{entity_id}/reactivar")
+async def reactivar_maestro(
+    entidad: str,
+    entity_id: uuid.UUID,
+    db: AsyncSession = Depends(get_motored_db_or_503),
+    user: MotoredUser = Depends(_require_write),
+) -> dict:
+    """Inverso del soft-delete: `activa = true`. No toca ningún otro campo
+    (una referencia reactivada conserva su `sustituida_por`). Sin efecto ni
+    auditoría si ya estaba activa."""
+    config = _config_or_404(entidad)
+    obj = await _get_or_404(db, config, entity_id)
+    if not obj.activa:
+        obj.activa = True
+        auditoria.audit_reactivate(db, _AUDIT_ENTIDAD[entidad], obj.id, uuid.UUID(user.user_id))
+        await db.commit()
+    return _to_read(config, obj)

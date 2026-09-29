@@ -21,7 +21,7 @@ class AuditoriaMaestro(MotoredBase):
     entidad = Column(String(50), nullable=False)  # 'sucursal' | 'bodega' | 'proveedor' | 'referencia'
     entidad_id = Column(UUID(as_uuid=True), nullable=False)
     usuario_id = Column(UUID(as_uuid=True), ForeignKey("usuario.id"), nullable=True)
-    accion = Column(String(20), nullable=False)  # 'create' | 'update' | 'deactivate'
+    accion = Column(String(20), nullable=False)  # 'create' | 'update' | 'deactivate' | 'reactivate'
     campo = Column(String(100), nullable=True)
     valor_anterior = Column(String(500), nullable=True)
     valor_nuevo = Column(String(500), nullable=True)

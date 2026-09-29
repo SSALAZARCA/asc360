@@ -66,6 +66,12 @@ export async function deactivateMaestro(entidadPlural, id) {
   });
 }
 
+export async function reactivateMaestro(entidadPlural, id) {
+  return motoredFetchJson(`/maestros/${entidadPlural}/${id}/reactivar`, {
+    method: 'POST',
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Referencias -- lectura paginada (`backend/app/motored/api/
 // referencias_busqueda.py`). `listMaestros('referencias')` sigue existiendo
@@ -177,6 +183,12 @@ export async function createUsuario(payload) {
 export async function deactivateUsuario(id) {
   return motoredFetchJson(`/usuarios/${id}`, {
     method: 'DELETE',
+  });
+}
+
+export async function reactivateUsuario(id) {
+  return motoredFetchJson(`/usuarios/${id}/reactivar`, {
+    method: 'POST',
   });
 }
 

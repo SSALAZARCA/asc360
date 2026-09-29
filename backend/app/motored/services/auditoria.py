@@ -88,6 +88,13 @@ def audit_deactivate(db, entidad: str, entidad_id: uuid.UUID, usuario_id: Option
     )
 
 
+def audit_reactivate(db, entidad: str, entidad_id: uuid.UUID, usuario_id: Optional[uuid.UUID] = None) -> AuditoriaMaestro:
+    return _record(
+        db, entidad, entidad_id, usuario_id, accion="reactivate",
+        campo="activa", valor_anterior=False, valor_nuevo=True,
+    )
+
+
 def audit_password_reset(db, entidad: str, entidad_id: uuid.UUID, usuario_id: Optional[uuid.UUID] = None) -> AuditoriaMaestro:
     """Registra QUE la contraseña cambió, nunca su valor ni su hash."""
     return _record(db, entidad, entidad_id, usuario_id, accion="update", campo="password")

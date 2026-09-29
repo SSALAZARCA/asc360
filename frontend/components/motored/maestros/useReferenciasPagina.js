@@ -18,6 +18,7 @@ import {
   createMaestro,
   updateMaestro,
   deactivateMaestro,
+  reactivateMaestro,
 } from '../../../lib/motored/api';
 import useDebouncedValue from '../../../lib/motored/useDebouncedValue';
 import { totalPaginas } from './ReferenciasPaginador';
@@ -90,7 +91,8 @@ function useEscriturasReferencia(setError, refrescar) {
     'Error al guardar referencia'
   );
   const deactivate = (id) => run(() => deactivateMaestro(ENTIDAD_PLURAL, id), 'Error al desactivar referencia');
-  return { save, deactivate };
+  const reactivate = (id) => run(() => reactivateMaestro(ENTIDAD_PLURAL, id), 'Error al reactivar referencia');
+  return { save, deactivate, reactivate };
 }
 
 export default function useReferenciasPagina() {

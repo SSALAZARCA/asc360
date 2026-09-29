@@ -179,10 +179,15 @@ const thStyle = { padding: '0 12px 8px 0' };
 const tdStyle = { padding: '10px 12px 10px 0' };
 const numericTdStyle = { ...tdStyle, textAlign: 'right', whiteSpace: 'nowrap' };
 
-function ReferenciasTable({ referencias, proveedorCodigoPorId, onEdit, onDeactivate }) {
+function ReferenciasTable({ referencias, proveedorCodigoPorId, onEdit, onDeactivate, onReactivate }) {
   const handleDeactivateClick = (r) => {
     if (window.confirm(`¿Desactivar la referencia "${r.codigo}"? No se elimina, queda marcada como inactiva.`)) {
       onDeactivate(r.id);
+    }
+  };
+  const handleReactivateClick = (r) => {
+    if (window.confirm(`¿Reactivar la referencia "${r.codigo}"? Queda marcada como activa.`)) {
+      onReactivate(r.id);
     }
   };
 
@@ -218,8 +223,10 @@ function ReferenciasTable({ referencias, proveedorCodigoPorId, onEdit, onDeactiv
               <td style={tdStyle}>{r.activa ? 'Activa' : 'Inactiva'}</td>
               <td style={{ display: 'flex', gap: '1rem', padding: '10px 0' }}>
                 <MotoredIconAction action="Editar" onClick={() => onEdit(r)} />
-                {r.activa && (
+                {r.activa ? (
                   <MotoredIconAction action="Desactivar" onClick={() => handleDeactivateClick(r)} />
+                ) : (
+                  <MotoredIconAction action="Reactivar" onClick={() => handleReactivateClick(r)} />
                 )}
               </td>
             </tr>
@@ -314,11 +321,11 @@ function useReferenciasEditor(save) {
 const mutedText = { color: 'var(--motored-text-muted, #5a5a5a)', fontSize: '0.8rem' };
 
 function ReferenciasListado({ pagina, proveedorCodigoPorId, onEdit }) {
-  const { items, total, loading, page, pageSize, setPage, setPageSize, deactivate } = pagina;
+  const { items, total, loading, page, pageSize, setPage, setPageSize, deactivate, reactivate } = pagina;
   if (loading && items.length === 0) return <p style={mutedText}>Cargando...</p>;
   return (
     <>
-      <ReferenciasTable referencias={items} proveedorCodigoPorId={proveedorCodigoPorId} onEdit={onEdit} onDeactivate={deactivate} />
+      <ReferenciasTable referencias={items} proveedorCodigoPorId={proveedorCodigoPorId} onEdit={onEdit} onDeactivate={deactivate} onReactivate={reactivate} />
       {items.length === 0 && <p style={mutedText}>No hay referencias que coincidan con la búsqueda.</p>}
       <ReferenciasPaginador page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} />
     </>

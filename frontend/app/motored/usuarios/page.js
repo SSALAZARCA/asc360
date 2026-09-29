@@ -34,7 +34,7 @@ import { useRouter } from 'next/navigation';
 import MotoredLayout from '../motored-layout';
 import CambiarPasswordForm from '../../../components/motored/CambiarPasswordForm';
 import {
-  listUsuarios, createUsuario, deactivateUsuario,
+  listUsuarios, createUsuario, deactivateUsuario, reactivateUsuario,
   listSolicitudesPendientes, aprobarUsuario, rechazarUsuario,
   generarCodigoTelegram, desvincularTelegram, resetPasswordUsuario,
 } from '../../../lib/motored/api';
@@ -77,10 +77,15 @@ function tieneAccesoWeb(u) {
   return Boolean(u.email) && u.role !== 'ASESOR_MOSTRADOR';
 }
 
-function UsuariosTable({ usuarios, onDeactivate, ownUserId, onVincularTelegram, onDesvincularTelegram, onCambiarPassword }) {
+function UsuariosTable({ usuarios, onDeactivate, onReactivate, ownUserId, onVincularTelegram, onDesvincularTelegram, onCambiarPassword }) {
   const handleDeactivateClick = (u) => {
     if (window.confirm(`¿Desactivar a "${u.nombre}"? No se elimina, queda marcado como inactivo.`)) {
       onDeactivate(u.id);
+    }
+  };
+  const handleReactivateClick = (u) => {
+    if (window.confirm(`¿Reactivar a "${u.nombre}"? Queda marcado como activo; su estado de aprobación no cambia.`)) {
+      onReactivate(u.id);
     }
   };
 
@@ -106,8 +111,10 @@ function UsuariosTable({ usuarios, onDeactivate, ownUserId, onVincularTelegram, 
               <td style={{ padding: '10px 0', display: 'flex', gap: '0.5rem' }}>
                 {/* Nunca un botón rojo dentro de una tabla -- ver
                 SucursalesTab.js para la misma regla aplicada. */}
-                {u.activo && (
+                {u.activo ? (
                   <MotoredIconAction action="Desactivar" onClick={() => handleDeactivateClick(u)} />
+                ) : (
+                  <MotoredIconAction action="Reactivar" onClick={() => handleReactivateClick(u)} />
                 )}
                 {tieneAccesoWeb(u) && (
                   <MotoredIconAction action="Cambiar contraseña" onClick={() => onCambiarPassword(u)} />
@@ -354,7 +361,17 @@ function useUsuarios(enabled) {
     }
   };
 
-  return { usuarios, loading, error, create, deactivate, reload: load };
+  const reactivate = async (id) => {
+    setError('');
+    try {
+      await reactivateUsuario(id);
+      await load();
+    } catch (err) {
+      setError(err.message || 'Error al reactivar usuario');
+    }
+  };
+
+  return { usuarios, loading, error, create, deactivate, reactivate, reload: load };
 }
 
 /**
@@ -427,7 +444,7 @@ function UsuariosContent() {
    * create-usuario form and the main table.
    */
   const { allowed, ownUserId } = useAdminGate();
-  const { usuarios, loading, error, create, deactivate, reload } = useUsuarios(allowed);
+  const { usuarios, loading, error, create, deactivate, reactivate, reload } = useUsuarios(allowed);
   const solicitudesState = useSolicitudesPendientes(allowed);
   const telegramState = useTelegramVinculacion(reload);
   const passwordState = usePasswordReset();
@@ -455,6 +472,7 @@ function UsuariosContent() {
         <UsuariosTable
           usuarios={usuarios}
           onDeactivate={deactivate}
+          onReactivate={reactivate}
           ownUserId={ownUserId}
           onVincularTelegram={telegramState.vincular}
           onDesvincularTelegram={telegramState.desvincular}
