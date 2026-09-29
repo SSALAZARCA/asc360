@@ -38,7 +38,7 @@ The Referencias page must load one page at a time, not all ~11.7k referencias at
 - Design: `GET /maestros/referencias` (`list_maestro`) is unchanged, and the new endpoints are separate:
   - `GET /maestros/referencias/buscar?page&page_size&q&linea_comercial&activa&proveedor_id` returns `{items, total, page, page_size}`. Each item is a `ReferenciaRead` plus `sustituta_codigo`, which is resolved by a self-join in the page query.
   - `GET /maestros/referencias/lineas-comerciales` returns the sorted distinct non-empty values.
-  - `GET /maestros/referencias/sustitutas?proveedor_id&q&exclude_id` returns `[{id, codigo, nombre}]`, at most 20.
+  - `GET /maestros/referencias/sustitutas?proveedor_id&q&exclude_id` returns `[{id, codigo, nombre}]`, at most 20, active referencias only (business decision). A current sustituta that is inactive is still shown by código through `sustituta_codigo` from `/buscar`.
   - They live in `api/referencias_busqueda.py` plus `services/referencias_busqueda.py`, and `router.py` mounts them BEFORE `maestros`. Otherwise `/maestros/{entidad}/{entity_id}` would catch `/referencias/buscar` and return a 422.
   - Keeping the old unpaginated list is not required by any runtime caller now. It was kept only for backward compatibility and for the existing tests.
 - Search: `ILIKE` with escaped `%`/`_`. It is case-insensitive but NOT accent-insensitive, because `unaccent` is not used anywhere in the Motored DB, so it was skipped.

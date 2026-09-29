@@ -102,6 +102,17 @@ class TestBuscarPaginado:
         assert item["sustituta_codigo"] == "VIEJA"
         assert item["homologados"] == []
 
+    def test_resolves_the_sustituta_codigo_even_when_the_sustituta_is_inactive(self):
+        """Chains A->B->C deactivate B, but A must still show B's código."""
+        client, session = _client([[1], [(_referencia("A", sustituida_por=uuid.uuid4()), "B")]])
+
+        item = client.get(f"{BASE}/buscar").json()["items"][0]
+
+        assert item["sustituta_codigo"] == "B"
+        page_sql = _business_sql(session)[1]
+        join_clause = page_sql.split("LEFT OUTER JOIN", 1)[1].split(" ORDER BY", 1)[0]
+        assert "activa" not in join_clause
+
     def test_issues_exactly_one_count_and_one_page_query(self):
         client, session = _client([[0], []])
 
@@ -281,7 +292,15 @@ class TestSustitutas:
         assert "ORDER BY referencia.codigo, referencia.id" in sql
         assert "LIMIT 20" in sql
 
-    def test_without_exclude_id_or_q_only_the_proveedor_filter_applies(self):
+    def test_only_offers_active_referencias(self):
+        client, session = _client([[]])
+
+        client.get(f"{BASE}/sustitutas", params={"proveedor_id": str(PROVEEDOR_ID), "q": "abc"})
+
+        (sql,) = _business_sql(session)
+        assert "referencia.activa = true" in sql
+
+    def test_without_exclude_id_or_q_only_proveedor_and_activa_apply(self):
         client, session = _client([[]])
 
         client.get(f"{BASE}/sustitutas", params={"proveedor_id": str(PROVEEDOR_ID)})
@@ -289,6 +308,8 @@ class TestSustitutas:
         (sql,) = _business_sql(session)
         assert "referencia.id !=" not in sql
         assert "ILIKE" not in sql
+        assert f"referencia.proveedor_id = '{PROVEEDOR_ID}'" in sql
+        assert "referencia.activa = true" in sql
 
 
 # --- backward compatibility ---------------------------------------------------

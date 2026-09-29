@@ -92,8 +92,12 @@ async def buscar_sustitutas(
     db: AsyncSession, proveedor_id: uuid.UUID, q: Optional[str], exclude_id: Optional[uuid.UUID]
 ) -> List[Referencia]:
     """Candidatas a sustituta: MISMO proveedor (regla de negocio, también
-    validada al guardar) y nunca la referencia misma."""
-    filtros = [Referencia.proveedor_id == proveedor_id]
+    validada al guardar), SOLO activas (decisión de negocio) y nunca la
+    referencia misma. Filtra únicamente las sugerencias: una sustituta ya
+    asignada que después quedó inactiva (cadena A->B->C) se sigue mostrando
+    por su código, porque `pagina_referencias` la resuelve sin mirar
+    `activa`."""
+    filtros = [Referencia.proveedor_id == proveedor_id, Referencia.activa == True]  # noqa: E712 (SQL, not Python)
     filtros += _condicion_texto(q, Referencia.codigo, Referencia.nombre)
     if exclude_id is not None:
         filtros.append(Referencia.id != exclude_id)

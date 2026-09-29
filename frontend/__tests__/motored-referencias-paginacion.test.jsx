@@ -182,6 +182,19 @@ describe('ReferenciasTab — sustituta type-ahead', () => {
     expect(input).toHaveValue('REF-OLD');
   });
 
+  it('keeps an inactive current sustituta (A->B->C chain): shown by código and saved unchanged', async () => {
+    // The search endpoint only suggests active referencias, but the current
+    // value comes from the row's `sustituta_codigo`, never from the search.
+    const input = await editRefNew();
+    expect(input).toHaveValue('REF-OLD');
+    expect(mockBuscarSustitutas).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+
+    await waitFor(() => expect(mockUpdateMaestro).toHaveBeenCalled());
+    expect(mockUpdateMaestro.mock.calls[0][2].sustituida_por).toBe('r-old');
+  });
+
   it('searches the server for the same proveedor, excluding the row itself', async () => {
     const input = await editRefNew();
 
