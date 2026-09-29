@@ -33,6 +33,7 @@ from app.config import settings
 from app.main import app
 from app.motored.models.sucursal import Sucursal
 from app.motored.models.usuario import MotoredRole, Usuario
+from app.motored.models.usuario_sucursal import UsuarioSucursal
 from app.motored.services.solicitudes import SolicitudYaResuelta
 from tests.motored.conftest import FakeAsyncSession, _ExecuteResult, override_motored_db
 
@@ -551,4 +552,130 @@ def test_rechazar_solicitud_bot_wrong_secret_returns_401():
     response = client.post(
         f"{BOT_URL}/admin/solicitudes/{uuid.uuid4()}/rechazar", headers=_headers(444, secret="wrong")
     )
+    assert response.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# GET /admin/solicitudes (Lore admin "Solicitudes pendientes" button)
+# ---------------------------------------------------------------------------
+
+def _sucursal(nombre: str) -> Sucursal:
+    return Sucursal(id=uuid.uuid4(), nombre=nombre, activa=True)
+
+
+def _asesor_con_sucursal(sucursal: Sucursal, **overrides) -> Usuario:
+    asesor = _asesor(**overrides)
+    asesor.sucursales = [
+        UsuarioSucursal(id=uuid.uuid4(), usuario_id=asesor.id, sucursal_id=sucursal.id)
+    ]
+    return asesor
+
+
+def test_listar_solicitudes_bot_returns_pending_with_sucursal_names():
+    admin = _admin(telegram_id=444)
+    sucursal = _sucursal("Sede Norte")
+    asesor = _asesor_con_sucursal(
+        sucursal, nombre="Juan Asesor", phone="3001234567", created_at=datetime(2026, 9, 1, 8, 0)
+    )
+    # [actor lookup, pending usuarios, sucursal names]
+    client = _client_with_queue([[admin], [asesor], [sucursal]])
+
+    response = client.get(f"{BOT_URL}/admin/solicitudes", headers=_headers(444))
+
+    assert response.status_code == 200, response.text
+    assert response.json() == {
+        "solicitudes": [
+            {
+                "id": str(asesor.id),
+                "nombre": "Juan Asesor",
+                "phone": "3001234567",
+                "sucursales": ["Sede Norte"],
+                "created_at": "2026-09-01T08:00:00",
+            }
+        ]
+    }
+
+
+def test_listar_solicitudes_bot_empty_skips_sucursal_query():
+    admin = _admin(telegram_id=444)
+    client = _client_with_queue([[admin], []])
+
+    response = client.get(f"{BOT_URL}/admin/solicitudes", headers=_headers(444))
+
+    assert response.status_code == 200, response.text
+    assert response.json() == {"solicitudes": []}
+
+
+def test_listar_solicitudes_bot_query_filters_pending_active_oldest_first():
+    admin = _admin(telegram_id=444)
+    session = FakeAsyncSession(execute_queue=[[], [admin], []])
+    override_motored_db(session)
+
+    TestClient(app).get(f"{BOT_URL}/admin/solicitudes", headers=_headers(444))
+
+    consulta = str(session.executed_statements[2].compile(compile_kwargs={"literal_binds": True}))
+    assert "usuario.status = 'pending'" in consulta
+    assert "usuario.activo IS true" in consulta or "usuario.activo = true" in consulta
+    assert "ORDER BY usuario.created_at ASC" in consulta
+
+
+@pytest.mark.parametrize(
+    "actor, codigo",
+    [
+        (_asesor(telegram_id=444, status="approved"), "NO_REGISTRADO"),
+        (_admin(telegram_id=444, status="pending"), "PENDIENTE"),
+        (_admin(telegram_id=444, status="rejected"), "RECHAZADO"),
+        (_admin(telegram_id=444, activo=False), "INACTIVO"),
+    ],
+)
+def test_listar_solicitudes_bot_refuses_non_admin_pending_rejected_inactive(actor, codigo):
+    client = _client_with_queue([[actor]])
+
+    response = client.get(f"{BOT_URL}/admin/solicitudes", headers=_headers(444))
+
+    assert response.status_code == 403
+    assert response.json()["detail"]["code"] == codigo
+
+
+def test_listar_solicitudes_bot_unknown_telegram_gets_403():
+    client = _client_with_queue([[]])
+
+    response = client.get(f"{BOT_URL}/admin/solicitudes", headers=_headers(444))
+
+    assert response.status_code == 403
+    assert response.json()["detail"]["code"] == "NO_REGISTRADO"
+
+
+def test_listar_solicitudes_bot_shared_telegram_asesor_header_is_refused():
+    """A Telegram shared by advisors: naming an advisor via
+    `X-Lore-Usuario-Id` never grants admin rights."""
+    asesor_a = _asesor(telegram_id=444, status="approved", phone="3001111111")
+    asesor_b = _asesor(telegram_id=444, status="approved", phone="3002222222")
+    client = _client_with_queue([[asesor_a, asesor_b]])
+
+    response = client.get(
+        f"{BOT_URL}/admin/solicitudes",
+        headers={**_headers(444), "X-Lore-Usuario-Id": str(asesor_a.id)},
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"]["code"] == "NO_REGISTRADO"
+
+
+def test_listar_solicitudes_bot_shared_telegram_header_of_foreign_usuario_is_refused():
+    admin = _admin(telegram_id=444)
+    client = _client_with_queue([[admin]])
+
+    response = client.get(
+        f"{BOT_URL}/admin/solicitudes",
+        headers={**_headers(444), "X-Lore-Usuario-Id": str(uuid.uuid4())},
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"]["code"] == "ASESOR_NO_PERTENECE"
+
+
+def test_listar_solicitudes_bot_wrong_secret_returns_401():
+    client = _client_with_queue([])
+    response = client.get(f"{BOT_URL}/admin/solicitudes", headers=_headers(444, secret="wrong"))
     assert response.status_code == 401

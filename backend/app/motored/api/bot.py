@@ -39,6 +39,7 @@ from pydantic import BaseModel, field_validator
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.limiter import limiter
 from app.motored.deps import get_motored_db_or_503, require_motored_ready
@@ -299,6 +300,51 @@ async def _resolver_solicitud_bot(
         "status": usuario.status,
         "nombre": usuario.nombre,
         "telegram_id_solicitante": usuario.telegram_id,
+    }
+
+
+async def _nombres_sucursales(db: AsyncSession, pendientes: List[Usuario]) -> dict:
+    """`{sucursal_id: nombre}` de las sucursales vinculadas a `pendientes`
+    (una sola consulta; ninguna si no hay ids que resolver)."""
+    ids = {rel.sucursal_id for u in pendientes for rel in u.sucursales}
+    if not ids:
+        return {}
+    result = await db.execute(select(Sucursal).where(Sucursal.id.in_(ids)))
+    return {s.id: s.nombre for s in result.scalars().all()}
+
+
+@router.get("/admin/solicitudes")
+async def listar_solicitudes_bot(
+    actor: BotActor = Depends(require_bot_admin),
+    db: AsyncSession = Depends(get_motored_db_or_503),
+) -> dict:
+    """Solicitudes de registro pendientes, la más antigua primero, para el
+    botón "Solicitudes pendientes" del bot. Mismo criterio que el listado
+    web `GET /usuarios?status=pending` (`status='pending'` y `activo`: un
+    pendiente desactivado ya no se puede resolver). Solo ADMIN: el actor lo
+    resuelve `require_bot_admin`, que también respeta `X-Lore-Usuario-Id`
+    sobre un Telegram compartido sin ampliar permisos."""
+    result = await db.execute(
+        select(Usuario)
+        .options(selectinload(Usuario.sucursales))
+        .where(Usuario.status == "pending", Usuario.activo.is_(True))
+        .order_by(Usuario.created_at.asc())
+    )
+    pendientes = list(result.scalars().all())
+    nombres = await _nombres_sucursales(db, pendientes)
+    return {
+        "solicitudes": [
+            {
+                "id": str(u.id),
+                "nombre": u.nombre,
+                "phone": u.phone,
+                "sucursales": [
+                    nombres[rel.sucursal_id] for rel in u.sucursales if rel.sucursal_id in nombres
+                ],
+                "created_at": u.created_at.isoformat() if u.created_at else None,
+            }
+            for u in pendientes
+        ]
     }
 
 
