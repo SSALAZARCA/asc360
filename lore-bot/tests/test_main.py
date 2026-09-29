@@ -424,3 +424,38 @@ async def test_cancel_tap_from_correccion_cantidad_ends_and_clears_state():
         "correcciones", CorreccionEstado.CANTIDAD, correccion_handlers._DATA_KEY, {"cargas": {}}, 404
     )
     assert "no se hizo ningún cambio" in texto
+
+
+def _conversacion(entry_point_check):
+    handlers = build_application().handlers[0]
+    return next(
+        h for h in handlers
+        if isinstance(h, ConversationHandler) and any(entry_point_check(ep) for ep in h.entry_points)
+    )
+
+
+def test_registro_conversation_can_be_entered_from_the_register_another_advisor_button():
+    conv = _conversacion(lambda ep: isinstance(ep, CommandHandler) and "start" in ep.commands)
+
+    botones = [
+        ep for ep in conv.entry_points
+        if isinstance(ep, CallbackQueryHandler) and ep.callback is registro_handlers.iniciar_otro
+    ]
+    assert len(botones) == 1
+    assert botones[0].pattern.match("lore_reg_otro")
+
+
+def test_captura_conversation_routes_the_who_registers_answer():
+    conv = _conversacion(lambda ep: isinstance(ep, CommandHandler) and "registrar" in ep.commands)
+
+    handlers = conv.states[CapturaEstado.ASESOR]
+    assert [h.callback for h in handlers] == [captura_handlers.recibir_asesor]
+    assert handlers[0].pattern.match("lore_cap_ase:abc")
+
+
+def test_correccion_conversation_routes_the_who_registers_answer():
+    conv = _conversacion(lambda ep: isinstance(ep, CommandHandler) and "correcciones" in ep.commands)
+
+    handlers = conv.states[CorreccionEstado.ASESOR]
+    assert [h.callback for h in handlers] == [correccion_handlers.recibir_asesor]
+    assert handlers[0].pattern.match("lore_cor_ase:abc")

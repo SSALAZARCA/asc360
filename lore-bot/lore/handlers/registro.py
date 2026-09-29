@@ -25,6 +25,7 @@ from lore.api import (
     LoreApiError,
     NoRegistrado,
     SucursalNoEncontrada,
+    TelegramEsAdmin,
     YaRegistrado,
 )
 from lore.estados import RegistroEstado
@@ -72,12 +73,22 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
             await update.message.reply_text(_MSG_CONEXION)
             return ConversationHandler.END
 
+    asesores = data.get("asesores")
+    if asesores is not None and len(asesores) > 1:
+        return await _saludar_varios(update, asesores)
+    return await _saludar_unico(update, data)
+
+
+async def _saludar_unico(update: Update, data: dict) -> int:
+    """Status-aware welcome for a Telegram with a single usuario."""
     estado = data.get("status")
+    otro = _teclado_otro_asesor(data)
     if estado == "pending":
         await update.message.reply_text(
             "⏳ Tu solicitud de acceso está *pendiente de aprobación*. "
             "Te aviso por acá apenas un administrador la revise.",
             parse_mode="Markdown",
+            **_con_markup(otro),
         )
         return ConversationHandler.END
     if estado == "rejected":
@@ -85,6 +96,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
             "❌ Tu solicitud de acceso fue *rechazada*. "
             "Si creés que es un error, contactá a un administrador.",
             parse_mode="Markdown",
+            **_con_markup(otro),
         )
         return ConversationHandler.END
 
@@ -111,15 +123,75 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         f"👋 ¡Hola, {data.get('nombre', '')}! Ya estás registrado como {rol_legible}.",
         reply_markup=reply_markup,
     )
+    await _ofrecer_otro_asesor(update, otro)
     return ConversationHandler.END
 
 
-async def _iniciar_registro(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    context.user_data[_DRAFT_KEY] = {}
+_TEXTO_OTRO_ASESOR = "➕ Registrar otro asesor"
+_CALLBACK_OTRO_ASESOR = "lore_reg_otro"
+_ETIQUETA_ESTADO = {
+    "approved": "aprobado",
+    "pending": "pendiente de aprobación",
+    "rejected": "rechazado",
+}
+
+
+def _teclado_otro_asesor(data: dict) -> InlineKeyboardMarkup | None:
+    """Button that starts the normal registration for one more advisor on this
+    Telegram. Never offered to an ADMIN: the backend refuses to share an
+    admin's Telegram, so the button would only lead to a dead end."""
+    if data.get("role") != "ASESOR_MOSTRADOR":
+        return None
+    return InlineKeyboardMarkup(
+        [[InlineKeyboardButton(_TEXTO_OTRO_ASESOR, callback_data=_CALLBACK_OTRO_ASESOR)]]
+    )
+
+
+def _con_markup(markup: InlineKeyboardMarkup | None) -> dict:
+    return {} if markup is None else {"reply_markup": markup}
+
+
+async def _ofrecer_otro_asesor(update: Update, otro: InlineKeyboardMarkup | None) -> None:
+    if otro is not None:
+        await update.message.reply_text(
+            "¿Otro asesor comparte este Telegram?", reply_markup=otro
+        )
+
+
+async def _saludar_varios(update: Update, asesores: list[dict]) -> int:
+    """`/start` on a Telegram shared by several advisors: lists each with its
+    state. The capture keyboard is shown only if at least one can act."""
+    lineas = [
+        f"• {a.get('nombre', '')} — {_ETIQUETA_ESTADO.get(a.get('status'), 'sin estado')}"
+        for a in asesores
+    ]
+    puede_actuar = any(a.get("status") == "approved" and a.get("activo", True) for a in asesores)
     await update.message.reply_text(
-        "👋 No te tengo registrado todavía.\n\n"
-        "Vamos a mandar una solicitud de acceso.\n"
-        "Paso 1 de 3 → ¿Cuál es tu *nombre completo*?",
+        "👋 En este Telegram hay varios asesores:\n" + "\n".join(lineas),
+        **({"reply_markup": TECLADO_CAPTURA} if puede_actuar else {}),
+    )
+    await _ofrecer_otro_asesor(update, _teclado_otro_asesor({"role": "ASESOR_MOSTRADOR"}))
+    return ConversationHandler.END
+
+
+async def iniciar_otro(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Tap on "➕ Registrar otro asesor": the same registration flow as a new
+    user, started from the button's message."""
+    query = update.callback_query
+    await query.answer()
+    return await _iniciar_registro(update, context, query.message, _INTRO_OTRO_ASESOR)
+
+
+_INTRO_NUEVO = "👋 No te tengo registrado todavía.\n\nVamos a mandar una solicitud de acceso.\n"
+_INTRO_OTRO_ASESOR = "👋 Vamos a registrar a otro asesor de este Telegram.\n\n"
+
+
+async def _iniciar_registro(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, mensaje=None, intro: str = _INTRO_NUEVO
+) -> int:
+    context.user_data[_DRAFT_KEY] = {}
+    await (mensaje or update.message).reply_text(
+        intro + "Paso 1 de 3 → ¿Cuál es tu *nombre completo*?",
         parse_mode="Markdown",
         reply_markup=teclado_solo_cancelar(),
     )
@@ -229,6 +301,17 @@ async def recibir_sucursal(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     return RegistroEstado.CONFIRMAR
 
 
+_MENSAJES_ERROR_TERMINAL: dict[type[LoreApiError], str] = {
+    YaRegistrado: "Ya tenés una solicitud registrada con ese celular. Mandá /start para ver tu estado.",
+    SucursalNoEncontrada: (
+        "⚠️ La sucursal seleccionada ya no está disponible. Probá de nuevo con /start."
+    ),
+    TelegramEsAdmin: (
+        "⚠️ Este Telegram pertenece a un administrador y no se puede compartir con un asesor."
+    ),
+}
+
+
 async def confirmar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
@@ -247,16 +330,8 @@ async def confirmar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
                 phone=draft.get("phone", ""),
                 sucursal_id=draft.get("sucursal_id", ""),
             )
-        except YaRegistrado:
-            await query.edit_message_text(
-                "Ya tenés una solicitud registrada para este usuario. Mandá /start para ver tu estado."
-            )
-            context.user_data.pop(_DRAFT_KEY, None)
-            return ConversationHandler.END
-        except SucursalNoEncontrada:
-            await query.edit_message_text(
-                "⚠️ La sucursal seleccionada ya no está disponible. Probá de nuevo con /start."
-            )
+        except (YaRegistrado, SucursalNoEncontrada, TelegramEsAdmin) as exc:
+            await query.edit_message_text(_MENSAJES_ERROR_TERMINAL[type(exc)])
             context.user_data.pop(_DRAFT_KEY, None)
             return ConversationHandler.END
         except BackendCaido:

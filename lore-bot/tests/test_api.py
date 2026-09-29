@@ -2,6 +2,8 @@ import httpx
 import pytest
 
 from lore.api import (
+    AsesorNoPertenece,
+    AsesorRequerido,
     BackendCaido,
     BackendClient,
     CargaNoEncontrada,
@@ -12,10 +14,12 @@ from lore.api import (
     LineaNoEncontrada,
     NoRegistrado,
     Pendiente,
+    Rechazado,
     ReferenciaNoEncontrada,
     RegistroInconsistente,
     SucursalNoAutorizada,
     SucursalNoEncontrada,
+    TelegramEsAdmin,
     TelegramYaVinculado,
     YaAnulada,
     YaRegistrado,
@@ -632,3 +636,149 @@ async def test_anular_registro_raises_backend_caido_on_unmapped_404():
     async with _client(handler) as client:
         with pytest.raises(BackendCaido):
             await client.anular_registro("c1")
+
+
+# --- several advisors on one Telegram: X-Lore-Usuario-Id -----------------------
+
+
+async def test_client_without_usuario_id_never_sends_the_usuario_header():
+    captured = {}
+
+    def handler(request):
+        captured["headers"] = request.headers
+        return httpx.Response(200, json=[])
+
+    async with _client(handler) as client:
+        await client.listar_hoy()
+
+    assert "x-lore-usuario-id" not in captured["headers"]
+
+
+async def test_client_with_usuario_id_sends_it_on_every_request():
+    vistos = []
+
+    def handler(request):
+        vistos.append(request.headers.get("x-lore-usuario-id"))
+        return httpx.Response(200, json=[])
+
+    transport = httpx.MockTransport(handler)
+    async with BackendClient(
+        123, usuario_id="u-7", base_url="http://test", transport=transport
+    ) as client:
+        await client.listar_hoy()
+        await client.listar_hoy()
+
+    assert vistos == ["u-7", "u-7"]
+
+
+async def test_asesor_requerido_409_maps_to_typed_error():
+    def handler(request):
+        return httpx.Response(409, json={"code": "ASESOR_REQUERIDO"})
+
+    async with _client(handler) as client:
+        with pytest.raises(AsesorRequerido):
+            await client.listar_hoy()
+
+
+async def test_asesor_no_pertenece_403_maps_to_typed_error():
+    def handler(request):
+        return httpx.Response(403, json={"code": "ASESOR_NO_PERTENECE"})
+
+    async with _client(handler) as client:
+        with pytest.raises(AsesorNoPertenece):
+            await client.listar_hoy()
+
+
+async def test_telegram_es_admin_409_maps_to_typed_error():
+    def handler(request):
+        return httpx.Response(409, json={"code": "TELEGRAM_ES_ADMIN"})
+
+    async with _client(handler) as client:
+        with pytest.raises(TelegramEsAdmin):
+            await client.registro(nombre="Ana Perez", phone="3001234567", sucursal_id="s1")
+
+
+# --- error code extraction: the REAL FastAPI error shape ------------------------
+
+
+async def test_error_code_is_read_from_fastapi_detail_dict():
+    def handler(request):
+        return httpx.Response(403, json={"detail": {"code": "PENDIENTE"}})
+
+    async with _client(handler) as client:
+        with pytest.raises(Pendiente):
+            await client.listar_hoy()
+
+
+async def test_error_code_from_detail_maps_409_codes_too():
+    def handler(request):
+        return httpx.Response(409, json={"detail": {"code": "YA_REGISTRADO"}})
+
+    async with _client(handler) as client:
+        with pytest.raises(YaRegistrado):
+            await client.registro(nombre="Ana Perez", phone="3001234567", sucursal_id="s1")
+
+
+async def test_top_level_code_still_works():
+    def handler(request):
+        return httpx.Response(403, json={"code": "RECHAZADO"})
+
+    async with _client(handler) as client:
+        with pytest.raises(Rechazado):
+            await client.listar_hoy()
+
+
+@pytest.mark.parametrize(
+    "cuerpo",
+    [
+        {"detail": "Forbidden"},
+        {"detail": [{"loc": ["body", "x"], "msg": "bad", "type": "value_error"}]},
+        {"detail": {"code": ["x"]}},
+        {"detail": {"message": "no code"}},
+        {"detail": None},
+        ["not", "a", "dict"],
+    ],
+)
+async def test_unrecognized_error_bodies_still_map_to_backend_caido(cuerpo):
+    def handler(request):
+        return httpx.Response(403, json=cuerpo)
+
+    async with _client(handler) as client:
+        with pytest.raises(BackendCaido):
+            await client.listar_hoy()
+
+
+async def test_non_json_error_body_still_maps_to_backend_caido():
+    def handler(request):
+        return httpx.Response(409, content=b"<html>oops</html>")
+
+    async with _client(handler) as client:
+        with pytest.raises(BackendCaido):
+            await client.listar_hoy()
+
+
+async def test_unknown_code_inside_detail_still_maps_to_backend_caido():
+    def handler(request):
+        return httpx.Response(409, json={"detail": {"code": "NUNCA_VISTO"}})
+
+    async with _client(handler) as client:
+        with pytest.raises(BackendCaido):
+            await client.listar_hoy()
+
+
+async def test_404_codes_are_also_read_from_detail():
+    def handler(request):
+        return httpx.Response(404, json={"detail": {"code": "SUCURSAL_NO_ENCONTRADA"}})
+
+    async with _client(handler) as client:
+        with pytest.raises(SucursalNoEncontrada):
+            await client.registro(nombre="Ana Perez", phone="3001234567", sucursal_id="s1")
+
+
+async def test_404_line_code_is_read_from_detail():
+    def handler(request):
+        return httpx.Response(404, json={"detail": {"code": "LINEA_NO_ENCONTRADA"}})
+
+    async with _client(handler) as client:
+        with pytest.raises(LineaNoEncontrada):
+            await client.editar_linea("l1", 3)

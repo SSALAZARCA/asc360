@@ -26,8 +26,14 @@ _CARGA_1 = "44444444-4444-4444-4444-444444444444"
 _LINEA_1 = "55555555-5555-5555-5555-555555555555"
 
 
+_YO_UN_ASESOR = {
+    "id": "u1", "role": "ASESOR_MOSTRADOR", "status": "approved", "activo": True, "sucursales": [],
+}
+
+
 class FakeClient:
     def __init__(self):
+        self.yo = AsyncMock(return_value=_YO_UN_ASESOR)
         self.listar_hoy = AsyncMock()
         self.editar_linea = AsyncMock()
         self.anular_registro = AsyncMock()
@@ -40,7 +46,7 @@ class FakeClient:
 
 
 def _fake_cliente(fake_client):
-    return lambda telegram_id: fake_client
+    return lambda telegram_id, usuario_id=None: fake_client
 
 
 def _make_update(*, text=None, callback_data=None, user_id=123):

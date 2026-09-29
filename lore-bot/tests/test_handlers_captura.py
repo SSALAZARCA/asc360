@@ -41,7 +41,7 @@ class FakeClient:
 
 
 def _fake_cliente(fake_client):
-    return lambda telegram_id: fake_client
+    return lambda telegram_id, usuario_id=None: fake_client
 
 
 def _make_update(*, text=None, callback_data=None, user_id=123):

@@ -26,6 +26,7 @@ class RegistroEstado(IntEnum):
 class CapturaEstado(IntEnum):
     """Lost-sale capture flow (manual entry, Method A, or photo, Method B)."""
 
+    ASESOR = auto()
     SUCURSAL = auto()
     METODO = auto()
     MANUAL = auto()
@@ -39,6 +40,7 @@ class CapturaEstado(IntEnum):
 class CorreccionEstado(IntEnum):
     """Today-only edit/cancel flow for a previously captured registration."""
 
+    ASESOR = auto()
     LISTA = auto()
     ACCION = auto()
     CANTIDAD = auto()
@@ -74,6 +76,9 @@ class Borrador:
     """
 
     registro_id: UUID = field(default_factory=uuid4)
+    # Which advisor of a shared Telegram is registering. None when the
+    # Telegram has a single advisor (no header sent, backend resolves it).
+    usuario_id: Optional[str] = None
     sucursal_id: Optional[UUID] = None
     metodo: Optional[str] = None  # "MANUAL" | "FOTO"
     fecha: Optional[date] = None

@@ -24,7 +24,6 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes, ConversationHandler
 
 from lore.api import (
-    BackendCaido,
     BackendClient,
     CargaNoEncontrada,
     FueraDeVentana,
@@ -37,6 +36,17 @@ from lore.api import (
     YaAnulada,
 )
 from lore.estados import CorreccionEstado
+from lore.handlers._asesor import (
+    MSG_ASESOR_NO_DISPONIBLE,
+    MSG_QUIEN_REGISTRA,
+    MSG_SIN_ASESOR_HABILITADO,
+    actor_automatico,
+    asesores_utilizables,
+    buscar_asesor,
+    ninguno_habilitado,
+    teclado_asesores,
+    verificar_actor,
+)
 from lore.handlers._common import (
     _CANTIDAD_MAXIMA,
     _CANTIDAD_MINIMA,
@@ -44,6 +54,7 @@ from lore.handlers._common import (
     _validar_cantidad,
     con_cancelar,
     editar_o_ignorar_sin_cambios,
+    responder,
     responder_cancelacion,
     teclado_solo_cancelar,
 )
@@ -51,11 +62,20 @@ from lore.handlers._common import (
 logger = logging.getLogger("lore.handlers.correccion")
 
 _DATA_KEY = "lore_correccion"
+_ASESORES_KEY = "lore_correccion_asesores"
+_PREFIJO_ASESOR = "lore_cor_ase:"
 
 
-def _cliente(telegram_id: int) -> BackendClient:
-    """Same seam as the other handler modules' `_cliente`."""
-    return BackendClient(telegram_id)
+def _cliente(telegram_id: int, usuario_id: str | None = None) -> BackendClient:
+    """Same seam as the other handler modules' `_cliente`. `usuario_id` is
+    the advisor chosen for this conversation (shared Telegram)."""
+    return BackendClient(telegram_id, usuario_id=usuario_id)
+
+
+def _usuario_id(context: ContextTypes.DEFAULT_TYPE) -> str | None:
+    """The advisor chosen for THIS conversation, if any; tolerant of a
+    missing state (stale button after a restart)."""
+    return context.user_data.get(_DATA_KEY, {}).get("usuario_id")
 
 
 def _estado(context: ContextTypes.DEFAULT_TYPE) -> dict:
@@ -76,34 +96,72 @@ def _uuid_valido(crudo: str) -> str | None:
 
 
 async def iniciar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """`/correcciones` — entry point."""
+    """`/correcciones` — entry point. Asks "¿Quién registra?" when the
+    Telegram has several usable advisors (every time, never remembered),
+    then lists only the acting advisor's registrations of today."""
     telegram_id = update.effective_user.id
     async with _cliente(telegram_id) as client:
+        yo = await verificar_actor(client, update)
+    if yo is None:
+        return ConversationHandler.END
+    if ninguno_habilitado(yo):
+        await update.message.reply_text(MSG_SIN_ASESOR_HABILITADO)
+        return ConversationHandler.END
+
+    usables = asesores_utilizables(yo)
+    if len(usables) > 1:
+        context.user_data.pop(_DATA_KEY, None)
+        context.user_data[_ASESORES_KEY] = {a["id"]: a for a in usables}
+        await update.message.reply_text(
+            MSG_QUIEN_REGISTRA, reply_markup=teclado_asesores(_PREFIJO_ASESOR, usables)
+        )
+        return CorreccionEstado.ASESOR
+    _, usuario_id = actor_automatico(yo)
+    return await _abrir_lista(update, context, usuario_id)
+
+
+async def recibir_asesor(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """The tapped advisor is only accepted if it was offered in THIS
+    conversation; the backend re-checks that it belongs to the Telegram."""
+    query = update.callback_query
+    await query.answer()
+
+    opciones = context.user_data.pop(_ASESORES_KEY, {})
+    asesor = buscar_asesor(opciones, query.data.replace(_PREFIJO_ASESOR, ""))
+    if asesor is None:
+        logger.warning("recibir_asesor (correccion): asesor no ofrecido %r", query.data)
+        await query.edit_message_text(MSG_ASESOR_NO_DISPONIBLE)
+        return ConversationHandler.END
+    return await _abrir_lista(update, context, asesor["id"])
+
+
+async def _abrir_lista(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, usuario_id: str | None
+) -> int:
+    telegram_id = update.effective_user.id
+    async with _cliente(telegram_id, usuario_id) as client:
         try:
             cargas = await client.listar_hoy()
         except NoRegistrado:
-            await update.message.reply_text("No estás registrado todavía. Mandá /start para solicitar acceso.")
+            await responder(update, "No estás registrado todavía. Mandá /start para solicitar acceso.")
             return ConversationHandler.END
         except Pendiente:
-            await update.message.reply_text("⏳ Tu solicitud de acceso todavía está pendiente de aprobación.")
+            await responder(update, "⏳ Tu solicitud de acceso todavía está pendiente de aprobación.")
             return ConversationHandler.END
         except Rechazado:
-            await update.message.reply_text("❌ Tu solicitud de acceso fue rechazada. Contactá a un administrador.")
-            return ConversationHandler.END
-        except BackendCaido:
-            await update.message.reply_text(_MSG_CONEXION)
+            await responder(update, "❌ Tu solicitud de acceso fue rechazada. Contactá a un administrador.")
             return ConversationHandler.END
         except LoreApiError:
-            await update.message.reply_text(_MSG_CONEXION)
+            # Includes BackendCaido.
+            await responder(update, _MSG_CONEXION)
             return ConversationHandler.END
 
     if not cargas:
-        await update.message.reply_text("No tenés registros de hoy para corregir.")
+        await responder(update, "No tenés registros de hoy para corregir.")
         return ConversationHandler.END
 
-    context.user_data[_DATA_KEY] = {"cargas": {c["carga_id"]: c for c in cargas}}
-    kb = _teclado_lista(cargas)
-    await update.message.reply_text("🧾 Tus registros de hoy:", reply_markup=con_cancelar(kb))
+    context.user_data[_DATA_KEY] = {"cargas": {c["carga_id"]: c for c in cargas}, "usuario_id": usuario_id}
+    await responder(update, "🧾 Tus registros de hoy:", reply_markup=con_cancelar(_teclado_lista(cargas)))
     return CorreccionEstado.LISTA
 
 
@@ -216,7 +274,7 @@ async def recibir_cantidad(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         return CorreccionEstado.CANTIDAD
 
     telegram_id = update.effective_user.id
-    async with _cliente(telegram_id) as client:
+    async with _cliente(telegram_id, _usuario_id(context)) as client:
         try:
             await client.editar_linea(linea_id, cantidad)
         except LineaNoEncontrada:
@@ -300,7 +358,7 @@ async def resolver_confirmacion_anular(update: Update, context: ContextTypes.DEF
         return ConversationHandler.END
 
     telegram_id = update.effective_user.id
-    async with _cliente(telegram_id) as client:
+    async with _cliente(telegram_id, _usuario_id(context)) as client:
         try:
             await client.anular_registro(carga_id)
         except CargaNoEncontrada:
@@ -334,6 +392,7 @@ async def resolver_confirmacion_anular(update: Update, context: ContextTypes.DEF
 
 def _limpiar(context: ContextTypes.DEFAULT_TYPE) -> None:
     context.user_data.pop(_DATA_KEY, None)
+    context.user_data.pop(_ASESORES_KEY, None)
 
 
 async def cancelar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:

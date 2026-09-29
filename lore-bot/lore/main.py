@@ -65,7 +65,12 @@ def _fallbacks_cancelar(callback) -> list:
 
 def _build_registro_conversation() -> ConversationHandler:
     return ConversationHandler(
-        entry_points=[CommandHandler("start", registro_handlers.start)],
+        entry_points=[
+            CommandHandler("start", registro_handlers.start),
+            # "➕ Registrar otro asesor": another advisor of a shared Telegram
+            # goes through the SAME registration flow.
+            CallbackQueryHandler(registro_handlers.iniciar_otro, pattern=r"^lore_reg_otro$"),
+        ],
         states={
             RegistroEstado.NOMBRE: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, registro_handlers.recibir_nombre)
@@ -100,6 +105,9 @@ def _build_captura_conversation() -> ConversationHandler:
             MessageHandler(filters.Text([BOTON_REGISTRAR]), captura_handlers.iniciar),
         ],
         states={
+            CapturaEstado.ASESOR: [
+                CallbackQueryHandler(captura_handlers.recibir_asesor, pattern=r"^lore_cap_ase:")
+            ],
             CapturaEstado.SUCURSAL: [
                 CallbackQueryHandler(captura_handlers.recibir_sucursal, pattern=r"^lore_cap_suc:")
             ],
@@ -151,6 +159,9 @@ def _build_correccion_conversation() -> ConversationHandler:
             MessageHandler(filters.Text([BOTON_CORRECCIONES]), correccion_handlers.iniciar),
         ],
         states={
+            CorreccionEstado.ASESOR: [
+                CallbackQueryHandler(correccion_handlers.recibir_asesor, pattern=r"^lore_cor_ase:")
+            ],
             CorreccionEstado.LISTA: [
                 CallbackQueryHandler(correccion_handlers.seleccionar_carga, pattern=r"^lore_cor_carga:")
             ],

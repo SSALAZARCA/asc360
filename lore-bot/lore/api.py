@@ -89,6 +89,18 @@ class YaAnulada(LoreApiError):
     """`POST /demanda-perdida/{carga_id}/anular` targets a carga already ANULADO."""
 
 
+class AsesorRequerido(LoreApiError):
+    """The Telegram has several usable advisors and the call named none (409)."""
+
+
+class AsesorNoPertenece(LoreApiError):
+    """`X-Lore-Usuario-Id` is not an advisor linked to this Telegram (403)."""
+
+
+class TelegramEsAdmin(LoreApiError):
+    """`POST /registro` on a Telegram that belongs to an ADMIN, which is never shared."""
+
+
 class BackendCaido(LoreApiError):
     """The backend is unreachable, erroring, or returned an unmapped code."""
 
@@ -102,6 +114,9 @@ _ERROR_CODE_MAP: dict[str, type[LoreApiError]] = {
     "YA_REGISTRADO": YaRegistrado,
     "CODIGO_INVALIDO": CodigoInvalido,
     "TELEGRAM_YA_VINCULADO": TelegramYaVinculado,
+    "ASESOR_REQUERIDO": AsesorRequerido,
+    "ASESOR_NO_PERTENECE": AsesorNoPertenece,
+    "TELEGRAM_ES_ADMIN": TelegramEsAdmin,
     # Phase 10 additions — all raised via `_request`'s shared 401/403/409
     # translation (see `backend/app/motored/api/bot_demanda_perdida.py` for
     # the authoritative code list; 404 codes from that same file are handled
@@ -123,6 +138,25 @@ def _safe_json(response: httpx.Response) -> Any:
         return None
 
 
+def _error_code(response: httpx.Response) -> Optional[str]:
+    """The backend's machine-readable error code, or None.
+
+    FastAPI's `HTTPException(detail={"code": ...})` serializes as
+    `{"detail": {"code": ...}}`; a bare top-level `{"code": ...}` is also
+    accepted. A `detail` that is a string or a list (422 validation), a
+    non-JSON body, or a non-string code all yield None."""
+    body = _safe_json(response)
+    if not isinstance(body, dict):
+        return None
+    detail = body.get("detail")
+    raw = body.get("code")
+    if raw is None and isinstance(detail, dict):
+        raw = detail.get("code")
+    # gga finding: `code` must be a str before it's used as a dict key -- a
+    # malformed body (`{"code": ["x"]}`) would otherwise raise a bare TypeError.
+    return raw if isinstance(raw, str) else None
+
+
 class BackendClient:
     """Thin async httpx wrapper around `/api/motored/bot`.
 
@@ -134,16 +168,23 @@ class BackendClient:
         self,
         telegram_id: int,
         *,
+        usuario_id: Optional[str] = None,
         base_url: Optional[str] = None,
         transport: Optional[httpx.AsyncBaseTransport] = None,
     ) -> None:
+        """`usuario_id` names WHICH advisor of a shared Telegram is acting;
+        the backend only honors it if that usuario is linked to
+        `telegram_id`. Omitted, the backend resolves the single advisor."""
         self._telegram_id = telegram_id
+        headers = {
+            "x-lore-secret": config.LORE_BOT_SECRET,
+            "x-lore-telegram-id": str(telegram_id),
+        }
+        if usuario_id is not None:
+            headers["x-lore-usuario-id"] = str(usuario_id)
         self._client = httpx.AsyncClient(
             base_url=base_url or config.LORE_API_URL,
-            headers={
-                "x-lore-secret": config.LORE_BOT_SECRET,
-                "x-lore-telegram-id": str(telegram_id),
-            },
+            headers=headers,
             transport=transport,
         )
 
@@ -163,12 +204,7 @@ class BackendClient:
             raise BackendCaido(str(exc)) from exc
 
         if response.status_code in (401, 403, 409):
-            body = _safe_json(response)
-            raw_code = body.get("code") if isinstance(body, dict) else None
-            # gga finding: `code` must be hashable/comparable before it's used
-            # as a dict key -- a malformed body (`{"code": ["x"]}`) would
-            # otherwise raise a bare, uncaught TypeError from `dict.get`.
-            code = raw_code if isinstance(raw_code, str) else None
+            code = _error_code(response)
             error_cls = _ERROR_CODE_MAP.get(code, BackendCaido)
             raise error_cls(code or f"unmapped HTTP {response.status_code}")
 
@@ -223,9 +259,7 @@ class BackendClient:
             json={"nombre": nombre, "phone": phone, "sucursal_id": sucursal_id},
         )
         if response.status_code == 404:
-            body = _safe_json(response)
-            raw_code = body.get("code") if isinstance(body, dict) else None
-            code = raw_code if isinstance(raw_code, str) else None
+            code = _error_code(response)
             if code == "SUCURSAL_NO_ENCONTRADA":
                 raise SucursalNoEncontrada(code)
             raise BackendCaido(f"unmapped HTTP 404 ({code})")
@@ -316,9 +350,7 @@ class BackendClient:
             headers={"Idempotency-Key": idempotency_key},
         )
         if response.status_code == 404:
-            body = _safe_json(response)
-            raw_code = body.get("code") if isinstance(body, dict) else None
-            code = raw_code if isinstance(raw_code, str) else None
+            code = _error_code(response)
             if code == "REFERENCIA_NO_ENCONTRADA":
                 raise ReferenciaNoEncontrada(code)
             if code == "SUCURSAL_NO_ENCONTRADA":
@@ -351,9 +383,7 @@ class BackendClient:
             "PATCH", f"/demanda-perdida/lineas/{linea_id}", json={"cantidad": cantidad}
         )
         if response.status_code == 404:
-            body = _safe_json(response)
-            raw_code = body.get("code") if isinstance(body, dict) else None
-            code = raw_code if isinstance(raw_code, str) else None
+            code = _error_code(response)
             if code == "LINEA_NO_ENCONTRADA":
                 raise LineaNoEncontrada(code)
             raise BackendCaido(f"unmapped HTTP 404 ({code})")
@@ -371,9 +401,7 @@ class BackendClient:
         `registrar_demanda_perdida`/`editar_linea`)."""
         response = await self._request("POST", f"/demanda-perdida/{carga_id}/anular")
         if response.status_code == 404:
-            body = _safe_json(response)
-            raw_code = body.get("code") if isinstance(body, dict) else None
-            code = raw_code if isinstance(raw_code, str) else None
+            code = _error_code(response)
             if code == "CARGA_NO_ENCONTRADA":
                 raise CargaNoEncontrada(code)
             raise BackendCaido(f"unmapped HTTP 404 ({code})")

@@ -175,3 +175,14 @@ async def editar_o_ignorar_sin_cambios(query, texto: str, **kwargs) -> None:
         if "message is not modified" not in str(exc).lower():
             raise
         logger.info("Edición idéntica ignorada (el mensaje ya mostraba este contenido)")
+
+
+async def responder(update: Update, texto: str, **kwargs) -> None:
+    """Answers wherever the user is: replies to a message, or edits the
+    tapped message when the step was reached through an inline button (where
+    `update.message` is None)."""
+    query = update.callback_query
+    if query is not None:
+        await query.edit_message_text(texto, **kwargs)
+        return
+    await update.message.reply_text(texto, **kwargs)

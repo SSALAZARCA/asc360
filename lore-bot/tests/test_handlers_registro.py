@@ -10,7 +10,14 @@ from unittest.mock import AsyncMock, MagicMock
 
 from telegram.ext import ConversationHandler
 
-from lore.api import BackendCaido, LoreApiError, NoRegistrado, SucursalNoEncontrada, YaRegistrado
+from lore.api import (
+    BackendCaido,
+    LoreApiError,
+    NoRegistrado,
+    SucursalNoEncontrada,
+    TelegramEsAdmin,
+    YaRegistrado,
+)
 from lore.estados import RegistroEstado
 from lore.handlers import registro
 from lore.handlers._common import TECLADO_CAPTURA, _MSG_SESION_EXPIRADA, _escapar_markdown
@@ -119,7 +126,7 @@ async def test_start_approved_asesor_greets_by_name_and_role(monkeypatch):
     result = await registro.start(update, _make_context())
 
     assert result == ConversationHandler.END
-    text = update.message.reply_text.call_args.args[0]
+    text = update.message.reply_text.call_args_list[0].args[0]
     assert "Ana" in text
     assert "asesor de mostrador" in text
     assert "administrador" not in text
@@ -127,7 +134,7 @@ async def test_start_approved_asesor_greets_by_name_and_role(monkeypatch):
     # that attaches the persistent capture/correction Reply Keyboard (see
     # `_common.py::TECLADO_CAPTURA`'s docstring for why elsewhere is not
     # needed).
-    assert update.message.reply_text.call_args.kwargs["reply_markup"] is TECLADO_CAPTURA
+    assert update.message.reply_text.call_args_list[0].kwargs["reply_markup"] is TECLADO_CAPTURA
 
 
 async def test_start_approved_admin_greets_by_name_and_role(monkeypatch):
@@ -674,3 +681,130 @@ async def test_resumen_confirm_step_has_exactly_one_cancel_control():
     markup = update.callback_query.edit_message_text.call_args.kwargs["reply_markup"]
     datos = [b.callback_data for fila in markup.inline_keyboard for b in fila]
     assert datos == ["lore_reg_confirmar", "lore_reg_cancelar"]
+
+
+# --- several advisors on one Telegram ---------------------------------------
+
+
+def _boton_otro(llamada):
+    """The "Registrar otro asesor" inline button of a `reply_text` call, if any."""
+    markup = llamada.kwargs.get("reply_markup")
+    filas = getattr(markup, "inline_keyboard", None) or []
+    return [b for fila in filas for b in fila if b.callback_data == "lore_reg_otro"]
+
+
+def _asesor_yo(status, nombre="Ana"):
+    return {"nombre": nombre, "role": "ASESOR_MOSTRADOR", "status": status, "activo": True}
+
+
+async def test_start_approved_asesor_offers_to_register_another_advisor(monkeypatch):
+    fake_client = FakeClient()
+    fake_client.yo.return_value = {**_asesor_yo("approved"), "asesores": [_asesor_yo("approved")]}
+    monkeypatch.setattr(registro, "_cliente", _fake_cliente(fake_client))
+    update = _make_update()
+
+    await registro.start(update, _make_context())
+
+    llamadas = update.message.reply_text.call_args_list
+    assert llamadas[0].kwargs["reply_markup"] is TECLADO_CAPTURA  # greeting unchanged
+    boton = _boton_otro(llamadas[-1])
+    assert [b.text for b in boton] == ["➕ Registrar otro asesor"]
+
+
+async def test_start_pending_asesor_can_still_register_another_advisor(monkeypatch):
+    fake_client = FakeClient()
+    fake_client.yo.return_value = {**_asesor_yo("pending"), "asesores": [_asesor_yo("pending")]}
+    monkeypatch.setattr(registro, "_cliente", _fake_cliente(fake_client))
+    update = _make_update()
+
+    await registro.start(update, _make_context())
+
+    assert "pendiente" in update.message.reply_text.call_args.args[0].lower()
+    assert _boton_otro(update.message.reply_text.call_args)
+
+
+async def test_start_rejected_asesor_can_still_register_another_advisor(monkeypatch):
+    fake_client = FakeClient()
+    fake_client.yo.return_value = {**_asesor_yo("rejected"), "asesores": [_asesor_yo("rejected")]}
+    monkeypatch.setattr(registro, "_cliente", _fake_cliente(fake_client))
+    update = _make_update()
+
+    await registro.start(update, _make_context())
+
+    assert "rechazada" in update.message.reply_text.call_args.args[0].lower()
+    assert _boton_otro(update.message.reply_text.call_args)
+
+
+async def test_start_admin_is_never_offered_to_share_the_telegram(monkeypatch):
+    fake_client = FakeClient()
+    admin = {"nombre": "Ana", "role": "ADMIN", "status": "approved", "activo": True}
+    fake_client.yo.return_value = {**admin, "asesores": [admin]}
+    monkeypatch.setattr(registro, "_cliente", _fake_cliente(fake_client))
+    update = _make_update()
+
+    await registro.start(update, _make_context())
+
+    assert update.message.reply_text.await_count == 1
+    assert not _boton_otro(update.message.reply_text.call_args)
+
+
+async def test_start_with_several_advisors_lists_each_with_its_state_and_offers_another(monkeypatch):
+    fake_client = FakeClient()
+    fake_client.yo.return_value = {"asesores": [
+        _asesor_yo("approved", "Ana"), _asesor_yo("pending", "Beto"), _asesor_yo("rejected", "Caro"),
+    ]}
+    monkeypatch.setattr(registro, "_cliente", _fake_cliente(fake_client))
+    update = _make_update()
+
+    result = await registro.start(update, _make_context())
+
+    assert result == ConversationHandler.END
+    llamadas = update.message.reply_text.call_args_list
+    texto = llamadas[0].args[0]
+    assert "Ana" in texto and "Beto" in texto and "Caro" in texto
+    assert "pendiente" in texto and "rechazad" in texto
+    assert llamadas[0].kwargs["reply_markup"] is TECLADO_CAPTURA  # one is approved
+    assert _boton_otro(llamadas[-1])
+
+
+async def test_start_with_several_advisors_none_approved_gets_no_capture_keyboard(monkeypatch):
+    fake_client = FakeClient()
+    fake_client.yo.return_value = {"asesores": [_asesor_yo("pending", "Ana"), _asesor_yo("pending", "Beto")]}
+    monkeypatch.setattr(registro, "_cliente", _fake_cliente(fake_client))
+    update = _make_update()
+
+    await registro.start(update, _make_context())
+
+    assert all(
+        c.kwargs.get("reply_markup") is not TECLADO_CAPTURA
+        for c in update.message.reply_text.call_args_list
+    )
+    assert _boton_otro(update.message.reply_text.call_args)
+
+
+async def test_iniciar_otro_starts_the_normal_registration_flow_from_the_button():
+    update = _make_update(callback_data="lore_reg_otro")
+    update.callback_query.message = MagicMock()
+    update.callback_query.message.reply_text = AsyncMock()
+    context = _make_context()
+
+    result = await registro.iniciar_otro(update, context)
+
+    assert result == RegistroEstado.NOMBRE
+    assert context.user_data[registro._DRAFT_KEY] == {}
+    update.callback_query.answer.assert_awaited()
+    assert "nombre completo" in update.callback_query.message.reply_text.call_args.args[0]
+
+
+async def test_confirmar_telegram_es_admin_explains_it_cannot_be_shared(monkeypatch):
+    fake_client = FakeClient()
+    fake_client.registro.side_effect = TelegramEsAdmin("TELEGRAM_ES_ADMIN")
+    monkeypatch.setattr(registro, "_cliente", _fake_cliente(fake_client))
+    update = _make_update(callback_data="lore_reg_confirmar")
+    context = _make_context(user_data={registro._DRAFT_KEY: {"nombre": "Ana Perez", "phone": "3001234567", "sucursal_id": "s1"}})
+
+    result = await registro.confirmar(update, context)
+
+    assert result == ConversationHandler.END
+    assert "administrador" in update.callback_query.edit_message_text.call_args.args[0]
+    assert registro._DRAFT_KEY not in context.user_data

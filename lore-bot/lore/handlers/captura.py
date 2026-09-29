@@ -46,15 +46,23 @@ from lore.api import (
     BackendClient,
     IdempotencyKeyEnUso,
     LoreApiError,
-    NoRegistrado,
-    Pendiente,
     ReferenciaNoEncontrada,
-    Rechazado,
     RegistroInconsistente,
     SucursalNoAutorizada,
     SucursalNoEncontrada,
 )
 from lore.estados import Borrador, CapturaEstado, LineaBorrador
+from lore.handlers._asesor import (
+    MSG_ASESOR_NO_DISPONIBLE,
+    MSG_QUIEN_REGISTRA,
+    MSG_SIN_ASESOR_HABILITADO,
+    actor_automatico,
+    asesores_utilizables,
+    buscar_asesor,
+    ninguno_habilitado,
+    teclado_asesores,
+    verificar_actor,
+)
 from lore.handlers._common import (
     _CANTIDAD_MAXIMA,
     _CANTIDAD_MINIMA,
@@ -63,6 +71,7 @@ from lore.handlers._common import (
     _validar_cantidad,
     con_cancelar,
     editar_o_ignorar_sin_cambios,
+    responder,
     responder_cancelacion,
     teclado_solo_cancelar,
 )
@@ -71,12 +80,15 @@ logger = logging.getLogger("lore.handlers.captura")
 
 _DRAFT_KEY = "lore_captura"
 _SUCURSALES_KEY = "lore_captura_sucursales"
+_ASESORES_KEY = "lore_captura_asesores"
+_PREFIJO_ASESOR = "lore_cap_ase:"
 _MAX_CODIGOS_POR_LOTE = 30
 
 
-def _cliente(telegram_id: int) -> BackendClient:
-    """Same seam as `handlers/registro.py::_cliente`/`handlers/admin.py::_cliente`."""
-    return BackendClient(telegram_id)
+def _cliente(telegram_id: int, usuario_id: str | None = None) -> BackendClient:
+    """Same seam as `handlers/registro.py::_cliente`/`handlers/admin.py::_cliente`.
+    `usuario_id` is the advisor chosen for this conversation (shared Telegram)."""
+    return BackendClient(telegram_id, usuario_id=usuario_id)
 
 
 def _borrador(context: ContextTypes.DEFAULT_TYPE) -> Borrador:
@@ -138,34 +150,6 @@ def _clave_descarte(codigo: str) -> str:
     return hashlib.sha256(codigo.strip().upper().encode("utf-8")).hexdigest()[:16]
 
 
-async def _verificar_actor(client: BackendClient, update: Update) -> dict | None:
-    """First concern split out of `iniciar` (Phase 10 fix-up, finding #7):
-    re-derives `require_bot_asesor`'s gate via `client.yo()`, never assumed
-    from a prior `/start` (the actor's status could have changed since).
-    Replies and returns `None` when the actor can't proceed; returns `/yo`'s
-    body otherwise."""
-    try:
-        return await client.yo()
-    except NoRegistrado:
-        await update.message.reply_text("No estás registrado todavía. Mandá /start para solicitar acceso.")
-        return None
-    except Pendiente:
-        await update.message.reply_text("⏳ Tu solicitud de acceso todavía está pendiente de aprobación.")
-        return None
-    except Rechazado:
-        await update.message.reply_text("❌ Tu solicitud de acceso fue rechazada. Contactá a un administrador.")
-        return None
-    except BackendCaido:
-        await update.message.reply_text(_MSG_CONEXION)
-        return None
-    except LoreApiError:
-        # Same rationale as registro.py/admin.py's final fallback: every
-        # BackendClient method shares ONE global error-code map, so a
-        # subclass not explicitly branched on above must still reply.
-        await update.message.reply_text(_MSG_CONEXION)
-        return None
-
-
 async def _fetch_sucursales_o_avisar(client: BackendClient, update: Update) -> list[dict] | None:
     """Fix-up finding #4 (WARNING, readability): `_obtener_sucursales_propias`
     and `_obtener_sucursales_todas` used to each wrap `client.sucursales()`
@@ -179,10 +163,10 @@ async def _fetch_sucursales_o_avisar(client: BackendClient, update: Update) -> l
     try:
         return await client.sucursales()
     except BackendCaido:
-        await update.message.reply_text(_MSG_CONEXION)
+        await responder(update, _MSG_CONEXION)
         return None
     except LoreApiError:
-        await update.message.reply_text(_MSG_CONEXION)
+        await responder(update, _MSG_CONEXION)
         return None
 
 
@@ -200,8 +184,8 @@ async def _obtener_sucursales_propias(
 
     propias = [s for s in todas if s.get("id") in propios_ids]
     if not propias:
-        await update.message.reply_text(
-            "⚠️ No pude encontrar tus sucursales asignadas. Contactá a un administrador."
+        await responder(
+            update, "⚠️ No pude encontrar tus sucursales asignadas. Contactá a un administrador."
         )
         return None
     return propias
@@ -221,8 +205,8 @@ async def _obtener_sucursales_todas(client: BackendClient, update: Update) -> li
         return None
 
     if not todas:
-        await update.message.reply_text(
-            "⚠️ No pude cargar la lista de sucursales en este momento. Probá de nuevo con /registrar."
+        await responder(
+            update, "⚠️ No pude cargar la lista de sucursales en este momento. Probá de nuevo con /registrar."
         )
         return None
     return todas
@@ -261,8 +245,8 @@ async def _resolver_sucursales_y_auto_seleccion(
 
     propios_ids = set(yo.get("sucursales") or [])
     if not propios_ids:
-        await update.message.reply_text(
-            "⚠️ No tenés ninguna sucursal asignada todavía. Contactá a un administrador."
+        await responder(
+            update, "⚠️ No tenés ninguna sucursal asignada todavía. Contactá a un administrador."
         )
         return None
 
@@ -273,31 +257,72 @@ async def _resolver_sucursales_y_auto_seleccion(
 
 
 async def iniciar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """`/registrar` — entry point. Auth re-check and sucursal/auto-select
-    resolution are delegated to `_verificar_actor`/`_resolver_sucursales_y_
-    auto_seleccion`; this function only orchestrates: verify actor -> resolve
-    sucursales/auto-select -> render UI (Phase 10 fix-up, finding #7;
-    Fix-up finding #5 — further decomposition, no behavior change)."""
+    """`/registrar` — entry point. Verifies the actor, asks "¿Quién registra?"
+    when the Telegram has several usable advisors (every time, never
+    remembered), then resolves sucursales for the acting advisor."""
     telegram_id = update.effective_user.id
     async with _cliente(telegram_id) as client:
-        yo = await _verificar_actor(client, update)
-        if yo is None:
-            return ConversationHandler.END
+        yo = await verificar_actor(client, update)
+    if yo is None:
+        return ConversationHandler.END
+    if ninguno_habilitado(yo):
+        await update.message.reply_text(MSG_SIN_ASESOR_HABILITADO)
+        return ConversationHandler.END
 
-        resultado = await _resolver_sucursales_y_auto_seleccion(client, update, yo)
-        if resultado is None:
-            return ConversationHandler.END
-        propias, auto_seleccionar = resultado
+    usables = asesores_utilizables(yo)
+    if len(usables) > 1:
+        return await _preguntar_asesor(update, context, usables)
+    actor, usuario_id = actor_automatico(yo)
+    return await _abrir_captura(update, context, actor, usuario_id)
 
-    context.user_data[_DRAFT_KEY] = Borrador()
+
+async def _preguntar_asesor(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, asesores: list[dict]
+) -> int:
+    context.user_data.pop(_DRAFT_KEY, None)
+    context.user_data[_ASESORES_KEY] = {a["id"]: a for a in asesores}
+    await update.message.reply_text(
+        MSG_QUIEN_REGISTRA, reply_markup=teclado_asesores(_PREFIJO_ASESOR, asesores)
+    )
+    return CapturaEstado.ASESOR
+
+
+async def recibir_asesor(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """The tapped advisor is only accepted if it was offered in THIS
+    conversation; the backend re-checks that it belongs to the Telegram."""
+    query = update.callback_query
+    await query.answer()
+
+    opciones = context.user_data.pop(_ASESORES_KEY, {})
+    asesor = buscar_asesor(opciones, query.data.replace(_PREFIJO_ASESOR, ""))
+    if asesor is None:
+        logger.warning("recibir_asesor: asesor no ofrecido %r", query.data)
+        await query.edit_message_text(MSG_ASESOR_NO_DISPONIBLE)
+        return ConversationHandler.END
+    return await _abrir_captura(update, context, asesor, asesor["id"])
+
+
+async def _abrir_captura(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, actor: dict, usuario_id: str | None
+) -> int:
+    """Starts the draft for `actor` and moves to its sucursal step."""
+    telegram_id = update.effective_user.id
+    async with _cliente(telegram_id, usuario_id) as client:
+        resultado = await _resolver_sucursales_y_auto_seleccion(client, update, actor)
+    if resultado is None:
+        return ConversationHandler.END
+    propias, auto_seleccionar = resultado
+
+    context.user_data[_DRAFT_KEY] = Borrador(usuario_id=usuario_id)
+    via_callback = update.callback_query is not None
     if auto_seleccionar:
         _borrador(context).sucursal_id = UUID(propias[0]["id"])
-        return await _pedir_metodo(update, context)
+        return await _pedir_metodo(update, context, via_callback=via_callback)
 
     context.user_data[_SUCURSALES_KEY] = {s["id"]: s["nombre"] for s in propias}
     kb = [[InlineKeyboardButton(s["nombre"], callback_data=f"lore_cap_suc:{s['id']}")] for s in propias]
-    await update.message.reply_text(
-        "🏢 ¿Para qué sucursal es esta venta perdida?", reply_markup=con_cancelar(kb)
+    await responder(
+        update, "🏢 ¿Para qué sucursal es esta venta perdida?", reply_markup=con_cancelar(kb)
     )
     return CapturaEstado.SUCURSAL
 
@@ -413,7 +438,7 @@ async def recibir_codigos(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     draft = _borrador(context)
     telegram_id = update.effective_user.id
-    async with _cliente(telegram_id) as client:
+    async with _cliente(telegram_id, draft.usuario_id) as client:
         try:
             await _resolver_y_actualizar_borrador(client, draft, codigos)
         except BackendCaido:
@@ -491,7 +516,7 @@ async def recibir_foto(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
 
     codigos = [candidato.codigo for candidato in candidatos]
     telegram_id = update.effective_user.id
-    async with _cliente(telegram_id) as client:
+    async with _cliente(telegram_id, draft.usuario_id) as client:
         try:
             await _resolver_y_actualizar_borrador(client, draft, codigos)
         except BackendCaido:
@@ -587,7 +612,7 @@ async def recibir_correccion_no_resueltas(update: Update, context: ContextTypes.
     draft.no_resueltas = [c for c in draft.no_resueltas if c.upper() not in resueltos_antes]
 
     telegram_id = update.effective_user.id
-    async with _cliente(telegram_id) as client:
+    async with _cliente(telegram_id, draft.usuario_id) as client:
         try:
             await _resolver_y_actualizar_borrador(client, draft, codigos)
         except BackendCaido:
@@ -805,7 +830,7 @@ async def confirmar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
     draft = _borrador(context)
     telegram_id = update.effective_user.id
-    async with _cliente(telegram_id) as client:
+    async with _cliente(telegram_id, draft.usuario_id) as client:
         try:
             await _enviar_registro(client, draft)
         except (SucursalNoAutorizada, ReferenciaNoEncontrada, SucursalNoEncontrada, IdempotencyKeyEnUso) as exc:
@@ -849,6 +874,7 @@ async def confirmar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 def _limpiar_borrador(context: ContextTypes.DEFAULT_TYPE) -> None:
     context.user_data.pop(_DRAFT_KEY, None)
     context.user_data.pop(_SUCURSALES_KEY, None)
+    context.user_data.pop(_ASESORES_KEY, None)
 
 
 async def cancelar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
