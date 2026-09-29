@@ -410,3 +410,15 @@ export async function descargarErroresCargaCsv(cargaId) {
 export async function descargarPlantilla(entidadSingular) {
   await _descargarBlob(`/maestros/${entidadSingular}/plantilla.xlsx`, `plantilla_${entidadSingular}.xlsx`);
 }
+
+/**
+ * `GET /cargas/{tipo}/plantilla.xlsx` -- plantilla `.xlsx` generada por el
+ * backend para un tipo de MOVIMIENTO (VENTAS, INVENTARIO, ...). Las columnas
+ * las define el backend (las mismas que valida al subir), así que el
+ * frontend ya no mantiene su propia lista. `tipo` es el valor de
+ * `tiposCarga.js` (mayúsculas); el archivo baja como
+ * `plantilla_{tipo en minúsculas}.xlsx`.
+ */
+export async function descargarPlantillaMovimiento(tipo) {
+  await _descargarBlob(`/cargas/${tipo}/plantilla.xlsx`, `plantilla_${tipo.toLowerCase()}.xlsx`);
+}

@@ -13,7 +13,9 @@
  * `_descargarBlob` helper, and stays green identically AFTER the extraction --
  * proof of zero behavior change.
  */
-import { descargarPlantilla, descargarErroresCargaCsv } from '../lib/motored/api';
+import {
+  descargarPlantilla, descargarPlantillaMovimiento, descargarErroresCargaCsv,
+} from '../lib/motored/api';
 import { MOTORED_TOKEN_KEY } from '../lib/motored/motoredFetch';
 
 const BASE = 'http://localhost:8000/api/motored';
@@ -103,5 +105,36 @@ describe('descargarErroresCargaCsv', () => {
     global.fetch.mockResolvedValueOnce({ ok: false, status: 502 });
 
     await expect(descargarErroresCargaCsv('carga-1')).rejects.toThrow('HTTP 502');
+  });
+});
+
+describe('descargarPlantillaMovimiento', () => {
+  it('fetches the server-generated plantilla.xlsx URL for the movement tipo', async () => {
+    await descargarPlantillaMovimiento('VENTAS');
+
+    const [url] = global.fetch.mock.calls[0];
+    expect(url).toBe(`${BASE}/cargas/VENTAS/plantilla.xlsx`);
+  });
+
+  it('downloads the response blob as plantilla_{tipo en minúsculas}.xlsx', async () => {
+    const anchors = [];
+    const realCreateElement = document.createElement.getMockImplementation();
+    document.createElement.mockImplementation((tag) => {
+      const el = realCreateElement(tag);
+      if (tag === 'a') anchors.push(el);
+      return el;
+    });
+
+    await descargarPlantillaMovimiento('INGRESOS_FACTURAS');
+
+    expect(createObjectURLMock).toHaveBeenCalledWith(FAKE_BLOB);
+    expect(anchors[0].download).toBe('plantilla_ingresos_facturas.xlsx');
+    expect(clickMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('throws HTTP {status} when the response is not ok', async () => {
+    global.fetch.mockResolvedValueOnce({ ok: false, status: 404 });
+
+    await expect(descargarPlantillaMovimiento('VENTAS')).rejects.toThrow('HTTP 404');
   });
 });

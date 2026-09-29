@@ -76,7 +76,7 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass, field
 from datetime import date
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -84,7 +84,9 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from app.motored.models.backorder_linea import BackorderLinea
 from app.motored.models.carga_error import CargaError
 from app.motored.models.carga_fila_staging import CargaFilaStaging
+from app.motored.services.ingesta import columnas as columnas_mod
 from app.motored.services.ingesta import errores as errores_mod
+from app.motored.services.ingesta import numeros as numeros_mod
 from app.motored.services.ingesta.resolucion import (
     CacheResolucion,
     resolver_referencia,
@@ -109,6 +111,7 @@ COLUMNAS_ESPERADAS: Tuple[str, ...] = (
 COLUMNAS_OPCIONALES: Tuple[str, ...] = ("Fecha Creación",)
 
 CODIGO_CANTIDAD_PENDIENTE_INVALIDA = "CANTIDAD_PENDIENTE_INVALIDA"
+CODIGO_PEDIDO_FALTANTE = "PEDIDO_FALTANTE"
 
 _CLAVE_UPSERT = ("fecha_corte", "sucursal_id", "referencia_id", "numero_pedido")
 
@@ -143,24 +146,23 @@ def _pasa_filtro_estado(
 def _resolver_cantidad_pendiente_o_error(
     fila_raw: Sequence[Any], mapa_columnas: Dict[str, int], carga_id: uuid.UUID, numero_fila: int
 ) -> Tuple[Optional[Decimal], Optional[CargaError]]:
-    """`Cantidad Pendiente` no numérica nunca debe propagar un `decimal.
-    InvalidOperation` crudo -- mismo contrato de tolerancia por-fila que
-    `ventas._resolver_cantidad_o_error`/`inventario._resolver_existencia_
-    o_error`. Ausente (`None`) es distinto de inválida: se trata como cero,
-    lo que hace que el filtro `> 0` del caller la descarte igual que
-    cualquier línea sin pendiente real."""
-    cantidad_raw = _extraer(fila_raw, mapa_columnas, "Cantidad Pendiente")
-    if cantidad_raw is None:
-        return Decimal("0"), None
-    try:
-        return Decimal(str(cantidad_raw)), None
-    except InvalidOperation:
-        error = errores_mod.construir_error(
-            carga_id, numero_fila, "Cantidad Pendiente", _texto(cantidad_raw),
-            CODIGO_CANTIDAD_PENDIENTE_INVALIDA,
-            "La cantidad pendiente de la fila no se pudo interpretar como un número.",
-        )
-        return None, error
+    """`Cantidad Pendiente` vacía, con error de Excel o no numérica -> error
+    de fila (`numeros.resolver_decimal_o_error`), nunca un cero silencioso
+    (decisión del owner, 2026-09-29). Un `0` real o negativo SÍ es válido
+    aquí; el filtro `> 0` del caller lo descarta como "no pendiente"."""
+    return numeros_mod.resolver_decimal_o_error(
+        _extraer(fila_raw, mapa_columnas, "Cantidad Pendiente"), "Cantidad Pendiente",
+        carga_id, numero_fila, CODIGO_CANTIDAD_PENDIENTE_INVALIDA,
+        "La cantidad pendiente de la fila no se pudo interpretar como un número.",
+    )
+
+
+def _error_pedido_faltante(carga_id: uuid.UUID, numero_fila: int) -> CargaError:
+    return errores_mod.construir_error(
+        carga_id, numero_fila, "Número del pedido", None, CODIGO_PEDIDO_FALTANTE,
+        f"Número del pedido vacío en la fila {numero_fila}: "
+        "corregí el archivo y volvé a cargarlo.",
+    )
 
 
 def _resolver_claves(
@@ -208,12 +210,7 @@ def _resolver_fecha_creacion_opcional(
     tipada por openpyxl (`data_only=True`), sin el chequeo de plausibilidad
     2015-2100 -- esto es un cross-check informativo, no una validación de
     fila que pueda rechazarla."""
-    valor = _extraer(fila_raw, mapa_columnas, "Fecha Creación")
-    if isinstance(valor, date):
-        return valor
-    if hasattr(valor, "date"):
-        return valor.date()
-    return None
+    return columnas_mod.a_fecha(_extraer(fila_raw, mapa_columnas, "Fecha Creación"))
 
 
 def procesar_fila(
@@ -229,8 +226,9 @@ def procesar_fila(
 ) -> Tuple[Optional[CargaFilaStaging], List[CargaError]]:
     """Procesa UNA fila cruda de BACKORDER. Retorna `(fila_staging,
     errores)` orquestando: filtro de `estado` -> resolución de `Cantidad
-    Pendiente` (error tipado si no es numérica) -> filtro `> 0` -> resolución
-    de claves (SIC/Sucursal/Referencia Parte)."""
+    Pendiente` (error de fila si está vacía, con error de Excel o no
+    numérica) -> filtro `> 0` -> `Número del pedido` (error de fila si
+    falta) -> resolución de claves (SIC/Sucursal/Referencia Parte)."""
     if not _pasa_filtro_estado(fila_raw, mapa_columnas, estados_backorder_vigentes):
         return None, []
 
@@ -243,6 +241,8 @@ def procesar_fila(
         return None, []
 
     numero_pedido = _texto(_extraer(fila_raw, mapa_columnas, "Número del pedido"))
+    if numero_pedido is None:
+        return None, [_error_pedido_faltante(carga_id, numero_fila)]
 
     sucursal_id, referencia_id, errores = _resolver_claves(
         fila_raw, mapa_columnas, cache, carga_id, numero_fila, proveedor_id

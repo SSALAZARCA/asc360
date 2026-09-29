@@ -29,10 +29,12 @@ import uuid
 from datetime import date
 from decimal import Decimal
 
+import pytest
+
 from tests.motored.conftest import FakeAsyncSession
 
 from app.motored.models.carga_fila_staging import CargaFilaStaging
-from app.motored.services.ingesta import columnas, facturas
+from app.motored.services.ingesta import columnas, facturas, numeros
 from app.motored.services.ingesta.resolucion import CacheResolucion
 
 CARGA_ID = uuid.uuid4()
@@ -156,8 +158,18 @@ def test_cantidad_no_numerica_emite_error_y_no_genera_staging():
     assert errores[0].codigo_error == facturas.CODIGO_CANTIDAD_INVALIDA
 
 
-def test_cantidad_ausente_se_trata_como_cero():
-    fila_staging, errores = _procesar(_fila(cantidad=None))
+@pytest.mark.parametrize("valor", [None, "#N/A", "#VALUE!"])
+def test_cantidad_vacia_o_con_error_de_excel_es_error_de_fila(valor):
+    fila_staging, errores = _procesar(_fila(cantidad=valor))
+
+    assert fila_staging is None
+    assert len(errores) == 1
+    assert errores[0].codigo_error == numeros.CODIGO_VALOR_FALTANTE
+    assert errores[0].columna == "Cantidad"
+
+
+def test_cantidad_cero_real_sigue_siendo_valida():
+    fila_staging, errores = _procesar(_fila(cantidad=0))
 
     assert errores == []
     assert Decimal(fila_staging.payload["cantidad"]) == Decimal("0")
@@ -171,8 +183,18 @@ def test_valor_total_no_numerico_emite_error_y_no_genera_staging():
     assert errores[0].codigo_error == facturas.CODIGO_VALOR_TOTAL_INVALIDO
 
 
-def test_valor_total_ausente_se_trata_como_cero():
-    fila_staging, errores = _procesar(_fila(valor_total_neto=None))
+@pytest.mark.parametrize("valor", [None, "#N/A", "#REF!"])
+def test_valor_total_vacio_o_con_error_de_excel_es_error_de_fila(valor):
+    fila_staging, errores = _procesar(_fila(valor_total_neto=valor))
+
+    assert fila_staging is None
+    assert len(errores) == 1
+    assert errores[0].codigo_error == numeros.CODIGO_VALOR_FALTANTE
+    assert errores[0].columna == "Vlr. Total Neto"
+
+
+def test_valor_total_cero_real_sigue_siendo_valido():
+    fila_staging, errores = _procesar(_fila(valor_total_neto=0))
 
     assert errores == []
     assert Decimal(fila_staging.payload["valor_total"]) == Decimal("0")

@@ -23,10 +23,12 @@ import uuid
 from datetime import date
 from decimal import Decimal
 
+import pytest
+
 from tests.motored.conftest import FakeAsyncSession
 
 from app.motored.models.carga_fila_staging import CargaFilaStaging
-from app.motored.services.ingesta import columnas, inventario
+from app.motored.services.ingesta import columnas, inventario, numeros
 from app.motored.services.ingesta.resolucion import CacheResolucion
 
 CARGA_ID = uuid.uuid4()
@@ -98,8 +100,19 @@ def test_fila_aplicable_conserva_existencia_en_el_payload():
     assert Decimal(fila_staging.payload["existencia"]) == Decimal("25")
 
 
-def test_existencia_ausente_se_trata_como_cero_no_como_error():
-    fila_staging, errores = _procesar(_fila(existencia=None))
+@pytest.mark.parametrize("valor", [None, "", "#N/A", "#NAME?", "#VALUE!"])
+def test_existencia_vacia_o_con_error_de_excel_es_error_de_fila_no_un_cero(valor):
+    fila_staging, errores = _procesar(_fila(existencia=valor))
+
+    assert fila_staging is None
+    assert len(errores) == 1
+    assert errores[0].codigo_error == numeros.CODIGO_VALOR_FALTANTE
+    assert errores[0].columna == "Existencia" and errores[0].fila == 2
+    assert "Existencia" in errores[0].mensaje and "corregí el archivo" in errores[0].mensaje
+
+
+def test_existencia_cero_real_sigue_siendo_valida():
+    fila_staging, errores = _procesar(_fila(existencia=0))
 
     assert errores == []
     assert Decimal(fila_staging.payload["existencia"]) == Decimal("0")

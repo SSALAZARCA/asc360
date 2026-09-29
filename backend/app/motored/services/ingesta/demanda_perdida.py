@@ -4,16 +4,16 @@ Transform" (PR7) (sdd/motored-pedidos-ingesta, task 7.2; design ADR-8/ADR-9,
 spec "DEMANDA_PERDIDA silent discard of incomplete rows").
 
 Compone `lector` + `columnas` + `resolucion` + `errores` (Phase 3) en el
-transform de DEMANDA_PERDIDA: descarta EN SILENCIO (sin `carga_error`, la
-ÚNICA excepción documentada a la tolerancia por-fila del resto del pipeline)
-cualquier fila sin una `Referencia` resoluble o sin `Cantidad Solicitada
-> 0` (spec §5.7, proposal "DEMANDA_PERDIDA: cantidad_solicitada is the
-field used; rows without referencia or without quantity > 0 are discarded
-silently, not reported as errors"). Esa excepción está ACOTADA a esas dos
-condiciones -- una `sucursal` sin resolver en una fila POR LO DEMÁS válida
-SÍ sigue la regla general de tolerancia por-fila (`carga_error` +
-`sucursal_id = None` en staging), exactamente igual que VENTAS/INVENTARIO/
-BACKORDER.
+transform de DEMANDA_PERDIDA. Descarta EN SILENCIO (sin `carga_error`) una
+fila sin `Referencia` (relleno), con `Cantidad Solicitada <= 0` o con una
+`Referencia` sin resolver (spec §5.7, proposal "rows without referencia or
+without quantity > 0 are discarded silently"). Decisión del owner
+(2026-09-29) que REEMPLAZA el descarte silencioso para una cantidad vacía,
+con error de Excel (`#N/A`, `#NAME?`...) o no numérica: esa fila NO se
+carga y queda como `carga_error` visible en el informe previo. Una
+`sucursal` sin resolver en una fila por lo demás válida sigue la regla
+general de tolerancia por-fila (`carga_error` + `sucursal_id = None` en
+staging), igual que VENTAS/INVENTARIO/BACKORDER.
 
 Columnas confirmadas contra el workbook real de producción (`PLANTILLA
 PEDIDO SEPTIEMBRE.xlsx`, hoja "Ventas perdidas"): `sucursal`, `sucursal
@@ -47,7 +47,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import date
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -56,6 +56,7 @@ from app.motored.models.carga_error import CargaError
 from app.motored.models.carga_fila_staging import CargaFilaStaging
 from app.motored.models.demanda_perdida import DemandaPerdida
 from app.motored.services.ingesta import errores as errores_mod
+from app.motored.services.ingesta import numeros as numeros_mod
 from app.motored.services.ingesta.resolucion import (
     CacheResolucion,
     resolver_referencia,
@@ -71,6 +72,8 @@ COLUMNAS_ESPERADAS: Tuple[str, ...] = (
     "Referencia",
     "Cantidad Solicitada",
 )
+
+CODIGO_CANTIDAD_SOLICITADA_INVALIDA = "CANTIDAD_SOLICITADA_INVALIDA"
 
 _CLAVE_UPSERT = ("fecha", "sucursal_id", "referencia_id", "origen")
 
@@ -90,21 +93,18 @@ def _texto(valor: Any) -> Optional[str]:
 
 
 def _resolver_cantidad_solicitada(
-    fila_raw: Sequence[Any], mapa_columnas: Dict[str, int]
-) -> Optional[Decimal]:
-    """Ausente, no numérica, cero o negativa: TODAS colapsan al mismo
-    resultado (`None`) -- spec §5.7 exige descarte SILENCIOSO para
-    cualquiera de esos casos, a diferencia de VENTAS/INVENTARIO/BACKORDER
-    (que sí emiten un `carga_error` tipado para un valor no-numérico).
-    Nunca propaga `decimal.InvalidOperation`."""
-    cantidad_raw = _extraer(fila_raw, mapa_columnas, "Cantidad Solicitada")
-    if cantidad_raw is None:
-        return None
-    try:
-        cantidad = Decimal(str(cantidad_raw))
-    except InvalidOperation:
-        return None
-    return cantidad if cantidad > 0 else None
+    fila_raw: Sequence[Any], mapa_columnas: Dict[str, int], carga_id: uuid.UUID, numero_fila: int
+) -> Tuple[Optional[Decimal], Optional[CargaError]]:
+    """`Cantidad Solicitada` vacía, con error de Excel o no numérica -> error
+    de fila (`numeros.resolver_decimal_o_error`); decisión del owner
+    (2026-09-29) que reemplaza el descarte silencioso de la spec §5.7 para
+    esos casos. Cero y negativa SÍ son numéricas: las descarta en silencio
+    el caller (`procesar_fila`)."""
+    return numeros_mod.resolver_decimal_o_error(
+        _extraer(fila_raw, mapa_columnas, "Cantidad Solicitada"), "Cantidad Solicitada",
+        carga_id, numero_fila, CODIGO_CANTIDAD_SOLICITADA_INVALIDA,
+        "La cantidad solicitada de la fila no se pudo interpretar como un número.",
+    )
 
 
 def procesar_fila(
@@ -118,18 +118,26 @@ def procesar_fila(
     proveedor_id: uuid.UUID,
 ) -> Tuple[Optional[CargaFilaStaging], List[CargaError]]:
     """Procesa UNA fila cruda de DEMANDA_PERDIDA. Retorna `(fila_staging,
-    errores)`. Orden de evaluación, en línea con la excepción de descarte
-    silencioso (spec §5.7): primero `Cantidad Solicitada > 0`, luego
-    `Referencia` resoluble -- si CUALQUIERA de las dos falla, la fila se
-    descarta EN SILENCIO, `([], None)`, sin tocar sucursal ni emitir ningún
-    `carga_error`. Solo si ambas pasan se resuelve `sucursal` -- que SÍ
-    sigue la regla general de tolerancia por-fila (`carga_error` +
-    `sucursal_id = None` si no resuelve)."""
-    cantidad_solicitada = _resolver_cantidad_solicitada(fila_raw, mapa_columnas)
-    if cantidad_solicitada is None:
+    errores)`. Orden de evaluación: `Referencia` vacía es una fila de
+    relleno y se descarta EN SILENCIO; luego `Cantidad Solicitada` vacía,
+    con error de Excel o no numérica es un error de fila (decisión del owner,
+    2026-09-29); una cantidad `<= 0` o una `Referencia` no resuelta se
+    descartan EN SILENCIO (spec §5.7, sin tocar sucursal). Solo si todo eso
+    pasa se resuelve `sucursal` -- que SÍ sigue la regla general de
+    tolerancia por-fila (`carga_error` + `sucursal_id = None` si no
+    resuelve)."""
+    codigo_referencia = _texto(_extraer(fila_raw, mapa_columnas, "Referencia"))
+    if codigo_referencia is None:
         return None, []
 
-    codigo_referencia = _texto(_extraer(fila_raw, mapa_columnas, "Referencia"))
+    cantidad_solicitada, error_cantidad = _resolver_cantidad_solicitada(
+        fila_raw, mapa_columnas, carga_id, numero_fila
+    )
+    if cantidad_solicitada is None:
+        return None, [error_cantidad]
+    if cantidad_solicitada <= 0:
+        return None, []
+
     referencia_id = resolver_referencia(cache, codigo_referencia, proveedor_id)
     if referencia_id is None:
         return None, []

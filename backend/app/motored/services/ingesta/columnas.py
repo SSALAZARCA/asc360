@@ -25,8 +25,8 @@ branch name still matches" aplica al mismo criterio de comparación).
 from __future__ import annotations
 
 import math
-from datetime import date, timedelta
-from typing import Any, Dict, Sequence
+from datetime import date, datetime, timedelta
+from typing import Any, Dict, List, Optional, Sequence
 
 from app.motored.services.texto import normalizar_encabezado
 
@@ -41,6 +41,20 @@ _ANIO_MAXIMO_PLAUSIBLE = 2100
 class EncabezadoNoEncontradoError(Exception):
     """Ninguna fila escaneada alcanza el umbral de match -- el archivo no
     tiene un encabezado reconocible para el tipo esperado."""
+
+
+class EncabezadoDuplicadoError(Exception):
+    """Una columna esperada aparece más de una vez en el encabezado: no hay
+    forma de saber cuál es la buena, así que el archivo completo se rechaza
+    (nunca se toma "la primera" en silencio). `columnas` lista los nombres
+    canónicos duplicados."""
+
+    def __init__(self, columnas: Sequence[str]):
+        self.columnas = list(columnas)
+        super().__init__(
+            f"El encabezado tiene columnas duplicadas: {', '.join(self.columnas)}. "
+            "Dejá una sola columna de cada una y volvé a cargar el archivo."
+        )
 
 
 class FechaExcelImplausibleError(Exception):
@@ -58,17 +72,26 @@ def construir_mapa_columnas(
     original (p.ej. `"cantidad inv."`), no la forma normalizada
     internamente (`"cantidadinv"`) -- el caller siempre indexa por el
     nombre canónico que declaró, nunca por su forma comprimida. Columnas
-    del archivo que no matchean ninguna esperada se ignoran. El primer
-    índice que matchea una clave gana si hay duplicados en el encabezado."""
+    del archivo que no matchean ninguna esperada se ignoran. Una columna
+    ESPERADA repetida en el encabezado lanza `EncabezadoDuplicadoError`;
+    duplicados de columnas no esperadas se ignoran."""
     nombre_original_por_normalizado = {
         normalizar_encabezado(c, quitar_separadores=True): c for c in columnas_esperadas
     }
     mapa: Dict[str, int] = {}
+    duplicadas: List[str] = []
     for idx, valor in enumerate(fila_encabezado):
         clave_normalizada = normalizar_encabezado(valor, quitar_separadores=True)
         nombre_original = nombre_original_por_normalizado.get(clave_normalizada)
-        if nombre_original is not None and nombre_original not in mapa:
+        if nombre_original is None:
+            continue
+        if nombre_original in mapa:
+            if nombre_original not in duplicadas:
+                duplicadas.append(nombre_original)
+        else:
             mapa[nombre_original] = idx
+    if duplicadas:
+        raise EncabezadoDuplicadoError(duplicadas)
     return mapa
 
 
@@ -76,6 +99,21 @@ def _ratio_de_match(fila: Sequence[Any], normalizados_esperados: set) -> float:
     normalizados_fila = {normalizar_encabezado(v, quitar_separadores=True) for v in fila}
     coincidencias = len(normalizados_esperados & normalizados_fila)
     return coincidencias / len(normalizados_esperados)
+
+
+def mejor_ratio_de_encabezado(
+    filas: Sequence[Sequence[Any]], columnas_esperadas: Sequence[str]
+) -> float:
+    """Mayor ratio de columnas esperadas presentes entre `filas` (0.0 si no
+    hay filas o columnas). Sirve para comparar QUÉ tan bien encaja cada hoja
+    de un libro con un tipo: una hoja de VENTAS trae 3 de las 4 columnas de
+    INVENTARIO (75%), pero solo la hoja de inventario las trae todas."""
+    normalizados_esperados = {
+        normalizar_encabezado(c, quitar_separadores=True) for c in columnas_esperadas
+    }
+    if not normalizados_esperados:
+        return 0.0
+    return max((_ratio_de_match(fila, normalizados_esperados) for fila in filas), default=0.0)
 
 
 def encontrar_fila_encabezado(
@@ -100,6 +138,19 @@ def encontrar_fila_encabezado(
         f"No se encontró una fila de encabezado con al menos "
         f"{umbral:.0%} de las columnas esperadas."
     )
+
+
+def a_fecha(valor: Any) -> Optional[date]:
+    """Normaliza una celda de fecha a un `date` PURO: openpyxl (`data_only=
+    True`) entrega `datetime` (subclase de `date`) para una celda con formato
+    de fecha, y su `isoformat()` ("2026-07-15T00:00:00") no se puede volver a
+    leer con `date.fromisoformat` al aplicar. Cualquier otro valor -> `None`.
+    Único punto donde las transforms convierten una celda a fecha."""
+    if isinstance(valor, datetime):
+        return valor.date()
+    if isinstance(valor, date):
+        return valor
+    return None
 
 
 def anio_es_plausible(anio: int) -> bool:

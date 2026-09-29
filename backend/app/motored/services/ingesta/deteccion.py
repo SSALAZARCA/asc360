@@ -26,7 +26,7 @@ llegan a declararse como `tipo_declarado` acá.
 from __future__ import annotations
 
 import io
-from typing import Any, Dict, List, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import openpyxl
 
@@ -36,7 +36,7 @@ from app.motored.services.ingesta import facturas as facturas_mod
 from app.motored.services.ingesta import ingresos as ingresos_mod
 from app.motored.services.ingesta import inventario as inventario_mod
 from app.motored.services.ingesta import ventas as ventas_mod
-from app.motored.services.ingesta.lector import LecturaMovimientoError
+from app.motored.services.ingesta.lector import LecturaMovimientoError, elegir_hoja
 from app.motored.services.texto import normalizar_encabezado
 
 _FIRMAS_POR_TIPO: Dict[str, Tuple[str, ...]] = {
@@ -46,6 +46,12 @@ _FIRMAS_POR_TIPO: Dict[str, Tuple[str, ...]] = {
     "FACTURAS_PEDIDOS": facturas_mod.COLUMNAS_ESPERADAS,
     "INGRESOS_FACTURAS": ingresos_mod.COLUMNAS_ESPERADAS,
     "DEMANDA_PERDIDA": demanda_perdida_mod.COLUMNAS_ESPERADAS,
+}
+
+# Columnas que un tipo puede traer pero no exige (`orquestador` no aborta si
+# faltan; `plantillas` las agrega al encabezado). Única definición.
+COLUMNAS_OPCIONALES_POR_TIPO: Dict[str, Tuple[str, ...]] = {
+    "BACKORDER": backorder_mod.COLUMNAS_OPCIONALES,
 }
 
 UMBRAL_DETECCION = 0.6
@@ -124,24 +130,33 @@ def verificar_tipo(tipo_declarado: str, filas_muestra: Sequence[Sequence[Any]]) 
     )
 
 
+def columnas_esperadas_de(tipo: str) -> Tuple[str, ...]:
+    """Columnas esperadas del `tipo` declarado (mismo `KeyError` que
+    `verificar_tipo` para un tipo fuera de las 6 claves)."""
+    return _FIRMAS_POR_TIPO[tipo]
+
+
 def extraer_filas_muestra(
-    file_bytes: bytes, limite: int = _FILAS_MAXIMAS_ESCANEADAS
+    file_bytes: bytes,
+    limite: int = _FILAS_MAXIMAS_ESCANEADAS,
+    columnas_esperadas: Optional[Sequence[str]] = None,
 ) -> List[Sequence[Any]]:
-    """Lee, SÍNCRONAMENTE, a lo sumo las primeras `limite` filas del archivo
-    -- usado por `api/cargas.py` en el request de subida (`POST /cargas`),
-    ANTES de que exista ningún `carga_archivo` que un job en background
-    pudiera procesar. Deliberadamente NO usa `lector.leer_lotes` (async,
-    pensado para streamear TODO el archivo vía `POOL_INGESTA`) -- acá solo
-    hace falta un puñado de filas para verificar el tipo, una lectura
-    acotada y síncrona es más simple y más barata. Nunca deja escapar una
-    excepción cruda de `openpyxl` -- mismo contrato que `lector._abrir_
-    workbook`. Sin cambios de comportamiento en este cutover (compartida
-    entre detección y verificación)."""
+    """Lee, SÍNCRONAMENTE, a lo sumo las primeras `limite` filas de la hoja
+    que `lector.elegir_hoja` selecciona para `columnas_esperadas` (sin
+    ellas, la hoja activa). Usado por `api/cargas.py` en el request de
+    subida (`POST /cargas`), ANTES de que exista ningún `carga_archivo` que
+    un job en background pudiera procesar. Deliberadamente NO usa
+    `lector.leer_lotes` (async, pensado para streamear TODO el archivo vía
+    `POOL_INGESTA`) -- acá solo hace falta un puñado de filas para
+    verificar el tipo, una lectura acotada y síncrona es más simple y más
+    barata. Nunca deja escapar una excepción cruda de `openpyxl` -- mismo
+    contrato que `lector._abrir_workbook`."""
     try:
         workbook = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True, read_only=True)
         try:
             filas = []
-            for idx, fila in enumerate(workbook.active.iter_rows(values_only=True)):
+            hoja = elegir_hoja(workbook, columnas_esperadas)
+            for idx, fila in enumerate(hoja.iter_rows(values_only=True)):
                 if idx >= limite:
                     break
                 filas.append(fila)

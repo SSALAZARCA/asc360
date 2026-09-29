@@ -146,6 +146,132 @@ async def test_dry_run_todas_las_filas_rechazadas_es_con_errores_no_validado(mon
     assert carga.filas_validas == 0
 
 
+async def test_dry_run_lee_la_hoja_del_tipo_aunque_la_hoja_activa_sea_otra(monkeypatch):
+    carga = _carga("INVENTARIO", periodo_desde=date(2026, 9, 15), periodo_hasta=date(2026, 9, 15))
+    workbook = openpyxl.Workbook()
+    workbook.active.title = "Lista HMCL Sep 2026"
+    workbook.active.append(["Código", "Precio lista"])
+    inventario = workbook.create_sheet("inventario actual")
+    inventario.append(["Referencia", "Bodega", "Desc.bodega", "Existencia"])
+    inventario.append(["REF1", "BA061", "CALI NORTE", 10])
+    buffer = io.BytesIO()
+    workbook.save(buffer)
+    monkeypatch.setattr(orquestador.storage, "descargar_archivo", lambda ruta: buffer.getvalue())
+    session = FakeAsyncSession(execute_queue=_queue_cache_y_proveedor())
+
+    await orquestador._dry_run(session, carga)
+
+    assert carga.estado == "VALIDADO"
+    assert carga.filas_validas == 1
+
+
+async def test_dry_run_encabezado_duplicado_aborta_el_archivo_completo(monkeypatch):
+    carga = _carga("INVENTARIO")
+    file_bytes = _build_xlsx_bytes(
+        [
+            ["Referencia", "Bodega", "Desc.bodega", "Existencia", "Existencia"],
+            ["REF1", "BA061", "CALI NORTE", 10, 99],
+        ]
+    )
+    monkeypatch.setattr(orquestador.storage, "descargar_archivo", lambda ruta: file_bytes)
+    session = FakeAsyncSession(execute_queue=_queue_cache_y_proveedor())
+
+    await orquestador._dry_run(session, carga)
+
+    assert carga.estado == "CON_ERRORES"
+    assert session.added_of_type(CargaFilaStaging) == []
+    (error,) = session.added_of_type(CargaError)
+    assert error.codigo_error == orquestador.CODIGO_ENCABEZADO_DUPLICADO
+    assert error.fila == 0 and error.valor == "Existencia"
+    assert "Existencia" in error.mensaje and "duplicad" in error.mensaje
+
+
+async def test_dry_run_sin_ninguna_fila_valida_emite_error_de_archivo_completo(monkeypatch):
+    carga = _carga("INVENTARIO", periodo_desde=date(2026, 9, 15), periodo_hasta=date(2026, 9, 15))
+    file_bytes = _build_xlsx_bytes(
+        [["Referencia", "Bodega", "Desc.bodega", "Existencia"], ["REF1", "BA061", "CALI NORTE", "#N/A"]]
+    )
+    monkeypatch.setattr(orquestador.storage, "descargar_archivo", lambda ruta: file_bytes)
+    session = FakeAsyncSession(execute_queue=_queue_cache_y_proveedor())
+
+    await orquestador._dry_run(session, carga)
+
+    assert carga.estado == "CON_ERRORES"
+    errores = {e.codigo_error: e for e in session.added_of_type(CargaError)}
+    assert set(errores) == {"VALOR_FALTANTE", orquestador.CODIGO_SIN_FILAS_VALIDAS}
+    assert errores[orquestador.CODIGO_SIN_FILAS_VALIDAS].fila == 0
+    assert "ninguna fila válida" in errores[orquestador.CODIGO_SIN_FILAS_VALIDAS].mensaje
+
+
+async def test_dry_run_archivo_con_encabezado_pero_sin_filas_de_datos_es_con_errores_con_aviso(monkeypatch):
+    carga = _carga("INVENTARIO", periodo_desde=date(2026, 9, 15), periodo_hasta=date(2026, 9, 15))
+    file_bytes = _build_xlsx_bytes([["Referencia", "Bodega", "Desc.bodega", "Existencia"]])
+    monkeypatch.setattr(orquestador.storage, "descargar_archivo", lambda ruta: file_bytes)
+    session = FakeAsyncSession(execute_queue=_queue_cache_y_proveedor())
+
+    await orquestador._dry_run(session, carga)
+
+    assert carga.estado == "CON_ERRORES"
+    (error,) = session.added_of_type(CargaError)
+    assert error.codigo_error == orquestador.CODIGO_SIN_FILAS_VALIDAS
+
+
+async def test_dry_run_con_al_menos_una_fila_valida_no_emite_aviso_de_sin_filas(monkeypatch):
+    carga = _carga("INVENTARIO", periodo_desde=date(2026, 9, 15), periodo_hasta=date(2026, 9, 15))
+    file_bytes = _build_xlsx_bytes(
+        [
+            ["Referencia", "Bodega", "Desc.bodega", "Existencia"],
+            ["REF1", "BA061", "CALI NORTE", 10],
+            ["REF1", "BA061", "CALI NORTE", "#N/A"],
+        ]
+    )
+    monkeypatch.setattr(orquestador.storage, "descargar_archivo", lambda ruta: file_bytes)
+    session = FakeAsyncSession(execute_queue=_queue_cache_y_proveedor())
+
+    await orquestador._dry_run(session, carga)
+
+    assert carga.estado == "VALIDADO"
+    codigos = [e.codigo_error for e in session.added_of_type(CargaError)]
+    assert codigos == ["VALOR_FALTANTE"]
+
+
+async def test_dry_run_registra_en_log_cuantas_filas_con_error_no_se_cargan(monkeypatch):
+    """Filas rechazadas (sin staging) Y filas staged con sucursal/referencia
+    sin resolver (excluidas al aplicar) cuentan como "filas con errores" --
+    el aviso del informe previo/aplicado usa este número, no solo
+    `filas_rechazadas`."""
+    carga = _carga("INVENTARIO", periodo_desde=date(2026, 9, 15), periodo_hasta=date(2026, 9, 15))
+    file_bytes = _build_xlsx_bytes(
+        [
+            ["Referencia", "Bodega", "Desc.bodega", "Existencia"],
+            ["REF1", "BA061", "CALI NORTE", 10],
+            ["REF1", "BA061", "CALI NORTE", "#N/A"],
+            ["REF1", "BA061", "SUCURSAL INEXISTENTE", 5],
+        ]
+    )
+    monkeypatch.setattr(orquestador.storage, "descargar_archivo", lambda ruta: file_bytes)
+    session = FakeAsyncSession(execute_queue=_queue_cache_y_proveedor())
+
+    await orquestador._dry_run(session, carga)
+
+    assert carga.estado == "VALIDADO"
+    assert carga.filas_rechazadas == 1
+    assert carga.log["filas_con_error"] == 2
+
+
+async def test_dry_run_sin_errores_registra_cero_filas_con_error(monkeypatch):
+    carga = _carga("INVENTARIO", periodo_desde=date(2026, 9, 15), periodo_hasta=date(2026, 9, 15))
+    file_bytes = _build_xlsx_bytes(
+        [["Referencia", "Bodega", "Desc.bodega", "Existencia"], ["REF1", "BA061", "CALI NORTE", 10]]
+    )
+    monkeypatch.setattr(orquestador.storage, "descargar_archivo", lambda ruta: file_bytes)
+    session = FakeAsyncSession(execute_queue=_queue_cache_y_proveedor())
+
+    await orquestador._dry_run(session, carga)
+
+    assert carga.log["filas_con_error"] == 0
+
+
 async def test_resolver_proveedor_principal_raises_domain_error_never_a_500(monkeypatch):
     session = FakeAsyncSession(execute_queue=[[]])  # ningún proveedor principal configurado
 
@@ -281,6 +407,20 @@ async def test_ejecutar_aplicar_inventario_marks_aplicado_and_clears_staging():
     assert carga.ultimo_lote_aplicado == 3
     assert carga.aplicado_en is not None
     assert len(session.executed_statements) == 3
+
+
+async def test_ejecutar_aplicar_conserva_filas_rechazadas_y_filas_con_error_del_informe():
+    carga = _carga(
+        "INVENTARIO", estado="VALIDADO", periodo_desde=date(2026, 9, 15),
+        periodo_hasta=date(2026, 9, 15), filas_rechazadas=4, log={"filas_con_error": 6},
+    )
+    session = FakeAsyncSession(execute_queue=[[], [], []])
+
+    await orquestador.ejecutar_aplicar(session, carga)
+
+    assert carga.estado == "APLICADO"
+    assert carga.filas_rechazadas == 4
+    assert carga.log["filas_con_error"] == 6
 
 
 async def test_ejecutar_aplicar_facturas_pedidos_triggers_transito_recalculation(monkeypatch):

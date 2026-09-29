@@ -20,26 +20,25 @@ column could not be verified end-to-end against real data -- flagged in the
 apply-progress report for the orchestrator to re-check once the owner has a
 month with real lost-demand rows.
 
-The silent-discard rule is THE ONE documented exception to per-row-tolerant
-error reporting: unlike VENTAS/INVENTARIO/BACKORDER, a row here that fails
-resolution or quantity NEVER produces a `carga_error` -- confirmed against
-`sdd/motored-pedidos-ingesta/proposal` (§5.7, "descartar filas sin
-referencia o sin cantidad > 0, sin reportarlas como error"). The exception
-is scoped EXACTLY to those two conditions: an unresolved `sucursal` on an
-otherwise-valid row (resolvable referencia + `cantidad_solicitada > 0`)
-still follows the general per-row-tolerant rule and DOES produce a
-`SUCURSAL_NO_ENCONTRADA` `carga_error`, staging the row with
-`sucursal_id = None` for Fase 9 to re-resolve later -- same contract as
-every other movement type.
+Silent discard (spec §5.7) now covers only a blank `Referencia`, an
+unresolved `Referencia`, and a quantity `<= 0`. Owner decision (2026-09-29):
+a blank, Excel-error (`#N/A`, `#NAME?`...) or non-numeric
+`Cantidad Solicitada` is a row `carga_error`, no longer a silent discard. An
+unresolved `sucursal` on an otherwise-valid row still follows the general
+per-row-tolerant rule and DOES produce a `SUCURSAL_NO_ENCONTRADA`
+`carga_error`, staging the row with `sucursal_id = None` for Fase 9 to
+re-resolve later -- same contract as every other movement type.
 """
 import uuid
 from datetime import date
 from decimal import Decimal
 
+import pytest
+
 from tests.motored.conftest import FakeAsyncSession
 
 from app.motored.models.carga_fila_staging import CargaFilaStaging
-from app.motored.services.ingesta import columnas, demanda_perdida
+from app.motored.services.ingesta import columnas, demanda_perdida, numeros
 from app.motored.services.ingesta.resolucion import CacheResolucion
 
 CARGA_ID = uuid.uuid4()
@@ -130,22 +129,25 @@ def test_cantidad_negativa_se_descarta_en_silencio():
     assert errores == []
 
 
-def test_cantidad_ausente_se_descarta_en_silencio():
-    fila_staging, errores = _procesar(_fila(cantidad_solicitada=None))
+@pytest.mark.parametrize("valor", [None, "", "#N/A", "#NAME?"])
+def test_cantidad_vacia_o_con_error_de_excel_es_error_de_fila(valor):
+    # Decisión del owner (2026-09-29): reemplaza el descarte silencioso de
+    # spec §5.7 para una cantidad vacía/con error -- la fila NO se carga y
+    # queda visible en el informe previo.
+    fila_staging, errores = _procesar(_fila(cantidad_solicitada=valor))
 
     assert fila_staging is None
-    assert errores == []
+    assert len(errores) == 1
+    assert errores[0].codigo_error == numeros.CODIGO_VALOR_FALTANTE
+    assert errores[0].columna == "Cantidad Solicitada"
 
 
-def test_cantidad_no_numerica_se_descarta_en_silencio_sin_carga_error():
-    # A diferencia de VENTAS/INVENTARIO/BACKORDER (que SÍ emiten un error
-    # tipado para un valor no-numérico), DEMANDA_PERDIDA colapsa este caso
-    # al mismo descarte silencioso que "ausente"/"cero" -- spec §5.7,
-    # literal: "sin reportarlas como error".
-    fila_staging, errores = _procesar(_fila(cantidad_solicitada="#N/A"))
+def test_cantidad_no_numerica_emite_error_tipado():
+    fila_staging, errores = _procesar(_fila(cantidad_solicitada="N/D"))
 
     assert fila_staging is None
-    assert errores == []
+    assert len(errores) == 1
+    assert errores[0].codigo_error == demanda_perdida.CODIGO_CANTIDAD_SOLICITADA_INVALIDA
 
 
 def test_fila_aplicable_conserva_cantidad_solicitada_en_el_payload():

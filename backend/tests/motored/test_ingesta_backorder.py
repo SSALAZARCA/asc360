@@ -32,10 +32,12 @@ import uuid
 from datetime import date
 from decimal import Decimal
 
+import pytest
+
 from tests.motored.conftest import FakeAsyncSession
 
 from app.motored.models.carga_fila_staging import CargaFilaStaging
-from app.motored.services.ingesta import backorder, columnas
+from app.motored.services.ingesta import backorder, columnas, numeros
 from app.motored.services.ingesta.resolucion import CacheResolucion
 
 CARGA_ID = uuid.uuid4()
@@ -127,11 +129,25 @@ def test_cantidad_pendiente_negativa_se_descarta_en_silencio():
     assert errores == []
 
 
-def test_cantidad_pendiente_ausente_se_trata_como_cero_y_se_descarta():
-    fila_staging, errores = _procesar(_fila(cantidad_pendiente=None))
+@pytest.mark.parametrize("valor", [None, "", "#N/A", "#NAME?"])
+def test_cantidad_pendiente_vacia_o_con_error_de_excel_es_error_de_fila(valor):
+    fila_staging, errores = _procesar(_fila(cantidad_pendiente=valor))
 
     assert fila_staging is None
-    assert errores == []
+    assert len(errores) == 1
+    assert errores[0].codigo_error == numeros.CODIGO_VALOR_FALTANTE
+    assert errores[0].columna == "Cantidad Pendiente"
+
+
+@pytest.mark.parametrize("pedido", [None, "", "   "])
+def test_pedido_sin_numero_es_error_de_fila_y_no_genera_staging(pedido):
+    fila_staging, errores = _procesar(_fila(numero_pedido=pedido))
+
+    assert fila_staging is None
+    assert len(errores) == 1
+    assert errores[0].codigo_error == backorder.CODIGO_PEDIDO_FALTANTE
+    assert errores[0].columna == "Número del pedido"
+    assert "fila 2" in errores[0].mensaje and "corregí el archivo" in errores[0].mensaje
 
 
 def test_cantidad_pendiente_no_numerica_emite_error_y_no_genera_staging():

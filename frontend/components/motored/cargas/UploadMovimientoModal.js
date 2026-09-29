@@ -13,28 +13,14 @@
  * with a named reason -- never "PENDIENTE waiting for a human to pick a
  * type", which is structurally impossible now (design D1).
  *
- * "Descargar plantilla" (follow-up, self-contained): same client-side
- * blob/`a.download` mechanism `BulkUploadModal.js`'s own `downloadTemplate`
- * already uses (no server round-trip) -- the header row is `tiposCarga.js`'s
- * per-tipo `columnas` list, comma-joined.
+ * "Descargar plantilla": downloads the `.xlsx` template the BACKEND
+ * generates for this tipo (`descargarPlantillaMovimiento`) -- the backend
+ * owns the column list, so it can never drift from what upload accepts.
  */
 import { useState } from 'react';
-import { subirCargaMovimiento, getCarga } from '../../../lib/motored/api';
+import { subirCargaMovimiento, getCarga, descargarPlantillaMovimiento } from '../../../lib/motored/api';
 import InfoTooltip from '../InfoTooltip';
-import { tipoDeclaraPeriodo, excedeUnMes, columnasTipo } from './tiposCarga';
-
-function downloadTemplate(tipo) {
-  const csv = columnasTipo(tipo).join(',');
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `plantilla_${tipo.toLowerCase()}.csv`;
-  a.click();
-  // Revocar en el mismo tick puede cancelar la descarga en algunos
-  // navegadores (mismo ajuste ya aplicado en api.js::descargarErroresCargaCsv).
-  setTimeout(() => URL.revokeObjectURL(url), 0);
-}
+import { tipoDeclaraPeriodo, excedeUnMes } from './tiposCarga';
 
 const overlayStyle = {
   position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
@@ -105,6 +91,15 @@ function useSubirMovimiento(tipo, onUploaded) {
 
   const necesitaPeriodo = tipoDeclaraPeriodo(tipo);
 
+  const handleDescargarPlantilla = async () => {
+    setError('');
+    try {
+      await descargarPlantillaMovimiento(tipo);
+    } catch (err) {
+      setError(`No se pudo descargar la plantilla: ${err.message}`);
+    }
+  };
+
   const handleSubir = async () => {
     if (!file) return;
     if (necesitaPeriodo && !periodoDesde) {
@@ -138,7 +133,7 @@ function useSubirMovimiento(tipo, onUploaded) {
 
   return {
     file, setFile, periodoDesde, setPeriodoDesde, periodoHasta, setPeriodoHasta,
-    necesitaPeriodo, duplicadoInfo, loading, error, completo, handleSubir,
+    necesitaPeriodo, duplicadoInfo, loading, error, completo, handleSubir, handleDescargarPlantilla,
   };
 }
 
@@ -208,7 +203,7 @@ function FormularioSubida({ estado, onSubir }) {
 
 export default function UploadMovimientoModal({ tipo, label, onClose, onUploaded }) {
   const estado = useSubirMovimiento(tipo, onUploaded);
-  const { duplicadoInfo, error, completo, handleSubir } = estado;
+  const { duplicadoInfo, error, completo, handleSubir, handleDescargarPlantilla } = estado;
 
   return (
     <div role="dialog" aria-label={`Subir ${label}`} style={overlayStyle}>
@@ -218,7 +213,7 @@ export default function UploadMovimientoModal({ tipo, label, onClose, onUploaded
             Subir {label}
           </h2>
           <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <button type="button" className="motored-btn motored-btn-tertiary" onClick={() => downloadTemplate(tipo)}>
+            <button type="button" className="motored-btn motored-btn-tertiary" onClick={handleDescargarPlantilla}>
               Descargar plantilla
             </button>
             <button type="button" className="motored-btn motored-btn-tertiary" onClick={onClose}>

@@ -53,7 +53,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import date, timedelta
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -63,6 +63,7 @@ from app.motored.models.carga_error import CargaError
 from app.motored.models.carga_fila_staging import CargaFilaStaging
 from app.motored.models.inventario_snapshot import InventarioSnapshot
 from app.motored.services.ingesta import errores as errores_mod
+from app.motored.services.ingesta import numeros as numeros_mod
 from app.motored.services.ingesta.resolucion import (
     CacheResolucion,
     resolver_referencia,
@@ -97,23 +98,16 @@ def _texto(valor: Any) -> Optional[str]:
 def _resolver_existencia_o_error(
     fila_raw: Sequence[Any], mapa_columnas: Dict[str, int], carga_id: uuid.UUID, numero_fila: int
 ) -> Tuple[Optional[Decimal], Optional[CargaError]]:
-    """`Existencia` no numérica nunca debe propagar un `decimal.
-    InvalidOperation` crudo -- mismo contrato de tolerancia por-fila que
-    `ventas._resolver_cantidad_o_error`. Ausente (`None`) es distinto de
-    inválida: se trata como cero (bodega sin stock registrado para esa
-    referencia), no como error."""
-    existencia_raw = _extraer(fila_raw, mapa_columnas, "Existencia")
-    if existencia_raw is None:
-        return Decimal("0"), None
-    try:
-        return Decimal(str(existencia_raw)), None
-    except InvalidOperation:
-        error = errores_mod.construir_error(
-            carga_id, numero_fila, "Existencia", _texto(existencia_raw),
-            CODIGO_EXISTENCIA_INVALIDA,
-            "La existencia de la fila no se pudo interpretar como un número.",
-        )
-        return None, error
+    """`Existencia` vacía, con error de Excel o no numérica nunca debe
+    propagar un `decimal.InvalidOperation` crudo ni convertirse en un cero
+    silencioso (decisión del owner, 2026-09-29, que reemplaza el "vacío =
+    0" anterior): la fila queda como `carga_error` (ver `numeros.
+    resolver_decimal_o_error`). Un `0` real es un valor válido."""
+    return numeros_mod.resolver_decimal_o_error(
+        _extraer(fila_raw, mapa_columnas, "Existencia"), "Existencia", carga_id,
+        numero_fila, CODIGO_EXISTENCIA_INVALIDA,
+        "La existencia de la fila no se pudo interpretar como un número.",
+    )
 
 
 def _resolver_claves(

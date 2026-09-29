@@ -34,10 +34,12 @@ import uuid
 from datetime import date
 from decimal import Decimal
 
+import pytest
+
 from tests.motored.conftest import FakeAsyncSession
 
 from app.motored.models.carga_fila_staging import CargaFilaStaging
-from app.motored.services.ingesta import columnas, ingresos
+from app.motored.services.ingesta import columnas, ingresos, numeros
 
 CARGA_ID = uuid.uuid4()
 
@@ -150,8 +152,18 @@ def test_valor_neto_no_numerico_emite_error_y_no_genera_staging():
     assert errores[0].codigo_error == ingresos.CODIGO_VALOR_NETO_INVALIDO
 
 
-def test_valor_neto_ausente_se_trata_como_cero():
-    fila_staging, errores = _procesar(_fila(valor_neto=None))
+@pytest.mark.parametrize("valor", [None, "#N/A", "#NAME?"])
+def test_valor_neto_vacio_o_con_error_de_excel_es_error_de_fila(valor):
+    fila_staging, errores = _procesar(_fila(valor_neto=valor))
+
+    assert fila_staging is None
+    assert len(errores) == 1
+    assert errores[0].codigo_error == numeros.CODIGO_VALOR_FALTANTE
+    assert errores[0].columna == "Valornetolocal"
+
+
+def test_valor_neto_cero_real_sigue_siendo_valido():
+    fila_staging, errores = _procesar(_fila(valor_neto=0))
 
     assert errores == []
     assert Decimal(fila_staging.payload["valor_neto"]) == Decimal("0")

@@ -19,23 +19,23 @@
  * 5. A duplicate-hash response still surfaces the informational (never
  *    blocking) duplicate notice.
  *
- * "Descargar plantilla" (follow-up to sdd/motored-cargas-tipo-declarado):
- * same client-side blob/`a.download` mechanism as `BulkUploadModal.js`'s own
- * `downloadTemplate` (no server round-trip) -- proves the button exists,
- * clicking it builds a Blob via `URL.createObjectURL`, and the Blob content
- * is the exact per-tipo column header row (`tiposCarga.js`'s `columnas`),
- * checked for two different tipos to prove the per-type wiring, not just
- * that a button exists.
+ * "Descargar plantilla": the template is a server-generated `.xlsx` (the
+ * backend owns the column list, single source of truth) fetched through
+ * `descargarPlantillaMovimiento(tipo)`. The tests prove the button exists,
+ * that each tipo asks the server for ITS OWN template, and that a failed
+ * download is reported to the user instead of being swallowed.
  */
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 
 const mockSubir = jest.fn();
 const mockGetCarga = jest.fn();
+const mockDescargarPlantilla = jest.fn();
 
 jest.mock('../lib/motored/api', () => ({
   subirCargaMovimiento: (...args) => mockSubir(...args),
   getCarga: (...args) => mockGetCarga(...args),
+  descargarPlantillaMovimiento: (...args) => mockDescargarPlantilla(...args),
 }));
 
 import UploadMovimientoModal from '../components/motored/cargas/UploadMovimientoModal';
@@ -54,6 +54,8 @@ function selectFile(container, file) {
 beforeEach(() => {
   mockSubir.mockReset();
   mockGetCarga.mockReset();
+  mockDescargarPlantilla.mockReset();
+  mockDescargarPlantilla.mockResolvedValue(undefined);
 });
 
 describe('UploadMovimientoModal — declared tipo, one-step upload', () => {
@@ -140,27 +142,7 @@ describe('UploadMovimientoModal — declared tipo, one-step upload', () => {
   });
 });
 
-// jsdom's Blob polyfill has no `.text()`/`.arrayBuffer()` -- FileReader is
-// the one blob-reading API jsdom does implement, so tests read the captured
-// Blob's content through it instead.
-function leerBlob(blob) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = reject;
-    reader.readAsText(blob);
-  });
-}
-
 describe('UploadMovimientoModal — Descargar plantilla', () => {
-  let createObjectURLMock;
-
-  beforeEach(() => {
-    createObjectURLMock = jest.fn(() => 'blob:mock-url');
-    global.URL.createObjectURL = createObjectURLMock;
-    global.URL.revokeObjectURL = jest.fn();
-  });
-
   it('renders a "Descargar plantilla" button', () => {
     render(
       <UploadMovimientoModal tipo="VENTAS" label="Ventas" onClose={jest.fn()} onUploaded={jest.fn()} />
@@ -169,51 +151,30 @@ describe('UploadMovimientoModal — Descargar plantilla', () => {
     expect(screen.getByText('Descargar plantilla')).toBeInTheDocument();
   });
 
-  it('clicking "Descargar plantilla" builds a CSV blob with the exact VENTAS columns', async () => {
+  it.each(['VENTAS', 'INVENTARIO', 'INGRESOS_FACTURAS'])(
+    'clicking "Descargar plantilla" asks the server for the %s template',
+    async (tipo) => {
+      render(
+        <UploadMovimientoModal tipo={tipo} label={tipo} onClose={jest.fn()} onUploaded={jest.fn()} />
+      );
+
+      fireEvent.click(screen.getByText('Descargar plantilla'));
+
+      await waitFor(() => expect(mockDescargarPlantilla).toHaveBeenCalledWith(tipo));
+      expect(mockDescargarPlantilla).toHaveBeenCalledTimes(1);
+    }
+  );
+
+  it('shows an error message when the template download fails', async () => {
+    mockDescargarPlantilla.mockRejectedValueOnce(new Error('HTTP 500'));
     render(
       <UploadMovimientoModal tipo="VENTAS" label="Ventas" onClose={jest.fn()} onUploaded={jest.fn()} />
     );
 
     fireEvent.click(screen.getByText('Descargar plantilla'));
 
-    expect(createObjectURLMock).toHaveBeenCalledTimes(1);
-    const blob = createObjectURLMock.mock.calls[0][0];
-    const contenido = await leerBlob(blob);
-    expect(contenido).toBe(
-      'Estado,Módulo,Fecha,Cantidad inv.,Tipo inventario,Desc.bodega,Bodega,Referencia'
+    await waitFor(() =>
+      expect(screen.getByText('No se pudo descargar la plantilla: HTTP 500')).toBeInTheDocument()
     );
-  });
-
-  it('clicking "Descargar plantilla" builds a CSV blob with the exact INVENTARIO columns', async () => {
-    render(
-      <UploadMovimientoModal tipo="INVENTARIO" label="Inventario" onClose={jest.fn()} onUploaded={jest.fn()} />
-    );
-
-    fireEvent.click(screen.getByText('Descargar plantilla'));
-
-    const blob = createObjectURLMock.mock.calls[0][0];
-    const contenido = await leerBlob(blob);
-    expect(contenido).toBe('Referencia,Bodega,Desc.bodega,Existencia');
-  });
-
-  it('names the downloaded file after the lowercased tipo', () => {
-    const realCreateElement = document.createElement.bind(document);
-    const anchors = [];
-    jest.spyOn(document, 'createElement').mockImplementation((tag) => {
-      const el = realCreateElement(tag);
-      if (tag === 'a') anchors.push(el);
-      return el;
-    });
-
-    try {
-      render(
-        <UploadMovimientoModal tipo="VENTAS" label="Ventas" onClose={jest.fn()} onUploaded={jest.fn()} />
-      );
-      fireEvent.click(screen.getByText('Descargar plantilla'));
-
-      expect(anchors[0].download).toBe('plantilla_ventas.csv');
-    } finally {
-      document.createElement.mockRestore();
-    }
   });
 });

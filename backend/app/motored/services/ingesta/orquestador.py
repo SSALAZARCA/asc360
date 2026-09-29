@@ -57,6 +57,7 @@ from app.motored.services import storage
 from app.motored.services.carga_excel import CargaExcelError
 from app.motored.services.ingesta import backorder as backorder_mod
 from app.motored.services.ingesta import columnas as columnas_mod
+from app.motored.services.ingesta import deteccion as deteccion_mod
 from app.motored.services.ingesta import demanda_perdida as demanda_perdida_mod
 from app.motored.services.ingesta import errores as errores_mod
 from app.motored.services.ingesta import facturas as facturas_mod
@@ -90,6 +91,8 @@ TIPOS_MAESTRO: Tuple[str, ...] = ("MAESTRO_REFERENCIAS", "MAESTRO_BODEGAS")
 # número, la única inconsistencia que tenían contra ese esquema ya establecido.
 CODIGO_COLUMNA_OBLIGATORIA_FALTANTE = "E-CARGA-046"
 CODIGO_ENCABEZADO_NO_ENCONTRADO = "E-CARGA-047"
+CODIGO_ENCABEZADO_DUPLICADO = "E-CARGA-048"
+CODIGO_SIN_FILAS_VALIDAS = "E-CARGA-049"
 
 _COLUMNAS_POR_TIPO: Dict[str, Tuple[str, ...]] = {
     "VENTAS": ventas_mod.COLUMNAS_ESPERADAS,
@@ -98,10 +101,6 @@ _COLUMNAS_POR_TIPO: Dict[str, Tuple[str, ...]] = {
     "FACTURAS_PEDIDOS": facturas_mod.COLUMNAS_ESPERADAS,
     "INGRESOS_FACTURAS": ingresos_mod.COLUMNAS_ESPERADAS,
     "DEMANDA_PERDIDA": demanda_perdida_mod.COLUMNAS_ESPERADAS,
-}
-
-_COLUMNAS_OPCIONALES_POR_TIPO: Dict[str, Tuple[str, ...]] = {
-    "BACKORDER": backorder_mod.COLUMNAS_OPCIONALES,
 }
 
 
@@ -245,6 +244,10 @@ class _EstadoLoteDryRun:
         self.filas_leidas = 0
         self.filas_validas = 0
         self.filas_rechazadas = 0
+        # Filas con AL MENOS un `carga_error` (rechazadas + las staged con
+        # sucursal/referencia sin resolver, que `Aplicar` excluye): lo que el
+        # informe muestra como "filas con errores que no se cargaron".
+        self.filas_con_error = 0
         self.histograma: Dict[Tuple[int, int], int] = {}
         # Verify-report WARNING #2: `{clave: valor}` de cada
         # `parametro_metodologia` que resolvió a su default codificado
@@ -275,6 +278,20 @@ async def _abortar_columna_faltante(
     await session.commit()
 
 
+async def _abortar_encabezado_duplicado(
+    session: AsyncSession, carga: CargaArchivo, error: columnas_mod.EncabezadoDuplicadoError
+) -> None:
+    """Una columna esperada repetida en el encabezado aborta el archivo
+    completo -- mismo contrato que `_abortar_columna_faltante`."""
+    carga.estado = "CON_ERRORES"
+    session.add(errores_mod.construir_error(
+        carga.id, 0, None, ", ".join(error.columnas),
+        CODIGO_ENCABEZADO_DUPLICADO, str(error),
+    ))
+    carga.log = {**(carga.log or {}), "columnas_duplicadas": error.columnas}
+    await session.commit()
+
+
 async def _resolver_encabezado(
     estado: _EstadoLoteDryRun,
     lote: Sequence[Sequence[Any]],
@@ -302,9 +319,13 @@ async def _resolver_encabezado(
         return None
 
     estado.fila_encabezado = lote[idx]
-    estado.mapa_columnas = columnas_mod.construir_mapa_columnas(
-        estado.fila_encabezado, tuple(columnas_esperadas) + tuple(columnas_opcionales)
-    )
+    try:
+        estado.mapa_columnas = columnas_mod.construir_mapa_columnas(
+            estado.fila_encabezado, tuple(columnas_esperadas) + tuple(columnas_opcionales)
+        )
+    except columnas_mod.EncabezadoDuplicadoError as error:
+        await _abortar_encabezado_duplicado(session, carga, error)
+        raise _ArchivoAbortado()
     faltantes = [c for c in columnas_esperadas if c not in estado.mapa_columnas]
     if faltantes:
         await _abortar_columna_faltante(session, carga, faltantes)
@@ -336,6 +357,8 @@ def _procesar_filas_del_lote(
         )
         for error in errores_fila:
             session.add(error)
+        if errores_fila:
+            estado.filas_con_error += 1
         if fila_staging is not None:
             session.add(fila_staging)
             staged_del_lote.append(fila_staging)
@@ -443,7 +466,8 @@ async def _cerrar_dry_run(
     abort por encabezado nunca encontrado, el volcado de `parametros_
     default_usados` (verify-report WARNING #2) + los dos chequeos de cierre
     de ADR-9 (corte de BACKORDER, veredicto de período de VENTAS), y el
-    estado final `CON_ERRORES`/`VALIDADO`."""
+    estado final `CON_ERRORES`/`VALIDADO` (cero filas válidas es
+    `CON_ERRORES` con un error de archivo completo que lo explica)."""
     if estado.fila_encabezado is None:
         carga.estado = "CON_ERRORES"
         session.add(errores_mod.construir_error(
@@ -454,13 +478,22 @@ async def _cerrar_dry_run(
         return
 
     log: Dict[str, Any] = dict(carga.log or {})
+    log["filas_con_error"] = estado.filas_con_error
     if estado.parametros_default_usados:
         log["parametros_default_usados"] = dict(estado.parametros_default_usados)
     await _verificar_corte_backorder(session, carga, log)
     if await _verificar_periodo_ventas(session, carga, log, estado.histograma):
         return
 
-    carga.estado = "CON_ERRORES" if estado.filas_validas == 0 else "VALIDADO"
+    if estado.filas_validas == 0:
+        session.add(errores_mod.construir_error(
+            carga.id, 0, None, None, CODIGO_SIN_FILAS_VALIDAS,
+            "El archivo no tiene ninguna fila válida para cargar. Revisá los errores "
+            "por fila (si los hay) o que el archivo tenga datos, y volvé a cargarlo.",
+        ))
+        carga.estado = "CON_ERRORES"
+    else:
+        carga.estado = "VALIDADO"
     carga.log = log
     await session.commit()
 
@@ -468,7 +501,7 @@ async def _cerrar_dry_run(
 async def _dry_run(session: AsyncSession, carga: CargaArchivo) -> None:
     tipo = carga.tipo
     columnas_esperadas = _COLUMNAS_POR_TIPO[tipo]
-    columnas_opcionales = _COLUMNAS_OPCIONALES_POR_TIPO.get(tipo, ())
+    columnas_opcionales = deteccion_mod.COLUMNAS_OPCIONALES_POR_TIPO.get(tipo, ())
 
     loop = asyncio.get_event_loop()
     file_bytes = await loop.run_in_executor(
@@ -481,7 +514,7 @@ async def _dry_run(session: AsyncSession, carga: CargaArchivo) -> None:
     estado = _EstadoLoteDryRun()
     numero_lote = 0
 
-    async for lote in lector_mod.leer_lotes(file_bytes):
+    async for lote in lector_mod.leer_lotes(file_bytes, columnas_esperadas=columnas_esperadas):
         numero_lote += 1
 
         if estado.fila_encabezado is None:

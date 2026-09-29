@@ -106,6 +106,7 @@ from app.motored.services.ingesta import errores as errores_mod
 from app.motored.services.ingesta import lector as lector_mod
 from app.motored.services.ingesta import orquestador
 from app.motored.services.ingesta import periodo as periodo_mod
+from app.motored.services.ingesta import plantillas as plantillas_mod
 from app.motored.services.ingesta import resolucion as resolucion_mod
 from app.motored.services.trabajos.runner import JobRunner, SupervisorRunner
 
@@ -205,7 +206,9 @@ def _verificar_tipo_o_400(tipo: str, file_bytes: bytes) -> None:
     estructurado que la spec exige ("names the declared type and the
     specific missing expected columns")."""
     try:
-        filas_muestra = deteccion_mod.extraer_filas_muestra(file_bytes)
+        filas_muestra = deteccion_mod.extraer_filas_muestra(
+            file_bytes, columnas_esperadas=deteccion_mod.columnas_esperadas_de(tipo)
+        )
     except lector_mod.LecturaMovimientoError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
     try:
@@ -372,6 +375,27 @@ def _validar_rango_bot(desde: Optional[date], hasta: Optional[date]) -> None:
                 f"{_BOT_RANGO_MAX_DIAS} días para origen=BOT."
             ),
         )
+
+
+@router.get("/{tipo}/plantilla.xlsx")
+async def descargar_plantilla_movimiento(
+    tipo: str,
+    user: MotoredUser = Depends(_require_write),
+):
+    """Plantilla `.xlsx` (solo encabezado) del `tipo` de movimiento, para el
+    modal de subida (`UploadMovimientoModal`). Las columnas vienen de
+    `plantillas.columnas_plantilla` -- las mismas que el backend verifica y
+    lee al subir, no una copia. `tipo` fuera de `orquestador.TIPOS_
+    MOVIMIENTO` (incluidos `MAESTRO_*`) es `404`. Mismo patrón que
+    `GET /maestros/{entidad}/plantilla.xlsx`; sin choque con `/{carga_id}/...`
+    (rutas de otra forma, y `carga_id` es `uuid`)."""
+    if tipo not in orquestador.TIPOS_MOVIMIENTO:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tipo no encontrado")
+    return Response(
+        content=plantillas_mod.generar_plantilla_xlsx(tipo),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="plantilla_{tipo.lower()}.xlsx"'},
+    )
 
 
 @router.get("", response_model=List[CargaArchivoRead])

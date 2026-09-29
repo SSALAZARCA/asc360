@@ -61,7 +61,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import date
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -69,7 +69,9 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from app.motored.models.carga_error import CargaError
 from app.motored.models.carga_fila_staging import CargaFilaStaging
 from app.motored.models.ingreso_factura import IngresoFactura
+from app.motored.services.ingesta import columnas as columnas_mod
 from app.motored.services.ingesta import errores as errores_mod
+from app.motored.services.ingesta import numeros as numeros_mod
 from app.motored.services.ingesta import transito as transito_mod
 
 # Nombres CANÓNICOS (no normalizados) tal como los espera `columnas.
@@ -108,10 +110,9 @@ def _resolver_fecha_o_error(
     """`Fecha` no interpretable -- mismo contrato que `facturas.
     _resolver_fecha_o_error`."""
     valor_fecha = _extraer(fila_raw, mapa_columnas, "Fecha")
-    if isinstance(valor_fecha, date):
-        return valor_fecha, None
-    if hasattr(valor_fecha, "date"):
-        return valor_fecha.date(), None
+    fecha = columnas_mod.a_fecha(valor_fecha)
+    if fecha is not None:
+        return fecha, None
     error = errores_mod.construir_error(
         carga_id, numero_fila, "Fecha", _texto(valor_fecha), CODIGO_FECHA_INVALIDA,
         "La fecha de la fila no se pudo interpretar.",
@@ -122,20 +123,14 @@ def _resolver_fecha_o_error(
 def _resolver_valor_neto_o_error(
     fila_raw: Sequence[Any], mapa_columnas: Dict[str, int], carga_id: uuid.UUID, numero_fila: int
 ) -> Tuple[Optional[Decimal], Optional[CargaError]]:
-    """`Valornetolocal` no numérico -- mismo contrato de tolerancia por-fila
-    que el resto de Fase 2. Ausente (`None`) es distinto de inválida: se
-    trata como cero."""
-    valor_raw = _extraer(fila_raw, mapa_columnas, "Valornetolocal")
-    if valor_raw is None:
-        return Decimal("0"), None
-    try:
-        return Decimal(str(valor_raw)), None
-    except InvalidOperation:
-        error = errores_mod.construir_error(
-            carga_id, numero_fila, "Valornetolocal", _texto(valor_raw), CODIGO_VALOR_NETO_INVALIDO,
-            "El valor neto de la fila no se pudo interpretar como un número.",
-        )
-        return None, error
+    """`Valornetolocal` vacío, con error de Excel o no numérico -- mismo
+    contrato que `facturas._resolver_decimal_o_error`: `carga_error`, nunca
+    un cero silencioso (decisión del owner, 2026-09-29)."""
+    return numeros_mod.resolver_decimal_o_error(
+        _extraer(fila_raw, mapa_columnas, "Valornetolocal"), "Valornetolocal", carga_id,
+        numero_fila, CODIGO_VALOR_NETO_INVALIDO,
+        "El valor neto de la fila no se pudo interpretar como un número.",
+    )
 
 
 def _pasa_filtro_estado(fila_raw: Sequence[Any], mapa_columnas: Dict[str, int]) -> bool:

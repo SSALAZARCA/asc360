@@ -57,7 +57,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import date
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -67,6 +67,7 @@ from app.motored.models.carga_fila_staging import CargaFilaStaging
 from app.motored.models.factura_proveedor_linea import FacturaProveedorLinea
 from app.motored.services.ingesta import columnas as columnas_mod
 from app.motored.services.ingesta import errores as errores_mod
+from app.motored.services.ingesta import numeros as numeros_mod
 from app.motored.services.ingesta import transito as transito_mod
 from app.motored.services.ingesta.resolucion import (
     CacheResolucion,
@@ -113,10 +114,9 @@ def _resolver_fecha_o_error(
     acá solo hace falta la fecha en sí (`fecha_factura`), nunca año/mes
     separados -- FACTURAS_PEDIDOS no declara período por ADR-9."""
     valor_fecha = _extraer(fila_raw, mapa_columnas, "Fecha")
-    if isinstance(valor_fecha, date):
-        return valor_fecha, None
-    if hasattr(valor_fecha, "date"):
-        return valor_fecha.date(), None
+    fecha = columnas_mod.a_fecha(valor_fecha)
+    if fecha is not None:
+        return fecha, None
     error = errores_mod.construir_error(
         carga_id, numero_fila, "Fecha", _texto(valor_fecha), CODIGO_FECHA_INVALIDA,
         "La fecha de la fila no se pudo interpretar.",
@@ -128,21 +128,15 @@ def _resolver_decimal_o_error(
     fila_raw: Sequence[Any], mapa_columnas: Dict[str, int], nombre_columna: str,
     carga_id: uuid.UUID, numero_fila: int, codigo_error: str, mensaje: str,
 ) -> Tuple[Optional[Decimal], Optional[CargaError]]:
-    """Ausente -> cero; no numérico -> `carga_error` tipado, nunca un
-    `decimal.InvalidOperation` crudo -- mismo contrato que `ventas.
-    _resolver_cantidad_o_error`/`inventario._resolver_existencia_o_error`.
-    Compartida entre `Cantidad` y `Vlr. Total Neto`: ambas siguen
-    exactamente la misma regla de tolerancia."""
-    valor_raw = _extraer(fila_raw, mapa_columnas, nombre_columna)
-    if valor_raw is None:
-        return Decimal("0"), None
-    try:
-        return Decimal(str(valor_raw)), None
-    except InvalidOperation:
-        error = errores_mod.construir_error(
-            carga_id, numero_fila, nombre_columna, _texto(valor_raw), codigo_error, mensaje,
-        )
-        return None, error
+    """Vacío o error de Excel -> `carga_error` `VALOR_FALTANTE` (nunca un
+    cero silencioso, decisión del owner 2026-09-29); no numérico ->
+    `carga_error` tipado con `codigo_error`; nunca un `decimal.
+    InvalidOperation` crudo. Compartida entre `Cantidad` y `Vlr. Total
+    Neto`: ambas siguen exactamente la misma regla."""
+    return numeros_mod.resolver_decimal_o_error(
+        _extraer(fila_raw, mapa_columnas, nombre_columna), nombre_columna, carga_id,
+        numero_fila, codigo_error, mensaje,
+    )
 
 
 def _es_nota_credito(fila_raw: Sequence[Any], mapa_columnas: Dict[str, int]) -> bool:

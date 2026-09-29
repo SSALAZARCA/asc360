@@ -50,7 +50,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import date
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -61,6 +61,7 @@ from app.motored.models.carga_fila_staging import CargaFilaStaging
 from app.motored.models.venta_mensual import VentaMensual
 from app.motored.services.ingesta import columnas as columnas_mod
 from app.motored.services.ingesta import errores as errores_mod
+from app.motored.services.ingesta import numeros as numeros_mod
 from app.motored.services.ingesta import periodo as periodo_mod
 from app.motored.services.ingesta.resolucion import (
     CacheResolucion,
@@ -118,10 +119,11 @@ def _resolver_anio_mes(valor_fecha: Any) -> Optional[Tuple[int, int]]:
     de un tipo distinto, no numérico, o fuera de 2015-2100 es `None` -- el
     caller lo traduce a `carga_error`, nunca deja escapar la excepción
     cruda (mismo contrato que `carga_excel.py`)."""
-    if isinstance(valor_fecha, date):
-        if not columnas_mod.anio_es_plausible(valor_fecha.year):
+    fecha_celda = columnas_mod.a_fecha(valor_fecha)
+    if fecha_celda is not None:
+        if not columnas_mod.anio_es_plausible(fecha_celda.year):
             return None
-        return valor_fecha.year, valor_fecha.month
+        return fecha_celda.year, fecha_celda.month
     try:
         fecha = columnas_mod.convertir_fecha_excel(float(valor_fecha))
     except (TypeError, ValueError, columnas_mod.FechaExcelImplausibleError):
@@ -163,22 +165,16 @@ def _resolver_fecha_o_error(
 def _resolver_cantidad_o_error(
     fila_raw: Sequence[Any], mapa_columnas: Dict[str, int], carga_id: uuid.UUID, numero_fila: int
 ) -> Tuple[Optional[Decimal], Optional[CargaError]]:
-    """`Cantidad inv.` no numérica (texto, coma decimal mal formada, etc.)
-    nunca debe propagar un `decimal.InvalidOperation` crudo -- mismo
-    contrato de tolerancia por-fila que `_resolver_fecha_o_error`
-    (`CODIGO_CANTIDAD_INVALIDA`). Ausente (`None`) es distinto de inválida:
-    se trata como cero, igual que antes de este fix."""
-    cantidad_raw = _extraer(fila_raw, mapa_columnas, "Cantidad inv.")
-    if cantidad_raw is None:
-        return Decimal("0"), None
-    try:
-        return Decimal(str(cantidad_raw)), None
-    except InvalidOperation:
-        error = errores_mod.construir_error(
-            carga_id, numero_fila, "Cantidad inv.", _texto(cantidad_raw), CODIGO_CANTIDAD_INVALIDA,
-            "La cantidad de la fila no se pudo interpretar como un número.",
-        )
-        return None, error
+    """`Cantidad inv.` vacía, con error de Excel o no numérica nunca debe
+    propagar un `decimal.InvalidOperation` crudo ni convertirse en un cero
+    silencioso (decisión del owner, 2026-09-29): la fila queda como
+    `carga_error` (ver `numeros.resolver_decimal_o_error`). Un `0` real es
+    un valor válido."""
+    return numeros_mod.resolver_decimal_o_error(
+        _extraer(fila_raw, mapa_columnas, "Cantidad inv."), "Cantidad inv.", carga_id,
+        numero_fila, CODIGO_CANTIDAD_INVALIDA,
+        "La cantidad de la fila no se pudo interpretar como un número.",
+    )
 
 
 def _resolver_claves(

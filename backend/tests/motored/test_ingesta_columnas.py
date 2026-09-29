@@ -41,6 +41,35 @@ def test_construir_mapa_columnas_ignores_unknown_extra_columns():
     assert len(mapa) == 4
 
 
+def test_construir_mapa_columnas_rechaza_una_columna_esperada_duplicada():
+    encabezado = ["fecha", "sucursal", "Referencia", "cantidad inv.", "REFERENCIA"]
+
+    with pytest.raises(columnas.EncabezadoDuplicadoError) as excinfo:
+        columnas.construir_mapa_columnas(encabezado, COLUMNAS_ESPERADAS)
+
+    assert excinfo.value.columnas == ["referencia"]
+    assert "referencia" in str(excinfo.value) and "duplicad" in str(excinfo.value)
+
+
+def test_construir_mapa_columnas_ignora_duplicados_de_columnas_no_esperadas():
+    encabezado = ["fecha", "sucursal", "referencia", "cantidad inv.", "notas", "notas"]
+
+    mapa = columnas.construir_mapa_columnas(encabezado, COLUMNAS_ESPERADAS)
+
+    assert len(mapa) == 4
+
+
+def test_mejor_ratio_de_encabezado_devuelve_el_mayor_ratio_entre_filas():
+    filas = [
+        ["titulo"],
+        ["fecha", "sucursal", "otra"],
+        ["fecha", "sucursal", "referencia", "cantidad inv."],
+    ]
+
+    assert columnas.mejor_ratio_de_encabezado(filas, COLUMNAS_ESPERADAS) == 1.0
+    assert columnas.mejor_ratio_de_encabezado([], COLUMNAS_ESPERADAS) == 0.0
+
+
 def test_encontrar_fila_encabezado_skips_leading_title_rows():
     filas = [
         ["Reporte de ventas"],
@@ -92,11 +121,9 @@ def test_convertir_fecha_excel_rejects_year_after_2100():
 
 
 def test_convertir_fecha_excel_boundary_years_are_accepted():
-    from datetime import date as _date, timedelta
-
-    epoch = _date(1899, 12, 30)
-    serial_2015 = (_date(2015, 1, 1) - epoch).days
-    serial_2100 = (_date(2100, 12, 31) - epoch).days
+    epoch = date(1899, 12, 30)
+    serial_2015 = (date(2015, 1, 1) - epoch).days
+    serial_2100 = (date(2100, 12, 31) - epoch).days
 
     assert columnas.convertir_fecha_excel(serial_2015).year == 2015
     assert columnas.convertir_fecha_excel(serial_2100).year == 2100

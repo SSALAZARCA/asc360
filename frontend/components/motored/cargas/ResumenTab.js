@@ -67,6 +67,28 @@ function PeriodoDetectado({ log }) {
   );
 }
 
+/** Filas con errores que NO se cargan (las válidas sí): `log.filas_con_error`
+ * (rechazadas + staged con sucursal/referencia sin resolver); cargas viejas
+ * sin ese campo caen a `filas_rechazadas`. Se muestra en el informe previo y
+ * también después de Aplicar, sin abrir la pestaña Errores. */
+function FilasNoCargadasAviso({ informe }) {
+  const cantidad = informe.log?.filas_con_error ?? informe.filas_rechazadas;
+  if (!cantidad) return null;
+  const sujeto = cantidad === 1 ? '1 fila con errores no se cargó.' : `${cantidad} filas con errores no se cargaron.`;
+  return (
+    <p
+      role="alert"
+      style={{
+        margin: 0, padding: '0.5rem 0.75rem', fontSize: '0.8rem', fontWeight: 600,
+        color: 'var(--motored-danger, #c0392b)', background: 'var(--motored-danger-bg, #fdecea)',
+        borderRadius: 'var(--motored-radius-sm, 4px)',
+      }}
+    >
+      {`${sujeto} Revisá el detalle en Errores o descargá errores.csv`}
+    </p>
+  );
+}
+
 function Conteo({ etiqueta, valor, color }) {
   return (
     <div>
@@ -155,6 +177,7 @@ export default function ResumenTab({ carga, onChanged }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
       <Conteos informe={informe} />
+      <FilasNoCargadasAviso informe={informe} />
 
       <div style={{ fontSize: '0.8rem' }}>
         <span>
