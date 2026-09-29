@@ -11,6 +11,10 @@
  * asc360's `admin-layout.js` division of labor (UI convenience gate, real
  * enforcement is server-side).
  *
+ * odd/motored-salir-y-cambio-password adds a "Cambiar contraseña" action on
+ * every row with web access (email and not `ASESOR_MOSTRADOR`): the ADMIN
+ * sets a new password through `CambiarPasswordForm`.
+ *
  * sdd/motored-ventas-perdidas-bot, Phase 4 "Approval service + Usuarios UI"
  * (design D5) adds two things to this same screen (not a new route):
  * - A "Solicitudes pendientes" section (`status='pending'` advisors from
@@ -26,10 +30,11 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import MotoredLayout from '../motored-layout';
+import CambiarPasswordForm from '../../../components/motored/CambiarPasswordForm';
 import {
   listUsuarios, createUsuario, deactivateUsuario,
   listSolicitudesPendientes, aprobarUsuario, rechazarUsuario,
-  generarCodigoTelegram, desvincularTelegram,
+  generarCodigoTelegram, desvincularTelegram, resetPasswordUsuario,
 } from '../../../lib/motored/api';
 import { MOTORED_USER_KEY } from '../../../lib/motored/motoredFetch';
 
@@ -66,7 +71,11 @@ function UsuarioForm({ form, setForm, onSubmit }) {
   );
 }
 
-function UsuariosTable({ usuarios, onDeactivate, ownUserId, onVincularTelegram, onDesvincularTelegram }) {
+function tieneAccesoWeb(u) {
+  return Boolean(u.email) && u.role !== 'ASESOR_MOSTRADOR';
+}
+
+function UsuariosTable({ usuarios, onDeactivate, ownUserId, onVincularTelegram, onDesvincularTelegram, onCambiarPassword }) {
   const handleDeactivateClick = (u) => {
     if (window.confirm(`¿Desactivar a "${u.nombre}"? No se elimina, queda marcado como inactivo.`)) {
       onDeactivate(u.id);
@@ -96,6 +105,9 @@ function UsuariosTable({ usuarios, onDeactivate, ownUserId, onVincularTelegram, 
               SucursalesTab.js para la misma regla aplicada. */}
               {u.activo && (
                 <button type="button" className="motored-row-action" onClick={() => handleDeactivateClick(u)}>Desactivar</button>
+              )}
+              {tieneAccesoWeb(u) && (
+                <button type="button" className="motored-row-action" onClick={() => onCambiarPassword(u)}>Cambiar contraseña</button>
               )}
               {/* Vincular/Desvincular Telegram SOLO en la propia fila del
               ADMIN autenticado (sdd/motored-ventas-perdidas-bot, design D5:
@@ -259,6 +271,38 @@ function useTelegramVinculacion(onDesvinculado) {
   return { codigo, error, vincular, desvincular };
 }
 
+function usePasswordReset() {
+  /** `objetivo` es el usuario cuyo formulario está abierto; `exito` el
+   * aviso posterior. Nunca guarda la contraseña: solo la pasa a la API. */
+  const [objetivo, setObjetivo] = useState(null);
+  const [error, setError] = useState('');
+  const [exito, setExito] = useState('');
+
+  const abrir = (usuario) => {
+    setObjetivo(usuario);
+    setError('');
+    setExito('');
+  };
+
+  const cerrar = () => {
+    setObjetivo(null);
+    setError('');
+  };
+
+  const guardar = async (password) => {
+    setError('');
+    try {
+      await resetPasswordUsuario(objetivo.id, password);
+      setExito(`Contraseña actualizada para ${objetivo.nombre}`);
+      setObjetivo(null);
+    } catch (err) {
+      setError(err.message || 'Error al cambiar la contraseña');
+    }
+  };
+
+  return { objetivo, error, exito, abrir, cerrar, guardar };
+}
+
 function useUsuarios(enabled) {
   const [usuarios, setUsuarios] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -348,6 +392,24 @@ function SolicitudesPendientesPanel({ solicitudes, loading, error, onAprobar, on
   );
 }
 
+/** Aviso de éxito + formulario "Cambiar contraseña" (uno a la vez). */
+function PasswordResetPanel({ state }) {
+  return (
+    <>
+      {state.exito && <p style={{ color: 'var(--motored-text, #1a1a18)', fontSize: '0.8rem' }}>{state.exito}</p>}
+      {state.objetivo && (
+        <CambiarPasswordForm
+          key={state.objetivo.id}
+          usuario={state.objetivo}
+          onSubmit={state.guardar}
+          onCancel={state.cerrar}
+          serverError={state.error}
+        />
+      )}
+    </>
+  );
+}
+
 function UsuariosContent() {
   /**
    * Post-Phase-4 review (finding #6): this function used to mix 4
@@ -362,6 +424,7 @@ function UsuariosContent() {
   const { usuarios, loading, error, create, deactivate, reload } = useUsuarios(allowed);
   const solicitudesState = useSolicitudesPendientes(allowed);
   const telegramState = useTelegramVinculacion(reload);
+  const passwordState = usePasswordReset();
   const [form, setForm] = useState(emptyForm);
 
   const handleSubmit = async (e) => {
@@ -389,8 +452,11 @@ function UsuariosContent() {
           ownUserId={ownUserId}
           onVincularTelegram={telegramState.vincular}
           onDesvincularTelegram={telegramState.desvincular}
+          onCambiarPassword={passwordState.abrir}
         />
       )}
+
+      <PasswordResetPanel state={passwordState} />
 
       <TelegramLinkPanel codigo={telegramState.codigo} error={telegramState.error} />
 

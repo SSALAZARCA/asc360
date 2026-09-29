@@ -23,6 +23,10 @@ sdd/motored-ventas-perdidas-bot, Phase 4 "Approval service + Usuarios UI"
   vinculación de Telegram de un ADMIN para notificaciones push, siempre
   sobre SU PROPIA fila (nunca la de otro usuario -- spec "ADMIN
   telegram-linking independent of role").
+
+odd/motored-salir-y-cambio-password agrega `POST /usuarios/{id}/password`
+(ADMIN fija una contraseña nueva a un usuario con acceso web) y exige un
+largo mínimo de contraseña también al crear usuarios.
 """
 import uuid
 from typing import List, Optional
@@ -35,7 +39,9 @@ from app.core.security import get_password_hash
 from app.motored.deps import MotoredUser, get_motored_db_or_503, require_motored_ready, require_roles
 from app.motored.models.usuario import MotoredRole, Usuario
 from app.motored.models.usuario_sucursal import UsuarioSucursal
-from app.motored.schemas.usuario import UsuarioCreate, UsuarioRead
+from app.motored.schemas.usuario import (
+    PASSWORD_MIN_LENGTH, UsuarioCreate, UsuarioPasswordReset, UsuarioRead,
+)
 from app.motored.services import auditoria, solicitudes, vinculacion
 
 router = APIRouter(
@@ -62,6 +68,22 @@ async def _get_or_404(db: AsyncSession, usuario_id: uuid.UUID) -> Usuario:
     if usuario is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado")
     return usuario
+
+
+def _validar_password(password: str) -> None:
+    """422 con mensaje fijo: jamás incluye la contraseña recibida."""
+    if len(password) < PASSWORD_MIN_LENGTH:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"La contraseña debe tener al menos {PASSWORD_MIN_LENGTH} caracteres",
+        )
+
+
+def _tiene_acceso_web(usuario: Usuario) -> bool:
+    """Un asesor de mostrador (Lore) o una fila sin email entra solo por el
+    bot: no tiene credenciales web que resetear."""
+    role = getattr(usuario.role, "value", usuario.role)
+    return bool(usuario.email) and role != MotoredRole.ASESOR_MOSTRADOR.value
 
 
 @router.get("")
@@ -105,6 +127,7 @@ async def create_usuario(
     db: AsyncSession = Depends(get_motored_db_or_503),
     user: MotoredUser = Depends(_require_admin),
 ) -> dict:
+    _validar_password(payload.password)
     try:
         role = MotoredRole(payload.role)
     except ValueError:
@@ -126,6 +149,29 @@ async def create_usuario(
         db.add(UsuarioSucursal(id=uuid.uuid4(), usuario_id=usuario.id, sucursal_id=sucursal_id))
 
     auditoria.audit_create(db, "usuario", usuario.id, uuid.UUID(user.user_id))
+    await db.commit()
+    return _to_read(usuario)
+
+
+@router.post("/{usuario_id}/password")
+async def reset_password_usuario(
+    usuario_id: uuid.UUID,
+    payload: UsuarioPasswordReset,
+    db: AsyncSession = Depends(get_motored_db_or_503),
+    user: MotoredUser = Depends(_require_admin),
+) -> dict:
+    """Un ADMIN fija una contraseña nueva para un usuario con acceso web
+    (también la suya). Guarda solo el hash; la respuesta es el usuario sin
+    contraseña y la auditoría registra el cambio sin valores."""
+    _validar_password(payload.password)
+    usuario = await _get_or_404(db, usuario_id)
+    if not _tiene_acceso_web(usuario):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="SIN_ACCESO_WEB: el usuario no tiene acceso web (sin email o asesor de mostrador)",
+        )
+    usuario.hashed_password = get_password_hash(payload.password)
+    auditoria.audit_password_reset(db, "usuario", usuario.id, uuid.UUID(user.user_id))
     await db.commit()
     return _to_read(usuario)
 

@@ -180,6 +180,14 @@ export async function deactivateUsuario(id) {
   });
 }
 
+/** ADMIN fija una contraseña nueva a un usuario con acceso web. */
+export async function resetPasswordUsuario(id, password) {
+  return motoredFetchJson(`/usuarios/${id}/password`, {
+    method: 'POST',
+    body: JSON.stringify({ password }),
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Usuarios -- aprobación de solicitudes del bot Lore + vinculación de
 // Telegram (sdd/motored-ventas-perdidas-bot, Phase 4, design D5). `status`

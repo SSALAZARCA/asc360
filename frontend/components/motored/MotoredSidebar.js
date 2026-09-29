@@ -21,6 +21,10 @@
  * red text -- not a filled block, which is what this component originally
  * (incorrectly) used.
  *
+ * The aside is sticky and exactly one viewport tall, so the footer (user
+ * name + "Salir") stays on screen however long the page is; only the nav
+ * area scrolls if it ever overflows.
+ *
  * The standalone "Cargas" entry was REMOVED (sdd/motored-cargas-tipo-
  * declarado; proposal decision #2: "ONE screen" / design D5): uploading is
  * now one of the 10 grouped tabs inside "Maestros" (`MovimientoTab.js`),
@@ -39,14 +43,14 @@ const ALL_ITEMS = [
 ];
 
 const asideStyle = {
-  width: '240px', minHeight: '100vh',
+  width: '240px', position: 'sticky', top: 0, height: '100vh',
   background: 'var(--motored-surface, #ffffff)',
   borderRight: '1px solid var(--motored-border, #e4e4e7)',
   display: 'flex', flexDirection: 'column', flexShrink: 0,
 };
 
 const logoBoxStyle = { padding: '1.5rem', borderBottom: '1px solid var(--motored-border, #e4e4e7)' };
-const navStyle = { flex: 1, padding: '1rem 0.75rem', display: 'flex', flexDirection: 'column', gap: '2px' };
+const navStyle = { flex: 1, minHeight: 0, overflowY: 'auto', padding: '1rem 0.75rem', display: 'flex', flexDirection: 'column', gap: '2px' };
 const navLabelStyle = { margin: '0 0 0.5rem 0.75rem', color: 'var(--motored-text-soft, #8a8a8a)' };
 const footerBoxStyle = { padding: '1rem 1.5rem', borderTop: '1px solid var(--motored-border, #e4e4e7)' };
 const userNameStyle = { margin: '0 0 0.5rem', fontSize: '0.7rem', fontWeight: 700, color: 'var(--motored-text, #1a1a18)' };

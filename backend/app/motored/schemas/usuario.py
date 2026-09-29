@@ -5,6 +5,18 @@ from typing import List, Optional
 from pydantic import BaseModel, ConfigDict
 
 
+PASSWORD_MIN_LENGTH = 8
+
+
+class UsuarioPasswordReset(BaseModel):
+    """Body de `POST /usuarios/{id}/password`. El largo mínimo se valida en
+    el endpoint (no con `Field(min_length=...)`) porque el 422 automático de
+    pydantic devuelve el valor recibido, y una contraseña nunca debe viajar
+    de vuelta en una respuesta."""
+
+    password: str
+
+
 class UsuarioCreate(BaseModel):
     nombre: str
     email: str
