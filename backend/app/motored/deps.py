@@ -23,7 +23,7 @@ porque debe poder consultarla.
 """
 from typing import Optional
 
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Depends, Header, HTTPException, Request, status
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError, OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -36,6 +36,24 @@ from app.motored.services.trabajos import supervisor
 
 MOTORED_UNAVAILABLE_DETAIL = {"code": "MOTORED_UNAVAILABLE"}
 MOTORED_DB_UNAVAILABLE_DETAIL = {"code": "MOTORED_DB_UNAVAILABLE"}
+
+# Motored satisfaction survey (T1): `SERVICIO_CLIENTE` may only reach these
+# path prefixes. Many Motored read endpoints depend on
+# `get_current_motored_user` with no role check, so the confinement lives in
+# that dependency (no endpoint can forget it). Later slices that add survey /
+# case routers under these prefixes need no change; a new prefix for this role
+# must be added here.
+SERVICIO_CLIENTE_ROLE = "SERVICIO_CLIENTE"
+SERVICIO_CLIENTE_ALLOWED_PREFIXES = (
+    "/api/motored/auth",
+    "/api/motored/encuesta",
+    "/api/motored/detractores",
+)
+
+
+def _path_in_prefixes(path: str, prefixes) -> bool:
+    """Prefix match on segment boundaries (`/encuesta-x` is not `/encuesta`)."""
+    return any(path == p or path.startswith(p + "/") for p in prefixes)
 
 
 async def get_motored_db_or_503(
@@ -68,6 +86,7 @@ def get_motored_user_lookup(
 
 
 async def get_current_motored_user(
+    request: Request,
     authorization: Optional[str] = Header(None),
     lookup: MotoredUserLookup = Depends(get_motored_user_lookup),
 ) -> MotoredUser:
@@ -106,6 +125,14 @@ async def get_current_motored_user(
         # a `pending`/`rejected` account of ANY role must not be treated as
         # authenticated just because its token still decodes.
         raise credentials_exception
+
+    if user.role == SERVICIO_CLIENTE_ROLE and not _path_in_prefixes(
+        request.url.path, SERVICIO_CLIENTE_ALLOWED_PREFIXES
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No tiene permisos para realizar esta acción.",
+        )
 
     return user
 

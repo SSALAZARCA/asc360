@@ -46,6 +46,9 @@ class MotoredRole(enum.Enum):
     SUCURSAL = "SUCURSAL"
     CONSULTA = "CONSULTA"
     ASESOR_MOSTRADOR = "ASESOR_MOSTRADOR"
+    # Customer-service agent: web role confined to the survey/detractor
+    # routes (see `deps.SERVICIO_CLIENTE_ALLOWED_PREFIXES`).
+    SERVICIO_CLIENTE = "SERVICIO_CLIENTE"
 
 
 class Usuario(MotoredBase):
