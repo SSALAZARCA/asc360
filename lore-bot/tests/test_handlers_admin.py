@@ -3,9 +3,22 @@ Rechazar callback buttons. Same `FakeClient`-double pattern as
 `test_handlers_registro.py`."""
 from unittest.mock import AsyncMock, MagicMock
 
-from lore.api import BackendCaido, CodigoInvalido, Pendiente, TelegramYaVinculado, YaResuelta
+import pytest
+from telegram.error import BadRequest
+
+from lore.api import (
+    BackendCaido,
+    CodigoInvalido,
+    Inactivo,
+    NoRegistrado,
+    Pendiente,
+    Rechazado,
+    TelegramYaVinculado,
+    YaResuelta,
+)
 from lore.handlers import admin
-from lore.handlers._common import _MSG_CONEXION
+from lore.handlers._common import _MSG_CONEXION, teclado_resolver_solicitud
+from lore.handlers.admin import _MAX_SOLICITUDES_POR_TOQUE, _MSG_SOLO_ADMIN
 
 _UUID_1 = "11111111-1111-1111-1111-111111111111"
 
@@ -15,6 +28,7 @@ class FakeClient:
         self.vincular = AsyncMock()
         self.aprobar_solicitud = AsyncMock()
         self.rechazar_solicitud = AsyncMock()
+        self.listar_solicitudes = AsyncMock()
 
     async def __aenter__(self):
         return self
@@ -27,7 +41,7 @@ def _fake_cliente(fake_client):
     return lambda telegram_id: fake_client
 
 
-def _make_update(*, callback_data=None, user_id=999):
+def _make_update(*, callback_data=None, user_id=999, message_text=None, message_markup=None):
     update = MagicMock()
     update.effective_user.id = user_id
     if callback_data is not None:
@@ -35,6 +49,8 @@ def _make_update(*, callback_data=None, user_id=999):
         update.callback_query.data = callback_data
         update.callback_query.answer = AsyncMock()
         update.callback_query.edit_message_text = AsyncMock()
+        update.callback_query.message.text = message_text
+        update.callback_query.message.reply_markup = message_markup
         update.message = None
     else:
         update.callback_query = None
@@ -172,16 +188,36 @@ async def test_resolver_solicitud_callback_ya_resuelta_edits_message_without_cra
     context.bot.send_message.assert_not_awaited()
 
 
-async def test_resolver_solicitud_callback_backend_caido(monkeypatch):
+async def test_resolver_solicitud_callback_backend_caido_keeps_the_buttons_for_retry(monkeypatch):
     fake_client = FakeClient()
     fake_client.aprobar_solicitud.side_effect = BackendCaido("boom")
     monkeypatch.setattr(admin, "_cliente", _fake_cliente(fake_client))
+    botones = teclado_resolver_solicitud(_UUID_1)
 
-    update = _make_update(callback_data=f"lore_apr:{_UUID_1}")
+    update = _make_update(
+        callback_data=f"lore_apr:{_UUID_1}",
+        message_text="Solicitud de acceso\nNombre: Ana",
+        message_markup=botones,
+    )
     await admin.resolver_solicitud_callback(update, _make_context())
 
-    text = update.callback_query.edit_message_text.call_args.args[0]
-    assert text == _MSG_CONEXION
+    llamada = update.callback_query.edit_message_text.call_args
+    assert llamada.args[0] == f"Solicitud de acceso\nNombre: Ana\n\n{_MSG_CONEXION}"
+    assert llamada.kwargs["reply_markup"] is botones
+
+
+async def test_resolver_solicitud_callback_backend_caido_twice_is_not_an_error(monkeypatch):
+    fake_client = FakeClient()
+    fake_client.aprobar_solicitud.side_effect = BackendCaido("boom")
+    monkeypatch.setattr(admin, "_cliente", _fake_cliente(fake_client))
+    update = _make_update(
+        callback_data=f"lore_apr:{_UUID_1}",
+        message_text="Solicitud",
+        message_markup=teclado_resolver_solicitud(_UUID_1),
+    )
+    update.callback_query.edit_message_text.side_effect = BadRequest("Message is not modified")
+
+    await admin.resolver_solicitud_callback(update, _make_context())  # must not raise
 
 
 async def test_resolver_solicitud_callback_without_solicitante_id_skips_notify(monkeypatch):
@@ -271,3 +307,137 @@ async def test_resolver_solicitud_callback_malformed_usuario_id_shows_generic_er
     update.callback_query.edit_message_text.assert_awaited_once()
     text = update.callback_query.edit_message_text.call_args.args[0]
     assert "no pude procesar esta solicitud" in text.lower()
+
+
+# --- /pendientes and the "Solicitudes pendientes" button ---------------------
+
+_PENDIENTE_ANA = {
+    "id": _UUID_1,
+    "nombre": "Ana_Gomez",
+    "phone": "3001234567",
+    "sucursales": ["Sede Norte"],
+    "created_at": "2026-09-01T08:00:00",
+}
+_PENDIENTE_LUIS = {
+    "id": "22222222-2222-2222-2222-222222222222",
+    "nombre": "Luis",
+    "phone": "3007654321",
+    "sucursales": [],
+    "created_at": "2026-09-02T09:00:00",
+}
+
+
+async def test_pendientes_sends_one_message_per_request_with_approve_reject_buttons(monkeypatch):
+    fake_client = FakeClient()
+    fake_client.listar_solicitudes.return_value = [_PENDIENTE_ANA, _PENDIENTE_LUIS]
+    monkeypatch.setattr(admin, "_cliente", _fake_cliente(fake_client))
+    update = _make_update()
+
+    await admin.solicitudes_pendientes(update, _make_context())
+
+    llamadas = update.message.reply_text.call_args_list
+    assert len(llamadas) == 3  # summary + one per request
+    assert "2" in llamadas[0].args[0]
+    assert "Ana_Gomez" in llamadas[1].args[0]
+    assert "3001234567" in llamadas[1].args[0]
+    assert "Sede Norte" in llamadas[1].args[0]
+    assert "Luis" in llamadas[2].args[0]
+    botones = llamadas[1].kwargs["reply_markup"].inline_keyboard[0]
+    assert [b.callback_data for b in botones] == [f"lore_apr:{_UUID_1}", f"lore_rej:{_UUID_1}"]
+    assert "parse_mode" not in llamadas[1].kwargs  # names are shown as plain text
+
+
+async def test_pendientes_with_nothing_pending_says_so(monkeypatch):
+    fake_client = FakeClient()
+    fake_client.listar_solicitudes.return_value = []
+    monkeypatch.setattr(admin, "_cliente", _fake_cliente(fake_client))
+    update = _make_update()
+
+    await admin.solicitudes_pendientes(update, _make_context())
+
+    update.message.reply_text.assert_awaited_once_with("No hay solicitudes pendientes.")
+
+
+@pytest.mark.parametrize("error", [NoRegistrado, Pendiente, Rechazado, Inactivo])
+async def test_pendientes_refuses_politely_when_the_caller_is_not_an_active_admin(monkeypatch, error):
+    fake_client = FakeClient()
+    fake_client.listar_solicitudes.side_effect = error("403")
+    monkeypatch.setattr(admin, "_cliente", _fake_cliente(fake_client))
+    update = _make_update()
+
+    await admin.solicitudes_pendientes(update, _make_context())
+
+    update.message.reply_text.assert_awaited_once_with(_MSG_SOLO_ADMIN)
+
+
+async def test_pendientes_backend_caido_shows_connection_message(monkeypatch):
+    fake_client = FakeClient()
+    fake_client.listar_solicitudes.side_effect = BackendCaido("boom")
+    monkeypatch.setattr(admin, "_cliente", _fake_cliente(fake_client))
+    update = _make_update()
+
+    await admin.solicitudes_pendientes(update, _make_context())
+
+    update.message.reply_text.assert_awaited_once_with(_MSG_CONEXION)
+
+
+def _pendientes(cantidad: int) -> list[dict]:
+    return [
+        {
+            "id": f"{n:08d}-1111-1111-1111-111111111111",
+            "nombre": f"Asesor {n}",
+            "phone": "3001234567",
+            "sucursales": [],
+        }
+        for n in range(cantidad)
+    ]
+
+
+async def test_pendientes_caps_the_list_at_the_oldest_and_says_there_are_more(monkeypatch):
+    fake_client = FakeClient()
+    fake_client.listar_solicitudes.return_value = _pendientes(23)
+    monkeypatch.setattr(admin, "_cliente", _fake_cliente(fake_client))
+    update = _make_update()
+
+    await admin.solicitudes_pendientes(update, _make_context())
+
+    llamadas = update.message.reply_text.call_args_list
+    assert _MAX_SOLICITUDES_POR_TOQUE == 10
+    assert len(llamadas) == 1 + _MAX_SOLICITUDES_POR_TOQUE
+    assert llamadas[0].args[0] == (
+        "Hay 23 solicitudes pendientes. Te muestro las 10 más antiguas; aprobalas o "
+        "rechazalas y volvé a tocar el botón para ver más, o revisalas todas en el "
+        "panel (Usuarios)."
+    )
+    assert "Asesor 0" in llamadas[1].args[0]
+    assert "Asesor 9" in llamadas[10].args[0]
+
+
+async def test_pendientes_exactly_at_the_cap_has_no_more_notice(monkeypatch):
+    fake_client = FakeClient()
+    fake_client.listar_solicitudes.return_value = _pendientes(_MAX_SOLICITUDES_POR_TOQUE)
+    monkeypatch.setattr(admin, "_cliente", _fake_cliente(fake_client))
+    update = _make_update()
+
+    await admin.solicitudes_pendientes(update, _make_context())
+
+    llamadas = update.message.reply_text.call_args_list
+    assert len(llamadas) == 1 + _MAX_SOLICITUDES_POR_TOQUE
+    assert "más antiguas" not in llamadas[0].args[0]
+
+
+async def test_pendientes_skips_malformed_items_and_logs_a_warning(monkeypatch, caplog):
+    fake_client = FakeClient()
+    sin_id = {"nombre": "Sin id", "phone": "3000000000", "sucursales": []}
+    fake_client.listar_solicitudes.return_value = [sin_id, "basura", _PENDIENTE_ANA]
+    monkeypatch.setattr(admin, "_cliente", _fake_cliente(fake_client))
+    update = _make_update()
+
+    with caplog.at_level("WARNING", logger="lore.handlers.admin"):
+        await admin.solicitudes_pendientes(update, _make_context())
+
+    llamadas = update.message.reply_text.call_args_list
+    assert len(llamadas) == 2  # summary + the one valid request
+    assert "1" in llamadas[0].args[0]
+    assert "Ana_Gomez" in llamadas[1].args[0]
+    assert sum("malformada" in r.message for r in caplog.records) == 2

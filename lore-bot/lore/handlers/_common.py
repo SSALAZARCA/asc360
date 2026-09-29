@@ -80,6 +80,7 @@ def _validar_cantidad(texto: str) -> int | None:
 # instead of being duplicated as string literals in each file.
 BOTON_REGISTRAR = "📝 Registrar venta perdida"
 BOTON_CORRECCIONES = "🧾 Mis correcciones de hoy"
+BOTON_PENDIENTES = "📋 Solicitudes pendientes"
 
 # `resize_keyboard=True` shrinks the keyboard to fit just these 2 rows
 # instead of Telegram's oversized default. Deliberately NOT
@@ -110,6 +111,37 @@ TECLADO_CAPTURA = ReplyKeyboardMarkup(
     [[BOTON_REGISTRAR], [BOTON_CORRECCIONES]],
     resize_keyboard=True,
 )
+
+# ADMIN menu: the capture buttons plus the pending-requests shortcut. Which
+# menu a user gets depends on the role (`teclado_para_rol`); advisors never
+# see the admin button.
+TECLADO_ADMIN = ReplyKeyboardMarkup(
+    [[BOTON_REGISTRAR], [BOTON_CORRECCIONES], [BOTON_PENDIENTES]],
+    resize_keyboard=True,
+)
+
+
+def teclado_para_rol(rol: str | None) -> ReplyKeyboardMarkup | None:
+    """The persistent menu for an APPROVED user of `rol`, or None for a role
+    with no menu."""
+    if rol == "ADMIN":
+        return TECLADO_ADMIN
+    if rol == "ASESOR_MOSTRADOR":
+        return TECLADO_CAPTURA
+    return None
+
+
+def teclado_resolver_solicitud(usuario_id: str) -> InlineKeyboardMarkup:
+    """Aprobar/Rechazar buttons for one pending request; the callbacks are
+    handled by `admin.resolver_solicitud_callback`."""
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton("✅ Aprobar", callback_data=f"lore_apr:{usuario_id}"),
+                InlineKeyboardButton("❌ Rechazar", callback_data=f"lore_rej:{usuario_id}"),
+            ]
+        ]
+    )
 
 
 # Inline "Cancelar" button shown on every prompt of the 3 conversations

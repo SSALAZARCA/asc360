@@ -9,6 +9,7 @@ from lore.api import (
     CargaNoEncontrada,
     CodigoInvalido,
     FueraDeVentana,
+    Inactivo,
     IdempotencyKeyEnUso,
     LineaAnulada,
     LineaNoEncontrada,
@@ -782,3 +783,43 @@ async def test_404_line_code_is_read_from_detail():
     async with _client(handler) as client:
         with pytest.raises(LineaNoEncontrada):
             await client.editar_linea("l1", 3)
+
+
+# --- listar_solicitudes() -----------------------------------------------------
+
+
+async def test_listar_solicitudes_returns_the_pending_list():
+    pendientes = [{"id": "u1", "nombre": "Ana", "phone": "3001234567", "sucursales": ["Norte"]}]
+
+    def handler(request):
+        assert request.method == "GET"
+        assert request.url.path == "/admin/solicitudes"
+        return httpx.Response(200, json={"solicitudes": pendientes})
+
+    async with _client(handler) as client:
+        assert await client.listar_solicitudes() == pendientes
+
+
+@pytest.mark.parametrize(
+    "code, error",
+    [
+        ("NO_REGISTRADO", NoRegistrado),
+        ("PENDIENTE", Pendiente),
+        ("RECHAZADO", Rechazado),
+        ("INACTIVO", Inactivo),
+    ],
+)
+async def test_listar_solicitudes_maps_the_403_refusals(code, error):
+    def handler(request):
+        return httpx.Response(403, json={"detail": {"code": code}})
+
+    async with _client(handler) as client:
+        with pytest.raises(error):
+            await client.listar_solicitudes()
+
+
+@pytest.mark.parametrize("respuesta", [httpx.Response(500), httpx.Response(200, json=["x"])])
+async def test_listar_solicitudes_raises_backend_caido_on_bad_response(respuesta):
+    async with _client(lambda request: respuesta) as client:
+        with pytest.raises(BackendCaido):
+            await client.listar_solicitudes()

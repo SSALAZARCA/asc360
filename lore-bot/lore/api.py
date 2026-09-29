@@ -33,6 +33,10 @@ class Rechazado(LoreApiError):
     """The caller's registration was rejected."""
 
 
+class Inactivo(LoreApiError):
+    """The caller's Usuario was deactivated."""
+
+
 class FueraDeVentana(LoreApiError):
     """The requested edit/cancel targets a row outside today's window."""
 
@@ -109,6 +113,7 @@ _ERROR_CODE_MAP: dict[str, type[LoreApiError]] = {
     "NO_REGISTRADO": NoRegistrado,
     "PENDIENTE": Pendiente,
     "RECHAZADO": Rechazado,
+    "INACTIVO": Inactivo,
     "FUERA_DE_VENTANA": FueraDeVentana,
     "YA_RESUELTA": YaResuelta,
     "YA_REGISTRADO": YaRegistrado,
@@ -281,6 +286,19 @@ class BackendClient:
         if not isinstance(body, dict):
             raise BackendCaido("non-JSON response body")
         return body
+
+    async def listar_solicitudes(self) -> list:
+        """`GET /admin/solicitudes` — the pending registration requests,
+        oldest first. Admin only: the backend's `require_bot_admin` answers
+        403 (`NO_REGISTRADO`/`PENDIENTE`/`RECHAZADO`/`INACTIVO`) to anyone
+        else, which `_request` maps to its typed error."""
+        response = await self._request("GET", "/admin/solicitudes")
+        if response.status_code != 200:
+            raise BackendCaido(f"unmapped HTTP {response.status_code}")
+        body = _safe_json(response)
+        if not isinstance(body, dict) or not isinstance(body.get("solicitudes"), list):
+            raise BackendCaido("unexpected response body")
+        return body["solicitudes"]
 
     async def _resolver_solicitud(self, path: str) -> dict:
         """Shared by `aprobar_solicitud`/`rechazar_solicitud` — both call the

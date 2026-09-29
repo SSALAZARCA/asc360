@@ -9,7 +9,8 @@ from lore.estados import Borrador, CapturaEstado, CorreccionEstado, RegistroEsta
 from lore.handlers import captura as captura_handlers
 from lore.handlers import correccion as correccion_handlers
 from lore.handlers import registro as registro_handlers
-from lore.handlers._common import BOTON_CORRECCIONES, BOTON_REGISTRAR
+from lore.handlers import admin as admin_handlers
+from lore.handlers._common import BOTON_CORRECCIONES, BOTON_PENDIENTES, BOTON_REGISTRAR
 from lore.main import build_application
 
 
@@ -108,6 +109,26 @@ def test_build_application_registers_vincular_command():
     handlers = application.handlers[0]
     command_handlers = [h for h in handlers if isinstance(h, CommandHandler)]
     assert any("vincular" in h.commands for h in command_handlers)
+
+
+def test_build_application_registers_pendientes_command():
+    application = build_application()
+    handlers = application.handlers[0]
+    command_handlers = [h for h in handlers if isinstance(h, CommandHandler)]
+    assert any("pendientes" in h.commands for h in command_handlers)
+
+
+async def test_button_text_pendientes_calls_the_same_handler_as_the_command():
+    fake_pendientes = AsyncMock()
+    with patch.object(admin_handlers, "solicitudes_pendientes", fake_pendientes):
+        application = build_application()
+        application._initialized = True
+
+        user = User(id=13, is_bot=False, first_name="admin")
+        message = _make_message(13, user, application.bot, text=BOTON_PENDIENTES)
+        await application.process_update(Update(update_id=13, message=message))
+
+    fake_pendientes.assert_awaited_once()
 
 
 def test_build_application_registers_admin_approval_callback():

@@ -20,7 +20,7 @@ from lore.api import (
 )
 from lore.estados import RegistroEstado
 from lore.handlers import registro
-from lore.handlers._common import TECLADO_CAPTURA, _MSG_SESION_EXPIRADA, _escapar_markdown
+from lore.handlers._common import TECLADO_ADMIN, TECLADO_CAPTURA, _MSG_SESION_EXPIRADA, _escapar_markdown
 
 
 class FakeClient:
@@ -156,12 +156,9 @@ async def test_start_approved_admin_greets_by_name_and_role(monkeypatch):
     assert "asalazar" in text
     assert "administrador" in text
     assert "asesor de mostrador" not in text
-    # Ad-hoc extension (post-Phase-10, product-owner request): an ADMIN can
-    # now also drive `/registrar`/`/correcciones`, so its welcome-back DOES
-    # get the same persistent keyboard an approved advisor already gets --
-    # same role-aware discipline as the greeting text itself, just widened to
-    # both roles instead of "only ASESOR_MOSTRADOR".
-    assert update.message.reply_text.call_args.kwargs["reply_markup"] is TECLADO_CAPTURA
+    # An ADMIN also drives `/registrar`/`/correcciones`, and additionally
+    # gets the "Solicitudes pendientes" button: the keyboard depends on role.
+    assert update.message.reply_text.call_args.kwargs["reply_markup"] is TECLADO_ADMIN
 
 
 async def test_start_backend_caido_ends_conversation(monkeypatch):
@@ -801,7 +798,8 @@ async def test_confirmar_telegram_es_admin_explains_it_cannot_be_shared(monkeypa
     fake_client.registro.side_effect = TelegramEsAdmin("TELEGRAM_ES_ADMIN")
     monkeypatch.setattr(registro, "_cliente", _fake_cliente(fake_client))
     update = _make_update(callback_data="lore_reg_confirmar")
-    context = _make_context(user_data={registro._DRAFT_KEY: {"nombre": "Ana Perez", "phone": "3001234567", "sucursal_id": "s1"}})
+    draft = {"nombre": "Ana Perez", "phone": "3001234567", "sucursal_id": "s1"}
+    context = _make_context(user_data={registro._DRAFT_KEY: draft})
 
     result = await registro.confirmar(update, context)
 

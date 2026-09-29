@@ -42,6 +42,7 @@ from lore.handlers import correccion as correccion_handlers
 from lore.handlers import registro as registro_handlers
 from lore.handlers._common import (
     BOTON_CORRECCIONES,
+    BOTON_PENDIENTES,
     BOTON_REGISTRAR,
     CALLBACK_CANCELAR,
     nada_para_cancelar,
@@ -209,6 +210,14 @@ def build_application() -> Application:
 
     application.add_handler(_build_registro_conversation())
     application.add_handler(CommandHandler("vincular", admin_handlers.vincular_command))
+    # Pending registrations: the command and the admin menu button run the
+    # same handler.
+    application.add_handler(
+        CommandHandler("pendientes", admin_handlers.solicitudes_pendientes)
+    )
+    application.add_handler(
+        MessageHandler(filters.Text([BOTON_PENDIENTES]), admin_handlers.solicitudes_pendientes)
+    )
     application.add_handler(
         CallbackQueryHandler(admin_handlers.resolver_solicitud_callback, pattern=r"^lore_(apr|rej):")
     )

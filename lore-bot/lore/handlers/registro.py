@@ -20,7 +20,6 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes, ConversationHandler
 
 from lore.api import (
-    BackendCaido,
     BackendClient,
     LoreApiError,
     NoRegistrado,
@@ -36,6 +35,8 @@ from lore.handlers._common import (
     _escapar_markdown,
     con_cancelar,
     responder_cancelacion,
+    teclado_para_rol,
+    teclado_resolver_solicitud,
     teclado_solo_cancelar,
 )
 
@@ -61,9 +62,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
             data = await client.yo()
         except NoRegistrado:
             return await _iniciar_registro(update, context)
-        except BackendCaido:
-            await update.message.reply_text(_MSG_CONEXION)
-            return ConversationHandler.END
         except LoreApiError:
             # gga finding (post-4-lens-review): `/yo` shares ONE global
             # error-code map (`api.py::_ERROR_CODE_MAP`) with every other
@@ -111,14 +109,10 @@ async def _saludar_unico(update: Update, data: dict) -> int:
         "ASESOR_MOSTRADOR": "asesor de mostrador",
     }.get(rol, "usuario")
 
-    # UX shortcut (persistent Reply Keyboard): ad-hoc extension (post-Phase-10,
-    # product-owner request) -- an ADMIN can now also drive `/registrar`/
-    # `/correcciones` (backend: `deps_bot.py::require_bot_asesor_o_admin`), so
-    # the keyboard now shows for BOTH approved roles, never for `pending`/
-    # `rejected` (both `return` before reaching this line) or any other role.
-    # Same role-aware discipline as the Phase 9 fix-up above: check the real
-    # role instead of hardcoding one branch for everyone.
-    reply_markup = TECLADO_CAPTURA if rol in ("ASESOR_MOSTRADOR", "ADMIN") else None
+    # UX shortcut (persistent Reply Keyboard): the menu depends on the real
+    # role -- an ADMIN also gets "Solicitudes pendientes". `pending`/
+    # `rejected` never reach this line (both `return` above).
+    reply_markup = teclado_para_rol(rol)
     await update.message.reply_text(
         f"👋 ¡Hola, {data.get('nombre', '')}! Ya estás registrado como {rol_legible}.",
         reply_markup=reply_markup,
@@ -231,9 +225,6 @@ async def recibir_celular(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     async with _cliente(telegram_id) as client:
         try:
             sucursales = await client.sucursales()
-        except BackendCaido:
-            await update.message.reply_text(_MSG_CONEXION)
-            return ConversationHandler.END
         except LoreApiError:
             await update.message.reply_text(_MSG_CONEXION)
             return ConversationHandler.END
@@ -334,9 +325,6 @@ async def confirmar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
             await query.edit_message_text(_MENSAJES_ERROR_TERMINAL[type(exc)])
             context.user_data.pop(_DRAFT_KEY, None)
             return ConversationHandler.END
-        except BackendCaido:
-            await query.edit_message_text(_MSG_CONEXION)
-            return ConversationHandler.END
         except LoreApiError:
             await query.edit_message_text(_MSG_CONEXION)
             return ConversationHandler.END
@@ -372,14 +360,7 @@ async def _notificar_admins(context: ContextTypes.DEFAULT_TYPE, resultado: dict)
 
     nombre = _escapar_markdown(usuario.get("nombre", "N/D"))
     mensaje = f"🔔 *Nueva solicitud de acceso (Lore)*\n\n👤 Nombre: {nombre}"
-    kb = InlineKeyboardMarkup(
-        [
-            [
-                InlineKeyboardButton("✅ Aprobar", callback_data=f"lore_apr:{usuario_id}"),
-                InlineKeyboardButton("❌ Rechazar", callback_data=f"lore_rej:{usuario_id}"),
-            ]
-        ]
-    )
+    kb = teclado_resolver_solicitud(usuario_id)
     for admin_telegram_id in admin_ids:
         try:
             await context.bot.send_message(

@@ -16,13 +16,20 @@ from telegram.error import BadRequest
 from lore.handlers._common import (
     _CANTIDAD_MAXIMA,
     _CANTIDAD_MINIMA,
+    BOTON_CORRECCIONES,
+    BOTON_PENDIENTES,
+    BOTON_REGISTRAR,
     CALLBACK_CANCELAR,
+    TECLADO_ADMIN,
+    TECLADO_CAPTURA,
     _validar_cantidad,
     boton_cancelar,
     con_cancelar,
     editar_o_ignorar_sin_cambios,
     nada_para_cancelar,
     responder_cancelacion,
+    teclado_para_rol,
+    teclado_resolver_solicitud,
     teclado_solo_cancelar,
 )
 
@@ -147,3 +154,29 @@ async def test_editar_o_ignorar_sin_cambios_reraises_other_bad_requests():
     query.edit_message_text = AsyncMock(side_effect=BadRequest("Can't parse entities"))
     with pytest.raises(BadRequest):
         await editar_o_ignorar_sin_cambios(query, "Hola")
+
+
+def _etiquetas(teclado) -> list[str]:
+    return [boton.text for fila in teclado.keyboard for boton in fila]
+
+
+def test_admin_keyboard_has_the_capture_buttons_plus_pending_requests():
+    assert _etiquetas(TECLADO_ADMIN) == [BOTON_REGISTRAR, BOTON_CORRECCIONES, BOTON_PENDIENTES]
+
+
+def test_advisor_keyboard_does_not_offer_pending_requests():
+    assert BOTON_PENDIENTES not in _etiquetas(TECLADO_CAPTURA)
+
+
+def test_teclado_para_rol_depends_on_the_role():
+    assert teclado_para_rol("ADMIN") is TECLADO_ADMIN
+    assert teclado_para_rol("ASESOR_MOSTRADOR") is TECLADO_CAPTURA
+    assert teclado_para_rol("OTRO") is None
+    assert teclado_para_rol(None) is None
+
+
+def test_teclado_resolver_solicitud_has_approve_and_reject_callbacks():
+    teclado = teclado_resolver_solicitud("u-1")
+
+    botones = teclado.inline_keyboard[0]
+    assert [b.callback_data for b in botones] == ["lore_apr:u-1", "lore_rej:u-1"]
