@@ -1,9 +1,10 @@
 /**
- * Referencia 9-column layout (owner request 2026-09-28) -- `ReferenciasTab`
- * table and single-record form. Columns (exact labels, in order): Código,
- * Código del proveedor, Nombre, Línea comercial, Unidad de empaque, Precio
- * Normal antes de IVA, Precio Público antes de IVA, Código de referencia
- * sustituta, Homologados otras marcas. `precio_venta` is no longer shown.
+ * `ReferenciasTab` table and single-record form. The table shows 7 business
+ * columns (exact labels, in order): Código, Código del proveedor, Nombre,
+ * Línea comercial, Unidad de empaque, Precio Normal antes de IVA, Precio
+ * Público antes de IVA. "Código de referencia sustituta" and "Homologados
+ * otras marcas" are hidden from the table (business decision) but stay as
+ * form fields. `precio_venta` is no longer shown.
  */
 import React from 'react';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
@@ -84,10 +85,10 @@ function rowFor(table, codigo) {
 }
 
 describe('ReferenciasTab — table', () => {
-  it('shows the 9 business columns in order (then Estado and actions)', async () => {
+  it('shows the 7 business columns in order (then Estado and actions)', async () => {
     const table = await renderTab();
 
-    expect(headerLabels(table).slice(0, 9)).toEqual([
+    expect(headerLabels(table).slice(0, 7)).toEqual([
       'Código',
       'Código del proveedor',
       'Nombre',
@@ -95,18 +96,20 @@ describe('ReferenciasTab — table', () => {
       'Unidad de empaque',
       'Precio Normal antes de IVA',
       'Precio Público antes de IVA',
-      'Código de referencia sustituta',
-      'Homologados otras marcas',
     ]);
+    expect(headerLabels(table)[7]).toBe('Estado');
   });
 
-  it('shows the proveedor codigo, the substitute codigo and homologados joined with ", "', async () => {
+  it('hides the sustituta and homologados columns from the table', async () => {
     const table = await renderTab();
-    const cells = within(rowFor(table, 'REF-NEW')).getAllByRole('cell').map((td) => td.textContent);
+    const labels = headerLabels(table);
 
+    expect(labels).not.toContain('Código de referencia sustituta');
+    expect(labels).not.toContain('Homologados otras marcas');
+    const cells = within(rowFor(table, 'REF-NEW')).getAllByRole('cell').map((td) => td.textContent);
     expect(cells[1]).toBe('HMCL');
-    expect(cells[7]).toBe('REF-OLD');
-    expect(cells[8]).toBe('YAM-1, HON-2');
+    expect(cells).not.toContain('REF-OLD');
+    expect(cells).not.toContain('YAM-1, HON-2');
   });
 
   it('shows both prices as rounded Colombian pesos, right-aligned with their headers', async () => {
@@ -144,14 +147,14 @@ describe('ReferenciasTab — table', () => {
     expect(mockUpdateMaestro.mock.calls[0][2]).toMatchObject({ precio_normal: 200, precio_publico: 250 });
   });
 
-  it('keeps a long homologados list on one line with a +N button instead of wrapping', async () => {
+  it('does not render homologados in the row, not even a long list', async () => {
     const largo = { ...REFERENCIAS[2], id: 'r-long', codigo: 'REF-LONG', homologados: ['A1', 'B2', 'C3', 'D4', 'E5'] };
     mockBuscarReferencias.mockImplementation(() => pagina([...REFERENCIAS, largo]));
     const table = await renderTab();
     const row = rowFor(table, 'REF-LONG');
 
-    expect(within(row).getByText('A1, B2, C3')).toBeInTheDocument();
-    expect(within(row).getByRole('button', { name: 'Ver los 5 modelos' })).toHaveTextContent('+2');
+    expect(within(row).queryByText(/A1/)).not.toBeInTheDocument();
+    expect(within(row).queryByRole('button', { name: /modelos/ })).not.toBeInTheDocument();
   });
 
   it('no longer shows precio_venta anywhere', async () => {
@@ -171,32 +174,19 @@ describe('ReferenciasTab — table', () => {
       'Código del proveedor',
       'Precio Normal antes de IVA',
       'Precio Público antes de IVA',
-      'Código de referencia sustituta',
-      'Homologados otras marcas',
     ]));
-  });
-  it('describes homologados as compatible motorcycle models of other brands, not part codes', async () => {
-    const table = await renderTab();
-    const header = within(table).getAllByRole('columnheader')
-      .find((th) => headerLabel(th) === 'Homologados otras marcas');
-    const tooltip = within(header).getByRole('note').textContent;
-
-    expect(tooltip).toMatch(/modelos de moto/i);
-    expect(tooltip).not.toMatch(/c[oó]digos/i);
-  });
-
-  it('the sustituta tooltip states the same-proveedor rule without pointing to homologados', async () => {
-    const table = await renderTab();
-    const header = within(table).getAllByRole('columnheader')
-      .find((th) => headerLabel(th) === 'Código de referencia sustituta');
-    const tooltip = within(header).getByRole('note').textContent;
-
-    expect(tooltip).toMatch(/mismo proveedor/i);
-    expect(tooltip).not.toMatch(/homologados/i);
   });
 });
 
 describe('ReferenciasTab — form', () => {
+  it('keeps the sustituta and homologados fields in the form', async () => {
+    await renderTab();
+    fireEvent.click(within(rowFor(screen.getByRole('table'), 'REF-NEW')).getByRole('button', { name: 'Editar' }));
+
+    expect(screen.getByRole('combobox', { name: /Código de referencia sustituta/ })).toHaveValue('REF-OLD');
+    expect(screen.getByLabelText(/Homologados otras marcas/i, { selector: 'input' })).toBeInTheDocument();
+  });
+
   it('edits homologados as a comma/semicolon separated text and sends a clean array', async () => {
     await renderTab();
     fireEvent.click(within(rowFor(screen.getByRole('table'), 'REF-NEW')).getByRole('button', { name: 'Editar' }));

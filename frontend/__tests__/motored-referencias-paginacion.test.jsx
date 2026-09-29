@@ -182,6 +182,16 @@ describe('ReferenciasTab — sustituta type-ahead', () => {
     expect(input).toHaveValue('REF-OLD');
   });
 
+  it('does not show the sustituta column in the table, only in the form', async () => {
+    await renderTab();
+    const table = screen.getByRole('table');
+
+    expect(within(table).queryByRole('columnheader', { name: /Código de referencia sustituta/ })).not.toBeInTheDocument();
+    expect(within(table).queryByText('REF-OLD')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Editar' }));
+    expect(screen.getByRole('combobox', { name: /Código de referencia sustituta/ })).toBeInTheDocument();
+  });
+
   it('keeps an inactive current sustituta (A->B->C chain): shown by código and saved unchanged', async () => {
     // The search endpoint only suggests active referencias, but the current
     // value comes from the row's `sustituta_codigo`, never from the search.

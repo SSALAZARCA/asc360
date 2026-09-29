@@ -24,20 +24,22 @@
  * are exactly the two locked business rules from the proposal most likely to
  * confuse a business user, so both get a real InfoTooltip, not just a label.
  *
- * Referencia 9-column layout (owner request 2026-09-28): the table and form
- * use exactly these labels, in this order -- the same ones as the `.xlsx`
- * template and bulk parser (`BulkUploadModal.js` / backend `carga_excel.py`):
- * Código, Código del proveedor, Nombre, Línea comercial, Unidad de empaque,
- * Precio Normal antes de IVA, Precio Público antes de IVA, Código de
- * referencia sustituta, Homologados otras marcas. `precio_venta` is no longer
- * shown or sent (the DB column is kept untouched).
+ * Referencia layout (owner request 2026-09-28, table trimmed afterwards): the
+ * form and the `.xlsx` template / bulk parser (`BulkUploadModal.js` / backend
+ * `carga_excel.py`) use 9 labels, in this order: Código, Código del
+ * proveedor, Nombre, Línea comercial, Unidad de empaque, Precio Normal antes
+ * de IVA, Precio Público antes de IVA, Código de referencia sustituta,
+ * Homologados otras marcas. The TABLE shows only the first 7 (plus Estado):
+ * by business decision "Código de referencia sustituta" and "Homologados
+ * otras marcas" are hidden from it, but stay as data and as form fields so
+ * they can still be maintained. `precio_venta` is no longer shown or sent
+ * (the DB column is kept untouched).
  */
 import MotoredTableScroll from '../MotoredTableScroll';
 import { useEffect, useState } from 'react';
 import { listMaestros } from '../../../lib/motored/api';
 import BulkUploadModal from './BulkUploadModal';
 import FormField from './FormField';
-import HomologadosCell from './HomologadosCell';
 import ReferenciasFiltros from './ReferenciasFiltros';
 import ReferenciasPaginador from './ReferenciasPaginador';
 import SustitutaTypeahead from './SustitutaTypeahead';
@@ -169,8 +171,6 @@ const TABLE_COLUMNS = [
   { label: 'Unidad de empaque', help: HELP.unidadEmpaque },
   { label: 'Precio Normal antes de IVA', help: HELP.precioNormal, numeric: true },
   { label: 'Precio Público antes de IVA', help: HELP.precioPublico, numeric: true },
-  { label: 'Código de referencia sustituta', help: HELP.sustituta },
-  { label: 'Homologados otras marcas', help: HELP.homologados },
   { label: 'Estado' },
 ];
 
@@ -214,10 +214,6 @@ function ReferenciasTable({ referencias, proveedorCodigoPorId, onEdit, onDeactiv
               </td>
               <td style={numericTdStyle}>{formatCOP(r.precio_normal)}</td>
               <td style={numericTdStyle}>{formatCOP(r.precio_publico)}</td>
-              <td style={tdStyle}>
-                {r.sustituida_por ? (r.sustituta_codigo || <em>desconocida</em>) : <em>—</em>}
-              </td>
-              <td style={tdStyle}><HomologadosCell values={r.homologados} /></td>
               <td style={tdStyle}>{r.activa ? 'Activa' : 'Inactiva'}</td>
               <td style={{ display: 'flex', gap: '1rem', padding: '10px 0' }}>
                 <button type="button" className="motored-row-action" onClick={() => onEdit(r)}>Editar</button>
