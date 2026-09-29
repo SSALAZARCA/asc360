@@ -5,7 +5,8 @@ conversation (Method A only). Same pattern as `test_handlers_registro.py`:
 import uuid
 from unittest.mock import AsyncMock, MagicMock
 
-from telegram.error import TelegramError
+import pytest
+from telegram.error import BadRequest, TelegramError
 from telegram.ext import ConversationHandler
 
 from lore.api import (
@@ -387,7 +388,8 @@ async def test_pedir_metodo_offers_both_manual_and_foto_buttons():
 
     kb = update.message.reply_text.call_args.kwargs["reply_markup"]
     callback_datas = [btn.callback_data for fila in kb.inline_keyboard for btn in fila]
-    assert callback_datas == ["lore_cap_metodo:MANUAL", "lore_cap_metodo:FOTO"]
+    # lore-boton-cancelar: the shared Cancelar row is appended last.
+    assert callback_datas == ["lore_cap_metodo:MANUAL", "lore_cap_metodo:FOTO", "lore_cancelar"]
 
 
 async def test_recibir_metodo_sets_foto_and_moves_to_foto_state():
@@ -1291,3 +1293,264 @@ async def test_recibir_foto_lore_api_error_during_resolve_stays_in_foto(monkeypa
     assert captura._DRAFT_KEY in context.user_data
     mensajes = [call.args[0] for call in update.message.reply_text.call_args_list]
     assert captura._MSG_CONEXION in mensajes
+
+
+# --- cancelar (lore-boton-cancelar) ---------------------------------------------
+
+
+async def test_cancelar_from_cancel_button_answers_edits_and_clears_draft():
+    update = _make_update(callback_data="lore_cancelar")
+    context = _make_context(
+        user_data={captura._DRAFT_KEY: captura.Borrador(), captura._SUCURSALES_KEY: {"s1": "Bogotá"}}
+    )
+
+    result = await captura.cancelar(update, context)
+
+    assert result == ConversationHandler.END
+    assert captura._DRAFT_KEY not in context.user_data
+    assert captura._SUCURSALES_KEY not in context.user_data
+    update.callback_query.answer.assert_awaited_once()
+    assert "Registro cancelado" in update.callback_query.edit_message_text.call_args.args[0]
+
+
+# --- T1b: retry message keeps its buttons ----------------------------------------
+
+
+def _datos_teclado(markup):
+    return [b.callback_data for fila in markup.inline_keyboard for b in fila]
+
+
+async def _confirmar_con_error(monkeypatch, error):
+    fake_client = FakeClient()
+    fake_client.registrar_demanda_perdida.side_effect = error
+    monkeypatch.setattr(captura, "_cliente", _fake_cliente(fake_client))
+    update = _make_update(callback_data="lore_cap_confirmar")
+    context = _make_context(user_data={captura._DRAFT_KEY: _draft_listo()})
+    await captura.confirmar(update, context)
+    return update.callback_query.edit_message_text.call_args
+
+
+# Exactly ONE cancel control: the confirm step's own "❌ Cancelar" already
+# does what "✖️ Cancelar" does, so the shared row is not added here.
+_TECLADO_CONFIRMAR_CAPTURA = ["lore_cap_confirmar", "lore_cap_cancelar"]
+
+
+async def test_confirmar_backend_caido_retry_message_keeps_confirm_and_cancel_buttons(monkeypatch):
+    llamada = await _confirmar_con_error(monkeypatch, BackendCaido("boom"))
+    assert _datos_teclado(llamada.kwargs["reply_markup"]) == _TECLADO_CONFIRMAR_CAPTURA
+
+
+async def test_confirmar_unmapped_error_retry_message_keeps_confirm_and_cancel_buttons(monkeypatch):
+    llamada = await _confirmar_con_error(monkeypatch, LoreApiError("unmapped"))
+    assert _datos_teclado(llamada.kwargs["reply_markup"]) == _TECLADO_CONFIRMAR_CAPTURA
+
+
+# --- T2: every prompt carries the Cancelar button ---------------------------------
+
+
+async def test_sucursal_picker_has_cancel_button(monkeypatch, termina_en_cancelar):
+    fake_client = FakeClient()
+    fake_client.yo.return_value = {"role": "ASESOR_MOSTRADOR", "sucursales": [_S1, _S2]}
+    fake_client.sucursales.return_value = [{"id": _S1, "nombre": "A"}, {"id": _S2, "nombre": "B"}]
+    monkeypatch.setattr(captura, "_cliente", _fake_cliente(fake_client))
+    update = _make_update(text="/registrar")
+
+    await captura.iniciar(update, _make_context())
+
+    assert termina_en_cancelar(update.message.reply_text.call_args)
+
+
+async def test_metodo_prompt_has_cancel_button(termina_en_cancelar):
+    context = _make_context(
+        user_data={captura._DRAFT_KEY: captura.Borrador(), captura._SUCURSALES_KEY: {_S1: "A"}}
+    )
+    update = _make_update(callback_data=f"lore_cap_suc:{_S1}")
+
+    await captura.recibir_sucursal(update, context)
+
+    assert termina_en_cancelar(update.callback_query.edit_message_text.call_args)
+
+
+async def test_manual_and_foto_prompts_have_cancel_button(termina_en_cancelar):
+    for metodo in ("MANUAL", "FOTO"):
+        context = _make_context(user_data={captura._DRAFT_KEY: captura.Borrador()})
+        update = _make_update(callback_data=f"lore_cap_metodo:{metodo}")
+
+        await captura.recibir_metodo(update, context)
+
+        assert termina_en_cancelar(update.callback_query.edit_message_text.call_args), metodo
+
+
+async def test_manual_retry_prompts_have_cancel_button(monkeypatch, termina_en_cancelar):
+    fake_client = FakeClient()
+    fake_client.resolver_referencias.side_effect = BackendCaido("boom")
+    monkeypatch.setattr(captura, "_cliente", _fake_cliente(fake_client))
+    context = _make_context(user_data={captura._DRAFT_KEY: captura.Borrador()})
+    vacio = _make_update(text="   ")
+    caido = _make_update(text="ABC")
+
+    await captura.recibir_codigos(vacio, context)
+    await captura.recibir_codigos(caido, context)
+
+    assert termina_en_cancelar(vacio.message.reply_text.call_args)
+    assert termina_en_cancelar(caido.message.reply_text.call_args)
+
+
+async def test_manual_nothing_resolved_prompt_has_cancel_button(monkeypatch, termina_en_cancelar):
+    fake_client = FakeClient()
+    fake_client.resolver_referencias.return_value = {"resueltas": [], "no_resueltas": []}
+    monkeypatch.setattr(captura, "_cliente", _fake_cliente(fake_client))
+    update = _make_update(text="ABC")
+
+    await captura.recibir_codigos(update, _make_context(user_data={captura._DRAFT_KEY: captura.Borrador()}))
+
+    assert termina_en_cancelar(update.message.reply_text.call_args)
+
+
+async def test_foto_vision_error_fallback_prompt_has_cancel_button(monkeypatch, termina_en_cancelar):
+    monkeypatch.setattr(vision, "extraer_referencias", AsyncMock(side_effect=vision.VisionError("boom")))
+    update = _make_photo_update(file=MagicMock())
+
+    await captura.recibir_foto(update, _make_context(user_data={captura._DRAFT_KEY: captura.Borrador()}))
+
+    assert termina_en_cancelar(update.message.reply_text.call_args)
+
+
+async def test_foto_nothing_recognized_prompt_has_cancel_button(monkeypatch, termina_en_cancelar):
+    monkeypatch.setattr(vision, "extraer_referencias", AsyncMock(return_value=[]))
+    update = _make_photo_update(file=MagicMock())
+
+    await captura.recibir_foto(update, _make_context(user_data={captura._DRAFT_KEY: captura.Borrador()}))
+
+    assert termina_en_cancelar(update.message.reply_text.call_args)
+
+
+async def test_foto_backend_down_and_nothing_valid_prompts_have_cancel_button(monkeypatch, termina_en_cancelar):
+    candidatos = [vision.Candidato(codigo="ABC", nombre=None)]
+    monkeypatch.setattr(vision, "extraer_referencias", AsyncMock(return_value=candidatos))
+    fake_client = FakeClient()
+    fake_client.resolver_referencias.side_effect = [
+        BackendCaido("boom"),
+        {"resueltas": [], "no_resueltas": []},
+    ]
+    monkeypatch.setattr(captura, "_cliente", _fake_cliente(fake_client))
+    caido = _make_photo_update(file=MagicMock())
+    vacio = _make_photo_update(file=MagicMock())
+    context = _make_context(user_data={captura._DRAFT_KEY: captura.Borrador()})
+
+    await captura.recibir_foto(caido, context)
+    await captura.recibir_foto(vacio, context)
+
+    assert termina_en_cancelar(caido.message.reply_text.call_args)
+    assert termina_en_cancelar(vacio.message.reply_text.call_args)
+
+
+async def test_no_resueltas_prompt_has_cancel_button(monkeypatch, termina_en_cancelar):
+    fake_client = FakeClient()
+    fake_client.resolver_referencias.return_value = {"resueltas": [], "no_resueltas": ["ZZZ"]}
+    monkeypatch.setattr(captura, "_cliente", _fake_cliente(fake_client))
+    update = _make_update(text="ZZZ")
+
+    await captura.recibir_codigos(update, _make_context(user_data={captura._DRAFT_KEY: captura.Borrador()}))
+
+    assert termina_en_cancelar(update.message.reply_text.call_args)
+
+
+async def test_no_resueltas_emptied_by_discard_prompt_has_cancel_button(termina_en_cancelar):
+    draft = captura.Borrador()
+    draft.no_resueltas = ["ZZZ"]
+    update = _make_update(callback_data=f"lore_cap_descartar:{captura._clave_descarte('ZZZ')}")
+
+    await captura.descartar_no_resuelta(update, _make_context(user_data={captura._DRAFT_KEY: draft}))
+
+    assert termina_en_cancelar(update.callback_query.edit_message_text.call_args)
+
+
+async def test_no_resueltas_retype_retry_prompts_have_cancel_button(monkeypatch, termina_en_cancelar):
+    fake_client = FakeClient()
+    fake_client.resolver_referencias.side_effect = [
+        BackendCaido("boom"),
+        {"resueltas": [], "no_resueltas": []},
+    ]
+    monkeypatch.setattr(captura, "_cliente", _fake_cliente(fake_client))
+    draft = captura.Borrador()
+    draft.no_resueltas = ["ZZZ"]
+    context = _make_context(user_data={captura._DRAFT_KEY: draft})
+    caido = _make_update(text="ZZZ")
+    vacio = _make_update(text="ZZZ")
+
+    await captura.recibir_correccion_no_resueltas(caido, context)
+    await captura.recibir_correccion_no_resueltas(vacio, context)
+
+    assert termina_en_cancelar(caido.message.reply_text.call_args)
+    assert termina_en_cancelar(vacio.message.reply_text.call_args)
+
+
+def test_seleccion_keyboard_ends_with_cancel_row():
+    draft = _draft_listo()
+    kb = captura._teclado_seleccion(draft)
+    datos = [[b.callback_data for b in fila] for fila in kb.inline_keyboard]
+    assert datos[-2] == ["lore_cap_continuar"]
+    assert datos[-1] == ["lore_cancelar"]
+
+
+async def test_cantidad_prompts_have_cancel_button(termina_en_cancelar):
+    draft = _draft_listo()
+    draft.lineas[0].cantidad = None
+    otra = captura.LineaBorrador(referencia_id=uuid.uuid4(), codigo="DEF", nombre=None)
+    otra.seleccionada = True
+    draft.lineas.append(otra)
+    context = _make_context(user_data={captura._DRAFT_KEY: draft})
+    continuar = _make_update(callback_data="lore_cap_continuar")
+    invalida = _make_update(text="0")
+    valida = _make_update(text="2")
+
+    await captura.continuar_seleccion(continuar, context)
+    await captura.recibir_cantidad(invalida, context)
+    await captura.recibir_cantidad(valida, context)
+
+    assert termina_en_cancelar(continuar.callback_query.edit_message_text.call_args)
+    assert termina_en_cancelar(invalida.message.reply_text.call_args)
+    assert termina_en_cancelar(valida.message.reply_text.call_args)
+
+
+async def test_confirmacion_prompt_has_exactly_one_cancel_control():
+    update = _make_update(callback_data="lore_cap_continuar")
+
+    await captura.continuar_seleccion(update, _make_context(user_data={captura._DRAFT_KEY: _draft_listo()}))
+
+    markup = update.callback_query.edit_message_text.call_args.kwargs["reply_markup"]
+    assert _datos_teclado(markup) == _TECLADO_CONFIRMAR_CAPTURA
+
+
+# --- repeated retry: identical edit is a no-op ----------------------------------
+
+_NO_MODIFICADO = "Message is not modified: specified new message content and reply markup are exactly the same"
+
+
+async def test_confirmar_second_failure_with_unchanged_message_stays_in_confirmar(monkeypatch):
+    for error in (BackendCaido("boom"), LoreApiError("unmapped")):
+        fake_client = FakeClient()
+        fake_client.registrar_demanda_perdida.side_effect = error
+        monkeypatch.setattr(captura, "_cliente", _fake_cliente(fake_client))
+        draft = _draft_listo()
+        update = _make_update(callback_data="lore_cap_confirmar")
+        update.callback_query.edit_message_text.side_effect = BadRequest(_NO_MODIFICADO)
+        context = _make_context(user_data={captura._DRAFT_KEY: draft})
+
+        result = await captura.confirmar(update, context)
+
+        assert result == CapturaEstado.CONFIRMAR, type(error)
+        assert context.user_data[captura._DRAFT_KEY] is draft
+
+
+async def test_confirmar_retry_edit_other_bad_request_still_raises(monkeypatch):
+    fake_client = FakeClient()
+    fake_client.registrar_demanda_perdida.side_effect = BackendCaido("boom")
+    monkeypatch.setattr(captura, "_cliente", _fake_cliente(fake_client))
+    update = _make_update(callback_data="lore_cap_confirmar")
+    update.callback_query.edit_message_text.side_effect = BadRequest("Message to edit not found")
+    context = _make_context(user_data={captura._DRAFT_KEY: _draft_listo()})
+
+    with pytest.raises(BadRequest):
+        await captura.confirmar(update, context)

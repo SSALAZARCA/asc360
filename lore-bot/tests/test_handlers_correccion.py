@@ -4,6 +4,7 @@ correction menu. Same `_cliente`-monkeypatch pattern as
 """
 from unittest.mock import AsyncMock, MagicMock
 
+from telegram.error import BadRequest
 from telegram.ext import ConversationHandler
 
 from lore.api import (
@@ -519,3 +520,128 @@ async def test_cancelar_clears_state():
 
     assert result == ConversationHandler.END
     assert correccion._DATA_KEY not in context.user_data
+
+
+async def test_cancelar_from_cancel_button_answers_edits_and_clears_state():
+    update = _make_update(callback_data="lore_cancelar")
+    context = _make_context(user_data={correccion._DATA_KEY: {"cargas": {}}})
+
+    result = await correccion.cancelar(update, context)
+
+    assert result == ConversationHandler.END
+    assert correccion._DATA_KEY not in context.user_data
+    update.callback_query.answer.assert_awaited_once()
+    assert "no se hizo ningún cambio" in update.callback_query.edit_message_text.call_args.args[0]
+
+
+# --- T1b: retry message keeps its buttons ----------------------------------------
+
+
+async def _anular_con_error(monkeypatch, error):
+    fake_client = FakeClient()
+    fake_client.anular_registro.side_effect = error
+    monkeypatch.setattr(correccion, "_cliente", _fake_cliente(fake_client))
+    update = _make_update(callback_data=f"lore_cor_anular_confirmar:{_CARGA_1}")
+    context = _make_context(user_data={correccion._DATA_KEY: {"carga_id_actual": _CARGA_1}})
+    await correccion.resolver_confirmacion_anular(update, context)
+    markup = update.callback_query.edit_message_text.call_args.kwargs["reply_markup"]
+    return [b.callback_data for fila in markup.inline_keyboard for b in fila]
+
+
+# "❌ No" ends the conversation and clears the state, exactly like
+# "✖️ Cancelar", so this step keeps only "❌ No" as its cancel control.
+_TECLADO_ANULAR = [f"lore_cor_anular_confirmar:{_CARGA_1}", "lore_cor_anular_cancelar"]
+
+
+async def test_resolver_anular_backend_caido_keeps_confirm_and_cancel_buttons(monkeypatch):
+    assert await _anular_con_error(monkeypatch, BackendCaido("boom")) == _TECLADO_ANULAR
+
+
+async def test_resolver_anular_unmapped_error_keeps_confirm_and_cancel_buttons(monkeypatch):
+    assert await _anular_con_error(monkeypatch, LoreApiError("unmapped")) == _TECLADO_ANULAR
+
+
+# --- T2: every prompt carries the Cancelar button ---------------------------------
+
+
+async def test_lista_prompt_has_cancel_button(monkeypatch, termina_en_cancelar):
+    fake_client = FakeClient()
+    fake_client.listar_hoy.return_value = [_carga_ejemplo()]
+    monkeypatch.setattr(correccion, "_cliente", _fake_cliente(fake_client))
+    update = _make_update(text="/correcciones")
+
+    await correccion.iniciar(update, _make_context())
+
+    assert termina_en_cancelar(update.message.reply_text.call_args)
+
+
+async def test_acciones_prompt_has_cancel_button(termina_en_cancelar):
+    context = _make_context(user_data={correccion._DATA_KEY: {"cargas": {_CARGA_1: _carga_ejemplo()}}})
+    update = _make_update(callback_data=f"lore_cor_carga:{_CARGA_1}")
+
+    await correccion.seleccionar_carga(update, context)
+
+    assert termina_en_cancelar(update.callback_query.edit_message_text.call_args)
+
+
+async def test_volver_a_lista_prompt_has_cancel_button(termina_en_cancelar):
+    context = _make_context(user_data={correccion._DATA_KEY: {"cargas": {_CARGA_1: _carga_ejemplo()}}})
+    update = _make_update(callback_data="lore_cor_volver")
+
+    await correccion.volver_a_lista(update, context)
+
+    assert termina_en_cancelar(update.callback_query.edit_message_text.call_args)
+
+
+async def test_cantidad_prompt_has_cancel_button(termina_en_cancelar):
+    context = _make_context(user_data={correccion._DATA_KEY: {"cargas": {}}})
+    update = _make_update(callback_data=f"lore_cor_linea:{_LINEA_1}")
+
+    await correccion.elegir_linea(update, context)
+
+    assert termina_en_cancelar(update.callback_query.edit_message_text.call_args)
+
+
+async def test_cantidad_retry_prompts_have_cancel_button(monkeypatch, termina_en_cancelar):
+    fake_client = FakeClient()
+    fake_client.editar_linea.side_effect = BackendCaido("boom")
+    monkeypatch.setattr(correccion, "_cliente", _fake_cliente(fake_client))
+    context = _make_context(user_data={correccion._DATA_KEY: {"linea_id_actual": _LINEA_1}})
+    invalido = _make_update(text="0")
+    caido = _make_update(text="7")
+
+    await correccion.recibir_cantidad(invalido, context)
+    await correccion.recibir_cantidad(caido, context)
+
+    assert termina_en_cancelar(invalido.message.reply_text.call_args)
+    assert termina_en_cancelar(caido.message.reply_text.call_args)
+
+
+async def test_confirmar_anular_prompt_has_exactly_one_cancel_control():
+    context = _make_context(user_data={correccion._DATA_KEY: {"cargas": {}}})
+    update = _make_update(callback_data=f"lore_cor_anular:{_CARGA_1}")
+
+    await correccion.pedir_confirmacion_anular(update, context)
+
+    markup = update.callback_query.edit_message_text.call_args.kwargs["reply_markup"]
+    assert [b.callback_data for fila in markup.inline_keyboard for b in fila] == _TECLADO_ANULAR
+
+
+# --- repeated retry: identical edit is a no-op ----------------------------------
+
+
+async def test_resolver_anular_second_failure_with_unchanged_message_keeps_state(monkeypatch):
+    for error in (BackendCaido("boom"), LoreApiError("unmapped")):
+        fake_client = FakeClient()
+        fake_client.anular_registro.side_effect = error
+        monkeypatch.setattr(correccion, "_cliente", _fake_cliente(fake_client))
+        update = _make_update(callback_data=f"lore_cor_anular_confirmar:{_CARGA_1}")
+        update.callback_query.edit_message_text.side_effect = BadRequest(
+            "Message is not modified: specified new message content and reply markup are exactly the same"
+        )
+        context = _make_context(user_data={correccion._DATA_KEY: {"carga_id_actual": _CARGA_1}})
+
+        result = await correccion.resolver_confirmacion_anular(update, context)
+
+        assert result == CorreccionEstado.CONFIRMAR_ANULAR, type(error)
+        assert correccion._DATA_KEY in context.user_data

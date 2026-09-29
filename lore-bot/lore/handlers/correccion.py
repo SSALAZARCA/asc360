@@ -42,6 +42,10 @@ from lore.handlers._common import (
     _CANTIDAD_MINIMA,
     _MSG_CONEXION,
     _validar_cantidad,
+    con_cancelar,
+    editar_o_ignorar_sin_cambios,
+    responder_cancelacion,
+    teclado_solo_cancelar,
 )
 
 logger = logging.getLogger("lore.handlers.correccion")
@@ -99,7 +103,7 @@ async def iniciar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
     context.user_data[_DATA_KEY] = {"cargas": {c["carga_id"]: c for c in cargas}}
     kb = _teclado_lista(cargas)
-    await update.message.reply_text("🧾 Tus registros de hoy:", reply_markup=kb)
+    await update.message.reply_text("🧾 Tus registros de hoy:", reply_markup=con_cancelar(kb))
     return CorreccionEstado.LISTA
 
 
@@ -149,7 +153,7 @@ async def _mostrar_acciones(update: Update, context: ContextTypes.DEFAULT_TYPE, 
     )
     filas.append([InlineKeyboardButton("⬅️ Volver", callback_data="lore_cor_volver")])
     await update.callback_query.edit_message_text(
-        "¿Qué querés hacer con este registro?", reply_markup=InlineKeyboardMarkup(filas)
+        "¿Qué querés hacer con este registro?", reply_markup=con_cancelar(filas)
     )
     return CorreccionEstado.ACCION
 
@@ -165,7 +169,7 @@ async def volver_a_lista(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if not cargas:
         await query.edit_message_text("No tenés registros de hoy para corregir.")
         return ConversationHandler.END
-    await query.edit_message_text("🧾 Tus registros de hoy:", reply_markup=_teclado_lista(cargas))
+    await query.edit_message_text("🧾 Tus registros de hoy:", reply_markup=con_cancelar(_teclado_lista(cargas)))
     return CorreccionEstado.LISTA
 
 
@@ -181,7 +185,9 @@ async def elegir_linea(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
         return ConversationHandler.END
 
     _estado(context)["linea_id_actual"] = linea_id
-    await query.edit_message_text(f"🔢 Nueva cantidad (1 a {_CANTIDAD_MAXIMA})?")
+    await query.edit_message_text(
+        f"🔢 Nueva cantidad (1 a {_CANTIDAD_MAXIMA})?", reply_markup=teclado_solo_cancelar()
+    )
     return CorreccionEstado.CANTIDAD
 
 
@@ -204,7 +210,8 @@ async def recibir_cantidad(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     cantidad = _validar_cantidad(texto)
     if cantidad is None:
         await update.message.reply_text(
-            f"Cantidad inválida. Ingresá un número entre {_CANTIDAD_MINIMA} y {_CANTIDAD_MAXIMA}."
+            f"Cantidad inválida. Ingresá un número entre {_CANTIDAD_MINIMA} y {_CANTIDAD_MAXIMA}.",
+            reply_markup=teclado_solo_cancelar(),
         )
         return CorreccionEstado.CANTIDAD
 
@@ -228,11 +235,10 @@ async def recibir_cantidad(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             await update.message.reply_text("⚠️ Esa línea ya fue anulada.")
             _limpiar(context)
             return ConversationHandler.END
-        except BackendCaido:
-            await update.message.reply_text(_MSG_CONEXION)
-            return CorreccionEstado.CANTIDAD
         except LoreApiError:
-            await update.message.reply_text(_MSG_CONEXION)
+            # Includes BackendCaido: retryable, so the state stays and the
+            # reply keeps the Cancelar button.
+            await update.message.reply_text(_MSG_CONEXION, reply_markup=teclado_solo_cancelar())
             return CorreccionEstado.CANTIDAD
 
     await update.message.reply_text(
@@ -254,7 +260,20 @@ async def pedir_confirmacion_anular(update: Update, context: ContextTypes.DEFAUL
         return ConversationHandler.END
 
     _estado(context)["carga_id_actual"] = carga_id
-    kb = InlineKeyboardMarkup(
+    await query.edit_message_text(
+        "⚠️ ¿Confirmás anular este registro completo? Se van a revertir todas sus cantidades.",
+        reply_markup=_teclado_confirmar_anular(carga_id),
+    )
+    return CorreccionEstado.CONFIRMAR_ANULAR
+
+
+def _teclado_confirmar_anular(carga_id: str) -> InlineKeyboardMarkup:
+    """Shared by `pedir_confirmacion_anular` and the retry branches of
+    `resolver_confirmacion_anular`, which stay in CONFIRMAR_ANULAR and so
+    must keep the buttons (an edit without `reply_markup` drops them, T1b).
+    No shared "✖️ Cancelar" row: "❌ No" already ends the conversation and
+    clears the state, exactly like it."""
+    return InlineKeyboardMarkup(
         [
             [
                 InlineKeyboardButton("✅ Sí, anular", callback_data=f"lore_cor_anular_confirmar:{carga_id}"),
@@ -262,11 +281,6 @@ async def pedir_confirmacion_anular(update: Update, context: ContextTypes.DEFAUL
             ]
         ]
     )
-    await query.edit_message_text(
-        "⚠️ ¿Confirmás anular este registro completo? Se van a revertir todas sus cantidades.",
-        reply_markup=kb,
-    )
-    return CorreccionEstado.CONFIRMAR_ANULAR
 
 
 async def resolver_confirmacion_anular(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -305,11 +319,12 @@ async def resolver_confirmacion_anular(update: Update, context: ContextTypes.DEF
             await query.edit_message_text("Ese registro ya estaba anulado.")
             _limpiar(context)
             return ConversationHandler.END
-        except BackendCaido:
-            await query.edit_message_text(_MSG_CONEXION)
-            return CorreccionEstado.CONFIRMAR_ANULAR
         except LoreApiError:
-            await query.edit_message_text(_MSG_CONEXION)
+            # Includes BackendCaido (a LoreApiError subclass): both are
+            # retryable, so the state and the buttons stay.
+            await editar_o_ignorar_sin_cambios(
+                query, _MSG_CONEXION, reply_markup=_teclado_confirmar_anular(carga_id)
+            )
             return CorreccionEstado.CONFIRMAR_ANULAR
 
     await query.edit_message_text("✅ Registro anulado.")
@@ -323,5 +338,5 @@ def _limpiar(context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def cancelar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     _limpiar(context)
-    await update.message.reply_text("Listo, no se hizo ningún cambio.")
+    await responder_cancelacion(update, "Listo, no se hizo ningún cambio.")
     return ConversationHandler.END

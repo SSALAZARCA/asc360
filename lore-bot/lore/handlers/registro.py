@@ -33,6 +33,9 @@ from lore.handlers._common import (
     _MSG_SESION_EXPIRADA,
     TECLADO_CAPTURA,
     _escapar_markdown,
+    con_cancelar,
+    responder_cancelacion,
+    teclado_solo_cancelar,
 )
 
 logger = logging.getLogger("lore.handlers.registro")
@@ -118,6 +121,7 @@ async def _iniciar_registro(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         "Vamos a mandar una solicitud de acceso.\n"
         "Paso 1 de 3 → ¿Cuál es tu *nombre completo*?",
         parse_mode="Markdown",
+        reply_markup=teclado_solo_cancelar(),
     )
     return RegistroEstado.NOMBRE
 
@@ -126,7 +130,8 @@ async def recibir_nombre(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     nombre = (update.message.text or "").strip()
     if len(nombre) < 3:
         await update.message.reply_text(
-            "Necesito tu nombre completo (mínimo 3 letras). ¿Cómo te llamás?"
+            "Necesito tu nombre completo (mínimo 3 letras). ¿Cómo te llamás?",
+            reply_markup=teclado_solo_cancelar(),
         )
         return RegistroEstado.NOMBRE
 
@@ -134,6 +139,7 @@ async def recibir_nombre(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     await update.message.reply_text(
         "Paso 2 de 3 → ¿Cuál es tu *celular*? (solo dígitos, ej: 3001234567)",
         parse_mode="Markdown",
+        reply_markup=teclado_solo_cancelar(),
     )
     return RegistroEstado.CELULAR
 
@@ -142,7 +148,8 @@ async def recibir_celular(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     phone = (update.message.text or "").strip().replace(" ", "").replace("-", "")
     if not phone.isdigit() or not (_PHONE_MIN_DIGITS <= len(phone) <= _PHONE_MAX_DIGITS):
         await update.message.reply_text(
-            "Ese número no parece válido. Mandame solo los dígitos, ej: 3001234567"
+            "Ese número no parece válido. Mandame solo los dígitos, ej: 3001234567",
+            reply_markup=teclado_solo_cancelar(),
         )
         return RegistroEstado.CELULAR
 
@@ -173,7 +180,7 @@ async def recibir_celular(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     await update.message.reply_text(
         "Paso 3 de 3 → ¿En qué *sucursal* trabajás?",
         parse_mode="Markdown",
-        reply_markup=InlineKeyboardMarkup(kb),
+        reply_markup=con_cancelar(kb),
     )
     return RegistroEstado.SUCURSAL
 
@@ -208,6 +215,8 @@ async def recibir_sucursal(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         f"🏢 Sucursal: {sucursal_nombre}\n\n"
         "¿Confirmás el envío?"
     )
+    # No shared "✖️ Cancelar" row here: this step's own "❌ Cancelar" already
+    # does the same thing, and one cancel control per message is the rule.
     kb = InlineKeyboardMarkup(
         [
             [
@@ -316,7 +325,7 @@ async def _notificar_admins(context: ContextTypes.DEFAULT_TYPE, resultado: dict)
 
 async def cancelar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data.pop(_DRAFT_KEY, None)
-    await update.message.reply_text("Registro cancelado. Si querés intentarlo de nuevo, mandá /start.")
+    await responder_cancelacion(update, "Registro cancelado. Si querés intentarlo de nuevo, mandá /start.")
     return ConversationHandler.END
 
 

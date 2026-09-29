@@ -605,3 +605,72 @@ def test_escapar_markdown_escapes_all_legacy_special_chars():
 
 def test_escapar_markdown_leaves_plain_text_untouched():
     assert _escapar_markdown("Ana Torres") == "Ana Torres"
+
+
+async def test_cancelar_from_cancel_button_answers_edits_and_clears_draft():
+    update = _make_update(callback_data="lore_cancelar")
+    context = _make_context(user_data={registro._DRAFT_KEY: {"nombre": "Ana"}})
+
+    result = await registro.cancelar(update, context)
+
+    assert result == ConversationHandler.END
+    assert registro._DRAFT_KEY not in context.user_data
+    update.callback_query.answer.assert_awaited_once()
+    assert "Registro cancelado" in update.callback_query.edit_message_text.call_args.args[0]
+
+
+# --- T2: every prompt carries the Cancelar button ---------------------------------
+
+
+async def test_prompt_nombre_has_cancel_button(monkeypatch, termina_en_cancelar):
+    fake_client = FakeClient()
+    fake_client.yo.side_effect = NoRegistrado("nope")
+    monkeypatch.setattr(registro, "_cliente", _fake_cliente(fake_client))
+    update = _make_update(text="/start")
+
+    await registro.start(update, _make_context())
+
+    assert termina_en_cancelar(update.message.reply_text.call_args)
+
+
+async def test_prompts_nombre_retry_and_celular_have_cancel_button(termina_en_cancelar):
+    context = _make_context(user_data={registro._DRAFT_KEY: {}})
+    invalido = _make_update(text="A")
+    valido = _make_update(text="Ana Pérez")
+
+    await registro.recibir_nombre(invalido, context)
+    await registro.recibir_nombre(valido, context)
+
+    assert termina_en_cancelar(invalido.message.reply_text.call_args)
+    assert termina_en_cancelar(valido.message.reply_text.call_args)
+
+
+async def test_prompts_celular_retry_and_sucursal_picker_have_cancel_button(monkeypatch, termina_en_cancelar):
+    fake_client = FakeClient()
+    fake_client.sucursales.return_value = [{"id": "s1", "nombre": "Bogotá"}]
+    monkeypatch.setattr(registro, "_cliente", _fake_cliente(fake_client))
+    context = _make_context(user_data={registro._DRAFT_KEY: {"nombre": "Ana"}})
+    invalido = _make_update(text="12")
+    valido = _make_update(text="3001234567")
+
+    await registro.recibir_celular(invalido, context)
+    await registro.recibir_celular(valido, context)
+
+    assert termina_en_cancelar(invalido.message.reply_text.call_args)
+    llamada = valido.message.reply_text.call_args
+    assert termina_en_cancelar(llamada)
+    assert llamada.kwargs["reply_markup"].inline_keyboard[0][0].callback_data == "lore_sucursal:s1"
+
+
+async def test_resumen_confirm_step_has_exactly_one_cancel_control():
+    context = _make_context(
+        user_data={registro._DRAFT_KEY: {"nombre": "Ana", "phone": "3001234567", "sucursales": {"s1": "Bogotá"}}}
+    )
+    update = _make_update(callback_data="lore_sucursal:s1")
+
+    await registro.recibir_sucursal(update, context)
+
+    # The step's own "❌ Cancelar" (next to ✅ Confirmar) is the only cancel.
+    markup = update.callback_query.edit_message_text.call_args.kwargs["reply_markup"]
+    datos = [b.callback_data for fila in markup.inline_keyboard for b in fila]
+    assert datos == ["lore_reg_confirmar", "lore_reg_cancelar"]

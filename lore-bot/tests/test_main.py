@@ -1,11 +1,11 @@
 import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from telegram import CallbackQuery, Chat, Message, Update, User
+from telegram import CallbackQuery, Chat, Message, MessageEntity, Update, User
 from telegram.ext import CallbackQueryHandler, CommandHandler, ConversationHandler, MessageHandler
 
 from lore import config
-from lore.estados import RegistroEstado
+from lore.estados import Borrador, CapturaEstado, CorreccionEstado, RegistroEstado
 from lore.handlers import captura as captura_handlers
 from lore.handlers import correccion as correccion_handlers
 from lore.handlers import registro as registro_handlers
@@ -126,7 +126,8 @@ def test_build_application_registers_orphaned_callback_fallback_last():
     application = build_application()
     handlers = application.handlers[0]
     callback_handlers = [h for h in handlers if isinstance(h, CallbackQueryHandler)]
-    assert len(callback_handlers) == 2
+    # admin approval + global stray-Cancelar handler + this fallback.
+    assert len(callback_handlers) == 3
     assert callback_handlers[-1].pattern.pattern == r"^lore_"
     assert callback_handlers[-1].callback is registro_handlers.callback_huerfano
 
@@ -281,3 +282,145 @@ async def test_button_text_does_not_trigger_unrelated_conversations():
 
     fake_captura_iniciar.assert_not_awaited()
     fake_correccion_iniciar.assert_not_awaited()
+
+
+# --- lore-boton-cancelar: dispatch ----------------------------------------------
+
+
+def _command_update(user: User, bot, comando: str, update_id: int = 100) -> Update:
+    texto = f"/{comando}"
+    message = Message(
+        message_id=1,
+        date=datetime.datetime.now(),
+        chat=Chat(id=user.id, type="private"),
+        from_user=user,
+        text=texto,
+        entities=[MessageEntity(type=MessageEntity.BOT_COMMAND, offset=0, length=len(texto))],
+    )
+    message.set_bot(bot)
+    return Update(update_id=update_id, message=message)
+
+
+def _cancel_tap_update(user: User, bot, data: str = "lore_cancelar", update_id: int = 200) -> Update:
+    message = _make_message(user.id, user, bot)
+    callback_query = CallbackQuery(
+        id=str(update_id), from_user=user, chat_instance="c", data=data, message=message
+    )
+    callback_query.set_bot(bot)
+    return Update(update_id=update_id, callback_query=callback_query)
+
+
+def _conv_por_comando(application, comando: str) -> ConversationHandler:
+    return next(
+        h
+        for h in application.handlers[0]
+        if isinstance(h, ConversationHandler)
+        and any(isinstance(ep, CommandHandler) and comando in ep.commands for ep in h.entry_points)
+    )
+
+
+def _patch_bot(application):
+    bot_type = type(application.bot)
+    return (
+        patch.object(bot_type, "answer_callback_query", AsyncMock()),
+        patch.object(bot_type, "edit_message_text", AsyncMock()),
+        patch.object(bot_type, "send_message", AsyncMock()),
+    )
+
+
+def _app():
+    application = build_application()
+    application._initialized = True
+    # `CommandHandler` compares against `bot.username`, which needs the bot's
+    # own `User` (normally fetched by `get_me()` during `initialize()`).
+    application.bot._bot_user = User(id=999, is_bot=True, first_name="lore", username="lore_bot")
+    return application
+
+
+async def test_global_cancelar_command_without_conversation_replies_nothing_to_cancel():
+    application = _app()
+    p1, p2, p3 = _patch_bot(application)
+    with p1, p2, p3 as send_mock:
+        user = User(id=301, is_bot=False, first_name="a")
+        await application.process_update(_command_update(user, application.bot, "cancelar"))
+    send_mock.assert_awaited_once()
+    assert send_mock.await_args.kwargs["text"] == "No hay nada para cancelar."
+
+
+async def test_global_cancela_alias_without_conversation_replies_nothing_to_cancel():
+    application = _app()
+    p1, p2, p3 = _patch_bot(application)
+    with p1, p2, p3 as send_mock:
+        user = User(id=302, is_bot=False, first_name="a")
+        await application.process_update(_command_update(user, application.bot, "cancela"))
+    send_mock.assert_awaited_once()
+    assert send_mock.await_args.kwargs["text"] == "No hay nada para cancelar."
+
+
+async def test_stray_cancel_tap_without_conversation_is_not_treated_as_expired_session():
+    application = _app()
+    p1, p2, p3 = _patch_bot(application)
+    with p1 as answer_mock, p2 as edit_mock, p3:
+        user = User(id=303, is_bot=False, first_name="a")
+        await application.process_update(_cancel_tap_update(user, application.bot))
+    answer_mock.assert_awaited_once()
+    assert edit_mock.await_args.kwargs["text"] == "No hay nada para cancelar."
+
+
+async def test_cancelar_command_in_active_conversation_is_still_handled_by_the_conversation():
+    application = _app()
+    conv = _conv_por_comando(application, "start")
+    p1, p2, p3 = _patch_bot(application)
+    with p1, p2, p3 as send_mock:
+        user = User(id=304, is_bot=False, first_name="a")
+        update = _command_update(user, application.bot, "cancelar")
+        conv._conversations[conv._get_key(update)] = RegistroEstado.NOMBRE
+        application.user_data[user.id][registro_handlers._DRAFT_KEY] = {}
+        await application.process_update(update)
+    assert "Registro cancelado" in send_mock.await_args.kwargs["text"]
+    assert registro_handlers._DRAFT_KEY not in application.user_data[user.id]
+    assert conv._get_key(update) not in conv._conversations
+
+
+async def _tap_cancel_in_state(comando, estado, draft_key, draft, user_id):
+    application = _app()
+    conv = _conv_por_comando(application, comando)
+    p1, p2, p3 = _patch_bot(application)
+    with p1 as answer_mock, p2 as edit_mock, p3:
+        user = User(id=user_id, is_bot=False, first_name="a")
+        update = _cancel_tap_update(user, application.bot, update_id=user_id)
+        conv._conversations[conv._get_key(update)] = estado
+        application.user_data[user.id][draft_key] = draft
+        await application.process_update(update)
+    answer_mock.assert_awaited_once()
+    assert conv._get_key(update) not in conv._conversations
+    assert draft_key not in application.user_data[user.id]
+    return edit_mock.await_args.kwargs["text"]
+
+
+async def test_cancel_tap_from_free_text_state_ends_registro_and_clears_draft():
+    texto = await _tap_cancel_in_state(
+        "start", RegistroEstado.NOMBRE, registro_handlers._DRAFT_KEY, {}, 401
+    )
+    assert "Registro cancelado" in texto
+
+
+async def test_cancel_tap_from_inline_state_ends_captura_and_clears_draft():
+    texto = await _tap_cancel_in_state(
+        "registrar", CapturaEstado.SELECCION, captura_handlers._DRAFT_KEY, Borrador(), 402
+    )
+    assert "Registro cancelado" in texto
+
+
+async def test_cancel_tap_from_foto_state_ends_captura_and_clears_draft():
+    texto = await _tap_cancel_in_state(
+        "registrar", CapturaEstado.FOTO, captura_handlers._DRAFT_KEY, Borrador(), 403
+    )
+    assert "Registro cancelado" in texto
+
+
+async def test_cancel_tap_from_correccion_cantidad_ends_and_clears_state():
+    texto = await _tap_cancel_in_state(
+        "correcciones", CorreccionEstado.CANTIDAD, correccion_handlers._DATA_KEY, {"cargas": {}}, 404
+    )
+    assert "no se hizo ningún cambio" in texto

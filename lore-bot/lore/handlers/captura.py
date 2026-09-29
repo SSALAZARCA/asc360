@@ -61,6 +61,10 @@ from lore.handlers._common import (
     _MSG_CONEXION,
     _escapar_markdown,
     _validar_cantidad,
+    con_cancelar,
+    editar_o_ignorar_sin_cambios,
+    responder_cancelacion,
+    teclado_solo_cancelar,
 )
 
 logger = logging.getLogger("lore.handlers.captura")
@@ -293,7 +297,7 @@ async def iniciar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data[_SUCURSALES_KEY] = {s["id"]: s["nombre"] for s in propias}
     kb = [[InlineKeyboardButton(s["nombre"], callback_data=f"lore_cap_suc:{s['id']}")] for s in propias]
     await update.message.reply_text(
-        "🏢 ¿Para qué sucursal es esta venta perdida?", reply_markup=InlineKeyboardMarkup(kb)
+        "🏢 ¿Para qué sucursal es esta venta perdida?", reply_markup=con_cancelar(kb)
     )
     return CapturaEstado.SUCURSAL
 
@@ -318,7 +322,7 @@ async def _pedir_metodo(update: Update, context: ContextTypes.DEFAULT_TYPE, *, v
     """`CapturaEstado.METODO` — Phase 10 kept this state specifically so
     Phase 11 could add the FOTO button here without reshaping the flow
     (Phase 10 ambiguity #2). Both MANUAL and FOTO now offered."""
-    kb = InlineKeyboardMarkup(
+    kb = con_cancelar(
         [
             [InlineKeyboardButton("📝 Ingresar manualmente", callback_data="lore_cap_metodo:MANUAL")],
             [InlineKeyboardButton("📷 Sacar una foto", callback_data="lore_cap_metodo:FOTO")],
@@ -355,12 +359,13 @@ async def recibir_metodo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     _borrador(context).metodo = metodo
     if metodo == "FOTO":
         await query.edit_message_text(
-            "📷 Mandá una foto donde se vean los códigos de referencia."
+            "📷 Mandá una foto donde se vean los códigos de referencia.", reply_markup=teclado_solo_cancelar()
         )
         return CapturaEstado.FOTO
 
     await query.edit_message_text(
-        "✍️ Escribí los códigos de referencia. Podés mandar varios separados por coma o uno por línea."
+        "✍️ Escribí los códigos de referencia. Podés mandar varios separados por coma o uno por línea.",
+        reply_markup=teclado_solo_cancelar(),
     )
     return CapturaEstado.MANUAL
 
@@ -401,7 +406,7 @@ async def recibir_codigos(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     texto = update.message.text or ""
     codigos, descartados = _parsear_codigos(texto)
     if not codigos:
-        await update.message.reply_text("No reconocí ningún código ahí. Escribí al menos uno.")
+        await update.message.reply_text("No reconocí ningún código ahí. Escribí al menos uno.", reply_markup=teclado_solo_cancelar())
         return CapturaEstado.MANUAL
     if descartados:
         await update.message.reply_text(_texto_truncamiento(descartados))
@@ -412,16 +417,16 @@ async def recibir_codigos(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         try:
             await _resolver_y_actualizar_borrador(client, draft, codigos)
         except BackendCaido:
-            await update.message.reply_text(_MSG_CONEXION)
+            await update.message.reply_text(_MSG_CONEXION, reply_markup=teclado_solo_cancelar())
             return CapturaEstado.MANUAL
         except LoreApiError:
-            await update.message.reply_text(_MSG_CONEXION)
+            await update.message.reply_text(_MSG_CONEXION, reply_markup=teclado_solo_cancelar())
             return CapturaEstado.MANUAL
 
     if draft.no_resueltas:
         return await _mostrar_no_resueltas(update, context)
     if not draft.lineas:
-        await update.message.reply_text("No reconocí ningún código ahí. Escribí al menos uno.")
+        await update.message.reply_text("No reconocí ningún código ahí. Escribí al menos uno.", reply_markup=teclado_solo_cancelar())
         return CapturaEstado.MANUAL
     return await _mostrar_seleccion(update, context)
 
@@ -472,14 +477,15 @@ async def recibir_foto(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     except (TelegramError, vision.VisionError):
         logger.warning("recibir_foto: no se pudo procesar la foto, cayendo a entrada manual")
         await update.message.reply_text(
-            "⚠️ No pude analizar esa foto. Escribí los códigos de referencia a mano."
+            "⚠️ No pude analizar esa foto. Escribí los códigos de referencia a mano.", reply_markup=teclado_solo_cancelar()
         )
         return CapturaEstado.MANUAL
 
     if not candidatos:
         await update.message.reply_text(
             "🔍 No reconocí ninguna referencia en esa foto. Probá con otra foto más clara, "
-            "o escribí los códigos a mano."
+            "o escribí los códigos a mano.",
+            reply_markup=teclado_solo_cancelar(),
         )
         return CapturaEstado.FOTO
 
@@ -489,17 +495,17 @@ async def recibir_foto(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
         try:
             await _resolver_y_actualizar_borrador(client, draft, codigos)
         except BackendCaido:
-            await update.message.reply_text(_MSG_CONEXION)
+            await update.message.reply_text(_MSG_CONEXION, reply_markup=teclado_solo_cancelar())
             return CapturaEstado.FOTO
         except LoreApiError:
-            await update.message.reply_text(_MSG_CONEXION)
+            await update.message.reply_text(_MSG_CONEXION, reply_markup=teclado_solo_cancelar())
             return CapturaEstado.FOTO
 
     if draft.no_resueltas:
         return await _mostrar_no_resueltas(update, context)
     if not draft.lineas:
         await update.message.reply_text(
-            "No reconocí ningún código válido ahí. Escribí los códigos a mano."
+            "No reconocí ningún código válido ahí. Escribí los códigos a mano.", reply_markup=teclado_solo_cancelar()
         )
         return CapturaEstado.MANUAL
     return await _mostrar_seleccion(update, context)
@@ -522,9 +528,9 @@ async def _mostrar_no_resueltas(update: Update, context: ContextTypes.DEFAULT_TY
         "Podés descartarlas o escribir de nuevo los códigos corregidos."
     )
     if update.callback_query is not None:
-        await update.callback_query.edit_message_text(texto, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(kb))
+        await update.callback_query.edit_message_text(texto, parse_mode="Markdown", reply_markup=con_cancelar(kb))
     else:
-        await update.message.reply_text(texto, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(kb))
+        await update.message.reply_text(texto, parse_mode="Markdown", reply_markup=con_cancelar(kb))
     return CapturaEstado.NO_RESUELTAS
 
 
@@ -557,7 +563,7 @@ async def descartar_no_resuelta(update: Update, context: ContextTypes.DEFAULT_TY
     if draft.no_resueltas:
         return await _mostrar_no_resueltas(update, context)
     if not draft.lineas:
-        await query.edit_message_text("Ya no queda ninguna referencia. Escribí los códigos de nuevo.")
+        await query.edit_message_text("Ya no queda ninguna referencia. Escribí los códigos de nuevo.", reply_markup=teclado_solo_cancelar())
         return CapturaEstado.MANUAL
     return await _mostrar_seleccion(update, context)
 
@@ -585,16 +591,16 @@ async def recibir_correccion_no_resueltas(update: Update, context: ContextTypes.
         try:
             await _resolver_y_actualizar_borrador(client, draft, codigos)
         except BackendCaido:
-            await update.message.reply_text(_MSG_CONEXION)
+            await update.message.reply_text(_MSG_CONEXION, reply_markup=teclado_solo_cancelar())
             return CapturaEstado.NO_RESUELTAS
         except LoreApiError:
-            await update.message.reply_text(_MSG_CONEXION)
+            await update.message.reply_text(_MSG_CONEXION, reply_markup=teclado_solo_cancelar())
             return CapturaEstado.NO_RESUELTAS
 
     if draft.no_resueltas:
         return await _mostrar_no_resueltas(update, context)
     if not draft.lineas:
-        await update.message.reply_text("Ya no queda ninguna referencia. Escribí los códigos de nuevo.")
+        await update.message.reply_text("Ya no queda ninguna referencia. Escribí los códigos de nuevo.", reply_markup=teclado_solo_cancelar())
         return CapturaEstado.MANUAL
     return await _mostrar_seleccion(update, context)
 
@@ -610,7 +616,7 @@ def _teclado_seleccion(draft: Borrador) -> InlineKeyboardMarkup:
         for linea in draft.lineas
     ]
     filas.append([InlineKeyboardButton("▶️ Continuar", callback_data="lore_cap_continuar")])
-    return InlineKeyboardMarkup(filas)
+    return con_cancelar(filas)
 
 
 async def _mostrar_seleccion(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -672,7 +678,7 @@ async def continuar_seleccion(update: Update, context: ContextTypes.DEFAULT_TYPE
     if pendiente is None:
         return await _mostrar_confirmacion(update, context)
 
-    await query.edit_message_text(_texto_pedido_cantidad(pendiente), parse_mode="Markdown")
+    await query.edit_message_text(_texto_pedido_cantidad(pendiente), parse_mode="Markdown", reply_markup=teclado_solo_cancelar())
     return CapturaEstado.CANTIDAD
 
 
@@ -694,16 +700,32 @@ async def recibir_cantidad(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     if cantidad is None:
         await update.message.reply_text(
             f"Cantidad inválida. Ingresá un número entre {_CANTIDAD_MINIMA} y {_CANTIDAD_MAXIMA} "
-            f"para {pendiente.codigo}."
+            f"para {pendiente.codigo}.",
+            reply_markup=teclado_solo_cancelar(),
         )
         return CapturaEstado.CANTIDAD
 
     pendiente.cantidad = cantidad
     siguiente = _siguiente_sin_cantidad(draft)
     if siguiente is not None:
-        await update.message.reply_text(_texto_pedido_cantidad(siguiente), parse_mode="Markdown")
+        await update.message.reply_text(_texto_pedido_cantidad(siguiente), parse_mode="Markdown", reply_markup=teclado_solo_cancelar())
         return CapturaEstado.CANTIDAD
     return await _mostrar_confirmacion(update, context)
+
+
+def _teclado_confirmacion() -> InlineKeyboardMarkup:
+    """Shared by `_mostrar_confirmacion` and `confirmar`'s retry message: an
+    `edit_message_text` without `reply_markup` drops the keyboard, which left
+    the advisor told to "tocá Confirmar" with no button to tap (T1b). No
+    shared "✖️ Cancelar" row: "❌ Cancelar" already does the same thing."""
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton("✅ Confirmar", callback_data="lore_cap_confirmar"),
+                InlineKeyboardButton("❌ Cancelar", callback_data="lore_cap_cancelar"),
+            ]
+        ]
+    )
 
 
 async def _mostrar_confirmacion(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -713,14 +735,7 @@ async def _mostrar_confirmacion(update: Update, context: ContextTypes.DEFAULT_TY
         f"• {_escapar_markdown(linea.codigo)} — {linea.cantidad}" for linea in seleccionadas
     )
     texto = f"📋 *Confirmá el registro:*\n\n{filas}\n\n¿Confirmás el envío?"
-    kb = InlineKeyboardMarkup(
-        [
-            [
-                InlineKeyboardButton("✅ Confirmar", callback_data="lore_cap_confirmar"),
-                InlineKeyboardButton("❌ Cancelar", callback_data="lore_cap_cancelar"),
-            ]
-        ]
-    )
+    kb = _teclado_confirmacion()
     if update.callback_query is not None:
         await update.callback_query.edit_message_text(texto, parse_mode="Markdown", reply_markup=kb)
     else:
@@ -809,7 +824,7 @@ async def confirmar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
                 telegram_id,
                 draft.registro_id,
             )
-            await query.edit_message_text(_MSG_CONFIRMAR_REINTENTO)
+            await editar_o_ignorar_sin_cambios(query, _MSG_CONFIRMAR_REINTENTO, reply_markup=_teclado_confirmacion())
             return CapturaEstado.CONFIRMAR
         except LoreApiError:
             # Final fallback, per this project's established rule: catch the
@@ -823,7 +838,7 @@ async def confirmar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
                 telegram_id,
                 draft.registro_id,
             )
-            await query.edit_message_text(_MSG_CONFIRMAR_REINTENTO)
+            await editar_o_ignorar_sin_cambios(query, _MSG_CONFIRMAR_REINTENTO, reply_markup=_teclado_confirmacion())
             return CapturaEstado.CONFIRMAR
 
     await query.edit_message_text("✅ *¡Registro guardado!*", parse_mode="Markdown")
@@ -838,5 +853,5 @@ def _limpiar_borrador(context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def cancelar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     _limpiar_borrador(context)
-    await update.message.reply_text("Registro cancelado. Si querés intentarlo de nuevo, mandá /registrar.")
+    await responder_cancelacion(update, "Registro cancelado. Si querés intentarlo de nuevo, mandá /registrar.")
     return ConversationHandler.END

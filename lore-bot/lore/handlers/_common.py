@@ -12,9 +12,14 @@ admin-linking one).
 """
 from __future__ import annotations
 
+import logging
 import re
 
-from telegram import ReplyKeyboardMarkup
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, Update
+from telegram.error import BadRequest, TelegramError
+from telegram.ext import ContextTypes
+
+logger = logging.getLogger("lore.handlers._common")
 
 _MSG_CONEXION = "⚠️ Tuve un problema para hablar con el sistema. Probá de nuevo en unos segundos."
 
@@ -105,3 +110,68 @@ TECLADO_CAPTURA = ReplyKeyboardMarkup(
     [[BOTON_REGISTRAR], [BOTON_CORRECCIONES]],
     resize_keyboard=True,
 )
+
+
+# Inline "Cancelar" button shown on every prompt of the 3 conversations
+# (Registro, Captura, Correccion). Inline -- never a Reply Keyboard button --
+# because the free-text states would read a typed "Cancelar" as a name, code
+# or quantity. ONE shared callback_data, registered as a fallback in every
+# conversation (`main.py`), so a tap works from any state. It must stay an
+# exact match (`^lore_cancelar$`) so it never collides with the older
+# `lore_*_cancelar` confirm-step callbacks.
+CALLBACK_CANCELAR = "lore_cancelar"
+_TEXTO_BOTON_CANCELAR = "✖️ Cancelar"
+_MSG_NADA_PARA_CANCELAR = "No hay nada para cancelar."
+
+
+def boton_cancelar() -> InlineKeyboardButton:
+    return InlineKeyboardButton(_TEXTO_BOTON_CANCELAR, callback_data=CALLBACK_CANCELAR)
+
+
+def teclado_solo_cancelar() -> InlineKeyboardMarkup:
+    """Keyboard for text/photo prompts, which have no other inline buttons."""
+    return InlineKeyboardMarkup([[boton_cancelar()]])
+
+
+def con_cancelar(teclado: InlineKeyboardMarkup | list) -> InlineKeyboardMarkup:
+    """Returns a NEW markup: `teclado`'s rows plus the Cancelar row last."""
+    filas = teclado.inline_keyboard if isinstance(teclado, InlineKeyboardMarkup) else teclado
+    return InlineKeyboardMarkup([*[list(fila) for fila in filas], [boton_cancelar()]])
+
+
+async def responder_cancelacion(update: Update, texto: str) -> None:
+    """Sends a cancel confirmation for either a `/cancelar` command or a
+    Cancelar button tap. On a tap, editing the tapped message's text also
+    drops its inline keyboard, so stale buttons can't be tapped again."""
+    query = update.callback_query
+    if query is None:
+        await update.message.reply_text(texto)
+        return
+    await query.answer()
+    try:
+        await query.edit_message_text(texto)
+    except TelegramError:
+        # E.g. the tapped message is gone or can't be edited: the
+        # conversation still ends; only the cosmetic cleanup is lost.
+        logger.warning("responder_cancelacion: no se pudo editar el mensaje tocado")
+
+
+async def nada_para_cancelar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Global `/cancelar` and stray Cancelar tap with NO active conversation.
+    Registered after the 3 conversations in `main.py`, so an active
+    conversation's own fallback always wins."""
+    await responder_cancelacion(update, _MSG_NADA_PARA_CANCELAR)
+
+
+async def editar_o_ignorar_sin_cambios(query, texto: str, **kwargs) -> None:
+    """`query.edit_message_text`, treating Telegram's "Message is not
+    modified" as a no-op. A retry path that fails twice in a row re-edits the
+    message to identical text and buttons; Telegram rejects that, but the
+    user is already looking at the right message with working buttons. Any
+    other `BadRequest` still propagates."""
+    try:
+        await query.edit_message_text(texto, **kwargs)
+    except BadRequest as exc:
+        if "message is not modified" not in str(exc).lower():
+            raise
+        logger.info("Edición idéntica ignorada (el mensaje ya mostraba este contenido)")

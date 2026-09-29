@@ -40,9 +40,27 @@ from lore.handlers import admin as admin_handlers
 from lore.handlers import captura as captura_handlers
 from lore.handlers import correccion as correccion_handlers
 from lore.handlers import registro as registro_handlers
-from lore.handlers._common import BOTON_CORRECCIONES, BOTON_REGISTRAR
+from lore.handlers._common import (
+    BOTON_CORRECCIONES,
+    BOTON_REGISTRAR,
+    CALLBACK_CANCELAR,
+    nada_para_cancelar,
+)
 
 logger = logging.getLogger("lore.main")
+
+# `/cancela` is a common typo of `/cancelar` seen in production; both work.
+_COMANDOS_CANCELAR = ["cancelar", "cancela"]
+_PATRON_CANCELAR = rf"^{CALLBACK_CANCELAR}$"
+
+
+def _fallbacks_cancelar(callback) -> list:
+    """Every conversation ends on `/cancelar` OR the inline Cancelar button
+    (`_common.boton_cancelar`), from any state."""
+    return [
+        CommandHandler(_COMANDOS_CANCELAR, callback),
+        CallbackQueryHandler(callback, pattern=_PATRON_CANCELAR),
+    ]
 
 
 def _build_registro_conversation() -> ConversationHandler:
@@ -62,7 +80,7 @@ def _build_registro_conversation() -> ConversationHandler:
                 CallbackQueryHandler(registro_handlers.confirmar, pattern=r"^lore_reg_(confirmar|cancelar)$")
             ],
         },
-        fallbacks=[CommandHandler("cancelar", registro_handlers.cancelar)],
+        fallbacks=_fallbacks_cancelar(registro_handlers.cancelar),
         allow_reentry=True,
     )
 
@@ -118,7 +136,7 @@ def _build_captura_conversation() -> ConversationHandler:
                 CallbackQueryHandler(captura_handlers.confirmar, pattern=r"^lore_cap_(confirmar|cancelar)$")
             ],
         },
-        fallbacks=[CommandHandler("cancelar", captura_handlers.cancelar)],
+        fallbacks=_fallbacks_cancelar(captura_handlers.cancelar),
         allow_reentry=True,
     )
 
@@ -151,7 +169,7 @@ def _build_correccion_conversation() -> ConversationHandler:
                 )
             ],
         },
-        fallbacks=[CommandHandler("cancelar", correccion_handlers.cancelar)],
+        fallbacks=_fallbacks_cancelar(correccion_handlers.cancelar),
         allow_reentry=True,
     )
 
@@ -185,6 +203,12 @@ def build_application() -> Application:
     )
     application.add_handler(_build_captura_conversation())
     application.add_handler(_build_correccion_conversation())
+    # With no active conversation, `/cancelar` and a stray Cancelar tap get
+    # a friendly "nothing to cancel" instead of silence / "sesión expirada".
+    # Added AFTER the conversations (same group) so an active conversation's
+    # own fallback wins, and BEFORE `callback_huerfano` so it isn't swallowed.
+    application.add_handler(CommandHandler(_COMANDOS_CANCELAR, nada_para_cancelar))
+    application.add_handler(CallbackQueryHandler(nada_para_cancelar, pattern=_PATRON_CANCELAR))
     # MUST be added last, in this SAME default group (group=0) — see
     # `registro.callback_huerfano`'s docstring for why a higher group number
     # (e.g. group=1) would NOT give the intended "only fires if nothing else
