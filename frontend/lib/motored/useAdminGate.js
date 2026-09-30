@@ -4,9 +4,10 @@
  *
  * sdd/motored-ventas-perdidas-panel, Phase 5 (design D6): shared extraction
  * of the ADMIN-gate hook that already lived inline in
- * `app/motored/usuarios/page.js` -- byte-for-byte the same logic (same
- * sessionStorage key, same redirect target, same JSON-parse-failure
- * handling), just moved here so other ADMIN-only pages (starting with this
+ * `app/motored/usuarios/page.js` -- the same logic (same sessionStorage key,
+ * same JSON-parse-failure handling; the only difference is that this hook
+ * sends SERVICIO_CLIENTE to its survey page instead of /motored/maestros),
+ * just moved here so other ADMIN-only pages (starting with this
  * change's own `ventas-perdidas/page.js`, Phase 7) can reuse it without
  * copy-pasting.
  *
@@ -18,6 +19,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { MOTORED_USER_KEY } from './motoredFetch';
+import { ROLE_SERVICIO_CLIENTE, SURVEY_ADMIN_PATH } from './servicioCliente';
 
 export default function useAdminGate() {
   const router = useRouter();
@@ -33,7 +35,7 @@ export default function useAdminGate() {
       parsed = null;
     }
     if (parsed?.role !== 'ADMIN') {
-      router.push('/motored/maestros');
+      router.push(parsed?.role === ROLE_SERVICIO_CLIENTE ? SURVEY_ADMIN_PATH : '/motored/maestros');
       return;
     }
     setOwnUserId(parsed.id ?? null);

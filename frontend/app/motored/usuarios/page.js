@@ -40,7 +40,8 @@ import {
 } from '../../../lib/motored/api';
 import { MOTORED_USER_KEY } from '../../../lib/motored/motoredFetch';
 
-const ROLES = ['ADMIN', 'COMPRAS', 'SUCURSAL', 'CONSULTA'];
+const ROLES = ['ADMIN', 'COMPRAS', 'SUCURSAL', 'CONSULTA', 'SERVICIO_CLIENTE'];
+const ROLE_LABELS = { SERVICIO_CLIENTE: 'Servicio al cliente' };
 const emptyForm = { nombre: '', email: '', password: '', role: 'CONSULTA' };
 
 function UsuarioForm({ form, setForm, onSubmit }) {
@@ -63,7 +64,7 @@ function UsuarioForm({ form, setForm, onSubmit }) {
         <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
           {ROLES.map((r) => (
             <option key={r} value={r} style={{ color: '#1a1a18' }}>
-              {r}
+              {ROLE_LABELS[r] || r}
             </option>
           ))}
         </select>

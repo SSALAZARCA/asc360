@@ -19,6 +19,7 @@ import Image from 'next/image';
 import { Mail, Lock, ArrowRight } from 'lucide-react';
 import { login } from '../../../lib/motored/api';
 import { MOTORED_TOKEN_KEY, MOTORED_USER_KEY } from '../../../lib/motored/motoredFetch';
+import { ROLE_SERVICIO_CLIENTE, SURVEY_ADMIN_PATH } from '../../../lib/motored/servicioCliente';
 
 export default function MotoredLoginPage() {
   const router = useRouter();
@@ -39,7 +40,7 @@ export default function MotoredLoginPage() {
       sessionStorage.setItem(MOTORED_USER_KEY, JSON.stringify(data.user));
       window.dispatchEvent(new Event('storage'));
 
-      router.push('/motored/maestros');
+      router.push(data.user?.role === ROLE_SERVICIO_CLIENTE ? SURVEY_ADMIN_PATH : '/motored/maestros');
     } catch (err) {
       setError(err.message || 'Credenciales inválidas o servidor inalcanzable.');
     } finally {

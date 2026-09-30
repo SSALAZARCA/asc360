@@ -10,9 +10,10 @@
  * it reads `motored_user`, never `um_user`, and redirects to
  * `/motored/login`, never `/login`.
  *
- * "Wrong role" here means a role string outside the 4 valid Motored roles
- * (ADMIN|COMPRAS|SUCURSAL|CONSULTA) -- e.g. a corrupted/forged session
- * value. All 4 real roles get past this gate; per-screen role restriction
+ * "Wrong role" here means a role string outside the 5 valid Motored roles
+ * (ADMIN|COMPRAS|SUCURSAL|CONSULTA|SERVICIO_CLIENTE) -- e.g. a corrupted/forged session
+ * value. All 5 real roles get past this gate (SERVICIO_CLIENTE is then kept
+ * inside its survey pages by the allow-list redirect); per-screen role restriction
  * (like `/motored/usuarios` being ADMIN-only) is enforced by the page
  * itself, same division of responsibility as asc360's `admin-layout.js`
  * (route-level gate) vs `Sidebar.js` (menu-visibility) vs the backend
@@ -24,8 +25,11 @@ import MotoredSidebar from '../../components/motored/MotoredSidebar';
 import MotoredTopBar from '../../components/motored/MotoredTopBar';
 import useDrawerMenu from '../../components/motored/useDrawerMenu';
 import { MOTORED_USER_KEY, MOTORED_TOKEN_KEY } from '../../lib/motored/motoredFetch';
+import {
+  ROLE_SERVICIO_CLIENTE, SURVEY_ADMIN_PATH, isServicioClientePath,
+} from '../../lib/motored/servicioCliente';
 
-const VALID_ROLES = ['ADMIN', 'COMPRAS', 'SUCURSAL', 'CONSULTA'];
+const VALID_ROLES = ['ADMIN', 'COMPRAS', 'SUCURSAL', 'CONSULTA', ROLE_SERVICIO_CLIENTE];
 
 export default function MotoredLayout({ children }) {
   const router = useRouter();
@@ -63,6 +67,13 @@ export default function MotoredLayout({ children }) {
         sessionStorage.removeItem(MOTORED_USER_KEY);
         sessionStorage.removeItem(MOTORED_TOKEN_KEY);
         r.push('/motored/login');
+        return;
+      }
+
+      // SERVICIO_CLIENTE only works inside the survey module (UX guard; the
+      // backend answers 403 everywhere else). Never mount the other pages.
+      if (u.role === ROLE_SERVICIO_CLIENTE && !isServicioClientePath(pathname)) {
+        r.push(SURVEY_ADMIN_PATH);
         return;
       }
 
