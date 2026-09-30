@@ -21,6 +21,7 @@ E_CORRIDA_BACKORDER_AUSENTE = "E-CORRIDA-004"
 E_CORRIDA_BACKORDER_VIEJO = "E-CORRIDA-005"
 E_CORRIDA_FACTURAS_AUSENTE_O_VIEJA = "E-CORRIDA-006"
 E_CORRIDA_INGRESOS_AUSENTE_O_VIEJO = "E-CORRIDA-007"
+E_CORRIDA_MAESTRO_REFERENCIAS_AUSENTE = "E-CORRIDA-008"
 E_CORRIDA_CORTE_FUTURO = "E-CORRIDA-009"
 E_CORRIDA_OVERRIDE_INVALIDO = "E-CORRIDA-010"
 
@@ -76,6 +77,10 @@ CATALOGO = {
     E_CORRIDA_INGRESOS_AUSENTE_O_VIEJO: (
         "Faltan los ingresos de facturas o están desactualizados. " + _EDAD
     ),
+    E_CORRIDA_MAESTRO_REFERENCIAS_AUSENTE: (
+        "No hay referencias en el maestro. Cargue el maestro de "
+        "referencias antes de calcular."
+    ),
     E_CORRIDA_CORTE_FUTURO: "La fecha de corte no puede estar en el futuro.",
     E_CORRIDA_OVERRIDE_INVALIDO: (
         "Parámetro de escenario no válido «{clave}»: {detalle}."
@@ -105,7 +110,27 @@ CATALOGO = {
     A_CORRIDA_SIN_PRECIO: "La referencia {codigo} no tiene precio.",
 }
 
+# Variante "no hay ninguna carga" de los códigos que también cubren "vieja".
+CATALOGO_AUSENTE = {
+    E_CORRIDA_FACTURAS_AUSENTE_O_VIEJA: (
+        "No hay una carga de {dataset} aplicada. Cargue el archivo de "
+        "{dataset}."
+    ),
+    E_CORRIDA_INGRESOS_AUSENTE_O_VIEJO: (
+        "No hay una carga de {dataset} aplicada. Cargue el archivo de "
+        "{dataset}."
+    ),
+}
+
 
 def mensaje(codigo: str, **datos) -> str:
     """Mensaje en español del código, con sus marcadores rellenados."""
     return CATALOGO[codigo].format(**datos)
+
+
+def mensaje_vigencia(codigo: str, dataset: str, antiguedad, limite) -> str:
+    """Mensaje de un chequeo de vigencia; sin antigüedad = sin carga."""
+    if antiguedad is None and codigo in CATALOGO_AUSENTE:
+        return CATALOGO_AUSENTE[codigo].format(dataset=dataset)
+    return mensaje(
+        codigo, dataset=dataset, antiguedad=antiguedad, limite=limite)
