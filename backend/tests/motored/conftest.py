@@ -23,6 +23,7 @@ required"). This is a Motored-local copy, deliberately not importing the
 `tests/imports` version, since the two domains have nothing in common and
 this module must stay independently readable.
 """
+import datetime
 import operator as _operator
 import uuid
 from decimal import Decimal
@@ -409,13 +410,14 @@ def override_motored_db(session: "FakeAsyncSession") -> None:
 
 @pytest.fixture(autouse=True)
 async def _reset_motored_supervisor():
-    """Suite-wide safety net (Fase 2 "Ingesta", ADR-1): whatever a test
-    did, never leave the supervisor's poll-loop task running into the
-    next test's event loop."""
+    """Suite-wide safety net (Fase 2 "Ingesta", ADR-1; Fase 3 S6b for the
+    corrida loop): whatever a test did, never leave either supervisor's
+    poll-loop task running into the next test's event loop."""
     yield
-    from app.motored.services.trabajos import supervisor
+    from app.motored.services.trabajos import supervisor, supervisor_corridas
 
     await supervisor.reset_for_tests()
+    await supervisor_corridas.detener()
 
 
 def override_motored_user(user) -> None:
@@ -429,3 +431,67 @@ def override_motored_user(user) -> None:
         return user
 
     app.dependency_overrides[get_current_motored_user] = _fake_current_user
+
+
+# ---------------------------------------------------------------------------
+# Fase 3 "Motor", S6b (sdd/motored-pedidos-motor) -- plumbing compartido por
+# los tests del job de corridas: reloj congelado y una sesión de juguete que
+# cuenta commits y rollbacks (cada sucursal es UNA transacción).
+# ---------------------------------------------------------------------------
+INSTANTE_CONGELADO = datetime.datetime(
+    2026, 9, 30, 12, 0, tzinfo=datetime.timezone.utc)
+
+
+@pytest.fixture
+def reloj_congelado():
+    """Reloj inyectable (`reloj=`) que siempre marca `INSTANTE_CONGELADO`."""
+    return lambda: INSTANTE_CONGELADO
+
+
+class _Savepoint:
+    def __init__(self, sesion):
+        self._sesion = sesion
+
+    async def __aenter__(self):
+        self._sesion.savepoints += 1
+        return self
+
+    async def __aexit__(self, tipo, valor, traza):
+        return False
+
+
+class SesionConCommits(FakeAsyncSession):
+    """`FakeAsyncSession` que además anota cuántos commits, rollbacks y
+    savepoints hizo el recorrido de una corrida."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.commits = 0
+        self.rollbacks = 0
+        self.savepoints = 0
+
+    def begin_nested(self):
+        return _Savepoint(self)
+
+    async def commit(self):
+        self.commits += 1
+
+    async def rollback(self):
+        self.rollbacks += 1
+
+
+class FabricaDeSesion:
+    """`async_sessionmaker` de juguete: cada llamada devuelve la MISMA sesión
+    como context manager (y no la cierra)."""
+
+    def __init__(self, sesion):
+        self.sesion = sesion
+
+    def __call__(self):
+        return self
+
+    async def __aenter__(self):
+        return self.sesion
+
+    async def __aexit__(self, tipo, valor, traza):
+        return False

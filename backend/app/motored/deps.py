@@ -32,7 +32,7 @@ from app.config import settings
 from app.motored.auth import decode_motored_token, motored_secret_is_safe
 from app.motored.database import get_motored_db
 from app.motored.services.auth import MotoredUser, MotoredUserLookup, crear_lookup_real
-from app.motored.services.trabajos import supervisor
+from app.motored.services.trabajos import supervisor, supervisor_corridas
 
 MOTORED_UNAVAILABLE_DETAIL = {"code": "MOTORED_UNAVAILABLE"}
 MOTORED_DB_UNAVAILABLE_DETAIL = {"code": "MOTORED_DB_UNAVAILABLE"}
@@ -162,10 +162,15 @@ async def require_motored_ready() -> None:
     También es el seam de arranque perezoso del supervisor de Fase 2
     "Ingesta" (sdd/motored-pedidos-ingesta, ADR-1): `ensure_started()` es
     un chequeo O(1) después de la primera llamada, por eso `app/main.py`
-    no necesita ningún hook `lifespan` y queda byte-a-byte sin tocar."""
+    no necesita ningún hook `lifespan` y queda byte-a-byte sin tocar.
+
+    Arranca de la misma forma el loop propio de las corridas de la Fase 3
+    (sdd/motored-pedidos-motor, S6b): su `ensure_started()` no lanza nunca
+    y se apaga con `MOTORED_CORRIDAS_LOOP_ENABLED=false`."""
     if not settings.MOTORED_ENABLED or not motored_secret_is_safe():
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=MOTORED_UNAVAILABLE_DETAIL,
         )
     supervisor.ensure_started()
+    supervisor_corridas.ensure_started()

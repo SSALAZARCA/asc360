@@ -65,6 +65,30 @@ class Settings(BaseSettings):
     MOTORED_RETENCION_DIAS: int = 90
     MOTORED_INGESTA_PERIODO_TOLERANCIA_PCT: float = 0.5
 
+    # Motored Pedidos — Fase 3 "Motor" (sdd/motored-pedidos-motor, S6b,
+    # ADR-5): loop asyncio PROPIO de las corridas, separado del supervisor
+    # de cargas de la Fase 2.
+    # - MOTORED_CORRIDAS_LOOP_ENABLED: interruptor de emergencia. Con
+    #   `false` el loop de corridas no arranca nunca (el de cargas no se
+    #   toca); una corrida PENDIENTE espera hasta reactivarlo. Se apaga con
+    #   la variable de entorno y un redeploy, sin tocar código. Además
+    #   MOTORED_ENABLED=false lo apaga junto con todo el módulo.
+    # - MOTORED_CORRIDA_POLL_SEGUNDOS: cada cuánto revisa si hay algo que
+    #   reclamar o barrer.
+    # - MOTORED_CORRIDA_TIMEOUT_MIN: una corrida CALCULANDO sin latido por
+    #   más de esto se considera muerta y el barrido la reintenta.
+    # - MOTORED_CORRIDA_MAX_INTENTOS: reclamos antes de dejarla FALLIDA
+    #   (E-CORRIDA-031); entre intento e intento espera 30 s * 2^(n-1).
+    # - MOTORED_CORRIDA_RETENCION_*: purga diaria de corridas ANULADA,
+    #   FALLIDA o BORRADOR con más de N días (nunca CERRADA). Apagada por
+    #   defecto.
+    MOTORED_CORRIDAS_LOOP_ENABLED: bool = True
+    MOTORED_CORRIDA_POLL_SEGUNDOS: int = 5
+    MOTORED_CORRIDA_TIMEOUT_MIN: int = 10
+    MOTORED_CORRIDA_MAX_INTENTOS: int = 3
+    MOTORED_CORRIDA_RETENCION_ENABLED: bool = False
+    MOTORED_CORRIDA_RETENCION_DIAS: int = 45
+
     # Motored Pedidos — bot "Lore" (sdd/motored-ventas-perdidas-bot, Phase
     # 5, design D5): secreto compartido propio para autenticar las llamadas
     # del bot al backend. DEBE ser distinto de `SONIA_BOT_SECRET` (Lore no

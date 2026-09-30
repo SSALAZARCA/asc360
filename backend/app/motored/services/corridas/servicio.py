@@ -8,29 +8,41 @@ ADR-5/ADR-9, decisiones #14 y #16): servicio de la corrida.
   con su fuente, maestro de sustitución, cortes, antigüedades y mes en curso
   efectivo. Los parámetros se resuelven AL CORTE (spec "version effective at
   the corte"), no a la fecha de creación.
-- `calcular_corrida` es el recorrido directo (el job de S6b lo envuelve):
-  reclama la corrida (PENDIENTE -> CALCULANDO), arma el contexto SÓLO con lo
-  congelado, calcula el tránsito al corte una vez y procesa cada sucursal en
-  su propio savepoint. Una sucursal que falla queda FALLIDA con su código y
-  las demás siguen; una corrida anulada a mitad de camino detiene el
-  recorrido (ver `persistencia._guardia`).
+- `calcular_corrida` es el recorrido directo en la transacción del llamador.
+  El job de S6b (`ejecucion.py`) usa las mismas piezas (`preparar`,
+  `procesar_sucursal`, `finalizar_corrida`) pero confirma cada sucursal,
+  reintenta las fallas transitorias de base y calcula en el ejecutor. Ambos
+  reclaman la corrida (PENDIENTE -> CALCULANDO), arman el contexto SÓLO con
+  lo congelado, calculan el tránsito al corte una vez y procesan cada
+  sucursal en su propio savepoint. Una sucursal que falla queda FALLIDA con
+  su código y las demás siguen; una corrida anulada a mitad de camino
+  detiene el recorrido (ver `persistencia._guardia`).
 - `finalizar_corrida` decide BORRADOR o FALLIDA (sólo si TODAS fallan) y
   verifica, con las cargas bloqueadas `FOR SHARE`, que ninguna se anuló
   mientras corría (si no, la corrida queda `invalidada`).
 - `cerrar_corrida` / `anular_corrida` aplican las reglas del ciclo de vida.
 
-Ningún commit acá: la transacción es del llamador. Nadie ejecuta este
-servicio de forma automática todavía (job en S6b, API en S7).
+Ningún commit acá: la transacción es del llamador. Lo ejecuta el job de
+S6b; todavía nadie encola corridas (API en S7).
 """
+import asyncio
 import logging
 import uuid
+from concurrent.futures import Executor
+from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from typing import Any, Dict, List, Mapping, Optional, Sequence
 from uuid import UUID
 
 from sqlalchemy import func, literal, select, update
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import (
+    DataError,
+    DBAPIError,
+    IntegrityError,
+    NotSupportedError,
+    ProgrammingError,
+)
 
 from app.motored.models.carga_archivo import CargaArchivo
 from app.motored.models.corrida import Corrida
@@ -228,7 +240,7 @@ async def crear_corrida(
 # --- calcular_corrida -------------------------------------------------------
 
 
-async def _reclamar(db, corrida_id: UUID) -> None:
+async def reclamar_corrida(db, corrida_id: UUID) -> None:
     """PENDIENTE -> CALCULANDO de forma atómica; otro estado es E-040."""
     resultado = await db.execute(
         update(Corrida)
@@ -267,7 +279,7 @@ async def _transito(db, corrida: Corrida):
         tolerancia_ingreso_pct=float(tolerancia))
 
 
-async def _preparar(db, corrida: Corrida):
+async def preparar(db, corrida: Corrida):
     """`(parámetros del motor, contexto del cargador)` desde lo congelado."""
     snapshot, seleccion = corrida.parametros_snapshot, corrida.seleccion_datos
     motor = parametros_corrida.parametros_motor_desde_snapshot(
@@ -293,7 +305,7 @@ async def _preparar(db, corrida: Corrida):
     return motor, ctx
 
 
-async def _pendientes(db, corrida_id: UUID) -> List[UUID]:
+async def pendientes(db, corrida_id: UUID) -> List[UUID]:
     resultado = await db.execute(
         select(CorridaSucursal.sucursal_id)
         .where(CorridaSucursal.corrida_id == corrida_id,
@@ -302,7 +314,7 @@ async def _pendientes(db, corrida_id: UUID) -> List[UUID]:
     return list(resultado.scalars().all())
 
 
-async def _marcar_fallida(
+async def marcar_fallida(
     db, corrida_id: UUID, sucursal_id: UUID, codigo: str, mensaje: str,
 ) -> bool:
     """`False` si la corrida se anuló mientras tanto (detener el recorrido)."""
@@ -316,17 +328,51 @@ async def _marcar_fallida(
     return True
 
 
-async def _procesar_sucursal(
-    db, corrida: Corrida, sucursal_id: UUID, ctx: ContextoCarga,
-    motor: ParametrosMotor,
+@dataclass(frozen=True)
+class CorridaRef:
+    """Lo mínimo de la corrida que necesita el recorrido. El job pasa esto y
+    no el `Corrida` del ORM: tras un rollback (reintento de una falla
+    transitoria) el objeto queda expirado y leerlo en async falla."""
+
+    id: UUID
+    codigo: str
+
+
+_NO_TRANSITORIOS = (
+    IntegrityError, DataError, ProgrammingError, NotSupportedError)
+
+
+def es_transitorio(error: BaseException) -> bool:
+    """Falla de base que vale la pena reintentar (conexión, deadlock,
+    serialización). Los errores deterministas de SQL (integridad, datos,
+    programación) fallarían igual la próxima vez: no se reintentan."""
+    return isinstance(error, DBAPIError) and not isinstance(
+        error, _NO_TRANSITORIOS)
+
+
+async def _calcular(ejecutor: Optional[Executor], *args):
+    """`calcular_sucursal` en el `ejecutor` (fuera del event loop) o, sin
+    ejecutor, en línea (recorrido directo y tests)."""
+    if ejecutor is None:
+        return calcular_sucursal(*args)
+    return await asyncio.get_running_loop().run_in_executor(
+        ejecutor, calcular_sucursal, *args)
+
+
+async def procesar_sucursal(
+    db, corrida, sucursal_id: UUID, ctx: ContextoCarga,
+    motor: ParametrosMotor, ejecutor: Optional[Executor] = None,
 ) -> bool:
     """Carga, calcula y guarda UNA sucursal en su savepoint; `False` detiene
-    el recorrido (corrida anulada). Aísla las fallas de la sucursal."""
+    el recorrido (corrida anulada). Aísla las fallas de la sucursal, salvo
+    las transitorias de base: esas se relanzan para que el llamador
+    reintente. `corrida` es cualquier objeto con `id` y `codigo`."""
     try:
         async with db.begin_nested():
             datos = await cargador.cargar_sucursal(db, sucursal_id, ctx)
-            resultado = calcular_sucursal(
-                datos.entradas, datos.atributos, motor, ctx.resoluciones)
+            resultado = await _calcular(
+                ejecutor, datos.entradas, datos.atributos, motor,
+                ctx.resoluciones)
             await persistencia.guardar_sucursal(
                 db, corrida.id, datos, resultado,
                 consolidar=ctx.consolidar)
@@ -336,27 +382,32 @@ async def _procesar_sucursal(
             return False
         raise
     except ErrorCargador as error:
-        return await _marcar_fallida(
+        return await marcar_fallida(
             db, corrida.id, sucursal_id, error.codigo, error.mensaje)
-    except Exception:  # aislamiento por sucursal: nada tumba a las demás
+    except Exception as error:  # aislamiento: nada tumba a las demás
+        if es_transitorio(error):
+            raise
         logger.exception(
             "corrida %s: falló la sucursal %s", corrida.codigo, sucursal_id)
-        return await _marcar_fallida(
+        return await marcar_fallida(
             db, corrida.id, sucursal_id, codigos.E_CORRIDA_INTERNO,
             codigos.mensaje(codigos.E_CORRIDA_INTERNO))
 
 
-async def calcular_corrida(db, corrida_id: UUID) -> str:
+async def calcular_corrida(
+    db, corrida_id: UUID, ejecutor: Optional[Executor] = None,
+) -> str:
     """Recorre la corrida completa y devuelve su estado final.
 
     `ANULADA` si la anularon mientras corría (el recorrido se detiene sin
     finalizar). Ver el docstring del módulo.
     """
-    await _reclamar(db, corrida_id)
+    await reclamar_corrida(db, corrida_id)
     corrida = await db.get(Corrida, corrida_id)
-    motor, ctx = await _preparar(db, corrida)
-    for sucursal_id in await _pendientes(db, corrida_id):
-        if not await _procesar_sucursal(db, corrida, sucursal_id, ctx, motor):
+    motor, ctx = await preparar(db, corrida)
+    for sucursal_id in await pendientes(db, corrida_id):
+        if not await procesar_sucursal(
+                db, corrida, sucursal_id, ctx, motor, ejecutor):
             return estados.ANULADA
     return await finalizar_corrida(db, corrida_id)
 
@@ -377,7 +428,7 @@ async def _cargas_anuladas(db, corrida_id: UUID) -> List[UUID]:
         if fila[1] == estados.ESTADO_CARGA_ANULADO]
 
 
-def _con_evento(evento: Dict[str, Any]):
+def con_evento(evento: Dict[str, Any]):
     """Expresión SQL que agrega un evento al `log` append-only."""
     return func.coalesce(Corrida.log, literal([], JSONB)).op("||")(
         literal([evento], JSONB))
@@ -403,7 +454,7 @@ async def finalizar_corrida(db, corrida_id: UUID) -> str:
         evento["codigo"] = codigos.E_CORRIDA_TODAS_FALLIDAS
     valores: Dict[str, Any] = {
         "estado": estado, "terminado_en": func.now(),
-        "log": _con_evento(evento)}
+        "log": con_evento(evento)}
     if anuladas:
         valores["invalidada"] = True
         valores["motivo_invalidacion"] = {
@@ -493,4 +544,3 @@ async def anular_corrida(
     corrida.motivo_anulacion = motivo
     await db.flush()
     return corrida
-
