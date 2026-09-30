@@ -1,3 +1,8 @@
--r requirements.txt
-pytest>=8.0.0
-pytest-asyncio>=0.24.0
+# Test-only dependencies. NOT installed in the production image.
+# Layered on top of the production lock so tests run the same versions.
+-r requirements.lock.txt
+pytest==9.1.1
+pytest-asyncio==1.4.0
+iniconfig==2.3.0
+pluggy==1.6.0
+pygments==2.21.0
