@@ -13,7 +13,7 @@ override > sucursal > global > default y entrega:
 
 Todo es puro salvo `cargar_parametros_corrida`, que hace una sola lectura.
 """
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
 from fractions import Fraction
 from typing import Any, Mapping, Optional, Sequence
@@ -21,7 +21,7 @@ from uuid import UUID
 
 from app.motored.services import parametros, parametros_claves as pc
 from app.motored.services.corridas import codigos
-from app.motored.services.motor.tipos import ParametrosMotor
+from app.motored.services.motor.tipos import MesEnCurso, ParametrosMotor
 from app.motored.services.parametros import ResolucionParametro
 
 CLAVE_DIAS_ENTRE_PEDIDOS = "dias_entre_pedidos"
@@ -151,3 +151,49 @@ async def cargar_parametros_corrida(
     vigentes = await parametros.obtener_vigentes_motor(
         db, pc.claves_motor(), en_fecha, overrides)
     return construir_parametros_corrida(vigentes, sucursal_ids)
+
+
+# --- Reconstrucción desde el snapshot (calcular y reproducir) ---------------
+
+
+def _mes_en_curso_efectivo(
+    seleccion_datos: Mapping[str, Any], tope: Fraction,
+) -> Optional[MesEnCurso]:
+    """`MesEnCurso` del bloque congelado; EXCLUIDO no lleva configuración."""
+    bloque = seleccion_datos["mes_en_curso"]
+    if bloque["modo_efectivo"] != "PONDERADO":
+        return None
+    return MesEnCurso("PONDERADO", bloque["d"], bloque["D"], tope)
+
+
+def parametros_motor_desde_snapshot(
+    snapshot: Mapping[str, Any], seleccion_datos: Mapping[str, Any],
+) -> ParametrosMotor:
+    """Los `ParametrosMotor` de una corrida, sólo con lo que se congeló.
+
+    Los valores salen de `snapshot["parametros"]` (mismo parseo que al crear)
+    y el modo efectivo del mes en curso del bloque `mes_en_curso` de
+    `seleccion_datos`; nunca se lee `parametro_metodologia`.
+    """
+    entradas = snapshot["parametros"]
+
+    def valor(clave: str) -> Any:
+        return pc.parsear(clave, entradas[clave]["valor"])
+
+    return replace(
+        _armar_motor(valor),
+        mes_en_curso=_mes_en_curso_efectivo(
+            seleccion_datos, valor("tope_proyeccion_mes_actual")),
+    )
+
+
+def dias_entre_pedidos_desde_snapshot(
+    snapshot: Mapping[str, Any],
+) -> Mapping[UUID, int]:
+    """`dias_entre_pedidos` congelado de cada sucursal de la corrida."""
+    return {
+        UUID(sucursal_id): pc.parsear(
+            CLAVE_DIAS_ENTRE_PEDIDOS, entrada["valor"])
+        for sucursal_id, entrada
+        in snapshot["dias_entre_pedidos_por_sucursal"].items()
+    }

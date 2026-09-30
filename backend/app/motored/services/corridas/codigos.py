@@ -24,12 +24,14 @@ E_CORRIDA_INGRESOS_AUSENTE_O_VIEJO = "E-CORRIDA-007"
 E_CORRIDA_MAESTRO_REFERENCIAS_AUSENTE = "E-CORRIDA-008"
 E_CORRIDA_CORTE_FUTURO = "E-CORRIDA-009"
 E_CORRIDA_OVERRIDE_INVALIDO = "E-CORRIDA-010"
+E_CORRIDA_SUCURSAL_INVALIDA = "E-CORRIDA-011"
 
 # Corrida: sucursal, estados terminales, transiciones, interno
 E_CORRIDA_SIN_EMPAQUE_NI_TRANSITO = "E-CORRIDA-020"
 E_CORRIDA_SUCURSAL_SIN_SIC = "E-CORRIDA-021"
 E_CORRIDA_TODAS_FALLIDAS = "E-CORRIDA-030"
 E_CORRIDA_REINTENTOS_AGOTADOS = "E-CORRIDA-031"
+E_CORRIDA_ESTADO_NO_ADMITE = "E-CORRIDA-040"
 E_CORRIDA_INVALIDADA = "E-CORRIDA-041"
 E_CORRIDA_ESCENARIO_NO_SE_CIERRA = "E-CORRIDA-042"
 E_CORRIDA_SUCURSAL_FALLIDA = "E-CORRIDA-043"
@@ -85,6 +87,13 @@ CATALOGO = {
     E_CORRIDA_OVERRIDE_INVALIDO: (
         "Parámetro de escenario no válido «{clave}»: {detalle}."
     ),
+    E_CORRIDA_SUCURSAL_INVALIDA: (
+        "Sucursales no válidas para la corrida: {detalle}."
+    ),
+    E_CORRIDA_ESTADO_NO_ADMITE: (
+        "La corrida no admite esta operación en su estado actual "
+        "({estado})."
+    ),
     E_CORRIDA_SIN_EMPAQUE_NI_TRANSITO: (
         "La sucursal {sucursal} no tiene días de empaque ni de tránsito."
     ),
@@ -102,7 +111,7 @@ CATALOGO = {
     ),
     E_CORRIDA_INTERNO: "Error interno al calcular la corrida.",
     E_CARGA_ANULACION_BLOQUEADA: (
-        "La carga la usa la corrida cerrada {codigo} y no se puede anular."
+        "La carga la usa la corrida cerrada {corrida} y no se puede anular."
     ),
     A_CORRIDA_DEMANDA_PERDIDA_AUSENTE: (
         "No hay demanda perdida cargada: se calcula sin ella."
@@ -121,6 +130,20 @@ CATALOGO_AUSENTE = {
         "{dataset}."
     ),
 }
+
+
+class ErrorCorrida(Exception):
+    """Error codificado de la corrida (creación, ciclo de vida, guardas).
+
+    `detalle` es un dict serializable con el contexto técnico (por ejemplo el
+    bloque de antigüedades de un preflight rechazado).
+    """
+
+    def __init__(self, codigo: str, mensaje: str, detalle=None):
+        super().__init__(f"{codigo}: {mensaje}")
+        self.codigo = codigo
+        self.mensaje = mensaje
+        self.detalle = detalle
 
 
 def mensaje(codigo: str, **datos) -> str:
