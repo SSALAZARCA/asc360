@@ -208,6 +208,20 @@ export async function reactivateUsuario(id) {
   });
 }
 
+/** ADMIN levanta el bloqueo por intentos fallidos de un usuario. */
+export async function desbloquearUsuario(id) {
+  return motoredFetchJson(`/usuarios/${id}/desbloquear`, { method: 'POST' });
+}
+
+/** ADMIN: registro de ingresos (cada intento de login), paginado y filtrable. */
+export async function listIngresos(params) {
+  const query = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== '' && value !== null && value !== undefined) query.set(key, String(value));
+  });
+  return motoredFetchJson(`/usuarios/ingresos?${query.toString()}`);
+}
+
 /** ADMIN fija una contraseña nueva a un usuario con acceso web. */
 export async function resetPasswordUsuario(id, password) {
   return motoredFetchJson(`/usuarios/${id}/password`, {

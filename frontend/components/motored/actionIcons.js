@@ -6,7 +6,7 @@
  */
 import {
   Pencil, Ban, RotateCcw, XCircle, Check, X, KeyRound, Download, Eye, Play,
-  Save, Undo2, MapPin, EyeOff, PlusCircle, Link2, Unlink,
+  Save, Undo2, MapPin, EyeOff, PlusCircle, Link2, Unlink, Unlock,
 } from 'lucide-react';
 
 export const ACTION_ICONS = {
@@ -27,4 +27,5 @@ export const ACTION_ICONS = {
   'Crear como OTROS': PlusCircle,
   'Vincular Telegram': Link2,
   'Desvincular Telegram': Unlink,
+  Desbloquear: Unlock,
 };

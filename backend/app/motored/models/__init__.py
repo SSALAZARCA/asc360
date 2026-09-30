@@ -28,6 +28,7 @@ from app.motored.models.encuesta_respuesta import EncuestaRespuesta
 from app.motored.models.factura_proveedor_linea import FacturaProveedorLinea
 from app.motored.models.ingreso_factura import IngresoFactura
 from app.motored.models.inventario_snapshot import InventarioSnapshot
+from app.motored.models.login_evento import LoginEvento
 from app.motored.models.parametro_metodologia import ParametroMetodologia
 from app.motored.models.proveedor import Proveedor
 from app.motored.models.referencia import Referencia
@@ -60,6 +61,7 @@ __all__ = [
     "FacturaProveedorLinea",
     "IngresoFactura",
     "InventarioSnapshot",
+    "LoginEvento",
     "ParametroMetodologia",
     "Proveedor",
     "Referencia",

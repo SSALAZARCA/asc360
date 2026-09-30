@@ -100,6 +100,11 @@ def audit_password_reset(db, entidad: str, entidad_id: uuid.UUID, usuario_id: Op
     return _record(db, entidad, entidad_id, usuario_id, accion="update", campo="password")
 
 
+def audit_desbloqueo(db, entidad: str, entidad_id: uuid.UUID, usuario_id: Optional[uuid.UUID] = None) -> AuditoriaMaestro:
+    """Registra QUE un ADMIN levantó el bloqueo por intentos fallidos."""
+    return _record(db, entidad, entidad_id, usuario_id, accion="update", campo="bloqueado_hasta", valor_nuevo=None)
+
+
 def diff_and_audit(
     db,
     entidad: str,

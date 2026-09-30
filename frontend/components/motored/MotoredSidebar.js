@@ -37,12 +37,13 @@
  */
 import { useRouter, usePathname } from 'next/navigation';
 import Image from 'next/image';
-import { LogOut, Warehouse, Users, TrendingDown, ClipboardCheck, MessageSquareWarning, KeyRound } from 'lucide-react';
+import { LogOut, Warehouse, Users, TrendingDown, ClipboardCheck, MessageSquareWarning, KeyRound, History } from 'lucide-react';
 import { MOTORED_TOKEN_KEY, MOTORED_USER_KEY } from '../../lib/motored/motoredFetch';
 
 const ALL_ITEMS = [
   { id: 'maestros', name: 'Maestros', icon: Warehouse, path: '/motored/maestros' },
   { id: 'usuarios', name: 'Usuarios', icon: Users, path: '/motored/usuarios', adminOnly: true },
+  { id: 'ingresos', name: 'Registro de ingresos', icon: History, path: '/motored/ingresos', roles: ['ADMIN'] },
   { id: 'ventas-perdidas', name: 'Ventas perdidas', icon: TrendingDown, path: '/motored/ventas-perdidas', adminOnly: true },
   // `roles` (optional) restricts an item to those roles; `adminOnly` and items
   // without either keep their original behaviour. SERVICIO_CLIENTE only ever

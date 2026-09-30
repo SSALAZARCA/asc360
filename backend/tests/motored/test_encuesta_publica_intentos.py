@@ -182,7 +182,7 @@ def test_expired_entries_are_evicted_opportunistically(clock):
     intentos.record_failure("111")
     clock["t"] += intentos.WINDOW_SECONDS + 1
     intentos.record_failure("222")
-    assert intentos.tracked_count() == 1
+    assert intentos.cantidad_rastreada() == 1
 
 
 def test_tracked_cedulas_are_capped_dropping_the_oldest(clock, monkeypatch):
@@ -190,6 +190,6 @@ def test_tracked_cedulas_are_capped_dropping_the_oldest(clock, monkeypatch):
     for cedula in ["1", "2", "3", "4"]:
         clock["t"] += 1
         intentos.record_failure(cedula)
-    assert intentos.tracked_count() == 3
+    assert intentos.cantidad_rastreada() == 3
     assert intentos.failure_count("1") == 0
     assert intentos.failure_count("4") == 1

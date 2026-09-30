@@ -31,6 +31,7 @@ from sqlalchemy import (
     Enum,
     ForeignKey,
     Index,
+    Integer,
     String,
     text,
 )
@@ -93,6 +94,12 @@ class Usuario(MotoredBase):
     password_changed_at = Column(DateTime, nullable=True)
     # True after an admin create/reset: only POST /auth/password works until cleared.
     must_change_password = Column(Boolean, nullable=False, default=False, server_default=text("false"))
+
+    # Account lockout (naive UTC). Failed-login counter inside a window that
+    # starts at its first failure; `bloqueado_hasta` set on the 5th failure.
+    login_fallidos = Column(Integer, nullable=False, default=0, server_default=text("0"))
+    login_ventana_inicio = Column(DateTime, nullable=True)
+    bloqueado_hasta = Column(DateTime, nullable=True)
 
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

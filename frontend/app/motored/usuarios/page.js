@@ -37,15 +37,26 @@ import CambiarPasswordForm from '../../../components/motored/CambiarPasswordForm
 import {
   listUsuarios, createUsuario, deactivateUsuario, reactivateUsuario,
   listSolicitudesPendientes, aprobarUsuario, rechazarUsuario,
-  generarCodigoTelegram, desvincularTelegram, resetPasswordUsuario,
+  generarCodigoTelegram, desvincularTelegram, resetPasswordUsuario, desbloquearUsuario,
 } from '../../../lib/motored/api';
 import { MOTORED_USER_KEY } from '../../../lib/motored/motoredFetch';
+import { formatHoraCo } from '../../../components/motored/ingresos/labels';
 
 function tieneAccesoWeb(u) {
   return Boolean(u.email) && u.role !== 'ASESOR_MOSTRADOR';
 }
 
-function UsuariosTable({ usuarios, onDeactivate, onReactivate, ownUserId, onVincularTelegram, onDesvincularTelegram, onCambiarPassword }) {
+const LOCK_BADGE = {
+  display: 'inline-block', marginLeft: '8px', padding: '2px 8px', borderRadius: 'var(--motored-radius-pill, 999px)',
+  fontSize: '0.7rem', fontWeight: 700, whiteSpace: 'nowrap', background: 'var(--motored-danger, #c0392b)', color: '#fff',
+};
+
+/** The backend only sends `bloqueado_hasta` while the lock is in force; re-check for a stale list. */
+function estaBloqueado(u) {
+  return Boolean(u.bloqueado_hasta) && new Date(u.bloqueado_hasta) > new Date();
+}
+
+function UsuariosTable({ usuarios, onDeactivate, onReactivate, ownUserId, onVincularTelegram, onDesvincularTelegram, onCambiarPassword, onDesbloquear }) {
   const handleDeactivateClick = (u) => {
     if (window.confirm(`¿Desactivar a "${u.nombre}"? No se elimina, queda marcado como inactivo.`)) {
       onDeactivate(u.id);
@@ -75,7 +86,10 @@ function UsuariosTable({ usuarios, onDeactivate, onReactivate, ownUserId, onVinc
               <td style={{ padding: '10px 12px 10px 0' }}>{u.nombre}</td>
               <td style={{ padding: '10px 12px 10px 0' }}>{u.email}</td>
               <td style={{ padding: '10px 12px 10px 0' }}>{u.role}</td>
-              <td style={{ padding: '10px 12px 10px 0' }}>{u.activo ? 'Activo' : 'Inactivo'}</td>
+              <td style={{ padding: '10px 12px 10px 0', whiteSpace: 'nowrap' }}>
+                {u.activo ? 'Activo' : 'Inactivo'}
+                {estaBloqueado(u) && <span style={LOCK_BADGE}>Bloqueado hasta {formatHoraCo(u.bloqueado_hasta)}</span>}
+              </td>
               <td style={{ padding: '10px 0', display: 'flex', gap: '0.5rem' }}>
                 {/* Nunca un botón rojo dentro de una tabla -- ver
                 SucursalesTab.js para la misma regla aplicada. */}
@@ -83,6 +97,9 @@ function UsuariosTable({ usuarios, onDeactivate, onReactivate, ownUserId, onVinc
                   <MotoredIconAction action="Desactivar" onClick={() => handleDeactivateClick(u)} />
                 ) : (
                   <MotoredIconAction action="Reactivar" onClick={() => handleReactivateClick(u)} />
+                )}
+                {estaBloqueado(u) && (
+                  <MotoredIconAction action="Desbloquear" onClick={() => onDesbloquear(u.id)} />
                 )}
                 {tieneAccesoWeb(u) && (
                   <MotoredIconAction action="Cambiar contraseña" onClick={() => onCambiarPassword(u)} />
@@ -339,7 +356,17 @@ function useUsuarios(enabled) {
     }
   };
 
-  return { usuarios, loading, error, create, deactivate, reactivate, reload: load };
+  const desbloquear = async (id) => {
+    setError('');
+    try {
+      await desbloquearUsuario(id);
+      await load();
+    } catch (err) {
+      setError(err.message || 'Error al desbloquear usuario');
+    }
+  };
+
+  return { usuarios, loading, error, create, deactivate, reactivate, desbloquear, reload: load };
 }
 
 /**
@@ -412,7 +439,7 @@ function UsuariosContent() {
    * create-usuario form and the main table.
    */
   const { allowed, ownUserId } = useAdminGate();
-  const { usuarios, loading, error, create, deactivate, reactivate, reload } = useUsuarios(allowed);
+  const { usuarios, loading, error, create, deactivate, reactivate, desbloquear, reload } = useUsuarios(allowed);
   const solicitudesState = useSolicitudesPendientes(allowed);
   const telegramState = useTelegramVinculacion(reload);
   const passwordState = usePasswordReset();
@@ -437,6 +464,7 @@ function UsuariosContent() {
           onVincularTelegram={telegramState.vincular}
           onDesvincularTelegram={telegramState.desvincular}
           onCambiarPassword={passwordState.abrir}
+          onDesbloquear={desbloquear}
         />
       )}
 

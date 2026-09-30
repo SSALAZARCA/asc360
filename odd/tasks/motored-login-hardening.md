@@ -82,5 +82,5 @@ Defaults chosen (user can adjust):
 - [x] T6 — notice shortened; RED 1 failed → GREEN 6 passed (motored-login-ux).
 - [x] T7 — policy: min 10, letter+digit, ~120-entry denylist, no email local part (≥4); 72-byte max kept; new passwords only (old 8-char still log in); frontend rules in lib/motored/passwordRules.js.
 - [x] T8 — usuario.must_change_password (migration c4e7a19b3d58 on b8d2f4a61c93); set on admin create/reset, cleared on own change; server 403 PASSWORD_CHANGE_REQUIRED everywhere except POST /auth/password; frontend forces /motored/mi-cuenta with banner. RED→GREEN; motored 3005, UM 1296, pg_real 91, jest 737.
-- [ ] T9
-- [ ] T10
+- [x] T9 — lockout 5 fails/15 min → 15 min (usuario columns, atomic UPDATE…RETURNING; unknown emails in-memory; dummy bcrypt for timing); admin Desbloquear + reset clears; usuarios badge.
+- [x] T10 — login_evento table (every attempt, SAVEPOINT so a log failure never breaks login); ADMIN GET /usuarios/ingresos + page "Registro de ingresos". Migration d9a2b6e04f71 on c4e7a19b3d58. RED→GREEN; motored 3046, UM 1296, pg_real 94 (incl. 8 concurrent wrong logins), jest 748. ALL FOLLOW-UP TASKS DONE.

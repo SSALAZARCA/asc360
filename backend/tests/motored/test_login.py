@@ -61,7 +61,7 @@ def test_wrong_password_returns_generic_401(monkeypatch):
     monkeypatch.setattr(settings, "MOTORED_SECRET_KEY", "login-test-motored-secret")
     monkeypatch.setattr(settings, "SECRET_KEY", "login-test-asc360-secret")
     usuario = _make_usuario("correcta123")
-    override_motored_db(FakeAsyncSession(execute_queue=[[], [usuario]]))
+    override_motored_db(FakeAsyncSession(execute_queue=[[], [usuario], [None]]))
 
     with TestClient(app) as client:
         response = client.post(LOGIN_URL, json={"email": usuario.email, "password": "incorrecta"})
@@ -95,7 +95,7 @@ def test_inactive_user_returns_the_same_generic_401(monkeypatch):
     monkeypatch.setattr(settings, "MOTORED_SECRET_KEY", "login-test-motored-secret")
     monkeypatch.setattr(settings, "SECRET_KEY", "login-test-asc360-secret")
     usuario = _make_usuario("correcta123", activo=False)
-    override_motored_db(FakeAsyncSession(execute_queue=[[], [usuario]]))
+    override_motored_db(FakeAsyncSession(execute_queue=[[], [usuario], [None]]))
 
     with TestClient(app) as client:
         response = client.post(LOGIN_URL, json={"email": usuario.email, "password": "correcta123"})
@@ -124,7 +124,7 @@ def test_login_advisor_account_with_null_password_returns_401_not_a_crash(monkey
         activo=True,
     )
     usuario.sucursales = []
-    override_motored_db(FakeAsyncSession(execute_queue=[[], [usuario]]))
+    override_motored_db(FakeAsyncSession(execute_queue=[[], [usuario], [None]]))
 
     with TestClient(app) as client:
         response = client.post(
@@ -151,7 +151,7 @@ def test_pending_status_account_with_valid_password_returns_401_at_login(monkeyp
     monkeypatch.setattr(settings, "SECRET_KEY", "login-test-asc360-secret")
     usuario = _make_usuario("correcta123")
     usuario.status = "pending"
-    override_motored_db(FakeAsyncSession(execute_queue=[[], [usuario]]))
+    override_motored_db(FakeAsyncSession(execute_queue=[[], [usuario], [None]]))
 
     with TestClient(app) as client:
         response = client.post(
@@ -178,7 +178,7 @@ def test_login_with_a_password_over_72_bytes_returns_401_not_500(monkeypatch):
     monkeypatch.setattr(settings, "MOTORED_SECRET_KEY", "login-test-motored-secret")
     monkeypatch.setattr(settings, "SECRET_KEY", "login-test-asc360-secret")
     usuario = _make_usuario("correcta123")
-    override_motored_db(FakeAsyncSession(execute_queue=[[], [usuario]]))
+    override_motored_db(FakeAsyncSession(execute_queue=[[], [usuario], [None]]))
 
     with TestClient(app) as client:
         response = client.post(LOGIN_URL, json={"email": usuario.email, "password": "x" * 100})

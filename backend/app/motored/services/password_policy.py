@@ -12,6 +12,7 @@ from fastapi import HTTPException, status
 from app.core.security import get_password_hash
 from app.motored.models.usuario import Usuario
 from app.motored.schemas.usuario import PASSWORD_MAX_BYTES, PASSWORD_MIN_LENGTH
+from app.motored.services import login_bloqueo
 from app.motored.services.common_passwords import COMMON_PASSWORDS
 
 EMAIL_LOCAL_PART_MIN = 4
@@ -56,3 +57,4 @@ def aplicar_password(usuario: Usuario, password: str, must_change: bool = False)
     usuario.hashed_password = get_password_hash(password)
     usuario.password_changed_at = datetime.utcnow()
     usuario.must_change_password = must_change
+    login_bloqueo.limpiar_bloqueo(usuario)  # a new password also lifts a lockout

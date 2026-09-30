@@ -50,7 +50,7 @@ def _live_entry(key: str) -> Tuple[float, int]:
     return entry or (0.0, 0)
 
 
-def _evict_expired() -> None:
+def _descartar_vencidos() -> None:
     now = _now()
     while _failures:
         oldest = next(iter(_failures))
@@ -71,7 +71,7 @@ def is_locked(cedula_raw: str) -> bool:
 def record_failure(cedula_raw: str) -> None:
     key = normalize_cedula(cedula_raw)
     with _lock:
-        _evict_expired()
+        _descartar_vencidos()
         start, count = _live_entry(key)
         if count == 0:
             start = _now()
@@ -85,7 +85,7 @@ def clear(cedula_raw: str) -> None:
         _failures.pop(normalize_cedula(cedula_raw), None)
 
 
-def tracked_count() -> int:
+def cantidad_rastreada() -> int:
     with _lock:
         return len(_failures)
 

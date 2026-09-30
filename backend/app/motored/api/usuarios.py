@@ -29,6 +29,7 @@ odd/motored-salir-y-cambio-password agrega `POST /usuarios/{id}/password`
 largo mínimo de contraseña también al crear usuarios.
 """
 import uuid
+from datetime import date, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -42,7 +43,7 @@ from app.motored.models.usuario_sucursal import UsuarioSucursal
 from app.motored.schemas.usuario import (
     UsuarioCreate, UsuarioPasswordReset, UsuarioRead,
 )
-from app.motored.services import auditoria, solicitudes, vinculacion
+from app.motored.services import auditoria, login_bloqueo, login_eventos, solicitudes, vinculacion
 from app.motored.services.password_policy import aplicar_password, validar_password
 
 router = APIRouter(
@@ -53,6 +54,9 @@ router = APIRouter(
 
 _require_admin = require_roles("ADMIN")
 
+PAGE_SIZE_DEFAULT = 50
+PAGE_SIZE_MAX = 200
+
 
 def _to_read(usuario: Usuario) -> dict:
     payload = UsuarioRead.model_validate(usuario).model_dump(mode="json")
@@ -60,6 +64,9 @@ def _to_read(usuario: Usuario) -> dict:
     # D5: el `telegram_id` crudo nunca se expone) -- se deriva acá, después
     # de `model_validate`, en vez de vía `from_attributes`.
     payload["telegram_vinculado"] = usuario.telegram_id is not None
+    # Only while the lock is still in force; stored naive UTC, sent with its offset.
+    until = login_bloqueo.bloqueado_hasta_vigente(usuario, login_bloqueo.ahora())
+    payload["bloqueado_hasta"] = until.replace(tzinfo=timezone.utc).isoformat() if until else None
     return payload
 
 
@@ -101,6 +108,26 @@ async def list_usuarios(
         stmt = stmt.where(Usuario.status == status_filtro, Usuario.activo.is_(True))
     result = await db.execute(stmt)
     return [_to_read(u) for u in result.scalars().all()]
+
+
+@router.get("/ingresos")
+async def list_ingresos(
+    desde: Optional[date] = Query(None, description="Día (hora de Colombia), inclusivo"),
+    hasta: Optional[date] = Query(None, description="Día (hora de Colombia), inclusivo"),
+    resultado: Optional[str] = Query(None, pattern="^(EXITO|FALLO|BLOQUEADO)$"),
+    texto: Optional[str] = Query(None, max_length=255, description="El correo contiene este texto"),
+    usuario_id: Optional[uuid.UUID] = None,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(PAGE_SIZE_DEFAULT, ge=1, le=PAGE_SIZE_MAX),
+    db: AsyncSession = Depends(get_motored_db_or_503),
+    _user: MotoredUser = Depends(_require_admin),
+) -> dict:
+    """Registro de ingresos (T10): cada intento de login, el más nuevo primero.
+    Declarado ANTES de `/{usuario_id}` para que "ingresos" no se lea como id."""
+    return await login_eventos.listar(
+        db, page=page, page_size=page_size, desde=desde, hasta=hasta,
+        resultado=resultado, texto=texto, usuario_id=usuario_id,
+    )
 
 
 @router.get("/{usuario_id}")
@@ -165,6 +192,21 @@ async def reset_password_usuario(
         )
     aplicar_password(usuario, payload.password, must_change=True)
     auditoria.audit_password_reset(db, "usuario", usuario.id, uuid.UUID(user.user_id))
+    await db.commit()
+    return _to_read(usuario)
+
+
+@router.post("/{usuario_id}/desbloquear")
+async def desbloquear_usuario(
+    usuario_id: uuid.UUID,
+    db: AsyncSession = Depends(get_motored_db_or_503),
+    user: MotoredUser = Depends(_require_admin),
+) -> dict:
+    """Un ADMIN levanta el bloqueo por intentos fallidos sin cambiar la
+    contraseña (un reset de contraseña también lo levanta)."""
+    usuario = await _get_or_404(db, usuario_id)
+    login_bloqueo.limpiar_bloqueo(usuario)
+    auditoria.audit_desbloqueo(db, "usuario", usuario.id, uuid.UUID(user.user_id))
     await db.commit()
     return _to_read(usuario)
 

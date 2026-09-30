@@ -51,5 +51,7 @@ class UsuarioRead(BaseModel):
     status: str = "approved"
     phone: Optional[str] = None
     telegram_vinculado: bool = False
+    # Lock expiry (UTC, offset included) while the account is locked; `_to_read` sets it.
+    bloqueado_hasta: Optional[datetime] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
