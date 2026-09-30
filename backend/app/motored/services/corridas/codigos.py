@@ -107,7 +107,7 @@ CATALOGO = {
     A_CORRIDA_DEMANDA_PERDIDA_AUSENTE: (
         "No hay demanda perdida cargada: se calcula sin ella."
     ),
-    A_CORRIDA_SIN_PRECIO: "La referencia {codigo} no tiene precio.",
+    A_CORRIDA_SIN_PRECIO: "La referencia {referencia} no tiene precio.",
 }
 
 # Variante "no hay ninguna carga" de los códigos que también cubren "vieja".
