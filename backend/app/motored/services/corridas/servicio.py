@@ -22,8 +22,8 @@ ADR-5/ADR-9, decisiones #14 y #16): servicio de la corrida.
   mientras corría (si no, la corrida queda `invalidada`).
 - `cerrar_corrida` / `anular_corrida` aplican las reglas del ciclo de vida.
 
-Ningún commit acá: la transacción es del llamador. Lo ejecuta el job de
-S6b; todavía nadie encola corridas (API en S7).
+Ningún commit acá: la transacción es del llamador. La API (S7, `api/
+corridas.py`) crea, cierra y anula; el job de S6b las calcula.
 """
 import asyncio
 import logging
@@ -52,6 +52,7 @@ from app.motored.models.sucursal import Sucursal
 from app.motored.services import parametros, parametros_claves as pc
 from app.motored.services.corridas import (
     cargador,
+    cargas_perdida,
     codigos,
     estados,
     parametros_corrida,
@@ -126,6 +127,16 @@ async def _insertar_corrida(
 # --- crear_corrida ----------------------------------------------------------
 
 
+async def _cargas_vinculadas(db, fecha_corte: date, resultado):
+    """Las cargas del preflight más las EXCEL de demanda perdida que el
+    cargador va a leer (la ventana depende del modo efectivo del mes en
+    curso congelado en `seleccion_datos`)."""
+    bloque = resultado.seleccion_datos["mes_en_curso"]
+    perdida = await cargas_perdida.cargas_demanda_perdida_excel(
+        db, fecha_corte, bloque["modo_efectivo"] == "PONDERADO")
+    return {**resultado.cargas_usadas, "demanda_perdida": perdida}
+
+
 def _validar_overrides(overrides: Optional[Mapping[str, Any]]) -> None:
     try:
         parametros_corrida.validar_overrides(overrides)
@@ -184,8 +195,13 @@ def _seleccion_congelada(resultado) -> Dict[str, Any]:
 def _valores_corrida(
     fecha_corte: date, proveedor, params, resultado, maestro,
     overrides: Optional[Mapping[str, Any]], alcance: str, total: int,
-    usuario_id: Optional[UUID],
+    usuario_id: Optional[UUID], nota: Optional[str] = None,
 ) -> Dict[str, Any]:
+    creada: Dict[str, Any] = {
+        "evento": "CREADA", "en": _ahora().isoformat(),
+        "usuario_id": None if usuario_id is None else str(usuario_id)}
+    if nota:
+        creada["nota"] = nota
     return {
         "proveedor_id": proveedor.id,
         "fecha_corte": fecha_corte,
@@ -199,9 +215,7 @@ def _valores_corrida(
         "seleccion_datos": _seleccion_congelada(resultado),
         "sucursales_total": total,
         "usuario_id": usuario_id,
-        "log": [{
-            "evento": "CREADA", "en": _ahora().isoformat(),
-            "usuario_id": None if usuario_id is None else str(usuario_id)}],
+        "log": [creada],
     }
 
 
@@ -209,8 +223,12 @@ async def crear_corrida(
     db, *, fecha_corte: date, sucursal_ids: Optional[Sequence[UUID]] = None,
     overrides: Optional[Mapping[str, Any]] = None,
     usuario_id: Optional[UUID] = None, hoy: Optional[date] = None,
+    nota: Optional[str] = None,
 ) -> Corrida:
-    """Crea la corrida PENDIENTE con sus insumos congelados (ver módulo)."""
+    """Crea la corrida PENDIENTE con sus insumos congelados (ver módulo).
+
+    `nota` (texto libre del POST, ADR-9) no tiene columna: queda en el evento
+    CREADA del `log`, que es append-only."""
     if fecha_corte > (hoy or hoy_bogota()):
         raise ErrorCorrida(
             codigos.E_CORRIDA_CORTE_FUTURO,
@@ -226,13 +244,14 @@ async def crear_corrida(
     valores = _valores_corrida(
         fecha_corte, proveedor, params, resultado, maestro, overrides,
         "TODAS" if sucursal_ids is None else "SELECCION", len(ids),
-        usuario_id)
+        usuario_id, nota)
     corrida = await _insertar_corrida(db, valores, bool(overrides))
     for orden, sucursal_id in enumerate(ids, start=1):
         db.add(CorridaSucursal(
             corrida_id=corrida.id, sucursal_id=sucursal_id, orden=orden,
             estado=estados.SUC_PENDIENTE))
-    persistencia.registrar_cargas(db, corrida.id, resultado.cargas_usadas)
+    persistencia.registrar_cargas(
+        db, corrida.id, await _cargas_vinculadas(db, fecha_corte, resultado))
     await db.flush()
     return corrida
 
@@ -510,16 +529,24 @@ async def _sucursales_fallidas(db, corrida_id: UUID) -> int:
 
 
 async def cerrar_corrida(db, corrida_id: UUID, usuario_id: UUID) -> Corrida:
-    """BORRADOR -> CERRADA. Bloquea la corrida `FOR UPDATE` y sus cargas
-    `FOR SHARE`: una anulación concurrente de una carga espera, y una carga
-    ya anulada invalida la corrida (E-041)."""
+    """BORRADOR -> CERRADA.
+
+    Bloquea primero las cargas vinculadas `FOR SHARE` y después la corrida
+    `FOR UPDATE`: el mismo orden (carga y luego corrida) que la guarda de
+    anulación (ADR-11) y `finalizar_corrida`. Una anulación concurrente de
+    una carga espera a este cierre (y se bloquea con E-CARGA-050); un cierre
+    que llega durante una anulación espera y la ve (E-041). El orden inverso
+    (corrida y luego carga) termina en `deadlock detected` cuando ambos se
+    cruzan. Una carga ya anulada invalida la corrida (E-041), pero después de
+    las reglas de estado, escenario y sucursales."""
+    anuladas = await _cargas_anuladas(db, corrida_id)
     corrida = await _bloquear_corrida(db, corrida_id)
     _validar_cierre(corrida)
     if await _sucursales_fallidas(db, corrida_id):
         raise ErrorCorrida(
             codigos.E_CORRIDA_SUCURSAL_FALLIDA,
             codigos.mensaje(codigos.E_CORRIDA_SUCURSAL_FALLIDA))
-    if await _cargas_anuladas(db, corrida_id):
+    if anuladas:
         raise ErrorCorrida(
             codigos.E_CORRIDA_INVALIDADA,
             codigos.mensaje(codigos.E_CORRIDA_INVALIDADA))

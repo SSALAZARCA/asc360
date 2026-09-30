@@ -24,11 +24,13 @@ a las filas de su(s) propia(s) sucursal(es) (T19, hot spot histórico --
 la verificación de `sdd/motored-pedidos-cimientos` ya encontró un defecto
 real de branch-scoping ahí).
 
-Anulación (spec "Anulación guard"): la tabla `corrida` todavía no existe
-(Fase 3 territorio) -- contra un conjunto SIEMPRE vacío de corridas
-cerradas, la anulación succeeds unconditionally, exactamente el escenario
-explícito de la spec. Este endpoint es el HOOK que Fase 3 completará, no
-una implementación de corridas en sí.
+Anulación (spec "Anulación guard"): desde Fase 3 S7 (sdd/motored-pedidos-
+motor, ADR-11) la anulación de una carga EXCEL pasa por
+`services.corridas.guardas.aplicar_guard_anulacion`: si una corrida CERRADA
+usó la carga responde 409 E-CARGA-050 (carga intacta); las corridas vivas
+que la usaron quedan invalidadas y la anulación sigue. Sin corridas
+vinculadas el camino es el de Fase 2, sin cambios. La rama BOT no pasa por
+la guarda (sus cabeceras no se vinculan a corridas).
 
 Decisión documentada -- scoping de `GET /cargas` (lista): `carga_archivo`
 NO tiene una dimensión de sucursal (un archivo puede tocar muchas/todas las
@@ -101,6 +103,8 @@ from app.motored.schemas.ingesta import (
 from app.motored.services import demanda_perdida_bot as demanda_perdida_bot_mod
 from app.motored.services import maestros as maestros_mod
 from app.motored.services import storage
+from app.motored.services.corridas.codigos import ErrorCorrida
+from app.motored.services.corridas.guardas import aplicar_guard_anulacion
 from app.motored.services.ingesta import deteccion as deteccion_mod
 from app.motored.services.ingesta import errores as errores_mod
 from app.motored.services.ingesta import lector as lector_mod
@@ -684,17 +688,58 @@ async def aplicar_carga(
     return CargaArchivoRead.model_validate(carga)
 
 
+async def _anular_bot(
+    db: AsyncSession, carga: CargaArchivo, user: MotoredUser
+) -> None:
+    """sdd/motored-ventas-perdidas-bot, design D4: un header BOT no tiene
+    `carga_fila_staging` que borrar -- el ADMIN web delega en el mismo
+    servicio que usará el propio endpoint del bot (`validar_ventana=True`,
+    Fase 6), pero sin sus reglas de propio-actor/mismo-día
+    (`validar_ventana=False`).
+
+    Post-Phase-3 review, finding #2: el guard `estado == "ANULADO"` del
+    endpoint es un SELECT + chequeo en Python, no atómico -- dos llamadas
+    concurrentes pueden pasarlo ambas. El claim atómico real vive DENTRO de
+    `anular_registro_bot` (única barrera común a toda llamada concurrente
+    contra la misma fila); acá solo se traduce su `CargaYaAnuladaError` al
+    mismo 409 que el guard del endpoint ya usa."""
+    try:
+        await demanda_perdida_bot_mod.anular_registro_bot(
+            db, carga, user, validar_ventana=False
+        )
+    except demanda_perdida_bot_mod.CargaYaAnuladaError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="La carga ya está anulada.",
+        )
+    await db.commit()
+
+
+async def _aplicar_guarda_corridas(
+    db: AsyncSession, carga: CargaArchivo
+) -> None:
+    """ADR-11: bloquea la carga y consulta las corridas que la usaron. Un
+    bloqueo (E-CARGA-050) libera el lock de inmediato con un rollback y se
+    responde 409 con el código y el mensaje que nombra la corrida."""
+    try:
+        await aplicar_guard_anulacion(db, carga)
+    except ErrorCorrida as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": exc.codigo, "message": exc.mensaje},
+        )
+
+
 @router.post("/{carga_id}/anular", response_model=CargaArchivoRead)
 async def anular_carga(
     carga_id: uuid.UUID,
     db: AsyncSession = Depends(get_motored_db_or_503),
     user: MotoredUser = Depends(_require_write),
 ):
-    """Spec "Anulación guard": bloqueada solo si una corrida CERRADA usó la
-    carga -- la tabla `corrida` no existe todavía (Fase 3), así que contra
-    el conjunto SIEMPRE vacío de hoy la anulación succeeds
-    unconditionally, exactamente el escenario explícito de la spec. Este
-    endpoint es el HOOK que Fase 3 completará (ver docstring del módulo)."""
+    """Spec "Anulación guard": una carga EXCEL usada por una corrida CERRADA
+    no se anula (409 E-CARGA-050); una usada por corridas vivas las marca
+    invalidadas y se anula igual. Ver el docstring del módulo."""
     carga = await _carga_or_404(db, carga_id)
     if carga.estado == "ANULADO":
         raise HTTPException(
@@ -702,32 +747,10 @@ async def anular_carga(
         )
 
     if carga.origen == "BOT":
-        # sdd/motored-ventas-perdidas-bot, design D4: un header BOT no
-        # tiene `carga_fila_staging` que borrar -- el ADMIN web delega en
-        # el mismo servicio que usará el propio endpoint del bot
-        # (`validar_ventana=True`, Fase 6), pero sin sus reglas de
-        # propio-actor/mismo-día (`validar_ventana=False`).
-        #
-        # Post-Phase-3 review, finding #2: el guard `estado == "ANULADO"`
-        # de arriba es un SELECT + chequeo en Python, no atómico -- dos
-        # llamadas concurrentes pueden pasarlo ambas. El claim atómico real
-        # vive DENTRO de `anular_registro_bot` (única barrera común a toda
-        # llamada concurrente contra la misma fila); acá solo se traduce su
-        # `CargaYaAnuladaError` al mismo 409 que el guard de arriba ya usa.
-        try:
-            await demanda_perdida_bot_mod.anular_registro_bot(
-                db, carga, user, validar_ventana=False
-            )
-        except demanda_perdida_bot_mod.CargaYaAnuladaError:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT, detail="La carga ya está anulada."
-            )
-        await db.commit()
+        await _anular_bot(db, carga, user)
         return CargaArchivoRead.model_validate(carga)
 
-    # Guard de corrida CERRADA: `corrida` no existe aún -- conjunto vacío,
-    # nunca bloquea (ver docstring del endpoint).
-
+    await _aplicar_guarda_corridas(db, carga)
     carga.estado = "ANULADO"
     await db.execute(delete(CargaFilaStaging).where(CargaFilaStaging.carga_id == carga_id))
     await db.commit()

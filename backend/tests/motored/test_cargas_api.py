@@ -77,6 +77,13 @@ def _motored_ready(monkeypatch):
     app.dependency_overrides.clear()
 
 
+def _cola_anular_sin_corridas(carga) -> list:
+    """Anulación EXCEL sin corridas vinculadas (S7): sonda, carga, y las tres
+    consultas de la guarda (FOR UPDATE, corrida cerrada, invalidación, todas
+    vacías) antes del DELETE del staging."""
+    return [[], [carga], [], [], [], []]
+
+
 def _client_as(role: str, execute_queue) -> TestClient:
     override_motored_user(MotoredUser(user_id=str(uuid.uuid4()), role=role))
     override_motored_db(FakeAsyncSession(execute_queue=execute_queue))
@@ -302,7 +309,7 @@ def test_post_aplicar_restricted_to_admin_and_compras(role):
 @pytest.mark.parametrize("role", ALL_ROLES)
 def test_post_anular_restricted_to_admin_and_compras(role):
     carga = _carga(estado="APLICADO")
-    client = _client_as(role, execute_queue=[[], [carga], []])
+    client = _client_as(role, execute_queue=_cola_anular_sin_corridas(carga))
     response = client.post(f"{CARGAS_URL}/{carga.id}/anular")
     if role in WRITE_ROLES:
         assert response.status_code == 200, response.text
@@ -452,7 +459,8 @@ def test_non_sucursal_roles_see_every_preview_row_unfiltered(role):
 @pytest.mark.parametrize("estado", ["PENDIENTE", "VALIDADO", "CON_ERRORES", "APLICADO"])
 def test_anular_succeeds_unconditionally_against_empty_corrida_set(estado):
     carga = _carga(estado=estado)
-    client = _client_as("ADMIN", execute_queue=[[], [carga], []])
+    client = _client_as(
+        "ADMIN", execute_queue=_cola_anular_sin_corridas(carga))
 
     response = client.post(f"{CARGAS_URL}/{carga.id}/anular")
 

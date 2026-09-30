@@ -628,8 +628,10 @@ def test_only_the_used_cargas_are_linked_with_their_upper_case_type():
     assert all(v.corrida_id == CORRIDA for v in db.added_of_type(CorridaCarga))
 
 
-def test_the_five_preflight_types_map_to_their_carga_type():
+def test_the_linked_types_map_to_their_carga_type():
+    """Los cinco del preflight más la demanda perdida EXCEL (S7)."""
     assert pe.TIPO_CARGA == {
         "ventas": "VENTAS", "inventario": "INVENTARIO",
         "backorder": "BACKORDER", "facturas": "FACTURAS_PEDIDOS",
-        "ingresos": "INGRESOS_FACTURAS"}
+        "ingresos": "INGRESOS_FACTURAS",
+        "demanda_perdida": "DEMANDA_PERDIDA"}

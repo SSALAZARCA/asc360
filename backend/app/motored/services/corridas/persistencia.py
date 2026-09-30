@@ -66,6 +66,7 @@ TIPO_CARGA = {
     "backorder": "BACKORDER",
     "facturas": "FACTURAS_PEDIDOS",
     "ingresos": "INGRESOS_FACTURAS",
+    "demanda_perdida": "DEMANDA_PERDIDA",
 }
 
 _SALIDAS = (

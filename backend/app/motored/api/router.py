@@ -23,6 +23,7 @@ from app.motored.api import (
     bot_demanda_perdida,
     cargas,
     carga,
+    corridas,
     demanda_perdida,
     detractores,
     encuesta_cargas,
@@ -70,3 +71,7 @@ router.include_router(encuesta_cargas.router)
 router.include_router(encuesta_publica.router)
 # Satisfaction survey (T5): `/detractores` is its own prefix, no path overlap.
 router.include_router(detractores.router)
+# Fase 3 "Motor" (sdd/motored-pedidos-motor, S7): `/corridas` es su propio
+# prefijo (`/api/motored/corridas`), sin superposición de path con ninguno de
+# los routers de arriba -- el orden relativo no importa acá.
+router.include_router(corridas.router)

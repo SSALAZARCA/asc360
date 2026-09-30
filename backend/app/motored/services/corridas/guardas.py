@@ -3,7 +3,7 @@ Motored Pedidos F3 "Motor" (sdd/motored-pedidos-motor, S6a, ADR-11, spec
 "Anulación guard for cargas"): gancho de la guarda de anulación de cargas.
 
 F2 llama a `aplicar_guard_anulacion` desde la anulación de una carga EXCEL
-(el cableado en `api/cargas.py` es de S7):
+(`api/cargas.py::anular_carga`, cableado en S7):
 
 1. bloquea la fila de la carga (`FOR UPDATE`), así espera a un `cerrar` que
    la tenga tomada `FOR SHARE` y ninguna corrida se cierra a mitad de camino;

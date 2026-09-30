@@ -129,7 +129,7 @@ def entorno(monkeypatch):
     """Dobles de los colaboradores que tienen su propia suite."""
     estado = SimpleNamespace(
         params=_params(), vigencia=_vigencia(), maestro=[],
-        error_preflight=None, llamadas=[])
+        error_preflight=None, llamadas=[], cargas_perdida=())
 
     async def proveedor(db):
         return cg.FilaProveedor(PROVEEDOR_ID, 4, 5, Decimal("3"))
@@ -147,11 +147,17 @@ def entorno(monkeypatch):
             raise estado.error_preflight
         return estado.vigencia
 
+    async def perdida(db, fecha_corte, con_m0):
+        estado.llamadas.append(("perdida", fecha_corte, con_m0))
+        return estado.cargas_perdida
+
     monkeypatch.setattr(sv.cargador, "cargar_proveedor_principal", proveedor)
     monkeypatch.setattr(sv.cargador, "cargar_maestro", maestro)
     monkeypatch.setattr(
         sv.parametros_corrida, "cargar_parametros_corrida", cargar_params)
     monkeypatch.setattr(sv.vigencia, "ejecutar_preflight", preflight)
+    monkeypatch.setattr(
+        sv.cargas_perdida, "cargas_demanda_perdida_excel", perdida)
     return estado
 
 
@@ -440,6 +446,49 @@ async def test_the_used_cargas_are_linked_to_the_new_corrida(entorno):
         (CARGA_VENTAS, "VENTAS"), (CARGA_INV, "INVENTARIO")}
     assert all(
         v.corrida_id == corrida.id for v in db.added_of_type(CorridaCarga))
+
+
+async def test_the_excel_lost_demand_cargas_are_linked_too(entorno):
+    uno, dos = uuid.UUID(int=31), uuid.UUID(int=32)
+    entorno.cargas_perdida = (uno, dos)
+    db = Sesion(execute_queue=_cola_crear())
+
+    await _crear(db)
+
+    vinculos = {(v.carga_id, v.tipo) for v in db.added_of_type(CorridaCarga)}
+    assert vinculos == {
+        (CARGA_VENTAS, "VENTAS"), (CARGA_INV, "INVENTARIO"),
+        (uno, "DEMANDA_PERDIDA"), (dos, "DEMANDA_PERDIDA")}
+
+
+async def test_the_lost_demand_window_ignores_the_current_month_by_default(
+        entorno):
+    await _crear(Sesion(execute_queue=_cola_crear()))
+
+    assert ("perdida", CORTE, False) in entorno.llamadas
+
+
+async def test_the_lost_demand_window_takes_the_current_month_if_ponderado(
+        entorno):
+    entorno.vigencia.seleccion_datos["mes_en_curso"] = _bloque_m0(
+        "PONDERADO", d=14, D=30)
+
+    await _crear(Sesion(execute_queue=_cola_crear()))
+
+    assert ("perdida", CORTE, True) in entorno.llamadas
+
+
+async def test_the_nota_is_kept_in_the_creation_event(entorno):
+    corrida = await _crear(
+        Sesion(execute_queue=_cola_crear()), nota="Corrida de prueba")
+
+    assert corrida.log[0]["nota"] == "Corrida de prueba"
+
+
+async def test_no_nota_leaves_the_creation_event_without_the_key(entorno):
+    corrida = await _crear(Sesion(execute_queue=_cola_crear()))
+
+    assert "nota" not in corrida.log[0]
 
 
 async def test_the_creation_event_opens_the_append_only_log(entorno):
@@ -823,7 +872,9 @@ def _corrida_en(estado, **campos):
 
 
 async def _cerrar(corrida, *, fallidas=0, anuladas=()):
-    db = Sesion(execute_queue=[[corrida], [fallidas], _cargas(anuladas)])
+    """Orden de las consultas de `cerrar_corrida`: las cargas `FOR SHARE`
+    primero, la corrida `FOR UPDATE` después, luego las sucursales."""
+    db = Sesion(execute_queue=[_cargas(anuladas), [corrida], [fallidas]])
     return await sv.cerrar_corrida(db, corrida.id, USUARIO), db
 
 
@@ -888,21 +939,33 @@ async def test_a_carga_annulled_after_the_run_blocks_the_close():
     assert corrida.estado == "BORRADOR"
 
 
-async def test_closing_locks_the_corrida_and_its_cargas():
+async def test_closing_locks_the_cargas_before_the_corrida():
+    """Mismo orden que la guarda de anulación y `finalizar_corrida` (carga y
+    luego corrida): el orden inverso termina en `deadlock detected` cuando un
+    cierre y una anulación de la misma carga se cruzan (pg_real)."""
     corrida = _corrida_en("BORRADOR")
 
     _, db = await _cerrar(corrida)
 
-    corrida_sql = str(db.executed_statements[0].compile(
+    cargas_sql = str(db.executed_statements[0].compile(
         dialect=postgresql.dialect()))
-    cargas_sql = str(db.executed_statements[2].compile(
+    corrida_sql = str(db.executed_statements[1].compile(
         dialect=postgresql.dialect()))
-    assert "FOR UPDATE" in corrida_sql
-    assert "FOR SHARE" in cargas_sql
+    assert "FOR SHARE" in cargas_sql and "carga_archivo" in cargas_sql
+    assert "FOR UPDATE" in corrida_sql and "FROM corrida" in corrida_sql
+
+
+async def test_a_carga_annulled_does_not_hide_a_state_refusal():
+    corrida = _corrida_en("CERRADA")
+
+    with pytest.raises(pe.ErrorCorrida) as error:
+        await _cerrar(corrida, anuladas=[uuid.uuid4()])
+
+    assert error.value.codigo == codigos.E_CORRIDA_ESTADO_NO_ADMITE
 
 
 async def test_closing_an_unknown_corrida_is_a_lookup_error():
-    db = Sesion(execute_queue=[[]])
+    db = Sesion(execute_queue=[[], []])
 
     with pytest.raises(LookupError):
         await sv.cerrar_corrida(db, uuid.uuid4(), USUARIO)
