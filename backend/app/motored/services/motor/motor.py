@@ -17,7 +17,8 @@ Orden de las etapas:
 7. Puntos y estado de quiebre.
 8. Resumen por clase.
 
-El mes en curso (M0) queda como identidad hasta S3b. Todo es aritmética exacta
+El mes en curso (M0) sólo entra a N con `modo_mes_en_curso` PONDERADO (etapa
+4); no cuenta para el universo, FMS ni la omisión. Todo es aritmética exacta
 y determinista: el resultado no depende del orden de las entradas.
 """
 from dataclasses import dataclass, replace
@@ -41,10 +42,10 @@ from app.motored.services.motor.cobertura import (
     stock_objetivo,
 )
 from app.motored.services.motor.demanda import (
-    demanda_ponderada,
+    demanda_con_m0,
     indicadores_informativos,
-    serie_demanda,
 )
+from app.motored.services.motor.mes_en_curso import validar as validar_m0
 from app.motored.services.motor.pedido import (
     calcular_pedido,
     cobertura_final,
@@ -166,7 +167,8 @@ def _quiebre(entrada: EntradaReferencia, n: Fraction,
 
 def _linea(ctx: _Contexto, entrada: EntradaReferencia,
            ventas: Sequence[Fraction], n: Fraction, item: ItemAbc,
-           fms: str, cobertura: Fraction) -> LineaPedido:
+           fms: str, cobertura: Fraction,
+           m0_proyectada: Optional[Fraction]) -> LineaPedido:
     params = ctx.params
     indicadores = indicadores_informativos(entrada, ctx.ventana, params)
     clase = item.clase + fms
@@ -203,21 +205,25 @@ def _linea(ctx: _Contexto, entrada: EntradaReferencia,
         punto_maximo=maximo,
         estado_quiebre=_quiebre(entrada, n, ventas, minimo, maximo, params),
         advertencias=calculo.advertencias,
+        venta_m0_proyectada=m0_proyectada,
     )
 
 
 def _demandas(universo: Universo, ctx: _Contexto,
-              ajustes: Optional[AjustesPrueba]) -> dict[str, Fraction]:
-    """N exacta de cada referencia del universo."""
-    demandas = {}
+              ajustes: Optional[AjustesPrueba]
+              ) -> tuple[dict[str, Fraction], dict[str, Optional[Fraction]]]:
+    """N exacta de cada referencia y su venta de M0 proyectada (o `None`)."""
+    demandas, proyectadas = {}, {}
     for codigo, (entrada, _) in universo.items():
         propia = _ventana_de(ctx.ventana, codigo, ajustes)
-        serie = serie_demanda(entrada, propia, ctx.params)
-        demandas[codigo] = demanda_ponderada(serie, propia)
-    return demandas
+        demandas[codigo], proyectadas[codigo] = demanda_con_m0(
+            entrada, propia, ctx.params
+        )
+    return demandas, proyectadas
 
 
 def _lineas(universo: Universo, demandas: Mapping[str, Fraction],
+            proyectadas: Mapping[str, Optional[Fraction]],
             abc: Mapping[str, ItemAbc], ctx: _Contexto
             ) -> tuple[LineaPedido, ...]:
     coberturas: dict[str, Fraction] = {}
@@ -232,7 +238,7 @@ def _lineas(universo: Universo, demandas: Mapping[str, Fraction],
             )
         lineas.append(_linea(
             ctx, entrada, ventas, demandas[codigo], item, fms,
-            coberturas[clase],
+            coberturas[clase], proyectadas[codigo],
         ))
     return tuple(sorted(lineas, key=lambda linea: linea.orden_abc))
 
@@ -247,17 +253,18 @@ def calcular_sucursal(entradas: Sequence[EntradaReferencia],
     `resoluciones` (de `resolver_cadenas`) sólo se usa con
     `consolidar_sustituidas` ON.
     """
+    validar_m0(params)
     ventana = construir_ventana(sucursal.fecha_corte, sucursal.fecha_apertura)
     if ventana.sin_historia:
         return _omitida(sucursal, ventana)
     ctx = _Contexto(ventana, sucursal, params)
     consolidacion = consolidar(entradas, resoluciones, ventana, params)
     universo = _universo(consolidacion.entradas, ventana)
-    demandas = _demandas(universo, ctx, ajustes_prueba)
+    demandas, proyectadas = _demandas(universo, ctx, ajustes_prueba)
     abc = clasificar_abc(
         demandas, params, desempate=_rangos_fisicos(ajustes_prueba)
     )
-    lineas = _lineas(universo, demandas, abc.items, ctx)
+    lineas = _lineas(universo, demandas, proyectadas, abc.items, ctx)
     advertencias = consolidacion.advertencias + (
         (Advertencia(COD_SUMA_NO_POSITIVA, MENSAJE_SUMA_NO_POSITIVA),)
         if abc.suma_no_positiva else ()

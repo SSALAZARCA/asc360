@@ -5,13 +5,15 @@ ponderada N e indicadores informativos K/L/M.
 La demanda mensual es la venta más, con el switch ON, la demanda perdida por
 `factor_demanda_perdida` (por mes de ocurrencia). Con el switch OFF la
 pérdida no influye en NADA, ni siquiera en K. Los meses no operados por la
-sucursal (divisor dinámico) valen 0. El mes en curso (M0) aún no
-participa (lo incorpora S3b).
+sucursal (divisor dinámico) valen 0. El mes en curso (M0) sólo entra a N
+con el modo PONDERADO (`mes_en_curso.py`); con EXCLUIDO no influye.
 """
 from dataclasses import dataclass
 from fractions import Fraction
+from typing import Optional
 
 from app.motored.services.motor.aritmetica import a_fraccion
+from app.motored.services.motor.mes_en_curso import AporteM0, aporte_m0
 from app.motored.services.motor.tipos import EntradaReferencia, ParametrosMotor
 from app.motored.services.motor.ventana import MESES_VENTANA, Ventana
 
@@ -58,12 +60,30 @@ def serie_demanda(entrada: EntradaReferencia, ventana: Ventana,
     )
 
 
-def demanda_ponderada(serie: tuple[Fraction, ...],
-                      ventana: Ventana) -> Fraction:
-    """N = sum(peso_i * d_i) / divisor, exacto. Divisor 0 no tiene N."""
+def demanda_ponderada(serie: tuple[Fraction, ...], ventana: Ventana,
+                      m0: Optional[AporteM0] = None) -> Fraction:
+    """N = (sum(peso_i * d_i) [+ d0_proy * w0]) / (divisor [+ w0]), exacto.
+
+    Sin `m0` es el N de meses cerrados. Divisor 0 no tiene N.
+    """
     if ventana.sin_historia:
         raise ValueError("divisor 0: la sucursal debe omitirse (OMITIDA)")
-    return sum(p * d for p, d in zip(ventana.pesos, serie)) / ventana.divisor
+    numerador = sum(p * d for p, d in zip(ventana.pesos, serie))
+    divisor = Fraction(ventana.divisor)
+    if m0 is not None:
+        numerador += m0.proyectada * m0.peso
+        divisor += m0.peso
+    return numerador / divisor
+
+
+def demanda_con_m0(entrada: EntradaReferencia, ventana: Ventana,
+                   params: ParametrosMotor
+                   ) -> tuple[Fraction, Optional[Fraction]]:
+    """(N, venta de M0 proyectada); la proyección es `None` sin M0."""
+    serie = serie_demanda(entrada, ventana, params)
+    m0 = aporte_m0(entrada, serie, params)
+    proyectada = None if m0 is None else m0.proyectada
+    return demanda_ponderada(serie, ventana, m0), proyectada
 
 
 def indicadores_informativos(entrada: EntradaReferencia, ventana: Ventana,

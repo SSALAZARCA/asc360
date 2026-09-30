@@ -22,6 +22,8 @@ ESTADO_OMITIDA = "OMITIDA"
 
 COD_SUCURSAL_OMITIDA = "A-CORRIDA-102"
 COD_CADENA_CICLICA = "A-CORRIDA-103"
+COD_MES_EN_CURSO_NO_DISPONIBLE = "A-CORRIDA-105"
+COD_MES_EN_CURSO_CORTO = "A-CORRIDA-106"
 COD_SUMA_NO_POSITIVA = "A-CORRIDA-110"
 
 MOTIVO_SUSTITUIDA = "SUSTITUIDA"
@@ -69,7 +71,9 @@ class AtributosSucursal:
 
 @dataclass(frozen=True)
 class MesEnCurso:
-    """Configuración efectiva del mes en curso (M0). La usa S3b.
+    """Configuración efectiva del mes en curso (M0), ya resuelta.
+
+    `None` o `modo` EXCLUIDO significa que M0 no influye en nada.
 
     En la especificación `d` son los días transcurridos (`dias_transcurridos`)
     y `D` los días del mes (`dias_del_mes`); `tope` es
@@ -129,6 +133,7 @@ class LineaPedido:
     Los valores son `Fraction` exactas; se cuantizan sólo al persistir.
     `peso` y `acumulado` son nulos cuando la suma de N no es positiva, y
     `cobertura_final`/`cobertura_actual` cuando N = 0.
+    `venta_m0_proyectada` es nula salvo con el mes en curso PONDERADO.
     """
 
     entrada: EntradaReferencia
@@ -154,6 +159,7 @@ class LineaPedido:
     punto_maximo: Fraction
     estado_quiebre: str
     advertencias: tuple[str, ...] = ()
+    venta_m0_proyectada: Optional[Fraction] = None
 
 
 @dataclass(frozen=True)

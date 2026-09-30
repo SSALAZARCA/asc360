@@ -14,6 +14,7 @@ MODULOS_ESPERADOS = {
     "__init__", "aritmetica", "tipos", "ventana",
     "demanda", "cobertura", "pedido",
     "clasificacion", "puntos", "resumen", "motor", "sustitucion",
+    "mes_en_curso",
 }
 PROHIBIDOS = (
     "sqlalchemy",
