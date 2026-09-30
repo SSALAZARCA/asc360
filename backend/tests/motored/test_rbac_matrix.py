@@ -120,7 +120,11 @@ def test_parametros_write_restricted_to_admin_only(role):
     client = _client_as(role)
     response = client.post(
         "/api/motored/parametros",
-        json={"clave": "cobertura_default", "valor": 30, "vigente_desde": "2026-01-01"},
+        # Desde S4b el POST valida contra el registro de claves.
+        json={
+            "clave": "dias_ventana_ingresos", "valor": 30,
+            "vigente_desde": "2026-01-01",
+        },
     )
     if role == "ADMIN":
         assert response.status_code == 201, response.text

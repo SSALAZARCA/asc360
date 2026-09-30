@@ -13,12 +13,14 @@ vigente`), sin un solo caller en todo el motor hasta ahora.
 """
 import logging
 import uuid
+from dataclasses import dataclass
 from datetime import date
-from typing import Any, List, NamedTuple, Optional
+from typing import Any, Iterable, List, Mapping, NamedTuple, Optional
 
 from sqlalchemy import select
 
 from app.motored.models.parametro_metodologia import ParametroMetodologia
+from app.motored.services.parametros_claves import REGISTRO
 
 logger = logging.getLogger(__name__)
 
@@ -29,15 +31,18 @@ async def registrar_cambio(
     valor: Any,
     vigente_desde: date,
     usuario_id: Optional[uuid.UUID] = None,
+    sucursal_id: Optional[uuid.UUID] = None,
 ) -> ParametroMetodologia:
     """Un "cambio" es SIEMPRE una fila nueva. La fila anterior (si existe)
     ni se toca ni se consulta aquí -- este método no necesita saber si hay
-    una versión previa para insertar la siguiente."""
+    una versión previa para insertar la siguiente. `sucursal_id=None` es el
+    alcance global."""
     nueva_version = ParametroMetodologia(
         id=uuid.uuid4(),
         clave=clave,
         valor=valor,
         vigente_desde=vigente_desde,
+        sucursal_id=sucursal_id,
         created_by=usuario_id,
     )
     db.add(nueva_version)
@@ -45,12 +50,21 @@ async def registrar_cambio(
 
 
 async def obtener_vigente(db, clave: str, en_fecha: date) -> Optional[ParametroMetodologia]:
-    """La versión vigente para `clave` en `en_fecha`: la de mayor
-    `vigente_desde` que sea `<= en_fecha`."""
+    """La versión GLOBAL vigente para `clave` en `en_fecha`: la de mayor
+    `vigente_desde` que sea `<= en_fecha`. Las filas por sucursal se ignoran
+    (los lectores de F2 siguen viendo lo mismo que antes de S4b). Si dos
+    versiones comparten `vigente_desde`, gana la creada después."""
     result = await db.execute(
         select(ParametroMetodologia)
-        .where(ParametroMetodologia.clave == clave, ParametroMetodologia.vigente_desde <= en_fecha)
-        .order_by(ParametroMetodologia.vigente_desde.desc())
+        .where(
+            ParametroMetodologia.clave == clave,
+            ParametroMetodologia.sucursal_id.is_(None),
+            ParametroMetodologia.vigente_desde <= en_fecha,
+        )
+        .order_by(
+            ParametroMetodologia.vigente_desde.desc(),
+            ParametroMetodologia.created_at.desc().nulls_last(),
+        )
         .limit(1)
     )
     return result.scalars().first()
@@ -170,3 +184,103 @@ async def resolver_tolerancia_ingreso_pct(db, en_fecha: date) -> ResolverResulta
     return await resolver(
         db, CLAVE_TOLERANCIA_INGRESO_PCT, en_fecha, DEFAULT_TOLERANCIA_INGRESO_PCT
     )
+
+
+# ---------------------------------------------------------------------------
+# S4b (sdd/motored-pedidos-motor, ADR-7): lectura de los parámetros del motor
+# con alcance por sucursal. UNA consulta trae la versión vigente de cada
+# (clave, sucursal); la precedencia se resuelve en memoria:
+# override de escenario > sucursal > global > default codificado.
+# ---------------------------------------------------------------------------
+
+FUENTE_OVERRIDE = "OVERRIDE"
+FUENTE_SUCURSAL = "SUCURSAL"
+FUENTE_GLOBAL = "GLOBAL"
+FUENTE_DEFAULT = "DEFAULT"
+
+
+class ResolucionParametro(NamedTuple):
+    """Valor efectivo de un parámetro y de dónde salió."""
+
+    valor: Any
+    fuente: str
+    parametro_id: Optional[uuid.UUID]
+    vigente_desde: Optional[date]
+
+
+def _clave_fila(clave: str, sucursal_id: Any) -> tuple:
+    return (clave, None if sucursal_id is None else str(sucursal_id))
+
+
+@dataclass(frozen=True)
+class VigentesMotor:
+    """Versiones vigentes al corte, listas para resolver por sucursal."""
+
+    en_fecha: date
+    filas: Mapping[tuple, ParametroMetodologia]
+    overrides: Mapping[str, Any]
+
+    @classmethod
+    def desde_filas(
+        cls,
+        filas: Iterable[ParametroMetodologia],
+        en_fecha: date,
+        overrides: Optional[Mapping[str, Any]] = None,
+    ) -> "VigentesMotor":
+        """Las filas llegan ordenadas de la más nueva a la más vieja: se
+        conserva la primera de cada (clave, sucursal)."""
+        indice: dict = {}
+        for fila in filas:
+            indice.setdefault(_clave_fila(fila.clave, fila.sucursal_id), fila)
+        return cls(en_fecha, indice, dict(overrides or {}))
+
+    def resolver(
+        self, clave: str, sucursal_id: Any = None,
+    ) -> ResolucionParametro:
+        """Precedencia: override > sucursal > global > default. Una clave
+        que el registro no conoce se lee igual (default `None`)."""
+        if clave in self.overrides:
+            return ResolucionParametro(
+                self.overrides[clave], FUENTE_OVERRIDE, None, None)
+        propia = self.filas.get(_clave_fila(clave, sucursal_id))
+        if sucursal_id is not None and propia is not None:
+            return _desde_fila(propia, FUENTE_SUCURSAL)
+        global_ = self.filas.get(_clave_fila(clave, None))
+        if global_ is not None:
+            return _desde_fila(global_, FUENTE_GLOBAL)
+        espec = REGISTRO.get(clave)
+        default = None if espec is None else espec.default
+        return ResolucionParametro(default, FUENTE_DEFAULT, None, None)
+
+
+def _desde_fila(fila: ParametroMetodologia, fuente: str):
+    return ResolucionParametro(
+        fila.valor, fuente, fila.id, fila.vigente_desde)
+
+
+async def obtener_vigentes_motor(
+    db,
+    claves: Iterable[str],
+    en_fecha: date,
+    overrides: Optional[Mapping[str, Any]] = None,
+) -> VigentesMotor:
+    """Una sola consulta `DISTINCT ON (clave, sucursal_id)`: la versión de
+    mayor `vigente_desde <= en_fecha` de cada clave y sucursal (empate por
+    `created_at` más reciente)."""
+    columna = ParametroMetodologia
+    resultado = await db.execute(
+        select(columna)
+        .where(
+            columna.clave.in_(list(claves)),
+            columna.vigente_desde <= en_fecha,
+        )
+        .distinct(columna.clave, columna.sucursal_id)
+        .order_by(
+            columna.clave,
+            columna.sucursal_id,
+            columna.vigente_desde.desc(),
+            columna.created_at.desc().nulls_last(),
+        )
+    )
+    return VigentesMotor.desde_filas(
+        resultado.scalars().all(), en_fecha, overrides)

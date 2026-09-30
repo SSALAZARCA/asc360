@@ -9,6 +9,8 @@ class ParametroMetodologiaCreate(BaseModel):
     clave: str
     valor: Any
     vigente_desde: date
+    # None = alcance global. Sólo `dias_entre_pedidos` admite sucursal.
+    sucursal_id: Optional[uuid.UUID] = None
 
 
 class ParametroMetodologiaRead(BaseModel):
@@ -18,4 +20,5 @@ class ParametroMetodologiaRead(BaseModel):
     clave: str
     valor: Any
     vigente_desde: date
+    sucursal_id: Optional[uuid.UUID] = None
     created_at: Optional[datetime] = None
