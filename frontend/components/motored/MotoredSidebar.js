@@ -37,7 +37,7 @@
  */
 import { useRouter, usePathname } from 'next/navigation';
 import Image from 'next/image';
-import { LogOut, Warehouse, Users, TrendingDown, ClipboardCheck } from 'lucide-react';
+import { LogOut, Warehouse, Users, TrendingDown, ClipboardCheck, MessageSquareWarning } from 'lucide-react';
 import { MOTORED_TOKEN_KEY, MOTORED_USER_KEY } from '../../lib/motored/motoredFetch';
 
 const ALL_ITEMS = [
@@ -48,6 +48,7 @@ const ALL_ITEMS = [
   // without either keep their original behaviour. SERVICIO_CLIENTE only ever
   // sees items that list it in `roles`.
   { id: 'encuesta-satisfaccion', name: 'Encuesta satisfacción', icon: ClipboardCheck, path: '/motored/encuesta-satisfaccion', roles: ['ADMIN', 'SERVICIO_CLIENTE'] },
+  { id: 'detractores', name: 'Detractores', icon: MessageSquareWarning, path: '/motored/detractores', roles: ['ADMIN', 'SERVICIO_CLIENTE'] },
 ];
 
 const asideStyle = {
