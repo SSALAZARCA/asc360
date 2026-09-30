@@ -98,7 +98,9 @@ class ParametrosMotor:
     corte_abc_b: Fraction = Fraction(19, 20)
     umbral_f: int = 2
     umbral_m: int = 1
-    k_fms: Mapping[str, Fraction] = field(default=K_FMS_LEGACY)
+    # default_factory: Python 3.11 (production) rejects an unhashable
+    # mappingproxy as a plain dataclass default.
+    k_fms: Mapping[str, Fraction] = field(default_factory=lambda: K_FMS_LEGACY)
     tolerancia_sobrestock: Fraction = Fraction(1, 4)
     meses_inventario_muerto: int = 6
     mes_en_curso: Optional[MesEnCurso] = None
