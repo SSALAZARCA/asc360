@@ -8,7 +8,7 @@ export default function DetractoresFilters({ filters, setFilter }) {
     <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
       <label style={{ ...labelStyle, flex: '1 1 220px' }}>
         Buscar
-        <input placeholder="Nombre, cédula o placa" {...bind('q')} />
+        <input placeholder="Nombre, cédula, placa o código de caso" {...bind('q')} />
       </label>
       <label style={labelStyle}>
         Centro de servicio

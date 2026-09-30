@@ -12,7 +12,7 @@ export function YaRespondidaScreen({ fecha }) {
   );
 }
 
-export function ClosingScreen({ clasificacion, casoNumero, nombre }) {
+export function ClosingScreen({ clasificacion, casoCodigo, nombre }) {
   if (clasificacion === 'DETRACTOR') {
     return (
       <div className="enc-closing is-dark">
@@ -21,7 +21,7 @@ export function ClosingScreen({ clasificacion, casoNumero, nombre }) {
           <p className="enc-text">Nuestro equipo de servicio al cliente te va a contactar.</p>
           <div className="enc-case">
             <div className="enc-step">TU CASO</div>
-            <div className="enc-case-number">{`No. ${casoNumero}`}</div>
+            <div className="enc-case-number">{casoCodigo}</div>
             <p>Queda registrado a tu nombre. Si nadie te contacta, este número es tu respaldo.</p>
           </div>
         </div>

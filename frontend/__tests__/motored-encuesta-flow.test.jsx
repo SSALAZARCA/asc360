@@ -291,7 +291,7 @@ describe('Q4 consent and submit', () => {
   it('auto-advances on Sí and submits the exact payload', async () => {
     setupFetch({
       identificar: () => pendiente(),
-      respuestas: () => reply(200, { clasificacion: 'DETRACTOR', caso_numero: 42, primer_nombre: 'Moreno' }),
+      respuestas: () => reply(200, { clasificacion: 'DETRACTOR', caso_numero: 42, caso_codigo: 'DET-2026-000042', primer_nombre: 'Moreno' }),
     });
     render(<EncuestaPage />);
     await reachQ4();
@@ -353,11 +353,11 @@ describe('Q4 consent and submit', () => {
   }
 
   it('detractor closing shows the case number', async () => {
-    await submitWith(() => reply(200, { clasificacion: 'DETRACTOR', caso_numero: 42, primer_nombre: 'Moreno' }));
+    await submitWith(() => reply(200, { clasificacion: 'DETRACTOR', caso_numero: 42, caso_codigo: 'DET-2026-000042', primer_nombre: 'Moreno' }));
     expect(await screen.findByText('Gracias por decírnoslo, Sr(a). Moreno.')).toBeInTheDocument();
     expect(screen.getByText('Nuestro equipo de servicio al cliente te va a contactar.')).toBeInTheDocument();
     expect(screen.getByText('TU CASO')).toBeInTheDocument();
-    expect(screen.getByText('No. 42')).toBeInTheDocument();
+    expect(screen.getByText('DET-2026-000042')).toBeInTheDocument();
     expect(
       screen.getByText('Queda registrado a tu nombre. Si nadie te contacta, este número es tu respaldo.')
     ).toBeInTheDocument();

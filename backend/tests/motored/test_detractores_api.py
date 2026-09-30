@@ -138,6 +138,7 @@ def test_list_shape_pagination_and_counts():
     assert body["conteo_por_estado"] == {"ABIERTO": 3, "EN_GESTION": 0, "CERRADO": 4}
     first, second = body["items"]
     assert first["numero"] == 12 and first["asignado_a"] is None
+    assert first["codigo"] == "DET-2026-000012" and second["codigo"] == "DET-2026-000013"
     assert first["cliente"] == {
         "nombre": "Ana Perez", "cedula": "123", "celular": "300", "placa": "ABC12D",
         "linea": "Xtreet 401", "centro_servicio": "Cali Norte",
@@ -417,3 +418,24 @@ def test_state_change_unknown_case_is_404():
     response, session = _post_state({"estado": "EN_GESTION", "comentario": "Tomo el caso"}, None)
     assert response.status_code == 404
     assert session.added == []
+
+
+def _list_sql(q):
+    session = _client([(0,)], [], [])
+    with TestClient(app) as client:
+        assert client.get(f"{BASE}?q={q}").status_code == 200
+    return session.executed_statements[1]
+
+
+def test_search_by_case_code_filters_on_number_and_year_not_text():
+    stmt = _list_sql("det-2026-000012")
+    sql = _sql(stmt)
+    assert "caso_detractor.numero = 12" in sql
+    assert "EXTRACT(year FROM caso_detractor.created_at) = 2026" in sql
+    assert "ILIKE" not in sql
+
+
+def test_search_with_plain_digits_stays_a_text_search():
+    sql = _sql(_list_sql("123456"))
+    assert "encuesta_registro.cedula ILIKE" in sql
+    assert "caso_detractor.numero =" not in sql

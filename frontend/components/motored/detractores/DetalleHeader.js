@@ -12,7 +12,7 @@ export default function DetalleHeader({ caso, onBack }) {
         <ArrowLeft size={14} /> Volver a detractores
       </button>
       <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
-        <h1 className="motored-h-pantalla">Caso No. {caso.numero}</h1>
+        <h1 className="motored-h-pantalla">Caso {caso.codigo}</h1>
         <EstadoBadge estado={caso.estado} />
         {caso.resultado && (
           <span style={{ fontSize: '0.8rem' }}>Resultado: <strong>{RESULTADO_LABELS[caso.resultado]}</strong></span>

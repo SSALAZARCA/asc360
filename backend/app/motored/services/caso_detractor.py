@@ -9,6 +9,7 @@ trigger rejects UPDATE/DELETE), so nothing here ever edits or deletes an action.
 Concurrency: every write path locks the case row (`SELECT ... FOR UPDATE`) and
 validates against the LOCKED state, so two agents acting at once serialize.
 """
+import re
 import uuid
 from datetime import date, datetime, time, timedelta
 from typing import Any, Dict, List, Optional
@@ -34,6 +35,21 @@ TRANSICIONES = {
 TIPOS_CIERRE_PERMITIDOS = {"NOTA", "CORRECCION"}
 
 
+_CODIGO_RE = re.compile(r"^DET-(\d{4})-(\d{1,6})$", re.IGNORECASE)
+
+
+def codigo_caso(numero: int, creado: datetime) -> str:
+    """Customer-facing case code, derived (never stored): DET-<year opened>-<numero, 6 digits>."""
+    return f"DET-{creado.year}-{numero:06d}"
+
+
+def parse_codigo_caso(texto: Optional[str]) -> Optional[tuple]:
+    """(year, numero) when `texto` is a case code (case/space-insensitive), else None."""
+    compacto = re.sub(r"\s+", "", texto or "")
+    encontrado = _CODIGO_RE.match(compacto)
+    return (int(encontrado.group(1)), int(encontrado.group(2))) if encontrado else None
+
+
 class CasoError(Exception):
     def __init__(self, status_code: int, detail: str):
         super().__init__(detail)
@@ -49,6 +65,7 @@ def _resumen(row) -> Dict[str, Any]:
     return {
         "id": row.id,
         "numero": row.numero,
+        "codigo": codigo_caso(row.numero, row.created_at),
         "estado": row.estado,
         "resultado": row.resultado,
         "created_at": row.created_at,
@@ -89,10 +106,17 @@ def _base_select(*extra):
     )
 
 
+def _condicion_busqueda(q) -> list:
+    """A case code searches by case; anything else is the free-text search."""
+    codigo = parse_codigo_caso(q)
+    if codigo is None:
+        return _condicion_texto(q, EncuestaRegistro.nombre, EncuestaRegistro.cedula, EncuestaRegistro.placa)
+    anio, numero = codigo
+    return [CasoDetractor.numero == numero, func.extract("year", CasoDetractor.created_at) == anio]
+
+
 def _condiciones(estado, centro_servicio, autoriza_datos, desde: Optional[date], hasta: Optional[date], q) -> list:
-    conds = _condicion_texto(
-        q, EncuestaRegistro.nombre, EncuestaRegistro.cedula, EncuestaRegistro.placa
-    )
+    conds = _condicion_busqueda(q)
     if estado:
         conds.append(CasoDetractor.estado == estado)
     if centro_servicio:

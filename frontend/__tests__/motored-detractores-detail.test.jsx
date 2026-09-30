@@ -38,7 +38,7 @@ const MATRIX_TEXTS = [
 
 function caso(over = {}) {
   return {
-    id: 'c1', numero: 12, estado: 'ABIERTO', resultado: null,
+    id: 'c1', numero: 12, codigo: 'DET-2026-000012', estado: 'ABIERTO', resultado: null,
     created_at: '2026-09-20T15:30:00', cerrado_at: null, asignado_a: null,
     cliente: { nombre: 'Ana Pérez' }, satisfaccion_general: 2, autoriza_datos: true,
     registro: {
@@ -72,7 +72,7 @@ async function renderDetail(role = 'SERVICIO_CLIENTE') {
   sessionStorage.setItem('motored_user', JSON.stringify({ nombre: 'U', role }));
   sessionStorage.setItem('motored_token', 't');
   render(<DetractorDetailPage />);
-  await screen.findByText('Caso No. 12');
+  await screen.findByText('Caso DET-2026-000012');
 }
 
 beforeEach(() => {

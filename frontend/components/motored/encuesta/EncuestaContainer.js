@@ -47,7 +47,7 @@ export default function EncuestaContainer({ fontClassName }) {
       )}
       {step === 'ya' && <YaRespondidaScreen fecha={flow.fecha} />}
       {step === 'closing' && (
-        <ClosingScreen clasificacion={closing.clasificacion} casoNumero={closing.caso_numero} nombre={closing.primer_nombre} />
+        <ClosingScreen clasificacion={closing.clasificacion} casoCodigo={closing.caso_codigo} nombre={closing.primer_nombre} />
       )}
     </EncuestaShell>
   );

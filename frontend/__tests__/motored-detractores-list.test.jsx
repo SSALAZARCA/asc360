@@ -26,13 +26,13 @@ import DetractoresPage from '../app/motored/detractores/page';
 const res = (body, status = 200) => ({ ok: status < 400, status, json: async () => body });
 
 const ITEM = {
-  id: 'c1', numero: 12, estado: 'ABIERTO', resultado: null,
+  id: 'c1', numero: 12, codigo: 'DET-2026-000012', estado: 'ABIERTO', resultado: null,
   created_at: '2026-09-20T15:30:00', cerrado_at: null, asignado_a: null,
   cliente: { nombre: 'Ana Pérez', cedula: '1012345678', celular: '3001234567', placa: 'ABC12D', linea: 'Xpeed 125', centro_servicio: 'Taller Norte' },
   satisfaccion_general: 2, autoriza_datos: true, ultima_accion_at: '2026-09-21T10:00:00',
 };
 const ITEM_NO = {
-  ...ITEM, id: 'c2', numero: 13, autoriza_datos: false,
+  ...ITEM, id: 'c2', numero: 13, codigo: 'DET-2026-000013', autoriza_datos: false,
   cliente: { ...ITEM.cliente, nombre: 'Luis Gómez', cedula: '900', placa: 'XYZ98A' },
   asignado_a: { id: 'u1', nombre: 'Marta Ruiz' }, estado: 'EN_GESTION',
 };
@@ -138,7 +138,7 @@ describe('Detractores list — table', () => {
   it('renders the case row fields', async () => {
     await renderPage();
     const row = (await screen.findByText('Ana Pérez')).closest('tr');
-    expect(row).toHaveTextContent('12');
+    expect(row).toHaveTextContent('DET-2026-000012');
     expect(row).toHaveTextContent('1012345678');
     expect(row).toHaveTextContent('ABC12D');
     expect(row).toHaveTextContent('Taller Norte');

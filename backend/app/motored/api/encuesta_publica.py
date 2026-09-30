@@ -94,6 +94,7 @@ class RespuestaRequest(BaseModel):
 class RespuestaResponse(BaseModel):
     clasificacion: Literal["DETRACTOR", "SATISFECHO"]
     caso_numero: Optional[int] = None
+    caso_codigo: Optional[str] = None
     primer_nombre: str
 
 
@@ -137,5 +138,6 @@ async def responder(
     return RespuestaResponse(
         clasificacion=resultado.clasificacion,
         caso_numero=resultado.caso_numero,
+        caso_codigo=resultado.caso_codigo,
         primer_nombre=resultado.primer_nombre,
     )

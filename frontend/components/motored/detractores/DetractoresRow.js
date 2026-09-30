@@ -13,7 +13,7 @@ export default function DetractoresRow({ caso, onOpen }) {
       tabIndex={0} onClick={open} onKeyDown={(e) => { if (e.key === 'Enter') open(); }}
       style={{ borderTop: '1px solid var(--motored-border, #e4e4e7)', cursor: 'pointer' }}
     >
-      <td style={tdStyle} className="motored-mono">{caso.numero}</td>
+      <td style={tdStyle} className="motored-mono">{caso.codigo}</td>
       <td style={tdStyle}>{formatFecha(caso.created_at)}</td>
       <td style={tdStyle}>
         {cliente.nombre}

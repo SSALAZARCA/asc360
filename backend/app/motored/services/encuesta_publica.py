@@ -19,6 +19,7 @@ from app.motored.models.caso_detractor_accion import CasoDetractorAccion
 from app.motored.models.encuesta_carga import EncuestaCarga
 from app.motored.models.encuesta_registro import EncuestaRegistro
 from app.motored.models.encuesta_respuesta import EncuestaRespuesta
+from app.motored.services.caso_detractor import codigo_caso
 from app.motored.services.encuesta_carga import (
     CEDULA_MAX_LENGTH,
     TIPO_SERVICIO_TALLER,
@@ -54,6 +55,7 @@ class IdentificacionResultado:
 class EnvioResultado:
     clasificacion: str
     caso_numero: Optional[int]
+    caso_codigo: Optional[str]
     primer_nombre: str
 
 
@@ -202,5 +204,6 @@ async def registrar_respuesta(
     return EnvioResultado(
         clasificacion="DETRACTOR" if caso is not None else "SATISFECHO",
         caso_numero=caso.numero if caso is not None else None,
+        caso_codigo=codigo_caso(caso.numero, caso.created_at) if caso is not None else None,
         primer_nombre=primer_nombre_de(row.nombre),
     )

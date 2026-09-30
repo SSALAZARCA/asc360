@@ -92,6 +92,7 @@ async def test_detractor_response_is_saved_with_case_and_opening_entry(sesion, s
         select(CasoDetractor).where(CasoDetractor.respuesta_id == respuesta_id)
     )).scalar_one()
     assert caso.numero == resultado.caso_numero
+    assert resultado.caso_codigo == f"DET-{caso.created_at.year}-{caso.numero:06d}"
     assert await _contar(sesion, CasoDetractorAccion, CasoDetractorAccion.caso_id == caso.id,
                          CasoDetractorAccion.tipo == "APERTURA") == 1
 
@@ -125,6 +126,9 @@ async def test_detractor_case_full_lifecycle_in_the_panel(sesion):
 
     pagina = await casos.listar(sesion, page=1, page_size=50, estado="ABIERTO", autoriza_datos=False, q=cedula)
     assert [item["numero"] for item in pagina["items"]] == [resultado.caso_numero]
+    assert pagina["items"][0]["codigo"] == resultado.caso_codigo
+    por_codigo = await casos.listar(sesion, page=1, page_size=50, q=resultado.caso_codigo.lower())
+    assert [item["codigo"] for item in por_codigo["items"]] == [resultado.caso_codigo]
     caso_id = pagina["items"][0]["id"]
 
     detalle = await casos.detalle(sesion, caso_id)

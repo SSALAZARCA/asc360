@@ -76,7 +76,8 @@ export const encuestaCss = `
 .enc-closing-main { padding: 28px 20px 0; flex: 1; }
 .enc-case { margin-top: 24px; border: 1px solid #E4E4E1; padding: 16px; }
 .enc-case .enc-step { color: #E4E4E1; }
-.enc-case-number { font-size: 36px; line-height: 42px; font-weight: 700; margin-top: 6px; }
+.enc-case-number { font-size: 36px; line-height: 42px; font-weight: 700; margin-top: 6px; overflow-wrap: anywhere; }
+@media (max-width: 400px) { .enc-case-number { font-size: 28px; line-height: 34px; } }
 .enc-case p { margin: 8px 0 0; font-size: 15px; line-height: 23px; color: #E4E4E1; }
 .enc-band { position: relative; overflow: hidden; background: #1A1A18; height: 72px; margin-top: 28px; }
 .enc-band::before { content: ''; position: absolute; top: 0; bottom: 0; left: -14px; width: 20px; background: #E20714; transform: skewX(-14deg); }

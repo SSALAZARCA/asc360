@@ -41,6 +41,7 @@ class _CaseFakeSession(FakeAsyncSession):
     async def refresh(self, obj, attribute_names=None):
         if isinstance(obj, CasoDetractor) and obj.numero is None:
             obj.numero = 4321
+            obj.created_at = datetime(2026, 9, 30, 12)  # Python-side default, applied on INSERT
 
 
 def _reg(placa="ABC12D", linea="Xtreet 401", nombre="ANA MARIA perez", carga=datetime(2026, 9, 1),
@@ -232,7 +233,7 @@ def test_submit_satisfied_creates_response_without_case():
     session = _session([row], cls=_CaseFakeSession)
     response = _submit(_payload(rid, observaciones="  Todo bien  "))
     assert response.status_code == 200
-    assert response.json() == {"clasificacion": "SATISFECHO", "caso_numero": None, "primer_nombre": "Ana"}
+    assert response.json() == {"clasificacion": "SATISFECHO", "caso_numero": None, "caso_codigo": None, "primer_nombre": "Ana"}
     (respuesta,) = session.added_of_type(EncuestaRespuesta)
     assert respuesta.registro_id == rid and respuesta.satisfaccion_general == 5
     assert respuesta.observaciones == "Todo bien" and respuesta.autoriza_datos is True
@@ -255,7 +256,10 @@ def test_submit_detractor_opens_case_and_system_apertura_action(score):
     session = _session([row], cls=_CaseFakeSession)
     response = _submit(_payload(rid, satisfaccion_general=score))
     assert response.status_code == 200
-    assert response.json() == {"clasificacion": "DETRACTOR", "caso_numero": 4321, "primer_nombre": "Ana"}
+    assert response.json() == {
+        "clasificacion": "DETRACTOR", "caso_numero": 4321, "caso_codigo": "DET-2026-004321",
+        "primer_nombre": "Ana",
+    }
     (respuesta,) = session.added_of_type(EncuestaRespuesta)
     (caso,) = session.added_of_type(CasoDetractor)
     (accion,) = session.added_of_type(CasoDetractorAccion)
