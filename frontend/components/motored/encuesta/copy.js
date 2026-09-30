@@ -15,7 +15,7 @@ export const COPY = {
     'Pensando en su experiencia en el taller al que asistió, por favor califique utilizando la misma escala de 1 a 5, donde 5 es "excelente" y 1 es "pésimo", como califica usted:',
   q3: '¿Qué observaciones tiene respecto al servicio que obtuvo en el taller?',
   q4:
-    'PHD2. Dando cumplimiento a la ley de Protección de Datos Personales le solicito su autorización para que Moto red Nacional pueda contactarlo nuevamente en caso de ser necesario con fines de supervisión de esta encuesta y futuras encuestas. ¿Está usted de acuerdo?',
+    'PHD2. Dando cumplimiento a la ley de Protección de Datos Personales le solicito su autorización para que Motos red Nacional pueda contactarlo nuevamente en caso de ser necesario con fines de supervisión de esta encuesta y futuras encuestas. ¿Está usted de acuerdo?',
   rateLimited: 'Hiciste demasiados intentos. Espera un minuto e inténtalo de nuevo.',
   network: 'No pudimos conectarnos. Revisa tu conexión e inténtalo de nuevo.',
   genericIdentify: 'No pudimos revisar tu cédula. Inténtalo de nuevo en un momento.',

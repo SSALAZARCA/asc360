@@ -237,11 +237,38 @@ describe('Detractor detail — cambiar estado', () => {
     expect(screen.getByRole('button', { name: 'Cerrar caso' })).toBeInTheDocument();
   });
 
-  it('CERRADO shows no state controls', async () => {
+  it('CERRADO offers only Reabrir caso', async () => {
     current = caso({ estado: 'CERRADO', resultado: 'RECUPERADO' });
     await renderDetail();
     expect(screen.queryByRole('button', { name: 'Tomar caso' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Cerrar caso' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Reabrir caso' })).toBeInTheDocument();
+  });
+
+  it('Reabrir caso requires a comentario and sends EN_GESTION without resultado', async () => {
+    current = caso({ estado: 'CERRADO', resultado: 'RECUPERADO' });
+    const post = jest.fn(async () => res(current));
+    route({ post });
+    await renderDetail();
+    fireEvent.click(screen.getByRole('button', { name: 'Reabrir caso' }));
+    expect(screen.queryByLabelText('Resultado')).not.toBeInTheDocument();
+    const confirm = screen.getByRole('button', { name: 'Confirmar' });
+    expect(confirm).toBeDisabled();
+    fireEvent.change(screen.getByLabelText('Comentario'), { target: { value: 'Volvió a llamar' } });
+    expect(confirm).toBeEnabled();
+    fireEvent.click(confirm);
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/detractores/c1/estado', { estado: 'EN_GESTION', comentario: 'Volvió a llamar' }));
+  });
+
+  it('after reopening, the action form offers every tipo again', async () => {
+    current = caso({ estado: 'CERRADO', resultado: 'RECUPERADO' });
+    route({ post: async () => { current = caso({ estado: 'EN_GESTION' }); return res(current); } });
+    await renderDetail();
+    fireEvent.click(screen.getByRole('button', { name: 'Reabrir caso' }));
+    fireEvent.change(screen.getByLabelText('Comentario'), { target: { value: 'Volvió a llamar' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar' }));
+    await screen.findByRole('button', { name: 'Cerrar caso' });
+    expect(screen.getByRole('option', { name: 'Llamada' })).toBeInTheDocument();
   });
 
   it('on 409 shows the message and reloads the case', async () => {

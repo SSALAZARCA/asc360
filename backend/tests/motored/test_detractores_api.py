@@ -319,7 +319,7 @@ def test_allowed_transitions_update_case_and_append_log(current, body):
 
 @pytest.mark.parametrize(
     "current,estado",
-    [("CERRADO", "EN_GESTION"), ("CERRADO", "CERRADO"), ("EN_GESTION", "EN_GESTION")],
+    [("CERRADO", "CERRADO"), ("EN_GESTION", "EN_GESTION")],
 )
 def test_forbidden_transitions_are_409(current, estado):
     body = {"estado": estado, "comentario": "intento invalido"}
@@ -334,9 +334,42 @@ def test_forbidden_transitions_are_409(current, estado):
 
 def test_closed_case_message_is_clear():
     response, _ = _post_state(
-        {"estado": "EN_GESTION", "comentario": "reabrir"}, _real_caso("CERRADO")
+        {"estado": "CERRADO", "resultado": "RECUPERADO", "comentario": "cerrar de nuevo"},
+        _real_caso("CERRADO"),
     )
     assert "cerrado" in response.json()["detail"].lower()
+
+
+def _reopen(asignado_a=None):
+    caso = _real_caso("CERRADO", asignado_a=asignado_a)
+    caso.resultado = "RECUPERADO"
+    caso.cerrado_at = datetime(2026, 9, 5, 10)
+    response, session = _post_state({"estado": "EN_GESTION", "comentario": "Cliente volvio a llamar"}, caso)
+    return caso, response, session
+
+
+def test_reopen_closed_case_clears_closure_and_logs_transition():
+    caso, response, session = _reopen()
+    assert response.status_code == 200
+    assert caso.estado == "EN_GESTION"
+    assert caso.resultado is None and caso.cerrado_at is None
+    assert caso.updated_at > datetime(2026, 9, 2)
+    (accion,) = session.added_of_type(CasoDetractorAccion)
+    assert accion.tipo == "CAMBIO_ESTADO"
+    assert (accion.estado_anterior, accion.estado_nuevo) == ("CERRADO", "EN_GESTION")
+    assert accion.descripcion == "Caso reabierto: Cliente volvio a llamar"
+    assert session.committed is True
+
+
+def test_reopen_assigns_current_user_when_unassigned():
+    caso, _, _ = _reopen()
+    assert str(caso.asignado_a) == USER_ID
+
+
+def test_reopen_keeps_existing_assignee():
+    other = uuid.uuid4()
+    caso, _, _ = _reopen(asignado_a=other)
+    assert caso.asignado_a == other
 
 
 @pytest.mark.parametrize(

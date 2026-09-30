@@ -3,7 +3,8 @@ Motored satisfaction survey (slice T5) -- detractor case management service.
 
 Cases are opened by the public survey (T4); this module lists them, shows the
 detail with the append-only action log, appends actions and moves a case
-through ABIERTO -> EN_GESTION -> CERRADO. The action table is append-only (a DB
+through ABIERTO -> EN_GESTION -> CERRADO (a closed case can be reopened to
+EN_GESTION). The action table is append-only (a DB
 trigger rejects UPDATE/DELETE), so nothing here ever edits or deletes an action.
 Concurrency: every write path locks the case row (`SELECT ... FOR UPDATE`) and
 validates against the LOCKED state, so two agents acting at once serialize.
@@ -24,8 +25,12 @@ from app.motored.models.usuario import Usuario
 from app.motored.services.referencias_busqueda import _condicion_texto
 
 ESTADOS = ("ABIERTO", "EN_GESTION", "CERRADO")
-# CERRADO is terminal for now (no reopening).
-TRANSICIONES = {"ABIERTO": {"EN_GESTION", "CERRADO"}, "EN_GESTION": {"CERRADO"}}
+# CERRADO -> EN_GESTION is the "reopen" transition; ABIERTO is never re-entered.
+TRANSICIONES = {
+    "ABIERTO": {"EN_GESTION", "CERRADO"},
+    "EN_GESTION": {"CERRADO"},
+    "CERRADO": {"EN_GESTION"},
+}
 TIPOS_CIERRE_PERMITIDOS = {"NOTA", "CORRECCION"}
 
 
@@ -223,32 +228,44 @@ class SimpleAccion:
         self.created_at, self.usuario_id, self.usuario_nombre = accion.created_at, accion.usuario_id, nombre
 
 
+def _validar_transicion(actual: str, estado: str) -> None:
+    if actual == estado:
+        raise CasoError(409, f"El caso ya está en estado {estado}.")
+    if estado not in TRANSICIONES.get(actual, set()):
+        raise CasoError(409, f"Transición no permitida: {actual} -> {estado}.")
+
+
+def _aplicar_transicion(caso: CasoDetractor, actual: str, estado: str, resultado, actor, ahora) -> None:
+    caso.estado = estado
+    caso.resultado = resultado  # NULL when reopening: the DB CHECK ties resultado to CERRADO
+    caso.updated_at = ahora
+    if estado == "CERRADO":
+        caso.cerrado_at = ahora
+    elif actual == "CERRADO":
+        caso.cerrado_at = None
+    if estado == "EN_GESTION" and caso.asignado_a is None:
+        caso.asignado_a = actor
+
+
+def _descripcion_cambio(actual: str, comentario: str, resultado: Optional[str]) -> str:
+    if actual == "CERRADO":
+        return f"Caso reabierto: {comentario}"
+    return comentario if resultado is None else f"{comentario} (Resultado: {resultado})"
+
+
 async def cambiar_estado(
     db: AsyncSession, caso_id: uuid.UUID, *, usuario_id: str, estado: str,
     resultado: Optional[str], comentario: str,
 ) -> Dict[str, Any]:
     caso = await _bloquear_caso(db, caso_id)
     actual = caso.estado
-    if actual == "CERRADO":
-        raise CasoError(409, "El caso ya está cerrado y no se puede reabrir ni modificar su estado.")
-    if actual == estado:
-        raise CasoError(409, f"El caso ya está en estado {estado}.")
-    if estado not in TRANSICIONES.get(actual, set()):
-        raise CasoError(409, f"Transición no permitida: {actual} -> {estado}.")
-
+    _validar_transicion(actual, estado)
     actor = uuid.UUID(usuario_id)
-    ahora = datetime.utcnow()
-    caso.estado = estado
-    caso.resultado = resultado
-    caso.updated_at = ahora
-    if estado == "CERRADO":
-        caso.cerrado_at = ahora
-    if estado == "EN_GESTION" and caso.asignado_a is None:
-        caso.asignado_a = actor
-    descripcion = comentario if resultado is None else f"{comentario} (Resultado: {resultado})"
+    _aplicar_transicion(caso, actual, estado, resultado, actor, datetime.utcnow())
     db.add(CasoDetractorAccion(
         id=uuid.uuid4(), caso_id=caso_id, usuario_id=actor, tipo="CAMBIO_ESTADO",
-        descripcion=descripcion, estado_anterior=actual, estado_nuevo=estado,
+        descripcion=_descripcion_cambio(actual, comentario, resultado),
+        estado_anterior=actual, estado_nuevo=estado,
     ))
     await db.commit()
     return await detalle(db, caso_id)

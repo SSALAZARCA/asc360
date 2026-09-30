@@ -1,5 +1,5 @@
 'use client';
-/** State transitions: Tomar caso / Cerrar caso (closed cases have no controls). */
+/** State transitions: Tomar caso / Cerrar caso; closed cases can be reopened. */
 import { useState } from 'react';
 import { cardStyle, errorStyle, labelStyle, optionStyle } from './styles';
 import { RESULTADO_LABELS } from './labels';
@@ -38,6 +38,11 @@ function ConfirmPanel({ mode, busy, onCancel, onConfirm }) {
 }
 
 function StartButtons({ estado, onPick }) {
+  if (estado === 'CERRADO') {
+    return (
+      <button type="button" className="motored-btn motored-btn-secondary" onClick={() => onPick('EN_GESTION')}>Reabrir caso</button>
+    );
+  }
   return (
     <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
       {estado === 'ABIERTO' && (
@@ -50,14 +55,13 @@ function StartButtons({ estado, onPick }) {
 
 export default function EstadoControls({ estado, error, busy, onSubmit }) {
   const [mode, setMode] = useState(null);
-  if (estado === 'CERRADO' && !error) return null;
   const confirm = async (payload) => { if (await onSubmit(payload)) setMode(null); };
   return (
     <section style={cardStyle}>
       <h2 className="motored-h-seccion">Cambiar estado</h2>
       {error && <div role="alert" style={errorStyle}>{error}</div>}
-      {estado !== 'CERRADO' && !mode && <StartButtons estado={estado} onPick={setMode} />}
-      {estado !== 'CERRADO' && mode && (
+      {!mode && <StartButtons estado={estado} onPick={setMode} />}
+      {mode && (
         <ConfirmPanel key={mode} mode={mode} busy={busy} onCancel={() => setMode(null)} onConfirm={confirm} />
       )}
     </section>

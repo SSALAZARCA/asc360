@@ -20,7 +20,7 @@ const Q2_ROWS = [
 ];
 const Q3 = '¿Qué observaciones tiene respecto al servicio que obtuvo en el taller?';
 const Q4 =
-  'PHD2. Dando cumplimiento a la ley de Protección de Datos Personales le solicito su autorización para que Moto red Nacional pueda contactarlo nuevamente en caso de ser necesario con fines de supervisión de esta encuesta y futuras encuestas. ¿Está usted de acuerdo?';
+  'PHD2. Dando cumplimiento a la ley de Protección de Datos Personales le solicito su autorización para que Motos red Nacional pueda contactarlo nuevamente en caso de ser necesario con fines de supervisión de esta encuesta y futuras encuestas. ¿Está usted de acuerdo?';
 const NOT_FOUND =
   'No encontramos esa cédula. Recuerda ingresar la cédula de la persona a cuyo nombre está registrada la motocicleta. Revísala e intenta de nuevo.';
 

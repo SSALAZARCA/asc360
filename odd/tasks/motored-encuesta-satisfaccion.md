@@ -42,7 +42,7 @@ Customers who took their motorcycle to a Motored workshop receive a WhatsApp mes
   5. La claridad en la explicación recibida de los cobros realizados antes y después del servicio
   6. La confianza en la procedencia y originalidad de los repuestos
 - **Q3 (optional, free text):** "¿Qué observaciones tiene respecto al servicio que obtuvo en el taller?"
-- **Q4 (required, Sí/No):** "PHD2. Dando cumplimiento a la ley de Protección de Datos Personales le solicito su autorización para que Moto red Nacional pueda contactarlo nuevamente en caso de ser necesario con fines de supervisión de esta encuesta y futuras encuestas. ¿Está usted de acuerdo?"
+- **Q4 (required, Sí/No):** "PHD2. Dando cumplimiento a la ley de Protección de Datos Personales le solicito su autorización para que Motos red Nacional pueda contactarlo nuevamente en caso de ser necesario con fines de supervisión de esta encuesta y futuras encuestas. ¿Está usted de acuerdo?"
 
 ## Assumptions (to confirm with user, non-blocking)
 - The public URL is `/motored/encuesta`.
@@ -122,3 +122,19 @@ Pending / not verified:
 5. Sales (VENTA) survey not built yet; TIPO=VENTA rows are stored but not surveyed.
 6. Consent "No" still opens a case (user decision, legal risk acknowledged) — validate privacy policy with legal.
 Next step: user runs the end-to-end production check; then decide on items 2–5.
+
+## Follow-up (user decisions 2026-09-29, after close)
+- Q4 company name is "Motos red Nacional" (user-confirmed spelling), replacing "Moto red Nacional".
+- Closed cases CAN be reopened (reverses the no-reopen default).
+- Fix the lookup attempts protection (approach pending user choice).
+- Sales survey stays pending; legal (consent "No" still opens case) stays as is.
+
+| ID | Task | Route |
+|---|---|---|
+| T10 | Q4 text "Motos red Nacional" (frontend copy + tests + this doc) | delegated writer (with T11) |
+| T11 | Reopen: CERRADO → EN_GESTION with comentario; clears resultado/cerrado_at; CAMBIO_ESTADO logged; "Reabrir caso" button in detail | delegated writer |
+| T12 | Lookup attempts protection | pending decision |
+
+- [x] T10 — "Motos red Nacional" in copy.js + verbatim test + doc. RED 3 failed → GREEN.
+- [x] T11 — CERRADO→EN_GESTION reopen (clears resultado/cerrado_at, keeps or sets assignee, CAMBIO_ESTADO "Caso reabierto: …"), "Reabrir caso" button. RED 2 backend + 3 frontend failed → GREEN; tests/motored 1456, jest 90/668.
+- [ ] T12
