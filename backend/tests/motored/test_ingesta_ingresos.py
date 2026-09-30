@@ -37,6 +37,7 @@ from decimal import Decimal
 import pytest
 
 from tests.motored.conftest import FakeAsyncSession
+from tests.motored.sql_upsert import upsert_set_clause
 
 from app.motored.models.carga_fila_staging import CargaFilaStaging
 from app.motored.services.ingesta import columnas, ingresos, numeros
@@ -250,13 +251,9 @@ def test_construir_statement_upsert_setea_valor_neto_a_excluded_nunca_suma():
 
     stmt = ingresos.construir_statement_upsert(consolidado, CARGA_ID)
 
-    set_clause = stmt._post_values_clause.update_values_to_set
-    valores_set = {
-        (col if isinstance(col, str) else col.name): expr for col, expr in set_clause
-    }
+    valores_set = upsert_set_clause(stmt)
     assert "valor_neto" in valores_set
-    assert valores_set["valor_neto"].table.name == "excluded"
-    assert valores_set["valor_neto"].name == "valor_neto"
+    assert valores_set["valor_neto"] == "excluded.valor_neto"
 
 
 def test_construir_statement_upsert_retorna_none_sin_consolidado():

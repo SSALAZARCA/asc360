@@ -32,6 +32,7 @@ from decimal import Decimal
 import pytest
 
 from tests.motored.conftest import FakeAsyncSession
+from tests.motored.sql_upsert import upsert_set_clause
 
 from app.motored.models.carga_fila_staging import CargaFilaStaging
 from app.motored.services.ingesta import columnas, facturas, numeros
@@ -337,14 +338,10 @@ def test_construir_statement_upsert_setea_cantidad_y_valor_total_a_excluded():
 
     stmt = facturas.construir_statement_upsert(consolidado, CARGA_ID)
 
-    set_clause = stmt._post_values_clause.update_values_to_set
-    valores_set = {
-        (col if isinstance(col, str) else col.name): expr for col, expr in set_clause
-    }
+    valores_set = upsert_set_clause(stmt)
     for campo in ("cantidad", "valor_total"):
         assert campo in valores_set
-        assert valores_set[campo].table.name == "excluded"
-        assert valores_set[campo].name == campo
+        assert valores_set[campo] == f"excluded.{campo}"
 
 
 def test_construir_statement_upsert_retorna_none_sin_consolidado():

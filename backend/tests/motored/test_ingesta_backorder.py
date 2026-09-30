@@ -35,6 +35,7 @@ from decimal import Decimal
 import pytest
 
 from tests.motored.conftest import FakeAsyncSession
+from tests.motored.sql_upsert import upsert_set_clause
 
 from app.motored.models.carga_fila_staging import CargaFilaStaging
 from app.motored.services.ingesta import backorder, columnas, numeros
@@ -267,14 +268,9 @@ def test_construir_statement_upsert_setea_cantidad_pendiente_a_excluded_nunca_su
 
     stmt = backorder.construir_statement_upsert(consolidado, date(2026, 9, 15), CARGA_ID)
 
-    set_clause = stmt._post_values_clause.update_values_to_set
-    valores_set = {
-        (col if isinstance(col, str) else col.name): expr for col, expr in set_clause
-    }
+    valores_set = upsert_set_clause(stmt)
     assert "cantidad_pendiente" in valores_set
-    columna_referenciada = valores_set["cantidad_pendiente"]
-    assert columna_referenciada.table.name == "excluded"
-    assert columna_referenciada.name == "cantidad_pendiente"
+    assert valores_set["cantidad_pendiente"] == "excluded.cantidad_pendiente"
 
 
 def test_construir_statement_upsert_retorna_none_sin_consolidado():

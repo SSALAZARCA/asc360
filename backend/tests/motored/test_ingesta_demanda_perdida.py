@@ -36,6 +36,7 @@ from decimal import Decimal
 import pytest
 
 from tests.motored.conftest import FakeAsyncSession
+from tests.motored.sql_upsert import upsert_set_clause
 
 from app.motored.models.carga_fila_staging import CargaFilaStaging
 from app.motored.services.ingesta import columnas, demanda_perdida, numeros
@@ -248,14 +249,9 @@ def test_construir_statement_upsert_setea_cantidad_a_excluded_nunca_suma():
 
     stmt = demanda_perdida.construir_statement_upsert(totales, date(2026, 9, 15), CARGA_ID)
 
-    set_clause = stmt._post_values_clause.update_values_to_set
-    valores_set = {
-        (col if isinstance(col, str) else col.name): expr for col, expr in set_clause
-    }
+    valores_set = upsert_set_clause(stmt)
     assert "cantidad_solicitada" in valores_set
-    columna_referenciada = valores_set["cantidad_solicitada"]
-    assert columna_referenciada.table.name == "excluded"
-    assert columna_referenciada.name == "cantidad_solicitada"
+    assert valores_set["cantidad_solicitada"] == "excluded.cantidad_solicitada"
 
 
 def test_construir_statement_upsert_retorna_none_sin_totales():

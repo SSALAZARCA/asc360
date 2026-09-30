@@ -19,9 +19,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # ==== STAGE 2: Construcción e instalación de paquetes ====
 FROM builder-base AS deps
 WORKDIR /build
-COPY requirements.txt .
+# requirements.lock.txt is the full production freeze (direct + transitive),
+# so the image installs exactly the versions that were tested.
+COPY requirements.lock.txt .
 # Instalamos en un directorio local para copiar al final
-RUN pip install --user --no-cache-dir -r requirements.txt
+RUN pip install --user --no-cache-dir -r requirements.lock.txt
 
 # ==== STAGE 3: Entorno de Producción Hardened ====
 FROM builder-base AS runtime

@@ -23,7 +23,11 @@ from app.motored.services.demanda_perdida_bot import (
     aplicar_delta_demanda_perdida,
     construir_upsert_aditivo,
 )
-from tests.motored.conftest import AdditiveDemandaPerdidaFakeSession, FakeAsyncSession
+from tests.motored.conftest import (
+    AdditiveDemandaPerdidaFakeSession,
+    FakeAsyncSession,
+)
+from tests.motored.sql_upsert import upsert_set_clause
 
 FECHA = date(2026, 9, 24)
 SUCURSAL_ID = uuid.uuid4()
@@ -46,19 +50,12 @@ def test_construir_upsert_aditivo_set_expression_suma_nunca_reemplaza():
         delta=Decimal("3"), carga_id=CARGA_ID,
     )
 
-    set_clause = stmt._post_values_clause.update_values_to_set
-    valores_set = {(col if isinstance(col, str) else col.name): expr for col, expr in set_clause}
-    assert "cantidad_solicitada" in valores_set
-    expresion = valores_set["cantidad_solicitada"]
-    # A `col + excluded.col` expression compiles to a BinaryExpression whose
-    # right side references the `excluded` pseudo-table -- unlike EXCEL's
-    # bare `excluded.cantidad_solicitada` column reference.
-    lado_derecho = expresion.right
-    assert lado_derecho.table.name == "excluded"
-    assert lado_derecho.name == "cantidad_solicitada"
-    lado_izquierdo = expresion.left
-    assert lado_izquierdo.table.name == "demanda_perdida"
-    assert lado_izquierdo.name == "cantidad_solicitada"
+    valores_set = upsert_set_clause(stmt)
+    # `col + excluded.col`, unlike EXCEL's bare `excluded.col` REPLACE.
+    assert valores_set["cantidad_solicitada"] == (
+        "(demanda_perdida.cantidad_solicitada"
+        " + excluded.cantidad_solicitada)"
+    )
 
 
 def test_construir_upsert_aditivo_conflict_target_es_la_clave_de_4_columnas():
