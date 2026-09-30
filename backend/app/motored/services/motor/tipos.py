@@ -21,7 +21,11 @@ ESTADO_OK = "OK"
 ESTADO_OMITIDA = "OMITIDA"
 
 COD_SUCURSAL_OMITIDA = "A-CORRIDA-102"
+COD_CADENA_CICLICA = "A-CORRIDA-103"
 COD_SUMA_NO_POSITIVA = "A-CORRIDA-110"
+
+MOTIVO_SUSTITUIDA = "SUSTITUIDA"
+MOTIVO_SIN_REEMPLAZO = "INACTIVA_SIN_REEMPLAZO"
 
 K_FMS_LEGACY: Mapping[str, Fraction] = MappingProxyType(
     {"F": Fraction(3), "M": Fraction(3, 2), "S": Fraction(1)}
@@ -150,3 +154,48 @@ class LineaPedido:
     punto_maximo: Fraction
     estado_quiebre: str
     advertencias: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class NodoMaestro:
+    """Una referencia del maestro de sustitución (sólo las que interesan).
+
+    Entran las inactivas y las que declaran `sustituida_por`; una referencia
+    ausente del maestro es una activa sin sustituta, o sea una FINAL.
+    """
+
+    referencia_id: UUID
+    activa: bool
+    sustituida_por: Optional[UUID] = None
+
+
+@dataclass(frozen=True)
+class Resolucion:
+    """Destino de una referencia tras seguir su cadena de sustitución.
+
+    `motivo` es `None` para una FINAL (`final_id` es ella misma),
+    `MOTIVO_SUSTITUIDA` con la sustituta activa final en `final_id`, o
+    `MOTIVO_SIN_REEMPLAZO` con `final_id` nulo. `ciclo` marca las cadenas
+    cíclicas o demasiado largas (A-CORRIDA-103). `cadena` va desde la
+    referencia hasta el último nodo visitado.
+    """
+
+    referencia_id: UUID
+    final_id: Optional[UUID]
+    motivo: Optional[str]
+    cadena: tuple[UUID, ...]
+    ciclo: bool = False
+
+
+@dataclass(frozen=True)
+class LineaExcluida:
+    """Referencia que sale del pedido, con sus insumos crudos (sin cálculo).
+
+    `sustituta_final_*` son nulos cuando no hay reemplazo ("inactiva sin
+    reemplazo, revisar"); si no, es "demanda transferida a X".
+    """
+
+    entrada: EntradaReferencia
+    motivo: str
+    sustituta_final_id: Optional[UUID]
+    sustituta_final_codigo: Optional[str]

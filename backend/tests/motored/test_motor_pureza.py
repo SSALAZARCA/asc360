@@ -13,7 +13,7 @@ PAQUETE = Path(servicios_pkg.__file__).parent / "motor"
 MODULOS_ESPERADOS = {
     "__init__", "aritmetica", "tipos", "ventana",
     "demanda", "cobertura", "pedido",
-    "clasificacion", "puntos", "resumen", "motor",
+    "clasificacion", "puntos", "resumen", "motor", "sustitucion",
 }
 PROHIBIDOS = (
     "sqlalchemy",

@@ -6,7 +6,8 @@ Orden de las etapas:
 
 1. Ventana y divisor. Divisor 0 (sucursal sin ningún mes completo operado)
    -> `OMITIDA` con A-CORRIDA-102 (decisión #14).
-2. Consolidación de sustituidas (S3; hoy es identidad).
+2. Consolidación de sustituidas (S3), sólo con `consolidar_sustituidas`
+   ON; con el switch OFF es identidad.
 3. Universo: referencias con venta neta > 0 en algún mes cerrado operado.
    Nunca entran por stock, tránsito, backorder, demanda perdida ni mes en
    curso.
@@ -22,6 +23,7 @@ y determinista: el resultado no depende del orden de las entradas.
 from dataclasses import dataclass, replace
 from fractions import Fraction
 from typing import Mapping, Optional, Sequence
+from uuid import UUID
 
 from app.motored.services.motor.aritmetica import a_fraccion
 from app.motored.services.motor.clasificacion import (
@@ -51,6 +53,7 @@ from app.motored.services.motor.pedido import (
 )
 from app.motored.services.motor.puntos import estado_quiebre
 from app.motored.services.motor.resumen import ResumenSucursal, resumir
+from app.motored.services.motor.sustitucion import consolidar
 from app.motored.services.motor.tipos import (
     COD_SUCURSAL_OMITIDA,
     COD_SUMA_NO_POSITIVA,
@@ -60,8 +63,10 @@ from app.motored.services.motor.tipos import (
     AjustesPrueba,
     AtributosSucursal,
     EntradaReferencia,
+    LineaExcluida,
     LineaPedido,
     ParametrosMotor,
+    Resolucion,
 )
 from app.motored.services.motor.ventana import Ventana, construir_ventana
 
@@ -77,13 +82,18 @@ MENSAJE_SUMA_NO_POSITIVA = (
 
 @dataclass(frozen=True)
 class ResultadoSucursal:
-    """Resultado de una sucursal; `lineas` sale en orden ABC."""
+    """Resultado de una sucursal; `lineas` sale en orden ABC.
+
+    `excluidas` son las referencias que salieron del pedido por la
+    consolidación de sustituidas (vacío con el switch OFF).
+    """
 
     estado: str
     lineas: tuple[LineaPedido, ...]
     resumen: ResumenSucursal
     advertencias: tuple[Advertencia, ...]
     divisor: int
+    excluidas: tuple[LineaExcluida, ...] = ()
 
 
 def _omitida(sucursal: AtributosSucursal, ventana: Ventana
@@ -99,12 +109,6 @@ def _omitida(sucursal: AtributosSucursal, ventana: Ventana
         advertencias=(Advertencia(COD_SUCURSAL_OMITIDA, mensaje),),
         divisor=ventana.divisor,
     )
-
-
-def _consolidar(entradas: Sequence[EntradaReferencia]
-                ) -> Sequence[EntradaReferencia]:
-    """Punto de enganche de la consolidación de sustituidas (S3): identidad."""
-    return entradas
 
 
 def _universo(entradas: Sequence[EntradaReferencia], ventana: Ventana
@@ -235,20 +239,26 @@ def _lineas(universo: Universo, demandas: Mapping[str, Fraction],
 
 def calcular_sucursal(entradas: Sequence[EntradaReferencia],
                       sucursal: AtributosSucursal, params: ParametrosMotor,
+                      resoluciones: Optional[Mapping[UUID, Resolucion]] = None,
                       *, ajustes_prueba: Optional[AjustesPrueba] = None
                       ) -> ResultadoSucursal:
-    """Calcula el pedido de una sucursal; ver el docstring del módulo."""
+    """Calcula el pedido de una sucursal; ver el docstring del módulo.
+
+    `resoluciones` (de `resolver_cadenas`) sólo se usa con
+    `consolidar_sustituidas` ON.
+    """
     ventana = construir_ventana(sucursal.fecha_corte, sucursal.fecha_apertura)
     if ventana.sin_historia:
         return _omitida(sucursal, ventana)
     ctx = _Contexto(ventana, sucursal, params)
-    universo = _universo(_consolidar(entradas), ventana)
+    consolidacion = consolidar(entradas, resoluciones, ventana, params)
+    universo = _universo(consolidacion.entradas, ventana)
     demandas = _demandas(universo, ctx, ajustes_prueba)
     abc = clasificar_abc(
         demandas, params, desempate=_rangos_fisicos(ajustes_prueba)
     )
     lineas = _lineas(universo, demandas, abc.items, ctx)
-    advertencias = (
+    advertencias = consolidacion.advertencias + (
         (Advertencia(COD_SUMA_NO_POSITIVA, MENSAJE_SUMA_NO_POSITIVA),)
         if abc.suma_no_positiva else ()
     )
@@ -261,4 +271,5 @@ def calcular_sucursal(entradas: Sequence[EntradaReferencia],
         ),
         advertencias=advertencias,
         divisor=ventana.divisor,
+        excluidas=consolidacion.excluidas,
     )
