@@ -184,7 +184,8 @@ class TestLineasBorde:
         linea = _por_codigo(_calcular([fila]))["REF-1"]
         assert linea.n == 0
         assert linea.clase_abc == "D"
-        assert linea.clase == "DM"
+        assert linea.clase_fms == "M"
+        assert linea.clase == "DS"
         assert linea.cobertura == 0
         assert linea.stock_objetivo == 0
         assert linea.pedido == 0
@@ -192,6 +193,45 @@ class TestLineasBorde:
         assert linea.cobertura_actual is None
         assert linea.punto_minimo == 0
         assert linea.punto_maximo == 0
+
+    def test_decision_19_n_no_positivo_es_ds_sea_cual_sea_la_fms(self):
+        con_mes = entrada((6, 0, 0, 0, 0, -1), codigo="D-UNO")
+        con_dos = entrada((5, 5, 0, 0, 0, -20), codigo="D-DOS")
+        positiva = entrada((10,) * 6, codigo="POS")
+        lineas = _por_codigo(_calcular([con_mes, con_dos, positiva]))
+        for codigo, fms in (("D-UNO", "M"), ("D-DOS", "F")):
+            assert lineas[codigo].n <= 0
+            assert lineas[codigo].clase_fms == fms
+            assert lineas[codigo].clase == "DS"
+        positiva = lineas["POS"]
+        assert positiva.clase == positiva.clase_abc + positiva.clase_fms
+        assert positiva.clase_abc != "D"
+
+    def test_decision_19_el_resumen_agrupa_los_d_en_la_fila_ds(self):
+        filas = [
+            entrada((6, 0, 0, 0, 0, -1), codigo="D-UNO"),
+            entrada((5, 5, 0, 0, 0, -20), codigo="D-DOS"),
+            entrada((10,) * 6, codigo="POS"),
+        ]
+        resumen = _calcular(filas).resumen
+        assert [f.clase for f in resumen.filas] == [
+            "AF", "AM", "AS", "BF", "BM", "BS", "CF", "CM", "CS", "DS",
+        ]
+
+    def test_clase_d_como_excel_conserva_dm_y_df(self):
+        filas = [
+            entrada((6, 0, 0, 0, 0, -1), codigo="D-UNO"),
+            entrada((5, 5, 0, 0, 0, -20), codigo="D-DOS"),
+            entrada((10,) * 6, codigo="POS"),
+        ]
+        lineas = _por_codigo(_calcular(
+            filas, ajustes=AjustesPrueba(clase_d_como_excel=True)
+        ))
+        assert lineas["D-UNO"].clase == "DM"
+        assert lineas["D-DOS"].clase == "DF"
+        positiva = lineas["POS"]
+        assert positiva.clase == positiva.clase_abc + positiva.clase_fms
+        assert positiva.clase_abc != "D"
 
     def test_unidad_de_empaque_invalida_da_pedido_cero_y_advierte(self):
         fila = entrada((0, 0, 0, 0, 0, 30), unidad_empaque=0)

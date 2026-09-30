@@ -28,6 +28,7 @@ from uuid import UUID
 
 from app.motored.services.motor.aritmetica import a_fraccion
 from app.motored.services.motor.clasificacion import (
+    CLASE_D_SIN_DEMANDA,
     ItemAbc,
     clase_fms,
     clasificar_abc,
@@ -145,6 +146,22 @@ def _empates_como_excel(ajustes: Optional[AjustesPrueba]) -> bool:
     return ajustes is not None and ajustes.empates_como_excel
 
 
+def _clase_d_como_excel(ajustes: Optional[AjustesPrueba]) -> bool:
+    return ajustes is not None and ajustes.clase_d_como_excel
+
+
+def _etiqueta_clase(n: Fraction, item: ItemAbc, fms: str,
+                    d_como_excel: bool) -> str:
+    """Clase de la línea: "DS" si N <= 0 (decisión #19), si no ABC + FMS.
+
+    La letra FMS no se pierde: sigue en `clase_fms`. Con N <= 0 la cobertura
+    es 0 sea cual sea la letra, así que la etiqueta no cambia cantidades.
+    """
+    if n <= 0 and not d_como_excel:
+        return CLASE_D_SIN_DEMANDA
+    return item.clase + fms
+
+
 @dataclass(frozen=True)
 class _Contexto:
     """Lo que comparten todas las líneas de una misma sucursal."""
@@ -171,11 +188,10 @@ def _quiebre(entrada: EntradaReferencia, n: Fraction,
 
 def _linea(ctx: _Contexto, entrada: EntradaReferencia,
            ventas: Sequence[Fraction], n: Fraction, item: ItemAbc,
-           fms: str, cobertura: Fraction,
+           fms: str, clase: str, cobertura: Fraction,
            m0_proyectada: Optional[Fraction]) -> LineaPedido:
     params = ctx.params
     indicadores = indicadores_informativos(entrada, ctx.ventana, params)
-    clase = item.clase + fms
     ss = stock_objetivo(n, cobertura)
     y = inventario_efectivo(entrada)
     calculo = calcular_pedido(
@@ -228,20 +244,20 @@ def _demandas(universo: Universo, ctx: _Contexto,
 
 def _lineas(universo: Universo, demandas: Mapping[str, Fraction],
             proyectadas: Mapping[str, Optional[Fraction]],
-            abc: Mapping[str, ItemAbc], ctx: _Contexto
-            ) -> tuple[LineaPedido, ...]:
+            abc: Mapping[str, ItemAbc], ctx: _Contexto,
+            d_como_excel: bool = False) -> tuple[LineaPedido, ...]:
     coberturas: dict[str, Fraction] = {}
     lineas = []
     for codigo, (entrada, ventas) in universo.items():
         item = abc[codigo]
         fms = clase_fms(meses_con_venta(ventas), ctx.params)
-        clase = item.clase + fms
+        clase = _etiqueta_clase(demandas[codigo], item, fms, d_como_excel)
         if clase not in coberturas:
             coberturas[clase] = cobertura_clase(
                 clase, ctx.sucursal, ctx.params
             )
         lineas.append(_linea(
-            ctx, entrada, ventas, demandas[codigo], item, fms,
+            ctx, entrada, ventas, demandas[codigo], item, fms, clase,
             coberturas[clase], proyectadas[codigo],
         ))
     return tuple(sorted(lineas, key=lambda linea: linea.orden_abc))
@@ -269,7 +285,10 @@ def calcular_sucursal(entradas: Sequence[EntradaReferencia],
         demandas, params, desempate=_rangos_fisicos(ajustes_prueba),
         empates_como_excel=_empates_como_excel(ajustes_prueba),
     )
-    lineas = _lineas(universo, demandas, proyectadas, abc.items, ctx)
+    lineas = _lineas(
+        universo, demandas, proyectadas, abc.items, ctx,
+        _clase_d_como_excel(ajustes_prueba),
+    )
     advertencias = consolidacion.advertencias + (
         (Advertencia(COD_SUMA_NO_POSITIVA, MENSAJE_SUMA_NO_POSITIVA),)
         if abc.suma_no_positiva else ()

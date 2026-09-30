@@ -117,11 +117,15 @@ class AjustesPrueba:
     `empates_como_excel` desactiva la regla de empates del ABC (decisión #17:
     misma clase para N exactamente igual) y clasifica fila por fila como el
     Excel; sólo lo usa el nivel A1 para seguir coincidiendo con él.
+    `clase_d_como_excel` desactiva la decisión #19 (N <= 0 es clase "DS") y
+    deja la clase ABC + FMS (DM/DF) como la rotula el Excel; también sólo
+    lo usa el nivel A1.
     """
 
     divisor_por_referencia: Optional[Mapping[str, int]] = None
     orden_explicito: Optional[Sequence[str]] = None
     empates_como_excel: bool = False
+    clase_d_como_excel: bool = False
 
 
 @dataclass(frozen=True)

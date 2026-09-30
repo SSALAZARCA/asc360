@@ -17,6 +17,10 @@ Reglas del Excel (ganan sobre el texto del spec 6.5.1):
   (sólo nivel A1) reproduce eso.
 - Clase ABC: D si N <= 0; A si el acumulado <= corte A (80 %); B si <= corte B
   (95 %); C si es mayor. Las comparaciones son exactas (`Fraction`).
+- Clase de la línea (decisión #19): toda referencia con N <= 0 es "DS", sea
+  cual sea su letra FMS (el Excel la rotula DM/DF; `clase_d_como_excel`,
+  sólo nivel A1, lo reproduce). La letra FMS sigue en `clase_fms`. Lo compone
+  el ensamblador del motor (`motor._etiqueta_clase`).
 - FMS: meses con venta neta > 0 entre los seis cerrados (F >= umbral F, M >=
   umbral M, si no S). La demanda perdida y el mes en curso no cuentan, y los
   meses anteriores a la apertura de la sucursal tampoco.
@@ -28,6 +32,8 @@ from typing import Mapping, Optional, Sequence
 from app.motored.services.motor.aritmetica import a_fraccion
 from app.motored.services.motor.tipos import EntradaReferencia, ParametrosMotor
 from app.motored.services.motor.ventana import Ventana
+
+CLASE_D_SIN_DEMANDA = "DS"
 
 
 @dataclass(frozen=True)

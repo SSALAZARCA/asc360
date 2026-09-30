@@ -8,7 +8,8 @@ del motor es la Z del Excel: sólo aquí, nunca en producción.
 
 - **A1 (fidelidad de fórmulas)**: `AjustesPrueba` reproduce el divisor /18 de
   las filas marcadas, el orden físico del Excel y su clasificación ABC fila
-  por fila (sin la regla de empates #17, `empates_como_excel`). Se
+  por fila (sin la regla de empates #17, `empates_como_excel`) y su
+  rótulo DM/DF para N <= 0 (sin la decisión #19, `clase_d_como_excel`). Se
   espera coincidencia exacta en N..AD (|Δ| <= 5e-7 en decimales, 0 en el
   pedido); lo que no coincide lleva categoría o es `SIN_CATEGORIA`.
 - **A2 (comportamiento del producto)**: divisor 21 y el orden del motor
@@ -41,6 +42,7 @@ from app.motored.herramientas.regresion.taxonomia import (
     clasificar,
 )
 from app.motored.services.motor.aritmetica import a_fraccion, cuantizar
+from app.motored.services.motor.clasificacion import CLASE_D_SIN_DEMANDA
 from app.motored.services.motor.cobertura import cobertura_clase
 from app.motored.services.motor.motor import (
     ResultadoSucursal,
@@ -74,6 +76,7 @@ COLUMNA_COBERTURA = "E3:N3"
 ETIQUETA_TOTAL_EXCEL = "Total general"
 COLUMNAS_DERIVADAS = frozenset({"S", "AB", "AC", COLUMNA_FILA})
 ETIQUETAS_T10 = frozenset({"CF", "CM", CLASE_TOTAL})
+ETIQUETAS_D_EXCEL = frozenset({"DM", "DF"})
 
 
 class PrecondicionIncumplida(ValueError):
@@ -196,7 +199,7 @@ def ajustes_orden_fisico(lectura: LecturaExcel) -> AjustesPrueba:
 
 
 def ajustes_a1(lectura: LecturaExcel) -> AjustesPrueba:
-    """Divisor por referencia (el /18), orden físico y empates del Excel."""
+    """Divisor /18, orden físico, empates y etiquetas DM/DF del Excel."""
     divisores = {
         fila.codigo: fila.divisor
         for fila in lectura.filas
@@ -206,6 +209,7 @@ def ajustes_a1(lectura: LecturaExcel) -> AjustesPrueba:
         divisor_por_referencia=divisores,
         orden_explicito=[fila.codigo for fila in lectura.filas],
         empates_como_excel=True,
+        clase_d_como_excel=True,
     )
 
 
@@ -293,6 +297,10 @@ def _contexto(fila: FilaExcel, linea: LineaPedido,
         columnas_empate=globales.por_empate.get(fila.codigo, frozenset()),
         frontera_medio=_frontera_medio(linea) and _otro_lado(fila, linea),
         frontera_abc=linea.acumulado in globales.cortes_abc,
+        d_como_ds=(
+            linea.clase == CLASE_D_SIN_DEMANDA
+            and fila.clase_estatica in ETIQUETAS_D_EXCEL
+        ),
     )
 
 

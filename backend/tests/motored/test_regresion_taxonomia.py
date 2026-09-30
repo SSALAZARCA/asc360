@@ -1,6 +1,6 @@
 """
 Motored Pedidos F3 "Motor" (S8a-1, ADR-10) — taxonomía de diferencias de los
-niveles A1/A2 de la regresión contra el Excel: categorías T1..T10, reglas de
+niveles A1/A2 de la regresión contra el Excel: categorías T1..T11, reglas de
 clasificación y archivo de aceptaciones. `SIN_CATEGORIA` hace fallar el nivel.
 """
 import json
@@ -18,8 +18,8 @@ from app.motored.herramientas.regresion.taxonomia import (
 
 
 class TestCategorias:
-    def test_estan_t1_a_t10_y_sin_categoria(self):
-        esperadas = {f"T{i}" for i in range(1, 11)} | {SIN_CATEGORIA}
+    def test_estan_t1_a_t11_y_sin_categoria(self):
+        esperadas = {f"T{i}" for i in range(1, 12)} | {SIN_CATEGORIA}
         assert set(CATEGORIAS) == esperadas
 
     def test_cada_categoria_tiene_descripcion_en_espanol(self):
@@ -29,6 +29,10 @@ class TestCategorias:
         assert "estática" in CATEGORIAS["T4"]
         assert "Q" in CATEGORIAS["T4"] and "R" in CATEGORIAS["T4"]
 
+    def test_t11_es_la_etiqueta_ds_de_la_decision_19(self):
+        assert "DS" in CATEGORIAS["T11"]
+        assert "DM" in CATEGORIAS["T11"] and "DF" in CATEGORIAS["T11"]
+
 
 class TestClasificar:
     @pytest.mark.parametrize("columna, contexto, esperada", [
@@ -37,6 +41,11 @@ class TestClasificar:
         ("S", ContextoFila(estatica_inconsistente=True), "T4"),
         ("AA", ContextoFila(estatica_inconsistente=True), "T4"),
         ("AB", ContextoFila(u_cero=True), "T5"),
+        ("S", ContextoFila(d_como_ds=True), "T11"),
+        ("S", ContextoFila(nivel="A2", hay_divisor_distinto=True,
+                           d_como_ds=True), "T11"),
+        ("S", ContextoFila(estatica_inconsistente=True, d_como_ds=True),
+         "T4"),
         ("AB", ContextoFila(frontera_medio=True), "T9"),
         ("Q", ContextoFila(frontera_abc=True), "T9"),
         ("Q", ContextoFila(columnas_empate=frozenset({"Q", "S"})), "T3"),
@@ -57,6 +66,9 @@ class TestClasificar:
         ("AB", ContextoFila(estatica_inconsistente=False, nivel="A1")),
         ("Q", ContextoFila(nivel="A1", hay_divisor_distinto=True)),
         ("P", ContextoFila(columnas_empate=frozenset({"Q"}))),
+        ("S", ContextoFila(d_como_ds=False)),
+        ("AB", ContextoFila(d_como_ds=True)),
+        ("Q", ContextoFila(d_como_ds=True)),
     ])
     def test_sin_regla_que_aplique_es_sin_categoria(self, columna, contexto):
         assert clasificar(columna, contexto) == SIN_CATEGORIA

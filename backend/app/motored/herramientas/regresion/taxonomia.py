@@ -8,6 +8,7 @@ categoría documentada. Una diferencia que ninguna regla explica queda como
 
 T6, T7 y T8 describen divergencias de datos que sólo aparecen en el nivel B
 (pipeline completo); a nivel de fórmulas únicamente entran por aceptación.
+T11 es la etiqueta DS de la clase D (decisión #19).
 """
 import json
 from dataclasses import dataclass
@@ -36,6 +37,9 @@ CATEGORIAS: Mapping[str, str] = {
           "corte ABC exacto hacia el otro lado que la aritmética exacta.",
     "T10": "Etiqueta del resumen AA1:AE11: la fila CF figura como CM y el "
            "total del Excel no suma CF.",
+    "T11": "Etiqueta de clase D: el Excel rotula DM o DF a las filas con "
+           "N <= 0 según su letra FMS; el motor las rotula todas DS "
+           "(decisión #19) y no cambia ninguna cantidad.",
     SIN_CATEGORIA: "Diferencia sin explicación: hace fallar el nivel salvo "
                    "que esté en el archivo de aceptaciones.",
 }
@@ -65,6 +69,7 @@ class ContextoFila:
     columnas_empate: frozenset[str] = frozenset()
     frontera_medio: bool = False
     frontera_abc: bool = False
+    d_como_ds: bool = False
 
 
 def _t1(columna: str, ctx: ContextoFila) -> bool:
@@ -84,6 +89,10 @@ def _t9(columna: str, ctx: ContextoFila) -> bool:
     return medio or (ctx.frontera_abc and columna in _COLUMNAS_ABC)
 
 
+def _t11(columna: str, ctx: ContextoFila) -> bool:
+    return ctx.d_como_ds and columna == "S"
+
+
 def _t3(columna: str, ctx: ContextoFila) -> bool:
     return columna in ctx.columnas_empate
 
@@ -97,7 +106,7 @@ def _t2(columna: str, ctx: ContextoFila) -> bool:
 
 # El orden es la precedencia: la causa más específica de la fila gana.
 _REGLAS: tuple[tuple[str, Callable[[str, ContextoFila], bool]], ...] = (
-    ("T1", _t1), ("T4", _t4), ("T5", _t5), ("T9", _t9),
+    ("T1", _t1), ("T4", _t4), ("T5", _t5), ("T9", _t9), ("T11", _t11),
     ("T3", _t3), ("T2", _t2),
 )
 

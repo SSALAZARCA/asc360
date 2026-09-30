@@ -8,8 +8,10 @@ pedido; las transferidas o sin reemplazo no suman.
 
 `porcentaje_peso` es la fracción de las unidades de la sucursal (0..1; la
 suma de las filas da 1) y vale 0 cuando el total de unidades es 0. Una clase
-fuera del bloque (por ejemplo DM: N <= 0 con ventas en un mes) se agrega al
-final para que los totales nunca pierdan unidades.
+fuera del bloque se agrega al final para que los totales nunca pierdan
+unidades. Desde la decisión #19 toda referencia con N <= 0 es "DS", así que
+en una corrida real no aparece ninguna fila extra; el código se conserva
+como red de seguridad (y lo ejercita el nivel A1 con DM/DF del Excel).
 """
 from dataclasses import dataclass
 from fractions import Fraction

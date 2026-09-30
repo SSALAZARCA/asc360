@@ -132,6 +132,7 @@ class TestInsumos:
         assert list(ajustes.orden_explicito) == [
             f.codigo for f in lectura.filas
         ]
+        assert ajustes.clase_d_como_excel is True
 
 
 class TestNivelA1:
@@ -143,6 +144,17 @@ class TestNivelA1:
         assert resultado.filas_exactas == 6
         assert resultado.diferencias == ()
         assert resultado.exacto and resultado.paso
+
+    def test_las_filas_d_conservan_dm_y_df_del_excel(self, tmp_path):
+        filas = filas_base() + [
+            FilaSintetica("D-UNO", (6, 0, 0, 0, 0, -1), precio=5.0),
+            FilaSintetica("D-DOS", (5, 5, 0, 0, 0, -20), precio=5.0),
+        ]
+        lectura = _leer(tmp_path, filas, etiquetas=CLASES)
+        por_codigo = {f.codigo: f for f in lectura.filas}
+        assert por_codigo["D-UNO"].clase_estatica == "DM"
+        assert por_codigo["D-DOS"].clase_estatica == "DF"
+        assert ejecutar_nivel_a1(lectura).exacto
 
     def test_el_orden_fisico_resuelve_el_empate(self, tmp_path):
         lectura = _leer(tmp_path, filas_con_empate(), etiquetas=CLASES)
@@ -364,6 +376,21 @@ class TestNivelA2:
         resultado = ejecutar_nivel_a2(lectura)
         assert _columnas(resultado, "A-100")["N"].categoria == SIN_CATEGORIA
         assert not resultado.paso
+
+    def test_la_etiqueta_ds_de_las_filas_d_es_t11(self, tmp_path):
+        filas = filas_base() + [
+            FilaSintetica("D-UNO", (6, 0, 0, 0, 0, -1), precio=5.0),
+            FilaSintetica("D-DOS", (5, 5, 0, 0, 0, -20), precio=5.0),
+        ]
+        resultado = ejecutar_nivel_a2(
+            _leer(tmp_path, filas, etiquetas=CLASES)
+        )
+        for codigo, excel in (("D-UNO", "DM"), ("D-DOS", "DF")):
+            diferencia = _columnas(resultado, codigo)["S"]
+            assert diferencia.valor_excel == excel
+            assert diferencia.valor_motor == "DS"
+            assert diferencia.categoria == "T11"
+        assert SIN_CATEGORIA not in resultado.por_categoria
 
     def test_la_clase_unica_del_empate_es_t3(self, tmp_path):
         lectura = _leer(tmp_path, filas_con_empate(), etiquetas=CLASES)
