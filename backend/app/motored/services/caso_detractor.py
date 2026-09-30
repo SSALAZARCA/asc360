@@ -239,8 +239,20 @@ async def agregar_accion(
         id=uuid.uuid4(), caso_id=caso_id, usuario_id=actor, tipo=tipo, descripcion=descripcion,
     )
     db.add(accion)
+    _asignar_primer_responsable(caso, actor)
     await db.commit()
     return _accion_dict(SimpleAccion(accion, nombre_row.nombre if nombre_row else None))
+
+
+def _asignar_primer_responsable(caso: CasoDetractor, actor: uuid.UUID) -> None:
+    """The first user to record anything in the history becomes the responsable.
+
+    Runs under the row lock taken by `_bloquear_caso`, so two concurrent first
+    actions cannot both win; an existing assignee is never overwritten.
+    """
+    if caso.asignado_a is None:
+        caso.asignado_a = actor
+        caso.updated_at = datetime.utcnow()
 
 
 class SimpleAccion:

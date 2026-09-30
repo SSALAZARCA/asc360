@@ -251,6 +251,27 @@ def test_add_action_happy_path_appends_and_returns_it():
     assert "FOR UPDATE" in _sql(session.executed_statements[1])
 
 
+def test_first_user_action_on_unassigned_case_sets_responsable():
+    caso = _real_caso("ABIERTO")
+    response, _ = _post_action({"tipo": "NOTA", "descripcion": "Primer registro"}, caso)
+    assert response.status_code == 201
+    assert str(caso.asignado_a) == USER_ID
+    assert caso.updated_at is not None and caso.updated_at > datetime(2026, 9, 1, 10)
+
+
+def test_action_on_assigned_case_keeps_responsable():
+    other = uuid.uuid4()
+    caso = _real_caso("EN_GESTION", asignado_a=other)
+    _post_action({"tipo": "LLAMADA", "descripcion": "Llamada de seguimiento"}, caso)
+    assert caso.asignado_a == other
+
+
+def test_note_on_closed_unassigned_case_also_sets_responsable():
+    caso = _real_caso("CERRADO")
+    _post_action({"tipo": "NOTA", "descripcion": "Nota tardia"}, caso)
+    assert str(caso.asignado_a) == USER_ID
+
+
 @pytest.mark.parametrize("tipo", ["APERTURA", "CAMBIO_ESTADO", "OTRO"])
 def test_system_only_or_unknown_tipos_are_rejected(tipo):
     response, session = _post_action({"tipo": tipo, "descripcion": "descripcion valida"}, _real_caso())

@@ -146,3 +146,76 @@ async def test_detractor_case_full_lifecycle_in_the_panel(sesion):
     assert [a["tipo"] for a in reabierto["acciones"]] == [
         "APERTURA", "LLAMADA", "CAMBIO_ESTADO", "CAMBIO_ESTADO", "CAMBIO_ESTADO",
     ]
+
+
+async def _caso_detractor(sesion) -> tuple:
+    """Submit a detractor response; returns (caso_id, admin_id)."""
+    registro_id, cedula, ultimos4 = await _registro(sesion)
+    resultado = await servicio.registrar_respuesta(
+        sesion, cedula_raw=cedula, celular_ultimos4=ultimos4, registro_id=registro_id, datos=_datos(1, False),
+    )
+    admin_id = (await sesion.execute(select(Usuario.id).where(Usuario.email.like(f"%{cedula}%")))).scalar_one()
+    caso_id = (await sesion.execute(
+        select(CasoDetractor.id).where(CasoDetractor.numero == resultado.caso_numero)
+    )).scalar_one()
+    return caso_id, admin_id
+
+
+async def test_first_manual_action_makes_the_author_the_responsable(sesion):
+    from app.motored.services import caso_detractor as casos
+
+    caso_id, admin_id = await _caso_detractor(sesion)
+    assert (await casos.detalle(sesion, caso_id))["asignado_a"] is None
+
+    await casos.agregar_accion(sesion, caso_id, usuario_id=str(admin_id), tipo="NOTA", descripcion="Primer registro")
+
+    responsable = (await casos.detalle(sesion, caso_id))["asignado_a"]
+    assert responsable["id"] == admin_id
+
+
+class _CapturingOp:
+    """Stands in for `alembic.op` so the migration's SQL can run on a session."""
+
+    def __init__(self):
+        self.statements = []
+
+    def execute(self, statement):
+        self.statements.append(str(statement))
+
+
+async def test_backfill_migration_assigns_the_first_user_entry_only_where_unassigned(sesion):
+    """Runs the real migration statements (upgrade) against seeded legacy-shaped data."""
+    import importlib.util
+    from datetime import datetime
+    from pathlib import Path
+
+    from sqlalchemy import text
+
+    caso_id, first_id = await _caso_detractor(sesion)
+    second_id = uuid.uuid4()
+    sesion.add(Usuario(
+        id=second_id, nombre="Otro", role=MotoredRole.ADMIN, activo=True,
+        email=f"otro{second_id.hex[:8]}@test.co", hashed_password="x",
+    ))
+    await sesion.flush()
+    for usuario_id, hora in ((second_id, 12), (first_id, 10)):  # the earlier entry is the one that must win
+        sesion.add(CasoDetractorAccion(
+            id=uuid.uuid4(), caso_id=caso_id, usuario_id=usuario_id, tipo="NOTA",
+            descripcion="Entrada antigua", created_at=datetime(2026, 9, 1, hora),
+        ))
+    await sesion.commit()
+    assert (await sesion.get(CasoDetractor, caso_id)).asignado_a is None
+
+    archivo = next((Path(__file__).resolve().parents[3] / "alembic_motored" / "versions").glob("a7c3e91d5b20_*.py"))
+    spec = importlib.util.spec_from_file_location("backfill_migration", archivo)
+    modulo = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(modulo)
+    captura = _CapturingOp()
+    modulo.op = captura
+    modulo.upgrade()
+    for sentencia in captura.statements:
+        await sesion.execute(text(sentencia))
+    await sesion.commit()
+
+    sesion.expire_all()
+    assert (await sesion.get(CasoDetractor, caso_id)).asignado_a == first_id
