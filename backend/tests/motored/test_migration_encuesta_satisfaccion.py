@@ -111,7 +111,7 @@ def test_registro_unique_and_cedula_index():
     assert any(a[1] == "encuesta_registro" and a[2] == ["cedula"] for a in idx)
 
 
-def test_is_the_only_head_of_the_chain():
+def test_chain_keeps_a_single_head_and_encuesta_is_not_orphaned():
     revisions, downs = set(), set()
     for path in _VERSIONS_DIR.glob("*.py"):
         spec = importlib.util.spec_from_file_location(f"m_{path.stem}", path)
@@ -119,4 +119,7 @@ def test_is_the_only_head_of_the_chain():
         spec.loader.exec_module(module)
         revisions.add(module.revision)
         downs.add(module.down_revision)
-    assert revisions - downs == {migration.revision}
+    # Later slices (Fase 3 S4a) chain on top of this revision, so it is no
+    # longer the head itself: what matters is one head and no fork here.
+    assert len(revisions - downs) == 1
+    assert migration.revision in downs

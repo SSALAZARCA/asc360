@@ -1,8 +1,9 @@
 """
 Motored Pedidos — paquete de modelos (sdd/motored-pedidos-cimientos, Fase 3,
 task 3.1; sdd/motored-pedidos-ingesta, Fase 2 Phase 1 task 1.1, Phase 3 task
-3.1; sdd/motored-ventas-perdidas-bot, Phase 1 "Schema"). Importar este
-paquete registra los 20 modelos en `MotoredBase.metadata` -- requerido por
+3.1; sdd/motored-ventas-perdidas-bot, Phase 1 "Schema";
+sdd/motored-pedidos-motor, S4a, tablas `corrida*`). Importar este
+paquete registra todos los modelos en `MotoredBase.metadata` -- requerido por
 `alembic_motored/env.py` para el autogenerate y por cualquier `create_all()`
 de test.
 """
@@ -14,6 +15,11 @@ from app.motored.models.carga_error import CargaError
 from app.motored.models.caso_detractor import CasoDetractor
 from app.motored.models.caso_detractor_accion import CasoDetractorAccion
 from app.motored.models.carga_fila_staging import CargaFilaStaging
+from app.motored.models.corrida import Corrida
+from app.motored.models.corrida_carga import CorridaCarga
+from app.motored.models.corrida_linea import CorridaLinea
+from app.motored.models.corrida_resumen import CorridaResumen
+from app.motored.models.corrida_sucursal import CorridaSucursal
 from app.motored.models.demanda_perdida import DemandaPerdida
 from app.motored.models.demanda_perdida_bot_linea import DemandaPerdidaBotLinea
 from app.motored.models.encuesta_carga import EncuestaCarga
@@ -41,6 +47,11 @@ __all__ = [
     "CasoDetractor",
     "CasoDetractorAccion",
     "CargaFilaStaging",
+    "Corrida",
+    "CorridaCarga",
+    "CorridaLinea",
+    "CorridaResumen",
+    "CorridaSucursal",
     "DemandaPerdida",
     "DemandaPerdidaBotLinea",
     "EncuestaCarga",
