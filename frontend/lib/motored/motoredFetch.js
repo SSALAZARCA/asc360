@@ -17,8 +17,12 @@
  * (and re-exports `getMotoredApiUrl` for convenience), never the reverse.
  * One-directional dependency, no circular-import risk.
  */
+import { httpErrorMessage } from './httpErrors';
+
 export const MOTORED_TOKEN_KEY = 'motored_token';
 export const MOTORED_USER_KEY = 'motored_user';
+/** Set when the session ended on its own (401), so the login page can explain it. */
+export const MOTORED_EXPIRED_KEY = 'motored_session_expired';
 
 export const getMotoredApiUrl = () => {
   const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
@@ -78,6 +82,8 @@ export async function motoredFetch(path, options = {}) {
   // aislamiento de sesión que el diseño exige.
   if (response.status === 401) {
     if (typeof window !== 'undefined') {
+      // A failed login attempt is not a lost session: only flag real expiries.
+      if (token && !path.endsWith('/auth/login')) sessionStorage.setItem(MOTORED_EXPIRED_KEY, '1');
       sessionStorage.removeItem(MOTORED_TOKEN_KEY);
       sessionStorage.removeItem(MOTORED_USER_KEY);
       window.dispatchEvent(new Event('storage'));
@@ -100,7 +106,7 @@ export async function motoredFetchJson(path, options = {}) {
   const res = await motoredFetch(path, options);
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(body.detail || `HTTP ${res.status}`);
+    throw new Error(httpErrorMessage(res.status, body, `HTTP ${res.status}`));
   }
   return body;
 }

@@ -13,22 +13,22 @@ const toggleStyle = {
 };
 const hintStyle = { margin: 0, fontSize: '0.7rem', color: 'var(--motored-text-soft, #8a8a8a)' };
 
-export default function PasswordField({ label, value, onChange, autoComplete, hint, maxLength = 72 }) {
+export default function PasswordField({ label, value, onChange, autoComplete, hint, maxLength = 72, toggleName = label, autoFocus = false, styles = {} }) {
   const id = useId();
   const [visible, setVisible] = useState(false);
   const Icon = visible ? EyeOff : Eye;
   return (
-    <div style={wrapStyle}>
-      <label htmlFor={id} style={labelStyle}>{label}</label>
+    <div style={{ ...wrapStyle, ...styles.wrap }}>
+      <label htmlFor={id} style={{ ...labelStyle, ...styles.label }}>{label}</label>
       <div style={rowStyle}>
         <input
           id={id} type={visible ? 'text' : 'password'} value={value} autoComplete={autoComplete}
-          maxLength={maxLength} required onChange={(e) => onChange(e.target.value)}
-          style={{ width: '100%', paddingRight: '3rem', minHeight: '44px' }}
+          maxLength={maxLength} required autoFocus={autoFocus} onChange={(e) => onChange(e.target.value)}
+          style={{ width: '100%', paddingRight: '3rem', minHeight: '44px', ...styles.input }}
         />
         <button
-          type="button" style={toggleStyle} onClick={() => setVisible((v) => !v)}
-          aria-label={`${visible ? 'Ocultar' : 'Mostrar'} ${label}`}
+          type="button" style={{ ...toggleStyle, ...styles.toggle }} onClick={() => setVisible((v) => !v)}
+          aria-label={`${visible ? 'Ocultar' : 'Mostrar'} ${toggleName}`} aria-pressed={visible}
         >
           <Icon size={16} />
         </button>

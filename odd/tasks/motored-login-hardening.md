@@ -55,7 +55,7 @@ Not requested:
 - [x] T1 — verify_password returns False above 72 bytes (shared core, UM unchanged otherwise); Motored create/reset 422 "no puede superar 72 caracteres" (bytes); bootstrap script min 8/max 72. RED 9 → GREEN; motored 2647, UM 1296.
 - [x] T2 — start.sh prints only host/db (python heredoc with `||` fallback; verified never aborts and never prints the password).
 - [x] T3 — POST /api/motored/auth/password (actual+nueva, 5/min, fresh token, audited); tokens carry iat; migration b8d2f4a61c93 adds usuario.password_changed_at (set on admin reset and own change); older tokens → 401; "Cambiar mi contraseña" page /motored/mi-cuenta for all web roles. RED→GREEN; motored 2805, UM 1296, pg_real 78, jest 691.
-- [ ] T4
+- [x] T4 — login/mi-cuenta/reset map 401/429/5xx/network to clear Spanish messages (never [object Object]); session-expired notice via sessionStorage flag set only when a 401 clears an existing session; login: show/hide, autocomplete, labels, role=alert, autofocus, forgot-password line; create-user: confirm field, hint, maxLength 72, aligned row. RED 17 → GREEN; jest 95/711; next build OK; screenshots 390/820/1280 reviewed.
 - [ ] T5
 
 ## Log

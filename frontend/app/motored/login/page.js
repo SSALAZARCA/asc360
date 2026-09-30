@@ -13,39 +13,77 @@
  * as the single accent, on a light surface (per the app's own design-
  * system reference, not the dark theme this page originally shipped with).
  */
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { Mail, Lock, ArrowRight } from 'lucide-react';
+import { Mail, ArrowRight } from 'lucide-react';
 import { login } from '../../../lib/motored/api';
-import { MOTORED_TOKEN_KEY, MOTORED_USER_KEY } from '../../../lib/motored/motoredFetch';
+import { MOTORED_TOKEN_KEY, MOTORED_USER_KEY, MOTORED_EXPIRED_KEY } from '../../../lib/motored/motoredFetch';
 import { ROLE_SERVICIO_CLIENTE, SURVEY_ADMIN_PATH } from '../../../lib/motored/servicioCliente';
+import PasswordField from '../../../components/motored/mi-cuenta/PasswordField';
 
-export default function MotoredLoginPage() {
+// Same look as the email label above it (the scoped CSS cannot reach PasswordField).
+const passwordStyles = {
+  wrap: { gap: 0 },
+  label: {
+    display: 'block', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase',
+    letterSpacing: '0.05em', marginBottom: '0.4rem',
+  },
+  input: { minHeight: 'auto' },
+  toggle: { minHeight: '100%', minWidth: '40px' },
+};
+
+const EXPIRED_NOTICE = 'Tu sesión terminó (venció o se cerró por un cambio de contraseña). Vuelve a ingresar.';
+
+/** True once when the previous session ended automatically; consumes the flag. */
+function useExpiredNotice() {
+  const [expired, setExpired] = useState(false);
+  useEffect(() => {
+    try {
+      if (sessionStorage.getItem(MOTORED_EXPIRED_KEY)) {
+        sessionStorage.removeItem(MOTORED_EXPIRED_KEY);
+        setExpired(true);
+      }
+    } catch {
+      /* sessionStorage unavailable: no notice */
+    }
+  }, []);
+  return expired;
+}
+
+function useLogin() {
   const router = useRouter();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const handleLogin = async (e) => {
-    e.preventDefault();
+  const submit = async (email, password) => {
     setLoading(true);
     setError('');
-
     try {
       const data = await login(email, password);
-
       sessionStorage.setItem(MOTORED_TOKEN_KEY, data.access_token);
       sessionStorage.setItem(MOTORED_USER_KEY, JSON.stringify(data.user));
       window.dispatchEvent(new Event('storage'));
-
       router.push(data.user?.role === ROLE_SERVICIO_CLIENTE ? SURVEY_ADMIN_PATH : '/motored/maestros');
     } catch (err) {
-      setError(err.message || 'Credenciales inválidas o servidor inalcanzable.');
+      setError(err.message || 'No pudimos iniciar sesión. Inténtalo de nuevo.');
     } finally {
       setLoading(false);
     }
+  };
+
+  return { loading, error, submit };
+}
+
+export default function MotoredLoginPage() {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const { loading, error, submit } = useLogin();
+  const expired = useExpiredNotice();
+
+  const handleLogin = (e) => {
+    e.preventDefault();
+    submit(email, password);
   };
 
   return (
@@ -57,14 +95,18 @@ export default function MotoredLoginPage() {
         </div>
 
         <form onSubmit={handleLogin} className="motored-login-form">
-          {error && <div className="motored-error-box">{error}</div>}
+          {expired && <div role="status" className="motored-notice-box">{EXPIRED_NOTICE}</div>}
+          {error && <div role="alert" className="motored-error-box">{error}</div>}
 
           <div className="motored-input-group">
-            <label>Correo Electrónico</label>
+            <label htmlFor="motored-login-email">Correo electrónico</label>
             <div className="motored-input-icon">
               <Mail size={16} />
               <input
+                id="motored-login-email"
                 type="email"
+                autoComplete="username"
+                autoFocus
                 placeholder="usuario@motoredcolombia.com.co"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -73,23 +115,15 @@ export default function MotoredLoginPage() {
             </div>
           </div>
 
-          <div className="motored-input-group">
-            <label>Contraseña</label>
-            <div className="motored-input-icon">
-              <Lock size={16} />
-              <input
-                type="password"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
-            </div>
-          </div>
+          <PasswordField
+            label="Contraseña" toggleName="contraseña" value={password} onChange={setPassword}
+            autoComplete="current-password" styles={passwordStyles}
+          />
 
           <button type="submit" className="motored-btn motored-btn-primary" style={{ width: '100%', height: '44px', marginTop: '0.5rem' }} disabled={loading}>
             {loading ? 'Verificando...' : <>Iniciar sesión <ArrowRight size={16} /></>}
           </button>
+          <p className="motored-forgot">¿Olvidaste tu contraseña? Pídele a un administrador que la restablezca.</p>
         </form>
       </div>
 
@@ -107,6 +141,8 @@ export default function MotoredLoginPage() {
         .motored-input-icon :global(svg:first-child) { position: absolute; left: 1rem; color: var(--motored-text-soft, #8a8a8a); }
         .motored-input-icon :global(input) { width: 100%; padding-left: 2.8rem; }
 
+        .motored-forgot { margin: 0; font-size: 0.75rem; text-align: center; color: var(--motored-text-muted, #5a5a5a); }
+        .motored-notice-box { background: var(--motored-surface-alt, #f1f1f3); border: 1px solid var(--motored-border, #e4e4e7); color: var(--motored-text, #1a1a18); padding: 0.75rem; border-radius: var(--motored-radius-sm, 4px); font-size: 0.75rem; font-weight: 600; text-align: center; }
         .motored-error-box { background: var(--motored-danger-bg, #fdecea); border: 1px solid var(--motored-danger, #c0392b); color: var(--motored-danger, #c0392b); padding: 0.75rem; border-radius: var(--motored-radius-sm, 4px); font-size: 0.75rem; font-weight: 700; text-align: center; }
       `}</style>
     </div>

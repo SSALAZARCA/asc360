@@ -32,6 +32,7 @@ import MotoredIconAction from '../../../components/motored/MotoredIconAction';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import MotoredLayout from '../motored-layout';
+import UsuarioCreateForm from '../../../components/motored/UsuarioCreateForm';
 import CambiarPasswordForm from '../../../components/motored/CambiarPasswordForm';
 import {
   listUsuarios, createUsuario, deactivateUsuario, reactivateUsuario,
@@ -39,40 +40,6 @@ import {
   generarCodigoTelegram, desvincularTelegram, resetPasswordUsuario,
 } from '../../../lib/motored/api';
 import { MOTORED_USER_KEY } from '../../../lib/motored/motoredFetch';
-
-const ROLES = ['ADMIN', 'COMPRAS', 'SUCURSAL', 'CONSULTA', 'SERVICIO_CLIENTE'];
-const ROLE_LABELS = { SERVICIO_CLIENTE: 'Servicio al cliente' };
-const emptyForm = { nombre: '', email: '', password: '', role: 'CONSULTA' };
-
-function UsuarioForm({ form, setForm, onSubmit }) {
-  return (
-    <form onSubmit={onSubmit} style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
-      <label style={{ display: 'flex', flexDirection: 'column', fontSize: '0.7rem', color: 'var(--motored-text-muted, #5a5a5a)' }}>
-        Nombre
-        <input value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} required />
-      </label>
-      <label style={{ display: 'flex', flexDirection: 'column', fontSize: '0.7rem', color: 'var(--motored-text-muted, #5a5a5a)' }}>
-        Email
-        <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required />
-      </label>
-      <label style={{ display: 'flex', flexDirection: 'column', fontSize: '0.7rem', color: 'var(--motored-text-muted, #5a5a5a)' }}>
-        Password
-        <input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required />
-      </label>
-      <label style={{ display: 'flex', flexDirection: 'column', fontSize: '0.7rem', color: 'var(--motored-text-muted, #5a5a5a)' }}>
-        Rol
-        <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
-          {ROLES.map((r) => (
-            <option key={r} value={r} style={{ color: '#1a1a18' }}>
-              {ROLE_LABELS[r] || r}
-            </option>
-          ))}
-        </select>
-      </label>
-      <button type="submit" className="motored-btn motored-btn-primary">Crear usuario</button>
-    </form>
-  );
-}
 
 function tieneAccesoWeb(u) {
   return Boolean(u.email) && u.role !== 'ASESOR_MOSTRADOR';
@@ -449,14 +416,6 @@ function UsuariosContent() {
   const solicitudesState = useSolicitudesPendientes(allowed);
   const telegramState = useTelegramVinculacion(reload);
   const passwordState = usePasswordReset();
-  const [form, setForm] = useState(emptyForm);
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    const ok = await create(form);
-    if (ok) setForm(emptyForm);
-  };
-
   if (!allowed) return null;
 
   return (
@@ -465,7 +424,7 @@ function UsuariosContent() {
 
       {error && <p style={{ color: 'var(--motored-danger, #c0392b)', fontSize: '0.8rem' }}>{error}</p>}
 
-      <UsuarioForm form={form} setForm={setForm} onSubmit={handleSubmit} />
+      <UsuarioCreateForm onCreate={create} />
 
       {loading ? (
         <p style={{ color: 'var(--motored-text-muted, #5a5a5a)', fontSize: '0.8rem' }}>Cargando...</p>

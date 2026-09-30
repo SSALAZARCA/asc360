@@ -12,6 +12,7 @@
  * token exists).
  */
 import { motoredFetch, motoredFetchJson, getMotoredApiUrl } from './motoredFetch';
+import { httpErrorMessage, NETWORK_MESSAGE } from './httpErrors';
 
 export { getMotoredApiUrl };
 
@@ -21,13 +22,20 @@ export { getMotoredApiUrl };
 
 /** POST /auth/login -- credenciales planas, sin token todavía. */
 export async function login(email, password) {
-  const res = await motoredFetch('/auth/login', {
-    method: 'POST',
-    body: JSON.stringify({ email, password }),
-  });
+  let res;
+  try {
+    res = await motoredFetch('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    });
+  } catch {
+    throw new Error(NETWORK_MESSAGE);
+  }
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(body.detail || 'Credenciales incorrectas');
+    // 401 stays generic on purpose: never say which of email/password was wrong.
+    const generic = 'Correo o contraseña incorrectos.';
+    throw new Error(res.status === 401 ? generic : httpErrorMessage(res.status, body, generic));
   }
   return body; // { access_token, token_type, user }
 }
