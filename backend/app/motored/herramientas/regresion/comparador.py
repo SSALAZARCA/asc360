@@ -7,12 +7,14 @@ valor legacy y la fecha de apertura de la sucursal nula (se verifica). La Z
 del motor es la Z del Excel: sólo aquí, nunca en producción.
 
 - **A1 (fidelidad de fórmulas)**: `AjustesPrueba` reproduce el divisor /18 de
-  las filas marcadas y el orden físico del Excel como desempate del ABC. Se
+  las filas marcadas, el orden físico del Excel y su clasificación ABC fila
+  por fila (sin la regla de empates #17, `empates_como_excel`). Se
   espera coincidencia exacta en N..AD (|Δ| <= 5e-7 en decimales, 0 en el
   pedido); lo que no coincide lleva categoría o es `SIN_CATEGORIA`.
 - **A2 (comportamiento del producto)**: divisor 21 y el orden del motor
-  (N descendente, código ascendente). Toda diferencia se clasifica con la
-  taxonomía y lo inexplicado hace fallar el nivel.
+  (N descendente, código ascendente, empates con la misma clase). Toda
+  diferencia se clasifica con la taxonomía y lo inexplicado hace fallar el
+  nivel.
 
 Columnas comparadas por fila: N, O, P, Q, R, S, Y, AA, AB, AC, AD. Además
 los factores de cobertura E3:N3 y el bloque de resumen AA1:AE11. K, L y M
@@ -186,14 +188,15 @@ def entradas_de(lectura: LecturaExcel) -> list[EntradaReferencia]:
 
 
 def ajustes_orden_fisico(lectura: LecturaExcel) -> AjustesPrueba:
-    """Sólo el orden físico del Excel como desempate (sin el /18)."""
+    """Orden físico y clasificación fila por fila del Excel (sin el /18)."""
     return AjustesPrueba(
-        orden_explicito=[fila.codigo for fila in lectura.filas]
+        orden_explicito=[fila.codigo for fila in lectura.filas],
+        empates_como_excel=True,
     )
 
 
 def ajustes_a1(lectura: LecturaExcel) -> AjustesPrueba:
-    """Divisor por referencia (el /18) y orden físico del Excel."""
+    """Divisor por referencia (el /18), orden físico y empates del Excel."""
     divisores = {
         fila.codigo: fila.divisor
         for fila in lectura.filas
@@ -202,6 +205,7 @@ def ajustes_a1(lectura: LecturaExcel) -> AjustesPrueba:
     return AjustesPrueba(
         divisor_por_referencia=divisores,
         orden_explicito=[fila.codigo for fila in lectura.filas],
+        empates_como_excel=True,
     )
 
 
@@ -313,9 +317,10 @@ def _cambios_por_empate(lectura: LecturaExcel, resultado: ResultadoSucursal,
                         ) -> dict[str, frozenset[str]]:
     """Columnas de cada fila que cambian sólo por el desempate del ABC.
 
-    Se compara el motor con su orden (código ascendente) contra el mismo
-    motor con el orden físico del Excel: lo que difiere entre ambos lo causa
-    únicamente el desempate, y no el divisor.
+    Se compara el motor (empates con la misma clase, código ascendente)
+    contra el mismo motor con el orden físico y la clasificación fila por
+    fila del Excel: lo que difiere entre ambos lo causa únicamente el
+    tratamiento de empates, y no el divisor.
     """
     if referencia is None:
         return {}

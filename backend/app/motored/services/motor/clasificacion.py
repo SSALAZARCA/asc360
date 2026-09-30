@@ -7,6 +7,14 @@ Reglas del Excel (ganan sobre el texto del spec 6.5.1):
   N <= 0. El acumulado incluye la fila actual y se recorre en orden de N
   descendente, con desempate determinista (`orden_explicito` si existe, si no
   el código ascendente).
+- Empates (decisión #17): las referencias con N exactamente igual forman un
+  grupo y todas reciben la clase de la PRIMERA posición del grupo, es decir
+  la del acumulado que alcanza su primer miembro. El orden (`orden`), el peso
+  y el acumulado de cada fila siguen siendo por fila: sólo la clase se
+  unifica, así que un miembro puede mostrar un acumulado por encima del corte
+  de la clase que lleva. Así el ABC deja de depender del código o del orden
+  físico del Excel. El Excel clasifica fila por fila; `empates_como_excel`
+  (sólo nivel A1) reproduce eso.
 - Clase ABC: D si N <= 0; A si el acumulado <= corte A (80 %); B si <= corte B
   (95 %); C si es mayor. Las comparaciones son exactas (`Fraction`).
 - FMS: meses con venta neta > 0 entre los seis cerrados (F >= umbral F, M >=
@@ -92,9 +100,27 @@ def _abc_sin_total_positivo(orden: Sequence[str],
     return ResultadoAbc(items, suma_no_positiva=True)
 
 
+def _clases_por_grupo(orden: Sequence[str],
+                      demandas: Mapping[str, Fraction], total: Fraction,
+                      params: ParametrosMotor) -> dict[str, str]:
+    """Clase de cada código: la de la primera posición de su grupo de N."""
+    clases: dict[str, str] = {}
+    corrido = Fraction(0)
+    n_grupo = None
+    clase_grupo = "D"
+    for codigo in orden:
+        n = demandas[codigo]
+        corrido += n
+        if n != n_grupo:
+            n_grupo = n
+            clase_grupo = _letra_abc(n, corrido / total, params)
+        clases[codigo] = clase_grupo
+    return clases
+
+
 def clasificar_abc(demandas: Mapping[str, Fraction], params: ParametrosMotor,
-                   *, desempate: Optional[Mapping[str, int]] = None
-                   ) -> ResultadoAbc:
+                   *, desempate: Optional[Mapping[str, int]] = None,
+                   empates_como_excel: bool = False) -> ResultadoAbc:
     """ABC de una sucursal a partir de `{código: N}` de todo el universo."""
     orden = sorted(
         demandas, key=lambda c: _clave_de_orden(c, demandas[c], desempate)
@@ -102,13 +128,16 @@ def clasificar_abc(demandas: Mapping[str, Fraction], params: ParametrosMotor,
     total = sum(demandas.values(), Fraction(0))
     if orden and total <= 0:
         return _abc_sin_total_positivo(orden, demandas)
+    grupos = _clases_por_grupo(orden, demandas, total, params)
     items = {}
     corrido = Fraction(0)
     for posicion, codigo in enumerate(orden, start=1):
         n = demandas[codigo]
         corrido += n
         acumulado = corrido / total
-        items[codigo] = ItemAbc(
-            posicion, _letra_abc(n, acumulado, params), n / total, acumulado
+        clase = (
+            _letra_abc(n, acumulado, params) if empates_como_excel
+            else grupos[codigo]
         )
+        items[codigo] = ItemAbc(posicion, clase, n / total, acumulado)
     return ResultadoAbc(items, suma_no_positiva=False)

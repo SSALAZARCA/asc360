@@ -59,7 +59,7 @@ class TestAbcCortes:
     def test_cortes_exactos_80_y_95(self):
         resultado = _abc({"a": 50, "b": 30, "c": 10, "d": 5, "e": 5})
         assert _clases(resultado) == {
-            "a": "A", "b": "A", "c": "B", "d": "B", "e": "C",
+            "a": "A", "b": "A", "c": "B", "d": "B", "e": "B",
         }
         assert [resultado.items[c].acumulado for c in "abcde"] == [
             F(1, 2), F(4, 5), F(9, 10), F(19, 20), F(1),
@@ -87,30 +87,71 @@ class TestAbcCortes:
     def test_los_pesos_son_exactos_sin_error_binario(self):
         resultado = _abc({str(i): 1 for i in range(10)})
         clases = [resultado.items[str(i)].clase for i in range(10)]
-        assert clases == ["A"] * 8 + ["B", "C"]
+        assert clases == ["A"] * 10  # un solo grupo: clase de la posición 1
         assert resultado.items["7"].acumulado == F(4, 5)
+        distintos = _abc({str(i): i + 1 for i in range(10)})
+        assert distintos.items["0"].clase == "C"
+        assert distintos.items["9"].acumulado == F(10, 55)
 
 
 class TestAbcDesempate:
     DEMANDAS = {"x": 50, "y": 15, "z": 15, "w": 20}
 
-    def test_empate_en_frontera_se_resuelve_por_codigo(self):
+    def test_empate_en_frontera_da_la_misma_clase_al_grupo(self):
         resultado = _abc(self.DEMANDAS)
-        assert _clases(resultado) == {"x": "A", "w": "A", "y": "B", "z": "C"}
+        assert _clases(resultado) == {"x": "A", "w": "A", "y": "B", "z": "B"}
         assert resultado.items["y"].orden == 3
         assert resultado.items["z"].orden == 4
+
+    def test_el_grupo_toma_la_clase_de_su_primera_posicion(self):
+        resultado = _abc({"a": 70, "b": 10, "c": 10, "d": 10})
+        assert _clases(resultado) == {
+            "a": "A", "b": "A", "c": "A", "d": "A",
+        }
+        abierto = _abc({"a": 75, "b": 10, "c": 10, "d": 5})
+        assert _clases(abierto)["b"] == _clases(abierto)["c"] == "B"
+
+    def test_peso_y_acumulado_siguen_siendo_por_fila(self):
+        resultado = _abc(self.DEMANDAS)
+        assert resultado.items["y"].acumulado == F(17, 20)
+        assert resultado.items["z"].acumulado == F(1)
+        assert resultado.items["y"].peso == resultado.items["z"].peso
 
     def test_empate_es_independiente_del_orden_de_entrada(self):
         invertido = dict(reversed(list(self.DEMANDAS.items())))
         assert _abc(invertido).items == _abc(self.DEMANDAS).items
 
-    def test_orden_explicito_del_excel_manda_sobre_el_codigo(self):
+    def test_orden_explicito_solo_mueve_el_orden_no_la_clase(self):
         rango = {"z": 0, "y": 1}
         resultado = _abc(self.DEMANDAS, desempate=rango)
         assert resultado.items["z"].orden == 3
         assert resultado.items["y"].orden == 4
         assert resultado.items["z"].clase == "B"
+        assert resultado.items["y"].clase == "B"
+        assert resultado.items["z"].acumulado == F(17, 20)
+
+    def test_empates_como_excel_clasifica_fila_por_fila(self):
+        rango = {"z": 0, "y": 1}
+        resultado = _abc(
+            self.DEMANDAS, desempate=rango, empates_como_excel=True
+        )
+        assert resultado.items["z"].clase == "B"
         assert resultado.items["y"].clase == "C"
+
+    def test_solo_empata_con_n_exactamente_igual(self):
+        resultado = _abc({"a": 50, "b": 30, "c": 10, "d": 5, "e": 5})
+        assert _clases(resultado)["d"] == _clases(resultado)["e"] == "B"
+        casi = clasificar_abc(
+            {"d": F(5), "e": F(5) + F(1, 1000), "f": F(90)},
+            parametros_legacy(),
+        )
+        assert casi.items["e"].orden == 2 and casi.items["d"].orden == 3
+
+    def test_empate_de_filas_d_sigue_siendo_d(self):
+        resultado = _abc({"a": 70, "b": 0, "c": 0, "d": 30})
+        assert _clases(resultado) == {
+            "a": "A", "b": "D", "c": "D", "d": "C",
+        }
 
 
 class TestAbcFilasD:

@@ -141,6 +141,10 @@ def _rangos_fisicos(ajustes: Optional[AjustesPrueba]
     return {codigo: i for i, codigo in enumerate(ajustes.orden_explicito)}
 
 
+def _empates_como_excel(ajustes: Optional[AjustesPrueba]) -> bool:
+    return ajustes is not None and ajustes.empates_como_excel
+
+
 @dataclass(frozen=True)
 class _Contexto:
     """Lo que comparten todas las líneas de una misma sucursal."""
@@ -262,7 +266,8 @@ def calcular_sucursal(entradas: Sequence[EntradaReferencia],
     universo = _universo(consolidacion.entradas, ventana)
     demandas, proyectadas = _demandas(universo, ctx, ajustes_prueba)
     abc = clasificar_abc(
-        demandas, params, desempate=_rangos_fisicos(ajustes_prueba)
+        demandas, params, desempate=_rangos_fisicos(ajustes_prueba),
+        empates_como_excel=_empates_como_excel(ajustes_prueba),
     )
     lineas = _lineas(universo, demandas, proyectadas, abc.items, ctx)
     advertencias = consolidacion.advertencias + (

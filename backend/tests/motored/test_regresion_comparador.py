@@ -365,15 +365,20 @@ class TestNivelA2:
         assert _columnas(resultado, "A-100")["N"].categoria == SIN_CATEGORIA
         assert not resultado.paso
 
-    def test_el_desempate_por_codigo_ascendente_es_t3(self, tmp_path):
+    def test_la_clase_unica_del_empate_es_t3(self, tmp_path):
         lectura = _leer(tmp_path, filas_con_empate(), etiquetas=CLASES)
         resultado = ejecutar_nivel_a2(lectura)
-        assert {d.codigo for d in resultado.diferencias} == {"G-1", "G-2"}
+        assert {d.codigo for d in resultado.diferencias} == {
+            "G-1", "G-2", "AF", "CF",
+        }
         assert {d.categoria for d in resultado.diferencias} == {"T3"}
-        assert {d.columna for d in resultado.diferencias} == {"P", "Q", "S"}
+        columnas = {
+            d.columna for d in resultado.diferencias if d.fila is not None
+        }
+        assert columnas == {"P", "Q", "S"}
         assert resultado.paso
 
-    def test_un_empate_que_ya_estaba_en_orden_ascendente_no_es_t3(
+    def test_un_empate_en_orden_ascendente_solo_cambia_la_clase_por_t3(
         self, tmp_path
     ):
         filas = [
@@ -389,8 +394,13 @@ class TestNivelA2:
         empatadas = [
             d for d in resultado.diferencias if d.codigo in {"G-1", "G-2"}
         ]
-        assert {d.columna for d in empatadas} == {"O", "P"}
-        assert {d.categoria for d in empatadas} == {"T2"}
+        assert {d.columna for d in empatadas} == {"O", "P", "Q", "S"}
+        assert {
+            d.columna for d in empatadas if d.categoria == "T2"
+        } == {"O", "P"}
+        assert {
+            d.columna for d in empatadas if d.categoria == "T3"
+        } == {"Q", "S"}
 
     def test_solo_lo_que_cambia_el_desempate_es_t3_y_el_resto_es_cascada(
         self, tmp_path

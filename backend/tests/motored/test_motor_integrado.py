@@ -414,6 +414,16 @@ class TestAjustesPrueba:
         ))
         assert [ln.entrada.codigo for ln in fisico.lineas] == ["B", "A"]
         assert fisico.lineas[0].clase_abc == "A"
+        assert fisico.lineas[1].clase_abc == "A"
+
+    def test_empates_como_excel_clasifica_por_orden_fisico(self):
+        iguales = [
+            entrada((10,) * 6, codigo="A"), entrada((10,) * 6, codigo="B"),
+        ]
+        fisico = _calcular(iguales, ajustes=AjustesPrueba(
+            orden_explicito=["B", "A"], empates_como_excel=True
+        ))
+        assert fisico.lineas[0].clase_abc == "A"
         assert fisico.lineas[1].clase_abc == "C"
 
 

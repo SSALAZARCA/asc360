@@ -20,8 +20,9 @@ CATEGORIAS: Mapping[str, str] = {
     "T1": "Divisor /18 de la plantilla en lugar de 21 (error de plantilla).",
     "T2": "Efecto en cascada: cambian la suma de N y el orden, y con ellos "
           "el peso, el acumulado y la clase ABC de otras filas.",
-    "T3": "Empate de N: el Excel desempata por orden físico y el motor por "
-          "código ascendente (H5).",
+    "T3": "Empate de N: el Excel clasifica fila por fila según el orden "
+          "físico; el motor da a todo el grupo empatado la clase de su "
+          "primera posición (decisión #17) y ordena por código (H5).",
     "T4": "La clase S estática del Excel contradice su propia fórmula Q y R, "
           "y el stock objetivo del Excel se calculó con esa S estática.",
     "T5": "Unidad de empaque 0 en el Excel (IFERROR da pedido 0); la base "

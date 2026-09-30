@@ -114,10 +114,14 @@ class AjustesPrueba:
     códigos de referencia: `divisor_por_referencia` reemplaza el divisor de N
     de esa referencia (el /18 de la plantilla) y `orden_explicito` es el
     orden físico del Excel, que gobierna el desempate del ABC.
+    `empates_como_excel` desactiva la regla de empates del ABC (decisión #17:
+    misma clase para N exactamente igual) y clasifica fila por fila como el
+    Excel; sólo lo usa el nivel A1 para seguir coincidiendo con él.
     """
 
     divisor_por_referencia: Optional[Mapping[str, int]] = None
     orden_explicito: Optional[Sequence[str]] = None
+    empates_como_excel: bool = False
 
 
 @dataclass(frozen=True)
