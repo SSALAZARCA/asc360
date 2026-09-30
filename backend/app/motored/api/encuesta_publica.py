@@ -6,6 +6,7 @@ limit (cedulas are guessable) and by returning minimal data only.
 `/identificar` answers HTTP 200 with a discriminated `estado` so the page can
 render each screen; `/respuestas` uses 404/409 for the failure cases.
 """
+import re
 import uuid
 from datetime import datetime
 from typing import List, Literal, Optional
@@ -32,10 +33,21 @@ IDENTIFICAR_LIMIT = "10/minute"
 RESPUESTAS_LIMIT = "20/minute"
 
 Score = Field(ge=1, le=5)
+_LAST4_RE = re.compile(r"\d{4}")
+
+
+def _clean_last4(value: str) -> str:
+    value = value.strip()
+    if not _LAST4_RE.fullmatch(value):
+        raise ValueError("celular_ultimos4 debe tener exactamente 4 dígitos")
+    return value
 
 
 class IdentificarRequest(BaseModel):
     cedula: str = Field(min_length=1, max_length=64)
+    celular_ultimos4: str = Field(max_length=16)
+
+    _validate_last4 = field_validator("celular_ultimos4")(_clean_last4)
 
 
 class RegistroPendiente(BaseModel):
@@ -54,6 +66,7 @@ class IdentificarResponse(BaseModel):
 
 class RespuestaRequest(BaseModel):
     cedula: str = Field(min_length=1, max_length=64)
+    celular_ultimos4: str = Field(max_length=16)
     registro_id: uuid.UUID
     satisfaccion_general: int = Score
     p_explicacion_tecnica: Optional[int] = Field(ge=1, le=5)
@@ -64,6 +77,8 @@ class RespuestaRequest(BaseModel):
     p_originalidad_repuestos: Optional[int] = Field(ge=1, le=5)
     observaciones: Optional[str] = Field(default=None)
     autoriza_datos: bool
+
+    _validate_last4 = field_validator("celular_ultimos4")(_clean_last4)
 
     @field_validator("observaciones")
     @classmethod
@@ -89,7 +104,7 @@ async def identificar(
     payload: IdentificarRequest,
     db: AsyncSession = Depends(get_motored_db_or_503),
 ):
-    resultado = await servicio.identificar(db, payload.cedula)
+    resultado = await servicio.identificar(db, payload.cedula, payload.celular_ultimos4)
     return IdentificarResponse(
         estado=resultado.estado,
         mensaje=servicio.NOT_FOUND_MESSAGE if resultado.estado == "NO_ENCONTRADA" else None,
@@ -106,10 +121,14 @@ async def responder(
     payload: RespuestaRequest,
     db: AsyncSession = Depends(get_motored_db_or_503),
 ):
-    datos = payload.model_dump(exclude={"cedula", "registro_id"})
+    datos = payload.model_dump(exclude={"cedula", "celular_ultimos4", "registro_id"})
     try:
         resultado = await servicio.registrar_respuesta(
-            db, cedula_raw=payload.cedula, registro_id=payload.registro_id, datos=datos
+            db,
+            cedula_raw=payload.cedula,
+            celular_ultimos4=payload.celular_ultimos4,
+            registro_id=payload.registro_id,
+            datos=datos,
         )
     except servicio.RegistroNoEncontrado:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="REGISTRO_NO_ENCONTRADO")

@@ -22,7 +22,8 @@ const Q3 = '¿Qué observaciones tiene respecto al servicio que obtuvo en el tal
 const Q4 =
   'PHD2. Dando cumplimiento a la ley de Protección de Datos Personales le solicito su autorización para que Motos red Nacional pueda contactarlo nuevamente en caso de ser necesario con fines de supervisión de esta encuesta y futuras encuestas. ¿Está usted de acuerdo?';
 const NOT_FOUND =
-  'No encontramos esa cédula. Recuerda ingresar la cédula de la persona a cuyo nombre está registrada la motocicleta. Revísala e intenta de nuevo.';
+  'No encontramos tus datos. Revisa la cédula de la persona a cuyo nombre está registrada la motocicleta y los últimos 4 dígitos del celular donde te llegó el mensaje.';
+const LAST4_LABEL = 'Últimos 4 dígitos de tu celular';
 
 const REG_A = { registro_id: 'reg-a', placa: 'ABC12D', linea: 'Xpulse 200' };
 const REG_B = { registro_id: 'reg-b', placa: 'XYZ98E', linea: 'Hunk 160' };
@@ -55,8 +56,9 @@ afterEach(() => {
   delete global.fetch;
 });
 
-async function identify(cedula = '1010') {
+async function identify(cedula = '1010', last4 = '2233') {
   await user.type(screen.getByLabelText('Ingresa tu número de cédula'), cedula);
+  await user.type(screen.getByLabelText(LAST4_LABEL), last4);
   await user.click(screen.getByRole('button', { name: 'Continuar' }));
 }
 
@@ -96,6 +98,29 @@ describe('cédula screen', () => {
     expect(screen.getByText('ENCUESTA DE SATISFACCIÓN')).toBeInTheDocument();
   });
 
+  it('shows the celular last-4 field with its hint, numeric and capped at 4 digits', async () => {
+    render(<EncuestaPage />);
+    const field = screen.getByLabelText(LAST4_LABEL);
+    expect(field).toHaveAttribute('inputmode', 'numeric');
+    expect(field).toHaveAttribute('maxlength', '4');
+    expect(screen.getByText('Los del número donde te llegó el mensaje de WhatsApp.')).toBeInTheDocument();
+    await user.type(field, 'a1b2c3d4e5');
+    expect(field).toHaveValue('1234');
+  });
+
+  it('keeps Continuar disabled until cédula and exactly 4 celular digits are typed', async () => {
+    render(<EncuestaPage />);
+    const cta = screen.getByRole('button', { name: 'Continuar' });
+    await user.type(screen.getByLabelText('Ingresa tu número de cédula'), '1010');
+    expect(cta).toBeDisabled();
+    await user.type(screen.getByLabelText(LAST4_LABEL), '223');
+    expect(cta).toBeDisabled();
+    await user.type(screen.getByLabelText(LAST4_LABEL), '3');
+    expect(cta).toBeEnabled();
+    await user.clear(screen.getByLabelText('Ingresa tu número de cédula'));
+    expect(cta).toBeDisabled();
+  });
+
   it('keeps Continuar disabled until a cédula is typed', async () => {
     render(<EncuestaPage />);
     expect(screen.getByRole('button', { name: 'Continuar' })).toBeDisabled();
@@ -107,7 +132,7 @@ describe('cédula screen', () => {
     await identify();
     expect(await screen.findByRole('alert')).toHaveTextContent(NOT_FOUND);
     expect(screen.getByLabelText('Ingresa tu número de cédula')).toBeInTheDocument();
-    expect(global.fetch.mock.calls[0][1].body).toBe(JSON.stringify({ cedula: '1010' }));
+    expect(global.fetch.mock.calls[0][1].body).toBe(JSON.stringify({ cedula: '1010', celular_ultimos4: '2233' }));
   });
 
   it('YA_RESPONDIDA shows the thank-you with the date', async () => {
@@ -279,6 +304,7 @@ describe('Q4 consent and submit', () => {
     await waitFor(() => expect(submitCalls()).toHaveLength(1));
     expect(JSON.parse(submitCalls()[0][1].body)).toEqual({
       cedula: '1010',
+      celular_ultimos4: '2233',
       registro_id: 'reg-a',
       satisfaccion_general: 2,
       p_explicacion_tecnica: 1,

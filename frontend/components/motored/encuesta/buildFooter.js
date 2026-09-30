@@ -5,10 +5,10 @@ import { MATRIX_ROWS } from './copy';
  * useEncuestaFlow result; steps without a footer (ya, closing) return undefined.
  */
 export default function buildFooter(step, flow) {
-  const { cedula, busy, answers, submitCedula, goBack, setStep } = flow;
+  const { cedula, celular4, busy, answers, submitCedula, goBack, setStep } = flow;
   const missing = answers.matrix.filter((a) => a == null).length;
   const footers = {
-    cedula: { cta: { label: 'Continuar', disabled: !cedula.trim() || busy, onClick: submitCedula } },
+    cedula: { cta: { label: 'Continuar', disabled: !cedula.trim() || celular4.length !== 4 || busy, onClick: submitCedula } },
     placa: { onBack: goBack },
     q1: {
       onBack: goBack,

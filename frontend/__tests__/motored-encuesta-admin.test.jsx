@@ -155,6 +155,9 @@ describe('Encuesta admin — template columns and list', () => {
       expect(within(region).getAllByText(new RegExp(`^${c}`)).length).toBeGreaterThan(0)
     );
     expect(within(region).getByRole('note', { name: /HMCL/ })).toBeInTheDocument();
+    expect(within(region).getByText(/^Celular/).closest('li')).toHaveTextContent(
+      'Celular donde se enviará el WhatsApp. Obligatorio.'
+    );
   });
 
   it('renders the uploads table with respondidas and percentage', async () => {

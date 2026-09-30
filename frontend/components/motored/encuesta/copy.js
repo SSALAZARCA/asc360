@@ -8,6 +8,8 @@ export const COPY = {
     'En estos momentos estamos haciendo un estudio sobre la satisfacción del servicio de posventa prestado en nuestros talleres.',
   cedulaQuestion: 'Ingresa tu número de cédula',
   cedulaHint: 'La cédula de la persona a cuyo nombre está registrada la motocicleta.',
+  celularQuestion: 'Últimos 4 dígitos de tu celular',
+  celularHint: 'Los del número donde te llegó el mensaje de WhatsApp.',
   pickBike: '¿Sobre cuál moto nos cuentas?',
   q1:
     'En una calificación de 1 a 5, donde 5 es "Muy Satisfecho" y 1 es "Muy Insatisfecho", en general, ¿qué tan satisfecho se siente usted con el servicio de posventa recibida por el taller?',

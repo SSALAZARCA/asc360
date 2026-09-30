@@ -23,7 +23,14 @@ export default function EncuestaContainer({ fontClassName }) {
       footer={buildFooter(step, flow)}
     >
       {step === 'cedula' && (
-        <CedulaScreen cedula={flow.cedula} onChange={flow.setCedula} onSubmit={flow.submitCedula} error={flow.error} />
+        <CedulaScreen
+          cedula={flow.cedula}
+          onChange={flow.setCedula}
+          celular4={flow.celular4}
+          onChangeCelular4={flow.setCelular4}
+          onSubmit={flow.submitCedula}
+          error={flow.error}
+        />
       )}
       {step === 'placa' && <PlacaScreen nombre={cliente.nombre} registros={cliente.registros} onPick={flow.pickRegistro} />}
       {step === 'q1' && <ScaleScreen nombre={cliente.nombre} value={answers.q1} onChange={answers.setQ1} />}

@@ -23,9 +23,11 @@ BASE = "/api/motored/encuesta/publico"
 IDENTIFICAR = f"{BASE}/identificar"
 RESPUESTAS = f"{BASE}/respuestas"
 NOT_FOUND_MESSAGE = (
-    "No encontramos esa cédula. Recuerda ingresar la cédula de la persona a cuyo nombre "
-    "está registrada la motocicleta. Revísala e intenta de nuevo."
+    "No encontramos tus datos. Revisa la cédula de la persona a cuyo nombre está registrada "
+    "la motocicleta y los últimos 4 dígitos del celular donde te llegó el mensaje."
 )
+CELULAR = "3001112233"
+LAST4 = "2233"
 MATRIX_KEYS = [
     "p_explicacion_tecnica", "p_confianza_reparacion", "p_servicio_taller",
     "p_calidad_mecanicos", "p_claridad_cobros", "p_originalidad_repuestos",
@@ -42,9 +44,9 @@ class _CaseFakeSession(FakeAsyncSession):
 
 
 def _reg(placa="ABC12D", linea="Xtreet 401", nombre="ANA MARIA perez", carga=datetime(2026, 9, 1),
-         respondida=None, reg_id=None):
+         respondida=None, reg_id=None, celular=CELULAR):
     return SimpleNamespace(
-        id=reg_id or uuid.uuid4(), placa=placa, linea=linea, nombre=nombre,
+        id=reg_id or uuid.uuid4(), placa=placa, linea=linea, nombre=nombre, celular=celular,
         carga_created_at=carga, respuesta_created_at=respondida,
     )
 
@@ -56,14 +58,15 @@ def _session(*result_sets, cls=FakeAsyncSession, **kwargs):
     return session
 
 
-def _identificar(cedula="1.234.567-8"):
+def _identificar(cedula="1.234.567-8", last4=LAST4):
     with TestClient(app) as client:
-        return client.post(IDENTIFICAR, json={"cedula": cedula})
+        return client.post(IDENTIFICAR, json={"cedula": cedula, "celular_ultimos4": last4})
 
 
 def _payload(_registro_id, **overrides):
     body = {
-        "cedula": "12345678", "registro_id": str(_registro_id), "satisfaccion_general": 5,
+        "cedula": "12345678", "celular_ultimos4": LAST4,
+        "registro_id": str(_registro_id), "satisfaccion_general": 5,
         **{key: 4 for key in MATRIX_KEYS}, "observaciones": None, "autoriza_datos": True,
     }
     body.update(overrides)
@@ -75,10 +78,11 @@ def _submit(body):
         return client.post(RESPUESTAS, json=body)
 
 
-def _target(cedula="12345678", tipo="SERVICIO_TALLER", respondida=False, nombre="Ana maria PEREZ"):
+def _target(cedula="12345678", tipo="SERVICIO_TALLER", respondida=False, nombre="Ana maria PEREZ",
+            celular=CELULAR):
     reg_id = uuid.uuid4()
     return reg_id, SimpleNamespace(
-        id=reg_id, cedula=cedula, tipo=tipo, nombre=nombre,
+        id=reg_id, cedula=cedula, tipo=tipo, nombre=nombre, celular=celular,
         respuesta_id=uuid.uuid4() if respondida else None,
     )
 
@@ -162,10 +166,55 @@ def test_identificar_query_is_scoped_to_normalized_cedula_and_servicio_taller():
     assert "SERVICIO_TALLER" in compiled.params.values()  # VENTA rows never surface
 
 
+def test_identificar_wrong_digits_is_identical_to_unknown_cedula():
+    _session([])
+    unknown = _identificar()
+    _session([_reg()])
+    wrong = _identificar(last4="9999")
+    assert unknown.status_code == wrong.status_code == 200
+    assert wrong.json() == unknown.json() == {"estado": "NO_ENCONTRADA", "mensaje": NOT_FOUND_MESSAGE}
+
+
+def test_identificar_registro_without_celular_never_matches():
+    _session([_reg(celular=None), _reg(placa="XYZ99A", celular="")])
+    assert _identificar().json() == {"estado": "NO_ENCONTRADA", "mensaje": NOT_FOUND_MESSAGE}
+
+
+def test_identificar_state_is_computed_only_over_registros_matching_both_factors():
+    mine, other = uuid.uuid4(), uuid.uuid4()
+    _session([
+        _reg(reg_id=mine, respondida=datetime(2026, 9, 3)),
+        _reg(reg_id=other, placa="ZZZ11Z", celular="3009998877"),  # same cedula, other celular
+    ])
+    assert _identificar().json()["estado"] == "YA_RESPONDIDA"
+    _session([_reg(reg_id=mine), _reg(reg_id=other, placa="ZZZ11Z", celular="3009998877")])
+    registros = _identificar().json()["registros"]
+    assert [r["registro_id"] for r in registros] == [str(mine)]
+
+
+@pytest.mark.parametrize("last4", ["123", "12345", "abcd", "", "12 3"])
+def test_identificar_invalid_celular_ultimos4_is_422(last4):
+    session = _session()
+    assert _identificar(last4=last4).status_code == 422
+    assert len(session.executed_statements) <= 1
+
+
+def test_identificar_missing_celular_ultimos4_is_422():
+    _session()
+    with TestClient(app) as client:
+        assert client.post(IDENTIFICAR, json={"cedula": "1"}).status_code == 422
+
+
+def test_identificar_strips_non_digits_around_the_four_digits():
+    _session([_reg()])
+    assert _identificar(last4=" 2233 ").json()["estado"] == "PENDIENTE"
+
+
 def test_identificar_needs_no_authentication():
     _session([])
     with TestClient(app) as client:
-        assert client.post(IDENTIFICAR, json={"cedula": "1"}).status_code == 200
+        body = {"cedula": "1", "celular_ultimos4": LAST4}
+        assert client.post(IDENTIFICAR, json=body).status_code == 200
 
 
 def test_identificar_is_rate_limited_per_ip():
@@ -271,6 +320,24 @@ def test_submit_cedula_mismatch_is_indistinguishable_from_unknown_registro():
     assert mismatch.status_code == unknown.status_code == 404
     assert mismatch.json() == unknown.json()
     assert session.added == [] and session.committed is False
+
+
+@pytest.mark.parametrize("celular,last4", [(None, LAST4), ("3009998877", LAST4), (CELULAR, "0000")])
+def test_submit_requires_matching_celular_digits_with_the_same_404(celular, last4):
+    rid, row = _target(celular=celular)
+    session = _session([row], cls=_CaseFakeSession)
+    mismatch = _submit(_payload(rid, celular_ultimos4=last4))
+    _session([], cls=_CaseFakeSession)
+    unknown = _submit(_payload(uuid.uuid4()))
+    assert mismatch.status_code == unknown.status_code == 404
+    assert mismatch.json() == unknown.json()
+    assert session.added == [] and session.committed is False
+
+
+def test_submit_invalid_celular_ultimos4_is_422():
+    rid, row = _target()
+    _session([row], cls=_CaseFakeSession)
+    assert _submit(_payload(rid, celular_ultimos4="12")).status_code == 422
 
 
 def test_submit_venta_registro_is_not_found():

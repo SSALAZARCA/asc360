@@ -29,8 +29,8 @@ logger = logging.getLogger(__name__)
 
 DETRACTOR_MAX_SCORE = 3
 NOT_FOUND_MESSAGE = (
-    "No encontramos esa cédula. Recuerda ingresar la cédula de la persona a cuyo nombre "
-    "está registrada la motocicleta. Revísala e intenta de nuevo."
+    "No encontramos tus datos. Revisa la cédula de la persona a cuyo nombre está registrada "
+    "la motocicleta y los últimos 4 dígitos del celular donde te llegó el mensaje."
 )
 
 
@@ -57,12 +57,17 @@ class EnvioResultado:
     primer_nombre: str
 
 
+def celular_matches(celular: Optional[str], ultimos4: str) -> bool:
+    """A registro without celular never matches, whatever the digits."""
+    return bool(celular) and celular.endswith(ultimos4)
+
+
 def primer_nombre_de(nombre: Any) -> str:
     words = str(nombre or "").split()
     return words[0].title() if words else ""
 
 
-async def identificar(db: AsyncSession, cedula_raw: str) -> IdentificacionResultado:
+async def identificar(db: AsyncSession, cedula_raw: str, celular_ultimos4: str) -> IdentificacionResultado:
     cedula = normalize_cedula(cedula_raw)
     if not cedula or len(cedula) > CEDULA_MAX_LENGTH:
         return IdentificacionResultado(estado="NO_ENCONTRADA")
@@ -73,6 +78,7 @@ async def identificar(db: AsyncSession, cedula_raw: str) -> IdentificacionResult
             EncuestaRegistro.placa,
             EncuestaRegistro.linea,
             EncuestaRegistro.nombre,
+            EncuestaRegistro.celular,
             EncuestaCarga.created_at.label("carga_created_at"),
             EncuestaRespuesta.created_at.label("respuesta_created_at"),
         )
@@ -83,7 +89,7 @@ async def identificar(db: AsyncSession, cedula_raw: str) -> IdentificacionResult
             EncuestaRegistro.tipo == TIPO_SERVICIO_TALLER,
         )
     )
-    rows = (await db.execute(stmt)).all()
+    rows = [r for r in (await db.execute(stmt)).all() if celular_matches(r.celular, celular_ultimos4)]
     if not rows:
         return IdentificacionResultado(estado="NO_ENCONTRADA")
 
@@ -105,47 +111,69 @@ async def identificar(db: AsyncSession, cedula_raw: str) -> IdentificacionResult
     )
 
 
-async def registrar_respuesta(
-    db: AsyncSession,
-    *,
-    cedula_raw: str,
-    registro_id: uuid.UUID,
-    datos: dict,
-) -> EnvioResultado:
-    """`datos` holds satisfaccion_general, the six matrix answers,
-    observaciones and autoriza_datos (already validated by the schema)."""
-    cedula = normalize_cedula(cedula_raw)
+async def _registro_verificado(
+    db: AsyncSession, *, cedula_raw: str, celular_ultimos4: str, registro_id: uuid.UUID
+):
+    """Load the registro only if it belongs to both identity factors and is
+    still unanswered; any mismatch is indistinguishable from not-found."""
     stmt = (
         select(
             EncuestaRegistro.id,
             EncuestaRegistro.cedula,
             EncuestaRegistro.tipo,
             EncuestaRegistro.nombre,
+            EncuestaRegistro.celular,
             EncuestaRespuesta.id.label("respuesta_id"),
         )
         .outerjoin(EncuestaRespuesta, EncuestaRespuesta.registro_id == EncuestaRegistro.id)
         .where(EncuestaRegistro.id == registro_id)
     )
     row = (await db.execute(stmt)).first()
-    if row is None or row.cedula != cedula or row.tipo != TIPO_SERVICIO_TALLER:
+    if (
+        row is None
+        or row.cedula != normalize_cedula(cedula_raw)
+        or row.tipo != TIPO_SERVICIO_TALLER
+        or not celular_matches(row.celular, celular_ultimos4)
+    ):
         raise RegistroNoEncontrado()
     if row.respuesta_id is not None:
         raise RespuestaYaRegistrada()
+    return row
 
+
+def _abrir_caso_detractor(db: AsyncSession, respuesta: EncuestaRespuesta, datos: dict) -> CasoDetractor:
+    """Add the ABIERTO case and its system APERTURA entry to the session."""
+    score = datos["satisfaccion_general"]
+    caso = CasoDetractor(id=uuid.uuid4(), respuesta_id=respuesta.id, estado="ABIERTO")
+    db.add(caso)
+    descripcion = f"Caso abierto automáticamente: satisfacción general {score}/5"
+    if not datos["autoriza_datos"]:
+        descripcion += " — el cliente NO autorizó tratamiento de datos"
+    db.add(CasoDetractorAccion(
+        id=uuid.uuid4(), caso_id=caso.id, usuario_id=None, tipo="APERTURA", descripcion=descripcion,
+    ))
+    return caso
+
+
+async def registrar_respuesta(
+    db: AsyncSession,
+    *,
+    cedula_raw: str,
+    celular_ultimos4: str,
+    registro_id: uuid.UUID,
+    datos: dict,
+) -> EnvioResultado:
+    """`datos` holds satisfaccion_general, the six matrix answers,
+    observaciones and autoriza_datos (already validated by the schema)."""
+    row = await _registro_verificado(
+        db, cedula_raw=cedula_raw, celular_ultimos4=celular_ultimos4, registro_id=registro_id
+    )
     respuesta = EncuestaRespuesta(id=uuid.uuid4(), registro_id=registro_id, **datos)
     db.add(respuesta)
     caso: Optional[CasoDetractor] = None
-    score = datos["satisfaccion_general"]
     try:
-        if score <= DETRACTOR_MAX_SCORE:
-            caso = CasoDetractor(id=uuid.uuid4(), respuesta_id=respuesta.id, estado="ABIERTO")
-            db.add(caso)
-            descripcion = f"Caso abierto automáticamente: satisfacción general {score}/5"
-            if not datos["autoriza_datos"]:
-                descripcion += " — el cliente NO autorizó tratamiento de datos"
-            db.add(CasoDetractorAccion(
-                id=uuid.uuid4(), caso_id=caso.id, usuario_id=None, tipo="APERTURA", descripcion=descripcion,
-            ))
+        if datos["satisfaccion_general"] <= DETRACTOR_MAX_SCORE:
+            caso = _abrir_caso_detractor(db, respuesta, datos)
         await db.flush()
         if caso is not None:
             await db.refresh(caso, attribute_names=["numero"])  # Identity value

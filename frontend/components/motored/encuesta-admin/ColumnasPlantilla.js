@@ -5,7 +5,7 @@ import InfoTooltip from '../InfoTooltip';
 const COLUMNS = [
   { name: 'Nombre', help: 'Nombre del cliente. Obligatorio.' },
   { name: 'Cédula', help: 'Cédula de la persona a cuyo nombre está registrada la moto. Obligatoria.' },
-  { name: 'Celular', help: 'Opcional.' },
+  { name: 'Celular', help: 'Celular donde se enviará el WhatsApp. Obligatorio.' },
   { name: 'Línea', help: 'Modelo de la moto. Opcional.' },
   { name: 'Placa', help: 'Obligatoria.' },
   {

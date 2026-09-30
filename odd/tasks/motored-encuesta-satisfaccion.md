@@ -133,8 +133,9 @@ Next step: user runs the end-to-end production check; then decide on items 2–5
 |---|---|---|
 | T10 | Q4 text "Motos red Nacional" (frontend copy + tests + this doc) | delegated writer (with T11) |
 | T11 | Reopen: CERRADO → EN_GESTION with comentario; clears resultado/cerrado_at; CAMBIO_ESTADO logged; "Reabrir caso" button in detail | delegated writer |
-| T12 | Lookup attempts protection | pending decision |
+| T12 | Lookup protection, option B (user decision 2026-09-29): identify with cédula + last 4 digits of celular; Celular becomes REQUIRED in the customer-base upload (Escala sends the WhatsApp to it). Same generic error for any mismatch; respuestas re-validates both; per-IP limit kept. | delegated writer |
 
 - [x] T10 — "Motos red Nacional" in copy.js + verbatim test + doc. RED 3 failed → GREEN.
 - [x] T11 — CERRADO→EN_GESTION reopen (clears resultado/cerrado_at, keeps or sets assignee, CAMBIO_ESTADO "Caso reabierto: …"), "Reabrir caso" button. RED 2 backend + 3 frontend failed → GREEN; tests/motored 1456, jest 90/668.
-- [ ] T12
+- [x] T12 — cédula + last 4 of celular (Python-side match over cédula-scoped rows), single generic NO_ENCONTRADA message, submit re-validates, celular required (min 7 digits) in upload, second input on survey screen. RED 6+14 backend, 25 frontend → GREEN; tests/motored 1477, asc360 1292, jest 90/671. Screenshot reviewed.
+- 2026-09-29: user chose T12 option B after noting option A still lets whoever guesses a cédula submit a fake answer (and burn the real customer's single response). Celular mandatory in the upload.

@@ -162,15 +162,15 @@ def test_commit_invalid_file_rejects_all_and_writes_nothing():
 
 
 def test_optional_columns_blank_are_stored_as_null_and_may_be_absent():
-    headers = ["Nombre", "Cédula", "Placa", "Tipo"]
-    response, session = _post(BASE, headers, [["Ana", "1", "abc12d", "Venta"]])
+    headers = ["Nombre", "Cédula", "Celular", "Placa", "Tipo"]
+    response, session = _post(BASE, headers, [["Ana", "1", "3001112233", "abc12d", "Venta"]])
     assert response.json()["ok"] is True
     reg = session.added_of_type(EncuestaRegistro)[0]
-    assert (reg.celular, reg.linea, reg.sic, reg.centro_servicio) == (None, None, None, None)
+    assert (reg.linea, reg.sic, reg.centro_servicio) == (None, None, None)
 
-    response, session = _post(BASE, HEADERS, [_row(celular="", linea="", sic="", centro="")])
+    response, session = _post(BASE, HEADERS, [_row(linea="", sic="", centro="")])
     reg = session.added_of_type(EncuestaRegistro)[0]
-    assert (reg.celular, reg.linea, reg.sic, reg.centro_servicio) == (None, None, None, None)
+    assert (reg.linea, reg.sic, reg.centro_servicio) == (None, None, None)
 
 
 # --- normalization ---------------------------------------------------------
@@ -248,6 +248,24 @@ def test_each_required_field_reports_its_row():
     assert "Tipo" in errores[4]["motivo"]
 
 
+@pytest.mark.parametrize("celular", ["", None, "---"])
+def test_blank_celular_is_a_row_error(celular):
+    errores = _errors([_row(celular=celular)])
+    assert errores[0]["fila"] == 1
+    assert errores[0]["motivo"] == "Celular es obligatorio"
+
+
+@pytest.mark.parametrize("celular", ["123456", "30-01 1"])
+def test_celular_with_fewer_than_7_digits_is_invalid(celular):
+    errores = _errors([_row(celular=celular)])
+    assert errores[0]["motivo"] == "Celular inválido"
+
+
+def test_celular_with_7_digits_is_accepted():
+    response, _ = _post(VALIDAR_URL, HEADERS, [_row(celular="1234567")])
+    assert response.json()["ok"] is True
+
+
 def test_cedula_longer_than_32_digits_is_an_error():
     errores = _errors([_row(cedula="1" * 33)])
     assert errores[0]["fila"] == 1
@@ -282,6 +300,13 @@ def test_missing_required_column_is_a_400_and_writes_nothing():
     response, session = _post(BASE, ["Nombre", "Cédula", "Placa"], [["Ana", "1", "A1"]])
     assert response.status_code == 400
     assert "Tipo" in response.json()["detail"]
+    assert session.added == [] and session.committed is False
+
+
+def test_missing_celular_column_is_a_400_and_writes_nothing():
+    response, session = _post(BASE, ["Nombre", "Cédula", "Placa", "Tipo"], [["Ana", "1", "A1", "Venta"]])
+    assert response.status_code == 400
+    assert "Celular" in response.json()["detail"]
     assert session.added == [] and session.committed is False
 
 

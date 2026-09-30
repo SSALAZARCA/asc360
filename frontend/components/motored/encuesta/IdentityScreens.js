@@ -1,6 +1,6 @@
 import { COPY } from './copy';
 
-export function CedulaScreen({ cedula, onChange, onSubmit, error }) {
+export function CedulaScreen({ cedula, onChange, celular4, onChangeCelular4, onSubmit, error }) {
   return (
     <div className="enc-body">
       <p className="enc-text" style={{ marginTop: 8 }}>{COPY.intro}</p>
@@ -16,6 +16,21 @@ export function CedulaScreen({ cedula, onChange, onSubmit, error }) {
         autoComplete="off"
         value={cedula}
         onChange={(e) => onChange(e.target.value.replace(/[^\d.\s-]/g, ''))}
+        onKeyDown={(e) => e.key === 'Enter' && onSubmit()}
+      />
+      <label className="enc-question" htmlFor="enc-celular4" style={{ marginTop: 22 }}>
+        {COPY.celularQuestion}
+      </label>
+      <p className="enc-hint">{COPY.celularHint}</p>
+      <input
+        id="enc-celular4"
+        className="enc-input"
+        type="text"
+        inputMode="numeric"
+        maxLength={4}
+        autoComplete="off"
+        value={celular4}
+        onChange={(e) => onChangeCelular4(e.target.value.replace(/\D/g, '').slice(0, 4))}
         onKeyDown={(e) => e.key === 'Enter' && onSubmit()}
       />
       {error && <p className="enc-error" role="alert">{error}</p>}

@@ -20,5 +20,6 @@ async function post(path, payload) {
   return { kind: 'error' };
 }
 
-export const identificar = (cedula) => post('identificar', { cedula });
+export const identificar = (cedula, celularUltimos4) =>
+  post('identificar', { cedula, celular_ultimos4: celularUltimos4 });
 export const enviarRespuesta = (payload) => post('respuestas', payload);

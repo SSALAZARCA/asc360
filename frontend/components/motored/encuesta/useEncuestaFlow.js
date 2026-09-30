@@ -43,6 +43,7 @@ function routeSubmission(result, actions) {
 export default function useEncuestaFlow() {
   const [step, setStep] = useState('cedula');
   const [cedula, setCedula] = useState('');
+  const [celular4, setCelular4] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [cliente, setCliente] = useState({ nombre: '', registros: [] });
@@ -57,10 +58,10 @@ export default function useEncuestaFlow() {
   useEffect(() => () => clearTimeout(timer.current), []);
 
   const submitCedula = async () => {
-    if (!cedula.trim() || busy) return;
+    if (!cedula.trim() || celular4.length !== 4 || busy) return;
     setBusy(true);
     setError('');
-    const result = await identificar(cedula.trim());
+    const result = await identificar(cedula.trim(), celular4);
     setBusy(false);
     routeIdentification(result, actions);
   };
@@ -70,7 +71,7 @@ export default function useEncuestaFlow() {
     sending.current = true;
     setBusy(true);
     setError('');
-    const result = await enviarRespuesta(buildPayload({ cedula, registroId, ...answers }, autoriza));
+    const result = await enviarRespuesta(buildPayload({ cedula, celular4, registroId, ...answers }, autoriza));
     sending.current = false;
     setBusy(false);
     routeSubmission(result, actions);
@@ -94,7 +95,7 @@ export default function useEncuestaFlow() {
   };
 
   return {
-    step, setStep, cedula, setCedula, error, busy, cliente, fecha, closing, answers,
+    step, setStep, cedula, setCedula, celular4, setCelular4, error, busy, cliente, fecha, closing, answers,
     submitCedula, chooseConsent, retry: () => submit(answers.consent), goBack, pickRegistro,
   };
 }

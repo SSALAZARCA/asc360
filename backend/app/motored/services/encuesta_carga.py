@@ -23,13 +23,14 @@ from app.motored.services.carga_excel import (
 TIPO_SERVICIO_TALLER = "SERVICIO_TALLER"
 TIPO_VENTA = "VENTA"
 CEDULA_MAX_LENGTH = 32
+CELULAR_MIN_DIGITS = 7
 
 COLUMNS: List[Dict[str, Any]] = [
     {"key": "nombre", "label": "Nombre", "required": True, "type": "string",
      "aliases": ["nombre", "nombre cliente", "nombre del cliente"]},
     {"key": "cedula", "label": "Cédula", "required": True, "type": "string",
      "aliases": ["cedula", "cédula"]},
-    {"key": "celular", "label": "Celular", "required": False, "type": "string",
+    {"key": "celular", "label": "Celular", "required": True, "type": "string",
      "aliases": ["celular"]},
     {"key": "linea", "label": "Línea", "required": False, "type": "string",
      "aliases": ["linea", "línea"]},
@@ -102,6 +103,14 @@ def parse_encuesta_excel(filename: Optional[str], file_bytes: bytes) -> List[Dic
         workbook.close()
 
 
+def _celular_error(celular: str) -> Optional[str]:
+    if not celular:
+        return "Celular es obligatorio"
+    if len(celular) < CELULAR_MIN_DIGITS:
+        return "Celular inválido"
+    return None
+
+
 def _validate_row(raw: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
     if not str(raw.get("nombre") or "").strip():
         return None, "El campo 'Nombre' es obligatorio"
@@ -110,6 +119,10 @@ def _validate_row(raw: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any]], Option
         return None, "El campo 'Cédula' es obligatorio y debe contener números"
     if len(cedula) > CEDULA_MAX_LENGTH:
         return None, f"La 'Cédula' supera los {CEDULA_MAX_LENGTH} dígitos permitidos"
+    celular = _digits(raw.get("celular"))
+    celular_error = _celular_error(celular)
+    if celular_error:
+        return None, celular_error
     placa = _normalize_placa(raw.get("placa"))
     if not placa:
         return None, "El campo 'Placa' es obligatorio"
@@ -121,7 +134,7 @@ def _validate_row(raw: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any]], Option
     return {
         "nombre": str(raw["nombre"]).strip(),
         "cedula": cedula,
-        "celular": _digits(raw.get("celular")) or None,
+        "celular": celular,
         "linea": _blank_to_none(raw.get("linea")),
         "placa": placa,
         "sic": _blank_to_none(raw.get("sic")),
