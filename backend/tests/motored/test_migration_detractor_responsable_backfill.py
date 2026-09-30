@@ -1,6 +1,6 @@
 """
 Static checks for the detractor "responsable" backfill migration: it chains
-after the current head, keeps a single head and runs the expected UPDATE.
+after its parent, keeps a single head and runs the expected UPDATE.
 """
 import importlib.util
 from pathlib import Path
@@ -25,7 +25,9 @@ def test_revision_chain_and_single_head():
     assert module.revision == "a7c3e91d5b20"
     assert module.down_revision == "f2a6d83b9e14"
     script = ScriptDirectory.from_config(Config(str(_ROOT / "alembic_motored.ini")))
-    assert script.get_heads() == ["a7c3e91d5b20"]
+    # Later migrations chain after it; the single-head check lives in the newest one.
+    assert script.get_revision("a7c3e91d5b20") is not None
+    assert len(script.get_heads()) == 1
 
 
 def test_upgrade_runs_the_idempotent_backfill_update():

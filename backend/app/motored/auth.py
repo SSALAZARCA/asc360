@@ -14,6 +14,7 @@ como `decode_motored_token` se niegan a operar. Este es el único caso que
 la sola firma HS256 no cubriría por sí sola (un operador configurando el
 mismo valor en ambos secretos por error).
 """
+import calendar
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -40,6 +41,25 @@ def motored_secret_is_safe() -> bool:
     return bool(secret) and secret != settings.SECRET_KEY
 
 
+def _to_epoch_seconds(naive_utc: datetime) -> int:
+    return calendar.timegm(naive_utc.utctimetuple())
+
+
+def token_predates_password_change(payload: dict, password_changed_at: Optional[datetime]) -> bool:
+    """True when the token must be rejected because the user's password
+    changed after it was issued. `password_changed_at` is naive UTC; both
+    sides are compared in whole seconds, so a token issued in the same second
+    as the change (the fresh one handed back by the change endpoint) is still
+    valid. A token without `iat` is only valid while the password was never
+    changed (tokens issued before this feature existed)."""
+    if password_changed_at is None:
+        return False
+    iat = payload.get("iat")
+    if not isinstance(iat, (int, float)):
+        return True
+    return int(iat) < _to_epoch_seconds(password_changed_at)
+
+
 def create_motored_token(sub: str, role: str, expires_delta: Optional[timedelta] = None) -> str:
     """Crea un JWT de Motored. Lanza `MotoredAuthUnavailable` si el secreto
     no es seguro -- nunca firma un token con un secreto vacío o compartido."""
@@ -47,13 +67,15 @@ def create_motored_token(sub: str, role: str, expires_delta: Optional[timedelta]
         raise MotoredAuthUnavailable(
             "MOTORED_SECRET_KEY vacío o igual a SECRET_KEY: no se puede emitir un token de Motored."
         )
-    expire = datetime.utcnow() + (expires_delta or DEFAULT_EXPIRES)
+    now = datetime.utcnow()
+    expire = now + (expires_delta or DEFAULT_EXPIRES)
     to_encode = {
         "sub": sub,
         "role": role,
         "iss": ISSUER,
         "aud": AUDIENCE,
         "exp": expire,
+        "iat": _to_epoch_seconds(now),
     }
     return jwt.encode(to_encode, settings.MOTORED_SECRET_KEY, algorithm=ALGORITHM)
 

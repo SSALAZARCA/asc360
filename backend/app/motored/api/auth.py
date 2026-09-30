@@ -13,6 +13,8 @@ Gated by `require_motored_ready` (503 if the module is off/misconfigured),
 never by `get_current_motored_user` -- this IS the login endpoint, there is
 no user yet to authenticate.
 """
+import uuid
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import select
@@ -21,8 +23,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.limiter import limiter
 from app.core.security import verify_password
 from app.motored.auth import create_motored_token
-from app.motored.deps import get_motored_db_or_503, require_motored_ready
+from app.motored.deps import MotoredUser, get_current_motored_user, get_motored_db_or_503, require_motored_ready
 from app.motored.models.usuario import Usuario
+from app.motored.services import auditoria
+from app.motored.services.password_policy import aplicar_password, validar_password
 
 router = APIRouter(
     prefix="/auth",
@@ -92,11 +96,13 @@ async def login(
     if not verify_password(payload.password, usuario.hashed_password):
         raise generic_error
 
-    role_value = usuario.role.value if hasattr(usuario.role, "value") else usuario.role
-    token = create_motored_token(sub=str(usuario.id), role=role_value)
+    return _session_response(usuario)
 
+
+def _session_response(usuario: Usuario) -> MotoredLoginResponse:
+    role_value = usuario.role.value if hasattr(usuario.role, "value") else usuario.role
     return MotoredLoginResponse(
-        access_token=token,
+        access_token=create_motored_token(sub=str(usuario.id), role=role_value),
         user={
             "id": str(usuario.id),
             "nombre": usuario.nombre,
@@ -104,3 +110,38 @@ async def login(
             "role": role_value,
         },
     )
+
+
+class MotoredChangePasswordRequest(BaseModel):
+    """Plain strings on purpose: pydantic's automatic 422 echoes the received
+    value, and a password must never travel back in a response."""
+
+    actual: str
+    nueva: str
+
+
+@router.post("/password", response_model=MotoredLoginResponse)
+@limiter.limit("5/minute")
+async def change_own_password(
+    request: Request,
+    payload: MotoredChangePasswordRequest,
+    db: AsyncSession = Depends(get_motored_db_or_503),
+    user: MotoredUser = Depends(get_current_motored_user),
+):
+    """Any authenticated web user changes their own password. Every other
+    session is cut (`password_changed_at`); the response carries a fresh
+    token so this tab stays logged in."""
+    result = await db.execute(select(Usuario).where(Usuario.id == uuid.UUID(user.user_id)))
+    usuario = result.scalars().first()
+    if not usuario or not usuario.hashed_password or not verify_password(payload.actual, usuario.hashed_password):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="La contraseña actual no es correcta.")
+    validar_password(payload.nueva)
+    if payload.nueva == payload.actual:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="La nueva contraseña debe ser distinta de la actual.",
+        )
+    aplicar_password(usuario, payload.nueva)
+    auditoria.audit_password_reset(db, "usuario", usuario.id, usuario.id)
+    await db.commit()
+    return _session_response(usuario)

@@ -16,6 +16,7 @@ circular. `deps.py` re-exporta `MotoredUser` con
 2) sigue funcionando sin cambios.
 """
 import uuid
+from datetime import datetime
 from dataclasses import dataclass, field
 from typing import Awaitable, Callable, List, Optional
 
@@ -42,6 +43,7 @@ class MotoredUser:
     sucursal_ids: List[str] = field(default_factory=list)
     activo: bool = True
     status: str = "approved"
+    password_changed_at: Optional[datetime] = None
 
 
 MotoredUserLookup = Callable[[str], Awaitable[Optional[MotoredUser]]]
@@ -77,6 +79,7 @@ async def obtener_usuario_motored(db: AsyncSession, user_id: str) -> Optional[Mo
         # test fixture in this suite) -- fall back to "approved" so those
         # rows keep behaving exactly like a real, already-migrated row.
         status=usuario.status or "approved",
+        password_changed_at=usuario.password_changed_at,
     )
 
 

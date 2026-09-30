@@ -32,6 +32,14 @@ export async function login(email, password) {
   return body; // { access_token, token_type, user }
 }
 
+/** POST /auth/password -- any web user changes their own password; returns a fresh session. */
+export async function changeOwnPassword(actual, nueva) {
+  return motoredFetchJson('/auth/password', {
+    method: 'POST',
+    body: JSON.stringify({ actual, nueva }),
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Maestros -- CRUD genérico. `entidad` es PLURAL acá
 // (sucursales|bodegas|referencias|proveedores), igual que

@@ -166,7 +166,7 @@ def test_create_usuario_accepts_a_password_of_the_minimum_length():
 
 
 # --- bcrypt only hashes the first 72 BYTES; bcrypt 5 raises above that -------
-MSG_TOO_LONG = "La contraseña no puede superar 72 caracteres."
+MSG_TOO_LONG = "La contraseña es demasiado larga (máximo 72 caracteres; tildes y emojis cuentan doble)."
 PASSWORD_72_BYTES = "a" * 72
 PASSWORD_80_BYTES = "a" * 80
 

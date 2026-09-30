@@ -29,7 +29,7 @@ from sqlalchemy.exc import DBAPIError, OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.motored.auth import decode_motored_token, motored_secret_is_safe
+from app.motored.auth import decode_motored_token, motored_secret_is_safe, token_predates_password_change
 from app.motored.database import get_motored_db
 from app.motored.services.auth import MotoredUser, MotoredUserLookup, crear_lookup_real
 from app.motored.services.trabajos import supervisor, supervisor_corridas
@@ -114,6 +114,10 @@ async def get_current_motored_user(
 
     user = await lookup(user_id)
     if not user or not user.activo:
+        raise credentials_exception
+
+    if token_predates_password_change(payload, user.password_changed_at):
+        # Password reset/changed after this session was issued: cut it.
         raise credentials_exception
 
     if user.role == "ASESOR_MOSTRADOR" or user.status != "approved":

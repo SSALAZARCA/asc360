@@ -89,6 +89,9 @@ class Usuario(MotoredBase):
     codigo_vinculacion_hash = Column(String(64), nullable=True)
     codigo_vinculacion_expira = Column(DateTime(timezone=True), nullable=True)
 
+    # Naive UTC. Sessions (JWTs) issued before this instant are rejected.
+    password_changed_at = Column(DateTime, nullable=True)
+
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
