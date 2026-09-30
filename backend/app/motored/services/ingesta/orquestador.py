@@ -249,6 +249,10 @@ class _EstadoLoteDryRun:
         # informe muestra como "filas con errores que no se cargaron".
         self.filas_con_error = 0
         self.histograma: Dict[Tuple[int, int], int] = {}
+        # Fecha de venta mas reciente del archivo (solo VENTAS), acumulada en
+        # la misma pasada que `histograma`; `_verificar_periodo_ventas` la
+        # deja en `log["fecha_max_detectada"]` (ADR-12).
+        self.fecha_max: Optional[date] = None
         # Verify-report WARNING #2: `{clave: valor}` de cada
         # `parametro_metodologia` que resolvió a su default codificado
         # durante este dry-run (poblado por `_construir_procesador_fila`,
@@ -397,6 +401,7 @@ async def _verificar_periodo_ventas(
     carga: CargaArchivo,
     log: Dict[str, Any],
     histograma: Dict[Tuple[int, int], int],
+    fecha_max: Optional[date] = None,
 ) -> bool:
     """ADR-9 para VENTAS. Retorna `True` cuando `_dry_run` debe retornar
     de inmediato (RECHAZO: ya persistió `estado`/error/`log`, borró el
@@ -404,10 +409,14 @@ async def _verificar_periodo_ventas(
     ENTIRE, a previously-correct month stays intact"). Retorna `False`
     para ACEPTADO/ADVERTENCIA -- el archivo sigue su curso normal hacia
     `VALIDADO` en `_dry_run` (ADVERTENCIA ya dejó anotado un `carga_error`
-    puntual por cada fila fuera de tolerancia antes de retornar)."""
+    puntual por cada fila fuera de tolerancia antes de retornar). Deja en
+    `log["fecha_max_detectada"]` la fecha de venta mas reciente (ISO) cuando
+    el archivo la trae."""
     if carga.tipo != "VENTAS":
         return False
 
+    if fecha_max is not None:
+        log["fecha_max_detectada"] = fecha_max.isoformat()
     log["filas_por_periodo"] = {
         f"{anio}-{mes:02d}": cantidad for (anio, mes), cantidad in histograma.items()
     }
@@ -482,7 +491,9 @@ async def _cerrar_dry_run(
     if estado.parametros_default_usados:
         log["parametros_default_usados"] = dict(estado.parametros_default_usados)
     await _verificar_corte_backorder(session, carga, log)
-    if await _verificar_periodo_ventas(session, carga, log, estado.histograma):
+    if await _verificar_periodo_ventas(
+        session, carga, log, estado.histograma, estado.fecha_max
+    ):
         return
 
     if estado.filas_validas == 0:
@@ -496,6 +507,18 @@ async def _cerrar_dry_run(
         carga.estado = "VALIDADO"
     carga.log = log
     await session.commit()
+
+
+def _acumular_ventas_del_lote(
+    estado: _EstadoLoteDryRun, staged_del_lote: Sequence[CargaFilaStaging]
+) -> None:
+    """Suma al `estado` el histograma por periodo y la fecha maxima de venta
+    de ESTE lote (misma pasada, sin releer el archivo)."""
+    for clave, cantidad in ventas_mod.construir_filas_por_periodo(staged_del_lote).items():
+        estado.histograma[clave] = estado.histograma.get(clave, 0) + cantidad
+    fecha_lote = ventas_mod.fecha_maxima_de_filas(staged_del_lote)
+    if fecha_lote is not None and (estado.fecha_max is None or fecha_lote > estado.fecha_max):
+        estado.fecha_max = fecha_lote
 
 
 async def _dry_run(session: AsyncSession, carga: CargaArchivo) -> None:
@@ -533,8 +556,7 @@ async def _dry_run(session: AsyncSession, carga: CargaArchivo) -> None:
         staged_del_lote = _procesar_filas_del_lote(estado, datos_del_lote, numero_lote, session)
 
         if tipo == "VENTAS" and staged_del_lote:
-            for clave, cantidad in ventas_mod.construir_filas_por_periodo(staged_del_lote).items():
-                estado.histograma[clave] = estado.histograma.get(clave, 0) + cantidad
+            _acumular_ventas_del_lote(estado, staged_del_lote)
 
         await _registrar_progreso_lote(session, carga, estado, numero_lote)
 

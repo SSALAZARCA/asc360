@@ -157,7 +157,7 @@ def anio_es_plausible(anio: int) -> bool:
     """Mismo umbral 2015-2100 que `convertir_fecha_excel`, expuesto para que
     un caller que YA tiene un `date`/`datetime` (openpyxl con `data_only=
     True` convierte una celda con formato de fecha directamente, sin pasar
-    por un serial -- ver `services/ingesta/ventas.py::_resolver_anio_mes`,
+    por un serial -- ver `services/ingesta/ventas.py::_resolver_fecha`,
     confirmado contra el workbook real de producción) no tenga que
     reinventar el rango."""
     return _ANIO_MINIMO_PLAUSIBLE <= anio <= _ANIO_MAXIMO_PLAUSIBLE

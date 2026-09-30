@@ -107,8 +107,9 @@ def _texto(valor: Any) -> Optional[str]:
     return texto or None
 
 
-def _resolver_anio_mes(valor_fecha: Any) -> Optional[Tuple[int, int]]:
-    """`Fecha` puede llegar de dos formas, dependiendo de si la celda del
+def _resolver_fecha(valor_fecha: Any) -> Optional[date]:
+    """Devuelve la fecha completa de la venta (el caller deriva `anio`/`mes`
+    y conserva el `dia`). `Fecha` puede llegar de dos formas, dependiendo de si la celda del
     ERP tiene formato de fecha aplicado o no: (a) `openpyxl` con
     `data_only=True` la entrega YA como `date`/`datetime` cuando la celda
     tiene formato de fecha -- confirmado contra el workbook real de
@@ -123,12 +124,11 @@ def _resolver_anio_mes(valor_fecha: Any) -> Optional[Tuple[int, int]]:
     if fecha_celda is not None:
         if not columnas_mod.anio_es_plausible(fecha_celda.year):
             return None
-        return fecha_celda.year, fecha_celda.month
+        return fecha_celda
     try:
-        fecha = columnas_mod.convertir_fecha_excel(float(valor_fecha))
+        return columnas_mod.convertir_fecha_excel(float(valor_fecha))
     except (TypeError, ValueError, columnas_mod.FechaExcelImplausibleError):
         return None
-    return fecha.year, fecha.month
 
 
 def _pasa_filtros_negocio(
@@ -148,13 +148,13 @@ def _pasa_filtros_negocio(
 
 def _resolver_fecha_o_error(
     fila_raw: Sequence[Any], mapa_columnas: Dict[str, int], carga_id: uuid.UUID, numero_fila: int
-) -> Tuple[Optional[Tuple[int, int]], Optional[CargaError]]:
-    """`Fecha` implausible/no interpretable -- sin `anio`/`mes` no hay
-    payload posible para esa fila (`CODIGO_FECHA_INVALIDA`)."""
+) -> Tuple[Optional[date], Optional[CargaError]]:
+    """`Fecha` implausible/no interpretable -- sin fecha no hay payload
+    posible para esa fila (`CODIGO_FECHA_INVALIDA`)."""
     valor_fecha = _extraer(fila_raw, mapa_columnas, "Fecha")
-    anio_mes = _resolver_anio_mes(valor_fecha)
-    if anio_mes is not None:
-        return anio_mes, None
+    fecha = _resolver_fecha(valor_fecha)
+    if fecha is not None:
+        return fecha, None
     error = errores_mod.construir_error(
         carga_id, numero_fila, "Fecha", _texto(valor_fecha), CODIGO_FECHA_INVALIDA,
         "La fecha de la fila no se pudo interpretar o cae fuera del rango plausible.",
@@ -231,10 +231,9 @@ def procesar_fila(
     if not _pasa_filtros_negocio(fila_raw, mapa_columnas, tipos_inventario_incluidos):
         return None, []
 
-    anio_mes, error_fecha = _resolver_fecha_o_error(fila_raw, mapa_columnas, carga_id, numero_fila)
-    if anio_mes is None:
+    fecha, error_fecha = _resolver_fecha_o_error(fila_raw, mapa_columnas, carga_id, numero_fila)
+    if fecha is None:
         return None, [error_fecha]
-    anio, mes = anio_mes
 
     cantidad, error_cantidad = _resolver_cantidad_o_error(
         fila_raw, mapa_columnas, carga_id, numero_fila
@@ -248,7 +247,13 @@ def procesar_fila(
         fila_raw, mapa_columnas, cache, carga_id, numero_fila, proveedor_id
     )
 
-    payload = {"anio": anio, "mes": mes, "origen": modulo.upper(), "cantidad": str(cantidad)}
+    payload = {
+        "anio": fecha.year,
+        "mes": fecha.month,
+        "dia": fecha.day,
+        "origen": modulo.upper(),
+        "cantidad": str(cantidad),
+    }
     fila_staging = CargaFilaStaging(
         carga_id=carga_id,
         fila=numero_fila,
@@ -351,6 +356,20 @@ def construir_filas_por_periodo(
         clave = (fila.payload["anio"], fila.payload["mes"])
         histograma[clave] = histograma.get(clave, 0) + 1
     return histograma
+
+
+def fecha_maxima_de_filas(filas_staging: Sequence[CargaFilaStaging]) -> Optional[date]:
+    """Fecha de venta mas reciente entre las filas staged de ESTE lote, leida
+    del `payload` (`anio`/`mes`/`dia`) sin reinterpretar `Fecha`. Las filas
+    staged por una version anterior no traen `dia` y se ignoran; `None` si
+    ninguna lo trae. El caller acumula el maximo entre lotes, igual que el
+    histograma."""
+    fechas = [
+        date(fila.payload["anio"], fila.payload["mes"], fila.payload["dia"])
+        for fila in filas_staging
+        if "dia" in fila.payload
+    ]
+    return max(fechas, default=None)
 
 
 def evaluar_periodo_declarado(

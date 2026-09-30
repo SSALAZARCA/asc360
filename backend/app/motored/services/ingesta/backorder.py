@@ -206,7 +206,7 @@ def _resolver_fecha_creacion_opcional(
     """`Fecha Creación` (task 9.6, `COLUMNAS_OPCIONALES`) -- NUNCA genera
     `carga_error`: ausente (columna no mapeada) o no interpretable colapsan
     al mismo `None`, que `procesar_fila` simplemente omite del payload. Mismo
-    criterio de conversión que `ventas._resolver_anio_mes` para una celda ya
+    criterio de conversión que `ventas._resolver_fecha` para una celda ya
     tipada por openpyxl (`data_only=True`), sin el chequeo de plausibilidad
     2015-2100 -- esto es un cross-check informativo, no una validación de
     fila que pueda rechazarla."""
