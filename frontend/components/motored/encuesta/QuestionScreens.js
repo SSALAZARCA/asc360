@@ -1,5 +1,5 @@
 import ChoiceGroup from './ChoiceGroup';
-import { COPY, MATRIX_ROWS, SCALE_WORDS } from './copy';
+import { COPY, MATRIX_ROWS, SCALE_WORDS, tratamiento } from './copy';
 
 const SCALE = [1, 2, 3, 4, 5].map((n) => ({ value: n, label: String(n) }));
 const MATRIX_OPTIONS = [...SCALE, { value: 'NS', label: 'NS/NR', className: 'enc-na' }];
@@ -17,7 +17,7 @@ const Heading = ({ step, greeting, children }) => (
 export function ScaleScreen({ nombre, value, onChange }) {
   return (
     <div className="enc-body">
-      <Heading step={1} greeting={`Hola, ${nombre}.`}>
+      <Heading step={1} greeting={`Hola, ${tratamiento(nombre)}.`}>
         <h1 className="enc-question">{COPY.q1}</h1>
       </Heading>
       <ChoiceGroup label={COPY.q1} options={SCALE} value={value} onChange={onChange} className="enc-scale" />

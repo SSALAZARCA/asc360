@@ -41,7 +41,7 @@ function setupFetch({ identificar, respuestas }) {
 }
 
 const pendiente = (registros = [REG_A]) =>
-  reply(200, { estado: 'PENDIENTE', primer_nombre: 'Juan', registros });
+  reply(200, { estado: 'PENDIENTE', primer_nombre: 'Moreno', registros });
 
 const submitCalls = () =>
   global.fetch.mock.calls.filter(([url]) => String(url).endsWith('/respuestas'));
@@ -149,7 +149,7 @@ describe('cédula screen', () => {
     setupFetch({ identificar: () => pendiente() });
     render(<EncuestaPage />);
     await identify();
-    expect(await screen.findByText('Hola, Juan.')).toBeInTheDocument();
+    expect(await screen.findByText('Hola, Sr(a). Moreno.')).toBeInTheDocument();
     expect(screen.getByText(Q1)).toBeInTheDocument();
     expect(screen.getByText('PREGUNTA 1 DE 4')).toBeInTheDocument();
     expect(screen.queryByText('¿Sobre cuál moto nos cuentas?')).not.toBeInTheDocument();
@@ -160,7 +160,7 @@ describe('cédula screen', () => {
     render(<EncuestaPage />);
     await identify();
     expect(await screen.findByText('¿Sobre cuál moto nos cuentas?')).toBeInTheDocument();
-    expect(screen.getByText('Hola, Juan.')).toBeInTheDocument();
+    expect(screen.getByText('Hola, Sr(a). Moreno.')).toBeInTheDocument();
     expect(screen.getByText('ABC12D')).toBeInTheDocument();
     expect(screen.getByText('Hunk 160')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: /XYZ98E/ }));
@@ -291,7 +291,7 @@ describe('Q4 consent and submit', () => {
   it('auto-advances on Sí and submits the exact payload', async () => {
     setupFetch({
       identificar: () => pendiente(),
-      respuestas: () => reply(200, { clasificacion: 'DETRACTOR', caso_numero: 42, primer_nombre: 'Juan' }),
+      respuestas: () => reply(200, { clasificacion: 'DETRACTOR', caso_numero: 42, primer_nombre: 'Moreno' }),
     });
     render(<EncuestaPage />);
     await reachQ4();
@@ -338,7 +338,7 @@ describe('Q4 consent and submit', () => {
     expect(submitCalls()).toHaveLength(1);
     expect(JSON.parse(submitCalls()[0][1].body).autoriza_datos).toBe(false);
     await act(async () => {
-      resolve({ ok: true, status: 200, json: async () => ({ clasificacion: 'SATISFECHO', caso_numero: null, primer_nombre: 'Juan' }) });
+      resolve({ ok: true, status: 200, json: async () => ({ clasificacion: 'SATISFECHO', caso_numero: null, primer_nombre: 'Moreno' }) });
     });
   });
 
@@ -353,8 +353,8 @@ describe('Q4 consent and submit', () => {
   }
 
   it('detractor closing shows the case number', async () => {
-    await submitWith(() => reply(200, { clasificacion: 'DETRACTOR', caso_numero: 42, primer_nombre: 'Juan' }));
-    expect(await screen.findByText('Gracias por decírnoslo, Juan.')).toBeInTheDocument();
+    await submitWith(() => reply(200, { clasificacion: 'DETRACTOR', caso_numero: 42, primer_nombre: 'Moreno' }));
+    expect(await screen.findByText('Gracias por decírnoslo, Sr(a). Moreno.')).toBeInTheDocument();
     expect(screen.getByText('Nuestro equipo de servicio al cliente te va a contactar.')).toBeInTheDocument();
     expect(screen.getByText('TU CASO')).toBeInTheDocument();
     expect(screen.getByText('No. 42')).toBeInTheDocument();
@@ -364,8 +364,8 @@ describe('Q4 consent and submit', () => {
   });
 
   it('satisfied closing has no case box', async () => {
-    await submitWith(() => reply(200, { clasificacion: 'SATISFECHO', caso_numero: null, primer_nombre: 'Juan' }));
-    expect(await screen.findByText('Gracias, Juan.')).toBeInTheDocument();
+    await submitWith(() => reply(200, { clasificacion: 'SATISFECHO', caso_numero: null, primer_nombre: 'Moreno' }));
+    expect(await screen.findByText('Gracias, Sr(a). Moreno.')).toBeInTheDocument();
     expect(screen.getByText('Tu opinión nos ayuda a mejorar.')).toBeInTheDocument();
     expect(screen.queryByText('TU CASO')).not.toBeInTheDocument();
   });

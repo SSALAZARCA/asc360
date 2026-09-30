@@ -1,4 +1,4 @@
-import { COPY } from './copy';
+import { COPY, tratamiento } from './copy';
 
 export function CedulaScreen({ cedula, onChange, celular4, onChangeCelular4, onSubmit, error }) {
   return (
@@ -41,7 +41,7 @@ export function CedulaScreen({ cedula, onChange, celular4, onChangeCelular4, onS
 export function PlacaScreen({ nombre, registros, onPick }) {
   return (
     <div className="enc-body">
-      <p className="enc-greeting">{`Hola, ${nombre}.`}</p>
+      <p className="enc-greeting">{`Hola, ${tratamiento(nombre)}.`}</p>
       <h1 className="enc-question">{COPY.pickBike}</h1>
       <div className="enc-options">
         {registros.map((r) => (

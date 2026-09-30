@@ -2,6 +2,14 @@
  * Customer-facing Spanish copy of the public satisfaction survey. The four
  * questions are verbatim from the Google Form "ENCUESTA TALLERES".
  */
+
+/**
+ * Formal, gender-neutral form of address. The customer base stores names as
+ * "APELLIDOS NOMBRES" and has no gender column, so the backend's first word
+ * is the first surname: "MORENO MOLANO JORGE JAIR" -> "Sr(a). Moreno".
+ */
+export const tratamiento = (apellido) => `Sr(a). ${apellido}`;
+
 export const COPY = {
   label: 'ENCUESTA DE SATISFACCIÓN',
   intro:

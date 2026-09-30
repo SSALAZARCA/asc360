@@ -1,4 +1,4 @@
-import { formatDay } from './copy';
+import { formatDay, tratamiento } from './copy';
 
 export function YaRespondidaScreen({ fecha }) {
   const day = formatDay(fecha);
@@ -17,7 +17,7 @@ export function ClosingScreen({ clasificacion, casoNumero, nombre }) {
     return (
       <div className="enc-closing is-dark">
         <div className="enc-closing-main">
-          <h1 className="enc-title" style={{ marginTop: 0 }}>{`Gracias por decírnoslo, ${nombre}.`}</h1>
+          <h1 className="enc-title" style={{ marginTop: 0 }}>{`Gracias por decírnoslo, ${tratamiento(nombre)}.`}</h1>
           <p className="enc-text">Nuestro equipo de servicio al cliente te va a contactar.</p>
           <div className="enc-case">
             <div className="enc-step">TU CASO</div>
@@ -31,7 +31,7 @@ export function ClosingScreen({ clasificacion, casoNumero, nombre }) {
   return (
     <div className="enc-closing">
       <div className="enc-closing-main">
-        <h1 className="enc-title" style={{ marginTop: 0 }}>{`Gracias, ${nombre}.`}</h1>
+        <h1 className="enc-title" style={{ marginTop: 0 }}>{`Gracias, ${tratamiento(nombre)}.`}</h1>
         <p className="enc-text">Tu opinión nos ayuda a mejorar.</p>
       </div>
       <div className="enc-band" aria-hidden="true" />
