@@ -110,3 +110,15 @@ Customers who took their motorcycle to a Motored workshop receive a WhatsApp mes
 - 2026-09-29: Created the worktree and the document. Mapping done (reference HTML, spec folder, Motored module patterns).
 - 2026-09-29: user chose stacked-to-main slices; consent text company -> "Moto red Nacional"; verified Motored migrations are not auto-run on deploy.
 - 2026-09-29: slice 1 (T9) delivered to main as f924e67 (rebased twice on origin/main; tests 1157 passed after rebase). RDD: risk high (shell/start.sh), consent granted, 4-lens review approved, acknowledged (lineage review-86ef86e669950456, authority burned). Pending: user confirms prod deploy log shows "Corriendo migraciones de Motored".
+- 2026-09-29: slice 9 (T8) delivered to main as 5f26f55. RDD medium, 1-lens approved + acknowledged. ALL TASKS DONE (T1–T9).
+
+## Close (2026-09-29)
+Status: functionally complete, 9 slices on main (f924e67, 135276f, fb34c82, 97c550c, 7d31ed4, 5993af3, 5893b8b, f6a0fc6, 5f26f55). Production deploys confirmed Success through fb34c82; Motored migrations auto-applied (prod at head).
+Pending / not verified:
+1. No test ran against a live Postgres (no docker in WSL): do an end-to-end production check (upload a small Excel with your own cédula → answer at /motored/encuesta with 3 or less → case in Detractores → take/close).
+2. Rate limit is per IP only (in-memory, per process); no per-cédula bound.
+3. Confirm SIC tooltip text on the upload page (inferred) and the spelling "Moto red Nacional" in Q4.
+4. Closed cases cannot be reopened (default decision).
+5. Sales (VENTA) survey not built yet; TIPO=VENTA rows are stored but not surveyed.
+6. Consent "No" still opens a case (user decision, legal risk acknowledged) — validate privacy policy with legal.
+Next step: user runs the end-to-end production check; then decide on items 2–5.
