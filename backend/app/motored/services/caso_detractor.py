@@ -183,6 +183,8 @@ async def detalle(db: AsyncSession, caso_id: uuid.UUID) -> Dict[str, Any]:
     row = (await db.execute(stmt)).first()
     if row is None:
         raise CasoError(404, "Caso no encontrado")
+    if row.estado == "ABIERTO":  # nobody previews a case they have not taken
+        raise CasoError(409, "Debes tomar el caso para verlo.")
     log_stmt = (
         select(
             CasoDetractorAccion.id, CasoDetractorAccion.tipo, CasoDetractorAccion.descripcion,
@@ -229,6 +231,8 @@ async def agregar_accion(
     db: AsyncSession, caso_id: uuid.UUID, *, usuario_id: str, tipo: str, descripcion: str
 ) -> Dict[str, Any]:
     caso = await _bloquear_caso(db, caso_id)
+    if caso.estado == "ABIERTO":
+        raise CasoError(409, "Debes tomar el caso para gestionarlo.")
     if caso.estado == "CERRADO" and tipo not in TIPOS_CIERRE_PERMITIDOS:
         raise CasoError(
             409, "El caso está cerrado: solo se pueden agregar notas o correcciones."
@@ -302,6 +306,35 @@ async def cambiar_estado(
         id=uuid.uuid4(), caso_id=caso_id, usuario_id=actor, tipo="CAMBIO_ESTADO",
         descripcion=_descripcion_cambio(actual, comentario, resultado),
         estado_anterior=actual, estado_nuevo=estado,
+    ))
+    await db.commit()
+    return await detalle(db, caso_id)
+
+
+async def _mensaje_ya_tomado(db: AsyncSession, caso: CasoDetractor) -> str:
+    if caso.asignado_a is None:
+        return "Este caso ya fue tomado por otra persona."
+    fila = (await db.execute(select(Usuario.nombre).where(Usuario.id == caso.asignado_a))).first()
+    nombre = fila.nombre if fila else None
+    return f"Este caso ya lo tomó {nombre}." if nombre else "Este caso ya fue tomado por otra persona."
+
+
+async def tomar_caso(db: AsyncSession, caso_id: uuid.UUID, *, usuario_id: str) -> Dict[str, Any]:
+    """Canonical way into an ABIERTO case: the caller becomes the responsable.
+
+    Validated against the row-locked state, so of two simultaneous takers only
+    the first wins; the second gets a 409 naming who has the case.
+    """
+    caso = await _bloquear_caso(db, caso_id)
+    if caso.estado != "ABIERTO":
+        raise CasoError(409, await _mensaje_ya_tomado(db, caso))
+    actor = uuid.UUID(usuario_id)
+    caso.estado = "EN_GESTION"
+    caso.asignado_a = actor
+    caso.updated_at = datetime.utcnow()
+    db.add(CasoDetractorAccion(
+        id=uuid.uuid4(), caso_id=caso_id, usuario_id=actor, tipo="CAMBIO_ESTADO",
+        descripcion="Caso tomado", estado_anterior="ABIERTO", estado_nuevo="EN_GESTION",
     ))
     await db.commit()
     return await detalle(db, caso_id)

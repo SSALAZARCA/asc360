@@ -105,6 +105,7 @@ def test_other_roles_are_forbidden_everywhere(role):
     with TestClient(app) as client:
         assert client.get(BASE).status_code == 403
         assert client.get(f"{BASE}/{CASO_ID}").status_code == 403
+        assert client.post(f"{BASE}/{CASO_ID}/tomar").status_code == 403
         body = {"tipo": "NOTA", "descripcion": "hola mundo"}
         assert client.post(f"{BASE}/{CASO_ID}/acciones", json=body).status_code == 403
         est = {"estado": "EN_GESTION", "comentario": "arrancamos"}
@@ -198,7 +199,7 @@ def test_detail_has_consent_flag_full_registro_respuesta_and_ordered_log():
         _accion("APERTURA", None),
         _accion("LLAMADA", "Carla", actor, created_at=datetime(2026, 9, 2)),
     ]
-    session = _client([_row()], log)
+    session = _client([_row(estado="EN_GESTION")], log)
     with TestClient(app) as client:
         body = client.get(f"{BASE}/{CASO_ID}").json()
     assert body["autoriza_datos"] is False
@@ -227,6 +228,81 @@ def test_detail_unknown_case_is_404():
     assert response.status_code == 404
 
 
+@pytest.mark.parametrize("role", ["ADMIN", "SERVICIO_CLIENTE"])
+def test_detail_of_an_open_case_is_refused_for_everyone(role):
+    _client([_row(estado="ABIERTO")], [_accion()], role=role)
+    with TestClient(app) as client:
+        response = client.get(f"{BASE}/{CASO_ID}")
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Debes tomar el caso para verlo."
+    assert "respuesta" not in response.json() and "registro" not in response.json()
+
+
+# --- take case -------------------------------------------------------------
+
+def _take(caso, nombre=None, role="ADMIN"):
+    """Queue: lock the case, [responsable name when already taken], detail row + log."""
+    queue = [[caso] if caso else []]
+    if caso is not None and caso.estado != "ABIERTO" and caso.asignado_a is not None:
+        queue.append([SimpleNamespace(nombre=nombre)])
+    queue += [[_row(estado="EN_GESTION", asignado_id=USER_ID, asignado_nombre="Ana Admin")], [_accion()]]
+    session = _client(*queue, role=role)
+    with TestClient(app) as client:
+        response = client.post(f"{BASE}/{CASO_ID}/tomar")
+    return response, session
+
+
+@pytest.mark.parametrize("role", ["ADMIN", "SERVICIO_CLIENTE"])
+def test_take_open_case_assigns_moves_to_en_gestion_logs_and_returns_detail(role):
+    caso = _real_caso("ABIERTO")
+    response, session = _take(caso, role=role)
+    assert response.status_code == 200
+    assert caso.estado == "EN_GESTION" and str(caso.asignado_a) == USER_ID
+    assert caso.updated_at > datetime(2026, 9, 2)
+    (accion,) = session.added_of_type(CasoDetractorAccion)
+    assert accion.tipo == "CAMBIO_ESTADO" and accion.descripcion == "Caso tomado"
+    assert (accion.estado_anterior, accion.estado_nuevo) == ("ABIERTO", "EN_GESTION")
+    assert str(accion.usuario_id) == USER_ID and accion.caso_id == CASO_ID
+    assert session.committed is True
+    body = response.json()
+    assert body["estado"] == "EN_GESTION" and body["asignado_a"]["nombre"] == "Ana Admin"
+    assert "respuesta" in body and "acciones" in body
+
+
+def test_take_open_case_with_a_stale_assignee_reassigns_to_the_taker():
+    caso = _real_caso("ABIERTO", asignado_a=uuid.uuid4())
+    response, _ = _take(caso)
+    assert response.status_code == 200 and str(caso.asignado_a) == USER_ID
+
+
+@pytest.mark.parametrize("estado", ["EN_GESTION", "CERRADO"])
+def test_take_already_taken_case_is_409_naming_the_responsable(estado):
+    caso = _real_caso(estado, asignado_a=uuid.uuid4())
+    response, session = _take(caso, nombre="Carla Gomez")
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Este caso ya lo tomó Carla Gomez."
+    assert session.added == [] and session.committed is False
+
+
+def test_take_already_taken_case_without_assignee_has_a_generic_message():
+    response, session = _take(_real_caso("EN_GESTION"))
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Este caso ya fue tomado por otra persona."
+    assert session.added == [] and session.committed is False
+
+
+def test_take_locks_the_case_row():
+    _, session = _take(_real_caso("ABIERTO"))
+    lock_sql = _sql(session.executed_statements[1])
+    assert "FROM caso_detractor" in lock_sql and "FOR UPDATE" in lock_sql
+
+
+def test_take_unknown_case_is_404():
+    response, session = _take(None)
+    assert response.status_code == 404
+    assert session.added == []
+
+
 # --- add action ------------------------------------------------------------
 
 def _post_action(body, caso, nombre="Ana Admin"):
@@ -251,8 +327,16 @@ def test_add_action_happy_path_appends_and_returns_it():
     assert "FOR UPDATE" in _sql(session.executed_statements[1])
 
 
-def test_first_user_action_on_unassigned_case_sets_responsable():
+def test_action_on_an_open_case_is_refused_until_someone_takes_it():
     caso = _real_caso("ABIERTO")
+    response, session = _post_action({"tipo": "NOTA", "descripcion": "Quiero anotar algo"}, caso)
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Debes tomar el caso para gestionarlo."
+    assert session.added == [] and session.committed is False and caso.asignado_a is None
+
+
+def test_first_user_action_on_unassigned_case_sets_responsable():
+    caso = _real_caso("EN_GESTION")
     response, _ = _post_action({"tipo": "NOTA", "descripcion": "Primer registro"}, caso)
     assert response.status_code == 201
     assert str(caso.asignado_a) == USER_ID
@@ -274,7 +358,7 @@ def test_note_on_closed_unassigned_case_also_sets_responsable():
 
 @pytest.mark.parametrize("tipo", ["APERTURA", "CAMBIO_ESTADO", "OTRO"])
 def test_system_only_or_unknown_tipos_are_rejected(tipo):
-    response, session = _post_action({"tipo": tipo, "descripcion": "descripcion valida"}, _real_caso())
+    response, session = _post_action({"tipo": tipo, "descripcion": "descripcion valida"}, _real_caso("EN_GESTION"))
     assert response.status_code == 422
     assert session.added == []
 

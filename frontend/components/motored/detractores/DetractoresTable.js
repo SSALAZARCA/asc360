@@ -5,11 +5,11 @@ import DetractoresRow from './DetractoresRow';
 
 const thStyle = { padding: '0 12px 8px 0', textAlign: 'left', whiteSpace: 'nowrap' };
 const HEADERS = [
-  'No. caso', 'Fecha', 'Cliente', 'Placa', 'Centro', 'Satisfacción',
+  'Acción', 'No. caso', 'Fecha', 'Cliente', 'Placa', 'Centro', 'Satisfacción',
   'Autorizó datos', 'Estado', 'Responsable', 'Última acción',
 ];
 
-export default function DetractoresTable({ casos, onOpen }) {
+export default function DetractoresTable({ casos, onOpen, tomar }) {
   return (
     <MotoredTableScroll>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
@@ -19,7 +19,12 @@ export default function DetractoresTable({ casos, onOpen }) {
           </tr>
         </thead>
         <tbody>
-          {casos.map((c) => <DetractoresRow key={c.id} caso={c} onOpen={onOpen} />)}
+          {casos.map((c) => (
+            <DetractoresRow
+              key={c.id} caso={c} onOpen={onOpen} onTomar={tomar.tomar}
+              busy={tomar.busyId === c.id} error={tomar.errors[c.id]}
+            />
+          ))}
         </tbody>
       </table>
     </MotoredTableScroll>

@@ -131,20 +131,18 @@ async def test_detractor_case_full_lifecycle_in_the_panel(sesion):
     assert [item["codigo"] for item in por_codigo["items"]] == [resultado.caso_codigo]
     caso_id = pagina["items"][0]["id"]
 
-    detalle = await casos.detalle(sesion, caso_id)
-    assert detalle["autoriza_datos"] is False
-    assert [a["tipo"] for a in detalle["acciones"]] == ["APERTURA"]
+    detalle = await casos.tomar_caso(sesion, caso_id, usuario_id=str(admin_id))
+    assert detalle["autoriza_datos"] is False and detalle["estado"] == "EN_GESTION"
+    assert [a["tipo"] for a in detalle["acciones"]] == ["APERTURA", "CAMBIO_ESTADO"]
 
     await casos.agregar_accion(sesion, caso_id, usuario_id=str(admin_id), tipo="LLAMADA", descripcion="Llamé al cliente")
-    await casos.cambiar_estado(sesion, caso_id, usuario_id=str(admin_id), estado="EN_GESTION", resultado=None,
-                               comentario="Tomo el caso")
     await casos.cambiar_estado(sesion, caso_id, usuario_id=str(admin_id), estado="CERRADO",
                                resultado="RECUPERADO", comentario="Cliente conforme")
     reabierto = await casos.cambiar_estado(sesion, caso_id, usuario_id=str(admin_id), estado="EN_GESTION",
                                            resultado=None, comentario="Volvió a llamar")
     assert reabierto["estado"] == "EN_GESTION" and reabierto["resultado"] is None
     assert [a["tipo"] for a in reabierto["acciones"]] == [
-        "APERTURA", "LLAMADA", "CAMBIO_ESTADO", "CAMBIO_ESTADO", "CAMBIO_ESTADO",
+        "APERTURA", "CAMBIO_ESTADO", "LLAMADA", "CAMBIO_ESTADO", "CAMBIO_ESTADO",
     ]
 
 
@@ -161,16 +159,52 @@ async def _caso_detractor(sesion) -> tuple:
     return caso_id, admin_id
 
 
-async def test_first_manual_action_makes_the_author_the_responsable(sesion):
+async def _otro_admin(sesion) -> uuid.UUID:
+    otro_id = uuid.uuid4()
+    sesion.add(Usuario(
+        id=otro_id, nombre="Otro Admin", role=MotoredRole.ADMIN, activo=True,
+        email=f"otro{otro_id.hex[:8]}@test.co", hashed_password="x",
+    ))
+    await sesion.commit()
+    return otro_id
+
+
+async def test_open_case_is_closed_to_preview_and_actions_until_someone_takes_it(sesion):
     from app.motored.services import caso_detractor as casos
 
     caso_id, admin_id = await _caso_detractor(sesion)
-    assert (await casos.detalle(sesion, caso_id))["asignado_a"] is None
+    with pytest.raises(casos.CasoError) as visto:
+        await casos.detalle(sesion, caso_id)
+    assert visto.value.status_code == 409
+    with pytest.raises(casos.CasoError) as accion:
+        await casos.agregar_accion(sesion, caso_id, usuario_id=str(admin_id), tipo="NOTA", descripcion="Sin tomar")
+    assert accion.value.status_code == 409
 
-    await casos.agregar_accion(sesion, caso_id, usuario_id=str(admin_id), tipo="NOTA", descripcion="Primer registro")
+    tomado = await casos.tomar_caso(sesion, caso_id, usuario_id=str(admin_id))
+    assert tomado["estado"] == "EN_GESTION" and tomado["asignado_a"]["id"] == admin_id
+    assert (await casos.detalle(sesion, caso_id))["asignado_a"]["id"] == admin_id
+    entrada = tomado["acciones"][-1]
+    assert (entrada["descripcion"], entrada["estado_anterior"], entrada["estado_nuevo"]) == (
+        "Caso tomado", "ABIERTO", "EN_GESTION")
+    assert entrada["usuario"]["id"] == admin_id
 
-    responsable = (await casos.detalle(sesion, caso_id))["asignado_a"]
-    assert responsable["id"] == admin_id
+
+async def test_second_taker_is_refused_naming_the_first_and_can_still_work_the_case(sesion):
+    from app.motored.services import caso_detractor as casos
+
+    caso_id, admin_a = await _caso_detractor(sesion)
+    admin_b = await _otro_admin(sesion)
+    await casos.tomar_caso(sesion, caso_id, usuario_id=str(admin_a))
+
+    with pytest.raises(casos.CasoError) as perdido:
+        await casos.tomar_caso(sesion, caso_id, usuario_id=str(admin_b))
+    assert perdido.value.status_code == 409
+    assert perdido.value.detail == "Este caso ya lo tomó Admin."
+
+    await casos.agregar_accion(sesion, caso_id, usuario_id=str(admin_b), tipo="NOTA", descripcion="Aporte de B")
+    detalle = await casos.detalle(sesion, caso_id)
+    assert detalle["asignado_a"]["id"] == admin_a  # B's action never steals the case
+    assert detalle["acciones"][-1]["usuario"]["id"] == admin_b
 
 
 class _CapturingOp:

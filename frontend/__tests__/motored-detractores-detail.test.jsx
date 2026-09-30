@@ -38,7 +38,7 @@ const MATRIX_TEXTS = [
 
 function caso(over = {}) {
   return {
-    id: 'c1', numero: 12, codigo: 'DET-2026-000012', estado: 'ABIERTO', resultado: null,
+    id: 'c1', numero: 12, codigo: 'DET-2026-000012', estado: 'EN_GESTION', resultado: null,
     created_at: '2026-09-20T15:30:00', cerrado_at: null, asignado_a: null,
     cliente: { nombre: 'Ana Pérez' }, satisfaccion_general: 2, autoriza_datos: true,
     registro: {
@@ -85,7 +85,7 @@ beforeEach(() => {
 describe('Detractor detail — header and consent warning', () => {
   it('shows header data', async () => {
     await renderDetail();
-    expect(screen.getByText('Abierto')).toBeInTheDocument();
+    expect(screen.getByText('En gestión')).toBeInTheDocument();
     expect(mockFetch.mock.calls[0][0]).toBe('/detractores/c1');
   });
 
@@ -201,16 +201,6 @@ describe('Detractor detail — registrar acción', () => {
 });
 
 describe('Detractor detail — cambiar estado', () => {
-  it('Tomar caso sends EN_GESTION and reloads', async () => {
-    const post = jest.fn(async () => res(current));
-    route({ post });
-    await renderDetail();
-    fireEvent.click(screen.getByRole('button', { name: 'Tomar caso' }));
-    fireEvent.change(screen.getByLabelText('Comentario'), { target: { value: 'Lo atiendo hoy' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Confirmar' }));
-    await waitFor(() => expect(post).toHaveBeenCalledWith('/detractores/c1/estado', { estado: 'EN_GESTION', comentario: 'Lo atiendo hoy' }));
-  });
-
   it('Cerrar caso requires a resultado and a comentario of at least 5 chars', async () => {
     const post = jest.fn(async () => res(current));
     route({ post });
@@ -231,10 +221,16 @@ describe('Detractor detail — cambiar estado', () => {
   });
 
   it('EN_GESTION offers only Cerrar caso', async () => {
-    current = caso({ estado: 'EN_GESTION' });
     await renderDetail();
     expect(screen.queryByRole('button', { name: 'Tomar caso' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Cerrar caso' })).toBeInTheDocument();
+  });
+
+  it('has no take option even for an open case (unreachable: the list takes it)', async () => {
+    current = caso({ estado: 'ABIERTO' });
+    await renderDetail();
+    expect(screen.queryByRole('button', { name: 'Tomar caso' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Cerrar caso' })).not.toBeInTheDocument();
   });
 
   it('CERRADO offers only Reabrir caso', async () => {
@@ -275,11 +271,26 @@ describe('Detractor detail — cambiar estado', () => {
     route({ post: async () => res({ detail: 'El caso ya está cerrado y no se puede reabrir ni modificar su estado.' }, 409) });
     await renderDetail();
     const before = mockFetch.mock.calls.length;
-    fireEvent.click(screen.getByRole('button', { name: 'Tomar caso' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cerrar caso' }));
+    fireEvent.change(screen.getByLabelText('Resultado'), { target: { value: 'RECUPERADO' } });
     fireEvent.change(screen.getByLabelText('Comentario'), { target: { value: 'Lo atiendo hoy' } });
     fireEvent.click(screen.getByRole('button', { name: 'Confirmar' }));
     expect(await screen.findByText(/ya está cerrado y no se puede reabrir/)).toBeInTheDocument();
     await waitFor(() => expect(mockFetch.mock.calls.length).toBeGreaterThan(before + 1));
+  });
+});
+
+describe('Detractor detail — open case not taken', () => {
+  it('shows the 409 message with a way back and renders no case data', async () => {
+    mockFetch.mockResolvedValue(res({ detail: 'Debes tomar el caso para verlo.' }, 409));
+    sessionStorage.setItem('motored_user', JSON.stringify({ nombre: 'U', role: 'ADMIN' }));
+    sessionStorage.setItem('motored_token', 't');
+    render(<DetractorDetailPage />);
+    expect(await screen.findByRole('alert')).toHaveTextContent('Debes tomar el caso para verlo.');
+    expect(screen.getByRole('link', { name: 'Volver a detractores' })).toHaveAttribute('href', '/motored/detractores');
+    expect(screen.queryByText('Ana Pérez')).not.toBeInTheDocument();
+    expect(screen.queryByText('Demoraron mucho')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Tomar caso' })).not.toBeInTheDocument();
   });
 });
 

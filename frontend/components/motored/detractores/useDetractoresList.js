@@ -12,6 +12,7 @@ export default function useDetractoresList(enabled) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [nonce, setNonce] = useState(0);
   const requestId = useRef(0);
   const q = useDebouncedValue(filters.q);
   const centro = useDebouncedValue(filters.centro);
@@ -20,6 +21,8 @@ export default function useDetractoresList(enabled) {
     setFilters((f) => ({ ...f, [key]: value, page: 1 }));
   }, []);
   const setPage = useCallback((page) => setFilters((f) => ({ ...f, page })), []);
+
+  const reload = useCallback(() => setNonce((n) => n + 1), []);
 
   const { estado, autoriza, desde, hasta, page } = filters;
   useEffect(() => {
@@ -33,7 +36,7 @@ export default function useDetractoresList(enabled) {
       .then((body) => { if (id === requestId.current) setData(body); })
       .catch((err) => { if (id === requestId.current) setError(err.message || 'No se pudo cargar los casos.'); })
       .finally(() => { if (id === requestId.current) setLoading(false); });
-  }, [enabled, estado, q, centro, autoriza, desde, hasta, page]);
+  }, [enabled, estado, q, centro, autoriza, desde, hasta, page, nonce]);
 
-  return { filters, setFilter, setPage, data, loading, error };
+  return { filters, setFilter, setPage, reload, data, loading, error };
 }

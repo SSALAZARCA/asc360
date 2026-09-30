@@ -40,3 +40,4 @@ export function listDetractores(params) {
 export const getDetractor = (id) => request(`${BASE}/${id}`);
 export const agregarAccion = (id, payload) => post(`${BASE}/${id}/acciones`, payload);
 export const cambiarEstadoDetractor = (id, payload) => post(`${BASE}/${id}/estado`, payload);
+export const tomarDetractor = (id) => request(`${BASE}/${id}/tomar`, { method: 'POST' });

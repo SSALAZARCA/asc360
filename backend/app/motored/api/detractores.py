@@ -84,6 +84,15 @@ async def detalle_caso(
     return await _run(servicio.detalle(db, caso_id))
 
 
+@router.post("/{caso_id}/tomar")
+async def tomar_caso(
+    caso_id: uuid.UUID,
+    db: AsyncSession = Depends(get_motored_db_or_503),
+    user: MotoredUser = Depends(_require_access),
+) -> dict:
+    return await _run(servicio.tomar_caso(db, caso_id, usuario_id=user.user_id))
+
+
 @router.post("/{caso_id}/acciones", status_code=status.HTTP_201_CREATED)
 async def agregar_accion(
     caso_id: uuid.UUID,

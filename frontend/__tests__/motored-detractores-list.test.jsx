@@ -156,10 +156,70 @@ describe('Detractores list — table', () => {
     expect(within(rowYes).getByText('Sí')).toBeInTheDocument();
   });
 
-  it('opens the detail on row click', async () => {
+  it('puts the action column first and keeps short tokens on one line', async () => {
     await renderPage();
-    fireEvent.click((await screen.findByText('Ana Pérez')).closest('tr'));
-    expect(pushMock).toHaveBeenCalledWith('/motored/detractores/c1');
+    const row = (await screen.findByText('Ana Pérez')).closest('tr');
+    expect(within(row.cells[0]).getByRole('button', { name: 'Tomar caso' })).toBeInTheDocument();
+    expect(screen.getAllByRole('columnheader')[0]).toHaveTextContent('Acción');
+    expect(row.cells[1].style.whiteSpace).toBe('nowrap');
+    expect(row.cells[4].style.whiteSpace).toBe('nowrap');
+  });
+
+  it('ABIERTO row offers only a primary Tomar caso button and is not clickable', async () => {
+    await renderPage();
+    const row = (await screen.findByText('Ana Pérez')).closest('tr');
+    const tomar = within(row).getByRole('button', { name: 'Tomar caso' });
+    expect(tomar).toHaveClass('motored-btn-primary');
+    expect(within(row).queryByRole('button', { name: 'Ver caso' })).not.toBeInTheDocument();
+    expect(row).not.toHaveAttribute('tabindex');
+    fireEvent.click(row);
+    expect(pushMock).not.toHaveBeenCalled();
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('EN_GESTION and CERRADO rows offer a secondary Ver caso that opens the detail', async () => {
+    const cerrado = { ...ITEM_NO, id: 'c3', codigo: 'DET-2026-000014', estado: 'CERRADO', cliente: { ...ITEM_NO.cliente, nombre: 'Eva Soto' } };
+    mockFetch.mockResolvedValue(res(listBody({ items: [ITEM_NO, cerrado] })));
+    await renderPage();
+    const row = (await screen.findByText('Luis Gómez')).closest('tr');
+    expect(within(row).queryByRole('button', { name: 'Tomar caso' })).not.toBeInTheDocument();
+    const ver = within(row).getByRole('button', { name: 'Ver caso' });
+    expect(ver).toHaveClass('motored-btn-secondary');
+    fireEvent.click(ver);
+    expect(pushMock).toHaveBeenCalledWith('/motored/detractores/c2');
+    expect(within(screen.getByText('Eva Soto').closest('tr')).getByRole('button', { name: 'Ver caso' })).toBeInTheDocument();
+  });
+
+  it('Tomar caso posts to /tomar and opens the management page on success', async () => {
+    mockFetch.mockImplementation(async (path, opts = {}) => (
+      opts.method === 'POST' ? res({ id: 'c1', estado: 'EN_GESTION' }) : res(listBody())
+    ));
+    await renderPage();
+    fireEvent.click(within((await screen.findByText('Ana Pérez')).closest('tr')).getByRole('button', { name: 'Tomar caso' }));
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith('/motored/detractores/c1'));
+    const post = mockFetch.mock.calls.find(([, o]) => o && o.method === 'POST');
+    expect(post[0]).toBe('/detractores/c1/tomar');
+  });
+
+  it('on 409 shows the backend message on that row and refreshes the list', async () => {
+    mockFetch.mockImplementation(async (path, opts = {}) => (
+      opts.method === 'POST' ? res({ detail: 'Este caso ya lo tomó Carla Gomez.' }, 409) : res(listBody())
+    ));
+    await renderPage();
+    const row = (await screen.findByText('Ana Pérez')).closest('tr');
+    const before = mockFetch.mock.calls.length;
+    fireEvent.click(within(row).getByRole('button', { name: 'Tomar caso' }));
+    expect(await within(row).findByText('Este caso ya lo tomó Carla Gomez.')).toBeInTheDocument();
+    await waitFor(() => expect(mockFetch.mock.calls.filter(([, o]) => !o).length).toBeGreaterThanOrEqual(2));
+    expect(mockFetch.mock.calls.length).toBeGreaterThan(before + 1);
+    expect(pushMock).not.toHaveBeenCalled();
+  });
+
+  it('never shows customer comments in the list', async () => {
+    mockFetch.mockResolvedValue(res(listBody({ items: [{ ...ITEM, observaciones: 'Texto privado del cliente' }] })));
+    await renderPage();
+    await screen.findByText('Ana Pérez');
+    expect(screen.queryByText('Texto privado del cliente')).not.toBeInTheDocument();
   });
 
   it('shows an empty state', async () => {

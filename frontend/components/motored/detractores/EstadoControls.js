@@ -1,5 +1,5 @@
 'use client';
-/** State transitions: Tomar caso / Cerrar caso; closed cases can be reopened. */
+/** State transitions: Cerrar caso; closed cases can be reopened. Taking a case happens from the list. */
 import { useState } from 'react';
 import { cardStyle, errorStyle, labelStyle, optionStyle } from './styles';
 import { RESULTADO_LABELS } from './labels';
@@ -43,13 +43,9 @@ function StartButtons({ estado, onPick }) {
       <button type="button" className="motored-btn motored-btn-secondary" onClick={() => onPick('EN_GESTION')}>Reabrir caso</button>
     );
   }
+  if (estado !== 'EN_GESTION') return null;
   return (
-    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-      {estado === 'ABIERTO' && (
-        <button type="button" className="motored-btn motored-btn-primary" onClick={() => onPick('EN_GESTION')}>Tomar caso</button>
-      )}
-      <button type="button" className="motored-btn motored-btn-secondary" onClick={() => onPick('CERRADO')}>Cerrar caso</button>
-    </div>
+    <button type="button" className="motored-btn motored-btn-secondary" onClick={() => onPick('CERRADO')}>Cerrar caso</button>
   );
 }
 
