@@ -171,3 +171,19 @@ def test_login_returns_503_when_motored_disabled(monkeypatch):
         response = client.post(LOGIN_URL, json={"email": "x@x.com", "password": "y"})
 
     assert response.status_code == 503
+
+
+def test_login_with_a_password_over_72_bytes_returns_401_not_500(monkeypatch):
+    monkeypatch.setattr(settings, "MOTORED_ENABLED", True)
+    monkeypatch.setattr(settings, "MOTORED_SECRET_KEY", "login-test-motored-secret")
+    monkeypatch.setattr(settings, "SECRET_KEY", "login-test-asc360-secret")
+    usuario = _make_usuario("correcta123")
+    override_motored_db(FakeAsyncSession(execute_queue=[[], [usuario]]))
+
+    with TestClient(app) as client:
+        response = client.post(LOGIN_URL, json={"email": usuario.email, "password": "x" * 100})
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Credenciales incorrectas"
+
+    app.dependency_overrides.clear()

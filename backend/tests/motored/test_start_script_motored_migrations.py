@@ -38,3 +38,12 @@ def test_motored_failure_does_not_abort_the_shared_backend():
         if "alembic -c alembic_motored.ini upgrade head" in line
     )
     assert "||" in line
+
+
+def test_start_script_never_echoes_the_raw_database_url():
+    """The URL carries the DB password and would land in every deploy log."""
+    for line in _script().splitlines():
+        if line.lstrip().startswith("#"):
+            continue
+        if "echo" in line or "printf" in line:
+            assert "$DATABASE_URL" not in line and "${DATABASE_URL" not in line, line

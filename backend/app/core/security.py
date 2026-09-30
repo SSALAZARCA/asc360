@@ -9,6 +9,7 @@ from jose import JWTError, jwt
 from app.config import settings
 
 ALGORITHM = "HS256"
+BCRYPT_MAX_PASSWORD_BYTES = 72
 
 def decode_access_token(token: str) -> Optional[dict]:
     """Decodifica y valida un JWT. Retorna el payload o None si es inválido."""
@@ -35,7 +36,12 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verificar la contraseña en plano vs el hash."""
-    return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
+    password_bytes = plain_password.encode('utf-8')
+    if len(password_bytes) > BCRYPT_MAX_PASSWORD_BYTES:
+        # bcrypt 5 raises ValueError above 72 bytes; such a password can never
+        # match a hash, because get_password_hash cannot have produced it.
+        return False
+    return bcrypt.checkpw(password_bytes, hashed_password.encode('utf-8'))
 
 def get_password_hash(password: str) -> str:
     """Obtener hash de una contraseña plana."""

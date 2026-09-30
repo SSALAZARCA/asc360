@@ -6,6 +6,8 @@ from pydantic import BaseModel, ConfigDict
 
 
 PASSWORD_MIN_LENGTH = 8
+# bcrypt only accepts 72 BYTES (UTF-8); bcrypt 5 raises above that.
+PASSWORD_MAX_BYTES = 72
 
 
 class UsuarioPasswordReset(BaseModel):

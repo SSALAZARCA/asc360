@@ -31,6 +31,7 @@ from app.config import settings  # noqa: E402
 from app.core.security import get_password_hash  # noqa: E402
 from app.motored.database import motored_session_maker  # noqa: E402
 from app.motored.models.usuario import MotoredRole, Usuario  # noqa: E402
+from app.motored.schemas.usuario import PASSWORD_MAX_BYTES, PASSWORD_MIN_LENGTH  # noqa: E402
 
 ADMIN_NOMBRE = "asalazar"
 ADMIN_EMAIL = "asalazarc@motoredcolombia.com.co"
@@ -41,9 +42,16 @@ def _resolve_password() -> str:
     (provisioning no interactivo / CI); si no está seteada, la pide de forma
     interactiva sin eco en pantalla."""
     env_password = os.environ.get("MOTORED_ADMIN_PASSWORD")
-    if env_password:
-        return env_password
-    return getpass.getpass("Contraseña para el ADMIN de Motored (asalazar): ")
+    password = env_password or getpass.getpass(
+        "Contraseña para el ADMIN de Motored (asalazar): "
+    )
+    if len(password) < PASSWORD_MIN_LENGTH:
+        print(f"ERROR: la contraseña debe tener al menos {PASSWORD_MIN_LENGTH} caracteres.")
+        raise SystemExit(1)
+    if len(password.encode("utf-8")) > PASSWORD_MAX_BYTES:
+        print(f"ERROR: la contraseña no puede superar {PASSWORD_MAX_BYTES} caracteres.")
+        raise SystemExit(1)
+    return password
 
 
 async def create_motored_admin() -> None:

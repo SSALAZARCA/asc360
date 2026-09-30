@@ -40,7 +40,7 @@ from app.motored.deps import MotoredUser, get_motored_db_or_503, require_motored
 from app.motored.models.usuario import MotoredRole, Usuario
 from app.motored.models.usuario_sucursal import UsuarioSucursal
 from app.motored.schemas.usuario import (
-    PASSWORD_MIN_LENGTH, UsuarioCreate, UsuarioPasswordReset, UsuarioRead,
+    PASSWORD_MAX_BYTES, PASSWORD_MIN_LENGTH, UsuarioCreate, UsuarioPasswordReset, UsuarioRead,
 )
 from app.motored.services import auditoria, solicitudes, vinculacion
 
@@ -76,6 +76,11 @@ def _validar_password(password: str) -> None:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=f"La contraseña debe tener al menos {PASSWORD_MIN_LENGTH} caracteres",
+        )
+    if len(password.encode("utf-8")) > PASSWORD_MAX_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"La contraseña no puede superar {PASSWORD_MAX_BYTES} caracteres.",
         )
 
 

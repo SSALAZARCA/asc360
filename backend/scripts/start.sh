@@ -1,7 +1,14 @@
 #!/bin/bash
 set -e
 
-echo "==> DATABASE_URL: $DATABASE_URL"
+# Never print DATABASE_URL itself: it carries the DB password into deploy logs.
+python - <<'PY' || echo "==> Base de datos: (no se pudo leer DATABASE_URL)"
+import os
+from urllib.parse import urlsplit
+
+u = urlsplit(os.environ.get("DATABASE_URL", ""))
+print(f"==> Base de datos: host={u.hostname or '?'} db={u.path.lstrip('/') or '?'}")
+PY
 echo "==> Corriendo migraciones de Alembic..."
 alembic upgrade head
 

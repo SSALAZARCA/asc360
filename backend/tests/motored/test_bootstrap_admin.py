@@ -112,3 +112,16 @@ async def test_second_run_is_noop_and_never_resets_password(motored_sqlite_engin
     assert rows[0].hashed_password == first_hash
     assert verify_password("primera-contraseña", rows[0].hashed_password)
     assert not verify_password("segunda-contraseña-distinta", rows[0].hashed_password)
+
+
+@pytest.mark.parametrize("bad", ["corta", "a" * 73])
+def test_resolve_password_rejects_out_of_range_without_printing_it(monkeypatch, capsys, bad):
+    monkeypatch.setenv("MOTORED_ADMIN_PASSWORD", bad)
+
+    with pytest.raises(SystemExit) as exc_info:
+        create_motored_admin._resolve_password()
+
+    assert exc_info.value.code != 0
+    out = capsys.readouterr()
+    assert bad not in out.out + out.err
+    assert "contraseña" in (out.out + out.err).lower()

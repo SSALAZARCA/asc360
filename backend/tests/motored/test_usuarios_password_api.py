@@ -163,3 +163,54 @@ def test_create_usuario_accepts_a_password_of_the_minimum_length():
 
     assert response.status_code == 201, response.text
     assert session.committed is True
+
+
+# --- bcrypt only hashes the first 72 BYTES; bcrypt 5 raises above that -------
+MSG_TOO_LONG = "La contraseña no puede superar 72 caracteres."
+PASSWORD_72_BYTES = "a" * 72
+PASSWORD_80_BYTES = "a" * 80
+
+
+def test_reset_password_over_72_bytes_returns_422_with_message():
+    usuario = _usuario()
+
+    response, session = _post_as("ADMIN", [[usuario]], usuario.id, {"password": PASSWORD_80_BYTES})
+
+    assert response.status_code == 422, response.text
+    assert response.json()["detail"] == MSG_TOO_LONG
+    assert PASSWORD_80_BYTES not in response.text
+    assert usuario.hashed_password == "hash-viejo"
+    assert session.committed is False
+
+
+def test_reset_password_counts_bytes_not_characters():
+    usuario = _usuario()
+    # 40 chars but 80 UTF-8 bytes.
+    response, _ = _post_as("ADMIN", [[usuario]], usuario.id, {"password": "ñ" * 40})
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == MSG_TOO_LONG
+
+
+def test_reset_password_accepts_exactly_72_bytes():
+    usuario = _usuario()
+
+    response, _ = _post_as("ADMIN", [[usuario]], usuario.id, {"password": PASSWORD_72_BYTES})
+
+    assert response.status_code == 200, response.text
+    assert verify_password(PASSWORD_72_BYTES, usuario.hashed_password)
+
+
+def test_create_usuario_over_72_bytes_returns_422_with_message():
+    response, session = _create_as_admin(PASSWORD_80_BYTES)
+
+    assert response.status_code == 422, response.text
+    assert response.json()["detail"] == MSG_TOO_LONG
+    assert session.committed is False
+
+
+def test_create_usuario_accepts_exactly_72_bytes():
+    response, session = _create_as_admin(PASSWORD_72_BYTES)
+
+    assert response.status_code == 201, response.text
+    assert session.committed is True
