@@ -61,3 +61,26 @@ Not requested:
 ## Log
 - 2026-09-30: document created from the audit (see pending-issues memory, "Auditoría de login Motored").
 - 2026-09-30: ALL TASKS DONE (T1–T5). Still deferred by user: proxy/X-Forwarded-For (M4) and DB password rotation. Not requested: policy changes, forced first-login change, account lockout, email recovery.
+
+## Follow-up round (user, 2026-09-30)
+User asked: shorter session-expired notice, plus stricter password rules, forced change on first login, account lockout after failed attempts, and a log of who logs in and when. Sync with the F3 agent on Motored migrations (F3 has none pending; keep `supervisor_corridas.ensure_started()` in `deps.require_motored_ready`).
+
+Defaults chosen (user can adjust):
+- Password rules (new passwords only: create, admin reset, own change): min 10 chars, at least one letter and one digit, not a common password, must not contain the email local part. Existing passwords keep working.
+- Forced change: admin create and admin reset set `must_change_password`; until changed the user can only reach the change-password page (enforced server-side); own change clears it.
+- Lockout: 5 failed logins for an account within 15 min lock it for 15 min; unknown emails tracked the same way in memory so the response never reveals whether an account exists.
+- Login log: every attempt (success/failure/locked) with email, user, IP, user agent, time; ADMIN-only screen to browse it.
+
+| ID | Task | Route |
+|---|---|---|
+| T6 | Short notice "Tu sesión terminó. Vuelve a ingresar." | inline |
+| T7 | Stricter password rules (backend policy + frontend hints) | delegated writer (with T8) |
+| T8 | Forced password change on first login / after admin reset (migration) | delegated writer (with T7) |
+| T9 | Account lockout after failed logins (migration) | delegated writer (with T10) |
+| T10 | Login event log + ADMIN screen (migration) | delegated writer (with T9) |
+
+- [x] T6 — notice shortened; RED 1 failed → GREEN 6 passed (motored-login-ux).
+- [ ] T7
+- [ ] T8
+- [ ] T9
+- [ ] T10

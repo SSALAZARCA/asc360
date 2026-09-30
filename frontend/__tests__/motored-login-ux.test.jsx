@@ -16,7 +16,7 @@ jest.mock('../lib/motored/api', () => ({ login: (...a) => mockLogin(...a) }));
 import MotoredLoginPage from '../app/motored/login/page';
 import { MOTORED_EXPIRED_KEY } from '../lib/motored/motoredFetch';
 
-const NOTICE = /Tu sesión terminó/;
+const NOTICE = /^Tu sesión terminó\. Vuelve a ingresar\.$/;
 
 beforeEach(() => {
   sessionStorage.clear();

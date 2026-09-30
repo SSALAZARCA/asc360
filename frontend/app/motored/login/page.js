@@ -33,7 +33,7 @@ const passwordStyles = {
   toggle: { minHeight: '100%', minWidth: '40px' },
 };
 
-const EXPIRED_NOTICE = 'Tu sesión terminó (venció o se cerró por un cambio de contraseña). Vuelve a ingresar.';
+const EXPIRED_NOTICE = 'Tu sesión terminó. Vuelve a ingresar.';
 
 /** True once when the previous session ended automatically; consumes the flag. */
 function useExpiredNotice() {
