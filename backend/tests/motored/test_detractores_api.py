@@ -164,8 +164,13 @@ def test_list_filters_are_applied_in_sql():
     assert "caso_detractor.created_at >= '2026-09-01" in sql
     assert "caso_detractor.created_at < '2026-10-01" in sql  # `hasta` is inclusive
     for column in ("nombre", "cedula", "placa"):
-        # literal_binds renders `%` doubled; the point is: wildcards escaped + ESCAPE clause
-        assert f"encuesta_registro.{column} ILIKE '%%50\\\\%%\\\\_x%%' ESCAPE" in sql
+        assert f"encuesta_registro.{column} ILIKE" in sql
+    assert "ESCAPE" in sql
+    # Check the bound value, not its literal rendering: SQLAlchemy 2.1 stopped
+    # doubling backslashes under literal_binds, but the value sent to Postgres
+    # is what matters. User wildcards `%` and `_` must arrive escaped.
+    params = session.executed_statements[1].compile(dialect=postgresql.dialect()).params
+    assert "%50\\%\\_x%" in params.values()
 
 
 def test_list_counts_ignore_filters():
