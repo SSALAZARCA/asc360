@@ -44,13 +44,15 @@ def _multiplos_de_unidad(neto: Fraction, unidad: int,
     return redondear_mitad_lejos_de_cero(cuentas)
 
 
-def calcular_pedido(ss: Fraction, y: Fraction, z: Fraction, unidad: int,
+def calcular_pedido(ss: Fraction, y: Fraction, z: Fraction,
+                    unidad: Optional[int],
                     modo: ModoRedondeo) -> ResultadoPedido:
     """Pedido sugerido exacto; devuelve además las advertencias del cálculo."""
     if unidad is None or unidad <= 0:
         return ResultadoPedido(Fraction(0), (ADV_UNIDAD_EMPAQUE_INVALIDA,))
     neto = ss - y + z
-    pedido = Fraction(max(0, _multiplos_de_unidad(neto, unidad, modo) * unidad))
+    multiplos = _multiplos_de_unidad(neto, unidad, modo)
+    pedido = Fraction(max(0, multiplos * unidad))
     if pedido == 0 and z > 0:
         pedido = z
     return ResultadoPedido(pedido)

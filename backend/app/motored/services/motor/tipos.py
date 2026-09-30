@@ -17,6 +17,12 @@ from uuid import UUID
 ModoRedondeo = Literal["CERCANO", "ARRIBA"]
 ModoMesEnCurso = Literal["EXCLUIDO", "PONDERADO"]
 
+ESTADO_OK = "OK"
+ESTADO_OMITIDA = "OMITIDA"
+
+COD_SUCURSAL_OMITIDA = "A-CORRIDA-102"
+COD_SUMA_NO_POSITIVA = "A-CORRIDA-110"
+
 K_FMS_LEGACY: Mapping[str, Fraction] = MappingProxyType(
     {"F": Fraction(3), "M": Fraction(3, 2), "S": Fraction(1)}
 )
@@ -59,11 +65,16 @@ class AtributosSucursal:
 
 @dataclass(frozen=True)
 class MesEnCurso:
-    """Configuración efectiva del mes en curso (M0). La usa S3b."""
+    """Configuración efectiva del mes en curso (M0). La usa S3b.
+
+    En la especificación `d` son los días transcurridos (`dias_transcurridos`)
+    y `D` los días del mes (`dias_del_mes`); `tope` es
+    `tope_proyeccion_mes_actual`.
+    """
 
     modo: ModoMesEnCurso
-    d: int
-    D: int
+    dias_transcurridos: int
+    dias_del_mes: int
     tope: Fraction
 
 
@@ -89,9 +100,53 @@ class ParametrosMotor:
 class AjustesPrueba:
     """Sólo tests (nivel A1): divisor por referencia y orden explícito.
 
-    Ningún camino de producción lo recibe (lo verifica S8a). En S1 es un
-    contenedor sin efecto; el motor ensamblado (S2) lo aplicará.
+    Ningún camino de producción lo recibe (lo verifica S8a). Las claves son
+    códigos de referencia: `divisor_por_referencia` reemplaza el divisor de N
+    de esa referencia (el /18 de la plantilla) y `orden_explicito` es el
+    orden físico del Excel, que gobierna el desempate del ABC.
     """
 
     divisor_por_referencia: Optional[Mapping[str, int]] = None
     orden_explicito: Optional[Sequence[str]] = None
+
+
+@dataclass(frozen=True)
+class Advertencia:
+    """Aviso de la sucursal: código A-CORRIDA-nnn y mensaje en español."""
+
+    codigo: str
+    mensaje: str
+
+
+@dataclass(frozen=True)
+class LineaPedido:
+    """Una línea del pedido: los insumos crudos más todo lo calculado.
+
+    Los valores son `Fraction` exactas; se cuantizan sólo al persistir.
+    `peso` y `acumulado` son nulos cuando la suma de N no es positiva, y
+    `cobertura_final`/`cobertura_actual` cuando N = 0.
+    """
+
+    entrada: EntradaReferencia
+    n: Fraction
+    k_perdida: Fraction
+    l_ultimo_mes: Fraction
+    m_promedio: Fraction
+    peso: Optional[Fraction]
+    acumulado: Optional[Fraction]
+    orden_abc: int
+    clase_abc: str
+    clase_fms: str
+    clase: str
+    meses_con_venta: int
+    cobertura: Fraction
+    inventario_efectivo: Fraction
+    stock_objetivo: Fraction
+    pedido: Fraction
+    valor_pedido: Fraction
+    cobertura_final: Optional[Fraction]
+    cobertura_actual: Optional[Fraction]
+    punto_minimo: Fraction
+    punto_maximo: Fraction
+    estado_quiebre: str
+    advertencias: tuple[str, ...] = ()

@@ -10,11 +10,17 @@ import pytest
 import app.motored.services as servicios_pkg
 
 PAQUETE = Path(servicios_pkg.__file__).parent / "motor"
-MODULOS_S1 = {
+MODULOS_ESPERADOS = {
     "__init__", "aritmetica", "tipos", "ventana",
     "demanda", "cobertura", "pedido",
+    "clasificacion", "puntos", "resumen", "motor",
 }
-PROHIBIDOS = ("sqlalchemy", "app.motored.models", "app.motored.database", "asyncio")
+PROHIBIDOS = (
+    "sqlalchemy",
+    "app.motored.models",
+    "app.motored.database",
+    "asyncio",
+)
 
 
 def _importaciones(ruta: Path):
@@ -36,9 +42,9 @@ def _es_prohibido(nombre: str) -> bool:
     )
 
 
-def test_el_paquete_del_motor_existe_con_los_modulos_de_s1():
+def test_el_paquete_del_motor_existe_con_los_modulos_de_s1_y_s2():
     presentes = {p.stem for p in PAQUETE.glob("*.py")}
-    assert MODULOS_S1 <= presentes
+    assert MODULOS_ESPERADOS <= presentes
 
 
 @pytest.mark.parametrize(

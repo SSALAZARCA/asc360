@@ -65,6 +65,7 @@ def entrada(
 
 def atributos(
     *,
+    nombre: str = "SUCURSAL DE PRUEBA",
     fecha_corte: date = CORTE_POR_DEFECTO,
     fecha_apertura: Optional[date] = None,
     dias_empaque="3",
@@ -75,7 +76,7 @@ def atributos(
     """Sucursal tipo Manizales: I = 3 + 2 + 2.5 = 7.5 días."""
     return AtributosSucursal(
         sucursal_id=uuid4(),
-        nombre="SUCURSAL DE PRUEBA",
+        nombre=nombre,
         fecha_corte=fecha_corte,
         fecha_apertura=fecha_apertura,
         dias_empaque=_dec(dias_empaque),

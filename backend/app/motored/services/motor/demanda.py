@@ -5,7 +5,8 @@ ponderada N e indicadores informativos K/L/M.
 La demanda mensual es la venta más, con el switch ON, la demanda perdida por
 `factor_demanda_perdida` (por mes de ocurrencia). Con el switch OFF la
 pérdida no influye en NADA, ni siquiera en K. Los meses no operados por la
-sucursal (divisor dinámico) valen 0. El mes en curso (M0) no participa en S1.
+sucursal (divisor dinámico) valen 0. El mes en curso (M0) aún no
+participa (lo incorpora S3b).
 """
 from dataclasses import dataclass
 from fractions import Fraction
@@ -25,10 +26,13 @@ class Indicadores:
 
 
 def _validar_seis_meses(entrada: EntradaReferencia) -> None:
-    if len(entrada.ventas) != MESES_VENTANA or len(entrada.perdidas) != MESES_VENTANA:
+    if (
+        len(entrada.ventas) != MESES_VENTANA
+        or len(entrada.perdidas) != MESES_VENTANA
+    ):
         raise ValueError(
-            f"{entrada.codigo}: se esperan {MESES_VENTANA} meses de ventas y de "
-            f"demanda perdida"
+            f"{entrada.codigo}: se esperan {MESES_VENTANA} meses de ventas "
+            f"y de demanda perdida"
         )
 
 
@@ -54,7 +58,8 @@ def serie_demanda(entrada: EntradaReferencia, ventana: Ventana,
     )
 
 
-def demanda_ponderada(serie: tuple[Fraction, ...], ventana: Ventana) -> Fraction:
+def demanda_ponderada(serie: tuple[Fraction, ...],
+                      ventana: Ventana) -> Fraction:
     """N = sum(peso_i * d_i) / divisor, exacto. Divisor 0 no tiene N."""
     if ventana.sin_historia:
         raise ValueError("divisor 0: la sucursal debe omitirse (OMITIDA)")
@@ -63,7 +68,7 @@ def demanda_ponderada(serie: tuple[Fraction, ...], ventana: Ventana) -> Fraction
 
 def indicadores_informativos(entrada: EntradaReferencia, ventana: Ventana,
                              params: ParametrosMotor) -> Indicadores:
-    """K = pérdida usada en la ventana; L = demanda de M1; M = promedio de 6."""
+    """K = pérdida usada en la ventana; L = demanda de M1; M = media de 6."""
     serie = serie_demanda(entrada, ventana, params)
     k = sum(_perdida_usada(entrada, ventana, params), Fraction(0))
     return Indicadores(
