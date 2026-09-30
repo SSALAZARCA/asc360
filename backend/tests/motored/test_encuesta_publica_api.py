@@ -368,6 +368,18 @@ def test_submit_unique_violation_race_rolls_back_and_returns_409():
     assert session.rolled_back is True and session.committed is False
 
 
+def test_submit_other_integrity_error_is_not_reported_as_already_answered():
+    """A foreign-key or check violation is a real bug, never a 409 (2026-09-30)."""
+    rid, row = _target()
+    session = _session(
+        [row], cls=_CaseFakeSession,
+        raise_integrity_error=IntegrityError("COMMIT", {}, Exception("caso_detractor_respuesta_id_fkey")),
+    )
+    with pytest.raises(IntegrityError):
+        _submit(_payload(rid, satisfaccion_general=1))
+    assert session.rolled_back is True and session.committed is False
+
+
 def test_submit_is_rate_limited_per_ip():
     for _ in range(20):
         rid, row = _target()

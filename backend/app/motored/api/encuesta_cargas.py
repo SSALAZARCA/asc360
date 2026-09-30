@@ -111,6 +111,9 @@ async def cargar(
         usuario_id=uuid.UUID(user.user_id),
     )
     db.add(carga)
+    # No relationship() between these models, so flush the parent first:
+    # insert order across tables is not guaranteed to follow the foreign key.
+    await db.flush()
     for registro in registros:
         db.add(EncuestaRegistro(carga_id=carga.id, **registro))
     await db.commit()

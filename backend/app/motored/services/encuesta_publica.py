@@ -141,18 +141,31 @@ async def _registro_verificado(
     return row
 
 
-def _abrir_caso_detractor(db: AsyncSession, respuesta: EncuestaRespuesta, datos: dict) -> CasoDetractor:
-    """Add the ABIERTO case and its system APERTURA entry to the session."""
+async def _abrir_caso_detractor(db: AsyncSession, respuesta: EncuestaRespuesta, datos: dict) -> CasoDetractor:
+    """Insert the ABIERTO case and its system APERTURA entry.
+
+    The models declare no relationship(), so the unit of work does not order
+    these inserts by foreign key: each parent is flushed before its child is
+    added (the case once went in before its response and hit an FK violation).
+    """
     score = datos["satisfaccion_general"]
     caso = CasoDetractor(id=uuid.uuid4(), respuesta_id=respuesta.id, estado="ABIERTO")
     db.add(caso)
+    await db.flush()
     descripcion = f"Caso abierto automáticamente: satisfacción general {score}/5"
     if not datos["autoriza_datos"]:
         descripcion += " — el cliente NO autorizó tratamiento de datos"
     db.add(CasoDetractorAccion(
         id=uuid.uuid4(), caso_id=caso.id, usuario_id=None, tipo="APERTURA", descripcion=descripcion,
     ))
+    await db.flush()
+    await db.refresh(caso, attribute_names=["numero"])  # Identity value
     return caso
+
+
+def _es_respuesta_duplicada(error: IntegrityError) -> bool:
+    """Only the UNIQUE(registro_id) race means "already answered"."""
+    return "uq_encuesta_respuesta_registro_id" in str(error.orig)
 
 
 async def registrar_respuesta(
@@ -169,18 +182,20 @@ async def registrar_respuesta(
         db, cedula_raw=cedula_raw, celular_ultimos4=celular_ultimos4, registro_id=registro_id
     )
     respuesta = EncuestaRespuesta(id=uuid.uuid4(), registro_id=registro_id, **datos)
-    db.add(respuesta)
     caso: Optional[CasoDetractor] = None
     try:
-        if datos["satisfaccion_general"] <= DETRACTOR_MAX_SCORE:
-            caso = _abrir_caso_detractor(db, respuesta, datos)
+        db.add(respuesta)
         await db.flush()
-        if caso is not None:
-            await db.refresh(caso, attribute_names=["numero"])  # Identity value
+        if datos["satisfaccion_general"] <= DETRACTOR_MAX_SCORE:
+            caso = await _abrir_caso_detractor(db, respuesta, datos)
         await db.commit()
-    except IntegrityError:
-        # UNIQUE(registro_id) is the source of truth for the double-submit race.
+    except IntegrityError as error:
         await db.rollback()
+        if not _es_respuesta_duplicada(error):
+            # Anything else is a real bug: never disguise it as "already answered".
+            logger.exception("encuesta response insert failed")
+            raise
+        # UNIQUE(registro_id) is the source of truth for the double-submit race.
         logger.debug("encuesta response race: registro already answered")
         raise RespuestaYaRegistrada()
 
