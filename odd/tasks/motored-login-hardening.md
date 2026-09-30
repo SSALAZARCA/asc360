@@ -56,7 +56,8 @@ Not requested:
 - [x] T2 — start.sh prints only host/db (python heredoc with `||` fallback; verified never aborts and never prints the password).
 - [x] T3 — POST /api/motored/auth/password (actual+nueva, 5/min, fresh token, audited); tokens carry iat; migration b8d2f4a61c93 adds usuario.password_changed_at (set on admin reset and own change); older tokens → 401; "Cambiar mi contraseña" page /motored/mi-cuenta for all web roles. RED→GREEN; motored 2805, UM 1296, pg_real 78, jest 691.
 - [x] T4 — login/mi-cuenta/reset map 401/429/5xx/network to clear Spanish messages (never [object Object]); session-expired notice via sessionStorage flag set only when a 401 clears an existing session; login: show/hide, autocomplete, labels, role=alert, autofocus, forgot-password line; create-user: confirm field, hint, maxLength 72, aligned row. RED 17 → GREEN; jest 95/711; next build OK; screenshots 390/820/1280 reviewed.
-- [ ] T5
+- [x] T5 — per-cédula lock: 5 failures / 15-min fixed window → 429 "Demasiados intentos con esta cédula…" on /identificar and /respuestas; counts any cédula (no existence leak); success clears; in-memory, 10k cap, threading.Lock. Frontend shows backend detail. RED→GREEN; motored 2829, jest 712.
 
 ## Log
 - 2026-09-30: document created from the audit (see pending-issues memory, "Auditoría de login Motored").
+- 2026-09-30: ALL TASKS DONE (T1–T5). Still deferred by user: proxy/X-Forwarded-For (M4) and DB password rotation. Not requested: policy changes, forced first-login change, account lockout, email recovery.

@@ -17,6 +17,7 @@ from app.main import app
 from app.motored.models.caso_detractor import CasoDetractor
 from app.motored.models.caso_detractor_accion import CasoDetractorAccion
 from app.motored.models.encuesta_respuesta import EncuestaRespuesta
+from app.motored.services import encuesta_intentos
 from tests.motored.conftest import FakeAsyncSession, override_motored_db
 
 BASE = "/api/motored/encuesta/publico"
@@ -94,8 +95,10 @@ def _motored_ready(monkeypatch):
     monkeypatch.setattr(settings, "MOTORED_SECRET_KEY", "encuesta-publica-test-motored-secret")
     monkeypatch.setattr(settings, "SECRET_KEY", "encuesta-publica-test-asc360-secret")
     limiter.reset()  # in-memory per-IP counters must not leak between tests
+    encuesta_intentos.reset()  # ...nor the per-cedula failure counters
     yield
     limiter.reset()
+    encuesta_intentos.reset()
     app.dependency_overrides.clear()
 
 
@@ -219,11 +222,12 @@ def test_identificar_needs_no_authentication():
 
 
 def test_identificar_is_rate_limited_per_ip():
-    for _ in range(10):
+    # distinct cedulas: the per-cedula failure lock must not be what trips here
+    for n in range(10):
         _session([])
-        assert _identificar().status_code == 200
+        assert _identificar(cedula=str(1000 + n)).status_code == 200
     _session([])
-    assert _identificar().status_code == 429
+    assert _identificar(cedula="2000").status_code == 429
 
 
 # --- respuestas ----------------------------------------------------------------

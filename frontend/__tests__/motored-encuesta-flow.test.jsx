@@ -167,8 +167,16 @@ describe('cédula screen', () => {
     expect(screen.getByText(Q1)).toBeInTheDocument();
   });
 
-  it('HTTP 429 shows the rate-limit message', async () => {
-    setupFetch({ identificar: () => reply(429, { detail: 'rate' }) });
+  it('HTTP 429 shows the backend detail when present (per-cedula lock)', async () => {
+    const detail = 'Demasiados intentos con esta cédula. Espera unos minutos e inténtalo de nuevo.';
+    setupFetch({ identificar: () => reply(429, { detail }) });
+    render(<EncuestaPage />);
+    await identify();
+    expect(await screen.findByRole('alert')).toHaveTextContent(detail);
+  });
+
+  it('HTTP 429 without a detail (per-IP limiter) shows the generic rate-limit message', async () => {
+    setupFetch({ identificar: () => reply(429, { error: 'Rate limit exceeded: 10 per 1 minute' }) });
     render(<EncuestaPage />);
     await identify();
     expect(await screen.findByRole('alert')).toHaveTextContent(

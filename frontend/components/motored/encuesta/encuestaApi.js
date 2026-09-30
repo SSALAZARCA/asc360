@@ -14,7 +14,7 @@ async function post(path, payload) {
   }
   const data = await res.json().catch(() => ({}));
   if (res.ok) return { kind: 'ok', data };
-  if (res.status === 429) return { kind: 'rate' };
+  if (res.status === 429) return { kind: 'rate', detail: typeof data.detail === 'string' ? data.detail : null };
   if (res.status === 409) return { kind: 'conflict' };
   if (res.status === 404) return { kind: 'notfound' };
   return { kind: 'error' };

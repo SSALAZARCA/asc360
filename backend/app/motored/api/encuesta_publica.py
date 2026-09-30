@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.limiter import limiter
 from app.motored.deps import get_motored_db_or_503, require_motored_ready
+from app.motored.services import encuesta_intentos as intentos
 from app.motored.services import encuesta_publica as servicio
 
 router = APIRouter(
@@ -98,6 +99,12 @@ class RespuestaResponse(BaseModel):
     primer_nombre: str
 
 
+def _reject_if_locked(cedula_raw: str) -> None:
+    """Per-cedula brute-force guard, identical for existing and unknown cedulas."""
+    if intentos.is_locked(cedula_raw):
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=intentos.LOCKED_DETAIL)
+
+
 @router.post("/identificar", response_model=IdentificarResponse, response_model_exclude_none=True)
 @limiter.limit(IDENTIFICAR_LIMIT)
 async def identificar(
@@ -105,7 +112,12 @@ async def identificar(
     payload: IdentificarRequest,
     db: AsyncSession = Depends(get_motored_db_or_503),
 ):
+    _reject_if_locked(payload.cedula)
     resultado = await servicio.identificar(db, payload.cedula, payload.celular_ultimos4)
+    if resultado.estado == "NO_ENCONTRADA":
+        intentos.record_failure(payload.cedula)
+    else:
+        intentos.clear(payload.cedula)
     return IdentificarResponse(
         estado=resultado.estado,
         mensaje=servicio.NOT_FOUND_MESSAGE if resultado.estado == "NO_ENCONTRADA" else None,
@@ -122,6 +134,7 @@ async def responder(
     payload: RespuestaRequest,
     db: AsyncSession = Depends(get_motored_db_or_503),
 ):
+    _reject_if_locked(payload.cedula)
     datos = payload.model_dump(exclude={"cedula", "celular_ultimos4", "registro_id"})
     try:
         resultado = await servicio.registrar_respuesta(
@@ -132,9 +145,12 @@ async def responder(
             datos=datos,
         )
     except servicio.RegistroNoEncontrado:
+        intentos.record_failure(payload.cedula)
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="REGISTRO_NO_ENCONTRADO")
     except servicio.RespuestaYaRegistrada:
+        intentos.clear(payload.cedula)  # both identity factors matched
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="YA_RESPONDIDA")
+    intentos.clear(payload.cedula)
     return RespuestaResponse(
         clasificacion=resultado.clasificacion,
         caso_numero=resultado.caso_numero,

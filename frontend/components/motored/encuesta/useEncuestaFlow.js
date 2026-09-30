@@ -10,7 +10,7 @@ const BACK_STEP = { placa: 'cedula', q2: 'q1', q3: 'q2', q4: 'q3' };
 // Maps an /identificar outcome to the next screen and the state it needs.
 function routeIdentification(result, actions) {
   const { setError, setFecha, setCliente, setRegistroId, setStep } = actions;
-  if (result.kind === 'rate') return setError(COPY.rateLimited);
+  if (result.kind === 'rate') return setError(result.detail || COPY.rateLimited);
   if (result.kind === 'network') return setError(COPY.network);
   if (result.kind !== 'ok') return setError(COPY.genericIdentify);
   const { estado, mensaje, respondida_at: at, primer_nombre: nombre, registros } = result.data;
