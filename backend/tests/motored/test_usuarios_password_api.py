@@ -21,7 +21,7 @@ from tests.motored.conftest import FakeAsyncSession, override_motored_db, overri
 
 ALL_ROLES = ["ADMIN", "COMPRAS", "SUCURSAL", "CONSULTA"]
 USUARIOS_URL = "/api/motored/usuarios"
-NUEVA_PASSWORD = "nueva-clave-segura"
+NUEVA_PASSWORD = "nueva-clave-segura1"
 
 
 @pytest.fixture(autouse=True)
@@ -159,7 +159,7 @@ def test_create_usuario_rejects_a_password_shorter_than_the_minimum():
 
 
 def test_create_usuario_accepts_a_password_of_the_minimum_length():
-    response, session = _create_as_admin("12345678")
+    response, session = _create_as_admin("abcdefghi1")
 
     assert response.status_code == 201, response.text
     assert session.committed is True
@@ -167,7 +167,7 @@ def test_create_usuario_accepts_a_password_of_the_minimum_length():
 
 # --- bcrypt only hashes the first 72 BYTES; bcrypt 5 raises above that -------
 MSG_TOO_LONG = "La contraseña es demasiado larga (máximo 72 caracteres; tildes y emojis cuentan doble)."
-PASSWORD_72_BYTES = "a" * 72
+PASSWORD_72_BYTES = "a" * 71 + "1"
 PASSWORD_80_BYTES = "a" * 80
 
 

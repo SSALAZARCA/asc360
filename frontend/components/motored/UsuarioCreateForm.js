@@ -5,7 +5,7 @@
  */
 import { useState } from 'react';
 import PasswordField from './mi-cuenta/PasswordField';
-import { PASSWORD_MIN_LENGTH } from './CambiarPasswordForm';
+import { PASSWORD_HINT, ADMIN_FORCED_CHANGE_NOTE, newPasswordProblem } from '../../lib/motored/passwordRules';
 
 const ROLES = ['ADMIN', 'COMPRAS', 'SUCURSAL', 'CONSULTA', 'SERVICIO_CLIENTE'];
 const ROLE_LABELS = { SERVICIO_CLIENTE: 'Servicio al cliente' };
@@ -21,12 +21,6 @@ const fieldStyles = {
   input: { minHeight: 'auto' },
   toggle: { minHeight: '100%', minWidth: '36px' },
 };
-
-function validar(password, confirmacion) {
-  if (password.length < PASSWORD_MIN_LENGTH) return `La contraseña debe tener al menos ${PASSWORD_MIN_LENGTH} caracteres`;
-  if (password !== confirmacion) return 'Las contraseñas no coinciden';
-  return '';
-}
 
 function IdentityFields({ form, setField }) {
   return (
@@ -66,7 +60,7 @@ export default function UsuarioCreateForm({ onCreate }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const problema = validar(form.password, confirmacion);
+    const problema = newPasswordProblem(form.password, confirmacion);
     setError(problema);
     if (problema) return;
     if (await onCreate(form)) {
@@ -89,7 +83,10 @@ export default function UsuarioCreateForm({ onCreate }) {
       <RoleSelect value={form.role} onChange={(v) => setField('role', v)} />
       <button type="submit" className="motored-btn motored-btn-primary">Crear usuario</button>
       <p style={{ margin: 0, width: '100%', fontSize: '0.7rem', color: 'var(--motored-text-soft, #8a8a8a)' }}>
-        Mínimo {PASSWORD_MIN_LENGTH} caracteres (máximo 72).
+        {PASSWORD_HINT}
+      </p>
+      <p style={{ margin: 0, width: '100%', fontSize: '0.7rem', color: 'var(--motored-text-soft, #8a8a8a)' }}>
+        {ADMIN_FORCED_CHANGE_NOTE}
       </p>
       {error && <p role="alert" style={{ color: 'var(--motored-danger, #c0392b)', fontSize: '0.8rem', width: '100%', margin: 0 }}>{error}</p>}
     </form>

@@ -108,6 +108,7 @@ def _session_response(usuario: Usuario) -> MotoredLoginResponse:
             "nombre": usuario.nombre,
             "email": usuario.email,
             "role": role_value,
+            "must_change_password": bool(usuario.must_change_password),
         },
     )
 
@@ -135,7 +136,7 @@ async def change_own_password(
     usuario = result.scalars().first()
     if not usuario or not usuario.hashed_password or not verify_password(payload.actual, usuario.hashed_password):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="La contraseña actual no es correcta.")
-    validar_password(payload.nueva)
+    validar_password(payload.nueva, usuario.email)
     if payload.nueva == payload.actual:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

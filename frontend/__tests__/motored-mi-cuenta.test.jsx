@@ -45,7 +45,7 @@ describe('MiCuentaContainer', () => {
       expect(i).toHaveAttribute('type', 'password');
       expect(i).toHaveAttribute('maxLength', '72');
     });
-    expect(screen.getByText(/Mínimo 8 caracteres/i)).toBeInTheDocument();
+    expect(screen.getByText(/Mínimo 10 caracteres, con letras y números\./i)).toBeInTheDocument();
   });
 
   it('toggles visibility per field', () => {
@@ -70,7 +70,7 @@ describe('MiCuentaContainer', () => {
     render(<MiCuentaContainer />);
     fillAll('vieja-clave-1', 'corta', 'corta');
     submit();
-    expect(screen.getByRole('alert')).toHaveTextContent('al menos 8 caracteres');
+    expect(screen.getByRole('alert')).toHaveTextContent('al menos 10 caracteres');
     expect(mockChange).not.toHaveBeenCalled();
   });
 

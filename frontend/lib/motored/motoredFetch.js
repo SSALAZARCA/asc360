@@ -90,7 +90,23 @@ export async function motoredFetch(path, options = {}) {
     }
   }
 
+  if (response.status === 403) await flagPasswordChangeRequired(response);
+
   return response;
+}
+
+/** A 403 PASSWORD_CHANGE_REQUIRED means the stored session must go to mi-cuenta: flag it and wake the layout. */
+async function flagPasswordChangeRequired(response) {
+  if (typeof window === 'undefined') return;
+  try {
+    const body = await response.clone().json();
+    if (body?.detail?.code !== 'PASSWORD_CHANGE_REQUIRED') return;
+    const user = JSON.parse(sessionStorage.getItem(MOTORED_USER_KEY));
+    sessionStorage.setItem(MOTORED_USER_KEY, JSON.stringify({ ...user, must_change_password: true }));
+    window.dispatchEvent(new Event('storage'));
+  } catch {
+    /* not JSON or no stored user: leave the 403 to the caller */
+  }
 }
 
 /**

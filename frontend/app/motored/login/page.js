@@ -18,8 +18,8 @@ import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { Mail, ArrowRight } from 'lucide-react';
 import { login } from '../../../lib/motored/api';
-import { MOTORED_TOKEN_KEY, MOTORED_USER_KEY, MOTORED_EXPIRED_KEY } from '../../../lib/motored/motoredFetch';
-import { ROLE_SERVICIO_CLIENTE, SURVEY_ADMIN_PATH } from '../../../lib/motored/servicioCliente';
+import { MOTORED_EXPIRED_KEY } from '../../../lib/motored/motoredFetch';
+import { landingPathFor, storeSession } from '../../../lib/motored/session';
 import PasswordField from '../../../components/motored/mi-cuenta/PasswordField';
 
 // Same look as the email label above it (the scoped CSS cannot reach PasswordField).
@@ -61,10 +61,8 @@ function useLogin() {
     setError('');
     try {
       const data = await login(email, password);
-      sessionStorage.setItem(MOTORED_TOKEN_KEY, data.access_token);
-      sessionStorage.setItem(MOTORED_USER_KEY, JSON.stringify(data.user));
-      window.dispatchEvent(new Event('storage'));
-      router.push(data.user?.role === ROLE_SERVICIO_CLIENTE ? SURVEY_ADMIN_PATH : '/motored/maestros');
+      storeSession(data);
+      router.push(landingPathFor(data.user));
     } catch (err) {
       setError(err.message || 'No pudimos iniciar sesión. Inténtalo de nuevo.');
     } finally {

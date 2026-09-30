@@ -5,7 +5,7 @@ from typing import List, Optional
 from pydantic import BaseModel, ConfigDict
 
 
-PASSWORD_MIN_LENGTH = 8
+PASSWORD_MIN_LENGTH = 10
 # bcrypt only accepts 72 BYTES (UTF-8); bcrypt 5 raises above that.
 PASSWORD_MAX_BYTES = 72
 

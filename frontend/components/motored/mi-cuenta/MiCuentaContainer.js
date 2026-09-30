@@ -4,27 +4,35 @@
  * with a fresh session (other sessions are cut), which replaces the stored one
  * so this tab stays logged in.
  */
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import PasswordField from './PasswordField';
 import { changeOwnPassword } from '../../../lib/motored/api';
-import { MOTORED_TOKEN_KEY, MOTORED_USER_KEY } from '../../../lib/motored/motoredFetch';
-import { PASSWORD_MIN_LENGTH } from '../CambiarPasswordForm';
+import { MOTORED_USER_KEY } from '../../../lib/motored/motoredFetch';
+import { PASSWORD_HINT, FORCED_CHANGE_BANNER, newPasswordProblem } from '../../../lib/motored/passwordRules';
+import { homePathFor, storeSession } from '../../../lib/motored/session';
 
 const formStyle = { display: 'flex', flexDirection: 'column', gap: '1rem', width: '100%', maxWidth: '420px' };
 const msgStyle = { margin: 0, fontSize: '0.8rem', fontWeight: 700 };
+const bannerStyle = {
+  maxWidth: '420px', margin: '0.75rem 0', padding: '0.75rem 1rem', borderRadius: 'var(--motored-radius-sm, 4px)', fontSize: '0.8rem', fontWeight: 700,
+  background: 'var(--motored-danger-bg, #fdecea)', border: '1px solid var(--motored-danger, #c0392b)', color: 'var(--motored-danger, #c0392b)',
+};
 
-function validar(nueva, confirmacion) {
-  if (nueva.length < PASSWORD_MIN_LENGTH) return `La contraseña debe tener al menos ${PASSWORD_MIN_LENGTH} caracteres`;
-  if (nueva !== confirmacion) return 'Las contraseñas no coinciden';
-  return '';
-}
-
-function storeSession(data) {
-  sessionStorage.setItem(MOTORED_TOKEN_KEY, data.access_token);
-  sessionStorage.setItem(MOTORED_USER_KEY, JSON.stringify(data.user));
+/** Stored user flagged for a forced change; read once on mount, so the banner survives the change. */
+function useForcedChange() {
+  return useMemo(() => {
+    try {
+      return Boolean(JSON.parse(sessionStorage.getItem(MOTORED_USER_KEY))?.must_change_password);
+    } catch {
+      return false;
+    }
+  }, []);
 }
 
 export default function MiCuentaContainer() {
+  const router = useRouter();
+  const forced = useForcedChange();
   const [actual, setActual] = useState('');
   const [nueva, setNueva] = useState('');
   const [confirmacion, setConfirmacion] = useState('');
@@ -35,14 +43,16 @@ export default function MiCuentaContainer() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setOk(false);
-    const problema = validar(nueva, confirmacion);
+    const problema = newPasswordProblem(nueva, confirmacion);
     setError(problema);
     if (problema) return;
     setBusy(true);
     try {
-      storeSession(await changeOwnPassword(actual, nueva));
+      const data = await changeOwnPassword(actual, nueva);
+      storeSession(data);
       setActual(''); setNueva(''); setConfirmacion('');
       setOk(true);
+      if (forced) router.push(homePathFor(data.user?.role));
     } catch (err) {
       setError(err.message || 'No se pudo cambiar la contraseña.');
     } finally {
@@ -53,6 +63,7 @@ export default function MiCuentaContainer() {
   return (
     <section>
       <h1 className="motored-t-interfaz" style={{ fontWeight: 700, fontSize: '1.1rem' }}>Cambiar mi contraseña</h1>
+      {forced && <p role="alert" style={bannerStyle}>{FORCED_CHANGE_BANNER}</p>}
       <p style={{ fontSize: '0.8rem', color: 'var(--motored-text-muted, #5a5a5a)' }}>
         Al cambiarla, se cierran tus otras sesiones abiertas. Esta sigue activa.
       </p>
@@ -60,7 +71,7 @@ export default function MiCuentaContainer() {
         <PasswordField label="Contraseña actual" value={actual} onChange={setActual} autoComplete="current-password" />
         <PasswordField
           label="Nueva contraseña" value={nueva} onChange={setNueva} autoComplete="new-password"
-          hint={`Mínimo ${PASSWORD_MIN_LENGTH} caracteres (máximo 72).`}
+          hint={PASSWORD_HINT}
         />
         <PasswordField label="Confirmar nueva contraseña" value={confirmacion} onChange={setConfirmacion} autoComplete="new-password" />
         {error && <p role="alert" style={{ ...msgStyle, color: 'var(--motored-danger, #c0392b)' }}>{error}</p>}

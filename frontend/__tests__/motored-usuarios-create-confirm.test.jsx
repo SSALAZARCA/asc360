@@ -38,16 +38,16 @@ async function fill(pw, confirm) {
 
 describe('create-user password fields', () => {
   it('blocks submit when confirmation differs', async () => {
-    await fill('abcdefgh', 'abcdefgX');
+    await fill('abcdefgh12', 'abcdefgh1X');
     expect(await screen.findByRole('alert')).toHaveTextContent('Las contraseñas no coinciden');
     expect(mockCreateUsuario).not.toHaveBeenCalled();
   });
 
   it('submits when both match and sends only the password', async () => {
-    await fill('abcdefgh', 'abcdefgh');
+    await fill('abcdefgh12', 'abcdefgh12');
     await waitFor(() => expect(mockCreateUsuario).toHaveBeenCalled());
     expect(mockCreateUsuario.mock.calls[0][0]).toEqual(
-      expect.objectContaining({ password: 'abcdefgh', email: 'ana@x.co' }),
+      expect.objectContaining({ password: 'abcdefgh12', email: 'ana@x.co' }),
     );
     expect(mockCreateUsuario.mock.calls[0][0]).not.toHaveProperty('confirmacion');
   });
@@ -57,7 +57,26 @@ describe('create-user password fields', () => {
     const pw = await screen.findByLabelText('Contraseña');
     expect(pw).toHaveAttribute('autocomplete', 'new-password');
     expect(pw).toHaveAttribute('maxlength', '72');
-    expect(screen.getByText(/Mínimo 8 caracteres/)).toBeInTheDocument();
+    expect(screen.getByText(/Mínimo 10 caracteres, con letras y números\./)).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: /Mostrar/ }).length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe('create-user password rules and forced-change note', () => {
+  it('blocks a password without a digit and never calls the API', async () => {
+    await fill('soloLetrasAqui', 'soloLetrasAqui');
+    expect(await screen.findByRole('alert')).toHaveTextContent('al menos un número');
+    expect(mockCreateUsuario).not.toHaveBeenCalled();
+  });
+
+  it('blocks a password shorter than 10 characters', async () => {
+    await fill('abcdefgh1', 'abcdefgh1');
+    expect(await screen.findByRole('alert')).toHaveTextContent('al menos 10 caracteres');
+    expect(mockCreateUsuario).not.toHaveBeenCalled();
+  });
+
+  it('tells the admin the user must change the password on first login', async () => {
+    render(<UsuariosPage />);
+    expect(await screen.findByText('El usuario deberá cambiar esta contraseña al ingresar.')).toBeInTheDocument();
   });
 });

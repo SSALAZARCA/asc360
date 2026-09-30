@@ -191,7 +191,7 @@ def test_same_password_is_rejected():
     assert r.json()["detail"] == "La nueva contraseña debe ser distinta de la actual."
 
 
-@pytest.mark.parametrize("nueva,fragment", [("corta", "al menos 8"), ("a" * 73, "72")])
+@pytest.mark.parametrize("nueva,fragment", [("corta", "al menos 10"), ("a" * 73, "72")])
 def test_new_password_length_rules(nueva, fragment):
     u = _usuario()
     r, _ = _post(u, {"actual": ACTUAL, "nueva": nueva})

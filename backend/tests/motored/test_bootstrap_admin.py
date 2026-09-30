@@ -73,7 +73,7 @@ async def test_missing_database_url_fails_clearly(monkeypatch, capsys):
 
 
 async def test_first_run_creates_admin(motored_sqlite_engine, monkeypatch):
-    monkeypatch.setenv("MOTORED_ADMIN_PASSWORD", "un-password-de-prueba")
+    monkeypatch.setenv("MOTORED_ADMIN_PASSWORD", "un-password-de-prueba1")
 
     await create_motored_admin.create_motored_admin()
 
@@ -83,11 +83,11 @@ async def test_first_run_creates_admin(motored_sqlite_engine, monkeypatch):
     assert admin.email == "asalazarc@motoredcolombia.com.co"
     assert admin.role == MotoredRole.ADMIN
     assert admin.activo is True
-    assert verify_password("un-password-de-prueba", admin.hashed_password)
+    assert verify_password("un-password-de-prueba1", admin.hashed_password)
 
 
 async def test_second_run_is_noop_and_never_resets_password(motored_sqlite_engine, monkeypatch):
-    monkeypatch.setenv("MOTORED_ADMIN_PASSWORD", "primera-contraseña")
+    monkeypatch.setenv("MOTORED_ADMIN_PASSWORD", "primera-contraseña1")
     await create_motored_admin.create_motored_admin()
 
     first_admin = await _fetch_admin(motored_sqlite_engine)
@@ -95,7 +95,7 @@ async def test_second_run_is_noop_and_never_resets_password(motored_sqlite_engin
     first_hash = first_admin.hashed_password
 
     # Segunda corrida con una contraseña DISTINTA -- no debe pisar nada.
-    monkeypatch.setenv("MOTORED_ADMIN_PASSWORD", "segunda-contraseña-distinta")
+    monkeypatch.setenv("MOTORED_ADMIN_PASSWORD", "segunda-contraseña-distinta1")
     await create_motored_admin.create_motored_admin()
 
     session_maker = async_sessionmaker(
@@ -110,8 +110,8 @@ async def test_second_run_is_noop_and_never_resets_password(motored_sqlite_engin
     assert len(rows) == 1
     assert rows[0].id == first_id
     assert rows[0].hashed_password == first_hash
-    assert verify_password("primera-contraseña", rows[0].hashed_password)
-    assert not verify_password("segunda-contraseña-distinta", rows[0].hashed_password)
+    assert verify_password("primera-contraseña1", rows[0].hashed_password)
+    assert not verify_password("segunda-contraseña-distinta1", rows[0].hashed_password)
 
 
 @pytest.mark.parametrize("bad", ["corta", "a" * 73])
@@ -125,3 +125,20 @@ def test_resolve_password_rejects_out_of_range_without_printing_it(monkeypatch, 
     out = capsys.readouterr()
     assert bad not in out.out + out.err
     assert "contraseña" in (out.out + out.err).lower()
+
+
+@pytest.mark.parametrize("bad", ["abcdefgh1", "soloLetrasAqui", "8675309421", "Password123", "xxasalazarc99"])
+def test_resolve_password_applies_the_same_policy_as_the_api(monkeypatch, capsys, bad):
+    monkeypatch.setenv("MOTORED_ADMIN_PASSWORD", bad)
+
+    with pytest.raises(SystemExit):
+        create_motored_admin._resolve_password()
+
+    out = capsys.readouterr()
+    assert bad not in out.out + out.err
+
+
+def test_resolve_password_accepts_a_compliant_password(monkeypatch):
+    monkeypatch.setenv("MOTORED_ADMIN_PASSWORD", "una-clave-valida-2026x")
+
+    assert create_motored_admin._resolve_password() == "una-clave-valida-2026x"

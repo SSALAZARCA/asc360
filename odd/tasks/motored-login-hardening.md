@@ -80,7 +80,7 @@ Defaults chosen (user can adjust):
 | T10 | Login event log + ADMIN screen (migration) | delegated writer (with T9) |
 
 - [x] T6 — notice shortened; RED 1 failed → GREEN 6 passed (motored-login-ux).
-- [ ] T7
-- [ ] T8
+- [x] T7 — policy: min 10, letter+digit, ~120-entry denylist, no email local part (≥4); 72-byte max kept; new passwords only (old 8-char still log in); frontend rules in lib/motored/passwordRules.js.
+- [x] T8 — usuario.must_change_password (migration c4e7a19b3d58 on b8d2f4a61c93); set on admin create/reset, cleared on own change; server 403 PASSWORD_CHANGE_REQUIRED everywhere except POST /auth/password; frontend forces /motored/mi-cuenta with banner. RED→GREEN; motored 3005, UM 1296, pg_real 91, jest 737.
 - [ ] T9
 - [ ] T10

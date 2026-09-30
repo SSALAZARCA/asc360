@@ -95,6 +95,7 @@ export default function MotoredSidebar({ user, open = false, onClose }) {
   const pathname = usePathname();
 
   const menuItems = ALL_ITEMS.filter((item) => {
+    if (user?.must_change_password) return item.id === 'mi-cuenta';
     if (item.roles) return item.roles.includes(user?.role);
     if (user?.role === 'SERVICIO_CLIENTE') return false;
     return !item.adminOnly || user?.role === 'ADMIN';

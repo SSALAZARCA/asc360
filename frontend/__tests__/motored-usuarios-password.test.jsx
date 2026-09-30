@@ -49,7 +49,7 @@ const ASESOR = {
   activo: true, status: 'approved', telegram_vinculado: true,
 };
 
-const NUEVA = 'nueva-clave-segura';
+const NUEVA = 'nueva-clave-segura1';
 
 beforeEach(() => {
   mockListUsuarios.mockReset().mockResolvedValue([ADMIN, COMPRAS, ASESOR]);
@@ -95,13 +95,13 @@ describe('UsuariosPage — cambiar contraseña', () => {
     expect(screen.getByLabelText('Confirmar contraseña')).toHaveValue('');
   });
 
-  it('rejects a password shorter than 8 characters without calling the API', async () => {
+  it('rejects a password shorter than 10 characters without calling the API', async () => {
     await abrirFormularioDe('Carla Compras');
 
     completar('corta', 'corta');
     fireEvent.click(screen.getByRole('button', { name: 'Guardar contraseña' }));
 
-    expect(screen.getByText(/al menos 8 caracteres/)).toBeInTheDocument();
+    expect(screen.getByText(/al menos 10 caracteres/)).toBeInTheDocument();
     expect(mockResetPasswordUsuario).not.toHaveBeenCalled();
   });
 
@@ -144,6 +144,23 @@ describe('UsuariosPage — cambiar contraseña', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
 
     expect(screen.queryByLabelText('Nueva contraseña')).not.toBeInTheDocument();
+    expect(mockResetPasswordUsuario).not.toHaveBeenCalled();
+  });
+});
+
+describe('admin reset: forced-change note and letter/digit checks', () => {
+  it('tells the admin the user must change the password on next login', async () => {
+    await abrirFormularioDe('Carla Compras');
+    const form = within(screen.getByText(/Cambiar contraseña de/).closest('form'));
+    expect(form.getByText('El usuario deberá cambiar esta contraseña al ingresar.')).toBeInTheDocument();
+    expect(form.getByText('Mínimo 10 caracteres, con letras y números.')).toBeInTheDocument();
+  });
+
+  it('rejects a password without a digit without calling the API', async () => {
+    await abrirFormularioDe('Carla Compras');
+    completar('soloLetrasAqui', 'soloLetrasAqui');
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar contraseña' }));
+    expect(screen.getByText(/al menos un número/)).toBeInTheDocument();
     expect(mockResetPasswordUsuario).not.toHaveBeenCalled();
   });
 });

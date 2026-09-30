@@ -91,6 +91,8 @@ class Usuario(MotoredBase):
 
     # Naive UTC. Sessions (JWTs) issued before this instant are rejected.
     password_changed_at = Column(DateTime, nullable=True)
+    # True after an admin create/reset: only POST /auth/password works until cleared.
+    must_change_password = Column(Boolean, nullable=False, default=False, server_default=text("false"))
 
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

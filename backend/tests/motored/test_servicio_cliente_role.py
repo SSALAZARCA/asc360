@@ -224,7 +224,7 @@ def test_admin_can_create_a_servicio_cliente_user_with_web_credentials():
     override_motored_db(session)
 
     body = dict(
-        nombre="Agente SC", email="sc@x.com", password="12345678", role="SERVICIO_CLIENTE"
+        nombre="Agente SC", email="sc@x.com", password="clave-valida-77", role="SERVICIO_CLIENTE"
     )
     response = TestClient(app).post("/api/motored/usuarios", json=body)
 

@@ -44,6 +44,7 @@ class MotoredUser:
     activo: bool = True
     status: str = "approved"
     password_changed_at: Optional[datetime] = None
+    must_change_password: bool = False
 
 
 MotoredUserLookup = Callable[[str], Awaitable[Optional[MotoredUser]]]
@@ -80,6 +81,7 @@ async def obtener_usuario_motored(db: AsyncSession, user_id: str) -> Optional[Mo
         # rows keep behaving exactly like a real, already-migrated row.
         status=usuario.status or "approved",
         password_changed_at=usuario.password_changed_at,
+        must_change_password=bool(usuario.must_change_password),
     )
 
 

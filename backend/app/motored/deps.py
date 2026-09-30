@@ -50,6 +50,10 @@ SERVICIO_CLIENTE_ALLOWED_PREFIXES = (
     "/api/motored/detractores",
 )
 
+# While `must_change_password` is set, the only endpoint a user may call.
+PASSWORD_CHANGE_REQUIRED_DETAIL = {"code": "PASSWORD_CHANGE_REQUIRED"}
+PASSWORD_CHANGE_PATH = "/api/motored/auth/password"
+
 
 def _path_in_prefixes(path: str, prefixes) -> bool:
     """Prefix match on segment boundaries (`/encuesta-x` is not `/encuesta`)."""
@@ -129,6 +133,12 @@ async def get_current_motored_user(
         # a `pending`/`rejected` account of ANY role must not be treated as
         # authenticated just because its token still decodes.
         raise credentials_exception
+
+    if user.must_change_password and request.url.path != PASSWORD_CHANGE_PATH:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=PASSWORD_CHANGE_REQUIRED_DETAIL,
+        )
 
     if user.role == SERVICIO_CLIENTE_ROLE and not _path_in_prefixes(
         request.url.path, SERVICIO_CLIENTE_ALLOWED_PREFIXES

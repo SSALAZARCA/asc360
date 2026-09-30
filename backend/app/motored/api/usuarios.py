@@ -119,7 +119,7 @@ async def create_usuario(
     db: AsyncSession = Depends(get_motored_db_or_503),
     user: MotoredUser = Depends(_require_admin),
 ) -> dict:
-    validar_password(payload.password)
+    validar_password(payload.password, payload.email)
     try:
         role = MotoredRole(payload.role)
     except ValueError:
@@ -133,6 +133,7 @@ async def create_usuario(
         nombre=payload.nombre,
         email=payload.email,
         hashed_password=get_password_hash(payload.password),
+        must_change_password=True,
         role=role,
         activo=True,
     )
@@ -155,14 +156,14 @@ async def reset_password_usuario(
     """Un ADMIN fija una contraseña nueva para un usuario con acceso web
     (también la suya). Guarda solo el hash; la respuesta es el usuario sin
     contraseña y la auditoría registra el cambio sin valores."""
-    validar_password(payload.password)
     usuario = await _get_or_404(db, usuario_id)
+    validar_password(payload.password, usuario.email)
     if not _tiene_acceso_web(usuario):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="SIN_ACCESO_WEB: el usuario no tiene acceso web (sin email o asesor de mostrador)",
         )
-    aplicar_password(usuario, payload.password)
+    aplicar_password(usuario, payload.password, must_change=True)
     auditoria.audit_password_reset(db, "usuario", usuario.id, uuid.UUID(user.user_id))
     await db.commit()
     return _to_read(usuario)

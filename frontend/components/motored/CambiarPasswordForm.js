@@ -4,21 +4,15 @@
  *
  * Small form the ADMIN uses on the Usuarios screen to set a new password for
  * one user (feature odd/motored-salir-y-cambio-password, T3). It checks the
- * minimum length and that both inputs match BEFORE calling `onSubmit`, never
+ * password rules (length, letter, digit) and that both inputs match BEFORE calling `onSubmit`, never
  * pre-fills the inputs and never renders the typed password anywhere.
  */
 import { useState } from 'react';
-
-export const PASSWORD_MIN_LENGTH = 8;
+import { PASSWORD_HINT, ADMIN_FORCED_CHANGE_NOTE, PASSWORD_MAX_LENGTH, newPasswordProblem } from '../../lib/motored/passwordRules';
 
 const labelStyle = { display: 'flex', flexDirection: 'column', fontSize: '0.7rem', color: 'var(--motored-text-muted, #5a5a5a)' };
+const noteStyle = { margin: 0, fontSize: '0.7rem', color: 'var(--motored-text-soft, #8a8a8a)' };
 const errorStyle = { color: 'var(--motored-danger, #c0392b)', fontSize: '0.8rem', margin: 0 };
-
-function validar(nueva, confirmacion) {
-  if (nueva.length < PASSWORD_MIN_LENGTH) return `La contraseña debe tener al menos ${PASSWORD_MIN_LENGTH} caracteres`;
-  if (nueva !== confirmacion) return 'Las contraseñas no coinciden';
-  return '';
-}
 
 export default function CambiarPasswordForm({ usuario, onSubmit, onCancel, serverError }) {
   const [nueva, setNueva] = useState('');
@@ -27,7 +21,7 @@ export default function CambiarPasswordForm({ usuario, onSubmit, onCancel, serve
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    const problema = validar(nueva, confirmacion);
+    const problema = newPasswordProblem(nueva, confirmacion);
     setErrorLocal(problema);
     if (!problema) onSubmit(nueva);
   };
@@ -37,9 +31,9 @@ export default function CambiarPasswordForm({ usuario, onSubmit, onCancel, serve
   return (
     <form onSubmit={handleSubmit} style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
       <strong style={{ fontSize: '0.8rem', width: '100%' }}>Cambiar contraseña de {usuario.nombre}</strong>
-      <label style={labelStyle} title={`Mínimo ${PASSWORD_MIN_LENGTH} caracteres`}>
+      <label style={labelStyle} title={PASSWORD_HINT}>
         Nueva contraseña
-        <input type="password" autoComplete="new-password" value={nueva} onChange={(e) => setNueva(e.target.value)} />
+        <input type="password" autoComplete="new-password" maxLength={PASSWORD_MAX_LENGTH} value={nueva} onChange={(e) => setNueva(e.target.value)} />
       </label>
       <label style={labelStyle} title="Repita la contraseña para evitar errores de digitación">
         Confirmar contraseña
@@ -47,6 +41,8 @@ export default function CambiarPasswordForm({ usuario, onSubmit, onCancel, serve
       </label>
       <button type="submit" className="motored-btn motored-btn-primary">Guardar contraseña</button>
       <button type="button" className="motored-row-action" onClick={onCancel}>Cancelar</button>
+      <p style={{ ...noteStyle, width: '100%' }}>{PASSWORD_HINT}</p>
+      <p style={{ ...noteStyle, width: '100%' }}>{ADMIN_FORCED_CHANGE_NOTE}</p>
       {error && <p style={{ ...errorStyle, width: '100%' }}>{error}</p>}
     </form>
   );
