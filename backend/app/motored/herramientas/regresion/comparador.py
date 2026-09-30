@@ -238,6 +238,12 @@ def _diferencia(codigo: str, fila: Optional[int], columna: str,
     )
 
 
+def nueva_diferencia(codigo: str, fila: Optional[int], columna: str,
+                     excel, motor, categoria: str) -> Diferencia:
+    """Diferencia con los valores formateados como en los niveles A y B."""
+    return _diferencia(codigo, fila, columna, excel, motor, categoria)
+
+
 def _pares(fila: FilaExcel, linea: LineaPedido) -> list[tuple]:
     """(columna, valor Excel, valor motor, tolerancia) de una fila."""
     return [
@@ -329,6 +335,8 @@ def _cambios_por_empate(lectura: LecturaExcel, resultado: ResultadoSucursal,
     cambios = {}
     for linea in resultado.lineas:
         codigo = linea.entrada.codigo
+        if codigo not in filas:
+            continue  # sólo en la aplicación (nivel B): sin fila del Excel
         propios = _valores_motor(filas[codigo], linea)
         previos = _valores_motor(filas[codigo], base[codigo])
         columnas = frozenset(c for c, v in propios.items() if previos[c] != v)
@@ -338,10 +346,11 @@ def _cambios_por_empate(lectura: LecturaExcel, resultado: ResultadoSucursal,
 
 
 def _globales(lectura: LecturaExcel, params: ParametrosMotor, nivel: str,
-              por_empate: Mapping[str, frozenset[str]]) -> _Globales:
+              por_empate: Mapping[str, frozenset[str]],
+              cascada_externa: bool = False) -> _Globales:
     return _Globales(
         nivel=nivel,
-        hay_divisor_distinto=any(
+        hay_divisor_distinto=cascada_externa or any(
             fila.divisor not in (None, DIVISOR_EXCEL_HABITUAL)
             for fila in lectura.filas
         ),
@@ -476,23 +485,45 @@ def _aceptadas(diferencias: Sequence[Diferencia],
     ]
 
 
+@dataclass(frozen=True)
+class InsumosNivel:
+    """Insumos del motor cuando no son los del libro (nivel B).
+
+    `cascada_externa` indica que hay entradas distintas a las del Excel: el
+    cambio de la suma de N y del orden mueve peso, acumulado y clase de las
+    demás filas (categoría T2).
+    """
+
+    entradas: Sequence[EntradaReferencia]
+    atributos: AtributosSucursal
+    params: ParametrosMotor
+    cascada_externa: bool = False
+
+
+def _insumos_del_libro(lectura: LecturaExcel) -> InsumosNivel:
+    return InsumosNivel(
+        entradas_de(lectura), atributos_de(lectura), ParametrosMotor()
+    )
+
+
 def _ejecutar_nivel(lectura: LecturaExcel, nivel: str,
                     aceptaciones: Optional[Mapping[str, str]],
                     ajustes: Optional[AjustesPrueba],
-                    referencia: Optional[AjustesPrueba] = None
-                    ) -> ResultadoNivel:
-    params = ParametrosMotor()
-    atributos = atributos_de(lectura)
+                    referencia: Optional[AjustesPrueba] = None,
+                    insumos: Optional[InsumosNivel] = None,
+                    etiqueta: Optional[str] = None) -> ResultadoNivel:
+    insumos = insumos or _insumos_del_libro(lectura)
+    params, atributos = insumos.params, insumos.atributos
     verificar_precondiciones(params, atributos)
-    entradas = entradas_de(lectura)
     resultado = calcular_sucursal(
-        entradas, atributos, params, ajustes_prueba=ajustes
+        insumos.entradas, atributos, params, ajustes_prueba=ajustes
     )
     base = None if referencia is None else calcular_sucursal(
-        entradas, atributos, params, ajustes_prueba=referencia
+        insumos.entradas, atributos, params, ajustes_prueba=referencia
     )
     globales = _globales(
-        lectura, params, nivel, _cambios_por_empate(lectura, resultado, base)
+        lectura, params, nivel, _cambios_por_empate(lectura, resultado, base),
+        insumos.cascada_externa,
     )
     filas = _aceptadas(
         _comparar_filas(lectura, resultado, globales), aceptaciones or {}
@@ -502,7 +533,7 @@ def _ejecutar_nivel(lectura: LecturaExcel, nivel: str,
         filas + _comparar_coberturas(lectura, atributos, params)
         + _comparar_resumen(lectura, resultado, derivada)
     )
-    return _resultado(nivel, lectura, diferencias)
+    return _resultado(etiqueta or nivel, lectura, diferencias)
 
 
 def ejecutar_nivel_a1(lectura: LecturaExcel,
@@ -518,4 +549,15 @@ def ejecutar_nivel_a2(lectura: LecturaExcel,
     """Nivel A2: divisor 21 siempre y el orden propio del motor."""
     return _ejecutar_nivel(
         lectura, "A2", aceptaciones, None, ajustes_orden_fisico(lectura)
+    )
+
+
+def ejecutar_salidas_nivel_b(lectura: LecturaExcel, insumos: InsumosNivel,
+                             aceptaciones: Optional[Mapping[str, str]] = None
+                             ) -> ResultadoNivel:
+    """Salidas del nivel B: el motor sobre las entradas de la aplicación,
+    comparado con el Excel con las reglas del A2 (divisor 21, orden propio)."""
+    return _ejecutar_nivel(
+        lectura, "A2", aceptaciones, None, ajustes_orden_fisico(lectura),
+        insumos=insumos, etiqueta="B-salidas",
     )
