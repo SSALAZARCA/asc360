@@ -13,7 +13,8 @@ reúne las reglas del ciclo de vida por tienda:
   la corrida `FOR SHARE` y las tiendas `FOR UPDATE` en orden de
   `sucursal_id` (cargas -> corrida -> tienda, el orden global de
   `bloqueos.py`); un cierre espera a las ediciones en vuelo de esa tienda y
-  las ve cerradas después. Escribe un evento CERRADO por tienda.
+  las ve cerradas después. Escribe un evento CERRADO por tienda, con el tope
+  de presupuesto en vigor congelado en su `detalle` (B5b).
 - `reabrir_tienda` (B3a): CERRADO -> BORRADOR con un motivo obligatorio y un
   evento REABIERTO; nunca toca a otra tienda. Enviar es de `envio.py` (B3b).
 - `resumen_pedidos`: cuántas tiendas OK están en cada estado, para la lista.
@@ -28,7 +29,7 @@ Ningún commit acá: la transacción es del llamador.
 from typing import Any, Dict, Iterable, List, NamedTuple, Optional, Sequence
 from uuid import UUID
 
-from sqlalchemy import func, insert, select, update
+from sqlalchemy import func, insert, null, select, update
 
 from app.motored.models.corrida import Corrida
 from app.motored.models.corrida_sucursal import CorridaSucursal
@@ -38,6 +39,7 @@ from app.motored.services.corridas import (
     codigos,
     envio,
     estados,
+    tope,
 )
 from app.motored.services.corridas.codigos import ErrorCorrida
 
@@ -133,9 +135,10 @@ async def _cerrar(
     for tienda in elegidas:
         tienda.estado_pedido = estados.PEDIDO_CERRADO
     await db.flush()
+    ids = [t.sucursal_id for t in elegidas]
     await _escribir_eventos(
-        db, corrida_id, EVENTO_CERRADO, [t.sucursal_id for t in elegidas],
-        usuario_id)
+        db, corrida_id, EVENTO_CERRADO, ids, usuario_id,
+        detalles=await tope.topes_congelados(db, ids))
     return corrida, elegidas, len(filas) - len(elegidas)
 
 
@@ -150,11 +153,18 @@ def _exigir_con_pedido(filas: list) -> None:
 async def _escribir_eventos(
     db, corrida_id: UUID, evento: str, sucursal_ids: Iterable[UUID],
     usuario_id: UUID, *, motivo: Optional[str] = None,
+    detalles: Optional[Dict[UUID, Dict[str, str]]] = None,
 ) -> None:
-    """Una fila de `pedido_evento` por tienda (el padre ya se actualizó)."""
+    """Una fila de `pedido_evento` por tienda (el padre ya se actualizó);
+    `detalles` trae, por tienda, el `detalle` JSON del evento (el tope
+    congelado al cerrar); sin él la columna queda en NULL de SQL (un `None`
+    de Python se guardaría como el JSON `null`)."""
+    detalles = detalles or {}
     await db.execute(insert(PedidoEvento).values([
         {"corrida_id": corrida_id, "sucursal_id": sucursal_id,
-         "evento": evento, "motivo": motivo, "usuario_id": usuario_id}
+         "evento": evento, "motivo": motivo,
+         "detalle": detalles.get(sucursal_id, null()),
+         "usuario_id": usuario_id}
         for sucursal_id in sucursal_ids]))
 
 

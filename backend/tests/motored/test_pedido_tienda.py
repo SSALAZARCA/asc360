@@ -11,12 +11,14 @@ se escriben y que un rechazo no escribe nada. Las mismas reglas contra
 Postgres real corren en `pg_real/test_pedido_tienda_pg.py` y
 `pg_real/test_pedido_concurrencia_pg.py`.
 """
+import datetime
 import uuid
 from types import SimpleNamespace
 
 import pytest
 from sqlalchemy.dialects import postgresql
 
+from app.motored.models.parametro_metodologia import ParametroMetodologia
 from app.motored.services.corridas import codigos, pedido_tienda
 from tests.motored.conftest import FakeAsyncSession
 from tests.motored.fixtures import corridas_api as fx
@@ -40,6 +42,12 @@ def _corrida(**campos):
     return SimpleNamespace(**{**base, **campos})
 
 
+def _param(clave, valor, sucursal_id=None):
+    return ParametroMetodologia(
+        id=uuid.uuid4(), clave=clave, valor=valor,
+        vigente_desde=datetime.date(2026, 9, 28), sucursal_id=sucursal_id)
+
+
 def _tienda(sucursal_id=SUC_A, estado_pedido="BORRADOR", estado="OK"):
     return SimpleNamespace(
         corrida_id=CORRIDA, sucursal_id=sucursal_id, estado=estado,
@@ -50,10 +58,12 @@ def _fila(sucursal_id=SUC_A, nombre="UNO", **campos):
     return (_tienda(sucursal_id, **campos), nombre)
 
 
-def _sesion(*, cargas=(), corrida=None, tiendas=None, escribe=True):
+def _sesion(*, cargas=(), corrida=None, tiendas=None, escribe=True,
+            parametros=()):
     """Cola en el orden en que `cerrar_todas` consulta: las cargas, la
-    corrida, las tiendas y, si escribe, la respuesta del INSERT de eventos.
-    Un paso que falla corta la cola: el resto no se consulta."""
+    corrida, las tiendas y, si escribe, los parámetros del tope vigente (B5b)
+    y la respuesta del INSERT de eventos. Un paso que falla corta la cola: el
+    resto no se consulta."""
     cola = [
         [(uuid.UUID(int=i + 700), "ANULADO" if anulada else "APLICADO")
          for i, anulada in enumerate(cargas)],
@@ -62,6 +72,7 @@ def _sesion(*, cargas=(), corrida=None, tiendas=None, escribe=True):
     if tiendas is not None:
         cola.append(list(tiendas))
     if escribe:
+        cola.append(list(parametros))
         cola.append([])
     return FakeAsyncSession(execute_queue=cola)
 
@@ -97,7 +108,8 @@ async def test_the_locks_follow_cargas_corrida_share_tiendas_update():
     assert "FROM corrida_sucursal" in sqls[2]
     assert "ORDER BY corrida_sucursal.sucursal_id" in sqls[2]
     assert sqls[2].endswith("FOR UPDATE OF corrida_sucursal")
-    assert sqls[3].startswith("INSERT INTO pedido_evento")
+    assert "FROM parametro_metodologia" in sqls[3]
+    assert sqls[4].startswith("INSERT INTO pedido_evento")
 
 
 async def test_closing_all_closes_only_the_borrador_tiendas_ci_05():
@@ -122,7 +134,7 @@ async def test_every_closed_tienda_gets_a_cerrado_event_with_who_and_when():
 
     await _cerrar(db)
 
-    sql = _sql(db.executed_statements[3])
+    sql = _sql(db.executed_statements[4])
     assert sql.count("'CERRADO'") == 2
     assert sql.count(f"'{USUARIO}'") == 2
     assert f"'{SUC_A}'" in sql and f"'{SUC_B}'" in sql
@@ -297,7 +309,74 @@ async def test_a_single_close_returns_the_tienda_and_writes_one_event():
     tienda = await pedido_tienda.cerrar_tienda(db, CORRIDA, SUC_A, USUARIO)
 
     assert (tienda.sucursal_id, tienda.estado_pedido) == (SUC_A, "CERRADO")
-    assert _sql(db.executed_statements[3]).count("'CERRADO'") == 1
+    assert _sql(db.executed_statements[4]).count("'CERRADO'") == 1
+
+
+# --- El tope vigente queda congelado en el evento CERRADO (B5b, ADR-6) -------
+
+
+def _valores_del_insert(db) -> dict:
+    return db.executed_statements[4].compile(
+        dialect=postgresql.dialect()).params
+
+
+async def test_the_cap_in_force_is_frozen_in_the_cerrado_event_of_its_tienda():
+    modo = _param("modo_tope_presupuesto", True)
+    tope = _param("presupuesto_maximo_pedido", "9000", SUC_A)
+    db = _sesion(
+        corrida=_corrida(), tiendas=[_fila(SUC_A), _fila(SUC_B, "DOS")],
+        parametros=[modo, tope])
+
+    await _cerrar(db)
+
+    valores = _valores_del_insert(db)
+    detalles = {
+        valores[f"sucursal_id_m{i}"]: valores.get(f"detalle_m{i}")
+        for i in range(2)}
+    assert detalles[SUC_A] == {
+        "tope": "9000", "parametro_id": str(tope.id)}
+    assert detalles[SUC_B] is None
+
+
+async def test_nothing_is_frozen_with_the_mode_off_or_without_a_cap():
+    apagado = _sesion(
+        corrida=_corrida(), tiendas=[_fila(SUC_A)], parametros=[
+            _param("modo_tope_presupuesto", False),
+            _param("presupuesto_maximo_pedido", "9000", SUC_A)])
+    sin_tope = _sesion(
+        corrida=_corrida(), tiendas=[_fila(SUC_A)],
+        parametros=[_param("modo_tope_presupuesto", True)])
+
+    await _cerrar(apagado)
+    await _cerrar(sin_tope)
+
+    assert _valores_del_insert(apagado).get("detalle_m0") is None
+    assert _valores_del_insert(sin_tope).get("detalle_m0") is None
+
+
+async def test_the_cap_is_read_after_the_locks_and_only_for_closed_tiendas():
+    cerrada = _fila(SUC_B, "DOS", estado_pedido="CERRADO")
+    db = _sesion(
+        corrida=_corrida(), tiendas=[_fila(SUC_A), cerrada],
+        parametros=[
+            _param("modo_tope_presupuesto", True),
+            _param("presupuesto_maximo_pedido", "5000", SUC_B)])
+
+    await _cerrar(db)
+
+    # SUC_B ya estaba cerrada: su tope vigente no se congela otra vez.
+    assert _valores_del_insert(db).get("detalle_m0") is None
+    assert "parametro_metodologia" in _sql(db.executed_statements[3])
+
+
+async def test_a_rejected_close_never_reads_the_cap():
+    db = _sesion(
+        corrida=_corrida(), tiendas=[_fila(SUC_A, estado_pedido="CERRADO")])
+
+    await _error(_cerrar(db, [SUC_A]))
+
+    assert "parametro_metodologia" not in " ".join(
+        _sql(s) for s in db.executed_statements)
 
 
 # --- Reabrir ----------------------------------------------------------------

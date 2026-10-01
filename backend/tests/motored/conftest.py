@@ -105,6 +105,9 @@ class FakeAsyncSession:
         self.committed = False
         self.rolled_back = False
         self.executed_statements: List[Any] = []
+        # B5b: la lista de parámetros de un `execute(stmt, [..])`
+        # (executemany), alineada con `executed_statements`; None si no hay.
+        self.executed_params: List[Any] = []
 
     async def get(self, model, ident):
         """Stand-in for `session.get(Model, id)` -- used by the crash-safety
@@ -123,8 +126,9 @@ class FakeAsyncSession:
             )
         return self._get_queue.pop(0)
 
-    async def execute(self, stmt):
+    async def execute(self, stmt, params=None):
         self.executed_statements.append(stmt)
+        self.executed_params.append(params)
         if not self._execute_queue:
             raise AssertionError(
                 "FakeAsyncSession.execute() called more times than expected "

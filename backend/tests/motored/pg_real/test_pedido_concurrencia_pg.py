@@ -25,19 +25,25 @@ from decimal import Decimal
 from types import SimpleNamespace
 
 import pytest
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.motored.models.corrida import Corrida
 from app.motored.models.corrida_linea import CorridaLinea
 from app.motored.models.corrida_linea_historial import CorridaLineaHistorial
 from app.motored.models.corrida_sucursal import CorridaSucursal
+from app.motored.models.parametro_metodologia import ParametroMetodologia
 from app.motored.models.pedido_evento import PedidoEvento
 from app.motored.models.proveedor import Proveedor
 from app.motored.models.referencia import Referencia
 from app.motored.models.sucursal import Sucursal
 from app.motored.models.usuario import MotoredRole, Usuario
-from app.motored.services.corridas import codigos, edicion, pedido_tienda
+from app.motored.services.corridas import (
+    codigos,
+    edicion,
+    pedido_tienda,
+    tope,
+)
 
 URL = os.environ.get("MOTORED_TEST_PG_URL")
 pytestmark = [
@@ -363,3 +369,166 @@ async def test_two_batches_in_opposite_order_never_deadlock(escenario):
     assert rechazados[0].codigo == codigos.E_CORRIDA_CERRAR_NO_BORRADOR
     assert await _estado_pedido(esc, esc.a) == "CERRADO"
     assert await _estado_pedido(esc, esc.b) == "CERRADO"
+
+
+# --- Recorte al tope de presupuesto (B5b, TP-32, TP-33, TP-31) ---------------
+#
+# Orden de bloqueos del recorte: corrida SHARE -> tienda UPDATE -> líneas
+# UPDATE por id. Una edición (tienda SHARE) y un cierre (tienda UPDATE) de la
+# MISMA tienda lo esperan o lo hacen esperar; otra tienda no.
+
+DESDE = datetime.date(2026, 1, 1)
+
+
+@pytest.fixture
+async def escenario_tope(escenario):
+    """El escenario de dos tiendas con la línea de cada una como clase C
+    (50 unidades, empaque 10, valor 5.000), el modo tope encendido y un tope
+    de 3.000 en A: el recorte propone bajarla de 50 a 30."""
+    esc = escenario
+    parametros = [
+        ParametroMetodologia(
+            id=uuid.uuid4(), clave="modo_tope_presupuesto", valor=True,
+            vigente_desde=DESDE),
+        ParametroMetodologia(
+            id=uuid.uuid4(), clave="presupuesto_maximo_pedido",
+            valor="3000", vigente_desde=DESDE, sucursal_id=esc.a)]
+    async with esc.maker() as db:
+        await db.execute(
+            update(CorridaLinea)
+            .where(CorridaLinea.corrida_id == esc.corrida_id)
+            .values(clase_abc="C", unidad_empaque=10,
+                    inventario_final=D("0.00"),
+                    demanda_ponderada=D("10.000000")))
+        db.add_all(parametros)
+        await db.commit()
+    yield esc
+    async with esc.maker() as db:
+        await db.execute(delete(ParametroMetodologia).where(
+            ParametroMetodologia.id.in_([p.id for p in parametros])))
+        await db.commit()
+
+
+async def _token(esc):
+    async with esc.maker() as db:
+        propuesta = await tope.previsualizar(db, esc.corrida_id, esc.a)
+        await db.rollback()
+    assert propuesta["activo"] and len(propuesta["recortes"]) == 1
+    return propuesta["token"]
+
+
+async def _recortar(db, esc, token, sucursal_id=None):
+    return await tope.aplicar(
+        db, esc.corrida_id, sucursal_id or esc.a, token, esc.usuario_id)
+
+
+async def test_a_recorte_waits_for_an_edit_in_flight_and_is_stale_tp_32(
+        escenario_tope):
+    esc = escenario_tope
+    token = await _token(esc)
+    async with esc.maker() as edita, esc.maker() as recorta:
+        await _editar(edita, esc, esc.linea_a, 60)
+        tarea = asyncio.create_task(_recortar(recorta, esc, token))
+        await _esperar(tarea, "el recorte debía esperar a la edición")
+
+        await edita.commit()
+        with pytest.raises(codigos.ErrorCorrida) as error:
+            await _terminar(tarea)
+        await recorta.rollback()
+
+    assert error.value.codigo == codigos.E_CORRIDA_PROPUESTA_DESACTUALIZADA
+    assert await _valor(esc, esc.linea_a) == D("60.00")
+    assert await _historial(esc, esc.linea_a) == [(D("50.00"), D("60.00"))]
+
+
+async def test_an_edit_waits_for_a_recorte_in_flight_and_chains_after_it(
+        escenario_tope):
+    esc = escenario_tope
+    token = await _token(esc)
+    async with esc.maker() as recorta, esc.maker() as edita:
+        await _recortar(recorta, esc, token)
+        tarea = asyncio.create_task(_editar(edita, esc, esc.linea_a, 45))
+        await _esperar(tarea, "la edición debía esperar al recorte")
+
+        await recorta.commit()
+        await _terminar(tarea)
+        await edita.commit()
+
+    assert await _valor(esc, esc.linea_a) == D("45.00")
+    assert await _historial(esc, esc.linea_a) == [
+        (D("50.00"), D("30.00")), (D("30.00"), D("45.00"))]
+
+
+async def test_a_close_waits_for_a_recorte_in_flight_and_closes_the_cut_one(
+        escenario_tope):
+    esc = escenario_tope
+    token = await _token(esc)
+    async with esc.maker() as recorta, esc.maker() as cierra:
+        await _recortar(recorta, esc, token)
+        tarea = asyncio.create_task(_cerrar(cierra, esc, esc.a))
+        await _esperar(tarea, "el cierre debía esperar al recorte")
+
+        await recorta.commit()
+        await _terminar(tarea)
+        await cierra.commit()
+
+    assert await _estado_pedido(esc, esc.a) == "CERRADO"
+    assert await _valor(esc, esc.linea_a) == D("30.00")
+    (evento,) = await _leer(esc, select(PedidoEvento.detalle).where(
+        PedidoEvento.corrida_id == esc.corrida_id,
+        PedidoEvento.sucursal_id == esc.a))
+    assert evento[0]["tope"] == "3000"
+
+
+async def test_a_recorte_waits_for_a_close_in_flight_and_is_061_tp_32(
+        escenario_tope):
+    esc = escenario_tope
+    token = await _token(esc)
+    async with esc.maker() as cierra, esc.maker() as recorta:
+        await _cerrar(cierra, esc, esc.a)
+        tarea = asyncio.create_task(_recortar(recorta, esc, token))
+        await _esperar(tarea, "el recorte debía esperar al cierre")
+
+        await cierra.commit()
+        with pytest.raises(codigos.ErrorCorrida) as error:
+            await _terminar(tarea)
+        await recorta.rollback()
+
+    assert error.value.codigo == codigos.E_CORRIDA_RECORTE_NO_BORRADOR
+    assert await _valor(esc, esc.linea_a) == D("50.00")
+    assert await _historial(esc, esc.linea_a) == []
+
+
+async def test_a_recorte_on_tienda_a_does_not_wait_for_closing_b_tp_33(
+        escenario_tope):
+    esc = escenario_tope
+    token = await _token(esc)
+    async with esc.maker() as cierra, esc.maker() as recorta:
+        await _cerrar(cierra, esc, esc.b)
+
+        await asyncio.wait_for(_recortar(recorta, esc, token), timeout=PLAZO)
+        await recorta.commit()
+        await cierra.commit()
+
+    assert await _estado_pedido(esc, esc.b) == "CERRADO"
+    assert await _valor(esc, esc.linea_a) == D("30.00")
+    assert await _valor(esc, esc.linea_b) == D("50.00")
+
+
+async def test_two_applies_with_the_same_token_apply_once_tp_31(
+        escenario_tope):
+    esc = escenario_tope
+    token = await _token(esc)
+    async with esc.maker() as primera, esc.maker() as segunda:
+        await _recortar(primera, esc, token)
+        tarea = asyncio.create_task(_recortar(segunda, esc, token))
+        await _esperar(tarea, "el segundo recorte debía esperar al primero")
+
+        await primera.commit()
+        with pytest.raises(codigos.ErrorCorrida) as error:
+            await _terminar(tarea)
+        await segunda.rollback()
+
+    assert error.value.codigo == codigos.E_CORRIDA_PROPUESTA_DESACTUALIZADA
+    assert await _valor(esc, esc.linea_a) == D("30.00")
+    assert await _historial(esc, esc.linea_a) == [(D("50.00"), D("30.00"))]

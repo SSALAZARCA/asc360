@@ -47,7 +47,8 @@ E_CORRIDA_INTERNO = "E-CORRIDA-099"
 # de B3b (anular una corrida con pedidos cerrados o enviados), igual que
 # 047-050, 056 y 067 (enviar y corregir el número de orden, F4-11/13/15).
 # 055 y 057 son de B4 (exportar el pedido a HMCL, F4-1); 056 también cubre
-# "nada que exportar".
+# "nada que exportar". 058-061 son de B5b (recortar el pedido de una tienda al
+# tope de presupuesto, F4-7).
 E_CORRIDA_REABRIR_BORRADOR = "E-CORRIDA-044"
 E_CORRIDA_REABRIR_ENVIADO = "E-CORRIDA-045"
 E_CORRIDA_REABRIR_MOTIVO = "E-CORRIDA-046"
@@ -59,6 +60,10 @@ E_CORRIDA_ANULAR_CON_PEDIDOS = "E-CORRIDA-051"
 E_CORRIDA_EXPORTAR_NO_CERRADO = "E-CORRIDA-055"
 E_CORRIDA_NADA_QUE_ENVIAR = "E-CORRIDA-056"
 E_CORRIDA_EXPORTAR_SIN_SIC = "E-CORRIDA-057"
+E_CORRIDA_RECORTE_MODO_OFF = "E-CORRIDA-058"
+E_CORRIDA_RECORTE_SIN_TOPE = "E-CORRIDA-059"
+E_CORRIDA_PROPUESTA_DESACTUALIZADA = "E-CORRIDA-060"
+E_CORRIDA_RECORTE_NO_BORRADOR = "E-CORRIDA-061"
 E_CORRIDA_CORREGIR_NO_ENVIADO = "E-CORRIDA-067"
 E_CORRIDA_OVERRIDES_SOLO_ADMIN = "E-CORRIDA-062"
 E_CORRIDA_CERRAR_NO_BORRADOR = "E-CORRIDA-064"
@@ -73,6 +78,9 @@ A_CORRIDA_DEMANDA_PERDIDA_AUSENTE = "A-CORRIDA-101"
 A_CORRIDA_SUCURSAL_OMITIDA = tipos.COD_SUCURSAL_OMITIDA
 A_CORRIDA_CADENA_CICLICA = tipos.COD_CADENA_CICLICA
 A_CORRIDA_SIN_PRECIO = "A-CORRIDA-104"
+# F4 (B5b): avisos del recorte al tope de presupuesto.
+A_CORRIDA_FUERA_DE_EMPAQUE = "A-CORRIDA-120"
+A_CORRIDA_TOPE_SIN_PRECIO = "A-CORRIDA-121"
 A_CORRIDA_MES_EN_CURSO_NO_DISPONIBLE = tipos.COD_MES_EN_CURSO_NO_DISPONIBLE
 A_CORRIDA_MES_EN_CURSO_CORTO = tipos.COD_MES_EN_CURSO_CORTO
 A_CORRIDA_SUMA_NO_POSITIVA = tipos.COD_SUMA_NO_POSITIVA
@@ -191,6 +199,22 @@ CATALOGO = {
         "El pedido de esta tienda no está enviado (está {estado}): no hay "
         "un número de orden que corregir."
     ),
+    E_CORRIDA_RECORTE_MODO_OFF: (
+        "El modo tope de presupuesto está apagado: no hay recorte que "
+        "aplicar."
+    ),
+    E_CORRIDA_RECORTE_SIN_TOPE: (
+        "Esta tienda no tiene un tope de presupuesto definido: no hay "
+        "recorte que aplicar."
+    ),
+    E_CORRIDA_PROPUESTA_DESACTUALIZADA: (
+        "La propuesta de recorte cambió desde que la vio, o ya no hay nada "
+        "que recortar. Revise la propuesta nueva y vuelva a aplicarla."
+    ),
+    E_CORRIDA_RECORTE_NO_BORRADOR: (
+        "Solo se puede recortar el pedido de una tienda en BORRADOR (este "
+        "está {estado}). Reábralo para ajustar sus cantidades."
+    ),
     E_CORRIDA_ANULAR_CON_PEDIDOS: (
         "No se puede anular la corrida: tiene pedidos cerrados o enviados "
         "({tiendas})."
@@ -215,6 +239,14 @@ CATALOGO = {
         "No hay demanda perdida cargada: se calcula sin ella."
     ),
     A_CORRIDA_SIN_PRECIO: "La referencia {referencia} no tiene precio.",
+    A_CORRIDA_FUERA_DE_EMPAQUE: (
+        "{cantidad} línea(s) del recorte no estaban en múltiplos del "
+        "empaque: el recorte las baja al múltiplo inferior."
+    ),
+    A_CORRIDA_TOPE_SIN_PRECIO: (
+        "{cantidad} línea(s) sin precio no suman al valor del pedido: el "
+        "tope no las considera."
+    ),
 }
 
 # F4 (B3b): E-CARGA-050 cuando lo que depende de la carga es el pedido

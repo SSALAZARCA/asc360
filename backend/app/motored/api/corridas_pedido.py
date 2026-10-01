@@ -10,10 +10,12 @@ la tienda y su línea de tiempo; y el envío (B3b): marcar como enviada una
 tienda (`POST .../enviar`) o varias a la vez (`POST /{id}/enviar`) y corregir
 el número de orden de una ya enviada (`PATCH .../envio`); y la exportación
 a HMCL (B4): el `.xlsx` de una tienda (`GET .../exportar`) y el `.zip` de la
-corrida (`GET /{id}/exportar`). Recortar llega en la siguiente rebanada.
-Router delgado: las reglas viven en `services/corridas/` (`edicion`,
-`pedido_tienda`, `envio`, `exportacion`) y las lecturas en `consultas` y
-`lecturas_pedido`.
+corrida (`GET /{id}/exportar`); y el recorte al tope de presupuesto (B5b):
+el resumen por tienda (`GET /{id}/topes`), la propuesta de una tienda con su
+token (`GET .../recorte`) y su aplicación (`POST .../recorte`). Router
+delgado: las reglas viven en `services/corridas/` (`edicion`,
+`pedido_tienda`, `envio`, `exportacion`, `tope`) y las lecturas en
+`consultas` y `lecturas_pedido`.
 
 RBAC (F4-16): ADMIN y COMPRAS; el resto, 403. Los servicios no hacen commit:
 `comun.ejecutar` confirma o deshace.
@@ -45,7 +47,11 @@ from app.motored.schemas.pedido import (
     HistorialLinea,
     LineaEditada,
     LineaEditar,
+    PropuestaRecorteTienda,
     ReabrirCuerpo,
+    RecorteAplicado,
+    RecorteCuerpo,
+    TopesCorrida,
     TotalesTienda,
 )
 from app.motored.services.corridas import (
@@ -56,6 +62,7 @@ from app.motored.services.corridas import (
     exportacion_hmcl,
     lecturas_pedido,
     pedido_tienda,
+    tope,
 )
 from app.motored.services.corridas.codigos import ErrorCorrida
 
@@ -320,3 +327,50 @@ async def exportar_corrida(
             "X-Tiendas-Omitidas": exportacion_hmcl.cabecera_omitidas(
                 seleccion.omitidas),
             "Access-Control-Expose-Headers": CABECERAS_EXPUESTAS})
+
+
+# --- Recorte al tope de presupuesto (B5b) -----------------------------------
+
+
+@router.get("/{corrida_id}/topes", response_model=TopesCorrida)
+async def topes_de_corrida(
+    corrida_id: uuid.UUID,
+    db: AsyncSession = Depends(get_motored_db_or_503),
+    user: MotoredUser = Depends(comun.require_read),
+):
+    """Por tienda con pedido: su tope, lo que vale el pedido y el exceso.
+    Sin tiendas (`activo` falso) con el modo apagado o en un escenario."""
+    return await comun.ejecutar(db, tope.resumen_topes(db, corrida_id))
+
+
+@router.get(
+    "/{corrida_id}/sucursales/{sucursal_id}/recorte",
+    response_model=PropuestaRecorteTienda)
+async def ver_recorte(
+    corrida_id: uuid.UUID,
+    sucursal_id: uuid.UUID,
+    db: AsyncSession = Depends(get_motored_db_or_503),
+    user: MotoredUser = Depends(comun.require_read),
+):
+    """La propuesta de recorte de una tienda y su token; no cambia nada. Si
+    no aplica (modo apagado, sin tope, pedido cerrado...) trae `activo`
+    falso y el motivo."""
+    return await comun.ejecutar(
+        db, tope.previsualizar(db, corrida_id, sucursal_id))
+
+
+@router.post(
+    "/{corrida_id}/sucursales/{sucursal_id}/recorte",
+    response_model=RecorteAplicado)
+async def aplicar_recorte(
+    corrida_id: uuid.UUID,
+    sucursal_id: uuid.UUID,
+    cuerpo: RecorteCuerpo = RecorteCuerpo(),
+    db: AsyncSession = Depends(get_motored_db_or_503),
+    user: MotoredUser = Depends(comun.require_write),
+):
+    """Aplica la propuesta cuyo `token` vio el usuario. Si cambió (o ya no
+    hay nada que recortar) responde 409 E-CORRIDA-060 con la propuesta
+    nueva y no cambia nada."""
+    return await comun.ejecutar(db, tope.aplicar(
+        db, corrida_id, sucursal_id, cuerpo.token, uuid.UUID(user.user_id)))

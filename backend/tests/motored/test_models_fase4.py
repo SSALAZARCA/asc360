@@ -47,6 +47,7 @@ _MODULOS_NUEVOS = (
     "app/motored/api/corridas_pedido.py",
     "app/motored/schemas/pedido.py",
     "app/motored/services/corridas/recorte.py",
+    "app/motored/services/corridas/tope.py",
     "app/motored/services/parametros_claves.py",
     "app/motored/services/parametros_topes.py",
     "app/motored/api/parametros.py",

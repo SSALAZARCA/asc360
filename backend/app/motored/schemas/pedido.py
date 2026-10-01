@@ -2,7 +2,8 @@
 Motored Pedidos F4 "Pantallas del pedido" (sdd/motored-pedidos-ui, B2, B3a,
 B3b, ADR-1, ADR-3): esquemas de la edición de líneas y su historial y del
 ciclo de vida del pedido por tienda (cerrar, reabrir, enviar, corregir el
-número de orden, cabecera y eventos).
+número de orden, cabecera y eventos) y del recorte al tope de presupuesto
+(B5b).
 
 `pedido_final` entra SIN tipo (`Any`): la regla de E-CORRIDA-053 la aplica el
 servicio, DESPUÉS de los chequeos de estado (404, 042, 065, 052), así un valor
@@ -245,3 +246,97 @@ class TopesGuardados(BaseModel):
 
     actualizados: List[uuid.UUID]
     sin_cambios: List[uuid.UUID]
+
+
+# --- Recorte al tope de presupuesto (B5b, F4-7) ------------------------------
+
+
+class RecorteCuerpo(BaseModel):
+    """Cuerpo de `POST .../sucursales/{sid}/recorte`: el `token` de la
+    propuesta que el usuario vio. Sin tipo, el servicio lo compara (un token
+    que falta o no es texto es E-CORRIDA-060, no el 422 del validador)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    token: Any = None
+
+
+class Advertencia(BaseModel):
+    """Un aviso con su código (A-CORRIDA-120 o 121) y su texto."""
+
+    codigo: str
+    mensaje: str
+
+
+class RecorteLinea(BaseModel):
+    """Lo que se le quita a UNA línea: de `pedido_actual` a
+    `pedido_propuesto`, en empaques y en valor."""
+
+    linea_id: int
+    codigo: str
+    nombre: Optional[str] = None
+    clase_abc: str
+    unidad_empaque: int
+    pedido_actual: Decimal
+    pedido_propuesto: Decimal
+    empaques_recortados: Optional[Decimal] = None
+    valor_recortado: Decimal
+
+
+class PropuestaRecorteTienda(BaseModel):
+    """La propuesta de recorte de una tienda. Con `activo` falso no hay
+    propuesta: `motivo_inactivo` dice por qué (MODO_OFF, SIN_TOPE,
+    NO_BORRADOR, ESCENARIO, SIN_PEDIDO, CORRIDA_NO_CALCULADA o
+    CORRIDA_INVALIDADA) y `modo_activo` sólo se conoce si se llegó a leer."""
+
+    activo: bool
+    motivo_inactivo: Optional[str] = None
+    modo_activo: Optional[bool] = None
+    corrida_id: uuid.UUID
+    sucursal_id: uuid.UUID
+    tope: Optional[Decimal] = None
+    valor_actual: Optional[Decimal] = None
+    exceso: Optional[Decimal] = None
+    recortes: List[RecorteLinea] = Field(default_factory=list)
+    valor_final: Optional[Decimal] = None
+    exceso_residual: Optional[Decimal] = None
+    lineas_sin_precio: int = 0
+    advertencias: List[Advertencia] = Field(default_factory=list)
+    token: Optional[str] = None
+
+
+class RecorteAplicado(BaseModel):
+    """Respuesta de aplicar el recorte: lo liberado, lo que queda y los
+    totales nuevos de la tienda."""
+
+    corrida_id: uuid.UUID
+    sucursal_id: uuid.UUID
+    tope: Decimal
+    lineas_recortadas: int
+    valor_liberado: Decimal
+    valor_final: Decimal
+    exceso_residual: Decimal
+    advertencias: List[Advertencia] = Field(default_factory=list)
+    totales_tienda: TotalesTienda
+
+
+class TopeTiendaCorrida(BaseModel):
+    """Una tienda con pedido en el resumen de topes de una corrida; sin tope
+    propio, `tope` y `exceso` van nulos."""
+
+    sucursal_id: uuid.UUID
+    nombre: str
+    estado_pedido: str
+    tope: Optional[Decimal] = None
+    valor_a_pedir: Decimal
+    exceso: Optional[Decimal] = None
+    lineas_sin_precio: int
+
+
+class TopesCorrida(BaseModel):
+    """El resumen de topes de una corrida; `activo` falso (modo apagado,
+    escenario o sin calcular) no trae tiendas."""
+
+    activo: bool
+    corrida_id: uuid.UUID
+    tiendas: List[TopeTiendaCorrida] = Field(default_factory=list)

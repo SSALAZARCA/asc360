@@ -13,7 +13,7 @@ import uuid
 from datetime import date
 from decimal import Decimal
 from fractions import Fraction
-from typing import Any, Dict, Iterable, List, Optional, Sequence
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from sqlalchemy import select
 
@@ -57,6 +57,19 @@ def tope_vigente(
         return parametros.ResolucionParametro(
             None, parametros.FUENTE_DEFAULT, None, None)
     return resolucion
+
+
+def tope_de(
+    vigentes: "parametros.VigentesMotor", sucursal_id: uuid.UUID,
+) -> Tuple[Optional[Decimal], Optional[uuid.UUID]]:
+    """El tope de UNA tienda como `Decimal` exacto y el id de la versión que
+    lo fija; `(None, None)` si no tiene tope, lo quitaron (`null`) o la fila
+    guardada ya no cumple la regla. Es lo que usa el recorte (B5b)."""
+    resolucion = tope_vigente(vigentes, sucursal_id)
+    valor = _decimal(resolucion.valor)
+    if valor is None:
+        return None, None
+    return valor, resolucion.parametro_id
 
 
 def _item(vigentes, sucursal_id, nombre) -> dict:

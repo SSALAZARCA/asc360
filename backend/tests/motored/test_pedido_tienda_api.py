@@ -441,4 +441,8 @@ def test_the_pedido_router_exposes_exactly_the_planned_operations():
         ("PATCH", "/corridas/{corrida_id}/sucursales/{sucursal_id}/envio"),
         ("GET", "/corridas/{corrida_id}/exportar"),
         ("GET", "/corridas/{corrida_id}/sucursales/{sucursal_id}/exportar"),
+        # B5b: el recorte al tope de presupuesto.
+        ("GET", "/corridas/{corrida_id}/topes"),
+        ("GET", "/corridas/{corrida_id}/sucursales/{sucursal_id}/recorte"),
+        ("POST", "/corridas/{corrida_id}/sucursales/{sucursal_id}/recorte"),
     }

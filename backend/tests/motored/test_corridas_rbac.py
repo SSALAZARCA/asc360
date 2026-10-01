@@ -53,6 +53,10 @@ LECTURAS = LECTURAS_F3 + [
     # (zip). Sólo leen, pero igual que escribir son de ADMIN y COMPRAS.
     ("GET", f"{BASE}/{ID}/sucursales/{fx.SUC_A}/exportar", None),
     ("GET", f"{BASE}/{ID}/exportar", None),
+    # Fase 4 (B5b): el resumen de topes de la corrida y la propuesta de
+    # recorte de una tienda.
+    ("GET", f"{BASE}/{ID}/topes", None),
+    ("GET", f"{BASE}/{ID}/sucursales/{fx.SUC_A}/recorte", None),
 ]
 ESCRITURAS = [
     ("POST", BASE, {"fecha_corte": "2026-09-21"}),
@@ -72,6 +76,9 @@ ESCRITURAS = [
         "fecha_envio": "2026-09-22"}]}),
     ("PATCH", f"{BASE}/{ID}/sucursales/{fx.SUC_A}/envio",
      {"numero_pedido_proveedor": "99999"}),
+    # Fase 4 (B5b): aplicar el recorte al tope de una tienda (TP-28).
+    ("POST", f"{BASE}/{ID}/sucursales/{fx.SUC_A}/recorte",
+     {"token": "ab" * 32}),
 ]
 
 

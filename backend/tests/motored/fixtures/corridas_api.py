@@ -183,6 +183,46 @@ def seleccion_zip(**campos):
     return exportacion.SeleccionZip(**{**base, **campos})
 
 
+def propuesta_recorte(**campos):
+    """Lo que devuelve `tope.previsualizar` con un recorte de una línea."""
+    base = dict(
+        activo=True, motivo_inactivo=None, modo_activo=True,
+        corrida_id=CORRIDA_ID, sucursal_id=SUC_A, tope=Decimal("9000"),
+        valor_actual=Decimal("11000.00"), exceso=Decimal("2000.00"),
+        recortes=[{
+            "linea_id": 1, "codigo": "C-1", "nombre": "PARTE",
+            "clase_abc": "C", "unidad_empaque": 10,
+            "pedido_actual": Decimal("50.00"),
+            "pedido_propuesto": Decimal("30.00"),
+            "empaques_recortados": Decimal("2"),
+            "valor_recortado": Decimal("2000.00")}],
+        valor_final=Decimal("9000.00"), exceso_residual=Decimal("0.00"),
+        lineas_sin_precio=0, advertencias=[], token="ab" * 32)
+    return {**base, **campos}
+
+
+def recorte_aplicado(**campos):
+    """Lo que devuelve `tope.aplicar`."""
+    base = dict(
+        corrida_id=CORRIDA_ID, sucursal_id=SUC_A, tope=Decimal("9000"),
+        lineas_recortadas=1, valor_liberado=Decimal("2000.00"),
+        valor_final=Decimal("9000.00"), exceso_residual=Decimal("0.00"),
+        advertencias=[], totales_tienda=totales_tienda())
+    return {**base, **campos}
+
+
+def resumen_topes(**campos):
+    """Lo que devuelve `tope.resumen_topes` con el modo tope encendido."""
+    base = dict(
+        activo=True, corrida_id=CORRIDA_ID,
+        tiendas=[{
+            "sucursal_id": SUC_A, "nombre": "UNO",
+            "estado_pedido": "BORRADOR", "tope": Decimal("9000"),
+            "valor_a_pedir": Decimal("11000.00"),
+            "exceso": Decimal("2000.00"), "lineas_sin_precio": 2}])
+    return {**base, **campos}
+
+
 class Espia:
     """Doble de `consultas` y `servicio`: graba las llamadas y responde lo
     configurado."""
@@ -216,6 +256,9 @@ class Espia:
         self.datos_tienda = datos_exportacion()
         self.seleccion = seleccion_zip()
         self.eventos = [evento_pedido()]
+        self.propuesta = propuesta_recorte()
+        self.recortado = recorte_aplicado()
+        self.topes = resumen_topes()
         self.anulada = SimpleNamespace(
             id=CORRIDA_ID, codigo="PED-2026-S39-001", estado="ANULADA",
             cerrada_en=None)
@@ -283,7 +326,30 @@ def instalar(monkeypatch, espia=None):
     _instalar_pedido_tienda(monkeypatch, espia)
     _instalar_envio(monkeypatch, espia)
     _instalar_exportacion(monkeypatch, espia)
+    _instalar_tope(monkeypatch, espia)
     return espia
+
+
+def _instalar_tope(monkeypatch, espia):
+    """Dobles del recorte al tope de presupuesto (F4, B5b): el resumen de la
+    corrida, la propuesta de una tienda y su aplicación."""
+    async def resumen(db, corrida_id):
+        espia._registrar("topes", corrida_id)
+        return espia.topes
+
+    async def previsualizar(db, corrida_id, sucursal_id):
+        espia._registrar("recorte_ver", corrida_id, sucursal_id)
+        return espia.propuesta
+
+    async def aplicar(db, corrida_id, sucursal_id, token, usuario_id):
+        espia._registrar(
+            "recorte_aplicar", corrida_id, sucursal_id, token, usuario_id)
+        return espia.recortado
+
+    for nombre, doble in (
+            ("resumen_topes", resumen), ("previsualizar", previsualizar),
+            ("aplicar", aplicar)):
+        monkeypatch.setattr(api_pedido.tope, nombre, doble)
 
 
 def _instalar_exportacion(monkeypatch, espia):
