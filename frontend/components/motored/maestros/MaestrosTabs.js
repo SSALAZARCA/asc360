@@ -98,7 +98,7 @@ export default function MaestrosTabs({ tabs }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-      <div className="motored-tab-bar">
+      <div className="motored-tab-bar" style={{ overflowX: 'auto', maxWidth: '100%' }}>
         {tabs.map((tab) => {
           const mostrarRotuloGrupo = Boolean(tab.group) && tab.group !== grupoAnterior;
           if (tab.group) grupoAnterior = tab.group;

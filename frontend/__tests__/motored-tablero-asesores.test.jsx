@@ -102,6 +102,25 @@ describe('Tablero de asesores - tabla', () => {
     expect(fijas).toEqual(['sticky', 'sticky', 'sticky']);
   });
 
+  describe('en pantallas estrechas (tablet de 768px)', () => {
+    const original = window.matchMedia;
+    afterEach(() => { window.matchMedia = original; });
+
+    it('solo el asesor queda fijo y va primero, para dejar espacio a los datos', async () => {
+      window.matchMedia = jest.fn().mockImplementation((query) => ({
+        matches: query === '(max-width: 1023px)', media: query,
+        addEventListener: jest.fn(), removeEventListener: jest.fn(),
+      }));
+      render(<TableroAsesoresPage />);
+      const fila = (await screen.findByText('Ana Pérez')).closest('tr');
+      const celdas = [...fila.children].slice(0, 3);
+      expect(celdas.map((td) => td.textContent)).toEqual(['Ana Pérez', 'CALI NORTE', 'ASESOR DE REPUESTOS']);
+      expect(celdas.map((td) => td.style.position)).toEqual(['sticky', '', '']);
+      const anchoFijo = Number.parseInt(celdas[0].style.width, 10);
+      expect(anchoFijo).toBeLessThanOrEqual(160);
+    });
+  });
+
   it('cada encabezado no obvio explica su fórmula en un tooltip', async () => {
     render(<TableroAsesoresPage />);
     await screen.findByText('Ana Pérez');
