@@ -8,7 +8,7 @@ import {
   Pencil, Ban, RotateCcw, XCircle, Check, X, KeyRound, Download, Eye, Play,
   Save, Undo2, MapPin, EyeOff, PlusCircle, Link2, Unlink, Unlock,
   Lock, LockOpen, FileSpreadsheet, Send, Scissors, RefreshCw, GitCompareArrows,
-  FlaskConical, History,
+  FlaskConical, History, PencilLine,
 } from 'lucide-react';
 
 export const ACTION_ICONS = {
@@ -36,6 +36,7 @@ export const ACTION_ICONS = {
   Reabrir: LockOpen,
   Exportar: FileSpreadsheet,
   'Marcar como enviado': Send,
+  'Corregir número': PencilLine,
   'Aplicar recorte': Scissors,
   'Recalcular fallidas': RefreshCw,
   Comparar: GitCompareArrows,

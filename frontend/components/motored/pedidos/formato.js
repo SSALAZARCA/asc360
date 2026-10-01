@@ -50,3 +50,6 @@ export const etiquetaEvento = (evento) => EVENTOS[evento] || evento;
 export const etiquetaMotivoEdicion = (motivo) => MOTIVOS_EDICION[motivo] || motivo;
 /** Name of the reason a line is excluded from the pedido. */
 export const etiquetaExclusion = (motivo) => EXCLUSIONES[motivo] || motivo;
+
+/** `uno` when `n` is 1, `varios` otherwise (Spanish wording of counts). */
+export const plural = (n, uno, varios) => (Number(n) === 1 ? uno : varios);

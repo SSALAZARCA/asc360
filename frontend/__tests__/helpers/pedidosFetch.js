@@ -90,12 +90,12 @@ export const T_ENVIADO = tienda({
 export const T_FALLIDA = tienda({
   sucursal_id: 's4', nombre: 'Armenia', orden: 4, estado: 'FALLIDA', codigo: 'E-CORRIDA-020',
   mensaje: 'La tienda no tiene precios cargados.', lineas: 0, excluidas: 0, unidades: null, valor: null,
-  estado_pedido: null, unidades_a_pedir: null, valor_a_pedir: null,
+  estado_pedido: null, unidades_a_pedir: null, valor_a_pedir: null, acciones: ACCIONES,
 });
 export const T_OMITIDA = tienda({
   sucursal_id: 's5', nombre: 'Ibagué', orden: 5, estado: 'OMITIDA', codigo: null,
   mensaje: 'Tienda sin ventas en el periodo.', lineas: 0, excluidas: 0, unidades: null, valor: null,
-  estado_pedido: null, unidades_a_pedir: null, valor_a_pedir: null,
+  estado_pedido: null, unidades_a_pedir: null, valor_a_pedir: null, acciones: ACCIONES,
 });
 
 const fila = (sucursal_id, clase, unidades, referencias, valor, porcentaje_peso) => (
@@ -225,4 +225,29 @@ export function installFetch(routes) {
 export function setSession(role = 'COMPRAS') {
   sessionStorage.setItem('motored_user', JSON.stringify({ nombre: 'Compras Uno', role }));
   sessionStorage.setItem('motored_token', 'tok');
+}
+
+// --- Lifecycle, export (F3) --------------------------------------------------
+
+/** A successful file download response; `cabeceras` are the (lower-case) response headers. */
+export const fileRes = (cabeceras = {}) => ({
+  ok: true, status: 200, headers: { get: (k) => cabeceras[k.toLowerCase()] ?? null },
+  blob: async () => ({}), clone() { return this; },
+});
+
+/** The same tienda as `base` under another id and name (for lists of drafts, closed tiendas...). */
+export const otraTienda = (base, sucursal_id, nombre, orden) => ({ ...base, sucursal_id, nombre, orden });
+
+/**
+ * Stubs the browser download (object URL + anchor click) so no test navigates;
+ * returns the list that receives the file name of every download asked for.
+ */
+export function installDescargas() {
+  const nombres = [];
+  global.URL.createObjectURL = jest.fn(() => 'blob:x');
+  global.URL.revokeObjectURL = jest.fn();
+  jest.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function click() {
+    nombres.push(this.download);
+  });
+  return nombres;
 }

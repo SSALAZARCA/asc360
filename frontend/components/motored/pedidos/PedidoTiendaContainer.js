@@ -7,6 +7,9 @@ import usePedidoTienda from './usePedidoTienda';
 import useTiendasCorrida from './useTiendasCorrida';
 import useLineasPedido from './useLineasPedido';
 import useEdicionLinea from './useEdicionLinea';
+import useAccionesPedido from './useAccionesPedido';
+import AvisoPedido from './AvisoPedido';
+import DialogosPedido from './DialogosPedido';
 import HistorialDrawer from './HistorialDrawer';
 import LineasSeccion from './LineasSeccion';
 import PedidoTiendaHeader from './PedidoTiendaHeader';
@@ -52,6 +55,7 @@ export default function PedidoTiendaContainer({ corridaId, sucursalId }) {
   const { data: corrida, reload: recargarCorrida } = useTiendasCorrida(corridaId, allowed);
   // An edit changes the totals of the header and the class summary of the corrida.
   const alCambiarPedido = useCallback(() => { recargarCabecera(); recargarCorrida(); }, [recargarCabecera, recargarCorrida]);
+  const acciones = useAccionesPedido(corridaId, alCambiarPedido);
   const [historial, setHistorial] = useState(null);
   if (!allowed) return null;
   return (
@@ -63,13 +67,18 @@ export default function PedidoTiendaContainer({ corridaId, sucursalId }) {
       {!error && !cabecera && <p style={mutedStyle}>Cargando...</p>}
       {cabecera && (
         <>
-          <PedidoTiendaHeader cabecera={cabecera} onHistorial={() => setHistorial({ linea: null })} />
+          <PedidoTiendaHeader
+            cabecera={cabecera} onHistorial={() => setHistorial({ linea: null })}
+            ciclo={{ alAccionar: acciones.alAccionar, ocupado: acciones.ocupado }}
+          />
+          <AvisoPedido aviso={acciones.aviso} onDescartar={acciones.descartarAviso} />
           <Detalle
             cabecera={cabecera} corridaId={corridaId} sucursalId={sucursalId} corrida={corrida}
             onHistorial={(linea) => setHistorial({ linea })} alCambiarPedido={alCambiarPedido}
           />
         </>
       )}
+      {cabecera && <DialogosPedido acciones={acciones} corridaId={corridaId} fechaCorte={cabecera.fecha_corte} />}
       {historial && (
         <HistorialDrawer
           corridaId={corridaId} sucursalId={sucursalId} linea={historial.linea}

@@ -1,16 +1,6 @@
 'use client';
 /** Confirmation dialog to annul a corrida; the motivo is required (1..500). */
-import { errorStyle, labelStyle, mutedStyle } from './styles';
-
-const overlayStyle = {
-  position: 'fixed', inset: 0, background: 'rgba(0, 0, 0, 0.45)', zIndex: 50,
-  display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem',
-};
-const panelStyle = {
-  background: 'var(--motored-surface, #ffffff)', borderRadius: 'var(--motored-radius-md, 8px)',
-  padding: '1.5rem', width: '100%', maxWidth: '480px', maxHeight: '90vh', overflowY: 'auto',
-  display: 'flex', flexDirection: 'column', gap: '1rem',
-};
+import { errorStyle, labelStyle, mutedStyle, overlayStyle, panelStyle } from './styles';
 
 export default function AnularCorridaDialog({ anular }) {
   const { corrida, motivo, setMotivo, busy, error, cerrar, confirmar } = anular;

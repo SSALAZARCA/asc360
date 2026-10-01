@@ -1,5 +1,5 @@
 'use client';
-/** Corrida detail screen: header, data age, progress (while calculating) and the Tiendas table. */
+/** Corrida detail screen: header, data age, progress (while calculating), lifecycle actions and the Tiendas table. */
 import { useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import usePedidosGate from '../../../lib/motored/usePedidosGate';
@@ -10,6 +10,11 @@ import ProgresoCorrida from './ProgresoCorrida';
 import PruebaBadge from './PruebaBadge';
 import ResumenPedidosChip from './ResumenPedidosChip';
 import TiendasTable from './TiendasTable';
+import AccionesCorrida from './AccionesCorrida';
+import AvisoPedido from './AvisoPedido';
+import DialogosPedido from './DialogosPedido';
+import useAccionesPedido from './useAccionesPedido';
+import useSeleccionTiendas from './useSeleccionTiendas';
 import { estaCalculando, fechaCorta } from './reglas';
 import { errorStyle, mutedStyle } from './styles';
 
@@ -31,19 +36,28 @@ function Cabecera({ corrida, onTerminal }) {
   );
 }
 
-function Cuerpo({ corrida, onOpen }) {
+function Cuerpo({ corrida, onOpen, ciclo }) {
   if (corrida.sucursales.length === 0) {
     return <p style={mutedStyle}>{estaCalculando(corrida.estado) ? 'Calculando...' : 'Sin pedidos para mostrar'}</p>;
   }
-  return <TiendasTable tiendas={corrida.sucursales} onOpen={onOpen} />;
+  return <TiendasTable tiendas={corrida.sucursales} onOpen={onOpen} ciclo={ciclo} />;
 }
+
+const cerrada = (t) => t.estado_pedido === 'CERRADO' || t.estado_pedido === 'ENVIADO';
 
 export default function CorridaDetalleContainer({ corridaId }) {
   const router = useRouter();
   const allowed = usePedidosGate();
   const { data, error, reload } = useTiendasCorrida(corridaId, allowed);
+  const { marcadas, alternar, limpiar } = useSeleccionTiendas();
+  // After any lifecycle change the screen reads the fresh states and forgets the ticked tiendas.
+  const alCambiar = useCallback(() => { reload(); limpiar(); }, [reload, limpiar]);
+  const acciones = useAccionesPedido(corridaId, alCambiar);
   const abrir = useCallback((sid) => router.push(`/motored/pedidos/${corridaId}/${sid}`), [router, corridaId]);
   if (!allowed) return null;
+  const seleccionadas = data ? data.sucursales.filter((t) => marcadas.has(t.sucursal_id)) : [];
+  const ciclo = { alAccionar: acciones.alAccionar, ocupado: acciones.ocupado, marcadas, alternar };
+  const recalcular = (fallidas) => acciones.abrir('recalcular', fallidas, { contexto: { fecha_corte: String(data.fecha_corte).slice(0, 10), codigo: data.codigo } });
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', maxWidth: '100%' }}>
       <button type="button" className="motored-row-action" style={{ alignSelf: 'flex-start' }} onClick={() => router.push('/motored/pedidos')}>
@@ -55,7 +69,15 @@ export default function CorridaDetalleContainer({ corridaId }) {
         <>
           <Cabecera corrida={data} onTerminal={reload} />
           <AntiguedadDatos antiguedad={data.antiguedad} advertencias={data.advertencias} />
-          <Cuerpo corrida={data} onOpen={abrir} />
+          <AccionesCorrida
+            corrida={data} seleccionadas={seleccionadas} ocupado={acciones.ocupado}
+            onCerrar={(tiendas, todas) => acciones.abrir('cerrar', tiendas, { todas })}
+            onEnviar={(tiendas) => acciones.abrir('enviar', tiendas)}
+            onExportar={acciones.exportarTodas} onRecalcular={recalcular}
+          />
+          <AvisoPedido aviso={acciones.aviso} onDescartar={acciones.descartarAviso} onVerCorrida={(id) => router.push(`/motored/pedidos/${id}`)} />
+          <Cuerpo corrida={data} onOpen={abrir} ciclo={ciclo} />
+          <DialogosPedido acciones={acciones} corridaId={corridaId} fechaCorte={data.fecha_corte} yaCerradas={data.sucursales.filter(cerrada).length} />
         </>
       )}
     </div>

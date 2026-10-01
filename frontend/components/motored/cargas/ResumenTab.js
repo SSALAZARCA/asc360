@@ -13,7 +13,11 @@
 import { useEffect, useState, useCallback } from 'react';
 import { getInformeCarga, aplicarCarga, anularCarga } from '../../../lib/motored/api';
 import { getRolActual } from '../../../lib/motored/motoredFetch';
+import { mensajeConCodigo } from '../../../lib/motored/httpErrors';
 import InfoTooltip from '../InfoTooltip';
+
+const CONFIRMAR_ANULAR = '¿Anular esta carga? Se borran las filas en proceso (staging). '
+  + 'Si ya está APLICADA y la usa el pedido cerrado o enviado de alguna tienda, el sistema no permitirá anularla.';
 
 function useInforme(cargaId, estadoCarga) {
   const [informe, setInforme] = useState(null);
@@ -120,7 +124,8 @@ function useAccionesCarga({ cargaId, reload, onChanged }) {
       await reload();
       onChanged?.();
     } catch (err) {
-      setAccionError(err.message || mensajeError);
+      // A coded rejection (E-CARGA-050 names the tienda and the corrida) shows its message and code.
+      setAccionError(mensajeConCodigo(err, mensajeError));
     } finally {
       setAccionando(false);
     }
@@ -131,7 +136,7 @@ function useAccionesCarga({ cargaId, reload, onChanged }) {
     accionError,
     handleAplicar: () => ejecutar(() => aplicarCarga(cargaId), 'No se pudo aplicar la carga'),
     handleAnular: () => {
-      if (!window.confirm('¿Anular esta carga? Se borran las filas en proceso (staging); si ya está APLICADA, esta acción queda registrada para revisión de corridas futuras.')) {
+      if (!window.confirm(CONFIRMAR_ANULAR)) {
         return;
       }
       return ejecutar(() => anularCarga(cargaId), 'No se pudo anular la carga');
@@ -190,7 +195,7 @@ export default function ResumenTab({ carga, onChanged }) {
       <PeriodoDetectado log={informe.log} />
       <VarianzaAviso variacion={informe.variacion_pct_vs_carga_anterior} />
 
-      {accionError && <p style={{ margin: 0, color: 'var(--motored-danger, #c0392b)', fontSize: '0.75rem' }}>{accionError}</p>}
+      {accionError && <p role="alert" style={{ margin: 0, color: 'var(--motored-danger, #c0392b)', fontSize: '0.75rem' }}>{accionError}</p>}
 
       {puedeEscribir && (
         <AccionesCarga estado={informe.estado} accionando={accionando} onAplicar={handleAplicar} onAnular={handleAnular} />

@@ -120,9 +120,9 @@ describe('tienda pedido - header', () => {
     expect(screen.getByText('Escenario de prueba: solo lectura.')).toBeInTheDocument();
   });
 
-  it('renders no lifecycle control (those arrive with the lifecycle slice)', async () => {
+  it('renders no lifecycle control that the backend did not allow (F3 draws only what `acciones` says)', async () => {
     params = { id: 'c1', sucursalId: 's2' };
-    installFetch(rutas(CAB_CERRADO));
+    installFetch(rutas({ ...CAB_CERRADO, acciones: { ...CAB_CERRADO.acciones, reabrir: false, enviar: false, exportar: false } }));
     render(<PedidoTiendaPage />);
     await screen.findByRole('heading', { name: 'Pereira' });
     const nombres = screen.getAllByRole('button').map((b) => b.getAttribute('aria-label') || b.textContent);

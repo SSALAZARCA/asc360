@@ -1,9 +1,11 @@
 'use client';
-/** Header of the pedido of one tienda: who, which corrida, the TIENDA state, last event, envio. */
+/** Header of the pedido of one tienda: who, which corrida, the TIENDA state, its lifecycle actions, last event, envio. */
 import InfoTooltip from '../InfoTooltip';
 import MotoredIconAction from '../MotoredIconAction';
+import AccionesTienda from './AccionesTienda';
 import EstadoPedidoBadge, { ESTADO_PEDIDO_TEXTO } from './EstadoPedidoBadge';
 import PruebaBadge from './PruebaBadge';
+import { tiendaDeCabecera } from './acciones';
 import { etiquetaEvento, fechaHora } from './formato';
 import { fechaCorta } from './reglas';
 import { mutedStyle } from './styles';
@@ -38,7 +40,7 @@ function Notas({ cab }) {
   );
 }
 
-export default function PedidoTiendaHeader({ cabecera, onHistorial }) {
+export default function PedidoTiendaHeader({ cabecera, onHistorial, ciclo }) {
   return (
     <header style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
       <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -49,6 +51,7 @@ export default function PedidoTiendaHeader({ cabecera, onHistorial }) {
         </span>
         {cabecera.es_escenario && <PruebaBadge />}
         <MotoredIconAction action="Historial" label="Historial del pedido" touch onClick={onHistorial} />
+        {ciclo && <AccionesTienda tienda={tiendaDeCabecera(cabecera)} alAccionar={ciclo.alAccionar} ocupado={ciclo.ocupado} />}
       </div>
       <div style={{ display: 'flex', gap: '1.25rem', flexWrap: 'wrap', fontSize: '0.85rem' }}>
         <Dato titulo="SIC" ayuda={SIC_TEXTO}>{cabecera.sic || '—'}</Dato>

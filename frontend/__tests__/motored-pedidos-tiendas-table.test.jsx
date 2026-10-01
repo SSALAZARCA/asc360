@@ -153,7 +153,9 @@ describe('corrida detail - Tiendas table', () => {
     expect(pushMock).toHaveBeenCalledWith('/motored/pedidos/c1/s1');
   });
 
-  it('renders no lifecycle control (those arrive with the lifecycle slice)', async () => {
+  it('renders no lifecycle control that the backend did not allow (F3 draws only what `acciones` says)', async () => {
+    const sinAcciones = D_DETALLE.sucursales.map((t) => ({ ...t, acciones: { ...t.acciones, cerrar: false, reabrir: false, enviar: false, corregir_envio: false, exportar: false } }));
+    installFetch(rutas({ 'GET /corridas/c1': jsonRes({ ...D_DETALLE, sucursales: sinAcciones.map((t) => (t.estado === 'FALLIDA' ? { ...t, estado: 'OMITIDA' } : t)) }) }));
     render(<CorridaDetallePage />);
     await screen.findByText('Manizales');
     const nombres = screen.getAllByRole('button').map((b) => b.getAttribute('aria-label') || b.textContent);
