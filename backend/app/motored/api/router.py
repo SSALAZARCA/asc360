@@ -34,6 +34,7 @@ from app.motored.api import (
     parametros,
     referencias_busqueda,
     salud,
+    tablero_asesores,
     usuarios,
     vendedores,
 )
@@ -51,6 +52,8 @@ router.include_router(carga.router)
 router.include_router(clientes_tecnired.router)
 # T3 tablero-asesores: `/vendedores` es un prefijo propio, sin superposicion.
 router.include_router(vendedores.router)
+# T4 tablero-asesores: `/tablero-asesores` es un prefijo propio, solo ADMIN|COMPRAS.
+router.include_router(tablero_asesores.router)
 router.include_router(usuarios.router)
 router.include_router(parametros.router)
 # Fase 2 "Ingesta" (sdd/motored-pedidos-ingesta, task 9.4): `/cargas` es un
