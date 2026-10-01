@@ -86,8 +86,9 @@ describe('IngresosPage', () => {
 describe('sidebar entry', () => {
   const Real = jest.requireActual('../components/motored/MotoredSidebar').default;
   it('is shown to ADMIN inside the Usuarios group and hidden from others', () => {
-    // On /motored/ingresos the Usuarios group opens by itself.
+    // The Usuarios group starts collapsed; open it to see its entries.
     const { unmount } = render(<Real user={{ nombre: 'U', role: 'ADMIN' }} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Usuarios' }));
     const labels = screen.getAllByRole('button').map((b) => b.textContent);
     expect(labels[labels.indexOf('Gestión de usuarios') + 1]).toBe('Registro de ingresos');
     unmount();
