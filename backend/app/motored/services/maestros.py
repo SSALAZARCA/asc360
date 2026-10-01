@@ -8,11 +8,12 @@ offers hard delete"). Upsert por llave natural: `referencia` por
 `codigo`, `proveedor` por `codigo` (owner decision #2).
 """
 import uuid
-from typing import Any, Dict, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 from app.motored.models.bodega import Bodega
+from app.motored.models.cliente_tecnired import ClienteTecnired
 from app.motored.models.proveedor import Proveedor
 from app.motored.models.referencia import Referencia
 from app.motored.models.sucursal import Sucursal
@@ -311,3 +312,42 @@ async def upsert_referencia(
         return updated, None, False
     created, warning = await create_referencia(db, data, usuario_id, verificar_sustituta=False)
     return created, warning, True
+
+
+# ---------------------------------------------------------------------------
+# Cliente Tecnired -- la carga REEMPLAZA la lista completa (sin upsert)
+# ---------------------------------------------------------------------------
+
+async def reemplazar_clientes_tecnired(
+    db, rows: List[Dict[str, Any]], usuario_id: Optional[uuid.UUID] = None
+) -> Tuple[int, int, List[Dict[str, Any]]]:
+    """Borra TODA la lista actual e inserta `rows` (ya validadas) en la
+    transaccion del caller -- el commit lo hace quien llama, asi que un fallo
+    en el INSERT deja la lista anterior intacta (rollback). Un NIT repetido en
+    el archivo se deduplica: gana la primera fila y las demas quedan como
+    advertencia. Retorna `(insertados, eliminados, advertencias)`; las
+    advertencias llevan la fila 1-indexada del archivo."""
+    vistos: Dict[str, int] = {}
+    nuevos: List[Dict[str, Any]] = []
+    advertencias: List[Dict[str, Any]] = []
+    for index, row in enumerate(rows, start=1):
+        nit = row["nit"]
+        if nit in vistos:
+            advertencias.append({
+                "fila": index,
+                "advertencias": [f"NIT repetido (igual a la fila {vistos[nit]}): se conserva la primera"],
+            })
+            continue
+        vistos[nit] = index
+        nuevos.append({
+            "id": uuid.uuid4(),
+            "nit": nit,
+            "razon_social": row.get("razon_social"),
+            "created_by": usuario_id,
+        })
+
+    resultado = await db.execute(delete(ClienteTecnired))
+    eliminados = resultado.rowcount or 0
+    for datos in nuevos:
+        db.add(ClienteTecnired(**datos))
+    return len(nuevos), eliminados, advertencias

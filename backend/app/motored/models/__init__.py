@@ -14,6 +14,7 @@ from app.motored.models.bodega import Bodega
 from app.motored.models.carga_archivo import CargaArchivo
 from app.motored.models.carga_error import CargaError
 from app.motored.models.caso_detractor import CasoDetractor
+from app.motored.models.cliente_tecnired import ClienteTecnired
 from app.motored.models.caso_detractor_accion import CasoDetractorAccion
 from app.motored.models.carga_fila_staging import CargaFilaStaging
 from app.motored.models.corrida import Corrida
@@ -52,6 +53,7 @@ __all__ = [
     "CargaArchivo",
     "CargaError",
     "CasoDetractor",
+    "ClienteTecnired",
     "CasoDetractorAccion",
     "CargaFilaStaging",
     "Corrida",

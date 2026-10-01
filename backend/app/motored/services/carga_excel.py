@@ -187,6 +187,19 @@ ALIASES_POR_ENTIDAD: Dict[str, List[Dict[str, Any]]] = {
             "aliases": ["homologados", "homologados otras marcas"],
         },
     ],
+    # CLIENTES TECNIRED: lista de NIT que cada carga reemplaza por completo.
+    # La `label` "NIT" es el encabezado de la plantilla; los alias cubren los
+    # nombres que usa el Excel de origen y el export del ERP.
+    "cliente_tecnired": [
+        {
+            "key": "nit", "label": "NIT", "required": True, "type": "string",
+            "aliases": ["nit", "nit / cedula", "nit/cedula", "cliente factura", "cedula", "cédula"],
+        },
+        {
+            "key": "razon_social", "label": "Razón social", "required": False,
+            "aliases": ["razon_social", "razon social", "razón social", "nombre"],
+        },
+    ],
 }
 
 _BOOLEAN_TRUE_VALUES = {"si", "sí", "true", "1", "yes", "x"}

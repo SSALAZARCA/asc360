@@ -22,7 +22,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from app.motored.schemas.carga import CargaErrorRow, CargaResultado
 from app.motored.schemas.referencia import ReferenciaUpdate
 from app.motored.services import maestros
-from app.motored.services.validators import _SCHEMA_BY_ENTIDAD, validate_rows
+from app.motored.services.validators import _SCHEMA_BY_ENTIDAD, ENTIDADES_DE_REEMPLAZO, validate_rows
 
 # Clave interna de fila (nunca llega al schema Pydantic): código de la
 # sustituta cuando es OTRA fila del mismo archivo y proveedor. La setea
@@ -92,6 +92,30 @@ async def _enlazar_sustitutas_del_archivo(
         )
 
 
+_REEMPLAZO_POR_ENTIDAD = {
+    "cliente_tecnired": maestros.reemplazar_clientes_tecnired,
+}
+
+
+async def _reemplazar_lista(
+    db, entidad: str, valid_rows: List[Dict[str, Any]], usuario_id: Optional[uuid.UUID]
+) -> CargaResultado:
+    """Carga que REEMPLAZA la lista completa: el archivo ya validó entero, así
+    que se borra todo y se inserta lo nuevo en la misma transacción, con un
+    único `commit()`."""
+    insertados, eliminados, advertencias = await _REEMPLAZO_POR_ENTIDAD[entidad](
+        db, valid_rows, usuario_id
+    )
+    await db.commit()
+    return CargaResultado(
+        ok=True,
+        total_filas=len(valid_rows),
+        insertados=insertados,
+        eliminados=eliminados,
+        advertencias=advertencias,
+    )
+
+
 async def procesar_carga(
     db,
     entidad: str,
@@ -124,6 +148,9 @@ async def procesar_carga(
             total_filas=total_filas,
             errores=[CargaErrorRow(fila=e["fila"], motivo=e["motivo"]) for e in row_errors],
         )
+
+    if entidad in ENTIDADES_DE_REEMPLAZO:
+        return await _reemplazar_lista(db, entidad, valid_rows, usuario_id)
 
     insertados = 0
     actualizados = 0

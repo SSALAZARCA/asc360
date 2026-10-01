@@ -145,6 +145,14 @@ export async function subirCarga(entidadSingular, filas) {
   });
 }
 
+/**
+ * GET /clientes-tecnired -> `{ items, total, page, page_size }`. Lista vigente de
+ * CLIENTES TECNIRED (solo ADMIN/COMPRAS); se carga con `subirCarga*('cliente_tecnired')`.
+ */
+export async function listClientesTecnired({ page, pageSize, q }) {
+  return motoredFetchJson(`/clientes-tecnired${_queryString({ page, page_size: pageSize, q })}`);
+}
+
 // ---------------------------------------------------------------------------
 // Carga masiva vía archivo `.xlsx` crudo -- batch posterior a la Fase 1
 // (owner brief "Excel upload capability"). A diferencia de `validarCarga`/

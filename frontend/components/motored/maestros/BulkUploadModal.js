@@ -163,7 +163,28 @@ const COLUMNAS_POR_ENTIDAD = {
       help: 'Modelos de moto de otras marcas con los que este repuesto es compatible. Podés poner varios en la misma celda, separados por coma o punto y coma (ej: Yamaha FZ 150; Honda CB 190R).',
     },
   ],
+  // Lista de NIT de clientes Tecnired: cada carga REEMPLAZA la lista completa.
+  // Mismo orden/alias que `ALIASES_POR_ENTIDAD.cliente_tecnired` del backend.
+  cliente_tecnired: [
+    {
+      key: 'nit', label: 'NIT', required: true,
+      aliases: ['nit', 'nit / cedula', 'nit/cedula', 'cliente factura', 'cedula', 'cédula'],
+      help: 'NIT o cédula del cliente tal como sale en la factura (también sirve el encabezado "Cliente factura"). Se limpia solo: sin espacios y sin el punto del final.',
+    },
+    {
+      key: 'razon_social', label: 'Razón social', required: false,
+      aliases: ['razon_social', 'razon social', 'razón social', 'nombre'],
+      help: 'Nombre del cliente. Es solo informativo, se puede dejar vacío.',
+    },
+  ],
 };
+
+// Nombre legible de cada entidad para el título del modal (las claves
+// internas como `cliente_tecnired` no se le muestran al usuario).
+const TITULO_POR_ENTIDAD = { cliente_tecnired: 'Clientes Tecnired' };
+
+// Entidades cuya carga reemplaza la lista completa en vez de actualizar fila por fila.
+const ENTIDADES_DE_REEMPLAZO = ['cliente_tecnired'];
 
 function toBoolean(value) {
   const v = String(value).trim().toLowerCase();
@@ -431,6 +452,7 @@ function CargaResultPanel({ resultado }) {
       <div style={{ color: 'var(--motored-success, #15803d)', fontSize: '0.8rem', fontWeight: 700 }}>
         OK — {resultado.total_filas} filas procesadas
         {typeof resultado.insertados === 'number' && ` (${resultado.insertados} nuevas, ${resultado.actualizados} actualizadas)`}
+        {resultado.eliminados > 0 && ` — se reemplazaron ${resultado.eliminados} registros anteriores`}
       </div>
     );
   }
@@ -475,11 +497,11 @@ export default function BulkUploadModal({ entidad, onClose, onSuccess }) {
   } = useCargaMasiva(entidad, onSuccess);
 
   return (
-    <div role="dialog" aria-label={`Carga masiva de ${entidad}`} style={overlayStyle}>
+    <div role="dialog" aria-label={`Carga masiva de ${TITULO_POR_ENTIDAD[entidad] || entidad}`} style={overlayStyle}>
       <div style={boxStyle}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <h2 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: 'var(--motored-text, #1a1a18)' }}>
-            Carga masiva — {entidad}
+            Carga masiva — {TITULO_POR_ENTIDAD[entidad] || entidad}
           </h2>
           <button type="button" className="motored-btn motored-btn-tertiary" onClick={handleDescargarPlantilla}>
             Descargar plantilla Excel
@@ -491,6 +513,12 @@ export default function BulkUploadModal({ entidad, onClose, onSuccess }) {
         <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--motored-text-muted, #5a5a5a)' }}>
           Todo-o-nada: si una sola fila del archivo es inválida, no se escribe nada.
         </p>
+
+        {ENTIDADES_DE_REEMPLAZO.includes(entidad) && (
+          <p style={{ margin: 0, fontSize: '0.75rem', fontWeight: 700, color: 'var(--motored-warning, #d97706)' }}>
+            Atención: cada carga reemplaza la lista completa. Los registros que no estén en el archivo se borran.
+          </p>
+        )}
 
         <FilePicker fileName={fileName} onFile={handleFile} />
 

@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from pydantic import ValidationError
 
 from app.motored.schemas.bodega import BodegaCreate
+from app.motored.schemas.cliente_tecnired import ClienteTecniredCreate, normalizar_nit
 from app.motored.schemas.proveedor import ProveedorCreate
 from app.motored.schemas.referencia import ReferenciaCreate
 from app.motored.schemas.sucursal import SucursalCreate
@@ -26,7 +27,12 @@ _SCHEMA_BY_ENTIDAD = {
     "bodega": BodegaCreate,
     "proveedor": ProveedorCreate,
     "referencia": ReferenciaCreate,
+    "cliente_tecnired": ClienteTecniredCreate,
 }
+
+# Entidades cuya carga REEMPLAZA la lista completa (en vez de upsert por llave
+# natural). Un archivo sin filas se rechaza: borraria la lista entera.
+ENTIDADES_DE_REEMPLAZO = frozenset({"cliente_tecnired"})
 
 
 def coerce_unidad_empaque(value: Optional[int]) -> Tuple[int, Optional[str]]:
@@ -58,6 +64,7 @@ REQUIRED_FIELDS = {
     "bodega": ["codigo"],
     "proveedor": ["codigo", "nombre"],
     "referencia": ["codigo", "proveedor_codigo"],
+    "cliente_tecnired": ["nit"],
 }
 
 
@@ -98,6 +105,9 @@ def _apply_entity_normalizations(entidad: str, cleaned: Row) -> List[str]:
 
     if entidad == "sucursal" and isinstance(cleaned.get("nombre"), str):
         cleaned["nombre"] = normalize_sucursal_nombre(cleaned["nombre"])
+
+    if entidad == "cliente_tecnired" and isinstance(cleaned.get("nit"), str):
+        cleaned["nit"] = normalizar_nit(cleaned["nit"])
 
     # Solo si vino un valor: un `unidad_empaque` ausente/en blanco es "no
     # provisto" (un update conserva el guardado; `create_referencia` pone 1
@@ -159,6 +169,13 @@ def validate_rows(entidad: str, rows: List[Row]) -> Tuple[List[Row], List[RowErr
     """
     valid_rows: List[Row] = []
     errors: List[RowError] = []
+
+    if entidad in ENTIDADES_DE_REEMPLAZO and not rows:
+        return valid_rows, [{
+            "fila": 0,
+            "motivo": "El archivo no tiene filas: no se reemplaza la lista actual. "
+                      "Cargá al menos una fila.",
+        }]
 
     for index, row in enumerate(rows, start=1):
         reasons = _validate_single_row(entidad, row)

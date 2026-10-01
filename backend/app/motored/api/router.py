@@ -23,6 +23,7 @@ from app.motored.api import (
     bot_demanda_perdida,
     cargas,
     carga,
+    clientes_tecnired,
     corridas,
     corridas_pedido,
     demanda_perdida,
@@ -45,6 +46,8 @@ router.include_router(salud.router)  # antes de maestros -- ver nota arriba
 router.include_router(referencias_busqueda.router)
 router.include_router(maestros.router)
 router.include_router(carga.router)
+# T2 tablero-asesores: `/clientes-tecnired` es un prefijo propio, sin superposicion.
+router.include_router(clientes_tecnired.router)
 router.include_router(usuarios.router)
 router.include_router(parametros.router)
 # Fase 2 "Ingesta" (sdd/motored-pedidos-ingesta, task 9.4): `/cargas` es un

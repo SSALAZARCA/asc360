@@ -22,4 +22,7 @@ class CargaResultado(BaseModel):
     errores: List[CargaErrorRow] = []
     insertados: int = 0
     actualizados: int = 0
+    # Solo para cargas que REEMPLAZAN la lista completa (CLIENTES TECNIRED):
+    # cuantas filas anteriores se borraron.
+    eliminados: int = 0
     advertencias: List[Any] = []
