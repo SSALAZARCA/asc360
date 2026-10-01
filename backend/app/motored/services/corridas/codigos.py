@@ -45,6 +45,8 @@ E_CORRIDA_INTERNO = "E-CORRIDA-099"
 # RETIRADO: una tienda fallida ya no bloquea el cierre de las demás. 051 es
 # de B3b (anular una corrida con pedidos cerrados o enviados), igual que
 # 047-050, 056 y 067 (enviar y corregir el número de orden, F4-11/13/15).
+# 055 y 057 son de B4 (exportar el pedido a HMCL, F4-1); 056 también cubre
+# "nada que exportar".
 E_CORRIDA_REABRIR_BORRADOR = "E-CORRIDA-044"
 E_CORRIDA_REABRIR_ENVIADO = "E-CORRIDA-045"
 E_CORRIDA_REABRIR_MOTIVO = "E-CORRIDA-046"
@@ -53,7 +55,9 @@ E_CORRIDA_ENVIO_INVALIDO = "E-CORRIDA-048"
 E_CORRIDA_ENVIAR_YA_ENVIADO = "E-CORRIDA-049"
 E_CORRIDA_ENVIO_DUPLICADO = "E-CORRIDA-050"
 E_CORRIDA_ANULAR_CON_PEDIDOS = "E-CORRIDA-051"
+E_CORRIDA_EXPORTAR_NO_CERRADO = "E-CORRIDA-055"
 E_CORRIDA_NADA_QUE_ENVIAR = "E-CORRIDA-056"
+E_CORRIDA_EXPORTAR_SIN_SIC = "E-CORRIDA-057"
 E_CORRIDA_CORREGIR_NO_ENVIADO = "E-CORRIDA-067"
 E_CORRIDA_OVERRIDES_SOLO_ADMIN = "E-CORRIDA-062"
 E_CORRIDA_CERRAR_NO_BORRADOR = "E-CORRIDA-064"
@@ -174,6 +178,11 @@ CATALOGO = {
         "{tienda} no tiene nada que pedir (todas sus cantidades son 0): "
         "no se puede enviar."
     ),
+    E_CORRIDA_EXPORTAR_NO_CERRADO: "No se puede exportar: {detalle}.",
+    E_CORRIDA_EXPORTAR_SIN_SIC: (
+        "{tienda} no tiene SIC: no se puede nombrar el archivo de pedido. "
+        "Cargue el SIC de la tienda."
+    ),
     E_CORRIDA_CORREGIR_NO_ENVIADO: (
         "El pedido de esta tienda no está enviado (está {estado}): no hay "
         "un número de orden que corregir."
@@ -247,6 +256,15 @@ def mensaje(codigo: str, **datos) -> str:
 def mensaje_escenario(accion: str) -> str:
     """E-CORRIDA-042: un escenario no admite `accion` (cerrar, editar...)."""
     return mensaje(E_CORRIDA_ESCENARIO_NO_SE_CIERRA, accion=accion)
+
+
+def mensaje_nada_que_exportar(tienda=None) -> str:
+    """E-CORRIDA-056 al exportar: la tienda (o, sin nombre, todas las
+    pedidas) no tiene ninguna cantidad mayor que 0."""
+    if tienda is None:
+        return "Ninguna de las tiendas tiene cantidades para exportar."
+    return (f"{tienda} no tiene nada que pedir (todas sus cantidades son "
+            "0): no hay nada que exportar.")
 
 
 def mensaje_carga_bloqueada(corrida: str, tienda=None, estado=None) -> str:

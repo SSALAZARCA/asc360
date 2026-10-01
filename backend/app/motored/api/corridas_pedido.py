@@ -1,17 +1,19 @@
 """
-Motored Pedidos F4 "Pantallas del pedido" (sdd/motored-pedidos-ui, B2, B3a
-y B3b, ADR-1, ADR-3): `/api/motored/corridas`, escrituras y lecturas del
-pedido por tienda.
+Motored Pedidos F4 "Pantallas del pedido" (sdd/motored-pedidos-ui, B2, B3a,
+B3b y B4, ADR-1, ADR-3, ADR-7): `/api/motored/corridas`, escrituras y
+lecturas del pedido por tienda.
 
 Trae la edición de una línea (`PATCH /{id}/lineas/{linea_id}`) y su
 historial (B2); y el ciclo de vida por tienda (B3a): cerrar varias a la vez
 (`POST /{id}/cerrar`, ahora por lote), cerrar y reabrir UNA, la cabecera de
 la tienda y su línea de tiempo; y el envío (B3b): marcar como enviada una
 tienda (`POST .../enviar`) o varias a la vez (`POST /{id}/enviar`) y corregir
-el número de orden de una ya enviada (`PATCH .../envio`). Exportar y recortar
-llegan en las siguientes rebanadas. Router delgado: las reglas viven en
-`services/corridas/` (`edicion`, `pedido_tienda`, `envio`) y las lecturas en
-`consultas` y `lecturas_pedido`.
+el número de orden de una ya enviada (`PATCH .../envio`); y la exportación
+a HMCL (B4): el `.xlsx` de una tienda (`GET .../exportar`) y el `.zip` de la
+corrida (`GET /{id}/exportar`). Recortar llega en la siguiente rebanada.
+Router delgado: las reglas viven en `services/corridas/` (`edicion`,
+`pedido_tienda`, `envio`, `exportacion`) y las lecturas en `consultas` y
+`lecturas_pedido`.
 
 RBAC (F4-16): ADMIN y COMPRAS; el resto, 403. Los servicios no hacen commit:
 `comun.ejecutar` confirma o deshace.
@@ -19,8 +21,9 @@ RBAC (F4-16): ADMIN y COMPRAS; el resto, 403. Los servicios no hacen commit:
 import uuid
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.concurrency import run_in_threadpool
 
 from app.motored.api import corridas_comun as comun
 from app.motored.deps import (
@@ -49,10 +52,17 @@ from app.motored.services.corridas import (
     consultas,
     edicion,
     envio,
+    exportacion,
+    exportacion_hmcl,
     lecturas_pedido,
     pedido_tienda,
 )
 from app.motored.services.corridas.codigos import ErrorCorrida
+
+TIPO_XLSX = (
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+TIPO_ZIP = "application/zip"
+CABECERAS_EXPUESTAS = "Content-Disposition, X-Tiendas-Omitidas"
 
 router = APIRouter(
     prefix="/corridas",
@@ -266,3 +276,47 @@ async def eventos_de_tienda(
     if eventos is None:
         raise comun.no_existe("La tienda no está en la corrida.")
     return eventos
+
+
+# --- Exportar el pedido a HMCL (B4) -----------------------------------------
+
+
+@router.get("/{corrida_id}/sucursales/{sucursal_id}/exportar")
+async def exportar_tienda(
+    corrida_id: uuid.UUID,
+    sucursal_id: uuid.UUID,
+    db: AsyncSession = Depends(get_motored_db_or_503),
+    user: MotoredUser = Depends(comun.require_write),
+):
+    """El `.xlsx` del pedido de UNA tienda (cerrada o enviada), con su
+    cabecera y las líneas con cantidad. No cambia nada; se puede repetir."""
+    datos = await comun.ejecutar(db, exportacion.preparar_tienda(
+        db, corrida_id, sucursal_id))
+    archivo, tamano = await run_in_threadpool(
+        exportacion.construir_xlsx, datos)
+    nombre = exportacion_hmcl.nombre_archivo(
+        datos.sic, datos.nombre, datos.fecha_corte)
+    return comun.respuesta_de_archivo(archivo, tamano, nombre, TIPO_XLSX)
+
+
+@router.get("/{corrida_id}/exportar")
+async def exportar_corrida(
+    corrida_id: uuid.UUID,
+    sucursal_id: Optional[List[uuid.UUID]] = Query(None),
+    db: AsyncSession = Depends(get_motored_db_or_503),
+    user: MotoredUser = Depends(comun.require_write),
+):
+    """Un `.zip` con el `.xlsx` de cada tienda cerrada o enviada (o de las
+    pedidas en `sucursal_id`). Las tiendas que no van y por qué viajan en la
+    cabecera `X-Tiendas-Omitidas` (JSON con porcentaje)."""
+    seleccion = await comun.ejecutar(db, exportacion.preparar_corrida(
+        db, corrida_id, sucursal_id))
+    archivo, tamano = await run_in_threadpool(
+        exportacion.construir_zip, seleccion.tiendas)
+    corrida = seleccion.corrida
+    nombre = exportacion_hmcl.nombre_zip(corrida.codigo, corrida.fecha_corte)
+    return comun.respuesta_de_archivo(
+        archivo, tamano, nombre, TIPO_ZIP, {
+            "X-Tiendas-Omitidas": exportacion_hmcl.cabecera_omitidas(
+                seleccion.omitidas),
+            "Access-Control-Expose-Headers": CABECERAS_EXPUESTAS})

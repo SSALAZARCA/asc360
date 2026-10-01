@@ -41,6 +41,8 @@ _MODULOS_NUEVOS = (
     "app/motored/services/corridas/lecturas_pedido.py",
     "app/motored/services/corridas/envio.py",
     "app/motored/services/corridas/guardas.py",
+    "app/motored/services/corridas/exportacion.py",
+    "app/motored/services/corridas/exportacion_hmcl.py",
     "app/motored/api/corridas_comun.py",
     "app/motored/api/corridas_pedido.py",
     "app/motored/schemas/pedido.py",

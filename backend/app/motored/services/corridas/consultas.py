@@ -203,9 +203,17 @@ async def detalle(
     a_pedir = await _a_pedir(db, corrida_id, alcance)
     eventos = await lecturas_pedido.ultimos_eventos(
         db, corrida_id, alcance)
+    envios = await _envios(db, corrida_id, alcance, sucursales)
     return proyecciones.armar_detalle(
         corrida, sucursales, resumen.scalars().all(), cargas.all(), alcance,
-        a_pedir, eventos)
+        a_pedir, eventos, envios)
+
+
+async def _envios(db, corrida_id: UUID, alcance: Alcance, sucursales) -> dict:
+    """El envío de cada tienda ENVIADO; sin ninguna, no hay consulta."""
+    if not any(s.estado_pedido == estados.PEDIDO_ENVIADO for s in sucursales):
+        return {}
+    return await lecturas_pedido.envios_de(db, corrida_id, alcance)
 
 
 async def _a_pedir(db, corrida_id: UUID, alcance: Alcance) -> list:

@@ -56,7 +56,7 @@ def _acciones(estado_pedido, **corrida):
 
 
 NADA = {"cerrar": False, "reabrir": False, "editar": False,
-        "enviar": False, "corregir_envio": False}
+        "enviar": False, "corregir_envio": False, "exportar": False}
 
 
 def test_a_borrador_pedido_can_be_edited_and_closed_but_not_reopened():
@@ -66,11 +66,12 @@ def test_a_borrador_pedido_can_be_edited_and_closed_but_not_reopened():
 
 def test_a_closed_pedido_can_be_reopened_or_sent():
     assert _acciones("CERRADO") == {
-        **NADA, "reabrir": True, "enviar": True}
+        **NADA, "reabrir": True, "enviar": True, "exportar": True}
 
 
 def test_a_sent_pedido_can_only_have_its_number_corrected():
-    assert _acciones("ENVIADO") == {**NADA, "corregir_envio": True}
+    assert _acciones("ENVIADO") == {
+        **NADA, "corregir_envio": True, "exportar": True}
 
 
 def test_a_tienda_without_pedido_has_no_action():
@@ -168,7 +169,8 @@ def test_each_sucursal_carries_its_pedido_state_and_what_to_order():
 def test_the_actions_follow_each_tienda_state():
     uno, dos, tres = _detalle_pedido()["sucursales"]
 
-    assert uno["acciones"] == {**NADA, "reabrir": True, "enviar": True}
+    assert uno["acciones"] == {
+        **NADA, "reabrir": True, "enviar": True, "exportar": True}
     assert dos["acciones"] == {**NADA, "cerrar": True, "editar": True}
     assert not any(tres["acciones"].values())
 

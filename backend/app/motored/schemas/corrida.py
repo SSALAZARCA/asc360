@@ -92,6 +92,18 @@ class AccionesTienda(BaseModel):
     editar: bool = False
     enviar: bool = False
     corregir_envio: bool = False
+    exportar: bool = False
+
+
+class EnvioInfo(BaseModel):
+    """El envío de una tienda ENVIADO: el número de orden de HMCL, la fecha
+    de envío y quién y cuándo lo marcó (`enviado_por` es el nombre del
+    usuario; NULL sólo si el usuario ya no existe)."""
+
+    numero_orden: str
+    fecha_envio: datetime.date
+    enviado_por: Optional[str] = None
+    enviado_en: datetime.datetime
 
 
 class CorridaItem(BaseModel):
@@ -160,6 +172,8 @@ class SucursalEstado(BaseModel):
     valor_a_pedir: Dec = None
     ultimo_evento: Optional[UltimoEvento] = None
     acciones: AccionesTienda = Field(default_factory=AccionesTienda)
+    # Fase 4 (B4): el envío, sólo cuando la tienda está ENVIADO.
+    envio: Optional[EnvioInfo] = None
 
 
 class ResumenClase(BaseModel):

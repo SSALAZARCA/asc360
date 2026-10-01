@@ -280,7 +280,7 @@ def test_the_tienda_header_is_served_with_its_totals_and_actions(espia):
     assert cuerpo["totales"]["unidades_a_pedir"] == "1010.00"
     assert cuerpo["acciones"] == {
         "cerrar": True, "reabrir": False, "editar": True,
-        "enviar": False, "corregir_envio": False}
+        "enviar": False, "corregir_envio": False, "exportar": False}
     assert espia.ultima("cabecera")[1] == (CORRIDA, fx.SUC_A, None)
 
 
@@ -439,4 +439,6 @@ def test_the_pedido_router_exposes_exactly_the_planned_operations():
         ("POST", "/corridas/{corrida_id}/enviar"),
         ("POST", "/corridas/{corrida_id}/sucursales/{sucursal_id}/enviar"),
         ("PATCH", "/corridas/{corrida_id}/sucursales/{sucursal_id}/envio"),
+        ("GET", "/corridas/{corrida_id}/exportar"),
+        ("GET", "/corridas/{corrida_id}/sucursales/{sucursal_id}/exportar"),
     }

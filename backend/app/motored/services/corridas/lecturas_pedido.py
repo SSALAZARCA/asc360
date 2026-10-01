@@ -1,11 +1,12 @@
 """
-Motored Pedidos F4 "Pantallas del pedido" (sdd/motored-pedidos-ui, B2 y B3a,
-ADR-1, ADR-3): lecturas del pedido de cada tienda.
+Motored Pedidos F4 "Pantallas del pedido" (sdd/motored-pedidos-ui, B2, B3a y
+B4, ADR-1, ADR-3): lecturas del pedido de cada tienda.
 
 Sólo SELECTs, nunca un commit. Las cifras a pedir y sugeridas de una tienda
 (`totales_de_tienda`, que la edición también devuelve), el último evento de
-pedido de cada tienda (`ultimos_eventos`), la cabecera de la pantalla de una
-tienda (`cabecera_tienda`) y su línea de tiempo (`eventos_tienda`). El
+pedido de cada tienda (`ultimos_eventos`), el envío de cada tienda ENVIADO
+(`envios_de`, B4), la cabecera de la pantalla de una tienda
+(`cabecera_tienda`) y su línea de tiempo (`eventos_tienda`). El
 alcance por sucursal es defensa en profundidad: `alcance` es `None` o el
 conjunto de sucursales visibles y restringe cada consulta en SQL; lo que no
 se ve responde `None` (la API lo trata como 404). Armar las respuestas es de
@@ -19,12 +20,13 @@ from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import distinct_on
 
 from app.motored.models.corrida import Corrida
+from app.motored.models.corrida_envio import CorridaEnvio
 from app.motored.models.corrida_linea import CorridaLinea
 from app.motored.models.corrida_sucursal import CorridaSucursal
 from app.motored.models.pedido_evento import PedidoEvento
 from app.motored.models.sucursal import Sucursal
 from app.motored.models.usuario import Usuario
-from app.motored.services.corridas import proyecciones
+from app.motored.services.corridas import estados, proyecciones
 
 Alcance = Optional[FrozenSet[UUID]]
 
@@ -76,6 +78,28 @@ async def ultimos_eventos(
         for fila in filas.all()}
 
 
+async def envios_de(
+    db, corrida_id: UUID, alcance: Alcance,
+    sucursal_id: Optional[UUID] = None,
+) -> Dict[UUID, proyecciones.EnvioTienda]:
+    """El envío de cada tienda de la corrida (o de UNA) que ya se envió: su
+    número de orden, la fecha, quién (el nombre) y cuándo, en una sola
+    consulta. Una tienda sin envío no aparece (`ENVIADO <=> existe la fila`,
+    por eso quien llama sólo pregunta si alguna está ENVIADO)."""
+    ce = CorridaEnvio
+    condiciones = [
+        ce.corrida_id == corrida_id, *_en_alcance(ce.sucursal_id, alcance)]
+    if sucursal_id is not None:
+        condiciones.append(ce.sucursal_id == sucursal_id)
+    filas = await db.execute(
+        select(ce.sucursal_id, ce.numero_pedido_proveedor, ce.fecha_envio,
+               Usuario.nombre, ce.enviada_en)
+        .outerjoin(Usuario, Usuario.id == ce.enviada_por)
+        .where(*condiciones))
+    return {
+        fila[0]: proyecciones.EnvioTienda(*fila[1:]) for fila in filas.all()}
+
+
 async def cabecera_tienda(
     db, corrida_id: UUID, sucursal_id: UUID, alcance: Alcance,
 ) -> Optional[Dict[str, Any]]:
@@ -94,8 +118,12 @@ async def cabecera_tienda(
     totales = await totales_de_tienda(db, corrida_id, sucursal_id)
     ultimo = (await ultimos_eventos(
         db, corrida_id, alcance, sucursal_id)).get(sucursal_id)
+    envio = None
+    if tienda.estado_pedido == estados.PEDIDO_ENVIADO:
+        envio = (await envios_de(
+            db, corrida_id, alcance, sucursal_id)).get(sucursal_id)
     return proyecciones.cabecera_tienda(
-        corrida, tienda, nombre, sic, totales, ultimo)
+        corrida, tienda, nombre, sic, totales, ultimo, envio)
 
 
 async def eventos_tienda(

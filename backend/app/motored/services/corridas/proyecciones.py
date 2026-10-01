@@ -232,12 +232,31 @@ class UltimoEvento(NamedTuple):
     creado_en: datetime.datetime
 
 
+class EnvioTienda(NamedTuple):
+    """El envío de una tienda ENVIADO (B4): número de orden, fecha de envío
+    y quién (`None` si el usuario ya no existe) y cuándo lo marcó."""
+
+    numero: str
+    fecha_envio: datetime.date
+    usuario: Optional[str]
+    enviado_en: datetime.datetime
+
+
+def _envio(envio: Optional[EnvioTienda]) -> Optional[Dict[str, Any]]:
+    if envio is None:
+        return None
+    return {"numero_orden": envio.numero, "fecha_envio": envio.fecha_envio,
+            "enviado_por": envio.usuario, "enviado_en": envio.enviado_en}
+
+
 def acciones_de(corrida, estado_pedido: Optional[str]) -> Dict[str, bool]:
     """Qué puede hacer el comprador con el pedido de una tienda, según el
     estado del pedido y el de la corrida (el rol ya lo filtró la API).
 
     Nada en un escenario ni en una corrida cuyo cálculo no terminó; una
-    corrida invalidada sólo deja reabrir (devolver a BORRADOR)."""
+    corrida invalidada sólo deja reabrir (devolver a BORRADOR) y corregir el
+    número de orden. Exportar (B4) sigue al servicio: pedido CERRADO o
+    ENVIADO en una corrida operable y no invalidada."""
     operable = (
         not corrida.es_escenario and corrida.estado in estados.CALCULADAS)
     abierta = operable and not corrida.invalidada
@@ -248,6 +267,8 @@ def acciones_de(corrida, estado_pedido: Optional[str]) -> Dict[str, bool]:
         "editar": abierta and borrador,
         "enviar": abierta and estado_pedido == estados.PEDIDO_CERRADO,
         "corregir_envio": operable and estado_pedido == estados.PEDIDO_ENVIADO,
+        "exportar": abierta and estado_pedido in (
+            estados.PEDIDO_CERRADO, estados.PEDIDO_ENVIADO),
     }
 
 
@@ -304,6 +325,7 @@ def _ultimo_evento(
 def cabecera_tienda(
     corrida, tienda, nombre: str, sic: Optional[str],
     totales_tienda: Mapping[str, Decimal], ultimo: Optional[UltimoEvento],
+    envio: Optional[EnvioTienda] = None,
 ) -> Dict[str, Any]:
     """La cabecera de la pantalla del pedido de UNA tienda."""
     return {
@@ -317,6 +339,7 @@ def cabecera_tienda(
         "totales": dict(totales_tienda),
         "ultimo_evento": _ultimo_evento(ultimo),
         "acciones": acciones_de(corrida, tienda.estado_pedido),
+        "envio": _envio(envio),
     }
 
 
@@ -379,6 +402,7 @@ def item_de_fila(fila) -> Dict[str, Any]:
 def _estado_sucursal(
     s, corrida, a_pedir: Mapping[Any, Tuple[Decimal, Decimal]],
     eventos: Mapping[Any, UltimoEvento],
+    envios: Mapping[Any, EnvioTienda],
 ) -> Dict[str, Any]:
     unidades, valor = a_pedir.get(s.sucursal_id, (Decimal(0), Decimal(0)))
     return {
@@ -386,6 +410,7 @@ def _estado_sucursal(
         "valor_a_pedir": valor,
         "ultimo_evento": _ultimo_evento(eventos.get(s.sucursal_id)),
         "acciones": acciones_de(corrida, s.estado_pedido),
+        "envio": _envio(envios.get(s.sucursal_id)),
         "sucursal_id": s.sucursal_id, "nombre": s.nombre.strip(),
         "orden": s.orden, "estado": s.estado, "codigo": s.codigo,
         "mensaje": s.mensaje, "lineas": s.lineas, "excluidas": s.excluidas,
@@ -414,10 +439,12 @@ def agrupar_cargas(cargas: Iterable[Any]) -> Dict[str, List[Dict[str, Any]]]:
 def armar_detalle(
     corrida, sucursales, resumen, cargas, alcance: Alcance, a_pedir=(),
     eventos: Optional[Mapping[Any, UltimoEvento]] = None,
+    envios: Optional[Mapping[Any, EnvioTienda]] = None,
 ) -> Dict[str, Any]:
     """El detalle completo de la corrida para quien tiene `alcance`.
-    `a_pedir` son las filas por sucursal y clase de `pedido_final` y
-    `eventos` el último evento de pedido de cada sucursal."""
+    `a_pedir` son las filas por sucursal y clase de `pedido_final`,
+    `eventos` el último evento de pedido de cada sucursal y `envios` el
+    envío de cada sucursal ENVIADO."""
     seleccion = corrida.seleccion_datos or {}
     por_clase = resumen_por_clase(resumen)
     pedir, totales_pedir = resumen_a_pedir(a_pedir, sucursales)
@@ -439,7 +466,8 @@ def armar_detalle(
         "mes_en_curso": seleccion.get("mes_en_curso"),
         "advertencias": avisos(corrida, sucursales),
         "sucursales": [
-            _estado_sucursal(s, corrida, por_sucursal, eventos or {})
+            _estado_sucursal(
+                s, corrida, por_sucursal, eventos or {}, envios or {})
             for s in sucursales],
         "resumen": _resumen_por_sucursal(resumen, sucursales),
         "resumen_por_clase": por_clase,

@@ -486,7 +486,7 @@ async def test_the_detail_shows_the_summary_and_each_tienda_pedido_ci_03(
     assert cerrada["ultimo_evento"]["usuario"] == "Compras"
     assert cerrada["acciones"] == {
         "cerrar": False, "reabrir": True, "editar": False,
-        "enviar": True, "corregir_envio": False}
+        "enviar": True, "corregir_envio": False, "exportar": True}
     assert abierta["estado_pedido"] == "BORRADOR"
     assert abierta["ultimo_evento"] is None
     assert abierta["acciones"]["cerrar"] is True

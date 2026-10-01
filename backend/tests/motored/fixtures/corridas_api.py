@@ -16,7 +16,13 @@ from types import SimpleNamespace
 from app.motored.api import corridas as api
 from app.motored.api import corridas_pedido as api_pedido
 from app.motored.models.corrida_linea import CorridaLinea
-from app.motored.services.corridas import edicion, envio, pedido_tienda
+from app.motored.services.corridas import (
+    edicion,
+    envio,
+    exportacion,
+    exportacion_hmcl,
+    pedido_tienda,
+)
 
 CORRIDA_ID = uuid.UUID(int=500)
 PROVEEDOR_ID = uuid.UUID(int=501)
@@ -153,6 +159,30 @@ def evento_pedido(**campos):
     return {**base, **campos}
 
 
+def datos_exportacion(nombre="Manizales", sic="1234", lineas=None):
+    """Lo que devuelve `exportacion.preparar_tienda`: los datos del archivo
+    HMCL de una tienda (el libro se arma de verdad, es chico)."""
+    lineas = [("94109-12000S", Decimal("50.00")),
+              ("00123-AB", Decimal("12.00"))] if lineas is None else lineas
+    return exportacion_hmcl.DatosTienda(nombre, sic, CORTE, lineas)
+
+
+def seleccion_zip(**campos):
+    """Lo que devuelve `exportacion.preparar_corrida`: dos tiendas en el zip
+    y una omitida."""
+    base = dict(
+        corrida=SimpleNamespace(
+            id=CORRIDA_ID, codigo="PED-2026-S39-001", fecha_corte=CORTE),
+        tiendas=[
+            datos_exportacion(),
+            datos_exportacion("Medellín Poblado", "77",
+                              [("55512-A", Decimal("7.00"))])],
+        omitidas=[{
+            "sucursal_id": str(SUC_B), "nombre": "Pereira",
+            "codigo": "BORRADOR", "motivo": "El pedido sigue en BORRADOR"}])
+    return exportacion.SeleccionZip(**{**base, **campos})
+
+
 class Espia:
     """Doble de `consultas` y `servicio`: graba las llamadas y responde lo
     configurado."""
@@ -183,6 +213,8 @@ class Espia:
             SimpleNamespace(estado_pedido="ENVIADO"),
             fila_envio(SUC_A, "99999"), True)
         self.cabecera = cabecera_tienda()
+        self.datos_tienda = datos_exportacion()
+        self.seleccion = seleccion_zip()
         self.eventos = [evento_pedido()]
         self.anulada = SimpleNamespace(
             id=CORRIDA_ID, codigo="PED-2026-S39-001", estado="ANULADA",
@@ -250,7 +282,25 @@ def instalar(monkeypatch, espia=None):
     _instalar_edicion(monkeypatch, espia)
     _instalar_pedido_tienda(monkeypatch, espia)
     _instalar_envio(monkeypatch, espia)
+    _instalar_exportacion(monkeypatch, espia)
     return espia
+
+
+def _instalar_exportacion(monkeypatch, espia):
+    """Dobles de la lectura de datos de la exportación HMCL (F4, B4): los
+    constructores del archivo corren de verdad."""
+    async def preparar_tienda(db, corrida_id, sucursal_id):
+        espia._registrar("exportar_tienda", corrida_id, sucursal_id)
+        return espia.datos_tienda
+
+    async def preparar_corrida(db, corrida_id, sucursal_ids=None):
+        espia._registrar("exportar_corrida", corrida_id, sucursal_ids)
+        return espia.seleccion
+
+    monkeypatch.setattr(
+        api_pedido.exportacion, "preparar_tienda", preparar_tienda)
+    monkeypatch.setattr(
+        api_pedido.exportacion, "preparar_corrida", preparar_corrida)
 
 
 def _instalar_envio(monkeypatch, espia):

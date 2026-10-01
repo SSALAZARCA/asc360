@@ -49,6 +49,10 @@ LECTURAS = LECTURAS_F3 + [
     # Fase 4 (B3a): la cabecera de una tienda y su línea de tiempo.
     ("GET", f"{BASE}/{ID}/sucursales/{fx.SUC_A}", None),
     ("GET", f"{BASE}/{ID}/sucursales/{fx.SUC_A}/eventos", None),
+    # Fase 4 (B4): exportar a HMCL, de una tienda (xlsx) y de la corrida
+    # (zip). Sólo leen, pero igual que escribir son de ADMIN y COMPRAS.
+    ("GET", f"{BASE}/{ID}/sucursales/{fx.SUC_A}/exportar", None),
+    ("GET", f"{BASE}/{ID}/exportar", None),
 ]
 ESCRITURAS = [
     ("POST", BASE, {"fecha_corte": "2026-09-21"}),

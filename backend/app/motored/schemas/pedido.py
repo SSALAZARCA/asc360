@@ -20,6 +20,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.motored.schemas.corrida import (
     AccionesTienda,
+    EnvioInfo,
     LineaRead,
     UltimoEvento,
 )
@@ -183,6 +184,7 @@ class CabeceraTienda(BaseModel):
     totales: TotalesTienda
     ultimo_evento: Optional[UltimoEvento] = None
     acciones: AccionesTienda
+    envio: Optional[EnvioInfo] = None
 
 
 class EventoPedido(BaseModel):
