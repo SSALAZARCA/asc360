@@ -66,13 +66,13 @@ Today the indicators live in a 135 MB Excel that is rebuilt by hand. Motored alr
 | ID | Task | Route | Status |
 |---|---|---|---|
 | T1 | INVENTARIO: required "Costo prom. uni.", the new `inventario_detalle` table, migration, set-based write in the same transaction, replace by (fecha_corte, sucursal), retention purge in the same job, template update, fixtures, pg_real tests. | delegated writer (2+ non-trivial files) | done (d64c4f3 on main) |
-| T2 | CLIENTES TECNIRED upload in Maestros (backend 4-maestros pattern plus a frontend tab). Columns: NIT, razón social. Each upload REPLACES the full list. | delegated writer | ready |
-| T3 | "Maestro de vendedores": every person who sells, with or without an app user. Fields: ERP name (the "Nombre vendedor" join key, normalized), cargo, sucursal principal, cédula (optional), linked Usuario (optional). Loaded by Excel in Maestros and editable by hand. | delegated writer | ready |
+| T2 | CLIENTES TECNIRED upload in Maestros (backend 4-maestros pattern plus a frontend tab). Columns: NIT, razón social. Each upload REPLACES the full list. | delegated writer | done (9fdf3e3, not pushed) |
+| T3 | "Maestro de vendedores": every person who sells, with or without an app user. Fields: ERP name (the "Nombre vendedor" join key, normalized), cargo, sucursal principal, cédula (optional), linked Usuario (optional). Loaded by Excel in Maestros and editable by hand. | delegated writer | done (71052cb, not pushed) |
 | T4 | Dashboard endpoint and screen (indicators from the analysis, period and HMCL filters). Visible to ADMIN and COMPRAS only. Sellers not in the maestro group as RESTO COMPAÑÍA. | delegated writer | ready |
 
 - [x] T1 (commit d64c4f3 on main, rebased from 0f6106e)
-- [ ] T2
-- [ ] T3
+- [x] T2 (commit 9fdf3e3, head d3b7f19a4c26)
+- [x] T3 (commit 71052cb, head e8c2a5f17b93)
 - [ ] T4
 
 ## Log
@@ -92,3 +92,11 @@ Today the indicators live in a 135 MB Excel that is rebuilt by hand. Motored alr
     - No frontend change: no file lists the INVENTARIO columns (the template comes from the backend).
 - 2026-10-01: T1 native review (medium risk) granted by the user, approved on the reliability lens and acknowledged. Rebased on main 40994b0 and pushed as d64c4f3 + 74ea4c1. Post-rebase `tests/motored`: 3800 passed. New head: `c4a9e7d1b852`.
   - Advisory follow-up: blank, invalid or too-large costs become NULL silently. Add a count of null costs to `carga.log` so the user can see when the cost base shrinks.
+- 2026-10-01: T2 and T3 done in worktree "- encuesta" (branch feat/motored-encuesta-satisfaccion), NOT pushed. Commits: T2 `9fdf3e3`, T3 `71052cb`. Alembic chain: `c4a9e7d1b852` -> `d3b7f19a4c26` (cliente_tecnired) -> `e8c2a5f17b93` (vendedor): tell the F3/F4 agent the new head `e8c2a5f17b93`.
+  - RED (before implementing): T2 `test_clientes_tecnired.py` failed at collection (`ModuleNotFoundError: app.motored.models.cliente_tecnired`) and the T2 jest suite failed to run (`Cannot find module ClientesTecniredTab`); T3 `test_vendedores.py` failed at collection (no `app.motored.models.vendedor`) and the T3 jest suite failed to run (`Cannot find module VendedoresTab`). Only after those did the implementations land.
+  - GREEN: tests/motored 3872 passed (3800 baseline + 29 T2 + 43 T3); full backend suite 5168 passed (final run after the gga fixes); pg_real on a throwaway PG 18 (migration upgrade, `downgrade -1`, upgrade again for both migrations): 272 passed, 2 skipped, including 4 new Tecnired and 6 new vendedor pg_real tests; full jest 112 suites / 875 tests passed. `next lint` does not exist here (Next 16, no ESLint config): skipped. gga review passed on both commits (the first T3 attempt was rejected for a misleading helper name, an uncaught unique-index race and long lines; all three were fixed, with 409 tests for the race).
+  - Decisions not covered above:
+    - CLIENTES TECNIRED: duplicate NITs in the file are DEDUPED (first row wins) with a per-row warning, not an error. An empty file (zero rows) is REJECTED so it can never wipe the list. Replace = `DELETE` all + ORM inserts in one transaction, one commit; no per-row audit rows (`created_by` records who loaded it). NIT normalization is trim + remove internal spaces + remove trailing "." + remove a trailing ".0" (Excel numbers). `CargaResultado` gained `eliminados` (rows replaced). Read-only list endpoint `GET /api/motored/clientes-tecnired` (paginated, ADMIN|COMPRAS); no delete-all and no manual add.
+    - Vendedores: `cargo` is normalized to UPPERCASE with collapsed spaces (max 80). A duplicated vendedor in the same file (same `normalizar_vendedor` key) is a row ERROR. Sucursal in the Excel is resolved by `normalizar_texto_sucursal` (name, `MR ` prefix, or `sucursal_alias`); an unknown value is a row error. The upload upserts by `nombre_norm` and never touches `nombre`, `usuario_id` or `activo` of an existing person (a blank cell keeps the stored value). Dedicated router `/api/motored/vendedores` (ADMIN|COMPRAS): list with `q`/`cargo`/`activo`, create (409 on duplicate name, also on the unique-index race), PATCH (explicit `null` unlinks sucursal/usuario), DELETE = deactivate, `POST /{id}/reactivar`, `GET /sin-registrar` (max 500, ordered by lines; inactive maestro people count as registered), `GET /usuarios-disponibles` (id, nombre, role only; no emails).
+    - Frontend: tabs "Clientes Tecnired" and "Vendedores" in group Maestros; `BulkUploadModal` got a readable title map and a replace warning for Tecnired. No sidebar item was added (no ping needed for `MotoredSidebar.js`).
+  - Not done: real-browser tablet check (768-1024px) of the two new tabs (no live backend to log into; jsdom cannot verify layout). Both tables sit in `MotoredTableScroll` and the forms wrap with flex-wrap.
