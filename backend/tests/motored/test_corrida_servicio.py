@@ -961,7 +961,7 @@ def test_closing_is_per_tienda_so_the_corrida_level_close_is_gone():
     "PENDIENTE", "CALCULANDO", "FALLIDA", "BORRADOR"])
 async def test_a_live_corrida_can_be_annulled(estado):
     corrida = _corrida_en(estado)
-    db = Sesion(execute_queue=[[corrida]])
+    db = Sesion(execute_queue=[[corrida], []])
 
     anulada = await sv.anular_corrida(
         db, corrida.id, USUARIO, "Datos equivocados")
@@ -982,3 +982,34 @@ async def test_a_closed_or_annulled_corrida_cannot_be_annulled(estado):
 
     assert error.value.codigo == codigos.E_CORRIDA_ESTADO_NO_ADMITE
     assert corrida.estado == estado
+    assert len(db.executed_statements) == 1
+
+
+async def test_a_corrida_with_a_closed_or_sent_tienda_is_051_ci_37():
+    """B3b (A6): la anulación se rechaza mientras alguna tienda esté CERRADO
+    o ENVIADO; la corrida queda como estaba y el error nombra las tiendas."""
+    corrida = _corrida_en("BORRADOR")
+    db = Sesion(execute_queue=[
+        [corrida], [("Manizales", "CERRADO"), ("Pereira", "ENVIADO")]])
+
+    with pytest.raises(pe.ErrorCorrida) as error:
+        await sv.anular_corrida(db, corrida.id, USUARIO, "Datos malos")
+
+    assert error.value.codigo == codigos.E_CORRIDA_ANULAR_CON_PEDIDOS
+    assert "Manizales" in error.value.mensaje
+    assert "Pereira" in error.value.mensaje
+    assert corrida.estado == "BORRADOR"
+    assert corrida.anulada_por is None and corrida.motivo_anulacion is None
+
+
+async def test_the_pedido_check_runs_after_the_lock_and_the_state_check():
+    corrida = _corrida_en("PENDIENTE")
+    db = Sesion(execute_queue=[[corrida], []])
+
+    await sv.anular_corrida(db, corrida.id, USUARIO, "x")
+
+    assert len(db.executed_statements) == 2
+    assert "FOR UPDATE" in str(db.executed_statements[0].compile(
+        dialect=postgresql.dialect()))
+    assert "corrida_sucursal" in str(db.executed_statements[1].compile(
+        dialect=postgresql.dialect()))

@@ -324,7 +324,8 @@ async def test_a_raised_staleness_limit_lets_the_old_data_run(sesion):
 async def _cerrada_como_en_f3(db, corrida_id):
     """F3 cerraba la corrida entera (estado CERRADA); F4 ya no lo escribe,
     pero M1 deja esas corridas heredadas y la guarda de anulación de cargas
-    las sigue protegiendo hasta que B3b la lleve a las tiendas."""
+    las sigue protegiendo (B3b la llevó además a las tiendas CERRADO y
+    ENVIADO)."""
     await db.execute(
         update(Corrida).where(Corrida.id == corrida_id)
         .values(estado="CERRADA")

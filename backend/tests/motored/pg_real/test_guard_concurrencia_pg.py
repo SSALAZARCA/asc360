@@ -83,7 +83,7 @@ async def escenario():
     yield SimpleNamespace(
         maker=maker, carga_id=carga.id, corrida_id=corrida.id,
         usuario_id=usuario.id, codigo=corrida.codigo,
-        sucursal_id=tienda.id)
+        sucursal_id=tienda.id, tienda=tienda.nombre)
     async with maker() as db:
         await db.execute(delete(CorridaCarga).where(
             CorridaCarga.corrida_id == corrida.id))
@@ -122,7 +122,7 @@ async def _cerrar(db, escenario):
     return tienda
 
 
-async def test_an_annulment_waits_for_a_close_in_flight_and_does_not_deadlock(
+async def test_an_annulment_waits_for_a_close_in_flight_and_is_then_blocked(
         escenario):
     async with escenario.maker() as cierre, escenario.maker() as anulacion:
         await pedido_tienda.cerrar_tienda(
@@ -134,10 +134,16 @@ async def test_an_annulment_waits_for_a_close_in_flight_and_does_not_deadlock(
         assert not tarea.done(), "la anulación debía esperar al cierre"
 
         await cierre.commit()
-        await asyncio.wait_for(tarea, timeout=10)
+        with pytest.raises(codigos.ErrorCorrida) as error:
+            await asyncio.wait_for(tarea, timeout=10)
 
+    assert error.value.codigo == codigos.E_CARGA_ANULACION_BLOQUEADA
+    assert escenario.tienda in error.value.mensaje
+    assert escenario.codigo in error.value.mensaje
     carga = await _estado_de(escenario.maker, CargaArchivo, escenario.carga_id)
-    assert carga.estado == "ANULADO"
+    corrida = await _estado_de(escenario.maker, Corrida, escenario.corrida_id)
+    assert carga.estado != "ANULADO"
+    assert corrida.invalidada is False
     async with escenario.maker() as db:
         estado = (await db.execute(
             select(CorridaSucursal.estado_pedido).where(

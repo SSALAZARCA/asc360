@@ -42,10 +42,19 @@ E_CORRIDA_INTERNO = "E-CORRIDA-099"
 # pedido de una tienda. 052-054 y 066 son de B2; 065 la comparten todas las
 # acciones por tienda. 042 (escenario) ahora dice QUÉ acción no admite.
 # 044-046, 062 y 064 son de B3a (reabrir, cerrar y escenarios). 043 está
-# RETIRADO: una tienda fallida ya no bloquea el cierre de las demás.
+# RETIRADO: una tienda fallida ya no bloquea el cierre de las demás. 051 es
+# de B3b (anular una corrida con pedidos cerrados o enviados), igual que
+# 047-050, 056 y 067 (enviar y corregir el número de orden, F4-11/13/15).
 E_CORRIDA_REABRIR_BORRADOR = "E-CORRIDA-044"
 E_CORRIDA_REABRIR_ENVIADO = "E-CORRIDA-045"
 E_CORRIDA_REABRIR_MOTIVO = "E-CORRIDA-046"
+E_CORRIDA_ENVIAR_NO_CERRADO = "E-CORRIDA-047"
+E_CORRIDA_ENVIO_INVALIDO = "E-CORRIDA-048"
+E_CORRIDA_ENVIAR_YA_ENVIADO = "E-CORRIDA-049"
+E_CORRIDA_ENVIO_DUPLICADO = "E-CORRIDA-050"
+E_CORRIDA_ANULAR_CON_PEDIDOS = "E-CORRIDA-051"
+E_CORRIDA_NADA_QUE_ENVIAR = "E-CORRIDA-056"
+E_CORRIDA_CORREGIR_NO_ENVIADO = "E-CORRIDA-067"
 E_CORRIDA_OVERRIDES_SOLO_ADMIN = "E-CORRIDA-062"
 E_CORRIDA_CERRAR_NO_BORRADOR = "E-CORRIDA-064"
 E_CORRIDA_PEDIDO_NO_BORRADOR = "E-CORRIDA-052"
@@ -149,6 +158,30 @@ CATALOGO = {
     E_CORRIDA_REABRIR_MOTIVO: (
         "Indique el motivo de la reapertura (entre 1 y 500 caracteres)."
     ),
+    E_CORRIDA_ENVIAR_NO_CERRADO: (
+        "El pedido de {tienda} no está cerrado (está {estado}): ciérrelo "
+        "antes de enviarlo."
+    ),
+    E_CORRIDA_ENVIO_INVALIDO: "Datos de envío no válidos: {detalle}.",
+    E_CORRIDA_ENVIAR_YA_ENVIADO: (
+        "El pedido de {tienda} ya se envió (orden {numero})."
+    ),
+    E_CORRIDA_ENVIO_DUPLICADO: (
+        "{tienda} ya tiene un pedido enviado para esta semana (corrida "
+        "{corrida}, orden {numero})."
+    ),
+    E_CORRIDA_NADA_QUE_ENVIAR: (
+        "{tienda} no tiene nada que pedir (todas sus cantidades son 0): "
+        "no se puede enviar."
+    ),
+    E_CORRIDA_CORREGIR_NO_ENVIADO: (
+        "El pedido de esta tienda no está enviado (está {estado}): no hay "
+        "un número de orden que corregir."
+    ),
+    E_CORRIDA_ANULAR_CON_PEDIDOS: (
+        "No se puede anular la corrida: tiene pedidos cerrados o enviados "
+        "({tiendas})."
+    ),
     E_CORRIDA_OVERRIDES_SOLO_ADMIN: (
         "Solo un administrador puede lanzar un escenario (una corrida con "
         "parámetros alternativos)."
@@ -170,6 +203,14 @@ CATALOGO = {
     ),
     A_CORRIDA_SIN_PRECIO: "La referencia {referencia} no tiene precio.",
 }
+
+# F4 (B3b): E-CARGA-050 cuando lo que depende de la carga es el pedido
+# CERRADO o ENVIADO de una tienda (el texto de arriba queda para la corrida
+# que F3 dejó CERRADA y no tiene tienda que nombrar).
+CATALOGO_CARGA_PEDIDO = (
+    "La carga la usa el pedido {estado} de {tienda} (corrida {corrida}) y "
+    "no se puede anular."
+)
 
 # Variante "no hay ninguna carga" de los códigos que también cubren "vieja".
 CATALOGO_AUSENTE = {
@@ -206,6 +247,15 @@ def mensaje(codigo: str, **datos) -> str:
 def mensaje_escenario(accion: str) -> str:
     """E-CORRIDA-042: un escenario no admite `accion` (cerrar, editar...)."""
     return mensaje(E_CORRIDA_ESCENARIO_NO_SE_CIERRA, accion=accion)
+
+
+def mensaje_carga_bloqueada(corrida: str, tienda=None, estado=None) -> str:
+    """E-CARGA-050: con tienda, nombra el pedido cerrado o enviado y la
+    corrida; sin tienda (corrida CERRADA de F3), sólo la corrida."""
+    if tienda is None:
+        return mensaje(E_CARGA_ANULACION_BLOQUEADA, corrida=corrida)
+    return CATALOGO_CARGA_PEDIDO.format(
+        estado=str(estado).lower(), tienda=tienda, corrida=corrida)
 
 
 def mensaje_vigencia(codigo: str, dataset: str, antiguedad, limite) -> str:

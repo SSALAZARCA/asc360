@@ -16,7 +16,7 @@ from types import SimpleNamespace
 from app.motored.api import corridas as api
 from app.motored.api import corridas_pedido as api_pedido
 from app.motored.models.corrida_linea import CorridaLinea
-from app.motored.services.corridas import edicion, pedido_tienda
+from app.motored.services.corridas import edicion, envio, pedido_tienda
 
 CORRIDA_ID = uuid.UUID(int=500)
 PROVEEDOR_ID = uuid.UUID(int=501)
@@ -137,6 +137,15 @@ def cabecera_tienda(**campos):
     return {**base, **campos}
 
 
+def fila_envio(sucursal_id=SUC_A, numero="12345", **campos):
+    """Lo que deja un envío: la fila `corrida_envio` (ya con sus defaults)."""
+    base = dict(
+        corrida_id=CORRIDA_ID, sucursal_id=sucursal_id,
+        numero_pedido_proveedor=numero, fecha_envio=datetime.date(2026, 9, 22),
+        enviada_por=USUARIO_EDITOR, enviada_en=CREADA)
+    return SimpleNamespace(**{**base, **campos})
+
+
 def evento_pedido(**campos):
     base = dict(
         id=1, evento="CERRADO", motivo=None, detalle=None,
@@ -165,6 +174,14 @@ class Espia:
         self.tienda = SimpleNamespace(
             corrida_id=CORRIDA_ID, sucursal_id=SUC_A,
             estado_pedido="CERRADO")
+        self.envios = envio.ResultadoEnvios(
+            SimpleNamespace(
+                id=CORRIDA_ID, codigo="PED-2026-S39-001",
+                estado="BORRADOR"),
+            [fila_envio(SUC_A, "12345"), fila_envio(SUC_B, "12346")])
+        self.correccion = envio.ResultadoCorreccion(
+            SimpleNamespace(estado_pedido="ENVIADO"),
+            fila_envio(SUC_A, "99999"), True)
         self.cabecera = cabecera_tienda()
         self.eventos = [evento_pedido()]
         self.anulada = SimpleNamespace(
@@ -232,7 +249,35 @@ def instalar(monkeypatch, espia=None):
         monkeypatch.setattr(api.servicio, nombre, doble)
     _instalar_edicion(monkeypatch, espia)
     _instalar_pedido_tienda(monkeypatch, espia)
+    _instalar_envio(monkeypatch, espia)
     return espia
+
+
+def _instalar_envio(monkeypatch, espia):
+    """Dobles del envío del pedido por tienda (F4, B3b): enviar una, enviar
+    varias y corregir el número de orden."""
+    async def enviar_tienda(db, corrida_id, sucursal_id, numero, fecha,
+                            usuario_id):
+        espia._registrar(
+            "enviar_tienda", corrida_id, sucursal_id, numero, fecha,
+            usuario_id)
+        return envio.ResultadoEnvios(
+            espia.envios.corrida, espia.envios.envios[:1])
+
+    async def enviar_lote(db, corrida_id, pedidos, usuario_id):
+        espia._registrar("enviar_lote", corrida_id, pedidos, usuario_id)
+        return espia.envios
+
+    async def corregir_numero(db, corrida_id, sucursal_id, numero,
+                              usuario_id):
+        espia._registrar(
+            "corregir", corrida_id, sucursal_id, numero, usuario_id)
+        return espia.correccion
+
+    for nombre, doble in (
+            ("enviar_tienda", enviar_tienda), ("enviar_lote", enviar_lote),
+            ("corregir_numero", corregir_numero)):
+        monkeypatch.setattr(api_pedido.envio, nombre, doble)
 
 
 def _instalar_pedido_tienda(monkeypatch, espia):

@@ -420,12 +420,37 @@ async def test_a_reopened_pedido_is_editable_and_recloses_with_the_edit_ci_21(
         "CERRADO", "REABIERTO", "CERRADO"]
 
 
-async def test_an_invalidated_corrida_can_still_reopen_but_not_close_ci_22(
+async def test_reopening_the_last_closed_tienda_lets_the_carga_invalidate_22(
         mundo):
+    """B3b (DM-10, DM-11): con una tienda CERRADO la guarda bloquea la
+    anulación de la carga; reabierta la última, la anulación sigue, invalida
+    la corrida y ninguna tienda se puede cerrar (E-CORRIDA-041)."""
     corrida_id = await _corrida(mundo)
     uno, dos = mundo.datos.uno.id, mundo.datos.dos.id
     await _post(_tienda(corrida_id, uno, "cerrar"))
-    await _anular_carga(mundo.datos.cargas.ingresos.id)
+    bloqueada = await _anular_carga(mundo.datos.cargas.ingresos.id)
+    await _post(_tienda(corrida_id, uno, "reabrir"), {"motivo": "ajuste"})
+    anulada = await _anular_carga(mundo.datos.cargas.ingresos.id)
+
+    cerrar = await _post(_tienda(corrida_id, dos, "cerrar"))
+
+    assert bloqueada.status_code == 409
+    assert bloqueada.json()["detail"]["code"] == "E-CARGA-050"
+    assert anulada.status_code == 200, anulada.text
+    assert cerrar.status_code == 409
+    assert cerrar.json()["detail"]["code"] == "E-CORRIDA-041"
+
+
+async def test_an_invalidated_corrida_can_still_reopen_but_not_close_ci_22(
+        mundo):
+    """Una corrida invalidada con una tienda CERRADO ya no se alcanza por la
+    API (la guarda lo impide); se emula con un UPDATE, como una carrera
+    residual o un dato heredado, para conservar la regla de reabrir."""
+    corrida_id = await _corrida(mundo)
+    uno, dos = mundo.datos.uno.id, mundo.datos.dos.id
+    await _post(_tienda(corrida_id, uno, "cerrar"))
+    await _ejecutar(mundo, update(Corrida).where(
+        Corrida.id == uuid.UUID(corrida_id)).values(invalidada=True))
 
     cerrar = await _post(_tienda(corrida_id, dos, "cerrar"))
     reabrir = await _post(
@@ -460,7 +485,8 @@ async def test_the_detail_shows_the_summary_and_each_tienda_pedido_ci_03(
     assert cerrada["ultimo_evento"]["evento"] == "CERRADO"
     assert cerrada["ultimo_evento"]["usuario"] == "Compras"
     assert cerrada["acciones"] == {
-        "cerrar": False, "reabrir": True, "editar": False}
+        "cerrar": False, "reabrir": True, "editar": False,
+        "enviar": True, "corregir_envio": False}
     assert abierta["estado_pedido"] == "BORRADOR"
     assert abierta["ultimo_evento"] is None
     assert abierta["acciones"]["cerrar"] is True

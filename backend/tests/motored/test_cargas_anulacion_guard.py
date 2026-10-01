@@ -71,7 +71,8 @@ def _sql(sentencia) -> str:
 
 
 # Cola de la anulación real: sonda, carga, y las tres consultas de la guarda
-# (bloqueo FOR UPDATE, corrida cerrada, invalidación) antes del DELETE.
+# (bloqueo FOR UPDATE, pedido bloqueante, invalidación) antes del DELETE.
+# `cerrada` lleva filas `(corrida, tienda, estado_pedido)`.
 def _cola(cerrada=(), invalidadas=(), carga=None):
     return [[], [carga], [], list(cerrada), list(invalidadas), []]
 
@@ -93,31 +94,50 @@ def test_the_guard_locks_the_carga_before_anything_else():
 
     cliente.post(f"{URL}/{carga.id}/anular")
 
-    # 0 sonda, 1 carga, 2 FOR UPDATE, 3 corrida cerrada, 4 invalidación,
+    # 0 sonda, 1 carga, 2 FOR UPDATE, 3 pedido bloqueante, 4 invalidación,
     # 5 DELETE del staging.
     sentencias = [_sql(s) for s in sesion.executed_statements]
     assert "FOR UPDATE" in sentencias[2]
     assert "corrida" in sentencias[3] and "CERRADA" in sentencias[3]
+    assert "'CERRADO', 'ENVIADO'" in sentencias[3]
     assert sentencias[4].startswith("UPDATE corrida")
     assert sentencias[5].startswith("DELETE FROM carga_fila_staging")
 
 
-def test_a_closed_corrida_blocks_the_annulment_with_its_codigo():
+def test_a_closed_tienda_blocks_the_annulment_naming_tienda_and_corrida():
     carga = _carga()
-    cliente, _ = _cliente(_cola(cerrada=["PED-2026-S39-001"], carga=carga))
+    cliente, _ = _cliente(_cola(
+        cerrada=[("PED-2026-S39-001", "Manizales", "CERRADO")],
+        carga=carga))
 
     respuesta = cliente.post(f"{URL}/{carga.id}/anular")
 
     assert respuesta.status_code == 409
     detalle = respuesta.json()["detail"]
     assert detalle["code"] == codigos.E_CARGA_ANULACION_BLOQUEADA
-    assert "PED-2026-S39-001" in detalle["message"]
+    assert detalle["message"] == (
+        "La carga la usa el pedido cerrado de Manizales (corrida "
+        "PED-2026-S39-001) y no se puede anular.")
+
+
+def test_a_legacy_cerrada_corrida_still_blocks_with_its_codigo():
+    carga = _carga()
+    cliente, _ = _cliente(_cola(
+        cerrada=[("PED-2026-S39-001", None, None)], carga=carga))
+
+    respuesta = cliente.post(f"{URL}/{carga.id}/anular")
+
+    assert respuesta.status_code == 409
+    assert respuesta.json()["detail"]["message"] == (
+        "La carga la usa la corrida cerrada PED-2026-S39-001 y no se puede "
+        "anular.")
 
 
 def test_a_blocked_annulment_leaves_the_carga_untouched():
     carga = _carga()
-    cliente, sesion = _cliente(
-        _cola(cerrada=["PED-2026-S39-001"], carga=carga))
+    cliente, sesion = _cliente(_cola(
+        cerrada=[("PED-2026-S39-001", "Manizales", "ENVIADO")],
+        carga=carga))
 
     cliente.post(f"{URL}/{carga.id}/anular")
 

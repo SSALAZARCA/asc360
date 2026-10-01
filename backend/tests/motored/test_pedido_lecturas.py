@@ -55,35 +55,38 @@ def _acciones(estado_pedido, **corrida):
     return pr.acciones_de(_corrida(**corrida), estado_pedido)
 
 
+NADA = {"cerrar": False, "reabrir": False, "editar": False,
+        "enviar": False, "corregir_envio": False}
+
+
 def test_a_borrador_pedido_can_be_edited_and_closed_but_not_reopened():
     assert _acciones("BORRADOR") == {
-        "cerrar": True, "reabrir": False, "editar": True}
+        **NADA, "cerrar": True, "editar": True}
 
 
-def test_a_closed_pedido_can_only_be_reopened():
+def test_a_closed_pedido_can_be_reopened_or_sent():
     assert _acciones("CERRADO") == {
-        "cerrar": False, "reabrir": True, "editar": False}
+        **NADA, "reabrir": True, "enviar": True}
 
 
-def test_a_sent_pedido_has_no_action_left():
-    assert _acciones("ENVIADO") == {
-        "cerrar": False, "reabrir": False, "editar": False}
+def test_a_sent_pedido_can_only_have_its_number_corrected():
+    assert _acciones("ENVIADO") == {**NADA, "corregir_envio": True}
 
 
 def test_a_tienda_without_pedido_has_no_action():
-    assert _acciones(None) == {
-        "cerrar": False, "reabrir": False, "editar": False}
+    assert _acciones(None) == NADA
 
 
 def test_a_scenario_never_offers_a_pedido_action():
-    assert _acciones("BORRADOR", es_escenario=True) == {
-        "cerrar": False, "reabrir": False, "editar": False}
+    for estado_pedido in ("BORRADOR", "CERRADO", "ENVIADO"):
+        assert _acciones(estado_pedido, es_escenario=True) == NADA
 
 
-def test_an_invalidated_corrida_can_only_reopen():
-    assert _acciones("BORRADOR", invalidada=True) == {
-        "cerrar": False, "reabrir": False, "editar": False}
-    assert _acciones("CERRADO", invalidada=True)["reabrir"] is True
+def test_an_invalidated_corrida_can_only_reopen_or_correct_a_number():
+    assert _acciones("BORRADOR", invalidada=True) == NADA
+    assert _acciones("CERRADO", invalidada=True) == {
+        **NADA, "reabrir": True}
+    assert _acciones("ENVIADO", invalidada=True)["corregir_envio"] is True
 
 
 def test_a_corrida_not_calculated_offers_nothing():
@@ -92,7 +95,8 @@ def test_a_corrida_not_calculated_offers_nothing():
 
 
 def test_a_legacy_cerrada_corrida_still_offers_the_actions():
-    assert _acciones("CERRADO", estado="CERRADA")["reabrir"] is True
+    legado = _acciones("CERRADO", estado="CERRADA")
+    assert legado["reabrir"] is True and legado["enviar"] is True
 
 
 # --- Resumen de estados -----------------------------------------------------
@@ -164,10 +168,8 @@ def test_each_sucursal_carries_its_pedido_state_and_what_to_order():
 def test_the_actions_follow_each_tienda_state():
     uno, dos, tres = _detalle_pedido()["sucursales"]
 
-    assert uno["acciones"] == {
-        "cerrar": False, "reabrir": True, "editar": False}
-    assert dos["acciones"] == {
-        "cerrar": True, "reabrir": False, "editar": True}
+    assert uno["acciones"] == {**NADA, "reabrir": True, "enviar": True}
+    assert dos["acciones"] == {**NADA, "cerrar": True, "editar": True}
     assert not any(tres["acciones"].values())
 
 

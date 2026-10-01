@@ -368,7 +368,7 @@ async def _anular_carga(carga_id):
 async def _cerrar_como_en_f3(mundo, corrida_id):
     """F3 cerraba la corrida entera (estado CERRADA). F4 ya no lo escribe,
     pero la guarda de anulación de cargas sigue protegiendo esas corridas
-    heredadas hasta que B3b la lleve a las tiendas."""
+    heredadas (B3b la llevó además a las tiendas CERRADO y ENVIADO)."""
     async with mundo.fabrica() as db:
         await db.execute(
             update(Corrida).where(Corrida.id == uuid.UUID(corrida_id))

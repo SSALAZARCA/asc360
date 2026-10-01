@@ -1,13 +1,15 @@
 """
 Motored Pedidos F4 "Pantallas del pedido" (sdd/motored-pedidos-ui, B2, B3a,
-ADR-1, ADR-3): esquemas de la edición de líneas y su historial y del ciclo de
-vida del pedido por tienda (cerrar, reabrir, cabecera y eventos).
+B3b, ADR-1, ADR-3): esquemas de la edición de líneas y su historial y del
+ciclo de vida del pedido por tienda (cerrar, reabrir, enviar, corregir el
+número de orden, cabecera y eventos).
 
 `pedido_final` entra SIN tipo (`Any`): la regla de E-CORRIDA-053 la aplica el
 servicio, DESPUÉS de los chequeos de estado (404, 042, 065, 052), así un valor
 inválido siempre responde con su código y no con el 422 genérico del
 validador. Los campos extra se prohíben (no se acepta Z ni nada más). Igual
-el `motivo` de reabrir (E-CORRIDA-046).
+el `motivo` de reabrir (E-CORRIDA-046) y el número y la fecha de un envío
+(E-CORRIDA-048).
 """
 import datetime
 import uuid
@@ -95,6 +97,63 @@ class ReabrirCuerpo(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     motivo: Any = None
+
+
+class EnviarCuerpo(BaseModel):
+    """Cuerpo de `POST .../sucursales/{sid}/enviar`: el número de orden del
+    proveedor (1..50) y la fecha de envío; sin tipo, el servicio los valida
+    (048) después de los chequeos de estado."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    numero_pedido_proveedor: Any = None
+    fecha_envio: Any = None
+
+
+class EnvioItem(EnviarCuerpo):
+    """Una tienda de `POST /corridas/{id}/enviar`, con su propio número."""
+
+    sucursal_id: uuid.UUID
+
+
+class EnviarLote(BaseModel):
+    """Cuerpo de `POST /corridas/{id}/enviar`: de 1 a 200 tiendas, todo o
+    nada."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    envios: List[EnvioItem] = Field(..., min_length=1, max_length=200)
+
+
+class CorregirEnvio(BaseModel):
+    """Cuerpo de `PATCH .../sucursales/{sid}/envio`: sólo el número de orden
+    se corrige (F4-15); la fecha de envío no."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    numero_pedido_proveedor: Any = None
+
+
+class EnvioTienda(BaseModel):
+    """El envío de UNA tienda: su número de orden, fecha, quién y cuándo."""
+
+    corrida_id: uuid.UUID
+    sucursal_id: uuid.UUID
+    estado_pedido: str = "ENVIADO"
+    numero_pedido_proveedor: str
+    fecha_envio: datetime.date
+    enviada_por: uuid.UUID
+    enviada_en: datetime.datetime
+
+
+class EnvioLote(BaseModel):
+    """Respuesta del envío por lote: la corrida (su `estado` es el del
+    cálculo) y los envíos que quedaron escritos."""
+
+    id: uuid.UUID
+    codigo: str
+    estado: str
+    enviadas: List[EnvioTienda]
 
 
 class EstadoPedidoTienda(BaseModel):

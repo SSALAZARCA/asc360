@@ -56,6 +56,7 @@ from app.motored.services.corridas import (
     cargas_perdida,
     codigos,
     estados,
+    guardas,
     parametros_corrida,
     pedido_tienda,
     persistencia,
@@ -508,6 +509,7 @@ async def anular_corrida(
     corrida = await _bloquear_corrida(db, corrida_id)
     if corrida.estado not in estados.ANULABLES:
         raise _no_admite(corrida.estado)
+    await guardas.exigir_sin_pedidos_cerrados(db, corrida_id)
     corrida.estado = estados.ANULADA
     corrida.anulada_en = _ahora()
     corrida.anulada_por = usuario_id

@@ -60,6 +60,14 @@ ESCRITURAS = [
     ("POST", f"{BASE}/{ID}/sucursales/{fx.SUC_A}/cerrar", None),
     ("POST", f"{BASE}/{ID}/sucursales/{fx.SUC_A}/reabrir",
      {"motivo": "Corrección de cantidades"}),
+    # Fase 4 (B3b): enviar una tienda, varias y corregir el número (F4-15).
+    ("POST", f"{BASE}/{ID}/sucursales/{fx.SUC_A}/enviar",
+     {"numero_pedido_proveedor": "12345", "fecha_envio": "2026-09-22"}),
+    ("POST", f"{BASE}/{ID}/enviar", {"envios": [{
+        "sucursal_id": str(fx.SUC_A), "numero_pedido_proveedor": "12345",
+        "fecha_envio": "2026-09-22"}]}),
+    ("PATCH", f"{BASE}/{ID}/sucursales/{fx.SUC_A}/envio",
+     {"numero_pedido_proveedor": "99999"}),
 ]
 
 

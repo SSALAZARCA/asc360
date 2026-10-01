@@ -1,14 +1,16 @@
 """
-Motored Pedidos F4 "Pantallas del pedido" (sdd/motored-pedidos-ui, B2 y B3a,
-ADR-1, ADR-3): `/api/motored/corridas`, escrituras y lecturas del pedido por
-tienda.
+Motored Pedidos F4 "Pantallas del pedido" (sdd/motored-pedidos-ui, B2, B3a
+y B3b, ADR-1, ADR-3): `/api/motored/corridas`, escrituras y lecturas del
+pedido por tienda.
 
 Trae la edición de una línea (`PATCH /{id}/lineas/{linea_id}`) y su
 historial (B2); y el ciclo de vida por tienda (B3a): cerrar varias a la vez
 (`POST /{id}/cerrar`, ahora por lote), cerrar y reabrir UNA, la cabecera de
-la tienda y su línea de tiempo. Enviar, exportar y recortar llegan en las
-siguientes rebanadas. Router delgado: las reglas viven en
-`services/corridas/` (`edicion`, `pedido_tienda`) y las lecturas en
+la tienda y su línea de tiempo; y el envío (B3b): marcar como enviada una
+tienda (`POST .../enviar`) o varias a la vez (`POST /{id}/enviar`) y corregir
+el número de orden de una ya enviada (`PATCH .../envio`). Exportar y recortar
+llegan en las siguientes rebanadas. Router delgado: las reglas viven en
+`services/corridas/` (`edicion`, `pedido_tienda`, `envio`) y las lecturas en
 `consultas` y `lecturas_pedido`.
 
 RBAC (F4-16): ADMIN y COMPRAS; el resto, 403. Los servicios no hacen commit:
@@ -30,6 +32,11 @@ from app.motored.schemas.pedido import (
     CabeceraTienda,
     CerrarLote,
     CierreLote,
+    CorregirEnvio,
+    EnviarCuerpo,
+    EnviarLote,
+    EnvioLote,
+    EnvioTienda,
     EstadoPedidoTienda,
     EventoPedido,
     HistorialLinea,
@@ -41,6 +48,7 @@ from app.motored.schemas.pedido import (
 from app.motored.services.corridas import (
     consultas,
     edicion,
+    envio,
     lecturas_pedido,
     pedido_tienda,
 )
@@ -154,6 +162,75 @@ async def reabrir_tienda(
         db, pedido_tienda.reabrir_tienda(
             db, corrida_id, sucursal_id, uuid.UUID(user.user_id),
             cuerpo.motivo)))
+
+
+# --- Envío del pedido por tienda (B3b) --------------------------------------
+
+
+def _envio_tienda(fila) -> EnvioTienda:
+    return EnvioTienda(
+        corrida_id=fila.corrida_id, sucursal_id=fila.sucursal_id,
+        numero_pedido_proveedor=fila.numero_pedido_proveedor,
+        fecha_envio=fila.fecha_envio, enviada_por=fila.enviada_por,
+        enviada_en=fila.enviada_en)
+
+
+@router.post(
+    "/{corrida_id}/sucursales/{sucursal_id}/enviar",
+    response_model=EnvioTienda)
+async def enviar_tienda(
+    corrida_id: uuid.UUID,
+    sucursal_id: uuid.UUID,
+    cuerpo: EnviarCuerpo = EnviarCuerpo(),
+    db: AsyncSession = Depends(get_motored_db_or_503),
+    user: MotoredUser = Depends(comun.require_write),
+):
+    """CERRADO -> ENVIADO en una tienda, con su número de orden y fecha de
+    envío (el servicio los valida: E-CORRIDA-048). Terminal: no se
+    des-envía ni se reabre."""
+    resultado = await comun.ejecutar(db, envio.enviar_tienda(
+        db, corrida_id, sucursal_id, cuerpo.numero_pedido_proveedor,
+        cuerpo.fecha_envio, uuid.UUID(user.user_id)))
+    return _envio_tienda(resultado.envios[0])
+
+
+@router.post("/{corrida_id}/enviar", response_model=EnvioLote)
+async def enviar_corrida(
+    corrida_id: uuid.UUID,
+    cuerpo: EnviarLote,
+    db: AsyncSession = Depends(get_motored_db_or_503),
+    user: MotoredUser = Depends(comun.require_write),
+):
+    """Envía varias tiendas a la vez, cada una con su número de orden y su
+    fecha, todo o nada: el error nombra la primera que no se pueda enviar."""
+    pedidos = [
+        envio.PedidoEnviar(
+            e.sucursal_id, e.numero_pedido_proveedor, e.fecha_envio)
+        for e in cuerpo.envios]
+    resultado = await comun.ejecutar(db, envio.enviar_lote(
+        db, corrida_id, pedidos, uuid.UUID(user.user_id)))
+    corrida = resultado.corrida
+    return EnvioLote(
+        id=corrida.id, codigo=corrida.codigo, estado=corrida.estado,
+        enviadas=[_envio_tienda(fila) for fila in resultado.envios])
+
+
+@router.patch(
+    "/{corrida_id}/sucursales/{sucursal_id}/envio",
+    response_model=EnvioTienda)
+async def corregir_envio(
+    corrida_id: uuid.UUID,
+    sucursal_id: uuid.UUID,
+    cuerpo: CorregirEnvio = CorregirEnvio(),
+    db: AsyncSession = Depends(get_motored_db_or_503),
+    user: MotoredUser = Depends(comun.require_write),
+):
+    """Corrige el número de orden de una tienda ya enviada (F4-15); el
+    mismo número es un no-op. La fecha de envío no se corrige."""
+    resultado = await comun.ejecutar(db, envio.corregir_numero(
+        db, corrida_id, sucursal_id, cuerpo.numero_pedido_proveedor,
+        uuid.UUID(user.user_id)))
+    return _envio_tienda(resultado.envio)
 
 
 @router.get(

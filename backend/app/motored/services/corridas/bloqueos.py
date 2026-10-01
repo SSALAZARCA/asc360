@@ -14,7 +14,7 @@ cargas vinculadas `FOR SHARE` (`cargas_anuladas`), igual que
 
 Ningún commit acá: la transacción es del llamador.
 """
-from typing import Any, List
+from typing import Any, List, Optional, Sequence
 from uuid import UUID
 
 from sqlalchemy import select
@@ -23,6 +23,7 @@ from app.motored.models.carga_archivo import CargaArchivo
 from app.motored.models.corrida import Corrida
 from app.motored.models.corrida_carga import CorridaCarga
 from app.motored.models.corrida_sucursal import CorridaSucursal
+from app.motored.models.sucursal import Sucursal
 from app.motored.services.corridas import codigos, estados
 from app.motored.services.corridas.codigos import ErrorCorrida
 
@@ -55,6 +56,31 @@ async def bloquear_tienda(
     if tienda is None:
         raise LookupError("La tienda no está en la corrida.")
     return tienda
+
+
+async def bloquear_tiendas(
+    db, corrida_id: UUID, sucursal_ids: Optional[Sequence[UUID]],
+) -> list:
+    """`[(tienda, nombre)]` con las filas bloqueadas `FOR UPDATE` en orden de
+    `sucursal_id` (el mismo orden en todos los lotes: sin deadlock). Sin
+    lista, todas las tiendas OK; con lista, exactamente esas (`LookupError`
+    si alguna no está en la corrida)."""
+    cs = CorridaSucursal
+    consulta = (
+        select(cs, Sucursal.nombre)
+        .join(Sucursal, Sucursal.id == cs.sucursal_id)
+        .where(cs.corrida_id == corrida_id))
+    if sucursal_ids is None:
+        consulta = consulta.where(cs.estado == estados.SUC_OK)
+    else:
+        consulta = consulta.where(cs.sucursal_id.in_(list(sucursal_ids)))
+    filas = (await db.execute(
+        consulta.order_by(cs.sucursal_id)
+        .with_for_update(of=cs)
+        .execution_options(populate_existing=True))).all()
+    if sucursal_ids is not None and len(filas) != len(set(sucursal_ids)):
+        raise LookupError("La tienda no está en la corrida.")
+    return filas
 
 
 async def cargas_anuladas(db, corrida_id: UUID) -> List[UUID]:

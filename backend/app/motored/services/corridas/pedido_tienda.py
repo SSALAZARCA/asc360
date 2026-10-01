@@ -15,7 +15,7 @@ reúne las reglas del ciclo de vida por tienda:
   `bloqueos.py`); un cierre espera a las ediciones en vuelo de esa tienda y
   las ve cerradas después. Escribe un evento CERRADO por tienda.
 - `reabrir_tienda` (B3a): CERRADO -> BORRADOR con un motivo obligatorio y un
-  evento REABIERTO; nunca toca a otra tienda. Enviar llega en B3b.
+  evento REABIERTO; nunca toca a otra tienda. Enviar es de `envio.py` (B3b).
 - `resumen_pedidos`: cuántas tiendas OK están en cada estado, para la lista.
 
 Orden de los chequeos (R3 de las tareas): corrida y tienda (404), escenario
@@ -31,11 +31,14 @@ from uuid import UUID
 from sqlalchemy import func, insert, select, update
 
 from app.motored.models.corrida import Corrida
-from app.motored.models.corrida_envio import CorridaEnvio
 from app.motored.models.corrida_sucursal import CorridaSucursal
 from app.motored.models.pedido_evento import PedidoEvento
-from app.motored.models.sucursal import Sucursal
-from app.motored.services.corridas import bloqueos, codigos, estados
+from app.motored.services.corridas import (
+    bloqueos,
+    codigos,
+    envio,
+    estados,
+)
 from app.motored.services.corridas.codigos import ErrorCorrida
 
 ACCION_CERRAR = "cerrar"
@@ -72,31 +75,6 @@ async def iniciar_pedidos(db, corrida_id: UUID) -> None:
 
 
 # --- Cerrar -----------------------------------------------------------------
-
-
-async def _bloquear_tiendas(
-    db, corrida_id: UUID, sucursal_ids: Optional[Sequence[UUID]],
-) -> list:
-    """`[(tienda, nombre)]` con las filas bloqueadas `FOR UPDATE` en orden de
-    `sucursal_id` (el mismo orden en todos los cierres: sin deadlock). Sin
-    lista, todas las tiendas OK; con lista, exactamente esas (`LookupError`
-    si alguna no está en la corrida)."""
-    cs = CorridaSucursal
-    consulta = (
-        select(cs, Sucursal.nombre)
-        .join(Sucursal, Sucursal.id == cs.sucursal_id)
-        .where(cs.corrida_id == corrida_id))
-    if sucursal_ids is None:
-        consulta = consulta.where(cs.estado == estados.SUC_OK)
-    else:
-        consulta = consulta.where(cs.sucursal_id.in_(list(sucursal_ids)))
-    filas = (await db.execute(
-        consulta.order_by(cs.sucursal_id)
-        .with_for_update(of=cs)
-        .execution_options(populate_existing=True))).all()
-    if sucursal_ids is not None and len(filas) != len(set(sucursal_ids)):
-        raise LookupError("La tienda no está en la corrida.")
-    return filas
 
 
 def _no_cerrable(tienda: Any, nombre: str) -> ErrorCorrida:
@@ -143,7 +121,7 @@ async def _cerrar(
     anuladas = await bloqueos.cargas_anuladas(db, corrida_id)
     corrida = await bloqueos.bloquear_corrida(
         db, corrida_id, exclusivo=False)
-    filas = await _bloquear_tiendas(db, corrida_id, sucursal_ids)
+    filas = await bloqueos.bloquear_tiendas(db, corrida_id, sucursal_ids)
     bloqueos.exigir_operable(corrida, ACCION_CERRAR)
     if anuladas:
         raise ErrorCorrida(
@@ -210,21 +188,14 @@ async def cerrar_tienda(
 # --- Reabrir ----------------------------------------------------------------
 
 
-async def _numero_enviado(db, corrida_id: UUID, sucursal_id: UUID) -> str:
-    resultado = await db.execute(
-        select(CorridaEnvio.numero_pedido_proveedor).where(
-            CorridaEnvio.corrida_id == corrida_id,
-            CorridaEnvio.sucursal_id == sucursal_id))
-    return resultado.scalars().first() or "sin número"
-
-
 async def _exigir_cerrado(db, corrida_id: UUID, tienda: Any) -> None:
     if tienda.estado_pedido is None:
         raise ErrorCorrida(
             codigos.E_CORRIDA_SIN_PEDIDO,
             codigos.mensaje(codigos.E_CORRIDA_SIN_PEDIDO))
     if tienda.estado_pedido == estados.PEDIDO_ENVIADO:
-        numero = await _numero_enviado(db, corrida_id, tienda.sucursal_id)
+        numero = await envio.numero_enviado(
+            db, corrida_id, tienda.sucursal_id)
         raise ErrorCorrida(
             codigos.E_CORRIDA_REABRIR_ENVIADO,
             codigos.mensaje(

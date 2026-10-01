@@ -246,6 +246,8 @@ def acciones_de(corrida, estado_pedido: Optional[str]) -> Dict[str, bool]:
         "cerrar": abierta and borrador,
         "reabrir": operable and estado_pedido == estados.PEDIDO_CERRADO,
         "editar": abierta and borrador,
+        "enviar": abierta and estado_pedido == estados.PEDIDO_CERRADO,
+        "corregir_envio": operable and estado_pedido == estados.PEDIDO_ENVIADO,
     }
 
 

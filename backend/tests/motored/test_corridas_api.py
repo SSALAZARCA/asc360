@@ -478,6 +478,25 @@ def test_a_refused_annulment_is_a_coded_409(espia):
     assert sesion.rolled_back is True
 
 
+def test_annulling_with_closed_tiendas_is_a_coded_409_naming_them_ci_37(
+        espia):
+    """B3b: E-CORRIDA-051 es un 409 con las tiendas en el detalle."""
+    detalle = {"tiendas": [
+        {"tienda": "Manizales", "estado_pedido": "CERRADO"}]}
+    espia.error = ({"anular"}, ErrorCorrida(
+        codigos.E_CORRIDA_ANULAR_CON_PEDIDOS, "hay pedidos", detalle))
+    cliente, sesion = _cliente()
+
+    respuesta = cliente.post(
+        f"{BASE}/{fx.CORRIDA_ID}/anular", json={"motivo": "porque sí"})
+
+    assert respuesta.status_code == 409
+    cuerpo = respuesta.json()["detail"]
+    assert cuerpo["code"] == "E-CORRIDA-051"
+    assert cuerpo["detalle"] == detalle
+    assert sesion.rolled_back is True
+
+
 def test_annulling_an_unknown_corrida_is_a_404(espia):
     espia.error = ({"anular"}, LookupError("no existe"))
     cliente, _ = _cliente()

@@ -90,6 +90,8 @@ class AccionesTienda(BaseModel):
     cerrar: bool = False
     reabrir: bool = False
     editar: bool = False
+    enviar: bool = False
+    corregir_envio: bool = False
 
 
 class CorridaItem(BaseModel):
