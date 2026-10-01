@@ -14,6 +14,7 @@ encabezado`) corre de punta a punta sin ningún archivo ni MinIO real.
 import io
 import uuid
 from datetime import date
+from decimal import Decimal
 
 import openpyxl
 import pytest
@@ -92,8 +93,8 @@ async def test_dry_run_inventario_happy_path_stages_rows_and_marks_validado(monk
     carga = _carga("INVENTARIO", periodo_desde=date(2026, 9, 15), periodo_hasta=date(2026, 9, 15))
     file_bytes = _build_xlsx_bytes(
         [
-            ["Referencia", "Bodega", "Desc.bodega", "Existencia"],
-            ["REF1", "BA061", "CALI NORTE", 10],
+            ["Referencia", "Bodega", "Desc.bodega", "Existencia", "Costo prom. uni."],
+            ["REF1", "BA061", "CALI NORTE", 10, 1500],
         ]
     )
     monkeypatch.setattr(orquestador.storage, "descargar_archivo", lambda ruta: file_bytes)
@@ -117,7 +118,7 @@ async def test_dry_run_missing_mandatory_column_aborts_whole_file_con_errores(mo
     carga = _carga("INVENTARIO")
     # Falta "Existencia" -- columna obligatoria de INVENTARIO.
     file_bytes = _build_xlsx_bytes(
-        [["Referencia", "Bodega", "Desc.bodega"], ["REF1", "BA061", "CALI NORTE"]]
+        [["Referencia", "Bodega", "Desc.bodega", "Costo prom. uni."], ["REF1", "BA061", "CALI NORTE", 1500]]
     )
     monkeypatch.setattr(orquestador.storage, "descargar_archivo", lambda ruta: file_bytes)
     session = FakeAsyncSession(execute_queue=_queue_cache_y_proveedor())
@@ -129,12 +130,70 @@ async def test_dry_run_missing_mandatory_column_aborts_whole_file_con_errores(mo
     assert session.added_of_type(CargaFilaStaging) == []
 
 
+async def test_dry_run_inventario_viejo_sin_costo_se_rechaza_nombrando_la_columna(monkeypatch):
+    carga = _carga("INVENTARIO", periodo_desde=date(2026, 9, 15), periodo_hasta=date(2026, 9, 15))
+    file_bytes = _build_xlsx_bytes(
+        [["Referencia", "Bodega", "Desc.bodega", "Existencia"], ["REF1", "BA061", "CALI NORTE", 10]]
+    )
+    monkeypatch.setattr(orquestador.storage, "descargar_archivo", lambda ruta: file_bytes)
+    session = FakeAsyncSession(execute_queue=_queue_cache_y_proveedor())
+
+    await orquestador._dry_run(session, carga)
+
+    assert carga.estado == "CON_ERRORES"
+    assert carga.log["columnas_faltantes"] == ["Costo prom. uni."]
+    error = session.added_of_type(CargaError)[0]
+    assert "Costo prom. uni." in error.mensaje
+    assert session.added_of_type(CargaFilaStaging) == []
+
+
+async def test_dry_run_archivo_de_ventas_declarado_como_inventario_queda_rechazado(monkeypatch):
+    carga = _carga("INVENTARIO", periodo_desde=date(2026, 9, 15), periodo_hasta=date(2026, 9, 15))
+    file_bytes = _build_xlsx_bytes(
+        [
+            ["Estado", "Módulo", "Fecha", "Cantidad inv.", "Tipo inventario", "Desc.bodega",
+             "Bodega", "Referencia", "Nombre vendedor", "Valor bruto", "Valor descuentos",
+             "Cliente factura", "Nro documento"],
+            ["Aprobada", "MOSTRADOR", 46280, 1, "0002 - REPUESTOS", "CALI NORTE", "BA061", "REF1",
+             "Ana", 1000, 0, "Taller", "FV-1"],
+        ]
+    )
+    monkeypatch.setattr(orquestador.storage, "descargar_archivo", lambda ruta: file_bytes)
+    session = FakeAsyncSession(execute_queue=_queue_cache_y_proveedor())
+
+    await orquestador._dry_run(session, carga)
+
+    assert carga.estado == "CON_ERRORES"
+    assert carga.log["columnas_faltantes"] == ["Existencia", "Costo prom. uni."]
+    assert session.added_of_type(CargaFilaStaging) == []
+
+
+async def test_dry_run_inventario_con_costo_en_blanco_valida_la_fila_igual(monkeypatch):
+    carga = _carga("INVENTARIO", periodo_desde=date(2026, 9, 15), periodo_hasta=date(2026, 9, 15))
+    file_bytes = _build_xlsx_bytes(
+        [
+            ["Referencia", "Bodega", "Desc.bodega", "Existencia", "Costo prom. uni."],
+            ["REF1", "BA061", "CALI NORTE", 10, None],
+        ]
+    )
+    monkeypatch.setattr(orquestador.storage, "descargar_archivo", lambda ruta: file_bytes)
+    session = FakeAsyncSession(execute_queue=_queue_cache_y_proveedor())
+
+    await orquestador._dry_run(session, carga)
+
+    assert carga.estado == "VALIDADO"
+    assert carga.filas_validas == 1 and carga.filas_rechazadas == 0
+    staged = session.added_of_type(CargaFilaStaging)
+    assert Decimal(staged[0].payload["existencia"]) == Decimal("10")
+    assert staged[0].payload["costo"] is None
+
+
 async def test_dry_run_todas_las_filas_rechazadas_es_con_errores_no_validado(monkeypatch):
     carga = _carga("INVENTARIO", periodo_desde=date(2026, 9, 15), periodo_hasta=date(2026, 9, 15))
     file_bytes = _build_xlsx_bytes(
         [
-            ["Referencia", "Bodega", "Desc.bodega", "Existencia"],
-            ["REF1", "BA061", "CALI NORTE", "no-es-un-numero"],
+            ["Referencia", "Bodega", "Desc.bodega", "Existencia", "Costo prom. uni."],
+            ["REF1", "BA061", "CALI NORTE", "no-es-un-numero", 1500],
         ]
     )
     monkeypatch.setattr(orquestador.storage, "descargar_archivo", lambda ruta: file_bytes)
@@ -152,8 +211,8 @@ async def test_dry_run_lee_la_hoja_del_tipo_aunque_la_hoja_activa_sea_otra(monke
     workbook.active.title = "Lista HMCL Sep 2026"
     workbook.active.append(["Código", "Precio lista"])
     inventario = workbook.create_sheet("inventario actual")
-    inventario.append(["Referencia", "Bodega", "Desc.bodega", "Existencia"])
-    inventario.append(["REF1", "BA061", "CALI NORTE", 10])
+    inventario.append(["Referencia", "Bodega", "Desc.bodega", "Existencia", "Costo prom. uni."])
+    inventario.append(["REF1", "BA061", "CALI NORTE", 10, 1500])
     buffer = io.BytesIO()
     workbook.save(buffer)
     monkeypatch.setattr(orquestador.storage, "descargar_archivo", lambda ruta: buffer.getvalue())
@@ -169,8 +228,8 @@ async def test_dry_run_encabezado_duplicado_aborta_el_archivo_completo(monkeypat
     carga = _carga("INVENTARIO")
     file_bytes = _build_xlsx_bytes(
         [
-            ["Referencia", "Bodega", "Desc.bodega", "Existencia", "Existencia"],
-            ["REF1", "BA061", "CALI NORTE", 10, 99],
+            ["Referencia", "Bodega", "Desc.bodega", "Existencia", "Costo prom. uni.", "Existencia"],
+            ["REF1", "BA061", "CALI NORTE", 10, 1500, 99],
         ]
     )
     monkeypatch.setattr(orquestador.storage, "descargar_archivo", lambda ruta: file_bytes)
@@ -189,7 +248,7 @@ async def test_dry_run_encabezado_duplicado_aborta_el_archivo_completo(monkeypat
 async def test_dry_run_sin_ninguna_fila_valida_emite_error_de_archivo_completo(monkeypatch):
     carga = _carga("INVENTARIO", periodo_desde=date(2026, 9, 15), periodo_hasta=date(2026, 9, 15))
     file_bytes = _build_xlsx_bytes(
-        [["Referencia", "Bodega", "Desc.bodega", "Existencia"], ["REF1", "BA061", "CALI NORTE", "#N/A"]]
+        [["Referencia", "Bodega", "Desc.bodega", "Existencia", "Costo prom. uni."], ["REF1", "BA061", "CALI NORTE", "#N/A", 1500]]
     )
     monkeypatch.setattr(orquestador.storage, "descargar_archivo", lambda ruta: file_bytes)
     session = FakeAsyncSession(execute_queue=_queue_cache_y_proveedor())
@@ -205,7 +264,7 @@ async def test_dry_run_sin_ninguna_fila_valida_emite_error_de_archivo_completo(m
 
 async def test_dry_run_archivo_con_encabezado_pero_sin_filas_de_datos_es_con_errores_con_aviso(monkeypatch):
     carga = _carga("INVENTARIO", periodo_desde=date(2026, 9, 15), periodo_hasta=date(2026, 9, 15))
-    file_bytes = _build_xlsx_bytes([["Referencia", "Bodega", "Desc.bodega", "Existencia"]])
+    file_bytes = _build_xlsx_bytes([["Referencia", "Bodega", "Desc.bodega", "Existencia", "Costo prom. uni."]])
     monkeypatch.setattr(orquestador.storage, "descargar_archivo", lambda ruta: file_bytes)
     session = FakeAsyncSession(execute_queue=_queue_cache_y_proveedor())
 
@@ -220,9 +279,9 @@ async def test_dry_run_con_al_menos_una_fila_valida_no_emite_aviso_de_sin_filas(
     carga = _carga("INVENTARIO", periodo_desde=date(2026, 9, 15), periodo_hasta=date(2026, 9, 15))
     file_bytes = _build_xlsx_bytes(
         [
-            ["Referencia", "Bodega", "Desc.bodega", "Existencia"],
-            ["REF1", "BA061", "CALI NORTE", 10],
-            ["REF1", "BA061", "CALI NORTE", "#N/A"],
+            ["Referencia", "Bodega", "Desc.bodega", "Existencia", "Costo prom. uni."],
+            ["REF1", "BA061", "CALI NORTE", 10, 1500],
+            ["REF1", "BA061", "CALI NORTE", "#N/A", 1500],
         ]
     )
     monkeypatch.setattr(orquestador.storage, "descargar_archivo", lambda ruta: file_bytes)
@@ -243,9 +302,9 @@ async def test_dry_run_registra_en_log_cuantas_filas_con_error_no_se_cargan(monk
     carga = _carga("INVENTARIO", periodo_desde=date(2026, 9, 15), periodo_hasta=date(2026, 9, 15))
     file_bytes = _build_xlsx_bytes(
         [
-            ["Referencia", "Bodega", "Desc.bodega", "Existencia"],
-            ["REF1", "BA061", "CALI NORTE", 10],
-            ["REF1", "BA061", "CALI NORTE", "#N/A"],
+            ["Referencia", "Bodega", "Desc.bodega", "Existencia", "Costo prom. uni."],
+            ["REF1", "BA061", "CALI NORTE", 10, 1500],
+            ["REF1", "BA061", "CALI NORTE", "#N/A", 1500],
             ["REF1", "BA061", "SUCURSAL INEXISTENTE", 5],
         ]
     )
@@ -262,7 +321,7 @@ async def test_dry_run_registra_en_log_cuantas_filas_con_error_no_se_cargan(monk
 async def test_dry_run_sin_errores_registra_cero_filas_con_error(monkeypatch):
     carga = _carga("INVENTARIO", periodo_desde=date(2026, 9, 15), periodo_hasta=date(2026, 9, 15))
     file_bytes = _build_xlsx_bytes(
-        [["Referencia", "Bodega", "Desc.bodega", "Existencia"], ["REF1", "BA061", "CALI NORTE", 10]]
+        [["Referencia", "Bodega", "Desc.bodega", "Existencia", "Costo prom. uni."], ["REF1", "BA061", "CALI NORTE", 10, 1500]]
     )
     monkeypatch.setattr(orquestador.storage, "descargar_archivo", lambda ruta: file_bytes)
     session = FakeAsyncSession(execute_queue=_queue_cache_y_proveedor())
@@ -411,6 +470,36 @@ async def test_ejecutar_aplicar_inventario_marks_aplicado_and_clears_staging():
     assert carga.ultimo_lote_aplicado == 3
     assert carga.aplicado_en is not None
     assert len(session.executed_statements) == 3
+
+
+async def test_ejecutar_aplicar_inventario_escribe_snapshot_y_detalle_en_la_misma_transaccion():
+    carga = _carga(
+        "INVENTARIO", estado="VALIDADO",
+        periodo_desde=date(2026, 9, 15), periodo_hasta=date(2026, 9, 15), lotes_staged=1,
+    )
+    staged = [
+        CargaFilaStaging(
+            carga_id=carga.id, fila=1, lote=1,
+            payload={"existencia": "10", "bodega": "BA061", "costo": None},
+            sucursal_id=SUCURSAL_ID, referencia_id=REFERENCIA_ID,
+        )
+    ]
+    # select staging; upsert snapshot; delete detalle; insert detalle; delete staging.
+    session = FakeAsyncSession(execute_queue=[staged, [], [], [], []])
+
+    await orquestador.ejecutar_aplicar(session, carga)
+
+    tablas = [
+        (getattr(e, "table", None) is not None and e.table.name, e.is_delete, e.is_insert)
+        for e in session.executed_statements[1:]
+    ]
+    assert tablas == [
+        ("inventario_snapshot", False, True),
+        ("inventario_detalle", True, False),
+        ("inventario_detalle", False, True),
+        ("carga_fila_staging", True, False),
+    ]
+    assert session.committed
 
 
 async def test_ejecutar_aplicar_conserva_filas_rechazadas_y_filas_con_error_del_informe():

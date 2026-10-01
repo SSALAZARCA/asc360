@@ -142,7 +142,7 @@ def _build_xlsx_bytes(filas: list) -> bytes:
 
 _ARCHIVO_SIN_TIPO_RECONOCIBLE = _build_xlsx_bytes([["Columna A", "Columna B"], [1, 2]])
 _ARCHIVO_INVENTARIO = _build_xlsx_bytes(
-    [["Referencia", "Bodega", "Desc.bodega", "Existencia"], ["REF1", "BA061", "CALI NORTE", 10]]
+    [["Referencia", "Bodega", "Desc.bodega", "Existencia", "Costo prom. uni."], ["REF1", "BA061", "CALI NORTE", 10, 1500]]
 )
 
 

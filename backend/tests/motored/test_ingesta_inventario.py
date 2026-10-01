@@ -7,7 +7,7 @@ No live Postgres: same `FakeAsyncSession` convention as
 `test_ingesta_ventas.py`. Consolidation and the REPLACE-not-sum upsert are
 asserted at the SQL-construction level, same as VENTAS's ADR-4 tests.
 
-Column names (`Referencia`, `Bodega`, `Desc.bodega`, `Existencia`) and the
+Column names (`Referencia`, `Bodega`, `Desc.bodega`, `Existencia`, `Costo prom. uni.`) and the
 "empty trailing row" shape were verified against the real production
 workbook (`PLANTILLA PEDIDO SEPTIEMBRE.xlsx`, hoja "inventario actual"):
 56 532 data rows, of which the LAST 795 are fully blank except for stray
@@ -43,6 +43,7 @@ _MAPA_COLUMNAS = {
     "Bodega": 1,
     "Desc.bodega": 2,
     "Existencia": 3,
+    "Costo prom. uni.": 4,
 }
 
 
@@ -55,8 +56,8 @@ def _cache(sucursales=(), referencias=()) -> CacheResolucion:
     )
 
 
-def _fila(referencia="REF1", bodega="BA061", desc_bodega="CALI NORTE", existencia=10):
-    return (referencia, bodega, desc_bodega, existencia)
+def _fila(referencia="REF1", bodega="BA061", desc_bodega="CALI NORTE", existencia=10, costo=1500):
+    return (referencia, bodega, desc_bodega, existencia, costo)
 
 
 def _cache_resuelta():
@@ -167,7 +168,7 @@ def test_desc_bodega_vacio_usa_bodega_como_fallback():
 
 
 def test_columnas_esperadas_mapean_por_nombre_via_columnas_modulo():
-    encabezado = ("Referencia", "Bodega", "Desc.bodega", "Existencia")
+    encabezado = ("Referencia", "Bodega", "Desc.bodega", "Existencia", "Costo prom. uni.")
     mapa = columnas.construir_mapa_columnas(encabezado, inventario.COLUMNAS_ESPERADAS)
 
     esperado = dict(zip(inventario.COLUMNAS_ESPERADAS, range(len(inventario.COLUMNAS_ESPERADAS))))
@@ -314,3 +315,157 @@ def test_fecha_corte_usa_default_de_settings_si_no_se_pasa_dias_retencion(monkey
     declarada = date(2025, 1, 1)
 
     assert inventario.fecha_corte_fuera_de_ventana(declarada, maxima)
+
+
+# ---------------------------------------------------------------------------
+# INVENTARIO per-bodega detail (`inventario_detalle`): required cost column,
+# row-level cost parsing that NEVER rejects the row, staging payload and the
+# apply-time detail statements. `inventario_snapshot` behaviour above must not
+# change.
+# ---------------------------------------------------------------------------
+
+
+def test_columnas_esperadas_incluye_el_costo_promedio_al_final():
+    assert inventario.COLUMNAS_ESPERADAS == (
+        "Referencia", "Bodega", "Desc.bodega", "Existencia", "Costo prom. uni."
+    )
+
+
+def test_payload_lleva_bodega_cruda_y_costo_sin_tocar_la_existencia():
+    fila_staging, errores = _procesar(_fila(bodega="  BA066 ", existencia=25, costo=1500))
+
+    assert errores == []
+    assert Decimal(fila_staging.payload["existencia"]) == Decimal("25")
+    assert fila_staging.payload["bodega"] == "BA066"
+    assert Decimal(fila_staging.payload["costo"]) == Decimal("1500")
+
+
+@pytest.mark.parametrize(
+    "crudo, esperado",
+    [
+        ("$ 1.234.567", Decimal("1234567")),
+        ("$1.234,50", Decimal("1234.50")),
+        (1500.5, Decimal("1500.5")),
+        (-500, Decimal("-500")),  # negativo: se guarda tal cual, el lector lo excluye
+        (0, Decimal("0")),
+    ],
+)
+def test_costo_se_interpreta_con_el_formato_de_dinero_colombiano(crudo, esperado):
+    fila_staging, errores = _procesar(_fila(costo=crudo))
+
+    assert errores == []
+    assert Decimal(fila_staging.payload["costo"]) == esperado
+
+
+@pytest.mark.parametrize("crudo", [None, "", "   ", "#N/A", "abc", "1.234", 10 ** 15])
+def test_costo_vacio_o_invalido_nunca_rechaza_la_fila_ni_toca_la_existencia(crudo):
+    fila_staging, errores = _procesar(_fila(existencia=7, costo=crudo))
+
+    assert errores == []
+    assert fila_staging is not None
+    assert fila_staging.payload["costo"] is None
+    assert Decimal(fila_staging.payload["existencia"]) == Decimal("7")
+    assert fila_staging.sucursal_id == SUCURSAL_ID
+    assert fila_staging.referencia_id == REFERENCIA_ID
+
+
+def test_fila_sin_la_celda_de_costo_en_absoluto_igual_llega_al_staging():
+    # Fila mas corta que el encabezado (la celda ni existe).
+    fila_staging, errores = _procesar(("REF1", "BA061", "CALI NORTE", 10))
+
+    assert errores == []
+    assert fila_staging.payload["costo"] is None
+
+
+def test_costo_en_blanco_deja_las_existencias_consolidadas_identicas_a_las_de_antes():
+    con_costo, _ = _procesar(_fila(existencia=10, costo=1500))
+    sin_costo, _ = _procesar(_fila(existencia=10, costo=None))
+    legado = CargaFilaStaging(
+        carga_id=CARGA_ID, fila=2, lote=1, payload={"existencia": "10"},
+        sucursal_id=SUCURSAL_ID, referencia_id=REFERENCIA_ID,
+    )
+
+    esperado = {(SUCURSAL_ID, REFERENCIA_ID): Decimal("10")}
+    assert inventario.consolidar_existencias([sin_costo]) == esperado
+    assert inventario.consolidar_existencias([con_costo]) == esperado
+    assert inventario.consolidar_existencias([legado]) == esperado
+
+
+def test_bodega_se_trunca_a_20_caracteres_y_vacia_queda_como_texto_vacio():
+    larga, _ = _procesar(_fila(bodega="B" * 30))
+    vacia, _ = _procesar(_fila(bodega=None))
+
+    assert larga.payload["bodega"] == "B" * 20
+    assert vacia.payload["bodega"] == ""
+
+
+def _staging_detalle(sucursal_id=SUCURSAL_ID, referencia_id=REFERENCIA_ID, bodega="BA061",
+                     existencia="10", costo="1500", fila=1):
+    return CargaFilaStaging(
+        carga_id=CARGA_ID, fila=fila, lote=1,
+        payload={"existencia": existencia, "bodega": bodega, "costo": costo},
+        sucursal_id=sucursal_id, referencia_id=referencia_id,
+    )
+
+
+def test_construir_detalle_guarda_una_fila_por_bodega_aunque_consoliden_en_la_misma_sucursal():
+    filas = [
+        _staging_detalle(bodega="BA061", existencia="12", costo="1500", fila=1),
+        _staging_detalle(bodega="BA066", existencia="30", costo=None, fila=2),
+    ]
+
+    detalle = inventario.construir_detalle(filas, date(2026, 9, 15), CARGA_ID)
+
+    assert [(d["bodega"], d["existencia"], d["costo_unitario"]) for d in detalle] == [
+        ("BA061", Decimal("12"), Decimal("1500")),
+        ("BA066", Decimal("30"), None),
+    ]
+    assert all(
+        d["carga_id"] == CARGA_ID and d["fecha_corte"] == date(2026, 9, 15)
+        and d["sucursal_id"] == SUCURSAL_ID and d["referencia_id"] == REFERENCIA_ID
+        for d in detalle
+    )
+
+
+def test_construir_detalle_excluye_lo_que_el_snapshot_tambien_excluye():
+    filas = [
+        _staging_detalle(sucursal_id=None),
+        _staging_detalle(referencia_id=None, fila=2),
+        CargaFilaStaging(  # staged por una version anterior: sin bodega ni costo
+            carga_id=CARGA_ID, fila=3, lote=1, payload={"existencia": "5"},
+            sucursal_id=SUCURSAL_ID, referencia_id=REFERENCIA_ID,
+        ),
+    ]
+
+    assert inventario.construir_detalle(filas, date(2026, 9, 15), CARGA_ID) == []
+
+
+async def test_aplicar_detalle_borra_por_fecha_corte_y_sucursal_y_luego_inserta():
+    session = FakeAsyncSession(execute_queue=[[], []])
+
+    await inventario.aplicar_detalle(
+        session, [_staging_detalle(), _staging_detalle(fila=2)], date(2026, 9, 15), CARGA_ID
+    )
+
+    borrado, insercion = session.executed_statements
+    assert borrado.is_delete and borrado.table.name == "inventario_detalle"
+    assert insercion.is_insert and insercion.table.name == "inventario_detalle"
+
+
+async def test_aplicar_detalle_inserta_en_lotes():
+    filas = [_staging_detalle(fila=i) for i in range(inventario.TAMANO_LOTE_DETALLE * 2 + 1)]
+    session = FakeAsyncSession(execute_queue=[[]] * 4)
+
+    await inventario.aplicar_detalle(session, filas, date(2026, 9, 15), CARGA_ID)
+
+    assert len(session.executed_statements) == 1 + 3  # delete + 3 lotes
+
+
+async def test_aplicar_detalle_sin_filas_resueltas_no_ejecuta_nada():
+    session = FakeAsyncSession()
+
+    await inventario.aplicar_detalle(
+        session, [_staging_detalle(sucursal_id=None)], date(2026, 9, 15), CARGA_ID
+    )
+
+    assert session.executed_statements == []

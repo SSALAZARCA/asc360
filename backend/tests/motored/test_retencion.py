@@ -167,6 +167,7 @@ async def test_ejecutar_purga_inventario_corre_en_chunks_acotados_y_escribe_una_
     session = FakeAsyncSession(
         execute_queue=[
             [max_fecha_corte],  # select max(fecha_corte)
+            [],  # inventario_detalle: nada que purgar (la purga del detalle va primero)
             ids_chunk_1,  # select ids, chunk 1 (lleno -> sigue)
             [],  # delete chunk 1
             ids_chunk_2,  # select ids, chunk 2 (lleno -> sigue)
@@ -183,15 +184,15 @@ async def test_ejecutar_purga_inventario_corre_en_chunks_acotados_y_escribe_una_
     assert ejecucion.tabla == retencion.TABLA_INVENTARIO_SNAPSHOT
     assert ejecucion.ejecutado_en == now.replace(tzinfo=None)
     assert ejecucion.duracion_ms >= 0
-    assert len(session.added) == 1
-    assert session.added[0] is ejecucion
+    assert len(session.added) == 2  # ledger del detalle y del snapshot
+    assert session.added[-1] is ejecucion
     assert session.committed is True
 
     # nunca borra más de `chunk_size` filas por sentencia, y cada DELETE
     # toca EXACTAMENTE los ids que su propio SELECT bounded acaba de traer
     # -- nunca los de otro chunk, y nunca nada por fuera del filtro
     # `fecha_corte < limite`.
-    delete_chunk1_params = session.executed_statements[2].compile().construct_params()
+    delete_chunk1_params = session.executed_statements[3].compile().construct_params()
     ids_bound_en_delete_chunk1 = {
         item
         for valor in delete_chunk1_params.values()
@@ -200,7 +201,7 @@ async def test_ejecutar_purga_inventario_corre_en_chunks_acotados_y_escribe_una_
     assert set(ids_chunk_1) <= ids_bound_en_delete_chunk1
     assert not (set(ids_chunk_2) | set(ids_chunk_3)) & ids_bound_en_delete_chunk1
 
-    select_ids_chunk1_params = session.executed_statements[1].compile().construct_params().values()
+    select_ids_chunk1_params = session.executed_statements[2].compile().construct_params().values()
     assert limite_esperado in select_ids_chunk1_params
 
 
@@ -215,7 +216,7 @@ async def test_ejecutar_purga_inventario_guarda_ejecutado_en_como_naive_utc():
     naive UTC antes de construir la fila, igual que el resto de este
     modelo ya hace con `default=datetime.utcnow`."""
     now_aware = datetime(2026, 9, 23, 12, 0, 0, tzinfo=timezone.utc)
-    session = FakeAsyncSession(execute_queue=[[date(2026, 9, 15)], []])
+    session = FakeAsyncSession(execute_queue=[[date(2026, 9, 15)], [], []])
 
     ejecucion = await retencion.ejecutar_purga_inventario(session, now=now_aware)
 
@@ -231,6 +232,7 @@ async def test_ejecutar_purga_inventario_se_detiene_en_un_solo_chunk_si_alcanza(
     session = FakeAsyncSession(
         execute_queue=[
             [max_fecha_corte],
+            [],  # detalle: sin filas viejas
             ids_unico_chunk,  # menos que chunk_size (20000 por default) -> corta enseguida
             [],
         ]
@@ -239,7 +241,56 @@ async def test_ejecutar_purga_inventario_se_detiene_en_un_solo_chunk_si_alcanza(
     ejecucion = await retencion.ejecutar_purga_inventario(session, now=now)
 
     assert ejecucion.filas_eliminadas == 2
-    assert len(session.executed_statements) == 3
+    assert len(session.executed_statements) == 4
+
+
+# ---------------------------------------------------------------------------
+# `inventario_detalle`: misma corrida, misma `fecha_limite`, ANTES del snapshot
+# ---------------------------------------------------------------------------
+
+
+async def test_la_purga_borra_el_detalle_antes_que_el_snapshot_con_la_misma_fecha_limite():
+    now = datetime(2026, 9, 23, 12, 0, 0, tzinfo=timezone.utc)
+    max_fecha_corte = date(2026, 9, 15)
+    limite = max_fecha_corte - timedelta(days=settings.MOTORED_RETENCION_DIAS)
+    ids_detalle = [uuid.uuid4(), uuid.uuid4(), uuid.uuid4()]
+    ids_snapshot = [uuid.uuid4()]
+
+    session = FakeAsyncSession(
+        execute_queue=[
+            [max_fecha_corte],
+            ids_detalle[:2], [],  # detalle chunk 1 (lleno)
+            ids_detalle[2:], [],  # detalle chunk 2 (corta)
+            ids_snapshot, [],  # snapshot
+        ]
+    )
+
+    ejecucion = await retencion.ejecutar_purga_inventario(session, now=now, chunk_size=2)
+
+    tablas = [
+        s.table.name if getattr(s, "is_delete", False) else None
+        for s in session.executed_statements
+    ]
+    assert tablas == [
+        None, None, "inventario_detalle", None, "inventario_detalle",
+        None, "inventario_snapshot",
+    ]
+    for select_ids in (session.executed_statements[1], session.executed_statements[5]):
+        assert limite in select_ids.compile().construct_params().values()
+    ledger = {e.tabla: e for e in session.added}
+    assert set(ledger) == {retencion.TABLA_INVENTARIO_DETALLE, retencion.TABLA_INVENTARIO_SNAPSHOT}
+    assert ledger[retencion.TABLA_INVENTARIO_DETALLE].filas_eliminadas == 3
+    assert ledger[retencion.TABLA_INVENTARIO_DETALLE].fecha_limite == limite
+    assert ledger[retencion.TABLA_INVENTARIO_SNAPSHOT] is ejecucion
+    assert ejecucion.filas_eliminadas == 1
+
+
+async def test_la_purga_sigue_cubierta_por_el_guard_de_job_activo(monkeypatch):
+    monkeypatch.setattr(settings, "MOTORED_RETENCION_ENABLED", True)
+    session = FakeAsyncSession(execute_queue=[[(uuid.uuid4(),)]])  # hay_job_activo -> True
+
+    assert await retencion.ejecutar_si_corresponde(session) is None
+    assert len(session.executed_statements) == 1  # ni el detalle ni el snapshot se tocan
 
 
 # ---------------------------------------------------------------------------
@@ -259,6 +310,7 @@ async def test_ejecutar_si_corresponde_ejecuta_la_purga_completa_cuando_correspo
             [],  # hay_job_activo: sin filas activas
             [ultima_ejecucion],  # esta_vencida: última corrida hace 25h -> vencida
             [max_fecha_corte],  # ejecutar_purga_inventario: max(fecha_corte)
+            [],  # select ids del detalle -> vacío
             [],  # select ids -> vacío -> nada que borrar, corta sin delete
         ]
     )

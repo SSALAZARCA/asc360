@@ -22,7 +22,7 @@ ENCABEZADOS = {
         "Bodega", "Referencia", "Nombre vendedor", "Valor bruto", "Valor descuentos",
         "Cliente factura", "Nro documento",
     ),
-    "INVENTARIO": ("Referencia", "Bodega", "Desc.bodega", "Existencia"),
+    "INVENTARIO": ("Referencia", "Bodega", "Desc.bodega", "Existencia", "Costo prom. uni."),
     "BACKORDER": (
         "SIC", "Sucursal", "Número del pedido", "Estado del pedido", "Referencia Parte",
         "Cantidad Pendiente",

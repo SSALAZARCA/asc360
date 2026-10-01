@@ -106,3 +106,11 @@ def test_plantilla_permite_el_rol_compras():
     override_motored_user(MotoredUser(user_id=str(uuid.uuid4()), role="COMPRAS"))
 
     assert _descargar("INVENTARIO").status_code == 200
+
+
+def test_la_plantilla_de_inventario_trae_el_costo_promedio_como_ultima_columna():
+    encabezado = _filas(_descargar("INVENTARIO").content)[0]
+
+    assert tuple(encabezado) == (
+        "Referencia", "Bodega", "Desc.bodega", "Existencia", "Costo prom. uni."
+    )

@@ -96,7 +96,7 @@ async def _construir_cache(
 # Tier 1 (task 11.1) — CI gate: ~56 500-row INVENTARIO fixture
 # ---------------------------------------------------------------------------
 
-INVENTARIO_MAPA_COLUMNAS = {"Referencia": 0, "Bodega": 1, "Desc.bodega": 2, "Existencia": 3}
+INVENTARIO_MAPA_COLUMNAS = {"Referencia": 0, "Bodega": 1, "Desc.bodega": 2, "Existencia": 3, "Costo prom. uni.": 4}
 INVENTARIO_ROWS = 56500
 
 
@@ -111,8 +111,8 @@ def _generar_filas_inventario(n: int, sucursales: Sequence[tuple]) -> Iterator[t
     for i in range(n - 1):
         _, nombre_sucursal, _ = sucursales[i % len(sucursales)]
         referencia_codigo = f"REF{i % N_REFERENCIAS:06d}"
-        yield (referencia_codigo, "BA061", nombre_sucursal, "10.5")
-    yield ("REF-NO-EXISTE", "BA061", sucursales[0][1], "1")
+        yield (referencia_codigo, "BA061", nombre_sucursal, "10.5", "1500")
+    yield ("REF-NO-EXISTE", "BA061", sucursales[0][1], "1", "1500")
 
 
 async def test_inventario_56500_rows_es_cache_first_con_queries_y_latencia_acotadas():

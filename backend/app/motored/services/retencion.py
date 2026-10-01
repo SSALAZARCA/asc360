@@ -44,10 +44,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.motored.models.carga_archivo import CargaArchivo
+from app.motored.models.inventario_detalle import InventarioDetalle
 from app.motored.models.inventario_snapshot import InventarioSnapshot
 from app.motored.models.retencion_ejecucion import RetencionEjecucion
 
 TABLA_INVENTARIO_SNAPSHOT = "inventario_snapshot"
+TABLA_INVENTARIO_DETALLE = "inventario_detalle"
 
 # ADR-3's due-check interval: "if older than 24 h".
 INTERVALO_DEBIDO = timedelta(hours=24)
@@ -130,8 +132,10 @@ async def ejecutar_purga_inventario(
     """The chunked delete itself (ADR-3). Bounded to `fecha_corte <
     max(fecha_corte) - MOTORED_RETENCION_DIAS`; runs in `chunk_size`-bounded
     batches, one commit per batch. Writes exactly one `retencion_ejecucion`
-    row per run (rows removed, limit date, duration) -- ledger AND scheduler
-    anchor for the next `esta_vencida()` call. Returns `None` (writes
+    row per table per run (rows removed, limit date, duration) -- the
+    snapshot's row is ledger AND scheduler anchor for the next
+    `esta_vencida()` call and is the one returned. `inventario_detalle` is
+    purged first, with the same `fecha_limite`. Returns `None` (writes
     nothing) if `inventario_snapshot` is empty -- there is no `fecha_corte`
     to anchor a window to."""
     now = now or _now_utc()
@@ -143,19 +147,37 @@ async def ejecutar_purga_inventario(
 
     fecha_limite = calcular_fecha_limite(fecha_corte_maxima, settings.MOTORED_RETENCION_DIAS)
 
+    # El detalle por bodega va PRIMERO, con la misma `fecha_limite` y en la
+    # misma corrida (mismo guard de job activo) que el snapshot.
+    await _purgar_tabla(
+        session, InventarioDetalle, TABLA_INVENTARIO_DETALLE, fecha_limite, now, chunk_size
+    )
+    return await _purgar_tabla(
+        session, InventarioSnapshot, TABLA_INVENTARIO_SNAPSHOT, fecha_limite, now, chunk_size
+    )
+
+
+async def _purgar_tabla(
+    session: AsyncSession,
+    modelo,
+    nombre_tabla: str,
+    fecha_limite: date,
+    now: datetime,
+    chunk_size: int,
+) -> RetencionEjecucion:
+    """Borra en chunks de PK las filas de `modelo` con `fecha_corte <
+    fecha_limite` y deja UNA fila de ledger para esa tabla."""
     inicio = time.monotonic()
     total_eliminadas = 0
     while True:
         resultado_ids = await session.execute(
-            select(InventarioSnapshot.id)
-            .where(InventarioSnapshot.fecha_corte < fecha_limite)
-            .limit(chunk_size)
+            select(modelo.id).where(modelo.fecha_corte < fecha_limite).limit(chunk_size)
         )
         ids_del_chunk = resultado_ids.scalars().all()
         if not ids_del_chunk:
             break
 
-        await session.execute(delete(InventarioSnapshot).where(InventarioSnapshot.id.in_(ids_del_chunk)))
+        await session.execute(delete(modelo).where(modelo.id.in_(ids_del_chunk)))
         await session.commit()
         total_eliminadas += len(ids_del_chunk)
 
@@ -165,7 +187,7 @@ async def ejecutar_purga_inventario(
     duracion_ms = int((time.monotonic() - inicio) * 1000)
 
     ejecucion = RetencionEjecucion(
-        tabla=TABLA_INVENTARIO_SNAPSHOT,
+        tabla=nombre_tabla,
         ejecutado_en=_como_naive_utc(now),
         fecha_limite=fecha_limite,
         filas_eliminadas=total_eliminadas,

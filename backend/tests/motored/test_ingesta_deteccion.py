@@ -30,7 +30,7 @@ COLUMNAS_POR_TIPO = {
         "Desc.bodega", "Bodega", "Referencia", "Nombre vendedor", "Valor bruto",
         "Valor descuentos", "Cliente factura", "Nro documento",
     ),
-    "INVENTARIO": ("Referencia", "Bodega", "Desc.bodega", "Existencia"),
+    "INVENTARIO": ("Referencia", "Bodega", "Desc.bodega", "Existencia", "Costo prom. uni."),
     "BACKORDER": (
         "SIC", "Sucursal", "Número del pedido", "Estado del pedido",
         "Referencia Parte", "Cantidad Pendiente",
@@ -121,3 +121,19 @@ def test_extraer_filas_muestra_sigue_disponible_sin_cambios():
     síncrona y acotada de un `.xlsx`) -- no depende de si la decisión de
     tipo es detección o verificación, y debe sobrevivir el cutover intacta."""
     assert callable(deteccion.extraer_filas_muestra)
+
+
+def test_archivo_inventario_viejo_de_4_columnas_se_detecta_como_inventario():
+    # 4/5 = 0.8 >= umbral: pasa la verificacion; el dry-run lo rechaza despues
+    # por la columna de costo faltante (ver test_ingesta_orquestador.py).
+    encabezado = ("Referencia", "Bodega", "Desc.bodega", "Existencia")
+
+    deteccion.verificar_tipo("INVENTARIO", [encabezado, ("REF1", "BA061", "CALI NORTE", 10)])
+
+
+def test_archivo_de_ventas_declarado_como_inventario_pasa_la_verificacion_con_ratio_0_6():
+    # 3/5 = 0.6: la verificacion de tipo lo deja pasar; lo que lo rechaza es el
+    # dry-run (faltan Existencia y Costo prom. uni.).
+    encabezado = COLUMNAS_POR_TIPO["VENTAS"]
+
+    deteccion.verificar_tipo("INVENTARIO", [encabezado, tuple(range(len(encabezado)))])

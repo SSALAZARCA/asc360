@@ -729,6 +729,7 @@ async def ejecutar_aplicar(session: AsyncSession, carga: CargaArchivo) -> None:
     elif tipo == "INVENTARIO":
         consolidado = inventario_mod.consolidar_existencias(filas_staging)
         await inventario_mod.aplicar(session, consolidado, carga.periodo_desde, carga.id)
+        await inventario_mod.aplicar_detalle(session, filas_staging, carga.periodo_desde, carga.id)
     elif tipo == "BACKORDER":
         consolidado = backorder_mod.consolidar_lineas(filas_staging)
         await backorder_mod.aplicar(session, consolidado, carga.periodo_desde, carga.id)

@@ -56,14 +56,19 @@ from datetime import date, timedelta
 from decimal import Decimal
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
+from sqlalchemy import delete, tuple_
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.config import settings
 from app.motored.models.carga_error import CargaError
 from app.motored.models.carga_fila_staging import CargaFilaStaging
+from app.motored.models.inventario_detalle import InventarioDetalle
 from app.motored.models.inventario_snapshot import InventarioSnapshot
 from app.motored.services.ingesta import errores as errores_mod
 from app.motored.services.ingesta import numeros as numeros_mod
+# El costo usa la misma limpieza de dinero y el mismo tope de `Numeric(16, 2)`
+# que los valores de VENTAS (`$1.234.567`, formato colombiano).
+from app.motored.services.ingesta import ventas as ventas_mod
 from app.motored.services.ingesta.resolucion import (
     CacheResolucion,
     resolver_referencia,
@@ -73,7 +78,20 @@ from app.motored.services.ingesta.resolucion import (
 # Nombres CANÓNICOS (no normalizados) tal como los espera `columnas.
 # construir_mapa_columnas` -- verificados contra el workbook real de
 # producción, hoja "inventario actual" (ver docstring del módulo).
-COLUMNAS_ESPERADAS: Tuple[str, ...] = ("Referencia", "Bodega", "Desc.bodega", "Existencia")
+COLUMNAS_ESPERADAS: Tuple[str, ...] = (
+    "Referencia",
+    "Bodega",
+    "Desc.bodega",
+    "Existencia",
+    # Costo promedio unitario por bodega (`inventario_detalle`): obligatoria
+    # desde 2026-10-01. Un archivo viejo de 4 columnas se detecta como
+    # INVENTARIO (4/5) y se rechaza por esta columna faltante.
+    "Costo prom. uni.",
+)
+
+# `inventario_detalle.bodega` es String(20).
+_LARGO_MAX_BODEGA = 20
+TAMANO_LOTE_DETALLE = 1000
 
 CODIGO_EXISTENCIA_INVALIDA = "EXISTENCIA_INVALIDA"
 CODIGO_FECHA_CORTE_FUERA_DE_VENTANA = "E-CARGA-021"
@@ -108,6 +126,22 @@ def _resolver_existencia_o_error(
         numero_fila, CODIGO_EXISTENCIA_INVALIDA,
         "La existencia de la fila no se pudo interpretar como un número.",
     )
+
+
+def _resolver_costo(fila_raw: Sequence[Any], mapa_columnas: Dict[str, int]) -> Optional[Decimal]:
+    """`Costo prom. uni.` de la fila (dinero colombiano, ver `numeros.py`).
+    NUNCA rechaza la fila ni afecta la existencia: una celda en blanco, con
+    error de Excel, no numerica o demasiado grande queda en `None`. Un
+    negativo se conserva tal cual (el ERP los exporta); el lector de costos
+    excluye todo valor NULL o <= 0."""
+    valor = ventas_mod._limpiar_moneda(_extraer(fila_raw, mapa_columnas, "Costo prom. uni."))
+    try:
+        costo = numeros_mod.parsear_decimal(valor)
+    except (numeros_mod.CeldaFaltanteError, numeros_mod.CeldaInvalidaError):
+        return None
+    if abs(costo) >= ventas_mod._VALOR_MAX_ABS:
+        return None
+    return costo
 
 
 def _resolver_claves(
@@ -174,7 +208,13 @@ def procesar_fila(
         fila_raw, mapa_columnas, cache, carga_id, numero_fila, proveedor_id
     )
 
-    payload = {"existencia": str(existencia)}
+    costo = _resolver_costo(fila_raw, mapa_columnas)
+    bodega = (_texto(_extraer(fila_raw, mapa_columnas, "Bodega")) or "")[:_LARGO_MAX_BODEGA]
+    payload = {
+        "existencia": str(existencia),
+        "bodega": bodega,
+        "costo": None if costo is None else str(costo),
+    }
     fila_staging = CargaFilaStaging(
         carga_id=carga_id,
         fila=numero_fila,
@@ -251,6 +291,61 @@ async def aplicar(
     stmt = construir_statement_upsert(consolidado, fecha_corte, carga_id)
     if stmt is not None:
         await session.execute(stmt)
+
+
+def construir_detalle(
+    filas_staging: Sequence[CargaFilaStaging], fecha_corte: date, carga_id: uuid.UUID
+) -> List[Dict[str, Any]]:
+    """Una fila de `inventario_detalle` por fila staged: la bodega fisica cruda
+    con su existencia y costo. Excluye lo mismo que el snapshot (sucursal o
+    referencia sin resolver) y las filas staged por una version anterior,
+    que no traen `bodega`."""
+    detalle: List[Dict[str, Any]] = []
+    for fila in filas_staging:
+        if fila.sucursal_id is None or fila.referencia_id is None:
+            continue
+        payload = fila.payload
+        if "bodega" not in payload:
+            continue
+        costo = payload.get("costo")
+        detalle.append({
+            "id": uuid.uuid4(),
+            "carga_id": carga_id,
+            "fecha_corte": fecha_corte,
+            "sucursal_id": fila.sucursal_id,
+            "referencia_id": fila.referencia_id,
+            "bodega": payload["bodega"],
+            "existencia": Decimal(payload["existencia"]),
+            "costo_unitario": None if costo is None else Decimal(costo),
+        })
+    return detalle
+
+
+async def aplicar_detalle(
+    session,
+    filas_staging: Sequence[CargaFilaStaging],
+    fecha_corte: date,
+    carga_id: uuid.UUID,
+) -> None:
+    """Escribe `inventario_detalle` en la MISMA transaccion que el upsert del
+    snapshot (sin `commit()`). Delete-on-replace: borra el detalle de cada
+    (fecha_corte, sucursal) presente en ESTA carga y lo inserta de nuevo, por
+    lotes. Anular una carga nunca lo borra."""
+    detalle = construir_detalle(filas_staging, fecha_corte, carga_id)
+    if not detalle:
+        return
+    sucursales = list({d["sucursal_id"] for d in detalle})
+    await session.execute(
+        delete(InventarioDetalle).where(
+            tuple_(InventarioDetalle.fecha_corte, InventarioDetalle.sucursal_id).in_(
+                [(fecha_corte, sucursal_id) for sucursal_id in sucursales]
+            )
+        )
+    )
+    for inicio in range(0, len(detalle), TAMANO_LOTE_DETALLE):
+        await session.execute(
+            pg_insert(InventarioDetalle).values(detalle[inicio:inicio + TAMANO_LOTE_DETALLE])
+        )
 
 
 def fecha_corte_fuera_de_ventana(
