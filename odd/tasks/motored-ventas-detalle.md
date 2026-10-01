@@ -55,8 +55,8 @@ Pedidos are unchanged: the monthly aggregate `venta_mensual` keeps being built e
 
 Route evidence: T1 and T2 together touch 2+ non-trivial files (parser, ingestion, model, migration, fixtures), so the writer trigger fired.
 
-- [x] T1 (commit 2583b6c)
-- [x] T2 (commit 2583b6c)
+- [x] T1 (commit ca71bbb on main, rebased from 2583b6c)
+- [x] T2 (commit ca71bbb on main, rebased from 2583b6c)
 
 ## Follow-ups (separate features, user-approved direction, not in this scope)
 - **Inventory cost.** An OPTIONAL "Costo" column in INVENTARIO, stored as a nullable column on `inventario_snapshot`, kept out of `COLUMNAS_ESPERADAS`. Open decision: the inventory key has no bodega, so how does a per-bodega cost aggregate (median, as the Excel did)?
@@ -64,6 +64,11 @@ Route evidence: T1 and T2 together touch 2+ non-trivial files (parser, ingestion
 - **Salesperson to advisor mapping.** An explicit vendedor → Usuario (ASESOR_MOSTRADOR) table, with a "sin asignar" bucket and no fuzzy auto-matching.
 - **Referencias.** The user will reload `linea_comercial` with the 7 dashboard lines. The engine only carries this field, so the reload is safe.
 - **Dashboard.** Build the TABLERO ASESORES indicators. Analysis is in Engram `motored/tablero-asesores-analysis`.
+- **Review advisories (non-blocking, from the approved native review).**
+  - A blank detail field (vendedor, cliente, nro documento, valor bruto) rejects the whole row, so its units also leave `venta_mensual`. The real Feb–Aug data has 0 such blanks in 367,011 line rows, and rejected rows surface as row errors. Consider keeping the units for `venta_mensual` and skipping only the detail row.
+  - Delete-then-insert has no uniqueness guard. Two concurrent applies for the same (sucursal, anio, mes) could duplicate detail rows. Check whether applies are already serialized.
+  - Cargas staged before the deploy and applied after it skip the detail delete.
+  - The default-run unit test does not prove the delete is scoped. Only pg_real does.
 
 ## Log
 - 2026-09-30: impact check with the F3 agent done (no blocker; two traps noted above). The user confirmed the columns. The F3 agent was told the columns are REQUIRED.
@@ -75,3 +80,4 @@ Route evidence: T1 and T2 together touch 2+ non-trivial files (parser, ingestion
   - pg_real: 4 new tests in `pg_real/test_venta_detalle_pg.py` (apply writes detail, replace by (sucursal, anio, mes), anulacion keeps rows, period rejection writes nothing). Their first run was already GREEN because the implementation came first; the only failure was a test-isolation bug (`anular_carga` commits), fixed by degrading `commit` to `flush`.
   - Side effect: "Nro documento" normalizes the same as INGRESOS_FACTURAS "Nrodocumento", so a VENTAS file declared as INGRESOS_FACTURAS now scores 3/5 = 0.6 in `verificar_tipo` and passes detection; the dry-run still rejects it for missing columns. The deteccion mismatch pair was changed to (INGRESOS_FACTURAS, FACTURAS_PEDIDOS).
   - No header aliases were added: the column matcher only compares normalized canonical names (case, accents, spaces, dots, dashes already tolerated).
+- 2026-09-30: native review (medium risk) granted by the user, approved on the reliability lens and acknowledged. Rebased on main 899fd5a and pushed as ca71bbb + 9a8ecbf. Post-rebase `tests/motored`: 3618 passed. The F3/F4 agent was notified of head `b8e2d4a1c735`. Review advisories are recorded under Follow-ups.
