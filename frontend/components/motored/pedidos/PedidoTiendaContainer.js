@@ -1,11 +1,12 @@
 'use client';
-/** Pedido of one tienda (read-only): header, totals, class summary, lines and the Historial panel. */
-import { useMemo, useState } from 'react';
+/** Pedido of one tienda: header, totals, class summary, lines (editable while it is a draft) and the Historial panel. */
+import { useCallback, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import usePedidosGate from '../../../lib/motored/usePedidosGate';
 import usePedidoTienda from './usePedidoTienda';
 import useTiendasCorrida from './useTiendasCorrida';
 import useLineasPedido from './useLineasPedido';
+import useEdicionLinea from './useEdicionLinea';
 import HistorialDrawer from './HistorialDrawer';
 import LineasSeccion from './LineasSeccion';
 import PedidoTiendaHeader from './PedidoTiendaHeader';
@@ -24,9 +25,12 @@ function SinPedido({ cabecera }) {
   );
 }
 
-function Detalle({ cabecera, corridaId, sucursalId, corrida, onHistorial }) {
+function Detalle({ cabecera, corridaId, sucursalId, corrida, onHistorial, alCambiarPedido }) {
   const conLineas = cabecera.estado === 'OK';
   const lineas = useLineasPedido(corridaId, sucursalId, conLineas);
+  const { parchear, recargar } = lineas;
+  const edicion = useEdicionLinea({ corridaId, parchear, recargar, alCambiarPedido });
+  const editable = Boolean(cabecera.acciones && cabecera.acciones.editar);
   const filas = useMemo(
     () => filasPorClase(sucursalId, corrida?.resumen, corrida?.resumen_a_pedir),
     [sucursalId, corrida],
@@ -36,7 +40,7 @@ function Detalle({ cabecera, corridaId, sucursalId, corrida, onHistorial }) {
     <>
       <TotalesPedido totales={cabecera.totales} />
       <ResumenClasesTable filas={filas} />
-      <LineasSeccion lineas={lineas} onHistorial={onHistorial} />
+      <LineasSeccion lineas={lineas} edicion={{ ...edicion, editable }} onHistorial={onHistorial} />
     </>
   );
 }
@@ -44,8 +48,10 @@ function Detalle({ cabecera, corridaId, sucursalId, corrida, onHistorial }) {
 export default function PedidoTiendaContainer({ corridaId, sucursalId }) {
   const router = useRouter();
   const allowed = usePedidosGate();
-  const { cabecera, error } = usePedidoTienda(corridaId, sucursalId, allowed);
-  const { data: corrida } = useTiendasCorrida(corridaId, allowed);
+  const { cabecera, error, reload: recargarCabecera } = usePedidoTienda(corridaId, sucursalId, allowed);
+  const { data: corrida, reload: recargarCorrida } = useTiendasCorrida(corridaId, allowed);
+  // An edit changes the totals of the header and the class summary of the corrida.
+  const alCambiarPedido = useCallback(() => { recargarCabecera(); recargarCorrida(); }, [recargarCabecera, recargarCorrida]);
   const [historial, setHistorial] = useState(null);
   if (!allowed) return null;
   return (
@@ -60,7 +66,7 @@ export default function PedidoTiendaContainer({ corridaId, sucursalId }) {
           <PedidoTiendaHeader cabecera={cabecera} onHistorial={() => setHistorial({ linea: null })} />
           <Detalle
             cabecera={cabecera} corridaId={corridaId} sucursalId={sucursalId} corrida={corrida}
-            onHistorial={(linea) => setHistorial({ linea })}
+            onHistorial={(linea) => setHistorial({ linea })} alCambiarPedido={alCambiarPedido}
           />
         </>
       )}

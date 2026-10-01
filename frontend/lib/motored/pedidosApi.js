@@ -20,6 +20,7 @@ function consulta(params = {}) {
 }
 
 const post = (path, cuerpo) => motoredFetchJson(path, { method: 'POST', body: JSON.stringify(cuerpo) });
+const patch = (path, cuerpo) => motoredFetchJson(path, { method: 'PATCH', body: JSON.stringify(cuerpo) });
 
 // --- Corridas --------------------------------------------------------------
 
@@ -35,3 +36,10 @@ export const listarLineas = (id, filtros) => motoredFetchJson(`${BASE}/${id}/lin
 export const getPedidoTienda = (id, sucursalId) => motoredFetchJson(`${BASE}/${id}/sucursales/${sucursalId}`);
 export const getEventosTienda = (id, sucursalId) => motoredFetchJson(`${BASE}/${id}/sucursales/${sucursalId}/eventos`);
 export const getHistorialLinea = (id, lineaId) => motoredFetchJson(`${BASE}/${id}/lineas/${lineaId}/historial`);
+
+// --- Line edit ---------------------------------------------------------------
+
+/** Sets "Cantidad a pedir" of a line; `esperado` is the quantity the screen saw (stale guard, E-CORRIDA-066). */
+export const editarLinea = (id, lineaId, { pedido_final, esperado }) => (
+  patch(`${BASE}/${id}/lineas/${lineaId}`, { pedido_final, esperado })
+);

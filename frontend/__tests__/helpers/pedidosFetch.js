@@ -185,6 +185,23 @@ export const L_EXCLUIDA = linea({
 
 export const paginaLineas = (items, over = {}) => ({ items, total: items.length, limite: 50, offset: 0, ...over });
 
+/** Body of a successful PATCH of a line: the refreshed line (edited by Compras Uno) and the tienda totals. */
+export const lineaEditada = (base, cantidad, over = {}) => {
+  const q = Number(cantidad);
+  const precio = Number(base.precio || 0);
+  return jsonRes({
+    linea: {
+      ...base, pedido_final: `${q}.00`, valor_pedido: (q * precio).toFixed(2),
+      fuera_de_empaque: q > 0 && q % base.unidad_empaque !== 0,
+      editada: `${q}.00` !== base.pedido_sugerido, editado_por: 'Compras Uno',
+      editado_en: '2026-10-02T10:15:00', motivo_edicion: 'MANUAL', ...over,
+    },
+    totales_tienda: {
+      unidades_a_pedir: '1022.00', valor_a_pedir: '5580000.00', unidades_sugerido: '1000.00', valor_sugerido: '5000000.00',
+    },
+  });
+};
+
 /**
  * Installs `global.fetch` as a router: `routes` maps "METHOD /path" (path
  * without the API base and query) to a response or a function of the URL and

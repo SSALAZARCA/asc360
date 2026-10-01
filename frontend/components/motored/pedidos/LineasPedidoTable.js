@@ -27,7 +27,7 @@ function Encabezado({ titulo, ayuda, pegada }) {
   );
 }
 
-export default function LineasPedidoTable({ lineas, onHistorial }) {
+export default function LineasPedidoTable({ lineas, edicion, onHistorial }) {
   return (
     <MotoredTableScroll maxHeight="70vh">
       <table aria-label="Líneas del pedido" style={{ ...tablaStyle, width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
@@ -37,7 +37,7 @@ export default function LineasPedidoTable({ lineas, onHistorial }) {
           </tr>
         </thead>
         <tbody>
-          {lineas.map((l) => <LineaFila key={l.id} linea={l} onHistorial={onHistorial} />)}
+          {lineas.map((l) => <LineaFila key={l.id} linea={l} edicion={edicion} onHistorial={onHistorial} />)}
         </tbody>
       </table>
     </MotoredTableScroll>

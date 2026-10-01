@@ -6,7 +6,7 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import {
-  installFetch, jsonRes, coded, setSession, D_DETALLE, CAB_BORRADOR,
+  installFetch, jsonRes, coded, setSession, D_DETALLE, CAB_BORRADOR, CAB_CERRADO,
   L_NORMAL, L_EDITADA, L_FUERA, L_EXCLUIDA, paginaLineas,
 } from './helpers/pedidosFetch';
 
@@ -74,8 +74,8 @@ describe('lines table - columns and content', () => {
     expect(within(await fila('00123-AB')).getByText('Quiebre total')).toBeInTheDocument();
   });
 
-  it('shows the quantity to order as plain text (no input)', async () => {
-    installFetch(rutas());
+  it('shows the quantity to order as plain text (no input) when the pedido cannot be edited', async () => {
+    installFetch({ ...rutas(), 'GET /corridas/c1/sucursales/s1': jsonRes(CAB_CERRADO) });
     render(<PedidoTiendaPage />);
     const tabla = await tablaLineas();
     expect(within(tabla).queryAllByRole('textbox')).toHaveLength(0);
