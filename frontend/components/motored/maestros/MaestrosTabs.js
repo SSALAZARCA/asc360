@@ -27,13 +27,9 @@
  * `group` ('Maestros' | 'Movimientos') and this component renders a small
  * uppercase label right before the FIRST tab of each new group -- a label
  * change inside the same bar, not a new screen, per the owner's "keep
- * Maestros / single route" ruling. `.motored-tab-bar`'s existing CSS uses
- * `flex-wrap`, which SHOULD handle 10 tabs on a narrow viewport, but this
- * has NOT been confirmed in a real browser in this batch (no live backend
- * was reachable in this environment to authenticate into `/motored/
- * maestros`) -- jsdom cannot catch layout/overflow at all, so this remains
- * an open live-verification item per the standing project rule, not a
- * closed one.
+ * Maestros / single route" ruling. With 12 tabs the bar does not fit in one
+ * row: checked with real screenshots (768, 1024 and 1440px), it scrolls
+ * inside its own box (`overflowX: auto`) instead of widening the page.
  */
 import { Fragment, useEffect, useState } from 'react';
 import { getSalud } from '../../../lib/motored/api';
