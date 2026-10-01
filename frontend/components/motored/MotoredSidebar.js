@@ -35,15 +35,26 @@
  * not a separate menu item. `/motored/cargas` itself still resolves (it
  * redirects), so an old bookmark keeps working even without a nav entry.
  */
+import { useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Image from 'next/image';
-import { LogOut, Warehouse, Users, TrendingDown, ClipboardCheck, MessageSquareWarning, KeyRound, History } from 'lucide-react';
+import {
+  LogOut, Warehouse, Users, TrendingDown, ClipboardCheck, MessageSquareWarning, KeyRound, History,
+  UserCog, ChevronDown, ChevronRight,
+} from 'lucide-react';
 import { MOTORED_TOKEN_KEY, MOTORED_USER_KEY } from '../../lib/motored/motoredFetch';
 
 const ALL_ITEMS = [
   { id: 'maestros', name: 'Maestros', icon: Warehouse, path: '/motored/maestros' },
-  { id: 'usuarios', name: 'Usuarios', icon: Users, path: '/motored/usuarios', adminOnly: true },
-  { id: 'ingresos', name: 'Registro de ingresos', icon: History, path: '/motored/ingresos', roles: ['ADMIN'] },
+  // A group (`children`) is a collapsible header; it is open while one of its
+  // pages is active, and toggles on click otherwise.
+  {
+    id: 'usuarios', name: 'Usuarios', icon: Users, adminOnly: true,
+    children: [
+      { id: 'usuarios-gestion', name: 'Gestión de usuarios', icon: UserCog, path: '/motored/usuarios' },
+      { id: 'ingresos', name: 'Registro de ingresos', icon: History, path: '/motored/ingresos' },
+    ],
+  },
   { id: 'ventas-perdidas', name: 'Ventas perdidas', icon: TrendingDown, path: '/motored/ventas-perdidas', adminOnly: true },
   // `roles` (optional) restricts an item to those roles; `adminOnly` and items
   // without either keep their original behaviour. SERVICIO_CLIENTE only ever
@@ -81,13 +92,42 @@ function menuItemStyle(isActive) {
   };
 }
 
-function MenuItem({ item, isActive, onNavigate }) {
+function MenuItem({ item, isActive, onNavigate, indent = false }) {
   const Icon = item.icon;
+  const style = indent ? { ...menuItemStyle(isActive), paddingLeft: '2.2rem' } : menuItemStyle(isActive);
   return (
-    <button type="button" onClick={() => onNavigate(item.path)} style={menuItemStyle(isActive)}>
+    <button type="button" onClick={() => onNavigate(item.path)} style={style}>
       <Icon size={16} />
       {item.name}
     </button>
+  );
+}
+
+const isActivePath = (pathname, path) => Boolean(pathname?.startsWith(path));
+
+function MenuGroup({ group, pathname, onNavigate }) {
+  const childActive = group.children.some((child) => isActivePath(pathname, child.path));
+  const [toggled, setToggled] = useState(false);
+  const expanded = childActive || toggled;
+  const Icon = group.icon;
+  const Chevron = expanded ? ChevronDown : ChevronRight;
+  return (
+    <>
+      <button
+        type="button" aria-expanded={expanded} onClick={() => setToggled((open) => !open)}
+        style={menuItemStyle(childActive && !expanded)}
+      >
+        <Icon size={16} />
+        <span style={{ flex: 1 }}>{group.name}</span>
+        <Chevron size={14} aria-hidden="true" />
+      </button>
+      {expanded && group.children.map((child) => (
+        <MenuItem
+          key={child.id} item={child} indent
+          isActive={isActivePath(pathname, child.path)} onNavigate={onNavigate}
+        />
+      ))}
+    </>
   );
 }
 
@@ -122,8 +162,9 @@ export default function MotoredSidebar({ user, open = false, onClose }) {
 
       <nav style={navStyle}>
         <p className="motored-t-rotulo" style={navLabelStyle}>Pedidos Motored</p>
-        {menuItems.map((item) => (
-          <MenuItem key={item.id} item={item} isActive={pathname?.startsWith(item.path)} onNavigate={navigate} />
+        {menuItems.map((item) => (item.children
+          ? <MenuGroup key={item.id} group={item} pathname={pathname} onNavigate={navigate} />
+          : <MenuItem key={item.id} item={item} isActive={isActivePath(pathname, item.path)} onNavigate={navigate} />
         ))}
       </nav>
 

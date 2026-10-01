@@ -85,10 +85,11 @@ describe('IngresosPage', () => {
 
 describe('sidebar entry', () => {
   const Real = jest.requireActual('../components/motored/MotoredSidebar').default;
-  it('is shown to ADMIN right after Usuarios and hidden from others', () => {
+  it('is shown to ADMIN inside the Usuarios group and hidden from others', () => {
     const { unmount } = render(<Real user={{ nombre: 'U', role: 'ADMIN' }} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Usuarios' }));
     const labels = screen.getAllByRole('button').map((b) => b.textContent);
-    expect(labels[labels.indexOf('Usuarios') + 1]).toBe('Registro de ingresos');
+    expect(labels[labels.indexOf('Gestión de usuarios') + 1]).toBe('Registro de ingresos');
     unmount();
     ['COMPRAS', 'CONSULTA', 'SUCURSAL', 'SERVICIO_CLIENTE'].forEach((role) => {
       const r = render(<Real user={{ nombre: 'U', role }} />);
