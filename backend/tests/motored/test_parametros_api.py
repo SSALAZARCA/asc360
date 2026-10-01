@@ -144,3 +144,100 @@ def test_reading_a_stored_key_the_registry_does_not_know_still_works():
     assert respuesta.status_code == 200
     assert respuesta.json()["valor"] == "x"
     assert respuesta.json()["sucursal_id"] is None
+
+
+# --- F4 (B5a): el tope de presupuesto por `POST /parametros` ---------------
+
+
+MODO = "modo_tope_presupuesto"
+TOPE = "presupuesto_maximo_pedido"
+
+
+def test_admin_can_switch_the_budget_mode_on_with_the_generic_endpoint():
+    client, db = _cliente()
+
+    respuesta = client.post(URL, json=_cuerpo(MODO, True))
+
+    assert respuesta.status_code == 201, respuesta.text
+    assert db.added[0].clave == MODO and db.added[0].valor is True
+    assert db.added[0].sucursal_id is None and db.committed is True
+
+
+@pytest.mark.parametrize("valor", ["true", 1, None, "si"])
+def test_a_non_boolean_budget_switch_is_e_param_002(valor):
+    client, db = _cliente()
+
+    respuesta = client.post(URL, json=_cuerpo(MODO, valor))
+
+    assert respuesta.status_code == 422
+    assert respuesta.json()["detail"]["code"] == "E-PARAM-002"
+    assert db.added == []
+
+
+def test_the_budget_switch_with_a_sucursal_is_e_param_003():
+    client, db = _cliente()
+
+    respuesta = client.post(
+        URL, json=_cuerpo(MODO, True, sucursal_id=str(uuid.uuid4())))
+
+    assert respuesta.status_code == 422
+    assert respuesta.json()["detail"]["code"] == "E-PARAM-003"
+    assert db.added == []
+
+
+def test_a_global_cap_is_a_coded_e_param_004_and_writes_nothing():
+    client, db = _cliente()
+
+    respuesta = client.post(URL, json=_cuerpo(TOPE, "80000000"))
+
+    assert respuesta.status_code == 422
+    assert respuesta.json()["detail"]["code"] == "E-PARAM-004"
+    assert TOPE in respuesta.json()["detail"]["message"]
+    assert db.added == [] and db.committed is False
+
+
+def test_a_cap_with_a_sucursal_is_stored_for_that_sucursal():
+    sucursal = Sucursal(id=uuid.uuid4(), nombre="CALI NORTE")
+    client, db = _cliente(get_queue=[sucursal])
+
+    respuesta = client.post(
+        URL, json=_cuerpo(TOPE, "80000000", sucursal_id=str(sucursal.id)))
+
+    assert respuesta.status_code == 201, respuesta.text
+    assert db.added[0].sucursal_id == sucursal.id
+    assert db.added[0].valor == "80000000"
+
+
+def test_a_null_cap_with_a_sucursal_is_a_valid_removal():
+    sucursal = Sucursal(id=uuid.uuid4(), nombre="CALI NORTE")
+    client, db = _cliente(get_queue=[sucursal])
+
+    respuesta = client.post(
+        URL, json=_cuerpo(TOPE, None, sucursal_id=str(sucursal.id)))
+
+    assert respuesta.status_code == 201, respuesta.text
+    assert db.added[0].valor is None
+
+
+@pytest.mark.parametrize("valor", [0, -5, "abc"])
+def test_an_invalid_cap_value_is_e_param_002(valor):
+    client, db = _cliente()
+
+    respuesta = client.post(
+        URL, json=_cuerpo(TOPE, valor, sucursal_id=str(uuid.uuid4())))
+
+    assert respuesta.status_code == 422
+    assert respuesta.json()["detail"]["code"] == "E-PARAM-002"
+    assert db.added == []
+
+
+@pytest.mark.parametrize("rol", ["COMPRAS", "CONSULTA", "SUCURSAL"])
+def test_only_admin_writes_the_budget_keys_with_the_generic_endpoint(rol):
+    override_motored_user(MotoredUser(user_id=str(uuid.uuid4()), role=rol))
+    db = FakeAsyncSession(execute_queue=[[]] * 4)
+    override_motored_db(db)
+
+    respuesta = TestClient(app).post(URL, json=_cuerpo(MODO, True))
+
+    assert respuesta.status_code == 403
+    assert db.added == [] and db.committed is False

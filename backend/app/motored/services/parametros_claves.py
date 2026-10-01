@@ -18,15 +18,20 @@ Los valores por defecto son JSON nativo (los decimales van como texto, p. ej.
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from fractions import Fraction
-from typing import Any, Callable, Mapping, Optional
+from typing import Any, Callable, Mapping, Optional, Tuple
 
 from app.motored.services.corridas import codigos
 
 AMBITO_GLOBAL = "GLOBAL"
 AMBITO_GLOBAL_Y_SUCURSAL = "GLOBAL_Y_SUCURSAL"
+# F4 (B5a): sólo existe por tienda; un valor global es E-PARAM-004.
+AMBITO_SOLO_SUCURSAL = "SOLO_SUCURSAL"
 
 GRUPO_INGESTA = "INGESTA"
 GRUPO_MOTOR = "MOTOR"
+# F4 (B5a): tope de presupuesto. NO es del motor: jamás entra al
+# snapshot de la corrida ni se puede usar como override.
+GRUPO_PEDIDO = "PEDIDO"
 
 
 class ErrorParametro(Exception):
@@ -47,6 +52,11 @@ class EspecClave:
     dominio: str
     validar: Callable[[Any], bool]
     convertir: Callable[[Any], Any]
+    # F4 (B5a): lo que el catálogo `GET /parametros/claves` (B6) expone.
+    # Sólo tuplas: un dataclass congelado con un default mutable no
+    # importa en Python 3.11.
+    tipo: str = ""
+    opciones: Tuple[str, ...] = ()
 
 
 def _entero(valor: Any) -> bool:
@@ -71,7 +81,7 @@ def _identidad(valor: Any) -> Any:
 def _booleana(clave: str, default: bool, grupo: str = GRUPO_MOTOR):
     return EspecClave(
         clave, default, AMBITO_GLOBAL, grupo, "verdadero o falso",
-        lambda v: isinstance(v, bool), _identidad,
+        lambda v: isinstance(v, bool), _identidad, tipo="bool",
     )
 
 
@@ -81,6 +91,7 @@ def _entera(clave, default, minimo, maximo, grupo=GRUPO_MOTOR,
         clave, default, ambito, grupo,
         f"un entero entre {minimo} y {maximo}",
         lambda v: _entero(v) and minimo <= v <= maximo, _identidad,
+        tipo="entero",
     )
 
 
@@ -98,13 +109,15 @@ def _decimal(clave, default, maximo=None, exclusivo=False,
     if maximo is not None:
         dominio += f" y hasta {maximo}"
     return EspecClave(
-        clave, default, AMBITO_GLOBAL, grupo, dominio, valido, _numero)
+        clave, default, AMBITO_GLOBAL, grupo, dominio, valido, _numero,
+        tipo="decimal")
 
 
 def _opcion(clave: str, default: str, opciones: tuple):
     return EspecClave(
         clave, default, AMBITO_GLOBAL, GRUPO_MOTOR,
         "uno de " + ", ".join(opciones), lambda v: v in opciones, _identidad,
+        tipo="opcion", opciones=tuple(opciones),
     )
 
 
@@ -114,7 +127,22 @@ def _lista_texto(clave: str, default: list):
         "una lista no vacía de textos",
         lambda v: isinstance(v, list) and len(v) > 0
         and all(isinstance(x, str) and x.strip() for x in v),
-        _identidad,
+        _identidad, tipo="lista",
+    )
+
+
+def _tope_por_tienda(clave: str):
+    """Decimal > 0 o nulo ("sin tope"), sólo por sucursal (F4, ADR-6)."""
+    def valido(valor):
+        if valor is None:
+            return True
+        n = _numero(valor)
+        return n is not None and n > 0
+
+    return EspecClave(
+        clave, None, AMBITO_SOLO_SUCURSAL, GRUPO_PEDIDO,
+        "un número mayor que 0 (o vacío para quitar el tope)", valido,
+        _numero, tipo="decimal",
     )
 
 
@@ -135,7 +163,7 @@ def _k_fms_convertido(valor: Mapping) -> Mapping:
 _K_FMS = EspecClave(
     "k_fms", {"F": "3", "M": "1.5", "S": "1"}, AMBITO_GLOBAL, GRUPO_MOTOR,
     "un objeto con F, M y S, números mayores o iguales a 0",
-    _k_fms_valido, _k_fms_convertido,
+    _k_fms_valido, _k_fms_convertido, tipo="k_fms",
 )
 
 # Tipos de dato con límite de antigüedad propio (decisión #16).
@@ -145,6 +173,9 @@ CLAVES_ANTIGUEDAD = {
     "facturas": "max_dias_antiguedad_facturas",
     "ingresos": "max_dias_antiguedad_ingresos",
 }
+
+CLAVE_MODO_TOPE = "modo_tope_presupuesto"
+CLAVE_TOPE_PEDIDO = "presupuesto_maximo_pedido"
 
 _DIAS_ANTIGUEDAD_MAX = 365  # supuesto ajustable (tasks: Open item D)
 
@@ -180,6 +211,11 @@ def _construir_registro() -> Mapping[str, EspecClave]:
         _entera(clave, 7, 1, _DIAS_ANTIGUEDAD_MAX)
         for clave in CLAVES_ANTIGUEDAD.values()
     ]
+    # F4 (B5a): tope de presupuesto, fuera del motor.
+    especs += [
+        _booleana(CLAVE_MODO_TOPE, False, GRUPO_PEDIDO),
+        _tope_por_tienda(CLAVE_TOPE_PEDIDO),
+    ]
     return {e.clave: e for e in especs}
 
 
@@ -211,14 +247,23 @@ def _espec_o_error(clave: str) -> EspecClave:
     return espec
 
 
+def _validar_ambito(espec: EspecClave, sucursal_id: Any) -> None:
+    """E-PARAM-003 (sucursal en clave global) o E-PARAM-004 (global en
+    clave sólo-sucursal)."""
+    codigo = None
+    if sucursal_id is not None and espec.ambito == AMBITO_GLOBAL:
+        codigo = codigos.E_PARAM_AMBITO_INVALIDO
+    elif sucursal_id is None and espec.ambito == AMBITO_SOLO_SUCURSAL:
+        codigo = codigos.E_PARAM_SOLO_SUCURSAL
+    if codigo is not None:
+        raise ErrorParametro(
+            codigo, codigos.mensaje(codigo, clave=espec.clave))
+
+
 def validar_escritura(clave: str, valor: Any, sucursal_id: Any = None) -> None:
     """Valida una escritura NUEVA; lanza `ErrorParametro` codificado."""
     espec = _espec_o_error(clave)
-    if sucursal_id is not None and espec.ambito == AMBITO_GLOBAL:
-        raise ErrorParametro(
-            codigos.E_PARAM_AMBITO_INVALIDO,
-            codigos.mensaje(codigos.E_PARAM_AMBITO_INVALIDO, clave=clave),
-        )
+    _validar_ambito(espec, sucursal_id)
     if not espec.validar(valor):
         raise _valor_invalido(espec)
 

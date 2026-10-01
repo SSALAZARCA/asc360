@@ -46,6 +46,10 @@ _MODULOS_NUEVOS = (
     "app/motored/api/corridas_comun.py",
     "app/motored/api/corridas_pedido.py",
     "app/motored/schemas/pedido.py",
+    "app/motored/services/corridas/recorte.py",
+    "app/motored/services/parametros_claves.py",
+    "app/motored/services/parametros_topes.py",
+    "app/motored/api/parametros.py",
     "alembic_motored/versions/a3f7c1d9e642_fase4_pedido_tienda.py",
 )
 _NUEVAS = {

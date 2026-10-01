@@ -22,9 +22,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.motored.deps import MotoredUser, get_current_motored_user, get_motored_db_or_503, require_motored_ready, require_roles
 from app.motored.models.sucursal import Sucursal
 from app.motored.schemas.parametro_metodologia import ParametroMetodologiaCreate, ParametroMetodologiaRead
-from app.motored.services import parametros_claves
+from app.motored.schemas.pedido import (
+    TopesGuardados,
+    TopesGuardar,
+    TopesPresupuesto,
+)
+from app.motored.services import parametros_claves, parametros_topes
 from app.motored.services.corridas import codigos
 from app.motored.services.parametros import obtener_vigente, registrar_cambio
+from app.motored.services.reloj import hoy_bogota
 
 router = APIRouter(
     prefix="/parametros",
@@ -33,6 +39,8 @@ router = APIRouter(
 )
 
 _require_admin = require_roles("ADMIN")
+# F4-16: el tope de presupuesto lo leen ADMIN y COMPRAS; sólo ADMIN lo escribe.
+_require_lectura_topes = require_roles("ADMIN", "COMPRAS")
 
 
 def _rechazo_422(codigo: str, mensaje: str) -> HTTPException:
@@ -70,6 +78,35 @@ async def crear_parametro(
     )
     await db.commit()
     return nueva_version
+
+
+@router.get("/topes-presupuesto", response_model=TopesPresupuesto)
+async def leer_topes_presupuesto(
+    db: AsyncSession = Depends(get_motored_db_or_503),
+    _user: MotoredUser = Depends(_require_lectura_topes),
+):
+    """El interruptor del modo tope y el tope de cada tienda (B5a, F4-7)."""
+    return await parametros_topes.leer_topes(db, hoy_bogota())
+
+
+@router.post(
+    "/topes-presupuesto", status_code=status.HTTP_201_CREATED,
+    response_model=TopesGuardados)
+async def guardar_topes_presupuesto(
+    payload: TopesGuardar,
+    db: AsyncSession = Depends(get_motored_db_or_503),
+    user: MotoredUser = Depends(_require_admin),
+):
+    """Fija o quita el tope de 1 a 200 tiendas: una versión por tienda que
+    cambia, todo en una transacción (B5a, F4-7)."""
+    try:
+        resultado = await parametros_topes.guardar_topes(
+            db, payload.topes, uuid.UUID(user.user_id), hoy_bogota())
+    except parametros_claves.ErrorParametro as error:
+        await db.rollback()
+        raise _rechazo_422(error.codigo, error.mensaje) from error
+    await db.commit()
+    return resultado
 
 
 @router.get("/{clave}/vigente", response_model=ParametroMetodologiaRead)

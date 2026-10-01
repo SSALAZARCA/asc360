@@ -197,3 +197,51 @@ class EventoPedido(BaseModel):
     usuario_id: Optional[uuid.UUID] = None
     usuario: Optional[str] = None
     creado_en: datetime.datetime
+
+
+# --- Tope de presupuesto por tienda (B5a, F4-7) ------------------------------
+
+
+class TopeCuerpo(BaseModel):
+    """Una entrada de `POST /parametros/topes-presupuesto`. `valor` es
+    obligatorio y sin tipo: un número positivo fija el tope, `null` lo quita,
+    y cualquier otra cosa es E-PARAM-002 (la regla la aplica el servicio)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    sucursal_id: uuid.UUID
+    valor: Any
+
+
+class TopesGuardar(BaseModel):
+    """Cuerpo de `POST /parametros/topes-presupuesto` (1 a 200 entradas;
+    el largo lo valida el servicio para responder con su código)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    topes: List[TopeCuerpo]
+
+
+class TopeTienda(BaseModel):
+    """El tope vigente de una tienda; `valor` nulo = sin tope."""
+
+    sucursal_id: uuid.UUID
+    nombre: str
+    valor: Optional[Decimal] = None
+    vigente_desde: Optional[datetime.date] = None
+
+
+class TopesPresupuesto(BaseModel):
+    """El interruptor global y el tope de cada tienda activa."""
+
+    modo_activo: bool
+    modo_vigente_desde: Optional[datetime.date] = None
+    topes: List[TopeTienda]
+
+
+class TopesGuardados(BaseModel):
+    """Qué tiendas recibieron una versión nueva y cuáles ya tenían ese
+    valor."""
+
+    actualizados: List[uuid.UUID]
+    sin_cambios: List[uuid.UUID]

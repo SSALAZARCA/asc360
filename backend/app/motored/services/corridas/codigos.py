@@ -12,6 +12,7 @@ from app.motored.services.motor import tipos
 E_PARAM_CLAVE_DESCONOCIDA = "E-PARAM-001"
 E_PARAM_VALOR_INVALIDO = "E-PARAM-002"
 E_PARAM_AMBITO_INVALIDO = "E-PARAM-003"
+E_PARAM_SOLO_SUCURSAL = "E-PARAM-004"
 
 # Corrida: preflight (crear la corrida)
 E_CORRIDA_VENTAS_SIN_CUBRIR = "E-CORRIDA-001"
@@ -91,6 +92,9 @@ CATALOGO = {
     ),
     E_PARAM_AMBITO_INVALIDO: (
         "El parámetro «{clave}» es global y no admite sucursal."
+    ),
+    E_PARAM_SOLO_SUCURSAL: (
+        "El parámetro «{clave}» es de cada tienda: indique la sucursal."
     ),
     E_CORRIDA_VENTAS_SIN_CUBRIR: (
         "Las ventas de {mes} no están cubiertas por ninguna carga aplicada."
