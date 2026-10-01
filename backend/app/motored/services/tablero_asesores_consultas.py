@@ -29,7 +29,7 @@ import datetime
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import Numeric, String, case, cast, func, literal_column, select
+from sqlalchemy import Numeric, String, case, cast, false, func, literal_column, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.motored.models.carga_archivo import CargaArchivo
@@ -109,7 +109,9 @@ def _expr_mes():
 
 
 def _expr_es_hmcl(cliente_norm):
-    return cliente_norm.in_(t.HMCL_NITS)
+    """Un cliente NULL cuenta como NO HMCL (`NOT IN` con NULL daria NULL y la
+    linea desapareceria del filtro `excluir`)."""
+    return func.coalesce(cliente_norm.in_(t.HMCL_NITS), false())
 
 
 def _expr_es_mostrador():

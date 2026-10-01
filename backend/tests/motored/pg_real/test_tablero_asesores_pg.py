@@ -310,3 +310,16 @@ async def test_el_sql_normaliza_el_nit_igual_que_python(sesion):
         finally:
             q.VentaDetalle.cliente_factura = original
         assert en_sql == normalizar_nit(crudo), crudo
+
+
+async def test_un_cliente_nulo_cuenta_como_no_hmcl(sesion):
+    """`cliente_factura` es NOT NULL hoy; la regla es defensiva. Un NULL en el
+    NOT IN daria NULL y la linea saldria de `hmcl=excluir` (y de `solo`)."""
+    from sqlalchemy import null, select, cast as sa_cast, String
+
+    nulo = sa_cast(null(), String)
+    es_hmcl = (await sesion.execute(select(q._expr_es_hmcl(nulo)))).scalar_one()
+    no_es_hmcl = (await sesion.execute(select(~q._expr_es_hmcl(nulo)))).scalar_one()
+
+    assert es_hmcl is False
+    assert no_es_hmcl is True

@@ -1,6 +1,6 @@
 'use client';
-/** "Tablero de asesores": filters + warnings + table. ADMIN and COMPRAS only (usePedidosGate). */
-import usePedidosGate from '../../../lib/motored/usePedidosGate';
+/** "Tablero de asesores": filters + warnings + table. ADMIN and COMPRAS only (useTableroGate). */
+import useTableroGate from './useTableroGate';
 import useTableroAsesores from './useTableroAsesores';
 import TableroFilters from './TableroFilters';
 import TableroAvisos from './TableroAvisos';
@@ -21,7 +21,7 @@ function Cuerpo({ data, loading }) {
 }
 
 export default function TableroAsesoresContent() {
-  const allowed = usePedidosGate();
+  const allowed = useTableroGate();
   const { filtros, setFiltros, data, loading, error } = useTableroAsesores(allowed);
   if (!allowed) return null;
   return (

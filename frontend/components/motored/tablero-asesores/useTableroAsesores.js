@@ -18,7 +18,12 @@ export default function useTableroAsesores(enabled) {
   const errorDeRango = validarRango(filtros.desde, filtros.hasta);
 
   useEffect(() => {
-    if (!enabled || errorDeRango) return undefined;
+    if (!enabled || errorDeRango) {
+      // The cleanup of the previous run already discarded its request, so
+      // nobody else would reset `loading`.
+      setLoading(false);
+      return undefined;
+    }
     const actual = ++pedido.current;
     setLoading(true);
     setError('');

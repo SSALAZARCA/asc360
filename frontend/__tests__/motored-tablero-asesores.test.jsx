@@ -177,13 +177,43 @@ describe('Tablero de asesores - filtros', () => {
     render(<TableroAsesoresPage />);
     await screen.findByText('Ana Pérez');
 
+    // Both ends are set explicitly: the default range depends on today's date.
     fireEvent.change(screen.getByLabelText('Mes desde'), { target: { value: '2026-03' } });
-    await waitFor(() => expect(ultima(calls).query.get('desde')).toBe('2026-03'));
     fireEvent.change(screen.getByLabelText('Mes hasta'), { target: { value: '2026-08' } });
-    await waitFor(() => expect(ultima(calls).query.get('hasta')).toBe('2026-08'));
+    await waitFor(() => {
+      expect(ultima(calls).query.get('desde')).toBe('2026-03');
+      expect(ultima(calls).query.get('hasta')).toBe('2026-08');
+    });
     fireEvent.change(screen.getByLabelText('HMCL'), { target: { value: 'solo' } });
     await waitFor(() => expect(ultima(calls).query.get('hmcl')).toBe('solo'));
     expect(ultima(calls).query.get('desde')).toBe('2026-03');
+  });
+
+  it('si el rango pasa a ser inválido con una consulta en vuelo, deja de decir "Cargando"', async () => {
+    installFetch({ [RUTA]: () => new Promise(() => {}) }); // never answers
+    render(<TableroAsesoresPage />);
+    expect(await screen.findByText('Cargando...')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('Mes desde'), { target: { value: '2099-12' } });
+
+    expect(await screen.findByText(/no puede ser posterior/i)).toBeInTheDocument();
+    expect(screen.queryByText('Cargando...')).not.toBeInTheDocument();
+  });
+
+  it('al volver a un rango válido consulta de nuevo y muestra el resultado', async () => {
+    let respuesta = () => new Promise(() => {});
+    const calls = installFetch({ [RUTA]: () => respuesta() });
+    render(<TableroAsesoresPage />);
+    await screen.findByText('Cargando...');
+    const desdeOriginal = screen.getByLabelText('Mes desde').value;
+
+    fireEvent.change(screen.getByLabelText('Mes desde'), { target: { value: '2099-12' } });
+    await screen.findByText(/no puede ser posterior/i);
+    respuesta = async () => jsonRes(TABLERO);
+    fireEvent.change(screen.getByLabelText('Mes desde'), { target: { value: desdeOriginal } });
+
+    expect(await screen.findByText('Ana Pérez')).toBeInTheDocument();
+    expect(calls.length).toBeGreaterThanOrEqual(2);
   });
 
   it('un rango invertido se explica sin consultar al servidor', async () => {
