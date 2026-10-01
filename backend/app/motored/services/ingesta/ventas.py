@@ -48,16 +48,20 @@ re-implementan acá (ver apply-progress, sección "Deviations").
 """
 from __future__ import annotations
 
+import re
+import unicodedata
 import uuid
 from datetime import date
 from decimal import Decimal
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
+from sqlalchemy import delete, tuple_
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.config import settings
 from app.motored.models.carga_error import CargaError
 from app.motored.models.carga_fila_staging import CargaFilaStaging
+from app.motored.models.venta_detalle import VentaDetalle
 from app.motored.models.venta_mensual import VentaMensual
 from app.motored.services.ingesta import columnas as columnas_mod
 from app.motored.services.ingesta import errores as errores_mod
@@ -84,11 +88,30 @@ COLUMNAS_ESPERADAS: Tuple[str, ...] = (
     "Desc.bodega",
     "Bodega",
     "Referencia",
+    # Detalle por linea (`venta_detalle`): obligatorias desde 2026-09-30.
+    "Nombre vendedor",
+    "Valor bruto",
+    "Valor descuentos",
+    "Cliente factura",
+    "Nro documento",
 )
 
 ESTADO_APROBADA = "Aprobada"
 CODIGO_FECHA_INVALIDA = "FECHA_INVALIDA"
 CODIGO_CANTIDAD_INVALIDA = "CANTIDAD_INVALIDA"
+CODIGO_VALOR_BRUTO_INVALIDO = "VALOR_BRUTO_INVALIDO"
+CODIGO_DESCUENTO_INVALIDO = "DESCUENTO_INVALIDO"
+CODIGO_VENDEDOR_FALTANTE = "VENDEDOR_FALTANTE"
+CODIGO_CLIENTE_FALTANTE = "CLIENTE_FACTURA_FALTANTE"
+CODIGO_NRO_DOCUMENTO_FALTANTE = "NRO_DOCUMENTO_FALTANTE"
+CODIGO_TEXTO_DEMASIADO_LARGO = "TEXTO_DEMASIADO_LARGO"
+
+# Limites de las columnas de `venta_detalle`.
+_LARGO_MAX_NOMBRE = 255
+_LARGO_MAX_NRO_DOCUMENTO = 50
+# Numeric(16, 2): 14 digitos enteros.
+_VALOR_MAX_ABS = Decimal(10) ** 14
+TAMANO_LOTE_DETALLE = 1000
 
 _CLAVE_UPSERT = ("sucursal_id", "referencia_id", "anio", "mes", "origen")
 
@@ -177,6 +200,121 @@ def _resolver_cantidad_o_error(
     )
 
 
+def _normalizar_espacios(texto: str) -> str:
+    return " ".join(texto.split())
+
+
+def normalizar_vendedor(nombre: str) -> str:
+    """Clave estable del vendedor: MAYUSCULAS, sin tildes y con espacios
+    colapsados -- los nombres de Excel derivan ("Ana  Pérez" / "ANA PEREZ")."""
+    descompuesto = unicodedata.normalize("NFD", nombre)
+    sin_tildes = "".join(c for c in descompuesto if unicodedata.category(c) != "Mn")
+    return _normalizar_espacios(sin_tildes).upper()
+
+
+def _texto_documento(valor: Any) -> Optional[str]:
+    """Como `_texto`, pero un numero de Excel entero (`10234.0`) se guarda
+    sin decimales: un nro de documento nunca debe quedar como "10234.0"."""
+    if isinstance(valor, float) and valor.is_integer():
+        valor = int(valor)
+    return _texto(valor)
+
+
+def _limpiar_moneda(valor: Any) -> Any:
+    """`$1.234.567` / `$ 2.500 .000` -> `1.234.567` / `2.500.000`: quita el
+    simbolo y los espacios de un texto; cualquier otro valor pasa igual."""
+    if isinstance(valor, str):
+        return re.sub(r"[$\s]", "", valor)
+    return valor
+
+
+def _resolver_valor_o_error(
+    fila_raw: Sequence[Any], mapa_columnas: Dict[str, int], carga_id: uuid.UUID,
+    numero_fila: int, columna: str, codigo_invalido: str, vacio_es_cero: bool,
+) -> Tuple[Optional[Decimal], Optional[CargaError]]:
+    """Valor monetario de `Valor bruto`/`Valor descuentos` (formato
+    colombiano, ver `numeros.py`). Un negativo es valido (nota credito). Un
+    bruto vacio rechaza la fila; un descuento vacio cuenta como 0 (una venta
+    sin descuento no trae nada en la celda)."""
+    valor = _limpiar_moneda(_extraer(fila_raw, mapa_columnas, columna))
+    if vacio_es_cero and (valor is None or (isinstance(valor, str) and not valor)):
+        return Decimal("0"), None
+    mensaje = f"{columna} de la fila no se pudo interpretar como un valor numerico."
+    try:
+        decimal = numeros_mod.parsear_decimal(valor)
+    except numeros_mod.CeldaFaltanteError:
+        if vacio_es_cero:  # celda con error de Excel (#N/A): no es un descuento valido
+            return None, errores_mod.construir_error(
+                carga_id, numero_fila, columna, _texto(valor), codigo_invalido, mensaje
+            )
+        decimal, error = numeros_mod.resolver_decimal_o_error(
+            valor, columna, carga_id, numero_fila, codigo_invalido, mensaje
+        )
+        return decimal, error
+    except numeros_mod.CeldaInvalidaError:
+        return None, errores_mod.construir_error(
+            carga_id, numero_fila, columna, _texto(valor), codigo_invalido, mensaje
+        )
+    if abs(decimal) >= _VALOR_MAX_ABS:
+        return None, errores_mod.construir_error(
+            carga_id, numero_fila, columna, _texto(valor), codigo_invalido,
+            f"{columna} de la fila es demasiado grande.",
+        )
+    return decimal, None
+
+
+def _resolver_texto_o_error(
+    valor: Any, columna: str, carga_id: uuid.UUID, numero_fila: int,
+    codigo_faltante: str, largo_max: int,
+) -> Tuple[Optional[str], Optional[CargaError]]:
+    texto = _texto_documento(valor)
+    if texto is None:
+        return None, errores_mod.construir_error(
+            carga_id, numero_fila, columna, None, codigo_faltante,
+            f"{columna} vacio en la fila {numero_fila}: corregi el archivo y volve a cargarlo.",
+        )
+    texto = _normalizar_espacios(texto)
+    if len(texto) > largo_max:
+        return None, errores_mod.construir_error(
+            carga_id, numero_fila, columna, texto[:60], CODIGO_TEXTO_DEMASIADO_LARGO,
+            f"{columna} supera los {largo_max} caracteres en la fila {numero_fila}.",
+        )
+    return texto, None
+
+
+def _resolver_campos_detalle(
+    fila_raw: Sequence[Any], mapa_columnas: Dict[str, int], carga_id: uuid.UUID,
+    numero_fila: int,
+) -> Tuple[Optional[Dict[str, str]], Optional[CargaError]]:
+    """Las 5 columnas del detalle por linea. El primer problema rechaza la
+    fila (`carga_error`); si todo esta bien devuelve el aporte al payload."""
+    campos: Dict[str, str] = {}
+    for clave, columna, codigo, largo in (
+        ("vendedor", "Nombre vendedor", CODIGO_VENDEDOR_FALTANTE, _LARGO_MAX_NOMBRE),
+        ("cliente_factura", "Cliente factura", CODIGO_CLIENTE_FALTANTE, _LARGO_MAX_NOMBRE),
+        ("nro_documento", "Nro documento", CODIGO_NRO_DOCUMENTO_FALTANTE,
+         _LARGO_MAX_NRO_DOCUMENTO),
+    ):
+        texto, error = _resolver_texto_o_error(
+            _extraer(fila_raw, mapa_columnas, columna), columna, carga_id, numero_fila,
+            codigo, largo,
+        )
+        if error is not None:
+            return None, error
+        campos[clave] = texto
+    for clave, columna, codigo, vacio_es_cero in (
+        ("valor_bruto", "Valor bruto", CODIGO_VALOR_BRUTO_INVALIDO, False),
+        ("valor_descuentos", "Valor descuentos", CODIGO_DESCUENTO_INVALIDO, True),
+    ):
+        valor, error = _resolver_valor_o_error(
+            fila_raw, mapa_columnas, carga_id, numero_fila, columna, codigo, vacio_es_cero
+        )
+        if error is not None:
+            return None, error
+        campos[clave] = str(valor)
+    return campos, None
+
+
 def _resolver_claves(
     fila_raw: Sequence[Any],
     mapa_columnas: Dict[str, int],
@@ -241,6 +379,12 @@ def procesar_fila(
     if cantidad is None:
         return None, [error_cantidad]
 
+    campos_detalle, error_detalle = _resolver_campos_detalle(
+        fila_raw, mapa_columnas, carga_id, numero_fila
+    )
+    if campos_detalle is None:
+        return None, [error_detalle]
+
     modulo = _texto(_extraer(fila_raw, mapa_columnas, "Módulo")) or ""
 
     sucursal_id, referencia_id, errores = _resolver_claves(
@@ -253,6 +397,7 @@ def procesar_fila(
         "dia": fecha.day,
         "origen": modulo.upper(),
         "cantidad": str(cantidad),
+        **campos_detalle,
     }
     fila_staging = CargaFilaStaging(
         carga_id=carga_id,
@@ -339,6 +484,62 @@ async def aplicar(session, totales: Dict[ClaveVentaMensual, Decimal], carga_id: 
     stmt = construir_statement_upsert(totales, carga_id)
     if stmt is not None:
         await session.execute(stmt)
+
+
+def construir_detalle(
+    filas_staging: Sequence[CargaFilaStaging], carga_id: uuid.UUID
+) -> List[Dict[str, Any]]:
+    """Filas de `venta_detalle` desde las MISMAS filas de staging que
+    `agregar_unidades` (misma exclusion: sin sucursal o referencia resuelta
+    no se escribe). Las filas staged por una version anterior al detalle (sin
+    `nro_documento` en el payload) se omiten."""
+    detalle: List[Dict[str, Any]] = []
+    for fila in filas_staging:
+        payload = fila.payload
+        if fila.sucursal_id is None or fila.referencia_id is None:
+            continue
+        if "nro_documento" not in payload:
+            continue
+        detalle.append({
+            "id": uuid.uuid4(),
+            "carga_id": carga_id,
+            "fecha": date(payload["anio"], payload["mes"], payload["dia"]),
+            "anio": payload["anio"],
+            "mes": payload["mes"],
+            "sucursal_id": fila.sucursal_id,
+            "referencia_id": fila.referencia_id,
+            "origen": payload["origen"],
+            "cantidad": Decimal(payload["cantidad"]),
+            "vendedor": payload["vendedor"],
+            "vendedor_norm": normalizar_vendedor(payload["vendedor"]),
+            "valor_bruto": Decimal(payload["valor_bruto"]),
+            "valor_descuentos": Decimal(payload["valor_descuentos"]),
+            "cliente_factura": payload["cliente_factura"],
+            "nro_documento": payload["nro_documento"],
+        })
+    return detalle
+
+
+async def aplicar_detalle(
+    session, filas_staging: Sequence[CargaFilaStaging], carga_id: uuid.UUID
+) -> None:
+    """Escribe `venta_detalle` en la MISMA transaccion que el upsert de
+    `venta_mensual` (sin `commit()`). Delete-on-replace: borra el detalle de
+    cada (sucursal, anio, mes) presente en ESTA carga y lo inserta de nuevo,
+    por lotes. Nunca se llama para una carga rechazada ni se borra al anular."""
+    detalle = construir_detalle(filas_staging, carga_id)
+    if not detalle:
+        return
+    claves = {(d["sucursal_id"], d["anio"], d["mes"]) for d in detalle}
+    await session.execute(
+        delete(VentaDetalle).where(
+            tuple_(VentaDetalle.sucursal_id, VentaDetalle.anio, VentaDetalle.mes).in_(list(claves))
+        )
+    )
+    for inicio in range(0, len(detalle), TAMANO_LOTE_DETALLE):
+        await session.execute(
+            pg_insert(VentaDetalle).values(detalle[inicio:inicio + TAMANO_LOTE_DETALLE])
+        )
 
 
 def construir_filas_por_periodo(
@@ -441,4 +642,5 @@ async def aplicar_con_periodo(
     ]
     totales = agregar_unidades(filas_dentro_de_periodo)
     await aplicar(session, totales, carga_id)
+    await aplicar_detalle(session, filas_dentro_de_periodo, carga_id)
     return veredicto

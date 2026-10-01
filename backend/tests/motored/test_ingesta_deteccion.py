@@ -27,7 +27,8 @@ from app.motored.services.ingesta import deteccion
 COLUMNAS_POR_TIPO = {
     "VENTAS": (
         "Estado", "Módulo", "Fecha", "Cantidad inv.", "Tipo inventario",
-        "Desc.bodega", "Bodega", "Referencia",
+        "Desc.bodega", "Bodega", "Referencia", "Nombre vendedor", "Valor bruto",
+        "Valor descuentos", "Cliente factura", "Nro documento",
     ),
     "INVENTARIO": ("Referencia", "Bodega", "Desc.bodega", "Existencia"),
     "BACKORDER": (
@@ -50,11 +51,14 @@ _HEADERS_SIN_SENTIDO = ("Columna A", "Columna B", "Columna C")
 # de coincidencia caiga estrictamente ENTRE 0 y `UMBRAL_DETECCION` (0.6) --
 # ni un no-match total, ni una coincidencia que el umbral igual aceptaría.
 _PARES_MISMATCH = [
-    ("VENTAS", "INVENTARIO"),          # ratio 3/8 = 0.375
+    ("VENTAS", "INVENTARIO"),          # ratio 3/13 ≈ 0.23
     ("INVENTARIO", "DEMANDA_PERDIDA"),  # ratio 1/4 = 0.25
     ("BACKORDER", "FACTURAS_PEDIDOS"),  # ratio 1/6 ≈ 0.167
     ("FACTURAS_PEDIDOS", "INGRESOS_FACTURAS"),  # ratio 1/8 = 0.125
-    ("INGRESOS_FACTURAS", "VENTAS"),   # ratio 2/5 = 0.4
+    # (INGRESOS_FACTURAS, VENTAS) ya no sirve: "Nro documento" de VENTAS normaliza
+    # igual que "Nrodocumento" de INGRESOS_FACTURAS, el ratio sube a 3/5 = 0.6 y
+    # `verificar_tipo` lo acepta; el dry-run igual lo rechaza por columnas faltantes.
+    ("INGRESOS_FACTURAS", "FACTURAS_PEDIDOS"),  # ratio 1/5 = 0.2
     ("DEMANDA_PERDIDA", "BACKORDER"),  # ratio 1/4 = 0.25
 ]
 

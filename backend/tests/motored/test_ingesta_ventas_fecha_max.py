@@ -26,7 +26,8 @@ REFERENCIA_ID = uuid.uuid4()
 
 _ENCABEZADO = [
     "Estado", "Módulo", "Fecha", "Cantidad inv.", "Tipo inventario",
-    "Desc.bodega", "Bodega", "Referencia",
+    "Desc.bodega", "Bodega", "Referencia", "Nombre vendedor", "Valor bruto",
+    "Valor descuentos", "Cliente factura", "Nro documento",
 ]
 _MAPA_COLUMNAS = {nombre: idx for idx, nombre in enumerate(_ENCABEZADO)}
 
@@ -34,7 +35,7 @@ _MAPA_COLUMNAS = {nombre: idx for idx, nombre in enumerate(_ENCABEZADO)}
 def _fila_excel(fecha):
     return [
         "Aprobada", "MOSTRADOR", fecha, 10, "0002 - REPUESTOS",
-        "CALI NORTE", "BA061", "REF1",
+        "CALI NORTE", "BA061", "REF1", "Ana Pérez", 1000, 0, "Taller", "FV-1",
     ]
 
 

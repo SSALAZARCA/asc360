@@ -295,9 +295,11 @@ async def test_dry_run_ventas_periodo_mal_declarado_rechaza_archivo_completo(mon
     file_bytes = _build_xlsx_bytes(
         [
             ["Estado", "Módulo", "Fecha", "Cantidad inv.", "Tipo inventario",
-             "Desc.bodega", "Bodega", "Referencia"],
+             "Desc.bodega", "Bodega", "Referencia",
+             "Nombre vendedor", "Valor bruto", "Valor descuentos", "Cliente factura",
+             "Nro documento"],
             ["Aprobada", "MOSTRADOR", serial_agosto, 10, "0002 - REPUESTOS",
-             "CALI NORTE", "BA061", "REF1"],
+             "CALI NORTE", "BA061", "REF1", "Ana Pérez", 1000, 0, "Taller", "FV-1"],
         ]
     )
     monkeypatch.setattr(orquestador.storage, "descargar_archivo", lambda ruta: file_bytes)
@@ -326,9 +328,11 @@ async def test_dry_run_ventas_periodo_correcto_queda_validado(monkeypatch):
     file_bytes = _build_xlsx_bytes(
         [
             ["Estado", "Módulo", "Fecha", "Cantidad inv.", "Tipo inventario",
-             "Desc.bodega", "Bodega", "Referencia"],
+             "Desc.bodega", "Bodega", "Referencia",
+             "Nombre vendedor", "Valor bruto", "Valor descuentos", "Cliente factura",
+             "Nro documento"],
             ["Aprobada", "MOSTRADOR", serial_septiembre, 10, "0002 - REPUESTOS",
-             "CALI NORTE", "BA061", "REF1"],
+             "CALI NORTE", "BA061", "REF1", "Ana Pérez", 1000, 0, "Taller", "FV-1"],
         ]
     )
     monkeypatch.setattr(orquestador.storage, "descargar_archivo", lambda ruta: file_bytes)
@@ -458,14 +462,16 @@ async def test_dry_run_ventas_periodo_advertencia_emite_carga_error_por_fila_fue
     # de punta a punta a través de `_dry_run`.
     filas_septiembre = [
         ["Aprobada", "MOSTRADOR", serial_septiembre, 1, "0002 - REPUESTOS",
-         "CALI NORTE", "BA061", "REF1"]
+         "CALI NORTE", "BA061", "REF1", "Ana Pérez", 1000, 0, "Taller", "FV-1"]
         for _ in range(199)
     ]
     fila_agosto = ["Aprobada", "MOSTRADOR", serial_agosto_adyacente, 1, "0002 - REPUESTOS",
-                   "CALI NORTE", "BA061", "REF1"]
+                   "CALI NORTE", "BA061", "REF1", "Ana Pérez", 1000, 0, "Taller", "FV-1"]
     file_bytes = _build_xlsx_bytes(
         [["Estado", "Módulo", "Fecha", "Cantidad inv.", "Tipo inventario",
-          "Desc.bodega", "Bodega", "Referencia"]]
+          "Desc.bodega", "Bodega", "Referencia",
+          "Nombre vendedor", "Valor bruto", "Valor descuentos", "Cliente factura",
+          "Nro documento"]]
         + filas_septiembre + [fila_agosto]
     )
     monkeypatch.setattr(orquestador.storage, "descargar_archivo", lambda ruta: file_bytes)
@@ -668,9 +674,11 @@ async def test_dry_run_ventas_registra_default_usado_en_carga_log(monkeypatch):
     file_bytes = _build_xlsx_bytes(
         [
             ["Estado", "Módulo", "Fecha", "Cantidad inv.", "Tipo inventario",
-             "Desc.bodega", "Bodega", "Referencia"],
+             "Desc.bodega", "Bodega", "Referencia",
+             "Nombre vendedor", "Valor bruto", "Valor descuentos", "Cliente factura",
+             "Nro documento"],
             ["Aprobada", "MOSTRADOR", serial_septiembre, 10, "0002 - REPUESTOS",
-             "CALI NORTE", "BA061", "REF1"],
+             "CALI NORTE", "BA061", "REF1", "Ana Pérez", 1000, 0, "Taller", "FV-1"],
         ]
     )
     monkeypatch.setattr(orquestador.storage, "descargar_archivo", lambda ruta: file_bytes)
@@ -697,9 +705,11 @@ async def test_dry_run_ventas_no_registra_default_cuando_la_clave_esta_configura
     file_bytes = _build_xlsx_bytes(
         [
             ["Estado", "Módulo", "Fecha", "Cantidad inv.", "Tipo inventario",
-             "Desc.bodega", "Bodega", "Referencia"],
+             "Desc.bodega", "Bodega", "Referencia",
+             "Nombre vendedor", "Valor bruto", "Valor descuentos", "Cliente factura",
+             "Nro documento"],
             ["Aprobada", "MOSTRADOR", serial_septiembre, 10, "0002 - REPUESTOS",
-             "CALI NORTE", "BA061", "REF1"],
+             "CALI NORTE", "BA061", "REF1", "Ana Pérez", 1000, 0, "Taller", "FV-1"],
         ]
     )
     monkeypatch.setattr(orquestador.storage, "descargar_archivo", lambda ruta: file_bytes)

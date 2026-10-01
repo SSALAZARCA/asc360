@@ -186,6 +186,11 @@ VENTAS_MAPA_COLUMNAS = {
     "Desc.bodega": 5,
     "Bodega": 6,
     "Referencia": 7,
+    "Nombre vendedor": 8,
+    "Valor bruto": 9,
+    "Valor descuentos": 10,
+    "Cliente factura": 11,
+    "Nro documento": 12,
 }
 VENTAS_ROWS = 305901
 VENTAS_MESES = 6  # design "Load Sizing": el seed real cubre 6 meses, ~51 000/mes
@@ -207,10 +212,11 @@ def _generar_filas_ventas(n: int, sucursales: Sequence[tuple]) -> Iterator[tuple
         yield (
             "Aprobada", modulo, date(2026, mes, 15), "1", "0002 - REPUESTOS",
             nombre_sucursal, "BA061", referencia_codigo,
+            "Ana Pérez", "1000", "0", "Taller", f"FV-{i}",
         )
     yield (
         "Aprobada", "MOSTRADOR", date(2026, 1, 15), "1", "0002 - REPUESTOS",
-        sucursales[0][1], "BA061", "REF-NO-EXISTE",
+        sucursales[0][1], "BA061", "REF-NO-EXISTE", "Ana Pérez", "1000", "0", "Taller", "FV-X",
     )
 
 

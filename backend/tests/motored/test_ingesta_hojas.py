@@ -19,7 +19,8 @@ from app.motored.services.ingesta import deteccion, lector
 ENCABEZADOS = {
     "VENTAS": (
         "Estado", "Módulo", "Fecha", "Cantidad inv.", "Tipo inventario", "Desc.bodega",
-        "Bodega", "Referencia",
+        "Bodega", "Referencia", "Nombre vendedor", "Valor bruto", "Valor descuentos",
+        "Cliente factura", "Nro documento",
     ),
     "INVENTARIO": ("Referencia", "Bodega", "Desc.bodega", "Existencia"),
     "BACKORDER": (

@@ -38,6 +38,11 @@ _MAPA_COLUMNAS = {
     "Desc.bodega": 5,
     "Bodega": 6,
     "Referencia": 7,
+    "Nombre vendedor": 8,
+    "Valor bruto": 9,
+    "Valor descuentos": 10,
+    "Cliente factura": 11,
+    "Nro documento": 12,
 }
 
 # 2026-09-15 as an Excel serial (days since 1899-12-30).
@@ -63,7 +68,8 @@ def _fila(
     bodega="BA061",
     referencia="REF1",
 ):
-    return (estado, modulo, fecha, cantidad, tipo_inventario, desc_bodega, bodega, referencia)
+    return (estado, modulo, fecha, cantidad, tipo_inventario, desc_bodega, bodega, referencia,
+            "Ana Pérez", 1000, 0, "Taller El Rayo", "FV-1001")
 
 
 def _cache_resuelta():
@@ -238,7 +244,8 @@ def test_desc_bodega_vacio_usa_bodega_como_fallback():
 def test_columnas_esperadas_mapean_por_nombre_via_columnas_modulo():
     encabezado = (
         "Estado", "Módulo", "Fecha", "Cantidad inv.", "Tipo inventario",
-        "Desc.bodega", "Bodega", "Referencia",
+        "Desc.bodega", "Bodega", "Referencia", "Nombre vendedor", "Valor bruto",
+        "Valor descuentos", "Cliente factura", "Nro documento",
     )
     mapa = columnas.construir_mapa_columnas(encabezado, ventas.COLUMNAS_ESPERADAS)
 
