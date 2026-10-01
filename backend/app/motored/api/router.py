@@ -26,6 +26,7 @@ from app.motored.api import (
     clientes_tecnired,
     corridas,
     corridas_pedido,
+    corridas_vistas,
     demanda_perdida,
     detractores,
     encuesta_cargas,
@@ -89,3 +90,7 @@ router.include_router(corridas.router)
 # tienda de `/corridas` viven en su propio router, mismo prefijo, rutas
 # distintas (`/{id}/lineas/{linea_id}...`): el orden relativo no importa.
 router.include_router(corridas_pedido.router)
+# Fase 4 (B6): las vistas de la red (consolidado y comparación de un
+# escenario) tienen su propio router, mismo prefijo, rutas distintas
+# (`/{id}/consolidado`, `/{id}/comparar`): el orden relativo no importa.
+router.include_router(corridas_vistas.router)

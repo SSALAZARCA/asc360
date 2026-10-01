@@ -2,8 +2,9 @@
 Motored Pedidos F4 "Pantallas del pedido" (sdd/motored-pedidos-ui, B2, B3a,
 B3b, ADR-1, ADR-3): esquemas de la edición de líneas y su historial y del
 ciclo de vida del pedido por tienda (cerrar, reabrir, enviar, corregir el
-número de orden, cabecera y eventos) y del recorte al tope de presupuesto
-(B5b).
+número de orden, cabecera y eventos), del recorte al tope de presupuesto
+(B5b) y de las vistas de la red (B6): el consolidado, la comparación de un
+escenario y el catálogo de claves del motor.
 
 `pedido_final` entra SIN tipo (`Any`): la regla de E-CORRIDA-053 la aplica el
 servicio, DESPUÉS de los chequeos de estado (404, 042, 065, 052), así un valor
@@ -340,3 +341,133 @@ class TopesCorrida(BaseModel):
     activo: bool
     corrida_id: uuid.UUID
     tiendas: List[TopeTiendaCorrida] = Field(default_factory=list)
+
+
+# --- Vistas de la red: consolidado y comparación (B6) -----------------------
+
+
+class TiendaConsolidado(BaseModel):
+    """Una columna de la matriz: la tienda con el estado de su cálculo y de
+    su pedido y lo que se pide en ella (TODAS sus referencias, no sólo la
+    página). Una tienda fallida u omitida va marcada (`estado`, `codigo`,
+    `mensaje`) y sin números."""
+
+    sucursal_id: uuid.UUID
+    nombre: str
+    estado: str
+    estado_pedido: Optional[str] = None
+    codigo: Optional[str] = None
+    mensaje: Optional[str] = None
+    unidades: Optional[Decimal] = None
+    valor: Optional[Decimal] = None
+
+
+class FilaConsolidado(BaseModel):
+    """Una referencia: su total sobre las tiendas de la matriz y sus celdas
+    (la cantidad a pedir por el id de cada tienda que pide algo)."""
+
+    referencia_id: uuid.UUID
+    codigo: str
+    nombre: Optional[str] = None
+    total: Decimal
+    celdas: Dict[str, Decimal] = Field(default_factory=dict)
+
+
+class TotalesConsolidado(BaseModel):
+    """Lo que se pide en toda la red: la suma de las columnas."""
+
+    unidades: Decimal
+    valor: Decimal
+
+
+class ConsolidadoRead(BaseModel):
+    """La matriz consolidada de una corrida; `total` cuenta las referencias
+    (paginadas por `limite` y `offset`)."""
+
+    corrida_id: uuid.UUID
+    codigo: str
+    estado: str
+    es_escenario: bool
+    tiendas: List[TiendaConsolidado] = Field(default_factory=list)
+    filas: List[FilaConsolidado] = Field(default_factory=list)
+    totales: TotalesConsolidado
+    total: int
+    limite: int
+    offset: int
+
+
+class CorridaComparada(BaseModel):
+    """Una de las dos corridas de la comparación."""
+
+    id: uuid.UUID
+    codigo: str
+    estado: str
+    es_escenario: bool
+
+
+class FilaComparacion(BaseModel):
+    """Una (tienda, referencia): lo sugerido en la corrida real y en el
+    escenario y su delta (escenario - real); lo que falta de un lado vale 0.
+    `pedido_final_real` es sólo contexto."""
+
+    sucursal_id: uuid.UUID
+    sucursal: str
+    referencia_id: uuid.UUID
+    codigo: str
+    nombre: Optional[str] = None
+    clase_real: Optional[str] = None
+    clase_prueba: Optional[str] = None
+    sugerido_real: Decimal
+    sugerido_prueba: Decimal
+    delta: Decimal
+    pedido_final_real: Decimal
+
+
+class TotalComparacion(BaseModel):
+    """Lo sugerido en una tienda, en unidades y en valor, de cada lado."""
+
+    sucursal_id: uuid.UUID
+    nombre: str
+    unidades_real: Decimal
+    unidades_prueba: Decimal
+    diferencia_unidades: Decimal
+    valor_real: Decimal
+    valor_prueba: Decimal
+    diferencia_valor: Decimal
+
+
+class NoComparable(BaseModel):
+    """Una tienda que no se compara, con su estado de cada lado (nulo si no
+    está en esa corrida) y el motivo."""
+
+    sucursal_id: uuid.UUID
+    nombre: str
+    estado_real: Optional[str] = None
+    estado_prueba: Optional[str] = None
+    motivo: str
+
+
+class ComparacionRead(BaseModel):
+    """El escenario frente a su corrida real, paginado por filas."""
+
+    escenario: CorridaComparada
+    real: CorridaComparada
+    fecha_corte: datetime.date
+    filas: List[FilaComparacion] = Field(default_factory=list)
+    total: int
+    limite: int
+    offset: int
+    totales_por_sucursal: List[TotalComparacion] = Field(
+        default_factory=list)
+    no_comparables: List[NoComparable] = Field(default_factory=list)
+
+
+class ClaveCatalogo(BaseModel):
+    """Una clave del motor para el lanzador de escenarios (`opciones` sólo
+    en las de tipo opción)."""
+
+    clave: str
+    tipo: str
+    dominio: str
+    default: Any = None
+    opciones: Optional[List[str]] = None

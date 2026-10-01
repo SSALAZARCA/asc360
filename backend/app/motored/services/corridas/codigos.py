@@ -48,7 +48,8 @@ E_CORRIDA_INTERNO = "E-CORRIDA-099"
 # 047-050, 056 y 067 (enviar y corregir el número de orden, F4-11/13/15).
 # 055 y 057 son de B4 (exportar el pedido a HMCL, F4-1); 056 también cubre
 # "nada que exportar". 058-061 son de B5b (recortar el pedido de una tienda al
-# tope de presupuesto, F4-7).
+# tope de presupuesto, F4-7). 063 es de B6 (comparar un escenario con la
+# corrida real de la misma semana, F4-8).
 E_CORRIDA_REABRIR_BORRADOR = "E-CORRIDA-044"
 E_CORRIDA_REABRIR_ENVIADO = "E-CORRIDA-045"
 E_CORRIDA_REABRIR_MOTIVO = "E-CORRIDA-046"
@@ -66,6 +67,7 @@ E_CORRIDA_PROPUESTA_DESACTUALIZADA = "E-CORRIDA-060"
 E_CORRIDA_RECORTE_NO_BORRADOR = "E-CORRIDA-061"
 E_CORRIDA_CORREGIR_NO_ENVIADO = "E-CORRIDA-067"
 E_CORRIDA_OVERRIDES_SOLO_ADMIN = "E-CORRIDA-062"
+E_CORRIDA_COMPARACION_INVALIDA = "E-CORRIDA-063"
 E_CORRIDA_CERRAR_NO_BORRADOR = "E-CORRIDA-064"
 E_CORRIDA_PEDIDO_NO_BORRADOR = "E-CORRIDA-052"
 E_CORRIDA_CANTIDAD_INVALIDA = "E-CORRIDA-053"
@@ -223,6 +225,7 @@ CATALOGO = {
         "Solo un administrador puede lanzar un escenario (una corrida con "
         "parámetros alternativos)."
     ),
+    E_CORRIDA_COMPARACION_INVALIDA: "No se puede comparar: {detalle}.",
     E_CORRIDA_CERRAR_NO_BORRADOR: "No se puede cerrar: {detalle}.",
     E_CORRIDA_EDICION_DESACTUALIZADA: (
         "La cantidad de la línea cambió mientras la editaba (ahora es "

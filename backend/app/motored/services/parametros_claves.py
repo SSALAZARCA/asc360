@@ -15,10 +15,11 @@ Los valores por defecto son JSON nativo (los decimales van como texto, p. ej.
 "0.80") para poder guardarse tal cual en el snapshot de la corrida;
 `parsear` los convierte a `Fraction` para el motor.
 """
+from copy import deepcopy
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from fractions import Fraction
-from typing import Any, Callable, Mapping, Optional, Tuple
+from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
 
 from app.motored.services.corridas import codigos
 
@@ -227,6 +228,25 @@ REGISTRO: Mapping[str, EspecClave] = _construir_registro()
 def claves_motor() -> list:
     """Claves que forman parte del snapshot de una corrida."""
     return [c for c, e in REGISTRO.items() if e.grupo == GRUPO_MOTOR]
+
+
+def catalogo(grupo: str = GRUPO_MOTOR) -> List[Dict[str, Any]]:
+    """Las claves de un grupo, en el orden del registro, para que la
+    pantalla de escenarios arme sus campos: `clave`, `tipo`, `dominio`,
+    `default` (una copia: el registro no se toca) y, sólo en las de
+    opciones, `opciones`. Las claves de otros grupos (el tope de
+    presupuesto es PEDIDO) no salen: no son overrides válidos."""
+    entradas = []
+    for espec in REGISTRO.values():
+        if espec.grupo != grupo:
+            continue
+        entrada = {
+            "clave": espec.clave, "tipo": espec.tipo,
+            "dominio": espec.dominio, "default": deepcopy(espec.default)}
+        if espec.opciones:
+            entrada["opciones"] = list(espec.opciones)
+        entradas.append(entrada)
+    return entradas
 
 
 def _valor_invalido(espec: EspecClave) -> ErrorParametro:

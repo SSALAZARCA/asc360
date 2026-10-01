@@ -15,6 +15,7 @@ se lee siempre, sea o no conocida.
 """
 import uuid
 from datetime import date
+from typing import List, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,6 +24,7 @@ from app.motored.deps import MotoredUser, get_current_motored_user, get_motored_
 from app.motored.models.sucursal import Sucursal
 from app.motored.schemas.parametro_metodologia import ParametroMetodologiaCreate, ParametroMetodologiaRead
 from app.motored.schemas.pedido import (
+    ClaveCatalogo,
     TopesGuardados,
     TopesGuardar,
     TopesPresupuesto,
@@ -41,6 +43,8 @@ router = APIRouter(
 _require_admin = require_roles("ADMIN")
 # F4-16: el tope de presupuesto lo leen ADMIN y COMPRAS; sólo ADMIN lo escribe.
 _require_lectura_topes = require_roles("ADMIN", "COMPRAS")
+# F4 (B6): el catálogo de claves del motor lo leen los mismos dos roles.
+_require_lectura_claves = require_roles("ADMIN", "COMPRAS")
 
 
 def _rechazo_422(codigo: str, mensaje: str) -> HTTPException:
@@ -107,6 +111,19 @@ async def guardar_topes_presupuesto(
         raise _rechazo_422(error.codigo, error.mensaje) from error
     await db.commit()
     return resultado
+
+
+@router.get(
+    "/claves", response_model=List[ClaveCatalogo],
+    response_model_exclude_unset=True)
+async def catalogo_de_claves(
+    grupo: Literal["MOTOR"] = "MOTOR",
+    _user: MotoredUser = Depends(_require_lectura_claves),
+):
+    """Las claves del motor con su tipo, dominio y valor por defecto, para
+    armar los campos de un escenario (B6, F4-8). Sólo el grupo MOTOR: el
+    tope de presupuesto y la ingesta no son overrides válidos."""
+    return parametros_claves.catalogo(grupo)
 
 
 @router.get("/{clave}/vigente", response_model=ParametroMetodologiaRead)

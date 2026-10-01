@@ -57,6 +57,10 @@ LECTURAS = LECTURAS_F3 + [
     # recorte de una tienda.
     ("GET", f"{BASE}/{ID}/topes", None),
     ("GET", f"{BASE}/{ID}/sucursales/{fx.SUC_A}/recorte", None),
+    # Fase 4 (B6): las vistas de la red, el consolidado (CO-07, CO-09 con
+    # F4-16) y la comparación de un escenario con su corrida real (SC-14).
+    ("GET", f"{BASE}/{ID}/consolidado", None),
+    ("GET", f"{BASE}/{fx.ESCENARIO_ID}/comparar?con={ID}", None),
 ]
 ESCRITURAS = [
     ("POST", BASE, {"fecha_corte": "2026-09-21"}),

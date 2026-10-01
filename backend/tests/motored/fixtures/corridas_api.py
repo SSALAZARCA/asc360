@@ -15,6 +15,7 @@ from types import SimpleNamespace
 
 from app.motored.api import corridas as api
 from app.motored.api import corridas_pedido as api_pedido
+from app.motored.api import corridas_vistas as api_vistas
 from app.motored.models.corrida_linea import CorridaLinea
 from app.motored.services.corridas import (
     edicion,
@@ -223,6 +224,63 @@ def resumen_topes(**campos):
     return {**base, **campos}
 
 
+ESCENARIO_ID = uuid.UUID(int=510)
+
+
+def consolidado_vista(**campos):
+    """Lo que devuelve `consolidado.consolidado`: tres tiendas (una
+    fallida) y una referencia."""
+    base = dict(
+        corrida_id=CORRIDA_ID, codigo="PED-2026-S39-001", estado="BORRADOR",
+        es_escenario=False,
+        tiendas=[
+            dict(sucursal_id=SUC_A, nombre="UNO", estado="OK",
+                 estado_pedido="BORRADOR", codigo=None, mensaje=None,
+                 unidades=Decimal("12.00"), valor=Decimal("1200.00")),
+            dict(sucursal_id=SUC_B, nombre="DOS", estado="FALLIDA",
+                 estado_pedido=None, codigo="E-CORRIDA-020",
+                 mensaje="sin empaque", unidades=None, valor=None)],
+        filas=[dict(
+            referencia_id=uuid.UUID(int=800), codigo="94109-12000S",
+            nombre="Filtro", total=Decimal("12.00"),
+            celdas={str(SUC_A): Decimal("12.00")})],
+        totales={"unidades": Decimal("12.00"), "valor": Decimal("1200.00")},
+        total=1, limite=100, offset=0)
+    return {**base, **campos}
+
+
+def comparacion_vista(**campos):
+    """Lo que devuelve `comparacion.comparar`: una fila con delta +12, los
+    totales de la tienda y una tienda que no se compara."""
+    base = dict(
+        escenario=dict(id=ESCENARIO_ID, codigo="ESC-2026-S39-001",
+                       estado="BORRADOR", es_escenario=True),
+        real=dict(id=CORRIDA_ID, codigo="PED-2026-S39-001",
+                  estado="BORRADOR", es_escenario=False),
+        fecha_corte=CORTE,
+        filas=[dict(
+            sucursal_id=SUC_A, sucursal="UNO",
+            referencia_id=uuid.UUID(int=800), codigo="94109-12000S",
+            nombre="Filtro", clase_real="AF", clase_prueba="AF",
+            sugerido_real=Decimal("50.00"),
+            sugerido_prueba=Decimal("62.00"), delta=Decimal("12.00"),
+            pedido_final_real=Decimal("55.00"))],
+        total=1, limite=100, offset=0,
+        totales_por_sucursal=[dict(
+            sucursal_id=SUC_A, nombre="UNO",
+            unidades_real=Decimal("50.00"),
+            unidades_prueba=Decimal("62.00"),
+            diferencia_unidades=Decimal("12.00"),
+            valor_real=Decimal("500.00"), valor_prueba=Decimal("620.00"),
+            diferencia_valor=Decimal("120.00"))],
+        no_comparables=[dict(
+            sucursal_id=SUC_B, nombre="DOS", estado_real="FALLIDA",
+            estado_prueba="OK",
+            motivo="La corrida real no tiene pedido de la tienda "
+                   "(FALLIDA).")])
+    return {**base, **campos}
+
+
 class Espia:
     """Doble de `consultas` y `servicio`: graba las llamadas y responde lo
     configurado."""
@@ -259,6 +317,8 @@ class Espia:
         self.propuesta = propuesta_recorte()
         self.recortado = recorte_aplicado()
         self.topes = resumen_topes()
+        self.consolidado = consolidado_vista()
+        self.comparacion = comparacion_vista()
         self.anulada = SimpleNamespace(
             id=CORRIDA_ID, codigo="PED-2026-S39-001", estado="ANULADA",
             cerrada_en=None)
@@ -327,7 +387,23 @@ def instalar(monkeypatch, espia=None):
     _instalar_envio(monkeypatch, espia)
     _instalar_exportacion(monkeypatch, espia)
     _instalar_tope(monkeypatch, espia)
+    _instalar_vistas(monkeypatch, espia)
     return espia
+
+
+def _instalar_vistas(monkeypatch, espia):
+    """Dobles de las vistas de la red (F4, B6): la matriz consolidada y la
+    comparación de un escenario con su corrida real."""
+    async def consolidado_(db, corrida_id, **kw):
+        espia._registrar("consolidado", corrida_id, **kw)
+        return espia.consolidado
+
+    async def comparar(db, escenario_id, real_id, **kw):
+        espia._registrar("comparar", escenario_id, real_id, **kw)
+        return espia.comparacion
+
+    monkeypatch.setattr(api_vistas.consolidado, "consolidado", consolidado_)
+    monkeypatch.setattr(api_vistas.comparacion, "comparar", comparar)
 
 
 def _instalar_tope(monkeypatch, espia):
