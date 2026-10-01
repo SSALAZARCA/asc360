@@ -377,7 +377,7 @@ def _procesar_fila_solo_detalle(
     proveedor_id: uuid.UUID,
 ) -> Optional[CargaFilaStaging]:
     """Fila aprobada de un tipo de inventario excluido de `venta_mensual`
-    (p.ej. "0003 - OTROS"). Se stagea con `solo_detalle: True` para que
+    (p.ej. "0001 - MOTOCICLETA"). Se stagea con `solo_detalle: True` para que
     `venta_detalle` la conserve; `agregar_unidades`, el histograma de periodo
     y la fecha maxima la ignoran, asi `venta_mensual` queda exactamente como
     si la fila no existiera.

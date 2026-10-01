@@ -4,7 +4,7 @@ VENTAS: tipos de inventario de TALLER y detalle independiente del tipo.
 Decision del owner: la demanda de taller cuenta para el pedido. El ERP marca
 los repuestos de taller "IRPTOSYACC" y los lubricantes "IVNLUBGR"; el default
 de `tipos_inventario_incluidos` los incluye. Aparte, `venta_detalle` guarda
-TODA linea aprobada sin importar el tipo ("0003 - OTROS" incluido): esas
+TODA linea aprobada sin importar el tipo ("0001 - MOTOCICLETA" incluido): esas
 filas se stagean con `solo_detalle` y `venta_mensual`, el periodo detectado y
 `fecha_max_detectada` jamas las ven.
 """
@@ -34,7 +34,7 @@ CARGA_ID = uuid.uuid4()
 _MAPA = {nombre: idx for idx, nombre in enumerate(ventas.COLUMNAS_ESPERADAS)}
 _SERIAL_2026_09_15 = 46280
 _SERIAL_2026_08_15 = 46249
-TIPOS_NUEVO_DEFAULT = ["0002 - REPUESTOS", "IRPTOSYACC", "IVNLUBGR"]
+TIPOS_NUEVO_DEFAULT = ["0002 - REPUESTOS", "IRPTOSYACC", "IVNLUBGR", "0003 - OTROS"]
 
 
 def _cache():
@@ -107,7 +107,7 @@ def test_tipo_con_espacios_al_final_tambien_coincide():
 
 
 def test_fila_de_tipo_excluido_se_stagea_solo_para_detalle_sin_errores():
-    staging, errores = _procesar(_fila(tipo="0003 - OTROS"))
+    staging, errores = _procesar(_fila(tipo="0001 - MOTOCICLETA"))
 
     assert errores == []
     assert staging.payload["solo_detalle"] is True
@@ -115,13 +115,13 @@ def test_fila_de_tipo_excluido_se_stagea_solo_para_detalle_sin_errores():
 
 
 @pytest.mark.parametrize("fila", [
-    _fila(tipo="0003 - OTROS", ref="NOEXISTE"),
-    _fila(tipo="0003 - OTROS", bodega="NOEXISTE"),
-    _fila(tipo="0003 - OTROS", cantidad="abc"),
-    _fila(tipo="0003 - OTROS", fecha="no es fecha"),
-    _fila(tipo="0003 - OTROS", vendedor=None),
-    _fila(tipo="0003 - OTROS", nro_doc=None),
-    _fila(tipo="0003 - OTROS", estado="Pendiente"),
+    _fila(tipo="0001 - MOTOCICLETA", ref="NOEXISTE"),
+    _fila(tipo="0001 - MOTOCICLETA", bodega="NOEXISTE"),
+    _fila(tipo="0001 - MOTOCICLETA", cantidad="abc"),
+    _fila(tipo="0001 - MOTOCICLETA", fecha="no es fecha"),
+    _fila(tipo="0001 - MOTOCICLETA", vendedor=None),
+    _fila(tipo="0001 - MOTOCICLETA", nro_doc=None),
+    _fila(tipo="0001 - MOTOCICLETA", estado="Pendiente"),
 ])
 def test_fila_excluida_con_problema_se_omite_en_silencio(fila):
     assert _procesar(fila) == (None, [])
@@ -214,9 +214,9 @@ async def _dry_run(monkeypatch, filas, tipos_resueltos=None, extra_queue=()):
 async def test_archivo_solo_mostrador_0002_deja_el_log_identico_al_de_antes(monkeypatch):
     base = [_fila(nro_doc=f"FV-{i}") for i in range(3)]
     con_excluidas = base + [
-        _fila(tipo="0003 - OTROS", nro_doc="X-1"),
-        _fila(tipo="0003 - OTROS", fecha=_SERIAL_2026_08_15, nro_doc="X-2"),
-        _fila(tipo="0003 - OTROS", ref="NOEXISTE", nro_doc="X-3"),
+        _fila(tipo="0001 - MOTOCICLETA", nro_doc="X-1"),
+        _fila(tipo="0001 - MOTOCICLETA", fecha=_SERIAL_2026_08_15, nro_doc="X-2"),
+        _fila(tipo="0001 - MOTOCICLETA", ref="NOEXISTE", nro_doc="X-3"),
     ]
 
     carga_a, sesion_a = await _dry_run(monkeypatch, base)
@@ -245,7 +245,7 @@ async def test_mezcla_de_tipos_deja_taller_en_venta_mensual(monkeypatch):
         _fila(tipo="0002 - REPUESTOS", modulo="MOSTRADOR", nro_doc="M-1"),
         _fila(tipo="IRPTOSYACC", modulo="TALLER", nro_doc="T-1"),
         _fila(tipo="IVNLUBGR", modulo="TALLER", nro_doc="T-2", cantidad=5),
-        _fila(tipo="0003 - OTROS", modulo="MOSTRADOR", nro_doc="O-1"),
+        _fila(tipo="0001 - MOTOCICLETA", modulo="MOSTRADOR", nro_doc="O-1"),
     ]
 
     carga, sesion = await _dry_run(monkeypatch, filas)  # default nuevo
@@ -266,7 +266,7 @@ async def test_fila_solo_detalle_fuera_del_periodo_no_genera_carga_error(monkeyp
     # venta_mensual puede recibir A-CARGA-043; la excluida de agosto no.
     filas = [_fila(nro_doc=f"FV-{i}") for i in range(199)]
     filas.append(_fila(fecha=46265, nro_doc="AGO"))  # 2026-08-31, 0002
-    filas.append(_fila(tipo="0003 - OTROS", fecha=_SERIAL_2026_08_15, nro_doc="X"))
+    filas.append(_fila(tipo="0001 - MOTOCICLETA", fecha=_SERIAL_2026_08_15, nro_doc="X"))
     agosto = CargaFilaStaging(
         carga_id=CARGA_ID, fila=201, lote=1, sucursal_id=SUCURSAL_ID,
         referencia_id=REFERENCIA_ID,
@@ -282,3 +282,20 @@ async def test_fila_solo_detalle_fuera_del_periodo_no_genera_carga_error(monkeyp
     assert carga.log["periodo_veredicto"] == periodo_mod.TipoVeredictoPeriodo.ADVERTENCIA.value
     errores = sesion.added_of_type(CargaError)
     assert [e.fila for e in errores] == [201]
+
+
+async def test_fila_0003_otros_cuenta_en_venta_mensual_con_el_default(monkeypatch):
+    filas = [
+        _fila(tipo="0002 - REPUESTOS", modulo="MOSTRADOR", nro_doc="M-1"),
+        _fila(tipo="0003 - OTROS", modulo="MOSTRADOR", nro_doc="O-1", cantidad=4),
+    ]
+
+    carga, sesion = await _dry_run(monkeypatch, filas)  # default nuevo
+
+    staged = sesion.added_of_type(CargaFilaStaging)
+    assert not any(f.payload.get("solo_detalle") for f in staged)
+    assert ventas.agregar_unidades(staged) == {
+        (SUCURSAL_ID, REFERENCIA_ID, 2026, 9, "MOSTRADOR"): Decimal("14"),
+    }
+    assert carga.filas_validas == 2
+    assert "filas_solo_detalle" not in carga.log
