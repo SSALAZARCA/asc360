@@ -51,6 +51,34 @@ describe('MotoredSidebar — Usuarios submenu', () => {
     expect(screen.getByText('Registro de ingresos')).toBeInTheDocument();
   });
 
+  it.each(['/motored/usuarios', '/motored/ingresos'])('can be collapsed and reopened on %s', (path) => {
+    mockPathname = path;
+    render(<MotoredSidebar user={ADMIN} />);
+    const group = screen.getByRole('button', { name: 'Usuarios' });
+    fireEvent.click(group);
+    expect(group).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByText('Registro de ingresos')).toBeNull();
+    fireEvent.click(group);
+    expect(group).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByText('Registro de ingresos')).toBeInTheDocument();
+  });
+
+  it('collapses again after being opened elsewhere', () => {
+    render(<MotoredSidebar user={ADMIN} />);
+    const group = screen.getByRole('button', { name: 'Usuarios' });
+    fireEvent.click(group);
+    fireEvent.click(group);
+    expect(group).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('opens by itself when navigating into one of its pages', () => {
+    const { rerender } = render(<MotoredSidebar user={ADMIN} />);
+    expect(screen.getByRole('button', { name: 'Usuarios' })).toHaveAttribute('aria-expanded', 'false');
+    mockPathname = '/motored/ingresos';
+    rerender(<MotoredSidebar user={ADMIN} />);
+    expect(screen.getByRole('button', { name: 'Usuarios' })).toHaveAttribute('aria-expanded', 'true');
+  });
+
   it('keeps Registro de ingresos out of the top level', () => {
     render(<MotoredSidebar user={ADMIN} />);
     const labels = screen.getAllByRole('button').map((b) => b.textContent);

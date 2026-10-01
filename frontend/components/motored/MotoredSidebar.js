@@ -35,7 +35,7 @@
  * not a separate menu item. `/motored/cargas` itself still resolves (it
  * redirects), so an old bookmark keeps working even without a nav entry.
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Image from 'next/image';
 import {
@@ -46,8 +46,8 @@ import { MOTORED_TOKEN_KEY, MOTORED_USER_KEY } from '../../lib/motored/motoredFe
 
 const ALL_ITEMS = [
   { id: 'maestros', name: 'Maestros', icon: Warehouse, path: '/motored/maestros' },
-  // A group (`children`) is a collapsible header; it is open while one of its
-  // pages is active, and toggles on click otherwise.
+  // A group (`children`) is a collapsible header: a click always opens or
+  // closes it, and it opens by itself when one of its pages becomes active.
   {
     id: 'usuarios', name: 'Usuarios', icon: Users, adminOnly: true,
     children: [
@@ -107,14 +107,16 @@ const isActivePath = (pathname, path) => Boolean(pathname?.startsWith(path));
 
 function MenuGroup({ group, pathname, onNavigate }) {
   const childActive = group.children.some((child) => isActivePath(pathname, child.path));
-  const [toggled, setToggled] = useState(false);
-  const expanded = childActive || toggled;
+  const [expanded, setExpanded] = useState(childActive);
+  useEffect(() => {
+    if (childActive) setExpanded(true);
+  }, [childActive]);
   const Icon = group.icon;
   const Chevron = expanded ? ChevronDown : ChevronRight;
   return (
     <>
       <button
-        type="button" aria-expanded={expanded} onClick={() => setToggled((open) => !open)}
+        type="button" aria-expanded={expanded} onClick={() => setExpanded((open) => !open)}
         style={menuItemStyle(childActive && !expanded)}
       >
         <Icon size={16} />
