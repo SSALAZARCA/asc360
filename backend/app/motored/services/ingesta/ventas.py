@@ -113,6 +113,9 @@ _LARGO_MAX_NRO_DOCUMENTO = 50
 _VALOR_MAX_ABS = Decimal(10) ** 14
 TAMANO_LOTE_DETALLE = 1000
 
+# Marca del payload de las filas que solo alimentan `venta_detalle`.
+CLAVE_SOLO_DETALLE = "solo_detalle"
+
 _CLAVE_UPSERT = ("sucursal_id", "referencia_id", "anio", "mes", "origen")
 
 
@@ -154,6 +157,19 @@ def _resolver_fecha(valor_fecha: Any) -> Optional[date]:
         return None
 
 
+def _es_aprobada(fila_raw: Sequence[Any], mapa_columnas: Dict[str, int]) -> bool:
+    return _texto(_extraer(fila_raw, mapa_columnas, "Estado")) == ESTADO_APROBADA
+
+
+def _tipo_incluido(
+    fila_raw: Sequence[Any],
+    mapa_columnas: Dict[str, int],
+    tipos_inventario_incluidos: Sequence[str],
+) -> bool:
+    tipo_inventario = _texto(_extraer(fila_raw, mapa_columnas, "Tipo inventario"))
+    return tipo_inventario in tipos_inventario_incluidos
+
+
 def _pasa_filtros_negocio(
     fila_raw: Sequence[Any],
     mapa_columnas: Dict[str, int],
@@ -162,11 +178,9 @@ def _pasa_filtros_negocio(
     """`Estado != 'Aprobada'` o tipo de inventario no incluido -- spec: esos
     estados "se cuentan y reportan en el log, nunca se suman"; no es una
     fila inválida, no genera `carga_error`."""
-    estado = _texto(_extraer(fila_raw, mapa_columnas, "Estado"))
-    if estado != ESTADO_APROBADA:
-        return False
-    tipo_inventario = _texto(_extraer(fila_raw, mapa_columnas, "Tipo inventario"))
-    return tipo_inventario in tipos_inventario_incluidos
+    return _es_aprobada(fila_raw, mapa_columnas) and _tipo_incluido(
+        fila_raw, mapa_columnas, tipos_inventario_incluidos
+    )
 
 
 def _resolver_fecha_o_error(
@@ -352,6 +366,59 @@ def _resolver_claves(
     return sucursal_id, referencia_id, errores
 
 
+def _procesar_fila_solo_detalle(
+    fila_raw: Sequence[Any],
+    *,
+    numero_fila: int,
+    lote: int,
+    mapa_columnas: Dict[str, int],
+    cache: CacheResolucion,
+    carga_id: uuid.UUID,
+    proveedor_id: uuid.UUID,
+) -> Optional[CargaFilaStaging]:
+    """Fila aprobada de un tipo de inventario excluido de `venta_mensual`
+    (p.ej. "0003 - OTROS"). Se stagea con `solo_detalle: True` para que
+    `venta_detalle` la conserve; `agregar_unidades`, el histograma de periodo
+    y la fecha maxima la ignoran, asi `venta_mensual` queda exactamente como
+    si la fila no existiera.
+
+    Es una ruta independiente: cualquier problema (fecha, cantidad, campos de
+    detalle, sucursal o referencia sin resolver) la omite EN SILENCIO, sin
+    `carga_error` -- hoy esas filas ya se descartan sin ruido y no deben
+    aparecer como errores de la carga."""
+    fecha, _ = _resolver_fecha_o_error(fila_raw, mapa_columnas, carga_id, numero_fila)
+    if fecha is None:
+        return None
+    cantidad, _ = _resolver_cantidad_o_error(fila_raw, mapa_columnas, carga_id, numero_fila)
+    if cantidad is None:
+        return None
+    campos_detalle, _ = _resolver_campos_detalle(fila_raw, mapa_columnas, carga_id, numero_fila)
+    if campos_detalle is None:
+        return None
+    sucursal_id, referencia_id, _ = _resolver_claves(
+        fila_raw, mapa_columnas, cache, carga_id, numero_fila, proveedor_id
+    )
+    if sucursal_id is None or referencia_id is None:
+        return None
+    modulo = _texto(_extraer(fila_raw, mapa_columnas, "Módulo")) or ""
+    return CargaFilaStaging(
+        carga_id=carga_id,
+        fila=numero_fila,
+        lote=lote,
+        payload={
+            "anio": fecha.year,
+            "mes": fecha.month,
+            "dia": fecha.day,
+            "origen": modulo.upper(),
+            "cantidad": str(cantidad),
+            **campos_detalle,
+            CLAVE_SOLO_DETALLE: True,
+        },
+        sucursal_id=sucursal_id,
+        referencia_id=referencia_id,
+    )
+
+
 def procesar_fila(
     fila_raw: Sequence[Any],
     *,
@@ -365,9 +432,17 @@ def procesar_fila(
 ) -> Tuple[Optional[CargaFilaStaging], List[CargaError]]:
     """Procesa UNA fila cruda de VENTAS. Retorna `(fila_staging, errores)`
     orquestando los tres pasos de la transformación (ver los docstrings de
-    `_pasa_filtros_negocio`/`_resolver_fecha_o_error`/`_resolver_claves`)."""
-    if not _pasa_filtros_negocio(fila_raw, mapa_columnas, tipos_inventario_incluidos):
+    `_pasa_filtros_negocio`/`_resolver_fecha_o_error`/`_resolver_claves`).
+
+    Una linea aprobada de un tipo NO incluido no entra a `venta_mensual`,
+    pero `venta_detalle` la guarda igual: ver `_procesar_fila_solo_detalle`."""
+    if not _es_aprobada(fila_raw, mapa_columnas):
         return None, []
+    if not _tipo_incluido(fila_raw, mapa_columnas, tipos_inventario_incluidos):
+        return _procesar_fila_solo_detalle(
+            fila_raw, numero_fila=numero_fila, lote=lote, mapa_columnas=mapa_columnas,
+            cache=cache, carga_id=carga_id, proveedor_id=proveedor_id,
+        ), []
 
     fecha, error_fecha = _resolver_fecha_o_error(fila_raw, mapa_columnas, carga_id, numero_fila)
     if fecha is None:
@@ -413,6 +488,11 @@ def procesar_fila(
 ClaveVentaMensual = Tuple[uuid.UUID, uuid.UUID, int, int, str]
 
 
+def es_solo_detalle(fila: CargaFilaStaging) -> bool:
+    """True si la fila staged solo debe escribirse en `venta_detalle`."""
+    return bool(fila.payload.get(CLAVE_SOLO_DETALLE))
+
+
 def agregar_unidades(
     filas_staging: Sequence[CargaFilaStaging],
 ) -> Dict[ClaveVentaMensual, Decimal]:
@@ -429,7 +509,7 @@ def agregar_unidades(
     valor previamente aplicado."""
     totales: Dict[ClaveVentaMensual, Decimal] = {}
     for fila in filas_staging:
-        if fila.sucursal_id is None or fila.referencia_id is None:
+        if fila.sucursal_id is None or fila.referencia_id is None or es_solo_detalle(fila):
             continue
         payload = fila.payload
         clave: ClaveVentaMensual = (
@@ -489,9 +569,8 @@ async def aplicar(session, totales: Dict[ClaveVentaMensual, Decimal], carga_id: 
 def construir_detalle(
     filas_staging: Sequence[CargaFilaStaging], carga_id: uuid.UUID
 ) -> List[Dict[str, Any]]:
-    """Filas de `venta_detalle` desde las MISMAS filas de staging que
-    `agregar_unidades` (misma exclusion: sin sucursal o referencia resuelta
-    no se escribe). Las filas staged por una version anterior al detalle (sin
+    """Filas de `venta_detalle` desde las filas de staging, incluidas las
+    `solo_detalle` (sin sucursal o referencia resuelta no se escribe). Las filas staged por una version anterior al detalle (sin
     `nro_documento` en el payload) se omiten."""
     detalle: List[Dict[str, Any]] = []
     for fila in filas_staging:
@@ -554,6 +633,8 @@ def construir_filas_por_periodo(
     completo, solo una lectura más del mismo objeto en memoria."""
     histograma: Dict[Tuple[int, int], int] = {}
     for fila in filas_staging:
+        if es_solo_detalle(fila):
+            continue
         clave = (fila.payload["anio"], fila.payload["mes"])
         histograma[clave] = histograma.get(clave, 0) + 1
     return histograma
@@ -568,7 +649,7 @@ def fecha_maxima_de_filas(filas_staging: Sequence[CargaFilaStaging]) -> Optional
     fechas = [
         date(fila.payload["anio"], fila.payload["mes"], fila.payload["dia"])
         for fila in filas_staging
-        if "dia" in fila.payload
+        if "dia" in fila.payload and not es_solo_detalle(fila)
     ]
     return max(fechas, default=None)
 

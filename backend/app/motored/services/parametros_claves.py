@@ -183,7 +183,9 @@ _DIAS_ANTIGUEDAD_MAX = 365  # supuesto ajustable (tasks: Open item D)
 def _construir_registro() -> Mapping[str, EspecClave]:
     especs = [
         # Claves de la ingesta F2 (ya en uso en producción).
-        _lista_texto("tipos_inventario_incluidos", ["0002 - REPUESTOS"]),
+        _lista_texto(
+            "tipos_inventario_incluidos", ["0002 - REPUESTOS", "IRPTOSYACC", "IVNLUBGR"]
+        ),
         _booleana("crear_referencias_desconocidas", False, GRUPO_INGESTA),
         _lista_texto("estados_backorder_vigentes", ["BACKORDER"]),
         _entera("dias_ventana_ingresos", 45, 1, 3650, GRUPO_INGESTA),

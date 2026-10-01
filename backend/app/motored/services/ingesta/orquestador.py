@@ -248,6 +248,7 @@ class _EstadoLoteDryRun:
         # sucursal/referencia sin resolver, que `Aplicar` excluye): lo que el
         # informe muestra como "filas con errores que no se cargaron".
         self.filas_con_error = 0
+        self.filas_solo_detalle = 0
         self.histograma: Dict[Tuple[int, int], int] = {}
         # Fecha de venta mas reciente del archivo (solo VENTAS), acumulada en
         # la misma pasada que `histograma`; `_verificar_periodo_ventas` la
@@ -363,7 +364,12 @@ def _procesar_filas_del_lote(
             session.add(error)
         if errores_fila:
             estado.filas_con_error += 1
-        if fila_staging is not None:
+        if fila_staging is not None and ventas_mod.es_solo_detalle(fila_staging):
+            # Solo alimenta `venta_detalle`: ni valida, ni al histograma ni a
+            # `fecha_max` -- `venta_mensual` y el periodo no la ven.
+            session.add(fila_staging)
+            estado.filas_solo_detalle += 1
+        elif fila_staging is not None:
             session.add(fila_staging)
             staged_del_lote.append(fila_staging)
             estado.filas_validas += 1
@@ -442,6 +448,8 @@ async def _verificar_periodo_ventas(
             select(CargaFilaStaging).where(CargaFilaStaging.carga_id == carga.id)
         )
         for fila in result.scalars().all():
+            if ventas_mod.es_solo_detalle(fila):
+                continue
             clave = (fila.payload["anio"], fila.payload["mes"])
             if clave not in meses_declarados:
                 session.add(errores_mod.construir_error(
@@ -488,6 +496,8 @@ async def _cerrar_dry_run(
 
     log: Dict[str, Any] = dict(carga.log or {})
     log["filas_con_error"] = estado.filas_con_error
+    if estado.filas_solo_detalle:
+        log["filas_solo_detalle"] = estado.filas_solo_detalle
     if estado.parametros_default_usados:
         log["parametros_default_usados"] = dict(estado.parametros_default_usados)
     await _verificar_corte_backorder(session, carga, log)

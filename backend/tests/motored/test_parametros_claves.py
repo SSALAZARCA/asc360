@@ -15,7 +15,7 @@ from app.motored.services import parametros_claves as pc
 from app.motored.services.corridas import codigos
 
 CLAVES_F2 = {
-    "tipos_inventario_incluidos": ["0002 - REPUESTOS"],
+    "tipos_inventario_incluidos": ["0002 - REPUESTOS", "IRPTOSYACC", "IVNLUBGR"],
     "crear_referencias_desconocidas": False,
     "estados_backorder_vigentes": ["BACKORDER"],
     "dias_ventana_ingresos": 45,

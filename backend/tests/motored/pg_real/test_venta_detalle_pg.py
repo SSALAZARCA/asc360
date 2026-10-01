@@ -168,3 +168,48 @@ async def test_carga_rechazada_por_periodo_no_escribe_detalle(sesion):
 
     assert veredicto.tipo.value == "RECHAZO"
     assert await _detalle(sesion) == []
+
+
+# --- TALLER y detalle independiente del tipo --------------------------------
+
+_SERIAL_2026_09_15 = 46280
+
+
+def _fila_excel(tipo, modulo, nro, cantidad=2, ref="R-1"):
+    return ("Aprobada", modulo, _SERIAL_2026_09_15, cantidad, tipo, "BODEGA UNO",
+            "BA061", ref, "Ana  Pérez", 1000, 100, "Taller El Rayo", nro)
+
+
+async def test_aplicar_archivo_mixto_taller_en_mensual_y_todo_en_detalle(sesion):
+    from app.motored.services.ingesta.resolucion import CacheResolucion
+
+    (a, _), ref, (c1, *_) = await _mundo(sesion)
+    cache = CacheResolucion(
+        sucursal_por_texto={"BODEGA UNO": a.id},
+        referencia_por_codigo_proveedor={("R-1", ref.proveedor_id): ref.id})
+    mapa = {n: i for i, n in enumerate(ventas.COLUMNAS_ESPERADAS)}
+    filas_excel = [
+        _fila_excel("0002 - REPUESTOS", "MOSTRADOR", "M-1", 3),
+        _fila_excel("IRPTOSYACC", "TALLER", "T-1", 4),
+        _fila_excel("IVNLUBGR", "TALLER", "T-2", 5),
+        _fila_excel("0003 - OTROS", "MOSTRADOR", "O-1", 7),
+        _fila_excel("0003 - OTROS", "MOSTRADOR", "O-2", 1, ref="NOEXISTE"),
+    ]
+    staged = []
+    for n, fila in enumerate(filas_excel, start=2):
+        staging, _ = ventas.procesar_fila(
+            fila, numero_fila=n, lote=1, mapa_columnas=mapa, cache=cache,
+            carga_id=c1.id, proveedor_id=ref.proveedor_id,
+            tipos_inventario_incluidos=["0002 - REPUESTOS", "IRPTOSYACC", "IVNLUBGR"])
+        if staging is not None:
+            staged.append(staging)
+
+    await _aplicar(sesion, c1, staged, *SEP)
+
+    mensual = {
+        m.origen: m.unidades for m in (await sesion.execute(
+            select(VentaMensual).where(VentaMensual.sucursal_id == a.id))).scalars()}
+    assert mensual == {"MOSTRADOR": Decimal("3"), "TALLER": Decimal("9")}
+    detalle = {d.nro_documento: d.origen for d in await _detalle(sesion, a)}
+    assert detalle == {"M-1": "MOSTRADOR", "T-1": "TALLER", "T-2": "TALLER",
+                       "O-1": "MOSTRADOR"}  # O-2 no resuelve referencia: no se guarda

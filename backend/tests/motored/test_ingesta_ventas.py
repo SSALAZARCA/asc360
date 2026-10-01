@@ -105,14 +105,17 @@ def test_estado_distinto_de_aprobada_se_descarta_en_silencio():
     assert errores == []
 
 
-def test_tipo_inventario_no_incluido_se_descarta_en_silencio():
+def test_tipo_inventario_no_incluido_no_entra_a_venta_mensual_ni_da_error():
+    """Solo alimenta `venta_detalle` (marca `solo_detalle`); ver
+    `test_ingesta_ventas_taller.py` para el detalle de esa ruta."""
     fila_staging, errores = _procesar(
         _fila(tipo_inventario="0005 - ACCESORIOS"),
         tipos_inventario_incluidos=["0002 - REPUESTOS"],
     )
 
-    assert fila_staging is None
     assert errores == []
+    assert fila_staging.payload["solo_detalle"] is True
+    assert ventas.agregar_unidades([fila_staging]) == {}
 
 
 def test_fila_aplicable_conserva_modulo_como_origen():
