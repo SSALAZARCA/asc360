@@ -381,8 +381,8 @@ def test_editar_enlaza_un_usuario_y_audita(_motored_ready):
     _como("ADMIN")
     usuario = uuid.uuid4()
     v = Vendedor(id=uuid.uuid4(), nombre="Ana", nombre_norm="ANA", cargo="OTRO", activo=True)
-    # sonda, vendedor, usuario existe
-    db = FakeAsyncSession(execute_queue=[[], [v], [(usuario,)]])
+    # sonda, vendedor, usuario existe, nombres para la respuesta
+    db = FakeAsyncSession(execute_queue=[[], [v], [(usuario,)], [(None, "Ana Usuaria")]])
     override_motored_db(db)
 
     with TestClient(app) as client:
@@ -467,3 +467,53 @@ def test_vendedor_no_es_movimiento_ni_lo_lee_el_motor():
 
     assert not any("VENDEDOR" in t.upper() for t in orquestador.TIPOS_MOVIMIENTO)
     assert "VENDEDOR" not in repr(vigencia._TIPOS).upper()
+
+
+# --- Advertencias de la revision de T3 ------------------------------------------------------
+
+
+def test_sin_registrar_excluye_vendedor_norm_nulo_o_vacio(_motored_ready):
+    from sqlalchemy.dialects import postgresql
+
+    _como("ADMIN")
+    db = FakeAsyncSession(execute_queue=[[], []])
+    override_motored_db(db)
+
+    with TestClient(app) as client:
+        assert client.get(f"{URL}/sin-registrar").status_code == 200
+
+    sql = str(db.executed_statements[-1].compile(dialect=postgresql.dialect()))
+    assert "venta_detalle.vendedor_norm IS NOT NULL" in sql
+    assert "venta_detalle.vendedor_norm != " in sql
+
+
+def test_crear_devuelve_los_nombres_reales_de_sucursal_y_usuario(_motored_ready):
+    _como("ADMIN")
+    suc, usr = uuid.uuid4(), uuid.uuid4()
+    # sonda, nombre libre, sucursal existe, usuario existe, nombres para la respuesta
+    db = FakeAsyncSession(execute_queue=[[], [], [(suc,)], [(usr,)], [("CALI NORTE", "Ana Usuaria")]])
+    override_motored_db(db)
+
+    with TestClient(app) as client:
+        r = client.post(URL, json={
+            "nombre": "Ana", "cargo": "OTRO", "sucursal_id": str(suc), "usuario_id": str(usr)})
+
+    assert r.status_code == 201
+    assert r.json()["sucursal_nombre"] == "CALI NORTE"
+    assert r.json()["usuario_nombre"] == "Ana Usuaria"
+
+
+def test_editar_devuelve_los_nombres_reales_de_sucursal_y_usuario(_motored_ready):
+    _como("ADMIN")
+    suc = uuid.uuid4()
+    v = Vendedor(id=uuid.uuid4(), nombre="Ana", nombre_norm="ANA", cargo="OTRO", activo=True)
+    # sonda, vendedor, sucursal existe, nombres para la respuesta
+    db = FakeAsyncSession(execute_queue=[[], [v], [(suc,)], [("CALI NORTE", None)]])
+    override_motored_db(db)
+
+    with TestClient(app) as client:
+        r = client.patch(f"{URL}/{v.id}", json={"sucursal_id": str(suc)})
+
+    assert r.status_code == 200
+    assert r.json()["sucursal_nombre"] == "CALI NORTE"
+    assert r.json()["usuario_nombre"] is None

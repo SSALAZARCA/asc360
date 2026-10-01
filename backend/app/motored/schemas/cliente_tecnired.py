@@ -13,12 +13,21 @@ def normalizar_nit(crudo: str) -> str:
     """Misma regla que la columna CLIENTE NORMALIZADO del Excel de origen
     (`IF(RIGHT(TRIM(x),1)=".", LEFT(...), TRIM(x))`): recorta, saca el punto
     final. Ademas se quitan los espacios internos y el `.0` que deja un
-    numero entero leido como decimal desde Excel (`900123456.0`)."""
+    numero entero leido como decimal desde Excel (`900123456.0`).
+
+    Es idempotente (`f(f(x)) == f(x)`): se aplica al cargar la lista y otra
+    vez al cruzar con las ventas, asi que se repite hasta que no cambia
+    (`123.0.` -> `123.0` -> `123`)."""
     texto = _ESPACIOS_RE.sub("", str(crudo))
-    coincide = _FLOAT_ENTERO_RE.match(texto)
-    if coincide:
-        return coincide.group(1)
-    return texto[:-1] if texto.endswith(".") else texto
+    while True:
+        coincide = _FLOAT_ENTERO_RE.match(texto)
+        if coincide:
+            siguiente = coincide.group(1)
+        elif texto.endswith("."):
+            siguiente = texto[:-1]
+        else:
+            return texto
+        texto = siguiente
 
 
 class ClienteTecniredCreate(BaseModel):

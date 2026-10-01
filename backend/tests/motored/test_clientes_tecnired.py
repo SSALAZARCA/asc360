@@ -279,3 +279,29 @@ def test_lista_http_pagina_y_exige_rol(_motored_ready):
     cuerpo = r.json()
     assert cuerpo["total"] == 1
     assert cuerpo["items"][0]["nit"] == "900123456"
+
+
+# --- Advertencias de la revision de T2 ------------------------------------------------------
+
+
+@pytest.mark.parametrize("crudo", ["123.0.", "123.", " 1 23.0 ", "900123456.0", "900.123.456-7", "1.0.0", "..", "12.00."])
+def test_normalizar_nit_es_idempotente(crudo):
+    from app.motored.schemas.cliente_tecnired import normalizar_nit
+
+    una_vez = normalizar_nit(crudo)
+
+    assert normalizar_nit(una_vez) == una_vez
+
+
+def test_carga_concurrente_que_choca_en_el_indice_unico_es_409_y_hace_rollback(_motored_ready):
+    _como("COMPRAS")
+    # Otro reemplazo confirmo primero: el COMMIT de este choca con uq_cliente_tecnired_nit.
+    db = FakeAsyncSession(execute_queue=[[], [1]], raise_integrity_error=True)
+    override_motored_db(db)
+
+    with TestClient(app) as client:
+        r = client.post(CARGA_URL, json={"filas": [{"nit": "900123456"}]})
+
+    assert r.status_code == 409
+    assert "otra carga" in r.json()["detail"].lower()
+    assert db.rolled_back is True and db.committed is False

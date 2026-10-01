@@ -19,6 +19,9 @@ contra un caché de proveedores). Esta función exige que la fila ya traiga
 import uuid
 from typing import Any, Dict, List, Optional, Tuple
 
+from fastapi import HTTPException, status
+from sqlalchemy.exc import IntegrityError
+
 from app.motored.schemas.carga import CargaErrorRow, CargaResultado
 from app.motored.schemas.referencia import ReferenciaUpdate
 from app.motored.services import maestros
@@ -107,7 +110,16 @@ async def _reemplazar_lista(
     insertados, eliminados, advertencias = await _REEMPLAZO_POR_ENTIDAD[entidad](
         db, valid_rows, usuario_id
     )
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        # Otra carga reemplazo la lista entre el DELETE y este COMMIT y choco
+        # con el indice unico: se ve como un conflicto, no como un 500.
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Otra carga está reemplazando esta lista en este momento. Espere unos segundos y vuelva a subir el archivo.",
+        )
     return CargaResultado(
         ok=True,
         total_filas=len(valid_rows),

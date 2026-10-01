@@ -187,3 +187,18 @@ async def test_sin_registrar_cuenta_las_lineas_de_cada_vendedor(sesion):
     filas = [f for f in await vendedores_sin_registrar(db=sesion, user=None) if f["vendedor_norm"].endswith(sfx)]
 
     assert [(f["vendedor_norm"], f["lineas"]) for f in filas] == [(f"MUCHAS {sfx}", 3), (f"POCAS {sfx}", 1)]
+
+
+async def test_sin_registrar_excluye_el_vendedor_norm_vacio(sesion):
+    sfx = _sufijo()
+    suc, ref, cargas = await _mundo_ventas(sesion, sfx)
+    c = cargas["APLICADO"]
+    vacia = _linea(c, suc, ref, f"x {sfx}", datetime.date(2099, 9, 1), "v1")
+    vacia.vendedor_norm = ""
+    sesion.add_all([vacia, _linea(c, suc, ref, f"Real {sfx}", datetime.date(2099, 9, 1), "v2")])
+    await sesion.flush()
+
+    filas = await vendedores_sin_registrar(db=sesion, user=None)
+
+    assert "" not in [f["vendedor_norm"] for f in filas]
+    assert f"REAL {sfx}" in [f["vendedor_norm"] for f in filas]

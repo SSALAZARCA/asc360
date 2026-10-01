@@ -16,7 +16,7 @@ Rutas estaticas (`sin-registrar`, `usuarios-disponibles`) antes de las que
 llevan `{vendedor_id}`; no hay `GET /{id}` asi que no hay choque posible.
 """
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import ValidationError
@@ -51,6 +51,23 @@ def _a_dict(vendedor: Vendedor, sucursal_nombre: Optional[str], usuario_nombre: 
     cuerpo["sucursal_nombre"] = sucursal_nombre
     cuerpo["usuario_nombre"] = usuario_nombre
     return cuerpo
+
+
+async def _nombres_de(db: AsyncSession, vendedor: Vendedor) -> Tuple[Optional[str], Optional[str]]:
+    """Nombre de la sucursal y del usuario enlazados (para la respuesta de
+    crear/editar, igual que el listado)."""
+    if vendedor.sucursal_id is None and vendedor.usuario_id is None:
+        return None, None
+    fila = (
+        await db.execute(
+            select(Sucursal.nombre, Usuario.nombre)
+            .select_from(Vendedor)
+            .outerjoin(Sucursal, Sucursal.id == Vendedor.sucursal_id)
+            .outerjoin(Usuario, Usuario.id == Vendedor.usuario_id)
+            .where(Vendedor.id == vendedor.id)
+        )
+    ).first()
+    return (fila[0], fila[1]) if fila else (None, None)
 
 
 def _validado_o_422(schema_cls, payload: Dict[str, Any]):
@@ -157,7 +174,12 @@ async def vendedores_sin_registrar(
             lineas,
         )
         .join(CargaArchivo, CargaArchivo.id == VentaDetalle.carga_id)
-        .where(CargaArchivo.estado != "ANULADO", ~registrado)
+        .where(
+            CargaArchivo.estado != "ANULADO",
+            VentaDetalle.vendedor_norm.is_not(None),
+            VentaDetalle.vendedor_norm != "",
+            ~registrado,
+        )
         .group_by(VentaDetalle.vendedor_norm)
         .order_by(lineas.desc(), VentaDetalle.vendedor_norm)
         .limit(SIN_REGISTRAR_MAX)
@@ -205,7 +227,8 @@ async def crear_vendedor(
     await _verificar_referencias(db, data.sucursal_id, data.usuario_id)
     vendedor = await maestros.create_vendedor(db, data, uuid.UUID(user.user_id))
     await _confirmar_o_409(db)
-    return _a_dict(vendedor, None, None)
+    sucursal_nombre, usuario_nombre = await _nombres_de(db, vendedor)
+    return _a_dict(vendedor, sucursal_nombre, usuario_nombre)
 
 
 @router.patch("/{vendedor_id}")
@@ -222,7 +245,8 @@ async def editar_vendedor(
     await _verificar_referencias(db, data.sucursal_id, data.usuario_id)
     await maestros.update_vendedor(db, vendedor, data, uuid.UUID(user.user_id))
     await _confirmar_o_409(db)
-    return _a_dict(vendedor, None, None)
+    sucursal_nombre, usuario_nombre = await _nombres_de(db, vendedor)
+    return _a_dict(vendedor, sucursal_nombre, usuario_nombre)
 
 
 @router.delete("/{vendedor_id}")
