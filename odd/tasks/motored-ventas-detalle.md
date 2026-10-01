@@ -55,8 +55,8 @@ Pedidos are unchanged: the monthly aggregate `venta_mensual` keeps being built e
 
 Route evidence: T1 and T2 together touch 2+ non-trivial files (parser, ingestion, model, migration, fixtures), so the writer trigger fired.
 
-- [x] T1 (commit: see T1+T2 note below)
-- [x] T2 (same commit)
+- [x] T1 (commit 2583b6c)
+- [x] T2 (commit 2583b6c)
 
 ## Follow-ups (separate features, user-approved direction, not in this scope)
 - **Inventory cost.** An OPTIONAL "Costo" column in INVENTARIO, stored as a nullable column on `inventario_snapshot`, kept out of `COLUMNAS_ESPERADAS`. Open decision: the inventory key has no bodega, so how does a per-bodega cost aggregate (median, as the Excel did)?
