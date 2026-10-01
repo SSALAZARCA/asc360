@@ -63,6 +63,23 @@ export const corregirEnvio = (id, sucursalId, numero) => (
   patch(`${tienda(id, sucursalId)}/envio`, { numero_pedido_proveedor: numero })
 );
 
+// --- Budget cap and recorte (F4) ----------------------------------------------
+
+/** Cap, value and excess of every tienda of the corrida (`activo: false` when the mode is off or it is a scenario). */
+export const getTopesCorrida = (id) => motoredFetchJson(`${BASE}/${id}/topes`);
+/** The proposal of ONE draft tienda; it carries the `token` that `aplicarRecorte` must send back. */
+export const getRecorte = (id, sucursalId) => motoredFetchJson(`${tienda(id, sucursalId)}/recorte`);
+/** Applies the proposal the user saw; a changed proposal answers 409 E-CORRIDA-060 with the fresh one in `detalle`. */
+export const aplicarRecorte = (id, sucursalId, token) => post(`${tienda(id, sucursalId)}/recorte`, { token });
+/** The switch and the cap of every active tienda (ADMIN and COMPRAS read). */
+export const getTopesPresupuesto = () => motoredFetchJson('/parametros/topes-presupuesto');
+/** `[{ sucursal_id, valor }]`; `valor: null` removes the cap (ADMIN only). */
+export const guardarTopes = (topes) => post('/parametros/topes-presupuesto', { topes });
+/** Turns the cap mode on or off from `vigenteDesde` (`YYYY-MM-DD`); ADMIN only. */
+export const setModoTope = (activo, vigenteDesde) => (
+  post('/parametros', { clave: 'modo_tope_presupuesto', valor: activo, vigente_desde: vigenteDesde })
+);
+
 // --- Export to HMCL -----------------------------------------------------------
 
 /** Downloads the xlsx of one tienda; resolves `{ nombre, omitidas }`. */

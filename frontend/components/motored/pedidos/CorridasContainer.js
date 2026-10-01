@@ -1,5 +1,5 @@
 'use client';
-/** Corridas screen: launch form + filters + table + paging + anular dialog. */
+/** Corridas screen: launch form + filters + table + paging + anular dialog, and the way into Topes por tienda. */
 import { useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import usePedidosGate from '../../../lib/motored/usePedidosGate';
@@ -40,7 +40,15 @@ export default function CorridasContainer() {
   if (!allowed) return null;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', maxWidth: '100%' }}>
-      <h1 className="motored-h-pantalla">Pedidos</h1>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap' }}>
+        <h1 className="motored-h-pantalla">Pedidos</h1>
+        <button
+          type="button" className="motored-btn motored-btn-secondary" style={{ minHeight: '44px' }}
+          onClick={() => router.push('/motored/pedidos/topes')}
+        >
+          Topes por tienda
+        </button>
+      </div>
       <LanzarCorridaForm lanzar={lanzar} />
       <CorridasFiltros filters={list.filters} setFilter={list.setFilter} />
       <Cuerpo list={list} onOpen={abrir} onAnular={anular.abrir} />

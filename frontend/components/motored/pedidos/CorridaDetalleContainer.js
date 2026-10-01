@@ -15,6 +15,8 @@ import AvisoPedido from './AvisoPedido';
 import DialogosPedido from './DialogosPedido';
 import useAccionesPedido from './useAccionesPedido';
 import useSeleccionTiendas from './useSeleccionTiendas';
+import useTopesCorrida from './useTopesCorrida';
+import TopeResumenCorrida from './TopeResumenCorrida';
 import { estaCalculando, fechaCorta } from './reglas';
 import { errorStyle, mutedStyle } from './styles';
 
@@ -36,11 +38,11 @@ function Cabecera({ corrida, onTerminal }) {
   );
 }
 
-function Cuerpo({ corrida, onOpen, ciclo }) {
+function Cuerpo({ corrida, onOpen, ciclo, topes }) {
   if (corrida.sucursales.length === 0) {
     return <p style={mutedStyle}>{estaCalculando(corrida.estado) ? 'Calculando...' : 'Sin pedidos para mostrar'}</p>;
   }
-  return <TiendasTable tiendas={corrida.sucursales} onOpen={onOpen} ciclo={ciclo} />;
+  return <TiendasTable tiendas={corrida.sucursales} onOpen={onOpen} ciclo={ciclo} topes={topes} />;
 }
 
 const cerrada = (t) => t.estado_pedido === 'CERRADO' || t.estado_pedido === 'ENVIADO';
@@ -50,8 +52,10 @@ export default function CorridaDetalleContainer({ corridaId }) {
   const allowed = usePedidosGate();
   const { data, error, reload } = useTiendasCorrida(corridaId, allowed);
   const { marcadas, alternar, limpiar } = useSeleccionTiendas();
+  // The cap summary of a real corrida (nothing for a scenario).
+  const { topes, recargar: recargarTopes } = useTopesCorrida(corridaId, Boolean(allowed && data && !data.es_escenario), data && data.estado);
   // After any lifecycle change the screen reads the fresh states and forgets the ticked tiendas.
-  const alCambiar = useCallback(() => { reload(); limpiar(); }, [reload, limpiar]);
+  const alCambiar = useCallback(() => { reload(); limpiar(); recargarTopes(); }, [reload, limpiar, recargarTopes]);
   const acciones = useAccionesPedido(corridaId, alCambiar);
   const abrir = useCallback((sid) => router.push(`/motored/pedidos/${corridaId}/${sid}`), [router, corridaId]);
   if (!allowed) return null;
@@ -76,7 +80,8 @@ export default function CorridaDetalleContainer({ corridaId }) {
             onExportar={acciones.exportarTodas} onRecalcular={recalcular}
           />
           <AvisoPedido aviso={acciones.aviso} onDescartar={acciones.descartarAviso} onVerCorrida={(id) => router.push(`/motored/pedidos/${id}`)} />
-          <Cuerpo corrida={data} onOpen={abrir} ciclo={ciclo} />
+          <TopeResumenCorrida topes={topes} />
+          <Cuerpo corrida={data} onOpen={abrir} ciclo={ciclo} topes={topes} />
           <DialogosPedido acciones={acciones} corridaId={corridaId} fechaCorte={data.fecha_corte} yaCerradas={data.sucursales.filter(cerrada).length} />
         </>
       )}

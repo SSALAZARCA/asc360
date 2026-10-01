@@ -7,9 +7,12 @@ import EstadoCalculoBadge from './EstadoCalculoBadge';
 import EstadoPedidoBadge from './EstadoPedidoBadge';
 import { fechaCorta } from './reglas';
 import { etiquetaEvento, fechaHora, unidades } from './formato';
-import { mutedStyle, numStyle, stickyColStyle, stickyRightStyle, tdStyle } from './styles';
+import { mutedStyle, numStyle, stickyColStyle, stickyRightStyle, tdCompactStyle } from './styles';
 
 const fallaStyle = { background: 'var(--motored-danger-bg, #fdecea)' };
+// Compact cells whose text may wrap: on a tablet the table must fit its box, or the sticky Acción column would cover them.
+const tdStyle = tdCompactStyle;
+const ajusteStyle = { ...tdCompactStyle, whiteSpace: 'normal' };
 
 function Calculo({ tienda }) {
   return (
@@ -32,15 +35,27 @@ function Pedido({ tienda }) {
   );
 }
 
+/** Event, who and when; it wraps instead of being cut, and the whole sentence is also its tooltip. */
 function UltimoEvento({ evento }) {
   if (!evento) return <span style={mutedStyle}>Sin movimientos</span>;
   const quien = evento.usuario ? ` por ${evento.usuario}` : '';
+  const que = `${etiquetaEvento(evento.evento)}${quien}`;
   return (
-    <span style={{ display: 'flex', flexDirection: 'column' }}>
-      <span style={{ fontSize: '0.8rem' }}>{`${etiquetaEvento(evento.evento)}${quien}`}</span>
+    <span title={`${que} · ${fechaHora(evento.creado_en)}`} style={{ display: 'flex', flexDirection: 'column' }}>
+      <span style={{ fontSize: '0.8rem' }}>{que}</span>
       <span style={mutedStyle}>{fechaHora(evento.creado_en)}</span>
     </span>
   );
+}
+
+/** Cap of the tienda: the excess, within the cap, no cap, or a dash when the tienda has no pedido. */
+function CeldaTope({ tope }) {
+  if (!tope) return <span style={mutedStyle}>—</span>;
+  if (tope.tope == null) return <span style={mutedStyle}>Sin tope</span>;
+  if (Number(tope.exceso) > 0) {
+    return <span style={{ fontWeight: 700, color: 'var(--motored-warning, #d97706)', ...numStyle }}>{`Excede ${formatCOP(tope.exceso)}`}</span>;
+  }
+  return <span style={mutedStyle}>Dentro del tope</span>;
 }
 
 const casillaStyle = { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '24px', flex: 'none' };
@@ -65,20 +80,22 @@ function NombreTienda({ tienda, ciclo }) {
   );
 }
 
-export default function TiendaFila({ tienda, onOpen, ciclo }) {
+/** `conTope` adds the cap cell (`tope` is the tienda row of the cap summary, absent for a tienda without pedido). */
+export default function TiendaFila({ tienda, onOpen, ciclo, conTope = false, tope }) {
   const conPedido = tienda.estado_pedido != null;
   return (
     <tr style={{ borderTop: '1px solid var(--motored-border, #e4e4e7)', ...(conPedido ? {} : fallaStyle) }}>
-      <td style={{ ...tdStyle, ...stickyColStyle, ...(conPedido ? {} : fallaStyle), fontWeight: 600 }}><NombreTienda tienda={tienda} ciclo={ciclo} /></td>
-      <td style={{ ...tdStyle, whiteSpace: 'normal' }}><Calculo tienda={tienda} /></td>
-      <td style={tdStyle}><Pedido tienda={tienda} /></td>
+      <td style={{ ...ajusteStyle, ...stickyColStyle, ...(conPedido ? {} : fallaStyle), fontWeight: 600 }}><NombreTienda tienda={tienda} ciclo={ciclo} /></td>
+      <td style={ajusteStyle}><Calculo tienda={tienda} /></td>
+      <td style={ajusteStyle}><Pedido tienda={tienda} /></td>
       <td style={{ ...tdStyle, ...numStyle }}>
         <span style={{ display: 'flex', flexDirection: 'column' }}>
           <span>{unidades(tienda.unidades_a_pedir)}</span>
           <span style={mutedStyle}>{formatCOP(tienda.valor_a_pedir)}</span>
         </span>
       </td>
-      <td style={tdStyle}><UltimoEvento evento={tienda.ultimo_evento} /></td>
+      {conTope && <td style={ajusteStyle}><CeldaTope tope={tope} /></td>}
+      <td style={ajusteStyle}><UltimoEvento evento={tienda.ultimo_evento} /></td>
       <td style={{ ...tdStyle, ...stickyRightStyle, ...(conPedido ? {} : fallaStyle) }}>
         <div style={{ display: 'flex', alignItems: 'center' }}>
           {conPedido && <MotoredIconAction action="Ver pedido" touch onClick={() => onOpen(tienda.sucursal_id)} />}

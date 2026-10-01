@@ -251,3 +251,54 @@ export function installDescargas() {
   });
   return nombres;
 }
+
+// --- Budget cap (F4) ------------------------------------------------------------
+
+/** A recorte proposal for tienda s1 (CAB_BORRADOR): cuts L_EDITADA (60 -> 50) and L_FUERA (30 -> 24), frees 95,000. */
+export const PROPUESTA_TOPE = {
+  activo: true, motivo_inactivo: null, modo_activo: true, corrida_id: 'c1', sucursal_id: 's1',
+  tope: '5310000.00', valor_actual: '5400000.00', exceso: '90000.00',
+  recortes: [
+    {
+      linea_id: 2, codigo: '55512-A', nombre: 'Bujía', clase_abc: 'CM', unidad_empaque: 10,
+      pedido_actual: '60.00', pedido_propuesto: '50.00', empaques_recortados: '1.00', valor_recortado: '5000.00',
+    },
+    {
+      linea_id: 3, codigo: '00123-AB', nombre: 'Pastilla de freno', clase_abc: 'BM', unidad_empaque: 12,
+      pedido_actual: '30.00', pedido_propuesto: '24.00', empaques_recortados: '0.50', valor_recortado: '90000.00',
+    },
+  ],
+  valor_final: '5305000.00', exceso_residual: '0.00', lineas_sin_precio: 0, advertencias: [], token: 'tok-1',
+};
+
+/** The answer of the recorte preview when there is nothing to propose (`motivo`: MODO_OFF, SIN_TOPE, ...). */
+export const propuestaInactiva = (motivo = 'MODO_OFF') => ({
+  activo: false, motivo_inactivo: motivo, modo_activo: motivo === 'MODO_OFF' ? false : true, corrida_id: 'c1',
+  sucursal_id: 's1', tope: null, valor_actual: null, exceso: null, recortes: [], valor_final: null,
+  exceso_residual: null, lineas_sin_precio: 0, advertencias: [], token: null,
+});
+
+/** One tienda of `GET /corridas/{id}/topes`. */
+export const topeTienda = (over = {}) => ({
+  sucursal_id: 's1', nombre: 'Manizales', estado_pedido: 'BORRADOR', tope: '3000000.00',
+  valor_a_pedir: '5400000.00', exceso: '2400000.00', lineas_sin_precio: 0, ...over,
+});
+
+export const TOPES_CORRIDA = {
+  activo: true, corrida_id: 'c1',
+  tiendas: [
+    topeTienda({}),
+    topeTienda({ sucursal_id: 's2', nombre: 'Pereira', estado_pedido: 'CERRADO', tope: '4000000.00', valor_a_pedir: '3200000.00', exceso: '0.00' }),
+    topeTienda({ sucursal_id: 's3', nombre: 'Cali', estado_pedido: 'ENVIADO', tope: null, valor_a_pedir: '2500000.00', exceso: null }),
+  ],
+};
+
+/** The cap screen read: switch and one cap per active tienda. */
+export const TOPES_PRESUPUESTO = {
+  modo_activo: false, modo_vigente_desde: null,
+  topes: [
+    { sucursal_id: 's1', nombre: 'Manizales', valor: '80000000.00', vigente_desde: '2026-09-30' },
+    { sucursal_id: 's2', nombre: 'Pereira', valor: null, vigente_desde: null },
+    { sucursal_id: 's3', nombre: 'Cali', valor: '45000000.50', vigente_desde: '2026-09-15' },
+  ],
+};

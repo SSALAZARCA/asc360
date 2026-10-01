@@ -43,3 +43,15 @@ export const panelStyle = {
   padding: '1.5rem', width: '100%', maxWidth: '480px', maxHeight: '90vh', overflowY: 'auto',
   display: 'flex', flexDirection: 'column', gap: '1rem',
 };
+
+// Budget cap banner (warning tone, same family as the Borrador badge) and the lines the proposal would cut.
+export const topeBannerStyle = {
+  background: 'var(--motored-warning-bg, #fef3e2)', borderLeft: '4px solid var(--motored-warning, #d97706)',
+  borderRadius: 'var(--motored-radius-md, 8px)', padding: '1rem 1.25rem', minWidth: 0,
+  display: 'flex', flexDirection: 'column', gap: '0.6rem',
+};
+export const recorteMarcaStyle = {
+  display: 'block', fontSize: '0.7rem', fontWeight: 700, whiteSpace: 'normal', maxWidth: '170px',
+  color: 'var(--motored-warning, #d97706)',
+};
+export const recorteFondoStyle = { background: 'var(--motored-warning-bg, #fef3e2)' };
