@@ -5,7 +5,7 @@
  * Icon-only row action with a hover/focus label. The accessible name is the
  * action word (aria-label), the tooltip is state-driven (mouse and keyboard
  * focus, which also fires on tap) and styled inline, so nothing depends on
- * the shared themeCss.
+ * the shared themeCss. `touch` raises the target to 44 px for tablet rows.
  */
 import { useState } from 'react';
 import { ACTION_ICONS } from './actionIcons';
@@ -15,6 +15,7 @@ const BTN = {
   minWidth: '32px', minHeight: '32px', background: 'transparent',
   border: 'none', borderRadius: '6px', cursor: 'pointer', padding: 0,
 };
+const BTN_TOUCH = { minWidth: '44px', minHeight: '44px' };
 const TIP = {
   position: 'absolute', bottom: '105%', left: '50%', transform: 'translateX(-50%)',
   background: 'var(--motored-text, #1a1a18)', color: '#fff', padding: '4px 8px',
@@ -22,7 +23,7 @@ const TIP = {
   pointerEvents: 'none', zIndex: 20,
 };
 
-export default function MotoredIconAction({ action, label, onClick, variant = 'default', disabled = false }) {
+export default function MotoredIconAction({ action, label, onClick, variant = 'default', disabled = false, touch = false }) {
   const [visible, setVisible] = useState(false);
   const text = label || action;
   const Icon = ACTION_ICONS[action];
@@ -31,7 +32,7 @@ export default function MotoredIconAction({ action, label, onClick, variant = 'd
     <span style={{ position: 'relative', display: 'inline-flex' }}>
       <button
         type="button" aria-label={text} data-variant={variant}
-        style={{ ...BTN, color, opacity: disabled ? 0.5 : 1, cursor: disabled ? 'not-allowed' : 'pointer' }}
+        style={{ ...BTN, ...(touch ? BTN_TOUCH : {}), color, opacity: disabled ? 0.5 : 1, cursor: disabled ? 'not-allowed' : 'pointer' }}
         onClick={onClick} disabled={disabled}
         onMouseEnter={() => setVisible(true)} onMouseLeave={() => setVisible(false)}
         onFocus={() => setVisible(true)} onBlur={() => setVisible(false)}

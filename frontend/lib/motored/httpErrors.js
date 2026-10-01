@@ -16,5 +16,31 @@ export function httpErrorMessage(status, body, fallback) {
   if (status === 429) return typeof detail === 'string' && detail ? detail : RATE_LIMIT_MESSAGE;
   if (UNAVAILABLE_STATUSES.includes(status)) return UNAVAILABLE_MESSAGE;
   if (typeof detail === 'string' && detail) return detail;
+  // Coded business errors (Fase 4): `detail: { code, message, detalle? }`.
+  if (detail && typeof detail === 'object' && typeof detail.message === 'string' && detail.message) {
+    return detail.message;
+  }
   return fallback;
+}
+
+/**
+ * An `Error` for a failed response: the Spanish message plus `status` and,
+ * for a coded body (`detail: { code, message, detalle? }`), `code` and
+ * `detalle`, so a screen can branch on the rule that rejected the action.
+ */
+export function codedError(status, body, fallback) {
+  const error = new Error(httpErrorMessage(status, body, fallback));
+  error.status = status;
+  const detail = body && body.detail;
+  if (detail && typeof detail === 'object' && !Array.isArray(detail)) {
+    if (detail.code !== undefined) error.code = detail.code;
+    if (detail.detalle !== undefined) error.detalle = detail.detalle;
+  }
+  return error;
+}
+
+/** The message of `error`, followed by its code in parentheses when it has one. */
+export function mensajeConCodigo(error, fallback = 'No se pudo completar la acción.') {
+  const message = (error && error.message) || fallback;
+  return error && error.code ? `${message} (${error.code})` : message;
 }

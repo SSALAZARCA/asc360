@@ -7,6 +7,8 @@
 import {
   Pencil, Ban, RotateCcw, XCircle, Check, X, KeyRound, Download, Eye, Play,
   Save, Undo2, MapPin, EyeOff, PlusCircle, Link2, Unlink, Unlock,
+  Lock, LockOpen, FileSpreadsheet, Send, Scissors, RefreshCw, GitCompareArrows,
+  FlaskConical, History,
 } from 'lucide-react';
 
 export const ACTION_ICONS = {
@@ -28,4 +30,14 @@ export const ACTION_ICONS = {
   'Vincular Telegram': Link2,
   'Desvincular Telegram': Unlink,
   Desbloquear: Unlock,
+  // Pedidos (Fase 4)
+  Cerrar: Lock,
+  Reabrir: LockOpen,
+  Exportar: FileSpreadsheet,
+  'Marcar como enviado': Send,
+  'Aplicar recorte': Scissors,
+  'Recalcular fallidas': RefreshCw,
+  Comparar: GitCompareArrows,
+  'Nuevo escenario': FlaskConical,
+  Historial: History,
 };

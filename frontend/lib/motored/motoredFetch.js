@@ -17,7 +17,7 @@
  * (and re-exports `getMotoredApiUrl` for convenience), never the reverse.
  * One-directional dependency, no circular-import risk.
  */
-import { httpErrorMessage } from './httpErrors';
+import { codedError } from './httpErrors';
 
 export const MOTORED_TOKEN_KEY = 'motored_token';
 export const MOTORED_USER_KEY = 'motored_user';
@@ -122,7 +122,7 @@ export async function motoredFetchJson(path, options = {}) {
   const res = await motoredFetch(path, options);
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(httpErrorMessage(res.status, body, `HTTP ${res.status}`));
+    throw codedError(res.status, body, `HTTP ${res.status}`);
   }
   return body;
 }
