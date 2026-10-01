@@ -50,6 +50,13 @@ Today the indicators live in a 135 MB Excel that is rebuilt by hand. Motored alr
 - Also `-m pg_real` on a throwaway PG 18 (TCP 127.0.0.1, `unix_socket_directories=''`, deleted afterwards; do not use port 55432).
 - Frontend: `cd frontend && npx jest`.
 
+## Decisions (user, 2026-10-01, later the same day)
+- **CLIENTES TECNIRED:** each upload replaces the full list.
+- **"Maestro de vendedores":** named so it does not clash with the app's RBAC roles. Sellers absent from it go to RESTO COMPAÑÍA, as in the Excel; the dashboard still lists them so the user can add them.
+- **Dashboard:** visible to ADMIN and COMPRAS only, with no per-sucursal view.
+- **Retention:** option B, an auto-purge toggle plus days set in the app. It is built in the future admin Configuración screen (ADMIN only), see `odd/backlog/motored-configuracion-admin.md`. In this feature the purge stays env-gated.
+- **Config rule:** business operation and calculations are set in the app. Server and technical settings stay in Coolify.
+
 ## Delivery
 - Strategy: ask-on-risk.
 - Each task is one or more work-unit commits, pushed to main (Coolify auto-deploys). The native review runs per commit when it is due.
@@ -58,12 +65,12 @@ Today the indicators live in a 135 MB Excel that is rebuilt by hand. Motored alr
 ## Tasks
 | ID | Task | Route | Status |
 |---|---|---|---|
-| T1 | INVENTARIO: required "Costo prom. uni.", the new `inventario_detalle` table, migration, set-based write in the same transaction, replace by (fecha_corte, sucursal), retention purge in the same job, template update, fixtures, pg_real tests. | delegated writer (2+ non-trivial files) | done (0f6106e) |
-| T2 | CLIENTES TECNIRED upload in Maestros (backend 4-maestros pattern plus a frontend tab), with replace semantics pending the user's decision. | delegated writer | pending decisions |
-| T3 | Salesperson → advisor mapping (table, API, UI). Cargo handling pending the user's decision. | delegated writer | pending decisions |
-| T4 | Dashboard endpoint and screen (indicators from the analysis, period and HMCL filters). Roles pending the user's decision. | delegated writer | pending decisions |
+| T1 | INVENTARIO: required "Costo prom. uni.", the new `inventario_detalle` table, migration, set-based write in the same transaction, replace by (fecha_corte, sucursal), retention purge in the same job, template update, fixtures, pg_real tests. | delegated writer (2+ non-trivial files) | done (d64c4f3 on main) |
+| T2 | CLIENTES TECNIRED upload in Maestros (backend 4-maestros pattern plus a frontend tab). Columns: NIT, razón social. Each upload REPLACES the full list. | delegated writer | ready |
+| T3 | "Maestro de vendedores": every person who sells, with or without an app user. Fields: ERP name (the "Nombre vendedor" join key, normalized), cargo, sucursal principal, cédula (optional), linked Usuario (optional). Loaded by Excel in Maestros and editable by hand. | delegated writer | ready |
+| T4 | Dashboard endpoint and screen (indicators from the analysis, period and HMCL filters). Visible to ADMIN and COMPRAS only. Sellers not in the maestro group as RESTO COMPAÑÍA. | delegated writer | ready |
 
-- [x] T1 (commit 0f6106e)
+- [x] T1 (commit d64c4f3 on main, rebased from 0f6106e)
 - [ ] T2
 - [ ] T3
 - [ ] T4
@@ -83,3 +90,5 @@ Today the indicators live in a 135 MB Excel that is rebuilt by hand. Motored alr
     - Retention: one ledger row per table in `retencion_ejecucion` (`inventario_detalle` first, then `inventario_snapshot`, which stays the scheduler anchor and the returned row).
     - Cost parsing reuses `ventas._limpiar_moneda` and `_VALOR_MAX_ABS` (gga suggested moving them to `numeros.py` if a third caller appears).
     - No frontend change: no file lists the INVENTARIO columns (the template comes from the backend).
+- 2026-10-01: T1 native review (medium risk) granted by the user, approved on the reliability lens and acknowledged. Rebased on main 40994b0 and pushed as d64c4f3 + 74ea4c1. Post-rebase `tests/motored`: 3800 passed. New head: `c4a9e7d1b852`.
+  - Advisory follow-up: blank, invalid or too-large costs become NULL silently. Add a count of null costs to `carga.log` so the user can see when the cost base shrinks.
