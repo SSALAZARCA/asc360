@@ -53,9 +53,13 @@ from app.config import settings
 from app.motored.deps import MotoredUser, get_motored_db_or_503, require_motored_ready, require_roles
 from app.motored.models.proveedor import Proveedor
 from app.motored.models.referencia import Referencia
+from app.motored.models.sucursal import Sucursal
+from app.motored.models.sucursal_alias import SucursalAlias
 from app.motored.schemas.carga import CargaRequest, CargaResultado
 from app.motored.services.carga import SUSTITUTA_EN_ARCHIVO, procesar_carga
 from app.motored.services.carga_excel import CargaExcelError, LimiteFilasExcedidoError, parse_excel_rows
+from app.motored.services.ingesta.resolucion import normalizar_texto_sucursal
+from app.motored.services.ingesta.ventas import normalizar_vendedor
 from app.motored.services.validators import _SCHEMA_BY_ENTIDAD, validate_rows
 
 router = APIRouter(
@@ -275,6 +279,65 @@ def _marcar_ciclos(
             resolved[index - 1].pop(SUSTITUTA_EN_ARCHIVO, None)
 
 
+async def _sucursal_id_por_texto(db: AsyncSession) -> Dict[str, uuid.UUID]:
+    """`normalizar_texto_sucursal(nombre | alias)` -> `sucursal_id`, con DOS
+    queries (nombres reales primero, `sucursal_alias` solo rellena lo que
+    falte) -- la misma prioridad que `ingesta.resolucion.construir_cache`."""
+    por_texto: Dict[str, uuid.UUID] = {}
+    for sucursal_id, nombre in (await db.execute(select(Sucursal.id, Sucursal.nombre))).all():
+        if nombre:
+            por_texto[normalizar_texto_sucursal(nombre)] = sucursal_id
+    alias_rows = (
+        await db.execute(select(SucursalAlias.texto_normalizado, SucursalAlias.sucursal_id))
+    ).all()
+    for texto_normalizado, sucursal_id in alias_rows:
+        por_texto.setdefault(texto_normalizado, sucursal_id)
+    return por_texto
+
+
+async def _resolve_vendedor_relaciones(
+    db: AsyncSession, filas: List[Dict[str, Any]]
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """Para `vendedor`: resuelve `sucursal_nombre` -> `sucursal_id` (un nombre
+    que no existe es error de fila, nunca se descarta en silencio) y marca como
+    error un vendedor repetido en el archivo (misma `normalizar_vendedor`: dos
+    escrituras de la misma persona son ambiguas, el usuario debe dejar una).
+    Sin ningun nombre de sucursal en el archivo no consulta la base."""
+    hay_sucursales = any(str(f.get("sucursal_nombre") or "").strip() for f in filas)
+    por_texto = await _sucursal_id_por_texto(db) if hay_sucursales else {}
+
+    resueltas: List[Dict[str, Any]] = []
+    errores: List[Dict[str, Any]] = []
+    primera_fila: Dict[str, int] = {}
+    for index, fila in enumerate(filas, start=1):
+        fila = dict(fila)
+        nombre = str(fila.get("nombre") or "").strip()
+        if nombre:
+            clave = normalizar_vendedor(nombre)
+            if clave in primera_fila:
+                errores.append({
+                    "fila": index,
+                    "motivo": (
+                        f"Vendedor repetido en el archivo (igual a la fila {primera_fila[clave]}). "
+                        "Dejá una sola fila por persona."
+                    ),
+                })
+            else:
+                primera_fila[clave] = index
+        texto_sucursal = str(fila.get("sucursal_nombre") or "").strip()
+        if texto_sucursal:
+            sucursal_id = por_texto.get(normalizar_texto_sucursal(texto_sucursal))
+            if sucursal_id is None:
+                errores.append({
+                    "fila": index,
+                    "motivo": f"'Sucursal' '{texto_sucursal}' no corresponde a ninguna sucursal existente",
+                })
+            else:
+                fila["sucursal_id"] = sucursal_id
+        resueltas.append(fila)
+    return resueltas, errores
+
+
 async def _resolve_referencia_relaciones(
     db: AsyncSession, entidad: str, filas: List[Dict[str, Any]]
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
@@ -309,7 +372,7 @@ async def _validar_y_construir_resultado(
     `filas` (JSON ya estructurado vs. parseo de `.xlsx`) -- de ahí en
     adelante es el mismo dry-run puro (nunca `procesar_carga`, que además
     haría upsert+commit)."""
-    filas, errores_resolucion = await _resolve_referencia_relaciones(db, entidad, filas)
+    filas, errores_resolucion = await _resolver_relaciones(db, entidad, filas)
     _valid_rows, errors = validate_rows(entidad, filas)
     errores_totales = errores_resolucion + errors
 
@@ -331,8 +394,20 @@ async def _resolver_y_procesar_carga(
     `db.commit()`). `errores_resolucion` viaja como `errores_previos` -- por
     sí solo ya alcanza para bloquear TODO el archivo (todo-o-nada), exacto
     igual que un error de `validate_rows`."""
-    filas, errores_resolucion = await _resolve_referencia_relaciones(db, entidad, filas)
+    filas, errores_resolucion = await _resolver_relaciones(db, entidad, filas)
     return await procesar_carga(db, entidad, filas, usuario_id, errores_previos=errores_resolucion)
+
+
+async def _resolver_relaciones(
+    db: AsyncSession, entidad: str, filas: List[Dict[str, Any]]
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """Resuelve, según la entidad, las relaciones que el archivo trae como
+    texto: `vendedor` -> `_resolve_vendedor_relaciones`, `referencia` ->
+    `_resolve_referencia_relaciones`; el resto no resuelve nada. Mismo shape
+    de retorno `(filas_resueltas, errores_resolucion)` en los tres casos."""
+    if entidad == "vendedor":
+        return await _resolve_vendedor_relaciones(db, filas)
+    return await _resolve_referencia_relaciones(db, entidad, filas)
 
 
 @router.post("/validar", response_model=CargaResultado)

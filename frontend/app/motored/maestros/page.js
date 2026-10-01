@@ -31,6 +31,7 @@ import BodegasTab from '../../../components/motored/maestros/BodegasTab';
 import ProveedoresTab from '../../../components/motored/maestros/ProveedoresTab';
 import ReferenciasTab from '../../../components/motored/maestros/ReferenciasTab';
 import ClientesTecniredTab from '../../../components/motored/maestros/ClientesTecniredTab';
+import VendedoresTab from '../../../components/motored/maestros/VendedoresTab';
 import MovimientoTab from '../../../components/motored/cargas/MovimientoTab';
 
 const TABS = [
@@ -39,6 +40,7 @@ const TABS = [
   { id: 'proveedores', label: 'Proveedores', group: 'Maestros', render: () => <ProveedoresTab /> },
   { id: 'referencias', label: 'Referencias', group: 'Maestros', entidadSalud: 'referencia', render: () => <ReferenciasTab /> },
   { id: 'clientes_tecnired', label: 'Clientes Tecnired', group: 'Maestros', render: () => <ClientesTecniredTab /> },
+  { id: 'vendedores', label: 'Vendedores', group: 'Maestros', render: () => <VendedoresTab /> },
   { id: 'ventas', label: 'Ventas', group: 'Movimientos', render: () => <MovimientoTab tipo="VENTAS" label="Ventas" /> },
   { id: 'inventario', label: 'Inventario', group: 'Movimientos', render: () => <MovimientoTab tipo="INVENTARIO" label="Inventario" /> },
   { id: 'backorder', label: 'Backorder', group: 'Movimientos', render: () => <MovimientoTab tipo="BACKORDER" label="Backorder" /> },

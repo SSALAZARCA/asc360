@@ -154,6 +154,44 @@ export async function listClientesTecnired({ page, pageSize, q }) {
 }
 
 // ---------------------------------------------------------------------------
+// Maestro de vendedores (`backend/app/motored/api/vendedores.py`, ADMIN|COMPRAS).
+// La carga por Excel usa `subirCarga*('vendedor')`; acá solo la consulta y la
+// edición a mano.
+// ---------------------------------------------------------------------------
+
+/** GET /vendedores?q&cargo&activo -> lista (con `sucursal_nombre` y `usuario_nombre`). */
+export async function listVendedores({ q, cargo, activo } = {}) {
+  return motoredFetchJson(`/vendedores${_queryString({ q, cargo, activo })}`);
+}
+
+export async function createVendedor(payload) {
+  return motoredFetchJson('/vendedores', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export async function updateVendedor(id, payload) {
+  return motoredFetchJson(`/vendedores/${id}`, { method: 'PATCH', body: JSON.stringify(payload) });
+}
+
+/** DELETE /vendedores/{id} desactiva (`activo=false`), nunca borra. */
+export async function deactivateVendedor(id) {
+  return motoredFetchJson(`/vendedores/${id}`, { method: 'DELETE' });
+}
+
+export async function reactivateVendedor(id) {
+  return motoredFetchJson(`/vendedores/${id}/reactivar`, { method: 'POST' });
+}
+
+/** GET /vendedores/sin-registrar -> `[{ vendedor_norm, vendedor_ejemplo, ultima_venta, lineas }]`. */
+export async function listVendedoresSinRegistrar() {
+  return motoredFetchJson('/vendedores/sin-registrar');
+}
+
+/** GET /vendedores/usuarios-disponibles -> `[{ id, nombre, role }]` (para el selector de enlace). */
+export async function listUsuariosDisponibles() {
+  return motoredFetchJson('/vendedores/usuarios-disponibles');
+}
+
+// ---------------------------------------------------------------------------
 // Carga masiva vía archivo `.xlsx` crudo -- batch posterior a la Fase 1
 // (owner brief "Excel upload capability"). A diferencia de `validarCarga`/
 // `subirCarga` de arriba, acá NO se parsea nada en el browser: el archivo

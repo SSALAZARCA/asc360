@@ -163,6 +163,30 @@ const COLUMNAS_POR_ENTIDAD = {
       help: 'Modelos de moto de otras marcas con los que este repuesto es compatible. Podés poner varios en la misma celda, separados por coma o punto y coma (ej: Yamaha FZ 150; Honda CB 190R).',
     },
   ],
+  // Maestro de vendedores: upsert por nombre normalizado, nunca borra a nadie.
+  // Mismo orden/alias que `ALIASES_POR_ENTIDAD.vendedor` del backend. El usuario
+  // enlazado NO va en el Excel (se elige a mano en la pantalla).
+  vendedor: [
+    {
+      key: 'nombre', label: 'Nombre vendedor', required: true,
+      aliases: ['nombre', 'nombre vendedor', 'vendedor', 'nombre del vendedor'],
+      help: 'Tiene que ser igual al nombre que aparece en la columna Vendedor del archivo de ventas del ERP. Se compara sin tildes, sin mayúsculas y sin espacios de más.',
+    },
+    {
+      key: 'cargo', label: 'Cargo', required: true, aliases: ['cargo'],
+      help: 'Lo que hace la persona (ej: ASESOR DE REPUESTOS, JEFE DE TALLER, CAJERO POSVENTA). Es texto libre; se guarda en mayúsculas.',
+    },
+    {
+      key: 'sucursal_nombre', label: 'Sucursal', required: false,
+      aliases: ['sucursal', 'sucursal_nombre', 'sucursal principal'],
+      help: 'Sucursal principal donde trabaja, con el nombre que ya tiene en la pestaña Sucursales. Si el nombre no existe, el archivo se rechaza.',
+    },
+    {
+      key: 'cedula', label: 'Cédula', required: false,
+      aliases: ['cedula', 'cédula', 'documento', 'identificacion'],
+      help: 'Documento de identidad. Es opcional.',
+    },
+  ],
   // Lista de NIT de clientes Tecnired: cada carga REEMPLAZA la lista completa.
   // Mismo orden/alias que `ALIASES_POR_ENTIDAD.cliente_tecnired` del backend.
   cliente_tecnired: [
@@ -181,7 +205,7 @@ const COLUMNAS_POR_ENTIDAD = {
 
 // Nombre legible de cada entidad para el título del modal (las claves
 // internas como `cliente_tecnired` no se le muestran al usuario).
-const TITULO_POR_ENTIDAD = { cliente_tecnired: 'Clientes Tecnired' };
+const TITULO_POR_ENTIDAD = { cliente_tecnired: 'Clientes Tecnired', vendedor: 'Vendedores' };
 
 // Entidades cuya carga reemplaza la lista completa en vez de actualizar fila por fila.
 const ENTIDADES_DE_REEMPLAZO = ['cliente_tecnired'];

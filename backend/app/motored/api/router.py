@@ -35,6 +35,7 @@ from app.motored.api import (
     referencias_busqueda,
     salud,
     usuarios,
+    vendedores,
 )
 
 router = APIRouter()
@@ -48,6 +49,8 @@ router.include_router(maestros.router)
 router.include_router(carga.router)
 # T2 tablero-asesores: `/clientes-tecnired` es un prefijo propio, sin superposicion.
 router.include_router(clientes_tecnired.router)
+# T3 tablero-asesores: `/vendedores` es un prefijo propio, sin superposicion.
+router.include_router(vendedores.router)
 router.include_router(usuarios.router)
 router.include_router(parametros.router)
 # Fase 2 "Ingesta" (sdd/motored-pedidos-ingesta, task 9.4): `/cargas` es un

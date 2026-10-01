@@ -187,6 +187,25 @@ ALIASES_POR_ENTIDAD: Dict[str, List[Dict[str, Any]]] = {
             "aliases": ["homologados", "homologados otras marcas"],
         },
     ],
+    # Maestro de vendedores. "Nombre vendedor" debe coincidir con el nombre del
+    # archivo de ventas del ERP (se cruza por su version normalizada).
+    # `sucursal_nombre` no es un campo del schema: `api/carga.py` lo resuelve a
+    # `sucursal_id`. El usuario enlazado NO va en el Excel (se asigna a mano).
+    "vendedor": [
+        {
+            "key": "nombre", "label": "Nombre vendedor", "required": True,
+            "aliases": ["nombre", "nombre vendedor", "vendedor", "nombre del vendedor"],
+        },
+        {"key": "cargo", "label": "Cargo", "required": True, "aliases": ["cargo"]},
+        {
+            "key": "sucursal_nombre", "label": "Sucursal", "required": False, "type": "string",
+            "aliases": ["sucursal", "sucursal_nombre", "sucursal principal"],
+        },
+        {
+            "key": "cedula", "label": "Cédula", "required": False,
+            "aliases": ["cedula", "cédula", "documento", "identificacion"],
+        },
+    ],
     # CLIENTES TECNIRED: lista de NIT que cada carga reemplaza por completo.
     # La `label` "NIT" es el encabezado de la plantilla; los alias cubren los
     # nombres que usa el Excel de origen y el export del ERP.

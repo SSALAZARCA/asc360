@@ -17,11 +17,14 @@ from app.motored.models.cliente_tecnired import ClienteTecnired
 from app.motored.models.proveedor import Proveedor
 from app.motored.models.referencia import Referencia
 from app.motored.models.sucursal import Sucursal
+from app.motored.models.vendedor import Vendedor
 from app.motored.schemas.bodega import BodegaCreate, BodegaUpdate
 from app.motored.schemas.proveedor import ProveedorCreate, ProveedorUpdate
 from app.motored.schemas.referencia import ReferenciaCreate, ReferenciaUpdate
 from app.motored.schemas.sucursal import SucursalCreate, SucursalUpdate
+from app.motored.schemas.vendedor import VendedorCreate, VendedorUpdate
 from app.motored.services import auditoria
+from app.motored.services.ingesta.ventas import normalizar_vendedor
 from app.motored.services.validators import coerce_unidad_empaque, normalize_sucursal_nombre
 
 
@@ -351,3 +354,67 @@ async def reemplazar_clientes_tecnired(
     for datos in nuevos:
         db.add(ClienteTecnired(**datos))
     return len(nuevos), eliminados, advertencias
+
+
+# ---------------------------------------------------------------------------
+# Vendedor -- llave natural: nombre_norm (la misma normalizacion que
+# `venta_detalle.vendedor_norm`)
+# ---------------------------------------------------------------------------
+
+async def get_vendedor_by_nombre_norm(db, nombre_norm: str) -> Optional[Vendedor]:
+    result = await db.execute(select(Vendedor).where(Vendedor.nombre_norm == nombre_norm))
+    return result.scalars().first()
+
+
+async def create_vendedor(db, data: VendedorCreate, usuario_id: Optional[uuid.UUID] = None) -> Vendedor:
+    vendedor = Vendedor(
+        id=uuid.uuid4(),
+        nombre=data.nombre,
+        nombre_norm=normalizar_vendedor(data.nombre),
+        cargo=data.cargo,
+        sucursal_id=data.sucursal_id,
+        cedula=data.cedula,
+        usuario_id=data.usuario_id,
+        activo=data.activo,
+    )
+    db.add(vendedor)
+    auditoria.audit_create(db, "vendedor", vendedor.id, usuario_id)
+    return vendedor
+
+
+async def update_vendedor(
+    db, vendedor: Vendedor, data: VendedorUpdate, usuario_id: Optional[uuid.UUID] = None
+) -> Vendedor:
+    update_dict = data.model_dump(exclude_unset=True)
+    # `nombre` y `cargo` son NOT NULL: un `null` explicito significa "no tocar".
+    for campo in ("nombre", "cargo", "activo"):
+        if campo in update_dict and update_dict[campo] is None:
+            del update_dict[campo]
+    if "nombre" in update_dict:
+        update_dict["nombre_norm"] = normalizar_vendedor(update_dict["nombre"])
+    before, after = _apply_and_diff(vendedor, update_dict)
+    auditoria.diff_and_audit(db, "vendedor", vendedor.id, usuario_id, before, after)
+    return vendedor
+
+
+async def deactivate_vendedor(db, vendedor: Vendedor, usuario_id: Optional[uuid.UUID] = None) -> Vendedor:
+    vendedor.activo = False
+    auditoria.audit_deactivate(db, "vendedor", vendedor.id, usuario_id)
+    return vendedor
+
+
+async def upsert_vendedor(
+    db, data: VendedorCreate, usuario_id: Optional[uuid.UUID] = None
+) -> Tuple[Vendedor, None, bool]:
+    """Carga por Excel: upsert por `nombre_norm`, nunca borra a nadie. Solo
+    pisa lo que el archivo trae: una celda en blanco conserva el valor
+    guardado, y el Excel jamas toca `usuario_id` ni `activo`. El `nombre`
+    tampoco se reescribe (es la llave). Retorna `(vendedor, None, created)` --
+    ver nota en `upsert_proveedor`."""
+    existing = await get_vendedor_by_nombre_norm(db, normalizar_vendedor(data.nombre))
+    if existing:
+        update_fields = _updateable_fields(data, {"nombre", "usuario_id", "activo"})
+        updated = await update_vendedor(db, existing, VendedorUpdate(**update_fields), usuario_id)
+        return updated, None, False
+    created = await create_vendedor(db, data, usuario_id)
+    return created, None, True

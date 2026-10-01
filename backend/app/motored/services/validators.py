@@ -18,6 +18,7 @@ from app.motored.schemas.cliente_tecnired import ClienteTecniredCreate, normaliz
 from app.motored.schemas.proveedor import ProveedorCreate
 from app.motored.schemas.referencia import ReferenciaCreate
 from app.motored.schemas.sucursal import SucursalCreate
+from app.motored.schemas.vendedor import VendedorCreate
 
 Row = Dict[str, Any]
 RowError = Dict[str, Any]
@@ -28,6 +29,7 @@ _SCHEMA_BY_ENTIDAD = {
     "proveedor": ProveedorCreate,
     "referencia": ReferenciaCreate,
     "cliente_tecnired": ClienteTecniredCreate,
+    "vendedor": VendedorCreate,
 }
 
 # Entidades cuya carga REEMPLAZA la lista completa (en vez de upsert por llave
@@ -65,6 +67,7 @@ REQUIRED_FIELDS = {
     "proveedor": ["codigo", "nombre"],
     "referencia": ["codigo", "proveedor_codigo"],
     "cliente_tecnired": ["nit"],
+    "vendedor": ["nombre", "cargo"],
 }
 
 

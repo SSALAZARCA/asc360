@@ -43,6 +43,7 @@ from app.motored.models.sucursal import Sucursal
 from app.motored.models.sucursal_alias import SucursalAlias
 from app.motored.models.usuario import MotoredRole, Usuario
 from app.motored.models.usuario_sucursal import UsuarioSucursal
+from app.motored.models.vendedor import Vendedor
 from app.motored.models.venta_detalle import VentaDetalle
 from app.motored.models.venta_mensual import VentaMensual
 
@@ -83,6 +84,7 @@ __all__ = [
     "MotoredRole",
     "Usuario",
     "UsuarioSucursal",
+    "Vendedor",
     "VentaDetalle",
     "VentaMensual",
 ]

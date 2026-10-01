@@ -35,6 +35,7 @@ _UPSERT_BY_ENTIDAD = {
     "bodega": maestros.upsert_bodega,
     "proveedor": maestros.upsert_proveedor,
     "referencia": maestros.upsert_referencia,
+    "vendedor": maestros.upsert_vendedor,
 }
 
 
