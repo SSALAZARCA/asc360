@@ -5,29 +5,18 @@ import MotoredIconAction from '../MotoredIconAction';
 import EstadoCalculoBadge from './EstadoCalculoBadge';
 import ResumenPedidosChip from './ResumenPedidosChip';
 import ProgresoCorrida from './ProgresoCorrida';
+import PruebaBadge from './PruebaBadge';
 import { estaCalculando, fechaCorta, puedeAnular } from './reglas';
 import { mutedStyle, tdStyle } from './styles';
 
-const PRUEBA_TEXTO = 'PRUEBA: corrida de escenario para comparar contra la real. No se cierra, no se exporta y no se envía.';
 const INVALIDADA_TEXTO = 'Datos invalidados: se anuló una carga que esta corrida usó, por eso ya no se puede cerrar ninguna tienda. Calcule una corrida nueva.';
-
-const pruebaStyle = {
-  display: 'inline-block', padding: '2px 8px', borderRadius: 'var(--motored-radius-pill, 999px)',
-  fontSize: '0.65rem', fontWeight: 700, background: 'var(--motored-brand-soft, #fde8ea)',
-  color: 'var(--motored-primary, #e20714)',
-};
 
 function Calculo({ corrida, onTerminal }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
         <EstadoCalculoBadge estado={corrida.estado} />
-        {corrida.es_escenario && (
-          <span style={{ display: 'inline-flex', alignItems: 'center' }}>
-            <span style={pruebaStyle}>PRUEBA</span>
-            <InfoTooltip text={PRUEBA_TEXTO} />
-          </span>
-        )}
+        {corrida.es_escenario && <PruebaBadge />}
       </span>
       {estaCalculando(corrida.estado) && (
         <ProgresoCorrida corridaId={corrida.id} estado={corrida.estado} onTerminal={onTerminal} />

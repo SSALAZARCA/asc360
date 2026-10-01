@@ -6,7 +6,7 @@ import MotoredIconAction from '../components/motored/MotoredIconAction';
 
 const NUEVAS = [
   'Cerrar', 'Reabrir', 'Exportar', 'Marcar como enviado', 'Aplicar recorte',
-  'Recalcular fallidas', 'Comparar', 'Nuevo escenario', 'Historial',
+  'Recalcular fallidas', 'Comparar', 'Nuevo escenario', 'Historial', 'Ver pedido',
 ];
 
 describe('pedido action icons', () => {

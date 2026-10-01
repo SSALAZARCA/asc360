@@ -17,3 +17,13 @@ export const labelStyle = {
 export const optionStyle = { color: '#1a1a18' };
 export const thStyle = { padding: '0 12px 8px 0', textAlign: 'left', whiteSpace: 'nowrap' };
 export const tdStyle = { padding: '8px 12px 8px 0', verticalAlign: 'middle', whiteSpace: 'nowrap' };
+
+// Sticky first column and header row of the long tables (they scroll inside their box).
+export const stickyColStyle = { position: 'sticky', left: 0, zIndex: 2, background: 'var(--motored-surface, #ffffff)' };
+export const stickyHeadStyle = { position: 'sticky', top: 0, zIndex: 3, background: 'var(--motored-surface, #ffffff)' };
+// The tables sit on the surface colour so the sticky column (opaque) matches the other cells.
+export const tablaStyle = { background: 'var(--motored-surface, #ffffff)' };
+export const numStyle = { fontVariantNumeric: 'tabular-nums' };
+// Denser cells for the 9-column line table (less sideways scrolling on a tablet).
+export const tdCompactStyle = { ...tdStyle, padding: '8px 8px 8px 0' };
+export const thCompactStyle = { ...thStyle, padding: '0 8px 8px 0' };

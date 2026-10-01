@@ -21,6 +21,7 @@ export const ACTION_ICONS = {
   'Cambiar contraseña': KeyRound,
   Descargar: Download,
   'Ver detalle': Eye,
+  'Ver pedido': Eye,
   Aplicar: Play,
   Guardar: Save,
   Cancelar: Undo2,

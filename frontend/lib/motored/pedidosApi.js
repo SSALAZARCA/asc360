@@ -28,3 +28,10 @@ export const crearCorrida = (cuerpo) => post(BASE, cuerpo);
 export const getCorrida = (id) => motoredFetchJson(`${BASE}/${id}`);
 export const getProgreso = (id) => motoredFetchJson(`${BASE}/${id}/progreso`);
 export const anularCorrida = (id, motivo) => post(`${BASE}/${id}/anular`, { motivo });
+
+// --- Lines and tienda pedido (reads) ----------------------------------------
+
+export const listarLineas = (id, filtros) => motoredFetchJson(`${BASE}/${id}/lineas${consulta(filtros)}`);
+export const getPedidoTienda = (id, sucursalId) => motoredFetchJson(`${BASE}/${id}/sucursales/${sucursalId}`);
+export const getEventosTienda = (id, sucursalId) => motoredFetchJson(`${BASE}/${id}/sucursales/${sucursalId}/eventos`);
+export const getHistorialLinea = (id, lineaId) => motoredFetchJson(`${BASE}/${id}/lineas/${lineaId}/historial`);

@@ -56,3 +56,23 @@ describe('Motored tables use the shared wrapper', () => {
     expect(source).toMatch(/overflow: 'auto'/);
   });
 });
+
+describe('MotoredTableScroll maxHeight', () => {
+  it('scrolls vertically inside the box when a max height is given', () => {
+    render(
+      <MotoredTableScroll maxHeight="70vh">
+        <table><tbody><tr><td>dato</td></tr></tbody></table>
+      </MotoredTableScroll>,
+    );
+    expect(screen.getByRole('table').parentElement).toHaveStyle({ maxHeight: '70vh', overflowY: 'auto' });
+  });
+
+  it('does not limit the height by default', () => {
+    render(
+      <MotoredTableScroll>
+        <table><tbody><tr><td>dato</td></tr></tbody></table>
+      </MotoredTableScroll>,
+    );
+    expect(screen.getByRole('table').parentElement.style.maxHeight).toBe('');
+  });
+});

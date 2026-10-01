@@ -5,7 +5,8 @@
  * Paginator for the Referencias tab (`odd/tasks/motored-referencias-
  * paginacion.md`): previous/next, "Página X de Y", total count and a
  * page-size select. Every `<option>` carries an explicit color, otherwise
- * the text is invisible in the dark theme.
+ * the text is invisible in the dark theme. `sizes` and `unidad` are optional
+ * (the Pedidos line table counts lines in other page sizes).
  */
 export const PAGE_SIZES = [25, 50, 100, 200];
 
@@ -16,12 +17,12 @@ export function totalPaginas(total, pageSize) {
   return Math.max(1, Math.ceil(total / pageSize));
 }
 
-function PageSizeSelect({ pageSize, onPageSizeChange }) {
+function PageSizeSelect({ pageSize, sizes, onPageSizeChange }) {
   return (
     <label style={{ ...mutedStyle, display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
       Por página
       <select value={pageSize} onChange={(e) => onPageSizeChange(Number(e.target.value))}>
-        {PAGE_SIZES.map((size) => (
+        {sizes.map((size) => (
           <option key={size} value={size} style={optionStyle}>{size}</option>
         ))}
       </select>
@@ -29,10 +30,12 @@ function PageSizeSelect({ pageSize, onPageSizeChange }) {
   );
 }
 
-export default function ReferenciasPaginador({ page, pageSize, total, onPageChange, onPageSizeChange }) {
+export default function ReferenciasPaginador({
+  page, pageSize, total, onPageChange, onPageSizeChange, sizes = PAGE_SIZES, unidad = 'referencias',
+}) {
   const paginas = totalPaginas(total, pageSize);
   return (
-    <nav aria-label="Paginación de referencias" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+    <nav aria-label={`Paginación de ${unidad}`} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
       <button type="button" className="motored-btn motored-btn-secondary" disabled={page <= 1} onClick={() => onPageChange(page - 1)}>
         Anterior
       </button>
@@ -40,8 +43,8 @@ export default function ReferenciasPaginador({ page, pageSize, total, onPageChan
       <button type="button" className="motored-btn motored-btn-secondary" disabled={page >= paginas} onClick={() => onPageChange(page + 1)}>
         Siguiente
       </button>
-      <span style={mutedStyle}>{total} referencias</span>
-      <PageSizeSelect pageSize={pageSize} onPageSizeChange={onPageSizeChange} />
+      <span style={mutedStyle}>{total} {unidad}</span>
+      <PageSizeSelect pageSize={pageSize} sizes={sizes} onPageSizeChange={onPageSizeChange} />
     </nav>
   );
 }

@@ -60,6 +60,131 @@ export const SUCURSALES = [
   { id: 's3', nombre: 'Cerrada vieja', activa: false },
 ];
 
+// --- Corrida detail / tienda page fixtures (F2a) ---------------------------
+
+const ACCIONES = {
+  cerrar: false, reabrir: false, editar: false, enviar: false, corregir_envio: false, exportar: false,
+};
+
+const tienda = (over) => ({
+  sucursal_id: 's1', nombre: 'Manizales', orden: 1, estado: 'OK', codigo: null, mensaje: null,
+  lineas: 259, excluidas: 3, unidades: '1000.00', valor: '5000000.00', intentos: 1,
+  estado_pedido: 'BORRADOR', unidades_a_pedir: '1010.00', valor_a_pedir: '5400000.00',
+  ultimo_evento: null, acciones: { ...ACCIONES, cerrar: true, editar: true }, envio: null, ...over,
+});
+
+export const T_BORRADOR = tienda({});
+export const T_CERRADO = tienda({
+  sucursal_id: 's2', nombre: 'Pereira', orden: 2, estado_pedido: 'CERRADO',
+  unidades_a_pedir: '800.00', valor_a_pedir: '3200000.00',
+  ultimo_evento: { evento: 'CERRADO', usuario: 'Compras Uno', creado_en: '2026-10-02T09:15:00' },
+  acciones: { ...ACCIONES, reabrir: true, enviar: true, exportar: true },
+});
+export const T_ENVIADO = tienda({
+  sucursal_id: 's3', nombre: 'Cali', orden: 3, estado_pedido: 'ENVIADO',
+  unidades_a_pedir: '500.00', valor_a_pedir: '2500000.00',
+  ultimo_evento: { evento: 'ENVIADO', usuario: 'Ana Gómez', creado_en: '2026-10-02T11:00:00' },
+  acciones: { ...ACCIONES, corregir_envio: true, exportar: true },
+  envio: { numero_orden: '12345', fecha_envio: '2026-10-02', enviado_por: 'Ana Gómez', enviado_en: '2026-10-02T11:00:00' },
+});
+export const T_FALLIDA = tienda({
+  sucursal_id: 's4', nombre: 'Armenia', orden: 4, estado: 'FALLIDA', codigo: 'E-CORRIDA-020',
+  mensaje: 'La tienda no tiene precios cargados.', lineas: 0, excluidas: 0, unidades: null, valor: null,
+  estado_pedido: null, unidades_a_pedir: null, valor_a_pedir: null,
+});
+export const T_OMITIDA = tienda({
+  sucursal_id: 's5', nombre: 'Ibagué', orden: 5, estado: 'OMITIDA', codigo: null,
+  mensaje: 'Tienda sin ventas en el periodo.', lineas: 0, excluidas: 0, unidades: null, valor: null,
+  estado_pedido: null, unidades_a_pedir: null, valor_a_pedir: null,
+});
+
+const fila = (sucursal_id, clase, unidades, referencias, valor, porcentaje_peso) => (
+  { sucursal_id, clase, unidades, referencias, valor, porcentaje_peso }
+);
+
+export const D_DETALLE = {
+  ...C_CALCULADA,
+  pedidos: { total: 3, borrador: 1, cerrados: 1, enviados: 1, sin_pedido: 0 },
+  parametros_en_fecha: '2026-10-01', overrides: null, motivo_invalidacion: null, motivo_anulacion: null,
+  iniciado_en: null, anulada_en: null, intentos: 1, cargas_usadas: {}, parametros: {},
+  antiguedad: {
+    inventario: { carga_id: 'k1', fecha_usada: '2026-09-30', antiguedad_dias: 1, limite_dias: 7, fuente_limite: 'GLOBAL' },
+    backorder: { carga_id: 'k2', fecha_usada: '2026-09-28', antiguedad_dias: 3, limite_dias: 7, fuente_limite: 'GLOBAL' },
+    facturas: { carga_id: 'k3', fecha_usada: '2026-09-10', antiguedad_dias: 21, limite_dias: 14, fuente_limite: 'GLOBAL' },
+  },
+  mes_en_curso: null,
+  advertencias: [{ sucursal_id: null, sucursal: null, codigo: 'A-CORRIDA-101', mensaje: 'Sin demanda perdida cargada.' }],
+  sucursales: [T_BORRADOR, T_CERRADO, T_ENVIADO, T_FALLIDA, T_OMITIDA],
+  resumen: [
+    fila('s1', 'AF', '300.00', 20, '2000000.00', '30.00'),
+    fila('s1', 'CM', '700.00', 100, '3000000.00', '70.00'),
+    fila('s1', 'TOTAL', '1000.00', 120, '5000000.00', '100.00'),
+    fila('s2', 'AF', '800.00', 30, '3200000.00', '100.00'),
+  ],
+  resumen_por_clase: [],
+  totales: { unidades: '2300.00', referencias: 150, valor: '10200000.00' },
+  resumen_a_pedir: [
+    fila('s1', 'AF', '310.00', 20, '2100000.00', '30.69'),
+    fila('s1', 'CM', '700.00', 100, '3300000.00', '69.31'),
+    fila('s1', 'TOTAL', '1010.00', 120, '5400000.00', '100.00'),
+    fila('s2', 'AF', '800.00', 30, '3200000.00', '100.00'),
+  ],
+  totales_a_pedir: { unidades: '2310.00', referencias: 150, valor: '10600000.00' },
+};
+
+export const D_PRUEBA = { ...D_DETALLE, ...C_PRUEBA, sucursales: [tienda({ estado_pedido: null, acciones: ACCIONES })] };
+
+export const CAB_BORRADOR = {
+  corrida_id: 'c1', corrida_codigo: 'PED-2026-S40-001', fecha_corte: '2026-10-01', corrida_estado: 'BORRADOR',
+  es_escenario: false, invalidada: false, sucursal_id: 's1', nombre: 'Manizales', sic: '1234',
+  estado: 'OK', codigo: null, mensaje: null, estado_pedido: 'BORRADOR',
+  totales: { unidades_a_pedir: '1010.00', valor_a_pedir: '5400000.00', unidades_sugerido: '1000.00', valor_sugerido: '5000000.00' },
+  ultimo_evento: null, acciones: { ...ACCIONES, cerrar: true, editar: true }, envio: null,
+};
+export const CAB_CERRADO = {
+  ...CAB_BORRADOR, sucursal_id: 's2', nombre: 'Pereira', sic: '5678', estado_pedido: 'CERRADO',
+  ultimo_evento: { evento: 'CERRADO', usuario: 'Compras Uno', creado_en: '2026-10-02T09:15:00' },
+  acciones: { ...ACCIONES, reabrir: true, enviar: true, exportar: true },
+};
+export const CAB_ENVIADO = {
+  ...CAB_BORRADOR, sucursal_id: 's3', nombre: 'Cali', sic: '9012', estado_pedido: 'ENVIADO',
+  envio: { numero_orden: '12345', fecha_envio: '2026-10-02', enviado_por: 'Ana Gómez', enviado_en: '2026-10-02T11:00:00' },
+  acciones: { ...ACCIONES, corregir_envio: true, exportar: true },
+};
+export const CAB_FALLIDA = {
+  ...CAB_BORRADOR, sucursal_id: 's4', nombre: 'Armenia', sic: '3456', estado: 'FALLIDA', codigo: 'E-CORRIDA-020',
+  mensaje: 'La tienda no tiene precios cargados.', estado_pedido: null, acciones: ACCIONES,
+};
+export const CAB_PRUEBA = { ...CAB_BORRADOR, es_escenario: true, estado_pedido: null, acciones: ACCIONES };
+
+const linea = (over) => ({
+  id: 1, sucursal_id: 's1', referencia_id: 'r1', codigo_referencia: '94109-12000S', nombre_parte: 'Filtro de aceite',
+  clase: 'AF', unidad_empaque: 12, precio: '15000.00', pedido_sugerido: '48.00', pedido_final: '48.00',
+  valor_pedido: '720000.00', valor_sugerido: '720000.00', estado_quiebre: 'NORMAL', motivo_exclusion: null,
+  fuera_de_empaque: false, editada: false, editado_por: null, editado_en: null, motivo_edicion: null,
+  ajuste: '5.00', ...over,
+});
+
+export const L_NORMAL = linea({});
+export const L_EDITADA = linea({
+  id: 2, codigo_referencia: '55512-A', nombre_parte: 'Bujía', clase: 'CM', unidad_empaque: 10,
+  pedido_sugerido: '50.00', pedido_final: '60.00', valor_pedido: '27645.00', valor_sugerido: '23037.50',
+  estado_quiebre: 'BAJO_MINIMO', editada: true, editado_por: 'Compras Uno', editado_en: '2026-10-02T10:15:00',
+  motivo_edicion: 'MANUAL',
+});
+export const L_FUERA = linea({
+  id: 3, codigo_referencia: '00123-AB', nombre_parte: 'Pastilla de freno', clase: 'BM',
+  pedido_sugerido: '30.00', pedido_final: '30.00', valor_pedido: '450000.00', fuera_de_empaque: true,
+  estado_quiebre: 'QUIEBRE_TOTAL',
+});
+export const L_EXCLUIDA = linea({
+  id: 4, codigo_referencia: '77700-X', nombre_parte: 'Filtro sustituido', clase: 'DS',
+  pedido_sugerido: '0.00', pedido_final: '0.00', valor_pedido: '0.00', motivo_exclusion: 'SUSTITUIDA',
+  estado_quiebre: 'SIN_MOVIMIENTO',
+});
+
+export const paginaLineas = (items, over = {}) => ({ items, total: items.length, limite: 50, offset: 0, ...over });
+
 /**
  * Installs `global.fetch` as a router: `routes` maps "METHOD /path" (path
  * without the API base and query) to a response or a function of the URL and
