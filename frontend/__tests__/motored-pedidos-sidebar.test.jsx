@@ -39,9 +39,9 @@ describe('MotoredSidebar - Pedidos entry', () => {
     expect(pushMock).toHaveBeenCalledWith('/motored/pedidos');
   });
 
-  it('keeps Maestros right after it for COMPRAS', () => {
+  it('keeps Maestros right after Tablero asesores (which follows Pedidos) for COMPRAS', () => {
     render(<MotoredSidebar user={{ nombre: 'U', role: 'COMPRAS' }} />);
     const labels = screen.getAllByRole('button').map((b) => b.textContent);
-    expect(labels.slice(0, 2)).toEqual(['Pedidos', 'Maestros']);
+    expect(labels.slice(0, 3)).toEqual(['Pedidos', 'Tablero asesores', 'Maestros']);
   });
 });

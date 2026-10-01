@@ -40,13 +40,14 @@ import { useRouter, usePathname } from 'next/navigation';
 import Image from 'next/image';
 import {
   LogOut, Warehouse, Users, TrendingDown, ClipboardCheck, MessageSquareWarning, KeyRound, History,
-  UserCog, ChevronDown, ChevronRight, ShoppingCart,
+  UserCog, ChevronDown, ChevronRight, ShoppingCart, BarChart3,
 } from 'lucide-react';
 import { MOTORED_TOKEN_KEY, MOTORED_USER_KEY } from '../../lib/motored/motoredFetch';
 
 const ALL_ITEMS = [
   // Pedidos (Fase 4, decision F4-16): ADMIN and COMPRAS only.
   { id: 'pedidos', name: 'Pedidos', icon: ShoppingCart, path: '/motored/pedidos', roles: ['ADMIN', 'COMPRAS'] },
+  { id: 'tablero-asesores', name: 'Tablero asesores', icon: BarChart3, path: '/motored/tablero-asesores', roles: ['ADMIN', 'COMPRAS'] },
   { id: 'maestros', name: 'Maestros', icon: Warehouse, path: '/motored/maestros' },
   // A group (`children`) is a collapsible header that always starts folded; a
   // click opens or closes it. While folded on one of its pages, the header is
