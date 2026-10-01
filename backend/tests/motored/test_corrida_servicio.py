@@ -25,7 +25,7 @@ from app.motored.models.corrida_carga import CorridaCarga
 from app.motored.models.corrida_sucursal import CorridaSucursal
 from app.motored.services import parametros
 from app.motored.services.corridas import cargador as cg
-from app.motored.services.corridas import codigos
+from app.motored.services.corridas import codigos, estados
 from app.motored.services.corridas import parametros_corrida as pcorr
 from app.motored.services.corridas import persistencia as pe
 from app.motored.services.corridas import servicio as sv
@@ -776,8 +776,10 @@ def _cargas(anuladas=()):
 
 
 def _cola_finalizar(conteos, anuladas=(), actualizada=True):
+    """Cargas, conteos por estado, el UPDATE de la corrida y, sólo si la
+    corrida queda BORRADOR, el UPDATE que inicia los pedidos por tienda."""
     return [_cargas(anuladas), list(conteos),
-            ["BORRADOR"] if actualizada else []]
+            ["BORRADOR"] if actualizada else [], []]
 
 
 async def test_some_ok_sucursales_leave_the_corrida_as_borrador():
@@ -858,6 +860,77 @@ async def test_finalizing_an_annulled_corrida_reports_the_annulment():
         [("OK", 1)], actualizada=False))
 
     assert await sv.finalizar_corrida(db, uuid.uuid4()) == "ANULADA"
+
+
+# --- finalizar_corrida inicia el pedido de cada tienda (F4, ADR-1) ----------
+
+
+def _literal(sentencia):
+    return str(sentencia.compile(
+        dialect=postgresql.dialect(),
+        compile_kwargs={"literal_binds": True}))
+
+
+async def test_a_borrador_corrida_starts_the_pedido_of_its_ok_tiendas():
+    db = Sesion(execute_queue=_cola_finalizar([("OK", 2), ("FALLIDA", 1)]))
+
+    await sv.finalizar_corrida(db, uuid.uuid4())
+
+    assert len(db.executed_statements) == 4
+    inicio = _literal(db.executed_statements[3])
+    assert inicio.startswith("UPDATE corrida_sucursal SET estado_pedido")
+    assert "estado_pedido='BORRADOR'" in inicio.replace(" ", "")
+    assert "corrida_sucursal.estado = 'OK'" in inicio
+
+
+async def test_the_pedido_start_skips_scenario_corridas():
+    db = Sesion(execute_queue=_cola_finalizar([("OK", 2)]))
+
+    await sv.finalizar_corrida(db, uuid.uuid4())
+
+    inicio = _literal(db.executed_statements[3])
+    assert "NOT (EXISTS" in inicio
+    assert "corrida.es_escenario IS true" in inicio
+
+
+async def test_the_pedido_start_is_scoped_to_the_finalized_corrida():
+    corrida_id = uuid.uuid4()
+    db = Sesion(execute_queue=_cola_finalizar([("OK", 1)]))
+
+    await sv.finalizar_corrida(db, corrida_id)
+
+    inicio = _literal(db.executed_statements[3])
+    assert f"corrida_sucursal.corrida_id = '{corrida_id}'" in inicio
+
+
+async def test_a_failed_corrida_starts_no_pedido():
+    db = Sesion(execute_queue=_cola_finalizar([("FALLIDA", 3)]))
+
+    assert await sv.finalizar_corrida(db, uuid.uuid4()) == "FALLIDA"
+
+    assert len(db.executed_statements) == 3
+
+
+async def test_an_annulled_corrida_starts_no_pedido():
+    db = Sesion(execute_queue=_cola_finalizar(
+        [("OK", 1)], actualizada=False))
+
+    assert await sv.finalizar_corrida(db, uuid.uuid4()) == "ANULADA"
+
+    assert len(db.executed_statements) == 3
+
+
+def test_legacy_cerrada_counts_as_a_calculated_corrida():
+    assert estados.CALCULADAS == frozenset({"BORRADOR", "CERRADA"})
+    assert estados.BORRADOR in estados.CALCULADAS
+    assert estados.CERRADA in estados.CALCULADAS
+    assert estados.ANULADA not in estados.CALCULADAS
+
+
+def test_the_per_tienda_pedido_states_are_defined():
+    assert (estados.PEDIDO_BORRADOR, estados.PEDIDO_CERRADO,
+            estados.PEDIDO_ENVIADO) == ("BORRADOR", "CERRADO", "ENVIADO")
+    assert estados.PEDIDOS == frozenset({"BORRADOR", "CERRADO", "ENVIADO"})
 
 
 # --- cerrar_corrida ---------------------------------------------------------

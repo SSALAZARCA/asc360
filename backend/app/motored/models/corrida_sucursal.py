@@ -8,6 +8,10 @@ sucursal omitida o fallida. PK compuesta `(corrida_id, sucursal_id)`; el
 supervisor reanuda saltando las sucursales ya terminadas.
 
 `estado`: PENDIENTE | OK | OMITIDA (decisión #14, sin historia) | FALLIDA.
+`estado_pedido` (Fase 4, B1, ADR-1): el ciclo de vida del pedido de ESTA
+tienda, ortogonal al resultado del cálculo: BORRADOR | CERRADO | ENVIADO, o
+NULL si la tienda no tiene pedido (FALLIDA u OMITIDA, escenario, corrida no
+calculada). Lo inicia `finalizar_corrida`; la reproducción nunca lo compara.
 `buckets_operados` es un bitmask de los seis meses cerrados en que la
 sucursal estaba abierta; `divisor` es la suma de pesos de esos meses.
 """
@@ -37,6 +41,10 @@ class CorridaSucursal(MotoredBase):
             "estado IN ('PENDIENTE', 'OK', 'OMITIDA', 'FALLIDA')",
             name="ck_corrida_sucursal_estado",
         ),
+        CheckConstraint(
+            "estado_pedido IN ('BORRADOR', 'CERRADO', 'ENVIADO')",
+            name="ck_corrida_sucursal_estado_pedido",
+        ),
     )
 
     corrida_id = Column(
@@ -52,6 +60,7 @@ class CorridaSucursal(MotoredBase):
         String(12), nullable=False, default="PENDIENTE",
         server_default="PENDIENTE",
     )
+    estado_pedido = Column(String(10), nullable=True)
     codigo = Column(String(20), nullable=True)
     mensaje = Column(Text, nullable=True)
 

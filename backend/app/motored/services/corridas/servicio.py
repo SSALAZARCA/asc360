@@ -19,7 +19,8 @@ ADR-5/ADR-9, decisiones #14 y #16): servicio de la corrida.
   detiene el recorrido (ver `persistencia._guardia`).
 - `finalizar_corrida` decide BORRADOR o FALLIDA (sólo si TODAS fallan) y
   verifica, con las cargas bloqueadas `FOR SHARE`, que ninguna se anuló
-  mientras corría (si no, la corrida queda `invalidada`).
+  mientras corría (si no, la corrida queda `invalidada`). Al quedar BORRADOR
+  inicia el pedido de las tiendas OK (`pedido_tienda`, F4).
 - `cerrar_corrida` / `anular_corrida` aplican las reglas del ciclo de vida.
 
 Ningún commit acá: la transacción es del llamador. La API (S7, `api/
@@ -56,6 +57,7 @@ from app.motored.services.corridas import (
     codigos,
     estados,
     parametros_corrida,
+    pedido_tienda,
     persistencia,
     transito_corte,
     vigencia,
@@ -485,7 +487,11 @@ async def finalizar_corrida(db, corrida_id: UUID) -> str:
         .values(**valores)
         .returning(Corrida.estado)
         .execution_options(synchronize_session=False))
-    return estado if resultado.first() is not None else estados.ANULADA
+    if resultado.first() is None:
+        return estados.ANULADA
+    if estado == estados.BORRADOR:
+        await pedido_tienda.iniciar_pedidos(db, corrida_id)
+    return estado
 
 
 # --- Ciclo de vida: cerrar y anular -----------------------------------------

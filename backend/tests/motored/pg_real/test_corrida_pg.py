@@ -582,6 +582,77 @@ async def test_finalizing_flags_a_carga_annulled_while_the_corrida_ran(
         str(datos.cargas.backorder.id)]
 
 
+async def _finalizar_con(sesion, datos, estados_por_sucursal, **kwargs):
+    """Crea una corrida, deja cada sucursal en el estado dado y la
+    finaliza; devuelve `{sucursal_id: estado_pedido}`."""
+    corrida = await sv.crear_corrida(
+        sesion, fecha_corte=CORTE, hoy=CORTE, **kwargs)
+    await sesion.execute(
+        update(Corrida).where(Corrida.id == corrida.id)
+        .values(estado="CALCULANDO"))
+    for sucursal, estado in estados_por_sucursal.items():
+        await sesion.execute(
+            update(CorridaSucursal)
+            .where(CorridaSucursal.corrida_id == corrida.id,
+                   CorridaSucursal.sucursal_id == sucursal)
+            .values(estado=estado))
+    estado = await sv.finalizar_corrida(sesion, corrida.id)
+    filas = await sesion.execute(
+        select(CorridaSucursal.sucursal_id, CorridaSucursal.estado_pedido)
+        .where(CorridaSucursal.corrida_id == corrida.id)
+        .execution_options(populate_existing=True))
+    return estado, dict(filas.all())
+
+
+async def test_finalizing_starts_the_pedido_of_the_ok_tiendas_only(sesion):
+    datos = await _sembrar(sesion)
+
+    estado, pedidos = await _finalizar_con(sesion, datos, {
+        datos.uno.id: "OK", datos.dos.id: "OMITIDA",
+        datos.tres.id: "FALLIDA"})
+
+    assert estado == "BORRADOR"
+    assert pedidos == {
+        datos.uno.id: "BORRADOR", datos.dos.id: None, datos.tres.id: None}
+
+
+async def test_finalizing_a_scenario_leaves_every_pedido_null(sesion):
+    datos = await _sembrar(sesion)
+
+    estado, pedidos = await _finalizar_con(
+        sesion, datos, {s.id: "OK" for s in (datos.uno, datos.dos)},
+        overrides={"modo_redondeo_empaque": "ARRIBA"})
+
+    assert estado == "BORRADOR"
+    assert set(pedidos.values()) == {None}
+
+
+async def test_finalizing_an_all_failed_corrida_starts_no_pedido(sesion):
+    datos = await _sembrar(sesion)
+
+    estado, pedidos = await _finalizar_con(
+        sesion, datos, {
+            s.id: "FALLIDA" for s in (datos.uno, datos.dos, datos.tres)})
+
+    assert estado == "FALLIDA"
+    assert set(pedidos.values()) == {None}
+
+
+async def test_a_full_run_leaves_the_replay_identical_with_pedidos(sesion):
+    await _sembrar(sesion)
+
+    corrida, estado = await _correr(sesion)
+
+    assert estado == "BORRADOR"
+    filas = await sesion.execute(
+        select(CorridaSucursal.estado, CorridaSucursal.estado_pedido)
+        .where(CorridaSucursal.corrida_id == corrida.id))
+    for estado_calculo, estado_pedido in filas.all():
+        esperado = "BORRADOR" if estado_calculo == "OK" else None
+        assert estado_pedido == esperado
+    assert (await rp.reproducir(sesion, corrida.id)).identico is True
+
+
 # --- Volumen ----------------------------------------------------------------
 
 

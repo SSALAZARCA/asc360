@@ -193,6 +193,42 @@ async def test_the_same_inputs_persist_identical_rows_twice_t17():
     assert _sin_corrida(primera) == _sin_corrida(segunda)
 
 
+# --- El estado del pedido por tienda no entra al reproceso (F4, ADR-4) ------
+
+
+async def test_the_replay_ignores_the_pedido_state_of_each_tienda():
+    almacen = _almacenar(_dos_sucursales())
+    for fila, estado in zip(almacen.sucursales, ("CERRADO", "ENVIADO")):
+        assert CorridaSucursal.estado_pedido.property.columns[0].name == (
+            "estado_pedido")
+        fila.estado_pedido = estado
+
+    reporte = await _reproducir(almacen)
+
+    assert reporte.identico is True and reporte.diferencias == ()
+
+
+def test_armar_filas_keys_are_pinned_and_carry_no_pedido_state():
+    sucursal, entradas = _dos_sucursales()[0]
+    resultado = calcular_sucursal(
+        entradas, sucursal, pcorr.parametros_motor_desde_snapshot(
+            pcorr.construir_parametros_corrida(
+                parametros.VigentesMotor.desde_filas([], CORTE),
+                [sucursal.sucursal_id]).snapshot,
+            {"mes_en_curso": _bloque(None)}), {})
+
+    filas = pe.armar_filas(
+        uuid.uuid4(), sucursal, entradas, resultado, consolidar=False)
+
+    assert set(filas.sucursal) == {
+        "estado", "codigo", "mensaje", "fecha_apertura", "divisor",
+        "buckets_operados", "dias_empaque", "dias_transito",
+        "dias_seguridad", "dias_entre_pedidos", "parametros", "coberturas",
+        "lineas", "excluidas", "unidades", "valor"}
+    columnas = {k for fila in filas.lineas + filas.resumen for k in fila}
+    assert "estado_pedido" not in columnas
+
+
 # --- Detección de alteraciones ----------------------------------------------
 
 

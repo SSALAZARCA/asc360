@@ -27,6 +27,10 @@ _TABLAS = (
     "corrida_carga",
 )
 
+# Columnas que los modelos tienen y que una migración POSTERIOR agregó a una
+# tabla de F3 (F4, M1 `a3f7c1d9e642`): la migración de F3 no las crea.
+_COLUMNAS_POSTERIORES = {"corrida_sucursal": {"estado_pedido"}}
+
 _TABLAS_EXISTENTES = (
     "sucursal", "referencia", "proveedor", "usuario", "carga_archivo",
     "venta_mensual", "inventario_snapshot", "backorder_linea",
@@ -184,8 +188,11 @@ def test_corridas_tables_match_the_models_column_for_column():
     for nombre in _TABLAS:
         modelo = MotoredBase.metadata.tables[nombre]
         ddl = _columnas(creadas[nombre])
-        assert set(ddl) == set(modelo.c.keys()), nombre
+        posteriores = _COLUMNAS_POSTERIORES.get(nombre, set())
+        assert set(ddl) == set(modelo.c.keys()) - posteriores, nombre
         for col in modelo.c:
+            if col.name in posteriores:
+                continue
             assert ddl[col.name].nullable == col.nullable, (nombre, col.name)
 
 
@@ -197,7 +204,7 @@ def test_corridas_numeric_scales_match_the_models():
         modelo = MotoredBase.metadata.tables[nombre]
         ddl = _columnas(creadas[nombre])
         for col in modelo.c:
-            if col.type.__class__.__name__ == "Numeric":
+            if col.name in ddl and col.type.__class__.__name__ == "Numeric":
                 tipo = ddl[col.name].type
                 assert (tipo.precision, tipo.scale) == (
                     col.type.precision, col.type.scale,
