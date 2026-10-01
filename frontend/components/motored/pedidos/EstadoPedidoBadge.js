@@ -10,6 +10,9 @@ const ESTADOS = {
   ENVIADO: { label: 'Enviado', background: 'var(--motored-success-bg, #ecfdf3)', color: 'var(--motored-success, #15803d)' },
 };
 
+/** Spanish name of each pedido state (the badge text), for views that show the state some other way. */
+export const ESTADO_PEDIDO_ETIQUETA = Object.fromEntries(Object.entries(ESTADOS).map(([estado, { label }]) => [estado, label]));
+
 export const ESTADO_PEDIDO_TEXTO = 'Estado del pedido: Borrador se puede ajustar; Cerrado queda listo para exportar y enviar; Enviado ya se mandó a HMCL y no cambia.';
 
 export default function EstadoPedidoBadge({ estado }) {

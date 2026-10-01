@@ -302,3 +302,39 @@ export const TOPES_PRESUPUESTO = {
     { sucursal_id: 's3', nombre: 'Cali', valor: '45000000.50', vigente_desde: '2026-09-15' },
   ],
 };
+
+// --- Consolidated network matrix (F5a) ---------------------------------------
+
+/** One column of `GET /corridas/{id}/consolidado` (a tienda with the state of its calculation and of its pedido). */
+export const tiendaConsolidado = (over = {}) => ({
+  sucursal_id: 's1', nombre: 'Manizales', estado: 'OK', estado_pedido: 'BORRADOR', codigo: null, mensaje: null,
+  unidades: '1010.00', valor: '5400000.00', ...over,
+});
+
+const fCons = (referencia_id, codigo, nombre, total, celdas) => ({ referencia_id, codigo, nombre, total, celdas });
+
+/**
+ * Three references (page) over four tiendas: Manizales (Borrador), Pereira (Cerrado), Cali (Enviado) and a FALLIDA
+ * Armenia. Quantities are whole packs; the tienda totals cover the WHOLE corrida (more references than this page).
+ */
+export const CONSOLIDADO = {
+  corrida_id: 'c1', codigo: 'PED-2026-S40-001', estado: 'BORRADOR', es_escenario: false,
+  tiendas: [
+    tiendaConsolidado({}),
+    tiendaConsolidado({ sucursal_id: 's2', nombre: 'Pereira', estado_pedido: 'CERRADO', unidades: '800.00', valor: '3200000.00' }),
+    tiendaConsolidado({ sucursal_id: 's3', nombre: 'Villavicencio', estado_pedido: 'ENVIADO', unidades: '500.00', valor: '2500000.00' }),
+    tiendaConsolidado({
+      sucursal_id: 's4', nombre: 'Armenia', estado: 'FALLIDA', estado_pedido: null, codigo: 'E-CORRIDA-020',
+      mensaje: 'La tienda no tiene precios cargados.', unidades: null, valor: null,
+    }),
+  ],
+  filas: [
+    fCons('r1', '94109-12000S', 'Filtro de aceite', '108.00', { s1: '48.00', s2: '36.00', s3: '24.00' }),
+    fCons('r2', '55512-A', 'Bujía', '60.00', { s1: '60.00' }),
+    fCons('r3', '00123-AB', 'Pastilla de freno', '42.00', { s1: '30.00', s3: '12.00' }),
+  ],
+  totales: { unidades: '2310.00', valor: '11100000.00' },
+  total: 3, limite: 100, offset: 0,
+};
+
+export const CONSOLIDADO_VACIO = { ...CONSOLIDADO, tiendas: [], filas: [], totales: { unidades: '0.00', valor: '0.00' }, total: 0 };

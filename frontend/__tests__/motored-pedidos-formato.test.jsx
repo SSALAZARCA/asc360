@@ -1,5 +1,5 @@
 /** Motored Fase 4 (F2a): display helpers of the Pedidos screens. */
-import { unidades, fechaHora, etiquetaQuiebre, dias, etiquetaEvento, etiquetaMotivoEdicion, etiquetaExclusion } from '../components/motored/pedidos/formato';
+import { unidades, fechaHora, etiquetaQuiebre, dias, etiquetaEvento, etiquetaMotivoEdicion, etiquetaExclusion, valorCompacto, abreviarTienda } from '../components/motored/pedidos/formato';
 
 describe('unidades', () => {
   it('drops the decimals of a whole quantity and groups thousands (es-CO)', () => {
@@ -67,5 +67,41 @@ describe('labels of the audit trail', () => {
   it('names why a line is excluded', () => {
     expect(etiquetaExclusion('SUSTITUIDA')).toBe('Sustituida');
     expect(etiquetaExclusion('INACTIVA_SIN_REEMPLAZO')).toBe('Inactiva sin reemplazo');
+  });
+});
+
+describe('valorCompacto (a value that must fit a 64 px matrix column)', () => {
+  it('shows millions with one decimal and a comma (es-CO)', () => {
+    expect(valorCompacto('5400000.00')).toBe('5,4 M');
+    expect(valorCompacto('11100000.00')).toBe('11,1 M');
+    expect(valorCompacto('3000000.00')).toBe('3 M');
+  });
+
+  it('shows thousands as "mil" and small amounts as they are', () => {
+    expect(valorCompacto('450000.00')).toBe('450 mil');
+    expect(valorCompacto('1500.00')).toBe('1,5 mil');
+    expect(valorCompacto('950.00')).toBe('950');
+  });
+
+  it('renders a dash for a missing or non-numeric value and 0 for zero', () => {
+    expect(valorCompacto(null)).toBe('—');
+    expect(valorCompacto('abc')).toBe('—');
+    expect(valorCompacto('0.00')).toBe('0');
+  });
+});
+
+describe('abreviarTienda', () => {
+  it('keeps a name of up to 10 characters whole', () => {
+    expect(abreviarTienda('Manizales')).toBe('Manizales');
+    expect(abreviarTienda('Bucaramang')).toBe('Bucaramang');
+  });
+
+  it('cuts a longer name to 10 characters and adds an ellipsis', () => {
+    expect(abreviarTienda('Villavicencio')).toBe('Villavicen…');
+    expect(abreviarTienda('Bucaramanga')).toBe('Bucaramang…');
+  });
+
+  it('copes with a missing name', () => {
+    expect(abreviarTienda(null)).toBe('');
   });
 });

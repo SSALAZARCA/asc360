@@ -1,6 +1,6 @@
 'use client';
 /** Corrida detail screen: header, data age, progress (while calculating), lifecycle actions and the Tiendas table. */
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import usePedidosGate from '../../../lib/motored/usePedidosGate';
 import useTiendasCorrida from './useTiendasCorrida';
@@ -17,6 +17,8 @@ import useAccionesPedido from './useAccionesPedido';
 import useSeleccionTiendas from './useSeleccionTiendas';
 import useTopesCorrida from './useTopesCorrida';
 import TopeResumenCorrida from './TopeResumenCorrida';
+import ConsolidadoContainer from './ConsolidadoContainer';
+import CorridaTabs from './CorridaTabs';
 import { estaCalculando, fechaCorta } from './reglas';
 import { errorStyle, mutedStyle } from './styles';
 
@@ -45,12 +47,14 @@ function Cuerpo({ corrida, onOpen, ciclo, topes }) {
   return <TiendasTable tiendas={corrida.sucursales} onOpen={onOpen} ciclo={ciclo} topes={topes} />;
 }
 
+const PESTANAS = [{ id: 'tiendas', label: 'Tiendas' }, { id: 'consolidado', label: 'Consolidado' }];
 const cerrada = (t) => t.estado_pedido === 'CERRADO' || t.estado_pedido === 'ENVIADO';
 
 export default function CorridaDetalleContainer({ corridaId }) {
   const router = useRouter();
   const allowed = usePedidosGate();
   const { data, error, reload } = useTiendasCorrida(corridaId, allowed);
+  const [pestana, setPestana] = useState('tiendas');
   const { marcadas, alternar, limpiar } = useSeleccionTiendas();
   // The cap summary of a real corrida (nothing for a scenario).
   const { topes, recargar: recargarTopes } = useTopesCorrida(corridaId, Boolean(allowed && data && !data.es_escenario), data && data.estado);
@@ -73,15 +77,21 @@ export default function CorridaDetalleContainer({ corridaId }) {
         <>
           <Cabecera corrida={data} onTerminal={reload} />
           <AntiguedadDatos antiguedad={data.antiguedad} advertencias={data.advertencias} />
-          <AccionesCorrida
-            corrida={data} seleccionadas={seleccionadas} ocupado={acciones.ocupado}
-            onCerrar={(tiendas, todas) => acciones.abrir('cerrar', tiendas, { todas })}
-            onEnviar={(tiendas) => acciones.abrir('enviar', tiendas)}
-            onExportar={acciones.exportarTodas} onRecalcular={recalcular}
-          />
-          <AvisoPedido aviso={acciones.aviso} onDescartar={acciones.descartarAviso} onVerCorrida={(id) => router.push(`/motored/pedidos/${id}`)} />
-          <TopeResumenCorrida topes={topes} />
-          <Cuerpo corrida={data} onOpen={abrir} ciclo={ciclo} topes={topes} />
+          <CorridaTabs tabs={PESTANAS} value={pestana} onChange={setPestana} />
+          {pestana === 'consolidado' && <ConsolidadoContainer corridaId={corridaId} />}
+          {pestana === 'tiendas' && (
+            <>
+              <AccionesCorrida
+                corrida={data} seleccionadas={seleccionadas} ocupado={acciones.ocupado}
+                onCerrar={(tiendas, todas) => acciones.abrir('cerrar', tiendas, { todas })}
+                onEnviar={(tiendas) => acciones.abrir('enviar', tiendas)}
+                onExportar={acciones.exportarTodas} onRecalcular={recalcular}
+              />
+              <AvisoPedido aviso={acciones.aviso} onDescartar={acciones.descartarAviso} onVerCorrida={(id) => router.push(`/motored/pedidos/${id}`)} />
+              <TopeResumenCorrida topes={topes} />
+              <Cuerpo corrida={data} onOpen={abrir} ciclo={ciclo} topes={topes} />
+            </>
+          )}
           <DialogosPedido acciones={acciones} corridaId={corridaId} fechaCorte={data.fecha_corte} yaCerradas={data.sucursales.filter(cerrada).length} />
         </>
       )}

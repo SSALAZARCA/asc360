@@ -32,7 +32,7 @@ export default function TiendasTable({ tiendas, onOpen, ciclo, topes }) {
   const porSucursal = topes ? Object.fromEntries(topes.tiendas.map((t) => [t.sucursal_id, t])) : null;
   return (
     <MotoredTableScroll maxHeight="70vh">
-      <table style={{ ...tablaStyle, width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+      <table aria-label="Tiendas del pedido" style={{ ...tablaStyle, width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
         <thead>
           <tr style={{ color: 'var(--motored-text-muted, #5a5a5a)' }}>
             <Encabezado texto="Tienda" pegada />

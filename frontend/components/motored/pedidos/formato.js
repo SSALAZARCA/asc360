@@ -20,6 +20,27 @@ export function unidades(valor) {
   return Number.isFinite(numero) ? NUMERO.format(numero) : '—';
 }
 
+const DECIMAL = new Intl.NumberFormat('es-CO', { maximumFractionDigits: 1 });
+
+/** A COP value short enough for a narrow column: `5,4 M`, `450 mil`, `950`; `—` when missing. The exact pesos go in a tooltip. */
+export function valorCompacto(valor) {
+  if (valor == null || String(valor).trim() === '') return '—';
+  const numero = Number(valor);
+  if (!Number.isFinite(numero)) return '—';
+  const magnitud = Math.abs(numero);
+  if (magnitud >= 1e6) return `${DECIMAL.format(numero / 1e6)} M`;
+  if (magnitud >= 1e3) return `${DECIMAL.format(numero / 1e3)} mil`;
+  return DECIMAL.format(numero);
+}
+
+const LARGO_TIENDA = 10;
+
+/** A tienda name for a narrow column header: up to 10 characters, then an ellipsis. */
+export function abreviarTienda(nombre) {
+  const texto = String(nombre || '');
+  return texto.length > LARGO_TIENDA ? `${texto.slice(0, LARGO_TIENDA)}…` : texto;
+}
+
 /** `2026-10-02T09:15:00` as `02/10/2026 09:15`, read from the text (no time-zone shift). */
 export function fechaHora(iso) {
   const [fecha, hora] = String(iso || '').split('T');

@@ -55,3 +55,10 @@ export const recorteMarcaStyle = {
   color: 'var(--motored-warning, #d97706)',
 };
 export const recorteFondoStyle = { background: 'var(--motored-warning-bg, #fef3e2)' };
+
+// Summary strip of the consolidated matrix: neutral (it informs, it does not warn).
+export const resumenRedStyle = {
+  background: 'var(--motored-surface-alt, #f4f4f5)', border: '1px solid var(--motored-border, #e4e4e7)',
+  borderRadius: 'var(--motored-radius-md, 8px)', padding: '0.75rem 1.25rem', minWidth: 0,
+  display: 'flex', flexWrap: 'wrap', gap: '0.5rem 1.5rem', fontSize: '0.85rem', fontWeight: 700,
+};

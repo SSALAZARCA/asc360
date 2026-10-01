@@ -80,6 +80,11 @@ export const setModoTope = (activo, vigenteDesde) => (
   post('/parametros', { clave: 'modo_tope_presupuesto', valor: activo, vigente_desde: vigenteDesde })
 );
 
+// --- Consolidated network view (F5a) -------------------------------------------
+
+/** One page of the references x tiendas matrix; `filtros` are `q`, `limite` (<= 100) and `offset`. */
+export const getConsolidado = (id, filtros) => motoredFetchJson(`${BASE}/${id}/consolidado${consulta(filtros)}`);
+
 // --- Export to HMCL -----------------------------------------------------------
 
 /** Downloads the xlsx of one tienda; resolves `{ nombre, omitidas }`. */
