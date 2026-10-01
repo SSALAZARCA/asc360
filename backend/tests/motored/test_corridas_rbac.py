@@ -46,6 +46,9 @@ LECTURAS_F3 = [
 # Fase 4 (B2): el historial de una línea es otra lectura de /corridas.
 LECTURAS = LECTURAS_F3 + [
     ("GET", f"{BASE}/{ID}/lineas/7/historial", None),
+    # Fase 4 (B3a): la cabecera de una tienda y su línea de tiempo.
+    ("GET", f"{BASE}/{ID}/sucursales/{fx.SUC_A}", None),
+    ("GET", f"{BASE}/{ID}/sucursales/{fx.SUC_A}/eventos", None),
 ]
 ESCRITURAS = [
     ("POST", BASE, {"fecha_corte": "2026-09-21"}),
@@ -53,6 +56,10 @@ ESCRITURAS = [
     ("POST", f"{BASE}/{ID}/anular", {"motivo": "motivo de prueba"}),
     # Fase 4 (B2): la edición de una línea (ED-20, F4-16).
     ("PATCH", f"{BASE}/{ID}/lineas/7", {"pedido_final": 60}),
+    # Fase 4 (B3a): cerrar y reabrir el pedido de una tienda (CI-11, CI-24).
+    ("POST", f"{BASE}/{ID}/sucursales/{fx.SUC_A}/cerrar", None),
+    ("POST", f"{BASE}/{ID}/sucursales/{fx.SUC_A}/reabrir",
+     {"motivo": "Corrección de cantidades"}),
 ]
 
 

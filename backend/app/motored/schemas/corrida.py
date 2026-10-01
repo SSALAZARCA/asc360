@@ -63,6 +63,35 @@ class CorridaEstado(BaseModel):
 # --- Lista y detalle --------------------------------------------------------
 
 
+class ResumenPedidos(BaseModel):
+    """Cuántas tiendas OK de la corrida tienen el pedido en cada estado
+    ("3 de 47 enviadas"). `sin_pedido` (las que no tienen nada para pedir)
+    sólo lo trae el detalle."""
+
+    total: int
+    borrador: int
+    cerrados: int
+    enviados: int
+    sin_pedido: Optional[int] = None
+
+
+class UltimoEvento(BaseModel):
+    """El último evento del pedido de una tienda (cerrado, reabierto...).
+    `usuario` es NULL en los cierres que migró F3."""
+
+    evento: str
+    usuario: Optional[str] = None
+    creado_en: datetime.datetime
+
+
+class AccionesTienda(BaseModel):
+    """Lo que el estado del pedido admite hoy (el rol lo filtra la API)."""
+
+    cerrar: bool = False
+    reabrir: bool = False
+    editar: bool = False
+
+
 class CorridaItem(BaseModel):
     id: uuid.UUID
     codigo: str
@@ -78,6 +107,7 @@ class CorridaItem(BaseModel):
     created_at: Optional[datetime.datetime] = None
     terminado_en: Optional[datetime.datetime] = None
     cerrada_en: Optional[datetime.datetime] = None
+    pedidos: Optional[ResumenPedidos] = None
 
 
 class PaginaCorridas(BaseModel):
@@ -122,6 +152,12 @@ class SucursalEstado(BaseModel):
     dias_seguridad: Dec = None
     dias_entre_pedidos: Dec = None
     intentos: int
+    # Fase 4 (B3a): el pedido de ESTA tienda.
+    estado_pedido: Optional[str] = None
+    unidades_a_pedir: Dec = None
+    valor_a_pedir: Dec = None
+    ultimo_evento: Optional[UltimoEvento] = None
+    acciones: AccionesTienda = Field(default_factory=AccionesTienda)
 
 
 class ResumenClase(BaseModel):

@@ -3,14 +3,19 @@ Motored Pedidos F3 "Motor", S7 (sdd/motored-pedidos-motor, ADR-11, tasks
 S7-3): la guarda de anulación contra `cerrar` con sesiones concurrentes sobre
 un Postgres real (opt-in).
 
-`cerrar_corrida` toma la carga `FOR SHARE`; la guarda la toma `FOR UPDATE`.
-Acá se prueba el orden que imponen esos bloqueos: quien llega segundo espera
-al primero y luego ve su resultado (una anulación ve la corrida CERRADA y se
-bloquea con E-CARGA-050; un cierre ve la corrida invalidada y se rechaza con
-E-CORRIDA-041), y que ningún orden de llegada termina en un deadlock.
+`pedido_tienda.cerrar_tienda` (F4, B3a) toma la carga `FOR SHARE`; la guarda
+la toma `FOR UPDATE`. Acá se prueba el orden que imponen esos bloqueos: quien
+llega segundo espera al primero y luego ve su resultado (un cierre ve la
+corrida invalidada y se rechaza con E-CORRIDA-041), y que ningún orden de
+llegada termina en un deadlock.
+
+Hasta B3b la guarda sigue mirando el estado de la CORRIDA: una anulación que
+espera a un cierre de tienda termina sin bloquearse (B3b la llevará a las
+tiendas y devolverá el E-CARGA-050 que F3 daba al cerrar la corrida entera).
 
 Necesita sesiones distintas y filas confirmadas: siembra un proveedor, un
-usuario, una carga y una corrida BORRADOR vinculada, y los borra al terminar.
+usuario, una sucursal, una carga y una corrida BORRADOR vinculada con esa
+tienda en BORRADOR, y los borra al terminar.
 """
 import asyncio
 import datetime
@@ -26,10 +31,11 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from app.motored.models.carga_archivo import CargaArchivo
 from app.motored.models.corrida import Corrida
 from app.motored.models.corrida_carga import CorridaCarga
+from app.motored.models.corrida_sucursal import CorridaSucursal
 from app.motored.models.proveedor import Proveedor
+from app.motored.models.sucursal import Sucursal
 from app.motored.models.usuario import MotoredRole, Usuario
-from app.motored.services.corridas import codigos, guardas
-from app.motored.services.corridas import servicio as sv
+from app.motored.services.corridas import codigos, guardas, pedido_tienda
 from tests.motored.pg_real.test_corrida_pg import CORTE, _carga
 
 URL = os.environ.get("MOTORED_TEST_PG_URL")
@@ -54,28 +60,37 @@ async def escenario():
     usuario = Usuario(
         id=uuid.uuid4(), nombre="Compras", role=MotoredRole.COMPRAS,
         email=f"g-{sufijo}@x.co", hashed_password="x")
+    tienda = Sucursal(
+        id=uuid.uuid4(), nombre=f"GUARDA {sufijo}", sic=f"G-{sufijo}",
+        dias_empaque=1, dias_transito=1)
     carga = _carga(
         "VENTAS", datetime.date(2026, 3, 1), datetime.date(2026, 9, 14))
     corrida = Corrida(
         id=uuid.uuid4(), codigo=f"TST-{sufijo}-01", proveedor_id=proveedor.id,
         fecha_corte=CORTE, estado="BORRADOR")
     async with maker() as db:
-        db.add_all([proveedor, usuario, carga])
+        db.add_all([proveedor, usuario, carga, tienda])
         await db.flush()
         db.add(corrida)
         await db.flush()
-        db.add(CorridaCarga(
-            corrida_id=corrida.id, carga_id=carga.id, tipo="VENTAS"))
+        db.add_all([
+            CorridaCarga(
+                corrida_id=corrida.id, carga_id=carga.id, tipo="VENTAS"),
+            CorridaSucursal(
+                corrida_id=corrida.id, sucursal_id=tienda.id, orden=1,
+                estado="OK", estado_pedido="BORRADOR")])
         await db.commit()
     yield SimpleNamespace(
         maker=maker, carga_id=carga.id, corrida_id=corrida.id,
-        usuario_id=usuario.id, codigo=corrida.codigo)
+        usuario_id=usuario.id, codigo=corrida.codigo,
+        sucursal_id=tienda.id)
     async with maker() as db:
         await db.execute(delete(CorridaCarga).where(
             CorridaCarga.corrida_id == corrida.id))
         await db.execute(delete(Corrida).where(Corrida.id == corrida.id))
         await db.execute(delete(CargaArchivo).where(
             CargaArchivo.id == carga.id))
+        await db.execute(delete(Sucursal).where(Sucursal.id == tienda.id))
         await db.execute(delete(Usuario).where(Usuario.id == usuario.id))
         await db.execute(delete(Proveedor).where(
             Proveedor.id == proveedor.id))
@@ -100,31 +115,35 @@ async def _anular(db, carga_id):
 
 
 async def _cerrar(db, escenario):
-    corrida = await sv.cerrar_corrida(
-        db, escenario.corrida_id, escenario.usuario_id)
+    tienda = await pedido_tienda.cerrar_tienda(
+        db, escenario.corrida_id, escenario.sucursal_id,
+        escenario.usuario_id)
     await db.commit()
-    return corrida
+    return tienda
 
 
-async def test_an_annulment_waits_for_a_close_in_flight_and_is_blocked(
+async def test_an_annulment_waits_for_a_close_in_flight_and_does_not_deadlock(
         escenario):
     async with escenario.maker() as cierre, escenario.maker() as anulacion:
-        await sv.cerrar_corrida(
-            cierre, escenario.corrida_id, escenario.usuario_id)
+        await pedido_tienda.cerrar_tienda(
+            cierre, escenario.corrida_id, escenario.sucursal_id,
+            escenario.usuario_id)
         tarea = asyncio.create_task(
             _anular(anulacion, escenario.carga_id))
         await asyncio.sleep(ESPERA)
         assert not tarea.done(), "la anulación debía esperar al cierre"
 
         await cierre.commit()
-        with pytest.raises(codigos.ErrorCorrida) as error:
-            await asyncio.wait_for(tarea, timeout=10)
+        await asyncio.wait_for(tarea, timeout=10)
 
-    assert error.value.codigo == codigos.E_CARGA_ANULACION_BLOQUEADA
-    assert escenario.codigo in error.value.mensaje
     carga = await _estado_de(escenario.maker, CargaArchivo, escenario.carga_id)
-    corrida = await _estado_de(escenario.maker, Corrida, escenario.corrida_id)
-    assert (carga.estado, corrida.estado) == ("APLICADO", "CERRADA")
+    assert carga.estado == "ANULADO"
+    async with escenario.maker() as db:
+        estado = (await db.execute(
+            select(CorridaSucursal.estado_pedido).where(
+                CorridaSucursal.corrida_id == escenario.corrida_id)
+        )).scalar_one()
+    assert estado == "CERRADO"
 
 
 async def test_a_close_waits_for_an_annulment_in_flight_and_is_refused(

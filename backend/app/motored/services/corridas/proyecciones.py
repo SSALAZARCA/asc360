@@ -21,6 +21,10 @@ Fase 4 (sdd/motored-pedidos-ui, B2): la línea y el detalle suman lo que el
 comprador edita (`extras_linea`: valor sugerido, aviso de empaque y última
 edición; `resumen_a_pedir`: el resumen por clase sobre `pedido_final`) SIN
 tocar las cifras del sugerido, que siguen siendo las del motor.
+
+Fase 4 (B3a): cada sucursal del detalle suma el estado de su pedido, lo que se
+va a pedir, su último evento y las acciones que admite (`acciones_de`), y el
+detalle y la lista traen el resumen de pedidos ("3 de 47 enviadas").
 """
 import datetime
 from decimal import ROUND_HALF_UP, Decimal
@@ -217,6 +221,103 @@ def extras_linea(
     }
 
 
+# --- Pedido por tienda (F4, B3a) -------------------------------------------
+
+
+class UltimoEvento(NamedTuple):
+    """El último `pedido_evento` de una tienda (quién y cuándo)."""
+
+    evento: str
+    usuario: Optional[str]
+    creado_en: datetime.datetime
+
+
+def acciones_de(corrida, estado_pedido: Optional[str]) -> Dict[str, bool]:
+    """Qué puede hacer el comprador con el pedido de una tienda, según el
+    estado del pedido y el de la corrida (el rol ya lo filtró la API).
+
+    Nada en un escenario ni en una corrida cuyo cálculo no terminó; una
+    corrida invalidada sólo deja reabrir (devolver a BORRADOR)."""
+    operable = (
+        not corrida.es_escenario and corrida.estado in estados.CALCULADAS)
+    abierta = operable and not corrida.invalidada
+    borrador = estado_pedido == estados.PEDIDO_BORRADOR
+    return {
+        "cerrar": abierta and borrador,
+        "reabrir": operable and estado_pedido == estados.PEDIDO_CERRADO,
+        "editar": abierta and borrador,
+    }
+
+
+def unidades_valor_a_pedir(
+    filas: Iterable[Any],
+) -> Dict[Any, Tuple[Decimal, Decimal]]:
+    """`{sucursal_id: (unidades, valor)}` a pedir, sumando las clases."""
+    sumas: Dict[Any, List[Decimal]] = {}
+    for fila in filas:
+        suma = sumas.setdefault(fila.sucursal_id, [Decimal(0), Decimal(0)])
+        suma[0] += fila.unidades
+        suma[1] += fila.valor
+    return {clave: (u, v) for clave, (u, v) in sumas.items()}
+
+
+def resumen_de_pedidos(
+    sucursales: Iterable[Any], unidades: Mapping[Any, Decimal],
+) -> Dict[str, int]:
+    """El resumen de pedidos de las tiendas OK visibles: cuántas hay y
+    cuántas en cada estado, y `sin_pedido`: las que no tienen nada para
+    pedir (suma 0 o sin líneas)."""
+    ok = [s for s in sucursales if s.estado == estados.SUC_OK]
+
+    def en(estado: str) -> int:
+        return sum(1 for s in ok if s.estado_pedido == estado)
+
+    return {
+        "total": len(ok), "borrador": en(estados.PEDIDO_BORRADOR),
+        "cerrados": en(estados.PEDIDO_CERRADO),
+        "enviados": en(estados.PEDIDO_ENVIADO),
+        "sin_pedido": sum(
+            1 for s in ok if not unidades.get(s.sucursal_id)),
+    }
+
+
+def resumen_de_lista(
+    conteos: Optional[Mapping[str, int]],
+) -> Dict[str, Optional[int]]:
+    """El resumen de la lista: lo agrupado por la consulta (ceros si la
+    corrida no tiene tiendas OK). `sin_pedido` sólo lo trae el detalle."""
+    base = {"total": 0, "borrador": 0, "cerrados": 0, "enviados": 0}
+    return {**base, **(conteos or {}), "sin_pedido": None}
+
+
+def _ultimo_evento(
+    evento: Optional[UltimoEvento],
+) -> Optional[Dict[str, Any]]:
+    if evento is None:
+        return None
+    return {"evento": evento.evento, "usuario": evento.usuario,
+            "creado_en": evento.creado_en}
+
+
+def cabecera_tienda(
+    corrida, tienda, nombre: str, sic: Optional[str],
+    totales_tienda: Mapping[str, Decimal], ultimo: Optional[UltimoEvento],
+) -> Dict[str, Any]:
+    """La cabecera de la pantalla del pedido de UNA tienda."""
+    return {
+        "corrida_id": corrida.id, "corrida_codigo": corrida.codigo,
+        "fecha_corte": corrida.fecha_corte, "corrida_estado": corrida.estado,
+        "es_escenario": corrida.es_escenario,
+        "invalidada": corrida.invalidada,
+        "sucursal_id": tienda.sucursal_id, "nombre": nombre.strip(),
+        "sic": sic, "estado": tienda.estado, "codigo": tienda.codigo,
+        "mensaje": tienda.mensaje, "estado_pedido": tienda.estado_pedido,
+        "totales": dict(totales_tienda),
+        "ultimo_evento": _ultimo_evento(ultimo),
+        "acciones": acciones_de(corrida, tienda.estado_pedido),
+    }
+
+
 # --- Piezas comunes ---------------------------------------------------------
 
 
@@ -273,8 +374,16 @@ def item_de_fila(fila) -> Dict[str, Any]:
     }
 
 
-def _estado_sucursal(s) -> Dict[str, Any]:
+def _estado_sucursal(
+    s, corrida, a_pedir: Mapping[Any, Tuple[Decimal, Decimal]],
+    eventos: Mapping[Any, UltimoEvento],
+) -> Dict[str, Any]:
+    unidades, valor = a_pedir.get(s.sucursal_id, (Decimal(0), Decimal(0)))
     return {
+        "estado_pedido": s.estado_pedido, "unidades_a_pedir": unidades,
+        "valor_a_pedir": valor,
+        "ultimo_evento": _ultimo_evento(eventos.get(s.sucursal_id)),
+        "acciones": acciones_de(corrida, s.estado_pedido),
         "sucursal_id": s.sucursal_id, "nombre": s.nombre.strip(),
         "orden": s.orden, "estado": s.estado, "codigo": s.codigo,
         "mensaje": s.mensaje, "lineas": s.lineas, "excluidas": s.excluidas,
@@ -302,14 +411,19 @@ def agrupar_cargas(cargas: Iterable[Any]) -> Dict[str, List[Dict[str, Any]]]:
 
 def armar_detalle(
     corrida, sucursales, resumen, cargas, alcance: Alcance, a_pedir=(),
+    eventos: Optional[Mapping[Any, UltimoEvento]] = None,
 ) -> Dict[str, Any]:
     """El detalle completo de la corrida para quien tiene `alcance`.
-    `a_pedir` son las filas por sucursal y clase de `pedido_final`."""
+    `a_pedir` son las filas por sucursal y clase de `pedido_final` y
+    `eventos` el último evento de pedido de cada sucursal."""
     seleccion = corrida.seleccion_datos or {}
     por_clase = resumen_por_clase(resumen)
     pedir, totales_pedir = resumen_a_pedir(a_pedir, sucursales)
+    por_sucursal = unidades_valor_a_pedir(a_pedir)
     return {
         **cabecera(corrida, sucursales),
+        "pedidos": resumen_de_pedidos(
+            sucursales, {k: v[0] for k, v in por_sucursal.items()}),
         "parametros_en_fecha": corrida.parametros_en_fecha,
         "overrides": corrida.overrides,
         "motivo_invalidacion": corrida.motivo_invalidacion,
@@ -322,7 +436,9 @@ def armar_detalle(
         "antiguedad": seleccion.get("antiguedad", {}),
         "mes_en_curso": seleccion.get("mes_en_curso"),
         "advertencias": avisos(corrida, sucursales),
-        "sucursales": [_estado_sucursal(s) for s in sucursales],
+        "sucursales": [
+            _estado_sucursal(s, corrida, por_sucursal, eventos or {})
+            for s in sucursales],
         "resumen": _resumen_por_sucursal(resumen, sucursales),
         "resumen_por_clase": por_clase,
         "totales": totales(por_clase),

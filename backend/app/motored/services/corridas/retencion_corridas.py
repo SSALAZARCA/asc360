@@ -11,17 +11,22 @@ salta un día.
 Borra, con cascada a líneas, resumen y sucursales, sólo las corridas
 ANULADA, FALLIDA o BORRADOR con más de `MOTORED_CORRIDA_RETENCION_DIAS`
 (45) días. NUNCA una CERRADA (es historia del negocio) ni una PENDIENTE o
-CALCULANDO (están vivas). Apagada por defecto
+CALCULANDO (están vivas). Fase 4 (B3a): tampoco una corrida cuyo pedido de
+alguna tienda ya tuvo un evento (cerrado, reabierto, enviado) o está CERRADO
+o ENVIADO: el cálculo sigue en BORRADOR pero el pedido es historia (y un
+envío tiene `corrida_envio` con ON DELETE RESTRICT). Apagada por defecto
 (`MOTORED_CORRIDA_RETENCION_ENABLED`); apagada no hace ni una consulta.
 """
 import time
 from datetime import datetime, timedelta
 from typing import Optional
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, exists, select
 
 from app.config import settings
 from app.motored.models.corrida import Corrida
+from app.motored.models.corrida_sucursal import CorridaSucursal
+from app.motored.models.pedido_evento import PedidoEvento
 from app.motored.models.retencion_ejecucion import RetencionEjecucion
 from app.motored.services import retencion
 from app.motored.services.corridas import estados
@@ -33,11 +38,21 @@ ESTADOS_PURGABLES = (estados.ANULADA, estados.FALLIDA, estados.BORRADOR)
 TAMANO_BLOQUE = 20
 
 
+def _sin_pedido_vivo():
+    """La corrida no tiene eventos de pedido ni tiendas CERRADO o ENVIADO."""
+    con_evento = exists().where(PedidoEvento.corrida_id == Corrida.id)
+    con_tienda = exists().where(
+        CorridaSucursal.corrida_id == Corrida.id,
+        CorridaSucursal.estado_pedido.in_(
+            (estados.PEDIDO_CERRADO, estados.PEDIDO_ENVIADO)))
+    return ~con_evento, ~con_tienda
+
+
 async def _borrar_bloque(db, limite: datetime, tamano: int) -> int:
     ids = (await db.execute(
         select(Corrida.id)
         .where(Corrida.estado.in_(ESTADOS_PURGABLES),
-               Corrida.created_at < limite)
+               Corrida.created_at < limite, *_sin_pedido_vivo())
         .limit(tamano))).scalars().all()
     if not ids:
         return 0

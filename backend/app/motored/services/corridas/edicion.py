@@ -22,7 +22,7 @@ from decimal import Decimal
 from typing import Any, Dict, NamedTuple, Optional
 from uuid import UUID
 
-from sqlalchemy import func, insert, select
+from sqlalchemy import insert, select
 
 from app.motored.models.corrida_linea import CorridaLinea
 from app.motored.models.corrida_linea_historial import CorridaLineaHistorial
@@ -31,6 +31,7 @@ from app.motored.services.corridas import (
     codigos,
     consultas,
     estados,
+    lecturas_pedido,
     valores,
 )
 from app.motored.services.corridas.codigos import ErrorCorrida
@@ -90,26 +91,6 @@ async def _leer_linea(db, corrida_id: UUID, linea_id: int, *, bloquear):
     return linea
 
 
-async def totales_de_tienda(
-    db, corrida_id: UUID, sucursal_id: UUID,
-) -> Dict[str, Decimal]:
-    """Unidades y valor a pedir y sugeridos de la tienda (sin excluidas)."""
-    cl = CorridaLinea
-    sugerido = func.round(
-        cl.pedido_sugerido * func.coalesce(cl.precio, 0), 2)
-    fila = (await db.execute(
-        select(
-            func.coalesce(func.sum(cl.pedido_final), 0),
-            func.coalesce(func.sum(cl.valor_pedido), 0),
-            func.coalesce(func.sum(cl.pedido_sugerido), 0),
-            func.coalesce(func.sum(sugerido), 0))
-        .where(cl.corrida_id == corrida_id, cl.sucursal_id == sucursal_id,
-               cl.motivo_exclusion.is_(None)))).first()
-    claves = ("unidades_a_pedir", "valor_a_pedir", "unidades_sugerido",
-              "valor_sugerido")
-    return dict(zip(claves, (Decimal(v) for v in fila)))
-
-
 async def _escribir(
     db, linea: Any, nueva: int, corrida_id: UUID, usuario_id: UUID,
 ) -> None:
@@ -148,5 +129,6 @@ async def editar_linea(
     if linea.pedido_final != nueva:
         await _escribir(db, linea, nueva, corrida_id, usuario_id)
     ultima = (await consultas.ediciones_de(db, [linea.id])).get(linea.id)
-    totales = await totales_de_tienda(db, corrida_id, linea.sucursal_id)
+    totales = await lecturas_pedido.totales_de_tienda(
+        db, corrida_id, linea.sucursal_id)
     return ResultadoEdicion(linea, ultima, totales)

@@ -4,8 +4,9 @@ ADR-5/ADR-9, decisiones #14 y #16): servicio de la corrida.
 
 `crear_corrida` valida, corre el preflight de forma SÍNCRONA y congela los
 insumos; `calcular_corrida` recorre las sucursales (aislando las que
-fallan) y `finalizar_corrida` decide BORRADOR o FALLIDA; `cerrar_corrida` y
-`anular_corrida` aplican las reglas del ciclo de vida. Los colaboradores con
+fallan) y `finalizar_corrida` decide BORRADOR o FALLIDA; `anular_corrida`
+aplica la regla de anulación (desde F4 cerrar es por tienda y se prueba en
+`test_pedido_tienda.py`). Los colaboradores con
 su propia suite (parámetros, preflight, cargador, persistencia) se
 reemplazan por dobles; el recorrido real corre en `pg_real`.
 """
@@ -933,7 +934,7 @@ def test_the_per_tienda_pedido_states_are_defined():
     assert estados.PEDIDOS == frozenset({"BORRADOR", "CERRADO", "ENVIADO"})
 
 
-# --- cerrar_corrida ---------------------------------------------------------
+# --- El cierre ya no es de la corrida (F4, B3a) ----------------------------
 
 
 def _corrida_en(estado, **campos):
@@ -944,104 +945,13 @@ def _corrida_en(estado, **campos):
     return Corrida(**valores)
 
 
-async def _cerrar(corrida, *, fallidas=0, anuladas=()):
-    """Orden de las consultas de `cerrar_corrida`: las cargas `FOR SHARE`
-    primero, la corrida `FOR UPDATE` después, luego las sucursales."""
-    db = Sesion(execute_queue=[_cargas(anuladas), [corrida], [fallidas]])
-    return await sv.cerrar_corrida(db, corrida.id, USUARIO), db
-
-
-async def test_a_draft_corrida_is_closed_with_who_and_when():
-    corrida = _corrida_en("BORRADOR")
-
-    cerrada, _ = await _cerrar(corrida)
-
-    assert cerrada.estado == "CERRADA"
-    assert cerrada.cerrada_por == USUARIO
-    assert cerrada.cerrada_en is not None
-
-
-@pytest.mark.parametrize("estado", [
-    "PENDIENTE", "CALCULANDO", "FALLIDA", "CERRADA", "ANULADA"])
-async def test_only_a_draft_corrida_can_be_closed(estado):
-    corrida = _corrida_en(estado)
-
-    with pytest.raises(pe.ErrorCorrida) as error:
-        await _cerrar(corrida)
-
-    assert error.value.codigo == codigos.E_CORRIDA_ESTADO_NO_ADMITE
-    assert estado in error.value.mensaje
-    assert corrida.estado == estado
-
-
-async def test_a_scenario_corrida_cannot_be_closed():
-    corrida = _corrida_en("BORRADOR", es_escenario=True)
-
-    with pytest.raises(pe.ErrorCorrida) as error:
-        await _cerrar(corrida)
-
-    assert error.value.codigo == codigos.E_CORRIDA_ESCENARIO_NO_SE_CIERRA
-
-
-async def test_an_invalidated_corrida_cannot_be_closed():
-    corrida = _corrida_en("BORRADOR", invalidada=True)
-
-    with pytest.raises(pe.ErrorCorrida) as error:
-        await _cerrar(corrida)
-
-    assert error.value.codigo == codigos.E_CORRIDA_INVALIDADA
-
-
-async def test_a_failed_sucursal_blocks_the_close():
-    corrida = _corrida_en("BORRADOR")
-
-    with pytest.raises(pe.ErrorCorrida) as error:
-        await _cerrar(corrida, fallidas=1)
-
-    assert error.value.codigo == codigos.E_CORRIDA_SUCURSAL_FALLIDA
-    assert corrida.estado == "BORRADOR"
-
-
-async def test_a_carga_annulled_after_the_run_blocks_the_close():
-    corrida = _corrida_en("BORRADOR")
-
-    with pytest.raises(pe.ErrorCorrida) as error:
-        await _cerrar(corrida, anuladas=[uuid.uuid4()])
-
-    assert error.value.codigo == codigos.E_CORRIDA_INVALIDADA
-    assert corrida.estado == "BORRADOR"
-
-
-async def test_closing_locks_the_cargas_before_the_corrida():
-    """Mismo orden que la guarda de anulación y `finalizar_corrida` (carga y
-    luego corrida): el orden inverso termina en `deadlock detected` cuando un
-    cierre y una anulación de la misma carga se cruzan (pg_real)."""
-    corrida = _corrida_en("BORRADOR")
-
-    _, db = await _cerrar(corrida)
-
-    cargas_sql = str(db.executed_statements[0].compile(
-        dialect=postgresql.dialect()))
-    corrida_sql = str(db.executed_statements[1].compile(
-        dialect=postgresql.dialect()))
-    assert "FOR SHARE" in cargas_sql and "carga_archivo" in cargas_sql
-    assert "FOR UPDATE" in corrida_sql and "FROM corrida" in corrida_sql
-
-
-async def test_a_carga_annulled_does_not_hide_a_state_refusal():
-    corrida = _corrida_en("CERRADA")
-
-    with pytest.raises(pe.ErrorCorrida) as error:
-        await _cerrar(corrida, anuladas=[uuid.uuid4()])
-
-    assert error.value.codigo == codigos.E_CORRIDA_ESTADO_NO_ADMITE
-
-
-async def test_closing_an_unknown_corrida_is_a_lookup_error():
-    db = Sesion(execute_queue=[[], []])
-
-    with pytest.raises(LookupError):
-        await sv.cerrar_corrida(db, uuid.uuid4(), USUARIO)
+def test_closing_is_per_tienda_so_the_corrida_level_close_is_gone():
+    """F3 cerraba la corrida entera (BORRADOR -> CERRADA) y se bloqueaba con
+    una sucursal fallida (E-CORRIDA-043). Ahora cada tienda se cierra sola
+    (`pedido_tienda`, probado en `test_pedido_tienda.py`) y la corrida sólo
+    lleva el ciclo del cálculo."""
+    assert not hasattr(sv, "cerrar_corrida")
+    assert not hasattr(sv, "_validar_cierre")
 
 
 # --- anular_corrida ---------------------------------------------------------

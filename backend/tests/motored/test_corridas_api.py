@@ -80,7 +80,8 @@ def test_creating_a_corrida_answers_202_with_its_identity(espia):
 
 
 def test_the_request_is_forwarded_to_the_service(espia):
-    cliente, _ = _cliente("COMPRAS")
+    # Con `overrides` es un escenario: sólo ADMIN (E-CORRIDA-062).
+    cliente, _ = _cliente("ADMIN")
     cuerpo = {
         "fecha_corte": "2026-09-21",
         "sucursal_ids": [str(fx.SUC_A), str(fx.SUC_B)],
@@ -243,7 +244,7 @@ def test_the_list_filters_are_forwarded(espia):
         "alcance": None, "proveedor_id": fx.PROVEEDOR_ID,
         "estado": "CERRADA", "desde": datetime.date(2026, 9, 1),
         "hasta": datetime.date(2026, 9, 30), "escenario": True,
-        "limite": 20, "offset": 40}
+        "limite": 20, "offset": 40, "pedidos": None}
 
 
 def test_the_list_defaults_do_not_filter(espia):
@@ -437,45 +438,7 @@ def test_the_lines_of_an_unknown_corrida_are_a_404(espia):
         f"{BASE}/{uuid.uuid4()}/lineas").status_code == 404
 
 
-# --- POST /cerrar y /anular -------------------------------------------------
-
-
-def test_closing_a_corrida(espia):
-    cliente, sesion = _cliente("COMPRAS")
-
-    respuesta = cliente.post(f"{BASE}/{fx.CORRIDA_ID}/cerrar")
-
-    assert respuesta.status_code == 200, respuesta.text
-    assert respuesta.json()["estado"] == "CERRADA"
-    _, args, _ = espia.ultima("cerrar")
-    assert args == (fx.CORRIDA_ID, uuid.UUID(USUARIO))
-    assert sesion.committed is True
-
-
-@pytest.mark.parametrize("codigo", [
-    codigos.E_CORRIDA_ESTADO_NO_ADMITE,
-    codigos.E_CORRIDA_INVALIDADA,
-    codigos.E_CORRIDA_ESCENARIO_NO_SE_CIERRA,
-    codigos.E_CORRIDA_SUCURSAL_FALLIDA,
-])
-def test_a_refused_close_is_a_coded_409(espia, codigo):
-    espia.error = ({"cerrar"}, ErrorCorrida(codigo, "no se puede cerrar"))
-    cliente, sesion = _cliente()
-
-    respuesta = cliente.post(f"{BASE}/{fx.CORRIDA_ID}/cerrar")
-
-    assert respuesta.status_code == 409
-    assert respuesta.json()["detail"] == {
-        "code": codigo, "message": "no se puede cerrar"}
-    assert sesion.committed is False and sesion.rolled_back is True
-
-
-def test_closing_an_unknown_corrida_is_a_404(espia):
-    espia.error = ({"cerrar"}, LookupError("no existe"))
-    cliente, _ = _cliente()
-
-    assert cliente.post(
-        f"{BASE}/{uuid.uuid4()}/cerrar").status_code == 404
+# --- POST /anular (cerrar es por tienda: test_pedido_tienda_api.py) -------
 
 
 def test_annulling_a_corrida_keeps_the_reason(espia):
@@ -537,7 +500,6 @@ def test_the_router_exposes_exactly_the_planned_operations():
         ("GET", "/corridas/{corrida_id}"),
         ("GET", "/corridas/{corrida_id}/progreso"),
         ("GET", "/corridas/{corrida_id}/lineas"),
-        ("POST", "/corridas/{corrida_id}/cerrar"),
         ("POST", "/corridas/{corrida_id}/anular"),
     }
 

@@ -7,16 +7,21 @@ Orden global de bloqueos, siempre un prefijo de: cargas -> corrida ->
 corrida `FOR SHARE` (las tiendas distintas avanzan en paralelo y la anulación,
 que la toma `FOR UPDATE`, espera a todas) y después SU tienda: `FOR SHARE` al
 editar (varias ediciones a la vez; un cierre, que la toma `FOR UPDATE`, las
-espera) o `FOR UPDATE` al cerrar, reabrir o enviar.
+espera) o `FOR UPDATE` al cerrar, reabrir o enviar. Cerrar toma antes las
+cargas vinculadas `FOR SHARE` (`cargas_anuladas`), igual que
+`finalizar_corrida`, para que la guarda de anulación de cargas, que las toma
+`FOR UPDATE`, nunca se cruce con un cierre.
 
 Ningún commit acá: la transacción es del llamador.
 """
-from typing import Any
+from typing import Any, List
 from uuid import UUID
 
 from sqlalchemy import select
 
+from app.motored.models.carga_archivo import CargaArchivo
 from app.motored.models.corrida import Corrida
+from app.motored.models.corrida_carga import CorridaCarga
 from app.motored.models.corrida_sucursal import CorridaSucursal
 from app.motored.services.corridas import codigos, estados
 from app.motored.services.corridas.codigos import ErrorCorrida
@@ -52,11 +57,28 @@ async def bloquear_tienda(
     return tienda
 
 
-def exigir_operable(corrida: Any, accion: str) -> None:
+async def cargas_anuladas(db, corrida_id: UUID) -> List[UUID]:
+    """Bloquea `FOR SHARE` TODAS las cargas vinculadas (una anulación
+    concurrente espera) y devuelve las que están ANULADO."""
+    resultado = await db.execute(
+        select(CargaArchivo.id, CargaArchivo.estado)
+        .join(CorridaCarga, CorridaCarga.carga_id == CargaArchivo.id)
+        .where(CorridaCarga.corrida_id == corrida_id)
+        .with_for_update(read=True, of=CargaArchivo))
+    return [
+        fila[0] for fila in resultado.all()
+        if fila[1] == estados.ESTADO_CARGA_ANULADO]
+
+
+def exigir_operable(
+    corrida: Any, accion: str, *, permite_invalidada: bool = False,
+) -> None:
     """La corrida admite una acción sobre el pedido de una tienda.
 
     Orden: escenario (E-CORRIDA-042, que dice la `accion`), cálculo no
-    terminado o anulada (040) e invalidada por una carga anulada (041)."""
+    terminado o anulada (040) e invalidada por una carga anulada (041).
+    `permite_invalidada` es para reabrir: devolver un pedido a BORRADOR
+    nunca es riesgoso y es lo que deja anular la carga."""
     if corrida.es_escenario:
         raise ErrorCorrida(
             codigos.E_CORRIDA_ESCENARIO_NO_SE_CIERRA,
@@ -66,7 +88,7 @@ def exigir_operable(corrida: Any, accion: str) -> None:
             codigos.E_CORRIDA_ESTADO_NO_ADMITE,
             codigos.mensaje(
                 codigos.E_CORRIDA_ESTADO_NO_ADMITE, estado=corrida.estado))
-    if corrida.invalidada:
+    if corrida.invalidada and not permite_invalidada:
         raise ErrorCorrida(
             codigos.E_CORRIDA_INVALIDADA,
             codigos.mensaje(codigos.E_CORRIDA_INVALIDADA))

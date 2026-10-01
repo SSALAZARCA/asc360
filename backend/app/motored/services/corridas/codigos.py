@@ -34,12 +34,20 @@ E_CORRIDA_REINTENTOS_AGOTADOS = "E-CORRIDA-031"
 E_CORRIDA_ESTADO_NO_ADMITE = "E-CORRIDA-040"
 E_CORRIDA_INVALIDADA = "E-CORRIDA-041"
 E_CORRIDA_ESCENARIO_NO_SE_CIERRA = "E-CORRIDA-042"
+# RETIRADO en F4 (nunca se reutiliza): el cierre es por tienda.
 E_CORRIDA_SUCURSAL_FALLIDA = "E-CORRIDA-043"
 E_CORRIDA_INTERNO = "E-CORRIDA-099"
 
 # Fase 4 (sdd/motored-pedidos-ui, R3 de las tareas): edición de líneas del
 # pedido de una tienda. 052-054 y 066 son de B2; 065 la comparten todas las
 # acciones por tienda. 042 (escenario) ahora dice QUÉ acción no admite.
+# 044-046, 062 y 064 son de B3a (reabrir, cerrar y escenarios). 043 está
+# RETIRADO: una tienda fallida ya no bloquea el cierre de las demás.
+E_CORRIDA_REABRIR_BORRADOR = "E-CORRIDA-044"
+E_CORRIDA_REABRIR_ENVIADO = "E-CORRIDA-045"
+E_CORRIDA_REABRIR_MOTIVO = "E-CORRIDA-046"
+E_CORRIDA_OVERRIDES_SOLO_ADMIN = "E-CORRIDA-062"
+E_CORRIDA_CERRAR_NO_BORRADOR = "E-CORRIDA-064"
 E_CORRIDA_PEDIDO_NO_BORRADOR = "E-CORRIDA-052"
 E_CORRIDA_CANTIDAD_INVALIDA = "E-CORRIDA-053"
 E_CORRIDA_LINEA_EXCLUIDA = "E-CORRIDA-054"
@@ -130,6 +138,22 @@ CATALOGO = {
         "pedido ({motivo})."
     ),
     E_CORRIDA_SIN_PEDIDO: "La tienda no tiene pedido en esta corrida.",
+    E_CORRIDA_REABRIR_BORRADOR: (
+        "El pedido de esta tienda está en BORRADOR: no hay nada que "
+        "reabrir."
+    ),
+    E_CORRIDA_REABRIR_ENVIADO: (
+        "El pedido de esta tienda ya se envió (orden {numero}) y no se "
+        "puede reabrir."
+    ),
+    E_CORRIDA_REABRIR_MOTIVO: (
+        "Indique el motivo de la reapertura (entre 1 y 500 caracteres)."
+    ),
+    E_CORRIDA_OVERRIDES_SOLO_ADMIN: (
+        "Solo un administrador puede lanzar un escenario (una corrida con "
+        "parámetros alternativos)."
+    ),
+    E_CORRIDA_CERRAR_NO_BORRADOR: "No se puede cerrar: {detalle}.",
     E_CORRIDA_EDICION_DESACTUALIZADA: (
         "La cantidad de la línea cambió mientras la editaba (ahora es "
         "{actual}). Revise la pantalla y vuelva a intentar."

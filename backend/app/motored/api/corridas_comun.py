@@ -21,6 +21,7 @@ from app.motored.services.corridas.codigos import ErrorCorrida
 require_write = require_roles("ADMIN", "COMPRAS")
 require_read = require_roles("ADMIN", "COMPRAS")
 
+ROL_ADMIN = "ADMIN"
 ROL_SUCURSAL = "SUCURSAL"
 # Rechazos por el estado o el contenido de la corrida o del pedido (el resto
 # es 422).
@@ -33,6 +34,9 @@ CONFLICTOS = frozenset({
     codigos.E_CORRIDA_LINEA_EXCLUIDA,
     codigos.E_CORRIDA_SIN_PEDIDO,
     codigos.E_CORRIDA_EDICION_DESACTUALIZADA,
+    codigos.E_CORRIDA_REABRIR_BORRADOR,
+    codigos.E_CORRIDA_REABRIR_ENVIADO,
+    codigos.E_CORRIDA_CERRAR_NO_BORRADOR,
 })
 
 
@@ -64,6 +68,35 @@ def rechazo(error: ErrorCorrida) -> HTTPException:
 
 def no_existe(texto: str = "Corrida no encontrada.") -> HTTPException:
     return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=texto)
+
+
+def exigir_admin_para_overrides(
+    user: MotoredUser, overrides: Optional[Dict[str, Any]],
+) -> None:
+    """E-CORRIDA-062: sólo ADMIN lanza un escenario. Un diccionario vacío
+    cuenta como sin overrides (una corrida real, DM-04)."""
+    if overrides and user.role != ROL_ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": codigos.E_CORRIDA_OVERRIDES_SOLO_ADMIN,
+                    "message": codigos.mensaje(
+                        codigos.E_CORRIDA_OVERRIDES_SOLO_ADMIN)})
+
+
+async def ejecutar(db, operacion):
+    """Espera `operacion` (un servicio de escritura) y confirma. 404 si
+    algo no existe y el rechazo codificado si una regla lo impide; en ambos
+    casos deshace la transacción."""
+    try:
+        resultado = await operacion
+    except LookupError as error:
+        await db.rollback()
+        raise no_existe(str(error)) from error
+    except ErrorCorrida as error:
+        await db.rollback()
+        raise rechazo(error) from error
+    await db.commit()
+    return resultado
 
 
 def linea_read(

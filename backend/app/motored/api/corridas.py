@@ -14,7 +14,7 @@ confinamiento de prefijos de `deps.get_current_motored_user`.
 `POST /corridas` valida y corre el preflight de forma síncrona (un rechazo es
 un 422 con su código y, en los de vigencia, el detalle de antigüedades por
 tipo), guarda la corrida PENDIENTE, confirma y la encola en el runner: nunca
-calcula en línea. Cerrar y anular responden 409 con el código de la regla
+calcula en línea. Anular responde 409 con el código de la regla
 que los rechazó. Ninguna ruta edita `pedido_final` ni el ajuste Z.
 """
 import logging
@@ -61,6 +61,7 @@ _require_read = comun.require_read
 
 PAGINA_CORRIDAS, PAGINA_CORRIDAS_MAX = 50, 200
 PAGINA_LINEAS, PAGINA_LINEAS_MAX = 500, 2000
+PEDIDOS = Literal["abiertos", "por_enviar", "enviados"]
 ESTADOS = Literal[
     "PENDIENTE", "CALCULANDO", "FALLIDA", "BORRADOR", "EN_REVISION",
     "CERRADA", "ENVIADA", "ANULADA"]
@@ -91,7 +92,9 @@ async def crear_corrida(
     user: MotoredUser = Depends(_require_write),
     runner: CorridaRunner = Depends(get_corrida_runner),
 ):
-    """Crea la corrida PENDIENTE (preflight síncrono) y la encola."""
+    """Crea la corrida PENDIENTE (preflight síncrono) y la encola. Sólo
+    ADMIN lanza un escenario (con `overrides`): E-CORRIDA-062."""
+    comun.exigir_admin_para_overrides(user, cuerpo.overrides)
     try:
         corrida = await servicio.crear_corrida(
             db, fecha_corte=cuerpo.fecha_corte,
@@ -108,7 +111,7 @@ async def crear_corrida(
 
 
 async def _transicion(db, operacion, *args) -> CorridaEstado:
-    """Cierra o anula: 404 si no existe, 409 coded si no lo admite."""
+    """Anula: 404 si no existe, 409 coded si no lo admite."""
     try:
         corrida = await operacion(db, *args)
     except LookupError as error:
@@ -120,17 +123,6 @@ async def _transicion(db, operacion, *args) -> CorridaEstado:
     await db.commit()
     return CorridaEstado(
         id=corrida.id, codigo=corrida.codigo, estado=corrida.estado)
-
-
-@router.post("/{corrida_id}/cerrar", response_model=CorridaEstado)
-async def cerrar_corrida(
-    corrida_id: uuid.UUID,
-    db: AsyncSession = Depends(get_motored_db_or_503),
-    user: MotoredUser = Depends(_require_write),
-):
-    """BORRADOR -> CERRADA (inmutable)."""
-    return await _transicion(
-        db, servicio.cerrar_corrida, corrida_id, uuid.UUID(user.user_id))
 
 
 @router.post("/{corrida_id}/anular", response_model=CorridaEstado)
@@ -156,17 +148,19 @@ async def listar_corridas(
     desde: Optional[date] = None,
     hasta: Optional[date] = None,
     escenario: Optional[bool] = None,
+    pedidos: Optional[PEDIDOS] = None,
     limite: int = Query(PAGINA_CORRIDAS, ge=1, le=PAGINA_CORRIDAS_MAX),
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_motored_db_or_503),
     user: MotoredUser = Depends(_require_read),
 ):
-    """Corridas filtradas por proveedor, estado, rango de `fecha_corte` y
-    escenario (la más reciente primero)."""
+    """Corridas filtradas por proveedor, estado, rango de `fecha_corte`,
+    escenario y por el punto del ciclo de sus pedidos (la más reciente
+    primero); cada una trae el resumen de sus pedidos."""
     items, total = await consultas.listar(
         db, alcance=comun.alcance_de(user), proveedor_id=proveedor_id,
         estado=estado, desde=desde, hasta=hasta, escenario=escenario,
-        limite=limite, offset=offset)
+        limite=limite, offset=offset, pedidos=pedidos)
     return PaginaCorridas(
         items=items, total=total, limite=limite, offset=offset)
 

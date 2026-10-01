@@ -515,6 +515,24 @@ async def test_the_retention_deletes_only_annulled_failed_or_draft_corridas(
     assert estados.CERRADA not in estados_en_consulta
 
 
+async def test_the_retention_keeps_corridas_with_events_or_closed_tiendas(
+        retencion_activa):
+    """F4 (B3a): una corrida BORRADOR cuyo pedido ya tuvo un evento
+    (cerrado, reabierto) o cuya tienda está CERRADO/ENVIADO es historia del
+    negocio, aunque su estado de cálculo sea purgable."""
+    db = SesionConCommits(execute_queue=[[None], [], []])
+
+    await rc.ejecutar_si_corresponde(db, AHORA)
+
+    sql = str(db.executed_statements[1].compile(
+        dialect=postgresql.dialect(),
+        compile_kwargs={"literal_binds": True}))
+    assert "NOT (EXISTS (SELECT * \nFROM pedido_evento" in sql
+    assert "pedido_evento.corrida_id = corrida.id" in sql
+    assert "NOT (EXISTS (SELECT * \nFROM corrida_sucursal" in sql
+    assert "corrida_sucursal.estado_pedido IN ('CERRADO', 'ENVIADO')" in sql
+
+
 async def test_the_retention_cutoff_is_45_days_before_now(retencion_activa):
     db = SesionConCommits(execute_queue=[[None], [ID], []])
 

@@ -16,7 +16,7 @@ from types import SimpleNamespace
 from app.motored.api import corridas as api
 from app.motored.api import corridas_pedido as api_pedido
 from app.motored.models.corrida_linea import CorridaLinea
-from app.motored.services.corridas import edicion
+from app.motored.services.corridas import edicion, pedido_tienda
 
 CORRIDA_ID = uuid.UUID(int=500)
 PROVEEDOR_ID = uuid.UUID(int=501)
@@ -125,6 +125,25 @@ def resultado_edicion(**campos):
     return edicion.ResultadoEdicion(**{**base, **campos})
 
 
+def cabecera_tienda(**campos):
+    """Lo que devuelve `lecturas_pedido.cabecera_tienda`."""
+    base = dict(
+        corrida_id=CORRIDA_ID, corrida_codigo="PED-2026-S39-001",
+        fecha_corte=CORTE, corrida_estado="BORRADOR", es_escenario=False,
+        invalidada=False, sucursal_id=SUC_A, nombre="UNO", sic="SIC-1",
+        estado="OK", codigo=None, mensaje=None, estado_pedido="BORRADOR",
+        totales=totales_tienda(), ultimo_evento=None,
+        acciones={"cerrar": True, "reabrir": False, "editar": True})
+    return {**base, **campos}
+
+
+def evento_pedido(**campos):
+    base = dict(
+        id=1, evento="CERRADO", motivo=None, detalle=None,
+        usuario_id=USUARIO_EDITOR, usuario="Maria", creado_en=CREADA)
+    return {**base, **campos}
+
+
 class Espia:
     """Doble de `consultas` y `servicio`: graba las llamadas y responde lo
     configurado."""
@@ -138,9 +157,16 @@ class Espia:
         self.creada = SimpleNamespace(
             id=CORRIDA_ID, codigo="PED-2026-S39-001", estado="PENDIENTE",
             es_escenario=False)
-        self.cerrada = SimpleNamespace(
-            id=CORRIDA_ID, codigo="PED-2026-S39-001", estado="CERRADA",
-            cerrada_en=None)
+        self.lote = pedido_tienda.ResultadoLote(
+            SimpleNamespace(
+                id=CORRIDA_ID, codigo="PED-2026-S39-001",
+                estado="BORRADOR"),
+            [SUC_A, SUC_B], 0)
+        self.tienda = SimpleNamespace(
+            corrida_id=CORRIDA_ID, sucursal_id=SUC_A,
+            estado_pedido="CERRADO")
+        self.cabecera = cabecera_tienda()
+        self.eventos = [evento_pedido()]
         self.anulada = SimpleNamespace(
             id=CORRIDA_ID, codigo="PED-2026-S39-001", estado="ANULADA",
             cerrada_en=None)
@@ -193,10 +219,6 @@ def instalar(monkeypatch, espia=None):
         espia._registrar("crear", **kw)
         return espia.creada
 
-    async def cerrar(db, corrida_id, usuario_id):
-        espia._registrar("cerrar", corrida_id, usuario_id)
-        return espia.cerrada
-
     async def anular(db, corrida_id, usuario_id, motivo):
         espia._registrar("anular", corrida_id, usuario_id, motivo)
         return espia.anulada
@@ -206,11 +228,44 @@ def instalar(monkeypatch, espia=None):
             ("progreso", progreso_), ("lineas", lineas)):
         monkeypatch.setattr(api.consultas, nombre, doble)
     for nombre, doble in (
-            ("crear_corrida", crear), ("cerrar_corrida", cerrar),
-            ("anular_corrida", anular)):
+            ("crear_corrida", crear), ("anular_corrida", anular)):
         monkeypatch.setattr(api.servicio, nombre, doble)
     _instalar_edicion(monkeypatch, espia)
+    _instalar_pedido_tienda(monkeypatch, espia)
     return espia
+
+
+def _instalar_pedido_tienda(monkeypatch, espia):
+    """Dobles del ciclo de vida del pedido por tienda (F4, B3a): cerrar,
+    reabrir y las lecturas de cabecera y eventos."""
+    async def cerrar_todas(db, corrida_id, usuario_id, sucursal_ids=None):
+        espia._registrar("cerrar", corrida_id, usuario_id, sucursal_ids)
+        return espia.lote
+
+    async def cerrar_tienda(db, corrida_id, sucursal_id, usuario_id):
+        espia._registrar("cerrar_tienda", corrida_id, sucursal_id, usuario_id)
+        return espia.tienda
+
+    async def reabrir_tienda(db, corrida_id, sucursal_id, usuario_id, motivo):
+        espia._registrar(
+            "reabrir", corrida_id, sucursal_id, usuario_id, motivo)
+        return espia.tienda
+
+    async def cabecera(db, corrida_id, sucursal_id, alcance):
+        espia._registrar("cabecera", corrida_id, sucursal_id, alcance)
+        return espia.cabecera
+
+    async def eventos(db, corrida_id, sucursal_id, alcance):
+        espia._registrar("eventos", corrida_id, sucursal_id, alcance)
+        return espia.eventos
+
+    for nombre, doble in (
+            ("cerrar_todas", cerrar_todas), ("cerrar_tienda", cerrar_tienda),
+            ("reabrir_tienda", reabrir_tienda)):
+        monkeypatch.setattr(api_pedido.pedido_tienda, nombre, doble)
+    for nombre, doble in (
+            ("cabecera_tienda", cabecera), ("eventos_tienda", eventos)):
+        monkeypatch.setattr(api_pedido.lecturas_pedido, nombre, doble)
 
 
 def _instalar_edicion(monkeypatch, espia):

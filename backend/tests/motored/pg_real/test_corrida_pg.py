@@ -34,7 +34,7 @@ from app.motored.models.referencia import Referencia
 from app.motored.models.sucursal import Sucursal
 from app.motored.models.usuario import MotoredRole, Usuario
 from app.motored.models.venta_mensual import VentaMensual
-from app.motored.services.corridas import codigos, guardas
+from app.motored.services.corridas import codigos, guardas, pedido_tienda
 from app.motored.services.corridas import persistencia as pe
 from app.motored.services.corridas import reproduccion as rp
 from app.motored.services.corridas import servicio as sv
@@ -321,7 +321,18 @@ async def test_a_raised_staleness_limit_lets_the_old_data_run(sesion):
 # --- Falla parcial ----------------------------------------------------------
 
 
-async def test_a_sucursal_without_sic_fails_alone_and_blocks_the_close(
+async def _cerrada_como_en_f3(db, corrida_id):
+    """F3 cerraba la corrida entera (estado CERRADA); F4 ya no lo escribe,
+    pero M1 deja esas corridas heredadas y la guarda de anulación de cargas
+    las sigue protegiendo hasta que B3b la lleve a las tiendas."""
+    await db.execute(
+        update(Corrida).where(Corrida.id == corrida_id)
+        .values(estado="CERRADA")
+        .execution_options(synchronize_session=False))
+    await db.flush()
+
+
+async def test_a_sucursal_without_sic_fails_alone_and_does_not_block_the_close(
         sesion):
     datos = await _sembrar(sesion)
     datos.dos.sic = None
@@ -337,9 +348,14 @@ async def test_a_sucursal_without_sic_fails_alone_and_blocks_the_close(
         .execution_options(populate_existing=True))).scalar_one()
     assert (fila.estado, fila.codigo) == ("FALLIDA", "E-CORRIDA-021")
     assert len(await _lineas(sesion, corrida.id, datos.uno.id)) == 1
+    assert fila.estado_pedido is None
+    tienda = await pedido_tienda.cerrar_tienda(
+        sesion, corrida.id, datos.uno.id, datos.usuario.id)
+    assert tienda.estado_pedido == "CERRADO"
     with pytest.raises(codigos.ErrorCorrida) as error:
-        await sv.cerrar_corrida(sesion, corrida.id, datos.usuario.id)
-    assert error.value.codigo == codigos.E_CORRIDA_SUCURSAL_FALLIDA
+        await pedido_tienda.cerrar_tienda(
+            sesion, corrida.id, datos.dos.id, datos.usuario.id)
+    assert error.value.codigo == codigos.E_CORRIDA_SIN_PEDIDO
 
 
 async def test_when_every_sucursal_fails_the_corrida_is_failed(sesion):
@@ -479,7 +495,8 @@ async def test_a_scenario_cannot_be_closed_and_leaves_production_alone(
         sesion, overrides={"modo_redondeo_empaque": "ARRIBA"})
 
     with pytest.raises(codigos.ErrorCorrida) as error:
-        await sv.cerrar_corrida(sesion, corrida.id, datos.usuario.id)
+        await pedido_tienda.cerrar_tienda(
+            sesion, corrida.id, datos.uno.id, datos.usuario.id)
 
     assert error.value.codigo == codigos.E_CORRIDA_ESCENARIO_NO_SE_CIERRA
     parametros = (await sesion.execute(
@@ -504,12 +521,12 @@ async def test_the_annulment_guard_invalidates_a_draft_and_blocks_a_closed(
     assert borrador.motivo_invalidacion == {
         "tipo": "CARGA_ANULADA", "carga_id": str(datos.cargas.inventario.id)}
     with pytest.raises(codigos.ErrorCorrida) as error:
-        await sv.cerrar_corrida(sesion, borrador.id, datos.usuario.id)
+        await pedido_tienda.cerrar_tienda(
+            sesion, borrador.id, datos.uno.id, datos.usuario.id)
     assert error.value.codigo == codigos.E_CORRIDA_INVALIDADA
 
     cerrable, _ = await _correr(sesion)
-    cerrada = await sv.cerrar_corrida(sesion, cerrable.id, datos.usuario.id)
-    assert cerrada.estado == "CERRADA" and cerrada.cerrada_en is not None
+    await _cerrada_como_en_f3(sesion, cerrable.id)
     with pytest.raises(codigos.ErrorCorrida) as bloqueo:
         await guardas.aplicar_guard_anulacion(
             sesion, datos.cargas.inventario)
@@ -529,7 +546,7 @@ async def test_an_unused_carga_annuls_freely(sesion):
 async def test_a_closed_corrida_rejects_every_write_t18(sesion):
     datos = await _sembrar(sesion)
     corrida, _ = await _correr(sesion)
-    await sv.cerrar_corrida(sesion, corrida.id, datos.usuario.id)
+    await _cerrada_como_en_f3(sesion, corrida.id)
     antes = await _lineas(sesion, corrida.id, datos.uno.id)
     sucursal = dataclasses.replace(atributos(), sucursal_id=datos.uno.id)
     resultado = calcular_sucursal((), sucursal, ParametrosMotor())

@@ -21,10 +21,11 @@ ADR-5/ADR-9, decisiones #14 y #16): servicio de la corrida.
   verifica, con las cargas bloqueadas `FOR SHARE`, que ninguna se anuló
   mientras corría (si no, la corrida queda `invalidada`). Al quedar BORRADOR
   inicia el pedido de las tiendas OK (`pedido_tienda`, F4).
-- `cerrar_corrida` / `anular_corrida` aplican las reglas del ciclo de vida.
+- `anular_corrida` aplica la regla de anulación. Cerrar es POR TIENDA y vive
+  en `pedido_tienda` (F4, B3a); `cerrar_corrida` ya no existe.
 
 Ningún commit acá: la transacción es del llamador. La API (S7, `api/
-corridas.py`) crea, cierra y anula; el job de S6b las calcula.
+corridas.py`) crea y anula; el job de S6b las calcula.
 """
 import asyncio
 import logging
@@ -45,13 +46,12 @@ from sqlalchemy.exc import (
     ProgrammingError,
 )
 
-from app.motored.models.carga_archivo import CargaArchivo
 from app.motored.models.corrida import Corrida
-from app.motored.models.corrida_carga import CorridaCarga
 from app.motored.models.corrida_sucursal import CorridaSucursal
 from app.motored.models.sucursal import Sucursal
 from app.motored.services import parametros, parametros_claves as pc
 from app.motored.services.corridas import (
+    bloqueos,
     cargador,
     cargas_perdida,
     codigos,
@@ -436,19 +436,6 @@ async def calcular_corrida(
 # --- finalizar_corrida ------------------------------------------------------
 
 
-async def _cargas_anuladas(db, corrida_id: UUID) -> List[UUID]:
-    """Bloquea `FOR SHARE` TODAS las cargas vinculadas (una anulación
-    concurrente espera) y devuelve las que están ANULADO."""
-    resultado = await db.execute(
-        select(CargaArchivo.id, CargaArchivo.estado)
-        .join(CorridaCarga, CorridaCarga.carga_id == CargaArchivo.id)
-        .where(CorridaCarga.corrida_id == corrida_id)
-        .with_for_update(read=True, of=CargaArchivo))
-    return [
-        fila[0] for fila in resultado.all()
-        if fila[1] == estados.ESTADO_CARGA_ANULADO]
-
-
 def con_evento(evento: Dict[str, Any]):
     """Expresión SQL que agrega un evento al `log` append-only."""
     return func.coalesce(Corrida.log, literal([], JSONB)).op("||")(
@@ -459,7 +446,7 @@ async def finalizar_corrida(db, corrida_id: UUID) -> str:
     """BORRADOR si alguna sucursal quedó OK u OMITIDA, si no FALLIDA
     (E-CORRIDA-030); marca `invalidada` si una carga se anuló mientras
     corría. Devuelve el estado, o `ANULADA` si ya no estaba CALCULANDO."""
-    anuladas = await _cargas_anuladas(db, corrida_id)
+    anuladas = await bloqueos.cargas_anuladas(db, corrida_id)
     filas = await db.execute(
         select(CorridaSucursal.estado, func.count())
         .where(CorridaSucursal.corrida_id == corrida_id)
@@ -494,7 +481,7 @@ async def finalizar_corrida(db, corrida_id: UUID) -> str:
     return estado
 
 
-# --- Ciclo de vida: cerrar y anular -----------------------------------------
+# --- Ciclo de vida: anular -----------------------------------------
 
 
 def _no_admite(estado: str) -> ErrorCorrida:
@@ -510,56 +497,6 @@ async def _bloquear_corrida(db, corrida_id: UUID) -> Corrida:
     corrida = resultado.scalars().first()
     if corrida is None:
         raise LookupError(f"la corrida {corrida_id} no existe")
-    return corrida
-
-
-def _validar_cierre(corrida: Corrida) -> None:
-    if corrida.estado != estados.BORRADOR:
-        raise _no_admite(corrida.estado)
-    if corrida.es_escenario:
-        raise ErrorCorrida(
-            codigos.E_CORRIDA_ESCENARIO_NO_SE_CIERRA,
-            codigos.mensaje_escenario("cerrar"))
-    if corrida.invalidada:
-        raise ErrorCorrida(
-            codigos.E_CORRIDA_INVALIDADA,
-            codigos.mensaje(codigos.E_CORRIDA_INVALIDADA))
-
-
-async def _sucursales_fallidas(db, corrida_id: UUID) -> int:
-    resultado = await db.execute(
-        select(func.count()).select_from(CorridaSucursal).where(
-            CorridaSucursal.corrida_id == corrida_id,
-            CorridaSucursal.estado == estados.SUC_FALLIDA))
-    return resultado.scalars().first() or 0
-
-
-async def cerrar_corrida(db, corrida_id: UUID, usuario_id: UUID) -> Corrida:
-    """BORRADOR -> CERRADA.
-
-    Bloquea primero las cargas vinculadas `FOR SHARE` y después la corrida
-    `FOR UPDATE`: el mismo orden (carga y luego corrida) que la guarda de
-    anulación (ADR-11) y `finalizar_corrida`. Una anulación concurrente de
-    una carga espera a este cierre (y se bloquea con E-CARGA-050); un cierre
-    que llega durante una anulación espera y la ve (E-041). El orden inverso
-    (corrida y luego carga) termina en `deadlock detected` cuando ambos se
-    cruzan. Una carga ya anulada invalida la corrida (E-041), pero después de
-    las reglas de estado, escenario y sucursales."""
-    anuladas = await _cargas_anuladas(db, corrida_id)
-    corrida = await _bloquear_corrida(db, corrida_id)
-    _validar_cierre(corrida)
-    if await _sucursales_fallidas(db, corrida_id):
-        raise ErrorCorrida(
-            codigos.E_CORRIDA_SUCURSAL_FALLIDA,
-            codigos.mensaje(codigos.E_CORRIDA_SUCURSAL_FALLIDA))
-    if anuladas:
-        raise ErrorCorrida(
-            codigos.E_CORRIDA_INVALIDADA,
-            codigos.mensaje(codigos.E_CORRIDA_INVALIDADA))
-    corrida.estado = estados.CERRADA
-    corrida.cerrada_en = _ahora()
-    corrida.cerrada_por = usuario_id
-    await db.flush()
     return corrida
 
 

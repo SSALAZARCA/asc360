@@ -30,7 +30,13 @@ from app.motored.models.corrida_resumen import CorridaResumen
 from app.motored.models.corrida_sucursal import CorridaSucursal
 from app.motored.models.sucursal import Sucursal
 from app.motored.models.usuario import Usuario
-from app.motored.services.corridas import estados, proyecciones, valores
+from app.motored.services.corridas import (
+    estados,
+    lecturas_pedido,
+    pedido_tienda,
+    proyecciones,
+    valores,
+)
 
 Alcance = Optional[FrozenSet[UUID]]
 
@@ -59,7 +65,8 @@ async def _sucursales(db, corrida_id: UUID, alcance: Alcance) -> list:
     cs = CorridaSucursal
     resultado = await db.execute(
         select(
-            cs.sucursal_id, cs.orden, cs.estado, cs.codigo, cs.mensaje,
+            cs.sucursal_id, cs.orden, cs.estado, cs.estado_pedido, cs.codigo,
+            cs.mensaje,
             cs.lineas, cs.excluidas, cs.unidades, cs.valor,
             cs.fecha_apertura, cs.divisor, cs.dias_empaque,
             cs.dias_transito, cs.dias_seguridad, cs.dias_entre_pedidos,
@@ -74,11 +81,39 @@ async def _sucursales(db, corrida_id: UUID, alcance: Alcance) -> list:
 # --- Lista ------------------------------------------------------------------
 
 
+def _tienda_en(alcance: Alcance, *estados_pedido: str):
+    """EXISTS una tienda visible de la corrida con el pedido en alguno de
+    esos estados."""
+    condicion = (
+        CorridaSucursal.estado_pedido == estados_pedido[0]
+        if len(estados_pedido) == 1
+        else CorridaSucursal.estado_pedido.in_(estados_pedido))
+    return exists().where(
+        CorridaSucursal.corrida_id == Corrida.id, condicion,
+        *_en_alcance(CorridaSucursal.sucursal_id, alcance))
+
+
+def _filtro_pedidos(alcance: Alcance, pedidos: str):
+    """`abiertos`: alguna tienda en BORRADOR; `por_enviar`: alguna CERRADO;
+    `enviados`: alguna ENVIADO y ninguna pendiente (BORRADOR o CERRADO)."""
+    if pedidos == "abiertos":
+        return _tienda_en(alcance, estados.PEDIDO_BORRADOR)
+    if pedidos == "por_enviar":
+        return _tienda_en(alcance, estados.PEDIDO_CERRADO)
+    return and_(
+        _tienda_en(alcance, estados.PEDIDO_ENVIADO),
+        ~_tienda_en(
+            alcance, estados.PEDIDO_BORRADOR, estados.PEDIDO_CERRADO))
+
+
 def _filtros_lista(
     alcance: Alcance, proveedor_id: Optional[UUID], estado: Optional[str],
     desde: Optional[date], hasta: Optional[date], escenario: Optional[bool],
+    pedidos: Optional[str] = None,
 ) -> list:
     filtros = _visible(alcance)
+    if pedidos is not None:
+        filtros.append(_filtro_pedidos(alcance, pedidos))
     if proveedor_id is not None:
         filtros.append(Corrida.proveedor_id == proveedor_id)
     if estado is not None:
@@ -118,10 +153,14 @@ async def listar(
     db, *, alcance: Alcance, proveedor_id: Optional[UUID],
     estado: Optional[str], desde: Optional[date], hasta: Optional[date],
     escenario: Optional[bool], limite: int, offset: int,
+    pedidos: Optional[str] = None,
 ) -> Tuple[List[Dict[str, Any]], int]:
-    """Página de corridas (la más reciente primero) y el total filtrado."""
+    """Página de corridas (la más reciente primero) y el total filtrado.
+    `pedidos` (abiertos, por_enviar, enviados) deja las corridas que tienen
+    una tienda en ese punto del ciclo; cada item trae su resumen de
+    pedidos."""
     filtros = _filtros_lista(
-        alcance, proveedor_id, estado, desde, hasta, escenario)
+        alcance, proveedor_id, estado, desde, hasta, escenario, pedidos)
     total = await db.execute(
         select(func.count()).select_from(Corrida).where(*filtros))
     filas = await db.execute(
@@ -129,6 +168,11 @@ async def listar(
         .order_by(Corrida.created_at.desc(), Corrida.codigo.desc())
         .limit(limite).offset(offset))
     items = [proyecciones.item_de_fila(f) for f in filas.all()]
+    resumen = await pedido_tienda.resumen_pedidos(
+        db, [item["id"] for item in items], alcance)
+    for item in items:
+        item["pedidos"] = proyecciones.resumen_de_lista(
+            resumen.get(item["id"]))
     return items, total.scalars().first() or 0
 
 
@@ -157,9 +201,11 @@ async def detalle(
         .where(CorridaCarga.corrida_id == corrida_id)
         .order_by(CorridaCarga.tipo, CargaArchivo.id))
     a_pedir = await _a_pedir(db, corrida_id, alcance)
+    eventos = await lecturas_pedido.ultimos_eventos(
+        db, corrida_id, alcance)
     return proyecciones.armar_detalle(
         corrida, sucursales, resumen.scalars().all(), cargas.all(), alcance,
-        a_pedir)
+        a_pedir, eventos)
 
 
 async def _a_pedir(db, corrida_id: UUID, alcance: Alcance) -> list:

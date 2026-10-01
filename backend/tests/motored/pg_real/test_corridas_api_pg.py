@@ -24,7 +24,7 @@ from types import SimpleNamespace
 
 import httpx
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
@@ -157,7 +157,9 @@ async def _crear(cliente, **cuerpo):
 
 
 async def _corrida_en_borrador(mundo, **cuerpo):
-    _como("COMPRAS", mundo.datos.usuario.id)
+    # Un escenario (con `overrides`) sólo lo lanza ADMIN (E-CORRIDA-062).
+    _como("ADMIN" if cuerpo.get("overrides") else "COMPRAS",
+          mundo.datos.usuario.id)
     async with _cliente() as cliente:
         respuesta = await _crear(cliente, **cuerpo)
     assert respuesta.status_code == 202, respuesta.text
@@ -322,20 +324,23 @@ async def test_an_unknown_sucursal_is_a_422_and_leaves_no_corrida(mundo):
     assert respuesta.json()["detail"]["code"] == "E-CORRIDA-011"
 
 
-async def test_close_then_a_second_close_is_a_409(mundo):
+async def test_close_all_then_a_second_close_is_a_409(mundo):
+    """F4 (B3a): cerrar cierra el pedido de cada tienda OK y la corrida
+    sigue en BORRADOR (sólo lleva el cálculo); una segunda vez ya no hay
+    nada en BORRADOR (E-CORRIDA-064)."""
     creada = await _corrida_en_borrador(mundo)
     _como("ADMIN", mundo.datos.usuario.id)
 
     async with _cliente() as cliente:
         cierre = await cliente.post(f"{BASE}/{creada['id']}/cerrar")
         otra = await cliente.post(f"{BASE}/{creada['id']}/cerrar")
-        anulada = await cliente.post(
-            f"{BASE}/{creada['id']}/anular", json={"motivo": "ya cerrada"})
 
-    assert cierre.status_code == 200 and cierre.json()["estado"] == "CERRADA"
+    assert cierre.status_code == 200, cierre.text
+    assert cierre.json()["estado"] == "BORRADOR"
+    assert sorted(cierre.json()["cerradas"]) == sorted(
+        [str(mundo.datos.uno.id), str(mundo.datos.dos.id)])
     assert otra.status_code == 409
-    assert otra.json()["detail"]["code"] == "E-CORRIDA-040"
-    assert anulada.status_code == 409
+    assert otra.json()["detail"]["code"] == "E-CORRIDA-064"
 
 
 async def test_annulling_a_draft_keeps_its_lines_readable(mundo):
@@ -360,11 +365,21 @@ async def _anular_carga(carga_id):
         return await cliente.post(f"{CARGAS}/{carga_id}/anular")
 
 
+async def _cerrar_como_en_f3(mundo, corrida_id):
+    """F3 cerraba la corrida entera (estado CERRADA). F4 ya no lo escribe,
+    pero la guarda de anulación de cargas sigue protegiendo esas corridas
+    heredadas hasta que B3b la lleve a las tiendas."""
+    async with mundo.fabrica() as db:
+        await db.execute(
+            update(Corrida).where(Corrida.id == uuid.UUID(corrida_id))
+            .values(estado="CERRADA"))
+        await db.commit()
+
+
 async def test_a_closed_corrida_blocks_annulling_the_cargas_it_used(mundo):
     creada = await _corrida_en_borrador(mundo)
     _como("ADMIN", mundo.datos.usuario.id)
-    async with _cliente() as cliente:
-        await cliente.post(f"{BASE}/{creada['id']}/cerrar")
+    await _cerrar_como_en_f3(mundo, creada["id"])
 
     cargas = mundo.datos.cargas
     for carga in (cargas.ventas, cargas.inventario, cargas.backorder,
@@ -385,7 +400,7 @@ async def test_the_excel_lost_demand_carga_the_loader_read_is_protected(
     _como("ADMIN", mundo.datos.usuario.id)
     async with _cliente() as cliente:
         detalle = (await cliente.get(f"{BASE}/{creada['id']}")).json()
-        await cliente.post(f"{BASE}/{creada['id']}/cerrar")
+    await _cerrar_como_en_f3(mundo, creada["id"])
 
     respuesta = await _anular_carga(mundo.datos.cargas.perdida.id)
 
@@ -398,8 +413,7 @@ async def test_the_excel_lost_demand_carga_the_loader_read_is_protected(
 async def test_a_lost_demand_carga_outside_the_window_is_not_linked(mundo):
     creada = await _corrida_en_borrador(mundo)
     _como("ADMIN", mundo.datos.usuario.id)
-    async with _cliente() as cliente:
-        await cliente.post(f"{BASE}/{creada['id']}/cerrar")
+    await _cerrar_como_en_f3(mundo, creada["id"])
     async with mundo.fabrica() as db:
         vinculadas = (await db.execute(
             select(CorridaCarga.carga_id).where(
