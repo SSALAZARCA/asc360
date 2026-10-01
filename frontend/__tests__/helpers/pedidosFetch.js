@@ -338,3 +338,102 @@ export const CONSOLIDADO = {
 };
 
 export const CONSOLIDADO_VACIO = { ...CONSOLIDADO, tiendas: [], filas: [], totales: { unidades: '0.00', valor: '0.00' }, total: 0 };
+
+// --- Scenarios and comparison (F5b) -----------------------------------------------
+
+const claveMotor = (clave, tipo, dominio, valorDefecto, opciones) => ({
+  clave, tipo, dominio, default: valorDefecto, ...(opciones ? { opciones } : {}),
+});
+
+/** `GET /parametros/claves?grupo=MOTOR`: the 20 engine keys with their DEFAULTS (as the backend registry has them). */
+export const CLAVES_MOTOR = [
+  claveMotor('incluir_demanda_perdida_en_ponderada', 'bool', 'verdadero o falso', false),
+  claveMotor('factor_demanda_perdida', 'decimal', 'un número mayor o igual a 0', '1'),
+  claveMotor('consolidar_sustituidas', 'bool', 'verdadero o falso', false),
+  claveMotor('dias_entre_pedidos', 'entero', 'un entero entre 1 y 60', 30),
+  claveMotor('modo_mes_en_curso', 'opcion', 'uno de EXCLUIDO, PONDERADO', 'EXCLUIDO', ['EXCLUIDO', 'PONDERADO']),
+  claveMotor('tope_proyeccion_mes_actual', 'decimal', 'un número mayor o igual a 0', '3.0'),
+  claveMotor('min_dias_mes_actual', 'entero', 'un entero entre 1 y 28', 5),
+  claveMotor('excluir_transito_vencido', 'bool', 'verdadero o falso', false),
+  claveMotor('modo_redondeo_empaque', 'opcion', 'uno de CERCANO, ARRIBA', 'CERCANO', ['CERCANO', 'ARRIBA']),
+  claveMotor('corte_abc_a', 'decimal', 'un número mayor que 0 y hasta 1', '0.80'),
+  claveMotor('corte_abc_b', 'decimal', 'un número mayor que 0 y hasta 1', '0.95'),
+  claveMotor('umbral_f', 'entero', 'un entero entre 1 y 6', 2),
+  claveMotor('umbral_m', 'entero', 'un entero entre 1 y 6', 1),
+  claveMotor('k_fms', 'k_fms', 'un objeto con F, M y S, números mayores o iguales a 0', { F: '3', M: '1.5', S: '1' }),
+  claveMotor('tolerancia_sobrestock', 'decimal', 'un número mayor o igual a 0', '0.25'),
+  claveMotor('meses_inventario_muerto', 'entero', 'un entero entre 1 y 6', 6),
+  claveMotor('max_dias_antiguedad_inventario', 'entero', 'un entero entre 1 y 365', 7),
+  claveMotor('max_dias_antiguedad_backorder', 'entero', 'un entero entre 1 y 365', 7),
+  claveMotor('max_dias_antiguedad_facturas', 'entero', 'un entero entre 1 y 365', 7),
+  claveMotor('max_dias_antiguedad_ingresos', 'entero', 'un entero entre 1 y 365', 7),
+];
+
+/** The value in force of each key when it differs from the default (the rest answer 404: the default applies). */
+export const VIGENTES = {
+  dias_entre_pedidos: 21, corte_abc_a: '0.75', modo_redondeo_empaque: 'ARRIBA',
+  k_fms: { F: '4', M: '2', S: '1' }, consolidar_sustituidas: false,
+};
+
+/** Body of `GET /parametros/{clave}/vigente`. */
+export const vigente = (clave, valor) => jsonRes({
+  id: `v-${clave}`, clave, valor, vigente_desde: '2026-09-01', sucursal_id: null, created_at: '2026-09-01T08:00:00',
+});
+
+/** Routes for the launcher: the catalog plus the vigente of every key (404 when the key has no version). */
+export function rutasEscenario(over = {}) {
+  const rutas = { 'GET /parametros/claves': jsonRes(CLAVES_MOTOR) };
+  CLAVES_MOTOR.forEach(({ clave }) => {
+    rutas[`GET /parametros/${clave}/vigente`] = clave in VIGENTES
+      ? vigente(clave, VIGENTES[clave])
+      : jsonRes({ detail: 'Sin versión vigente para esta clave' }, 404);
+  });
+  return { ...rutas, ...over };
+}
+
+const filaComp = (sucursal_id, sucursal, codigo, nombre, real, prueba, claseReal, clasePrueba, pedidoReal) => ({
+  sucursal_id, sucursal, referencia_id: `ref-${codigo}`, codigo, nombre, clase_real: claseReal, clase_prueba: clasePrueba,
+  sugerido_real: `${real}.00`, sugerido_prueba: `${prueba}.00`, delta: `${prueba - real}.00`,
+  pedido_final_real: `${pedidoReal === undefined ? real : pedidoReal}.00`,
+});
+
+const totalComp = (sucursal_id, nombre, ur, up, vr, vp) => ({
+  sucursal_id, nombre, unidades_real: `${ur}.00`, unidades_prueba: `${up}.00`, diferencia_unidades: `${up - ur}.00`,
+  valor_real: `${vr}.00`, valor_prueba: `${vp}.00`, diferencia_valor: `${vp - vr}.00`,
+});
+
+/**
+ * Scenario c5 against the real corrida c1 (same corte). Quantities are whole packs (12, 10 and 12), the deltas are
+ * plausible: the scenario that adds the sold-out units of the substitutes raises two references, lowers one and
+ * brings a reference that the real corrida did not order (real 0, prueba 12). Cali is not comparable.
+ */
+export const COMPARACION = {
+  escenario: { id: 'c5', codigo: 'ESC-2026-S40-001', estado: 'BORRADOR', es_escenario: true },
+  real: { id: 'c1', codigo: 'PED-2026-S40-001', estado: 'BORRADOR', es_escenario: false },
+  fecha_corte: '2026-10-01',
+  filas: [
+    filaComp('s1', 'Manizales', '00123-AB', 'Pastilla de freno', 0, 12, 'DS', 'BM'),
+    filaComp('s1', 'Manizales', '55512-A', 'Bujía', 50, 40, 'CM', 'CM', 60),
+    filaComp('s1', 'Manizales', '94109-12000S', 'Filtro de aceite', 48, 60, 'AF', 'AF'),
+    filaComp('s2', 'Pereira', '94109-12000S', 'Filtro de aceite', 36, 48, 'AF', 'AF'),
+  ],
+  total: 4, limite: 100, offset: 0,
+  totales_por_sucursal: [
+    totalComp('s1', 'Manizales', 1000, 1014, 5000000, 5120000),
+    totalComp('s2', 'Pereira', 800, 812, 3200000, 3290000),
+  ],
+  no_comparables: [
+    { sucursal_id: 's3', nombre: 'Cali', estado_real: 'OK', estado_prueba: 'FALLIDA', motivo: 'El escenario no calculó la tienda (FALLIDA).' },
+  ],
+};
+
+/** Calculated real corridas of the same corte, most recent first (the older one has another code and creation day). */
+export const REALES = [
+  { ...C_CALCULADA, id: 'c1', codigo: 'PED-2026-S40-001', created_at: '2026-10-01T15:30:00' },
+  { ...C_CALCULADA, id: 'c10', codigo: 'PED-2026-S40-000', created_at: '2026-09-30T09:00:00' },
+];
+
+/** A scenario detail that remembers what it tested. */
+export const D_ESCENARIO = {
+  ...D_PRUEBA, overrides: { consolidar_sustituidas: true, k_fms: { F: '4', M: '2', S: '1' } },
+};

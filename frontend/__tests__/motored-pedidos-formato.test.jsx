@@ -1,5 +1,5 @@
 /** Motored Fase 4 (F2a): display helpers of the Pedidos screens. */
-import { unidades, fechaHora, etiquetaQuiebre, dias, etiquetaEvento, etiquetaMotivoEdicion, etiquetaExclusion, valorCompacto, abreviarTienda } from '../components/motored/pedidos/formato';
+import { unidades, fechaHora, etiquetaQuiebre, dias, etiquetaEvento, etiquetaMotivoEdicion, etiquetaExclusion, valorCompacto, abreviarTienda, deltaConSigno, direccionDelta, deltaCOP } from '../components/motored/pedidos/formato';
 
 describe('unidades', () => {
   it('drops the decimals of a whole quantity and groups thousands (es-CO)', () => {
@@ -103,5 +103,43 @@ describe('abreviarTienda', () => {
 
   it('copes with a missing name', () => {
     expect(abreviarTienda(null)).toBe('');
+  });
+});
+
+describe('deltaConSigno', () => {
+  it('writes the plus sign of an increase, the minus of a decrease and a bare zero', () => {
+    expect(deltaConSigno('12.00')).toBe('+12');
+    expect(deltaConSigno('-10.00')).toBe('-10');
+    expect(deltaConSigno('0.00')).toBe('0');
+  });
+
+  it('never writes a negative zero', () => {
+    expect(deltaConSigno('-0.00')).toBe('0');
+    expect(deltaCOP('-0.00')).toMatch(/^\$\s?0$/);
+  });
+
+  it('groups thousands, keeps decimals and renders a dash for a missing value', () => {
+    expect(deltaConSigno('1250.00')).toBe('+1.250');
+    expect(deltaConSigno('-0.50')).toBe('-0,5');
+    expect(deltaConSigno(null)).toBe('—');
+    expect(deltaConSigno('abc')).toBe('—');
+  });
+});
+
+describe('direccionDelta', () => {
+  it('says whether the scenario asks for more, less or the same', () => {
+    expect(direccionDelta('12.00')).toBe('sube');
+    expect(direccionDelta('-10.00')).toBe('baja');
+    expect(direccionDelta('0.00')).toBe('igual');
+    expect(direccionDelta(null)).toBe('igual');
+  });
+});
+
+describe('deltaCOP', () => {
+  it('writes a signed peso difference', () => {
+    expect(deltaCOP('120000.00')).toMatch(/^\+\$\s?120\.000$/);
+    expect(deltaCOP('-90000.00')).toMatch(/^-\$\s?90\.000$/);
+    expect(deltaCOP('0.00')).toMatch(/^\$\s?0$/);
+    expect(deltaCOP(null)).toBe('—');
   });
 });

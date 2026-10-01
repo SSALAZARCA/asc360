@@ -83,9 +83,11 @@ function NombreTienda({ tienda, ciclo }) {
 /** `conTope` adds the cap cell (`tope` is the tienda row of the cap summary, absent for a tienda without pedido). */
 export default function TiendaFila({ tienda, onOpen, ciclo, conTope = false, tope }) {
   const conPedido = tienda.estado_pedido != null;
+  // Flagged only when its calculation failed: a scenario tienda has no pedido either, and that is not a failure.
+  const marca = tienda.estado === 'OK' ? {} : fallaStyle;
   return (
-    <tr style={{ borderTop: '1px solid var(--motored-border, #e4e4e7)', ...(conPedido ? {} : fallaStyle) }}>
-      <td style={{ ...ajusteStyle, ...stickyColStyle, ...(conPedido ? {} : fallaStyle), fontWeight: 600 }}><NombreTienda tienda={tienda} ciclo={ciclo} /></td>
+    <tr style={{ borderTop: '1px solid var(--motored-border, #e4e4e7)', ...marca }}>
+      <td style={{ ...ajusteStyle, ...stickyColStyle, ...marca, fontWeight: 600 }}><NombreTienda tienda={tienda} ciclo={ciclo} /></td>
       <td style={ajusteStyle}><Calculo tienda={tienda} /></td>
       <td style={ajusteStyle}><Pedido tienda={tienda} /></td>
       <td style={{ ...tdStyle, ...numStyle }}>
@@ -96,7 +98,7 @@ export default function TiendaFila({ tienda, onOpen, ciclo, conTope = false, top
       </td>
       {conTope && <td style={ajusteStyle}><CeldaTope tope={tope} /></td>}
       <td style={ajusteStyle}><UltimoEvento evento={tienda.ultimo_evento} /></td>
-      <td style={{ ...tdStyle, ...stickyRightStyle, ...(conPedido ? {} : fallaStyle) }}>
+      <td style={{ ...tdStyle, ...stickyRightStyle, ...marca }}>
         <div style={{ display: 'flex', alignItems: 'center' }}>
           {conPedido && <MotoredIconAction action="Ver pedido" touch onClick={() => onOpen(tienda.sucursal_id)} />}
           {ciclo && <AccionesTienda tienda={tienda} alAccionar={ciclo.alAccionar} ocupado={ciclo.ocupado} />}

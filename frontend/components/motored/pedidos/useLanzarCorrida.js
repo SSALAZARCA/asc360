@@ -8,15 +8,17 @@ import { mensajeConCodigo } from '../../../lib/motored/httpErrors';
 export const MODO_TODAS = 'todas';
 export const MODO_SELECCION = 'seleccion';
 
-export function armarCuerpo({ fecha, modo, seleccion, nota }) {
+export function armarCuerpo({ fecha, modo, seleccion, nota, overrides }) {
   return {
     fecha_corte: fecha,
     ...(modo === MODO_SELECCION ? { sucursal_ids: seleccion } : {}),
     ...(nota.trim() ? { nota: nota.trim() } : {}),
+    ...(overrides ? { overrides } : {}),
   };
 }
 
-export default function useLanzarCorrida(onCreada) {
+/** `overrides` (optional) turns the launch into a scenario: only the parameters to test, as the server expects them. */
+export default function useLanzarCorrida(onCreada, overrides) {
   const [fecha, setFecha] = useState('');
   const [modo, setModoEstado] = useState(MODO_TODAS);
   const [seleccion, setSeleccion] = useState([]);
@@ -50,15 +52,16 @@ export default function useLanzarCorrida(onCreada) {
     setError('');
     setCreada(null);
     try {
-      setCreada(await crearCorrida(armarCuerpo({ fecha, modo, seleccion: ordenadas, nota })));
+      const nueva = await crearCorrida(armarCuerpo({ fecha, modo, seleccion: ordenadas, nota, overrides }));
+      setCreada(nueva);
       setNota('');
-      onCreada?.();
+      onCreada?.(nueva);
     } catch (fallo) {
       setError(mensajeConCodigo(fallo, 'No se pudo crear la corrida.'));
     } finally {
       setBusy(false);
     }
-  }, [fecha, modo, seleccion, nota, tiendas.items, onCreada]);
+  }, [fecha, modo, seleccion, nota, overrides, tiendas.items, onCreada]);
 
   const listo = fecha !== '' && !busy && (modo === MODO_TODAS || seleccion.length > 0);
   return {

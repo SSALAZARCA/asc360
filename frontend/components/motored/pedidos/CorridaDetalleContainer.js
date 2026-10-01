@@ -17,6 +17,7 @@ import useAccionesPedido from './useAccionesPedido';
 import useSeleccionTiendas from './useSeleccionTiendas';
 import useTopesCorrida from './useTopesCorrida';
 import TopeResumenCorrida from './TopeResumenCorrida';
+import ComparacionContainer from './ComparacionContainer';
 import ConsolidadoContainer from './ConsolidadoContainer';
 import CorridaTabs from './CorridaTabs';
 import { estaCalculando, fechaCorta } from './reglas';
@@ -48,6 +49,8 @@ function Cuerpo({ corrida, onOpen, ciclo, topes }) {
 }
 
 const PESTANAS = [{ id: 'tiendas', label: 'Tiendas' }, { id: 'consolidado', label: 'Consolidado' }];
+// Only a scenario can be compared with a real corrida.
+const PESTANA_COMPARAR = { id: 'comparar', label: 'Comparar' };
 const cerrada = (t) => t.estado_pedido === 'CERRADO' || t.estado_pedido === 'ENVIADO';
 
 export default function CorridaDetalleContainer({ corridaId }) {
@@ -77,8 +80,9 @@ export default function CorridaDetalleContainer({ corridaId }) {
         <>
           <Cabecera corrida={data} onTerminal={reload} />
           <AntiguedadDatos antiguedad={data.antiguedad} advertencias={data.advertencias} />
-          <CorridaTabs tabs={PESTANAS} value={pestana} onChange={setPestana} />
+          <CorridaTabs tabs={data.es_escenario ? [...PESTANAS, PESTANA_COMPARAR] : PESTANAS} value={pestana} onChange={setPestana} />
           {pestana === 'consolidado' && <ConsolidadoContainer corridaId={corridaId} />}
+          {pestana === 'comparar' && data.es_escenario && <ComparacionContainer escenario={data} />}
           {pestana === 'tiendas' && (
             <>
               <AccionesCorrida

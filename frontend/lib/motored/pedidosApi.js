@@ -85,6 +85,15 @@ export const setModoTope = (activo, vigenteDesde) => (
 /** One page of the references x tiendas matrix; `filtros` are `q`, `limite` (<= 100) and `offset`. */
 export const getConsolidado = (id, filtros) => motoredFetchJson(`${BASE}/${id}/consolidado${consulta(filtros)}`);
 
+// --- Scenarios and comparison (F5b) ---------------------------------------------
+
+/** The engine keys a scenario can override: `{ clave, tipo, dominio, default, opciones? }` (defaults, not current values). */
+export const listarClavesMotor = () => motoredFetchJson('/parametros/claves?grupo=MOTOR');
+/** The value in force today for one key (404 when it has no version: the default applies). */
+export const getParametroVigente = (clave) => motoredFetchJson(`/parametros/${encodeURIComponent(clave)}/vigente`);
+/** A scenario next to a real corrida (`con`): `con`, `sucursal_id`, `solo_diferencias`, `limite` (<= 100), `offset`. */
+export const compararCorridas = (id, filtros) => motoredFetchJson(`${BASE}/${id}/comparar${consulta(filtros)}`);
+
 // --- Export to HMCL -----------------------------------------------------------
 
 /** Downloads the xlsx of one tienda; resolves `{ nombre, omitidas }`. */
