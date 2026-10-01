@@ -1,14 +1,15 @@
 """
 Motored Pedidos F3 "Motor", S7 (sdd/motored-pedidos-motor, ADR-9, spec
-"RBAC (T19)"): quién puede qué en `/corridas`.
+"RBAC (T19)") y Fase 4 (sdd/motored-pedidos-ui, decision F4-16): quién
+puede qué en `/corridas`.
 
-Matriz de roles sobre CADA endpoint (ADMIN/COMPRAS crean, cierran, anulan y
-leen; CONSULTA y SUCURSAL sólo leen), el alcance por sucursal de SUCURSAL
-(el doble de las consultas recibe el conjunto de sus sucursales; ningún otro
-rol recibe restricción; una sucursal ajena es 403) y el confinamiento de
-SERVICIO_CLIENTE, que pasa por la dependencia real. Que las consultas reales
-honren ese alcance se prueba en `test_corrida_consultas.py` y en
-`pg_real/test_corridas_api_pg.py`.
+Matriz de roles sobre CADA endpoint: sólo ADMIN y COMPRAS leen, crean,
+cierran y anulan; SUCURSAL, CONSULTA y SERVICIO_CLIENTE reciben 403 en todo
+y sin credenciales es 401. SERVICIO_CLIENTE pasa por la dependencia real. El
+alcance por sucursal sigue existiendo como defensa en profundidad dentro de
+las consultas (`test_corrida_consultas.py` y `pg_real/test_corridas_api_pg.py`
+lo prueban a nivel de servicio); la API ya no lo necesita porque ningún rol
+restringido llega a ella.
 """
 import uuid
 
@@ -32,8 +33,9 @@ BASE = "/api/motored/corridas"
 USUARIO = str(uuid.UUID(int=900))
 ID = fx.CORRIDA_ID
 ESCRITURA = {"ADMIN", "COMPRAS"}
-LECTURA = ["ADMIN", "COMPRAS", "CONSULTA", "SUCURSAL"]
-TODOS = LECTURA + ["SERVICIO_CLIENTE", "ASESOR_MOSTRADOR"]
+LECTURA = ["ADMIN", "COMPRAS"]
+DENEGADOS = ["SUCURSAL", "CONSULTA", "SERVICIO_CLIENTE"]
+TODOS = LECTURA + DENEGADOS + ["ASESOR_MOSTRADOR"]
 
 LECTURAS = [
     ("GET", BASE, None),
@@ -82,7 +84,7 @@ def _pedir(cliente, metodo, ruta, cuerpo):
 
 @pytest.mark.parametrize("rol", TODOS)
 @pytest.mark.parametrize("metodo,ruta,cuerpo", LECTURAS)
-def test_only_the_four_panel_roles_can_read(espia, rol, metodo, ruta, cuerpo):
+def test_only_admin_and_compras_can_read(espia, rol, metodo, ruta, cuerpo):
     respuesta = _pedir(_como(rol, [fx.SUC_A]), metodo, ruta, cuerpo)
 
     if rol in LECTURA:
@@ -113,10 +115,33 @@ def test_a_refused_write_reaches_no_service_and_commits_nothing(
     assert espia.llamadas == [] and espia.encolados == []
 
 
-# --- Alcance por sucursal ---------------------------------------------------
+# --- Lectura denegada (F4-16) ------------------------------------------------
 
 
-@pytest.mark.parametrize("rol", ["ADMIN", "COMPRAS", "CONSULTA"])
+@pytest.mark.parametrize("rol", DENEGADOS)
+@pytest.mark.parametrize("metodo,ruta,cuerpo", LECTURAS)
+def test_sucursal_consulta_and_servicio_cliente_get_403_on_every_read(
+        espia, rol, metodo, ruta, cuerpo):
+    cliente = _como(rol, [fx.SUC_A])
+
+    respuesta = _pedir(cliente, metodo, ruta, cuerpo)
+
+    assert respuesta.status_code == 403
+    assert espia.llamadas == []
+
+
+@pytest.mark.parametrize("rol", DENEGADOS)
+def test_a_denied_role_is_refused_even_with_a_sucursal_filter(espia, rol):
+    cliente = _como(rol, [fx.SUC_A])
+
+    respuesta = cliente.get(
+        f"{BASE}/{ID}/lineas", params={"sucursal_id": str(fx.SUC_A)})
+
+    assert respuesta.status_code == 403
+    assert espia.llamadas == []
+
+
+@pytest.mark.parametrize("rol", ["ADMIN", "COMPRAS"])
 def test_unrestricted_roles_read_with_no_scope(espia, rol):
     cliente = _como(rol, [fx.SUC_A])
 
@@ -129,84 +154,24 @@ def test_unrestricted_roles_read_with_no_scope(espia, rol):
     assert alcances == [None, None, None, None]
 
 
-def test_a_sucursal_user_reads_with_the_set_of_its_own_sucursales(espia):
-    cliente = _como("SUCURSAL", [fx.SUC_A, fx.SUC_B])
-
-    for _, ruta, _ in LECTURAS:
-        assert cliente.get(ruta).status_code == 200
-
-    alcances = [
-        c[2]["alcance"] if c[0] == "listar" else c[1][1]
-        for c in espia.llamadas]
-    assert alcances == [frozenset({fx.SUC_A, fx.SUC_B})] * 4
-
-
-def test_a_sucursal_user_with_no_sucursales_gets_an_empty_scope(espia):
-    cliente = _como("SUCURSAL", [])
-
-    cliente.get(BASE)
-
-    assert espia.ultima("listar")[2]["alcance"] == frozenset()
-
-
-def test_a_foreign_sucursal_in_the_lines_is_a_403(espia):
-    cliente = _como("SUCURSAL", [fx.SUC_A])
-
-    respuesta = cliente.get(
-        f"{BASE}/{ID}/lineas", params={"sucursal_id": str(fx.SUC_B)})
-
-    assert respuesta.status_code == 403
-    assert espia.llamadas == []
-
-
-def test_an_own_sucursal_in_the_lines_is_served(espia):
-    cliente = _como("SUCURSAL", [fx.SUC_A])
-
-    respuesta = cliente.get(
-        f"{BASE}/{ID}/lineas", params={"sucursal_id": str(fx.SUC_A)})
-
-    assert respuesta.status_code == 200
-    kw = espia.ultima("lineas")[2]
-    assert kw["sucursal_id"] == fx.SUC_A
-
-
-def test_lines_without_a_sucursal_are_left_to_the_scope(espia):
-    cliente = _como("SUCURSAL", [fx.SUC_A])
-
-    cliente.get(f"{BASE}/{ID}/lineas")
-
-    _, args, kw = espia.ultima("lineas")
-    assert args == (ID, frozenset({fx.SUC_A})) and kw["sucursal_id"] is None
-
-
-def test_any_sucursal_filter_is_fine_for_an_unrestricted_role(espia):
-    cliente = _como("CONSULTA")
+@pytest.mark.parametrize("rol", ["ADMIN", "COMPRAS"])
+def test_any_sucursal_filter_is_fine_for_an_allowed_role(espia, rol):
+    cliente = _como(rol)
 
     respuesta = cliente.get(
         f"{BASE}/{ID}/lineas", params={"sucursal_id": str(fx.SUC_B)})
 
     assert respuesta.status_code == 200
+    assert espia.ultima("lineas")[2]["sucursal_id"] == fx.SUC_B
 
 
 @pytest.mark.parametrize("ruta", [
     f"{BASE}/{ID}", f"{BASE}/{ID}/progreso", f"{BASE}/{ID}/lineas"])
-def test_a_corrida_with_none_of_its_sucursales_is_a_404(espia, ruta):
+def test_a_missing_corrida_is_a_404_for_an_allowed_role(espia, ruta):
     espia.detalle = espia.progreso = espia.lineas = None
-    cliente = _como("SUCURSAL", [fx.SUC_A])
+    cliente = _como("COMPRAS")
 
     assert cliente.get(ruta).status_code == 404
-
-
-def test_a_malformed_sucursal_id_in_the_user_is_ignored(espia):
-    usuario = MotoredUser(
-        user_id=USUARIO, role="SUCURSAL",
-        sucursal_ids=[str(fx.SUC_A), "no-uuid"])
-    override_motored_user(usuario)
-    override_motored_db(FakeAsyncSession(execute_queue=[[]] * 4))
-
-    TestClient(app).get(BASE)
-
-    assert espia.ultima("listar")[2]["alcance"] == frozenset({fx.SUC_A})
 
 
 # --- Dependencia real: SERVICIO_CLIENTE y sin credenciales ------------------

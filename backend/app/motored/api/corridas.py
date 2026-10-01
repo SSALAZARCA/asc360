@@ -5,11 +5,11 @@ under /api/motored/corridas" y "RBAC (T19)"): `/api/motored/corridas`.
 Router delgado: las reglas viven en `services/corridas/` (servicio para
 escribir, `consultas` para leer). No hay UI en F3.
 
-RBAC: crear, cerrar y anular son de ADMIN y COMPRAS; leer, de esos dos más
-CONSULTA y SUCURSAL. SUCURSAL ve sólo sus sucursales (el alcance se pasa a
-las consultas, que lo aplican en SQL; una sucursal ajena en las líneas es
-403; una corrida sin ninguna sucursal suya es 404). SERVICIO_CLIENTE queda
-afuera por el confinamiento de prefijos de `deps.get_current_motored_user`.
+RBAC (F4-16): todo `/corridas`, leer o escribir, es sólo de ADMIN y COMPRAS;
+SUCURSAL y CONSULTA reciben 403. `_alcance` se conserva y devuelve `None`
+para los dos roles permitidos: las consultas siguen aceptando el alcance por
+sucursal como defensa en profundidad. SERVICIO_CLIENTE queda afuera por el
+confinamiento de prefijos de `deps.get_current_motored_user`.
 
 `POST /corridas` valida y corre el preflight de forma síncrona (un rechazo es
 un 422 con su código y, en los de vigencia, el detalle de antigüedades por
@@ -58,7 +58,7 @@ router = APIRouter(
 )
 
 _require_write = require_roles("ADMIN", "COMPRAS")
-_require_read = require_roles("ADMIN", "COMPRAS", "CONSULTA", "SUCURSAL")
+_require_read = require_roles("ADMIN", "COMPRAS")
 
 ROL_SUCURSAL = "SUCURSAL"
 PAGINA_CORRIDAS, PAGINA_CORRIDAS_MAX = 50, 200

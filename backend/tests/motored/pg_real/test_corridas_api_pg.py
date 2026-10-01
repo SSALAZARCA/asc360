@@ -39,8 +39,8 @@ from app.motored.models.carga_archivo import CargaArchivo
 from app.motored.models.corrida import Corrida
 from app.motored.models.corrida_carga import CorridaCarga
 from app.motored.models.demanda_perdida import DemandaPerdida
-from app.motored.models.sucursal import Sucursal
 from app.motored.services.auth import MotoredUser
+from app.motored.services.corridas import consultas as cs
 from app.motored.services.corridas import ejecucion as ej
 from app.motored.services.corridas import servicio as sv
 from app.motored.services.trabajos import supervisor, supervisor_corridas
@@ -454,69 +454,35 @@ async def test_a_carga_used_only_by_an_annulled_corrida_can_be_annulled(
     assert respuesta.status_code == 200
 
 
-# --- Alcance por sucursal (T19) ---------------------------------------------
+# --- Lectura denegada a SUCURSAL y CONSULTA (F4-16) -----------------------
 
 
-async def test_a_sucursal_user_reads_only_its_own_sucursal(mundo):
+@pytest.mark.parametrize("rol", ["SUCURSAL", "CONSULTA"])
+async def test_sucursal_and_consulta_are_refused_on_every_read(mundo, rol):
     creada = await _corrida_en_borrador(mundo)
-    uno, dos, tres = (mundo.datos.uno, mundo.datos.dos, mundo.datos.tres)
-    _como("SUCURSAL", mundo.datos.usuario.id, [uno.id])
-    ajenos = [str(dos.id), str(tres.id), dos.nombre, tres.nombre]
+    uno, dos = mundo.datos.uno, mundo.datos.dos
+    _como(rol, mundo.datos.usuario.id, [uno.id])
+    rutas = [
+        BASE, f"{BASE}/{creada['id']}", f"{BASE}/{creada['id']}/progreso",
+        f"{BASE}/{creada['id']}/lineas"]
 
     async with _cliente() as cliente:
-        detalle = await cliente.get(f"{BASE}/{creada['id']}")
-        progreso = await cliente.get(f"{BASE}/{creada['id']}/progreso")
-        lineas = await cliente.get(f"{BASE}/{creada['id']}/lineas")
-        lista = await cliente.get(BASE)
-
-    for respuesta in (detalle, progreso, lineas, lista):
-        assert respuesta.status_code == 200
-        assert not [a for a in ajenos if a in respuesta.text], respuesta.url
-    cuerpo = detalle.json()
-    assert [s["sucursal_id"] for s in cuerpo["sucursales"]] == [str(uno.id)]
-    assert {r["sucursal_id"] for r in cuerpo["resumen"]} == {str(uno.id)}
-    assert (cuerpo["sucursales_total"], cuerpo["totales"]["unidades"]) == (
-        1, "53.00")
-    assert list(cuerpo["parametros"][
-        "dias_entre_pedidos_por_sucursal"]) == [str(uno.id)]
-    assert progreso.json()["total"] == 1 and progreso.json()[
-        "actual"] is None
-    assert {i["sucursal_id"] for i in lineas.json()["items"]} == {str(uno.id)}
-    assert lista.json()["items"][0]["sucursales_total"] == 1
-
-
-async def test_a_sucursal_user_cannot_ask_for_another_sucursals_lines(mundo):
-    creada = await _corrida_en_borrador(mundo)
-    _como("SUCURSAL", mundo.datos.usuario.id, [mundo.datos.uno.id])
-
-    async with _cliente() as cliente:
+        respuestas = [await cliente.get(r) for r in rutas]
         ajena = await cliente.get(
             f"{BASE}/{creada['id']}/lineas",
-            params={"sucursal_id": str(mundo.datos.dos.id)})
+            params={"sucursal_id": str(dos.id)})
 
+    assert [r.status_code for r in respuestas] == [403] * 4
     assert ajena.status_code == 403
+    for respuesta in respuestas:
+        assert str(dos.id) not in respuesta.text
+        assert dos.nombre not in respuesta.text
 
 
-async def test_a_corrida_without_an_own_sucursal_does_not_exist_for_it(
-        mundo):
-    creada = await _corrida_en_borrador(
-        mundo, sucursal_ids=[str(mundo.datos.dos.id)])
-    _como("SUCURSAL", mundo.datos.usuario.id, [mundo.datos.uno.id])
-
-    async with _cliente() as cliente:
-        detalle = await cliente.get(f"{BASE}/{creada['id']}")
-        progreso = await cliente.get(f"{BASE}/{creada['id']}/progreso")
-        lineas = await cliente.get(f"{BASE}/{creada['id']}/lineas")
-        lista = await cliente.get(BASE)
-
-    assert (detalle.status_code, progreso.status_code,
-            lineas.status_code) == (404, 404, 404)
-    assert lista.json()["total"] == 0
-
-
-async def test_unrestricted_roles_see_the_whole_network(mundo):
+@pytest.mark.parametrize("rol", ["ADMIN", "COMPRAS"])
+async def test_admin_and_compras_see_the_whole_network(mundo, rol):
     creada = await _corrida_en_borrador(mundo)
-    _como("CONSULTA", mundo.datos.usuario.id, [mundo.datos.uno.id])
+    _como(rol, mundo.datos.usuario.id, [mundo.datos.uno.id])
 
     async with _cliente() as cliente:
         detalle = (await cliente.get(f"{BASE}/{creada['id']}")).json()
@@ -526,17 +492,66 @@ async def test_unrestricted_roles_see_the_whole_network(mundo):
     assert len(json.dumps(detalle["parametros"])) > 0
 
 
-async def test_an_inactive_sucursal_user_sees_an_empty_list(mundo):
-    await _corrida_en_borrador(mundo)
+# --- Alcance por sucursal en SQL (defensa en profundidad, a nivel de
+# servicio: la API ya no deja pasar a ningún rol restringido) ----------------
+
+
+async def test_the_scope_still_filters_the_queries_in_sql(mundo):
+    creada = await _corrida_en_borrador(mundo)
+    uno, dos, tres = (mundo.datos.uno, mundo.datos.dos, mundo.datos.tres)
+    alcance = frozenset({uno.id})
+    ajenos = [str(dos.id), str(tres.id), dos.nombre, tres.nombre]
+    corrida_id = uuid.UUID(creada["id"])
+
     async with mundo.fabrica() as db:
-        nueva = Sucursal(
-            id=uuid.uuid4(), nombre=f"SIN CORRIDA {uuid.uuid4().hex[:6]}",
-            sic="X", activa=False, dias_empaque=1, dias_transito=1)
-        await _guardar(db, nueva)
-        await db.commit()
-    _como("SUCURSAL", mundo.datos.usuario.id, [nueva.id])
+        detalle = await cs.detalle(db, corrida_id, alcance)
+        progreso = await cs.progreso(db, corrida_id, alcance)
+        lineas, total = await cs.lineas(
+            db, corrida_id, alcance, sucursal_id=None,
+            incluir_excluidas=False, clase=None, estado_quiebre=None,
+            limite=500, offset=0)
+        items, total_lista = await cs.listar(
+            db, alcance=alcance, proveedor_id=None, estado=None,
+            desde=None, hasta=None, escenario=None, limite=50, offset=0)
 
-    async with _cliente() as cliente:
-        lista = (await cliente.get(BASE)).json()
+    assert [s["sucursal_id"] for s in detalle["sucursales"]] == [uno.id]
+    assert {r["sucursal_id"] for r in detalle["resumen"]} == {uno.id}
+    assert detalle["sucursales_total"] == 1
+    assert progreso["total"] == 1 and progreso["actual"] is None
+    assert {i.sucursal_id for i in lineas} == {uno.id}
+    assert total_lista == 1 and items[0]["sucursales_total"] == 1
+    assert not [a for a in ajenos if a in json.dumps(detalle, default=str)]
 
-    assert lista["total"] == 0 and lista["items"] == []
+
+async def test_a_corrida_without_an_own_sucursal_is_invisible_to_the_scope(
+        mundo):
+    creada = await _corrida_en_borrador(
+        mundo, sucursal_ids=[str(mundo.datos.dos.id)])
+    alcance = frozenset({mundo.datos.uno.id})
+    corrida_id = uuid.UUID(creada["id"])
+
+    async with mundo.fabrica() as db:
+        detalle = await cs.detalle(db, corrida_id, alcance)
+        progreso = await cs.progreso(db, corrida_id, alcance)
+        lineas = await cs.lineas(
+            db, corrida_id, alcance, sucursal_id=None,
+            incluir_excluidas=False, clase=None, estado_quiebre=None,
+            limite=500, offset=0)
+        _, total = await cs.listar(
+            db, alcance=alcance, proveedor_id=None, estado=None,
+            desde=None, hasta=None, escenario=None, limite=50, offset=0)
+
+    assert (detalle, progreso, lineas) == (None, None, None)
+    assert total == 0
+
+
+async def test_an_empty_scope_sees_an_empty_list(mundo):
+    await _corrida_en_borrador(mundo)
+
+    async with mundo.fabrica() as db:
+        items, total = await cs.listar(
+            db, alcance=frozenset({uuid.uuid4()}), proveedor_id=None,
+            estado=None, desde=None, hasta=None, escenario=None,
+            limite=50, offset=0)
+
+    assert total == 0 and items == []
