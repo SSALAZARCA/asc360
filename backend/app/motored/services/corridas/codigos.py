@@ -37,6 +37,15 @@ E_CORRIDA_ESCENARIO_NO_SE_CIERRA = "E-CORRIDA-042"
 E_CORRIDA_SUCURSAL_FALLIDA = "E-CORRIDA-043"
 E_CORRIDA_INTERNO = "E-CORRIDA-099"
 
+# Fase 4 (sdd/motored-pedidos-ui, R3 de las tareas): edición de líneas del
+# pedido de una tienda. 052-054 y 066 son de B2; 065 la comparten todas las
+# acciones por tienda. 042 (escenario) ahora dice QUÉ acción no admite.
+E_CORRIDA_PEDIDO_NO_BORRADOR = "E-CORRIDA-052"
+E_CORRIDA_CANTIDAD_INVALIDA = "E-CORRIDA-053"
+E_CORRIDA_LINEA_EXCLUIDA = "E-CORRIDA-054"
+E_CORRIDA_SIN_PEDIDO = "E-CORRIDA-065"
+E_CORRIDA_EDICION_DESACTUALIZADA = "E-CORRIDA-066"
+
 # Avisos
 A_CORRIDA_DEMANDA_PERDIDA_AUSENTE = "A-CORRIDA-101"
 A_CORRIDA_SUCURSAL_OMITIDA = tipos.COD_SUCURSAL_OMITIDA
@@ -105,7 +114,26 @@ CATALOGO = {
     E_CORRIDA_INVALIDADA: (
         "La corrida quedó invalidada por la anulación de una carga."
     ),
-    E_CORRIDA_ESCENARIO_NO_SE_CIERRA: "Un escenario no se puede cerrar.",
+    E_CORRIDA_ESCENARIO_NO_SE_CIERRA: (
+        "Un escenario es solo de prueba: no se puede {accion}."
+    ),
+    E_CORRIDA_PEDIDO_NO_BORRADOR: (
+        "El pedido de esta tienda está {estado}: no se puede editar. "
+        "Reábralo para ajustar sus cantidades."
+    ),
+    E_CORRIDA_CANTIDAD_INVALIDA: (
+        "La cantidad a pedir debe ser un número entero entre 0 y "
+        "9.999.999."
+    ),
+    E_CORRIDA_LINEA_EXCLUIDA: (
+        "La línea {referencia} no se puede editar: está excluida del "
+        "pedido ({motivo})."
+    ),
+    E_CORRIDA_SIN_PEDIDO: "La tienda no tiene pedido en esta corrida.",
+    E_CORRIDA_EDICION_DESACTUALIZADA: (
+        "La cantidad de la línea cambió mientras la editaba (ahora es "
+        "{actual}). Revise la pantalla y vuelva a intentar."
+    ),
     E_CORRIDA_SUCURSAL_FALLIDA: (
         "Hay sucursales fallidas: no se puede cerrar la corrida."
     ),
@@ -149,6 +177,11 @@ class ErrorCorrida(Exception):
 def mensaje(codigo: str, **datos) -> str:
     """Mensaje en español del código, con sus marcadores rellenados."""
     return CATALOGO[codigo].format(**datos)
+
+
+def mensaje_escenario(accion: str) -> str:
+    """E-CORRIDA-042: un escenario no admite `accion` (cerrar, editar...)."""
+    return mensaje(E_CORRIDA_ESCENARIO_NO_SE_CIERRA, accion=accion)
 
 
 def mensaje_vigencia(codigo: str, dataset: str, antiguedad, limite) -> str:

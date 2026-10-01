@@ -403,7 +403,8 @@ def test_the_line_filters_are_forwarded(espia):
     assert args == (fx.CORRIDA_ID, None)
     assert kw == {
         "sucursal_id": fx.SUC_A, "incluir_excluidas": True, "clase": "AF",
-        "estado_quiebre": "QUIEBRE_TOTAL", "limite": 2000, "offset": 10}
+        "estado_quiebre": "QUIEBRE_TOTAL", "limite": 2000, "offset": 10,
+        "q": None, "solo_editadas": False, "solo_fuera_empaque": False}
 
 
 def test_excluded_lines_are_left_out_by_default(espia):

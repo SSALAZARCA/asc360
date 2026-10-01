@@ -14,7 +14,9 @@ from decimal import Decimal
 from types import SimpleNamespace
 
 from app.motored.api import corridas as api
+from app.motored.api import corridas_pedido as api_pedido
 from app.motored.models.corrida_linea import CorridaLinea
+from app.motored.services.corridas import edicion
 
 CORRIDA_ID = uuid.UUID(int=500)
 PROVEEDOR_ID = uuid.UUID(int=501)
@@ -90,6 +92,39 @@ def linea(sucursal_id=SUC_A, codigo="94109-12000S", **campos):
     return CorridaLinea(**{**base, **campos})
 
 
+USUARIO_EDITOR = uuid.UUID(int=900)
+
+
+def totales_tienda(**campos):
+    base = dict(
+        unidades_a_pedir=Decimal("1010.00"),
+        valor_a_pedir=Decimal("6000000.00"),
+        unidades_sugerido=Decimal("1000.00"),
+        valor_sugerido=Decimal("5000000.00"))
+    return {**base, **campos}
+
+
+def historial_fila(**campos):
+    base = dict(
+        id=1, linea_id=7, campo="pedido_final",
+        valor_anterior=Decimal("50.00"), valor_nuevo=Decimal("60.00"),
+        motivo="MANUAL", detalle=None, usuario_id=USUARIO_EDITOR,
+        usuario="Maria", creado_en=CREADA)
+    return {**base, **campos}
+
+
+def resultado_edicion(**campos):
+    """Lo que devuelve `edicion.editar_linea`: la línea editada (50 -> 60),
+    la última edición y los totales de la tienda."""
+    base = dict(
+        linea=linea(
+            id=7, pedido_sugerido=Decimal("50.00"),
+            pedido_final=Decimal("60.00"), precio=Decimal("460.75"),
+            valor_pedido=Decimal("27645.00"), unidad_empaque=12),
+        ultima_edicion=None, totales_tienda=totales_tienda())
+    return edicion.ResultadoEdicion(**{**base, **campos})
+
+
 class Espia:
     """Doble de `consultas` y `servicio`: graba las llamadas y responde lo
     configurado."""
@@ -109,6 +144,9 @@ class Espia:
         self.anulada = SimpleNamespace(
             id=CORRIDA_ID, codigo="PED-2026-S39-001", estado="ANULADA",
             cerrada_en=None)
+        self.editada = resultado_edicion()
+        self.historial = [historial_fila()]
+        self.ediciones = {}
         self.error = None
         self.encolados = []
 
@@ -171,4 +209,26 @@ def instalar(monkeypatch, espia=None):
             ("crear_corrida", crear), ("cerrar_corrida", cerrar),
             ("anular_corrida", anular)):
         monkeypatch.setattr(api.servicio, nombre, doble)
+    _instalar_edicion(monkeypatch, espia)
     return espia
+
+
+def _instalar_edicion(monkeypatch, espia):
+    """Dobles de la edición de líneas (F4, B2): el servicio y las lecturas
+    de historial y de última edición."""
+    async def editar_linea(db, corrida_id, linea_id, cantidad, esperado,
+                           usuario_id):
+        espia._registrar(
+            "editar", corrida_id, linea_id, cantidad, esperado, usuario_id)
+        return espia.editada
+
+    async def historial_linea(db, corrida_id, linea_id):
+        espia._registrar("historial", corrida_id, linea_id)
+        return espia.historial
+
+    async def ediciones_de(db, linea_ids):
+        return espia.ediciones
+
+    monkeypatch.setattr(api_pedido.edicion, "editar_linea", editar_linea)
+    monkeypatch.setattr(api.consultas, "historial_linea", historial_linea)
+    monkeypatch.setattr(api.consultas, "ediciones_de", ediciones_de)

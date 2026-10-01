@@ -37,16 +37,22 @@ LECTURA = ["ADMIN", "COMPRAS"]
 DENEGADOS = ["SUCURSAL", "CONSULTA", "SERVICIO_CLIENTE"]
 TODOS = LECTURA + DENEGADOS + ["ASESOR_MOSTRADOR"]
 
-LECTURAS = [
+LECTURAS_F3 = [
     ("GET", BASE, None),
     ("GET", f"{BASE}/{ID}", None),
     ("GET", f"{BASE}/{ID}/progreso", None),
     ("GET", f"{BASE}/{ID}/lineas", None),
 ]
+# Fase 4 (B2): el historial de una línea es otra lectura de /corridas.
+LECTURAS = LECTURAS_F3 + [
+    ("GET", f"{BASE}/{ID}/lineas/7/historial", None),
+]
 ESCRITURAS = [
     ("POST", BASE, {"fecha_corte": "2026-09-21"}),
     ("POST", f"{BASE}/{ID}/cerrar", None),
     ("POST", f"{BASE}/{ID}/anular", {"motivo": "motivo de prueba"}),
+    # Fase 4 (B2): la edición de una línea (ED-20, F4-16).
+    ("PATCH", f"{BASE}/{ID}/lineas/7", {"pedido_final": 60}),
 ]
 
 
@@ -145,7 +151,7 @@ def test_a_denied_role_is_refused_even_with_a_sucursal_filter(espia, rol):
 def test_unrestricted_roles_read_with_no_scope(espia, rol):
     cliente = _como(rol, [fx.SUC_A])
 
-    for _, ruta, _ in LECTURAS:
+    for _, ruta, _ in LECTURAS_F3:
         cliente.get(ruta)
 
     alcances = [

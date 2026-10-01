@@ -519,7 +519,7 @@ def _validar_cierre(corrida: Corrida) -> None:
     if corrida.es_escenario:
         raise ErrorCorrida(
             codigos.E_CORRIDA_ESCENARIO_NO_SE_CIERRA,
-            codigos.mensaje(codigos.E_CORRIDA_ESCENARIO_NO_SE_CIERRA))
+            codigos.mensaje_escenario("cerrar"))
     if corrida.invalidada:
         raise ErrorCorrida(
             codigos.E_CORRIDA_INVALIDADA,

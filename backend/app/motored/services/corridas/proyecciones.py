@@ -16,12 +16,28 @@ infraestructura:
   nivel del detalle, para que aparezca en todo resultado de corrida.
 
 `alcance` es `None` (sin restricción) o el conjunto de sucursales visibles.
+
+Fase 4 (sdd/motored-pedidos-ui, B2): la línea y el detalle suman lo que el
+comprador edita (`extras_linea`: valor sugerido, aviso de empaque y última
+edición; `resumen_a_pedir`: el resumen por clase sobre `pedido_final`) SIN
+tocar las cifras del sugerido, que siguen siendo las del motor.
 """
+import datetime
 from decimal import ROUND_HALF_UP, Decimal
-from typing import Any, Dict, FrozenSet, Iterable, List, Mapping, Optional
+from typing import (
+    Any,
+    Dict,
+    FrozenSet,
+    Iterable,
+    List,
+    Mapping,
+    NamedTuple,
+    Optional,
+    Tuple,
+)
 from uuid import UUID
 
-from app.motored.services.corridas import codigos, estados
+from app.motored.services.corridas import codigos, estados, valores
 from app.motored.services.motor.resumen import CLASE_TOTAL
 
 Alcance = Optional[FrozenSet[UUID]]
@@ -121,6 +137,86 @@ def _resumen_por_sucursal(resumen, sucursales) -> List[Dict[str, Any]]:
         for f in filas]
 
 
+def _sumar_por_clase(filas: Iterable[Any]) -> Dict[Any, Dict[str, list]]:
+    """`{sucursal_id: {clase: [unidades, referencias, valor]}}`."""
+    sumas: Dict[Any, Dict[str, list]] = {}
+    for fila in filas:
+        suma = sumas.setdefault(fila.sucursal_id, {}).setdefault(
+            fila.clase, [Decimal(0), 0, Decimal(0)])
+        suma[0] += fila.unidades
+        suma[1] += fila.referencias
+        suma[2] += fila.valor
+    return sumas
+
+
+def _filas_de_sucursal(sucursal_id, clases, total) -> List[Dict[str, Any]]:
+    """Las filas de una sucursal (clases en el orden del Excel y TOTAL)."""
+    pares = sorted(
+        [*clases.items(), (CLASE_TOTAL, total)],
+        key=lambda par: _orden_clase(par[0]))
+    return [
+        {"sucursal_id": sucursal_id, "clase": clase, "unidades": unidades,
+         "referencias": refs, "valor": valor,
+         "porcentaje_peso": _peso(unidades, total[0])}
+        for clase, (unidades, refs, valor) in pares]
+
+
+def resumen_a_pedir(
+    filas: Iterable[Any], sucursales: Iterable[Any],
+) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    """El resumen por clase de lo que se va a PEDIR (`pedido_final`), con la
+    misma forma que `resumen`: una fila por sucursal y clase, más su fila
+    TOTAL con el peso recalculado, y los totales de lo visible.
+
+    `filas` trae `sucursal_id, clase, unidades, referencias, valor` ya
+    agrupados por la consulta; sólo lo visible llega hasta acá."""
+    orden = {s.sucursal_id: s.orden for s in sucursales}
+    sumas = _sumar_por_clase(filas)
+    salida: List[Dict[str, Any]] = []
+    general = [Decimal(0), 0, Decimal(0)]
+    for sucursal_id in sorted(sumas, key=lambda i: orden.get(i, 10 ** 9)):
+        clases = sumas[sucursal_id]
+        total = [sum(c[i] for c in clases.values()) for i in range(3)]
+        salida += _filas_de_sucursal(sucursal_id, clases, total)
+        general = [general[i] + total[i] for i in range(3)]
+    return salida, {
+        "unidades": general[0], "referencias": general[1],
+        "valor": general[2]}
+
+
+# --- Línea: lo que agrega la edición (F4, B2) -------------------------------
+
+
+class UltimaEdicion(NamedTuple):
+    """La última fila del historial de una línea (quién, cuándo, motivo)."""
+
+    usuario: str
+    creado_en: datetime.datetime
+    motivo: str
+
+
+def extras_linea(
+    fila: Any, ultima: Optional[UltimaEdicion],
+) -> Dict[str, Any]:
+    """Los campos de `LineaRead` que no son columnas: el valor del
+    sugerido, el aviso de empaque y las marcas de edición.
+
+    `editada` es "la cantidad difiere del sugerido": volver al sugerido la
+    apaga, pero `editado_por`/`editado_en` siguen diciendo quién tocó la
+    línea por última vez (el historial es de sólo inserción)."""
+    return {
+        "valor_sugerido": valores.valor_sugerido(fila),
+        "fuera_de_empaque": valores.fuera_de_empaque(
+            fila.pedido_final, fila.unidad_empaque),
+        "editada": (
+            fila.pedido_final is not None
+            and fila.pedido_final != fila.pedido_sugerido),
+        "editado_por": None if ultima is None else ultima.usuario,
+        "editado_en": None if ultima is None else ultima.creado_en,
+        "motivo_edicion": None if ultima is None else ultima.motivo,
+    }
+
+
 # --- Piezas comunes ---------------------------------------------------------
 
 
@@ -205,11 +301,13 @@ def agrupar_cargas(cargas: Iterable[Any]) -> Dict[str, List[Dict[str, Any]]]:
 
 
 def armar_detalle(
-    corrida, sucursales, resumen, cargas, alcance: Alcance,
+    corrida, sucursales, resumen, cargas, alcance: Alcance, a_pedir=(),
 ) -> Dict[str, Any]:
-    """El detalle completo de la corrida para quien tiene `alcance`."""
+    """El detalle completo de la corrida para quien tiene `alcance`.
+    `a_pedir` son las filas por sucursal y clase de `pedido_final`."""
     seleccion = corrida.seleccion_datos or {}
     por_clase = resumen_por_clase(resumen)
+    pedir, totales_pedir = resumen_a_pedir(a_pedir, sucursales)
     return {
         **cabecera(corrida, sucursales),
         "parametros_en_fecha": corrida.parametros_en_fecha,
@@ -228,6 +326,8 @@ def armar_detalle(
         "resumen": _resumen_por_sucursal(resumen, sucursales),
         "resumen_por_clase": por_clase,
         "totales": totales(por_clase),
+        "resumen_a_pedir": pedir,
+        "totales_a_pedir": totales_pedir,
     }
 
 

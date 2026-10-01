@@ -43,7 +43,12 @@ _CORRIDA = Corrida.__table__
 _SUCURSAL = CorridaSucursal.__table__
 _LINEA = CorridaLinea.__table__
 _RESUMEN = CorridaResumen.__table__
-_COLUMNAS_LINEA = [c.key for c in _LINEA.columns if c.key != "id"]
+# Columnas de `corrida_linea` que NO son salida del motor: la clave y, desde
+# F4 (sdd/motored-pedidos-ui, ADR-4), lo que edita el comprador. El valor del
+# motor para `valor_pedido` sigue cubierto por `corrida_resumen.valor` y
+# `corrida_sucursal.valor`, que SÍ se comparan.
+_NO_MOTOR = frozenset({"id", "pedido_final", "valor_pedido"})
+_COLUMNAS_LINEA = [c.key for c in _LINEA.columns if c.key not in _NO_MOTOR]
 _COLUMNAS_RESUMEN = ("unidades", "referencias", "valor", "porcentaje_peso")
 _ESTADOS_REPRODUCIBLES = (estados.SUC_OK, estados.SUC_OMITIDA)
 _AUSENTE = "ausente"
@@ -119,7 +124,8 @@ def _comparar_lineas(
                 sucursal_id, clave, "*", _PRESENTE, _AUSENTE))
             continue
         diferencias += _diferencias(
-            sucursal_id, clave, esperada,
+            sucursal_id, clave,
+            {c: esperada[c] for c in _COLUMNAS_LINEA if c in esperada},
             _como_dict(guardada, _COLUMNAS_LINEA))
     return diferencias
 

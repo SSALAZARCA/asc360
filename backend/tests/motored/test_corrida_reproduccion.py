@@ -229,6 +229,54 @@ def test_armar_filas_keys_are_pinned_and_carry_no_pedido_state():
     assert "estado_pedido" not in columnas
 
 
+# --- Las ediciones del comprador no entran al reproceso (F4, ADR-4) ---------
+
+
+async def test_an_edited_corrida_replays_identical_ed_28():
+    almacen = _almacenar(_dos_sucursales())
+    editada = _linea(almacen, "A")
+    editada.pedido_final = editada.pedido_sugerido + 10
+    editada.valor_pedido = Decimal("12345.67")
+    _linea(almacen, "B").pedido_final = Decimal("0.00")
+
+    reporte = await _reproducir(almacen)
+
+    assert reporte.identico is True and reporte.diferencias == ()
+
+
+async def test_no_difference_ever_mentions_the_edited_columns_ed_28():
+    almacen = _almacenar(_dos_sucursales())
+    editada = _linea(almacen, "A")
+    editada.pedido_final = Decimal("999.00")
+    editada.valor_pedido = Decimal("1.00")
+    editada.venta_m1 = Decimal("500.00")  # una alteración REAL aparte
+
+    reporte = await _reproducir(almacen)
+
+    assert reporte.identico is False
+    columnas = {d.columna for d in reporte.diferencias}
+    assert "demanda_ponderada" in columnas
+    assert not columnas & {"pedido_final", "valor_pedido"}
+
+
+async def test_a_tampered_suggestion_is_still_detected_on_an_edited_line():
+    almacen = _almacenar(_dos_sucursales())
+    editada = _linea(almacen, "A")
+    editada.pedido_final = Decimal("77.00")
+    editada.pedido_sugerido = Decimal("999.00")
+
+    reporte = await _reproducir(almacen)
+
+    assert reporte.identico is False
+    assert [d.columna for d in reporte.diferencias] == ["pedido_sugerido"]
+
+
+def test_the_replay_skips_exactly_the_id_and_the_two_edited_columns():
+    assert rp._NO_MOTOR == frozenset({"id", "pedido_final", "valor_pedido"})
+    assert not set(rp._COLUMNAS_LINEA) & rp._NO_MOTOR
+    assert "pedido_sugerido" in rp._COLUMNAS_LINEA
+
+
 # --- Detección de alteraciones ----------------------------------------------
 
 

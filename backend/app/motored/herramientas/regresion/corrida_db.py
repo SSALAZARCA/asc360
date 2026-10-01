@@ -42,6 +42,7 @@ from app.motored.services.corridas import estados
 from app.motored.services.corridas import parametros_corrida as pcorr
 from app.motored.services.corridas import persistencia as pe
 from app.motored.services.corridas import reproduccion as rp
+from app.motored.services.corridas import valores
 from app.motored.services.motor.motor import calcular_sucursal
 from app.motored.services.motor.sustitucion import resolver_cadenas
 from app.motored.services.motor.tipos import (
@@ -125,7 +126,7 @@ def conjunto_de_filas(lineas: Sequence[Any]) -> ConjuntoLineas:
             pedido[linea.codigo_referencia] = LineaComparable(
                 linea.codigo_referencia, linea.clase,
                 linea.demanda_ponderada, linea.pedido_sugerido,
-                linea.valor_pedido,
+                valores.valor_sugerido(linea),
             )
             continue
         destino = linea.sustituta_final_id

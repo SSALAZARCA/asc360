@@ -20,16 +20,16 @@ que los rechazó. Ninguna ruta edita `pedido_final` ni el ajuste Z.
 import logging
 import uuid
 from datetime import date
-from typing import Any, Dict, FrozenSet, Literal, Optional
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.motored.api import corridas_comun as comun
 from app.motored.deps import (
     MotoredUser,
     get_motored_db_or_503,
     require_motored_ready,
-    require_roles,
 )
 from app.motored.schemas.corrida import (
     CorridaAnular,
@@ -37,12 +37,11 @@ from app.motored.schemas.corrida import (
     CorridaCreate,
     CorridaDetalle,
     CorridaEstado,
-    LineaRead,
     PaginaCorridas,
     PaginaLineas,
     Progreso,
 )
-from app.motored.services.corridas import codigos, consultas, servicio
+from app.motored.services.corridas import consultas, servicio
 from app.motored.services.corridas.codigos import ErrorCorrida
 from app.motored.services.trabajos.runner_corridas import (
     CorridaRunner,
@@ -57,58 +56,19 @@ router = APIRouter(
     dependencies=[Depends(require_motored_ready)],
 )
 
-_require_write = require_roles("ADMIN", "COMPRAS")
-_require_read = require_roles("ADMIN", "COMPRAS")
+_require_write = comun.require_write
+_require_read = comun.require_read
 
-ROL_SUCURSAL = "SUCURSAL"
 PAGINA_CORRIDAS, PAGINA_CORRIDAS_MAX = 50, 200
 PAGINA_LINEAS, PAGINA_LINEAS_MAX = 500, 2000
 ESTADOS = Literal[
     "PENDIENTE", "CALCULANDO", "FALLIDA", "BORRADOR", "EN_REVISION",
     "CERRADA", "ENVIADA", "ANULADA"]
-# Rechazos por el estado o el contenido de la corrida (el resto es 422).
-_CONFLICTOS = frozenset({
-    codigos.E_CORRIDA_ESTADO_NO_ADMITE,
-    codigos.E_CORRIDA_INVALIDADA,
-    codigos.E_CORRIDA_ESCENARIO_NO_SE_CIERRA,
-    codigos.E_CORRIDA_SUCURSAL_FALLIDA,
-})
 
 
 def get_corrida_runner() -> CorridaRunner:
     """Seam inyectable: en producción sólo garantiza el loop en marcha."""
     return SupervisorCorridaRunner()
-
-
-def _alcance(user: MotoredUser) -> Optional[FrozenSet[uuid.UUID]]:
-    """Sucursales visibles: `None` (todas) salvo para el rol SUCURSAL."""
-    if user.role != ROL_SUCURSAL:
-        return None
-    propias = set()
-    for texto in user.sucursal_ids:
-        try:
-            propias.add(uuid.UUID(str(texto)))
-        except ValueError:
-            continue
-    return frozenset(propias)
-
-
-def _rechazo(error: ErrorCorrida) -> HTTPException:
-    """422 (la petición no es válida ahora) o 409 (la corrida no admite la
-    operación), con `{code, message[, detalle]}`."""
-    cuerpo: Dict[str, Any] = {
-        "code": error.codigo, "message": error.mensaje}
-    if error.detalle:
-        cuerpo["detalle"] = error.detalle
-    estado = (
-        status.HTTP_409_CONFLICT if error.codigo in _CONFLICTOS
-        else status.HTTP_422_UNPROCESSABLE_ENTITY)
-    return HTTPException(status_code=estado, detail=cuerpo)
-
-
-def _no_existe() -> HTTPException:
-    return HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND, detail="Corrida no encontrada.")
 
 
 async def _enqueue(runner: CorridaRunner, corrida_id: uuid.UUID) -> None:
@@ -139,7 +99,7 @@ async def crear_corrida(
             usuario_id=uuid.UUID(user.user_id), nota=cuerpo.nota or None)
     except ErrorCorrida as error:
         await db.rollback()
-        raise _rechazo(error) from error
+        raise comun.rechazo(error) from error
     await db.commit()
     await _enqueue(runner, corrida.id)
     return CorridaCreada(
@@ -153,10 +113,10 @@ async def _transicion(db, operacion, *args) -> CorridaEstado:
         corrida = await operacion(db, *args)
     except LookupError as error:
         await db.rollback()
-        raise _no_existe() from error
+        raise comun.no_existe() from error
     except ErrorCorrida as error:
         await db.rollback()
-        raise _rechazo(error) from error
+        raise comun.rechazo(error) from error
     await db.commit()
     return CorridaEstado(
         id=corrida.id, codigo=corrida.codigo, estado=corrida.estado)
@@ -204,7 +164,7 @@ async def listar_corridas(
     """Corridas filtradas por proveedor, estado, rango de `fecha_corte` y
     escenario (la más reciente primero)."""
     items, total = await consultas.listar(
-        db, alcance=_alcance(user), proveedor_id=proveedor_id,
+        db, alcance=comun.alcance_de(user), proveedor_id=proveedor_id,
         estado=estado, desde=desde, hasta=hasta, escenario=escenario,
         limite=limite, offset=offset)
     return PaginaCorridas(
@@ -219,9 +179,9 @@ async def detalle_corrida(
 ):
     """Cabecera, cargas usadas, snapshot, estado por sucursal, resumen,
     avisos y la antigüedad de cada dato de entrada."""
-    cuerpo = await consultas.detalle(db, corrida_id, _alcance(user))
+    cuerpo = await consultas.detalle(db, corrida_id, comun.alcance_de(user))
     if cuerpo is None:
-        raise _no_existe()
+        raise comun.no_existe()
     return cuerpo
 
 
@@ -231,9 +191,9 @@ async def progreso_corrida(
     db: AsyncSession = Depends(get_motored_db_or_503),
     user: MotoredUser = Depends(_require_read),
 ):
-    cuerpo = await consultas.progreso(db, corrida_id, _alcance(user))
+    cuerpo = await consultas.progreso(db, corrida_id, comun.alcance_de(user))
     if cuerpo is None:
-        raise _no_existe()
+        raise comun.no_existe()
     return cuerpo
 
 
@@ -244,14 +204,17 @@ async def lineas_corrida(
     incluir_excluidas: bool = False,
     clase: Optional[str] = None,
     estado_quiebre: Optional[str] = None,
+    q: Optional[str] = None,
+    solo_editadas: bool = False,
+    solo_fuera_empaque: bool = False,
     limite: int = Query(PAGINA_LINEAS, ge=1, le=PAGINA_LINEAS_MAX),
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_motored_db_or_503),
     user: MotoredUser = Depends(_require_read),
 ):
     """Líneas paginadas. Las excluidas (sustituidas o sin reemplazo) sólo
-    con `incluir_excluidas`."""
-    alcance = _alcance(user)
+    con `incluir_excluidas`; `q` busca por código o nombre."""
+    alcance = comun.alcance_de(user)
     if alcance is not None and sucursal_id is not None \
             and sucursal_id not in alcance:
         raise HTTPException(
@@ -260,10 +223,13 @@ async def lineas_corrida(
     pagina = await consultas.lineas(
         db, corrida_id, alcance, sucursal_id=sucursal_id,
         incluir_excluidas=incluir_excluidas, clase=clase,
-        estado_quiebre=estado_quiebre, limite=limite, offset=offset)
+        estado_quiebre=estado_quiebre, limite=limite, offset=offset,
+        q=(q or "").strip() or None, solo_editadas=solo_editadas,
+        solo_fuera_empaque=solo_fuera_empaque)
     if pagina is None:
-        raise _no_existe()
+        raise comun.no_existe()
     filas, total = pagina
+    ediciones = await consultas.ediciones_de(db, [f.id for f in filas])
     return PaginaLineas(
-        items=[LineaRead.model_validate(f) for f in filas], total=total,
-        limite=limite, offset=offset)
+        items=[comun.linea_read(f, ediciones.get(f.id)) for f in filas],
+        total=total, limite=limite, offset=offset)

@@ -24,6 +24,7 @@ from app.motored.api import (
     cargas,
     carga,
     corridas,
+    corridas_pedido,
     demanda_perdida,
     detractores,
     encuesta_cargas,
@@ -75,3 +76,7 @@ router.include_router(detractores.router)
 # prefijo (`/api/motored/corridas`), sin superposición de path con ninguno de
 # los routers de arriba -- el orden relativo no importa acá.
 router.include_router(corridas.router)
+# Fase 4 "Pantallas del pedido" (sdd/motored-pedidos-ui, B2): las acciones por
+# tienda de `/corridas` viven en su propio router, mismo prefijo, rutas
+# distintas (`/{id}/lineas/{linea_id}...`): el orden relativo no importa.
+router.include_router(corridas_pedido.router)

@@ -99,6 +99,28 @@ async def test_el_conjunto_guardado_coincide_con_el_del_motor():
     assert conjunto.lineas["94109-12000S"].pedido == 53
 
 
+async def test_el_conjunto_guardado_usa_el_sugerido_si_se_edita_el_pedido():
+    """F4 (B2, ADR-4): `pedido_final` y `valor_pedido` los edita el
+    comprador; el conjunto comparable sigue siendo el del motor."""
+    sucursales = _sucursales()
+    almacen = almacenar(sucursales)
+    atributos_uno, entradas = sucursales[0]
+    esperado = conjunto_desde_resultado(
+        calcular_sucursal(entradas, atributos_uno, ParametrosMotor())
+    )
+    patron = next(
+        f for f in almacen.lineas
+        if f.sucursal_id == SUC_1 and f.codigo_referencia == "94109-12000S"
+    )
+    patron.pedido_final = patron.pedido_sugerido + 40
+    patron.valor_pedido = Decimal("1.00")
+
+    conjunto = await conjunto_de_corrida(almacen, almacen.corrida.id, SUC_1)
+
+    assert conjunto == esperado
+    assert conjunto.lineas["94109-12000S"].pedido == 53
+
+
 async def test_las_excluidas_no_son_entradas_del_pedido_en_el_nivel_b():
     vieja = entrada((5, 0, 3, 0, 2, 4), codigo="REF-A", referencia_id=ID_A)
     nueva = entrada((1,) * 6, codigo="REF-B", referencia_id=ID_B)

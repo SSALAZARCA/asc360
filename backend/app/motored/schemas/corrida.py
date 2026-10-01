@@ -163,6 +163,10 @@ class CorridaDetalle(CorridaItem):
     resumen: List[ResumenClase]
     resumen_por_clase: List[ResumenClase]
     totales: Totales
+    # Fase 4 (B2): lo que se va a PEDIR (`pedido_final`), junto a las cifras
+    # del sugerido (`resumen`, `totales`), que no cambian al editar.
+    resumen_a_pedir: List[ResumenClase] = Field(default_factory=list)
+    totales_a_pedir: Optional[Totales] = None
 
 
 class Progreso(BaseModel):
@@ -184,10 +188,13 @@ class Progreso(BaseModel):
 
 class LineaRead(BaseModel):
     """Una línea de la corrida: entradas crudas propias y salidas del motor.
-    `pedido_final` es igual a `pedido_sugerido` en F3 y sólo se lee."""
+    `pedido_final` parte igual a `pedido_sugerido` y lo edita el comprador
+    (F4); `valor_sugerido`, `fuera_de_empaque` y las marcas de edición se
+    calculan al leer (`proyecciones.extras_linea`)."""
 
     model_config = ConfigDict(from_attributes=True)
 
+    id: int
     sucursal_id: uuid.UUID
     referencia_id: uuid.UUID
     codigo_referencia: str
@@ -244,6 +251,13 @@ class LineaRead(BaseModel):
     sustituta_final_id: Optional[uuid.UUID] = None
     banderas: List[str] = Field(default_factory=list)
     detalle_consolidacion: Optional[Dict[str, Any]] = None
+    # Fase 4: lo que agrega la edición (no son columnas de la línea).
+    valor_sugerido: Dec = None
+    fuera_de_empaque: bool = False
+    editada: bool = False
+    editado_por: Optional[str] = None
+    editado_en: Optional[datetime.datetime] = None
+    motivo_edicion: Optional[str] = None
 
 
 class PaginaLineas(BaseModel):
