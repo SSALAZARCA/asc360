@@ -145,6 +145,7 @@ def _consulta_lista(alcance: Alcance):
         Corrida.alcance, Corrida.invalidada, Corrida.created_at,
         Corrida.terminado_en, Corrida.cerrada_en,
         Corrida.log[0]["nota"].astext.label("nota"),
+        Corrida.seleccion_datos["antiguedad"].label("antiguedad_datos"),
         _contar_sucursales(alcance, False).label("sucursales_total"),
         _contar_sucursales(alcance, True).label("sucursales_procesadas"))
 

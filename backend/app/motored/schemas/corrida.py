@@ -106,6 +106,16 @@ class EnvioInfo(BaseModel):
     enviado_en: datetime.datetime
 
 
+class AntiguedadPeor(BaseModel):
+    """El insumo (inventario, backorder, facturas, ingresos) más cercano a
+    su límite de antigüedad, para avisar en la lista (UX-06)."""
+
+    dataset: str
+    antiguedad_dias: int
+    limite_dias: int
+    supera_limite: bool
+
+
 class CorridaItem(BaseModel):
     id: uuid.UUID
     codigo: str
@@ -122,6 +132,7 @@ class CorridaItem(BaseModel):
     terminado_en: Optional[datetime.datetime] = None
     cerrada_en: Optional[datetime.datetime] = None
     pedidos: Optional[ResumenPedidos] = None
+    antiguedad_peor: Optional[AntiguedadPeor] = None
 
 
 class PaginaCorridas(BaseModel):

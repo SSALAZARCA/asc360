@@ -385,6 +385,31 @@ def cabecera(corrida, sucursales) -> Dict[str, Any]:
     }
 
 
+def _margen(dato: Mapping[str, Any]) -> int:
+    return dato["limite_dias"] - dato["antiguedad_dias"]
+
+
+def peor_antiguedad(
+    bloque: Optional[Mapping[str, Mapping[str, Any]]],
+) -> Optional[Dict[str, Any]]:
+    """El insumo más cercano a su límite según el bloque `antiguedad` que la
+    corrida congeló (el mismo que muestra el detalle): el de menor margen
+    `limite_dias - antiguedad_dias`, el primero del bloque si hay empate.
+    `None` si ningún insumo trae antigüedad y límite. `supera_limite` usa la
+    misma regla que el detalle (`antiguedad_dias > limite_dias`)."""
+    candidatos = [
+        (tipo, dato) for tipo, dato in (bloque or {}).items()
+        if dato.get("antiguedad_dias") is not None
+        and dato.get("limite_dias") is not None]
+    if not candidatos:
+        return None
+    tipo, dato = min(candidatos, key=lambda c: _margen(c[1]))
+    return {
+        "dataset": tipo, "antiguedad_dias": dato["antiguedad_dias"],
+        "limite_dias": dato["limite_dias"],
+        "supera_limite": dato["antiguedad_dias"] > dato["limite_dias"]}
+
+
 def item_de_fila(fila) -> Dict[str, Any]:
     """Un renglón de la lista a partir de la fila de `consultas.listar`."""
     return {
@@ -396,6 +421,8 @@ def item_de_fila(fila) -> Dict[str, Any]:
         "sucursales_procesadas": fila.sucursales_procesadas,
         "nota": fila.nota, "created_at": fila.created_at,
         "terminado_en": fila.terminado_en, "cerrada_en": fila.cerrada_en,
+        "antiguedad_peor": peor_antiguedad(
+            getattr(fila, "antiguedad_datos", None)),
     }
 
 

@@ -281,6 +281,51 @@ async def test_the_list_filters_by_state_scenario_and_dates(mundo):
     assert ninguna["total"] == 0
 
 
+async def _envejecer(mundo, corrida_id, tipo, dias):
+    """Congela otra antigüedad en la evidencia de la corrida (el motor sólo
+    deja pasar insumos dentro de su límite)."""
+    async with mundo.fabrica() as db:
+        corrida = await db.get(Corrida, uuid.UUID(corrida_id))
+        seleccion = json.loads(json.dumps(corrida.seleccion_datos))
+        seleccion["antiguedad"][tipo]["antiguedad_dias"] = dias
+        corrida.seleccion_datos = seleccion
+        await db.commit()
+
+
+async def test_the_list_flags_stale_input_data_from_the_frozen_evidence(
+        mundo):
+    vieja = await _corrida_en_borrador(mundo)
+    await _corrida_en_borrador(mundo, overrides={
+        "consolidar_sustituidas": True})
+    await _envejecer(mundo, vieja["id"], "facturas", 99)
+
+    async with _cliente() as cliente:
+        items = (await cliente.get(BASE)).json()["items"]
+    por_codigo = {i["codigo"]: i["antiguedad_peor"] for i in items}
+
+    peor = por_codigo[vieja["codigo"]]
+    assert peor["dataset"] == "facturas" and peor["antiguedad_dias"] == 99
+    assert peor["supera_limite"] is True
+    fresca = por_codigo["ESC-2026-S39-001"]
+    assert fresca["supera_limite"] is False
+    assert fresca["dataset"] in {
+        "inventario", "backorder", "facturas", "ingresos"}
+    assert fresca["antiguedad_dias"] <= fresca["limite_dias"]
+
+
+async def test_the_list_without_frozen_evidence_has_no_age_warning(mundo):
+    creada = await _corrida_en_borrador(mundo)
+    async with mundo.fabrica() as db:
+        corrida = await db.get(Corrida, uuid.UUID(creada["id"]))
+        corrida.seleccion_datos = None
+        await db.commit()
+
+    async with _cliente() as cliente:
+        items = (await cliente.get(BASE)).json()["items"]
+
+    assert len(items) == 1 and items[0]["antiguedad_peor"] is None
+
+
 async def test_the_progress_of_a_finished_corrida(mundo):
     creada = await _corrida_en_borrador(mundo)
 
