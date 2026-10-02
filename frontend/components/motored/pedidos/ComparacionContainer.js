@@ -110,7 +110,7 @@ function Comparacion({ escenario, reales, con, onElegir }) {
       {data && data.total > 0 && (
         <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
           <span style={mutedStyle}>{`${data.total} ${plural(data.total, 'fila', 'filas')}`}</span>
-          {data.total > pageSize && <DetractoresPagination page={filtros.page} pageSize={pageSize} total={data.total} onChange={(p) => setFiltro('page', p)} />}
+          {data.total > pageSize && <DetractoresPagination touch page={filtros.page} pageSize={pageSize} total={data.total} onChange={(p) => setFiltro('page', p)} />}
         </div>
       )}
       {data && (

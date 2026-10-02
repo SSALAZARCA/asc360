@@ -57,7 +57,7 @@ export default function ConsolidadoContainer({ corridaId }) {
       {data && data.total > 0 && (
         <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
           <span style={mutedStyle}>{data.total} {plural(data.total, 'referencia', 'referencias')}</span>
-          {data.total > pageSize && <DetractoresPagination page={page} pageSize={pageSize} total={data.total} onChange={setPage} />}
+          {data.total > pageSize && <DetractoresPagination touch page={page} pageSize={pageSize} total={data.total} onChange={setPage} />}
         </div>
       )}
     </section>

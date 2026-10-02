@@ -21,7 +21,7 @@ import ComparacionContainer from './ComparacionContainer';
 import ConsolidadoContainer from './ConsolidadoContainer';
 import CorridaTabs from './CorridaTabs';
 import { estaCalculando, fechaCorta } from './reglas';
-import { errorStyle, mutedStyle } from './styles';
+import { errorStyle, mutedStyle, volverStyle } from './styles';
 
 function Cabecera({ corrida, onTerminal }) {
   return (
@@ -71,7 +71,7 @@ export default function CorridaDetalleContainer({ corridaId }) {
   const recalcular = (fallidas) => acciones.abrir('recalcular', fallidas, { contexto: { fecha_corte: String(data.fecha_corte).slice(0, 10), codigo: data.codigo } });
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', maxWidth: '100%' }}>
-      <button type="button" className="motored-row-action" style={{ alignSelf: 'flex-start' }} onClick={() => router.push('/motored/pedidos')}>
+      <button type="button" className="motored-row-action" style={volverStyle} onClick={() => router.push('/motored/pedidos')}>
         ← Volver a pedidos
       </button>
       {error && <p role="alert" style={errorStyle}>{error}</p>}

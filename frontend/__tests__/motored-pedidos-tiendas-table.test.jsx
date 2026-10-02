@@ -58,6 +58,12 @@ describe('corrida detail - header', () => {
     expect(pushMock).toHaveBeenCalledWith('/motored/pedidos');
   });
 
+  it('keeps the back button at the 44 px tablet touch target', async () => {
+    render(<CorridaDetallePage />);
+    const volver = await screen.findByRole('button', { name: /Volver a pedidos/ });
+    expect(volver.style.minHeight).toBe('44px');
+  });
+
   it('marks a scenario corrida as PRUEBA', async () => {
     installFetch(rutas({ 'GET /corridas/c1': jsonRes(D_PRUEBA) }));
     render(<CorridaDetallePage />);

@@ -1,7 +1,7 @@
 'use client';
 /** "Nueva corrida" form: fecha de corte, todas las tiendas o una selección, nota. */
 import CamposCorrida from './CamposCorrida';
-import { cardStyle, errorStyle, mutedStyle } from './styles';
+import { cardStyle, errorStyle, mutedStyle, touchStyle } from './styles';
 
 export default function LanzarCorridaForm({ lanzar: l }) {
   return (
@@ -14,7 +14,7 @@ export default function LanzarCorridaForm({ lanzar: l }) {
       {l.error && <p role="alert" style={errorStyle}>{l.error}</p>}
       {l.creada && <p role="status" style={mutedStyle}>{`Corrida ${l.creada.codigo} creada: se está calculando.`}</p>}
       <div>
-        <button type="submit" className="motored-btn motored-btn-primary" disabled={!l.listo}>Calcular corrida</button>
+        <button type="submit" className="motored-btn motored-btn-primary" style={touchStyle} disabled={!l.listo}>Calcular corrida</button>
       </div>
     </form>
   );

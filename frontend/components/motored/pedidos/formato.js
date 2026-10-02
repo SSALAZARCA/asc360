@@ -60,6 +60,12 @@ export function etiquetaQuiebre(estado) {
 /** "{n} día(s)". */
 export const dias = (n) => `${n} ${Number(n) === 1 ? 'día' : 'días'}`;
 
+const DATASETS = {
+  inventario: 'Inventario', backorder: 'Backorder', facturas: 'Facturas de pedidos', ingresos: 'Ingresos de facturas',
+};
+/** Business name of an input dataset of the engine (unknown values pass through). */
+export const etiquetaDataset = (tipo) => DATASETS[tipo] || tipo;
+
 const EVENTOS = {
   CERRADO: 'Cerrado', REABIERTO: 'Reabierto', ENVIADO: 'Enviado', ENVIO_CORREGIDO: 'Número de orden corregido',
 };

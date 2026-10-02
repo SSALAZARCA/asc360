@@ -7,6 +7,10 @@ export const cardStyle = {
   display: 'flex', flexDirection: 'column', gap: '0.75rem',
 };
 
+// Tablet touch target (UX-32): 44 px for the controls a finger has to hit.
+export const touchStyle = { minHeight: '44px', boxSizing: 'border-box' };
+export const volverStyle = { alignSelf: 'flex-start', minHeight: '44px' };
+
 export const errorStyle = { margin: 0, fontSize: '0.8rem', color: 'var(--motored-danger, #c0392b)' };
 export const mutedStyle = { fontSize: '0.75rem', color: 'var(--motored-text-muted, #5a5a5a)' };
 export const labelStyle = {

@@ -23,7 +23,7 @@ export default function LineasSeccion({ lineas, edicion, onHistorial, recortes }
       <Cuerpo lineas={lineas} edicion={edicion} onHistorial={onHistorial} recortes={recortes} />
       {data && data.items.length > 0 && (
         <ReferenciasPaginador
-          page={filters.page} pageSize={filters.pageSize} total={data.total} sizes={TAMANOS_LINEAS} unidad="líneas"
+          page={filters.page} pageSize={filters.pageSize} total={data.total} sizes={TAMANOS_LINEAS} unidad="líneas" touch
           onPageChange={setPage} onPageSizeChange={setPageSize}
         />
       )}

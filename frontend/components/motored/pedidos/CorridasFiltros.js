@@ -1,6 +1,6 @@
 'use client';
 /** Controlled filters of the corridas list: calculation state, kind, pedido stage. */
-import { labelStyle, optionStyle } from './styles';
+import { labelStyle, optionStyle, touchStyle } from './styles';
 
 const ESTADOS = [
   ['', 'Todos'], ['PENDIENTE', 'Pendiente'], ['CALCULANDO', 'Calculando'],
@@ -16,7 +16,7 @@ function Selector({ label, valor, opciones, onChange }) {
   return (
     <label style={labelStyle}>
       {label}
-      <select value={valor} onChange={(e) => onChange(e.target.value)}>
+      <select value={valor} style={touchStyle} onChange={(e) => onChange(e.target.value)}>
         {opciones.map(([v, texto]) => <option key={v} value={v} style={optionStyle}>{texto}</option>)}
       </select>
     </label>

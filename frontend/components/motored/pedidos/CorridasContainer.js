@@ -28,7 +28,7 @@ function Cuerpo({ list, onOpen, onAnular }) {
   return (
     <>
       <CorridasTable corridas={data.items} onOpen={onOpen} onAnular={onAnular} onTerminal={list.reload} />
-      <DetractoresPagination page={filters.page} pageSize={pageSize} total={total} onChange={setPage} />
+      <DetractoresPagination touch page={filters.page} pageSize={pageSize} total={total} onChange={setPage} />
     </>
   );
 }

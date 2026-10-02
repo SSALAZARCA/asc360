@@ -1,4 +1,6 @@
 /** Pure rules of the corridas list: which states are in flight, who can be anulada. */
+import { dias, etiquetaDataset } from './formato';
+
 export const EN_CURSO = ['PENDIENTE', 'CALCULANDO'];
 const ANULABLES = ['PENDIENTE', 'CALCULANDO', 'FALLIDA', 'BORRADOR'];
 
@@ -15,4 +17,14 @@ export function puedeAnular(corrida) {
 export function fechaCorta(iso) {
   const [anio, mes, dia] = String(iso || '').slice(0, 10).split('-');
   return anio && mes && dia ? `${dia}/${mes}/${anio}` : '—';
+}
+
+/** The stale-data warning of a list row (UX-06), or null when the data is within its limit or unknown. */
+export function avisoAntiguedad(corrida) {
+  const peor = corrida.antiguedad_peor;
+  if (!peor || !peor.supera_limite) return null;
+  return {
+    texto: 'Datos desactualizados',
+    ayuda: `Los datos de ${etiquetaDataset(peor.dataset)} tenían ${dias(peor.antiguedad_dias)} de antigüedad al calcular; el máximo permitido es ${peor.limite_dias}.`,
+  };
 }

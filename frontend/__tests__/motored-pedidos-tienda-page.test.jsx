@@ -69,6 +69,13 @@ describe('tienda pedido - header', () => {
     expect(pushMock).toHaveBeenCalledWith('/motored/pedidos/c1');
   });
 
+  it('keeps the back button at the 44 px tablet touch target', async () => {
+    installFetch(rutas());
+    render(<PedidoTiendaPage />);
+    const volver = await screen.findByRole('button', { name: /Volver a la corrida/ });
+    expect(volver.style.minHeight).toBe('44px');
+  });
+
   it('shows the state of THIS tienda (UX-19): Borrador with no closed note', async () => {
     installFetch(rutas(CAB_BORRADOR));
     render(<PedidoTiendaPage />);

@@ -52,6 +52,12 @@ describe('Lanzar corrida', () => {
     expect(boton).toBeEnabled();
   });
 
+  it('keeps the Calcular corrida button at the 44 px tablet touch target', async () => {
+    installFetch(rutas());
+    const form = await abrirFormulario();
+    expect(within(form).getByRole('button', { name: 'Calcular corrida' }).style.minHeight).toBe('44px');
+  });
+
   it('launches for every tienda and reloads the list', async () => {
     const calls = installFetch(rutas());
     const form = await abrirFormulario();

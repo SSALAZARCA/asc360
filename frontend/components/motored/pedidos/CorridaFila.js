@@ -6,12 +6,14 @@ import EstadoCalculoBadge from './EstadoCalculoBadge';
 import ResumenPedidosChip from './ResumenPedidosChip';
 import ProgresoCorrida from './ProgresoCorrida';
 import PruebaBadge from './PruebaBadge';
-import { estaCalculando, fechaCorta, puedeAnular } from './reglas';
+import { avisoAntiguedad, estaCalculando, fechaCorta, puedeAnular } from './reglas';
 import { mutedStyle, tdStyle } from './styles';
 
+const AVISO_STYLE = { display: 'inline-flex', alignItems: 'center', fontSize: '0.7rem', fontWeight: 700, color: 'var(--motored-warning, #d97706)' };
 const INVALIDADA_TEXTO = 'Datos invalidados: se anuló una carga que esta corrida usó, por eso ya no se puede cerrar ninguna tienda. Calcule una corrida nueva.';
 
 function Calculo({ corrida, onTerminal }) {
+  const antiguedad = avisoAntiguedad(corrida);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
@@ -22,9 +24,15 @@ function Calculo({ corrida, onTerminal }) {
         <ProgresoCorrida corridaId={corrida.id} estado={corrida.estado} onTerminal={onTerminal} />
       )}
       {corrida.invalidada && (
-        <span style={{ display: 'inline-flex', alignItems: 'center', fontSize: '0.7rem', fontWeight: 700, color: 'var(--motored-warning, #d97706)' }}>
+        <span style={AVISO_STYLE}>
           Datos invalidados
           <InfoTooltip text={INVALIDADA_TEXTO} />
+        </span>
+      )}
+      {antiguedad && (
+        <span style={AVISO_STYLE}>
+          {antiguedad.texto}
+          <InfoTooltip text={antiguedad.ayuda} />
         </span>
       )}
     </div>

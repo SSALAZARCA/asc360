@@ -9,7 +9,7 @@ import TopesTable from './TopesTable';
 import useEdicionTopes from './useEdicionTopes';
 import useTopes from './useTopes';
 import { plural } from './formato';
-import { cardStyle, errorStyle, mutedStyle } from './styles';
+import { cardStyle, errorStyle, mutedStyle, volverStyle } from './styles';
 import { filtrarTiendas } from './tope';
 
 function BarraGuardar({ edicion }) {
@@ -78,7 +78,7 @@ export default function TopesContainer() {
   if (!allowed) return null;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', maxWidth: '100%' }}>
-      <button type="button" className="motored-row-action" style={{ alignSelf: 'flex-start', minHeight: '44px' }} onClick={() => router.push('/motored/pedidos')}>
+      <button type="button" className="motored-row-action" style={volverStyle} onClick={() => router.push('/motored/pedidos')}>
         ← Volver a pedidos
       </button>
       <h1 className="motored-h-pantalla">Topes por tienda</h1>

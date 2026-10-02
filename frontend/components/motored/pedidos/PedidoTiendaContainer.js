@@ -18,7 +18,7 @@ import PedidoTiendaHeader from './PedidoTiendaHeader';
 import ResumenClasesTable, { filasPorClase } from './ResumenClasesTable';
 import TopeBanner from './TopeBanner';
 import TotalesPedido from './TotalesPedido';
-import { errorStyle, mutedStyle } from './styles';
+import { errorStyle, mutedStyle, volverStyle } from './styles';
 import { mapaRecortes } from './tope';
 
 function SinPedido({ cabecera }) {
@@ -70,7 +70,7 @@ export default function PedidoTiendaContainer({ corridaId, sucursalId }) {
   if (!allowed) return null;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', maxWidth: '100%' }}>
-      <button type="button" className="motored-row-action" style={{ alignSelf: 'flex-start' }} onClick={() => router.push(`/motored/pedidos/${corridaId}`)}>
+      <button type="button" className="motored-row-action" style={volverStyle} onClick={() => router.push(`/motored/pedidos/${corridaId}`)}>
         ← Volver a la corrida
       </button>
       {error && <p role="alert" style={errorStyle}>{error}</p>}
