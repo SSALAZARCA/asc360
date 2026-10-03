@@ -45,7 +45,7 @@ import { useState } from 'react';
 import Papa from 'papaparse';
 import { validarCarga, subirCarga, validarCargaArchivo, subirCargaArchivo, descargarPlantilla } from '../../../lib/motored/api';
 import InfoTooltip from '../InfoTooltip';
-import ReemplazoReferenciasResumen from './ReemplazoReferenciasResumen';
+import ReemplazoReferenciasResumen, { totalInactivadas } from './ReemplazoReferenciasResumen';
 
 // Columnas esperadas por maestro (sucursal/bodega/proveedor/referencia).
 // `aliases` es case/acento-insensible: cubre variantes razonables del
@@ -334,12 +334,33 @@ function parseCsvFile(entidad, file, { setFilas, setParseError }) {
   });
 }
 
-// Resumen del reemplazo de `referencia`: sale del último validar OK y se
-// conserva si aplicar falla (p.ej. 409), para poder reintentar sin revalidar.
-function useResumenReemplazo(resultado) {
+// Estado del reemplazo de `referencia`. El resumen sale del último validar OK y
+// se conserva si aplicar falla (p.ej. 409) para reintentar sin revalidar. Un
+// aplicar exitoso responde con `resumen_reemplazo` (misma forma que validar):
+// se guarda aparte en `aplicado` para no confundirlo con un resumen pendiente.
+function useReemplazoReferencias(resultado, onSuccess) {
   const [vigente, setVigente] = useState(null);
+  const [aplicado, setAplicado] = useState(null);
   const delResultado = resultado?.ok && resultado.resumen_reemplazo ? resultado.resumen_reemplazo : null;
-  return { resumen: delResultado || vigente, delResultado, conservar: setVigente };
+  return {
+    aplicado,
+    resumen: aplicado ? null : delResultado || vigente,
+    reiniciar: () => {
+      setVigente(null);
+      setAplicado(null);
+    },
+    // Opciones de envío para "Confirmar reemplazo".
+    alConfirmar: () => {
+      if (delResultado) setVigente(delResultado);
+      return {
+        notifyOnSuccess: true,
+        onSuccess: (res) => {
+          setAplicado(res);
+          onSuccess?.(res);
+        },
+      };
+    },
+  };
 }
 
 function useCargaMasiva(entidad, onSuccess) {
@@ -350,7 +371,7 @@ function useCargaMasiva(entidad, onSuccess) {
   const [parseError, setParseError] = useState('');
   const [resultado, setResultado] = useState(null);
   const [loading, setLoading] = useState(false);
-  const { resumen, delResultado, conservar } = useResumenReemplazo(resultado);
+  const reemplazo = useReemplazoReferencias(resultado, onSuccess);
   const enviar = (apiCsv, apiExcel, extra) => submitCarga(
     isExcel ? apiExcel : apiCsv,
     entidad,
@@ -360,7 +381,7 @@ function useCargaMasiva(entidad, onSuccess) {
 
   const handleFile = (file) => {
     setResultado(null);
-    conservar(null);
+    reemplazo.reiniciar();
     setParseError('');
     setFilas([]);
     setExcelFile(null);
@@ -389,17 +410,16 @@ function useCargaMasiva(entidad, onSuccess) {
   };
 
   const aplicar = (opciones) => {
-    if (delResultado) conservar(delResultado);
-    return enviar(subirCarga, subirCargaArchivo, { onSuccess, notifyOnSuccess: true, opciones });
+    return enviar(subirCarga, subirCargaArchivo, { ...reemplazo.alConfirmar(), opciones });
   };
 
   return {
     fileName, filas, isExcel, parseError, resultado, loading, handleFile,
-    resumenReemplazo: resumen, runConfirmarReemplazo: aplicar,
+    aplicado: reemplazo.aplicado, resumenReemplazo: reemplazo.resumen, runConfirmarReemplazo: aplicar,
     canSubmit: isExcel ? Boolean(excelFile) : filas.length > 0,
     handleDescargarPlantilla,
     runValidar: () => {
-      conservar(null);
+      reemplazo.reiniciar();
       return enviar(validarCarga, validarCargaArchivo);
     },
     runCarga: () => enviar(subirCarga, subirCargaArchivo, { onSuccess, notifyOnSuccess: true }),
@@ -488,8 +508,22 @@ function FilasPreview({ filas }) {
   );
 }
 
-function CargaResultPanel({ resultado }) {
+function textoAplicado(resumen) {
+  return `Reemplazo aplicado: ${resumen.crear.total} creadas, ${resumen.actualizar.total} actualizadas, `
+    + `${resumen.mover_proveedor.total} movidas de proveedor, ${totalInactivadas(resumen)} inactivadas, `
+    + `${resumen.reactivar.total} reactivadas.`;
+}
+
+function CargaResultPanel({ resultado, aplicado }) {
   if (!resultado) return null;
+
+  if (aplicado?.resumen_reemplazo) {
+    return (
+      <div style={{ color: 'var(--motored-success, #15803d)', fontSize: '0.8rem', fontWeight: 700 }}>
+        {textoAplicado(aplicado.resumen_reemplazo)}
+      </div>
+    );
+  }
 
   if (resultado.ok && resultado.resumen_reemplazo) {
     return (
@@ -556,7 +590,7 @@ export default function BulkUploadModal({ entidad, onClose, onSuccess }) {
   const {
     fileName, filas, isExcel, canSubmit, parseError, resultado, loading,
     handleFile, handleDescargarPlantilla, runValidar, runCarga,
-    resumenReemplazo, runConfirmarReemplazo,
+    resumenReemplazo, runConfirmarReemplazo, aplicado,
   } = useCargaMasiva(entidad, onSuccess);
   const conResumen = entidad === ENTIDAD_REEMPLAZO_CON_RESUMEN;
 
@@ -615,7 +649,7 @@ export default function BulkUploadModal({ entidad, onClose, onSuccess }) {
           </button>
         </div>
 
-        <CargaResultPanel resultado={resultado} />
+        <CargaResultPanel resultado={resultado} aplicado={aplicado} />
 
         {conResumen && (
           <ReemplazoReferenciasResumen

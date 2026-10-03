@@ -89,6 +89,81 @@ def test_crear_una_referencia_con_un_codigo_existente_es_409(monkeypatch):
     assert session.rolled_back is True
 
 
+def _post_con_error_de_integridad(error):
+    from app.config import settings
+    from app.motored.services.auth import MotoredUser
+    from tests.motored.conftest import override_motored_user
+
+    settings.MOTORED_ENABLED = True
+    override_motored_user(MotoredUser(user_id=str(uuid.uuid4()), role="ADMIN"))
+    session = FakeAsyncSession(execute_queue=[[]], raise_integrity_error=error)
+    override_motored_db(session)
+    try:
+        with TestClient(app) as client:
+            return client.post(
+                "/api/motored/maestros/referencias", json={"codigo": "R-1", "proveedor_id": str(OTRO)})
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_una_violacion_de_llave_foranea_no_se_reporta_como_codigo_duplicado(monkeypatch):
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "MOTORED_ENABLED", True)
+    monkeypatch.setattr(settings, "MOTORED_SECRET_KEY", "identidad-test-motored-secret")
+    monkeypatch.setattr(settings, "SECRET_KEY", "identidad-test-asc360-secret")
+    error = IntegrityError(
+        "COMMIT", {}, Exception('insert or update on table "referencia" violates foreign key constraint '
+                                '"referencia_proveedor_id_fkey"'))
+
+    response = _post_con_error_de_integridad(error)
+
+    assert response.status_code == 422, response.text
+    assert "Ya existe" not in response.json()["detail"]
+    assert "inexistente" in response.json()["detail"]
+
+
+def test_la_violacion_unica_del_codigo_leida_del_diag_sigue_siendo_409(monkeypatch):
+    from types import SimpleNamespace
+
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "MOTORED_ENABLED", True)
+    monkeypatch.setattr(settings, "MOTORED_SECRET_KEY", "identidad-test-motored-secret")
+    monkeypatch.setattr(settings, "SECRET_KEY", "identidad-test-asc360-secret")
+    orig = Exception("duplicate key")
+    orig.diag = SimpleNamespace(constraint_name="uq_referencia_codigo")
+
+    response = _post_con_error_de_integridad(IntegrityError("COMMIT", {}, orig))
+
+    assert response.status_code == 409, response.text
+    assert "R-1" in response.json()["detail"]
+
+
+def test_editar_una_referencia_con_una_fk_inexistente_es_422_no_500(monkeypatch):
+    from app.config import settings
+    from app.motored.services.auth import MotoredUser
+    from tests.motored.conftest import override_motored_user
+
+    monkeypatch.setattr(settings, "MOTORED_ENABLED", True)
+    monkeypatch.setattr(settings, "MOTORED_SECRET_KEY", "identidad-test-motored-secret")
+    monkeypatch.setattr(settings, "SECRET_KEY", "identidad-test-asc360-secret")
+    override_motored_user(MotoredUser(user_id=str(uuid.uuid4()), role="ADMIN"))
+    existente = _ref("R-1", HMCL)
+    error = IntegrityError("COMMIT", {}, Exception('violates foreign key constraint "referencia_proveedor_id_fkey"'))
+    session = FakeAsyncSession(execute_queue=[[], [existente]], raise_integrity_error=error)
+    override_motored_db(session)
+    try:
+        with TestClient(app) as client:
+            response = client.patch(
+                f"/api/motored/maestros/referencias/{existente.id}", json={"proveedor_id": str(OTRO)})
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 422, response.text
+    assert session.rolled_back is True
+
+
 # --- el alta de "referencia desconocida" tambien busca solo por codigo ----------
 
 

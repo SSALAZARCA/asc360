@@ -89,7 +89,7 @@ function DobleConfirmacion({ resumen, confirmado, onChange }) {
         style={{ width: '1.25rem', height: '1.25rem', flexShrink: 0 }}
       />
       <span>
-        Entiendo que se van a desactivar {resumen.inactivar.total} de {resumen.activas_actuales} referencias
+        Entiendo que se van a desactivar {totalInactivadas(resumen)} de {resumen.activas_actuales} referencias
         activas ({pct}%), más del 10%. Si la opción &quot;consolidar sustituidas&quot; está activada, esas
         referencias dejarían de contarse en los pedidos.
       </span>
@@ -97,9 +97,14 @@ function DobleConfirmacion({ resumen, confirmado, onChange }) {
   );
 }
 
+const totalPorSustituta = (resumen) => resumen.inactivar_por_sustituta?.total ?? 0;
+
+// Todas las activas que terminan inactivas: ausentes del archivo + las que quedan con sustituta.
+export const totalInactivadas = (resumen) => resumen.inactivar.total + totalPorSustituta(resumen);
+
 function totalCambios(resumen) {
   return resumen.crear.total + resumen.actualizar.total + resumen.mover_proveedor.total
-    + resumen.inactivar.total + resumen.reactivar.total;
+    + totalInactivadas(resumen) + resumen.reactivar.total;
 }
 
 function ListaDeCambios({ resumen }) {
@@ -130,6 +135,15 @@ function ListaDeCambios({ resumen }) {
         >
           <TextoDesactivar inactivar={resumen.inactivar} />
         </Grupo>
+        <Grupo
+          titulo={`Se desactivan ${totalPorSustituta(resumen)} referencias porque el archivo les pone una sustituta`}
+          total={totalPorSustituta(resumen)} destacado
+        >
+          <Muestra
+            items={resumen.inactivar_por_sustituta?.muestra} total={totalPorSustituta(resumen)}
+            render={(i) => `${i.codigo}${i.nombre ? ` — ${i.nombre}` : ''}`}
+          />
+        </Grupo>
         <Grupo titulo={`Se reactivan ${resumen.reactivar.total} referencias`} total={resumen.reactivar.total}>
           <Muestra items={resumen.reactivar.muestra} total={resumen.reactivar.total} render={(i) => i.codigo} />
         </Grupo>
@@ -154,8 +168,11 @@ function ListaDeCambios({ resumen }) {
 }
 
 export default function ReemplazoReferenciasResumen({ resumen, loading, onConfirmar }) {
-  const [confirmadoMasivo, setConfirmadoMasivo] = useState(false);
+  // La confirmación masiva vale solo para ESTE resumen: se guarda el resumen
+  // confirmado, así un resumen nuevo (otro archivo o re-validar) nace sin marcar.
+  const [confirmadoPara, setConfirmadoPara] = useState(null);
   if (!resumen) return null;
+  const confirmadoMasivo = confirmadoPara === resumen;
 
   const requiere = resumen.requiere_doble_confirmacion;
   const bloqueado = loading || (requiere && !confirmadoMasivo);
@@ -171,7 +188,7 @@ export default function ReemplazoReferenciasResumen({ resumen, loading, onConfir
       <ListaDeCambios resumen={resumen} />
 
       {requiere && (
-        <DobleConfirmacion resumen={resumen} confirmado={confirmadoMasivo} onChange={setConfirmadoMasivo} />
+        <DobleConfirmacion resumen={resumen} confirmado={confirmadoMasivo} onChange={(marcado) => setConfirmadoPara(marcado ? resumen : null)} />
       )}
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem' }}>

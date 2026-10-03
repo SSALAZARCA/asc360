@@ -165,3 +165,53 @@ describe('confirmar el reemplazo', () => {
     expect(mockSubirArchivo.mock.calls[0][2]).toEqual({ confirmarReemplazo: true, confirmarInactivacionMasiva: false });
   });
 });
+
+describe('despues de aplicar el reemplazo', () => {
+  it('muestra el resultado aplicado y ya no deja confirmar de nuevo', async () => {
+    mockSubirCarga.mockResolvedValue({
+      ok: true, total_filas: 120, insertados: 2, actualizados: 1,
+      resumen_reemplazo: resumen({ inactivar_por_sustituta: grupo(2, [{ codigo: 'S-1', nombre: null }]) }),
+    });
+    await subirCsvYValidar(resumen());
+
+    fireEvent.click(screen.getByText('Confirmar reemplazo'));
+
+    expect(await screen.findByText(
+      /Reemplazo aplicado: 2 creadas, 1 actualizadas, 1 movidas de proveedor, 5 inactivadas, 1 reactivadas/,
+    )).toBeInTheDocument();
+    expect(screen.queryByText('Confirmar reemplazo')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Todavía no se aplicó nada/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Revise el resumen/)).not.toBeInTheDocument();
+    expect(mockSubirCarga).toHaveBeenCalledTimes(1);
+  });
+
+  it('volver a validar otro archivo despues de aplicar vuelve a mostrar el resumen', async () => {
+    mockSubirCarga.mockResolvedValue({ ok: true, total_filas: 120, resumen_reemplazo: resumen() });
+    await subirCsvYValidar(resumen());
+    fireEvent.click(screen.getByText('Confirmar reemplazo'));
+    await screen.findByText(/Reemplazo aplicado/);
+
+    fireEvent.click(screen.getByText('Validar'));
+
+    expect(await screen.findByText('Confirmar reemplazo')).toBeInTheDocument();
+    expect(screen.queryByText(/Reemplazo aplicado/)).not.toBeInTheDocument();
+  });
+});
+
+describe('doble confirmacion al cambiar el resumen', () => {
+  it('re-validar con un resumen nuevo desmarca la confirmacion masiva', async () => {
+    const masivo = () => resumen({ pct_inactivar: 0.62, activas_actuales: 5, requiere_doble_confirmacion: true });
+    await subirCsvYValidar(masivo());
+    fireEvent.click(screen.getByRole('checkbox'));
+    expect(screen.getByRole('checkbox')).toBeChecked();
+    expect(screen.getByText('Confirmar reemplazo')).not.toBeDisabled();
+
+    mockValidarCarga.mockResolvedValue({ ok: true, total_filas: 120, resumen_reemplazo: masivo() });
+    fireEvent.click(screen.getByText('Validar'));
+
+    await waitFor(() => expect(mockValidarCarga).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.getByRole('checkbox')).not.toBeChecked());
+    expect(screen.getByText('Confirmar reemplazo')).toBeDisabled();
+  });
+});
+

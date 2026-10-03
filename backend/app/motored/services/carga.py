@@ -142,7 +142,8 @@ async def _reemplazar_referencias(
     resumen = reemplazo_referencias.construir_resumen(plan)
     if resumen.requiere_doble_confirmacion and not confirmar_inactivacion_masiva:
         raise _conflicto(
-            f"Este archivo desactivaría {resumen.inactivar.total} de {resumen.activas_actuales} referencias "
+            f"Este archivo desactivaría {resumen.inactivar.total + resumen.inactivar_por_sustituta.total} "
+            f"de {resumen.activas_actuales} referencias "
             f"activas ({resumen.pct_inactivar:.0%}), más del 10%. Confirme la desactivación masiva para continuar."
         )
 

@@ -151,7 +151,7 @@ async def test_una_referencia_con_sustituta_en_el_archivo_queda_inactiva():
     vieja, nueva = _ref("VIEJA"), _ref("NUEVA")
     filas = [_fila("VIEJA", **{"_sustituta_codigo_en_archivo": "NUEVA"}), _fila("NUEVA")]
 
-    resultado, _ = await _aplicar([vieja, nueva], filas)
+    resultado, _ = await _aplicar([vieja, nueva], filas, confirmar_masiva=True)
 
     assert resultado.ok is True
     assert vieja.sustituida_por == nueva.id and vieja.activa is False and nueva.activa is True
@@ -190,6 +190,63 @@ async def test_mover_quita_el_vinculo_de_una_ausente_que_la_tenia_de_sustituta()
     resumen = resultado.resumen_reemplazo
     assert resumen.vinculos_sustituta_limpiados.total == 1
     assert resumen.vinculos_sustituta_limpiados.muestra[0]["codigo"] == "VIEJA"
+
+
+async def test_mover_un_grupo_enlazado_al_mismo_proveedor_conserva_el_vinculo_sin_aviso():
+    # El plan usa el proveedor FINAL de cada fila del archivo: A y B se mueven
+    # juntas a OTRO y B.sustituida_por = A (repetida en el archivo) -> se mantiene.
+    a, b = _ref("A", HMCL), _ref("B", HMCL, activa=False)
+    b.sustituida_por = a.id
+    filas = [_fila("A", OTRO), _fila("B", OTRO, **{"_sustituta_codigo_en_archivo": "A"})]
+
+    resultado, _ = await _aplicar([a, b], filas, confirmar_masiva=True)
+
+    assert resultado.ok is True
+    assert (a.proveedor_id, b.proveedor_id) == (OTRO.id, OTRO.id)
+    assert b.sustituida_por == a.id
+    assert resultado.resumen_reemplazo.vinculos_sustituta_limpiados.total == 0
+
+
+async def test_mover_un_grupo_enlazado_con_la_sustituta_en_blanco_limpia_el_vinculo():
+    # "El archivo es la verdad": la celda en blanco borra la sustituta. No es un
+    # vinculo cruzado (no hay aviso): lo borra el reemplazo, y queda en `actualizar`.
+    a, b = _ref("A", HMCL), _ref("B", HMCL, activa=False)
+    b.sustituida_por = a.id
+
+    resultado, _ = await _aplicar([a, b], [_fila("A", OTRO), _fila("B", OTRO)], confirmar_masiva=True)
+
+    assert resultado.ok is True
+    assert b.sustituida_por is None
+    assert resultado.resumen_reemplazo.vinculos_sustituta_limpiados.total == 0
+
+
+async def test_las_activas_que_quedan_inactivas_por_sustituta_cuentan_para_el_umbral():
+    # 20 activas; 1 ausente (5%) + 2 que ganan sustituta (10%) = 15% > 10%.
+    referencias = [_ref(f"R-{i}") for i in range(20)]
+    filas = [_fila(r.codigo) for r in referencias[1:]]
+    filas[0] = _fila("R-1", **{"_sustituta_codigo_en_archivo": "R-5"})
+    filas[1] = _fila("R-2", **{"_sustituta_codigo_en_archivo": "R-5"})
+
+    plan, _ = await _plan(referencias, filas)
+    resumen = reemplazo_referencias.construir_resumen(plan)
+
+    assert resumen.inactivar.total == 1
+    assert resumen.inactivar_por_sustituta.total == 2
+    assert {m["codigo"] for m in resumen.inactivar_por_sustituta.muestra} == {"R-1", "R-2"}
+    assert resumen.pct_inactivar == pytest.approx(3 / 20)
+    assert resumen.requiere_doble_confirmacion is True
+
+
+async def test_aplicar_con_inactivas_por_sustituta_sobre_el_umbral_sin_doble_confirmacion_es_409():
+    referencias = [_ref(f"R-{i}") for i in range(20)]
+    filas = [_fila(r.codigo) for r in referencias]
+    for i in range(3):
+        filas[i] = _fila(f"R-{i}", **{"_sustituta_codigo_en_archivo": "R-10"})
+
+    with pytest.raises(HTTPException) as exc:
+        await _aplicar(referencias, filas)
+
+    assert exc.value.status_code == 409
 
 
 # --- Errores de fila: todo o nada ------------------------------------------------

@@ -262,8 +262,11 @@ class TestTwoPassPersistence:
         ]
 
         resolved, errores = await _resolve_referencia_relaciones(session, "referencia", filas)
+        # OLD (la unica activa) queda inactiva por la sustituta: 100%, exige la doble confirmacion.
         resultado = await procesar_carga(
-            session, "referencia", resolved, errores_previos=errores, confirmar_reemplazo=True)
+            session, "referencia", resolved, errores_previos=errores,
+            confirmar_reemplazo=True, confirmar_inactivacion_masiva=True,
+        )
 
         assert resultado.ok is True, resultado
         assert resultado.actualizados == 1 and resultado.insertados == 1

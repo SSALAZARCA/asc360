@@ -217,10 +217,45 @@ async def get_maestro(
     return _to_read(config, obj)
 
 
-def _detalle_duplicado(entidad: str, data: Any) -> str:
+_CONSTRAINT_CODIGO = "uq_referencia_codigo"  # llave única del código (migración f3a8d1c5b704)
+
+
+def _nombre_de_restriccion(exc: IntegrityError) -> str:
+    """Nombre de la restricción violada, sin asumir el driver: `diag`
+    (psycopg), atributo directo o `__cause__` (asyncpg) y, de último, el texto."""
+    orig = getattr(exc, "orig", None)
+    for fuente in (orig, getattr(orig, "__cause__", None)):
+        if fuente is None:
+            continue
+        nombre = getattr(getattr(fuente, "diag", None), "constraint_name", None) or getattr(
+            fuente, "constraint_name", None
+        )
+        if isinstance(nombre, str) and nombre:
+            return nombre
+    return str(orig or "")
+
+
+def _respuesta_de_integridad(entidad: str, data: Any, exc: IntegrityError) -> HTTPException:
+    """Solo la llave única del código de referencia es "ya existe"; una FK o un
+    NOT NULL violados son un dato inválido (422), no un duplicado."""
+    nombre = _nombre_de_restriccion(exc)
+    es_unica = _CONSTRAINT_CODIGO in nombre or nombre.startswith("uq_") or "duplicate key" in nombre.lower()
+    if es_unica:
+        return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=_detalle_duplicado(entidad, data))
+    return HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=_detalle_invalido(entidad))
+
+
+def _detalle_invalido(entidad: str) -> str:
     if entidad == "referencias":
+        return "Proveedor o referencia sustituta inexistente, o falta un dato obligatorio."
+    return "Algún registro relacionado no existe o falta un dato obligatorio."
+
+
+def _detalle_duplicado(entidad: str, data: Any) -> str:
+    codigo = getattr(data, "codigo", None)  # el schema de edición no trae `codigo`
+    if entidad == "referencias" and codigo:
         return (
-            f"Ya existe una referencia con el código '{data.codigo}'. "
+            f"Ya existe una referencia con el código '{codigo}'. "
             "El código es único: para cambiarle el proveedor use la carga masiva o edítela."
         )
     return "Ya existe un registro con esos datos."
@@ -247,14 +282,11 @@ async def create_maestro(
 
     try:
         await db.commit()
-    except IntegrityError:
-        # Llave única violada (p.ej. el código de una referencia ya existe,
-        # sea de este o de otro proveedor): un conflicto, no un 500.
+    except IntegrityError as exc:
+        # Un conflicto o un dato inválido, nunca un 500: solo la llave única
+        # (p.ej. el código de la referencia ya existe) es un 409.
         await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=_detalle_duplicado(entidad, data),
-        )
+        raise _respuesta_de_integridad(entidad, data, exc)
     return _to_read(config, obj)
 
 
@@ -274,7 +306,11 @@ async def update_maestro(
         updated = await config.update_fn(db, obj, data, uuid.UUID(user.user_id))
     except maestros.SustitutaInvalidaError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError as exc:
+        await db.rollback()
+        raise _respuesta_de_integridad(entidad, data, exc)
     return _to_read(config, updated)
 
 

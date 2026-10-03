@@ -82,7 +82,8 @@ class Plan:
     actualizaciones: List[Tuple[Referencia, List[str]]] = field(default_factory=list)
     movimientos: List[Tuple[Referencia, uuid.UUID]] = field(default_factory=list)  # (referencia, proveedor nuevo)
     reactivar: List[Referencia] = field(default_factory=list)
-    inactivar: List[Referencia] = field(default_factory=list)
+    inactivar: List[Referencia] = field(default_factory=list)  # activas ausentes del archivo
+    inactivar_por_sustituta: List[Referencia] = field(default_factory=list)  # activas que el archivo deja con sustituta
     vinculos_cruzados: List[Tuple[Referencia, Referencia]] = field(default_factory=list)  # (apuntadora, destino)
     con_ventas_6m: Set[uuid.UUID] = field(default_factory=set)
     con_inventario: Set[uuid.UUID] = field(default_factory=set)
@@ -192,6 +193,8 @@ def _clasificar(plan: Plan, referencias: List[Referencia]) -> None:
         se_mueve = existente.proveedor_id != objetivo.datos.proveedor_id
         if campos:
             plan.actualizaciones.append((existente, campos))
+        if existente.activa and not objetivo.activa:
+            plan.inactivar_por_sustituta.append(existente)
         if reactiva:
             plan.reactivar.append(existente)
         if se_mueve:
@@ -258,7 +261,10 @@ def _grupo_inactivar(plan: Plan) -> GrupoInactivar:
 
 
 def construir_resumen(plan: Plan) -> ResumenReemplazo:
-    pct = len(plan.inactivar) / plan.activas_actuales if plan.activas_actuales else 0.0
+    # Umbral del 10%: toda activa que termina inactiva cuenta, esté ausente del
+    # archivo o quede inactiva por ganar una sustituta.
+    quedan_inactivas = len(plan.inactivar) + len(plan.inactivar_por_sustituta)
+    pct = quedan_inactivas / plan.activas_actuales if plan.activas_actuales else 0.0
     return ResumenReemplazo(
         total_archivo=len(plan.objetivos),
         crear=GrupoResumen(
@@ -284,6 +290,10 @@ def construir_resumen(plan: Plan) -> ResumenReemplazo:
             ]),
         ),
         inactivar=_grupo_inactivar(plan),
+        inactivar_por_sustituta=GrupoResumen(
+            total=len(plan.inactivar_por_sustituta),
+            muestra=_muestra([{"codigo": r.codigo, "nombre": r.nombre} for r in plan.inactivar_por_sustituta]),
+        ),
         reactivar=GrupoResumen(
             total=len(plan.reactivar),
             muestra=_muestra([{"codigo": r.codigo} for r in plan.reactivar]),
@@ -304,7 +314,8 @@ def texto_auditoria(resumen: ResumenReemplazo) -> str:
     return (
         f"archivo={resumen.total_archivo}; crear={resumen.crear.total}; "
         f"actualizar={resumen.actualizar.total}; mover={resumen.mover_proveedor.total}; "
-        f"inactivar={resumen.inactivar.total}; reactivar={resumen.reactivar.total}; "
+        f"inactivar={resumen.inactivar.total}; "
+        f"inactivar_por_sustituta={resumen.inactivar_por_sustituta.total}; reactivar={resumen.reactivar.total}; "
         f"vinculos_limpiados={resumen.vinculos_sustituta_limpiados.total}"
     )
 

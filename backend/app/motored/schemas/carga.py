@@ -38,7 +38,8 @@ class GrupoInactivar(GrupoResumen):
 
 class ResumenReemplazo(BaseModel):
     """Dry-run de la carga de referencias (reemplazo completo). `pct_inactivar`
-    es una fracción (0.12 = 12%) sobre las referencias activas de hoy;
+    es una fracción (0.12 = 12%) de las referencias activas de hoy que terminan
+    inactivas (`inactivar` + `inactivar_por_sustituta`);
     `requiere_doble_confirmacion` es `pct_inactivar > 0.10`."""
 
     total_archivo: int
@@ -46,6 +47,9 @@ class ResumenReemplazo(BaseModel):
     actualizar: GrupoResumen
     mover_proveedor: GrupoResumen
     inactivar: GrupoInactivar
+    # Activas que el archivo deja con sustituta (quedan inactivas por regla del
+    # maestro). Cuentan para `pct_inactivar` junto con `inactivar`.
+    inactivar_por_sustituta: GrupoResumen
     reactivar: GrupoResumen
     vinculos_sustituta_limpiados: GrupoResumen
     activas_actuales: int
