@@ -80,7 +80,9 @@ async def resolver_filas(
     resueltas: List[Dict[str, Any]] = []
     for fila in filas:
         fila = dict(fila)
-        fila[FILA_CLAVE] = split_multivalor(fila.pop(COLUMNA, None))
+        if COLUMNA in fila:
+            # Por fila: una fila sin la clave (JSON) no toca las secundarias de su sucursal.
+            fila[FILA_CLAVE] = split_multivalor(fila.pop(COLUMNA))
         resueltas.append(fila)
 
     errores: List[Dict[str, Any]] = []
@@ -100,7 +102,7 @@ async def resolver_filas(
         else:
             vistos[nombre] = index
 
-    todos_los_codigos = {codigo for fila in resueltas for codigo in fila[FILA_CLAVE]}
+    todos_los_codigos = {codigo for fila in resueltas for codigo in fila.get(FILA_CLAVE, [])}
     if not todos_los_codigos:
         return resueltas, errores
 
@@ -133,7 +135,7 @@ def _errores_de_codigos(
     errores: List[Dict[str, Any]] = []
     primera_fila_de: Dict[str, int] = {}
     for index, fila in enumerate(filas, start=1):
-        codigos = fila[FILA_CLAVE]
+        codigos = fila.get(FILA_CLAVE)
         nombre = _texto(fila.get("nombre"))
         if not codigos or not nombre:
             continue

@@ -74,7 +74,8 @@ class TestResolverFilas:
         )
 
         assert errores == []
-        assert [f[FILA_CLAVE] for f in resueltas] == [[], []]
+        assert resueltas[0][FILA_CLAVE] == []
+        assert FILA_CLAVE not in resueltas[1]  # omitted key -> untouched
 
     async def test_codes_are_trimmed_deduped_and_empties_dropped(self):
         db = FakeAsyncSession(execute_queue=[[], []])
@@ -436,3 +437,62 @@ async def test_concurrent_bodega_creation_is_a_409_not_a_500():
 
     assert exc.value.status_code == 409
     assert db.rolled_back is True
+
+
+async def test_row_that_omits_the_column_keeps_its_secondaries_in_a_mixed_file():
+    cali = _sucursal("CALI", "BA061")
+    pasto = _sucursal("PASTO", "BA071")
+    de_pasto = _bodega("BA070", pasto.id, "BA071")
+    nueva = _bodega("BA066")
+    # resolver: sucursales, bodegas | upserts: CALI, PASTO | apply: bodegas
+    db = FakeAsyncSession(
+        execute_queue=[
+            [(cali.id, "CALI", "BA061"), (pasto.id, "PASTO", "BA071")],
+            [("BA066", None)],
+            [cali],
+            [pasto],
+            [nueva, de_pasto],
+        ]
+    )
+    omite = {"nombre": "PASTO", "bodega_principal": "BA071"}  # JSON row without the key
+
+    resultado = await _resolver_y_procesar_carga(
+        db, "sucursal", [_fila("CALI", "BA061", "BA066"), omite], USER_ID
+    )
+
+    assert resultado.ok is True
+    assert de_pasto.sucursal_id == pasto.id and de_pasto.bodega_principal == "BA071"
+    assert resultado.bodegas_secundarias.desvinculadas == []
+
+
+async def test_row_with_empty_list_still_unlinks_all():
+    cali = _sucursal("CALI", "BA061")
+    a = _bodega("BA066", cali.id, "BA061")
+    db = FakeAsyncSession(execute_queue=[[cali], [a]])
+
+    await _resolver_y_procesar_carga(db, "sucursal", [_fila("CALI", "BA061", [])], USER_ID)
+
+    assert a.sucursal_id is None
+
+
+async def test_integrity_error_inside_the_apply_step_is_a_409(monkeypatch):
+    from fastapi import HTTPException
+    from sqlalchemy.exc import IntegrityError
+
+    from app.motored.services import bodegas_secundarias
+
+    async def boom(db, entradas, usuario_id):
+        raise IntegrityError("INSERT", {}, Exception("duplicate key value"))
+
+    monkeypatch.setattr(bodegas_secundarias, "aplicar", boom)
+    db = FakeAsyncSession(execute_queue=[[], [], [], []])
+
+    with pytest.raises(HTTPException) as exc:
+        await _resolver_y_procesar_carga(
+            db, "sucursal", [_fila("CALI", "BA061", "BA066")], USER_ID
+        )
+
+    assert exc.value.status_code == 409
+    assert db.rolled_back is True
+    assert db.committed is False
+

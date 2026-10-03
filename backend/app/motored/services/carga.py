@@ -218,26 +218,27 @@ async def procesar_carga(
     insertados = 0
     actualizados = 0
     advertencias: List[Dict[str, Any]] = []
-
-    secundarias: List[tuple] = []  # (sucursal, códigos) de las filas con la columna
-    for index, row in enumerate(valid_rows, start=1):
-        obj, created, row_warnings = await _upsert_row(db, entidad, row, usuario_id)
-        if entidad == "sucursal" and bodegas_secundarias.FILA_CLAVE in row:
-            secundarias.append((obj, row[bodegas_secundarias.FILA_CLAVE]))
-        if created:
-            insertados += 1
-        else:
-            actualizados += 1
-        if row_warnings:
-            advertencias.append({"fila": index, "advertencias": row_warnings})
-
-    resumen_bodegas = await bodegas_secundarias.aplicar(db, secundarias, usuario_id) if secundarias else None
+    resumen_bodegas = None
 
     try:
+        secundarias: List[tuple] = []  # (sucursal, códigos) de las filas con la columna
+        for index, row in enumerate(valid_rows, start=1):
+            obj, created, row_warnings = await _upsert_row(db, entidad, row, usuario_id)
+            if entidad == "sucursal" and bodegas_secundarias.FILA_CLAVE in row:
+                secundarias.append((obj, row[bodegas_secundarias.FILA_CLAVE]))
+            if created:
+                insertados += 1
+            else:
+                actualizados += 1
+            if row_warnings:
+                advertencias.append({"fila": index, "advertencias": row_warnings})
+
+        if secundarias:
+            resumen_bodegas = await bodegas_secundarias.aplicar(db, secundarias, usuario_id)
         await db.commit()
     except IntegrityError:
         # Otra carga creó la misma llave natural (p.ej. la misma bodega
-        # secundaria) entre nuestro SELECT y este COMMIT: es un conflicto, no un 500.
+        # secundaria) entre nuestro SELECT y el flush/COMMIT: es un conflicto, no un 500.
         await db.rollback()
         raise _conflicto(
             "Otra carga modificó estos registros en este momento. Espere unos segundos y vuelva a subir el archivo."
