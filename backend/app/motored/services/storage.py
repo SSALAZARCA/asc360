@@ -92,6 +92,9 @@ def subir_archivo(
 
     hasher = hashlib.sha256()
     try:
+        # Un volumen de MinIO nuevo no trae el bucket de Motored: se crea si falta.
+        if not cliente.bucket_exists(settings.MOTORED_MINIO_BUCKET):
+            cliente.make_bucket(settings.MOTORED_MINIO_BUCKET)
         with tempfile.SpooledTemporaryFile(max_size=_PART_SIZE) as buffer:
             while True:
                 chunk = entrada.read(_CHUNK_SIZE)

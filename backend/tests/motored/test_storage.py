@@ -131,6 +131,55 @@ def test_subir_archivo_wraps_minio_errors_in_a_domain_exception():
         )
 
 
+def test_subir_archivo_creates_the_bucket_when_it_does_not_exist():
+    """A fresh MinIO volume has no `motored-cargas` bucket. The upload must
+    create it instead of failing with NoSuchBucket (502 in production)."""
+    mock_client = MagicMock()
+    mock_client.bucket_exists.return_value = False
+
+    storage.subir_archivo(
+        carga_id=uuid.uuid4(),
+        tipo="VENTAS",
+        entrada=io.BytesIO(b"contenido"),
+        ahora=datetime(2026, 10, 3, tzinfo=timezone.utc),
+        client=mock_client,
+    )
+
+    mock_client.make_bucket.assert_called_once_with(settings.MOTORED_MINIO_BUCKET)
+    mock_client.put_object.assert_called_once()
+
+
+def test_subir_archivo_does_not_recreate_an_existing_bucket():
+    mock_client = MagicMock()
+    mock_client.bucket_exists.return_value = True
+
+    storage.subir_archivo(
+        carga_id=uuid.uuid4(),
+        tipo="VENTAS",
+        entrada=io.BytesIO(b"contenido"),
+        ahora=datetime(2026, 10, 3, tzinfo=timezone.utc),
+        client=mock_client,
+    )
+
+    mock_client.make_bucket.assert_not_called()
+    mock_client.put_object.assert_called_once()
+
+
+def test_subir_archivo_wraps_a_bucket_creation_error_in_the_domain_exception():
+    mock_client = MagicMock()
+    mock_client.bucket_exists.side_effect = ServerError("servicio no disponible", 503)
+
+    with pytest.raises(storage.SubidaArchivoError):
+        storage.subir_archivo(
+            carga_id=uuid.uuid4(),
+            tipo="VENTAS",
+            entrada=io.BytesIO(b"contenido"),
+            ahora=datetime(2026, 10, 3, tzinfo=timezone.utc),
+            client=mock_client,
+        )
+    mock_client.put_object.assert_not_called()
+
+
 def test_module_does_not_import_storage_service_or_hardcode_a_secret_default():
     """ADR-6: `services/storage_service.py` lee env directo con defaults
     hardcodeados (ej. un literal 'umadmin123') -- inaceptable bajo la
