@@ -40,9 +40,16 @@ const FIELDS = [
   { key: 'nombre', label: 'Nombre', required: true },
 ];
 
-function ProveedorForm({ form, setForm, editingId, onSubmit, onCancel }) {
+const FORM_ID = 'proveedor-form';
+
+function ProveedorForm({ form, setForm, editingId, editingNombre, onSubmit, onCancel }) {
   return (
-    <form onSubmit={onSubmit} style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+    <form id={FORM_ID} onSubmit={onSubmit} style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+      {editingId && (
+        <p style={{ flexBasis: '100%', margin: 0, fontSize: '0.8rem', fontWeight: 600 }}>
+          Editando proveedor: {editingNombre}
+        </p>
+      )}
       {FIELDS.map((f) => (
         <FormField
           key={f.key}
@@ -208,18 +215,28 @@ function useProveedores() {
 function useProveedoresEditor(save) {
   const [form, setForm] = useState(emptyForm);
   const [editingId, setEditingId] = useState(null);
+  const [editingNombre, setEditingNombre] = useState('');
 
+  // The form sits above a long list: bring it into view and focus it so
+  // the click on "Editar" visibly does something.
   const startEdit = (p) => {
     setEditingId(p.id);
+    setEditingNombre(p.nombre);
     setForm({
       codigo: p.codigo,
       nombre: p.nombre,
       es_principal: p.es_principal,
     });
+    setTimeout(() => {
+      const formEl = document.getElementById(FORM_ID);
+      formEl?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+      formEl?.querySelector('input')?.focus();
+    }, 0);
   };
 
   const cancelEdit = () => {
     setEditingId(null);
+    setEditingNombre('');
     setForm(emptyForm);
   };
 
@@ -239,12 +256,12 @@ function useProveedoresEditor(save) {
     if (ok) cancelEdit();
   };
 
-  return { form, setForm, editingId, startEdit, cancelEdit, handleSubmit };
+  return { form, setForm, editingId, editingNombre, startEdit, cancelEdit, handleSubmit };
 }
 
 export default function ProveedoresTab() {
   const { proveedores, loading, error, save, deactivate, reactivate, reload } = useProveedores();
-  const { form, setForm, editingId, startEdit, cancelEdit, handleSubmit } = useProveedoresEditor(save);
+  const { form, setForm, editingId, editingNombre, startEdit, cancelEdit, handleSubmit } = useProveedoresEditor(save);
   const [showBulkModal, setShowBulkModal] = useState(false);
 
   return (
@@ -257,6 +274,7 @@ export default function ProveedoresTab() {
         form={form}
         setForm={setForm}
         editingId={editingId}
+        editingNombre={editingNombre}
         onSubmit={handleSubmit}
         onCancel={cancelEdit}
       />
