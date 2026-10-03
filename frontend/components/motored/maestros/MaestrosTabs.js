@@ -33,6 +33,7 @@
  */
 import { Fragment, useEffect, useState } from 'react';
 import { getSalud } from '../../../lib/motored/api';
+import AvisosSalud from './AvisosSalud';
 
 const groupLabelStyle = {
   display: 'flex', alignItems: 'center', padding: '0 0.35rem',
@@ -60,9 +61,13 @@ function estadoPorEntidad(hallazgos) {
 
 function useSaludPorEntidad() {
   const [porEntidad, setPorEntidad] = useState({});
+  const [hallazgos, setHallazgos] = useState([]);
   useEffect(() => {
     getSalud()
-      .then((salud) => setPorEntidad(estadoPorEntidad(salud.hallazgos)))
+      .then((salud) => {
+        setPorEntidad(estadoPorEntidad(salud.hallazgos));
+        setHallazgos(salud.hallazgos || []);
+      })
       .catch((err) => {
         // No bloquea la pantalla por esto -- los dots son un indicador
         // secundario, no la función principal de la pestaña -- pero el
@@ -70,7 +75,7 @@ function useSaludPorEntidad() {
         console.error('No se pudo cargar la salud de maestros para los indicadores de pestaña:', err);
       });
   }, []);
-  return porEntidad;
+  return { porEntidad, hallazgos };
 }
 
 function EstadoDot({ estado }) {
@@ -87,8 +92,11 @@ function EstadoDot({ estado }) {
 
 export default function MaestrosTabs({ tabs }) {
   const [activeId, setActiveId] = useState(tabs[0].id);
-  const saludPorEntidad = useSaludPorEntidad();
+  const { porEntidad: saludPorEntidad, hallazgos } = useSaludPorEntidad();
   const active = tabs.find((t) => t.id === activeId);
+  const hallazgosActivos = active.entidadSalud
+    ? hallazgos.filter((h) => h.entidad === active.entidadSalud)
+    : [];
 
   let grupoAnterior = null;
 
@@ -113,6 +121,7 @@ export default function MaestrosTabs({ tabs }) {
           );
         })}
       </div>
+      <AvisosSalud key={active.id} hallazgos={hallazgosActivos} />
       {active.render()}
     </div>
   );
