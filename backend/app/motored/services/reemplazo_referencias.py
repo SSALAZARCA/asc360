@@ -8,8 +8,10 @@ Motored — carga de REFERENCIAS como reemplazo completo
   nunca 0. `precio_venta` no es parte del layout y no se toca.
 - Cambiar el proveedor MUEVE la referencia (mismo id, historial intacto).
 - Las del archivo quedan activas (salvo las que tienen sustituta, que por
-  regla del maestro quedan inactivas); las ACTIVAS que el archivo no trae se
-  desactivan. Nunca se borra nada: 11 tablas tienen FK a `referencia`.
+  regla del maestro quedan inactivas). Las ACTIVAS que el archivo no trae
+  (ausentes) NO se desactivan solas (R3): se listan y siguen activas salvo
+  las que el usuario elija (`codigos_inactivar`). Nunca se borra nada: 11
+  tablas tienen FK a `referencia`.
 - Las que estaban inactivas y vuelven en el archivo se reactivan.
 
 `planificar` calcula TODO en memoria contra el estado actual (un query por
@@ -25,7 +27,7 @@ import datetime
 import uuid
 from dataclasses import dataclass, field
 from decimal import Decimal
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 from sqlalchemy import func, select
 
@@ -33,7 +35,7 @@ from app.motored.models.inventario_snapshot import InventarioSnapshot
 from app.motored.models.proveedor import Proveedor
 from app.motored.models.referencia import Referencia
 from app.motored.models.venta_mensual import VentaMensual
-from app.motored.schemas.carga import GrupoInactivar, GrupoResumen, ResumenReemplazo
+from app.motored.schemas.carga import GrupoAusentes, GrupoResumen, ResumenReemplazo
 from app.motored.schemas.referencia import ReferenciaCreate, ReferenciaUpdate
 from app.motored.services import auditoria, maestros
 
@@ -46,9 +48,19 @@ SUSTITUTA_EN_ARCHIVO = "_sustituta_codigo_en_archivo"
 MESES_VENTAS_ALERTA = 6
 UMBRAL_DOBLE_CONFIRMACION = 0.10
 MUESTRA_MAX = 50
+AUSENTES_MAX = 20_000  # tope de la lista completa que devuelve el dry-run
 
 _CENTAVOS = Decimal("0.01")
 _ADVERTENCIA_UNIDAD_EMPAQUE = "unidad_empaque vacío: se dejó en 1"
+
+
+class DemasiadasAusentes(Exception):
+    """El dry-run no puede listar tantas ausentes (el mensaje es para el usuario)."""
+
+
+class SeleccionInvalida(Exception):
+    """`codigos_inactivar` trae códigos que no son ausentes del archivo (el
+    mensaje es para el usuario)."""
 
 
 @dataclass
@@ -82,7 +94,7 @@ class Plan:
     actualizaciones: List[Tuple[Referencia, List[str]]] = field(default_factory=list)
     movimientos: List[Tuple[Referencia, uuid.UUID]] = field(default_factory=list)  # (referencia, proveedor nuevo)
     reactivar: List[Referencia] = field(default_factory=list)
-    inactivar: List[Referencia] = field(default_factory=list)  # activas ausentes del archivo
+    ausentes: List[Referencia] = field(default_factory=list)  # activas que el archivo no trae (siguen activas por defecto)
     inactivar_por_sustituta: List[Referencia] = field(default_factory=list)  # activas que el archivo deja con sustituta
     vinculos_cruzados: List[Tuple[Referencia, Referencia]] = field(default_factory=list)  # (apuntadora, destino)
     con_ventas_6m: Set[uuid.UUID] = field(default_factory=set)
@@ -204,7 +216,7 @@ def _clasificar(plan: Plan, referencias: List[Referencia]) -> None:
         if campos or reactiva or se_mueve:
             plan.modificadas += 1
 
-    plan.inactivar = [r for r in referencias if r.activa and r.codigo not in codigos_archivo]
+    plan.ausentes = [r for r in referencias if r.activa and r.codigo not in codigos_archivo]
 
     for apuntadora in referencias:
         if apuntadora.sustituida_por in movidas and apuntadora.codigo not in codigos_archivo:
@@ -231,7 +243,7 @@ async def planificar(db, valid_rows: List[Dict[str, Any]], hoy: Optional[datetim
         return plan
 
     _clasificar(plan, referencias)
-    if plan.inactivar:
+    if plan.ausentes:
         plan.con_ventas_6m, plan.con_inventario = await _actividad(db, hoy or datetime.date.today())
     return plan
 
@@ -240,31 +252,62 @@ def _muestra(items: List[Any]) -> List[Any]:
     return items[:MUESTRA_MAX]
 
 
-def _grupo_inactivar(plan: Plan) -> GrupoInactivar:
-    marcadas = [
+def _grupo_ausentes(plan: Plan, con_lista: bool) -> GrupoAusentes:
+    if con_lista and len(plan.ausentes) > AUSENTES_MAX:
+        raise DemasiadasAusentes(
+            f"El archivo deja {len(plan.ausentes)} referencias activas ausentes, más de las "
+            f"{AUSENTES_MAX} que se pueden listar. Revise que el archivo esté completo."
+        )
+    items = [
         {
             "codigo": r.codigo,
             "nombre": r.nombre,
+            "proveedor": plan.proveedores.get(r.proveedor_id, "?"),
             "con_ventas_6m": r.id in plan.con_ventas_6m,
             "con_inventario": r.id in plan.con_inventario,
         }
-        for r in plan.inactivar
+        for r in plan.ausentes
     ]
     # Las que vendieron o tienen stock van primero: son las que el usuario debe mirar.
-    marcadas.sort(key=lambda m: (-(m["con_ventas_6m"] + m["con_inventario"]), m["codigo"]))
-    return GrupoInactivar(
-        total=len(marcadas),
-        con_ventas_6m=sum(1 for m in marcadas if m["con_ventas_6m"]),
-        con_inventario=sum(1 for m in marcadas if m["con_inventario"]),
-        muestra=_muestra(marcadas),
+    items.sort(key=lambda m: (-(m["con_ventas_6m"] + m["con_inventario"]), m["codigo"]))
+    return GrupoAusentes(
+        total=len(items),
+        con_ventas_6m=sum(1 for m in items if m["con_ventas_6m"]),
+        con_inventario=sum(1 for m in items if m["con_inventario"]),
+        items=items if con_lista else [],
     )
 
 
-def construir_resumen(plan: Plan) -> ResumenReemplazo:
-    # Umbral del 10%: toda activa que termina inactiva cuenta, esté ausente del
-    # archivo o quede inactiva por ganar una sustituta.
-    quedan_inactivas = len(plan.inactivar) + len(plan.inactivar_por_sustituta)
-    pct = quedan_inactivas / plan.activas_actuales if plan.activas_actuales else 0.0
+def elegir_inactivar(plan: Plan, codigos: Optional[Iterable[str]]) -> List[Referencia]:
+    """Las ausentes que el usuario eligió inactivar. Los códigos se recortan y
+    se deduplican; todos deben ser ausentes del plan RECALCULADO (activas que el
+    archivo no trae), si no `SeleccionInvalida` y no se aplica nada."""
+    pedidos = list(dict.fromkeys(c.strip() for c in (codigos or []) if c and c.strip()))
+    por_codigo = {r.codigo: r for r in plan.ausentes}
+    ajenos = [c for c in pedidos if c not in por_codigo]
+    if ajenos:
+        mostrados = ", ".join(ajenos[:10]) + (f" y {len(ajenos) - 10} más" if len(ajenos) > 10 else "")
+        raise SeleccionInvalida(
+            f"Estos códigos no están entre las referencias ausentes del archivo y no se pueden inactivar: "
+            f"{mostrados}. Vuelva a validar el archivo y elija de nuevo."
+        )
+    return [por_codigo[c] for c in pedidos]
+
+
+def _fraccion(inactivas: int, activas: int) -> float:
+    return inactivas / activas if activas else 0.0
+
+
+def construir_resumen(
+    plan: Plan, codigos_inactivar: Optional[Iterable[str]] = None, con_lista: bool = True
+) -> ResumenReemplazo:
+    """`codigos_inactivar` es la selección (vacía en el dry-run: nada se
+    desactiva). Umbral del 10%: cuentan las ausentes ELEGIDAS más las activas
+    que quedan inactivas por ganar una sustituta (eso lo dice el archivo).
+    `con_lista=False` omite la lista completa de ausentes (el apply no la repite)."""
+    seleccionadas = elegir_inactivar(plan, codigos_inactivar)
+    por_sustituta = len(plan.inactivar_por_sustituta)
+    pct = _fraccion(len(seleccionadas) + por_sustituta, plan.activas_actuales)
     return ResumenReemplazo(
         total_archivo=len(plan.objetivos),
         crear=GrupoResumen(
@@ -289,7 +332,8 @@ def construir_resumen(plan: Plan) -> ResumenReemplazo:
                 for r, nuevo in plan.movimientos
             ]),
         ),
-        inactivar=_grupo_inactivar(plan),
+        ausentes=_grupo_ausentes(plan, con_lista),
+        seleccionadas=len(seleccionadas),
         inactivar_por_sustituta=GrupoResumen(
             total=len(plan.inactivar_por_sustituta),
             muestra=_muestra([{"codigo": r.codigo, "nombre": r.nombre} for r in plan.inactivar_por_sustituta]),
@@ -306,6 +350,7 @@ def construir_resumen(plan: Plan) -> ResumenReemplazo:
         ),
         activas_actuales=plan.activas_actuales,
         pct_inactivar=pct,
+        pct_inactivar_si_todas=_fraccion(len(plan.ausentes) + por_sustituta, plan.activas_actuales),
         requiere_doble_confirmacion=pct > UMBRAL_DOBLE_CONFIRMACION,
     )
 
@@ -314,7 +359,7 @@ def texto_auditoria(resumen: ResumenReemplazo) -> str:
     return (
         f"archivo={resumen.total_archivo}; crear={resumen.crear.total}; "
         f"actualizar={resumen.actualizar.total}; mover={resumen.mover_proveedor.total}; "
-        f"inactivar={resumen.inactivar.total}; "
+        f"ausentes_ofrecidas={resumen.ausentes.total}; inactivar_elegidas={resumen.seleccionadas}; "
         f"inactivar_por_sustituta={resumen.inactivar_por_sustituta.total}; reactivar={resumen.reactivar.total}; "
         f"vinculos_limpiados={resumen.vinculos_sustituta_limpiados.total}"
     )
@@ -361,11 +406,14 @@ async def _escribir_fila(
     return existente
 
 
-async def aplicar(db, plan: Plan, resumen: ResumenReemplazo, usuario_id: Optional[uuid.UUID]) -> None:
+async def aplicar(
+    db, plan: Plan, resumen: ResumenReemplazo, usuario_id: Optional[uuid.UUID],
+    inactivar: Optional[List[Referencia]] = None,
+) -> None:
     """Ejecuta el plan en la transacción del caller (sin `commit`). Orden:
     escribir cada fila (crear/actualizar/mover), enlazar las sustitutas que son
     otra fila del archivo, quitar los vínculos que el movimiento dejó cruzados
-    y desactivar las ausentes. Nunca borra."""
+    y desactivar SOLO las ausentes elegidas (`inactivar`). Nunca borra."""
     pendientes: List[Tuple[Referencia, str]] = []
     for objetivo in plan.objetivos:
         referencia = await _escribir_fila(db, plan, objetivo, usuario_id)
@@ -385,7 +433,7 @@ async def aplicar(db, plan: Plan, resumen: ResumenReemplazo, usuario_id: Optiona
     for apuntadora, destino in plan.vinculos_cruzados:
         maestros.quitar_vinculo_sustituta(db, apuntadora, destino, usuario_id, avisos)
 
-    for referencia in plan.inactivar:
+    for referencia in inactivar or []:
         referencia.activa = False
         auditoria.audit_deactivate(db, "referencia", referencia.id, usuario_id)
 

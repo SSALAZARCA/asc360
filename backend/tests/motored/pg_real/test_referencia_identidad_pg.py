@@ -22,6 +22,7 @@ from pathlib import Path
 import pytest
 from alembic import command
 from alembic.config import Config
+from fastapi import HTTPException
 from sqlalchemy import select, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import IntegrityError
@@ -277,7 +278,7 @@ async def test_el_reemplazo_desactiva_reactiva_mueve_y_borra_con_celdas_en_blanc
         {"codigo": c, "proveedor_codigo": hmcl.codigo, "nombre": "Vuelve"},  # reactiva
         {"codigo": d, "proveedor_codigo": otro.codigo},                   # se mueve
         {"codigo": f"E-{sfx}", "proveedor_codigo": otro.codigo},          # nueva
-    ])
+    ], codigos_inactivar=[b])
     await sesion.flush()
 
     assert resultado.ok is True, resultado
@@ -285,13 +286,36 @@ async def test_el_reemplazo_desactiva_reactiva_mueve_y_borra_con_celdas_en_blanc
     assert {k: v.id for k, v in refs.items() if k in ids} == ids  # nadie se borro ni se duplico
     assert refs[a].nombre is None and refs[a].linea_comercial is None and refs[a].precio_normal is None
     assert refs[a].homologados == [] and refs[a].unidad_empaque == 1 and refs[a].activa is True
-    assert refs[b].activa is False                                   # ausente: desactivada
+    assert refs[b].activa is False                                   # ausente Y elegida: desactivada
     assert refs[c].activa is True and refs[c].nombre == "Vuelve"      # volvio: reactivada
     assert refs[d].proveedor_id == otro.id and refs[d].activa is True  # movida
     assert refs[f"E-{sfx}"].activa is True
     resumen = resultado.resumen_reemplazo
     assert resumen.crear.total == 1 and resumen.mover_proveedor.total == 1 and resumen.reactivar.total == 1
-    assert b in {m["codigo"] for m in resumen.inactivar.muestra} or resumen.inactivar.total > 50
+    assert resumen.seleccionadas == 1 and resumen.ausentes.total >= 1
+    assert b not in {m["codigo"] for m in resumen.ausentes.items} or resumen.ausentes.total > 1
+
+
+async def test_las_ausentes_siguen_activas_salvo_las_elegidas_y_un_codigo_ajeno_es_409(sesion):
+    sfx = _sfx()
+    hmcl, _ = await _proveedores(sesion)
+    en_archivo = await _crear(sesion, f"EN-{sfx}", hmcl)
+    elegida = await _crear(sesion, f"ELE-{sfx}", hmcl)
+    otra = await _crear(sesion, f"OTR-{sfx}", hmcl)
+    await sesion.flush()
+    fila = [{"codigo": en_archivo.codigo, "proveedor_codigo": hmcl.codigo}]
+
+    sin_elegir = await _cargar(sesion, fila)
+    assert sin_elegir.ok is True and elegida.activa is True and otra.activa is True
+
+    with pytest.raises(HTTPException) as exc:
+        await _cargar(sesion, fila, codigos_inactivar=[elegida.codigo, en_archivo.codigo])
+    assert exc.value.status_code == 409
+    assert elegida.activa is True and en_archivo.activa is True
+
+    await _cargar(sesion, fila, codigos_inactivar=[elegida.codigo])
+    await sesion.flush()
+    assert (en_archivo.activa, elegida.activa, otra.activa) == (True, False, True)
 
 
 async def test_el_resumen_marca_las_desactivadas_con_ventas_de_los_ultimos_6_meses(sesion):
@@ -313,5 +337,5 @@ async def test_el_resumen_marca_las_desactivadas_con_ventas_de_los_ultimos_6_mes
     valid = [{**f} for f in filas]
     plan = await reemplazo_referencias.planificar(sesion, valid)
 
-    marcadas = {r.codigo: r.id in plan.con_ventas_6m for r in plan.inactivar}
+    marcadas = {r.codigo: r.id in plan.con_ventas_6m for r in plan.ausentes}
     assert marcadas[f"VEN-{sfx}"] is True and marcadas[f"QUI-{sfx}"] is False

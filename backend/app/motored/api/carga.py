@@ -42,10 +42,11 @@ adelante reutilizan exactamente el mismo pipeline (`_resolve_referencia_
 relaciones` -> `validate_rows`/`procesar_carga`) que los endpoints de arriba
 -- cero lógica de validación/upsert duplicada.
 """
+import json
 import uuid
 from typing import Any, Dict, List, Optional, Tuple
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -443,11 +444,15 @@ async def _validar_reemplazo_referencias(
     plan = await reemplazo_referencias.planificar(db, valid_rows)
     if plan.errores:
         return _resultado_con_errores(total_filas, plan.errores)
+    try:
+        resumen = reemplazo_referencias.construir_resumen(plan)
+    except reemplazo_referencias.DemasiadasAusentes as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
     return CargaResultado(
         ok=True,
         total_filas=total_filas,
         advertencias=plan.advertencias_por_fila(),
-        resumen_reemplazo=reemplazo_referencias.construir_resumen(plan),
+        resumen_reemplazo=resumen,
     )
 
 
@@ -458,6 +463,7 @@ async def _resolver_y_procesar_carga(
     usuario_id: uuid.UUID,
     confirmar_reemplazo: bool = False,
     confirmar_inactivacion_masiva: bool = False,
+    codigos_inactivar: Optional[List[str]] = None,
 ) -> CargaResultado:
     """Lógica compartida entre `carga` y `carga_excel` (ad-hoc dedupe, no
     trackeado bajo ningún sdd/*, 2026-09-28): resolver relaciones de
@@ -470,6 +476,7 @@ async def _resolver_y_procesar_carga(
         db, entidad, filas, usuario_id, errores_previos=errores_resolucion,
         confirmar_reemplazo=confirmar_reemplazo,
         confirmar_inactivacion_masiva=confirmar_inactivacion_masiva,
+        codigos_inactivar=codigos_inactivar,
     )
 
 
@@ -519,6 +526,7 @@ async def carga(
         db, entidad, payload.filas, usuario_id,
         confirmar_reemplazo=payload.confirmar_reemplazo,
         confirmar_inactivacion_masiva=payload.confirmar_inactivacion_masiva,
+        codigos_inactivar=payload.codigos_inactivar,
     )
 
 
@@ -601,6 +609,23 @@ async def _parse_excel_upload(entidad: str, request: Request, file: UploadFile) 
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
 
+def _parse_codigos_inactivar(raw: Optional[str]) -> List[str]:
+    """`codigos_inactivar` en el camino Excel viaja como campo de formulario
+    con una lista JSON (miles de códigos no caben en la query string)."""
+    if raw is None or not raw.strip():
+        return []
+    try:
+        codigos = json.loads(raw)
+    except ValueError:
+        codigos = None
+    if not isinstance(codigos, list) or not all(isinstance(c, str) for c in codigos):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="codigos_inactivar debe ser una lista JSON de códigos (texto).",
+        )
+    return codigos
+
+
 @router.post("/excel/validar", response_model=CargaResultado)
 async def validar_carga_excel(
     entidad: str,
@@ -623,6 +648,7 @@ async def carga_excel(
     file: UploadFile = File(...),
     confirmar_reemplazo: bool = Query(False),
     confirmar_inactivacion_masiva: bool = Query(False),
+    codigos_inactivar: Optional[str] = Form(None),
     db: AsyncSession = Depends(get_motored_db_or_503),
     user: MotoredUser = Depends(_require_write),
 ):
@@ -631,10 +657,12 @@ async def carga_excel(
     la MISMA lógica que usa el camino JSON, una sola fuente de verdad para
     todo-o-nada."""
     entidad = entidad_or_404(entidad)
+    codigos = _parse_codigos_inactivar(codigos_inactivar)
     filas = await _parse_excel_upload(entidad, request, file)
     usuario_id = uuid.UUID(user.user_id)
     return await _resolver_y_procesar_carga(
         db, entidad, filas, usuario_id,
         confirmar_reemplazo=confirmar_reemplazo,
         confirmar_inactivacion_masiva=confirmar_inactivacion_masiva,
+        codigos_inactivar=codigos,
     )

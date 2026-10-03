@@ -119,6 +119,7 @@ async def _reemplazar_referencias(
     usuario_id: Optional[uuid.UUID],
     confirmar_reemplazo: bool,
     confirmar_inactivacion_masiva: bool,
+    codigos_inactivar: Optional[List[str]] = None,
 ) -> CargaResultado:
     """Aplica el reemplazo completo de referencias en UNA transacción. El plan
     y el resumen se RECALCULAN acá contra el estado actual y el archivo que
@@ -126,8 +127,8 @@ async def _reemplazar_referencias(
     doble confirmación y no vino, 409 sin escribir nada."""
     if not confirmar_reemplazo:
         raise _conflicto(
-            "La carga de referencias reemplaza el maestro completo: las referencias que no estén en el "
-            "archivo se desactivan y las celdas en blanco borran lo guardado. "
+            "La carga de referencias reemplaza el maestro completo: las celdas en blanco borran lo guardado "
+            "y solo se inactivan las referencias ausentes que usted elija. "
             "Revise el resumen y confirme el reemplazo."
         )
 
@@ -139,16 +140,21 @@ async def _reemplazar_referencias(
             errores=[CargaErrorRow(fila=e["fila"], motivo=e["motivo"]) for e in plan.errores],
         )
 
-    resumen = reemplazo_referencias.construir_resumen(plan)
+    try:
+        a_inactivar = reemplazo_referencias.elegir_inactivar(plan, codigos_inactivar)
+    except reemplazo_referencias.SeleccionInvalida as exc:
+        raise _conflicto(str(exc))
+
+    resumen = reemplazo_referencias.construir_resumen(plan, codigos_inactivar, con_lista=False)
     if resumen.requiere_doble_confirmacion and not confirmar_inactivacion_masiva:
         raise _conflicto(
-            f"Este archivo desactivaría {resumen.inactivar.total + resumen.inactivar_por_sustituta.total} "
+            f"Este archivo desactivaría {resumen.seleccionadas + resumen.inactivar_por_sustituta.total} "
             f"de {resumen.activas_actuales} referencias "
             f"activas ({resumen.pct_inactivar:.0%}), más del 10%. Confirme la desactivación masiva para continuar."
         )
 
     try:
-        await reemplazo_referencias.aplicar(db, plan, resumen, usuario_id)
+        await reemplazo_referencias.aplicar(db, plan, resumen, usuario_id, a_inactivar)
         await db.commit()
     except IntegrityError:
         await db.rollback()
@@ -173,6 +179,7 @@ async def procesar_carga(
     errores_previos: Optional[List[Dict[str, Any]]] = None,
     confirmar_reemplazo: bool = False,
     confirmar_inactivacion_masiva: bool = False,
+    codigos_inactivar: Optional[List[str]] = None,
 ) -> CargaResultado:
     """Valida TODO el archivo antes de escribir NADA. Si `validate_rows`
     reporta cualquier error, retorna de inmediato (`ok=False`) sin haber
@@ -204,7 +211,8 @@ async def procesar_carga(
         return await _reemplazar_lista(db, entidad, valid_rows, usuario_id)
     if entidad == "referencia":
         return await _reemplazar_referencias(
-            db, valid_rows, usuario_id, confirmar_reemplazo, confirmar_inactivacion_masiva
+            db, valid_rows, usuario_id, confirmar_reemplazo, confirmar_inactivacion_masiva,
+            codigos_inactivar,
         )
 
     insertados = 0

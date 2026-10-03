@@ -5,12 +5,16 @@ REEMPLAZO COMPLETO -- el archivo es la verdad.
 - Una celda opcional en blanco BORRA el valor guardado (nombre, linea,
   precios, sustituta, homologados); `unidad_empaque` en blanco queda en 1 con
   aviso, nunca 0.
-- Las referencias del archivo quedan activas; las activas que NO estan en el
-  archivo se desactivan (nunca se borran); las que vuelven se reactivan.
-- Un dry-run (`resumen_reemplazo`) cuenta crear/actualizar/mover/inactivar/
-  reactivar y los vinculos de sustituta quitados, resalta lo desactivado con
-  ventas de los ultimos 6 meses o stock, y exige DOBLE confirmacion si se
-  desactiva mas del 10% de las activas.
+- Las referencias del archivo quedan activas; las que vuelven se reactivan.
+- R3: las activas que NO estan en el archivo (ausentes) se LISTAN, no se
+  desactivan: siguen activas salvo las que el usuario elija en
+  `codigos_inactivar` (subconjunto de las ausentes, recalculadas al aplicar;
+  si no, 409). Nunca se borra nada.
+- Un dry-run (`resumen_reemplazo`) cuenta crear/actualizar/mover/reactivar y
+  los vinculos de sustituta quitados, lista TODAS las ausentes (resaltando las
+  que vendieron en los ultimos 6 meses o tienen stock) y exige DOBLE
+  confirmacion si lo elegido + las que quedan inactivas por sustituta pasan
+  del 10% de las activas.
 - Aplicar exige `confirmar_reemplazo`; recalcula el resumen y, si exige doble
   confirmacion y no vino, responde 409. Todo-o-nada en una transaccion.
 
@@ -61,11 +65,13 @@ async def _plan(referencias, filas, **kw):
     return plan, db
 
 
-async def _aplicar(referencias, filas, confirmar_reemplazo=True, confirmar_masiva=False, **kw):
+async def _aplicar(referencias, filas, confirmar_reemplazo=True, confirmar_masiva=False,
+                   codigos_inactivar=None, **kw):
     db = _db(referencias, **kw)
     resultado = await carga.procesar_carga(
         db, "referencia", filas,
-        confirmar_reemplazo=confirmar_reemplazo, confirmar_inactivacion_masiva=confirmar_masiva)
+        confirmar_reemplazo=confirmar_reemplazo, confirmar_inactivacion_masiva=confirmar_masiva,
+        codigos_inactivar=codigos_inactivar)
     return resultado, db
 
 
@@ -123,20 +129,62 @@ async def test_las_columnas_requeridas_siguen_siendo_requeridas():
 # --- Activar / desactivar / reactivar ----------------------------------------
 
 
-async def test_las_del_archivo_quedan_activas_y_las_ausentes_se_desactivan_sin_borrar():
+async def test_por_defecto_aplicar_no_desactiva_a_las_ausentes():
     en_archivo = _ref("A")
     ausente = _ref("B")
     vuelve = _ref("C", activa=False)
 
-    resultado, db = await _aplicar([en_archivo, ausente, vuelve], [_fila("A"), _fila("C")],
-                                   confirmar_masiva=True)
+    resultado, db = await _aplicar([en_archivo, ausente, vuelve], [_fila("A"), _fila("C")])
 
     assert resultado.ok is True
-    assert (en_archivo.activa, ausente.activa, vuelve.activa) == (True, False, True)
+    assert (en_archivo.activa, ausente.activa, vuelve.activa) == (True, True, True)
     assert db.committed is True
+    acciones = {(a.entidad_id, a.accion) for a in db.added_of_type(AuditoriaMaestro)}
+    assert (ausente.id, "deactivate") not in acciones and (vuelve.id, "reactivate") in acciones
+
+
+async def test_una_lista_vacia_tampoco_desactiva_nada():
+    ausente = _ref("B")
+
+    await _aplicar([_ref("A"), ausente], [_fila("A")], codigos_inactivar=[])
+
+    assert ausente.activa is True
+
+
+async def test_solo_se_desactivan_los_codigos_elegidos_sin_borrar_nada():
+    en_archivo, elegida, otra = _ref("A"), _ref("B"), _ref("C")
+
+    resultado, db = await _aplicar([en_archivo, elegida, otra], [_fila("A")],
+                                   codigos_inactivar=["B"], confirmar_masiva=True)
+
+    assert resultado.ok is True
+    assert (en_archivo.activa, elegida.activa, otra.activa) == (True, False, True)
     assert not any(type(s).__name__ == "Delete" for s in db.executed_statements)
     acciones = {(a.entidad_id, a.accion) for a in db.added_of_type(AuditoriaMaestro)}
-    assert (ausente.id, "deactivate") in acciones and (vuelve.id, "reactivate") in acciones
+    assert (elegida.id, "deactivate") in acciones and (otra.id, "deactivate") not in acciones
+
+
+async def test_un_codigo_elegido_que_no_es_ausente_es_409_y_no_se_aplica_nada():
+    en_archivo, ausente, inactiva = _ref("A", nombre="Original"), _ref("B"), _ref("I", activa=False)
+    db = _db([en_archivo, ausente, inactiva])
+
+    with pytest.raises(HTTPException) as exc:
+        await carga.procesar_carga(
+            db, "referencia", [_fila("A", nombre="Nueva")], confirmar_reemplazo=True,
+            codigos_inactivar=["B", "A", "I", "NOEXISTE"])
+
+    assert exc.value.status_code == 409
+    assert "A" in exc.value.detail and "NOEXISTE" in exc.value.detail and "ausente" in exc.value.detail.lower()
+    assert en_archivo.nombre == "Original" and ausente.activa is True and db.committed is False
+
+
+async def test_los_codigos_elegidos_se_recortan_y_no_se_cuentan_dos_veces():
+    ausente = _ref("B")
+
+    resultado, _ = await _aplicar([_ref("A"), ausente], [_fila("A")], codigos_inactivar=[" B ", "B"],
+                                  confirmar_masiva=True)
+
+    assert ausente.activa is False and resultado.resumen_reemplazo.seleccionadas == 1
 
 
 async def test_una_inactiva_ausente_del_archivo_no_cambia():
@@ -144,7 +192,7 @@ async def test_una_inactiva_ausente_del_archivo_no_cambia():
 
     plan, _ = await _plan([_ref("A"), inactiva], [_fila("A")])
 
-    assert inactiva not in plan.inactivar and inactiva not in plan.reactivar
+    assert inactiva not in plan.ausentes and inactiva not in plan.reactivar
 
 
 async def test_una_referencia_con_sustituta_en_el_archivo_queda_inactiva():
@@ -221,19 +269,22 @@ async def test_mover_un_grupo_enlazado_con_la_sustituta_en_blanco_limpia_el_vinc
 
 
 async def test_las_activas_que_quedan_inactivas_por_sustituta_cuentan_para_el_umbral():
-    # 20 activas; 1 ausente (5%) + 2 que ganan sustituta (10%) = 15% > 10%.
+    # 20 activas; 1 ausente ELEGIDA (5%) + 2 que ganan sustituta (10%) = 15% > 10%.
     referencias = [_ref(f"R-{i}") for i in range(20)]
     filas = [_fila(r.codigo) for r in referencias[1:]]
     filas[0] = _fila("R-1", **{"_sustituta_codigo_en_archivo": "R-5"})
     filas[1] = _fila("R-2", **{"_sustituta_codigo_en_archivo": "R-5"})
 
     plan, _ = await _plan(referencias, filas)
-    resumen = reemplazo_referencias.construir_resumen(plan)
+    sin_elegir = reemplazo_referencias.construir_resumen(plan)
+    resumen = reemplazo_referencias.construir_resumen(plan, ["R-0"])
 
-    assert resumen.inactivar.total == 1
+    assert resumen.ausentes.total == 1
     assert resumen.inactivar_por_sustituta.total == 2
     assert {m["codigo"] for m in resumen.inactivar_por_sustituta.muestra} == {"R-1", "R-2"}
+    assert sin_elegir.pct_inactivar == pytest.approx(2 / 20) and sin_elegir.requiere_doble_confirmacion is False
     assert resumen.pct_inactivar == pytest.approx(3 / 20)
+    assert resumen.pct_inactivar_si_todas == pytest.approx(3 / 20)
     assert resumen.requiere_doble_confirmacion is True
 
 
@@ -293,7 +344,8 @@ async def test_el_resumen_cuenta_crear_actualizar_mover_inactivar_y_reactivar():
     assert resumen.mover_proveedor.total == 1
     assert resumen.mover_proveedor.muestra[0] == {
         "codigo": "MUEVE", "proveedor_anterior": "HMCL", "proveedor_nuevo": "OTRO"}
-    assert resumen.inactivar.total == 1 and resumen.inactivar.muestra[0]["codigo"] == "SEVA"
+    assert resumen.ausentes.total == 1 and resumen.ausentes.items[0]["codigo"] == "SEVA"
+    assert resumen.seleccionadas == 0
     assert resumen.reactivar.total == 1 and resumen.reactivar.muestra[0]["codigo"] == "VUELVE"
 
 
@@ -322,37 +374,63 @@ async def test_inactivar_marca_las_que_tuvieron_ventas_o_tienen_stock():
         ventas=[con_ventas.id, con_ambos.id], fecha_corte=datetime.date(2026, 9, 21),
         con_stock=[con_stock.id, con_ambos.id])
 
-    inactivar = reemplazo_referencias.construir_resumen(plan).inactivar
+    ausentes = reemplazo_referencias.construir_resumen(plan).ausentes
 
-    assert inactivar.total == 4 and inactivar.con_ventas_6m == 2 and inactivar.con_inventario == 2
-    por_codigo = {m["codigo"]: m for m in inactivar.muestra}
+    assert ausentes.total == 4 and ausentes.con_ventas_6m == 2 and ausentes.con_inventario == 2
+    por_codigo = {m["codigo"]: m for m in ausentes.items}
     assert por_codigo["V"]["con_ventas_6m"] is True and por_codigo["V"]["con_inventario"] is False
     assert por_codigo["S"]["con_ventas_6m"] is False and por_codigo["S"]["con_inventario"] is True
     assert por_codigo["L"]["con_ventas_6m"] is False and por_codigo["L"]["con_inventario"] is False
-    assert inactivar.muestra[-1]["codigo"] == "L"  # las resaltadas van primero
+    assert ausentes.items[-1]["codigo"] == "L"  # las resaltadas van primero
+    assert set(por_codigo["V"]) >= {"codigo", "nombre", "proveedor", "con_ventas_6m", "con_inventario"}
+    assert por_codigo["V"]["proveedor"] == "HMCL"
 
 
-async def test_la_muestra_se_limita_a_50_pero_el_total_es_real():
+async def test_la_lista_de_ausentes_es_completa_mas_alla_de_50():
     referencias = [_ref("A")] + [_ref(f"X-{i:03d}") for i in range(80)]
 
     plan, _ = await _plan(referencias, [_fila("A")])
-    inactivar = reemplazo_referencias.construir_resumen(plan).inactivar
+    ausentes = reemplazo_referencias.construir_resumen(plan).ausentes
 
-    assert inactivar.total == 80 and len(inactivar.muestra) == 50
+    assert ausentes.total == 80 and len(ausentes.items) == 80
 
 
-@pytest.mark.parametrize("ausentes,requiere", [(1, False), (2, False), (3, True)])
-async def test_doble_confirmacion_solo_si_se_desactiva_mas_del_10_por_ciento(ausentes, requiere):
-    # 20 activas: 10% = 2 -> exactamente 10% NO exige; mas de 10% si.
+async def test_demasiadas_ausentes_para_listar_es_un_error_claro(monkeypatch):
+    monkeypatch.setattr(reemplazo_referencias, "AUSENTES_MAX", 5)
+    referencias = [_ref("A")] + [_ref(f"X-{i}") for i in range(6)]
+
+    plan, _ = await _plan(referencias, [_fila("A")])
+
+    with pytest.raises(reemplazo_referencias.DemasiadasAusentes) as exc:
+        reemplazo_referencias.construir_resumen(plan)
+    assert "6" in str(exc.value) and "5" in str(exc.value)
+
+
+@pytest.mark.parametrize("elegidas,requiere", [(1, False), (2, False), (3, True)])
+async def test_doble_confirmacion_solo_si_lo_elegido_pasa_del_10_por_ciento(elegidas, requiere):
+    # 20 activas: 10% = 2 -> exactamente 10% NO exige; mas de 10% si. Las ausentes
+    # son 10, pero solo cuenta lo que se elige.
     referencias = [_ref(f"R-{i}") for i in range(20)]
-    filas = [_fila(r.codigo) for r in referencias[ausentes:]]
+    filas = [_fila(r.codigo) for r in referencias[10:]]
 
     plan, _ = await _plan(referencias, filas)
+    resumen = reemplazo_referencias.construir_resumen(plan, [f"R-{i}" for i in range(elegidas)])
+
+    assert resumen.ausentes.total == 10 and resumen.activas_actuales == 20
+    assert resumen.seleccionadas == elegidas
+    assert resumen.pct_inactivar == pytest.approx(elegidas / 20)
+    assert resumen.pct_inactivar_si_todas == pytest.approx(10 / 20)
+    assert resumen.requiere_doble_confirmacion is requiere
+
+
+async def test_sin_elegir_nada_el_dry_run_no_pide_doble_confirmacion_aunque_falten_muchas():
+    referencias = [_ref(f"R-{i}") for i in range(20)]
+
+    plan, _ = await _plan(referencias, [_fila("R-0")])
     resumen = reemplazo_referencias.construir_resumen(plan)
 
-    assert resumen.inactivar.total == ausentes and resumen.activas_actuales == 20
-    assert resumen.pct_inactivar == pytest.approx(ausentes / 20)
-    assert resumen.requiere_doble_confirmacion is requiere
+    assert resumen.ausentes.total == 19 and resumen.pct_inactivar == 0
+    assert resumen.requiere_doble_confirmacion is False
 
 
 async def test_sin_referencias_activas_el_porcentaje_es_cero():
@@ -382,7 +460,8 @@ async def test_aplicar_que_desactiva_mas_del_10_por_ciento_sin_doble_confirmacio
 
     with pytest.raises(HTTPException) as exc:
         await carga.procesar_carga(
-            db, "referencia", [_fila("R-0")], confirmar_reemplazo=True)
+            db, "referencia", [_fila("R-0")], confirmar_reemplazo=True,
+            codigos_inactivar=[f"R-{i}" for i in range(1, 10)])
 
     assert exc.value.status_code == 409 and "%" in exc.value.detail
     assert all(r.activa for r in referencias) and db.committed is False
@@ -391,10 +470,20 @@ async def test_aplicar_que_desactiva_mas_del_10_por_ciento_sin_doble_confirmacio
 async def test_con_la_doble_confirmacion_se_aplica():
     referencias = [_ref(f"R-{i}") for i in range(10)]
 
-    resultado, db = await _aplicar(referencias, [_fila("R-0")], confirmar_masiva=True)
+    resultado, db = await _aplicar(referencias, [_fila("R-0")], confirmar_masiva=True,
+                                   codigos_inactivar=[f"R-{i}" for i in range(1, 10)])
 
     assert resultado.ok is True and db.committed is True
     assert [r.activa for r in referencias] == [True] + [False] * 9
+
+
+async def test_aplicar_sin_elegir_ausentes_no_exige_doble_confirmacion_aunque_falten_muchas():
+    referencias = [_ref(f"R-{i}") for i in range(10)]
+
+    resultado, db = await _aplicar(referencias, [_fila("R-0")])
+
+    assert resultado.ok is True and db.committed is True
+    assert all(r.activa for r in referencias)
 
 
 async def test_la_confirmacion_masiva_no_hace_falta_bajo_el_umbral():
@@ -406,19 +495,23 @@ async def test_la_confirmacion_masiva_no_hace_falta_bajo_el_umbral():
 async def test_aplicar_deja_un_asiento_de_auditoria_con_el_resumen():
     existente, ausente = _ref("A"), _ref("B")
 
-    _, db = await _aplicar([existente, ausente], [_fila("A")], confirmar_masiva=True)
+    otra = _ref("C")
+    _, db = await _aplicar([existente, ausente, otra], [_fila("A")], codigos_inactivar=["B"],
+                           confirmar_masiva=True)
 
     asientos = [a for a in db.added_of_type(AuditoriaMaestro) if a.campo == "reemplazo_masivo"]
     assert len(asientos) == 1
-    assert "inactivar=1" in asientos[0].valor_nuevo and asientos[0].entidad == "referencia_reemplazo"
+    assert "ausentes_ofrecidas=2" in asientos[0].valor_nuevo
+    assert "inactivar_elegidas=1" in asientos[0].valor_nuevo and asientos[0].entidad == "referencia_reemplazo"
 
 
 async def test_aplicar_devuelve_el_resumen_de_lo_aplicado():
     resultado, _ = await _aplicar([_ref("A"), _ref("B")], [_fila("A"), _fila("NUEVA")],
-                                  confirmar_masiva=True)
+                                  codigos_inactivar=["B"], confirmar_masiva=True)
 
     assert resultado.resumen_reemplazo.crear.total == 1
-    assert resultado.resumen_reemplazo.inactivar.total == 1
+    assert resultado.resumen_reemplazo.ausentes.total == 1
+    assert resultado.resumen_reemplazo.seleccionadas == 1
     assert resultado.insertados == 1
 
 

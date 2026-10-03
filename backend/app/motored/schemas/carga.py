@@ -13,6 +13,9 @@ class CargaRequest(BaseModel):
     # confirmar el reemplazo y, si el resumen lo exige, la desactivación masiva.
     confirmar_reemplazo: bool = False
     confirmar_inactivacion_masiva: bool = False
+    # Referencias ausentes del archivo que el usuario eligió inactivar (R3).
+    # Por defecto (omitido o vacío) no se desactiva ninguna.
+    codigos_inactivar: List[str] = Field(default_factory=list)
 
 
 class CargaErrorRow(BaseModel):
@@ -28,32 +31,42 @@ class GrupoResumen(BaseModel):
     muestra: List[Dict[str, Any]] = Field(default_factory=list)
 
 
-class GrupoInactivar(GrupoResumen):
-    """Las referencias activas que el archivo deja afuera, con cuántas
-    vendieron en los últimos 6 meses o tienen stock en el último corte."""
+class GrupoAusentes(BaseModel):
+    """Las referencias ACTIVAS que el archivo no trae (R3): se listan completas
+    en `items` (codigo, nombre, proveedor, con_ventas_6m, con_inventario) y
+    siguen activas salvo las que el usuario elija inactivar. `total` es el
+    total real; el dry-run devuelve la lista entera, el apply no la repite."""
 
+    total: int = 0
     con_ventas_6m: int = 0
     con_inventario: int = 0
+    items: List[Dict[str, Any]] = Field(default_factory=list)
 
 
 class ResumenReemplazo(BaseModel):
     """Dry-run de la carga de referencias (reemplazo completo). `pct_inactivar`
     es una fracción (0.12 = 12%) de las referencias activas de hoy que terminan
-    inactivas (`inactivar` + `inactivar_por_sustituta`);
-    `requiere_doble_confirmacion` es `pct_inactivar > 0.10`."""
+    inactivas: las ABSENTES ELEGIDAS (`seleccionadas`, 0 en el dry-run) más
+    `inactivar_por_sustituta`; `requiere_doble_confirmacion` es
+    `pct_inactivar > 0.10`. `pct_inactivar_si_todas` es lo mismo suponiendo que
+    se eligieran todas las ausentes (el frontend calcula el % de su selección
+    con `activas_actuales`)."""
 
     total_archivo: int
     crear: GrupoResumen
     actualizar: GrupoResumen
     mover_proveedor: GrupoResumen
-    inactivar: GrupoInactivar
+    ausentes: GrupoAusentes
+    # Ausentes elegidas para inactivar (apply); 0 en el dry-run.
+    seleccionadas: int = 0
     # Activas que el archivo deja con sustituta (quedan inactivas por regla del
-    # maestro). Cuentan para `pct_inactivar` junto con `inactivar`.
+    # maestro, siempre). Cuentan para `pct_inactivar` junto con las elegidas.
     inactivar_por_sustituta: GrupoResumen
     reactivar: GrupoResumen
     vinculos_sustituta_limpiados: GrupoResumen
     activas_actuales: int
     pct_inactivar: float
+    pct_inactivar_si_todas: float = 0.0
     requiere_doble_confirmacion: bool
 
 
