@@ -57,7 +57,7 @@ from app.motored.models.referencia import Referencia
 from app.motored.models.sucursal import Sucursal
 from app.motored.models.sucursal_alias import SucursalAlias
 from app.motored.schemas.carga import CargaRequest, CargaResultado
-from app.motored.services import reemplazo_referencias
+from app.motored.services import bodegas_secundarias, reemplazo_referencias
 from app.motored.services.carga import procesar_carga
 from app.motored.services.carga_excel import CargaExcelError, LimiteFilasExcedidoError, parse_excel_rows
 from app.motored.services.ingesta.resolucion import normalizar_texto_sucursal
@@ -77,6 +77,22 @@ _require_write = require_roles("ADMIN", "COMPRAS")
 def entidad_or_404(entidad: str) -> str:
     if entidad not in _SCHEMA_BY_ENTIDAD:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Maestro desconocido: '{entidad}'")
+    return entidad
+
+
+def entidad_de_carga(entidad: str) -> str:
+    """`entidad_or_404` + las bodegas ya no se cargan en masa: se administran
+    desde Sucursales -> "Bodegas secundarias" (410, no 404: el recurso existió).
+    Los listados GET de bodegas siguen vivos en `api/maestros.py`."""
+    entidad = entidad_or_404(entidad)
+    if entidad == "bodega":
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail=(
+                "La carga masiva de bodegas ya no existe: las bodegas se administran desde la carga de "
+                "Sucursales, en la columna 'Bodegas secundarias'."
+            ),
+        )
     return entidad
 
 
@@ -485,10 +501,13 @@ async def _resolver_relaciones(
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     """Resuelve, según la entidad, las relaciones que el archivo trae como
     texto: `vendedor` -> `_resolve_vendedor_relaciones`, `referencia` ->
-    `_resolve_referencia_relaciones`; el resto no resuelve nada. Mismo shape
-    de retorno `(filas_resueltas, errores_resolucion)` en los tres casos."""
+    `_resolve_referencia_relaciones`, `sucursal` -> `bodegas_secundarias.
+    resolver_filas`; el resto no resuelve nada. Mismo shape de retorno
+    `(filas_resueltas, errores_resolucion)` en los cuatro casos."""
     if entidad == "vendedor":
         return await _resolve_vendedor_relaciones(db, filas)
+    if entidad == "sucursal":
+        return await bodegas_secundarias.resolver_filas(db, filas)
     return await _resolve_referencia_relaciones(db, entidad, filas)
 
 
@@ -502,7 +521,7 @@ async def validar_carga(
 ):
     """Dry-run: SOLO valida, nunca escribe -- ver `_validar_y_construir_
     resultado` para la lógica compartida con `validar_carga_excel`."""
-    entidad = entidad_or_404(entidad)
+    entidad = entidad_de_carga(entidad)
     _check_size_guards(request, payload)
     return await _validar_y_construir_resultado(db, entidad, payload.filas)
 
@@ -519,7 +538,7 @@ async def carga(
     payload de `validar` del cliente) y, si es válido, hace upsert atómico --
     ver `_resolver_y_procesar_carga` para la lógica compartida con
     `carga_excel`."""
-    entidad = entidad_or_404(entidad)
+    entidad = entidad_de_carga(entidad)
     _check_size_guards(request, payload)
     usuario_id = uuid.UUID(user.user_id)
     return await _resolver_y_procesar_carga(
@@ -636,7 +655,7 @@ async def validar_carga_excel(
 ):
     """Variante `.xlsx` de `validar_carga`: mismo dry-run puro -- ver
     `_validar_y_construir_resultado`, solo cambia cómo llegan las filas."""
-    entidad = entidad_or_404(entidad)
+    entidad = entidad_de_carga(entidad)
     filas = await _parse_excel_upload(entidad, request, file)
     return await _validar_y_construir_resultado(db, entidad, filas)
 
@@ -656,7 +675,7 @@ async def carga_excel(
     si es válido, hace upsert atómico -- ver `_resolver_y_procesar_carga`,
     la MISMA lógica que usa el camino JSON, una sola fuente de verdad para
     todo-o-nada."""
-    entidad = entidad_or_404(entidad)
+    entidad = entidad_de_carga(entidad)
     codigos = _parse_codigos_inactivar(codigos_inactivar)
     filas = await _parse_excel_upload(entidad, request, file)
     usuario_id = uuid.UUID(user.user_id)

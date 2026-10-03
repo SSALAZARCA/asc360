@@ -69,8 +69,13 @@ async def evaluar_salud(db) -> SaludMaestros:
         db,
         select(Bodega).where(Bodega.activa == True, Bodega.sucursal_id.is_(None)),  # noqa: E712
         tipo="bodega_sin_sucursal",
-        entidad="bodega",
-        mensaje_fn=lambda b: f"Bodega '{b.codigo}' no está asociada a ninguna sucursal",
+        # Se muestra en la pestaña Sucursales: la pestaña Bodegas ya no existe,
+        # las bodegas se administran desde "Bodegas secundarias" de cada tienda.
+        entidad="sucursal",
+        mensaje_fn=lambda b: (
+            f"La bodega '{b.codigo}' no está asociada a ninguna sucursal; "
+            "agréguela en 'Bodegas secundarias' de su sucursal."
+        ),
         bloqueante=False,
     )
 

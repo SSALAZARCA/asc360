@@ -103,6 +103,12 @@ ALIASES_POR_ENTIDAD: Dict[str, List[Dict[str, Any]]] = {
             "key": "bodega_principal", "label": "Bodega principal", "required": False,
             "aliases": ["bodega_principal", "bodega principal"],
         },
+        # No es un campo del schema de sucursal: `services/bodegas_secundarias.py`
+        # lo resuelve a filas `bodega` (multi-valor, separado por coma).
+        {
+            "key": "bodegas_secundarias", "label": "Bodegas secundarias", "required": False,
+            "type": "multivalor", "aliases": ["bodegas_secundarias", "bodegas secundarias"],
+        },
         {"key": "departamento", "label": "Departamento", "required": False, "aliases": ["departamento"]},
         {"key": "ciudad", "label": "Ciudad", "required": False, "aliases": ["ciudad"]},
         {

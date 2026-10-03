@@ -27,7 +27,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError
 
 from app.motored.schemas.carga import CargaErrorRow, CargaResultado
-from app.motored.services import maestros, reemplazo_referencias
+from app.motored.services import bodegas_secundarias, maestros, reemplazo_referencias
 from app.motored.services.validators import _SCHEMA_BY_ENTIDAD, ENTIDADES_DE_REEMPLAZO, validate_rows
 
 _UPSERT_BY_ENTIDAD = {
@@ -219,8 +219,11 @@ async def procesar_carga(
     actualizados = 0
     advertencias: List[Dict[str, Any]] = []
 
+    secundarias: List[tuple] = []  # (sucursal, códigos) de las filas con la columna
     for index, row in enumerate(valid_rows, start=1):
-        _, created, row_warnings = await _upsert_row(db, entidad, row, usuario_id)
+        obj, created, row_warnings = await _upsert_row(db, entidad, row, usuario_id)
+        if entidad == "sucursal" and bodegas_secundarias.FILA_CLAVE in row:
+            secundarias.append((obj, row[bodegas_secundarias.FILA_CLAVE]))
         if created:
             insertados += 1
         else:
@@ -228,7 +231,17 @@ async def procesar_carga(
         if row_warnings:
             advertencias.append({"fila": index, "advertencias": row_warnings})
 
-    await db.commit()
+    resumen_bodegas = await bodegas_secundarias.aplicar(db, secundarias, usuario_id) if secundarias else None
+
+    try:
+        await db.commit()
+    except IntegrityError:
+        # Otra carga creó la misma llave natural (p.ej. la misma bodega
+        # secundaria) entre nuestro SELECT y este COMMIT: es un conflicto, no un 500.
+        await db.rollback()
+        raise _conflicto(
+            "Otra carga modificó estos registros en este momento. Espere unos segundos y vuelva a subir el archivo."
+        )
 
     return CargaResultado(
         ok=True,
@@ -236,4 +249,5 @@ async def procesar_carga(
         insertados=insertados,
         actualizados=actualizados,
         advertencias=advertencias,
+        bodegas_secundarias=resumen_bodegas,
     )

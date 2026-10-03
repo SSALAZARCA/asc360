@@ -70,6 +70,15 @@ class ResumenReemplazo(BaseModel):
     requiere_doble_confirmacion: bool
 
 
+class ResumenBodegasSecundarias(BaseModel):
+    """Lo que la columna "Bodegas secundarias" de Sucursales vinculó o
+    desvinculó en esta carga. Cada elemento: `{"sucursal": nombre, "bodega":
+    código}`. Solo se reportan los cambios reales."""
+
+    vinculadas: List[Dict[str, str]] = Field(default_factory=list)
+    desvinculadas: List[Dict[str, str]] = Field(default_factory=list)
+
+
 class CargaResultado(BaseModel):
     ok: bool
     total_filas: int
@@ -82,3 +91,5 @@ class CargaResultado(BaseModel):
     advertencias: List[Any] = []
     # Solo `referencia`: lo que el reemplazo hará (validar) o hizo (aplicar).
     resumen_reemplazo: Optional[ResumenReemplazo] = None
+    # Solo `sucursal` con la columna "Bodegas secundarias" en el archivo.
+    bodegas_secundarias: Optional[ResumenBodegasSecundarias] = None
