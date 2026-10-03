@@ -97,9 +97,9 @@ def _pick_sustituta(
     candidatas: List[Referencia],
     existe_en_archivo_otro_proveedor: bool = False,
 ) -> Tuple[Optional[uuid.UUID], Optional[str]]:
-    """Elige la referencia sustituta para `codigo` entre `candidatas` (todas
-    las referencias existentes con ese código -- la UNIQUE es
-    `(codigo, proveedor_id)`, así que puede haber varias). Regla de negocio
+    """Elige la referencia sustituta para `codigo` entre `candidatas` (las
+    referencias existentes con ese código: desde motored-referencia-identidad
+    el código es único, así que hay a lo sumo una). Regla de negocio
     (decisión del usuario, 2026-09-28): la sustituta DEBE ser del MISMO
     proveedor que la fila. Retorna `(id, None)` o
     `(None, motivo_de_error)` -- nunca se descarta en silencio.
@@ -120,7 +120,7 @@ def _pick_sustituta(
     )
 
 
-_Llave = Tuple[str, uuid.UUID]  # (codigo, proveedor_id) -- la llave natural de `referencia`
+_Llave = Tuple[str, uuid.UUID]  # (codigo, proveedor_id): llave para emparejar las sustitutas DENTRO del archivo (la llave natural de `referencia` es solo `codigo`)
 
 
 def _ciclos_de_sustitucion(enlaces: Dict[_Llave, _Llave]) -> Dict[_Llave, List[_Llave]]:
@@ -157,6 +157,41 @@ def _motivo_ciclo(ciclo: List[_Llave], desde: _Llave) -> str:
         f"dentro del archivo ({' -> '.join(codigos + [codigos[0]])}). Una referencia no puede terminar "
         "sustituyéndose a sí misma."
     )
+
+
+def _normalizar_codigos(filas: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Copia las filas con `codigo` y `sustituida_por_codigo` recortados: la
+    referencia se identifica por su código (sin espacios sobrantes, mayúscula
+    intacta), y todo lo que sigue compara contra el código ya recortado."""
+    normalizadas: List[Dict[str, Any]] = []
+    for fila in filas:
+        fila = dict(fila)
+        for clave in ("codigo", "sustituida_por_codigo"):
+            if isinstance(fila.get(clave), str):
+                fila[clave] = fila[clave].strip()
+        normalizadas.append(fila)
+    return normalizadas
+
+
+def _errores_codigo_repetido(filas: List[Dict[str, Any]]) -> Dict[int, str]:
+    """Un código repetido en el archivo es error de fila (la segunda y
+    siguientes): una referencia es UNA sola, y con proveedores distintos no
+    hay forma de saber cuál es el correcto. Filas sin código no cuentan (ya
+    las rechaza `validate_rows` como campo requerido)."""
+    primera_fila: Dict[str, int] = {}
+    errores: Dict[int, str] = {}
+    for index, fila in enumerate(filas, start=1):
+        codigo = fila.get("codigo")
+        if not codigo:
+            continue
+        if codigo in primera_fila:
+            errores[index] = (
+                f"Código '{codigo}' repetido en el archivo (igual a la fila {primera_fila[codigo]}). "
+                "Cada referencia debe aparecer una sola vez."
+            )
+        else:
+            primera_fila[codigo] = index
+    return errores
 
 
 async def _cargar_proveedores_y_candidatas(
@@ -353,10 +388,13 @@ async def _resolve_referencia_relaciones(
     if entidad != "referencia":
         return filas, []
 
+    filas = _normalizar_codigos(filas)
     proveedor_id_by_codigo, referencias_by_codigo = await _cargar_proveedores_y_candidatas(db, filas)
     resolved = _asignar_proveedor_id(filas, proveedor_id_by_codigo)
     errores_by_index, enlaces, index_by_llave = _clasificar_sustitutas(resolved, referencias_by_codigo)
     _marcar_ciclos(resolved, errores_by_index, enlaces, index_by_llave)
+    for index, motivo in _errores_codigo_repetido(resolved).items():
+        errores_by_index.setdefault(index, motivo)
 
     errores_resolucion = [{"fila": i, "motivo": errores_by_index[i]} for i in sorted(errores_by_index)]
     return resolved, errores_resolucion

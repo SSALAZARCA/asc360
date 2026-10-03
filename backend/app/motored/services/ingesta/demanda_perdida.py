@@ -138,7 +138,7 @@ def procesar_fila(
     if cantidad_solicitada <= 0:
         return None, []
 
-    referencia_id = resolver_referencia(cache, codigo_referencia, proveedor_id)
+    referencia_id = resolver_referencia(cache, codigo_referencia)
     if referencia_id is None:
         return None, []
 

@@ -64,6 +64,19 @@ class ReferenciaCreate(_HomologadosMixin):
     precio_publico: Optional[Decimal] = None
     sustituida_por: Optional[uuid.UUID] = None
 
+    @field_validator("codigo", mode="before")
+    @classmethod
+    def _normalizar_codigo(cls, value: Any) -> Any:
+        """La referencia se identifica por su código (único): se guarda sin
+        espacios sobrantes, con la mayúscula/minúscula intacta. Vale para
+        TODOS los caminos de escritura (CRUD, carga masiva)."""
+        if not isinstance(value, str):
+            return value
+        recortado = value.strip()
+        if not recortado:
+            raise ValueError("el código no puede estar vacío")
+        return recortado
+
 
 class ReferenciaUpdate(_HomologadosMixin):
     nombre: Optional[str] = None

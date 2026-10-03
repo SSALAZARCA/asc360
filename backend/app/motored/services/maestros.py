@@ -4,7 +4,7 @@ task 3.3). Soft-delete ÚNICAMENTE (`activa = false`) para sucursal, bodega,
 proveedor y referencia -- ninguna función de este módulo llama jamás
 `db.delete(...)` sobre un maestro (owner decision #3, spec "No endpoint
 offers hard delete"). Upsert por llave natural: `referencia` por
-(`codigo`, `proveedor_id`), `sucursal` por `nombre` (trimmed), `bodega` por
+`codigo` (único; cambiar su proveedor la MUEVE), `sucursal` por `nombre` (trimmed), `bodega` por
 `codigo`, `proveedor` por `codigo` (owner decision #2).
 """
 import uuid
@@ -209,13 +209,11 @@ async def upsert_bodega(
 
 
 # ---------------------------------------------------------------------------
-# Referencia -- llave natural: (codigo, proveedor_id)
+# Referencia -- llave natural: codigo
 # ---------------------------------------------------------------------------
 
-async def get_referencia_by_codigo_proveedor(db, codigo: str, proveedor_id: uuid.UUID) -> Optional[Referencia]:
-    result = await db.execute(
-        select(Referencia).where(Referencia.codigo == codigo, Referencia.proveedor_id == proveedor_id)
-    )
+async def get_referencia_by_codigo(db, codigo: str) -> Optional[Referencia]:
+    result = await db.execute(select(Referencia).where(Referencia.codigo == codigo.strip()))
     return result.scalars().first()
 
 
@@ -301,13 +299,89 @@ async def deactivate_referencia(db, referencia: Referencia, usuario_id: Optional
     return referencia
 
 
+def _aviso_vinculo_quitado(codigo: str, codigo_sustituta: str, motivo: str) -> str:
+    return (
+        f"'{codigo}': se quitó su referencia sustituta '{codigo_sustituta}' {motivo}. "
+        "La sustituta debe ser del mismo proveedor."
+    )
+
+
+async def limpiar_vinculos_entrantes(
+    db,
+    movidas: Dict[uuid.UUID, Referencia],
+    excluir_ids: Set[uuid.UUID],
+    usuario_id: Optional[uuid.UUID],
+    avisos: List[str],
+) -> List[Referencia]:
+    """Invariante "la sustituta es del MISMO proveedor", lado entrante: quita
+    el `sustituida_por` de toda referencia de la base que apunta a una de las
+    `movidas` (ya con su proveedor nuevo) y quedó en otro proveedor. Un solo
+    query. `excluir_ids`: referencias cuyo vínculo ya decide el archivo.
+    Retorna las referencias a las que se les quitó el vínculo."""
+    if not movidas:
+        return []
+    result = await db.execute(select(Referencia).where(Referencia.sustituida_por.in_(list(movidas))))
+    limpiadas: List[Referencia] = []
+    for apuntadora in result.scalars().all():
+        if apuntadora.id in excluir_ids:
+            continue
+        destino = movidas[apuntadora.sustituida_por]
+        if apuntadora.proveedor_id == destino.proveedor_id:
+            continue
+        before, after = _apply_and_diff(apuntadora, {"sustituida_por": None})
+        auditoria.diff_and_audit(db, "referencia", apuntadora.id, usuario_id, before, after)
+        avisos.append(_aviso_vinculo_quitado(
+            apuntadora.codigo, destino.codigo, "porque esa referencia ahora es de otro proveedor"))
+        limpiadas.append(apuntadora)
+    return limpiadas
+
+
+async def mover_referencia(
+    db,
+    referencia: Referencia,
+    proveedor_id: uuid.UUID,
+    sustituta_en_archivo: bool,
+    usuario_id: Optional[uuid.UUID],
+    avisos: List[str],
+) -> None:
+    """Cambia el proveedor de una referencia EXISTENTE (mismo id, historial
+    intacto) y repara el invariante de la sustituta: si el archivo no trae
+    sustituta y la guardada quedó en otro proveedor se quita con aviso; y se
+    quitan, con aviso, los vínculos de otras referencias que apuntaban a esta
+    desde el proveedor anterior."""
+    before, after = _apply_and_diff(referencia, {"proveedor_id": proveedor_id})
+    auditoria.diff_and_audit(db, "referencia", referencia.id, usuario_id, before, after)
+
+    if referencia.sustituida_por is not None and not sustituta_en_archivo:
+        result = await db.execute(select(Referencia).where(Referencia.id == referencia.sustituida_por))
+        sustituta = result.scalars().first()
+        if sustituta is None or sustituta.proveedor_id != proveedor_id:
+            codigo_sustituta = sustituta.codigo if sustituta is not None else "(inexistente)"
+            before, after = _apply_and_diff(referencia, {"sustituida_por": None})
+            auditoria.diff_and_audit(db, "referencia", referencia.id, usuario_id, before, after)
+            avisos.append(_aviso_vinculo_quitado(
+                referencia.codigo, codigo_sustituta, "porque ahora son de proveedores distintos"))
+
+    await limpiar_vinculos_entrantes(db, {referencia.id: referencia}, set(), usuario_id, avisos)
+
+
 async def upsert_referencia(
-    db, data: ReferenciaCreate, usuario_id: Optional[uuid.UUID] = None
+    db, data: ReferenciaCreate, usuario_id: Optional[uuid.UUID] = None,
+    avisos: Optional[List[str]] = None,
 ) -> Tuple[Referencia, Optional[str], bool]:
-    """Retorna `(referencia, advertencia_o_None, created)`."""
-    existing = await get_referencia_by_codigo_proveedor(db, data.codigo, data.proveedor_id)
+    """Retorna `(referencia, advertencia_o_None, created)`. La referencia se
+    busca por CODIGO: si existe bajo otro proveedor se MUEVE (mismo id) en
+    vez de duplicarse. Los avisos del movimiento (vínculos de sustituta
+    quitados) se agregan a `avisos` cuando el caller los quiere mostrar."""
+    avisos = avisos if avisos is not None else []
+    existing = await get_referencia_by_codigo(db, data.codigo)
     if existing:
         update_fields = _updateable_fields(data, {"codigo", "proveedor_id"})
+        if existing.proveedor_id != data.proveedor_id:
+            await mover_referencia(
+                db, existing, data.proveedor_id, "sustituida_por" in data.model_fields_set,
+                usuario_id, avisos,
+            )
         # Bulk path: same-proveedor sustituta already enforced by the resolver.
         updated = await update_referencia(
             db, existing, ReferenciaUpdate(**update_fields), usuario_id, verificar_sustituta=False

@@ -162,7 +162,7 @@ def _resolver_claves(
     sucursal_id = resolver_sucursal(cache, texto_sucursal)
 
     codigo_referencia = _texto(_extraer(fila_raw, mapa_columnas, "Referencia"))
-    referencia_id = resolver_referencia(cache, codigo_referencia, proveedor_id)
+    referencia_id = resolver_referencia(cache, codigo_referencia)
 
     errores: List[CargaError] = []
     if sucursal_id is None:

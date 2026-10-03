@@ -58,7 +58,7 @@ _MAPA_COLUMNAS = {
 def _cache(sucursales=(), referencias=()) -> CacheResolucion:
     return CacheResolucion(
         sucursal_por_texto={texto: sid for texto, sid in sucursales},
-        referencia_por_codigo_proveedor={clave: rid for clave, rid in referencias},
+        referencia_por_codigo={codigo: (rid, prov) for (codigo, prov), rid in referencias},
     )
 
 

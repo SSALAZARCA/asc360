@@ -2,7 +2,9 @@
 Motored Pedidos — modelo `referencia` (sdd/motored-pedidos-cimientos, Fase 3).
 
 Reglas bloqueantes (proposal §4.1/§5.8, spec):
-- UNIQUE(`codigo`, `proveedor_id`).
+- UNIQUE(`codigo`): una referencia se identifica por su CODIGO (migración
+  `f3a8d1c5b704`); cambiar el proveedor la MUEVE, nunca la duplica. Los
+  códigos se guardan con trim (mayúscula/minúscula intacta).
 - `unidad_empaque` default 1, JAMÁS 0: el 0/None de entrada se corrige a 1
   en `services/maestros.py`/`services/carga.py`. `unidad_empaque_advertencia`
   persiste la marca de "esta fila fue corregida" para que el tablero de
@@ -41,7 +43,7 @@ from app.motored.database import MotoredBase
 
 class Referencia(MotoredBase):
     __tablename__ = "referencia"
-    __table_args__ = (UniqueConstraint("codigo", "proveedor_id", name="uq_referencia_codigo_proveedor"),)
+    __table_args__ = (UniqueConstraint("codigo", name="uq_referencia_codigo"),)
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     codigo = Column(String(100), nullable=False)

@@ -622,7 +622,8 @@ async def _aplicar_mapeo_sucursal(db: AsyncSession, accion) -> bool:
 async def _aplicar_creacion_referencia(db: AsyncSession, accion) -> bool:
     """Crea la referencia bajo el proveedor `OTROS` (`unidad_empaque=1`) --
     retorna `False` (ignorada) si falta `valor` o si ya existe."""
-    if not accion.valor:
+    codigo = (accion.valor or "").strip()
+    if not codigo:
         return False
     proveedor_otros = await maestros_mod.get_proveedor_by_codigo(db, "OTROS")
     if proveedor_otros is None:
@@ -630,14 +631,10 @@ async def _aplicar_creacion_referencia(db: AsyncSession, accion) -> bool:
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="No existe el proveedor 'OTROS' -- no se puede crear la referencia.",
         )
-    referencia_existente = await db.execute(
-        select(Referencia).where(
-            Referencia.codigo == accion.valor, Referencia.proveedor_id == proveedor_otros.id
-        )
-    )
-    if referencia_existente.scalars().first() is not None:
+    # Por CODIGO (único): si ya existe bajo cualquier proveedor no se duplica.
+    if await maestros_mod.get_referencia_by_codigo(db, codigo) is not None:
         return False
-    db.add(Referencia(codigo=accion.valor, proveedor_id=proveedor_otros.id, unidad_empaque=1))
+    db.add(Referencia(codigo=codigo, proveedor_id=proveedor_otros.id, unidad_empaque=1))
     return True
 
 

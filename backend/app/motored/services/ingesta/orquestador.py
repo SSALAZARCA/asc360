@@ -120,7 +120,12 @@ async def resolver_proveedor_principal(db: AsyncSession) -> uuid.UUID:
     -- NINGUNO trae su propio código de proveedor en el archivo (todos son
     del proveedor HMCL). No es un `parametro_metodologia` (Phase 9a
     confirmó que esa clave no existe ahí) -- es un maestro real, Fase 1
-    (`proveedor.es_principal`), sin un solo caller hasta este batch."""
+    (`proveedor.es_principal`), sin un solo caller hasta este batch.
+
+    Desde motored-referencia-identidad el proveedor ya NO participa en la
+    resolución de referencias (se resuelven por código); los procesadores de
+    fila lo siguen recibiendo por compatibilidad de firma y el orquestador
+    sigue exigiendo que exista exactamente un principal."""
     result = await db.execute(select(Proveedor.id).where(Proveedor.es_principal.is_(True)))
     ids = result.scalars().all()
     if len(ids) != 1:

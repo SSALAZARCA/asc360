@@ -87,7 +87,7 @@ def _procesar(fecha):
         numero_fila=2, lote=1, mapa_columnas=_MAPA_COLUMNAS,
         cache=CacheResolucion(
             sucursal_por_texto={"CALI NORTE": SUCURSAL_ID},
-            referencia_por_codigo_proveedor={("REF1", PROVEEDOR_ID): REFERENCIA_ID},
+            referencia_por_codigo={"REF1": (REFERENCIA_ID, PROVEEDOR_ID)},
         ),
         carga_id=uuid.uuid4(), proveedor_id=PROVEEDOR_ID,
         tipos_inventario_incluidos=["0002 - REPUESTOS"],

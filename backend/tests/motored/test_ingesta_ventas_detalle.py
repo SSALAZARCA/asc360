@@ -41,7 +41,7 @@ _SERIAL_2026_09_15 = 46280
 def _cache():
     return CacheResolucion(
         sucursal_por_texto={"CALI NORTE": SUCURSAL_ID},
-        referencia_por_codigo_proveedor={("REF1", PROVEEDOR_ID): REFERENCIA_ID},
+        referencia_por_codigo={"REF1": (REFERENCIA_ID, PROVEEDOR_ID)},
     )
 
 

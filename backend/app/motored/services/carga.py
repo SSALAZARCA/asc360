@@ -5,7 +5,7 @@ archivo COMPLETO primero (`validators.validate_rows`, que acumula TODOS los
 errores en un solo pase); si hay AL MENOS una fila inválida, no se escribe
 absolutamente nada y se retorna el reporte completo. Un archivo totalmente
 válido se sube en una única transacción, con upsert por llave natural
-(owner decision #2), reutilizando exactamente las mismas funciones de
+(owner decision #2; `referencia` por `codigo`), reutilizando exactamente las mismas funciones de
 `services/maestros.py` que usa el CRUD unitario -- una sola fuente de
 verdad para la coerción de `unidad_empaque` y el trim de `sucursal.nombre`.
 
@@ -70,7 +70,14 @@ async def _upsert_row(
     payload = _row_to_schema(entidad, row)
 
     upsert_fn = _UPSERT_BY_ENTIDAD[entidad]
-    obj, upsert_warning, created = await upsert_fn(db, payload, usuario_id)
+    if entidad == "referencia":
+        # Mover una referencia de proveedor puede quitar vínculos de
+        # sustituta: esos avisos viajan como advertencias de la fila.
+        avisos: List[str] = []
+        obj, upsert_warning, created = await upsert_fn(db, payload, usuario_id, avisos=avisos)
+        row_warnings.extend(avisos)
+    else:
+        obj, upsert_warning, created = await upsert_fn(db, payload, usuario_id)
     if upsert_warning:
         row_warnings.append(upsert_warning)
 

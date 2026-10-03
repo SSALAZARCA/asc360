@@ -72,10 +72,15 @@ class CacheResolucion(NamedTuple):
     numérico y un nombre de sucursal nunca podrían colisionar de todos
     modos. Default `{}` para que los callers existentes (VENTAS/INVENTARIO,
     Phases 4/6) que construyen un `CacheResolucion` a mano en sus tests
-    sigan funcionando sin pasar este campo."""
+    sigan funcionando sin pasar este campo.
+
+    `referencia_por_codigo` (motored-referencia-identidad): `codigo ->
+    (referencia_id, proveedor_id)`. Una referencia se identifica por su
+    CODIGO, así que un movimiento resuelve su referencia sea cual sea el
+    proveedor, y el cache incluye también las inactivas."""
 
     sucursal_por_texto: Dict[str, uuid.UUID]
-    referencia_por_codigo_proveedor: Dict[Tuple[str, uuid.UUID], uuid.UUID]
+    referencia_por_codigo: Dict[str, Tuple[uuid.UUID, uuid.UUID]]
     sucursal_por_sic: Dict[str, uuid.UUID] = {}
 
 
@@ -119,6 +124,9 @@ async def construir_cache(session: AsyncSession) -> CacheResolucion:
     alias_rows = (
         await session.execute(select(SucursalAlias.texto_normalizado, SucursalAlias.sucursal_id))
     ).all()
+    # TODAS las referencias, sin filtrar por `activa` ni por proveedor: una
+    # fila de movimiento de una referencia inactiva (o de otro proveedor) debe
+    # resolver igual.
     referencias = (
         await session.execute(select(Referencia.codigo, Referencia.proveedor_id, Referencia.id))
     ).all()
@@ -143,14 +151,14 @@ async def construir_cache(session: AsyncSession) -> CacheResolucion:
     for texto_normalizado, sucursal_id in alias_rows:
         sucursal_por_texto.setdefault(texto_normalizado, sucursal_id)
 
-    referencia_por_codigo_proveedor = {
-        (codigo, proveedor_id): referencia_id
+    referencia_por_codigo = {
+        codigo: (referencia_id, proveedor_id)
         for codigo, proveedor_id, referencia_id in referencias
     }
 
     return CacheResolucion(
         sucursal_por_texto=sucursal_por_texto,
-        referencia_por_codigo_proveedor=referencia_por_codigo_proveedor,
+        referencia_por_codigo=referencia_por_codigo,
         sucursal_por_sic=sucursal_por_sic,
     )
 
@@ -175,10 +183,10 @@ def resolver_sucursal_por_sic(cache: CacheResolucion, sic: Optional[str]) -> Opt
     return cache.sucursal_por_sic.get(sic.strip())
 
 
-def resolver_referencia(
-    cache: CacheResolucion, codigo: Optional[str], proveedor_id: uuid.UUID
-) -> Optional[uuid.UUID]:
-    """Lookup PURO en memoria -- NUNCA toca la base de datos (ADR-8)."""
+def resolver_referencia(cache: CacheResolucion, codigo: Optional[str]) -> Optional[uuid.UUID]:
+    """Lookup PURO en memoria -- NUNCA toca la base de datos (ADR-8). Por
+    CODIGO únicamente: el proveedor de la referencia no participa."""
     if not codigo:
         return None
-    return cache.referencia_por_codigo_proveedor.get((codigo.strip(), proveedor_id))
+    entrada = cache.referencia_por_codigo.get(codigo.strip())
+    return entrada[0] if entrada else None

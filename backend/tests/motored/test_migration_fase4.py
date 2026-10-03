@@ -47,7 +47,7 @@ def test_alembic_single_head():
     guion = ScriptDirectory.from_config(
         Config(str(_RAIZ / "alembic_motored.ini")))
 
-    assert guion.get_heads() == ["e8c2a5f17b93"]  # vendedor (chained on cliente_tecnired)
+    assert guion.get_heads() == ["f3a8d1c5b704"]  # referencia_codigo_unico (chained on vendedor)
 
 
 def test_m1_chains_onto_the_login_lockout_head():

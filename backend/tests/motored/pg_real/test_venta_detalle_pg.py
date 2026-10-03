@@ -186,7 +186,7 @@ async def test_aplicar_archivo_mixto_taller_en_mensual_y_todo_en_detalle(sesion)
     (a, _), ref, (c1, *_) = await _mundo(sesion)
     cache = CacheResolucion(
         sucursal_por_texto={"BODEGA UNO": a.id},
-        referencia_por_codigo_proveedor={("R-1", ref.proveedor_id): ref.id})
+        referencia_por_codigo={"R-1": (ref.id, ref.proveedor_id)})
     mapa = {n: i for i, n in enumerate(ventas.COLUMNAS_ESPERADAS)}
     filas_excel = [
         _fila_excel("0002 - REPUESTOS", "MOSTRADOR", "M-1", 3),

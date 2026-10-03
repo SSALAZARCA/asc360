@@ -29,6 +29,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from openpyxl import Workbook
 from pydantic import BaseModel, ValidationError
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.motored.api.carga import entidad_or_404
@@ -216,6 +217,15 @@ async def get_maestro(
     return _to_read(config, obj)
 
 
+def _detalle_duplicado(entidad: str, data: Any) -> str:
+    if entidad == "referencias":
+        return (
+            f"Ya existe una referencia con el código '{data.codigo}'. "
+            "El código es único: para cambiarle el proveedor use la carga masiva o edítela."
+        )
+    return "Ya existe un registro con esos datos."
+
+
 @router.post("/{entidad}", status_code=status.HTTP_201_CREATED)
 async def create_maestro(
     entidad: str,
@@ -235,7 +245,16 @@ async def create_maestro(
     # `create_*` de `services/maestros.py`.
     obj = created[0] if isinstance(created, tuple) else created
 
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        # Llave única violada (p.ej. el código de una referencia ya existe,
+        # sea de este o de otro proveedor): un conflicto, no un 500.
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=_detalle_duplicado(entidad, data),
+        )
     return _to_read(config, obj)
 
 

@@ -40,7 +40,7 @@ TIPOS_NUEVO_DEFAULT = ["0002 - REPUESTOS", "IRPTOSYACC", "IVNLUBGR", "0003 - OTR
 def _cache():
     return CacheResolucion(
         sucursal_por_texto={"CALI NORTE": SUCURSAL_ID},
-        referencia_por_codigo_proveedor={("REF1", PROVEEDOR_ID): REFERENCIA_ID},
+        referencia_por_codigo={"REF1": (REFERENCIA_ID, PROVEEDOR_ID)},
     )
 
 

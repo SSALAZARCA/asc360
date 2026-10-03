@@ -144,25 +144,48 @@ async def test_resolver_sucursal_por_sic_never_touches_the_session_after_cache_i
     assert len(session.executed_statements) == queries_after_cache
 
 
-async def test_resolver_referencia_matches_by_codigo_and_proveedor():
+async def test_resolver_referencia_matches_by_codigo():
     proveedor_id = uuid.uuid4()
     referencia_id = uuid.uuid4()
     session = _make_session(referencias=[("REF1", proveedor_id, referencia_id)])
 
     cache = await resolucion.construir_cache(session)
 
-    assert resolucion.resolver_referencia(cache, "REF1", proveedor_id) == referencia_id
+    assert resolucion.resolver_referencia(cache, "REF1") == referencia_id
+    assert resolucion.resolver_referencia(cache, "  REF1 ") == referencia_id
 
 
-async def test_resolver_referencia_is_scoped_by_proveedor():
-    referencia_id = uuid.uuid4()
-    proveedor_a = uuid.uuid4()
-    proveedor_b = uuid.uuid4()
-    session = _make_session(referencias=[("REF1", proveedor_a, referencia_id)])
+async def test_resolver_referencia_no_depende_del_proveedor():
+    """Una referencia se identifica por su codigo: resuelve sea cual sea su
+    proveedor (motored-referencia-identidad)."""
+    hmcl, otro = uuid.uuid4(), uuid.uuid4()
+    id_hmcl, id_otro = uuid.uuid4(), uuid.uuid4()
+    session = _make_session(referencias=[("H-1", hmcl, id_hmcl), ("O-1", otro, id_otro)])
 
     cache = await resolucion.construir_cache(session)
 
-    assert resolucion.resolver_referencia(cache, "REF1", proveedor_b) is None
+    assert resolucion.resolver_referencia(cache, "H-1") == id_hmcl
+    assert resolucion.resolver_referencia(cache, "O-1") == id_otro
+    assert resolucion.resolver_referencia(cache, "NO-EXISTE") is None
+
+
+async def test_el_cache_guarda_codigo_a_id_y_proveedor():
+    proveedor_id, referencia_id = uuid.uuid4(), uuid.uuid4()
+    session = _make_session(referencias=[("REF1", proveedor_id, referencia_id)])
+
+    cache = await resolucion.construir_cache(session)
+
+    assert cache.referencia_por_codigo == {"REF1": (referencia_id, proveedor_id)}
+
+
+async def test_construir_cache_carga_todas_las_referencias_sin_filtrar_por_activa():
+    session = _make_session()
+
+    await resolucion.construir_cache(session)
+
+    consulta_referencia = str(session.executed_statements[3]).lower()
+    assert "activa" not in consulta_referencia
+    assert "where" not in consulta_referencia
 
 
 async def test_resolvers_never_touch_the_session_after_cache_is_built():
@@ -179,7 +202,7 @@ async def test_resolvers_never_touch_the_session_after_cache_is_built():
 
     for _ in range(500):
         resolucion.resolver_sucursal(cache, "Cali Norte")
-        resolucion.resolver_referencia(cache, "REF1", proveedor_id)
+        resolucion.resolver_referencia(cache, "REF1")
 
     assert len(session.executed_statements) == queries_after_cache
 

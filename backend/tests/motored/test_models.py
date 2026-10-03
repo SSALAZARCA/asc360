@@ -3,7 +3,7 @@ Phase 3 "Models/Schemas/Services" — task 3.1 (sdd/motored-pedidos-cimientos).
 
 Proves the 9 masters/auth models exist on `MotoredBase` (not on asc360's
 `app.database.Base`), with the constraints locked by the proposal/spec:
-`referencia` UNIQUE(codigo, proveedor_id), `sucursal.nombre` UNIQUE,
+`referencia` UNIQUE(codigo), `sucursal.nombre` UNIQUE,
 `bodega.codigo` UNIQUE, `proveedor.codigo` UNIQUE.
 """
 from sqlalchemy import UniqueConstraint
@@ -70,12 +70,14 @@ def test_bodega_codigo_is_unique():
     assert col.unique is True
 
 
-def test_referencia_has_composite_unique_codigo_proveedor():
+def test_referencia_is_unique_by_codigo_alone():
+    """motored-referencia-identidad: una referencia se identifica por su
+    codigo; ya no hay unico compuesto (codigo, proveedor_id)."""
     constraints = [
         c for c in Referencia.__table__.constraints if isinstance(c, UniqueConstraint)
     ]
-    composite = [c for c in constraints if {col.name for col in c.columns} == {"codigo", "proveedor_id"}]
-    assert len(composite) == 1
+    assert [(c.name, [col.name for col in c.columns]) for c in constraints] == [
+        ("uq_referencia_codigo", ["codigo"])]
 
 
 def test_referencia_unidad_empaque_defaults_to_one():
