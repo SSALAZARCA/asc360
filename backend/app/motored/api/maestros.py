@@ -306,6 +306,8 @@ async def update_maestro(
         updated = await config.update_fn(db, obj, data, uuid.UUID(user.user_id))
     except maestros.SustitutaInvalidaError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
+    except maestros.CodigoProveedorBloqueadoError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
     try:
         await db.commit()
     except IntegrityError as exc:

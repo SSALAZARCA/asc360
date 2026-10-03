@@ -70,10 +70,39 @@ async def create_proveedor(db, data: ProveedorCreate, usuario_id: Optional[uuid.
     return proveedor
 
 
+class CodigoProveedorBloqueadoError(ValueError):
+    """The proveedor's codigo cannot take the requested value."""
+
+
+async def _validar_cambio_codigo(db, proveedor: Proveedor, codigo: str) -> None:
+    """The codigo is the key bulk uploads match on: it may change only while
+    no referencia is loaded under the proveedor, and never to a taken code."""
+    if not codigo:
+        raise CodigoProveedorBloqueadoError("El código del proveedor no puede quedar vacío.")
+    con_referencias = await db.execute(
+        select(Referencia.id).where(Referencia.proveedor_id == proveedor.id).limit(1)
+    )
+    if con_referencias.scalars().first() is not None:
+        raise CodigoProveedorBloqueadoError(
+            f"No se puede cambiar el código de '{proveedor.nombre}': ya tiene referencias "
+            "cargadas, y las cargas masivas lo identifican por ese código."
+        )
+    duplicado = await get_proveedor_by_codigo(db, codigo)
+    if duplicado is not None:
+        raise CodigoProveedorBloqueadoError(f"Ya existe otro proveedor con el código '{codigo}'.")
+
+
 async def update_proveedor(
     db, proveedor: Proveedor, data: ProveedorUpdate, usuario_id: Optional[uuid.UUID] = None
 ) -> Proveedor:
     update_dict = data.model_dump(exclude_unset=True)
+    if "codigo" in update_dict:
+        nuevo = (update_dict["codigo"] or "").strip()
+        if nuevo == proveedor.codigo:
+            update_dict.pop("codigo")
+        else:
+            await _validar_cambio_codigo(db, proveedor, nuevo)
+            update_dict["codigo"] = nuevo
     before, after = _apply_and_diff(proveedor, update_dict)
     auditoria.diff_and_audit(db, "proveedor", proveedor.id, usuario_id, before, after)
     return proveedor

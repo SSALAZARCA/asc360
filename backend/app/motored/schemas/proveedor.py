@@ -16,6 +16,8 @@ class ProveedorCreate(BaseModel):
 
 
 class ProveedorUpdate(BaseModel):
+    # Editable only while no referencia uses the proveedor (owner, 2026-10-03).
+    codigo: Optional[str] = None
     nombre: Optional[str] = None
     es_principal: Optional[bool] = None
     dias_empaque_default: Optional[int] = None
