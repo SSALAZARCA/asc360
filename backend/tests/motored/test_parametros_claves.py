@@ -15,7 +15,7 @@ from app.motored.services import parametros_claves as pc
 from app.motored.services.corridas import codigos
 
 CLAVES_F2 = {
-    "tipos_inventario_incluidos": ["0002 - REPUESTOS", "IRPTOSYACC", "IVNLUBGR", "0003 - OTROS"],
+    "tipos_inventario_incluidos": ["REPUESTOS", "ACCESORIOS", "LUBRICANTES", "LLANTAS", "BATERIAS", "CASCOS", "GPS"],
     "crear_referencias_desconocidas": False,
     "estados_backorder_vigentes": ["BACKORDER"],
     "dias_ventana_ingresos": 45,
@@ -194,7 +194,7 @@ def test_k_fms_needs_exactly_f_m_s_with_non_negative_numbers(valor):
     ("meses_inventario_muerto", 7),
     ("tolerancia_sobrestock", "-0.1"),
     ("tipos_inventario_incluidos", []),
-    ("tipos_inventario_incluidos", "0002 - REPUESTOS"),
+    ("tipos_inventario_incluidos", "REPUESTOS"),
     ("estados_backorder_vigentes", [1]),
     ("dias_ventana_ingresos", 0),
     ("tolerancia_ingreso_pct", -2),

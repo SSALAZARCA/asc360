@@ -167,7 +167,11 @@ def _tipo_incluido(
     tipos_inventario_incluidos: Sequence[str],
 ) -> bool:
     tipo_inventario = _texto(_extraer(fila_raw, mapa_columnas, "Tipo inventario"))
-    return tipo_inventario in tipos_inventario_incluidos
+    if tipo_inventario is None:
+        return False
+    # Sin distinguir mayusculas ni espacios sobrantes, en ambos lados.
+    clave = tipo_inventario.strip().casefold()
+    return any(clave == str(t).strip().casefold() for t in tipos_inventario_incluidos)
 
 
 def _pasa_filtros_negocio(

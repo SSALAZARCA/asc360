@@ -1,9 +1,9 @@
 """
 VENTAS: tipos de inventario de TALLER y detalle independiente del tipo.
 
-Decision del owner: la demanda de taller cuenta para el pedido. El ERP marca
-los repuestos de taller "IRPTOSYACC" y los lubricantes "IVNLUBGR"; el default
-de `tipos_inventario_incluidos` los incluye. Aparte, `venta_detalle` guarda
+Decision del owner: la demanda de taller cuenta para el pedido. Los archivos VENTAS traen la linea comercial en "Tipo inventario"
+(REPUESTOS, ACCESORIOS, LUBRICANTES, LLANTAS, BATERIAS, CASCOS, GPS); el default
+de `tipos_inventario_incluidos` las incluye todas. Aparte, `venta_detalle` guarda
 TODA linea aprobada sin importar el tipo ("0001 - MOTOCICLETA" incluido): esas
 filas se stagean con `solo_detalle` y `venta_mensual`, el periodo detectado y
 `fecha_max_detectada` jamas las ven.
@@ -34,7 +34,7 @@ CARGA_ID = uuid.uuid4()
 _MAPA = {nombre: idx for idx, nombre in enumerate(ventas.COLUMNAS_ESPERADAS)}
 _SERIAL_2026_09_15 = 46280
 _SERIAL_2026_08_15 = 46249
-TIPOS_NUEVO_DEFAULT = ["0002 - REPUESTOS", "IRPTOSYACC", "IVNLUBGR", "0003 - OTROS"]
+TIPOS_NUEVO_DEFAULT = ["REPUESTOS", "ACCESORIOS", "LUBRICANTES", "LLANTAS", "BATERIAS", "CASCOS", "GPS"]
 
 
 def _cache():
@@ -44,14 +44,14 @@ def _cache():
     )
 
 
-def _fila(tipo="0002 - REPUESTOS", modulo="MOSTRADOR", fecha=_SERIAL_2026_09_15,
+def _fila(tipo="REPUESTOS", modulo="MOSTRADOR", fecha=_SERIAL_2026_09_15,
           cantidad=10, bodega="CALI NORTE", ref="REF1", estado="Aprobada",
           vendedor="Ana Pérez", nro_doc="FV-1"):
     return (estado, modulo, fecha, cantidad, tipo, bodega, "BA061", ref,
             vendedor, 1000, 0, "Taller", nro_doc)
 
 
-def _procesar(fila_raw, tipos=("0002 - REPUESTOS",)):
+def _procesar(fila_raw, tipos=("REPUESTOS",)):
     return ventas.procesar_fila(
         fila_raw, numero_fila=2, lote=1, mapa_columnas=_MAPA, cache=_cache(),
         carga_id=CARGA_ID, proveedor_id=PROVEEDOR_ID,
@@ -82,7 +82,7 @@ def test_fila_de_tipo_incluido_no_lleva_la_marca_solo_detalle():
 
 
 def test_fila_taller_irptosyacc_con_el_default_cae_en_venta_mensual_como_taller():
-    staging, errores = _procesar(_fila(tipo="IRPTOSYACC", modulo="Taller"),
+    staging, errores = _procesar(_fila(tipo="REPUESTOS", modulo="Taller"),
                                  tipos=TIPOS_NUEVO_DEFAULT)
 
     assert errores == []
@@ -93,7 +93,7 @@ def test_fila_taller_irptosyacc_con_el_default_cae_en_venta_mensual_como_taller(
 
 
 def test_fila_taller_lubricantes_ivnlubgr_con_el_default_cae_en_venta_mensual():
-    staging, errores = _procesar(_fila(tipo="IVNLUBGR", modulo="TALLER"),
+    staging, errores = _procesar(_fila(tipo="LUBRICANTES", modulo="TALLER"),
                                  tipos=TIPOS_NUEVO_DEFAULT)
 
     assert errores == []
@@ -101,7 +101,7 @@ def test_fila_taller_lubricantes_ivnlubgr_con_el_default_cae_en_venta_mensual():
 
 
 def test_tipo_con_espacios_al_final_tambien_coincide():
-    staging, _ = _procesar(_fila(tipo="IRPTOSYACC  "), tipos=TIPOS_NUEVO_DEFAULT)
+    staging, _ = _procesar(_fila(tipo="Lubricantes "), tipos=TIPOS_NUEVO_DEFAULT)
 
     assert "solo_detalle" not in staging.payload
 
@@ -242,9 +242,9 @@ async def test_archivo_solo_mostrador_0002_deja_el_log_identico_al_de_antes(monk
 
 async def test_mezcla_de_tipos_deja_taller_en_venta_mensual(monkeypatch):
     filas = [
-        _fila(tipo="0002 - REPUESTOS", modulo="MOSTRADOR", nro_doc="M-1"),
-        _fila(tipo="IRPTOSYACC", modulo="TALLER", nro_doc="T-1"),
-        _fila(tipo="IVNLUBGR", modulo="TALLER", nro_doc="T-2", cantidad=5),
+        _fila(tipo="REPUESTOS", modulo="MOSTRADOR", nro_doc="M-1"),
+        _fila(tipo="ACCESORIOS", modulo="TALLER", nro_doc="T-1"),
+        _fila(tipo="LUBRICANTES", modulo="TALLER", nro_doc="T-2", cantidad=5),
         _fila(tipo="0001 - MOTOCICLETA", modulo="MOSTRADOR", nro_doc="O-1"),
     ]
 
@@ -284,10 +284,10 @@ async def test_fila_solo_detalle_fuera_del_periodo_no_genera_carga_error(monkeyp
     assert [e.fila for e in errores] == [201]
 
 
-async def test_fila_0003_otros_cuenta_en_venta_mensual_con_el_default(monkeypatch):
+async def test_fila_gps_cuenta_en_venta_mensual_con_el_default(monkeypatch):
     filas = [
-        _fila(tipo="0002 - REPUESTOS", modulo="MOSTRADOR", nro_doc="M-1"),
-        _fila(tipo="0003 - OTROS", modulo="MOSTRADOR", nro_doc="O-1", cantidad=4),
+        _fila(tipo="REPUESTOS", modulo="MOSTRADOR", nro_doc="M-1"),
+        _fila(tipo="GPS", modulo="MOSTRADOR", nro_doc="O-1", cantidad=4),
     ]
 
     carga, sesion = await _dry_run(monkeypatch, filas)  # default nuevo
@@ -299,3 +299,18 @@ async def test_fila_0003_otros_cuenta_en_venta_mensual_con_el_default(monkeypatc
     }
     assert carga.filas_validas == 2
     assert "filas_solo_detalle" not in carga.log
+
+
+def test_tipo_en_mayusculas_distintas_y_con_espacio_cuenta_en_venta_mensual_con_el_default():
+    staging, errores = _procesar(_fila(tipo="Lubricantes "), tipos=TIPOS_NUEVO_DEFAULT)
+
+    assert errores == []
+    assert "solo_detalle" not in staging.payload
+    assert ventas.agregar_unidades([staging]) == {
+        (SUCURSAL_ID, REFERENCIA_ID, 2026, 9, "MOSTRADOR"): Decimal("10")}
+
+
+def test_lista_configurada_con_mayusculas_y_espacios_tambien_coincide():
+    staging, _ = _procesar(_fila(tipo="gps"), tipos=[" Gps "])
+
+    assert "solo_detalle" not in staging.payload

@@ -189,9 +189,9 @@ async def test_aplicar_archivo_mixto_taller_en_mensual_y_todo_en_detalle(sesion)
         referencia_por_codigo={"R-1": (ref.id, ref.proveedor_id)})
     mapa = {n: i for i, n in enumerate(ventas.COLUMNAS_ESPERADAS)}
     filas_excel = [
-        _fila_excel("0002 - REPUESTOS", "MOSTRADOR", "M-1", 3),
-        _fila_excel("IRPTOSYACC", "TALLER", "T-1", 4),
-        _fila_excel("IVNLUBGR", "TALLER", "T-2", 5),
+        _fila_excel("REPUESTOS", "MOSTRADOR", "M-1", 3),
+        _fila_excel("ACCESORIOS", "TALLER", "T-1", 4),
+        _fila_excel("LUBRICANTES", "TALLER", "T-2", 5),
         _fila_excel("0001 - MOTOCICLETA", "MOSTRADOR", "O-1", 7),
         _fila_excel("0001 - MOTOCICLETA", "MOSTRADOR", "O-2", 1, ref="NOEXISTE"),
     ]
@@ -200,7 +200,7 @@ async def test_aplicar_archivo_mixto_taller_en_mensual_y_todo_en_detalle(sesion)
         staging, _ = ventas.procesar_fila(
             fila, numero_fila=n, lote=1, mapa_columnas=mapa, cache=cache,
             carga_id=c1.id, proveedor_id=ref.proveedor_id,
-            tipos_inventario_incluidos=["0002 - REPUESTOS", "IRPTOSYACC", "IVNLUBGR", "0003 - OTROS"])
+            tipos_inventario_incluidos=["REPUESTOS", "ACCESORIOS", "LUBRICANTES", "LLANTAS", "BATERIAS", "CASCOS", "GPS"])
         if staging is not None:
             staged.append(staging)
 

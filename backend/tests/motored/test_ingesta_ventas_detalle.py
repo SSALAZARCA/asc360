@@ -47,7 +47,7 @@ def _cache():
 
 def _fila(vendedor="Ana  Pérez", bruto=1000, descuentos=100, cliente="Taller El Rayo",
           nro_doc="FV-1001"):
-    return ("Aprobada", "MOSTRADOR", _SERIAL_2026_09_15, 10, "0002 - REPUESTOS",
+    return ("Aprobada", "MOSTRADOR", _SERIAL_2026_09_15, 10, "REPUESTOS",
             "CALI NORTE", "BA061", "REF1", vendedor, bruto, descuentos, cliente, nro_doc)
 
 
@@ -55,7 +55,7 @@ def _procesar(fila_raw):
     return ventas.procesar_fila(
         fila_raw, numero_fila=2, lote=1, mapa_columnas=_MAPA, cache=_cache(),
         carga_id=CARGA_ID, proveedor_id=PROVEEDOR_ID,
-        tipos_inventario_incluidos=["0002 - REPUESTOS"],
+        tipos_inventario_incluidos=["REPUESTOS"],
     )
 
 
@@ -216,7 +216,7 @@ def test_normalizar_vendedor_quita_tildes_mayusculas_y_espacios():
 
 def _hoja_vieja_con_fila():
     return [list(VIEJAS),
-            ["Aprobada", "MOSTRADOR", _SERIAL_2026_09_15, 10, "0002 - REPUESTOS",
+            ["Aprobada", "MOSTRADOR", _SERIAL_2026_09_15, 10, "REPUESTOS",
              "CALI NORTE", "BA061", "REF1"]]
 
 

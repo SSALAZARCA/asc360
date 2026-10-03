@@ -154,7 +154,7 @@ async def test_dry_run_archivo_de_ventas_declarado_como_inventario_queda_rechaza
             ["Estado", "Módulo", "Fecha", "Cantidad inv.", "Tipo inventario", "Desc.bodega",
              "Bodega", "Referencia", "Nombre vendedor", "Valor bruto", "Valor descuentos",
              "Cliente factura", "Nro documento"],
-            ["Aprobada", "MOSTRADOR", 46280, 1, "0002 - REPUESTOS", "CALI NORTE", "BA061", "REF1",
+            ["Aprobada", "MOSTRADOR", 46280, 1, "REPUESTOS", "CALI NORTE", "BA061", "REF1",
              "Ana", 1000, 0, "Taller", "FV-1"],
         ]
     )
@@ -357,7 +357,7 @@ async def test_dry_run_ventas_periodo_mal_declarado_rechaza_archivo_completo(mon
              "Desc.bodega", "Bodega", "Referencia",
              "Nombre vendedor", "Valor bruto", "Valor descuentos", "Cliente factura",
              "Nro documento"],
-            ["Aprobada", "MOSTRADOR", serial_agosto, 10, "0002 - REPUESTOS",
+            ["Aprobada", "MOSTRADOR", serial_agosto, 10, "REPUESTOS",
              "CALI NORTE", "BA061", "REF1", "Ana Pérez", 1000, 0, "Taller", "FV-1"],
         ]
     )
@@ -390,7 +390,7 @@ async def test_dry_run_ventas_periodo_correcto_queda_validado(monkeypatch):
              "Desc.bodega", "Bodega", "Referencia",
              "Nombre vendedor", "Valor bruto", "Valor descuentos", "Cliente factura",
              "Nro documento"],
-            ["Aprobada", "MOSTRADOR", serial_septiembre, 10, "0002 - REPUESTOS",
+            ["Aprobada", "MOSTRADOR", serial_septiembre, 10, "REPUESTOS",
              "CALI NORTE", "BA061", "REF1", "Ana Pérez", 1000, 0, "Taller", "FV-1"],
         ]
     )
@@ -550,11 +550,11 @@ async def test_dry_run_ventas_periodo_advertencia_emite_carga_error_por_fila_fue
     # ya fija para `periodo.evaluar_periodo` en aislamiento; acá se prueba
     # de punta a punta a través de `_dry_run`.
     filas_septiembre = [
-        ["Aprobada", "MOSTRADOR", serial_septiembre, 1, "0002 - REPUESTOS",
+        ["Aprobada", "MOSTRADOR", serial_septiembre, 1, "REPUESTOS",
          "CALI NORTE", "BA061", "REF1", "Ana Pérez", 1000, 0, "Taller", "FV-1"]
         for _ in range(199)
     ]
-    fila_agosto = ["Aprobada", "MOSTRADOR", serial_agosto_adyacente, 1, "0002 - REPUESTOS",
+    fila_agosto = ["Aprobada", "MOSTRADOR", serial_agosto_adyacente, 1, "REPUESTOS",
                    "CALI NORTE", "BA061", "REF1", "Ana Pérez", 1000, 0, "Taller", "FV-1"]
     file_bytes = _build_xlsx_bytes(
         [["Estado", "Módulo", "Fecha", "Cantidad inv.", "Tipo inventario",
@@ -766,7 +766,7 @@ async def test_dry_run_ventas_registra_default_usado_en_carga_log(monkeypatch):
              "Desc.bodega", "Bodega", "Referencia",
              "Nombre vendedor", "Valor bruto", "Valor descuentos", "Cliente factura",
              "Nro documento"],
-            ["Aprobada", "MOSTRADOR", serial_septiembre, 10, "0002 - REPUESTOS",
+            ["Aprobada", "MOSTRADOR", serial_septiembre, 10, "REPUESTOS",
              "CALI NORTE", "BA061", "REF1", "Ana Pérez", 1000, 0, "Taller", "FV-1"],
         ]
     )
@@ -797,14 +797,14 @@ async def test_dry_run_ventas_no_registra_default_cuando_la_clave_esta_configura
              "Desc.bodega", "Bodega", "Referencia",
              "Nombre vendedor", "Valor bruto", "Valor descuentos", "Cliente factura",
              "Nro documento"],
-            ["Aprobada", "MOSTRADOR", serial_septiembre, 10, "0002 - REPUESTOS",
+            ["Aprobada", "MOSTRADOR", serial_septiembre, 10, "REPUESTOS",
              "CALI NORTE", "BA061", "REF1", "Ana Pérez", 1000, 0, "Taller", "FV-1"],
         ]
     )
     monkeypatch.setattr(orquestador.storage, "descargar_archivo", lambda ruta: file_bytes)
     fila_configurada = ParametroMetodologia(
         id=uuid.uuid4(), clave=parametros.CLAVE_TIPOS_INVENTARIO_INCLUIDOS,
-        valor=["0002 - REPUESTOS"], vigente_desde=date(2026, 1, 1),
+        valor=["REPUESTOS"], vigente_desde=date(2026, 1, 1),
     )
     queue = _queue_cache_y_proveedor() + [
         [fila_configurada],  # parametros.resolver_tipos_inventario_incluidos -> CONFIGURADA

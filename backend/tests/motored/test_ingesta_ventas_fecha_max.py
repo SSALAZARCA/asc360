@@ -34,7 +34,7 @@ _MAPA_COLUMNAS = {nombre: idx for idx, nombre in enumerate(_ENCABEZADO)}
 
 def _fila_excel(fecha):
     return [
-        "Aprobada", "MOSTRADOR", fecha, 10, "0002 - REPUESTOS",
+        "Aprobada", "MOSTRADOR", fecha, 10, "REPUESTOS",
         "CALI NORTE", "BA061", "REF1", "Ana Pérez", 1000, 0, "Taller", "FV-1",
     ]
 
@@ -90,7 +90,7 @@ def _procesar(fecha):
             referencia_por_codigo={"REF1": (REFERENCIA_ID, PROVEEDOR_ID)},
         ),
         carga_id=uuid.uuid4(), proveedor_id=PROVEEDOR_ID,
-        tipos_inventario_incluidos=["0002 - REPUESTOS"],
+        tipos_inventario_incluidos=["REPUESTOS"],
     )
 
 

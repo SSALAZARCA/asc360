@@ -185,7 +185,8 @@ def _construir_registro() -> Mapping[str, EspecClave]:
     especs = [
         # Claves de la ingesta F2 (ya en uso en producción).
         _lista_texto(
-            "tipos_inventario_incluidos", ["0002 - REPUESTOS", "IRPTOSYACC", "IVNLUBGR", "0003 - OTROS"]
+            "tipos_inventario_incluidos",
+            ["REPUESTOS", "ACCESORIOS", "LUBRICANTES", "LLANTAS", "BATERIAS", "CASCOS", "GPS"],
         ),
         _booleana("crear_referencias_desconocidas", False, GRUPO_INGESTA),
         _lista_texto("estados_backorder_vigentes", ["BACKORDER"]),

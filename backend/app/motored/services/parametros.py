@@ -126,7 +126,10 @@ async def resolver(db, clave: str, en_fecha: date, default: Any) -> ResolverResu
 # alcance de Fase 2 (proposal Decision #2) -- el signed `Cantidad inv.` se
 # suma tal cual, sin ninguna clasificación de devolución/nota de crédito.
 CLAVE_TIPOS_INVENTARIO_INCLUIDOS = "tipos_inventario_incluidos"
-DEFAULT_TIPOS_INVENTARIO_INCLUIDOS: List[str] = ["0002 - REPUESTOS", "IRPTOSYACC", "IVNLUBGR", "0003 - OTROS"]
+# Linea comercial de la columna "Tipo inventario" de VENTAS (todas cuentan).
+DEFAULT_TIPOS_INVENTARIO_INCLUIDOS: List[str] = [
+    "REPUESTOS", "ACCESORIOS", "LUBRICANTES", "LLANTAS", "BATERIAS", "CASCOS", "GPS",
+]
 
 CLAVE_CREAR_REFERENCIAS_DESCONOCIDAS = "crear_referencias_desconocidas"
 # Sin default explícito en la especificación fuente (verificado por

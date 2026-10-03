@@ -93,7 +93,7 @@ class TestClavesDeFase2ConDefaultCodificado:
 
         valor, fue_default = await parametros.resolver_tipos_inventario_incluidos(db, FECHA)
 
-        assert valor == ["0002 - REPUESTOS", "IRPTOSYACC", "IVNLUBGR", "0003 - OTROS"]
+        assert valor == ["REPUESTOS", "ACCESORIOS", "LUBRICANTES", "LLANTAS", "BATERIAS", "CASCOS", "GPS"]
         assert fue_default is True
 
     async def test_estados_backorder_vigentes_default(self):
