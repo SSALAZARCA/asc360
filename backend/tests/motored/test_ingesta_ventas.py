@@ -27,6 +27,7 @@ from app.motored.services.ingesta.resolucion import CacheResolucion
 CARGA_ID = uuid.uuid4()
 PROVEEDOR_ID = uuid.uuid4()
 SUCURSAL_ID = uuid.uuid4()
+SUCURSAL_ID_2 = uuid.uuid4()
 REFERENCIA_ID = uuid.uuid4()
 
 _MAPA_COLUMNAS = {
@@ -242,6 +243,64 @@ def test_desc_bodega_vacio_usa_bodega_como_fallback():
 
     assert errores == []
     assert fila_staging.sucursal_id == SUCURSAL_ID
+
+
+def test_codigo_resuelve_aunque_el_nombre_sea_desconocido():
+    cache = _cache(
+        sucursales=[("BA911", SUCURSAL_ID)],
+        referencias=[(("REF1", PROVEEDOR_ID), REFERENCIA_ID)],
+    )
+    fila_staging, errores = _procesar(_fila(desc_bodega="CRA 1RA 2", bodega="BA911"), cache=cache)
+
+    assert errores == []
+    assert fila_staging.sucursal_id == SUCURSAL_ID
+
+
+def test_codigo_gana_sobre_el_nombre_si_apuntan_a_sucursales_distintas():
+    cache = _cache(
+        sucursales=[("CALI NORTE", SUCURSAL_ID), ("BA911", SUCURSAL_ID_2)],
+        referencias=[(("REF1", PROVEEDOR_ID), REFERENCIA_ID)],
+    )
+    fila_staging, errores = _procesar(_fila(desc_bodega="CALI NORTE", bodega="BA911"), cache=cache)
+
+    assert errores == []
+    assert fila_staging.sucursal_id == SUCURSAL_ID_2
+
+
+def test_codigo_desconocido_cae_al_nombre():
+    fila_staging, errores = _procesar(_fila(desc_bodega="CALI NORTE", bodega="ZZ999"))
+
+    assert errores == []
+    assert fila_staging.sucursal_id == SUCURSAL_ID
+
+
+def test_codigo_vacio_con_nombre_conocido_resuelve():
+    fila_staging, errores = _procesar(_fila(desc_bodega="CALI NORTE", bodega=""))
+
+    assert errores == []
+    assert fila_staging.sucursal_id == SUCURSAL_ID
+
+
+def test_alias_del_nombre_sigue_funcionando_con_codigo_desconocido():
+    # Los alias ya viven en `sucursal_por_texto` (misma clave normalizada).
+    cache = _cache(
+        sucursales=[("CRA 1RA 2", SUCURSAL_ID_2)],
+        referencias=[(("REF1", PROVEEDOR_ID), REFERENCIA_ID)],
+    )
+    fila_staging, errores = _procesar(_fila(desc_bodega="CRA 1RA 2", bodega="ZZ999"), cache=cache)
+
+    assert errores == []
+    assert fila_staging.sucursal_id == SUCURSAL_ID_2
+
+
+def test_nombre_y_codigo_desconocidos_generan_error_con_nombre_como_valor_y_codigo_en_mensaje():
+    fila_staging, errores = _procesar(_fila(desc_bodega="CRA 1RA 2", bodega="ZZ999"))
+
+    assert fila_staging.sucursal_id is None
+    assert len(errores) == 1
+    assert errores[0].codigo_error == "SUCURSAL_NO_ENCONTRADA"
+    assert errores[0].valor == "CRA 1RA 2"
+    assert "ZZ999" in errores[0].mensaje
 
 
 def test_columnas_esperadas_mapean_por_nombre_via_columnas_modulo():

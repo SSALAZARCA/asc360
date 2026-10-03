@@ -54,11 +54,17 @@ def construir_error(
 
 
 def error_sucursal_no_encontrada(
-    carga_id: uuid.UUID, fila: int, columna: Optional[str], valor: Optional[str]
+    carga_id: uuid.UUID, fila: int, columna: Optional[str], valor: Optional[str],
+    codigo_bodega: Optional[str] = None,
 ) -> CargaError:
+    """`valor` queda como el texto mapeable a `sucursal_alias`; el codigo de
+    bodega probado (si lo hay y difiere) se informa solo en el mensaje."""
+    detalle = f" ni para el código de bodega '{codigo_bodega}'" if (
+        codigo_bodega and codigo_bodega != valor
+    ) else ""
     return construir_error(
         carga_id, fila, columna, valor, CODIGO_SUCURSAL_NO_ENCONTRADA,
-        f"No se encontró una sucursal para el texto '{valor}'.",
+        f"No se encontró una sucursal para el texto '{valor}'{detalle}.",
     )
 
 

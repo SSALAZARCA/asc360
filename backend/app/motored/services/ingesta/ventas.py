@@ -70,7 +70,7 @@ from app.motored.services.ingesta import periodo as periodo_mod
 from app.motored.services.ingesta.resolucion import (
     CacheResolucion,
     resolver_referencia,
-    resolver_sucursal,
+    resolver_sucursal_por_codigo_o_nombre,
 )
 
 # Nombres CANÓNICOS (no normalizados) tal como los espera `columnas.
@@ -346,10 +346,12 @@ def _resolver_claves(
     for movement loads": se retorna el/los id(s) en `None` (para que
     `Aplicar` sólo re-resuelva los `NULL`, ADR-2) junto con el
     `carga_error` correspondiente."""
-    texto_sucursal = _texto(_extraer(fila_raw, mapa_columnas, "Desc.bodega")) or _texto(
-        _extraer(fila_raw, mapa_columnas, "Bodega")
-    )
-    sucursal_id = resolver_sucursal(cache, texto_sucursal)
+    desc_bodega = _texto(_extraer(fila_raw, mapa_columnas, "Desc.bodega"))
+    codigo_bodega = _texto(_extraer(fila_raw, mapa_columnas, "Bodega"))
+    # `valor` del error sigue siendo el nombre (o el codigo si no hay nombre): es el
+    # texto que "Mapear a" guarda como `sucursal_alias`. El codigo va en el mensaje.
+    texto_sucursal = desc_bodega or codigo_bodega
+    sucursal_id = resolver_sucursal_por_codigo_o_nombre(cache, codigo_bodega, desc_bodega)
 
     codigo_referencia = _texto(_extraer(fila_raw, mapa_columnas, "Referencia"))
     referencia_id = resolver_referencia(cache, codigo_referencia)
@@ -358,7 +360,8 @@ def _resolver_claves(
     if sucursal_id is None:
         errores.append(
             errores_mod.error_sucursal_no_encontrada(
-                carga_id, numero_fila, "Desc.bodega", texto_sucursal
+                carga_id, numero_fila, "Desc.bodega", texto_sucursal,
+                codigo_bodega=codigo_bodega,
             )
         )
     if referencia_id is None:

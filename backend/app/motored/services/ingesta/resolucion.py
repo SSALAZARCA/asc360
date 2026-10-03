@@ -170,6 +170,17 @@ def resolver_sucursal(cache: CacheResolucion, texto: Optional[str]) -> Optional[
     return cache.sucursal_por_texto.get(normalizar_texto_sucursal(texto))
 
 
+def resolver_sucursal_por_codigo_o_nombre(
+    cache: CacheResolucion, codigo: Optional[str], nombre: Optional[str]
+) -> Optional[uuid.UUID]:
+    """Resuelve por el CODIGO de bodega (`bodega.codigo` ya vive en
+    `sucursal_por_texto`, ver `construir_cache`) y, solo si no resuelve, por
+    el NOMBRE (que tambien cubre `sucursal_alias`). El codigo gana porque es
+    estable; los nombres se renombran en el ERP. Si ambos resuelven a
+    sucursales distintas, gana el codigo."""
+    return resolver_sucursal(cache, codigo) or resolver_sucursal(cache, nombre)
+
+
 def resolver_sucursal_por_sic(cache: CacheResolucion, sic: Optional[str]) -> Optional[uuid.UUID]:
     """Lookup PURO en memoria por `sucursal.sic` (Phase 7, spec §5.3
     BACKORDER) -- NUNCA toca la base de datos (ADR-8), mismo contrato que
