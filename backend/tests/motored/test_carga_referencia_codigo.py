@@ -45,13 +45,21 @@ async def test_cargar_una_referencia_con_otro_proveedor_la_mueve_y_avisa_los_vin
                         unidad_empaque=1, activa=True, homologados=[])
     vieja = Referencia(id=uuid.uuid4(), codigo="VIEJA", proveedor_id=HMCL.id, unidad_empaque=1,
                        activa=False, homologados=[], sustituida_por=movida.id)
-    session = FakeAsyncSession(execute_queue=[[movida], [vieja]])  # por codigo; apuntadoras
+    session = FakeAsyncSession(execute_queue=[[movida, vieja], [HMCL, OTRO]])  # plan: referencias, proveedores
     filas = [{"codigo": "NUEVA", "proveedor_id": OTRO.id, "proveedor_codigo": "OTRO"}]
 
-    resultado = await carga.procesar_carga(session, "referencia", filas)
+    resultado = await carga.procesar_carga(session, "referencia", filas, confirmar_reemplazo=True)
 
     assert resultado.ok and resultado.actualizados == 1 and resultado.insertados == 0
     assert movida.proveedor_id == OTRO.id and vieja.sustituida_por is None
     assert session.added_of_type(Referencia) == []
-    assert len(resultado.advertencias) == 1
-    assert "VIEJA" in str(resultado.advertencias[0]["advertencias"])
+    assert resultado.resumen_reemplazo.vinculos_sustituta_limpiados.total == 1
+
+
+async def test_un_codigo_repetido_ignorando_mayusculas_tambien_es_error_de_fila():
+    session = FakeAsyncSession(execute_queue=[[HMCL]])
+    filas = [{"codigo": "R-1", "proveedor_codigo": "HMCL"}, {"codigo": "r-1", "proveedor_codigo": "HMCL"}]
+
+    _, errores = await _resolve_referencia_relaciones(session, "referencia", filas)
+
+    assert [e["fila"] for e in errores] == [2]

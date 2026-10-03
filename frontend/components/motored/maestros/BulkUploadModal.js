@@ -45,6 +45,7 @@ import { useState } from 'react';
 import Papa from 'papaparse';
 import { validarCarga, subirCarga, validarCargaArchivo, subirCargaArchivo, descargarPlantilla } from '../../../lib/motored/api';
 import InfoTooltip from '../InfoTooltip';
+import ReemplazoReferenciasResumen from './ReemplazoReferenciasResumen';
 
 // Columnas esperadas por maestro (sucursal/bodega/proveedor/referencia).
 // `aliases` es case/acento-insensible: cubre variantes razonables del
@@ -210,6 +211,10 @@ const TITULO_POR_ENTIDAD = { cliente_tecnired: 'Clientes Tecnired', vendedor: 'V
 // Entidades cuya carga reemplaza la lista completa en vez de actualizar fila por fila.
 const ENTIDADES_DE_REEMPLAZO = ['cliente_tecnired'];
 
+// `referencia` también reemplaza el maestro completo, pero con resumen previo y
+// confirmación explícita (ver `ReemplazoReferenciasResumen`), no con el botón "Cargar".
+const ENTIDAD_REEMPLAZO_CON_RESUMEN = 'referencia';
+
 function toBoolean(value) {
   const v = String(value).trim().toLowerCase();
   return ['si', 'sí', 'true', '1', 'yes', 'x'].includes(v);
@@ -292,12 +297,12 @@ function isPayloadEmpty(payload) {
 // (`payload` = file: File) -- `apiFn(entidad, payload)` is the only thing
 // that differs between validar/subir x csv/xlsx, so one function handles
 // all four combinations instead of two near-identical closures per mode.
-async function submitCarga(apiFn, entidad, payload, { onSuccess, notifyOnSuccess, setLoading, setResultado }) {
+async function submitCarga(apiFn, entidad, payload, { onSuccess, notifyOnSuccess, setLoading, setResultado, opciones }) {
   if (isPayloadEmpty(payload)) return;
   setLoading(true);
   setResultado(null);
   try {
-    const res = await apiFn(entidad, payload);
+    const res = await (opciones ? apiFn(entidad, payload, opciones) : apiFn(entidad, payload));
     setResultado(res);
     if (notifyOnSuccess && res.ok) onSuccess?.(res);
   } catch (err) {
@@ -329,6 +334,14 @@ function parseCsvFile(entidad, file, { setFilas, setParseError }) {
   });
 }
 
+// Resumen del reemplazo de `referencia`: sale del último validar OK y se
+// conserva si aplicar falla (p.ej. 409), para poder reintentar sin revalidar.
+function useResumenReemplazo(resultado) {
+  const [vigente, setVigente] = useState(null);
+  const delResultado = resultado?.ok && resultado.resumen_reemplazo ? resultado.resumen_reemplazo : null;
+  return { resumen: delResultado || vigente, delResultado, conservar: setVigente };
+}
+
 function useCargaMasiva(entidad, onSuccess) {
   const [fileName, setFileName] = useState('');
   const [filas, setFilas] = useState([]);
@@ -337,9 +350,17 @@ function useCargaMasiva(entidad, onSuccess) {
   const [parseError, setParseError] = useState('');
   const [resultado, setResultado] = useState(null);
   const [loading, setLoading] = useState(false);
+  const { resumen, delResultado, conservar } = useResumenReemplazo(resultado);
+  const enviar = (apiCsv, apiExcel, extra) => submitCarga(
+    isExcel ? apiExcel : apiCsv,
+    entidad,
+    isExcel ? excelFile : filas,
+    { setLoading, setResultado, ...extra },
+  );
 
   const handleFile = (file) => {
     setResultado(null);
+    conservar(null);
     setParseError('');
     setFilas([]);
     setExcelFile(null);
@@ -367,22 +388,21 @@ function useCargaMasiva(entidad, onSuccess) {
     });
   };
 
+  const aplicar = (opciones) => {
+    if (delResultado) conservar(delResultado);
+    return enviar(subirCarga, subirCargaArchivo, { onSuccess, notifyOnSuccess: true, opciones });
+  };
+
   return {
     fileName, filas, isExcel, parseError, resultado, loading, handleFile,
+    resumenReemplazo: resumen, runConfirmarReemplazo: aplicar,
     canSubmit: isExcel ? Boolean(excelFile) : filas.length > 0,
     handleDescargarPlantilla,
-    runValidar: () => submitCarga(
-      isExcel ? validarCargaArchivo : validarCarga,
-      entidad,
-      isExcel ? excelFile : filas,
-      { setLoading, setResultado },
-    ),
-    runCarga: () => submitCarga(
-      isExcel ? subirCargaArchivo : subirCarga,
-      entidad,
-      isExcel ? excelFile : filas,
-      { onSuccess, notifyOnSuccess: true, setLoading, setResultado },
-    ),
+    runValidar: () => {
+      conservar(null);
+      return enviar(validarCarga, validarCargaArchivo);
+    },
+    runCarga: () => enviar(subirCarga, subirCargaArchivo, { onSuccess, notifyOnSuccess: true }),
   };
 }
 
@@ -471,6 +491,14 @@ function FilasPreview({ filas }) {
 function CargaResultPanel({ resultado }) {
   if (!resultado) return null;
 
+  if (resultado.ok && resultado.resumen_reemplazo) {
+    return (
+      <div style={{ color: 'var(--motored-success, #15803d)', fontSize: '0.8rem', fontWeight: 700 }}>
+        Archivo válido — {resultado.total_filas} filas leídas. Revise el resumen de abajo antes de confirmar.
+      </div>
+    );
+  }
+
   if (resultado.ok) {
     return (
       <div style={{ color: 'var(--motored-success, #15803d)', fontSize: '0.8rem', fontWeight: 700 }}>
@@ -514,11 +542,23 @@ const boxStyle = {
   overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1rem',
 };
 
+function AvisoReemplazoReferencias() {
+  return (
+    <p style={{ margin: 0, fontSize: '0.75rem', fontWeight: 700, color: 'var(--motored-warning, #d97706)' }}>
+      Atención: esta carga reemplaza el maestro completo. Las referencias que no estén en el archivo se
+      desactivan (no se borran) y una celda en blanco borra lo que tenía guardado. Primero se muestra un
+      resumen y recién después de confirmarlo se aplica.
+    </p>
+  );
+}
+
 export default function BulkUploadModal({ entidad, onClose, onSuccess }) {
   const {
     fileName, filas, isExcel, canSubmit, parseError, resultado, loading,
     handleFile, handleDescargarPlantilla, runValidar, runCarga,
+    resumenReemplazo, runConfirmarReemplazo,
   } = useCargaMasiva(entidad, onSuccess);
+  const conResumen = entidad === ENTIDAD_REEMPLAZO_CON_RESUMEN;
 
   return (
     <div role="dialog" aria-label={`Carga masiva de ${TITULO_POR_ENTIDAD[entidad] || entidad}`} style={overlayStyle}>
@@ -544,6 +584,8 @@ export default function BulkUploadModal({ entidad, onClose, onSuccess }) {
           </p>
         )}
 
+        {conResumen && <AvisoReemplazoReferencias />}
+
         <FilePicker fileName={fileName} onFile={handleFile} />
 
         {isExcel && (
@@ -563,15 +605,23 @@ export default function BulkUploadModal({ entidad, onClose, onSuccess }) {
           <button type="button" className="motored-btn motored-btn-secondary" onClick={runValidar} disabled={loading || !canSubmit}>
             {loading ? 'Validando...' : 'Validar'}
           </button>
-          <button type="button" className="motored-btn motored-btn-primary" onClick={runCarga} disabled={loading || !canSubmit}>
-            {loading ? 'Cargando...' : 'Cargar'}
-          </button>
+          {!conResumen && (
+            <button type="button" className="motored-btn motored-btn-primary" onClick={runCarga} disabled={loading || !canSubmit}>
+              {loading ? 'Cargando...' : 'Cargar'}
+            </button>
+          )}
           <button type="button" className="motored-btn motored-btn-tertiary" onClick={onClose} disabled={loading}>
             Cerrar
           </button>
         </div>
 
         <CargaResultPanel resultado={resultado} />
+
+        {conResumen && (
+          <ReemplazoReferenciasResumen
+            resumen={resumenReemplazo} loading={loading} onConfirmar={runConfirmarReemplazo}
+          />
+        )}
       </div>
     </div>
   );

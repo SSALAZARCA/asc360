@@ -138,11 +138,23 @@ export async function validarCarga(entidadSingular, filas) {
   });
 }
 
-export async function subirCarga(entidadSingular, filas) {
+/**
+ * `opciones` solo aplica a `referencia` (reemplazo completo):
+ * `{ confirmarReemplazo, confirmarInactivacionMasiva }`. Sin ellas el body es
+ * el de siempre ({ filas }) y el resto de los maestros no cambia.
+ */
+export async function subirCarga(entidadSingular, filas, opciones = {}) {
   return motoredFetchJson(`/maestros/${entidadSingular}/carga`, {
     method: 'POST',
-    body: JSON.stringify({ filas }),
+    body: JSON.stringify({ filas, ..._confirmacionesBody(opciones) }),
   });
+}
+
+function _confirmacionesBody({ confirmarReemplazo, confirmarInactivacionMasiva } = {}) {
+  return {
+    ...(confirmarReemplazo ? { confirmar_reemplazo: true } : {}),
+    ...(confirmarInactivacionMasiva ? { confirmar_inactivacion_masiva: true } : {}),
+  };
 }
 
 /**
@@ -210,10 +222,11 @@ export async function validarCargaArchivo(entidadSingular, file) {
   });
 }
 
-export async function subirCargaArchivo(entidadSingular, file) {
+export async function subirCargaArchivo(entidadSingular, file, opciones = {}) {
   const formData = new FormData();
   formData.append('file', file);
-  return motoredFetchJson(`/maestros/${entidadSingular}/carga/excel`, {
+  const qs = new URLSearchParams(_confirmacionesBody(opciones)).toString();
+  return motoredFetchJson(`/maestros/${entidadSingular}/carga/excel${qs ? `?${qs}` : ''}`, {
     method: 'POST',
     body: formData,
   });

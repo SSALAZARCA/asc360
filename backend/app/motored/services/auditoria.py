@@ -95,6 +95,19 @@ def audit_reactivate(db, entidad: str, entidad_id: uuid.UUID, usuario_id: Option
     )
 
 
+def audit_reemplazo_masivo(
+    db, usuario_id: Optional[uuid.UUID], resumen: str
+) -> AuditoriaMaestro:
+    """Asiento resumen de una carga de referencias que REEMPLAZA el maestro:
+    quién la aplicó y qué cambió en total (el detalle por referencia va en sus
+    propios asientos). No pertenece a una referencia puntual, por eso usa una
+    entidad aparte y un id propio."""
+    return _record(
+        db, "referencia_reemplazo", uuid.uuid4(), usuario_id, accion="update",
+        campo="reemplazo_masivo", valor_nuevo=resumen,
+    )
+
+
 def audit_password_reset(db, entidad: str, entidad_id: uuid.UUID, usuario_id: Optional[uuid.UUID] = None) -> AuditoriaMaestro:
     """Registra QUE la contraseña cambió, nunca su valor ni su hash."""
     return _record(db, entidad, entidad_id, usuario_id, accion="update", campo="password")

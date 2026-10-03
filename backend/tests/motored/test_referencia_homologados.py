@@ -114,17 +114,6 @@ class TestService:
 
         assert row.homologados == ["X", "Y"]
 
-    async def test_upsert_without_homologados_column_keeps_existing_value(self):
-        existing = Referencia(
-            id=uuid.uuid4(), codigo="R1", proveedor_id=uuid.uuid4(), unidad_empaque=1, homologados=["KEEP"],
-        )
-        db = FakeAsyncSession(execute_queue=[[existing]])
-        data = ReferenciaCreate(codigo="R1", proveedor_id=existing.proveedor_id, nombre="Nuevo")
-
-        await maestros.upsert_referencia(db, data)
-
-        assert existing.homologados == ["KEEP"]
-
 
 class TestBulkValidation:
     def test_csv_style_string_is_accepted_by_validate_rows(self):

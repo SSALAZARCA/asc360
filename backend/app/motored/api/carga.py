@@ -45,7 +45,7 @@ relaciones` -> `validate_rows`/`procesar_carga`) que los endpoints de arriba
 import uuid
 from typing import Any, Dict, List, Optional, Tuple
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -56,10 +56,12 @@ from app.motored.models.referencia import Referencia
 from app.motored.models.sucursal import Sucursal
 from app.motored.models.sucursal_alias import SucursalAlias
 from app.motored.schemas.carga import CargaRequest, CargaResultado
-from app.motored.services.carga import SUSTITUTA_EN_ARCHIVO, procesar_carga
+from app.motored.services import reemplazo_referencias
+from app.motored.services.carga import procesar_carga
 from app.motored.services.carga_excel import CargaExcelError, LimiteFilasExcedidoError, parse_excel_rows
 from app.motored.services.ingesta.resolucion import normalizar_texto_sucursal
 from app.motored.services.ingesta.ventas import normalizar_vendedor
+from app.motored.services.reemplazo_referencias import SUSTITUTA_EN_ARCHIVO
 from app.motored.services.validators import _SCHEMA_BY_ENTIDAD, validate_rows
 
 router = APIRouter(
@@ -120,7 +122,9 @@ def _pick_sustituta(
     )
 
 
-_Llave = Tuple[str, uuid.UUID]  # (codigo, proveedor_id): llave para emparejar las sustitutas DENTRO del archivo (la llave natural de `referencia` es solo `codigo`)
+# (codigo, proveedor_id): llave para emparejar las sustitutas DENTRO del archivo
+# (la llave natural de `referencia` es solo `codigo`).
+_Llave = Tuple[str, uuid.UUID]
 
 
 def _ciclos_de_sustitucion(enlaces: Dict[_Llave, _Llave]) -> Dict[_Llave, List[_Llave]]:
@@ -184,13 +188,14 @@ def _errores_codigo_repetido(filas: List[Dict[str, Any]]) -> Dict[int, str]:
         codigo = fila.get("codigo")
         if not codigo:
             continue
-        if codigo in primera_fila:
+        clave = codigo.upper()  # mismo criterio que la guarda de la migración
+        if clave in primera_fila:
             errores[index] = (
-                f"Código '{codigo}' repetido en el archivo (igual a la fila {primera_fila[codigo]}). "
-                "Cada referencia debe aparecer una sola vez."
+                f"Código '{codigo}' repetido en el archivo (igual a la fila {primera_fila[clave]}, "
+                "ignorando mayúsculas). Cada referencia debe aparecer una sola vez."
             )
         else:
-            primera_fila[codigo] = index
+            primera_fila[clave] = index
     return errores
 
 
@@ -251,8 +256,8 @@ def _clasificar_sustitutas(
     este orden:
     1. Autorreferencia -> error de fila.
     2. Otra fila del MISMO archivo con ese código y proveedor: la fila queda
-       marcada con `SUSTITUTA_EN_ARCHIVO` y `procesar_carga` setea el enlace
-       en una segunda pasada, después de insertar todo (odd/tasks/motored-
+       marcada con `SUSTITUTA_EN_ARCHIVO` y `reemplazo_referencias.aplicar` setea el
+       enlace en una segunda pasada, después de insertar todo (odd/tasks/motored-
        sustituta-mismo-archivo.md). Se prefiere al match de base porque la
        fila del archivo es la versión que va a quedar, y el chequeo de
        ciclos la necesita.
@@ -411,20 +416,48 @@ async def _validar_y_construir_resultado(
     adelante es el mismo dry-run puro (nunca `procesar_carga`, que además
     haría upsert+commit)."""
     filas, errores_resolucion = await _resolver_relaciones(db, entidad, filas)
-    _valid_rows, errors = validate_rows(entidad, filas)
+    valid_rows, errors = validate_rows(entidad, filas)
     errores_totales = errores_resolucion + errors
 
     if errores_totales:
-        return CargaResultado(
-            ok=False,
-            total_filas=len(filas),
-            errores=[{"fila": e["fila"], "motivo": e["motivo"]} for e in errores_totales],
-        )
+        return _resultado_con_errores(len(filas), errores_totales)
+    if entidad == "referencia":
+        return await _validar_reemplazo_referencias(db, valid_rows, len(filas))
     return CargaResultado(ok=True, total_filas=len(filas))
 
 
+def _resultado_con_errores(total_filas: int, errores: List[Dict[str, Any]]) -> CargaResultado:
+    return CargaResultado(
+        ok=False,
+        total_filas=total_filas,
+        errores=[{"fila": e["fila"], "motivo": e["motivo"]} for e in errores],
+    )
+
+
+async def _validar_reemplazo_referencias(
+    db: AsyncSession, valid_rows: List[Dict[str, Any]], total_filas: int
+) -> CargaResultado:
+    """Dry-run de la carga de `referencia` (reemplazo completo): además de los
+    errores de fila devuelve `resumen_reemplazo` -- qué se crea, actualiza,
+    mueve, desactiva y reactiva -- y las advertencias por fila. Nunca escribe."""
+    plan = await reemplazo_referencias.planificar(db, valid_rows)
+    if plan.errores:
+        return _resultado_con_errores(total_filas, plan.errores)
+    return CargaResultado(
+        ok=True,
+        total_filas=total_filas,
+        advertencias=plan.advertencias_por_fila(),
+        resumen_reemplazo=reemplazo_referencias.construir_resumen(plan),
+    )
+
+
 async def _resolver_y_procesar_carga(
-    db: AsyncSession, entidad: str, filas: List[Dict[str, Any]], usuario_id: uuid.UUID
+    db: AsyncSession,
+    entidad: str,
+    filas: List[Dict[str, Any]],
+    usuario_id: uuid.UUID,
+    confirmar_reemplazo: bool = False,
+    confirmar_inactivacion_masiva: bool = False,
 ) -> CargaResultado:
     """Lógica compartida entre `carga` y `carga_excel` (ad-hoc dedupe, no
     trackeado bajo ningún sdd/*, 2026-09-28): resolver relaciones de
@@ -433,7 +466,11 @@ async def _resolver_y_procesar_carga(
     sí solo ya alcanza para bloquear TODO el archivo (todo-o-nada), exacto
     igual que un error de `validate_rows`."""
     filas, errores_resolucion = await _resolver_relaciones(db, entidad, filas)
-    return await procesar_carga(db, entidad, filas, usuario_id, errores_previos=errores_resolucion)
+    return await procesar_carga(
+        db, entidad, filas, usuario_id, errores_previos=errores_resolucion,
+        confirmar_reemplazo=confirmar_reemplazo,
+        confirmar_inactivacion_masiva=confirmar_inactivacion_masiva,
+    )
 
 
 async def _resolver_relaciones(
@@ -478,7 +515,11 @@ async def carga(
     entidad = entidad_or_404(entidad)
     _check_size_guards(request, payload)
     usuario_id = uuid.UUID(user.user_id)
-    return await _resolver_y_procesar_carga(db, entidad, payload.filas, usuario_id)
+    return await _resolver_y_procesar_carga(
+        db, entidad, payload.filas, usuario_id,
+        confirmar_reemplazo=payload.confirmar_reemplazo,
+        confirmar_inactivacion_masiva=payload.confirmar_inactivacion_masiva,
+    )
 
 
 def _check_content_length_guard(request: Request) -> None:
@@ -580,6 +621,8 @@ async def carga_excel(
     entidad: str,
     request: Request,
     file: UploadFile = File(...),
+    confirmar_reemplazo: bool = Query(False),
+    confirmar_inactivacion_masiva: bool = Query(False),
     db: AsyncSession = Depends(get_motored_db_or_503),
     user: MotoredUser = Depends(_require_write),
 ):
@@ -590,4 +633,8 @@ async def carga_excel(
     entidad = entidad_or_404(entidad)
     filas = await _parse_excel_upload(entidad, request, file)
     usuario_id = uuid.UUID(user.user_id)
-    return await _resolver_y_procesar_carga(db, entidad, filas, usuario_id)
+    return await _resolver_y_procesar_carga(
+        db, entidad, filas, usuario_id,
+        confirmar_reemplazo=confirmar_reemplazo,
+        confirmar_inactivacion_masiva=confirmar_inactivacion_masiva,
+    )

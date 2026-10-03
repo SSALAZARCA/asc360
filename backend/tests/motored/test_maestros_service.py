@@ -2,9 +2,9 @@
 Phase 3 "Models/Schemas/Services" — task 3.3 (sdd/motored-pedidos-cimientos).
 
 `services/maestros.py`: CRUD + soft-delete ONLY (never a real SQL DELETE)
-for every master, plus natural-key upsert (`referencia` by
-(codigo, proveedor_id), `sucursal` by nombre trimmed, `bodega` by codigo,
-`proveedor` by codigo).
+for every master, plus natural-key upsert (`sucursal` by nombre trimmed,
+`bodega` by codigo, `proveedor` by codigo). `referencia` is identified by
+codigo and uploaded through `reemplazo_referencias` (full replace).
 """
 import uuid
 
@@ -102,23 +102,6 @@ class TestReferenciaCreateCoercesUnidadEmpaque:
         assert referencia.unidad_empaque == 24
         assert referencia.unidad_empaque_advertencia is False
         assert warning is None
-
-
-class TestReferenciaUpsertByCodigoProveedor:
-    async def test_upsert_matches_existing_by_codigo_and_proveedor_id(self):
-        proveedor_id = uuid.uuid4()
-        existing = Referencia(
-            id=uuid.uuid4(), codigo="REF1", proveedor_id=proveedor_id,
-            unidad_empaque=1, precio_normal=100, activa=True,
-        )
-        db = FakeAsyncSession(execute_queue=[[existing]])
-        data = ReferenciaCreate(codigo="REF1", proveedor_id=proveedor_id, precio_normal=120)
-
-        referencia, _, created = await maestros.upsert_referencia(db, data)
-
-        assert referencia is existing
-        assert referencia.precio_normal == 120
-        assert created is False
 
 
 class TestReferenciaSustitucionDeactivates:

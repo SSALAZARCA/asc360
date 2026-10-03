@@ -75,10 +75,10 @@ class TestUpsertByNaturalKey:
 
 class TestReferenciaCargaCoercesUnidadEmpaque:
     async def test_zero_unidad_empaque_row_is_coerced_and_surfaced_as_warning(self):
-        db = FakeAsyncSession(execute_queue=[[]])
+        db = FakeAsyncSession(execute_queue=[[], []])  # replace plan: all referencias, all proveedores
         rows = [{"codigo": "REF1", "proveedor_codigo": "HMCL", "proveedor_id": str(uuid.uuid4()), "unidad_empaque": 0}]
 
-        resultado = await carga.procesar_carga(db, "referencia", rows)
+        resultado = await carga.procesar_carga(db, "referencia", rows, confirmar_reemplazo=True)
 
         assert resultado.ok is True
         assert resultado.advertencias, "expected at least one warning for the coerced row"

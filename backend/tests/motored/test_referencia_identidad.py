@@ -1,14 +1,9 @@
 """
 Motored `motored-referencia-identidad` (R1): una referencia se identifica por
-su CODIGO. `services/maestros.py::upsert_referencia` busca por codigo y, si la
-referencia existe bajo OTRO proveedor, la MUEVE (mismo id, historial intacto)
-en vez de duplicarla. Mantiene el invariante "la sustituta es del mismo
-proveedor": un vinculo que el movimiento deja cruzado se quita CON aviso.
-
-`FakeAsyncSession` encola el resultado de cada `execute` en el orden en que
-el servicio emite sus queries: [referencia por codigo] y, solo si hubo
-movimiento, [sustituta guardada] (cuando el archivo no trae sustituta) y
-[referencias que la tienen como sustituta].
+su CODIGO. El codigo se guarda recortado, se busca solo por codigo, crear uno
+repetido es 409 y "crear como OTROS" no duplica un codigo de otro proveedor.
+Mover una referencia de proveedor (mismo id) lo hace la carga masiva de
+reemplazo: ver `test_reemplazo_referencias.py`.
 """
 import uuid
 
@@ -18,7 +13,6 @@ from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
 
 from app.main import app
-from app.motored.models.auditoria_maestro import AuditoriaMaestro
 from app.motored.models.proveedor import Proveedor
 from app.motored.models.referencia import Referencia
 from app.motored.schemas.referencia import ReferenciaCreate
@@ -64,87 +58,6 @@ async def test_get_referencia_by_codigo_filtra_solo_por_codigo():
     assert await maestros.get_referencia_by_codigo(db, " R-1 ") is existente
     sql = str(db.executed_statements[0].compile(compile_kwargs={"literal_binds": True}))
     assert "proveedor_id" not in sql.split("WHERE")[1]
-
-
-# --- upsert: mover el proveedor -------------------------------------------------
-
-
-async def test_upsert_con_otro_proveedor_mueve_la_referencia_y_conserva_el_id():
-    existente = _ref("R-1", HMCL, precio_normal=100)
-    db = FakeAsyncSession(execute_queue=[[existente], []])  # por codigo; referencias que la apuntan
-    data = ReferenciaCreate(codigo="R-1", proveedor_id=OTRO, precio_normal=120)
-    id_original = existente.id
-
-    referencia, _, created = await maestros.upsert_referencia(db, data)
-
-    assert referencia is existente and created is False
-    assert referencia.id == id_original and referencia.proveedor_id == OTRO
-    assert referencia.precio_normal == 120
-    assert db.added_of_type(Referencia) == []  # no se creo un duplicado
-    cambios = [a for a in db.added_of_type(AuditoriaMaestro) if a.campo == "proveedor_id"]
-    assert len(cambios) == 1
-
-
-async def test_upsert_con_el_mismo_proveedor_no_hace_queries_de_movimiento():
-    existente = _ref("R-1", HMCL)
-    db = FakeAsyncSession(execute_queue=[[existente]])  # solo la busqueda por codigo
-
-    await maestros.upsert_referencia(db, ReferenciaCreate(codigo="R-1", proveedor_id=HMCL))
-
-    assert len(db.executed_statements) == 1
-
-
-async def test_al_mover_se_quitan_con_aviso_los_vinculos_que_apuntaban_a_ella():
-    movida = _ref("NUEVA", HMCL)
-    vieja = _ref("VIEJA", HMCL, sustituida_por=movida.id)
-    vieja.activa = False
-    db = FakeAsyncSession(execute_queue=[[movida], [vieja]])
-    avisos = []
-
-    await maestros.upsert_referencia(
-        db, ReferenciaCreate(codigo="NUEVA", proveedor_id=OTRO), avisos=avisos)
-
-    assert vieja.sustituida_por is None
-    assert len(avisos) == 1 and "VIEJA" in avisos[0] and "NUEVA" in avisos[0]
-    assert any(a.campo == "sustituida_por" and a.entidad_id == vieja.id
-               for a in db.added_of_type(AuditoriaMaestro))
-
-
-async def test_al_mover_se_quita_con_aviso_la_sustituta_guardada_que_quedo_en_otro_proveedor():
-    sustituta = _ref("SUST", HMCL)
-    movida = _ref("R-1", HMCL, sustituida_por=sustituta.id)
-    # por codigo; sustituta guardada (el archivo no trae sustituta); referencias que apuntan a R-1
-    db = FakeAsyncSession(execute_queue=[[movida], [sustituta], []])
-    avisos = []
-
-    await maestros.upsert_referencia(
-        db, ReferenciaCreate(codigo="R-1", proveedor_id=OTRO), avisos=avisos)
-
-    assert movida.sustituida_por is None
-    assert len(avisos) == 1 and "SUST" in avisos[0]
-
-
-async def test_al_mover_con_sustituta_en_el_archivo_no_revisa_la_guardada():
-    sustituta_nueva = _ref("S2", OTRO)
-    movida = _ref("R-1", HMCL)
-    db = FakeAsyncSession(execute_queue=[[movida], []])  # por codigo; apuntadoras
-    data = ReferenciaCreate(codigo="R-1", proveedor_id=OTRO, sustituida_por=sustituta_nueva.id)
-
-    await maestros.upsert_referencia(db, data, avisos=[])
-
-    assert movida.sustituida_por == sustituta_nueva.id
-
-
-async def test_un_vinculo_que_sigue_siendo_del_mismo_proveedor_se_conserva():
-    movida = _ref("R-1", HMCL)
-    otra_de_otro = _ref("X", OTRO, sustituida_por=movida.id)  # ya cruzada: no se toca el invariante aca
-    db = FakeAsyncSession(execute_queue=[[movida], [otra_de_otro]])
-    avisos = []
-
-    await maestros.upsert_referencia(
-        db, ReferenciaCreate(codigo="R-1", proveedor_id=OTRO), avisos=avisos)
-
-    assert otra_de_otro.sustituida_por == movida.id and avisos == []
 
 
 # --- crear con un codigo que ya existe (otro proveedor) -> 409, no 500 ----------

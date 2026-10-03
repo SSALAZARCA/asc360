@@ -33,7 +33,9 @@ def _xlsx(headers, rows):
     return buffer.getvalue()
 
 
-async def test_blank_cells_in_the_template_never_wipe_existing_referencia_values():
+async def test_blank_cells_in_the_template_wipe_existing_referencia_values():
+    """Full replace (motored-referencia-identidad R2): the file is the truth,
+    so a blank optional cell CLEARS the stored value."""
     proveedor = Proveedor(id=uuid.uuid4(), codigo="HMCL", nombre="HMCL", es_principal=True)
     existing = Referencia(
         id=uuid.uuid4(), codigo="REF1", proveedor_id=proveedor.id, nombre="Filtro viejo",
@@ -45,19 +47,20 @@ async def test_blank_cells_in_the_template_never_wipe_existing_referencia_values
     file_bytes = _xlsx(column_labels("referencia"), [["REF1", "HMCL", None, None, None, 50, None, None, None]])
 
     filas = parse_excel_rows("referencia", "referencias.xlsx", file_bytes)
-    db = FakeAsyncSession(execute_queue=[[proveedor], [existing]])  # proveedor lookup, upsert lookup
+    # proveedor lookup, replace plan: all referencias, all proveedores
+    db = FakeAsyncSession(execute_queue=[[proveedor], [existing], [proveedor]])
     filas, errores = await _resolve_referencia_relaciones(db, "referencia", filas)
-    resultado = await procesar_carga(db, "referencia", filas, errores_previos=errores)
+    resultado = await procesar_carga(db, "referencia", filas, errores_previos=errores, confirmar_reemplazo=True)
 
     assert resultado.ok is True, resultado
     assert resultado.actualizados == 1
     assert existing.precio_normal == 50  # the one provided value is applied
-    assert existing.nombre == "Filtro viejo"
-    assert existing.linea_comercial == "REPUESTOS"
-    assert existing.unidad_empaque == 6
-    assert existing.unidad_empaque_advertencia is False
-    assert existing.precio_publico == Decimal("99")
-    assert existing.homologados == ["KEEP-1", "KEEP-2"]
+    assert existing.nombre is None
+    assert existing.linea_comercial is None
+    assert existing.unidad_empaque == 1  # blank -> 1, never 0
+    assert existing.unidad_empaque_advertencia is True
+    assert existing.precio_publico is None
+    assert existing.homologados == []
     assert existing.sustituida_por is None
 
 
@@ -79,13 +82,13 @@ async def test_new_referencia_with_blank_unidad_empaque_still_defaults_to_one_wi
     file_bytes = _xlsx(column_labels("referencia"), [["REF-NEW", "HMCL", None, None, None, None, None, None, None]])
 
     filas = parse_excel_rows("referencia", "referencias.xlsx", file_bytes)
-    db = FakeAsyncSession(execute_queue=[[proveedor], []])  # proveedor lookup, upsert lookup (none)
+    db = FakeAsyncSession(execute_queue=[[proveedor], [], [proveedor]])  # proveedor lookup, replace plan
     filas, errores = await _resolve_referencia_relaciones(db, "referencia", filas)
-    resultado = await procesar_carga(db, "referencia", filas, errores_previos=errores)
+    resultado = await procesar_carga(db, "referencia", filas, errores_previos=errores, confirmar_reemplazo=True)
 
     assert resultado.ok is True, resultado
     assert resultado.insertados == 1
-    created = db.added[0]
+    created = db.added_of_type(Referencia)[0]
     assert created.unidad_empaque == 1
     assert created.unidad_empaque_advertencia is True
     assert created.homologados == []

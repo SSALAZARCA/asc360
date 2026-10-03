@@ -9,6 +9,10 @@ válido se sube en una única transacción, con upsert por llave natural
 `services/maestros.py` que usa el CRUD unitario -- una sola fuente de
 verdad para la coerción de `unidad_empaque` y el trim de `sucursal.nombre`.
 
+`referencia` es la excepción (motored-referencia-identidad, R2): su carga es
+un REEMPLAZO COMPLETO (`services/reemplazo_referencias.py`) -- celda en blanco
+borra, las ausentes se desactivan, resumen previo y confirmaciones.
+
 Nota de alcance (Fase 1): para `referencia`, la resolución de
 `proveedor_codigo` -> `proveedor_id` es responsabilidad del llamador (router
 de Fase 4, que arma cada fila del Excel con el `proveedor_id` ya resuelto
@@ -17,27 +21,19 @@ contra un caché de proveedores). Esta función exige que la fila ya traiga
 "campo requerido".
 """
 import uuid
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError
 
 from app.motored.schemas.carga import CargaErrorRow, CargaResultado
-from app.motored.schemas.referencia import ReferenciaUpdate
-from app.motored.services import maestros
+from app.motored.services import maestros, reemplazo_referencias
 from app.motored.services.validators import _SCHEMA_BY_ENTIDAD, ENTIDADES_DE_REEMPLAZO, validate_rows
-
-# Clave interna de fila (nunca llega al schema Pydantic): código de la
-# sustituta cuando es OTRA fila del mismo archivo y proveedor. La setea
-# `api/carga.py::_resolve_referencia_relaciones`; la consume
-# `_enlazar_sustitutas_del_archivo` en la segunda pasada.
-SUSTITUTA_EN_ARCHIVO = "_sustituta_codigo_en_archivo"
 
 _UPSERT_BY_ENTIDAD = {
     "sucursal": maestros.upsert_sucursal,
     "bodega": maestros.upsert_bodega,
     "proveedor": maestros.upsert_proveedor,
-    "referencia": maestros.upsert_referencia,
     "vendedor": maestros.upsert_vendedor,
 }
 
@@ -70,37 +66,11 @@ async def _upsert_row(
     payload = _row_to_schema(entidad, row)
 
     upsert_fn = _UPSERT_BY_ENTIDAD[entidad]
-    if entidad == "referencia":
-        # Mover una referencia de proveedor puede quitar vínculos de
-        # sustituta: esos avisos viajan como advertencias de la fila.
-        avisos: List[str] = []
-        obj, upsert_warning, created = await upsert_fn(db, payload, usuario_id, avisos=avisos)
-        row_warnings.extend(avisos)
-    else:
-        obj, upsert_warning, created = await upsert_fn(db, payload, usuario_id)
+    obj, upsert_warning, created = await upsert_fn(db, payload, usuario_id)
     if upsert_warning:
         row_warnings.append(upsert_warning)
 
     return obj, created, row_warnings
-
-
-async def _enlazar_sustitutas_del_archivo(
-    db, pendientes: List[Tuple[Any, str]], objs: List[Any], usuario_id: Optional[uuid.UUID]
-) -> None:
-    """Segunda pasada: setea `sustituida_por` para las filas cuya sustituta
-    es otra fila del mismo archivo. `flush()` primero, para que todas las
-    filas nuevas ya estén insertadas cuando se escribe la FK. El resolver ya
-    garantizó que cada objetivo existe en el archivo bajo el mismo proveedor
-    y que no hay ciclos, así que la búsqueda en `por_llave` no puede fallar."""
-    if not pendientes:
-        return
-    await db.flush()
-    por_llave = {(obj.codigo, obj.proveedor_id): obj for obj in objs}
-    for obj, codigo_sustituta in pendientes:
-        sustituta = por_llave[(codigo_sustituta, obj.proveedor_id)]
-        await maestros.update_referencia(
-            db, obj, ReferenciaUpdate(sustituida_por=sustituta.id), usuario_id, verificar_sustituta=False
-        )
 
 
 _REEMPLAZO_POR_ENTIDAD = {
@@ -125,7 +95,10 @@ async def _reemplazar_lista(
         await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Otra carga está reemplazando esta lista en este momento. Espere unos segundos y vuelva a subir el archivo.",
+            detail=(
+                "Otra carga está reemplazando esta lista en este momento. "
+                "Espere unos segundos y vuelva a subir el archivo."
+            ),
         )
     return CargaResultado(
         ok=True,
@@ -136,12 +109,69 @@ async def _reemplazar_lista(
     )
 
 
+def _conflicto(detalle: str) -> HTTPException:
+    return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detalle)
+
+
+async def _reemplazar_referencias(
+    db,
+    valid_rows: List[Dict[str, Any]],
+    usuario_id: Optional[uuid.UUID],
+    confirmar_reemplazo: bool,
+    confirmar_inactivacion_masiva: bool,
+) -> CargaResultado:
+    """Aplica el reemplazo completo de referencias en UNA transacción. El plan
+    y el resumen se RECALCULAN acá contra el estado actual y el archivo que
+    llegó a este request (no se confía en lo que `validar` mostró): si exige la
+    doble confirmación y no vino, 409 sin escribir nada."""
+    if not confirmar_reemplazo:
+        raise _conflicto(
+            "La carga de referencias reemplaza el maestro completo: las referencias que no estén en el "
+            "archivo se desactivan y las celdas en blanco borran lo guardado. "
+            "Revise el resumen y confirme el reemplazo."
+        )
+
+    plan = await reemplazo_referencias.planificar(db, valid_rows)
+    if plan.errores:
+        return CargaResultado(
+            ok=False,
+            total_filas=len(valid_rows),
+            errores=[CargaErrorRow(fila=e["fila"], motivo=e["motivo"]) for e in plan.errores],
+        )
+
+    resumen = reemplazo_referencias.construir_resumen(plan)
+    if resumen.requiere_doble_confirmacion and not confirmar_inactivacion_masiva:
+        raise _conflicto(
+            f"Este archivo desactivaría {resumen.inactivar.total} de {resumen.activas_actuales} referencias "
+            f"activas ({resumen.pct_inactivar:.0%}), más del 10%. Confirme la desactivación masiva para continuar."
+        )
+
+    try:
+        await reemplazo_referencias.aplicar(db, plan, resumen, usuario_id)
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise _conflicto(
+            "Otra carga modificó las referencias en este momento. Espere unos segundos y vuelva a subir el archivo."
+        )
+    return CargaResultado(
+        ok=True,
+        total_filas=len(valid_rows),
+        insertados=len(plan.nuevas),
+        actualizados=plan.modificadas,
+        advertencias=plan.advertencias_por_fila(),
+        resumen_reemplazo=resumen,
+    )
+
+
 async def procesar_carga(
     db,
     entidad: str,
     rows: List[Dict[str, Any]],
     usuario_id: Optional[uuid.UUID] = None,
     errores_previos: Optional[List[Dict[str, Any]]] = None,
+    confirmar_reemplazo: bool = False,
+    confirmar_inactivacion_masiva: bool = False,
 ) -> CargaResultado:
     """Valida TODO el archivo antes de escribir NADA. Si `validate_rows`
     reporta cualquier error, retorna de inmediato (`ok=False`) sin haber
@@ -171,18 +201,17 @@ async def procesar_carga(
 
     if entidad in ENTIDADES_DE_REEMPLAZO:
         return await _reemplazar_lista(db, entidad, valid_rows, usuario_id)
+    if entidad == "referencia":
+        return await _reemplazar_referencias(
+            db, valid_rows, usuario_id, confirmar_reemplazo, confirmar_inactivacion_masiva
+        )
 
     insertados = 0
     actualizados = 0
     advertencias: List[Dict[str, Any]] = []
 
-    objs: List[Any] = []
-    pendientes: List[Tuple[Any, str]] = []
     for index, row in enumerate(valid_rows, start=1):
-        obj, created, row_warnings = await _upsert_row(db, entidad, row, usuario_id)
-        objs.append(obj)
-        if row.get(SUSTITUTA_EN_ARCHIVO):
-            pendientes.append((obj, row[SUSTITUTA_EN_ARCHIVO]))
+        _, created, row_warnings = await _upsert_row(db, entidad, row, usuario_id)
         if created:
             insertados += 1
         else:
@@ -190,7 +219,6 @@ async def procesar_carga(
         if row_warnings:
             advertencias.append({"fila": index, "advertencias": row_warnings})
 
-    await _enlazar_sustitutas_del_archivo(db, pendientes, objs, usuario_id)
     await db.commit()
 
     return CargaResultado(

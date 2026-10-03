@@ -17,6 +17,14 @@ jest.mock('../lib/motored/api', () => ({
 
 import BulkUploadModal from '../components/motored/maestros/BulkUploadModal';
 
+const grupo = () => ({ total: 0, muestra: [] });
+const RESUMEN_VACIO = {
+  total_archivo: 1, crear: grupo(), actualizar: grupo(), mover_proveedor: grupo(),
+  inactivar: { ...grupo(), con_ventas_6m: 0, con_inventario: 0 }, reactivar: grupo(),
+  vinculos_sustituta_limpiados: grupo(), activas_actuales: 10, pct_inactivar: 0,
+  requiere_doble_confirmacion: false,
+};
+
 async function uploadCsvAndSubmit(content, entidad = 'referencia') {
   const { container } = render(
     <BulkUploadModal entidad={entidad} onClose={jest.fn()} onSuccess={jest.fn()} />
@@ -24,13 +32,21 @@ async function uploadCsvAndSubmit(content, entidad = 'referencia') {
   const input = container.querySelector('input[type="file"]');
   fireEvent.change(input, { target: { files: [new File([content], 'referencias.csv', { type: 'text/csv' })] } });
   await waitFor(() => expect(screen.getByText(/Vista previa/i)).toBeInTheDocument());
-  fireEvent.click(screen.getByText('Cargar'));
+  if (entidad === 'referencia') {
+    // Reemplazo completo: Validar -> resumen -> "Confirmar reemplazo".
+    fireEvent.click(screen.getByText('Validar'));
+    fireEvent.click(await screen.findByText('Confirmar reemplazo'));
+  } else {
+    fireEvent.click(screen.getByText('Cargar'));
+  }
   await waitFor(() => expect(mockSubirCarga).toHaveBeenCalled());
   return mockSubirCarga.mock.calls[0][1];
 }
 
 beforeEach(() => {
-  mockValidarCarga.mockReset();
+  mockValidarCarga.mockReset().mockResolvedValue({
+    ok: true, total_filas: 1, resumen_reemplazo: RESUMEN_VACIO,
+  });
   mockSubirCarga.mockReset().mockResolvedValue({ ok: true, total_filas: 1, insertados: 1, actualizados: 0, advertencias: [] });
 });
 

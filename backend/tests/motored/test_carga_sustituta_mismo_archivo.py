@@ -58,7 +58,8 @@ class _FkCheckingSession(FakeAsyncSession):
         for obj in [*self._loaded, *self.added_of_type(Referencia)]:
             if obj.sustituida_por is not None and obj.sustituida_por not in self._existing_ids:
                 raise IntegrityError(
-                    "INSERT/UPDATE referencia", {}, Exception("violates foreign key constraint referencia_sustituida_por_fkey")
+                    "INSERT/UPDATE referencia", {},
+                    Exception("violates foreign key constraint referencia_sustituida_por_fkey"),
                 )
             self._existing_ids.add(obj.id)
 
@@ -207,12 +208,12 @@ class TestTwoPassPersistence:
     def test_chain_a_b_c_all_new_in_the_same_file_is_persisted_and_linked(self):
         proveedor = _proveedor()
         # probe, proveedor lookup, sustituta lookup (none in DB),
-        # get_referencia_by_codigo_proveedor x3 (all new)
-        session = _FkCheckingSession(execute_queue=[[], [proveedor], [], [], [], []])
+        # replace plan: all referencias (none), all proveedores
+        session = _FkCheckingSession(execute_queue=[[], [proveedor], [], [], [proveedor]])
         override_motored_db(session)
 
         with TestClient(app) as client:
-            response = client.post(CARGA_URL, json={"filas": CHAIN_ROWS})
+            response = client.post(CARGA_URL, json={"filas": CHAIN_ROWS, "confirmar_reemplazo": True})
 
         assert response.status_code == 200
         body = response.json()
@@ -231,7 +232,7 @@ class TestTwoPassPersistence:
 
     def test_target_listed_before_its_source_is_also_linked(self):
         proveedor = _proveedor()
-        session = _FkCheckingSession(execute_queue=[[], [proveedor], [], [], []])
+        session = _FkCheckingSession(execute_queue=[[], [proveedor], [], [], [proveedor]])
         override_motored_db(session)
         filas = [
             {"codigo": "NEW", "proveedor_codigo": "HMCL"},
@@ -239,7 +240,7 @@ class TestTwoPassPersistence:
         ]
 
         with TestClient(app) as client:
-            body = client.post(CARGA_URL, json={"filas": filas}).json()
+            body = client.post(CARGA_URL, json={"filas": filas, "confirmar_reemplazo": True}).json()
 
         assert body["ok"] is True, body
         refs = _by_codigo(session)
@@ -251,9 +252,9 @@ class TestTwoPassPersistence:
         existente = Referencia(
             id=uuid.uuid4(), codigo="OLD", proveedor_id=proveedor.id, unidad_empaque=1, activa=True, homologados=[]
         )
-        # proveedor lookup, sustituta lookup (NEW not in DB), upsert OLD (found), upsert NEW (new)
+        # proveedor lookup, sustituta lookup (NEW not in DB), replace plan: all referencias, all proveedores
         session = _FkCheckingSession(
-            db_ids=[existente.id], execute_queue=[[proveedor], [], [existente], []]
+            db_ids=[existente.id], execute_queue=[[proveedor], [], [existente], [proveedor]]
         )
         filas = [
             {"codigo": "OLD", "proveedor_codigo": "HMCL", "sustituida_por_codigo": "NEW"},
@@ -261,7 +262,8 @@ class TestTwoPassPersistence:
         ]
 
         resolved, errores = await _resolve_referencia_relaciones(session, "referencia", filas)
-        resultado = await procesar_carga(session, "referencia", resolved, errores_previos=errores)
+        resultado = await procesar_carga(
+            session, "referencia", resolved, errores_previos=errores, confirmar_reemplazo=True)
 
         assert resultado.ok is True, resultado
         assert resultado.actualizados == 1 and resultado.insertados == 1
@@ -304,7 +306,7 @@ class TestValidarGivesTheSameVerdictAsCarga:
     )
     def test_validar_matches_carga(self, filas, ok_esperado):
         proveedor = _proveedor()
-        session = FakeAsyncSession(execute_queue=[[], [proveedor], []])
+        session = FakeAsyncSession(execute_queue=[[], [proveedor], [], [], [proveedor]])
         override_motored_db(session)
 
         with TestClient(app) as client:
@@ -321,12 +323,13 @@ class TestExcelEndpoints:
 
     def test_xlsx_chain_in_the_same_file_uploads_and_links(self):
         proveedor = _proveedor()
-        session = _FkCheckingSession(execute_queue=[[], [proveedor], [], [], [], []])
+        session = _FkCheckingSession(execute_queue=[[], [proveedor], [], [], [proveedor]])
         override_motored_db(session)
 
         with TestClient(app) as client:
             response = client.post(
-                CARGA_EXCEL_URL, files=_upload("referencias.xlsx", _xlsx_bytes(self.HEADERS, self.ROWS))
+                CARGA_EXCEL_URL + "?confirmar_reemplazo=true",
+                files=_upload("referencias.xlsx", _xlsx_bytes(self.HEADERS, self.ROWS)),
             )
 
         assert response.status_code == 200
@@ -338,7 +341,8 @@ class TestExcelEndpoints:
         assert session.committed is True
 
     def test_xlsx_validar_accepts_the_same_chain(self):
-        session = FakeAsyncSession(execute_queue=[[], [_proveedor()], []])
+        proveedor = _proveedor()
+        session = FakeAsyncSession(execute_queue=[[], [proveedor], [], [], [proveedor]])
         override_motored_db(session)
 
         with TestClient(app) as client:

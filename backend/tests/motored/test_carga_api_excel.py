@@ -175,13 +175,16 @@ def test_carga_excel_rejects_corrupt_file_with_400_not_500():
 def test_carga_excel_referencia_resolves_proveedor_codigo_to_proveedor_id():
     proveedor_id = uuid.uuid4()
     proveedor = Proveedor(id=proveedor_id, codigo="HMCL", nombre="HMCL", es_principal=True)
-    # probe, proveedor-codigo-resolution query, get_referencia_by_codigo_proveedor (no match)
-    session = FakeAsyncSession(execute_queue=[[], [proveedor], []])
+    # probe, proveedor-codigo-resolution query, replace plan: all referencias, all proveedores
+    session = FakeAsyncSession(execute_queue=[[], [proveedor], [], [proveedor]])
     override_motored_db(session)
     file_bytes = _xlsx_bytes(["Código", "Código proveedor"], [["REF1", "HMCL"]])
 
     with TestClient(app) as client:
-        response = client.post(CARGA_EXCEL_REFERENCIA_URL, files=_upload_file("referencias.xlsx", file_bytes))
+        response = client.post(
+            CARGA_EXCEL_REFERENCIA_URL + "?confirmar_reemplazo=true",
+            files=_upload_file("referencias.xlsx", file_bytes),
+        )
 
     assert response.status_code == 200
     body = response.json()

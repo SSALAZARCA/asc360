@@ -162,14 +162,14 @@ def test_referencia_carga_resolves_proveedor_codigo_to_proveedor_id():
     already present."""
     proveedor_id = uuid.uuid4()
     proveedor = Proveedor(id=proveedor_id, codigo="HMCL", nombre="HMCL", es_principal=True)
-    # probe, proveedor-codigo-resolution query, get_referencia_by_codigo_proveedor (no match)
-    session = FakeAsyncSession(execute_queue=[[], [proveedor], []])
+    # probe, proveedor-codigo-resolution query, replace plan: all referencias, all proveedores
+    session = FakeAsyncSession(execute_queue=[[], [proveedor], [], [proveedor]])
     override_motored_db(session)
 
     with TestClient(app) as client:
         response = client.post(
             CARGA_REFERENCIA_URL,
-            json={"filas": [{"codigo": "REF1", "proveedor_codigo": "HMCL"}]},
+            json={"filas": [{"codigo": "REF1", "proveedor_codigo": "HMCL"}], "confirmar_reemplazo": True},
         )
 
     assert response.status_code == 200
@@ -331,9 +331,11 @@ class TestSustituidaPorCodigoEndToEnd:
         referencia_sustituida = Referencia(
             id=referencia_id, codigo="REF-OLD", proveedor_id=proveedor_id, unidad_empaque=1
         )
-        # probe, proveedor-codigo query, sustituida_por_codigo query,
-        # get_referencia_by_codigo_proveedor (no match) -> create path
-        session = FakeAsyncSession(execute_queue=[[], [proveedor], [referencia_sustituida], []])
+        # probe, proveedor-codigo query, sustituida_por_codigo query, replace plan:
+        # all referencias, all proveedores, ventas 6m, ultimo corte (REF-OLD is left out -> deactivated)
+        session = FakeAsyncSession(
+            execute_queue=[[], [proveedor], [referencia_sustituida], [referencia_sustituida], [proveedor], [], [None]]
+        )
         override_motored_db(session)
 
         with TestClient(app) as client:
@@ -341,7 +343,7 @@ class TestSustituidaPorCodigoEndToEnd:
                 CARGA_REFERENCIA_URL,
                 json={"filas": [{
                     "codigo": "REF-NEW", "proveedor_codigo": "HMCL", "sustituida_por_codigo": "REF-OLD",
-                }]},
+                }], "confirmar_reemplazo": True, "confirmar_inactivacion_masiva": True},
             )
 
         assert response.status_code == 200
