@@ -78,6 +78,11 @@ const COLUMNAS_POR_ENTIDAD = {
       help: 'Código de la bodega principal de esta sucursal (ej: BE051).',
     },
     {
+      key: 'bodegas_secundarias', label: 'Bodegas secundarias', required: false,
+      aliases: ['bodegas_secundarias', 'bodegas secundarias'],
+      help: 'Códigos de las otras bodegas de esta sucursal, separados por coma (ej: BA066, BA067). Su inventario y sus ventas se suman a la bodega principal.',
+    },
+    {
       key: 'departamento', label: 'Departamento', required: false, aliases: ['departamento'],
     },
     {
@@ -576,6 +581,41 @@ const boxStyle = {
   overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1rem',
 };
 
+// Reglas de la columna "Bodegas secundarias" (solo Sucursales).
+function NotaBodegasSecundarias() {
+  return (
+    <p data-testid="nota-bodegas-secundarias" style={{ margin: 0, fontSize: '0.75rem', color: 'var(--motored-text-muted, #5a5a5a)' }}>
+      Bodegas secundarias: cada código de la celda queda asociado a esa sucursal. Sin la columna no se toca ninguna
+      bodega. Con la columna, las bodegas que la sucursal tenía y ya no aparecen en su celda se desvinculan, y una
+      celda en blanco desvincula todas las de esa sucursal (las bodegas nunca se borran). Las sucursales que no están
+      en el archivo no cambian. Una bodega no puede ser a la vez la principal de una sucursal ni estar en dos
+      sucursales: si ya pertenece a otra, quítela primero de esa sucursal.
+    </p>
+  );
+}
+
+function ListaCambiosBodegas({ titulo, items }) {
+  if (!items?.length) return null;
+  return (
+    <div>
+      <strong>{titulo} ({items.length})</strong>
+      <ul style={{ margin: '0.2rem 0 0', paddingLeft: '1.1rem' }}>
+        {items.map((it, idx) => <li key={`${it.sucursal}-${it.bodega}-${idx}`}>{it.sucursal}: {it.bodega}</li>)}
+      </ul>
+    </div>
+  );
+}
+
+function ResultadoBodegasSecundarias({ resumen }) {
+  if (!resumen || (!resumen.vinculadas?.length && !resumen.desvinculadas?.length)) return null;
+  return (
+    <div data-testid="resultado-bodegas-secundarias" style={{ fontSize: '0.75rem', color: 'var(--motored-text, #1a1a18)' }}>
+      <ListaCambiosBodegas titulo="Vinculadas" items={resumen.vinculadas} />
+      <ListaCambiosBodegas titulo="Desvinculadas" items={resumen.desvinculadas} />
+    </div>
+  );
+}
+
 function AvisoReemplazoReferencias() {
   return (
     <p style={{ margin: 0, fontSize: '0.75rem', fontWeight: 700, color: 'var(--motored-warning, #d97706)' }}>
@@ -620,6 +660,8 @@ export default function BulkUploadModal({ entidad, onClose, onSuccess }) {
 
         {conResumen && <AvisoReemplazoReferencias />}
 
+        {entidad === 'sucursal' && <NotaBodegasSecundarias />}
+
         <FilePicker fileName={fileName} onFile={handleFile} />
 
         {isExcel && (
@@ -650,6 +692,8 @@ export default function BulkUploadModal({ entidad, onClose, onSuccess }) {
         </div>
 
         <CargaResultPanel resultado={resultado} aplicado={aplicado} />
+
+        {resultado?.ok && <ResultadoBodegasSecundarias resumen={resultado.bodegas_secundarias} />}
 
         {conResumen && (
           <ReemplazoReferenciasResumen

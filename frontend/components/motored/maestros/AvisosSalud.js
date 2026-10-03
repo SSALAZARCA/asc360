@@ -17,7 +17,7 @@ const AYUDAS = {
   referencia_sin_precio: 'No suman valor en el pedido. Cargue el precio con la carga masiva de referencias.',
   unidad_empaque_corregida: 'Venían con empaque 0 o vacío. Revise el empaque real.',
   sucursal_sin_sic: 'Sin SIC no se puede identificar la tienda ante HMCL ni calcular su pedido.',
-  bodega_sin_sucursal: 'Su inventario no se asigna a ninguna tienda.',
+  bodega_sin_sucursal: "Su inventario no se asigna a ninguna tienda. Agréguela en 'Bodegas secundarias' de su sucursal con la carga masiva de Sucursales.",
 };
 
 const CODIGO_ENTRE_COMILLAS = /'([^']+)'/;

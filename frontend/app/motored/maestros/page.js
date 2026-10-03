@@ -15,6 +15,10 @@
  * Referencias are UNCHANGED (proposal decision #3) -- still their own Fase
  * 1 `BulkUploadModal` tabs, byte-for-byte as before.
  *
+ * The Bodegas tab is hidden (2026-10-03): bodegas are now managed from the
+ * Sucursales upload, column "Bodegas secundarias" (their health warning, "bodega
+ * sin sucursal", shows under Sucursales). `BodegasTab.js` stays in the repo.
+ *
  * Per direct user feedback, "Salud de maestros" is no longer a standalone
  * 5th tab -- each tab below carries `entidadSalud` (the backend's own
  * hallazgo.entidad value for that master) so `MaestrosTabs.js` can render
@@ -27,7 +31,6 @@
 import MotoredLayout from '../motored-layout';
 import MaestrosTabs from '../../../components/motored/maestros/MaestrosTabs';
 import SucursalesTab from '../../../components/motored/maestros/SucursalesTab';
-import BodegasTab from '../../../components/motored/maestros/BodegasTab';
 import ProveedoresTab from '../../../components/motored/maestros/ProveedoresTab';
 import ReferenciasTab from '../../../components/motored/maestros/ReferenciasTab';
 import ClientesTecniredTab from '../../../components/motored/maestros/ClientesTecniredTab';
@@ -36,7 +39,6 @@ import MovimientoTab from '../../../components/motored/cargas/MovimientoTab';
 
 const TABS = [
   { id: 'sucursales', label: 'Sucursales', group: 'Maestros', entidadSalud: 'sucursal', render: () => <SucursalesTab /> },
-  { id: 'bodegas', label: 'Bodegas', group: 'Maestros', entidadSalud: 'bodega', render: () => <BodegasTab /> },
   { id: 'proveedores', label: 'Proveedores', group: 'Maestros', render: () => <ProveedoresTab /> },
   { id: 'referencias', label: 'Referencias', group: 'Maestros', entidadSalud: 'referencia', render: () => <ReferenciasTab /> },
   { id: 'clientes_tecnired', label: 'Clientes Tecnired', group: 'Maestros', render: () => <ClientesTecniredTab /> },
