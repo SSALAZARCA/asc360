@@ -74,7 +74,6 @@ from app.motored.models.demanda_perdida_bot_linea import DemandaPerdidaBotLinea
 from app.motored.models.referencia import Referencia
 from app.motored.models.sucursal import Sucursal
 from app.motored.services import demanda_perdida_bot as demanda_perdida_bot_mod
-from app.motored.services.ingesta.orquestador import resolver_proveedor_principal
 from app.motored.services.reloj import hoy_bogota
 
 logger = logging.getLogger("motored.bot_demanda_perdida")
@@ -169,10 +168,10 @@ async def resolver_referencias(
     db: AsyncSession = Depends(get_motored_db_or_503),
 ) -> dict:
     """Task 6.5, design D3 "Reference resolution": exact match `upper(trim(
-    codigo))` dentro de `resolver_proveedor_principal()` y `activa`. Más de
+    codigo))` entre las referencias `activa` (por CODIGO, sea cual sea su
+    proveedor: motored-referencia-identidad). Más de
     un hit para el mismo texto normalizado cuenta como NO resuelto -- nunca
     hay matching difuso (`sustituida_por` se ignora en v1, design D5)."""
-    proveedor_id = await resolver_proveedor_principal(db)
     normalizados: Dict[str, str] = {
         entrada: entrada.strip().upper() for entrada in payload.codigos
     }
@@ -180,7 +179,6 @@ async def resolver_referencias(
 
     result = await db.execute(
         select(Referencia.id, Referencia.codigo, Referencia.nombre).where(
-            Referencia.proveedor_id == proveedor_id,
             Referencia.activa.is_(True),
             func.upper(func.trim(Referencia.codigo)).in_(valores_normalizados),
         )

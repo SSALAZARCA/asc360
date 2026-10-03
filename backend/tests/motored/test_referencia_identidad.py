@@ -194,3 +194,20 @@ async def test_crear_referencia_desconocida_no_duplica_un_codigo_de_otro_proveed
     assert aplicada is False and db.added_of_type(Referencia) == []
     sql = str(db.executed_statements[1].compile(compile_kwargs={"literal_binds": True}))
     assert "proveedor_id" not in sql.split("WHERE")[1]
+
+
+async def test_una_referencia_creada_como_otros_resuelve_al_reaplicar_la_carga():
+    from types import SimpleNamespace
+
+    from app.motored.api import cargas
+    from app.motored.services.ingesta.resolucion import construir_cache, resolver_referencia
+
+    otros = Proveedor(id=uuid.uuid4(), codigo="OTROS", nombre="Otros")
+    db = FakeAsyncSession(execute_queue=[[otros], []])
+    assert await cargas._aplicar_creacion_referencia(db, SimpleNamespace(valor="DESC-9")) is True
+    [creada] = db.added_of_type(Referencia)
+
+    cache = await construir_cache(FakeAsyncSession(execute_queue=[
+        [], [], [], [(creada.codigo, creada.proveedor_id, creada.id)]]))
+
+    assert resolver_referencia(cache, "DESC-9") == creada.id and creada.proveedor_id == otros.id

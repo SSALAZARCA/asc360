@@ -144,13 +144,11 @@ def _linea_bot(**overrides) -> DemandaPerdidaBotLinea:
 
 
 def test_resolver_referencias_exact_match_resolves():
-    proveedor_id = uuid.uuid4()
     referencia_id = uuid.uuid4()
     asesor = _asesor(telegram_id=1)
     client, _session = _client_with_queue(
         [
             [asesor],  # actor lookup
-            [proveedor_id],  # resolver_proveedor_principal
             [(referencia_id, "ABC123", "Filtro de aceite")],  # match query
         ]
     )
@@ -168,9 +166,8 @@ def test_resolver_referencias_exact_match_resolves():
 
 
 def test_resolver_referencias_no_match_is_unresolved():
-    proveedor_id = uuid.uuid4()
     asesor = _asesor(telegram_id=1)
-    client, _session = _client_with_queue([[asesor], [proveedor_id], []])
+    client, _session = _client_with_queue([[asesor], []])
 
     response = client.post(
         f"{BOT_URL}/referencias/resolver", json={"codigos": ["ZZZ999"]}, headers=_headers(1)
@@ -188,11 +185,10 @@ def test_resolver_referencias_multiple_hits_is_unresolved_no_fuzzy_matching():
     normalizes to the SAME value (e.g. differing only by case, which the
     real UNIQUE(codigo, proveedor_id) constraint does not catch) must NOT
     be silently picked -- the whole entry is unresolved."""
-    proveedor_id = uuid.uuid4()
     id_a, id_b = uuid.uuid4(), uuid.uuid4()
     asesor = _asesor(telegram_id=1)
     client, _session = _client_with_queue(
-        [[asesor], [proveedor_id], [(id_a, "abc123", "Uno"), (id_b, "ABC123", "Otro")]]
+        [[asesor], [(id_a, "abc123", "Uno"), (id_b, "ABC123", "Otro")]]
     )
 
     response = client.post(
@@ -999,9 +995,8 @@ def test_edit_then_cancel_reverses_current_amount_not_original():
 
 
 def test_resolver_referencias_admin_can_reach_it():
-    proveedor_id = uuid.uuid4()
     admin = _admin(telegram_id=2)
-    client, _session = _client_with_queue([[admin], [proveedor_id], []])
+    client, _session = _client_with_queue([[admin], []])
 
     response = client.post(
         f"{BOT_URL}/referencias/resolver", json={"codigos": ["ZZZ999"]}, headers=_headers(2)
