@@ -59,10 +59,26 @@ The user is about to upload a new referencias master with several proveedores (H
 - [x] R1 (d58cac8, 2eb37d0)
 - [x] R2 (6b5debc)
 
+## R3: deactivation is opt-in (user decision 2026-10-03)
+- **Trigger:** the user's first real dry-run showed 709 creates, 72 updates and 127 deactivations. Production still holds the FIRST master `plantilla_referencia_HMCL.xlsx`. The user does not want absent references deactivated automatically.
+- **Decision:**
+  - References in the DB but absent from the file are LISTED, not deactivated.
+  - By default they all STAY ACTIVE. Each one gets an "Inactivar" checkbox, plus "Marcar todas" and "Marcar solo las que no tienen ventas ni inventario".
+  - On confirm, only the selected codes are deactivated.
+  - The 10% double confirmation applies to the selected count plus `inactivar_por_sustituta`, the latter staying automatic because the file says so.
+- R3 shipped locally (not pushed): the replace can be confirmed once it is merged and deployed.
+
+| ID | Task | Route |
+|---|---|---|
+| R3 | Opt-in deactivation. The backend returns the FULL list of absent references (not a 50-row sample) with `con_ventas_6m` and `con_inventario`; the apply takes `codigos_inactivar` (validated as a subset of the absent set, recomputed at apply); the threshold is computed on the selection. The frontend shows the list with checkboxes, the two bulk buttons and the highlight flags, defaulting to none selected. | delegated writer |
+
+- [x] R3 (backend e6ed04d; frontend in the next commit, `feat(motored): make referencias deactivation opt-in per code in full replace`, same subject)
+
 ## Log
 - 2026-10-03: feature created. The user approved starting (identity plus replace mode). Worktree synced to main 4b07fc9; alembic head `e8c2a5f17b93`.
 - 2026-10-03: R1 and R2 implemented by one delegated writer (route: delegated direct, trigger: 2+ non-trivial files). New alembic head `f3a8d1c5b704` (`referencia_codigo_unico`, chained on `e8c2a5f17b93`).
 - 2026-10-03: native review findings fixed by one bounded writer (route: delegated direct). (1) After a successful confirm the modal shows "Reemplazo aplicado: ..." and hides "Confirmar reemplazo" (`aplicado` state in `useCargaMasiva`). (2) The mass confirmation is bound to the summary object it was ticked for, so a new summary starts unticked. (3) Decision: separate `inactivar_por_sustituta` group in the summary (count plus sample); `pct_inactivar` and the 10% brake count `inactivar` + `inactivar_por_sustituta`; the 409 message and the frontend text use the combined total. (4) Decision: the replace path is NOT affected (R1 `mover_referencia` / `limpiar_vinculos_entrantes` no longer exist; the plan reads the final proveedor of every file row, and only DB rows absent from the file can get a cleared link); tests added only. With the sustituta repeated in the file the link is kept with no warning; with it blank the link is cleared by the replace semantics (file is the truth), not reported as a cross-proveedor warning. (5) `POST /maestros/referencias`: only `uq_referencia_codigo` (read from `orig.diag`, `orig.constraint_name`, the `__cause__` or the text) is 409; other IntegrityErrors are 422 "Proveedor o referencia sustituta inexistente, o falta un dato obligatorio.". Two older tests that deactivated their only active referencia through a sustituta now pass the mass confirmation (100% > 10%).
+- 2026-10-03: R3 implemented by one delegated writer (route: delegated direct, trigger: 2+ non-trivial files plus frontend). No migration (head stays `f3a8d1c5b704`).
 
 ## Evidence
 - Commits: R1 `d58cac8` (identity by code), `2eb37d0` (bot demanda perdida by code, found in the F3/F4 check), R2 `6b5debc` (full replace + frontend).
@@ -89,3 +105,13 @@ The user is about to upload a new referencias master with several proveedores (H
 ## Pending
 - Ping the F3/F4 agent with the new head `f3a8d1c5b704`.
 - Real end-to-end check with the production referencias file (the guard may abort the migration if prod has duplicate codes).
+
+## R3 evidence and decisions
+- RED -> GREEN backend: tests rewritten first (`test_reemplazo_referencias.py`, `test_carga_referencias_reemplazo_api.py`, pg_real): 41 failed, 12 passed against the old code -> `tests/motored` 4520 passed after; pg_real on throwaway PG 18 (alembic_motored head): 399 passed, 2 skipped.
+- RED -> GREEN frontend: 24 failed, 3 passed (component and csv suites) -> 27 passed; API helper tests 2 failed against the old `api.js` -> 7 passed; full `npx jest`: 146 suites, 1469 passed.
+- Decisions:
+  - Renamed `plan.inactivar` / `resumen.inactivar` to `ausentes` (it no longer means "will be deactivated"); `ausentes.items` is the FULL list (codigo, nombre, proveedor, con_ventas_6m, con_inventario), capped at `AUSENTES_MAX = 20000` (the dry-run returns 422 with a Spanish message above it). The apply does not repeat the list.
+  - `resumen.seleccionadas` (apply), `pct_inactivar` = (selected + `inactivar_por_sustituta`) / `activas_actuales`, `pct_inactivar_si_todas` for all absent selected. In the dry-run `pct_inactivar` counts only the substitute group, so `requiere_doble_confirmacion` is false unless the substitutes alone exceed 10%. The frontend recomputes the % from the live selection with `activas_actuales` (the existing name for `total_activas`); the backend rechecks at apply.
+  - `codigos_inactivar`: JSON body field; for `/excel` a multipart form field holding a JSON list (thousands of codes do not fit a query string); an invalid value is 422. Codes are trimmed and deduplicated; any code outside the recomputed absent set is 409 with the offending codes and nothing is applied.
+  - Audit text: `ausentes_ofrecidas=N; inactivar_elegidas=M`.
+  - Frontend: selection and double confirmation are stored with the summary they belong to; changing the selection un-ticks the confirmation. The list is a scroll area (`max-height: min(45vh, 360px)`), rows are memoized, no virtualization (the cap is 20000 rows).

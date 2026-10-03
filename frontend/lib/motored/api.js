@@ -140,8 +140,10 @@ export async function validarCarga(entidadSingular, filas) {
 
 /**
  * `opciones` solo aplica a `referencia` (reemplazo completo):
- * `{ confirmarReemplazo, confirmarInactivacionMasiva }`. Sin ellas el body es
- * el de siempre ({ filas }) y el resto de los maestros no cambia.
+ * `{ confirmarReemplazo, confirmarInactivacionMasiva, codigosInactivar }`
+ * (`codigosInactivar`: las ausentes del archivo que el usuario eligió
+ * inactivar; vacío u omitido no inactiva ninguna). Sin ellas el body es el de
+ * siempre ({ filas }) y el resto de los maestros no cambia.
  */
 export async function subirCarga(entidadSingular, filas, opciones = {}) {
   return motoredFetchJson(`/maestros/${entidadSingular}/carga`, {
@@ -150,10 +152,18 @@ export async function subirCarga(entidadSingular, filas, opciones = {}) {
   });
 }
 
-function _confirmacionesBody({ confirmarReemplazo, confirmarInactivacionMasiva } = {}) {
+function _banderasDeConfirmacion({ confirmarReemplazo, confirmarInactivacionMasiva } = {}) {
   return {
     ...(confirmarReemplazo ? { confirmar_reemplazo: true } : {}),
     ...(confirmarInactivacionMasiva ? { confirmar_inactivacion_masiva: true } : {}),
+  };
+}
+
+function _confirmacionesBody(opciones = {}) {
+  const codigos = opciones.codigosInactivar;
+  return {
+    ..._banderasDeConfirmacion(opciones),
+    ...(codigos?.length ? { codigos_inactivar: codigos } : {}),
   };
 }
 
@@ -225,7 +235,12 @@ export async function validarCargaArchivo(entidadSingular, file) {
 export async function subirCargaArchivo(entidadSingular, file, opciones = {}) {
   const formData = new FormData();
   formData.append('file', file);
-  const qs = new URLSearchParams(_confirmacionesBody(opciones)).toString();
+  // Las banderas viajan por query; los códigos elegidos (pueden ser miles) por
+  // el formulario como lista JSON: no caben en la URL.
+  const qs = new URLSearchParams(_banderasDeConfirmacion(opciones)).toString();
+  if (opciones.codigosInactivar?.length) {
+    formData.append('codigos_inactivar', JSON.stringify(opciones.codigosInactivar));
+  }
   return motoredFetchJson(`/maestros/${entidadSingular}/carga/excel${qs ? `?${qs}` : ''}`, {
     method: 'POST',
     body: formData,

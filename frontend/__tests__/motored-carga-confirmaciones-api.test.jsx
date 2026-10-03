@@ -28,6 +28,14 @@ describe('subirCarga', () => {
       filas: [], confirmar_reemplazo: true, confirmar_inactivacion_masiva: true,
     });
   });
+
+  it('manda codigos_inactivar solo cuando hay elegidos', async () => {
+    await subirCarga('referencia', [], { confirmarReemplazo: true, codigosInactivar: ['A', 'B'] });
+    await subirCarga('referencia', [], { confirmarReemplazo: true, codigosInactivar: [] });
+
+    expect(JSON.parse(global.fetch.mock.calls[0][1].body).codigos_inactivar).toEqual(['A', 'B']);
+    expect(JSON.parse(global.fetch.mock.calls[1][1].body)).not.toHaveProperty('codigos_inactivar');
+  });
 });
 
 describe('subirCargaArchivo', () => {
@@ -44,5 +52,19 @@ describe('subirCargaArchivo', () => {
     expect(url.pathname).toMatch(/\/maestros\/referencia\/carga\/excel$/);
     expect(url.searchParams.get('confirmar_reemplazo')).toBe('true');
     expect(url.searchParams.has('confirmar_inactivacion_masiva')).toBe(false);
+  });
+
+  it('los codigos elegidos viajan en el formulario como lista JSON, no en la URL', async () => {
+    await subirCargaArchivo('referencia', archivo(), { confirmarReemplazo: true, codigosInactivar: ['A', 'B'] });
+
+    const [url, init] = global.fetch.mock.calls[0];
+    expect(new URL(url).searchParams.has('codigos_inactivar')).toBe(false);
+    expect(JSON.parse(init.body.get('codigos_inactivar'))).toEqual(['A', 'B']);
+  });
+
+  it('sin elegidos no agrega el campo', async () => {
+    await subirCargaArchivo('referencia', archivo(), { confirmarReemplazo: true, codigosInactivar: [] });
+
+    expect(global.fetch.mock.calls[0][1].body.has('codigos_inactivar')).toBe(false);
   });
 });

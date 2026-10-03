@@ -20,7 +20,7 @@ import BulkUploadModal from '../components/motored/maestros/BulkUploadModal';
 const grupo = () => ({ total: 0, muestra: [] });
 const RESUMEN_VACIO = {
   total_archivo: 1, crear: grupo(), actualizar: grupo(), mover_proveedor: grupo(),
-  inactivar: { ...grupo(), con_ventas_6m: 0, con_inventario: 0 }, reactivar: grupo(),
+  ausentes: { total: 0, con_ventas_6m: 0, con_inventario: 0, items: [] }, seleccionadas: 0, reactivar: grupo(),
   vinculos_sustituta_limpiados: grupo(), activas_actuales: 10, pct_inactivar: 0,
   requiere_doble_confirmacion: false,
 };

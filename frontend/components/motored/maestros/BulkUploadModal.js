@@ -579,9 +579,9 @@ const boxStyle = {
 function AvisoReemplazoReferencias() {
   return (
     <p style={{ margin: 0, fontSize: '0.75rem', fontWeight: 700, color: 'var(--motored-warning, #d97706)' }}>
-      Atención: esta carga reemplaza el maestro completo. Las referencias que no estén en el archivo se
-      desactivan (no se borran) y una celda en blanco borra lo que tenía guardado. Primero se muestra un
-      resumen y recién después de confirmarlo se aplica.
+      Atención: esta carga reemplaza el maestro completo. Una celda en blanco borra lo que tenía guardado. Las
+      referencias que no estén en el archivo siguen activas salvo las que usted marque para inactivar
+      (nunca se borran). Primero se muestra un resumen y recién después de confirmarlo se aplica.
     </p>
   );
 }
