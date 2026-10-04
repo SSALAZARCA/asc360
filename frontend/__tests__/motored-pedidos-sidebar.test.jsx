@@ -39,10 +39,10 @@ describe('MotoredSidebar - Pedidos entry', () => {
     expect(pushMock).toHaveBeenCalledWith('/motored/pedidos');
   });
 
-  it('keeps Maestros right after Tablero asesores (which follows Pedidos) for COMPRAS', () => {
+  it('keeps Maestros right after the KPIs entry (which follows Pedidos) for COMPRAS', () => {
     render(<MotoredSidebar user={{ nombre: 'U', role: 'COMPRAS' }} />);
     const labels = screen.getAllByRole('button').map((b) => b.textContent);
-    expect(labels.slice(0, 3)).toEqual(['Pedidos', 'Tablero asesores', 'Maestros']);
+    expect(labels.slice(0, 3)).toEqual(['Pedidos', "KPI's", 'Maestros']);
   });
 });
 
@@ -65,7 +65,7 @@ describe('MotoredSidebar - Configuración entry', () => {
   it('is appended after the existing entries and navigates to /motored/configuracion', () => {
     render(<MotoredSidebar user={{ nombre: 'U', role: 'ADMIN' }} />);
     const etiquetas = screen.getAllByRole('button').map((b) => b.textContent);
-    expect(etiquetas.slice(0, 3)).toEqual(['Pedidos', 'Tablero asesores', 'Maestros']);
+    expect(etiquetas.slice(0, 3)).toEqual(['Pedidos', "KPI's", 'Maestros']);
     expect(etiquetas.indexOf('Configuración')).toBe(etiquetas.indexOf('Cambiar mi contraseña') + 1);
     fireEvent.click(screen.getByRole('button', { name: 'Configuración' }));
     expect(pushMock).toHaveBeenCalledWith('/motored/configuracion');

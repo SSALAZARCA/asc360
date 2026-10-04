@@ -19,7 +19,7 @@ import { filtrarTabsPorRol, PRESUPUESTOS_ROLES } from './maestrosTabsPorRol';
 /** Web roles (ASESOR_MOSTRADOR has no web access: it only talks to the Telegram bot). */
 export const ROLES = [
   { id: 'ADMIN', ayuda: 'Administra toda la aplicación.' },
-  { id: 'COMPRAS', ayuda: 'Gestiona pedidos de repuestos y ve el tablero de asesores.' },
+  { id: 'COMPRAS', ayuda: "Gestiona pedidos de repuestos y ve los KPI's." },
   { id: 'GERENCIA', ayuda: "Ve Presupuestos y KPI's" },
   { id: 'SUCURSAL', ayuda: 'Usuario de una sucursal: consulta y carga de maestros.' },
   { id: 'CONSULTA', ayuda: 'Solo consulta: sin pedidos ni administración.' },
@@ -39,7 +39,7 @@ export const PANTALLAS = [
   { id: 'maestros-datos', nombre: 'Maestros: datos y catálogos', nota: 'Sucursales, proveedores, referencias, clientes y vendedores.', visible: (rol) => enMaestros({}, rol) },
   { id: 'cargas', nombre: 'Cargas de archivos', nota: 'Pestañas de movimientos dentro de Maestros.', visible: (rol) => enMaestros({}, rol) },
   { id: 'presupuestos', nombre: 'Maestros: Presupuestos', nota: 'Presupuesto mensual por asesor.', visible: (rol) => enMaestros({ roles: PRESUPUESTOS_ROLES }, rol) },
-  { id: 'tablero-asesores', nombre: "KPI's (Tablero asesores)", sidebarId: 'tablero-asesores', nota: '', visible: (rol) => TABLERO_ROLES.includes(rol) },
+  { id: 'tablero-asesores', nombre: "KPI's", sidebarId: 'tablero-asesores', nota: '', visible: (rol) => TABLERO_ROLES.includes(rol) },
   { id: 'pedidos', nombre: 'Pedidos y corridas', sidebarId: 'pedidos', nota: '', visible: (rol) => PEDIDOS_ROLES.includes(rol) },
   { id: 'topes', nombre: 'Topes de pedido', nota: 'Dentro de Pedidos.', visible: (rol) => PEDIDOS_ROLES.includes(rol) },
   { id: 'ventas-perdidas', nombre: 'Ventas perdidas', sidebarId: 'ventas-perdidas', nota: '', visible: (rol) => enSidebar('ventas-perdidas', rol) },

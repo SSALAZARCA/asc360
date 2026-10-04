@@ -43,7 +43,7 @@ describe('RolesPermisosMatriz', () => {
     render(<RolesPermisosMatriz />);
 
     expect(marca('Maestros: Presupuestos', 'GERENCIA')).toBe('Sí');
-    expect(marca("KPI's (Tablero asesores)", 'GERENCIA')).toBe('Sí');
+    expect(marca("KPI's", 'GERENCIA')).toBe('Sí');
     ['Pedidos y corridas', 'Configuración', 'Cargas de archivos', 'Gestión de usuarios', 'Vincular Telegram']
       .forEach((p) => expect(marca(p, 'GERENCIA')).toBe('No'));
   });

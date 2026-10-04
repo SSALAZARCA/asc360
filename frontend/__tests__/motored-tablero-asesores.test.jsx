@@ -18,7 +18,7 @@ jest.mock('../components/motored/MotoredSidebar', () => {
   return M;
 });
 
-import TableroAsesoresPage from '../app/motored/tablero-asesores/page';
+import TableroAsesoresPage from '../components/motored/tablero-asesores/TableroAsesoresContent';
 import { rangoPorDefecto, validarRango } from '../components/motored/tablero-asesores/rango';
 
 const RUTA = 'GET /tablero-asesores';

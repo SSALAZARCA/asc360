@@ -20,13 +20,14 @@ function Cuerpo({ data, loading }) {
   );
 }
 
-export default function TableroAsesoresContent() {
+/** `embedded`: shown inside the KPI's, which already has its own title. */
+export default function TableroAsesoresContent({ embedded = false }) {
   const allowed = useTableroGate();
   const { filtros, setFiltros, data, loading, error } = useTableroAsesores(allowed);
   if (!allowed) return null;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', maxWidth: '100%' }}>
-      <h1 className="motored-h-pantalla">Tablero de asesores</h1>
+      {!embedded && <h1 className="motored-h-pantalla">Tablero de asesores</h1>}
       <TableroFilters filtros={filtros} setFiltros={setFiltros} />
       {error && <p style={errorStyle}>{error}</p>}
       {loading && data && <p style={mutedStyle}>Actualizando...</p>}

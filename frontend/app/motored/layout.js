@@ -44,10 +44,13 @@
  * plain `<style>` tag with a raw CSS string is valid, static, and needs no
  * client-side runtime -- this stylesheet has zero interactivity.
  */
-import { Mulish, IBM_Plex_Mono } from 'next/font/google';
+import { Mulish, IBM_Plex_Mono, Manrope } from 'next/font/google';
 
 const mulish = Mulish({ subsets: ['latin'], weight: ['500', '800'], variable: '--motored-font-body' });
 const plexMono = IBM_Plex_Mono({ subsets: ['latin'], weight: ['500', '600'], variable: '--motored-font-mono' });
+
+// Manrope (500/700) is the font of the KPI's charts (brand manual); the rest of Motored keeps Mulish.
+const manrope = Manrope({ subsets: ['latin'], weight: ['500', '700'], variable: '--motored-font-manrope' });
 
 const MOTORED_TITLE = 'Motored Pedidos';
 const MOTORED_DESCRIPTION = 'Sistema de gestión Motored';
@@ -136,7 +139,7 @@ const themeCss = `
           --motored-gray-300: #c9c9c6;
           --motored-gray-200: #e4e4e1;
           --motored-gray-100: #f2f2f0;
-          --motored-font-kpi: 'Manrope', var(--motored-font-body), 'Mulish', system-ui, sans-serif;
+          --motored-font-kpi: var(--motored-font-manrope), var(--motored-font-body), 'Mulish', system-ui, sans-serif;
           min-height: 100vh;
           background: var(--motored-bg);
           color: var(--motored-text);
@@ -302,7 +305,7 @@ const themeCss = `
 
 export default function MotoredRootLayout({ children }) {
   return (
-    <div className={`motored-theme ${mulish.variable} ${plexMono.variable}`}>
+    <div className={`motored-theme ${mulish.variable} ${plexMono.variable} ${manrope.variable}`}>
       {children}
       <style>{themeCss}</style>
     </div>

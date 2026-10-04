@@ -64,7 +64,7 @@ describe('GERENCIA sidebar', () => {
     render(<MotoredSidebar user={{ nombre: 'G', role: 'GERENCIA' }} />);
     const labels = screen.getAllByRole('button').map((b) => b.textContent.trim());
 
-    expect(labels).toEqual(['Tablero asesores', 'Maestros', 'Cambiar mi contraseña', 'Salir']);
+    expect(labels).toEqual(["KPI's", 'Maestros', 'Cambiar mi contraseña', 'Salir']);
   });
 
   it.each(['ADMIN', 'COMPRAS', 'SUCURSAL', 'CONSULTA', 'ASESOR_MOSTRADOR'])('keeps Maestros for %s', (role) => {

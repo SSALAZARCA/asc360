@@ -1,12 +1,12 @@
 'use client';
-/** Tablero de asesores (ADMIN and COMPRAS): sales indicators per advisor. */
+/** KPI's (ADMIN, COMPRAS and GERENCIA): sales, stores and advisors with budget compliance. */
 import MotoredLayout from '../motored-layout';
-import TableroAsesoresContent from '../../../components/motored/tablero-asesores/TableroAsesoresContent';
+import KpisContent from '../../../components/motored/kpis/KpisContent';
 
-export default function TableroAsesoresPage() {
+export default function KpisPage() {
   return (
     <MotoredLayout>
-      <TableroAsesoresContent />
+      <KpisContent />
     </MotoredLayout>
   );
 }
