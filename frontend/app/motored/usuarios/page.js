@@ -32,6 +32,7 @@ import MotoredIconAction from '../../../components/motored/MotoredIconAction';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import MotoredLayout from '../motored-layout';
+import RolesPermisosMatriz from '../../../components/motored/usuarios/RolesPermisosMatriz';
 import UsuarioCreateForm from '../../../components/motored/UsuarioCreateForm';
 import CambiarPasswordForm from '../../../components/motored/CambiarPasswordForm';
 import {
@@ -428,27 +429,32 @@ function PasswordResetPanel({ state }) {
   );
 }
 
-function UsuariosContent() {
-  /**
-   * Post-Phase-4 review (finding #6): this function used to mix 4
-   * unrelated concerns inline (create-usuario form, main usuarios table +
-   * own-row Telegram link/unlink, one-time Telegram code banner,
-   * pending-solicitudes section). Pure decomposition, no behavior
-   * change: `TelegramLinkPanel` and `SolicitudesPendientesPanel` now own
-   * their own rendering; this function is left composing them plus the
-   * create-usuario form and the main table.
-   */
-  const { allowed, ownUserId } = useAdminGate();
-  const { usuarios, loading, error, create, deactivate, reactivate, desbloquear, reload } = useUsuarios(allowed);
-  const solicitudesState = useSolicitudesPendientes(allowed);
-  const telegramState = useTelegramVinculacion(reload);
-  const passwordState = usePasswordReset();
-  if (!allowed) return null;
+const PESTANAS = [
+  { id: 'gestion', label: 'Gestión de usuarios' },
+  { id: 'roles', label: 'Roles y permisos' },
+];
 
+function UsuariosTabs({ activa, onChange }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-      <h2 className="motored-h-seccion">Usuarios</h2>
+    <div className="motored-tab-bar" role="tablist" style={{ overflowX: 'auto', maxWidth: '100%' }}>
+      {PESTANAS.map((p) => (
+        <button
+          key={p.id} type="button" role="tab" aria-selected={activa === p.id}
+          className={`motored-tab${activa === p.id ? ' is-active' : ''}`}
+          onClick={() => onChange(p.id)}
+        >
+          {p.label}
+        </button>
+      ))}
+    </div>
+  );
+}
 
+/** "Gestión de usuarios" tab: create form, main table, Telegram code and pending requests. */
+function GestionUsuariosPanel({ ownUserId, users, solicitudesState, telegramState, passwordState }) {
+  const { usuarios, loading, error, create, deactivate, reactivate, desbloquear } = users;
+  return (
+    <>
       {error && <p style={{ color: 'var(--motored-danger, #c0392b)', fontSize: '0.8rem' }}>{error}</p>}
 
       <UsuarioCreateForm onCreate={create} />
@@ -479,6 +485,37 @@ function UsuariosContent() {
         onAprobar={solicitudesState.aprobar}
         onRechazar={solicitudesState.rechazar}
       />
+    </>
+  );
+}
+
+function UsuariosContent() {
+  /**
+   * Gate + hooks + the tab switch only: "Gestión de usuarios" lives in
+   * `GestionUsuariosPanel` (post-Phase-4 review, finding #6, split its
+   * concerns into panels) and the read-only matrix in `RolesPermisosMatriz`.
+   */
+  const { allowed, ownUserId } = useAdminGate();
+  const users = useUsuarios(allowed);
+  const solicitudesState = useSolicitudesPendientes(allowed);
+  const telegramState = useTelegramVinculacion(users.reload);
+  const passwordState = usePasswordReset();
+  const [pestana, setPestana] = useState('gestion');
+  if (!allowed) return null;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+      <h2 className="motored-h-seccion">Usuarios</h2>
+      <UsuariosTabs activa={pestana} onChange={setPestana} />
+      {pestana === 'roles' ? <RolesPermisosMatriz /> : (
+        <GestionUsuariosPanel
+          ownUserId={ownUserId}
+          users={users}
+          solicitudesState={solicitudesState}
+          telegramState={telegramState}
+          passwordState={passwordState}
+        />
+      )}
     </div>
   );
 }

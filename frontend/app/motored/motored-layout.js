@@ -30,7 +30,7 @@ import {
   ROLE_SERVICIO_CLIENTE, SURVEY_ADMIN_PATH, isServicioClientePath,
 } from '../../lib/motored/servicioCliente';
 
-const VALID_ROLES = ['ADMIN', 'COMPRAS', 'SUCURSAL', 'CONSULTA', ROLE_SERVICIO_CLIENTE, ROLE_GERENCIA];
+export const VALID_ROLES = ['ADMIN', 'COMPRAS', 'SUCURSAL', 'CONSULTA', ROLE_SERVICIO_CLIENTE, ROLE_GERENCIA];
 
 export default function MotoredLayout({ children }) {
   const router = useRouter();

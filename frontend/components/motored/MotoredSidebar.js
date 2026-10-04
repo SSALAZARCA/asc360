@@ -137,17 +137,22 @@ function MenuGroup({ group, pathname, onNavigate }) {
   );
 }
 
-export default function MotoredSidebar({ user, open = false, onClose }) {
-  const router = useRouter();
-  const pathname = usePathname();
-
-  const menuItems = ALL_ITEMS.filter((item) => {
+/** The menu entries a user sees (also read by the Roles y permisos matrix). */
+export function menuItemsFor(user) {
+  return ALL_ITEMS.filter((item) => {
     if (user?.must_change_password) return item.id === 'mi-cuenta';
     if (item.excludeRoles?.includes(user?.role)) return false;
     if (item.roles) return item.roles.includes(user?.role);
     if (user?.role === 'SERVICIO_CLIENTE') return false;
     return !item.adminOnly || user?.role === 'ADMIN';
   });
+}
+
+export default function MotoredSidebar({ user, open = false, onClose }) {
+  const router = useRouter();
+  const pathname = usePathname();
+
+  const menuItems = menuItemsFor(user);
 
   const navigate = (path) => {
     onClose?.();

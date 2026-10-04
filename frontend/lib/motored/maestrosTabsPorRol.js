@@ -9,6 +9,9 @@
  */
 import { ROLE_GERENCIA } from './session';
 
+/** Roles that see the Presupuestos tab (the page and the permission matrix share it). */
+export const PRESUPUESTOS_ROLES = ['ADMIN', 'GERENCIA'];
+
 export function filtrarTabsPorRol(tabs, rol) {
   return tabs.filter((tab) => (tab.roles ? tab.roles.includes(rol) : rol !== ROLE_GERENCIA));
 }

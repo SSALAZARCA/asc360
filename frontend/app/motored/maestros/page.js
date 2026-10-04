@@ -38,7 +38,7 @@ import ClientesTecniredTab from '../../../components/motored/maestros/ClientesTe
 import VendedoresTab from '../../../components/motored/maestros/VendedoresTab';
 import MovimientoTab from '../../../components/motored/cargas/MovimientoTab';
 import PresupuestosTab from '../../../components/motored/maestros/PresupuestosTab';
-import { filtrarTabsPorRol } from '../../../lib/motored/maestrosTabsPorRol';
+import { filtrarTabsPorRol, PRESUPUESTOS_ROLES } from '../../../lib/motored/maestrosTabsPorRol';
 import { getRolActual } from '../../../lib/motored/motoredFetch';
 
 const TABS = [
@@ -53,7 +53,7 @@ const TABS = [
   { id: 'demanda_perdida', label: 'Demanda perdida', group: 'Movimientos', render: () => <MovimientoTab tipo="DEMANDA_PERDIDA" label="Demanda perdida" /> },
   { id: 'facturas_pedidos', label: 'Facturas de pedidos', group: 'Movimientos', render: () => <MovimientoTab tipo="FACTURAS_PEDIDOS" label="Facturas de pedidos" /> },
   { id: 'ingresos_facturas', label: 'Ingresos de facturas', group: 'Movimientos', render: () => <MovimientoTab tipo="INGRESOS_FACTURAS" label="Ingresos de facturas" /> },
-  { id: 'presupuestos', label: 'Presupuestos', group: 'Comercial', roles: ['ADMIN', 'GERENCIA'], render: () => <PresupuestosTab /> },
+  { id: 'presupuestos', label: 'Presupuestos', group: 'Comercial', roles: PRESUPUESTOS_ROLES, render: () => <PresupuestosTab /> },
 ];
 
 /** The role is read after mount (sessionStorage does not exist on the server). */

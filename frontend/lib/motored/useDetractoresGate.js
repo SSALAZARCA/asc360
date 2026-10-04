@@ -8,7 +8,7 @@ import { useRouter } from 'next/navigation';
 import { MOTORED_USER_KEY } from './motoredFetch';
 import { homePathFor } from './session';
 
-const ALLOWED_ROLES = ['ADMIN', 'SERVICIO_CLIENTE'];
+export const DETRACTORES_ROLES = ['ADMIN', 'SERVICIO_CLIENTE'];
 
 function readRole() {
   try {
@@ -23,7 +23,7 @@ export default function useDetractoresGate() {
   const [allowed, setAllowed] = useState(false);
 
   useEffect(() => {
-    if (ALLOWED_ROLES.includes(readRole())) {
+    if (DETRACTORES_ROLES.includes(readRole())) {
       setAllowed(true);
       return;
     }

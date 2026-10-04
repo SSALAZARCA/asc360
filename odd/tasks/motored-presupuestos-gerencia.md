@@ -113,7 +113,7 @@ Give Motored a monthly, versioned **sales budget per asesor**: the base for KPI 
   - Maestros tabs filtered by role (GERENCIA sees only Presupuestos), and `homePathFor(GERENCIA)` moves to maestros.
   - Jest tests.
   - Route: delegated writer.
-- [ ] **T4: Usuarios → Roles y permisos (read-only).**
+- [x] **T4: Usuarios → Roles y permisos (read-only).**
   - Matrix of role × screen from one frontend source, consistent with the gates.
   - Sidebar/route under Usuarios (ADMIN).
   - Jest tests.
@@ -196,5 +196,26 @@ Give Motored a monthly, versioned **sales budget per asesor**: the base for KPI 
 - **Rebase:** onto -22's 96364cc. The parent re-ran the affected jest suites (19 suites / 216 passed) and the presupuestos/gerencia pytest (165 passed).
 - **gga advisories:** the GERENCIA branch in `homePathFor` is redundant; `PresupuestosTab` has 9 state hooks, so a `usePresupuestosMes` hook would help later.
 
+- **Delivery:** commits e4a50fb and 94425e0, pushed to main.
+- **Native review:** risk medium (`slice_budget_reached`, 1,433 lines). Consent granted; the R3 lens approved and the result was acknowledged.
+- **Advisories to fix with T4**
+  - The month view can stay stale after Aplicar (`PresupuestosTab.js:91-94`).
+  - A race on the detail fetch: switching months quickly can show the previous month's detail (`PresupuestosTab.js:54-67`).
+  - The max-amount message in `EditorAsesor`.
+  - A sticky error that is never cleared.
+
+**T4, done.** Route: delegated writer, with two commits.
+- **Commit A (`fix`):** the Presupuestos tab now refreshes the selected month and the months list after Aplicar. It ignores stale detail responses (latest-requested-month guard), clears a sticky error, and shows the cap message in EditorAsesor.
+- **Commit B (`feat`):**
+  - `lib/motored/permisosPorRol.js`: 16 screens × 6 web roles, derived from `menuItemsFor` (now exported from MotoredSidebar), the gate constants (PEDIDOS/TABLERO/CONFIGURACION/DETRACTORES_ROLES) and `filtrarTabsPorRol`/`PRESUPUESTOS_ROLES`. The backend-only Telegram rule is noted in the module.
+  - `RolesPermisosMatriz` is a tab inside Usuarios (ADMIN), next to "Gestión de usuarios".
+  - Drift tests cover VALID_ROLES, the sidebar and the gates.
+  - ASESOR_MOSTRADOR is left out (bot-only, no web access).
+- **TDD evidence**
+  - RED: 4 fresh-view tests failed; the matrix suite failed on missing modules.
+  - GREEN: full jest 166 suites / 1699 tests.
+  - Compile check: `/motored/usuarios` returned 200 on `next dev --webpack`.
+- **Rebase:** onto -22's d461d5d. The parent re-ran the affected jest suites (24 suites / 250 passed).
+
 ## Next step
-Native review + push of T3, then T4 (Usuarios → Roles y permisos).
+Native review + push of T4. Then the feature is complete; remaining follow-ups are listed above.
