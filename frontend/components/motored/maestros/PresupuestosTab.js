@@ -10,7 +10,7 @@
  * The store options come from `GET /presupuestos/tiendas` (GERENCIA cannot read
  * `/maestros/sucursales`), plus the stores already present in the month.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   getMesPresupuesto, guardarAsesorPresupuesto, listarMesesPresupuesto, listarTiendasPresupuesto,
   quitarAsesorPresupuesto,
@@ -31,11 +31,13 @@ export default function PresupuestosTab() {
   const [subiendo, setSubiendo] = useState(false);
   const [aviso, setAviso] = useState(null);
   const [error, setError] = useState(null);
+  const mesSolicitado = useRef(null); // latest month asked for: older responses are ignored
 
   const cargarMeses = useCallback(async (preferido) => {
     try {
       const lista = await listarMesesPresupuesto();
       setMeses(lista);
+      setError(null);
       setMesActual((actual) => {
         const buscado = preferido || actual;
         return lista.some((m) => m.mes === buscado) ? buscado : (lista[0]?.mes ?? null);
@@ -52,9 +54,14 @@ export default function PresupuestosTab() {
   }, []);
 
   const cargarDetalle = useCallback(async (mes) => {
+    mesSolicitado.current = mes;
     try {
-      setDetalle(await getMesPresupuesto(mes));
+      const respuesta = await getMesPresupuesto(mes);
+      if (mesSolicitado.current !== mes) return;
+      setDetalle(respuesta);
+      setError(null);
     } catch (e) {
+      if (mesSolicitado.current !== mes) return;
       setError(e.message || 'No se pudo cargar el mes.');
     }
   }, []);
@@ -63,6 +70,8 @@ export default function PresupuestosTab() {
     setEditor(null);
     setHistorial(false);
     setDetalle(null);
+    setError(null);
+    mesSolicitado.current = mesActual;
     if (mesActual) cargarDetalle(mesActual);
   }, [mesActual, cargarDetalle]);
 
@@ -88,9 +97,12 @@ export default function PresupuestosTab() {
     await tras(await quitarAsesorPresupuesto(mesActual, cedula, nota));
   };
 
-  const alAplicar = (respuesta) => {
+  const alAplicar = async (respuesta) => {
     setAviso(respuesta.meses.map((m) => `${m.mes}: versión ${m.version}`).join(' · '));
-    cargarMeses(respuesta.meses[0]?.mes);
+    const aplicado = respuesta.meses[0]?.mes;
+    await cargarMeses(aplicado);
+    // The month effect only reruns when the selection changes; refresh in place otherwise.
+    if (aplicado && aplicado === mesActual) await cargarDetalle(aplicado);
   };
 
   if (meses === null) return <p style={mutedStyle}>Cargando presupuestos…</p>;

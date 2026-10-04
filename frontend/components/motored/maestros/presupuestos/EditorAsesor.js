@@ -25,7 +25,10 @@ export default function EditorAsesor({ modo, linea, tiendas, onGuardar, onCancel
     if (!quitando) {
       if (!cedula.trim()) return setError('Ingresa la cédula del asesor.');
       if (!sucursalId) return setError('Elige la tienda del asesor.');
-      if (!Number.isInteger(importe) || importe <= 0 || importe > MONTO_MAXIMO) {
+      if (Number.isInteger(importe) && importe > MONTO_MAXIMO) {
+        return setError('El presupuesto no puede superar 100.000.000.000 pesos.');
+      }
+      if (!Number.isInteger(importe) || importe <= 0) {
         return setError('El monto debe ser un número entero de pesos mayor a 0.');
       }
     }
