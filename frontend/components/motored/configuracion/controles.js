@@ -5,6 +5,7 @@
  * 44 px tall and every <option> has an explicit colour (dark theme).
  */
 import { Plus, Trash2 } from 'lucide-react';
+import { editorDe } from './editores';
 import { columnaStyle, controlStyle, filaStyle, optionStyle, touchStyle } from './styles';
 
 function Interruptor({ id, etiqueta, borrador, onChange }) {
@@ -25,8 +26,11 @@ function Numero({ id, etiqueta, borrador, onChange, modo }) {
   );
 }
 
+// Business wording for options whose stored value is a code.
+const ETIQUETA_OPCION = { sin_hmcl: 'Sin HMCL', con_hmcl: 'Con HMCL' };
+
 function Opciones({ opciones }) {
-  return opciones.map((o) => <option key={o} value={o} style={optionStyle}>{o}</option>);
+  return opciones.map((o) => <option key={o} value={o} style={optionStyle}>{ETIQUETA_OPCION[o] || o}</option>);
 }
 
 function Seleccion({ id, etiqueta, borrador, onChange, spec }) {
@@ -134,8 +138,16 @@ function Tramos({ borrador, onChange }) {
 /** Types whose control is one field (the visible label points at it). */
 export const TIPOS_SIMPLES = ['bool', 'entero', 'decimal', 'opcion', 'lista', 'lista_digitos'];
 
+/** True when the visible label can point at one field of the control. */
+export const esControlSimple = (spec) => TIPOS_SIMPLES.includes(spec.tipo) && !editorDe(spec);
+
+/** Messages that block saving this draft (a dedicated editor's rules). */
+export const mensajesDe = (spec, borrador) => editorDe(spec)?.validar?.(borrador) || [];
+
 export default function ControlValor({ spec, etiqueta, id, borrador, onChange }) {
   const comun = { id, etiqueta, borrador, onChange, spec };
+  const Editor = editorDe(spec)?.Control;
+  if (Editor) return <Editor {...comun} />;
   switch (spec.tipo) {
     case 'bool': return <Interruptor {...comun} />;
     case 'entero': return <Numero {...comun} modo="numeric" />;

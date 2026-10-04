@@ -7,7 +7,7 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import InfoTooltip from '../InfoTooltip';
-import ControlValor, { TIPOS_SIMPLES } from './controles';
+import ControlValor, { esControlSimple, mensajesDe } from './controles';
 import HistorialDrawer from './HistorialDrawer';
 import { aBorrador, desdeBorrador, formatearValor, mesActual, vigenteDesdeDeMes } from './valor';
 import { getHistorialParametro, guardarParametro } from '../../../lib/motored/configuracionApi';
@@ -78,7 +78,7 @@ export default function CampoConfiguracion({
   onGuardar = guardarParametro, cargarHistorial = getHistorialParametro, onGuardado,
 }) {
   const id = `cfg-${spec.clave}`;
-  const simple = TIPOS_SIMPLES.includes(spec.tipo);
+  const simple = esControlSimple(spec);
   const minimo = spec.snapshotted ? mesActual(hoy) : '';
   const { borrador, setBorrador, cambiado } = useBorrador(spec);
   const [mes, setMes] = useState(mesActual(hoy));
@@ -87,8 +87,9 @@ export default function CampoConfiguracion({
 
   const guardar = async () => {
     const { valor, error } = desdeBorrador(spec, borrador);
-    if (error || (minimo && mes < minimo)) {
-      setEstado({ guardando: false, error: error || MENSAJE_MES, aviso: '' });
+    const reglas = mensajesDe(spec, borrador);
+    if (error || reglas.length || (minimo && mes < minimo)) {
+      setEstado({ guardando: false, error: error || reglas[0] || MENSAJE_MES, aviso: '' });
       return;
     }
     setEstado({ guardando: true, error: '', aviso: '' });

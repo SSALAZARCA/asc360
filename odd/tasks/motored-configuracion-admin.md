@@ -49,8 +49,8 @@ Many tunable values have no screen today. They are either env vars changed in Co
 - [ ] T3
 - [ ] T4
 - [ ] T5
-- [ ] T6
-- [ ] T7
+- [x] T6 (implemented, verified, NOT yet committed)
+- [x] T7 (implemented, verified, NOT yet committed)
 - [ ] T8
 
 ## Delivery
@@ -65,3 +65,10 @@ Many tunable values have no screen today. They are either env vars changed in Co
   - Tablet check 768/1024/1280 done (no horizontal overflow); screenshots in `Documents/Motored/capturas-configuracion/`.
   - Open: a dedicated error code for the vigencia rule needs `corridas/codigos.py` (out of T1 surface); E-PARAM-002 reused.
 
+- 2026-10-04: T6 + T7 done by one delegated writer (route: delegated, trigger: 2+ non-trivial files across backend and frontend). TDD: pytest and jest written first; RED observed (68 backend failures and 12 frontend failures before code), then GREEN.
+  - Backend: 8 keys in `GRUPO_OPERACION` (global, not snapshotted, versioned): `hmcl_nits` (unique digit strings), `grupo_por_cargo` (cargo names uppercase/trimmed -> PERSONA|COMERCIALES|OTROS), `lineas_comerciales`, `kpi_semaforo_cortes` (0..200, ambar < verde) in section indicadores; `comision_tramos` (first desde 0, strictly increasing, tasa >= 0, unique non-empty names), `comision_base_pago` (sin_hmcl), `cumplimiento_base` (con_hmcl), `comision_cargos_asesor` in section comisiones. Defaults copied from `tablero_asesores` (a test guards drift; the tablero files were NOT edited). Builders extended: `unicos` (digit list), `normalizado` (map), `maximo` (numeric object), unique names (tramos).
+  - `lineas_comerciales` is NOT cross-checked against `tipos_inventario_incluidos`: a registry validator sees one key and no DB, and that list can change after the lines are saved. The tooltip tells the admin to keep them consistent.
+  - New code `E-PARAM-005` (`E_PARAM_VIGENCIA_PASADA`, same message) for the "past month on a snapshotted key" rule; T1 tests updated to it.
+  - Frontend: tabs Indicadores and Comisiones (`SeccionIndicadores`, `SeccionComisiones`, `CamposDeSeccion`), dedicated editors chosen by key (`editores.js`): chips list, cargo map ("Agregar cargo"), semaforo with live 3-band preview, tramos table (add/remove/reorder). Live Spanish validation (`validaciones.js`) also blocks Guardar. `SeccionPanel`/`ConfiguracionContainer` now pass `data` and `recargar`. Option labels "Sin HMCL"/"Con HMCL" for the two base enums.
+  - Verification: backend `tests/motored` 4836 passed; UM `tests --ignore=tests/motored` 1296 passed; `-m pg_real` 423 passed, 2 skipped (throwaway PG 18, new `pg_real/test_configuracion_operacion_pg.py`); full jest 157 suites / 1607 tests passed (run alone). Browser check at 768/1024/1280 (mocked API): no horizontal overflow; every control of the two tabs is >= 44 px (only the sidebar nav buttons, 35 px, are smaller, untouched). Screenshots `t6-*`, `t7-*` in `Documents/Motored/capturas-configuracion/`.
+  - Open: "Valor por defecto" still shows raw codes (`sin_hmcl`, `verde_desde: 90`) because `formatearValor` is generic (T1).

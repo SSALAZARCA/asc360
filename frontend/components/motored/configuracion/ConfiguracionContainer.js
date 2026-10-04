@@ -10,7 +10,7 @@ import { errorStyle, mutedStyle } from './styles';
 
 export default function ConfiguracionContainer() {
   const allowed = useConfiguracionGate();
-  const { data, error } = useConfiguracion(allowed);
+  const { data, error, recargar } = useConfiguracion(allowed);
   const [activa, setActiva] = useState(SECCIONES[0].id);
   if (!allowed) return null;
   const seccion = SECCIONES.find((s) => s.id === activa);
@@ -20,7 +20,7 @@ export default function ConfiguracionContainer() {
       {error && <p role="alert" style={errorStyle}>{error}</p>}
       {!error && !data && <p style={mutedStyle}>Cargando...</p>}
       <CorridaTabs tabs={SECCIONES} value={activa} onChange={setActiva} />
-      <SeccionPanel seccion={seccion} />
+      <SeccionPanel seccion={seccion} data={data} recargar={recargar} />
     </div>
   );
 }

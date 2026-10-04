@@ -1,7 +1,9 @@
 'use client';
 /** Body of one tab. Empty placeholder until its task fills it; Topes links to its own screen. */
 import { useRouter } from 'next/navigation';
-import { cardStyle, mutedStyle, touchStyle } from './styles';
+import SeccionComisiones from './SeccionComisiones';
+import SeccionIndicadores from './SeccionIndicadores';
+import { cardStyle, columnaStyle, mutedStyle, touchStyle } from './styles';
 
 export const RUTA_TOPES = '/motored/pedidos/topes';
 
@@ -19,7 +21,17 @@ function Topes() {
   );
 }
 
-export default function SeccionPanel({ seccion }) {
+const PANELES = { indicadores: SeccionIndicadores, comisiones: SeccionComisiones };
+
+export default function SeccionPanel({ seccion, data = null, recargar, onGuardar }) {
+  const Panel = PANELES[seccion.id];
+  if (Panel) {
+    return (
+      <div style={columnaStyle} role="tabpanel" aria-label={seccion.label}>
+        <Panel data={data} recargar={recargar} onGuardar={onGuardar} />
+      </div>
+    );
+  }
   return (
     <section style={cardStyle} role="tabpanel" aria-label={seccion.label}>
       {seccion.id === 'topes'

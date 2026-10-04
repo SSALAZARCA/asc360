@@ -11,7 +11,7 @@ const DECIMAL = /^\d+([.,]\d+)?$/;
 const textoDe = (valor) => (valor === null || valor === undefined ? '' : String(valor));
 const unaLinea = (texto) => texto.split('\n').map((x) => x.trim()).filter(Boolean);
 
-function numeroTexto(texto) {
+export function numeroTexto(texto) {
   const limpio = textoDe(texto).trim();
   return DECIMAL.test(limpio) ? limpio.replace(',', '.') : null;
 }
