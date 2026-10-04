@@ -16,13 +16,17 @@ import datetime
 import uuid
 
 import pytest
-from sqlalchemy import func, insert, select, update
+from sqlalchemy import delete, func, insert, select, update
 
 from app.config import settings
 from app.motored.models.corrida import Corrida
 from app.motored.models.corrida_envio import CorridaEnvio
 from app.motored.models.corrida_sucursal import CorridaSucursal
+from app.motored.models.parametro_metodologia import (
+    ParametroMetodologia,
+)
 from app.motored.models.pedido_evento import PedidoEvento
+from app.motored.models.retencion_ejecucion import RetencionEjecucion
 from app.motored.services.corridas import ejecucion as ej
 from app.motored.services.corridas import retencion_corridas as rc
 from tests.motored.pg_real.test_corridas_api_pg import (  # noqa: F401
@@ -567,6 +571,17 @@ async def test_the_timeline_lists_the_events_oldest_first(mundo):
 # --- Retención (B3a.4) ------------------------------------------------------
 
 
+async def _sin_estado_de_retencion(db):
+    """La purga debe decidir por el respaldo de entorno, no por filas
+    `retencion_*` ni por un ledger de hoy que dejó otra corrida en una base
+    reutilizada. El borrado vive en la transacción del test: se revierte."""
+    await db.execute(delete(ParametroMetodologia).where(
+        ParametroMetodologia.clave.startswith(
+            "retencion_", autoescape=True)))
+    await db.execute(delete(RetencionEjecucion).where(
+        RetencionEjecucion.tabla == rc.TABLA_CORRIDA))
+
+
 async def test_the_retention_keeps_corridas_whose_pedido_is_history(
         mundo, monkeypatch):
     monkeypatch.setattr(settings, "MOTORED_CORRIDA_RETENCION_ENABLED", True)
@@ -576,6 +591,7 @@ async def test_the_retention_keeps_corridas_whose_pedido_is_history(
     uno = mundo.datos.uno.id
     ids = {}
     async with mundo.fabrica() as db:
+        await _sin_estado_de_retencion(db)
         for clave in ("libre", "con_evento", "cerrada", "enviada"):
             corrida = Corrida(
                 id=uuid.uuid4(), codigo=f"RT-{uuid.uuid4().hex[:8]}",

@@ -35,7 +35,11 @@ from app.motored import database as motored_database
 from app.motored.models.corrida import Corrida
 from app.motored.models.corrida_linea import CorridaLinea
 from app.motored.models.corrida_sucursal import CorridaSucursal
+from app.motored.models.parametro_metodologia import (
+    ParametroMetodologia,
+)
 from app.motored.models.proveedor import Proveedor
+from app.motored.models.retencion_ejecucion import RetencionEjecucion
 from app.motored.services.corridas import ejecucion as ej
 from app.motored.services.corridas import retencion_corridas as rc
 from app.motored.services.corridas import servicio as sv
@@ -451,6 +455,17 @@ async def test_the_sweep_skips_a_corrida_a_live_worker_has_locked(
 # --- Retención sobre Postgres real -------------------------------------------
 
 
+async def _sin_estado_de_retencion(db):
+    """La purga debe decidir por el respaldo de entorno, no por filas
+    `retencion_*` ni por un ledger de hoy que dejó otra corrida en una base
+    reutilizada. El borrado vive en la transacción del test: se revierte."""
+    await db.execute(delete(ParametroMetodologia).where(
+        ParametroMetodologia.clave.startswith(
+            "retencion_", autoescape=True)))
+    await db.execute(delete(RetencionEjecucion).where(
+        RetencionEjecucion.tabla == rc.TABLA_CORRIDA))
+
+
 async def test_the_retention_purges_only_old_annulled_failed_or_draft(
         fabrica, monkeypatch):
     monkeypatch.setattr(settings, "MOTORED_CORRIDA_RETENCION_ENABLED", True)
@@ -459,6 +474,7 @@ async def test_the_retention_purges_only_old_annulled_failed_or_draft(
     vieja = (ahora - datetime.timedelta(days=60)).replace(tzinfo=None)
     reciente = (ahora - datetime.timedelta(days=5)).replace(tzinfo=None)
     async with fabrica() as db:
+        await _sin_estado_de_retencion(db)
         proveedor_id = await _proveedor(db)
         ids = {}
         for estado, creada in [
