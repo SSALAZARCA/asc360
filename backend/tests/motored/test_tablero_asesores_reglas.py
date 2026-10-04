@@ -73,7 +73,7 @@ async def test_cargar_reglas_arma_las_reglas_desde_leer_valores(monkeypatch):
 
 @pytest.mark.parametrize("hasta, esperado", [("2026-03", "2026-03"), ("2026-12", "2026-12")])
 def test_el_eco_de_reglas_lleva_semaforo_base_y_vigencia(hasta, esperado):
-    eco = q._eco_reglas(t.REGLAS_POR_DEFECTO, hasta)
+    eco = q.eco_reglas(t.REGLAS_POR_DEFECTO, hasta)
 
     assert eco == {"semaforo": {"verde_desde": 90, "ambar_desde": 70},
                    "cumplimiento_base": "con_hmcl", "vigencia": esperado}

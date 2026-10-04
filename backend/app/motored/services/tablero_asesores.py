@@ -42,6 +42,9 @@ GRUPO_COMERCIALES = "COMERCIALES"
 GRUPO_OTROS = "OTROS"
 GRUPO_RESTO = "RESTO"
 CLAVE_TOTAL = "TOTAL"
+# What a cube row is keyed by: the asesor/group of the tablero, the store of the
+# sale (`VentaDetalle.sucursal_id`) or nothing (one TOTAL row for the network).
+DIM_ASESOR, DIM_SUCURSAL, DIM_TOTAL = "asesor", "sucursal", "total"
 PREFIJO_PERSONA = "P:"
 
 # UNICO lugar donde un cargo decide como se agrupa (regla de la hoja MAESTRO
@@ -155,11 +158,13 @@ def reglas_desde_valores(valores: Dict[str, Any]) -> Reglas:
 class Filtro(NamedTuple):
     """Todo lo que acota las consultas del tablero: los rangos de fechas
     `[inicio, fin)` (meses consecutivos ya fusionados), el modo HMCL, las
-    sucursales de la venta (None = todas) y las reglas de Configuracion."""
+    sucursales de la venta (None = todas), las reglas de Configuracion y los
+    meses elegidos (los `rangos` son solo su forma para SQL)."""
     rangos: Tuple[Tuple[datetime.date, datetime.date], ...]
     modo_hmcl: str = HMCL_INCLUIR
     sucursal_ids: Optional[FrozenSet[Any]] = None
     reglas: Reglas = REGLAS_POR_DEFECTO
+    meses: Tuple[str, ...] = ()  # the selected months AAAA-MM, sorted
 
 
 class FilaCubo(NamedTuple):
@@ -352,7 +357,7 @@ def filtro_de_meses(
     reglas: Reglas = REGLAS_POR_DEFECTO,
 ) -> Filtro:
     ids = frozenset(sucursal_ids) if sucursal_ids else None
-    return Filtro(tuple(rangos_de_meses(meses)), modo_hmcl, ids, reglas)
+    return Filtro(tuple(rangos_de_meses(meses)), modo_hmcl, ids, reglas, tuple(meses))
 
 
 def filtrar_cubo_por_hmcl(cubo: Iterable[FilaCubo], modo_hmcl: str) -> List[FilaCubo]:
@@ -410,6 +415,41 @@ def variacion_3m(venta_por_mes: Dict[str, Decimal], meses: List[str]) -> Dict[st
     }
 
 
+def mes_desplazado(mes: str, cantidad: int) -> str:
+    """`mes` (AAAA-MM) movido `cantidad` meses de calendario (negativo = antes)."""
+    anio, numero = _partir_mes(mes)
+    indice = anio * 12 + (numero - 1) + cantidad
+    return f"{indice // 12:04d}-{indice % 12 + 1:02d}"
+
+
+CRECE, CAE, NUEVA = "crece", "cae", "nueva"
+MESES_VENTANA_CRECIMIENTO = 6
+
+
+def crecimiento_3m(
+    venta_por_mes: Dict[str, Decimal], ultimo_mes: str, fecha_apertura: Optional[datetime.date] = None,
+) -> Dict[str, Any]:
+    """Crecimiento de una tienda con MESES DE CALENDARIO (como la hoja
+    "VAR % 3M VS 3M" del Excel): los 3 meses que terminan en `ultimo_mes` contra
+    los 3 anteriores, sin importar que otros meses se hayan elegido (por eso
+    `venta_por_mes` viene de la ventana de 6 meses, no del cubo elegido).
+    `clasificacion`: `nueva` si abrio dentro de esos 6 meses o no vendio nada en
+    los 3 primeros; si no, `crece` (venta de los ultimos 3 > la de los previos)
+    o `cae` (menor o igual)."""
+    ultimos = sum((venta_por_mes.get(mes_desplazado(ultimo_mes, -i), Decimal(0)) for i in range(3)), Decimal(0))
+    previos = sum((venta_por_mes.get(mes_desplazado(ultimo_mes, -i), Decimal(0)) for i in range(3, 6)), Decimal(0))
+    inicio_ventana = datetime.date(*_partir_mes(mes_desplazado(ultimo_mes, -(MESES_VENTANA_CRECIMIENTO - 1))), 1)
+    es_nueva = previos == 0 or (fecha_apertura is not None and fecha_apertura >= inicio_ventana)
+    pct = ratio(ultimos, previos)
+    return {
+        "ultimos_3m": _dinero(ultimos),
+        "previos_3m": _dinero(previos),
+        "diferencia": _dinero(ultimos - previos),
+        "pct": None if pct is None else pct - 1,
+        "clasificacion": NUEVA if es_nueva else (CRECE if ultimos > previos else CAE),
+    }
+
+
 def rankear(valores: Dict[str, Decimal]) -> Dict[str, int]:
     """Posicion 1 = mayor valor. Los empates comparten posicion y la siguiente
     se salta (igual que RANK de Excel)."""
@@ -424,6 +464,9 @@ class _Acumulado:
     def __init__(self) -> None:
         self.venta_por_mes: Dict[str, Decimal] = defaultdict(Decimal)
         self.venta_por_linea: Dict[str, Decimal] = defaultdict(Decimal)
+        self.venta_por_mes_linea: Dict[Tuple[str, str], Decimal] = defaultdict(Decimal)
+        self.tecnired_por_mes: Dict[str, Decimal] = defaultdict(Decimal)
+        self.tecnired_por_linea: Dict[str, Decimal] = defaultdict(Decimal)
         self.descuento_por_mes: Dict[str, Decimal] = defaultdict(Decimal)
         self.hmcl = self.tecnired = self.mostrador = Decimal(0)
         self.con_costo = self.costo = self.bruto = self.cantidad = Decimal(0)
@@ -432,11 +475,14 @@ class _Acumulado:
     def sumar(self, f: FilaCubo) -> None:
         self.venta_por_mes[f.mes] += f.venta
         self.venta_por_linea[f.linea] += f.venta
+        self.venta_por_mes_linea[(f.mes, f.linea)] += f.venta
         self.descuento_por_mes[f.mes] += f.descuentos
         if f.es_hmcl:
             self.hmcl += f.venta
         if f.es_tecnired:
             self.tecnired += f.venta
+            self.tecnired_por_mes[f.mes] += f.venta
+            self.tecnired_por_linea[f.linea] += f.venta
         if f.es_mostrador:
             self.mostrador += f.venta
         if f.con_costo:
@@ -455,15 +501,49 @@ class _Acumulado:
         return sum(self.descuento_por_mes.values(), Decimal(0))
 
 
-def _indicadores(
-    acum: _Acumulado,
-    facturas: Optional[FilaFacturas],
-    clientes: Optional[FilaClientes],
-    meses: List[str],
-    lineas: Tuple[str, ...] = LINEAS,
+def _bloque_venta(acum: _Acumulado, meses: List[str], lineas: Tuple[str, ...]) -> Dict[str, Any]:
+    venta, cero = acum.venta, Decimal(0)
+    return {
+        "total": _dinero(venta),
+        "hmcl": _dinero(acum.hmcl),
+        "sin_hmcl": _dinero(venta - acum.hmcl),
+        "pct_hmcl": ratio(acum.hmcl, venta),
+        "por_mes": {m: _dinero(acum.venta_por_mes.get(m, cero)) for m in meses},
+        "por_linea": {linea: _dinero(acum.venta_por_linea.get(linea, cero)) for linea in lineas},
+        "mix": {linea: ratio(acum.venta_por_linea.get(linea, cero), venta) for linea in lineas},
+        "por_mes_linea": {
+            m: {linea: _dinero(acum.venta_por_mes_linea.get((m, linea), cero)) for linea in lineas}
+            for m in meses
+        },
+    }
+
+
+def _bloque_costo(acum: _Acumulado) -> Dict[str, Any]:
+    return {
+        "costo_venta": _dinero(acum.costo),
+        "venta_con_costo": _dinero(acum.con_costo),
+        "utilidad_bruta": _dinero(acum.con_costo - acum.costo),
+        "pct_margen": ratio(acum.con_costo - acum.costo, acum.con_costo),
+        "pct_venta_con_costo": ratio(acum.con_costo, acum.venta),
+    }
+
+
+def _bloque_facturas(
+    acum: _Acumulado, facturas: Optional[FilaFacturas], lineas: Tuple[str, ...],
 ) -> Dict[str, Any]:
-    venta = acum.venta
-    n_facturas = facturas.facturas if facturas else 0
+    n_facturas = Decimal(facturas.facturas if facturas else 0)
+    con_linea = facturas.con_linea if facturas else (0,) * len(lineas)
+    return {
+        "facturas": int(n_facturas),
+        "ticket_promedio": ratio(acum.venta, n_facturas),
+        "unidades": _dinero(acum.cantidad),
+        "items_por_factura": ratio(Decimal(acum.lineas), n_facturas),
+        "pct_con_linea": {linea: ratio(Decimal(n), n_facturas) for linea, n in zip(lineas, con_linea)},
+        "pct_multilinea": ratio(Decimal(facturas.multilinea if facturas else 0), n_facturas),
+    }
+
+
+def _bloque_descuentos(acum: _Acumulado) -> Dict[str, Any]:
     descuentos = acum.descuentos
     mes_mayor = None
     if descuentos > 0:
@@ -471,46 +551,43 @@ def _indicadores(
             (m for m, d in acum.descuento_por_mes.items() if d > 0),
             key=lambda m: (-acum.descuento_por_mes[m], m),
         )
-    con_linea = facturas.con_linea if facturas else (0,) * len(lineas)
     return {
-        "venta": {
-            "total": _dinero(venta),
-            "hmcl": _dinero(acum.hmcl),
-            "sin_hmcl": _dinero(venta - acum.hmcl),
-            "pct_hmcl": ratio(acum.hmcl, venta),
-            "por_mes": {m: _dinero(acum.venta_por_mes.get(m, Decimal(0))) for m in meses},
-            "por_linea": {linea: _dinero(acum.venta_por_linea.get(linea, Decimal(0))) for linea in lineas},
-            "mix": {linea: ratio(acum.venta_por_linea.get(linea, Decimal(0)), venta) for linea in lineas},
-        },
-        "costo": {
-            "costo_venta": _dinero(acum.costo),
-            "venta_con_costo": _dinero(acum.con_costo),
-            "utilidad_bruta": _dinero(acum.con_costo - acum.costo),
-            "pct_margen": ratio(acum.con_costo - acum.costo, acum.con_costo),
-            "pct_venta_con_costo": ratio(acum.con_costo, venta),
-        },
+        "total": _dinero(descuentos),
+        "mes_mayor": mes_mayor,
+        "pct_en_mes_mayor": ratio(acum.descuento_por_mes[mes_mayor], descuentos) if mes_mayor else None,
+        "pct_descuento": ratio(descuentos, acum.bruto),
+    }
+
+
+def _bloque_clientes(
+    acum: _Acumulado, clientes: Optional[FilaClientes], meses: List[str], lineas: Tuple[str, ...],
+) -> Dict[str, Any]:
+    venta, cero = acum.venta, Decimal(0)
+    return {
+        "pct_mostrador": ratio(acum.mostrador, venta),
+        "venta_tecnired": _dinero(acum.tecnired),
+        "tecnired_por_mes": {m: _dinero(acum.tecnired_por_mes.get(m, cero)) for m in meses},
+        "tecnired_por_linea": {linea: _dinero(acum.tecnired_por_linea.get(linea, cero)) for linea in lineas},
+        "pct_tecnired": ratio(acum.tecnired, venta),
+        "clientes_unicos": clientes.clientes if clientes else 0,
+        "pct_top5": ratio(clientes.venta_top5, venta) if clientes else None,
+    }
+
+
+def indicadores(
+    acum: _Acumulado,
+    facturas: Optional[FilaFacturas],
+    clientes: Optional[FilaClientes],
+    meses: List[str],
+    lineas: Tuple[str, ...] = LINEAS,
+) -> Dict[str, Any]:
+    return {
+        "venta": _bloque_venta(acum, meses, lineas),
+        "costo": _bloque_costo(acum),
         "tendencia": variacion_3m(acum.venta_por_mes, meses),
-        "facturas": {
-            "facturas": n_facturas,
-            "ticket_promedio": ratio(venta, Decimal(n_facturas)),
-            "unidades": _dinero(acum.cantidad),
-            "items_por_factura": ratio(Decimal(acum.lineas), Decimal(n_facturas)),
-            "pct_con_linea": {linea: ratio(Decimal(n), Decimal(n_facturas)) for linea, n in zip(lineas, con_linea)},
-            "pct_multilinea": ratio(Decimal(facturas.multilinea if facturas else 0), Decimal(n_facturas)),
-        },
-        "descuentos": {
-            "total": _dinero(descuentos),
-            "mes_mayor": mes_mayor,
-            "pct_en_mes_mayor": ratio(acum.descuento_por_mes[mes_mayor], descuentos) if mes_mayor else None,
-            "pct_descuento": ratio(descuentos, acum.bruto),
-        },
-        "clientes": {
-            "pct_mostrador": ratio(acum.mostrador, venta),
-            "venta_tecnired": _dinero(acum.tecnired),
-            "pct_tecnired": ratio(acum.tecnired, venta),
-            "clientes_unicos": clientes.clientes if clientes else 0,
-            "pct_top5": ratio(clientes.venta_top5, venta) if clientes else None,
-        },
+        "facturas": _bloque_facturas(acum, facturas, lineas),
+        "descuentos": _bloque_descuentos(acum),
+        "clientes": _bloque_clientes(acum, clientes, meses, lineas),
         "ranking": None,
     }
 
@@ -531,8 +608,24 @@ ORDEN_GRUPOS = (GRUPO_COMERCIALES, GRUPO_OTROS, GRUPO_RESTO)
 def _fila_total(acum, facturas, clientes, personas, meses, lineas=LINEAS) -> Dict[str, Any]:
     fila = {"clave": CLAVE_TOTAL, "tipo": "TOTAL", "nombre": "TOTAL", "cargo": None,
             "punto_venta": None, "cargos": [], "cargo_conflicto": False, "personas": personas}
-    fila.update(_indicadores(acum, facturas, clientes, meses, lineas))
+    fila.update(indicadores(acum, facturas, clientes, meses, lineas))
     return fila
+
+
+def acumular_cubo(
+    cubo: Iterable[FilaCubo], reglas: Reglas = REGLAS_POR_DEFECTO,
+) -> Tuple[Dict[str, _Acumulado], Decimal]:
+    """Acumulado por clave del cubo (mas la clave TOTAL con todo) y la venta
+    excluida por no tener una de las lineas de `reglas`."""
+    acumulados: Dict[str, _Acumulado] = {CLAVE_TOTAL: _Acumulado()}
+    sin_linea = Decimal(0)
+    for f in cubo:
+        if f.linea is None or f.linea not in reglas.lineas:
+            sin_linea += f.venta
+            continue
+        acumulados.setdefault(f.clave, _Acumulado()).sumar(f)
+        acumulados[CLAVE_TOTAL].sumar(f)
+    return acumulados, sin_linea
 
 
 def construir_tablero(
@@ -545,14 +638,7 @@ def construir_tablero(
 ) -> Dict[str, Any]:
     """Filas del tablero (personas, grupos), fila TOTAL y la venta excluida por
     no tener linea comercial reconocida."""
-    acumulados: Dict[str, _Acumulado] = {CLAVE_TOTAL: _Acumulado()}
-    sin_linea = Decimal(0)
-    for f in cubo:
-        if f.linea is None or f.linea not in reglas.lineas:
-            sin_linea += f.venta
-            continue
-        acumulados.setdefault(f.clave, _Acumulado()).sumar(f)
-        acumulados[CLAVE_TOTAL].sumar(f)
+    acumulados, sin_linea = acumular_cubo(cubo, reglas)
 
     facturas_por = _por_clave(facturas)
     clientes_por = _por_clave(clientes)
@@ -580,7 +666,7 @@ def construir_tablero(
                 tipo="GRUPO", nombre=nombre_de_grupo(clave, n), cargo=None, punto_venta=None,
                 cargos=[], cargo_conflicto=False, personas=n,
             )
-        fila.update(_indicadores(acum, facturas_por.get(clave), clientes_por.get(clave), meses, reglas.lineas))
+        fila.update(indicadores(acum, facturas_por.get(clave), clientes_por.get(clave), meses, reglas.lineas))
         filas.append(fila)
     filas.sort(key=_orden_de_fila)
 
