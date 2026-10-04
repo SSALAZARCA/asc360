@@ -99,7 +99,7 @@ Give Motored a monthly, versioned **sales budget per asesor**: the base for KPI 
     - `homePathFor(GERENCIA)` set to the tablero until T3 lands.
   - Tests: RBAC/confinement, layout, sidebar, form.
   - Route: delegated writer (multi-file).
-- [ ] **T2: Budgets backend.**
+- [x] **T2: Budgets backend.**
   - Migration with `presupuesto_version` (mes, version, origen, archivo_nombre, nota, created_at, created_by) and `presupuesto_linea` (version_id, cedula, sucursal_id, monto).
   - Service: parse, validate, dry-run summary, apply (one new version per month in the file), manual edit/add as a new version, history, and reads (latest per mes/cédula, sum per mes/tienda).
   - Router `/presupuestos` with ADMIN+GERENCIA, plus a template endpoint.
@@ -137,6 +137,38 @@ Give Motored a monthly, versioned **sales budget per asesor**: the base for KPI 
 - **Left untouched**
   - `app/motored/usuarios/page.js` has a local gate.
   - The `cargas/page.js` redirect goes to Maestros. GERENCIA is blocked server-side anyway.
+- **Delivery:** commit fd37e42, pushed to main.
+- **Native review:** risk medium (`slice_budget_reached`, 582 lines). Consent granted; the R3 lens approved and the result was acknowledged.
+- **Follow-ups from non-blocking advisories**
+  - Frontend pages are not role-confined in `motored-layout.js`: GERENCIA typing another URL sees the page shell, while the API returns 403.
+  - The login test does not exercise GERENCIA.
+  - The password-change assert is negative-only.
+
+**T2, done.** Route: delegated writer (multi-file backend slice).
+- **Migration:** `d7a2f4b8c915_presupuestos` (down `c4e8a1f6d903`), creating `presupuesto_version` and `presupuesto_linea` with CHECKs (day=1, monto>0) and UNIQUEs.
+- **Service:**
+  - `services/presupuestos_archivo.py`: pure parse/validate.
+  - `services/presupuestos.py`: dry-run, apply, manual edit, history and reads.
+  - `services/sucursal_texto.py`: tienda resolution, moved out of `api/carga.py` and re-imported there.
+- **Router** `/api/motored/presupuestos` (ADMIN+GERENCIA):
+  - `GET /plantilla.xlsx`, `POST /validar`, `POST /aplicar` (422 on errors, 409 on a race);
+  - `GET /meses`, `GET /meses/{yyyy-mm}`, `GET /meses/{yyyy-mm}/versiones`, `GET /versiones/{id}`;
+  - `PUT` and `DELETE /meses/{yyyy-mm}/asesores/{cedula}`.
+- **Decisions**
+  - The immutable version header is the audit trail; `AuditoriaMaestro` is not used.
+  - Each month's version number is taken under a per-month `pg_advisory_xact_lock`.
+  - Removing the last asesor leaves an empty version.
+  - `YYYY-MM-DD` text is also accepted for Mes.
+  - Monto is BigInteger and accepts `1.500.000`.
+- **TDD evidence**
+  - RED: ImportErrors, head asserts, 87 API failures.
+  - GREEN: pytest 4898 passed; pg_real 448 passed / 2 skipped.
+  - After the rebase onto -22's 034c2b1/912cc18, the parent re-ran pytest: 4966 passed.
+- **Size:** ~1,900 authored lines including tests. It is one cohesive backend slice.
+- **Deferred**
+  - Make `_parse_excel_upload` public.
+  - The `quitar_asesor` docstring wording.
+  - The KPI read helpers `presupuesto_por_asesor` and `presupuesto_por_sucursal` are tested but unused until the KPI work.
 
 ## Next step
-T2 (budgets backend).
+Native review + push of T2, then T3 (Maestros → Presupuestos tab).

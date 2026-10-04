@@ -36,6 +36,7 @@ from app.motored.models.inventario_snapshot import InventarioSnapshot
 from app.motored.models.login_evento import LoginEvento
 from app.motored.models.parametro_metodologia import ParametroMetodologia
 from app.motored.models.pedido_evento import PedidoEvento
+from app.motored.models.presupuesto import PresupuestoLinea, PresupuestoVersion
 from app.motored.models.proveedor import Proveedor
 from app.motored.models.referencia import Referencia
 from app.motored.models.retencion_ejecucion import RetencionEjecucion
@@ -76,6 +77,8 @@ __all__ = [
     "LoginEvento",
     "ParametroMetodologia",
     "PedidoEvento",
+    "PresupuestoLinea",
+    "PresupuestoVersion",
     "Proveedor",
     "Referencia",
     "RetencionEjecucion",

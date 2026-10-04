@@ -54,8 +54,6 @@ from app.config import settings
 from app.motored.deps import MotoredUser, get_motored_db_or_503, require_motored_ready, require_roles
 from app.motored.models.proveedor import Proveedor
 from app.motored.models.referencia import Referencia
-from app.motored.models.sucursal import Sucursal
-from app.motored.models.sucursal_alias import SucursalAlias
 from app.motored.schemas.carga import CargaRequest, CargaResultado
 from app.motored.services import bodegas_secundarias, reemplazo_referencias
 from app.motored.services.carga import procesar_carga
@@ -63,6 +61,7 @@ from app.motored.services.carga_excel import CargaExcelError, LimiteFilasExcedid
 from app.motored.services.ingesta.resolucion import normalizar_texto_sucursal
 from app.motored.services.ingesta.ventas import normalizar_vendedor
 from app.motored.services.reemplazo_referencias import SUSTITUTA_EN_ARCHIVO
+from app.motored.services.sucursal_texto import sucursal_id_por_texto as _sucursal_id_por_texto
 from app.motored.services.validators import _SCHEMA_BY_ENTIDAD, validate_rows
 
 router = APIRouter(
@@ -334,22 +333,6 @@ def _marcar_ciclos(
         for index in index_by_llave[llave]:
             errores_by_index[index] = _motivo_ciclo(ciclo, llave)
             resolved[index - 1].pop(SUSTITUTA_EN_ARCHIVO, None)
-
-
-async def _sucursal_id_por_texto(db: AsyncSession) -> Dict[str, uuid.UUID]:
-    """`normalizar_texto_sucursal(nombre | alias)` -> `sucursal_id`, con DOS
-    queries (nombres reales primero, `sucursal_alias` solo rellena lo que
-    falte) -- la misma prioridad que `ingesta.resolucion.construir_cache`."""
-    por_texto: Dict[str, uuid.UUID] = {}
-    for sucursal_id, nombre in (await db.execute(select(Sucursal.id, Sucursal.nombre))).all():
-        if nombre:
-            por_texto[normalizar_texto_sucursal(nombre)] = sucursal_id
-    alias_rows = (
-        await db.execute(select(SucursalAlias.texto_normalizado, SucursalAlias.sucursal_id))
-    ).all()
-    for texto_normalizado, sucursal_id in alias_rows:
-        por_texto.setdefault(texto_normalizado, sucursal_id)
-    return por_texto
 
 
 async def _resolve_vendedor_relaciones(

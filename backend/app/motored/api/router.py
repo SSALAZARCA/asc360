@@ -34,6 +34,7 @@ from app.motored.api import (
     encuesta_publica,
     maestros,
     parametros,
+    presupuestos,
     referencias_busqueda,
     salud,
     tablero_asesores,
@@ -98,3 +99,6 @@ router.include_router(corridas_vistas.router)
 # Aviso anticipado de antigüedad de datos: `/avisos-antiguedad` es su propio
 # prefijo (`/api/motored/avisos-antiguedad`), sin superposición de path.
 router.include_router(avisos_antiguedad.router)
+# Sales budgets per asesor (ADMIN|GERENCIA): `/presupuestos` is its own prefix,
+# no path overlap with any router above.
+router.include_router(presupuestos.router)

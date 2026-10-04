@@ -225,6 +225,18 @@ ALIASES_POR_ENTIDAD: Dict[str, List[Dict[str, Any]]] = {
             "aliases": ["razon_social", "razon social", "razón social", "nombre"],
         },
     ],
+    # Presupuestos de venta por asesor (`services/presupuestos_archivo.py`).
+    # NO es un maestro del registro de carga masiva: solo reusa este parser.
+    # Todo llega como texto; `presupuestos_archivo` interpreta Mes y monto.
+    "presupuesto": [
+        {"key": "cedula", "label": "Cédula", "required": True, "type": "string", "aliases": ["cedula"]},
+        {"key": "mes", "label": "Mes", "required": True, "type": "string", "aliases": ["mes"]},
+        {"key": "tienda", "label": "Tienda", "required": True, "type": "string", "aliases": ["tienda", "sucursal"]},
+        {
+            "key": "presupuesto", "label": "Presupuesto", "required": True, "type": "string",
+            "aliases": ["presupuesto", "monto"],
+        },
+    ],
 }
 
 _BOOLEAN_TRUE_VALUES = {"si", "sí", "true", "1", "yes", "x"}
