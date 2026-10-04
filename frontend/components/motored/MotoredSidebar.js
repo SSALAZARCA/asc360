@@ -48,7 +48,7 @@ const ALL_ITEMS = [
   // Pedidos (Fase 4, decision F4-16): ADMIN and COMPRAS only.
   { id: 'pedidos', name: 'Pedidos', icon: ShoppingCart, path: '/motored/pedidos', roles: ['ADMIN', 'COMPRAS'] },
   { id: 'tablero-asesores', name: 'Tablero asesores', icon: BarChart3, path: '/motored/tablero-asesores', roles: ['ADMIN', 'COMPRAS', 'GERENCIA'] },
-  { id: 'maestros', name: 'Maestros', icon: Warehouse, path: '/motored/maestros', excludeRoles: ['GERENCIA'] },
+  { id: 'maestros', name: 'Maestros', icon: Warehouse, path: '/motored/maestros' },
   // A group (`children`) is a collapsible header that always starts folded; a
   // click opens or closes it. While folded on one of its pages, the header is
   // marked as the current section.

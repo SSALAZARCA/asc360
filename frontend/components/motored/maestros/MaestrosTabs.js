@@ -60,10 +60,13 @@ function estadoPorEntidad(hallazgos) {
   return porEntidad;
 }
 
-function useSaludPorEntidad() {
+function useSaludPorEntidad(habilitado) {
   const [porEntidad, setPorEntidad] = useState({});
   const [hallazgos, setHallazgos] = useState([]);
   useEffect(() => {
+    // A role with no tab that carries a health dot (GERENCIA) must not call an
+    // endpoint it cannot read.
+    if (!habilitado) return;
     getSalud()
       .then((salud) => {
         setPorEntidad(estadoPorEntidad(salud.hallazgos));
@@ -75,7 +78,7 @@ function useSaludPorEntidad() {
         // fallo no debe desaparecer sin dejar rastro.
         console.error('No se pudo cargar la salud de maestros para los indicadores de pestaña:', err);
       });
-  }, []);
+  }, [habilitado]);
   return { porEntidad, hallazgos };
 }
 
@@ -96,7 +99,7 @@ export default function MaestrosTabs({ tabs }) {
   const [activeId, setActiveId] = useState(
     tabs.some((t) => t.id === tabPedido) ? tabPedido : tabs[0].id,
   );
-  const { porEntidad: saludPorEntidad, hallazgos } = useSaludPorEntidad();
+  const { porEntidad: saludPorEntidad, hallazgos } = useSaludPorEntidad(tabs.some((t) => t.entidadSalud));
   const active = tabs.find((t) => t.id === activeId);
   const hallazgosActivos = active.entidadSalud
     ? hallazgos.filter((h) => h.entidad === active.entidadSalud)

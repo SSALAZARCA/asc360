@@ -105,7 +105,7 @@ Give Motored a monthly, versioned **sales budget per asesor**: the base for KPI 
   - Router `/presupuestos` with ADMIN+GERENCIA, plus a template endpoint.
   - Tests: unit + pg_real.
   - Route: delegated writer.
-- [ ] **T3: Maestros → Presupuestos tab.**
+- [x] **T3: Maestros → Presupuestos tab.**
   - Month selector and budgets grouped by tienda with totals.
   - Upload modal with template download and dry-run summary, then apply.
   - Manual edit/add with an optional note.
@@ -170,5 +170,31 @@ Give Motored a monthly, versioned **sales budget per asesor**: the base for KPI 
   - The `quitar_asesor` docstring wording.
   - The KPI read helpers `presupuesto_por_asesor` and `presupuesto_por_sucursal` are tested but unused until the KPI work.
 
+- **Delivery:** commit 5bcf940, pushed to main.
+- **Native review:** risk medium (`slice_budget_reached`, 2,130 lines). Consent granted; the R3 lens approved and the result was acknowledged.
+- **Advisories to fix as a small follow-up (with T3)**
+  - A long `archivo_nombre` can overflow its column (`api/presupuestos.py:123`).
+  - `monto` has no upper bound in the upload or the manual edit schema, so a huge value could overflow BigInteger and return a 500.
+  - The IntegrityError→409 mapping is untested.
+
+**T3, done.** Route: delegated writer, with two commits: A, the backend advisory fix, and B, the frontend tab.
+- **Commit A (`fix`):**
+  - `archivo_nombre` is truncated to 255 characters, keeping the extension.
+  - `MONTO_MAXIMO` = 100.000.000.000 applies to both the upload and the manual edit.
+  - The IntegrityError→409 mapping is now tested.
+  - New `GET /presupuestos/tiendas` (ADMIN+GERENCIA) lists the active sucursales for the tienda select.
+- **Commit B (`feat`):**
+  - `PresupuestosTab` plus `presupuestos/` (MesPresupuesto, EditorAsesor, HistorialVersiones, CargaPresupuestosModal).
+  - `presupuestosApi.js` and `maestrosTabsPorRol.js`, which filters tabs by role so GERENCIA sees only Presupuestos and makes no getSalud call.
+  - The sidebar Maestros `excludeRoles` was removed, so GERENCIA sees Maestros.
+  - `homePathFor(GERENCIA)` now points to `/motored/maestros`.
+  - Options carry an explicit style; tables use `MotoredTableScroll`.
+- **TDD evidence**
+  - RED: 91 backend errors; frontend "Cannot find module"; 5 gerencia-role failures.
+  - GREEN: pytest 4979 passed; pg_real `test_presupuestos_pg.py` 29 passed; jest 162 suites / 1657 tests.
+  - Compile check: `/motored/maestros` returned 200 on `next dev --webpack`. Turbopack panics on the `node_modules` symlink, which is an environment issue.
+- **Rebase:** onto -22's 96364cc. The parent re-ran the affected jest suites (19 suites / 216 passed) and the presupuestos/gerencia pytest (165 passed).
+- **gga advisories:** the GERENCIA branch in `homePathFor` is redundant; `PresupuestosTab` has 9 state hooks, so a `usePresupuestosMes` hook would help later.
+
 ## Next step
-Native review + push of T2, then T3 (Maestros → Presupuestos tab).
+Native review + push of T3, then T4 (Usuarios → Roles y permisos).

@@ -10,7 +10,7 @@ export const PASSWORD_CHANGE_REQUIRED_CODE = 'PASSWORD_CHANGE_REQUIRED';
 
 /** Home page of a role (where it lands after login or after the forced change). */
 export const ROLE_GERENCIA = 'GERENCIA';
-export const GERENCIA_HOME_PATH = '/motored/tablero-asesores';
+export const GERENCIA_HOME_PATH = '/motored/maestros';
 
 export function homePathFor(role) {
   if (role === ROLE_SERVICIO_CLIENTE) return SURVEY_ADMIN_PATH;

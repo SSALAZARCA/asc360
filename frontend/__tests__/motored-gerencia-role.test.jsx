@@ -1,6 +1,6 @@
 /**
- * GERENCIA role (budgets/management, T1): valid session role, lands on the
- * advisor dashboard, sees only the dashboard (plus account), is offered when
+ * GERENCIA role (budgets/management, T1/T3): valid session role, lands on
+ * Maestros (Presupuestos), sees Maestros and the dashboard (plus account), is offered when
  * creating users, and never bounces into a screen the backend would 403.
  * The backend is the real enforcement; these guards are UX only.
  */
@@ -24,6 +24,7 @@ import usePedidosGate from '../lib/motored/usePedidosGate';
 import useDetractoresGate from '../lib/motored/useDetractoresGate';
 
 const TABLERO_PATH = '/motored/tablero-asesores';
+const MAESTROS_PATH = '/motored/maestros';
 
 function login(role, extra = {}) {
   sessionStorage.setItem('motored_user', JSON.stringify({ nombre: 'G', role, ...extra }));
@@ -46,9 +47,9 @@ describe('GERENCIA session', () => {
     expect(pushMock).not.toHaveBeenCalledWith('/motored/login');
   });
 
-  it('lands on the advisor dashboard after login and after a forced change', () => {
-    expect(homePathFor('GERENCIA')).toBe(TABLERO_PATH);
-    expect(landingPathFor({ role: 'GERENCIA' })).toBe(TABLERO_PATH);
+  it('lands on Maestros (Presupuestos) after login and after a forced change', () => {
+    expect(homePathFor('GERENCIA')).toBe(MAESTROS_PATH);
+    expect(landingPathFor({ role: 'GERENCIA' })).toBe(MAESTROS_PATH);
   });
 
   it('keeps the other roles landing on Maestros', () => {
@@ -59,11 +60,11 @@ describe('GERENCIA session', () => {
 });
 
 describe('GERENCIA sidebar', () => {
-  it('shows the dashboard and the account page only', () => {
+  it('shows Maestros, the dashboard and the account page only', () => {
     render(<MotoredSidebar user={{ nombre: 'G', role: 'GERENCIA' }} />);
     const labels = screen.getAllByRole('button').map((b) => b.textContent.trim());
 
-    expect(labels).toEqual(['Tablero asesores', 'Cambiar mi contraseña', 'Salir']);
+    expect(labels).toEqual(['Tablero asesores', 'Maestros', 'Cambiar mi contraseña', 'Salir']);
   });
 
   it.each(['ADMIN', 'COMPRAS', 'SUCURSAL', 'CONSULTA', 'ASESOR_MOSTRADOR'])('keeps Maestros for %s', (role) => {
@@ -87,16 +88,15 @@ describe('GERENCIA in the create-user form', () => {
   });
 });
 
-describe('gates never loop GERENCIA through Maestros', () => {
+describe('gates send GERENCIA to its home (Maestros, which has no gate)', () => {
   it.each([
     ['useAdminGate', useAdminGate],
     ['usePedidosGate', usePedidosGate],
     ['useDetractoresGate', useDetractoresGate],
-  ])('%s sends GERENCIA to the dashboard', async (_name, hook) => {
+  ])('%s sends GERENCIA to Maestros', async (_name, hook) => {
     login('GERENCIA');
     renderHook(() => hook());
 
-    await waitFor(() => expect(pushMock).toHaveBeenCalledWith(TABLERO_PATH));
-    expect(pushMock).not.toHaveBeenCalledWith('/motored/maestros');
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith(MAESTROS_PATH));
   });
 });

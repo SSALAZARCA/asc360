@@ -28,7 +28,7 @@
  * nothing being checked for it yet. The 6 movement tabs never had a health
  * check either, same reasoning.
  */
-import { Suspense } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import MotoredLayout from '../motored-layout';
 import MaestrosTabs from '../../../components/motored/maestros/MaestrosTabs';
 import SucursalesTab from '../../../components/motored/maestros/SucursalesTab';
@@ -37,6 +37,9 @@ import ReferenciasTab from '../../../components/motored/maestros/ReferenciasTab'
 import ClientesTecniredTab from '../../../components/motored/maestros/ClientesTecniredTab';
 import VendedoresTab from '../../../components/motored/maestros/VendedoresTab';
 import MovimientoTab from '../../../components/motored/cargas/MovimientoTab';
+import PresupuestosTab from '../../../components/motored/maestros/PresupuestosTab';
+import { filtrarTabsPorRol } from '../../../lib/motored/maestrosTabsPorRol';
+import { getRolActual } from '../../../lib/motored/motoredFetch';
 
 const TABS = [
   { id: 'sucursales', label: 'Sucursales', group: 'Maestros', entidadSalud: 'sucursal', render: () => <SucursalesTab /> },
@@ -50,13 +53,24 @@ const TABS = [
   { id: 'demanda_perdida', label: 'Demanda perdida', group: 'Movimientos', render: () => <MovimientoTab tipo="DEMANDA_PERDIDA" label="Demanda perdida" /> },
   { id: 'facturas_pedidos', label: 'Facturas de pedidos', group: 'Movimientos', render: () => <MovimientoTab tipo="FACTURAS_PEDIDOS" label="Facturas de pedidos" /> },
   { id: 'ingresos_facturas', label: 'Ingresos de facturas', group: 'Movimientos', render: () => <MovimientoTab tipo="INGRESOS_FACTURAS" label="Ingresos de facturas" /> },
+  { id: 'presupuestos', label: 'Presupuestos', group: 'Comercial', roles: ['ADMIN', 'GERENCIA'], render: () => <PresupuestosTab /> },
 ];
+
+/** The role is read after mount (sessionStorage does not exist on the server). */
+function MaestrosPorRol() {
+  const [rol, setRol] = useState(undefined);
+  useEffect(() => { setRol(getRolActual()); }, []);
+  if (rol === undefined) return null;
+  const tabs = filtrarTabsPorRol(TABS, rol);
+  if (tabs.length === 0) return null;
+  return <MaestrosTabs tabs={tabs} />;
+}
 
 export default function MaestrosPage() {
   return (
     <MotoredLayout>
       <Suspense fallback={null}>
-        <MaestrosTabs tabs={TABS} />
+        <MaestrosPorRol />
       </Suspense>
     </MotoredLayout>
   );
