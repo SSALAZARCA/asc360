@@ -76,3 +76,18 @@ describe('MotoredTableScroll maxHeight', () => {
     expect(screen.getByRole('table').parentElement.style.maxHeight).toBe('');
   });
 });
+
+describe('MotoredTableScroll scrollbar', () => {
+  it('ships an explicit visible horizontal scrollbar and keeps hidden tooltips out of the scroll width', () => {
+    const { container } = render(
+      <MotoredTableScroll>
+        <table><tbody><tr><td>dato</td></tr></tbody></table>
+      </MotoredTableScroll>,
+    );
+    const css = container.querySelector('style').textContent;
+
+    expect(css).toMatch(/\.motored-table-scroll::-webkit-scrollbar \{[^}]*height: 12px/);
+    expect(css).toMatch(/::-webkit-scrollbar-thumb \{ background: var\(--motored-text-soft/);
+    expect(css).toMatch(/\.motored-table-scroll \.motored-tooltip-text \{ display: none; \}/);
+  });
+});
