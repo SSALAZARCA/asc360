@@ -54,7 +54,7 @@ from __future__ import annotations
 import uuid
 from datetime import date, timedelta
 from decimal import Decimal
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, FrozenSet, List, Optional, Sequence, Tuple
 
 from sqlalchemy import delete, tuple_
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -72,6 +72,8 @@ from app.motored.services.ingesta import ventas as ventas_mod
 from app.motored.services.ingesta.lotes import partir
 from app.motored.services.ingesta.resolucion import (
     CacheResolucion,
+    MarcaFila,
+    es_bodega_excluida,
     resolver_referencia,
     resolver_sucursal_por_codigo_o_nombre,
 )
@@ -135,12 +137,13 @@ def _resolver_costo(fila_raw: Sequence[Any], mapa_columnas: Dict[str, int]) -> O
     error de Excel, no numerica o demasiado grande queda en `None`. Un
     negativo se conserva tal cual (el ERP los exporta); el lector de costos
     excluye todo valor NULL o <= 0."""
-    valor = ventas_mod._limpiar_moneda(_extraer(fila_raw, mapa_columnas, "Costo prom. uni."))
+    valor = ventas_mod.limpiar_moneda(
+        _extraer(fila_raw, mapa_columnas, "Costo prom. uni."))
     try:
         costo = numeros_mod.parsear_decimal(valor)
     except (numeros_mod.CeldaFaltanteError, numeros_mod.CeldaInvalidaError):
         return None
-    if abs(costo) >= ventas_mod._VALOR_MAX_ABS:
+    if abs(costo) >= ventas_mod.VALOR_MAX_ABS:
         return None
     return costo
 
@@ -184,6 +187,32 @@ def _resolver_claves(
     return sucursal_id, referencia_id, errores
 
 
+def _staging_de_inventario(
+    fila_raw: Sequence[Any], *, existencia: Decimal,
+    mapa_columnas: Dict[str, int], numero_fila: int, lote: int,
+    carga_id: uuid.UUID, sucursal_id: Optional[uuid.UUID],
+    referencia_id: Optional[uuid.UUID],
+) -> CargaFilaStaging:
+    """Payload (existencia, bodega cruda, costo) de una fila válida."""
+    costo = _resolver_costo(fila_raw, mapa_columnas)
+    bodega = (
+        _texto(_extraer(fila_raw, mapa_columnas, "Bodega")) or ""
+    )[:_LARGO_MAX_BODEGA]
+    payload = {
+        "existencia": str(existencia),
+        "bodega": bodega,
+        "costo": None if costo is None else str(costo),
+    }
+    return CargaFilaStaging(
+        carga_id=carga_id,
+        fila=numero_fila,
+        lote=lote,
+        payload=payload,
+        sucursal_id=sucursal_id,
+        referencia_id=referencia_id,
+    )
+
+
 def procesar_fila(
     fila_raw: Sequence[Any],
     *,
@@ -193,14 +222,21 @@ def procesar_fila(
     cache: CacheResolucion,
     carga_id: uuid.UUID,
     proveedor_id: uuid.UUID,
-) -> Tuple[Optional[CargaFilaStaging], List[CargaError]]:
+    bodegas_excluidas: FrozenSet[str] = frozenset(),
+) -> ventas_mod.ResultadoFila:
     """Procesa UNA fila cruda de INVENTARIO. Retorna `(fila_staging,
-    errores)`. Una `Referencia` vacía es una fila de relleno (cola del
+    errores)`, o `MarcaFila.BODEGA_EXCLUIDA` si la bodega no es una
+    tienda. Una `Referencia` vacía es una fila de relleno (cola del
     archivo real, ver docstring del módulo) y se descarta EN SILENCIO --
     nunca genera `REFERENCIA_NO_ENCONTRADA`."""
     codigo_referencia = _texto(_extraer(fila_raw, mapa_columnas, "Referencia"))
     if codigo_referencia is None:
         return None, []
+    # Bodega que no es tienda: sin staging ni error, antes de resolver.
+    if es_bodega_excluida(
+        _extraer(fila_raw, mapa_columnas, "Bodega"), bodegas_excluidas
+    ):
+        return MarcaFila.BODEGA_EXCLUIDA
 
     existencia, error_existencia = _resolver_existencia_o_error(
         fila_raw, mapa_columnas, carga_id, numero_fila
@@ -212,20 +248,10 @@ def procesar_fila(
         fila_raw, mapa_columnas, cache, carga_id, numero_fila, proveedor_id
     )
 
-    costo = _resolver_costo(fila_raw, mapa_columnas)
-    bodega = (_texto(_extraer(fila_raw, mapa_columnas, "Bodega")) or "")[:_LARGO_MAX_BODEGA]
-    payload = {
-        "existencia": str(existencia),
-        "bodega": bodega,
-        "costo": None if costo is None else str(costo),
-    }
-    fila_staging = CargaFilaStaging(
-        carga_id=carga_id,
-        fila=numero_fila,
-        lote=lote,
-        payload=payload,
-        sucursal_id=sucursal_id,
-        referencia_id=referencia_id,
+    fila_staging = _staging_de_inventario(
+        fila_raw, existencia=existencia, mapa_columnas=mapa_columnas,
+        numero_fila=numero_fila, lote=lote, carga_id=carga_id,
+        sucursal_id=sucursal_id, referencia_id=referencia_id,
     )
     return fila_staging, errores
 

@@ -41,6 +41,11 @@ GRUPO_PEDIDO = "PEDIDO"
 # snapshot de la corrida, así que un cambio rige para todos desde su mes.
 GRUPO_OPERACION = "OPERACION"
 
+# Bodegas que no son tiendas (bodega central, producto terminado): sus
+# líneas se ignoran al cargar ventas e inventario, sin marcar error.
+CLAVE_BODEGAS_EXCLUIDAS = "bodegas_excluidas"
+BODEGAS_EXCLUIDAS_DEFAULT = ("99999", "PYM01")
+
 # Pestañas de la pantalla de Configuración, en orden.
 SECCIONES = (
     "pedido", "avisos", "cargas", "limpieza", "indicadores", "comisiones",
@@ -225,6 +230,23 @@ def lista_de_digitos(clave: str, default: list, grupo: str = GRUPO_OPERACION,
 def _normalizado(texto: str) -> bool:
     """Sin espacios sobrantes y en mayúsculas (como se comparan los cargos)."""
     return bool(texto) and texto == texto.strip().upper()
+
+
+def lista_de_codigos(clave: str, default: list, grupo: str = GRUPO_OPERACION,
+                     seccion: str = "") -> EspecClave:
+    """Lista no vacía de códigos en mayúsculas y sin espacios al borde,
+    sin repetidos (p. ej. códigos de bodega)."""
+    def valido(valor):
+        return isinstance(valor, list) and len(valor) > 0 and all(
+            isinstance(x, str) and _normalizado(x) for x in valor
+        ) and _sin_repetidos(valor)
+
+    return EspecClave(
+        clave, default, AMBITO_GLOBAL, grupo,
+        "una lista no vacía de códigos en mayúsculas y sin espacios al "
+        "borde, sin repetidos",
+        valido, _identidad, tipo="lista", seccion=seccion,
+    )
 
 
 def mapa_a_opcion(clave: str, default: dict, opciones: tuple,
@@ -478,6 +500,9 @@ def _construir_registro() -> Mapping[str, EspecClave]:
         ),
         _booleana("crear_referencias_desconocidas", False, GRUPO_INGESTA),
         _lista_texto("estados_backorder_vigentes", ["BACKORDER"]),
+        lista_de_codigos(
+            CLAVE_BODEGAS_EXCLUIDAS, list(BODEGAS_EXCLUIDAS_DEFAULT),
+            seccion="cargas"),
         _entera("dias_ventana_ingresos", 45, 1, 3650, GRUPO_INGESTA),
         _decimal("tolerancia_ingreso_pct", 2.0, grupo=GRUPO_INGESTA),
         _decimal(

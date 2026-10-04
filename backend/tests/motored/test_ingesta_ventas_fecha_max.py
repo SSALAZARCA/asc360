@@ -71,6 +71,7 @@ def _cola_dry_run():
         [("REF1", PROVEEDOR_ID, REFERENCIA_ID)],
         [PROVEEDOR_ID],
         [],  # tipos_inventario_incluidos -> default
+        [],  # bodegas_excluidas -> default
         [],  # periodo_tolerancia_pct -> entorno
     ]
 

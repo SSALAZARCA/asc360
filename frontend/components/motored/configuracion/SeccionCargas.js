@@ -31,6 +31,11 @@ const CAMPOS = [
     etiqueta: 'Tolerancia del período declarado (%)',
     ayuda: 'Porcentaje máximo de líneas de otro mes que se acepta al declarar el período de un archivo. Si se pasa, el archivo de ventas se rechaza entero. Va de 0 a 100.',
   },
+  {
+    clave: 'bodegas_excluidas',
+    etiqueta: 'Bodegas que no son tiendas',
+    ayuda: 'Códigos de bodega que no son tiendas (p. ej. bodega central o producto terminado). Sus líneas se ignoran al cargar ventas e inventario, sin marcar error. Una bodega que no esté aquí ni tenga tienda asignada sigue dando error.',
+  },
 ];
 
 export default function SeccionCargas(props) {

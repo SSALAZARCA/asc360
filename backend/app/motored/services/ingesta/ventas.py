@@ -53,7 +53,9 @@ import unicodedata
 import uuid
 from datetime import date
 from decimal import Decimal
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import (
+    Any, Dict, FrozenSet, List, Optional, Sequence, Tuple, Union,
+)
 
 from sqlalchemy import delete, tuple_
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -70,6 +72,8 @@ from app.motored.services.ingesta import periodo as periodo_mod
 from app.motored.services.ingesta.lotes import partir
 from app.motored.services.ingesta.resolucion import (
     CacheResolucion,
+    MarcaFila,
+    es_bodega_excluida,
     resolver_referencia,
     resolver_sucursal_por_codigo_o_nombre,
 )
@@ -111,7 +115,7 @@ CODIGO_TEXTO_DEMASIADO_LARGO = "TEXTO_DEMASIADO_LARGO"
 _LARGO_MAX_NOMBRE = 255
 _LARGO_MAX_NRO_DOCUMENTO = 50
 # Numeric(16, 2): 14 digitos enteros.
-_VALOR_MAX_ABS = Decimal(10) ** 14
+VALOR_MAX_ABS = Decimal(10) ** 14
 TAMANO_LOTE_DETALLE = 1000
 
 # Marca del payload de las filas que solo alimentan `venta_detalle`.
@@ -239,7 +243,7 @@ def _texto_documento(valor: Any) -> Optional[str]:
     return _texto(valor)
 
 
-def _limpiar_moneda(valor: Any) -> Any:
+def limpiar_moneda(valor: Any) -> Any:
     """`$1.234.567` / `$ 2.500 .000` -> `1.234.567` / `2.500.000`: quita el
     simbolo y los espacios de un texto; cualquier otro valor pasa igual."""
     if isinstance(valor, str):
@@ -255,7 +259,7 @@ def _resolver_valor_o_error(
     colombiano, ver `numeros.py`). Un negativo es valido (nota credito). Un
     bruto vacio rechaza la fila; un descuento vacio cuenta como 0 (una venta
     sin descuento no trae nada en la celda)."""
-    valor = _limpiar_moneda(_extraer(fila_raw, mapa_columnas, columna))
+    valor = limpiar_moneda(_extraer(fila_raw, mapa_columnas, columna))
     if vacio_es_cero and (valor is None or (isinstance(valor, str) and not valor)):
         return Decimal("0"), None
     mensaje = f"{columna} de la fila no se pudo interpretar como un valor numerico."
@@ -274,7 +278,7 @@ def _resolver_valor_o_error(
         return None, errores_mod.construir_error(
             carga_id, numero_fila, columna, _texto(valor), codigo_invalido, mensaje
         )
-    if abs(decimal) >= _VALOR_MAX_ABS:
+    if abs(decimal) >= VALOR_MAX_ABS:
         return None, errores_mod.construir_error(
             carga_id, numero_fila, columna, _texto(valor), codigo_invalido,
             f"{columna} de la fila es demasiado grande.",
@@ -427,7 +431,37 @@ def _procesar_fila_solo_detalle(
     )
 
 
-def procesar_fila(
+ResultadoFila = Union[
+    Tuple[Optional[CargaFilaStaging], List[CargaError]], MarcaFila
+]
+
+
+def _staging_de_venta(
+    *, fecha: date, cantidad: Decimal, modulo: str,
+    campos_detalle: Dict[str, str], numero_fila: int, lote: int,
+    carga_id: uuid.UUID, sucursal_id: Optional[uuid.UUID],
+    referencia_id: Optional[uuid.UUID],
+) -> CargaFilaStaging:
+    """Payload de `venta_mensual` + `venta_detalle` de una fila válida."""
+    payload = {
+        "anio": fecha.year,
+        "mes": fecha.month,
+        "dia": fecha.day,
+        "origen": modulo.upper(),
+        "cantidad": str(cantidad),
+        **campos_detalle,
+    }
+    return CargaFilaStaging(
+        carga_id=carga_id,
+        fila=numero_fila,
+        lote=lote,
+        payload=payload,
+        sucursal_id=sucursal_id,
+        referencia_id=referencia_id,
+    )
+
+
+def _procesar_fila_incluida(
     fila_raw: Sequence[Any],
     *,
     numero_fila: int,
@@ -436,23 +470,11 @@ def procesar_fila(
     cache: CacheResolucion,
     carga_id: uuid.UUID,
     proveedor_id: uuid.UUID,
-    tipos_inventario_incluidos: Sequence[str],
 ) -> Tuple[Optional[CargaFilaStaging], List[CargaError]]:
-    """Procesa UNA fila cruda de VENTAS. Retorna `(fila_staging, errores)`
-    orquestando los tres pasos de la transformación (ver los docstrings de
-    `_pasa_filtros_negocio`/`_resolver_fecha_o_error`/`_resolver_claves`).
-
-    Una linea aprobada de un tipo NO incluido no entra a `venta_mensual`,
-    pero `venta_detalle` la guarda igual: ver `_procesar_fila_solo_detalle`."""
-    if not _es_aprobada(fila_raw, mapa_columnas):
-        return None, []
-    if not _tipo_incluido(fila_raw, mapa_columnas, tipos_inventario_incluidos):
-        return _procesar_fila_solo_detalle(
-            fila_raw, numero_fila=numero_fila, lote=lote, mapa_columnas=mapa_columnas,
-            cache=cache, carga_id=carga_id, proveedor_id=proveedor_id,
-        ), []
-
-    fecha, error_fecha = _resolver_fecha_o_error(fila_raw, mapa_columnas, carga_id, numero_fila)
+    """Fila aprobada de un tipo incluido en `venta_mensual`: valida fecha,
+    cantidad y campos de detalle, y resuelve sucursal/referencia."""
+    fecha, error_fecha = _resolver_fecha_o_error(
+        fila_raw, mapa_columnas, carga_id, numero_fila)
     if fecha is None:
         return None, [error_fecha]
 
@@ -468,29 +490,51 @@ def procesar_fila(
     if campos_detalle is None:
         return None, [error_detalle]
 
-    modulo = _texto(_extraer(fila_raw, mapa_columnas, "Módulo")) or ""
-
     sucursal_id, referencia_id, errores = _resolver_claves(
         fila_raw, mapa_columnas, cache, carga_id, numero_fila, proveedor_id
     )
-
-    payload = {
-        "anio": fecha.year,
-        "mes": fecha.month,
-        "dia": fecha.day,
-        "origen": modulo.upper(),
-        "cantidad": str(cantidad),
-        **campos_detalle,
-    }
-    fila_staging = CargaFilaStaging(
-        carga_id=carga_id,
-        fila=numero_fila,
-        lote=lote,
-        payload=payload,
-        sucursal_id=sucursal_id,
-        referencia_id=referencia_id,
+    fila_staging = _staging_de_venta(
+        fecha=fecha, cantidad=cantidad, campos_detalle=campos_detalle,
+        modulo=_texto(_extraer(fila_raw, mapa_columnas, "Módulo")) or "",
+        numero_fila=numero_fila, lote=lote, carga_id=carga_id,
+        sucursal_id=sucursal_id, referencia_id=referencia_id,
     )
     return fila_staging, errores
+
+
+def procesar_fila(
+    fila_raw: Sequence[Any],
+    *,
+    numero_fila: int,
+    lote: int,
+    mapa_columnas: Dict[str, int],
+    cache: CacheResolucion,
+    carga_id: uuid.UUID,
+    proveedor_id: uuid.UUID,
+    tipos_inventario_incluidos: Sequence[str],
+    bodegas_excluidas: FrozenSet[str] = frozenset(),
+) -> ResultadoFila:
+    """Procesa UNA fila cruda de VENTAS. Retorna `(fila_staging, errores)`
+    orquestando los tres pasos de la transformación (ver los docstrings de
+    `_pasa_filtros_negocio`/`_resolver_fecha_o_error`/`_resolver_claves`),
+    o `MarcaFila.BODEGA_EXCLUIDA` si la bodega no es una tienda.
+
+    Una linea aprobada de un tipo NO incluido no entra a `venta_mensual`,
+    pero `venta_detalle` la guarda igual: ver `_procesar_fila_solo_detalle`."""
+    if not _es_aprobada(fila_raw, mapa_columnas):
+        return None, []
+    # Bodega que no es tienda: la fila no va a ninguna tabla (ni a
+    # `venta_detalle`) y no da error; se mira antes de resolver sucursal.
+    if es_bodega_excluida(
+        _extraer(fila_raw, mapa_columnas, "Bodega"), bodegas_excluidas
+    ):
+        return MarcaFila.BODEGA_EXCLUIDA
+    comunes = dict(
+        numero_fila=numero_fila, lote=lote, mapa_columnas=mapa_columnas,
+        cache=cache, carga_id=carga_id, proveedor_id=proveedor_id)
+    if not _tipo_incluido(fila_raw, mapa_columnas, tipos_inventario_incluidos):
+        return _procesar_fila_solo_detalle(fila_raw, **comunes), []
+    return _procesar_fila_incluida(fila_raw, **comunes)
 
 
 ClaveVentaMensual = Tuple[uuid.UUID, uuid.UUID, int, int, str]

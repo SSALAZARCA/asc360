@@ -53,6 +53,7 @@ const CARGAS = [
   spec('dias_ventana_ingresos', 'entero', { seccion: 'cargas', grupo: 'INGESTA' }, 45),
   spec('tolerancia_ingreso_pct', 'decimal', { seccion: 'cargas', grupo: 'INGESTA' }, '2.0'),
   spec('periodo_tolerancia_pct', 'decimal', { seccion: 'cargas', grupo: 'INGESTA' }, '0.5'),
+  spec('bodegas_excluidas', 'lista', { seccion: 'cargas', grupo: 'OPERACION' }, ['99999', 'PYM01']),
 ];
 const LIMPIEZA = [
   spec('retencion_inventario_habilitada', 'bool', { seccion: 'limpieza', grupo: 'OPERACION' }, false),
@@ -216,11 +217,11 @@ describe('Avisos tab', () => {
 });
 
 describe('Cargas tab', () => {
-  it('shows the five keys, the period tolerance included, with tooltips', () => {
+  it('shows the six keys, the period tolerance included, with tooltips', () => {
     montar('cargas', 'Cargas', CARGAS);
-    ['Líneas de inventario que cuentan', 'Estados de backorder vigentes', 'Ventana de ingresos (días)', 'Tolerancia de ingresos (%)', 'Tolerancia del período declarado (%)']
+    ['Líneas de inventario que cuentan', 'Estados de backorder vigentes', 'Ventana de ingresos (días)', 'Tolerancia de ingresos (%)', 'Tolerancia del período declarado (%)', 'Bodegas que no son tiendas']
       .forEach((t) => expect(screen.getByText(t)).toBeInTheDocument());
-    expect(screen.getAllByRole('note').length).toBeGreaterThanOrEqual(5);
+    expect(screen.getAllByRole('note').length).toBeGreaterThanOrEqual(6);
     expect(campo('Tolerancia del período declarado (%)')).toHaveTextContent('Porcentaje máximo de líneas de otro mes que se acepta al declarar el período de un archivo.');
   });
 
@@ -241,6 +242,43 @@ describe('Cargas tab', () => {
     fireEvent.click(within(c).getByRole('button', { name: 'Guardar' }));
     await waitFor(() => expect(onGuardar).toHaveBeenCalled());
     expect(onGuardar.mock.calls[0][0].valor).toEqual(['REPUESTOS', 'GPS', 'LLANTAS']);
+  });
+
+  it('explains the excluded bodegas and shows them as chips', () => {
+    montar('cargas', 'Cargas', CARGAS);
+    const c = campo('Bodegas que no son tiendas');
+    expect(within(c).getByText('99999')).toBeInTheDocument();
+    expect(within(c).getByText('PYM01')).toBeInTheDocument();
+    const nota = within(c).getByRole('note');
+    expect(nota.getAttribute('aria-label')).toBe(
+      'Códigos de bodega que no son tiendas (p. ej. bodega central o producto terminado). '
+      + 'Sus líneas se ignoran al cargar ventas e inventario, sin marcar error. '
+      + 'Una bodega que no esté aquí ni tenga tienda asignada sigue dando error.',
+    );
+  });
+
+  it('adds an excluded bodega in capitals and saves the whole list', async () => {
+    const { onGuardar } = montar('cargas', 'Cargas', CARGAS);
+    const c = campo('Bodegas que no son tiendas');
+    fireEvent.change(within(c).getByLabelText('Nuevo valor'), { target: { value: ' ba099 ' } });
+    fireEvent.click(within(c).getByRole('button', { name: 'Agregar' }));
+    fireEvent.click(within(c).getByRole('button', { name: 'Guardar' }));
+    await waitFor(() => expect(onGuardar).toHaveBeenCalled());
+    expect(onGuardar.mock.calls[0][0]).toMatchObject({ clave: 'bodegas_excluidas' });
+    expect(onGuardar.mock.calls[0][0].valor).toEqual(['99999', 'PYM01', 'BA099']);
+  });
+
+  it('refuses a repeated code and an empty list before saving', async () => {
+    const { onGuardar } = montar('cargas', 'Cargas', CARGAS);
+    const c = campo('Bodegas que no son tiendas');
+    fireEvent.change(within(c).getByLabelText('Nuevo valor'), { target: { value: 'pym01' } });
+    fireEvent.click(within(c).getByRole('button', { name: 'Agregar' }));
+    expect(within(c).getByRole('alert')).toHaveTextContent('ya está en la lista');
+    fireEvent.click(within(c).getByRole('button', { name: 'Quitar 99999' }));
+    fireEvent.click(within(c).getByRole('button', { name: 'Quitar PYM01' }));
+    fireEvent.click(within(c).getByRole('button', { name: 'Guardar' }));
+    expect(await within(c).findByText('Agregue al menos un valor.')).toBeInTheDocument();
+    expect(onGuardar).not.toHaveBeenCalled();
   });
 
   it('saves the ingresos window as a number', async () => {

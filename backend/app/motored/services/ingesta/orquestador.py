@@ -40,7 +40,9 @@ import logging
 import uuid
 from datetime import date, datetime, timezone
 from decimal import Decimal
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
+from typing import (
+    Any, Callable, Dict, FrozenSet, List, Optional, Sequence, Tuple,
+)
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -53,7 +55,7 @@ from app.motored.models.factura_proveedor_linea import FacturaProveedorLinea
 from app.motored.models.ingreso_factura import IngresoFactura
 from app.motored.models.proveedor import Proveedor
 from app.motored.schemas.carga import CargaResultado
-from app.motored.services import parametros
+from app.motored.services import parametros, parametros_claves
 from app.motored.services import storage
 from app.motored.services.carga_excel import CargaExcelError
 from app.motored.services.ingesta import backorder as backorder_mod
@@ -78,6 +80,7 @@ logger = logging.getLogger("motored.ingesta.orquestador")
 CLAVE_TOLERANCIA_PERIODO = "periodo_tolerancia_pct"
 # Ultimo valor leido bien: si una lectura falla, se sigue con este.
 _memoria_tolerancia: dict = {}
+_memoria_bodegas_excluidas: dict = {}
 
 TIPOS_MOVIMIENTO: Tuple[str, ...] = (
     "VENTAS",
@@ -141,6 +144,88 @@ async def resolver_proveedor_principal(db: AsyncSession) -> uuid.UUID:
     return ids[0]
 
 
+async def _leer_bodegas_excluidas(
+    db: AsyncSession,
+) -> FrozenSet[str]:
+    """Una lectura por carga de `bodegas_excluidas`. Sin fila vigente vale
+    el default del registro. Nunca lanza; sin rollback porque la carga
+    tiene trabajo pendiente."""
+    clave = parametros_claves.CLAVE_BODEGAS_EXCLUIDAS
+    valores = await parametros.leer_con_memoria(
+        db, datetime.now(timezone.utc).date(),
+        {clave: list(parametros_claves.BODEGAS_EXCLUIDAS_DEFAULT)},
+        _memoria_bodegas_excluidas, deshacer=False)
+    return resolucion_mod.normalizar_bodegas_excluidas(valores[clave])
+
+
+ProcesadorFila = Callable[
+    [Sequence[Any], int, int], Tuple[Optional[CargaFilaStaging], List[Any]]
+]
+_Construido = Tuple[ProcesadorFila, Dict[str, Any]]
+
+
+def _con_parametros(modulo: Any, comunes: Dict[str, Any],
+                    **extra: Any) -> ProcesadorFila:
+    """Callable uniforme `(fila_raw, numero_fila, lote)` sobre el
+    `procesar_fila` de `modulo` (se busca al llamar), con `comunes` y los
+    parametros propios del tipo (`extra`)."""
+    def procesar(fila_raw, numero_fila, lote):
+        return modulo.procesar_fila(
+            fila_raw, numero_fila=numero_fila, lote=lote,
+            **comunes, **extra)
+    return procesar
+
+
+async def _procesador_ventas(db, en_fecha, comunes) -> _Construido:
+    resolver = parametros.resolver_tipos_inventario_incluidos
+    tipos, fue_default = await resolver(db, en_fecha)
+    defaults = {}
+    if fue_default:
+        defaults[parametros.CLAVE_TIPOS_INVENTARIO_INCLUIDOS] = tipos
+    bodegas_excluidas = await _leer_bodegas_excluidas(db)
+    return _con_parametros(
+        ventas_mod, comunes, tipos_inventario_incluidos=tipos,
+        bodegas_excluidas=bodegas_excluidas), defaults
+
+
+async def _procesador_inventario(db, en_fecha, comunes) -> _Construido:
+    bodegas_excluidas = await _leer_bodegas_excluidas(db)
+    return _con_parametros(
+        inventario_mod, comunes, bodegas_excluidas=bodegas_excluidas), {}
+
+
+async def _procesador_backorder(db, en_fecha, comunes) -> _Construido:
+    resolver = parametros.resolver_estados_backorder_vigentes
+    estados, fue_default = await resolver(db, en_fecha)
+    defaults = {}
+    if fue_default:
+        defaults[parametros.CLAVE_ESTADOS_BACKORDER_VIGENTES] = estados
+    return _con_parametros(
+        backorder_mod, comunes, estados_backorder_vigentes=estados), defaults
+
+
+def _procesador_simple(modulo: Any):
+    async def construir(db, en_fecha, comunes) -> _Construido:
+        return _con_parametros(modulo, comunes), {}
+    return construir
+
+
+async def _procesador_ingresos(db, en_fecha, comunes) -> _Construido:
+    # INGRESOS_FACTURAS no resuelve sucursal ni referencia.
+    propios = {k: comunes[k] for k in ("mapa_columnas", "carga_id")}
+    return _con_parametros(ingresos_mod, propios), {}
+
+
+_CONSTRUCTORES_PROCESADOR = {
+    "VENTAS": _procesador_ventas,
+    "INVENTARIO": _procesador_inventario,
+    "BACKORDER": _procesador_backorder,
+    "DEMANDA_PERDIDA": _procesador_simple(demanda_perdida_mod),
+    "FACTURAS_PEDIDOS": _procesador_simple(facturas_mod),
+    "INGRESOS_FACTURAS": _procesador_ingresos,
+}
+
+
 async def _construir_procesador_fila(
     tipo: str,
     db: AsyncSession,
@@ -149,15 +234,13 @@ async def _construir_procesador_fila(
     carga_id: uuid.UUID,
     proveedor_id: uuid.UUID,
     en_fecha: date,
-) -> Tuple[
-    Callable[[Sequence[Any], int, int], Tuple[Optional[CargaFilaStaging], List[Any]]],
-    Dict[str, Any],
-]:
+) -> _Construido:
     """Fábrica: resuelve los parámetros de negocio de `tipo` vía
     `parametros.py` (nunca hardcodeados, ver docstring del módulo) y arma un
     callable de firma uniforme `(fila_raw, numero_fila, lote) ->
     (fila_staging, errores)` sobre el `procesar_fila` real de cada
-    transform -- cuyas firmas difieren entre sí (ver cada módulo).
+    transform -- cuyas firmas difieren entre sí (ver cada módulo). Cada
+    tipo tiene su constructor en `_CONSTRUCTORES_PROCESADOR`.
 
     Retorna también `defaults_usados` (verify-report WARNING #2): un dict
     `{clave: valor}` con cada `parametro_metodologia` que resolvió a su
@@ -165,50 +248,14 @@ async def _construir_procesador_fila(
     ninguno defaulteó. El caller (`_resolver_encabezado`) lo cuelga de
     `estado.parametros_default_usados` para que `_dry_run` lo persista en
     `carga.log`."""
-    defaults_usados: Dict[str, Any] = {}
-    if tipo == "VENTAS":
-        tipos_inventario_incluidos, fue_default = await parametros.resolver_tipos_inventario_incluidos(
-            db, en_fecha
-        )
-        if fue_default:
-            defaults_usados[parametros.CLAVE_TIPOS_INVENTARIO_INCLUIDOS] = tipos_inventario_incluidos
-        return lambda fila_raw, numero_fila, lote: ventas_mod.procesar_fila(
-            fila_raw, numero_fila=numero_fila, lote=lote, mapa_columnas=mapa_columnas,
-            cache=cache, carga_id=carga_id, proveedor_id=proveedor_id,
-            tipos_inventario_incluidos=tipos_inventario_incluidos,
-        ), defaults_usados
-    if tipo == "INVENTARIO":
-        return lambda fila_raw, numero_fila, lote: inventario_mod.procesar_fila(
-            fila_raw, numero_fila=numero_fila, lote=lote, mapa_columnas=mapa_columnas,
-            cache=cache, carga_id=carga_id, proveedor_id=proveedor_id,
-        ), defaults_usados
-    if tipo == "BACKORDER":
-        estados_backorder_vigentes, fue_default = await parametros.resolver_estados_backorder_vigentes(
-            db, en_fecha
-        )
-        if fue_default:
-            defaults_usados[parametros.CLAVE_ESTADOS_BACKORDER_VIGENTES] = estados_backorder_vigentes
-        return lambda fila_raw, numero_fila, lote: backorder_mod.procesar_fila(
-            fila_raw, numero_fila=numero_fila, lote=lote, mapa_columnas=mapa_columnas,
-            cache=cache, carga_id=carga_id, proveedor_id=proveedor_id,
-            estados_backorder_vigentes=estados_backorder_vigentes,
-        ), defaults_usados
-    if tipo == "DEMANDA_PERDIDA":
-        return lambda fila_raw, numero_fila, lote: demanda_perdida_mod.procesar_fila(
-            fila_raw, numero_fila=numero_fila, lote=lote, mapa_columnas=mapa_columnas,
-            cache=cache, carga_id=carga_id, proveedor_id=proveedor_id,
-        ), defaults_usados
-    if tipo == "FACTURAS_PEDIDOS":
-        return lambda fila_raw, numero_fila, lote: facturas_mod.procesar_fila(
-            fila_raw, numero_fila=numero_fila, lote=lote, mapa_columnas=mapa_columnas,
-            cache=cache, carga_id=carga_id, proveedor_id=proveedor_id,
-        ), defaults_usados
-    if tipo == "INGRESOS_FACTURAS":
-        return lambda fila_raw, numero_fila, lote: ingresos_mod.procesar_fila(
-            fila_raw, numero_fila=numero_fila, lote=lote,
-            mapa_columnas=mapa_columnas, carga_id=carga_id,
-        ), defaults_usados
-    raise ValueError(f"Tipo de movimiento no soportado por el orquestador: {tipo!r}")
+    construir = _CONSTRUCTORES_PROCESADOR.get(tipo)
+    if construir is None:
+        raise ValueError(
+            f"Tipo de movimiento no soportado por el orquestador: {tipo!r}")
+    comunes = dict(
+        mapa_columnas=mapa_columnas, cache=cache, carga_id=carga_id,
+        proveedor_id=proveedor_id)
+    return await construir(db, en_fecha, comunes)
 
 
 async def ejecutar_dry_run(carga_id: uuid.UUID) -> None:
@@ -259,6 +306,9 @@ class _EstadoLoteDryRun:
         # informe muestra como "filas con errores que no se cargaron".
         self.filas_con_error = 0
         self.filas_solo_detalle = 0
+        # Filas de una bodega que no es tienda (`bodegas_excluidas`):
+        # ignoradas sin staging ni error.
+        self.filas_bodega_excluida = 0
         self.histograma: Dict[Tuple[int, int], int] = {}
         # Fecha de venta mas reciente del archivo (solo VENTAS), acumulada en
         # la misma pasada que `histograma`; `_verificar_periodo_ventas` la
@@ -367,9 +417,13 @@ def _procesar_filas_del_lote(
     for fila_raw in datos_del_lote:
         estado.numero_fila_absoluto += 1
         estado.filas_leidas += 1
-        fila_staging, errores_fila = estado.procesar_fila(
+        resultado = estado.procesar_fila(
             fila_raw, estado.numero_fila_absoluto, numero_lote
         )
+        if resultado is resolucion_mod.MarcaFila.BODEGA_EXCLUIDA:
+            estado.filas_bodega_excluida += 1
+            continue
+        fila_staging, errores_fila = resultado
         for error in errores_fila:
             session.add(error)
         if errores_fila:
@@ -521,6 +575,8 @@ async def _cerrar_dry_run(
     log["filas_con_error"] = estado.filas_con_error
     if estado.filas_solo_detalle:
         log["filas_solo_detalle"] = estado.filas_solo_detalle
+    if estado.filas_bodega_excluida:
+        log["filas_bodega_excluida"] = estado.filas_bodega_excluida
     if estado.parametros_default_usados:
         log["parametros_default_usados"] = dict(estado.parametros_default_usados)
     await _verificar_corte_backorder(session, carga, log)

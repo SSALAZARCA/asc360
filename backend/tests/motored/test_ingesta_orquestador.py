@@ -84,6 +84,11 @@ def _queue_cache_y_proveedor(sucursales=None, referencias=None):
     ]
 
 
+def _queue_inventario():
+    """Cache + proveedor + la lectura de `bodegas_excluidas` (sin fila)."""
+    return _queue_cache_y_proveedor() + [[]]
+
+
 # ---------------------------------------------------------------------------
 # Task 9.4 — dry-run genérico (feliz + guard de columna obligatoria)
 # ---------------------------------------------------------------------------
@@ -98,7 +103,7 @@ async def test_dry_run_inventario_happy_path_stages_rows_and_marks_validado(monk
         ]
     )
     monkeypatch.setattr(orquestador.storage, "descargar_archivo", lambda ruta: file_bytes)
-    session = FakeAsyncSession(execute_queue=_queue_cache_y_proveedor())
+    session = FakeAsyncSession(execute_queue=_queue_inventario())
 
     await orquestador._dry_run(session, carga)
 
@@ -121,7 +126,7 @@ async def test_dry_run_missing_mandatory_column_aborts_whole_file_con_errores(mo
         [["Referencia", "Bodega", "Desc.bodega", "Costo prom. uni."], ["REF1", "BA061", "CALI NORTE", 1500]]
     )
     monkeypatch.setattr(orquestador.storage, "descargar_archivo", lambda ruta: file_bytes)
-    session = FakeAsyncSession(execute_queue=_queue_cache_y_proveedor())
+    session = FakeAsyncSession(execute_queue=_queue_inventario())
 
     await orquestador._dry_run(session, carga)
 
@@ -136,7 +141,7 @@ async def test_dry_run_inventario_viejo_sin_costo_se_rechaza_nombrando_la_column
         [["Referencia", "Bodega", "Desc.bodega", "Existencia"], ["REF1", "BA061", "CALI NORTE", 10]]
     )
     monkeypatch.setattr(orquestador.storage, "descargar_archivo", lambda ruta: file_bytes)
-    session = FakeAsyncSession(execute_queue=_queue_cache_y_proveedor())
+    session = FakeAsyncSession(execute_queue=_queue_inventario())
 
     await orquestador._dry_run(session, carga)
 
@@ -159,7 +164,7 @@ async def test_dry_run_archivo_de_ventas_declarado_como_inventario_queda_rechaza
         ]
     )
     monkeypatch.setattr(orquestador.storage, "descargar_archivo", lambda ruta: file_bytes)
-    session = FakeAsyncSession(execute_queue=_queue_cache_y_proveedor())
+    session = FakeAsyncSession(execute_queue=_queue_inventario())
 
     await orquestador._dry_run(session, carga)
 
@@ -177,7 +182,7 @@ async def test_dry_run_inventario_con_costo_en_blanco_valida_la_fila_igual(monke
         ]
     )
     monkeypatch.setattr(orquestador.storage, "descargar_archivo", lambda ruta: file_bytes)
-    session = FakeAsyncSession(execute_queue=_queue_cache_y_proveedor())
+    session = FakeAsyncSession(execute_queue=_queue_inventario())
 
     await orquestador._dry_run(session, carga)
 
@@ -197,7 +202,7 @@ async def test_dry_run_todas_las_filas_rechazadas_es_con_errores_no_validado(mon
         ]
     )
     monkeypatch.setattr(orquestador.storage, "descargar_archivo", lambda ruta: file_bytes)
-    session = FakeAsyncSession(execute_queue=_queue_cache_y_proveedor())
+    session = FakeAsyncSession(execute_queue=_queue_inventario())
 
     await orquestador._dry_run(session, carga)
 
@@ -216,7 +221,7 @@ async def test_dry_run_lee_la_hoja_del_tipo_aunque_la_hoja_activa_sea_otra(monke
     buffer = io.BytesIO()
     workbook.save(buffer)
     monkeypatch.setattr(orquestador.storage, "descargar_archivo", lambda ruta: buffer.getvalue())
-    session = FakeAsyncSession(execute_queue=_queue_cache_y_proveedor())
+    session = FakeAsyncSession(execute_queue=_queue_inventario())
 
     await orquestador._dry_run(session, carga)
 
@@ -233,7 +238,7 @@ async def test_dry_run_encabezado_duplicado_aborta_el_archivo_completo(monkeypat
         ]
     )
     monkeypatch.setattr(orquestador.storage, "descargar_archivo", lambda ruta: file_bytes)
-    session = FakeAsyncSession(execute_queue=_queue_cache_y_proveedor())
+    session = FakeAsyncSession(execute_queue=_queue_inventario())
 
     await orquestador._dry_run(session, carga)
 
@@ -251,7 +256,7 @@ async def test_dry_run_sin_ninguna_fila_valida_emite_error_de_archivo_completo(m
         [["Referencia", "Bodega", "Desc.bodega", "Existencia", "Costo prom. uni."], ["REF1", "BA061", "CALI NORTE", "#N/A", 1500]]
     )
     monkeypatch.setattr(orquestador.storage, "descargar_archivo", lambda ruta: file_bytes)
-    session = FakeAsyncSession(execute_queue=_queue_cache_y_proveedor())
+    session = FakeAsyncSession(execute_queue=_queue_inventario())
 
     await orquestador._dry_run(session, carga)
 
@@ -266,7 +271,7 @@ async def test_dry_run_archivo_con_encabezado_pero_sin_filas_de_datos_es_con_err
     carga = _carga("INVENTARIO", periodo_desde=date(2026, 9, 15), periodo_hasta=date(2026, 9, 15))
     file_bytes = _build_xlsx_bytes([["Referencia", "Bodega", "Desc.bodega", "Existencia", "Costo prom. uni."]])
     monkeypatch.setattr(orquestador.storage, "descargar_archivo", lambda ruta: file_bytes)
-    session = FakeAsyncSession(execute_queue=_queue_cache_y_proveedor())
+    session = FakeAsyncSession(execute_queue=_queue_inventario())
 
     await orquestador._dry_run(session, carga)
 
@@ -285,7 +290,7 @@ async def test_dry_run_con_al_menos_una_fila_valida_no_emite_aviso_de_sin_filas(
         ]
     )
     monkeypatch.setattr(orquestador.storage, "descargar_archivo", lambda ruta: file_bytes)
-    session = FakeAsyncSession(execute_queue=_queue_cache_y_proveedor())
+    session = FakeAsyncSession(execute_queue=_queue_inventario())
 
     await orquestador._dry_run(session, carga)
 
@@ -309,7 +314,7 @@ async def test_dry_run_registra_en_log_cuantas_filas_con_error_no_se_cargan(monk
         ]
     )
     monkeypatch.setattr(orquestador.storage, "descargar_archivo", lambda ruta: file_bytes)
-    session = FakeAsyncSession(execute_queue=_queue_cache_y_proveedor())
+    session = FakeAsyncSession(execute_queue=_queue_inventario())
 
     await orquestador._dry_run(session, carga)
 
@@ -324,7 +329,7 @@ async def test_dry_run_sin_errores_registra_cero_filas_con_error(monkeypatch):
         [["Referencia", "Bodega", "Desc.bodega", "Existencia", "Costo prom. uni."], ["REF1", "BA061", "CALI NORTE", 10, 1500]]
     )
     monkeypatch.setattr(orquestador.storage, "descargar_archivo", lambda ruta: file_bytes)
-    session = FakeAsyncSession(execute_queue=_queue_cache_y_proveedor())
+    session = FakeAsyncSession(execute_queue=_queue_inventario())
 
     await orquestador._dry_run(session, carga)
 
@@ -364,6 +369,7 @@ async def test_dry_run_ventas_periodo_mal_declarado_rechaza_archivo_completo(mon
     monkeypatch.setattr(orquestador.storage, "descargar_archivo", lambda ruta: file_bytes)
     queue = _queue_cache_y_proveedor() + [
         [],  # parametros.resolver_tipos_inventario_incluidos -> obtener_vigente (usa default)
+        [],  # bodegas_excluidas (sin fila -> default)
         [],  # periodo_tolerancia_pct (sin fila -> entorno)
         [],  # delete(CargaFilaStaging) execute
     ]
@@ -396,8 +402,9 @@ async def test_dry_run_ventas_periodo_correcto_queda_validado(monkeypatch):
         ]
     )
     monkeypatch.setattr(orquestador.storage, "descargar_archivo", lambda ruta: file_bytes)
-    # tipos_inventario_incluidos + periodo_tolerancia_pct, ambos sin fila.
-    queue = _queue_cache_y_proveedor() + [[], []]
+    # tipos_inventario_incluidos + bodegas_excluidas + periodo_tolerancia_pct,
+    # los tres sin fila.
+    queue = _queue_cache_y_proveedor() + [[], [], []]
     session = FakeAsyncSession(execute_queue=queue)
 
     await orquestador._dry_run(session, carga)
@@ -575,6 +582,7 @@ async def test_dry_run_ventas_periodo_advertencia_emite_carga_error_por_fila_fue
     )
     queue = _queue_cache_y_proveedor() + [
         [],  # parametros.resolver_tipos_inventario_incluidos (sin fila vigente -> default)
+        [],  # bodegas_excluidas (sin fila -> default)
         [],  # periodo_tolerancia_pct (sin fila -> entorno)
         [fila_agosto],  # re-select de staging para detectar la fila fuera de período
     ]
@@ -777,6 +785,7 @@ async def test_dry_run_ventas_registra_default_usado_en_carga_log(monkeypatch):
     monkeypatch.setattr(orquestador.storage, "descargar_archivo", lambda ruta: file_bytes)
     queue = _queue_cache_y_proveedor() + [
         [],  # parametros.resolver_tipos_inventario_incluidos -> SIN fila vigente
+        [],  # bodegas_excluidas -> default
     ]
     session = FakeAsyncSession(execute_queue=queue)
 
@@ -970,6 +979,7 @@ async def _dry_run_3pct(monkeypatch, filas_tolerancia):
         orquestador.storage, "descargar_archivo", lambda ruta: contenido)
     queue = _queue_cache_y_proveedor() + [
         [],  # tipos_inventario_incluidos -> default
+        [],  # bodegas_excluidas -> default
         filas_tolerancia,  # periodo_tolerancia_pct
         [],  # SELECT de staging del ADVERTENCIA / DELETE del RECHAZO
         [],

@@ -32,7 +32,8 @@ from __future__ import annotations
 import re
 import unicodedata
 import uuid
-from typing import Dict, NamedTuple, Optional, Tuple
+from enum import Enum
+from typing import Any, Dict, FrozenSet, NamedTuple, Optional, Tuple
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -179,6 +180,39 @@ def resolver_sucursal_por_codigo_o_nombre(
     estable; los nombres se renombran en el ERP. Si ambos resuelven a
     sucursales distintas, gana el codigo."""
     return resolver_sucursal(cache, codigo) or resolver_sucursal(cache, nombre)
+
+
+class MarcaFila(Enum):
+    """Resultado de un procesador de fila que NO es el par `(staging,
+    errores)`: la fila se omite a propósito. El orquestador la cuenta
+    aparte de cualquier otro descarte silencioso (`(None, [])`)."""
+
+    BODEGA_EXCLUIDA = "bodega_excluida"
+
+
+def normalizar_codigo_bodega(valor: Any) -> str:
+    """Código de bodega crudo de una celda, recortado y en mayúsculas. Un
+    número entero de Excel (`99999.0`) vale `"99999"`. Vacío -> `""`."""
+    if valor is None:
+        return ""
+    if isinstance(valor, float) and valor.is_integer():
+        valor = int(valor)
+    return str(valor).strip().upper()
+
+
+def normalizar_bodegas_excluidas(codigos: Any) -> FrozenSet[str]:
+    """El valor de `bodegas_excluidas` como conjunto normalizado."""
+    return frozenset(
+        normalizar_codigo_bodega(c) for c in codigos or () if c)
+
+
+def es_bodega_excluida(
+    valor_bodega: Any, excluidas: FrozenSet[str]
+) -> bool:
+    """True si el código de bodega crudo de la fila está en `excluidas`.
+    Un código vacío nunca lo está."""
+    codigo = normalizar_codigo_bodega(valor_bodega)
+    return bool(codigo) and codigo in excluidas
 
 
 def resolver_sucursal_por_sic(cache: CacheResolucion, sic: Optional[str]) -> Optional[uuid.UUID]:
