@@ -33,7 +33,7 @@ SUC_ID = uuid.uuid4()
 
 
 def test_cargo_se_normaliza_a_mayusculas_sin_espacios_de_mas():
-    data = VendedorCreate(nombre="Ana Perez", cargo="  asesor de   repuestos ")
+    data = VendedorCreate(nombre="Ana Perez", cargo="  asesor de   repuestos ", cedula="1")
 
     assert data.cargo == "ASESOR DE REPUESTOS"
 
@@ -41,17 +41,47 @@ def test_cargo_se_normaliza_a_mayusculas_sin_espacios_de_mas():
 @pytest.mark.parametrize("cargo", ["", "   ", "X" * 81])
 def test_cargo_vacio_o_demasiado_largo_se_rechaza(cargo):
     with pytest.raises(ValueError):
-        VendedorCreate(nombre="Ana", cargo=cargo)
+        VendedorCreate(nombre="Ana", cargo=cargo, cedula="1")
 
 
 def test_nombre_vacio_se_rechaza():
     with pytest.raises(ValueError):
-        VendedorCreate(nombre="   ", cargo="OTRO")
+        VendedorCreate(nombre="   ", cargo="OTRO", cedula="1")
 
 
-def test_cedula_se_limpia_y_el_float_de_excel_pierde_el_decimal():
-    assert VendedorCreate(nombre="A", cargo="OTRO", cedula=" 12345.0 ").cedula == "12345"
-    assert VendedorCreate(nombre="A", cargo="OTRO", cedula="  ").cedula is None
+@pytest.mark.parametrize("crudo, esperado", [
+    (" 12345.0 ", "12345"),
+    (1130123456.0, "1130123456"),
+    (1130123456, "1130123456"),
+    ("1.130.123.456", "1130123456"),
+    ("1 130 123 456", "1130123456"),
+    ("  1130123456  ", "1130123456"),
+])
+def test_cedula_se_limpia_a_solo_digitos(crudo, esperado):
+    assert VendedorCreate(nombre="A", cargo="OTRO", cedula=crudo).cedula == esperado
+
+
+@pytest.mark.parametrize("crudo", [None, "", "   ", "...", "ABC123", "12-34"])
+def test_cedula_es_obligatoria_y_solo_numerica(crudo):
+    with pytest.raises(ValueError) as exc:
+        VendedorCreate(nombre="A", cargo="OTRO", cedula=crudo)
+
+    assert "cédula" in str(exc.value).lower()
+
+
+def test_crear_sin_la_clave_cedula_se_rechaza():
+    with pytest.raises(ValueError):
+        VendedorCreate(nombre="A", cargo="OTRO")
+
+
+@pytest.mark.parametrize("crudo", [None, "", "  ", "abc"])
+def test_update_rechaza_una_cedula_enviada_pero_vacia_o_invalida(crudo):
+    with pytest.raises(ValueError):
+        VendedorUpdate(cedula=crudo)
+
+
+def test_update_normaliza_la_cedula_enviada():
+    assert VendedorUpdate(cedula=" 1.234.567.0 ").cedula == "1234567"
 
 
 def test_update_solo_normaliza_los_campos_enviados():
@@ -68,7 +98,7 @@ async def test_create_vendedor_calcula_nombre_norm_como_venta_detalle():
     db = FakeAsyncSession()
 
     vendedor = await maestros.create_vendedor(
-        db, VendedorCreate(nombre="  Ana  Pérez ", cargo="OTRO"), uuid.uuid4())
+        db, VendedorCreate(nombre="  Ana  Pérez ", cargo="OTRO", cedula="1"), uuid.uuid4())
 
     assert vendedor.nombre_norm == normalizar_vendedor("  Ana  Pérez ") == "ANA PEREZ"
     assert vendedor.nombre == "Ana Pérez"
@@ -76,7 +106,7 @@ async def test_create_vendedor_calcula_nombre_norm_como_venta_detalle():
 
 
 async def test_update_vendedor_recalcula_nombre_norm_si_cambia_el_nombre():
-    existente = Vendedor(id=uuid.uuid4(), nombre="Ana", nombre_norm="ANA", cargo="OTRO", activo=True)
+    existente = Vendedor(id=uuid.uuid4(), nombre="Ana", nombre_norm="ANA", cargo="OTRO", activo=True, cedula="1")
     db = FakeAsyncSession()
 
     await maestros.update_vendedor(db, existente, VendedorUpdate(nombre="Ana María"), None)
@@ -85,7 +115,7 @@ async def test_update_vendedor_recalcula_nombre_norm_si_cambia_el_nombre():
 
 
 async def test_deactivate_vendedor_no_borra_y_audita():
-    existente = Vendedor(id=uuid.uuid4(), nombre="Ana", nombre_norm="ANA", cargo="OTRO", activo=True)
+    existente = Vendedor(id=uuid.uuid4(), nombre="Ana", nombre_norm="ANA", cargo="OTRO", activo=True, cedula="1")
     db = FakeAsyncSession()
 
     await maestros.deactivate_vendedor(db, existente, uuid.uuid4())
@@ -97,10 +127,44 @@ async def test_deactivate_vendedor_no_borra_y_audita():
 # --- Validacion de filas ----------------------------------------------------------
 
 
-def test_validate_rows_exige_nombre_y_cargo():
-    _v, errores = validators.validate_rows("vendedor", [{"nombre": "Ana"}, {"cargo": "OTRO"}])
+def test_validate_rows_exige_nombre_cargo_y_cedula():
+    _v, errores = validators.validate_rows("vendedor", [
+        {"nombre": "Ana", "cedula": "1"}, {"cargo": "OTRO", "cedula": "1"}, {"nombre": "Luis", "cargo": "OTRO"}])
 
-    assert [e["fila"] for e in errores] == [1, 2]
+    assert [e["fila"] for e in errores] == [1, 2, 3]
+    assert "'cedula'" in errores[2]["motivo"]
+
+
+def test_una_cedula_con_letras_es_error_de_fila_en_español():
+    _v, errores = validators.validate_rows(
+        "vendedor", [{"nombre": "Ana", "cargo": "OTRO", "cedula": "12AB"}])
+
+    assert [e["fila"] for e in errores] == [1]
+    assert "solo números" in errores[0]["motivo"]
+
+
+def test_la_cedula_del_excel_como_numero_se_normaliza_al_validar():
+    validas, errores = validators.validate_rows(
+        "vendedor", [{"nombre": "Ana", "cargo": "OTRO", "cedula": 1130123456.0}])
+
+    assert errores == [] and len(validas) == 1
+
+
+def test_misma_cedula_con_otro_cargo_o_sucursal_advierte_pero_no_rechaza():
+    suc_a, suc_b = uuid.uuid4(), uuid.uuid4()
+    validas, errores = validators.validate_rows("vendedor", [
+        {"nombre": "MORA DIANA PATRICIA", "cargo": "ASESOR DE REPUESTOS", "cedula": "55", "sucursal_id": suc_a},
+        {"nombre": "MORA BUSTOS DIANA PATRICIA", "cargo": "asesor de repuestos", "cedula": "55.0", "sucursal_id": suc_a},
+        {"nombre": "OTRA", "cargo": "ASESOR DE REPUESTOS", "cedula": "77", "sucursal_id": suc_a},
+        {"nombre": "MORA D P", "cargo": "JEFE DE TALLER", "cedula": "55", "sucursal_id": suc_b},
+    ])
+
+    assert errores == []
+    assert validas[0]["_warnings"] == [] and validas[2]["_warnings"] == []
+    # La 2da es igual a la 1ra en cargo y sucursal: sin aviso. La 4ta difiere.
+    assert validas[1]["_warnings"] == []
+    [aviso] = validas[3]["_warnings"]
+    assert "55" in aviso and "cargo" in aviso and "sucursal" in aviso
 
 
 def test_un_archivo_de_vendedores_vacio_no_es_error():
@@ -166,11 +230,13 @@ async def test_carga_crea_los_nuevos_con_nombre_norm():
     db = FakeAsyncSession(execute_queue=[[]])  # no existe
 
     resultado = await carga.procesar_carga(
-        db, "vendedor", [{"nombre": "Ana Pérez", "cargo": "asesor comercial", "sucursal_id": SUC_ID}])
+        db, "vendedor",
+        [{"nombre": "Ana Pérez", "cargo": "asesor comercial", "sucursal_id": SUC_ID, "cedula": "123"}])
 
     assert resultado.ok and resultado.insertados == 1 and resultado.actualizados == 0
     [nuevo] = db.added_of_type(Vendedor)
     assert (nuevo.nombre_norm, nuevo.cargo, nuevo.sucursal_id) == ("ANA PEREZ", "ASESOR COMERCIAL", SUC_ID)
+    assert nuevo.cedula == "123"
     assert db.committed is True
 
 
@@ -182,21 +248,47 @@ async def test_carga_actualiza_por_nombre_norm_sin_pisar_lo_que_no_vino():
     db = FakeAsyncSession(execute_queue=[[existente]])
 
     resultado = await carga.procesar_carga(
-        db, "vendedor", [{"nombre": "ANA  PÉREZ", "cargo": "JEFE DE TALLER", "cedula": ""}])
+        db, "vendedor", [{"nombre": "ANA  PÉREZ", "cargo": "JEFE DE TALLER", "cedula": "1000"}])
 
     assert resultado.ok and resultado.actualizados == 1 and resultado.insertados == 0
     assert existente.cargo == "JEFE DE TALLER"
-    assert existente.cedula == "999"  # celda en blanco = no provisto
+    assert existente.cedula == "1000"  # la cédula del archivo reemplaza la guardada
     assert existente.usuario_id == usuario  # el Excel nunca toca el usuario
     assert existente.sucursal_id == SUC_ID
     assert db.added_of_type(Vendedor) == []
+
+
+async def test_carga_sin_cedula_no_escribe_nada():
+    db = FakeAsyncSession()
+
+    resultado = await carga.procesar_carga(
+        db, "vendedor", [{"nombre": "Ana", "cargo": "OTRO", "cedula": ""}])
+
+    assert resultado.ok is False and resultado.errores[0].fila == 1
+    assert "cedula" in resultado.errores[0].motivo
+    assert db.added == [] and db.committed is False
+
+
+async def test_carga_con_la_misma_cedula_en_dos_nombres_crea_las_dos_filas_y_advierte():
+    db = FakeAsyncSession(execute_queue=[[], []])
+    filas = [
+        {"nombre": "MORA DIANA PATRICIA", "cargo": "OTRO", "cedula": "55"},
+        {"nombre": "MORA BUSTOS DIANA PATRICIA", "cargo": "JEFE", "cedula": "55"},
+    ]
+
+    resultado = await carga.procesar_carga(db, "vendedor", filas)
+
+    assert resultado.ok and resultado.insertados == 2
+    assert [v.cedula for v in db.added_of_type(Vendedor)] == ["55", "55"]
+    assert [a["fila"] for a in resultado.advertencias] == [2]
 
 
 async def test_carga_invalida_no_escribe_nada():
     db = FakeAsyncSession()
 
     resultado = await carga.procesar_carga(
-        db, "vendedor", [{"nombre": "Ana", "cargo": "OTRO"}, {"nombre": "", "cargo": "OTRO"}])
+        db, "vendedor",
+        [{"nombre": "Ana", "cargo": "OTRO", "cedula": "1"}, {"nombre": "", "cargo": "OTRO", "cedula": "2"}])
 
     assert resultado.ok is False and db.added == [] and db.committed is False
 
@@ -232,8 +324,15 @@ def test_el_excel_se_parsea_con_las_columnas_del_maestro():
     }]
 
 
+def test_el_excel_sin_la_columna_cedula_se_rechaza():
+    contenido = _xlsx(["Nombre vendedor", "Cargo"], [["Ana", "OTRO"]])
+
+    with pytest.raises(carga_excel.ColumnaObligatoriaFaltanteError):
+        carga_excel.parse_excel_rows("vendedor", "v.xlsx", contenido)
+
+
 def test_el_excel_sin_cargo_se_rechaza():
-    contenido = _xlsx(["Nombre vendedor"], [["Ana"]])
+    contenido = _xlsx(["Nombre vendedor", "Cédula"], [["Ana", "1"]])
 
     with pytest.raises(carga_excel.ColumnaObligatoriaFaltanteError):
         carga_excel.parse_excel_rows("vendedor", "v.xlsx", contenido)
@@ -318,11 +417,79 @@ def test_crear_responde_201_y_confirma(_motored_ready):
     override_motored_db(db)
 
     with TestClient(app) as client:
-        r = client.post(URL, json={"nombre": "Ana Pérez", "cargo": "jefe de taller"})
+        r = client.post(URL, json={"nombre": "Ana Pérez", "cargo": "jefe de taller", "cedula": "1.130.123"})
 
     assert r.status_code == 201
     assert r.json()["nombre_norm"] == "ANA PEREZ" and r.json()["cargo"] == "JEFE DE TALLER"
+    assert r.json()["cedula"] == "1130123"
     assert db.committed is True
+
+
+@pytest.mark.parametrize("cedula", [None, "", "  ", "abc"])
+def test_crear_sin_cedula_valida_es_422_y_no_escribe(_motored_ready, cedula):
+    _como("ADMIN")
+    db = FakeAsyncSession(execute_queue=[[], [], []])
+    override_motored_db(db)
+    payload = {"nombre": "Ana", "cargo": "OTRO"}
+    if cedula is not None:
+        payload["cedula"] = cedula
+
+    with TestClient(app) as client:
+        r = client.post(URL, json=payload)
+
+    assert r.status_code == 422
+    assert "cédula" in str(r.json()["detail"]).lower()
+    assert db.committed is False and db.added == []
+
+
+def test_editar_un_vendedor_sin_cedula_exige_llenarla(_motored_ready):
+    _como("ADMIN")
+    v = Vendedor(id=uuid.uuid4(), nombre="Ana", nombre_norm="ANA", cargo="OTRO", activo=True, cedula=None)
+    db = FakeAsyncSession(execute_queue=[[], [v]])
+    override_motored_db(db)
+
+    with TestClient(app) as client:
+        r = client.patch(f"{URL}/{v.id}", json={"cargo": "jefe"})
+
+    assert r.status_code == 422 and "cédula" in str(r.json()["detail"]).lower()
+    assert db.committed is False and v.cargo == "OTRO"
+
+
+def test_editar_un_vendedor_sin_cedula_con_la_cedula_funciona(_motored_ready):
+    _como("ADMIN")
+    v = Vendedor(id=uuid.uuid4(), nombre="Ana", nombre_norm="ANA", cargo="OTRO", activo=True, cedula="")
+    db = FakeAsyncSession(execute_queue=[[], [v]])
+    override_motored_db(db)
+
+    with TestClient(app) as client:
+        r = client.patch(f"{URL}/{v.id}", json={"cedula": "1.234"})
+
+    assert r.status_code == 200 and v.cedula == "1234" and db.committed is True
+
+
+@pytest.mark.parametrize("cedula", ["", None, "xx"])
+def test_editar_no_permite_borrar_la_cedula(_motored_ready, cedula):
+    _como("ADMIN")
+    v = Vendedor(id=uuid.uuid4(), nombre="Ana", nombre_norm="ANA", cargo="OTRO", activo=True, cedula="99")
+    db = FakeAsyncSession(execute_queue=[[], [v]])
+    override_motored_db(db)
+
+    with TestClient(app) as client:
+        r = client.patch(f"{URL}/{v.id}", json={"cedula": cedula})
+
+    assert r.status_code == 422 and v.cedula == "99" and db.committed is False
+
+
+def test_editar_un_vendedor_con_cedula_sin_enviarla_conserva_la_guardada(_motored_ready):
+    _como("ADMIN")
+    v = Vendedor(id=uuid.uuid4(), nombre="Ana", nombre_norm="ANA", cargo="OTRO", activo=True, cedula="99")
+    db = FakeAsyncSession(execute_queue=[[], [v]])
+    override_motored_db(db)
+
+    with TestClient(app) as client:
+        r = client.patch(f"{URL}/{v.id}", json={"cargo": "jefe"})
+
+    assert r.status_code == 200 and v.cedula == "99" and v.cargo == "JEFE"
 
 
 def test_crear_con_nombre_ya_existente_es_409(_motored_ready):
@@ -332,7 +499,7 @@ def test_crear_con_nombre_ya_existente_es_409(_motored_ready):
     override_motored_db(db)
 
     with TestClient(app) as client:
-        r = client.post(URL, json={"nombre": "ana  pérez", "cargo": "OTRO"})
+        r = client.post(URL, json={"nombre": "ana  pérez", "cargo": "OTRO", "cedula": "1"})
 
     assert r.status_code == 409
     assert db.committed is False
@@ -345,7 +512,7 @@ def test_crear_con_carrera_en_el_indice_unico_es_409_y_hace_rollback(_motored_re
     override_motored_db(db)
 
     with TestClient(app) as client:
-        r = client.post(URL, json={"nombre": "Ana", "cargo": "OTRO"})
+        r = client.post(URL, json={"nombre": "Ana", "cargo": "OTRO", "cedula": "1"})
 
     assert r.status_code == 409
     assert db.rolled_back is True and db.committed is False
@@ -353,7 +520,7 @@ def test_crear_con_carrera_en_el_indice_unico_es_409_y_hace_rollback(_motored_re
 
 def test_editar_con_carrera_en_el_indice_unico_es_409_y_hace_rollback(_motored_ready):
     _como("ADMIN")
-    v = Vendedor(id=uuid.uuid4(), nombre="Ana", nombre_norm="ANA", cargo="OTRO", activo=True)
+    v = Vendedor(id=uuid.uuid4(), nombre="Ana", nombre_norm="ANA", cargo="OTRO", activo=True, cedula="1")
     db = FakeAsyncSession(execute_queue=[[], [v], []], raise_integrity_error=True)
     override_motored_db(db)
 
@@ -371,7 +538,7 @@ def test_crear_con_usuario_inexistente_es_422(_motored_ready):
     override_motored_db(db)
 
     with TestClient(app) as client:
-        r = client.post(URL, json={"nombre": "Ana", "cargo": "OTRO", "usuario_id": str(uuid.uuid4())})
+        r = client.post(URL, json={"nombre": "Ana", "cargo": "OTRO", "cedula": "1", "usuario_id": str(uuid.uuid4())})
 
     assert r.status_code == 422
     assert db.committed is False
@@ -380,7 +547,7 @@ def test_crear_con_usuario_inexistente_es_422(_motored_ready):
 def test_editar_enlaza_un_usuario_y_audita(_motored_ready):
     _como("ADMIN")
     usuario = uuid.uuid4()
-    v = Vendedor(id=uuid.uuid4(), nombre="Ana", nombre_norm="ANA", cargo="OTRO", activo=True)
+    v = Vendedor(id=uuid.uuid4(), nombre="Ana", nombre_norm="ANA", cargo="OTRO", activo=True, cedula="1")
     # sonda, vendedor, usuario existe, nombres para la respuesta
     db = FakeAsyncSession(execute_queue=[[], [v], [(usuario,)], [(None, "Ana Usuaria")]])
     override_motored_db(db)
@@ -395,7 +562,7 @@ def test_editar_enlaza_un_usuario_y_audita(_motored_ready):
 
 def test_editar_puede_desenlazar_el_usuario_con_null(_motored_ready):
     _como("ADMIN")
-    v = Vendedor(id=uuid.uuid4(), nombre="Ana", nombre_norm="ANA", cargo="OTRO", activo=True, usuario_id=uuid.uuid4())
+    v = Vendedor(id=uuid.uuid4(), nombre="Ana", nombre_norm="ANA", cargo="OTRO", activo=True, usuario_id=uuid.uuid4(), cedula="1")
     db = FakeAsyncSession(execute_queue=[[], [v]])
     override_motored_db(db)
 
@@ -407,8 +574,8 @@ def test_editar_puede_desenlazar_el_usuario_con_null(_motored_ready):
 
 def test_editar_el_nombre_a_uno_de_otra_persona_es_409(_motored_ready):
     _como("ADMIN")
-    v = Vendedor(id=uuid.uuid4(), nombre="Ana", nombre_norm="ANA", cargo="OTRO", activo=True)
-    otra = Vendedor(id=uuid.uuid4(), nombre="Luis", nombre_norm="LUIS", cargo="OTRO", activo=True)
+    v = Vendedor(id=uuid.uuid4(), nombre="Ana", nombre_norm="ANA", cargo="OTRO", activo=True, cedula="1")
+    otra = Vendedor(id=uuid.uuid4(), nombre="Luis", nombre_norm="LUIS", cargo="OTRO", activo=True, cedula="2")
     db = FakeAsyncSession(execute_queue=[[], [v], [otra]])
     override_motored_db(db)
 
@@ -420,7 +587,7 @@ def test_editar_el_nombre_a_uno_de_otra_persona_es_409(_motored_ready):
 
 def test_desactivar_marca_inactivo_sin_borrar(_motored_ready):
     _como("COMPRAS")
-    v = Vendedor(id=uuid.uuid4(), nombre="Ana", nombre_norm="ANA", cargo="OTRO", activo=True)
+    v = Vendedor(id=uuid.uuid4(), nombre="Ana", nombre_norm="ANA", cargo="OTRO", activo=True, cedula="1")
     db = FakeAsyncSession(execute_queue=[[], [v]])
     override_motored_db(db)
 
@@ -496,7 +663,7 @@ def test_crear_devuelve_los_nombres_reales_de_sucursal_y_usuario(_motored_ready)
 
     with TestClient(app) as client:
         r = client.post(URL, json={
-            "nombre": "Ana", "cargo": "OTRO", "sucursal_id": str(suc), "usuario_id": str(usr)})
+            "nombre": "Ana", "cargo": "OTRO", "cedula": "1", "sucursal_id": str(suc), "usuario_id": str(usr)})
 
     assert r.status_code == 201
     assert r.json()["sucursal_nombre"] == "CALI NORTE"
@@ -506,7 +673,7 @@ def test_crear_devuelve_los_nombres_reales_de_sucursal_y_usuario(_motored_ready)
 def test_editar_devuelve_los_nombres_reales_de_sucursal_y_usuario(_motored_ready):
     _como("ADMIN")
     suc = uuid.uuid4()
-    v = Vendedor(id=uuid.uuid4(), nombre="Ana", nombre_norm="ANA", cargo="OTRO", activo=True)
+    v = Vendedor(id=uuid.uuid4(), nombre="Ana", nombre_norm="ANA", cargo="OTRO", activo=True, cedula="1")
     # sonda, vendedor, sucursal existe, nombres para la respuesta
     db = FakeAsyncSession(execute_queue=[[], [v], [(suc,)], [("CALI NORTE", None)]])
     override_motored_db(db)

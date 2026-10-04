@@ -65,25 +65,25 @@ async def test_el_upsert_por_nombre_norm_no_duplica_a_la_misma_persona(sesion):
     primera = await carga.procesar_carga(
         sesion, "vendedor", [{"nombre": f"Ana  Pérez {sfx}", "cargo": "asesor de repuestos", "cedula": "111"}])
     segunda = await carga.procesar_carga(
-        sesion, "vendedor", [{"nombre": f"ANA PEREZ {sfx}", "cargo": "jefe de taller", "cedula": ""}])
+        sesion, "vendedor", [{"nombre": f"ANA PEREZ {sfx}", "cargo": "jefe de taller", "cedula": "222"}])
 
     assert primera.insertados == 1 and segunda.actualizados == 1 and segunda.insertados == 0
     [ana] = await _vendedores_de(sesion, normalizar_vendedor(f"Ana Pérez {sfx}"))
     assert ana.nombre == f"Ana Pérez {sfx}"  # el nombre guardado no se reescribe
     assert ana.cargo == "JEFE DE TALLER"
-    assert ana.cedula == "111"  # celda en blanco = no provisto
+    assert ana.cedula == "222"  # la cedula del archivo reemplaza la guardada
 
 
 async def test_la_carga_no_desactiva_ni_desenlaza_a_nadie(sesion):
     sfx = _sufijo()
-    await carga.procesar_carga(sesion, "vendedor", [{"nombre": f"Luis {sfx}", "cargo": "OTRO"}])
+    await carga.procesar_carga(sesion, "vendedor", [{"nombre": f"Luis {sfx}", "cargo": "OTRO", "cedula": "5"}])
     [luis] = await _vendedores_de(sesion, f"LUIS {sfx}")
     luis.activo = False
     await sesion.flush()
 
     # Un archivo sin Luis, y otro con Luis: ninguno lo borra ni lo reactiva.
-    await carga.procesar_carga(sesion, "vendedor", [{"nombre": f"Otra {sfx}", "cargo": "OTRO"}])
-    await carga.procesar_carga(sesion, "vendedor", [{"nombre": f"Luis {sfx}", "cargo": "CAJERO POSVENTA"}])
+    await carga.procesar_carga(sesion, "vendedor", [{"nombre": f"Otra {sfx}", "cargo": "OTRO", "cedula": "6"}])
+    await carga.procesar_carga(sesion, "vendedor", [{"nombre": f"Luis {sfx}", "cargo": "CAJERO POSVENTA", "cedula": "5"}])
 
     [luis] = await _vendedores_de(sesion, f"LUIS {sfx}")
     assert luis.activo is False and luis.cargo == "CAJERO POSVENTA"
@@ -107,9 +107,9 @@ async def test_la_sucursal_se_resuelve_por_nombre_prefijo_mr_y_alias(sesion):
     sesion.add(SucursalAlias(id=uuid.uuid4(), texto_normalizado=f"SEDE VIEJA {sfx}", sucursal_id=suc.id))
     await sesion.flush()
     filas = [
-        {"nombre": f"A {sfx}", "cargo": "OTRO", "sucursal_nombre": f"MR cali  norte {sfx}"},
-        {"nombre": f"B {sfx}", "cargo": "OTRO", "sucursal_nombre": f"sede vieja {sfx}"},
-        {"nombre": f"C {sfx}", "cargo": "OTRO", "sucursal_nombre": f"No Existe {sfx}"},
+        {"nombre": f"A {sfx}", "cargo": "OTRO", "cedula": "65", "sucursal_nombre": f"MR cali  norte {sfx}"},
+        {"nombre": f"B {sfx}", "cargo": "OTRO", "cedula": "66", "sucursal_nombre": f"sede vieja {sfx}"},
+        {"nombre": f"C {sfx}", "cargo": "OTRO", "cedula": "67", "sucursal_nombre": f"No Existe {sfx}"},
     ]
 
     resueltas, errores = await _resolver_relaciones(sesion, "vendedor", filas)

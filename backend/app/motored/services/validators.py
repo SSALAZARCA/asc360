@@ -18,7 +18,7 @@ from app.motored.schemas.cliente_tecnired import ClienteTecniredCreate, normaliz
 from app.motored.schemas.proveedor import ProveedorCreate
 from app.motored.schemas.referencia import ReferenciaCreate
 from app.motored.schemas.sucursal import SucursalCreate
-from app.motored.schemas.vendedor import VendedorCreate
+from app.motored.schemas.vendedor import VendedorCreate, limpiar_cedula, normalizar_cargo_de_fila
 
 Row = Dict[str, Any]
 RowError = Dict[str, Any]
@@ -67,7 +67,7 @@ REQUIRED_FIELDS = {
     "proveedor": ["codigo", "nombre"],
     "referencia": ["codigo", "proveedor_codigo"],
     "cliente_tecnired": ["nit"],
-    "vendedor": ["nombre", "cargo"],
+    "vendedor": ["nombre", "cargo", "cedula"],
 }
 
 
@@ -151,6 +151,30 @@ def _schema_validation_error(entidad: str, cleaned: Row) -> Optional[str]:
     return None
 
 
+def _advertencias_cedula_compartida(valid_rows: List[Row]) -> None:
+    """Una persona puede estar en el ERP con varios nombres y por eso aparecer
+    en varias filas con la MISMA cedula (el maestro guarda una fila por nombre
+    del ERP). Si esas filas difieren en cargo o sucursal no es un error, pero
+    se avisa en la fila que difiere de la primera con esa cedula. Edita
+    `_warnings` IN-PLACE."""
+    primera_por_cedula: Dict[str, Row] = {}
+    for row in valid_rows:
+        cedula = limpiar_cedula(row["cedula"])
+        primera = primera_por_cedula.setdefault(cedula, row)
+        if primera is row:
+            continue
+        diferencias = []
+        if normalizar_cargo_de_fila(primera["cargo"]) != normalizar_cargo_de_fila(row["cargo"]):
+            diferencias.append("cargo")
+        if primera.get("sucursal_id") != row.get("sucursal_id"):
+            diferencias.append("sucursal")
+        if diferencias:
+            row["_warnings"].append(
+                f"La cédula {cedula} ya está en la fila de '{primera['nombre']}' con otro "
+                f"{' y otra '.join(diferencias)}: se guarda igual, revise que sea la misma persona."
+            )
+
+
 def validate_rows(entidad: str, rows: List[Row]) -> Tuple[List[Row], List[RowError]]:
     """Valida TODAS las filas de una carga masiva para `entidad` en un solo
     pase. Retorna `(filas_validas, errores)`:
@@ -197,5 +221,8 @@ def validate_rows(entidad: str, rows: List[Row]) -> Tuple[List[Row], List[RowErr
 
         cleaned["_warnings"] = warnings
         valid_rows.append(cleaned)
+
+    if entidad == "vendedor":
+        _advertencias_cedula_compartida(valid_rows)
 
     return valid_rows, errors

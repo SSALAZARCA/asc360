@@ -13,8 +13,9 @@ Reglas que comparten TODAS las consultas (`_desde_ventas`):
 - Linea = `referencia.linea_comercial` (recortada, mayusculas, sin tildes).
 - Cliente normalizado con la MISMA regla que `normalizar_nit` (ver
   `_expr_cliente_norm`), para cruzar con HMCL y con la lista Tecnired.
-- Fila del tablero (`_expr_clave`): una persona por asesor de repuestos, un
-  grupo para asesores comerciales, otro para otros cargos y "resto" para quien
+- Fila del tablero (`_expr_clave`): una persona por asesor de repuestos (una
+  persona = una CEDULA: todos los nombres del ERP con la misma cedula son una
+  fila; sin cedula, una fila por nombre), un grupo para asesores comerciales, otro para otros cargos y "resto" para quien
   no esta (activo) en el maestro. El mapa cargo -> grupo es
   `tablero_asesores.GRUPO_POR_CARGO`.
 
@@ -58,12 +59,24 @@ def _constante(texto: str):
 # --- Expresiones ----------------------------------------------------------------------------
 
 
+def _expr_identidad():
+    """Quien es la persona detras de la linea: su cedula (el maestro tiene una
+    fila por nombre del ERP, todas con la misma cedula) o, sin cedula, el propio
+    vendedor; para quien no esta en el maestro, su nombre normalizado. Misma
+    regla que `tablero_asesores.identidad_de_vendedor`."""
+    cedula = func.nullif(func.trim(Vendedor.cedula), _constante(""))
+    return case(
+        (Vendedor.id.is_(None), VentaDetalle.vendedor_norm),
+        else_=func.coalesce(cedula, cast(Vendedor.id, String)),
+    )
+
+
 def _expr_clave():
     """Fila del tablero a la que pertenece cada linea de venta."""
     ramas = []
     personas = [c for c, g in t.GRUPO_POR_CARGO.items() if g == t.TIPO_PERSONA]
     ramas.append((Vendedor.id.is_(None), _constante(t.GRUPO_RESTO)))
-    ramas.append((Vendedor.cargo.in_(personas), _constante(t.PREFIJO_PERSONA).concat(cast(Vendedor.id, String))))
+    ramas.append((Vendedor.cargo.in_(personas), _constante(t.PREFIJO_PERSONA).concat(_expr_identidad())))
     for grupo in sorted(set(t.GRUPO_POR_CARGO.values()) - {t.TIPO_PERSONA}):
         cargos = [c for c, g in t.GRUPO_POR_CARGO.items() if g == grupo]
         ramas.append((Vendedor.cargo.in_(cargos), _constante(grupo)))
@@ -277,21 +290,25 @@ async def consultar_clientes(db, inicio, fin, modo_hmcl, *, por_grupo: bool) -> 
 
 
 async def consultar_personas(db, inicio, fin, modo_hmcl) -> List[FilaPersona]:
-    """Quienes hay detras de cada fila: cuantos vendedores distintos y, para una
-    persona, su nombre, cargo y punto de venta (sucursal principal)."""
+    """Quienes hay detras de cada fila: cuantas personas distintas (por cedula) y,
+    para una persona, su nombre, cargo y punto de venta (sucursal principal) --
+    los del nombre del ERP con mas ventas en el rango. La venta es la misma del
+    tablero (solo las 7 lineas)."""
     lineas = _lineas_por_referencia()
     clave = _expr_clave().label("clave")
+    identidad = _expr_identidad().label("identidad")
+    columnas = [
+        clave, identidad, VentaDetalle.vendedor_norm, Vendedor.nombre, Vendedor.cargo, Sucursal.nombre,
+    ]
     consulta = _desde_ventas(
-        select(
-            clave,
-            func.count(func.distinct(VentaDetalle.vendedor_norm)),
-            func.min(Vendedor.nombre),
-            func.min(Vendedor.cargo),
-            func.min(Sucursal.nombre),
-        ).group_by(clave),
+        select(*columnas, func.sum(_expr_venta())).group_by(*columnas),
         inicio, fin, modo_hmcl, lineas, solo_lineas_reconocidas=True,
     ).outerjoin(Sucursal, Sucursal.id == Vendedor.sucursal_id)
-    return [FilaPersona(*fila) for fila in (await db.execute(consulta)).all()]
+    filas = [
+        t.FilaVendedorVenta(clave_, identidad_, nombre, cargo, punto, Decimal(venta))
+        for clave_, identidad_, _norm, nombre, cargo, punto, venta in (await db.execute(consulta)).all()
+    ]
+    return t.construir_personas(filas)
 
 
 async def calcular_tablero(db: AsyncSession, desde: str, hasta: str, modo_hmcl: str) -> Dict[str, Any]:

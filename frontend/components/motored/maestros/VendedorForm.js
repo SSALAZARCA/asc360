@@ -71,8 +71,14 @@ export default function VendedorForm({ form, setForm, sucursales, usuarios, edit
           ))}
         </select>
       </Campo>
-      <Campo label="Cédula" tooltip="Documento de identidad. Es opcional.">
-        <input type="text" value={form.cedula} onChange={set('cedula')} />
+      <Campo
+        label="Cédula"
+        tooltip="Documento de identidad, solo números. Es obligatoria. Si la misma persona aparece en el ERP con dos nombres, cargá las dos filas con la misma cédula: el tablero las junta en una sola persona."
+      >
+        <input
+          type="text" inputMode="numeric" value={form.cedula} onChange={set('cedula')} required
+          pattern="[0-9.\s]+" title="Solo números (se aceptan puntos y espacios)."
+        />
       </Campo>
       <Campo
         label="Usuario enlazado"

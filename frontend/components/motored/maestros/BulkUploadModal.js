@@ -188,9 +188,9 @@ const COLUMNAS_POR_ENTIDAD = {
       help: 'Sucursal principal donde trabaja, con el nombre que ya tiene en la pestaña Sucursales. Si el nombre no existe, el archivo se rechaza.',
     },
     {
-      key: 'cedula', label: 'Cédula', required: false,
+      key: 'cedula', label: 'Cédula', required: true,
       aliases: ['cedula', 'cédula', 'documento', 'identificacion'],
-      help: 'Documento de identidad. Es opcional.',
+      help: 'Documento de identidad, solo números. Es obligatoria. Si una persona está en el ERP con dos nombres, deje dos filas con la misma cédula: el tablero las junta en una sola persona.',
     },
   ],
   // Lista de NIT de clientes Tecnired: cada carga REEMPLAZA la lista completa.

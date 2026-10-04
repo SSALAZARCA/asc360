@@ -240,6 +240,11 @@ async def editar_vendedor(
 ) -> dict:
     vendedor = await _vendedor_o_404(db, vendedor_id)
     data = _validado_o_422(VendedorUpdate, payload)
+    if not (vendedor.cedula or "").strip() and data.cedula is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Este vendedor no tiene cédula: complétela para guardar los cambios.",
+        )
     if data.nombre is not None:
         await _verificar_nombre_libre(db, data.nombre, excepto_id=vendedor.id)
     await _verificar_referencias(db, data.sucursal_id, data.usuario_id)

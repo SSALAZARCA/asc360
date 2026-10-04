@@ -208,7 +208,7 @@ ALIASES_POR_ENTIDAD: Dict[str, List[Dict[str, Any]]] = {
             "aliases": ["sucursal", "sucursal_nombre", "sucursal principal"],
         },
         {
-            "key": "cedula", "label": "Cédula", "required": False,
+            "key": "cedula", "label": "Cédula", "required": True,
             "aliases": ["cedula", "cédula", "documento", "identificacion"],
         },
     ],

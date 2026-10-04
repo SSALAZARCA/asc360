@@ -91,6 +91,19 @@ class FilaPersona(NamedTuple):
     nombre: Optional[str]
     cargo: Optional[str]
     punto_venta: Optional[str]
+    cargos: Tuple[str, ...] = ()  # todos los cargos de los nombres del ERP de la persona
+
+
+class FilaVendedorVenta(NamedTuple):
+    """Venta (de las 7 lineas) de UN nombre del ERP dentro de una fila del
+    tablero, con los datos del maestro de ese nombre. `identidad` dice quien es
+    la persona: su cedula o, sin cedula, el propio vendedor."""
+    clave: str
+    identidad: str
+    nombre: Optional[str]
+    cargo: Optional[str]
+    punto_venta: Optional[str]
+    venta: Decimal
 
 
 # --- Normalizacion y claves ----------------------------------------------------------------
@@ -117,6 +130,36 @@ def clave_persona(vendedor_id: Any) -> str:
 
 def es_clave_persona(clave: str) -> bool:
     return clave.startswith(PREFIJO_PERSONA)
+
+
+def identidad_de_vendedor(cedula: Optional[str], respaldo: str) -> str:
+    """Una persona puede estar en el maestro con varios nombres del ERP (una fila
+    por nombre) y todos comparten su cedula: ESA es su identidad. Una fila sin
+    cedula (legado) es su propia persona (`respaldo`: su id o su nombre)."""
+    limpia = (cedula or "").strip()
+    return limpia or respaldo
+
+
+def construir_personas(filas: Iterable[FilaVendedorVenta]) -> List[FilaPersona]:
+    """Quienes hay detras de cada fila del tablero. Una fila de persona junta
+    todos los nombres del ERP con la misma cedula: muestra el nombre (con su
+    cargo y punto de venta) de la que mas vendio -- a igual venta, el primero
+    alfabeticamente -- y lista los cargos de todas. Una fila de grupo cuenta
+    personas distintas, no nombres."""
+    por_clave: Dict[str, List[FilaVendedorVenta]] = defaultdict(list)
+    for f in filas:
+        por_clave[f.clave].append(f)
+
+    resultado: List[FilaPersona] = []
+    for clave, miembros in por_clave.items():
+        if es_clave_persona(clave):
+            principal = min(miembros, key=lambda m: (-m.venta, (m.nombre or "").upper(), m.nombre or ""))
+            cargos = tuple(sorted({m.cargo for m in miembros if m.cargo}))
+            resultado.append(FilaPersona(
+                clave, 1, principal.nombre, principal.cargo, principal.punto_venta, cargos))
+        else:
+            resultado.append(FilaPersona(clave, len({m.identidad for m in miembros}), None, None, None))
+    return resultado
 
 
 def nombre_de_grupo(clave: str, personas: int) -> str:
@@ -326,7 +369,7 @@ ORDEN_GRUPOS = (GRUPO_COMERCIALES, GRUPO_OTROS, GRUPO_RESTO)
 
 def _fila_total(acum, facturas, clientes, personas, meses) -> Dict[str, Any]:
     fila = {"clave": CLAVE_TOTAL, "tipo": "TOTAL", "nombre": "TOTAL", "cargo": None,
-            "punto_venta": None, "personas": personas}
+            "punto_venta": None, "cargos": [], "cargo_conflicto": False, "personas": personas}
     fila.update(_indicadores(acum, facturas, clientes, meses))
     return fila
 
@@ -365,12 +408,15 @@ def construir_tablero(
                 nombre=(info.nombre if info and info.nombre else clave),
                 cargo=info.cargo if info else None,
                 punto_venta=info.punto_venta if info else None,
+                cargos=list(info.cargos) if info else [],
+                cargo_conflicto=bool(info and len(info.cargos) > 1),
                 personas=1,
             )
         else:
             n = info.personas if info else 0
             fila.update(
-                tipo="GRUPO", nombre=nombre_de_grupo(clave, n), cargo=None, punto_venta=None, personas=n,
+                tipo="GRUPO", nombre=nombre_de_grupo(clave, n), cargo=None, punto_venta=None,
+                cargos=[], cargo_conflicto=False, personas=n,
             )
         fila.update(_indicadores(acum, facturas_por.get(clave), clientes_por.get(clave), meses))
         filas.append(fila)

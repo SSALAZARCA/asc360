@@ -152,12 +152,55 @@ describe('VendedoresTab — manual create and edit', () => {
     fireEvent.change(screen.getByLabelText(/^Nombre vendedor/, { selector: 'input' }), { target: { value: 'Pedro Soto' } });
     fireEvent.change(screen.getByLabelText(/^Cargo/, { selector: 'input' }), { target: { value: 'Otro' } });
     fireEvent.change(screen.getByLabelText(/^Sucursal/, { selector: 'select' }), { target: { value: 's1' } });
+    fireEvent.change(screen.getByLabelText(/^Cédula/, { selector: 'input' }), { target: { value: '1130999' } });
     fireEvent.click(screen.getByRole('button', { name: 'Crear vendedor' }));
 
     await waitFor(() => expect(mockCreateVendedor).toHaveBeenCalledWith({
-      nombre: 'Pedro Soto', cargo: 'Otro', sucursal_id: 's1', cedula: '', usuario_id: null,
+      nombre: 'Pedro Soto', cargo: 'Otro', sucursal_id: 's1', cedula: '1130999', usuario_id: null,
     }));
     await waitFor(() => expect(mockListVendedores.mock.calls.length).toBeGreaterThan(1));
+  });
+
+  it('requires the cédula: the field is mandatory and an empty one blocks the save', async () => {
+    await renderTab();
+    const cedula = screen.getByLabelText(/^Cédula/, { selector: 'input' });
+    expect(cedula).toBeRequired();
+
+    fireEvent.change(screen.getByLabelText(/^Nombre vendedor/, { selector: 'input' }), { target: { value: 'Pedro Soto' } });
+    fireEvent.change(screen.getByLabelText(/^Cargo/, { selector: 'input' }), { target: { value: 'Otro' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Crear vendedor' }));
+
+    await new Promise((r) => setTimeout(r, 20));
+    expect(mockCreateVendedor).not.toHaveBeenCalled();
+  });
+
+  it('rejects a cédula with letters before calling the API', async () => {
+    await renderTab();
+
+    fireEvent.change(screen.getByLabelText(/^Nombre vendedor/, { selector: 'input' }), { target: { value: 'Pedro Soto' } });
+    fireEvent.change(screen.getByLabelText(/^Cargo/, { selector: 'input' }), { target: { value: 'Otro' } });
+    fireEvent.change(screen.getByLabelText(/^Cédula/, { selector: 'input' }), { target: { value: 'abc' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Crear vendedor' }));
+
+    await new Promise((r) => setTimeout(r, 20));
+    expect(mockCreateVendedor).not.toHaveBeenCalled();
+  });
+
+  it('forces filling in the cédula when editing a vendedor that has none', async () => {
+    await renderTab();
+    const filaLuis = within(tablaVendedores()).getByText('Luis Ríos').closest('tr');
+
+    fireEvent.click(within(filaLuis).getByRole('button', { name: 'Editar' }));
+    const cedula = screen.getByLabelText(/^Cédula/, { selector: 'input' });
+    expect(cedula).toHaveValue('');
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(mockUpdateVendedor).not.toHaveBeenCalled();
+
+    fireEvent.change(cedula, { target: { value: '99887766' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+
+    await waitFor(() => expect(mockUpdateVendedor).toHaveBeenCalledWith('v2', expect.objectContaining({ cedula: '99887766' })));
   });
 
   it('links an existing usuario when editing', async () => {
@@ -179,6 +222,7 @@ describe('VendedoresTab — manual create and edit', () => {
 
     fireEvent.click(within(filaLuis).getByRole('button', { name: 'Editar' }));
     fireEvent.change(screen.getByLabelText(/^Usuario enlazado/, { selector: 'select' }), { target: { value: '' } });
+    fireEvent.change(screen.getByLabelText(/^Cédula/, { selector: 'input' }), { target: { value: '55' } });
     fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
 
     await waitFor(() => expect(mockUpdateVendedor).toHaveBeenCalledWith('v2', expect.objectContaining({ usuario_id: null, sucursal_id: null })));
@@ -208,6 +252,7 @@ describe('VendedoresTab — manual create and edit', () => {
 
     fireEvent.change(screen.getByLabelText(/^Nombre vendedor/, { selector: 'input' }), { target: { value: 'Ana Pérez' } });
     fireEvent.change(screen.getByLabelText(/^Cargo/, { selector: 'input' }), { target: { value: 'Otro' } });
+    fireEvent.change(screen.getByLabelText(/^Cédula/, { selector: 'input' }), { target: { value: '123' } });
     fireEvent.click(screen.getByRole('button', { name: 'Crear vendedor' }));
 
     expect(await screen.findByText('Ya existe un vendedor con ese nombre')).toBeInTheDocument();
@@ -240,6 +285,7 @@ describe('VendedoresTab — vendedores sin registrar', () => {
     const tabla = await screen.findByRole('table', { name: /sin registrar/i });
     fireEvent.click(within(tabla).getByRole('button', { name: /Agregar/ }));
     fireEvent.change(screen.getByLabelText(/^Cargo/, { selector: 'input' }), { target: { value: 'Jefe de taller' } });
+    fireEvent.change(screen.getByLabelText(/^Cédula/, { selector: 'input' }), { target: { value: '123' } });
     mockListSinRegistrar.mockClear();
 
     fireEvent.click(screen.getByRole('button', { name: 'Crear vendedor' }));
@@ -267,7 +313,7 @@ describe('VendedoresTab — Excel upload', () => {
 });
 
 describe('BulkUploadModal — vendedor', () => {
-  it('lists the four columns with required flags and help', () => {
+  it('lists the four columns with required flags and help (Cédula is required)', () => {
     render(<BulkUploadModal entidad="vendedor" onClose={jest.fn()} onSuccess={jest.fn()} />);
 
     const items = screen.getAllByRole('listitem').map((li) => li.textContent);
@@ -275,7 +321,7 @@ describe('BulkUploadModal — vendedor', () => {
     expect(hay('Nombre vendedor', '(obligatoria)')).toBe(true);
     expect(hay('Cargo', '(obligatoria)')).toBe(true);
     expect(hay('Sucursal', '(opcional)')).toBe(true);
-    expect(hay('Cédula', '(opcional)')).toBe(true);
+    expect(hay('Cédula', '(obligatoria)')).toBe(true);
     const ayudas = screen.getAllByRole('note').map((n) => n.getAttribute('aria-label'));
     expect(ayudas.some((t) => /ERP/.test(t))).toBe(true);
   });

@@ -6,7 +6,8 @@ from typing import Optional
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 _ESPACIOS_RE = re.compile(r"\s+")
-_FLOAT_ENTERO_RE = re.compile(r"^(\d+)\.0+$")
+_DECIMAL_CERO_RE = re.compile(r"\.0$")
+_SEPARADORES_RE = re.compile(r"[\s.]+")
 
 
 def _limpiar_nombre(valor):
@@ -25,29 +26,38 @@ def _normalizar_cargo(valor):
     return texto.upper() if texto is not None else texto
 
 
-def _limpiar_cedula(valor):
-    """Una cedula leida de Excel como numero llega como `123.0`: se le quita el
-    decimal. Vacia = no provista."""
-    if valor is None:
-        return None
-    texto = str(valor).strip()
+def limpiar_cedula(valor):
+    """Cedula = solo digitos. Una cedula leida de Excel como numero llega como
+    `123.0` (se le quita ese decimal) y las escritas con puntos o espacios
+    ("1.130.123.456") se compactan. Es obligatoria: vacia o con letras se rechaza."""
+    texto = "" if valor is None else str(valor).strip()
+    texto = _DECIMAL_CERO_RE.sub("", texto)
+    texto = _SEPARADORES_RE.sub("", texto)
     if not texto:
-        return None
-    coincide = _FLOAT_ENTERO_RE.match(texto)
-    return coincide.group(1) if coincide else texto
+        raise ValueError("La cédula es obligatoria")
+    if not texto.isascii() or not texto.isdigit():
+        raise ValueError("La cédula debe tener solo números (sin letras ni guiones)")
+    return texto
+
+
+def normalizar_cargo_de_fila(valor) -> str:
+    """Mismo cargo que quedaria guardado (mayusculas, sin espacios de mas)."""
+    return _normalizar_cargo(valor)
 
 
 class VendedorCreate(BaseModel):
     nombre: str = Field(max_length=255)
     cargo: str = Field(max_length=80)
     sucursal_id: Optional[uuid.UUID] = None
-    cedula: Optional[str] = Field(default=None, max_length=20)
+    # Obligatoria: `validate_default` hace que omitirla tambien dispare el
+    # validador y de el mensaje en español (la columna sigue nullable en la base).
+    cedula: Optional[str] = Field(default=None, max_length=20, validate_default=True)
     usuario_id: Optional[uuid.UUID] = None
     activo: bool = True
 
     _nombre = field_validator("nombre", mode="before")(_limpiar_nombre)
     _cargo = field_validator("cargo", mode="before")(_normalizar_cargo)
-    _cedula = field_validator("cedula", mode="before")(_limpiar_cedula)
+    _cedula = field_validator("cedula", mode="before")(limpiar_cedula)
 
 
 class VendedorUpdate(BaseModel):
@@ -60,7 +70,7 @@ class VendedorUpdate(BaseModel):
 
     _nombre = field_validator("nombre", mode="before")(_limpiar_nombre)
     _cargo = field_validator("cargo", mode="before")(_normalizar_cargo)
-    _cedula = field_validator("cedula", mode="before")(_limpiar_cedula)
+    _cedula = field_validator("cedula", mode="before")(limpiar_cedula)
 
 
 class VendedorRead(BaseModel):

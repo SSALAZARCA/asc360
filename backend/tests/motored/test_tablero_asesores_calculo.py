@@ -153,7 +153,7 @@ FACTURAS = [
 ]
 CLIENTES = [FilaClientes(A, 3, D(3000)), FilaClientes(t.CLAVE_TOTAL, 8, D(7000))]
 PERSONAS = [
-    FilaPersona(A, 1, "Ana Pérez", "ASESOR DE REPUESTOS", "CALI NORTE"),
+    FilaPersona(A, 1, "Ana Pérez", "ASESOR DE REPUESTOS", "CALI NORTE", ("ASESOR DE REPUESTOS",)),
     FilaPersona(B, 1, "Beto Ruiz", "ASESOR DE REPUESTOS SUPERNUMERARIO", "BOGOTA"),
     FilaPersona(t.GRUPO_RESTO, 3, None, None, None),
 ]
@@ -281,3 +281,77 @@ def test_tablero_vacio_no_revienta():
     assert r["filas"] == [] and r["total"]["venta"]["total"] == 0.0
     assert r["total"]["venta"]["pct_hmcl"] is None
     assert r["venta_sin_linea"] == 0.0 and r["pct_venta_sin_linea"] is None
+
+
+# --- Una persona con varios nombres del ERP (misma cedula) -----------------------------------
+
+
+def _v(clave, identidad, nombre, cargo, punto, venta):
+    return t.FilaVendedorVenta(clave, identidad, nombre, cargo, punto, D(venta))
+
+
+def test_la_identidad_de_una_persona_con_cedula_es_la_cedula_y_sin_ella_el_vendedor():
+    assert t.identidad_de_vendedor("55", "vend-1") == "55"
+    assert t.identidad_de_vendedor("  55 ", "vend-1") == "55"
+    assert t.identidad_de_vendedor(None, "vend-1") == "vend-1"
+    assert t.identidad_de_vendedor("   ", "vend-1") == "vend-1"
+
+
+def test_personas_dos_nombres_de_una_cedula_son_una_fila_con_el_nombre_de_mas_ventas():
+    clave = t.clave_persona("55")
+    personas = t.construir_personas([
+        _v(clave, "55", "MORA DIANA PATRICIA", "ASESOR DE REPUESTOS", "CALI", 1400),
+        _v(clave, "55", "MORA BUSTOS DIANA PATRICIA", "ASESOR DE REPUESTOS SUPERNUMERARIO", "BOGOTA", 2800),
+    ])
+
+    [fila] = personas
+    assert fila.clave == clave and fila.personas == 1
+    assert fila.nombre == "MORA BUSTOS DIANA PATRICIA"
+    # Cargo y punto de venta salen de ESA misma fila, no de la otra.
+    assert (fila.cargo, fila.punto_venta) == ("ASESOR DE REPUESTOS SUPERNUMERARIO", "BOGOTA")
+    assert fila.cargos == ("ASESOR DE REPUESTOS", "ASESOR DE REPUESTOS SUPERNUMERARIO")
+
+
+def test_personas_empate_de_ventas_se_resuelve_por_nombre_alfabetico():
+    clave = t.clave_persona("55")
+
+    [fila] = t.construir_personas([
+        _v(clave, "55", "ZETA", "X", "A", 100), _v(clave, "55", "ALFA", "X", "B", 100)])
+
+    assert (fila.nombre, fila.punto_venta) == ("ALFA", "B")
+    assert fila.cargos == ("X",)
+
+
+def test_personas_un_grupo_cuenta_personas_distintas_no_nombres_del_erp():
+    personas = t.construir_personas([
+        _v(t.GRUPO_COMERCIALES, "77", "BETO", "ASESOR COMERCIAL DE SERVICIO POSVENTA", None, 10),
+        _v(t.GRUPO_COMERCIALES, "77", "BETO ALIAS", "ASESOR COMERCIAL DE SERVICIO POSVENTA", None, 10),
+        _v(t.GRUPO_COMERCIALES, "vend-9", "GINA", "ASESOR COMERCIAL DE SERVICIO POSVENTA", None, 10),
+        _v(t.GRUPO_RESTO, "EVA", None, None, None, 5),
+        _v(t.GRUPO_RESTO, "OTRA", None, None, None, 5),
+    ])
+
+    por_clave = {f.clave: f for f in personas}
+    assert por_clave[t.GRUPO_COMERCIALES].personas == 2
+    assert por_clave[t.GRUPO_RESTO].personas == 2
+
+
+def test_el_tablero_marca_el_conflicto_de_cargos_de_una_persona():
+    clave = t.clave_persona("55")
+    cubo = [_f(clave, "2026-08", "REPUESTOS", 100, 100, 0, 1, 1, 0)]
+    personas = t.construir_personas([
+        _v(clave, "55", "A", "ASESOR DE REPUESTOS", "CALI", 40),
+        _v(clave, "55", "B", "ASESOR DE REPUESTOS SUPERNUMERARIO", "CALI", 60),
+    ])
+
+    tablero = t.construir_tablero(cubo, [], [], personas, ["2026-08"])
+
+    [fila] = tablero["filas"]
+    assert fila["cargo"] == "ASESOR DE REPUESTOS SUPERNUMERARIO"
+    assert fila["cargos"] == ["ASESOR DE REPUESTOS", "ASESOR DE REPUESTOS SUPERNUMERARIO"]
+    assert fila["cargo_conflicto"] is True
+
+
+def test_el_tablero_no_marca_conflicto_con_un_solo_cargo(tablero):
+    a = _fila(tablero, A)
+    assert a["cargo_conflicto"] is False and a["cargos"] == ["ASESOR DE REPUESTOS"]
