@@ -396,3 +396,9 @@ async def presupuesto_por_sucursal(
         .where(PresupuestoVersion.mes.between(mes_desde, mes_hasta))
         .group_by(PresupuestoVersion.mes, PresupuestoLinea.sucursal_id))
     return {(mes, sucursal_id): int(total) for mes, sucursal_id, total in (await db.execute(consulta)).all()}
+
+
+async def listar_tiendas(db: AsyncSession) -> List[Dict[str, str]]:
+    """Active sucursales (id, name): the store options of the manual edit, readable by GERENCIA."""
+    consulta = select(Sucursal.id, Sucursal.nombre).where(Sucursal.activa.is_(True)).order_by(Sucursal.nombre)
+    return [{"id": str(id_), "nombre": nombre} for id_, nombre in (await db.execute(consulta)).all()]

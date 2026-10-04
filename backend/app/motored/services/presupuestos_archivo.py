@@ -13,6 +13,7 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Mapping, Optional
 
+from app.motored.schemas.presupuesto import MONTO_MAXIMO
 from app.motored.schemas.vendedor import limpiar_cedula
 from app.motored.services.ingesta.resolucion import normalizar_texto_sucursal
 
@@ -62,6 +63,8 @@ def parse_monto(valor: Any) -> int:
             monto = int(encontrado.group(1))
     if monto <= 0:
         raise ValueError(mensaje)
+    if monto > MONTO_MAXIMO:
+        raise ValueError(f"El presupuesto no puede superar {MONTO_MAXIMO:,}".replace(",", ".") + " pesos")
     return monto
 
 

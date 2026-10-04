@@ -31,6 +31,7 @@ from app.motored.schemas.presupuesto import (
     AplicadoOut,
     MesListadoOut,
     PresupuestoAsesorEdit,
+    TiendaOpcionOut,
     ValidacionOut,
     VersionCreadaOut,
     VersionDetalleOut,
@@ -54,6 +55,19 @@ _EJEMPLOS = [
     ("1130123456", "2026-10", "Nombre de una tienda", 1500000),
     ("1130654321", "2026-10", "Nombre de una tienda", 1200000),
 ]
+
+
+_ARCHIVO_NOMBRE_MAX = 255  # presupuesto_version.archivo_nombre column length
+
+
+def _nombre_archivo(nombre: Optional[str]) -> Optional[str]:
+    """Fits the upload's file name in its column, keeping the extension."""
+    if not nombre or len(nombre) <= _ARCHIVO_NOMBRE_MAX:
+        return nombre
+    base, punto, extension = nombre.rpartition(".")
+    if not punto or len(extension) > 10:
+        return nombre[:_ARCHIVO_NOMBRE_MAX]
+    return base[: _ARCHIVO_NOMBRE_MAX - len(extension) - 1] + "." + extension
 
 
 def _mes(texto: str) -> datetime.date:
@@ -121,7 +135,13 @@ async def aplicar(
     """Re-validates and, with no errors, creates a new version per month in the file."""
     filas = await _parse_excel_upload("presupuesto", request, file)
     return await _ejecutar(
-        db, presupuestos.aplicar_archivo(db, filas, file.filename, uuid.UUID(user.user_id)), escribe=True)
+        db, presupuestos.aplicar_archivo(db, filas, _nombre_archivo(file.filename), uuid.UUID(user.user_id)), escribe=True)
+
+
+@router.get("/tiendas", response_model=List[TiendaOpcionOut])
+async def listar_tiendas(db: AsyncSession = Depends(get_motored_db_or_503)):
+    """Active stores for the manual edit (GERENCIA cannot read /maestros/sucursales)."""
+    return await _ejecutar(db, presupuestos.listar_tiendas(db))
 
 
 @router.get("/meses", response_model=List[MesListadoOut])

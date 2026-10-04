@@ -8,16 +8,24 @@ from typing import List, Optional
 from pydantic import BaseModel, Field, field_validator
 
 
+MONTO_MAXIMO = 100_000_000_000  # pesos per asesor-month; far below the BigInteger limit
+
+
 class PresupuestoAsesorEdit(BaseModel):
     """Manual add/change of ONE asesor's budget for a month."""
     sucursal_id: uuid.UUID
-    monto: int = Field(gt=0)
+    monto: int = Field(gt=0, le=MONTO_MAXIMO)
     nota: Optional[str] = Field(default=None, max_length=500)
 
     @field_validator("nota")
     @classmethod
     def _nota_vacia_es_none(cls, valor):
         return (valor or "").strip() or None
+
+
+class TiendaOpcionOut(BaseModel):
+    id: str
+    nombre: str
 
 
 class IncidenciaOut(BaseModel):

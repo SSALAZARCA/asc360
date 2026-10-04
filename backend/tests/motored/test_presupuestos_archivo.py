@@ -75,6 +75,12 @@ class TestParseMonto:
     def test_integer_pesos(self, valor, esperado):
         assert parse_monto(valor) == esperado
 
+    def test_the_maximum_is_accepted_and_anything_above_is_rejected(self):
+        assert parse_monto(10 ** 11) == 10 ** 11
+        for valor in (10 ** 11 + 1, "100.000.000.001", 1e12):
+            with pytest.raises(ValueError, match="no puede superar"):
+                parse_monto(valor)
+
     @pytest.mark.parametrize("valor", ["", None, "0", 0, "-5", -5, "abc", "1500.5", 1500.5, "12 000 abc"])
     def test_rejects_non_positive_and_non_numeric(self, valor):
         with pytest.raises(ValueError):

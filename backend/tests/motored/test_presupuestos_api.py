@@ -73,13 +73,16 @@ def _servicio(monkeypatch):
     async def historial(db, mes):
         return []
 
+    async def tiendas(db):
+        return [{"id": str(ID), "nombre": "Cali"}]
+
     async def detalle_version(db, version_id):
         return _detalle("2031-03", str(version_id))
 
     for nombre, funcion in {
         "validar_archivo": validar, "aplicar_archivo": aplicar, "editar_asesor": editar,
         "quitar_asesor": quitar, "listar_meses": meses, "detalle_mes": detalle_mes,
-        "historial_mes": historial, "detalle_version": detalle_version,
+        "historial_mes": historial, "listar_tiendas": tiendas, "detalle_version": detalle_version,
     }.items():
         monkeypatch.setattr(presupuestos, nombre, funcion)
     return llamadas
@@ -113,6 +116,7 @@ ENDPOINTS = [
     ("POST", "/validar", {"files": _archivo()}),
     ("POST", "/aplicar", {"files": _archivo([("1", "2031-03", "Cali", 10)])}),
     ("GET", "/meses", {}),
+    ("GET", "/tiendas", {}),
     ("GET", "/meses/2031-03", {}),
     ("GET", "/meses/2031-03/versiones", {}),
     ("GET", f"/versiones/{ID}", {}),
@@ -248,3 +252,45 @@ def test_presupuesto_is_not_a_generic_bulk_upload_maestro():
 
     assert "presupuesto" not in _SCHEMA_BY_ENTIDAD
     assert _llamar("ADMIN", "POST", "/../maestros/presupuesto/carga/validar", json={"filas": []}).status_code == 404
+
+
+def test_tiendas_lists_active_sucursales_for_gerencia():
+    respuesta = _llamar("GERENCIA", "GET", "/tiendas")
+
+    assert respuesta.json() == [{"id": str(ID), "nombre": "Cali"}]
+
+
+def test_a_long_file_name_is_truncated_to_the_column_keeping_the_extension(_servicio):
+    nombre = "a" * 400 + ".xlsx"
+
+    _llamar("ADMIN", "POST", "/aplicar", files=_archivo([("1", "2031-03", "Cali", 10)], nombre=nombre))
+
+    guardado = _servicio[-1][1]
+    assert len(guardado) == 255 and guardado.endswith(".xlsx")
+
+
+def test_manual_edit_rejects_an_amount_that_would_overflow():
+    cuerpo = {"sucursal_id": str(ID), "monto": 10 ** 11 + 1}
+
+    respuesta = _llamar("ADMIN", "PUT", "/meses/2031-03/asesores/123", json=cuerpo)
+
+    assert respuesta.status_code == 422
+
+
+def test_manual_edit_accepts_the_maximum_amount():
+    cuerpo = {"sucursal_id": str(ID), "monto": 10 ** 11}
+
+    assert _llamar("ADMIN", "PUT", "/meses/2031-03/asesores/123", json=cuerpo).status_code == 200
+
+
+def test_a_database_integrity_error_on_a_write_is_a_409(monkeypatch):
+    from sqlalchemy.exc import IntegrityError
+
+    async def carrera(db, *args):
+        raise IntegrityError("insert", {}, Exception("duplicate key"))
+
+    monkeypatch.setattr(presupuestos, "editar_asesor", carrera)
+
+    respuesta = _llamar("ADMIN", "PUT", "/meses/2031-03/asesores/123", json={"sucursal_id": str(ID), "monto": 5})
+
+    assert respuesta.status_code == 409 and "Intente de nuevo" in respuesta.json()["detail"]

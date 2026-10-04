@@ -501,3 +501,11 @@ async def test_api_manual_edit_with_a_bad_amount_is_422(esc, http):
         json={"sucursal_id": str(esc.cali.id), "monto": 0})
 
     assert respuesta.status_code == 422
+
+
+async def test_tiendas_lists_only_active_sucursales_ordered_by_name(esc):
+    tiendas = {t["id"]: t["nombre"] for t in await presupuestos.listar_tiendas(esc.db)}
+
+    assert tiendas[str(esc.cali.id)] == esc.cali.nombre and tiendas[str(esc.bogota.id)] == esc.bogota.nombre
+    assert str(esc.cerrada.id) not in tiendas
+    assert list(tiendas.values()) == sorted(tiendas.values())
