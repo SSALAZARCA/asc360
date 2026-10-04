@@ -33,6 +33,7 @@ from lore.api import (
 from lore.handlers._common import (
     _MSG_CONEXION,
     editar_o_ignorar_sin_cambios,
+    etiqueta_rol,
     teclado_resolver_solicitud,
 )
 
@@ -90,7 +91,8 @@ async def vincular_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             return
 
     await update.message.reply_text(
-        f"✅ Vinculado como administrador: {usuario.get('nombre', '')}."
+        f"✅ Vinculado como {etiqueta_rol(usuario.get('role'))}: "
+        f"{usuario.get('nombre', '')}."
     )
 
 

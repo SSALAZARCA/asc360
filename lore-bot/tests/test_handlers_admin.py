@@ -95,6 +95,26 @@ async def test_vincular_command_success(monkeypatch):
     assert "Admin Uno" in text
 
 
+@pytest.mark.parametrize(
+    "role, esperado",
+    [
+        ("ADMIN", "Vinculado como administrador: Ana"),
+        ("COMPRAS", "Vinculado como Compras: Ana"),
+        ("ROL_NUEVO", "Vinculado como usuario: Ana"),
+        (None, "Vinculado como usuario: Ana"),
+    ],
+)
+async def test_vincular_command_shows_real_role(monkeypatch, role, esperado):
+    fake_client = FakeClient()
+    fake_client.vincular.return_value = {"id": "u3", "nombre": "Ana", "role": role}
+    monkeypatch.setattr(admin, "_cliente", _fake_cliente(fake_client))
+
+    update = _make_update()
+    await admin.vincular_command(update, _make_context(args=["ABC12345"]))
+
+    assert esperado in update.message.reply_text.call_args.args[0]
+
+
 async def test_vincular_command_codigo_invalido(monkeypatch):
     fake_client = FakeClient()
     fake_client.vincular.side_effect = CodigoInvalido("bad")

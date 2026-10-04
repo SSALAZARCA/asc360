@@ -121,6 +121,19 @@ TECLADO_ADMIN = ReplyKeyboardMarkup(
 )
 
 
+_ETIQUETA_ROL = {
+    "ADMIN": "administrador",
+    "COMPRAS": "Compras",
+    "ASESOR_MOSTRADOR": "asesor de mostrador",
+}
+
+
+def etiqueta_rol(rol: str | None) -> str:
+    """Readable Spanish name of a backend role code, with a generic
+    fallback for roles this bot does not know yet."""
+    return _ETIQUETA_ROL.get(rol, "usuario")
+
+
 def teclado_para_rol(rol: str | None) -> ReplyKeyboardMarkup | None:
     """The persistent menu for an APPROVED user of `rol`, or None for a role
     with no menu."""

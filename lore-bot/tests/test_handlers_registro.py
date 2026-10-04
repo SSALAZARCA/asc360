@@ -137,6 +137,20 @@ async def test_start_approved_asesor_greets_by_name_and_role(monkeypatch):
     assert update.message.reply_text.call_args_list[0].kwargs["reply_markup"] is TECLADO_CAPTURA
 
 
+async def test_start_approved_compras_greets_with_real_role(monkeypatch):
+    fake_client = FakeClient()
+    fake_client.yo.return_value = {
+        "status": "approved", "nombre": "Luis", "role": "COMPRAS",
+    }
+    monkeypatch.setattr(registro, "_cliente", _fake_cliente(fake_client))
+
+    update = _make_update()
+    await registro.start(update, _make_context())
+
+    text = update.message.reply_text.call_args_list[0].args[0]
+    assert "registrado como Compras." in text
+
+
 async def test_start_approved_admin_greets_by_name_and_role(monkeypatch):
     # Found via live testing right after Phase 9's first production deploy:
     # this branch used to hardcode "asesor de mostrador" for EVERY approved

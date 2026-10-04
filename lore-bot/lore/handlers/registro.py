@@ -34,6 +34,7 @@ from lore.handlers._common import (
     TECLADO_CAPTURA,
     _escapar_markdown,
     con_cancelar,
+    etiqueta_rol,
     responder_cancelacion,
     teclado_para_rol,
     teclado_resolver_solicitud,
@@ -104,10 +105,7 @@ async def _saludar_unico(update: Update, data: dict) -> int:
     # Telegram via /vincular got told they were an asesor. `/yo` already
     # returns the real role; use it instead of assuming one.
     rol = data.get("role")
-    rol_legible = {
-        "ADMIN": "administrador",
-        "ASESOR_MOSTRADOR": "asesor de mostrador",
-    }.get(rol, "usuario")
+    rol_legible = etiqueta_rol(rol)
 
     # UX shortcut (persistent Reply Keyboard): the menu depends on the real
     # role -- an ADMIN also gets "Solicitudes pendientes". `pending`/
