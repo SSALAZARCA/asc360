@@ -79,7 +79,7 @@ The user designed the dashboard in the artifact and approved it. The budgets mas
 - [x] **B4 Budgets + cumplimiento.** Join `presupuesto_por_asesor`/`presupuesto_por_sucursal` (min/max then filter), per-asesor and per-store cumplimiento per the rules above, semáforo, rows for budgeted asesores without sales, "sin presupuesto".
 - [x] **B5 New queries.** Distinct Tecnired clients, top-5 Tecnired clients with `razon_social`, días de inventario per store.
 - [x] **B6 Per-tab endpoints.** `/tablero-asesores/kpis/{ventas|tiendas|asesores}` (stays inside the GERENCIA prefix), plus the store list for the filter.
-- [ ] **F1 Chart primitives.** Gauge, donut, strip (zones), bars with value inside, stacked area, heatmap, treemap, scatter, segmented toggle. Plus color tokens in `layout.js`.
+- [x] **F1 Chart primitives.** Gauge, donut, strip (zones), bars with value inside, stacked area, heatmap, treemap, scatter, segmented toggle. Plus color tokens in `layout.js`.
 - [ ] **F2 Header + shell.** Period popover (año corrido / multi-month), store multi-select with search, HMCL popover, tabs, data hook with a per-tab cache, sidebar rename "KPI's", permisos matrix update.
 - [ ] **F3 Ventas tab.**
 - [ ] **F4 Tiendas tab.**
@@ -160,5 +160,26 @@ The user designed the dashboard in the artifact and approved it. The budgets mas
   - After the rebase, the parent ran the KPI API, B5, tablero API and gerencia tests: 121 passed.
 - **Follow-up:** `tablero_kpis_consultas.py` calls private helpers of `tablero_asesores_consultas` (a gga note).
 
+- **Delivery:** commits 8ceab58, f8b832b and 724231d, pushed to main.
+- **Native review:** risk medium (900 lines). Consent granted; the R3 lens approved and the result was acknowledged.
+- **Advisories, carried to the next writer as a backend commit 0**
+  - R3-inventario-corte-global (WARNING): inventory uses the GLOBAL latest `fecha_corte`, so a store whose latest corte is older is dropped. **User decision (2026-10-04): keep the current behavior.** They load all stores in a single file per day, so a store missing from the latest file should not appear. Document it in the code; no change.
+  - R3-pg-tests-global-state (WARNING): `test_tablero_kpis_b5_pg.py:181-187` depends on global DB state.
+  - R3-costo-venta-hmcl (suggestion): the cost of sales includes HMCL (line 114). Fine, since days of inventory measure all outflow; document it.
+
+**Test fix + F1, done.** Route: one delegated writer, two commits.
+- **Commit 1969be1 (`test`):** the inventory-days pg tests are isolated to their own stores. Comments document that cost of sales includes HMCL and that inventory uses the global latest corte, both by design. The per-store-corte change was implemented and then reverted per the user's decision.
+- **Commit b5b7c57, F1:**
+  - `components/motored/kpis/`: `format.js`, `tokens.js`, and `charts/` with Gauge, Donut, ZoneStrip, BarList, DivergingBars, StackedArea, ShareTiles, StackedBar100, Heatmap, Treemap, Scatter, SegmentedToggle, KpiMiniGrid, TrafficLightGrid, plus Chip, RankBadge, geometry and the index.
+  - Brand tokens in the `layout.js` themeCss.
+  - Size: ~1,900 lines, one cohesive set.
+- **TDD evidence:** RED: 2 suites failed on missing modules.
+- **Checks**
+  - Full jest: 168 suites / 1770 tests (before a `heatLevel` NaN guard; the chart suites re-ran afterwards, 60 passed).
+  - pg_real `-k tablero_kpis`: 27 passed.
+  - `/motored/maestros` returned 200 with the tokens present (`--webpack`).
+  - After the rebase, the parent re-ran the charts and layout suites: 77 passed.
+- **Open for F2:** Manrope is not loaded yet. `--motored-font-kpi` falls back to Mulish, and loading Manrope needs `layout.js` `next/font` plus an update to `motored-layout-metadata.test.jsx`.
+
 ## Next step
-Native review + push of B5/B6. Then F1 (chart primitives).
+Native review + push of F1, then F2 (header + shell).

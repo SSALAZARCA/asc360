@@ -106,6 +106,37 @@ const themeCss = `
           --motored-space-4: 16px;
           --motored-space-5: 24px;
           --motored-space-6: 32px;
+          /* Colores de datos del manual de marca (KPI's): verde azulado bueno, ambar medio,
+          violeta malo, azul de informacion y escala azul de categorias. El rojo de marca
+          NUNCA es un color de datos. */
+          --motored-data-good: #0f766e;
+          --motored-data-good-soft: #e4f3f1;
+          --motored-data-good-ink: #0b5d57;
+          --motored-data-mid: #b45309;
+          --motored-data-mid-soft: #fef3e2;
+          --motored-data-mid-ink: #8a4104;
+          --motored-data-bad: #6d28a8;
+          --motored-data-bad-soft: #f3eafb;
+          --motored-data-bad-ink: #5a1f8c;
+          --motored-info: #1d4e89;
+          --motored-info-soft: #eaf0f8;
+          --motored-cat-1: #0e2a4d;
+          --motored-cat-2: #1d4e89;
+          --motored-cat-3: #3570b0;
+          --motored-cat-4: #5b93cc;
+          --motored-cat-5: #86b2e0;
+          --motored-cat-6: #b3cfee;
+          --motored-cat-7: #dce8f6;
+          --motored-gray-900: #1a1a18;
+          --motored-gray-800: #3d3d3a;
+          --motored-gray-700: #595954;
+          --motored-gray-600: #6e6e68;
+          --motored-gray-500: #808080;
+          --motored-gray-400: #a3a39e;
+          --motored-gray-300: #c9c9c6;
+          --motored-gray-200: #e4e4e1;
+          --motored-gray-100: #f2f2f0;
+          --motored-font-kpi: 'Manrope', var(--motored-font-body), 'Mulish', system-ui, sans-serif;
           min-height: 100vh;
           background: var(--motored-bg);
           color: var(--motored-text);
