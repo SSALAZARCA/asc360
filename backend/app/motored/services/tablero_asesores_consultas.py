@@ -17,8 +17,8 @@ Reglas que comparten TODAS las consultas (`_desde_ventas`):
   `_expr_cliente_norm`), para cruzar con HMCL y con la lista Tecnired.
 - Fila del tablero (`_expr_clave`): una persona por asesor de repuestos (una
   persona = una CEDULA: todos los nombres del ERP con la misma cedula son una
-  fila; sin cedula, una fila por nombre), un grupo para asesores comerciales, otro para otros cargos y "resto" para quien
-  no esta (activo) en el maestro. El mapa cargo -> grupo, las lineas, los NIT HMCL
+  fila; sin cedula, una fila por nombre), un grupo para asesores comerciales,
+  otro para otros cargos y "resto" para quien no esta (activo) en el maestro. El mapa cargo -> grupo, las lineas, los NIT HMCL
   y el semaforo salen de Configuracion (`Reglas`, vigentes en el ultimo mes
   elegido); sus valores por defecto son las constantes de `tablero_asesores`.
 
@@ -44,6 +44,7 @@ from app.motored.models.referencia import Referencia
 from app.motored.models.sucursal import Sucursal
 from app.motored.models.vendedor import Vendedor
 from app.motored.models.venta_detalle import VentaDetalle
+from app.motored.schemas.vendedor import limpiar_cedula
 from app.motored.services import parametros
 from app.motored.services import tablero_asesores as t
 from app.motored.services.tablero_asesores import (
@@ -409,6 +410,28 @@ async def consultar_sucursales(db: AsyncSession, ids: Iterable[str]) -> Dict[str
     filas = await db.execute(
         select(Sucursal.id, Sucursal.nombre, Sucursal.fecha_apertura).where(Sucursal.id.in_(pedidas)))
     return {str(id_): (nombre, apertura) for id_, nombre, apertura in filas.all()}
+
+
+async def consultar_nombres_por_cedula(db: AsyncSession, cedulas: Iterable[str]) -> Dict[str, str]:
+    """`{cedula limpia: nombre}` del maestro de vendedores (un nombre por cedula:
+    el de un registro activo si lo hay y, entre iguales, el primero alfabetico).
+    Sirve para rotular a quien tiene presupuesto pero no vendio en el rango."""
+    pedidas = set(cedulas)
+    if not pedidas:
+        return {}
+    filas = await db.execute(
+        select(Vendedor.cedula, Vendedor.nombre)
+        .where(Vendedor.cedula.is_not(None))
+        .order_by(Vendedor.activo.desc(), func.upper(Vendedor.nombre), Vendedor.nombre))
+    nombres: Dict[str, str] = {}
+    for cedula, nombre in filas.all():
+        try:
+            limpia = limpiar_cedula(cedula)
+        except ValueError:
+            continue
+        if limpia in pedidas:
+            nombres.setdefault(limpia, nombre)
+    return nombres
 
 
 async def cargar_filtro(

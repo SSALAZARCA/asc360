@@ -75,8 +75,8 @@ The user designed the dashboard in the artifact and approved it. The budgets mas
 ## Tasks
 - [x] **B1 Rules from Configuración.** A `Reglas` object read once with `parametros.leer_valores` (fecha = last selected month), passed to `_expr_clave`, `_expr_es_hmcl`, `_lineas_por_referencia`, `_indicadores` and `construir_tablero`. pg_real tests.
 - [x] **B2 Filter object.** Explicit month list (consecutive months merged into OR ranges), `sucursal_ids`, API params `meses` and `sucursales`. Cube always `incluir`, with the HMCL mode applied in Python.
-- [ ] **B3 Store dimension + accumulators.** A cube key parameter (asesor/sucursal/total), facturas and clientes per dimension, `por_mes_linea`, Tecnired by month and by line, growth 3M and nueva classification.
-- [ ] **B4 Budgets + cumplimiento.** Join `presupuesto_por_asesor`/`presupuesto_por_sucursal` (min/max then filter), per-asesor and per-store cumplimiento per the rules above, semáforo, rows for budgeted asesores without sales, "sin presupuesto".
+- [x] **B3 Store dimension + accumulators.** A cube key parameter (asesor/sucursal/total), facturas and clientes per dimension, `por_mes_linea`, Tecnired by month and by line, growth 3M and nueva classification.
+- [x] **B4 Budgets + cumplimiento.** Join `presupuesto_por_asesor`/`presupuesto_por_sucursal` (min/max then filter), per-asesor and per-store cumplimiento per the rules above, semáforo, rows for budgeted asesores without sales, "sin presupuesto".
 - [ ] **B5 New queries.** Distinct Tecnired clients, top-5 Tecnired clients with `razon_social`, días de inventario per store.
 - [ ] **B6 Per-tab endpoints.** `/tablero-asesores/kpis/{ventas|tiendas|asesores}` (stays inside the GERENCIA prefix), plus the store list for the filter.
 - [ ] **F1 Chart primitives.** Gauge, donut, strip (zones), bars with value inside, stacked area, heatmap, treemap, scatter, segmented toggle. Plus color tokens in `layout.js`.
@@ -103,5 +103,39 @@ The user designed the dashboard in the artifact and approved it. The budgets mas
   - After the rebase, the parent ran the tablero/gerencia unit tests: 133 passed.
 - **Carried to B3:** `variacion_3m` still uses the last 3 vs previous 3 LIST entries; it must use calendar months.
 
+- **Delivery:** commits 4c11010 and 792e39a, pushed to main.
+- **Native review:** risk medium (988 lines). Consent granted; the R3 lens approved and the result was acknowledged.
+- **Advisories, carried to B3 to investigate and fix**
+  - R3-grupo-arbitrario (consultas:85-86).
+  - R3-lineas-no-normalizadas: Configuración line names are not normalized like referencia lines (consultas:114).
+  - R3-reglas-tipos: loaded values are not type-checked (consultas:346-352).
+  - The dedupe test has no assertion.
+- **Coordination:** the 2 failing retention pg_real tests were reported to session -c4.
+
+**Fix + B3 + B4, done.** Route: one delegated writer, three commits.
+- **Commit 95967dc, fix:**
+  - An unknown group now maps to OTROS.
+  - Configuración lines are normalized on both sides. This was a real bug: lowercase or accented lines never matched.
+  - `reglas_desde_valores` falls back per key to the default and logs a warning.
+  - The dedupe test now asserts.
+- **Commit c63f2b3, B3:**
+  - Cube dimension `DIM_ASESOR|DIM_SUCURSAL|DIM_TOTAL`; the vendor join is skipped for store and total.
+  - New accumulators: `por_mes_linea`, `tecnired_por_mes`, `tecnired_por_linea`.
+  - Growth comes from a separate `consultar_ventana_mensual` query (6 calendar months ending at the last selected month) with `crecimiento_3m`.
+  - `nueva` = `fecha_apertura` ≥ the window start, or no sales in the first 3 months of the window.
+  - New `services/tablero_kpis.py` with `calcular_kpis_ventas`, `calcular_kpis_tiendas` and `calcular_kpis_asesores`.
+- **Commit 38184e6, B4:**
+  - Compliance per asesor and per store follows defaults 2–4, with `limpiar_cedula` on both sides.
+  - Fields: `semaforo` is verde/ambar/violeta; `estado` is cumple/en_camino/atrasado/sin_presupuesto; `cumplimiento_pct` is a fraction, compared in Decimal so exactly 90% is green.
+  - Budgeted asesores without sales are included.
+  - Warnings: `personas_sin_cedula` and `venta_sin_cedula`.
+  - The store filter limits budgets by the budget's store.
+- **Deviation:** the Asesores `tendencia` keeps the list-position 3M, because an existing test pins it. Calendar-month growth applies only to stores. A small follow-up can change it if wanted.
+- **Checks**
+  - Unit suite: 5167 passed.
+  - pg_real: 491 passed / 2 skipped / 2 known retention failures.
+  - After the rebase, the parent ran the KPI and tablero unit tests: 96 passed.
+- **TDD note:** RED evidence came from removing the source after implementing (collection errors), not strict RED-first.
+
 ## Next step
-Native review + push of B1+B2, then B3+B4.
+Native review + push of fix/B3/B4, then B5 + B6.
