@@ -13,6 +13,7 @@ E_PARAM_CLAVE_DESCONOCIDA = "E-PARAM-001"
 E_PARAM_VALOR_INVALIDO = "E-PARAM-002"
 E_PARAM_AMBITO_INVALIDO = "E-PARAM-003"
 E_PARAM_SOLO_SUCURSAL = "E-PARAM-004"
+E_PARAM_VIGENCIA_PASADA = "E-PARAM-005"
 
 # Corrida: preflight (crear la corrida)
 E_CORRIDA_VENTAS_SIN_CUBRIR = "E-CORRIDA-001"
@@ -105,6 +106,9 @@ CATALOGO = {
     ),
     E_PARAM_SOLO_SUCURSAL: (
         "El parámetro «{clave}» es de cada tienda: indique la sucursal."
+    ),
+    E_PARAM_VIGENCIA_PASADA: (
+        "Valor no válido para «{clave}»: {detalle}."
     ),
     E_CORRIDA_VENTAS_SIN_CUBRIR: (
         "Las ventas de {mes} no están cubiertas por ninguna carga aplicada."

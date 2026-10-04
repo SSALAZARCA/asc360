@@ -161,7 +161,7 @@ def test_post_rejects_a_past_month_for_a_snapshotted_key_and_says_why():
 
     assert respuesta.status_code == 422
     detalle = respuesta.json()["detail"]
-    assert detalle["code"] == "E-PARAM-002"
+    assert detalle["code"] == "E-PARAM-005"
     assert "mes en curso" in detalle["message"]
     assert db.added == [] and db.committed is False
 

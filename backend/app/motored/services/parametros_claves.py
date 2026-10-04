@@ -160,34 +160,53 @@ def lista_de_texto(clave: str, default: list, grupo: str = GRUPO_OPERACION,
     )
 
 
+def _sin_repetidos(valor: list) -> bool:
+    return len(set(valor)) == len(valor)
+
+
 def _lista_texto(clave: str, default: list):
     return lista_de_texto(clave, default, GRUPO_INGESTA)
 
 
 def lista_de_digitos(clave: str, default: list, grupo: str = GRUPO_OPERACION,
-                     seccion: str = "") -> EspecClave:
-    """Lista no vacía de textos de sólo dígitos (p. ej. NIT)."""
+                     seccion: str = "", unicos: bool = False) -> EspecClave:
+    """Lista no vacía de textos de sólo dígitos (p. ej. NIT); con `unicos`
+    no admite repetidos."""
+    def valido(valor):
+        return isinstance(valor, list) and len(valor) > 0 and all(
+            isinstance(x, str) and re.fullmatch(r"[0-9]+", x) for x in valor
+        ) and (not unicos or _sin_repetidos(valor))
+
+    dominio = "una lista no vacía de textos con sólo dígitos"
+    if unicos:
+        dominio += ", sin repetidos"
     return EspecClave(
-        clave, default, AMBITO_GLOBAL, grupo,
-        "una lista no vacía de textos con sólo dígitos",
-        lambda v: isinstance(v, list) and len(v) > 0 and all(
-            isinstance(x, str) and re.fullmatch(r"[0-9]+", x) for x in v),
+        clave, default, AMBITO_GLOBAL, grupo, dominio, valido,
         _identidad, tipo="lista_digitos", seccion=seccion,
     )
 
 
+def _normalizado(texto: str) -> bool:
+    """Sin espacios sobrantes y en mayúsculas (como se comparan los cargos)."""
+    return bool(texto) and texto == texto.strip().upper()
+
+
 def mapa_a_opcion(clave: str, default: dict, opciones: tuple,
-                  grupo: str = GRUPO_OPERACION, seccion: str = ""
-                  ) -> EspecClave:
-    """Objeto texto -> una de `opciones`; vacío es válido (todo implícito)."""
+                  grupo: str = GRUPO_OPERACION, seccion: str = "",
+                  normalizado: bool = False) -> EspecClave:
+    """Objeto texto -> una de `opciones`; vacío es válido (todo implícito).
+    Con `normalizado` cada texto va en mayúsculas y sin espacios al borde."""
     def valido(valor):
         return isinstance(valor, dict) and all(
             isinstance(k, str) and k.strip() and v in opciones
+            and (not normalizado or _normalizado(k))
             for k, v in valor.items())
 
+    dominio = "un objeto de texto a uno de " + ", ".join(opciones)
+    if normalizado:
+        dominio += "; los nombres en mayúsculas y sin espacios al borde"
     return EspecClave(
-        clave, default, AMBITO_GLOBAL, grupo,
-        "un objeto de texto a uno de " + ", ".join(opciones), valido,
+        clave, default, AMBITO_GLOBAL, grupo, dominio, valido,
         _identidad, tipo="mapa_opcion", opciones=tuple(opciones),
         seccion=seccion,
     )
@@ -195,25 +214,30 @@ def mapa_a_opcion(clave: str, default: dict, opciones: tuple,
 
 def objeto_numerico(clave: str, default: dict, campos: Tuple[str, ...],
                     menores: Tuple[Tuple[str, str], ...] = (),
-                    grupo: str = GRUPO_OPERACION, seccion: str = ""
-                    ) -> EspecClave:
-    """Objeto con exactamente `campos`, números >= 0. Cada par de
-    `menores` (a, b) exige a < b entre campos."""
+                    grupo: str = GRUPO_OPERACION, seccion: str = "",
+                    maximo: Optional[int] = None) -> EspecClave:
+    """Objeto con exactamente `campos`, números >= 0 (y <= `maximo` si lo
+    hay). Cada par de `menores` (a, b) exige a < b entre campos."""
     def valido(valor):
         if not isinstance(valor, dict) or set(valor) != set(campos):
             return False
         n = {k: _numero(x) for k, x in valor.items()}
         if any(x is None or x < 0 for x in n.values()):
             return False
+        if maximo is not None and any(x > maximo for x in n.values()):
+            return False
         return all(n[a] < n[b] for a, b in menores)
 
     dominio = "un objeto con " + ", ".join(campos) + ", números >= 0"
+    if maximo is not None:
+        dominio += f" y hasta {maximo}"
     for menor, mayor in menores:
         dominio += f"; {menor} debe ser menor que {mayor}"
     return EspecClave(
         clave, default, AMBITO_GLOBAL, grupo, dominio, valido,
         lambda v: {k: _numero(x) for k, x in v.items()},
         tipo="objeto_numerico", campos=tuple(campos), seccion=seccion,
+        minimo=0 if maximo is not None else None, maximo=maximo,
     )
 
 
@@ -241,7 +265,8 @@ def _tramos_validos(valor: Any) -> bool:
         return False
     desdes = [p[0] for p in pares]
     estricto = all(a < b for a, b in zip(desdes, desdes[1:]))
-    return desdes[0] == 0 and estricto
+    nombres = [t["nombre"].strip().casefold() for t in valor]
+    return desdes[0] == 0 and estricto and _sin_repetidos(nombres)
 
 
 def tramos_ordenados(clave: str, default: list, grupo: str = GRUPO_OPERACION,
@@ -254,8 +279,8 @@ def tramos_ordenados(clave: str, default: list, grupo: str = GRUPO_OPERACION,
 
     return EspecClave(
         clave, default, AMBITO_GLOBAL, grupo,
-        "una lista de tramos con nombre, desde_pct y tasa_pct >= 0; el "
-        "primer desde_pct es 0 y los siguientes van de menor a mayor",
+        "una lista de tramos con nombre (sin repetir), desde_pct y tasa_pct "
+        ">= 0; el primer desde_pct es 0 y los siguientes van de menor a mayor",
         _tramos_validos, convertir, tipo="tramos", campos=_CAMPOS_TRAMO,
         seccion=seccion,
     )
@@ -309,6 +334,57 @@ CLAVE_TOPE_PEDIDO = "presupuesto_maximo_pedido"
 
 _DIAS_ANTIGUEDAD_MAX = 365  # supuesto ajustable (tasks: Open item D)
 
+_GRUPOS_CARGO = ("PERSONA", "COMERCIALES", "OTROS")
+_BASES_HMCL = ("sin_hmcl", "con_hmcl")
+
+
+def _claves_indicadores() -> list:
+    """T6: lo que el tablero de asesores lee hoy como constantes. Los
+    valores por defecto son los de `tablero_asesores`. `lineas_comerciales`
+    no se contrasta con `tipos_inventario_incluidos`: un validador del
+    registro ve una sola clave y no la base, y esa lista puede cambiar
+    después de guardar las líneas."""
+    return [
+        lista_de_digitos(
+            "hmcl_nits", ["900723988", "900883086"], seccion="indicadores",
+            unicos=True),
+        mapa_a_opcion(
+            "grupo_por_cargo",
+            {"ASESOR DE REPUESTOS": "PERSONA",
+             "ASESOR DE REPUESTOS SUPERNUMERARIO": "PERSONA",
+             "ASESOR COMERCIAL DE SERVICIO POSVENTA": "COMERCIALES"},
+            _GRUPOS_CARGO, seccion="indicadores", normalizado=True),
+        lista_de_texto(
+            "lineas_comerciales",
+            ["REPUESTOS", "ACCESORIOS", "LLANTAS", "LUBRICANTES",
+             "BATERIAS", "GPS", "CASCOS"], seccion="indicadores"),
+        objeto_numerico(
+            "kpi_semaforo_cortes", {"verde_desde": 90, "ambar_desde": 70},
+            ("verde_desde", "ambar_desde"),
+            menores=(("ambar_desde", "verde_desde"),),
+            seccion="indicadores", maximo=200),
+    ]
+
+
+def _claves_comisiones() -> list:
+    """T7: reglas de comisión; aún nadie las lee (el tablero las usará)."""
+    return [
+        tramos_ordenados(
+            "comision_tramos",
+            [{"nombre": "BASE", "desde_pct": 0, "tasa_pct": 1.0},
+             {"nombre": "PRO", "desde_pct": 90, "tasa_pct": 1.5},
+             {"nombre": "ELITE", "desde_pct": 105, "tasa_pct": 1.8}],
+            seccion="comisiones"),
+        _opcion("comision_base_pago", "sin_hmcl", _BASES_HMCL,
+                GRUPO_OPERACION, "comisiones"),
+        _opcion("cumplimiento_base", "con_hmcl", _BASES_HMCL,
+                GRUPO_OPERACION, "comisiones"),
+        lista_de_texto(
+            "comision_cargos_asesor",
+            ["ASESOR DE REPUESTOS", "ASESOR DE REPUESTOS SUPERNUMERARIO"],
+            seccion="comisiones"),
+    ]
+
 
 def _construir_registro() -> Mapping[str, EspecClave]:
     especs = [
@@ -350,6 +426,7 @@ def _construir_registro() -> Mapping[str, EspecClave]:
         _booleana(CLAVE_MODO_TOPE, False, GRUPO_PEDIDO),
         _tope_por_tienda(CLAVE_TOPE_PEDIDO),
     ]
+    especs += _claves_indicadores() + _claves_comisiones()
     return {e.clave: e for e in especs}
 
 
@@ -435,7 +512,7 @@ def es_snapshotted(clave: str) -> bool:
 def normalizar_vigencia(clave: str, vigente_desde: date, hoy: date) -> date:
     """Una versión rige desde el día 1 de un mes: normaliza `vigente_desde`
     a ese día. Una clave del motor se congela en cada corrida, así que no
-    admite un mes ya pasado (E-PARAM-002 explicando la regla)."""
+    admite un mes ya pasado (E-PARAM-005 explicando la regla)."""
     inicio = vigente_desde.replace(day=1)
     if es_snapshotted(clave) and inicio < hoy.replace(day=1):
         detalle = (
@@ -443,8 +520,8 @@ def normalizar_vigencia(clave: str, vigente_desde: date, hoy: date) -> date:
             f"puede regir desde el mes en curso ({hoy:%Y-%m}) o uno "
             f"posterior; {inicio:%Y-%m} ya pasó")
         raise ErrorParametro(
-            codigos.E_PARAM_VALOR_INVALIDO,
-            codigos.mensaje(codigos.E_PARAM_VALOR_INVALIDO,
+            codigos.E_PARAM_VIGENCIA_PASADA,
+            codigos.mensaje(codigos.E_PARAM_VIGENCIA_PASADA,
                             clave=clave, detalle=detalle))
     return inicio
 

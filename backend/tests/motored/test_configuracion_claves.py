@@ -258,7 +258,7 @@ def test_a_past_month_is_rejected_for_snapshotted_keys_with_the_rule():
         pc.normalizar_vigencia(
             "dias_entre_pedidos", datetime.date(2026, 9, 30), HOY)
 
-    assert error.value.codigo == codigos.E_PARAM_VALOR_INVALIDO
+    assert error.value.codigo == codigos.E_PARAM_VIGENCIA_PASADA
     assert "dias_entre_pedidos" in error.value.mensaje
     assert "mes en curso" in error.value.mensaje
     assert "corrida" in error.value.mensaje

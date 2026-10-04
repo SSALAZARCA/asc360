@@ -197,7 +197,10 @@ def test_the_switch_reads_false_by_default_and_true_when_written():
 # --- Catálogo de claves: tipo y opciones (B6 las expone) -------------------
 
 
-TIPOS = {"bool", "entero", "decimal", "opcion", "k_fms", "lista"}
+TIPOS = {
+    "bool", "entero", "decimal", "opcion", "k_fms", "lista",
+    "lista_digitos", "mapa_opcion", "objeto_numerico", "tramos",
+}
 
 
 def test_every_key_declares_a_known_hashable_type():
@@ -217,7 +220,10 @@ def test_the_option_keys_carry_their_options_as_a_tuple():
 def test_only_the_option_keys_have_options():
     con_opciones = {c for c, e in pc.REGISTRO.items() if e.opciones}
 
-    assert con_opciones == {"modo_mes_en_curso", "modo_redondeo_empaque"}
+    assert con_opciones == {
+        "modo_mes_en_curso", "modo_redondeo_empaque", "grupo_por_cargo",
+        "comision_base_pago", "cumplimiento_base",
+    }
 
 
 @pytest.mark.parametrize("clave, tipo", [
