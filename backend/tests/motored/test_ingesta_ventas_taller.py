@@ -205,8 +205,10 @@ async def _dry_run(monkeypatch, filas, tipos_resueltos=None, extra_queue=()):
     contenido = _build_xlsx_bytes([_ENCABEZADO] + [list(f) for f in filas])
     monkeypatch.setattr(orquestador.storage, "descargar_archivo", lambda ruta: contenido)
     vigente = [] if tipos_resueltos is None else [tipos_resueltos]
+    sin_tolerancia = [[]]  # periodo_tolerancia_pct -> entorno
     session = FakeAsyncSession(
-        execute_queue=_queue_cache_y_proveedor() + [vigente] + list(extra_queue) + [[]])
+        execute_queue=_queue_cache_y_proveedor() + [vigente]
+        + sin_tolerancia + list(extra_queue) + [[]])
     await orquestador._dry_run(session, carga)
     return carga, session
 

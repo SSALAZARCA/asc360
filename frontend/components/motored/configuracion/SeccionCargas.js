@@ -5,8 +5,6 @@ import CamposDeSeccion from './CamposDeSeccion';
 const AVISO = 'Reglas con las que se leen los archivos de carga. '
   + 'Cada carga usa el valor vigente en el momento de procesarla.';
 
-// `periodo_tolerancia_pct` is registered but no load reads it yet, so it is
-// not shown: a field that changes nothing would mislead.
 const CAMPOS = [
   {
     clave: 'tipos_inventario_incluidos',
@@ -27,6 +25,11 @@ const CAMPOS = [
     clave: 'tolerancia_ingreso_pct',
     etiqueta: 'Tolerancia de ingresos (%)',
     ayuda: 'Diferencia de valor, en porcentaje, que se acepta entre una factura del proveedor y sus ingresos para darla por recibida. 2 es un 2 %.',
+  },
+  {
+    clave: 'periodo_tolerancia_pct',
+    etiqueta: 'Tolerancia del período declarado (%)',
+    ayuda: 'Porcentaje máximo de líneas de otro mes que se acepta al declarar el período de un archivo. Si se pasa, el archivo de ventas se rechaza entero. Va de 0 a 100.',
   },
 ];
 

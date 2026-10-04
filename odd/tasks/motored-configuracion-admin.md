@@ -47,11 +47,11 @@ Many tunable values have no screen today. They are either env vars changed in Co
 - [x] T1 (implemented, verified, NOT yet committed; commit pending)
 - [x] T2 (implemented, verified, NOT yet committed)
 - [x] T3 (implemented, verified, NOT yet committed)
-- [~] T4 (Cargas tab done and verified, NOT yet committed; the period-tolerance consumer wiring is BLOCKED, see Log)
+- [x] T4 (implemented, verified, NOT yet committed; period tolerance wired and shown, see the 2026-10-04 T4 completion entry)
 - [x] T5 (implemented, verified, NOT yet committed)
 - [x] T6 (implemented, verified, NOT yet committed)
 - [x] T7 (implemented, verified, NOT yet committed)
-- [ ] T8
+- [x] T8 (the Topes link shipped in T1)
 
 ## Delivery
 - One or more work-unit commits per task. Project rule: commit and push to main after every change (Coolify auto-deploys).
@@ -82,3 +82,10 @@ Many tunable values have no screen today. They are either env vars changed in Co
   - Frontend: tabs Pedido (5 groups, banner, tooltips, per-tienda `ExcepcionesPorTienda` using `listMaestros('sucursales')` and the T1 per-sucursal save), Avisos (time inputs, role checkboxes), Cargas (4 keys, chips), Limpieza ("Nunca borra pedidos cerrados o enviados."). New controls `hora` and `lista_opciones`; `etiquetas.js` gives readable option names; `CampoConfiguracion` only lists scheduled versions of its own scope.
   - Verification: backend `tests/motored` 4917 passed; UM `tests --ignore=tests/motored` 1296 passed; `-m pg_real` 430 passed, 2 skipped (throwaway PG 18, stopped and deleted); full jest 159 suites / 1643 tests passed (run alone). Browser check 768/1024/1280 (mocked API): no horizontal overflow, every control of the four tabs >= 44 px (only the untouched sidebar nav buttons are smaller). Screenshots `t2-`, `t3-`, `t4-`, `t5-` in `Documents/Motored/capturas-configuracion/`.
   - Open: `inventario.py:374` (`fecha_corte_fuera_de_ventana`) still reads `MOTORED_RETENCION_DIAS` but has no caller today; wire it if E-CARGA-021 ever uses it.
+
+- 2026-10-04: T4 completed by one delegated writer (route: delegated, trigger: ingest edit plus tests across 4 files, backend and frontend). TDD: RED observed (a stored 5 left the verdict RECHAZO for a file with 2.94 % out-of-period lines; the Cargas jest tests failed before the field existed), then GREEN. Replaces the BLOCKED note above.
+  - Ingest: `orquestador._leer_tolerancia_periodo` reads `periodo_tolerancia_pct` once per carga through `parametros.leer_con_memoria` (real signature: `(db, fecha, respaldos, memoria, deshacer)`), fallback `settings.MOTORED_INGESTA_PERIODO_TOLERANCIA_PCT` read at call time, `deshacer=False` (the carga has pending work, a rollback would expire it), coerced with `float()` because the form stores numeric text such as "5". Only VENTAS reads it (the only type with the period check): `_verificar_periodo_ventas` (dry run) and `ejecutar_aplicar` -> `aplicar_con_periodo(..., tolerancia_pct)`. `ventas.py` was NOT edited: `evaluar_periodo_declarado` already takes `tolerancia_pct` and stays pure with its settings default.
+  - No stored row: byte-identical verdicts (tests with env 0.5 and env 5.0). The queues of the VENTAS dry-run and aplicar tests in `test_ingesta_orquestador.py`, `test_ingesta_ventas_fecha_max.py`, `test_ingesta_ventas_taller.py` got the extra read. A failed read is swallowed by the shared reader, so an unqueued test would pass silently on the fallback; the queues were updated explicitly anyway. Module memory `_memoria_tolerancia` is cleared by an autouse fixture.
+  - Frontend: the Cargas tab now shows "Tolerancia del período declarado (%)" with the tooltip "Porcentaje máximo de líneas de otro mes que se acepta al declarar el período de un archivo. ..."; the decimal control sends numeric text ("5").
+  - Verification: backend `tests/motored` 5052 passed; UM `--ignore=tests/motored` 1296 passed; `-m pg_real` 457 passed, 2 skipped, 2 failed (`test_the_retention_purges_only_old_annulled_failed_or_draft`, `test_the_retention_keeps_corridas_whose_pedido_is_history`: they also fail on a clean HEAD worktree against the same PG, so they are not caused by this change; the new `pg_real/test_configuracion_ingesta_pg.py` passed; the pg_real run was before the `float()` coercion, the new test was not rerun); full jest 159 suites / 1644 tests passed (run alone). Throwaway PG 18 stopped and deleted.
+  - Open: the 2 pg_real retention failures need their own look (T5 area, committed in 96364cc).

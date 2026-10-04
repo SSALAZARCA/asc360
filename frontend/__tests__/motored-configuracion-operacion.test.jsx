@@ -216,12 +216,21 @@ describe('Avisos tab', () => {
 });
 
 describe('Cargas tab', () => {
-  it('shows the four keys and hides the period tolerance until it is wired', () => {
+  it('shows the five keys, the period tolerance included, with tooltips', () => {
     montar('cargas', 'Cargas', CARGAS);
-    ['Líneas de inventario que cuentan', 'Estados de backorder vigentes', 'Ventana de ingresos (días)', 'Tolerancia de ingresos (%)']
+    ['Líneas de inventario que cuentan', 'Estados de backorder vigentes', 'Ventana de ingresos (días)', 'Tolerancia de ingresos (%)', 'Tolerancia del período declarado (%)']
       .forEach((t) => expect(screen.getByText(t)).toBeInTheDocument());
-    expect(screen.queryByText(/período declarado/i)).toBeNull();
-    expect(screen.getAllByRole('note').length).toBeGreaterThanOrEqual(4);
+    expect(screen.getAllByRole('note').length).toBeGreaterThanOrEqual(5);
+    expect(campo('Tolerancia del período declarado (%)')).toHaveTextContent('Porcentaje máximo de líneas de otro mes que se acepta al declarar el período de un archivo.');
+  });
+
+  it('saves the period tolerance as typed (the API accepts numeric text)', async () => {
+    const { onGuardar } = montar('cargas', 'Cargas', CARGAS);
+    const c = campo('Tolerancia del período declarado (%)');
+    fireEvent.change(within(c).getByRole('textbox'), { target: { value: '5' } });
+    fireEvent.click(within(c).getByRole('button', { name: 'Guardar' }));
+    await waitFor(() => expect(onGuardar).toHaveBeenCalled());
+    expect(onGuardar.mock.calls[0][0]).toMatchObject({ clave: 'periodo_tolerancia_pct', valor: '5' });
   });
 
   it('edits the inventory lines as chips in capitals', async () => {

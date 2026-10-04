@@ -45,6 +45,7 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.motored.database import motored_session_maker
 from app.motored.models.carga_archivo import CargaArchivo
 from app.motored.models.carga_fila_staging import CargaFilaStaging
@@ -73,6 +74,10 @@ from app.motored.services.trabajos import jobs
 from app.motored.services.trabajos.supervisor import POOL_INGESTA
 
 logger = logging.getLogger("motored.ingesta.orquestador")
+
+CLAVE_TOLERANCIA_PERIODO = "periodo_tolerancia_pct"
+# Ultimo valor leido bien: si una lectura falla, se sigue con este.
+_memoria_tolerancia: dict = {}
 
 TIPOS_MOVIMIENTO: Tuple[str, ...] = (
     "VENTAS",
@@ -407,6 +412,18 @@ async def _verificar_corte_backorder(
         }
 
 
+async def _leer_tolerancia_periodo(session: AsyncSession) -> float:
+    """Una lectura por carga de `periodo_tolerancia_pct`. Sin fila vigente
+    vale `MOTORED_INGESTA_PERIODO_TOLERANCIA_PCT` (leido ahora). Nunca
+    lanza; sin rollback porque la carga tiene trabajo pendiente."""
+    valores = await parametros.leer_con_memoria(
+        session, datetime.now(timezone.utc).date(),
+        {CLAVE_TOLERANCIA_PERIODO:
+         settings.MOTORED_INGESTA_PERIODO_TOLERANCIA_PCT},
+        _memoria_tolerancia, deshacer=False)
+    return float(valores[CLAVE_TOLERANCIA_PERIODO])
+
+
 async def _verificar_periodo_ventas(
     session: AsyncSession,
     carga: CargaArchivo,
@@ -432,7 +449,8 @@ async def _verificar_periodo_ventas(
         f"{anio}-{mes:02d}": cantidad for (anio, mes), cantidad in histograma.items()
     }
     veredicto = ventas_mod.evaluar_periodo_declarado(
-        histograma, carga.periodo_desde, carga.periodo_hasta
+        histograma, carga.periodo_desde, carga.periodo_hasta,
+        await _leer_tolerancia_periodo(session),
     )
     log["periodo_veredicto"] = veredicto.tipo.value
 
@@ -739,7 +757,8 @@ async def ejecutar_aplicar(session: AsyncSession, carga: CargaArchivo) -> None:
 
     if tipo == "VENTAS":
         await ventas_mod.aplicar_con_periodo(
-            session, filas_staging, carga.periodo_desde, carga.periodo_hasta, carga.id
+            session, filas_staging, carga.periodo_desde, carga.periodo_hasta,
+            carga.id, await _leer_tolerancia_periodo(session),
         )
     elif tipo == "INVENTARIO":
         consolidado = inventario_mod.consolidar_existencias(filas_staging)

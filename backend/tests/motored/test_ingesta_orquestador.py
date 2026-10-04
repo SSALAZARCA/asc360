@@ -364,6 +364,7 @@ async def test_dry_run_ventas_periodo_mal_declarado_rechaza_archivo_completo(mon
     monkeypatch.setattr(orquestador.storage, "descargar_archivo", lambda ruta: file_bytes)
     queue = _queue_cache_y_proveedor() + [
         [],  # parametros.resolver_tipos_inventario_incluidos -> obtener_vigente (usa default)
+        [],  # periodo_tolerancia_pct (sin fila -> entorno)
         [],  # delete(CargaFilaStaging) execute
     ]
     session = FakeAsyncSession(execute_queue=queue)
@@ -395,7 +396,8 @@ async def test_dry_run_ventas_periodo_correcto_queda_validado(monkeypatch):
         ]
     )
     monkeypatch.setattr(orquestador.storage, "descargar_archivo", lambda ruta: file_bytes)
-    queue = _queue_cache_y_proveedor() + [[]]
+    # tipos_inventario_incluidos + periodo_tolerancia_pct, ambos sin fila.
+    queue = _queue_cache_y_proveedor() + [[], []]
     session = FakeAsyncSession(execute_queue=queue)
 
     await orquestador._dry_run(session, carga)
@@ -573,6 +575,7 @@ async def test_dry_run_ventas_periodo_advertencia_emite_carga_error_por_fila_fue
     )
     queue = _queue_cache_y_proveedor() + [
         [],  # parametros.resolver_tipos_inventario_incluidos (sin fila vigente -> default)
+        [],  # periodo_tolerancia_pct (sin fila -> entorno)
         [fila_agosto],  # re-select de staging para detectar la fila fuera de período
     ]
     session = FakeAsyncSession(execute_queue=queue)
@@ -737,7 +740,8 @@ async def test_ejecutar_aplicar_ventas_uses_aplicar_con_periodo(monkeypatch):
         return periodo_mod.VeredictoPeriodo(tipo=periodo_mod.TipoVeredictoPeriodo.ACEPTADO)
 
     monkeypatch.setattr(orquestador.ventas_mod, "aplicar_con_periodo", _fake_aplicar_con_periodo)
-    session = FakeAsyncSession(execute_queue=[[], []])  # staging select vacío + delete staging
+    # staging select vacío + periodo_tolerancia_pct + delete staging
+    session = FakeAsyncSession(execute_queue=[[], [], []])
 
     await orquestador.ejecutar_aplicar(session, carga)
 
@@ -914,3 +918,122 @@ async def test_ejecutar_aplicar_facturas_pedidos_registra_defaults_de_transito_e
 
     assert carga.estado == "APLICADO"
     assert carga.log["parametros_default_usados"] == defaults_simulados
+
+
+# ---------------------------------------------------------------------------
+# `periodo_tolerancia_pct`: la tolerancia del período se lee UNA vez por carga
+# ---------------------------------------------------------------------------
+
+_ENCABEZADO_VENTAS = [
+    "Estado", "Módulo", "Fecha", "Cantidad inv.", "Tipo inventario",
+    "Desc.bodega", "Bodega", "Referencia", "Nombre vendedor",
+    "Valor bruto", "Valor descuentos", "Cliente factura", "Nro documento",
+]
+SERIAL_AGOSTO = 46249  # 2026-08-15
+SERIAL_SEPTIEMBRE = 46280  # 2026-09-15
+
+
+@pytest.fixture(autouse=True)
+def _memoria_tolerancia_limpia():
+    orquestador._memoria_tolerancia.clear()
+    yield
+    orquestador._memoria_tolerancia.clear()
+
+
+def _fila_ventas(serial, numero):
+    return [
+        "Aprobada", "MOSTRADOR", serial, 10, "REPUESTOS", "CALI NORTE",
+        "BA061", "REF1", "Ana Pérez", 1000, 0, "Taller", f"FV-{numero}",
+    ]
+
+
+def _archivo_con_3pct_fuera_de_periodo() -> bytes:
+    """33 filas de septiembre y 1 de agosto: 2.94 % fuera del período."""
+    filas = [_fila_ventas(SERIAL_SEPTIEMBRE, n) for n in range(33)]
+    filas.append(_fila_ventas(SERIAL_AGOSTO, 99))
+    return _build_xlsx_bytes([_ENCABEZADO_VENTAS] + filas)
+
+
+def _fila_tolerancia(valor):
+    return ParametroMetodologia(
+        id=uuid.uuid4(), clave="periodo_tolerancia_pct", valor=valor,
+        vigente_desde=date(2026, 1, 1),
+    )
+
+
+async def _dry_run_3pct(monkeypatch, filas_tolerancia):
+    carga = _carga(
+        "VENTAS", periodo_desde=date(2026, 9, 1),
+        periodo_hasta=date(2026, 9, 30))
+    contenido = _archivo_con_3pct_fuera_de_periodo()
+    monkeypatch.setattr(
+        orquestador.storage, "descargar_archivo", lambda ruta: contenido)
+    queue = _queue_cache_y_proveedor() + [
+        [],  # tipos_inventario_incluidos -> default
+        filas_tolerancia,  # periodo_tolerancia_pct
+        [],  # SELECT de staging del ADVERTENCIA / DELETE del RECHAZO
+        [],
+    ]
+    session = FakeAsyncSession(execute_queue=queue)
+    await orquestador._dry_run(session, carga)
+    return carga
+
+
+async def test_sin_fila_guardada_la_tolerancia_es_la_del_entorno(monkeypatch):
+    monkeypatch.setattr(
+        orquestador.settings, "MOTORED_INGESTA_PERIODO_TOLERANCIA_PCT", 0.5)
+
+    carga = await _dry_run_3pct(monkeypatch, [])
+
+    assert carga.estado == "CON_ERRORES"
+    assert carga.log["periodo_veredicto"] == "RECHAZO"
+
+
+async def test_sin_fila_guardada_se_lee_el_entorno_al_momento_de_la_carga(
+        monkeypatch):
+    monkeypatch.setattr(
+        orquestador.settings, "MOTORED_INGESTA_PERIODO_TOLERANCIA_PCT", 5.0)
+
+    carga = await _dry_run_3pct(monkeypatch, [])
+
+    assert carga.estado == "VALIDADO"
+    assert carga.log["periodo_veredicto"] == "ADVERTENCIA"
+
+
+async def test_la_tolerancia_guardada_cambia_el_veredicto(monkeypatch):
+    monkeypatch.setattr(
+        orquestador.settings, "MOTORED_INGESTA_PERIODO_TOLERANCIA_PCT", 0.5)
+
+    carga = await _dry_run_3pct(monkeypatch, [_fila_tolerancia(5)])
+
+    assert carga.estado == "VALIDADO"
+    assert carga.log["periodo_veredicto"] == "ADVERTENCIA"
+
+
+async def test_la_tolerancia_guardada_como_texto_se_usa_como_numero(
+        monkeypatch):
+    """El formulario guarda "5" (la API acepta texto numerico)."""
+    carga = await _dry_run_3pct(monkeypatch, [_fila_tolerancia("5")])
+
+    assert carga.log["periodo_veredicto"] == "ADVERTENCIA"
+
+
+async def test_aplicar_ventas_pasa_la_tolerancia_guardada(monkeypatch):
+    recibido = {}
+
+    async def _aplicar_falso(
+            session, filas, desde, hasta, carga_id, tolerancia_pct=None):
+        recibido["tolerancia"] = tolerancia_pct
+
+    monkeypatch.setattr(
+        orquestador.ventas_mod, "aplicar_con_periodo", _aplicar_falso)
+    carga = _carga(
+        "VENTAS", estado="VALIDADO", periodo_desde=date(2026, 9, 1),
+        periodo_hasta=date(2026, 9, 30))
+    session = FakeAsyncSession(
+        execute_queue=[[], [_fila_tolerancia(5)], []])
+
+    await orquestador.ejecutar_aplicar(session, carga)
+
+    assert recibido["tolerancia"] == 5
+    assert carga.estado == "APLICADO"

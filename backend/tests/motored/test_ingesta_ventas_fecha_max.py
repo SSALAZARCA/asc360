@@ -71,6 +71,7 @@ def _cola_dry_run():
         [("REF1", PROVEEDOR_ID, REFERENCIA_ID)],
         [PROVEEDOR_ID],
         [],  # tipos_inventario_incluidos -> default
+        [],  # periodo_tolerancia_pct -> entorno
     ]
 
 
@@ -180,7 +181,7 @@ async def _aplicar(monkeypatch, carga) -> None:
         return None
 
     monkeypatch.setattr(orquestador.ventas_mod, "aplicar_con_periodo", _aplicar_falso)
-    await orquestador.ejecutar_aplicar(FakeAsyncSession(execute_queue=[[], []]), carga)
+    await orquestador.ejecutar_aplicar(FakeAsyncSession(execute_queue=[[], [], []]), carga)
 
 
 async def test_aplicar_conserva_el_valor_calculado_en_el_dry_run(monkeypatch):
