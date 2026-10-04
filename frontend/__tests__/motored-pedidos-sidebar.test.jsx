@@ -45,3 +45,29 @@ describe('MotoredSidebar - Pedidos entry', () => {
     expect(labels.slice(0, 3)).toEqual(['Pedidos', 'Tablero asesores', 'Maestros']);
   });
 });
+
+describe('MotoredSidebar - Configuración entry', () => {
+  it('is shown to ADMIN only', () => {
+    render(<MotoredSidebar user={{ nombre: 'U', role: 'ADMIN' }} />);
+    expect(screen.getByRole('button', { name: 'Configuración' })).toBeInTheDocument();
+  });
+
+  it.each(['COMPRAS', 'CONSULTA', 'SUCURSAL', 'SERVICIO_CLIENTE'])('is hidden from %s', (role) => {
+    render(<MotoredSidebar user={{ nombre: 'U', role }} />);
+    expect(screen.queryByRole('button', { name: 'Configuración' })).not.toBeInTheDocument();
+  });
+
+  it('is hidden while a password change is pending', () => {
+    render(<MotoredSidebar user={{ nombre: 'U', role: 'ADMIN', must_change_password: true }} />);
+    expect(screen.queryByRole('button', { name: 'Configuración' })).not.toBeInTheDocument();
+  });
+
+  it('is appended after the existing entries and navigates to /motored/configuracion', () => {
+    render(<MotoredSidebar user={{ nombre: 'U', role: 'ADMIN' }} />);
+    const etiquetas = screen.getAllByRole('button').map((b) => b.textContent);
+    expect(etiquetas.slice(0, 3)).toEqual(['Pedidos', 'Tablero asesores', 'Maestros']);
+    expect(etiquetas.indexOf('Configuración')).toBe(etiquetas.indexOf('Cambiar mi contraseña') + 1);
+    fireEvent.click(screen.getByRole('button', { name: 'Configuración' }));
+    expect(pushMock).toHaveBeenCalledWith('/motored/configuracion');
+  });
+});

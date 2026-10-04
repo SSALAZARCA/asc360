@@ -22,7 +22,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.motored.deps import MotoredUser, get_current_motored_user, get_motored_db_or_503, require_motored_ready, require_roles
 from app.motored.models.sucursal import Sucursal
-from app.motored.schemas.parametro_metodologia import ParametroMetodologiaCreate, ParametroMetodologiaRead
+from app.motored.schemas.parametro_metodologia import (
+    ConfiguracionRespuesta,
+    HistorialParametro,
+    ParametroMetodologiaCreate,
+    ParametroMetodologiaRead,
+)
 from app.motored.schemas.pedido import (
     ClaveCatalogo,
     TopesGuardados,
@@ -31,7 +36,12 @@ from app.motored.schemas.pedido import (
 )
 from app.motored.services import parametros_claves, parametros_topes
 from app.motored.services.corridas import codigos
-from app.motored.services.parametros import obtener_vigente, registrar_cambio
+from app.motored.services.parametros import (
+    leer_configuracion,
+    listar_historial,
+    obtener_vigente,
+    registrar_cambio,
+)
 from app.motored.services.reloj import hoy_bogota
 
 router = APIRouter(
@@ -54,19 +64,23 @@ def _rechazo_422(codigo: str, mensaje: str) -> HTTPException:
     )
 
 
-async def _validar_escritura(db: AsyncSession, payload) -> None:
-    """422 codificado si la clave, el valor o la sucursal no son válidos."""
+async def _validar_escritura(db: AsyncSession, payload) -> date:
+    """422 codificado si la clave, el valor, la vigencia o la sucursal no
+    son válidos. Devuelve el día 1 del mes desde el que rige la versión."""
     try:
         parametros_claves.validar_escritura(
             payload.clave, payload.valor, payload.sucursal_id)
+        vigente_desde = parametros_claves.normalizar_vigencia(
+            payload.clave, payload.vigente_desde, hoy_bogota())
     except parametros_claves.ErrorParametro as error:
         raise _rechazo_422(error.codigo, error.mensaje) from error
     if payload.sucursal_id is None:
-        return
+        return vigente_desde
     if await db.get(Sucursal, payload.sucursal_id) is None:
         codigo = codigos.E_PARAM_VALOR_INVALIDO
         raise _rechazo_422(codigo, codigos.mensaje(
             codigo, clave=payload.clave, detalle="la sucursal no existe"))
+    return vigente_desde
 
 
 @router.post("", status_code=status.HTTP_201_CREATED, response_model=ParametroMetodologiaRead)
@@ -75,13 +89,42 @@ async def crear_parametro(
     db: AsyncSession = Depends(get_motored_db_or_503),
     user: MotoredUser = Depends(_require_admin),
 ):
-    await _validar_escritura(db, payload)
+    vigente_desde = await _validar_escritura(db, payload)
     nueva_version = await registrar_cambio(
-        db, payload.clave, payload.valor, payload.vigente_desde,
+        db, payload.clave, payload.valor, vigente_desde,
         uuid.UUID(user.user_id), sucursal_id=payload.sucursal_id,
     )
     await db.commit()
     return nueva_version
+
+
+@router.get("/configuracion", response_model=ConfiguracionRespuesta)
+async def configuracion(
+    db: AsyncSession = Depends(get_motored_db_or_503),
+    _user: MotoredUser = Depends(_require_admin),
+):
+    """Todas las claves registradas por pestaña y grupo, con tipo, rango,
+    ámbito, default, valor efectivo (global y por sucursal) y versiones
+    programadas, para la pantalla de Configuración (sólo ADMIN)."""
+    return {"secciones": await leer_configuracion(db, hoy_bogota())}
+
+
+@router.get("/{clave}/historial", response_model=List[HistorialParametro])
+async def historial_de_clave(
+    clave: str,
+    db: AsyncSession = Depends(get_motored_db_or_503),
+    _user: MotoredUser = Depends(_require_admin),
+):
+    """Las versiones de una clave, la más nueva primero, con quién y
+    cuándo la creó (sólo ADMIN)."""
+    return [
+        HistorialParametro(
+            id=f.fila.id, clave=f.fila.clave, valor=f.fila.valor,
+            vigente_desde=f.fila.vigente_desde,
+            sucursal_id=f.fila.sucursal_id, created_by=f.fila.created_by,
+            created_by_nombre=f.autor, created_at=f.fila.created_at)
+        for f in await listar_historial(db, clave)
+    ]
 
 
 @router.get("/topes-presupuesto", response_model=TopesPresupuesto)

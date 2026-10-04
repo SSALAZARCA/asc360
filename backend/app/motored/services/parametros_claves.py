@@ -15,8 +15,10 @@ Los valores por defecto son JSON nativo (los decimales van como texto, p. ej.
 "0.80") para poder guardarse tal cual en el snapshot de la corrida;
 `parsear` los convierte a `Fraction` para el motor.
 """
+import re
 from copy import deepcopy
 from dataclasses import dataclass
+from datetime import date
 from decimal import Decimal, InvalidOperation
 from fractions import Fraction
 from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
@@ -33,6 +35,19 @@ GRUPO_MOTOR = "MOTOR"
 # F4 (B5a): tope de presupuesto. NO es del motor: jamás entra al
 # snapshot de la corrida ni se puede usar como override.
 GRUPO_PEDIDO = "PEDIDO"
+# Configuración (T1): ajustes de la operación del negocio (avisos,
+# retención, indicadores, comisiones). NO es del motor: jamás entra al
+# snapshot de la corrida, así que un cambio rige para todos desde su mes.
+GRUPO_OPERACION = "OPERACION"
+
+# Pestañas de la pantalla de Configuración, en orden.
+SECCIONES = (
+    "pedido", "avisos", "cargas", "limpieza", "indicadores", "comisiones",
+    "topes",
+)
+_SECCION_POR_GRUPO = {
+    GRUPO_MOTOR: "pedido", GRUPO_INGESTA: "cargas", GRUPO_PEDIDO: "topes",
+}
 
 
 class ErrorParametro(Exception):
@@ -58,6 +73,14 @@ class EspecClave:
     # importa en Python 3.11.
     tipo: str = ""
     opciones: Tuple[str, ...] = ()
+    # Configuración (T1): lo que la pantalla necesita para dibujar el
+    # control. Rango de los números, nombres de los campos de un objeto y
+    # pestaña (vacía = la del grupo).
+    minimo: Optional[Any] = None
+    maximo: Optional[Any] = None
+    minimo_exclusivo: bool = False
+    campos: Tuple[str, ...] = ()
+    seccion: str = ""
 
 
 def _entero(valor: Any) -> bool:
@@ -79,25 +102,27 @@ def _identidad(valor: Any) -> Any:
     return valor
 
 
-def _booleana(clave: str, default: bool, grupo: str = GRUPO_MOTOR):
+def _booleana(clave: str, default: bool, grupo: str = GRUPO_MOTOR,
+              seccion: str = ""):
     return EspecClave(
         clave, default, AMBITO_GLOBAL, grupo, "verdadero o falso",
         lambda v: isinstance(v, bool), _identidad, tipo="bool",
+        seccion=seccion,
     )
 
 
 def _entera(clave, default, minimo, maximo, grupo=GRUPO_MOTOR,
-            ambito=AMBITO_GLOBAL):
+            ambito=AMBITO_GLOBAL, seccion=""):
     return EspecClave(
         clave, default, ambito, grupo,
         f"un entero entre {minimo} y {maximo}",
         lambda v: _entero(v) and minimo <= v <= maximo, _identidad,
-        tipo="entero",
+        tipo="entero", minimo=minimo, maximo=maximo, seccion=seccion,
     )
 
 
 def _decimal(clave, default, maximo=None, exclusivo=False,
-             grupo=GRUPO_MOTOR):
+             grupo=GRUPO_MOTOR, seccion=""):
     """Decimal exacto >= 0 (o > 0 si `exclusivo`), con tope opcional."""
     def valido(valor):
         n = _numero(valor)
@@ -111,24 +136,128 @@ def _decimal(clave, default, maximo=None, exclusivo=False,
         dominio += f" y hasta {maximo}"
     return EspecClave(
         clave, default, AMBITO_GLOBAL, grupo, dominio, valido, _numero,
-        tipo="decimal")
+        tipo="decimal", minimo=0, maximo=maximo, minimo_exclusivo=exclusivo,
+        seccion=seccion)
 
 
-def _opcion(clave: str, default: str, opciones: tuple):
+def _opcion(clave: str, default: str, opciones: tuple, grupo=GRUPO_MOTOR,
+            seccion=""):
     return EspecClave(
-        clave, default, AMBITO_GLOBAL, GRUPO_MOTOR,
+        clave, default, AMBITO_GLOBAL, grupo,
         "uno de " + ", ".join(opciones), lambda v: v in opciones, _identidad,
-        tipo="opcion", opciones=tuple(opciones),
+        tipo="opcion", opciones=tuple(opciones), seccion=seccion,
+    )
+
+
+def lista_de_texto(clave: str, default: list, grupo: str = GRUPO_OPERACION,
+                   seccion: str = "") -> EspecClave:
+    return EspecClave(
+        clave, default, AMBITO_GLOBAL, grupo,
+        "una lista no vacía de textos",
+        lambda v: isinstance(v, list) and len(v) > 0
+        and all(isinstance(x, str) and x.strip() for x in v),
+        _identidad, tipo="lista", seccion=seccion,
     )
 
 
 def _lista_texto(clave: str, default: list):
+    return lista_de_texto(clave, default, GRUPO_INGESTA)
+
+
+def lista_de_digitos(clave: str, default: list, grupo: str = GRUPO_OPERACION,
+                     seccion: str = "") -> EspecClave:
+    """Lista no vacía de textos de sólo dígitos (p. ej. NIT)."""
     return EspecClave(
-        clave, default, AMBITO_GLOBAL, GRUPO_INGESTA,
-        "una lista no vacía de textos",
-        lambda v: isinstance(v, list) and len(v) > 0
-        and all(isinstance(x, str) and x.strip() for x in v),
-        _identidad, tipo="lista",
+        clave, default, AMBITO_GLOBAL, grupo,
+        "una lista no vacía de textos con sólo dígitos",
+        lambda v: isinstance(v, list) and len(v) > 0 and all(
+            isinstance(x, str) and re.fullmatch(r"[0-9]+", x) for x in v),
+        _identidad, tipo="lista_digitos", seccion=seccion,
+    )
+
+
+def mapa_a_opcion(clave: str, default: dict, opciones: tuple,
+                  grupo: str = GRUPO_OPERACION, seccion: str = ""
+                  ) -> EspecClave:
+    """Objeto texto -> una de `opciones`; vacío es válido (todo implícito)."""
+    def valido(valor):
+        return isinstance(valor, dict) and all(
+            isinstance(k, str) and k.strip() and v in opciones
+            for k, v in valor.items())
+
+    return EspecClave(
+        clave, default, AMBITO_GLOBAL, grupo,
+        "un objeto de texto a uno de " + ", ".join(opciones), valido,
+        _identidad, tipo="mapa_opcion", opciones=tuple(opciones),
+        seccion=seccion,
+    )
+
+
+def objeto_numerico(clave: str, default: dict, campos: Tuple[str, ...],
+                    menores: Tuple[Tuple[str, str], ...] = (),
+                    grupo: str = GRUPO_OPERACION, seccion: str = ""
+                    ) -> EspecClave:
+    """Objeto con exactamente `campos`, números >= 0. Cada par de
+    `menores` (a, b) exige a < b entre campos."""
+    def valido(valor):
+        if not isinstance(valor, dict) or set(valor) != set(campos):
+            return False
+        n = {k: _numero(x) for k, x in valor.items()}
+        if any(x is None or x < 0 for x in n.values()):
+            return False
+        return all(n[a] < n[b] for a, b in menores)
+
+    dominio = "un objeto con " + ", ".join(campos) + ", números >= 0"
+    for menor, mayor in menores:
+        dominio += f"; {menor} debe ser menor que {mayor}"
+    return EspecClave(
+        clave, default, AMBITO_GLOBAL, grupo, dominio, valido,
+        lambda v: {k: _numero(x) for k, x in v.items()},
+        tipo="objeto_numerico", campos=tuple(campos), seccion=seccion,
+    )
+
+
+_CAMPOS_TRAMO = ("nombre", "desde_pct", "tasa_pct")
+
+
+def _tramo_numeros(tramo: Any) -> Optional[Tuple[Fraction, Fraction]]:
+    """(desde, tasa) de un tramo bien formado; None si no lo es."""
+    if not isinstance(tramo, dict) or set(tramo) != set(_CAMPOS_TRAMO):
+        return None
+    nombre = tramo["nombre"]
+    if not isinstance(nombre, str) or not nombre.strip():
+        return None
+    desde, tasa = _numero(tramo["desde_pct"]), _numero(tramo["tasa_pct"])
+    if desde is None or tasa is None or desde < 0 or tasa < 0:
+        return None
+    return desde, tasa
+
+
+def _tramos_validos(valor: Any) -> bool:
+    if not isinstance(valor, list) or not valor:
+        return False
+    pares = [_tramo_numeros(t) for t in valor]
+    if any(p is None for p in pares):
+        return False
+    desdes = [p[0] for p in pares]
+    estricto = all(a < b for a, b in zip(desdes, desdes[1:]))
+    return desdes[0] == 0 and estricto
+
+
+def tramos_ordenados(clave: str, default: list, grupo: str = GRUPO_OPERACION,
+                     seccion: str = "") -> EspecClave:
+    """Lista ordenada de {nombre, desde_pct, tasa_pct}: el primer
+    `desde_pct` es 0, crecen estrictamente y `tasa_pct` >= 0."""
+    def convertir(valor):
+        return [{"nombre": t["nombre"], "desde_pct": _numero(t["desde_pct"]),
+                 "tasa_pct": _numero(t["tasa_pct"])} for t in valor]
+
+    return EspecClave(
+        clave, default, AMBITO_GLOBAL, grupo,
+        "una lista de tramos con nombre, desde_pct y tasa_pct >= 0; el "
+        "primer desde_pct es 0 y los siguientes van de menor a mayor",
+        _tramos_validos, convertir, tipo="tramos", campos=_CAMPOS_TRAMO,
+        seccion=seccion,
     )
 
 
@@ -164,7 +293,7 @@ def _k_fms_convertido(valor: Mapping) -> Mapping:
 _K_FMS = EspecClave(
     "k_fms", {"F": "3", "M": "1.5", "S": "1"}, AMBITO_GLOBAL, GRUPO_MOTOR,
     "un objeto con F, M y S, números mayores o iguales a 0",
-    _k_fms_valido, _k_fms_convertido, tipo="k_fms",
+    _k_fms_valido, _k_fms_convertido, tipo="k_fms", campos=("F", "M", "S"),
 )
 
 # Tipos de dato con límite de antigüedad propio (decisión #16).
@@ -186,7 +315,8 @@ def _construir_registro() -> Mapping[str, EspecClave]:
         # Claves de la ingesta F2 (ya en uso en producción).
         _lista_texto(
             "tipos_inventario_incluidos",
-            ["REPUESTOS", "ACCESORIOS", "LUBRICANTES", "LLANTAS", "BATERIAS", "CASCOS", "GPS"],
+            ["REPUESTOS", "ACCESORIOS", "LUBRICANTES", "LLANTAS",
+             "BATERIAS", "CASCOS", "GPS"],
         ),
         _booleana("crear_referencias_desconocidas", False, GRUPO_INGESTA),
         _lista_texto("estados_backorder_vigentes", ["BACKORDER"]),
@@ -283,12 +413,59 @@ def _validar_ambito(espec: EspecClave, sucursal_id: Any) -> None:
             codigo, codigos.mensaje(codigo, clave=espec.clave))
 
 
+def validar_espec(espec: EspecClave, valor: Any) -> None:
+    """E-PARAM-002 si `valor` no cumple la regla de `espec`."""
+    if not espec.validar(valor):
+        raise _valor_invalido(espec)
+
+
 def validar_escritura(clave: str, valor: Any, sucursal_id: Any = None) -> None:
     """Valida una escritura NUEVA; lanza `ErrorParametro` codificado."""
     espec = _espec_o_error(clave)
     _validar_ambito(espec, sucursal_id)
-    if not espec.validar(valor):
-        raise _valor_invalido(espec)
+    validar_espec(espec, valor)
+
+
+def es_snapshotted(clave: str) -> bool:
+    """True si la clave entra al snapshot de cada corrida (grupo MOTOR)."""
+    espec = REGISTRO.get(clave)
+    return espec is not None and espec.grupo == GRUPO_MOTOR
+
+
+def normalizar_vigencia(clave: str, vigente_desde: date, hoy: date) -> date:
+    """Una versión rige desde el día 1 de un mes: normaliza `vigente_desde`
+    a ese día. Una clave del motor se congela en cada corrida, así que no
+    admite un mes ya pasado (E-PARAM-002 explicando la regla)."""
+    inicio = vigente_desde.replace(day=1)
+    if es_snapshotted(clave) and inicio < hoy.replace(day=1):
+        detalle = (
+            "este parámetro del motor se congela en cada corrida y sólo "
+            f"puede regir desde el mes en curso ({hoy:%Y-%m}) o uno "
+            f"posterior; {inicio:%Y-%m} ya pasó")
+        raise ErrorParametro(
+            codigos.E_PARAM_VALOR_INVALIDO,
+            codigos.mensaje(codigos.E_PARAM_VALOR_INVALIDO,
+                            clave=clave, detalle=detalle))
+    return inicio
+
+
+def seccion_de(espec: EspecClave) -> str:
+    """La pestaña de la clave: la explícita o la de su grupo."""
+    return espec.seccion or _SECCION_POR_GRUPO.get(espec.grupo, "")
+
+
+def ficha(espec: EspecClave) -> Dict[str, Any]:
+    """Todo lo que la pantalla de Configuración lee de una clave (sin sus
+    valores guardados). El default es una copia: el registro no se toca."""
+    return {
+        "clave": espec.clave, "seccion": seccion_de(espec),
+        "grupo": espec.grupo, "tipo": espec.tipo, "dominio": espec.dominio,
+        "ambito": espec.ambito, "default": deepcopy(espec.default),
+        "opciones": list(espec.opciones), "minimo": espec.minimo,
+        "maximo": espec.maximo, "minimo_exclusivo": espec.minimo_exclusivo,
+        "campos": list(espec.campos),
+        "snapshotted": espec.grupo == GRUPO_MOTOR,
+    }
 
 
 def parsear(clave: str, valor: Any) -> Any:
@@ -297,6 +474,5 @@ def parsear(clave: str, valor: Any) -> Any:
     Lanza E-PARAM-002 si el valor guardado no cumple la regla actual.
     """
     espec = _espec_o_error(clave)
-    if not espec.validar(valor):
-        raise _valor_invalido(espec)
+    validar_espec(espec, valor)
     return espec.convertir(valor)

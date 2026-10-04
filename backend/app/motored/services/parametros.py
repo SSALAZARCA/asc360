@@ -20,7 +20,10 @@ from typing import Any, Iterable, List, Mapping, NamedTuple, Optional
 from sqlalchemy import select
 
 from app.motored.models.parametro_metodologia import ParametroMetodologia
-from app.motored.services.parametros_claves import REGISTRO
+from app.motored.models.usuario import Usuario
+from app.motored.services.parametros_claves import (
+    REGISTRO, SECCIONES, ficha,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -287,3 +290,110 @@ async def obtener_vigentes_motor(
     )
     return VigentesMotor.desde_filas(
         resultado.scalars().all(), en_fecha, overrides)
+
+
+def primer_dia_del_mes(fecha: date) -> date:
+    return fecha.replace(day=1)
+
+
+async def vigente_en(
+    db, clave: str, fecha: date, sucursal_id: Any = None,
+) -> ResolucionParametro:
+    """Lectura puntual en el tiempo: la versión de mayor `vigente_desde`
+    <= el día 1 del mes de `fecha`, con la misma precedencia que el motor
+    (sucursal > global > default del registro). Así una comisión de un mes
+    pasado usa las reglas que regían ese mes."""
+    vigentes = await obtener_vigentes_motor(
+        db, [clave], primer_dia_del_mes(fecha))
+    return vigentes.resolver(clave, sucursal_id)
+
+
+class HistorialFila(NamedTuple):
+    """Una versión guardada y el nombre de quien la creó (None si el
+    usuario ya no existe o la fila no tiene autor)."""
+
+    fila: ParametroMetodologia
+    autor: Optional[str]
+
+    @property
+    def valor(self) -> Any:
+        return self.fila.valor
+
+
+LIMITE_HISTORIAL = 200
+
+
+async def listar_historial(
+    db, clave: str, limite: int = LIMITE_HISTORIAL,
+) -> List[HistorialFila]:
+    """Las versiones de `clave` (todas las sucursales y la global), de la
+    más nueva a la más vieja."""
+    columna = ParametroMetodologia
+    resultado = await db.execute(
+        select(columna, Usuario.nombre)
+        .outerjoin(Usuario, Usuario.id == columna.created_by)
+        .where(columna.clave == clave)
+        .order_by(
+            columna.vigente_desde.desc(),
+            columna.created_at.desc().nulls_last(),
+        )
+        .limit(limite)
+    )
+    return [HistorialFila(fila, autor) for fila, autor in resultado.all()]
+
+
+async def _programadas(db, desde: date) -> List[ParametroMetodologia]:
+    """Versiones que aún no rigen: `vigente_desde` posterior a `desde`."""
+    columna = ParametroMetodologia
+    resultado = await db.execute(
+        select(columna)
+        .where(
+            columna.clave.in_(list(REGISTRO)),
+            columna.vigente_desde > desde,
+        )
+        .order_by(columna.vigente_desde, columna.created_at)
+    )
+    return list(resultado.scalars().all())
+
+
+def _ficha_con_valores(
+    espec, vigentes: VigentesMotor, programadas: List[ParametroMetodologia],
+) -> dict:
+    efectivo = vigentes.resolver(espec.clave)
+    por_sucursal = [
+        {"sucursal_id": fila.sucursal_id, "valor": fila.valor,
+         "vigente_desde": fila.vigente_desde, "parametro_id": fila.id}
+        for (clave, sucursal), fila in vigentes.filas.items()
+        if clave == espec.clave and sucursal is not None
+    ]
+    futuras = [
+        {"valor": f.valor, "vigente_desde": f.vigente_desde,
+         "sucursal_id": f.sucursal_id}
+        for f in programadas if f.clave == espec.clave
+    ]
+    return {
+        **ficha(espec),
+        "efectivo_global": efectivo._asdict(),
+        "por_sucursal": por_sucursal,
+        "programados": futuras,
+    }
+
+
+async def leer_configuracion(db, hoy: date) -> List[dict]:
+    """El modelo de lectura de la pantalla: cada clave registrada con su
+    ficha, su valor efectivo global, sus excepciones por sucursal y las
+    versiones programadas, agrupada por pestaña y por grupo. Las
+    pestañas sin claves salen igual (vacías) y en orden fijo."""
+    inicio = primer_dia_del_mes(hoy)
+    vigentes = await obtener_vigentes_motor(db, list(REGISTRO), inicio)
+    programadas = await _programadas(db, inicio)
+    secciones = {nombre: {} for nombre in SECCIONES}
+    for espec in REGISTRO.values():
+        entrada = _ficha_con_valores(espec, vigentes, programadas)
+        grupos = secciones.setdefault(entrada["seccion"], {})
+        grupos.setdefault(espec.grupo, []).append(entrada)
+    return [
+        {"seccion": nombre,
+         "grupos": [{"grupo": g, "claves": c} for g, c in grupos.items()]}
+        for nombre, grupos in secciones.items()
+    ]

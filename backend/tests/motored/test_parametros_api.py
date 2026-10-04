@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 
 from app.config import settings
 from app.main import app
+from app.motored.api import parametros as parametros_api
 from app.motored.models.parametro_metodologia import ParametroMetodologia
 from app.motored.models.sucursal import Sucursal
 from app.motored.services.auth import MotoredUser
@@ -29,6 +30,9 @@ def _motored_ready(monkeypatch):
     monkeypatch.setattr(settings, "MOTORED_ENABLED", True)
     monkeypatch.setattr(settings, "MOTORED_SECRET_KEY", "param-test-secret")
     monkeypatch.setattr(settings, "SECRET_KEY", "param-test-asc360-secret")
+    # La regla "no escribir en un mes pasado" depende del reloj: se fija.
+    monkeypatch.setattr(
+        parametros_api, "hoy_bogota", lambda: datetime.date(2026, 10, 15))
     yield
     app.dependency_overrides.clear()
 

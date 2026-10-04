@@ -40,7 +40,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import Image from 'next/image';
 import {
   LogOut, Warehouse, Users, TrendingDown, ClipboardCheck, MessageSquareWarning, KeyRound, History,
-  UserCog, ChevronDown, ChevronRight, ShoppingCart, BarChart3,
+  UserCog, ChevronDown, ChevronRight, ShoppingCart, BarChart3, Settings,
 } from 'lucide-react';
 import { MOTORED_TOKEN_KEY, MOTORED_USER_KEY } from '../../lib/motored/motoredFetch';
 
@@ -66,6 +66,8 @@ const ALL_ITEMS = [
   { id: 'encuesta-satisfaccion', name: 'Encuesta satisfacción', icon: ClipboardCheck, path: '/motored/encuesta-satisfaccion', roles: ['ADMIN', 'SERVICIO_CLIENTE'] },
   { id: 'detractores', name: 'Detractores', icon: MessageSquareWarning, path: '/motored/detractores', roles: ['ADMIN', 'SERVICIO_CLIENTE'] },
   { id: 'mi-cuenta', name: 'Cambiar mi contraseña', icon: KeyRound, path: '/motored/mi-cuenta', roles: ['ADMIN', 'COMPRAS', 'SUCURSAL', 'CONSULTA', 'SERVICIO_CLIENTE'] },
+  // Configuración (ADMIN only): every business-operation setting, edited from the app.
+  { id: 'configuracion', name: 'Configuración', icon: Settings, path: '/motored/configuracion', roles: ['ADMIN'] },
 ];
 
 const asideStyle = {
