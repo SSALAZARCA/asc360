@@ -98,6 +98,18 @@ class Settings(BaseSettings):
     # esta variable (mismo criterio que `MOTORED_SECRET_KEY`).
     LORE_BOT_SECRET: str = ""
 
+    # Motored — aviso anticipado de antigüedad de datos. El backend manda el
+    # aviso por Telegram con el bot de Lore, así que lee el MISMO token que
+    # el proceso lore-bot (`LORE_BOT_TOKEN`, ya definido en Coolify). Vacío:
+    # no se envía nada por Telegram (se avisa en el log una vez) y el banner
+    # dentro de la app sigue funcionando.
+    # - MOTORED_AVISOS_ANTIGUEDAD_ENABLED: interruptor de emergencia del
+    #   loop (con MOTORED_ENABLED=false se apaga junto con todo el módulo).
+    # - MOTORED_AVISOS_POLL_SEGUNDOS: cada cuánto revisa si toca avisar.
+    LORE_BOT_TOKEN: str = ""
+    MOTORED_AVISOS_ANTIGUEDAD_ENABLED: bool = True
+    MOTORED_AVISOS_POLL_SEGUNDOS: int = 60
+
     @property
     def allowed_origins_list(self) -> list:
         return [o.strip() for o in self.ALLOWED_ORIGINS.split(",") if o.strip()]

@@ -418,10 +418,15 @@ async def _reset_motored_supervisor():
     corrida loop): whatever a test did, never leave either supervisor's
     poll-loop task running into the next test's event loop."""
     yield
-    from app.motored.services.trabajos import supervisor, supervisor_corridas
+    from app.motored.services.trabajos import (
+        supervisor,
+        supervisor_avisos,
+        supervisor_corridas,
+    )
 
     await supervisor.reset_for_tests()
     await supervisor_corridas.detener()
+    await supervisor_avisos.detener()
 
 
 def override_motored_user(user) -> None:

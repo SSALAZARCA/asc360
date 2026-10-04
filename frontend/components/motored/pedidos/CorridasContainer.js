@@ -10,6 +10,7 @@ import DetractoresPagination from '../detractores/DetractoresPagination';
 import useCorridas from './useCorridas';
 import useLanzarCorrida from './useLanzarCorrida';
 import useAnularCorrida from './useAnularCorrida';
+import AvisoAntiguedadBanner from './AvisoAntiguedadBanner';
 import LanzarCorridaForm from './LanzarCorridaForm';
 import CorridasFiltros from './CorridasFiltros';
 import CorridasTable from './CorridasTable';
@@ -81,6 +82,7 @@ export default function CorridasContainer() {
           </button>
         </div>
       </div>
+      <AvisoAntiguedadBanner enabled={Boolean(allowed)} />
       {creado && <AvisoEscenario escenario={creado} onVer={abrir} />}
       <LanzarCorridaForm lanzar={lanzar} />
       <CorridasFiltros filters={list.filters} setFilter={list.setFilter} />

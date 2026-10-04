@@ -210,6 +210,19 @@ def _elegir(vivas, tipo_carga: str, fecha_corte: date, por_periodo: bool):
     return elegida, fecha
 
 
+# API pública para quien necesite las MISMAS reglas fuera del preflight (el
+# aviso anticipado de antigüedad): la tabla de tipos y la elección de carga.
+TIPOS_ANTIGUEDAD = _TIPOS
+
+
+def elegir_carga_vigente(vivas, tipo: str, fecha_corte: date):
+    """`(carga, fecha usada)` o `(None, None)` del tipo de vigencia `tipo`
+    (`inventario`, `backorder`, `facturas`, `ingresos`), con la regla exacta
+    del preflight. `vivas` son las cargas APLICADAS."""
+    espec = _TIPOS[tipo]
+    return _elegir(vivas, espec[0], fecha_corte, espec[4])
+
+
 def _limite(params: ParametrosCorrida, tipo: str) -> Tuple[int, Any]:
     fuente = params.snapshot["limites_antiguedad"][tipo]["fuente"]
     return params.limites_antiguedad[tipo], fuente

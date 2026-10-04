@@ -19,6 +19,7 @@ from fastapi import APIRouter
 
 from app.motored.api import (
     auth,
+    avisos_antiguedad,
     bot,
     bot_demanda_perdida,
     cargas,
@@ -94,3 +95,6 @@ router.include_router(corridas_pedido.router)
 # escenario) tienen su propio router, mismo prefijo, rutas distintas
 # (`/{id}/consolidado`, `/{id}/comparar`): el orden relativo no importa.
 router.include_router(corridas_vistas.router)
+# Aviso anticipado de antigüedad de datos: `/avisos-antiguedad` es su propio
+# prefijo (`/api/motored/avisos-antiguedad`), sin superposición de path.
+router.include_router(avisos_antiguedad.router)

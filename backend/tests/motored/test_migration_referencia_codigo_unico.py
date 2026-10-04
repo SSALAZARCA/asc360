@@ -40,10 +40,10 @@ def _sql(op_mock):
     return [str(c.args[0]) for c in op_mock.execute.call_args_list]
 
 
-def test_es_la_unica_cabeza_y_encadena_sobre_vendedor():
+def test_encadena_sobre_vendedor_y_la_cabeza_es_la_del_aviso():
     guion = ScriptDirectory.from_config(Config(str(_RAIZ / "alembic_motored.ini")))
 
-    assert guion.get_heads() == ["f3a8d1c5b704"]
+    assert guion.get_heads() == ["b5d91e3a7c42"]
     assert _cargar().down_revision == "e8c2a5f17b93"
 
 

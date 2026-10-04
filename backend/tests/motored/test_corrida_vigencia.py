@@ -566,3 +566,28 @@ async def test_the_cargas_query_never_loads_the_bot_lost_demand_headers():
     sql = str(db.executed_statements[0]).upper()
     assert "APLICADO" in sql or "ESTADO" in sql
     assert "TIPO IN" in sql
+
+
+# --- API publica para el aviso anticipado de antiguedad -----------------
+
+
+def test_tipos_antiguedad_expone_los_cuatro_tipos_del_preflight():
+    assert set(vigencia.TIPOS_ANTIGUEDAD) == {
+        "inventario", "backorder", "facturas", "ingresos"}
+    assert vigencia.TIPOS_ANTIGUEDAD["inventario"][0] == "INVENTARIO"
+
+
+def test_elegir_carga_vigente_usa_la_misma_regla_que_el_preflight():
+    vieja = _carga("INVENTARIO", desde=datetime.date(2026, 9, 14))
+    nueva = _carga("INVENTARIO", desde=datetime.date(2026, 9, 18))
+    futura = _carga("INVENTARIO", desde=datetime.date(2026, 9, 25))
+
+    carga, fecha = vigencia.elegir_carga_vigente(
+        [vieja, nueva, futura], "inventario", CORTE)
+
+    assert carga is nueva and fecha == datetime.date(2026, 9, 18)
+
+
+def test_elegir_carga_vigente_sin_cargas_devuelve_none():
+    assert vigencia.elegir_carga_vigente([], "backorder", CORTE) == (
+        None, None)

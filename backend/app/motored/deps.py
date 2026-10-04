@@ -32,7 +32,11 @@ from app.config import settings
 from app.motored.auth import decode_motored_token, motored_secret_is_safe, token_predates_password_change
 from app.motored.database import get_motored_db
 from app.motored.services.auth import MotoredUser, MotoredUserLookup, crear_lookup_real
-from app.motored.services.trabajos import supervisor, supervisor_corridas
+from app.motored.services.trabajos import (
+    supervisor,
+    supervisor_avisos,
+    supervisor_corridas,
+)
 
 MOTORED_UNAVAILABLE_DETAIL = {"code": "MOTORED_UNAVAILABLE"}
 MOTORED_DB_UNAVAILABLE_DETAIL = {"code": "MOTORED_DB_UNAVAILABLE"}
@@ -180,7 +184,8 @@ async def require_motored_ready() -> None:
 
     Arranca de la misma forma el loop propio de las corridas de la Fase 3
     (sdd/motored-pedidos-motor, S6b): su `ensure_started()` no lanza nunca
-    y se apaga con `MOTORED_CORRIDAS_LOOP_ENABLED=false`."""
+    y se apaga con `MOTORED_CORRIDAS_LOOP_ENABLED=false`. Igual el loop del
+    aviso de antigüedad (`MOTORED_AVISOS_ANTIGUEDAD_ENABLED=false`)."""
     if not settings.MOTORED_ENABLED or not motored_secret_is_safe():
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -188,3 +193,4 @@ async def require_motored_ready() -> None:
         )
     supervisor.ensure_started()
     supervisor_corridas.ensure_started()
+    supervisor_avisos.ensure_started()

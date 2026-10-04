@@ -4,6 +4,7 @@ import { useCallback, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import usePedidosGate from '../../../lib/motored/usePedidosGate';
 import useTiendasCorrida from './useTiendasCorrida';
+import AvisoAntiguedadBanner from './AvisoAntiguedadBanner';
 import AntiguedadDatos from './AntiguedadDatos';
 import EstadoCalculoBadge from './EstadoCalculoBadge';
 import ProgresoCorrida from './ProgresoCorrida';
@@ -74,6 +75,7 @@ export default function CorridaDetalleContainer({ corridaId }) {
       <button type="button" className="motored-row-action" style={volverStyle} onClick={() => router.push('/motored/pedidos')}>
         ← Volver a pedidos
       </button>
+      <AvisoAntiguedadBanner enabled={Boolean(allowed)} />
       {error && <p role="alert" style={errorStyle}>{error}</p>}
       {!error && !data && <p style={mutedStyle}>Cargando...</p>}
       {data && (

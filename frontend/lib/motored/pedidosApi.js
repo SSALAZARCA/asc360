@@ -31,6 +31,11 @@ export const getCorrida = (id) => motoredFetchJson(`${BASE}/${id}`);
 export const getProgreso = (id) => motoredFetchJson(`${BASE}/${id}/progreso`);
 export const anularCorrida = (id, motivo) => post(`${BASE}/${id}/anular`, { motivo });
 
+// --- Data about to expire (banner) -------------------------------------------
+
+/** `{ avisos: [{ dataset, nombre, vence: 'hoy'|'manana', fecha_carga, fecha_vencimiento }] }`. */
+export const getAvisosAntiguedad = () => motoredFetchJson('/avisos-antiguedad');
+
 // --- Lines and tienda pedido (reads) ----------------------------------------
 
 export const listarLineas = (id, filtros) => motoredFetchJson(`${BASE}/${id}/lineas${consulta(filtros)}`);
