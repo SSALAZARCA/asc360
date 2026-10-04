@@ -47,8 +47,8 @@ import { MOTORED_TOKEN_KEY, MOTORED_USER_KEY } from '../../lib/motored/motoredFe
 const ALL_ITEMS = [
   // Pedidos (Fase 4, decision F4-16): ADMIN and COMPRAS only.
   { id: 'pedidos', name: 'Pedidos', icon: ShoppingCart, path: '/motored/pedidos', roles: ['ADMIN', 'COMPRAS'] },
-  { id: 'tablero-asesores', name: 'Tablero asesores', icon: BarChart3, path: '/motored/tablero-asesores', roles: ['ADMIN', 'COMPRAS'] },
-  { id: 'maestros', name: 'Maestros', icon: Warehouse, path: '/motored/maestros' },
+  { id: 'tablero-asesores', name: 'Tablero asesores', icon: BarChart3, path: '/motored/tablero-asesores', roles: ['ADMIN', 'COMPRAS', 'GERENCIA'] },
+  { id: 'maestros', name: 'Maestros', icon: Warehouse, path: '/motored/maestros', excludeRoles: ['GERENCIA'] },
   // A group (`children`) is a collapsible header that always starts folded; a
   // click opens or closes it. While folded on one of its pages, the header is
   // marked as the current section.
@@ -60,12 +60,12 @@ const ALL_ITEMS = [
     ],
   },
   { id: 'ventas-perdidas', name: 'Ventas perdidas', icon: TrendingDown, path: '/motored/ventas-perdidas', adminOnly: true },
-  // `roles` (optional) restricts an item to those roles; `adminOnly` and items
+  // `excludeRoles` (optional) hides an item from those roles only; `roles` (optional) restricts an item to those roles; `adminOnly` and items
   // without either keep their original behaviour. SERVICIO_CLIENTE only ever
   // sees items that list it in `roles`.
   { id: 'encuesta-satisfaccion', name: 'Encuesta satisfacción', icon: ClipboardCheck, path: '/motored/encuesta-satisfaccion', roles: ['ADMIN', 'SERVICIO_CLIENTE'] },
   { id: 'detractores', name: 'Detractores', icon: MessageSquareWarning, path: '/motored/detractores', roles: ['ADMIN', 'SERVICIO_CLIENTE'] },
-  { id: 'mi-cuenta', name: 'Cambiar mi contraseña', icon: KeyRound, path: '/motored/mi-cuenta', roles: ['ADMIN', 'COMPRAS', 'SUCURSAL', 'CONSULTA', 'SERVICIO_CLIENTE'] },
+  { id: 'mi-cuenta', name: 'Cambiar mi contraseña', icon: KeyRound, path: '/motored/mi-cuenta', roles: ['ADMIN', 'COMPRAS', 'SUCURSAL', 'CONSULTA', 'SERVICIO_CLIENTE', 'GERENCIA'] },
   // Configuración (ADMIN only): every business-operation setting, edited from the app.
   { id: 'configuracion', name: 'Configuración', icon: Settings, path: '/motored/configuracion', roles: ['ADMIN'] },
 ];
@@ -143,6 +143,7 @@ export default function MotoredSidebar({ user, open = false, onClose }) {
 
   const menuItems = ALL_ITEMS.filter((item) => {
     if (user?.must_change_password) return item.id === 'mi-cuenta';
+    if (item.excludeRoles?.includes(user?.role)) return false;
     if (item.roles) return item.roles.includes(user?.role);
     if (user?.role === 'SERVICIO_CLIENTE') return false;
     return !item.adminOnly || user?.role === 'ADMIN';

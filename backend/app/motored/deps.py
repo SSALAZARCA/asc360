@@ -54,9 +54,25 @@ SERVICIO_CLIENTE_ALLOWED_PREFIXES = (
     "/api/motored/detractores",
 )
 
+# Management (`GERENCIA`) is confined the same way: auth, the budgets API and
+# the advisor dashboard only. A new prefix for this role must be added here.
+GERENCIA_ROLE = "GERENCIA"
+GERENCIA_ALLOWED_PREFIXES = (
+    "/api/motored/auth",
+    "/api/motored/presupuestos",
+    "/api/motored/tablero-asesores",
+)
+
 # While `must_change_password` is set, the only endpoint a user may call.
 PASSWORD_CHANGE_REQUIRED_DETAIL = {"code": "PASSWORD_CHANGE_REQUIRED"}
 PASSWORD_CHANGE_PATH = "/api/motored/auth/password"
+
+
+# Roles that may only reach a path allow-list (enforced in `get_current_motored_user`).
+_CONFINED_ROLE_PREFIXES = {
+    SERVICIO_CLIENTE_ROLE: SERVICIO_CLIENTE_ALLOWED_PREFIXES,
+    GERENCIA_ROLE: GERENCIA_ALLOWED_PREFIXES,
+}
 
 
 def _path_in_prefixes(path: str, prefixes) -> bool:
@@ -144,9 +160,8 @@ async def get_current_motored_user(
             detail=PASSWORD_CHANGE_REQUIRED_DETAIL,
         )
 
-    if user.role == SERVICIO_CLIENTE_ROLE and not _path_in_prefixes(
-        request.url.path, SERVICIO_CLIENTE_ALLOWED_PREFIXES
-    ):
+    confined_to = _CONFINED_ROLE_PREFIXES.get(user.role)
+    if confined_to is not None and not _path_in_prefixes(request.url.path, confined_to):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="No tiene permisos para realizar esta acción.",

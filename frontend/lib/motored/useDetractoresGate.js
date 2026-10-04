@@ -6,6 +6,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { MOTORED_USER_KEY } from './motoredFetch';
+import { homePathFor } from './session';
 
 const ALLOWED_ROLES = ['ADMIN', 'SERVICIO_CLIENTE'];
 
@@ -26,7 +27,7 @@ export default function useDetractoresGate() {
       setAllowed(true);
       return;
     }
-    router.push('/motored/maestros');
+    router.push(homePathFor(readRole()));
   }, [router]);
 
   return allowed;

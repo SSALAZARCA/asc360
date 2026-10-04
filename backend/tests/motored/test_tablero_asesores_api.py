@@ -59,8 +59,8 @@ def test_otros_roles_no_entran(_motored_ready, llamadas, rol):
     assert llamadas == []
 
 
-@pytest.mark.parametrize("rol", ["ADMIN", "COMPRAS"])
-def test_admin_y_compras_entran_y_los_parametros_llegan(_motored_ready, llamadas, rol):
+@pytest.mark.parametrize("rol", ["ADMIN", "COMPRAS", "GERENCIA"])
+def test_admin_compras_y_gerencia_entran_y_los_parametros_llegan(_motored_ready, llamadas, rol):
     _como(rol)
 
     with TestClient(app) as client:

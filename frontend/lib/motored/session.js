@@ -9,8 +9,13 @@ export const MI_CUENTA_PATH = '/motored/mi-cuenta';
 export const PASSWORD_CHANGE_REQUIRED_CODE = 'PASSWORD_CHANGE_REQUIRED';
 
 /** Home page of a role (where it lands after login or after the forced change). */
+export const ROLE_GERENCIA = 'GERENCIA';
+export const GERENCIA_HOME_PATH = '/motored/tablero-asesores';
+
 export function homePathFor(role) {
-  return role === ROLE_SERVICIO_CLIENTE ? SURVEY_ADMIN_PATH : '/motored/maestros';
+  if (role === ROLE_SERVICIO_CLIENTE) return SURVEY_ADMIN_PATH;
+  if (role === ROLE_GERENCIA) return GERENCIA_HOME_PATH;
+  return '/motored/maestros';
 }
 
 /** Where a fresh session must go: the account page while a password change is pending. */

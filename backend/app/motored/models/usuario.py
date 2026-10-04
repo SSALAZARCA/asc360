@@ -50,6 +50,9 @@ class MotoredRole(enum.Enum):
     # Customer-service agent: web role confined to the survey/detractor
     # routes (see `deps.SERVICIO_CLIENTE_ALLOWED_PREFIXES`).
     SERVICIO_CLIENTE = "SERVICIO_CLIENTE"
+    # Management: web role confined to budgets and the advisor dashboard (see
+    # `deps.GERENCIA_ALLOWED_PREFIXES`).
+    GERENCIA = "GERENCIA"
 
 
 class Usuario(MotoredBase):

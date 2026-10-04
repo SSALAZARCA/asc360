@@ -19,7 +19,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { MOTORED_USER_KEY } from './motoredFetch';
-import { ROLE_SERVICIO_CLIENTE, SURVEY_ADMIN_PATH } from './servicioCliente';
+import { homePathFor } from './session';
 
 export default function useAdminGate() {
   const router = useRouter();
@@ -35,7 +35,7 @@ export default function useAdminGate() {
       parsed = null;
     }
     if (parsed?.role !== 'ADMIN') {
-      router.push(parsed?.role === ROLE_SERVICIO_CLIENTE ? SURVEY_ADMIN_PATH : '/motored/maestros');
+      router.push(homePathFor(parsed?.role));
       return;
     }
     setOwnUserId(parsed.id ?? null);

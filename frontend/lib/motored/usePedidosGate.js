@@ -7,6 +7,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { MOTORED_USER_KEY } from './motoredFetch';
+import { homePathFor } from './session';
 
 export const PEDIDOS_ROLES = ['ADMIN', 'COMPRAS'];
 
@@ -27,7 +28,7 @@ export default function usePedidosGate() {
       setAllowed(true);
       return;
     }
-    router.push('/motored/maestros');
+    router.push(homePathFor(readRole()));
   }, [router]);
 
   return allowed;

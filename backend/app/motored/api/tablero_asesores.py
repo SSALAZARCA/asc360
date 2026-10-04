@@ -23,7 +23,7 @@ router = APIRouter(
     dependencies=[Depends(require_motored_ready)],
 )
 
-_require_rol = require_roles("ADMIN", "COMPRAS")
+_require_rol = require_roles("ADMIN", "COMPRAS", "GERENCIA")
 
 _MES = r"^\d{4}-(0[1-9]|1[0-2])$"
 
