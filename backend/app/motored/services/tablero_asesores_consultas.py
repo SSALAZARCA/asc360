@@ -8,7 +8,9 @@ los indicadores viven en `tablero_asesores.py` (puro, sin base).
 
 Reglas que comparten TODAS las consultas (`_desde_ventas`):
 - Solo cargas VENTAS no ANULADAS (anular nunca borra el detalle).
-- `fecha` dentro de [inicio, fin) y el filtro HMCL (`incluir`/`excluir`/`solo`).
+- `fecha` dentro de rangos [inicio, fin) unidos con OR (uno por grupo de meses
+  consecutivos), las sucursales elegidas y el filtro HMCL (`incluir`/`excluir`/
+  `solo`; el cubo lo aplica en Python para conservar la venta con HMCL).
 - Venta de una linea = `valor_bruto - valor_descuentos`.
 - Linea = `referencia.linea_comercial` (recortada, mayusculas, sin tildes).
 - Cliente normalizado con la MISMA regla que `normalizar_nit` (ver
@@ -29,9 +31,9 @@ portable.
 """
 import datetime
 from decimal import Decimal
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterable, List, Optional
 
-from sqlalchemy import Numeric, String, case, cast, false, func, literal_column, select
+from sqlalchemy import Numeric, String, and_, case, cast, false, func, literal_column, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.motored.models.carga_archivo import CargaArchivo
@@ -44,7 +46,7 @@ from app.motored.models.venta_detalle import VentaDetalle
 from app.motored.services import parametros
 from app.motored.services import tablero_asesores as t
 from app.motored.services.tablero_asesores import (
-    CLAVE_TOTAL, FilaClientes, FilaCubo, FilaFacturas, FilaPersona, Reglas,
+    CLAVE_TOTAL, FilaClientes, FilaCubo, FilaFacturas, FilaPersona, Filtro, Reglas,
 )
 
 TOP_CLIENTES = 5
@@ -153,8 +155,13 @@ def _subconsulta_costos(fecha_corte: Optional[datetime.date]):
     )
 
 
-def _desde_ventas(consulta, inicio, fin, modo_hmcl, lineas, reglas, *, solo_lineas_reconocidas, costos=None):
-    """FROM/JOIN/WHERE comunes de todas las consultas del tablero."""
+def _desde_ventas(
+    consulta, filtro: Filtro, lineas, *, solo_lineas_reconocidas, costos=None, aplicar_hmcl=True,
+):
+    """FROM/JOIN/WHERE comunes de todas las consultas del tablero. Las fechas
+    son rangos `fecha >= a AND fecha < b` unidos con OR (sin funciones sobre la
+    columna: el indice `venta_detalle(sucursal_id, fecha)` sigue sirviendo).
+    `aplicar_hmcl=False` deja el modo HMCL para Python (ver el cubo)."""
     consulta = (
         consulta.select_from(VentaDetalle)
         .join(CargaArchivo, CargaArchivo.id == VentaDetalle.carga_id)
@@ -164,11 +171,15 @@ def _desde_ventas(consulta, inicio, fin, modo_hmcl, lineas, reglas, *, solo_line
     if costos is not None:
         consulta = consulta.outerjoin(costos, costos.c.referencia_id == VentaDetalle.referencia_id)
     consulta = consulta.where(
-        CargaArchivo.estado != "ANULADO", VentaDetalle.fecha >= inicio, VentaDetalle.fecha < fin)
-    if modo_hmcl == t.HMCL_SOLO:
-        consulta = consulta.where(_expr_es_hmcl(_expr_cliente_norm(), reglas))
-    elif modo_hmcl == t.HMCL_EXCLUIR:
-        consulta = consulta.where(~_expr_es_hmcl(_expr_cliente_norm(), reglas))
+        CargaArchivo.estado != "ANULADO",
+        or_(*[and_(VentaDetalle.fecha >= inicio, VentaDetalle.fecha < fin) for inicio, fin in filtro.rangos]),
+    )
+    if filtro.sucursal_ids:
+        consulta = consulta.where(VentaDetalle.sucursal_id.in_(sorted(filtro.sucursal_ids, key=str)))
+    if aplicar_hmcl and filtro.modo_hmcl == t.HMCL_SOLO:
+        consulta = consulta.where(_expr_es_hmcl(_expr_cliente_norm(), filtro.reglas))
+    elif aplicar_hmcl and filtro.modo_hmcl == t.HMCL_EXCLUIR:
+        consulta = consulta.where(~_expr_es_hmcl(_expr_cliente_norm(), filtro.reglas))
     if solo_lineas_reconocidas:
         consulta = consulta.where(lineas.c.linea.is_not(None))
     return consulta
@@ -205,7 +216,10 @@ async def meses_disponibles(db: AsyncSession) -> List[str]:
     return [m for (m,) in filas.all()]
 
 
-async def consultar_cubo(db, inicio, fin, modo_hmcl, fecha_corte, reglas: Reglas) -> List[FilaCubo]:
+async def consultar_cubo(db, filtro: Filtro, fecha_corte) -> List[FilaCubo]:
+    """Cubo con HMCL SIEMPRE incluido: el modo HMCL lo aplica el llamador en
+    Python con `es_hmcl` (`tablero_asesores.filtrar_cubo_por_hmcl`)."""
+    reglas = filtro.reglas
     costos = _subconsulta_costos(fecha_corte)
     lineas = _lineas_por_referencia(reglas)
     cliente = _expr_cliente_norm()
@@ -227,7 +241,7 @@ async def consultar_cubo(db, inicio, fin, modo_hmcl, fecha_corte, reglas: Reglas
         func.count(),
         func.coalesce(func.sum(VentaDetalle.cantidad * costos.c.costo_unitario), 0),
     ).group_by(*columnas)
-    consulta = _desde_ventas(consulta, inicio, fin, modo_hmcl, lineas, reglas, solo_lineas_reconocidas=False, costos=costos)
+    consulta = _desde_ventas(consulta, filtro, lineas, solo_lineas_reconocidas=False, costos=costos, aplicar_hmcl=False)
     return [
         FilaCubo(clave, mes, linea, hmcl, tec, mostr, costo_ok,
                  Decimal(venta), Decimal(bruto), Decimal(desc), Decimal(cant), int(n), Decimal(costo))
@@ -236,9 +250,10 @@ async def consultar_cubo(db, inicio, fin, modo_hmcl, fecha_corte, reglas: Reglas
     ]
 
 
-async def consultar_facturas(db, inicio, fin, modo_hmcl, reglas: Reglas, *, por_grupo: bool) -> List[FilaFacturas]:
+async def consultar_facturas(db, filtro: Filtro, *, por_grupo: bool) -> List[FilaFacturas]:
     """Una factura = (nro_documento, sucursal) distinta DENTRO de la fila: por
     cada una se marca que lineas trae y cuantas lineas distintas tiene."""
+    reglas = filtro.reglas
     lineas = _lineas_por_referencia(reglas)
     linea = lineas.c.linea
     clave = _clave_de(por_grupo, reglas).label("clave")
@@ -250,7 +265,7 @@ async def consultar_facturas(db, inicio, fin, modo_hmcl, reglas: Reglas, *, por_
     interna = _desde_ventas(
         select(clave, func.count(func.distinct(linea)).label("lineas_distintas"), *marcas)
         .group_by(*por_factura),
-        inicio, fin, modo_hmcl, lineas, reglas, solo_lineas_reconocidas=True,
+        filtro, lineas, solo_lineas_reconocidas=True,
     ).subquery("por_factura")
     externa = select(
         interna.c.clave if por_grupo else _constante(CLAVE_TOTAL),
@@ -266,15 +281,16 @@ async def consultar_facturas(db, inicio, fin, modo_hmcl, reglas: Reglas, *, por_
     ]
 
 
-async def consultar_clientes(db, inicio, fin, modo_hmcl, reglas: Reglas, *, por_grupo: bool) -> List[FilaClientes]:
+async def consultar_clientes(db, filtro: Filtro, *, por_grupo: bool) -> List[FilaClientes]:
     """Clientes distintos y venta de los 5 mayores, por fila."""
+    reglas = filtro.reglas
     lineas = _lineas_por_referencia(reglas)
     cliente = _expr_cliente_norm().label("cliente")
     clave = _clave_de(por_grupo, reglas).label("clave")
     por_cliente = [cliente] + ([clave] if por_grupo else [])
     interna = _desde_ventas(
         select(clave, cliente, func.sum(_expr_venta()).label("venta")).group_by(*por_cliente),
-        inicio, fin, modo_hmcl, lineas, reglas, solo_lineas_reconocidas=True,
+        filtro, lineas, solo_lineas_reconocidas=True,
     ).subquery("por_cliente")
     posicion = func.row_number().over(
         partition_by=interna.c.clave if por_grupo else None, order_by=interna.c.venta.desc())
@@ -292,11 +308,12 @@ async def consultar_clientes(db, inicio, fin, modo_hmcl, reglas: Reglas, *, por_
     ]
 
 
-async def consultar_personas(db, inicio, fin, modo_hmcl, reglas: Reglas) -> List[FilaPersona]:
+async def consultar_personas(db, filtro: Filtro) -> List[FilaPersona]:
     """Quienes hay detras de cada fila: cuantas personas distintas (por cedula) y,
     para una persona, su nombre, cargo y punto de venta (sucursal principal) --
     los del nombre del ERP con mas ventas en el rango. La venta es la misma del
     tablero (solo las 7 lineas)."""
+    reglas = filtro.reglas
     lineas = _lineas_por_referencia(reglas)
     clave = _expr_clave(reglas).label("clave")
     identidad = _expr_identidad().label("identidad")
@@ -305,7 +322,7 @@ async def consultar_personas(db, inicio, fin, modo_hmcl, reglas: Reglas) -> List
     ]
     consulta = _desde_ventas(
         select(*columnas, func.sum(_expr_venta())).group_by(*columnas),
-        inicio, fin, modo_hmcl, lineas, reglas, solo_lineas_reconocidas=True,
+        filtro, lineas, solo_lineas_reconocidas=True,
     ).outerjoin(Sucursal, Sucursal.id == Vendedor.sucursal_id)
     filas = [
         t.FilaVendedorVenta(clave_, identidad_, nombre, cargo, punto, Decimal(venta))
@@ -342,29 +359,47 @@ def _eco_reglas(reglas: Reglas, vigencia: str) -> Dict[str, Any]:
     }
 
 
-async def calcular_tablero(db: AsyncSession, desde: str, hasta: str, modo_hmcl: str) -> Dict[str, Any]:
-    """Tablero completo del rango `desde`..`hasta` (AAAA-MM). Lanza
-    `ValueError` si el rango no es valido."""
-    meses = t.validar_rango(desde, hasta)
-    inicio, fin = t.limites_de_fecha(desde, hasta)
-    reglas = await cargar_reglas(db, fin - datetime.timedelta(days=1))
+async def _calcular(
+    db: AsyncSession, meses: List[str], modo_hmcl: str, sucursal_ids: Optional[Iterable[Any]],
+) -> Dict[str, Any]:
+    # Las reglas de Configuracion que rigen son las del ULTIMO mes elegido.
+    ultimo = datetime.date(int(meses[-1][:4]), int(meses[-1][5:]), 1)
+    reglas = await cargar_reglas(db, ultimo)
+    filtro = t.filtro_de_meses(meses, modo_hmcl, sucursal_ids, reglas)
     corte = await fecha_corte_costos(db)
 
-    cubo = await consultar_cubo(db, inicio, fin, modo_hmcl, corte, reglas)
-    facturas = (await consultar_facturas(db, inicio, fin, modo_hmcl, reglas, por_grupo=True)
-                + await consultar_facturas(db, inicio, fin, modo_hmcl, reglas, por_grupo=False))
-    clientes = (await consultar_clientes(db, inicio, fin, modo_hmcl, reglas, por_grupo=True)
-                + await consultar_clientes(db, inicio, fin, modo_hmcl, reglas, por_grupo=False))
-    personas = await consultar_personas(db, inicio, fin, modo_hmcl, reglas)
+    cubo = t.filtrar_cubo_por_hmcl(await consultar_cubo(db, filtro, corte), modo_hmcl)
+    facturas = (await consultar_facturas(db, filtro, por_grupo=True)
+                + await consultar_facturas(db, filtro, por_grupo=False))
+    clientes = (await consultar_clientes(db, filtro, por_grupo=True)
+                + await consultar_clientes(db, filtro, por_grupo=False))
+    personas = await consultar_personas(db, filtro)
 
     tablero = t.construir_tablero(cubo, facturas, clientes, personas, meses, reglas)
     tablero.update(
-        desde=desde,
-        hasta=hasta,
+        desde=meses[0],
+        hasta=meses[-1],
         hmcl=modo_hmcl,
         meses=meses,
+        sucursales=sorted(str(s) for s in (filtro.sucursal_ids or ())),
         reglas=_eco_reglas(reglas, meses[-1]),
         meses_disponibles=await meses_disponibles(db),
         fecha_corte_costos=corte.isoformat() if corte else None,
     )
     return tablero
+
+
+async def calcular_tablero_por_meses(
+    db: AsyncSession, meses: List[str], modo_hmcl: str, sucursal_ids: Optional[Iterable[Any]] = None,
+) -> Dict[str, Any]:
+    """Tablero de una lista de meses AAAA-MM (no tienen que ser consecutivos) y,
+    opcionalmente, de ciertas sucursales de venta. `ValueError` si la lista no es valida."""
+    return await _calcular(db, t.validar_meses(meses), modo_hmcl, sucursal_ids)
+
+
+async def calcular_tablero(
+    db: AsyncSession, desde: str, hasta: str, modo_hmcl: str, *, sucursal_ids: Optional[Iterable[Any]] = None,
+) -> Dict[str, Any]:
+    """Tablero del rango `desde`..`hasta` (AAAA-MM): los meses del rango, ver
+    `calcular_tablero_por_meses`. Lanza `ValueError` si el rango no es valido."""
+    return await _calcular(db, t.validar_rango(desde, hasta), modo_hmcl, sucursal_ids)

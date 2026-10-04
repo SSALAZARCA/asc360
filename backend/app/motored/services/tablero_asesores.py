@@ -15,10 +15,11 @@ Convenciones del resultado:
   (nula, NO APLICA, ...) se excluye de todo indicador y se informa aparte.
 """
 import datetime
+import re
 import unicodedata
 from collections import defaultdict
 from decimal import Decimal
-from typing import Any, Dict, Iterable, List, NamedTuple, Optional, Tuple
+from typing import Any, Dict, FrozenSet, Iterable, List, NamedTuple, Optional, Tuple
 
 LINEAS: Tuple[str, ...] = (
     "REPUESTOS", "ACCESORIOS", "LLANTAS", "LUBRICANTES", "BATERIAS", "GPS", "CASCOS",
@@ -69,6 +70,16 @@ class Reglas(NamedTuple):
 
 
 REGLAS_POR_DEFECTO = Reglas()
+
+
+class Filtro(NamedTuple):
+    """Todo lo que acota las consultas del tablero: los rangos de fechas
+    `[inicio, fin)` (meses consecutivos ya fusionados), el modo HMCL, las
+    sucursales de la venta (None = todas) y las reglas de Configuracion."""
+    rangos: Tuple[Tuple[datetime.date, datetime.date], ...]
+    modo_hmcl: str = HMCL_INCLUIR
+    sucursal_ids: Optional[FrozenSet[Any]] = None
+    reglas: Reglas = REGLAS_POR_DEFECTO
 
 
 class FilaCubo(NamedTuple):
@@ -222,6 +233,58 @@ def validar_rango(desde: str, hasta: str) -> List[str]:
     if len(meses) > MAX_MESES:
         raise ValueError(f"El rango no puede pasar de {MAX_MESES} meses.")
     return meses
+
+
+_FORMATO_MES = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
+
+
+def validar_meses(meses: Iterable[str]) -> List[str]:
+    """Lista de meses AAAA-MM sin repetidos y ordenada, o `ValueError` (mensaje
+    para el usuario) si esta vacia, algun mes es invalido o pasa de `MAX_MESES`."""
+    vistos = set()
+    for texto in meses:
+        if not isinstance(texto, str) or not _FORMATO_MES.match(texto.strip()):
+            raise ValueError(f"Mes inválido: '{texto}' (use AAAA-MM).")
+        vistos.add(texto.strip())
+    if not vistos:
+        raise ValueError("Elija al menos un mes.")
+    if len(vistos) > MAX_MESES:
+        raise ValueError(f"No se pueden elegir más de {MAX_MESES} meses.")
+    return sorted(vistos)
+
+
+def rangos_de_meses(meses: List[str]) -> List[Tuple[datetime.date, datetime.date]]:
+    """Meses (ya validados y ordenados) a rangos `[inicio, fin)`: los meses
+    consecutivos se funden en un solo rango, los demas quedan separados."""
+    rangos: List[Tuple[datetime.date, datetime.date]] = []
+    for mes in meses:
+        inicio, fin = limites_de_fecha(mes, mes)
+        if rangos and rangos[-1][1] == inicio:
+            rangos[-1] = (rangos[-1][0], fin)
+        else:
+            rangos.append((inicio, fin))
+    return rangos
+
+
+def filtro_de_meses(
+    meses: List[str],
+    modo_hmcl: str = HMCL_INCLUIR,
+    sucursal_ids: Optional[Iterable[Any]] = None,
+    reglas: Reglas = REGLAS_POR_DEFECTO,
+) -> Filtro:
+    ids = frozenset(sucursal_ids) if sucursal_ids else None
+    return Filtro(tuple(rangos_de_meses(meses)), modo_hmcl, ids, reglas)
+
+
+def filtrar_cubo_por_hmcl(cubo: Iterable[FilaCubo], modo_hmcl: str) -> List[FilaCubo]:
+    """El cubo se consulta SIEMPRE con HMCL incluido (el cumplimiento necesita la
+    venta con HMCL); el modo `solo`/`excluir` se aplica aqui con la bandera
+    `es_hmcl` de cada fila, igual que el filtro SQL."""
+    if modo_hmcl == HMCL_SOLO:
+        return [f for f in cubo if f.es_hmcl]
+    if modo_hmcl == HMCL_EXCLUIR:
+        return [f for f in cubo if not f.es_hmcl]
+    return list(cubo)
 
 
 def limites_de_fecha(desde: str, hasta: str) -> Tuple[datetime.date, datetime.date]:

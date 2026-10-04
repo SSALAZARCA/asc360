@@ -396,3 +396,77 @@ def test_una_lista_de_lineas_reducida_cambia_los_indicadores():
 
 def test_sin_reglas_el_resultado_es_el_de_siempre(tablero):
     assert t.construir_tablero(CUBO, FACTURAS, CLIENTES, PERSONAS, MESES, t.REGLAS_POR_DEFECTO) == tablero
+
+
+# --- Lista de meses, filtro y HMCL en Python ---------------------------------------------------
+
+
+def test_validar_meses_ordena_y_quita_repetidos():
+    assert t.validar_meses(["2026-03", "2026-01", "2026-03", " 2026-02 "]) == ["2026-01", "2026-02", "2026-03"]
+
+
+def test_validar_meses_acepta_exactamente_doce():
+    doce = [f"2025-{m:02d}" for m in range(1, 13)]
+    assert t.validar_meses(doce + doce) == doce
+
+
+def test_validar_meses_rechaza_mas_de_doce():
+    trece = [f"2025-{m:02d}" for m in range(1, 13)] + ["2026-01"]
+    with pytest.raises(ValueError, match="más de 12 meses"):
+        t.validar_meses(trece)
+
+
+def test_validar_meses_rechaza_lista_vacia():
+    with pytest.raises(ValueError, match="al menos un mes"):
+        t.validar_meses([])
+
+
+@pytest.mark.parametrize("malo", ["2026-13", "2026-00", "2026-1", "26-01", "enero", "", "2026-01-01", None])
+def test_validar_meses_rechaza_formatos_invalidos(malo):
+    with pytest.raises(ValueError, match="Mes inválido"):
+        t.validar_meses(["2026-01", malo])
+
+
+def test_los_meses_consecutivos_se_funden_en_un_rango():
+    import datetime
+    d = datetime.date
+
+    assert t.rangos_de_meses(["2026-01", "2026-02", "2026-03"]) == [(d(2026, 1, 1), d(2026, 4, 1))]
+
+
+def test_los_meses_salteados_quedan_en_rangos_separados():
+    import datetime
+    d = datetime.date
+
+    assert t.rangos_de_meses(["2025-11", "2025-12", "2026-01", "2026-03", "2026-05", "2026-06"]) == [
+        (d(2025, 11, 1), d(2026, 2, 1)), (d(2026, 3, 1), d(2026, 4, 1)), (d(2026, 5, 1), d(2026, 7, 1))]
+
+
+def test_el_filtro_junta_rangos_modo_sucursales_y_reglas():
+    import datetime
+    reglas = t.Reglas(hmcl_nits=("1",))
+
+    f = t.filtro_de_meses(["2026-01", "2026-03"], t.HMCL_SOLO, ["a", "b", "a"], reglas)
+
+    assert f.rangos == (
+        (datetime.date(2026, 1, 1), datetime.date(2026, 2, 1)),
+        (datetime.date(2026, 3, 1), datetime.date(2026, 4, 1)))
+    assert (f.modo_hmcl, f.sucursal_ids, f.reglas) == (t.HMCL_SOLO, frozenset({"a", "b"}), reglas)
+
+
+def test_el_filtro_sin_sucursales_es_none_y_el_modo_por_defecto_incluye():
+    f = t.filtro_de_meses(["2026-01"])
+
+    assert f.sucursal_ids is None and f.modo_hmcl == t.HMCL_INCLUIR and f.reglas == t.REGLAS_POR_DEFECTO
+    assert t.filtro_de_meses(["2026-01"], sucursal_ids=[]).sucursal_ids is None
+
+
+def test_el_modo_hmcl_se_aplica_en_python_con_la_bandera_del_cubo():
+    cubo = [
+        _f(A, "2026-08", "REPUESTOS", 100, 100, 0, 1, 1, 0),
+        _f(A, "2026-08", "REPUESTOS", 40, 40, 0, 1, 1, 0, hmcl=True),
+    ]
+
+    assert [f.venta for f in t.filtrar_cubo_por_hmcl(cubo, t.HMCL_INCLUIR)] == [D(100), D(40)]
+    assert [f.venta for f in t.filtrar_cubo_por_hmcl(cubo, t.HMCL_SOLO)] == [D(40)]
+    assert [f.venta for f in t.filtrar_cubo_por_hmcl(cubo, t.HMCL_EXCLUIR)] == [D(100)]
