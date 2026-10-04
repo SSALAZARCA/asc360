@@ -57,6 +57,7 @@ from app.motored.models.carga_fila_staging import CargaFilaStaging
 from app.motored.models.demanda_perdida import DemandaPerdida
 from app.motored.services.ingesta import errores as errores_mod
 from app.motored.services.ingesta import numeros as numeros_mod
+from app.motored.services.ingesta.lotes import partir
 from app.motored.services.ingesta.resolucion import (
     CacheResolucion,
     resolver_referencia,
@@ -227,8 +228,10 @@ def construir_statement_upsert(
 async def aplicar(
     session, totales: Dict[ClaveDemandaPerdida, Decimal], fecha: date, carga_id: uuid.UUID
 ) -> None:
-    """Ejecuta el upsert como UNA sola sentencia set-based (ADR-2b) -- nunca
-    fila por fila. No hace `commit()`: responsabilidad del caller (Fase 9)."""
-    stmt = construir_statement_upsert(totales, fecha, carga_id)
-    if stmt is not None:
-        await session.execute(stmt)
+    """Ejecuta el upsert como sentencias set-based por lotes (ADR-2b; limite de
+    parametros de PostgreSQL) -- nunca fila por fila. No hace `commit()`:
+    responsabilidad del caller (Fase 9)."""
+    for lote in partir(totales):
+        stmt = construir_statement_upsert(lote, fecha, carga_id)
+        if stmt is not None:
+            await session.execute(stmt)

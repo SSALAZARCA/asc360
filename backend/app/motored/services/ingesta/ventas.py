@@ -67,6 +67,7 @@ from app.motored.services.ingesta import columnas as columnas_mod
 from app.motored.services.ingesta import errores as errores_mod
 from app.motored.services.ingesta import numeros as numeros_mod
 from app.motored.services.ingesta import periodo as periodo_mod
+from app.motored.services.ingesta.lotes import partir
 from app.motored.services.ingesta.resolucion import (
     CacheResolucion,
     resolver_referencia,
@@ -564,13 +565,14 @@ def construir_statement_upsert(totales: Dict[ClaveVentaMensual, Decimal], carga_
 
 
 async def aplicar(session, totales: Dict[ClaveVentaMensual, Decimal], carga_id: uuid.UUID) -> None:
-    """Ejecuta el upsert como UNA sola sentencia set-based (ADR-2b) -- nunca
-    fila por fila. No hace `commit()`: eso es responsabilidad del caller
+    """Ejecuta el upsert como sentencias set-based por lotes (ADR-2b; limite de
+    parametros de PostgreSQL) -- nunca fila por fila. No hace `commit()`: eso es responsabilidad del caller
     (el job runner de Fase 9, que ya define su propio límite de
     transacción por lote)."""
-    stmt = construir_statement_upsert(totales, carga_id)
-    if stmt is not None:
-        await session.execute(stmt)
+    for lote in partir(totales):
+        stmt = construir_statement_upsert(lote, carga_id)
+        if stmt is not None:
+            await session.execute(stmt)
 
 
 def construir_detalle(

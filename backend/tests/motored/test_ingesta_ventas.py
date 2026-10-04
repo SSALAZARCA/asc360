@@ -577,3 +577,23 @@ async def test_5_4_regresion_bug_historico_mes_shifteado_deja_agosto_previo_inta
     assert veredicto_septiembre.codigo_error == periodo.CODIGO_PERIODO_NO_COINCIDE
     # Cero sentencias NUEVAS -- la única que existe sigue siendo la de agosto.
     assert session.executed_statements == [statement_agosto]
+
+
+async def test_aplicar_parte_el_upsert_en_varias_sentencias_sin_perder_filas():
+    from app.motored.services.ingesta import lotes
+
+    n = lotes.FILAS_POR_SENTENCIA * 2 + 7
+    totales = {
+        (SUCURSAL_ID, uuid.uuid4(), 2026, 1, "TALLER"): Decimal(i) for i in range(n)
+    }
+    session = FakeAsyncSession(execute_queue=[[], [], []])
+
+    await ventas.aplicar(session, totales, CARGA_ID)
+
+    assert len(session.executed_statements) == 3
+    unidades = []
+    for stmt in session.executed_statements:
+        params = stmt.compile().construct_params()
+        assert len(params) <= 32_767
+        unidades.extend(v for k, v in params.items() if k.startswith("unidades"))
+    assert sorted(unidades) == sorted(totales.values())

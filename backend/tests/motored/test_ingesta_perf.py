@@ -36,6 +36,7 @@ for the isolated ADR-8 cache test this file reuses at volume).
 """
 from __future__ import annotations
 
+import math
 import time
 import tracemalloc
 import uuid
@@ -47,6 +48,7 @@ import pytest
 from tests.motored.conftest import FakeAsyncSession
 
 from app.motored.services.ingesta import inventario, periodo, resolucion, ventas
+from app.motored.services.ingesta.lotes import FILAS_POR_SENTENCIA
 
 CARGA_ID = uuid.uuid4()
 PROVEEDOR_ID = uuid.uuid4()
@@ -81,12 +83,11 @@ async def _construir_cache(
     reutilizado acá a escala. Retorna también `session` para que el caller
     siga contando queries después de este punto."""
     session = FakeAsyncSession(
-        # Los primeros 4 resultados son el cache (ADR-8); el 5to es para el
-        # ÚNICO `session.execute()` adicional que cada tier ejecuta después
-        # (el upsert set-based de `aplicar`/`aplicar_con_periodo`) -- su
-        # valor de retorno no se usa (ninguno de los dos transforms lee el
-        # resultado del upsert), así que una lista vacía alcanza.
-        execute_queue=[list(sucursales), [], [], list(referencias), []]
+        # Los primeros 4 resultados son el cache (ADR-8); el resto son para
+        # los `session.execute()` del upsert set-based por lotes de
+        # `aplicar`/`aplicar_con_periodo` -- su valor de retorno no se usa,
+        # así que listas vacías alcanzan (de sobra para el volumen del test).
+        execute_queue=[list(sucursales), [], [], list(referencias)] + [[]] * 400
     )
     cache = await resolucion.construir_cache(session)
     return session, cache
@@ -153,11 +154,13 @@ async def test_inventario_56500_rows_es_cache_first_con_queries_y_latencia_acota
     assert errores_totales[0].codigo_error == "REFERENCIA_NO_ENCONTRADA"
     assert len(consolidado) > 0
 
-    # --- Query-count ceiling (ADR-8): 4 del cache + 1 del upsert final de
-    # `aplicar` -- NUNCA escala con el número de filas. Si `procesar_fila`
-    # alguna vez volviera a tocar `session` por fila, este assert saltaría
-    # de 5 a decenas de miles en el primer push a CI.
-    assert len(session.executed_statements) == 5
+    # --- Query-count ceiling (ADR-8): 4 del cache + un upsert por lote de
+    # `FILAS_POR_SENTENCIA` -- nunca por fila. Si `procesar_fila` alguna vez
+    # volviera a tocar `session` por fila, este assert saltaría de un puñado
+    # a decenas de miles en el primer push a CI.
+    assert len(session.executed_statements) == 4 + math.ceil(
+        len(consolidado) / FILAS_POR_SENTENCIA
+    )
     # Ninguno de los dos módulos hace commit -- es responsabilidad
     # exclusiva del caller (docstring de `aplicar` en ambos transforms).
     assert session.committed is False
@@ -268,9 +271,10 @@ async def test_ventas_305901_rows_seed_es_cache_first_con_queries_latencia_y_mem
     assert veredicto.tipo == periodo.TipoVeredictoPeriodo.ACEPTADO
 
     # --- Query-count ceiling (idéntico razonamiento que Tier 1, ADR-8): 4
-    # del cache + 1 del upsert final -- independiente de que acá haya 5.4x
-    # más filas que en Tier 1.
-    assert len(session.executed_statements) == 5
+    # del cache + un upsert por lote -- crece por lote, nunca por fila.
+    assert 4 < len(session.executed_statements) <= 4 + math.ceil(
+        len(staged) / FILAS_POR_SENTENCIA
+    )
     assert session.committed is False
 
     # --- Latency ceiling: generoso -- esta corrida es opt-in (`lento`), no

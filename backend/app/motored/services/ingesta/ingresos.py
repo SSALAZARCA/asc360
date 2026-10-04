@@ -73,6 +73,7 @@ from app.motored.services.ingesta import columnas as columnas_mod
 from app.motored.services.ingesta import errores as errores_mod
 from app.motored.services.ingesta import numeros as numeros_mod
 from app.motored.services.ingesta import transito as transito_mod
+from app.motored.services.ingesta.lotes import partir
 
 # Nombres CANÓNICOS (no normalizados) tal como los espera `columnas.
 # construir_mapa_columnas` -- verificados contra el workbook real de
@@ -261,8 +262,10 @@ def construir_statement_upsert(
 async def aplicar(
     session, consolidado: Dict[ClaveIngresoDocumento, dict], carga_id: uuid.UUID
 ) -> None:
-    """Ejecuta el upsert como UNA sola sentencia set-based (ADR-2b) -- nunca
-    fila por fila. No hace `commit()`: responsabilidad del caller (Fase 9)."""
-    stmt = construir_statement_upsert(consolidado, carga_id)
-    if stmt is not None:
-        await session.execute(stmt)
+    """Ejecuta el upsert como sentencias set-based por lotes (ADR-2b; limite de
+    parametros de PostgreSQL) -- nunca fila por fila. No hace `commit()`:
+    responsabilidad del caller (Fase 9)."""
+    for lote in partir(consolidado):
+        stmt = construir_statement_upsert(lote, carga_id)
+        if stmt is not None:
+            await session.execute(stmt)
