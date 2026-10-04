@@ -49,7 +49,7 @@ function LineaReferencia({ reference, maximo }) {
 function Fila({ item, rank, ranked, maximo, color, reference }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-      {ranked && <RankBadge rank={rank} />}
+      {ranked && <RankBadge rank={rank} colors={item.badge} />}
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 4, paddingTop: reference?.label ? 12 : 0 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
           <span style={{ fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.name}</span>
@@ -68,7 +68,7 @@ function Fila({ item, rank, ranked, maximo, color, reference }) {
 
 /**
  * Horizontal bars with a rank badge. `items` [{name, sub, value, valueText, color, chips:[{text, variant}]}];
- * `tip` is the tooltip of the sub-line; `maxValue` is the full width (default the largest value); `reference` {at, label} draws a line
+ * `badge` {bg, fg} recolors the rank badge; `tip` is the tooltip of the sub-line; `maxValue` is the full width (default the largest value); `reference` {at, label} draws a line
  * (e.g. the 100% goal) in the same scale; `maxHeight` makes the list scroll inside its own box.
  */
 export default function BarList({ items, maxValue, color = COLOR.info, reference, ranked = true, maxHeight }) {

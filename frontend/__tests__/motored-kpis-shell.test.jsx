@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { installFetch, jsonRes, setSession } from './helpers/pedidosFetch';
 import { OPCIONES, VENTAS } from './helpers/kpisVentasFixture';
 import { TIENDAS } from './helpers/kpisTiendasFixture';
+import { ASESORES } from './helpers/kpisAsesoresFixture';
 
 const pushMock = jest.fn();
 jest.mock('next/navigation', () => ({
@@ -13,18 +14,13 @@ jest.mock('../components/motored/MotoredSidebar', () => {
   M.displayName = 'M';
   return M;
 });
-jest.mock('../components/motored/tablero-asesores/TableroAsesoresContent', () => {
-  const T = ({ embedded }) => <div data-testid="tablero-legacy" data-embedded={String(Boolean(embedded))} />;
-  T.displayName = 'T';
-  return { __esModule: true, default: T };
-});
-
 import KpisPage from '../app/motored/tablero-asesores/page';
 
 const RUTAS = () => ({
   'GET /tablero-asesores/kpis/opciones': jsonRes(OPCIONES),
   'GET /tablero-asesores/kpis/ventas': jsonRes(VENTAS),
   'GET /tablero-asesores/kpis/tiendas': jsonRes(TIENDAS),
+  'GET /tablero-asesores/kpis/asesores': jsonRes(ASESORES),
 });
 const llamadasA = (calls, ruta) => calls.filter((c) => c.path === ruta);
 
@@ -61,7 +57,7 @@ describe("KPI's shell", () => {
     expect(llamadasA(calls, '/tablero-asesores/kpis/ventas')[1].query.get('hmcl')).toBe('solo');
   });
 
-  it('loads Tiendas with the same filters and keeps the legacy table in Asesores without fetching its KPI data', async () => {
+  it('loads Tiendas and Asesores with the same filters, each one once, and keeps Ventas cached', async () => {
     setSession('COMPRAS');
     const calls = installFetch(RUTAS());
     render(<KpisPage />);
@@ -72,10 +68,11 @@ describe("KPI's shell", () => {
     expect(llamadasA(calls, '/tablero-asesores/kpis/tiendas')).toHaveLength(1);
     expect(llamadasA(calls, '/tablero-asesores/kpis/tiendas')[0].query.get('hmcl')).toBe('incluir');
     fireEvent.click(screen.getByRole('tab', { name: 'Asesores' }));
-    expect(screen.getByTestId('tablero-legacy')).toHaveAttribute('data-embedded', 'true');
+    expect(await screen.findByRole('region', { name: 'Asesores' })).toBeInTheDocument();
+    expect(llamadasA(calls, '/tablero-asesores/kpis/asesores')).toHaveLength(1);
+    expect(screen.queryByRole('table', { name: /asesores/i })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('tab', { name: 'Ventas' }));
     expect(llamadasA(calls, '/tablero-asesores/kpis/ventas')).toHaveLength(1);
-    expect(calls.map((c) => c.path).filter((p) => /asesores$/.test(p))).toEqual([]);
   });
 
   it('shows a Spanish error when the data cannot be loaded', async () => {

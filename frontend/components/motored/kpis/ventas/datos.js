@@ -64,10 +64,10 @@ export function filasCumplimiento(data) {
   return [...con, ...sin];
 }
 
-/** Legend of the three zones from the configured cuts; counts come from the endpoint. */
-export function zonasSemaforo(data) {
+/** Legend of the three zones from the configured cuts; counts come from the endpoint (`entidad`: tiendas or asesores). */
+export function zonasSemaforo(data, entidad = 'tiendas') {
   const { verde_desde: verde = 90, ambar_desde: ambar = 70 } = data.reglas?.semaforo ?? {};
-  const conteos = data.cumplimiento?.conteos?.tiendas ?? {};
+  const conteos = data.cumplimiento?.conteos?.[entidad] ?? {};
   return {
     verde, ambar,
     leyenda: [

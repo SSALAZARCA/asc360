@@ -9,7 +9,7 @@ const ESCALA = (ratio) => heatLevel(ratio);
 function Teja({ tile, color, area }) {
   return (
     <div
-      data-testid="treemap-tile" data-area={area} title={[tile.label, tile.valueText, tile.sub].filter(Boolean).join(' · ')}
+      data-testid="treemap-tile" data-area={area} title={tile.tip ?? [tile.label, tile.valueText, tile.sub].filter(Boolean).join(' · ')}
       style={{
         position: 'absolute', left: `${tile.left}%`, top: `${tile.top}%`, width: `${tile.width}%`, height: `${tile.height}%`,
         boxSizing: 'border-box', padding: 1,
@@ -25,7 +25,7 @@ function Teja({ tile, color, area }) {
 }
 
 /**
- * Squarified treemap. `items` [{id, label, value, colorValue, valueText, sub}]; tile area is proportional to
+ * Squarified treemap. `items` [{id, label, value, colorValue, valueText, sub, tip}] (`tip` replaces the default tooltip); tile area is proportional to
  * `value`. `colorScale(colorValue, item)` returns {bg, fg} (default: heatmap levels over a ratio).
  * `aspect` is width / height of the box; the box scales to its container width.
  */

@@ -2,18 +2,18 @@
 /** "KPI's": header filters + tabs. ADMIN, COMPRAS and GERENCIA only (`useTableroGate`). */
 import { useState } from 'react';
 import useTableroGate from '../tablero-asesores/useTableroGate';
-import TableroAsesoresContent from '../tablero-asesores/TableroAsesoresContent';
-import { getTiendas, getVentas } from '../../../lib/motored/kpisApi';
+import { getAsesores, getTiendas, getVentas } from '../../../lib/motored/kpisApi';
 import KpiHeader from './KpiHeader';
 import KpiTabs from './KpiTabs';
 import { COLOR } from './tokens';
 import useKpiFiltros from './useKpiFiltros';
 import useKpis from './useKpis';
+import AsesoresTab from './asesores/AsesoresTab';
 import TiendasTab from './tiendas/TiendasTab';
 import VentasTab from './ventas/VentasTab';
 
-// Asesores keeps the legacy table until its own tab.
-const FETCHERS = { ventas: getVentas, tiendas: getTiendas };
+const FETCHERS = { ventas: getVentas, tiendas: getTiendas, asesores: getAsesores };
+const TABS = { ventas: VentasTab, tiendas: TiendasTab, asesores: AsesoresTab };
 const SOMBRA = { background: COLOR.track, borderRadius: 14, height: 120 };
 
 function Esqueleto() {
@@ -30,10 +30,10 @@ function Mensaje({ children, error = false }) {
 }
 
 function Pestana({ tab, kpis }) {
-  if (tab === 'asesores') return <TableroAsesoresContent embedded />;
   if (kpis.error) return <Mensaje error>{kpis.error}</Mensaje>;
   if (!kpis.data) return <Esqueleto />;
-  return tab === 'tiendas' ? <TiendasTab data={kpis.data} /> : <VentasTab data={kpis.data} />;
+  const Tab = TABS[tab];
+  return <Tab data={kpis.data} />;
 }
 
 export default function KpisContent() {

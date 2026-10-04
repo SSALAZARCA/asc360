@@ -1,9 +1,9 @@
 import { MEDALLA } from '../tokens';
 
-/** Round rank badge: black, dark gray and gray for the podium, light gray for the rest. */
-export default function RankBadge({ rank, size = 28 }) {
+/** Round rank badge: black, dark gray and gray for the podium, light gray for the rest; `colors` {bg, fg} overrides it. */
+export default function RankBadge({ rank, size = 28, colors }) {
   const medal = rank <= 3 ? String(rank) : 'rest';
-  const { bg, fg } = MEDALLA[medal];
+  const { bg, fg } = colors ?? MEDALLA[medal];
   return (
     <span
       data-testid="rank-badge" data-medal={medal}
