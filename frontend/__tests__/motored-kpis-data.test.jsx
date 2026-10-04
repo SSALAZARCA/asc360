@@ -57,6 +57,17 @@ describe('useKpis', () => {
     expect(result.current.data).toEqual({ mes: 'nuevo' });
   });
 
+  it('shares one pending request between identical keys', async () => {
+    const lenta = deferred();
+    const api = { ventas: jest.fn().mockReturnValue(lenta.promise) };
+    const { result, rerender } = renderHook(({ f }) => useKpis('ventas', f, api), { initialProps: { f: FILTROS } });
+    rerender({ f: { ...FILTROS, hmcl: 'solo' } });
+    rerender({ f: FILTROS });
+    expect(api.ventas).toHaveBeenCalledTimes(2);
+    await act(async () => { lenta.resolve({ ok: 1 }); });
+    await waitFor(() => expect(result.current.data).toEqual({ ok: 1 }));
+  });
+
   it('reports a Spanish error and does not cache failures', async () => {
     const api = { ventas: jest.fn().mockRejectedValueOnce(new Error('boom')).mockResolvedValue({ ok: true }) };
     const { result, rerender } = renderHook(({ f }) => useKpis('ventas', f, api), { initialProps: { f: FILTROS } });

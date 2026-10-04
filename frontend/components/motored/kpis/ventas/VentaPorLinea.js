@@ -1,8 +1,7 @@
 import { StackedArea } from '../charts';
 import { millones, miles } from '../format';
 import { CATEGORIA, COLOR } from '../tokens';
-import { ventaPorLinea } from './datos';
-import { mesCorto } from './datos';
+import { mesCorto, ventaPorLinea } from './datos';
 import { CABECERA, NUM, TARJETA, TITULO } from './estilos';
 
 function Leyenda({ lineas }) {

@@ -81,6 +81,24 @@ describe('KpiHeader', () => {
     expect(within(dialog).getByText('7 meses seleccionados')).toBeInTheDocument();
   });
 
+  it('lets an unavailable month that is already selected be deselected', () => {
+    const { onChange } = montar({ meses: ['2026-07', '2026-08'] });
+    fireEvent.click(screen.getByRole('button', { name: /Jul – Ago 2026/ }));
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByRole('button', { name: 'Ago' })).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Ago' }));
+    expect(onChange).toHaveBeenCalledWith({ meses: ['2026-07'] });
+  });
+
+  it('presets drop the months without data', () => {
+    const opciones = { ...OPCIONES, meses_disponibles: OPCIONES.meses_disponibles.filter((m) => m !== '2026-06') };
+    const onChange = jest.fn();
+    render(<KpiHeader opciones={opciones} filtros={{ meses: ['2026-07'], sucursales: [], hmcl: 'incluir' }} onChange={onChange} />);
+    fireEvent.click(screen.getByRole('button', { name: /Jul 2026/ }));
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Último trimestre' }));
+    expect(onChange).toHaveBeenCalledWith({ meses: ['2026-05', '2026-07'] });
+  });
+
   it('does not let the last month be unselected', () => {
     const { onChange } = montar({ meses: ['2026-07'] });
     fireEvent.click(screen.getByRole('button', { name: /Jul 2026/ }));

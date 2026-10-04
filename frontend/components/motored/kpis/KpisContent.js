@@ -29,12 +29,12 @@ function Mensaje({ children, error = false }) {
   return <p role={error ? 'alert' : undefined} style={{ margin: 0, fontSize: 14, color: error ? 'var(--motored-danger, #C0392B)' : COLOR.muted }}>{children}</p>;
 }
 
-function Pestana({ tab, kpis, filtros }) {
+function Pestana({ tab, kpis }) {
   if (tab === 'tiendas') return <ProximamenteCard titulo="Tiendas" />;
   if (tab === 'asesores') return <TableroAsesoresContent embedded />;
   if (kpis.error) return <Mensaje error>{kpis.error}</Mensaje>;
   if (!kpis.data) return <Esqueleto />;
-  return <VentasTab data={kpis.data} filtros={filtros} />;
+  return <VentasTab data={kpis.data} />;
 }
 
 export default function KpisContent() {
@@ -49,7 +49,7 @@ export default function KpisContent() {
       <KpiHeader opciones={opciones} filtros={filtros} onChange={cambiar} />
       <KpiTabs value={tab} onChange={setTab} />
       {error && <Mensaje error>{error}</Mensaje>}
-      {sinVentas ? <Mensaje>Todavía no hay ventas cargadas.</Mensaje> : opciones && <Pestana tab={tab} kpis={kpis} filtros={filtros} />}
+      {sinVentas ? <Mensaje>Todavía no hay ventas cargadas.</Mensaje> : opciones && <Pestana tab={tab} kpis={kpis} />}
     </div>
   );
 }

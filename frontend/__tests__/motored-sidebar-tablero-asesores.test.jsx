@@ -1,6 +1,6 @@
 /**
  * "Tablero asesores" sidebar entry (feature motored-tablero-asesores, T4):
- * ADMIN and COMPRAS only, placed right after "Pedidos".
+ * ADMIN, COMPRAS and GERENCIA, placed right after "Pedidos".
  */
 import React from 'react';
 import { render, screen } from '@testing-library/react';

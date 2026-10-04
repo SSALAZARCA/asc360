@@ -14,6 +14,7 @@ export const claveKpis = (tab, { meses, sucursales = [], hmcl }) =>
 
 export default function useKpis(tab, filtros, api = API) {
   const cache = useRef(new Map());
+  const pendientes = useRef(new Map());
   const solicitud = useRef(0);
   const fetcher = api[tab];
   const activo = Boolean(fetcher && filtros.meses?.length);
@@ -28,7 +29,14 @@ export default function useKpis(tab, filtros, api = API) {
       return undefined;
     }
     setEstado({ clave, data: null, error: null });
-    Promise.resolve(fetcher(filtros)).then(
+    // An identical request already in flight is reused instead of fired again.
+    if (!pendientes.current.has(clave)) {
+      const promesa = Promise.resolve(fetcher(filtros));
+      pendientes.current.set(clave, promesa);
+      const soltar = () => pendientes.current.delete(clave);
+      promesa.then(soltar, soltar);
+    }
+    pendientes.current.get(clave).then(
       (data) => {
         cache.current.set(clave, data);
         if (numero === solicitud.current) setEstado({ clave, data, error: null });
