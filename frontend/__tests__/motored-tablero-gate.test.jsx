@@ -1,11 +1,10 @@
 /**
- * The dashboard has its own gate (ADMIN and COMPRAS). It must not follow
+ * The KPI's dashboard has its own gate (ADMIN, COMPRAS and GERENCIA). It must not follow
  * `usePedidosGate`: opening Pedidos to another role is a separate decision.
  */
 import React from 'react';
 import { render, screen, renderHook, waitFor } from '@testing-library/react';
 import { installFetch, jsonRes, setSession } from './helpers/pedidosFetch';
-import { TABLERO } from './helpers/tableroAsesoresFetch';
 
 const pushMock = jest.fn();
 jest.mock('next/navigation', () => ({
@@ -60,10 +59,10 @@ describe('useTableroGate', () => {
 describe('Tablero de asesores no sigue al gate de Pedidos', () => {
   it('SUCURSAL sigue fuera aunque Pedidos se abra a todos los roles', async () => {
     setSession('SUCURSAL');
-    const calls = installFetch({ 'GET /tablero-asesores': jsonRes(TABLERO) });
+    const calls = installFetch({ 'GET /tablero-asesores': jsonRes({}) });
     render(<TableroAsesoresPage />);
     await waitFor(() => expect(pushMock).toHaveBeenCalledWith('/motored/maestros'));
     expect(calls).toHaveLength(0);
-    expect(screen.queryByText('Ana Pérez')).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: "KPI's" })).not.toBeInTheDocument();
   });
 });

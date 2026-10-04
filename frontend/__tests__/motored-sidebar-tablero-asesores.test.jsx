@@ -1,5 +1,5 @@
 /**
- * "Tablero asesores" sidebar entry (feature motored-tablero-asesores, T4):
+ * "KPI's" sidebar entry (route /motored/tablero-asesores):
  * ADMIN, COMPRAS and GERENCIA, placed right after "Pedidos".
  */
 import React from 'react';
@@ -13,7 +13,7 @@ jest.mock('next/navigation', () => ({
 import MotoredSidebar from '../components/motored/MotoredSidebar';
 
 describe('MotoredSidebar - KPIs', () => {
-  it.each(['ADMIN', 'COMPRAS'])('lo muestra a %s', (role) => {
+  it.each(['ADMIN', 'COMPRAS', 'GERENCIA'])('lo muestra a %s', (role) => {
     render(<MotoredSidebar user={{ nombre: 'U', role }} />);
     expect(screen.getByText("KPI's")).toBeInTheDocument();
   });
