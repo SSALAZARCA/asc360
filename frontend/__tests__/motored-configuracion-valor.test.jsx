@@ -101,15 +101,34 @@ describe('aBorrador', () => {
 });
 
 describe('formatearValor', () => {
+  const semaforo = spec('objeto_numerico', { campos: ['verde_desde', 'ambar_desde'] });
   it.each([
     [spec('bool'), true, 'Sí'],
     [spec('bool'), false, 'No'],
     [spec('entero'), 30, '30'],
     [spec('decimal'), null, 'Sin valor'],
+    [spec('decimal'), '1.5', '1,5'],
+    [spec('opcion'), 'sin_hmcl', 'Sin HMCL'],
+    [spec('opcion'), 'otro_codigo', 'otro_codigo'],
+    [spec('lista_opciones'), ['ADMIN', 'COMPRAS'], 'Administración, Compras'],
     [spec('lista'), ['A', 'B'], 'A, B'],
-    [spec('objeto_numerico', { campos: ['a', 'b'] }), { a: 1, b: 2 }, 'a: 1 · b: 2'],
-    [spec('mapa_opcion'), { G: 'P' }, 'G → P'],
-    [spec('tramos'), [{ nombre: 'BASE', desde_pct: 0, tasa_pct: 1 }], 'BASE: desde 0% → 1%'],
+    [spec('lista'), [], '(vacía)'],
+    [spec('hora'), '08:30', '08:30'],
+    [semaforo, { verde_desde: 90, ambar_desde: 70 }, 'Verde desde 90% · Ámbar desde 70%'],
+    [spec('k_fms', { campos: ['F', 'M', 'S'] }), { F: '3', M: '1.5', S: '1' }, 'F: 3 · M: 1,5 · S: 1'],
+    [spec('objeto_numerico', { campos: ['dias_seguridad'] }), { dias_seguridad: 2 }, 'Dias seguridad: 2'],
+    [spec('mapa_opcion'), { GERENTE: 'COMERCIALES', X: 'raro' }, 'GERENTE: Comerciales; X: raro'],
+    [spec('mapa_opcion'), {}, '(vacío)'],
+    [
+      spec('tramos'),
+      [
+        { nombre: 'BASE', desde_pct: 0, tasa_pct: 1 },
+        { nombre: 'PRO', desde_pct: 90, tasa_pct: '1.5' },
+      ],
+      'BASE desde 0% (1%) · PRO desde 90% (1,5%)',
+    ],
+    [spec('desconocido'), { a: 1 }, '{"a":1}'],
+    [spec('desconocido'), 'x', 'x'],
   ])('shows %# readable', (s, valor, texto) => {
     expect(formatearValor(s, valor)).toBe(texto);
   });

@@ -6,8 +6,7 @@
  */
 import { Plus, Trash2 } from 'lucide-react';
 import { columnaStyle, controlStyle, filaStyle, optionStyle, touchStyle } from './styles';
-
-const ETIQUETA_GRUPO = { PERSONA: 'Persona', COMERCIALES: 'Comerciales', OTROS: 'Otros' };
+import { etiquetaDe } from './etiquetas';
 
 function Fila({ fila, opciones, onCambiar, onQuitar }) {
   return (
@@ -17,7 +16,7 @@ function Fila({ fila, opciones, onCambiar, onQuitar }) {
         onChange={(e) => onCambiar({ clave: e.target.value.toUpperCase() })}
       />
       <select aria-label="Grupo del cargo" value={fila.valor} style={controlStyle} onChange={(e) => onCambiar({ valor: e.target.value })}>
-        {opciones.map((o) => <option key={o} value={o} style={optionStyle}>{ETIQUETA_GRUPO[o] || o}</option>)}
+        {opciones.map((o) => <option key={o} value={o} style={optionStyle}>{etiquetaDe(o)}</option>)}
       </select>
       <button type="button" aria-label="Quitar cargo" className="motored-btn motored-btn-secondary" style={touchStyle} onClick={onQuitar}>
         <Trash2 size={14} aria-hidden="true" />

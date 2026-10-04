@@ -5,6 +5,8 @@
  * `formatearValor` writes it for a person. The server stays the judge of
  * ranges and cross-field rules; here only the shape and "is it a number".
  */
+import { etiquetaDe } from './etiquetas';
+
 const ENTERO = /^-?\d+$/;
 const DECIMAL = /^\d+([.,]\d+)?$/;
 
@@ -95,23 +97,50 @@ export function aBorrador(spec, valor) {
   }
 }
 
+const ETIQUETA_CAMPO = { verde_desde: 'Verde desde', ambar_desde: 'Ámbar desde' };
+const UNIDAD_CAMPO = { verde_desde: '%', ambar_desde: '%' };
+
+/** A number as shown on this page: Colombian decimal comma. */
+const numeroLegible = (n) => String(n).replace('.', ',');
+
+function nombreCampo(campo) {
+  if (ETIQUETA_CAMPO[campo]) return ETIQUETA_CAMPO[campo];
+  const texto = campo.replace(/_/g, ' ');
+  return texto.charAt(0).toUpperCase() + texto.slice(1);
+}
+
+function campoLegible(campo, valor) {
+  const numero = numeroLegible(valor);
+  if (UNIDAD_CAMPO[campo]) return `${nombreCampo(campo)} ${numero}${UNIDAD_CAMPO[campo]}`;
+  return `${nombreCampo(campo)}: ${numero}`;
+}
+
+const camposLegibles = (spec, valor) => spec.campos.map((c) => campoLegible(c, valor[c])).join(' · ');
+
+const tramoLegible = (t) => `${t.nombre} desde ${numeroLegible(t.desde_pct)}% (${numeroLegible(t.tasa_pct)}%)`;
+
+function textoSeguro(valor) {
+  if (typeof valor === 'object') return JSON.stringify(valor);
+  return String(valor);
+}
+
 export function formatearValor(spec, valor) {
   if (valor === null || valor === undefined) return 'Sin valor';
   switch (spec.tipo) {
     case 'bool': return valor ? 'Sí' : 'No';
+    case 'decimal': return numeroLegible(valor);
+    case 'opcion': return etiquetaDe(valor);
     case 'lista':
     case 'lista_opciones':
-    case 'lista_digitos': return valor.length ? valor.join(', ') : '(vacía)';
+    case 'lista_digitos': return valor.length ? valor.map(etiquetaDe).join(', ') : '(vacía)';
     case 'k_fms':
-    case 'objeto_numerico':
-      return spec.campos.map((c) => `${c}: ${valor[c]}`).join(' · ');
+    case 'objeto_numerico': return camposLegibles(spec, valor);
     case 'mapa_opcion': {
-      const pares = Object.entries(valor).map(([k, v]) => `${k} → ${v}`);
-      return pares.length ? pares.join(', ') : '(vacío)';
+      const pares = Object.entries(valor).map(([k, v]) => `${k}: ${etiquetaDe(v)}`);
+      return pares.length ? pares.join('; ') : '(vacío)';
     }
-    case 'tramos':
-      return valor.map((t) => `${t.nombre}: desde ${t.desde_pct}% → ${t.tasa_pct}%`).join(' · ');
-    default: return String(valor);
+    case 'tramos': return valor.map(tramoLegible).join(' · ');
+    default: return textoSeguro(valor);
   }
 }
 

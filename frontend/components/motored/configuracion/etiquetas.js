@@ -8,6 +8,9 @@ export const ETIQUETA_OPCION = {
   PONDERADO: 'Contarlo con menos peso',
   ADMIN: 'Administración',
   COMPRAS: 'Compras',
+  PERSONA: 'Persona',
+  COMERCIALES: 'Comerciales',
+  OTROS: 'Otros',
 };
 
 export const etiquetaDe = (codigo) => ETIQUETA_OPCION[codigo] || codigo;
