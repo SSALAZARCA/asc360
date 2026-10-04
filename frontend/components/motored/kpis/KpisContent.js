@@ -3,17 +3,17 @@
 import { useState } from 'react';
 import useTableroGate from '../tablero-asesores/useTableroGate';
 import TableroAsesoresContent from '../tablero-asesores/TableroAsesoresContent';
-import { getVentas } from '../../../lib/motored/kpisApi';
+import { getTiendas, getVentas } from '../../../lib/motored/kpisApi';
 import KpiHeader from './KpiHeader';
 import KpiTabs from './KpiTabs';
-import ProximamenteCard from './ProximamenteCard';
 import { COLOR } from './tokens';
 import useKpiFiltros from './useKpiFiltros';
 import useKpis from './useKpis';
+import TiendasTab from './tiendas/TiendasTab';
 import VentasTab from './ventas/VentasTab';
 
-// Only Ventas reads the new endpoints for now; Asesores keeps the legacy table until its own tab.
-const FETCHERS = { ventas: getVentas };
+// Asesores keeps the legacy table until its own tab.
+const FETCHERS = { ventas: getVentas, tiendas: getTiendas };
 const SOMBRA = { background: COLOR.track, borderRadius: 14, height: 120 };
 
 function Esqueleto() {
@@ -30,11 +30,10 @@ function Mensaje({ children, error = false }) {
 }
 
 function Pestana({ tab, kpis }) {
-  if (tab === 'tiendas') return <ProximamenteCard titulo="Tiendas" />;
   if (tab === 'asesores') return <TableroAsesoresContent embedded />;
   if (kpis.error) return <Mensaje error>{kpis.error}</Mensaje>;
   if (!kpis.data) return <Esqueleto />;
-  return <VentasTab data={kpis.data} />;
+  return tab === 'tiendas' ? <TiendasTab data={kpis.data} /> : <VentasTab data={kpis.data} />;
 }
 
 export default function KpisContent() {

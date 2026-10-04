@@ -59,7 +59,7 @@ function Fila({ item, rank, ranked, maximo, color, reference }) {
         </div>
         <Barra item={item} maximo={maximo} color={color} reference={reference} />
         {item.sub && (
-          <span style={{ fontSize: 11.5, color: COLOR.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.sub}</span>
+          <span title={item.tip} style={{ fontSize: 11.5, color: COLOR.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.sub}</span>
         )}
       </div>
     </div>
@@ -68,7 +68,7 @@ function Fila({ item, rank, ranked, maximo, color, reference }) {
 
 /**
  * Horizontal bars with a rank badge. `items` [{name, sub, value, valueText, color, chips:[{text, variant}]}];
- * `maxValue` is the full width (default the largest value); `reference` {at, label} draws a line
+ * `tip` is the tooltip of the sub-line; `maxValue` is the full width (default the largest value); `reference` {at, label} draws a line
  * (e.g. the 100% goal) in the same scale; `maxHeight` makes the list scroll inside its own box.
  */
 export default function BarList({ items, maxValue, color = COLOR.info, reference, ranked = true, maxHeight }) {

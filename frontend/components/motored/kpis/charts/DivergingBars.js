@@ -40,7 +40,7 @@ export default function DivergingBars({ items, maxAbs, nameWidth = 150, maxHeigh
         const negativo = item.value < 0;
         return (
           <div key={item.id ?? item.name} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ width: nameWidth, flex: 'none', fontSize: 12.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.name}</span>
+            <span data-testid="diverging-name" style={{ width: nameWidth, flex: 'none', fontSize: 12.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.name}</span>
             <div style={{ flex: 1, display: 'flex', alignItems: 'center', minWidth: 0 }}>
               <Mitad lado="neg" ancho={negativo ? ancho : 0} texto={item.valueText} />
               <span style={{ width: 2, height: 24, background: COLOR.ink, flex: 'none' }} />

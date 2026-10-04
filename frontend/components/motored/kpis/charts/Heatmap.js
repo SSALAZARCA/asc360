@@ -24,23 +24,26 @@ const CABECERA = {
 
 /**
  * Rows x columns table; each cell is colored against its row's own average (6 levels, teal above, violet below).
- * `rows` [{name, values[]}] (0 or null = no data), `maxHeight` scrolls inside the box, header stays sticky.
+ * `rowHeader` titles the name column. `rows` [{name, values[]}] (0 or null = no data), `maxHeight` scrolls inside the box, header stays sticky.
  */
-export default function Heatmap({ columns, rows, formatValue = miles, maxHeight = 380, legend = true, nameWidth = 160 }) {
+export default function Heatmap({ columns, rows, formatValue = miles, maxHeight = 380, legend = true, nameWidth = 160, rowHeader }) {
   return (
     <div>
       <div data-testid="heatmap-scroll" style={{ overflow: 'auto', maxHeight, marginTop: 12 }}>
         <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 5, minWidth: 420, fontSize: 12.5 }}>
           <thead>
             <tr>
-              <th style={{ ...CABECERA, textAlign: 'left', minWidth: nameWidth }} />
+              {/* globals.css forces `text-align: center !important` on cells, so the left alignment lives in a block inside the cell. */}
+              <th style={{ ...CABECERA, minWidth: nameWidth }}><div style={{ textAlign: 'left' }}>{rowHeader}</div></th>
               {columns.map((c) => <th key={c} style={CABECERA}>{c}</th>)}
             </tr>
           </thead>
           <tbody>
             {heatRows(rows).map((fila) => (
               <tr key={fila.id ?? fila.name}>
-                <td style={{ fontWeight: 500, whiteSpace: 'nowrap', maxWidth: nameWidth, overflow: 'hidden', textOverflow: 'ellipsis' }}>{fila.name}</td>
+                <td style={{ maxWidth: nameWidth }}>
+                  <div style={{ fontWeight: 700, textAlign: 'left', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{fila.name}</div>
+                </td>
                 {fila.cells.map((c, i) => (
                   <td
                     key={i} data-testid="heat-cell" data-level={c.level ?? 'none'}

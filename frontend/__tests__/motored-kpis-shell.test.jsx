@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { installFetch, jsonRes, setSession } from './helpers/pedidosFetch';
 import { OPCIONES, VENTAS } from './helpers/kpisVentasFixture';
+import { TIENDAS } from './helpers/kpisTiendasFixture';
 
 const pushMock = jest.fn();
 jest.mock('next/navigation', () => ({
@@ -23,6 +24,7 @@ import KpisPage from '../app/motored/tablero-asesores/page';
 const RUTAS = () => ({
   'GET /tablero-asesores/kpis/opciones': jsonRes(OPCIONES),
   'GET /tablero-asesores/kpis/ventas': jsonRes(VENTAS),
+  'GET /tablero-asesores/kpis/tiendas': jsonRes(TIENDAS),
 });
 const llamadasA = (calls, ruta) => calls.filter((c) => c.path === ruta);
 
@@ -59,19 +61,21 @@ describe("KPI's shell", () => {
     expect(llamadasA(calls, '/tablero-asesores/kpis/ventas')[1].query.get('hmcl')).toBe('solo');
   });
 
-  it('shows a placeholder in Tiendas and the legacy table in Asesores without fetching KPI data', async () => {
+  it('loads Tiendas with the same filters and keeps the legacy table in Asesores without fetching its KPI data', async () => {
     setSession('COMPRAS');
     const calls = installFetch(RUTAS());
     render(<KpisPage />);
     await screen.findByRole('tab', { name: 'Tiendas' });
     await waitFor(() => expect(llamadasA(calls, '/tablero-asesores/kpis/ventas')).toHaveLength(1));
     fireEvent.click(screen.getByRole('tab', { name: 'Tiendas' }));
-    expect(screen.getByText('Próximamente')).toBeInTheDocument();
+    expect(await screen.findByRole('region', { name: 'Tiendas' })).toBeInTheDocument();
+    expect(llamadasA(calls, '/tablero-asesores/kpis/tiendas')).toHaveLength(1);
+    expect(llamadasA(calls, '/tablero-asesores/kpis/tiendas')[0].query.get('hmcl')).toBe('incluir');
     fireEvent.click(screen.getByRole('tab', { name: 'Asesores' }));
     expect(screen.getByTestId('tablero-legacy')).toHaveAttribute('data-embedded', 'true');
     fireEvent.click(screen.getByRole('tab', { name: 'Ventas' }));
     expect(llamadasA(calls, '/tablero-asesores/kpis/ventas')).toHaveLength(1);
-    expect(calls.map((c) => c.path).filter((p) => /tiendas|asesores$/.test(p))).toEqual([]);
+    expect(calls.map((c) => c.path).filter((p) => /asesores$/.test(p))).toEqual([]);
   });
 
   it('shows a Spanish error when the data cannot be loaded', async () => {
