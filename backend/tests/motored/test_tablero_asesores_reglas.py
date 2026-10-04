@@ -77,3 +77,83 @@ def test_el_eco_de_reglas_lleva_semaforo_base_y_vigencia(hasta, esperado):
 
     assert eco == {"semaforo": {"verde_desde": 90, "ambar_desde": 70},
                    "cumplimiento_base": "con_hmcl", "vigencia": esperado}
+
+
+# --- reglas leidas de Configuracion: forma y tipos ---------------------------------------------
+
+
+def _valores(**cambios):
+    base = {
+        "lineas_comerciales": ["GPS"], "hmcl_nits": ["123"],
+        "grupo_por_cargo": {"X": "PERSONA"},
+        "kpi_semaforo_cortes": {"verde_desde": 95, "ambar_desde": 60},
+        "cumplimiento_base": "sin_hmcl",
+    }
+    base.update(cambios)
+    return base
+
+
+def test_un_grupo_desconocido_en_el_mapa_de_cargos_pasa_a_otros():
+    valores = _valores(grupo_por_cargo={"A": "PERSONA", "B": "COMERCIALES", "C": "VIP'; DROP", "D": "RESTO"})
+
+    reglas = t.reglas_desde_valores(valores)
+
+    assert reglas.grupo_por_cargo == {"A": "PERSONA", "B": "COMERCIALES", "C": "OTROS", "D": "OTROS"}
+
+
+def test_las_lineas_de_configuracion_se_normalizan_como_las_de_la_referencia():
+    valores = _valores(lineas_comerciales=["  gps ", "Baterías", "CASCOS", "gps"])
+
+    reglas = t.reglas_desde_valores(valores)
+
+    assert reglas.lineas == ("GPS", "BATERIAS", "CASCOS")
+
+
+def test_una_linea_de_configuracion_con_tildes_coincide_con_la_de_la_cte():
+    reglas = t.reglas_desde_valores(_valores(lineas_comerciales=["Baterías"]))
+
+    valores = _parametros(q._lineas_por_referencia(reglas).element)
+
+    assert "BATERIAS" in valores and "Baterías" not in valores
+
+
+@pytest.mark.parametrize("clave, malo", [
+    ("lineas_comerciales", "GPS"),
+    ("lineas_comerciales", [1, 2]),
+    ("lineas_comerciales", []),
+    ("hmcl_nits", {"a": 1}),
+    ("hmcl_nits", [None]),
+    ("grupo_por_cargo", ["x"]),
+    ("grupo_por_cargo", {"A": 3}),
+    ("kpi_semaforo_cortes", [90, 70]),
+    ("kpi_semaforo_cortes", {"verde_desde": "alto", "ambar_desde": 70}),
+    ("kpi_semaforo_cortes", {"verde_desde": 60, "ambar_desde": 70}),
+    ("kpi_semaforo_cortes", {"verde_desde": 90}),
+    ("cumplimiento_base", "otra"),
+    ("cumplimiento_base", 7),
+])
+def test_un_valor_con_forma_invalida_vuelve_al_defecto_de_esa_clave_y_avisa(clave, malo, caplog):
+    valores = _valores(**{clave: malo})
+
+    with caplog.at_level("WARNING"):
+        reglas = t.reglas_desde_valores(valores)
+
+    defecto = t.REGLAS_POR_DEFECTO
+    esperado = {
+        "lineas_comerciales": ("lineas", defecto.lineas),
+        "hmcl_nits": ("hmcl_nits", defecto.hmcl_nits),
+        "grupo_por_cargo": ("grupo_por_cargo", defecto.grupo_por_cargo),
+        "kpi_semaforo_cortes": ("semaforo", defecto.semaforo),
+        "cumplimiento_base": ("cumplimiento_base", defecto.cumplimiento_base),
+    }[clave]
+    assert getattr(reglas, esperado[0]) == esperado[1]
+    assert clave in caplog.text
+    # Las demas claves siguen con lo configurado.
+    if clave != "lineas_comerciales":
+        assert reglas.lineas == ("GPS",)
+
+
+def test_un_semaforo_numerico_se_conserva_como_numeros():
+    reglas = t.reglas_desde_valores(_valores(kpi_semaforo_cortes={"verde_desde": "95", "ambar_desde": 60.5}))
+
+    assert reglas.semaforo == {"verde_desde": 95.0, "ambar_desde": 60.5}

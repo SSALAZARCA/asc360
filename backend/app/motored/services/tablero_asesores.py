@@ -15,11 +15,14 @@ Convenciones del resultado:
   (nula, NO APLICA, ...) se excluye de todo indicador y se informa aparte.
 """
 import datetime
+import logging
 import re
 import unicodedata
 from collections import defaultdict
 from decimal import Decimal
 from typing import Any, Dict, FrozenSet, Iterable, List, NamedTuple, Optional, Tuple
+
+logger = logging.getLogger(__name__)
 
 LINEAS: Tuple[str, ...] = (
     "REPUESTOS", "ACCESORIOS", "LLANTAS", "LUBRICANTES", "BATERIAS", "GPS", "CASCOS",
@@ -70,6 +73,83 @@ class Reglas(NamedTuple):
 
 
 REGLAS_POR_DEFECTO = Reglas()
+
+GRUPOS_VALIDOS = (TIPO_PERSONA, GRUPO_COMERCIALES)
+BASES_CUMPLIMIENTO = (CUMPLIMIENTO_CON_HMCL, CUMPLIMIENTO_SIN_HMCL)
+
+
+def texto_de_linea(texto: str) -> str:
+    """Recorta, pasa a mayusculas y quita tildes (la misma regla que la CTE de
+    lineas aplica a `referencia.linea_comercial`)."""
+    descompuesto = unicodedata.normalize("NFD", texto.strip())
+    return "".join(c for c in descompuesto if unicodedata.category(c) != "Mn").upper()
+
+
+def _lineas_validas(valor: Any) -> Optional[Tuple[str, ...]]:
+    if not isinstance(valor, (list, tuple)) or not valor or not all(isinstance(x, str) for x in valor):
+        return None
+    lineas = tuple(dict.fromkeys(texto_de_linea(x) for x in valor))
+    return lineas if all(lineas) else None
+
+
+def _nits_validos(valor: Any) -> Optional[Tuple[str, ...]]:
+    if not isinstance(valor, (list, tuple)) or not all(isinstance(x, str) and x.strip() for x in valor):
+        return None
+    return tuple(x.strip() for x in valor)
+
+
+def _grupos_validos(valor: Any) -> Optional[Dict[str, str]]:
+    """Un grupo que no sea PERSONA o COMERCIALES (nunca debe llegar a SQL como
+    literal) cuenta como OTROS, el grupo de los cargos sin regla."""
+    if not isinstance(valor, dict) or not all(isinstance(c, str) and isinstance(g, str) for c, g in valor.items()):
+        return None
+    return {c: (g if g in GRUPOS_VALIDOS else GRUPO_OTROS) for c, g in valor.items()}
+
+
+def _numero_de_corte(valor: Any) -> Optional[float]:
+    if isinstance(valor, bool):
+        return None
+    try:
+        return float(valor)
+    except (TypeError, ValueError):
+        return None
+
+
+def _semaforo_valido(valor: Any) -> Optional[Dict[str, float]]:
+    if not isinstance(valor, dict):
+        return None
+    verde, ambar = _numero_de_corte(valor.get("verde_desde")), _numero_de_corte(valor.get("ambar_desde"))
+    if verde is None or ambar is None or ambar >= verde:
+        return None
+    return {"verde_desde": verde, "ambar_desde": ambar}
+
+
+def _base_valida(valor: Any) -> Optional[str]:
+    return valor if valor in BASES_CUMPLIMIENTO else None
+
+
+def reglas_desde_valores(valores: Dict[str, Any]) -> Reglas:
+    """`Reglas` desde los valores leidos de Configuracion. Cada clave se revisa
+    por separado: la que tenga una forma invalida (tipo, vacia, grupo o base
+    desconocidos) vuelve a su valor por defecto y se avisa en el log; las demas
+    se conservan. Las lineas se normalizan como las de la referencia."""
+    defecto = REGLAS_POR_DEFECTO
+
+    def tomar(clave: str, validar, respaldo):
+        resultado = validar(valores.get(clave))
+        if resultado is None:
+            logger.warning("tablero: el valor de Configuración %s no tiene la forma esperada (%r); "
+                           "se usa el valor por defecto", clave, valores.get(clave))
+            return respaldo
+        return resultado
+
+    return Reglas(
+        lineas=tomar("lineas_comerciales", _lineas_validas, defecto.lineas),
+        hmcl_nits=tomar("hmcl_nits", _nits_validos, defecto.hmcl_nits),
+        grupo_por_cargo=tomar("grupo_por_cargo", _grupos_validos, defecto.grupo_por_cargo),
+        semaforo=tomar("kpi_semaforo_cortes", _semaforo_valido, defecto.semaforo),
+        cumplimiento_base=tomar("cumplimiento_base", _base_valida, defecto.cumplimiento_base),
+    )
 
 
 class Filtro(NamedTuple):
@@ -143,8 +223,7 @@ def normalizar_linea(texto: Optional[str], lineas: Iterable[str] = LINEAS) -> Op
     es None)."""
     if not texto:
         return None
-    descompuesto = unicodedata.normalize("NFD", texto.strip())
-    limpio = "".join(c for c in descompuesto if unicodedata.category(c) != "Mn").upper()
+    limpio = texto_de_linea(texto)
     return limpio if limpio in tuple(lineas) else None
 
 

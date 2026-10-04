@@ -199,3 +199,6 @@ def test_doce_meses_salteados_son_validos_y_repetidos_no_cuentan(_motored_ready,
         r = client.get(URL, params={"meses": doce + ",2025-01"})
 
     assert r.status_code == 200
+    from app.motored.services.tablero_asesores import validar_meses
+    assert llamadas == [("meses", doce.split(",") + ["2025-01"], "incluir", None)]
+    assert validar_meses(llamadas[0][1]) == doce.split(",")  # the repeated month collapses to 12

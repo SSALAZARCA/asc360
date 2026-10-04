@@ -342,13 +342,7 @@ async def cargar_reglas(db: AsyncSession, fecha: datetime.date) -> Reglas:
         "kpi_semaforo_cortes": dict(defecto.semaforo),
         "cumplimiento_base": defecto.cumplimiento_base,
     })
-    return Reglas(
-        lineas=tuple(valores["lineas_comerciales"]),
-        hmcl_nits=tuple(valores["hmcl_nits"]),
-        grupo_por_cargo=dict(valores["grupo_por_cargo"]),
-        semaforo=dict(valores["kpi_semaforo_cortes"]),
-        cumplimiento_base=valores["cumplimiento_base"],
-    )
+    return t.reglas_desde_valores(valores)
 
 
 def _eco_reglas(reglas: Reglas, vigencia: str) -> Dict[str, Any]:
