@@ -17,6 +17,8 @@ const deLista = (opciones) => ({
 export const EDITORES = {
   hmcl_nits: deLista({ digitos: true, unicos: true }),
   lineas_comerciales: deLista({ mayusculas: true }),
+  tipos_inventario_incluidos: deLista({ mayusculas: true }),
+  estados_backorder_vigentes: deLista({ mayusculas: true }),
   comision_cargos_asesor: deLista({ mayusculas: true }),
   grupo_por_cargo: { Control: EditorMapaCargos },
   kpi_semaforo_cortes: { Control: EditorSemaforo, validar: validarSemaforo },

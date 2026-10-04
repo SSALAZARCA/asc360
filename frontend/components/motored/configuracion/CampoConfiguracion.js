@@ -28,11 +28,12 @@ function ValorActual({ spec }) {
   );
 }
 
-function Pendientes({ spec }) {
+function Pendientes({ spec, sucursalId }) {
   const n = spec.por_sucursal.length;
+  const propios = spec.programados.filter((p) => (p.sucursal_id ?? null) === (sucursalId ?? null));
   return (
     <>
-      {spec.programados.map((p) => (
+      {propios.map((p) => (
         <p key={`${p.vigente_desde}-${p.sucursal_id}`} style={mutedStyle}>
           {`Programado: ${formatearValor(spec, p.valor)} desde ${p.vigente_desde.slice(0, 7)}`}
         </p>
@@ -106,7 +107,7 @@ export default function CampoConfiguracion({
     <section style={cardStyle}>
       <Encabezado id={id} etiqueta={etiqueta} ayuda={ayuda} simple={simple} />
       <ValorActual spec={spec} />
-      <Pendientes spec={spec} />
+      <Pendientes spec={spec} sucursalId={sucursalId} />
       {spec.snapshotted && <p style={mutedStyle}>{MENSAJE_MOTOR}</p>}
       <div {...(simple ? {} : { role: 'group', 'aria-label': etiqueta })}>
         <ControlValor spec={spec} etiqueta={etiqueta} id={id} borrador={borrador} onChange={setBorrador} />

@@ -1,8 +1,12 @@
 'use client';
-/** Body of one tab. Empty placeholder until its task fills it; Topes links to its own screen. */
+/** Body of one tab: the section's fields; Topes links to its own screen. */
 import { useRouter } from 'next/navigation';
+import SeccionAvisos from './SeccionAvisos';
+import SeccionCargas from './SeccionCargas';
 import SeccionComisiones from './SeccionComisiones';
 import SeccionIndicadores from './SeccionIndicadores';
+import SeccionLimpieza from './SeccionLimpieza';
+import SeccionPedido from './SeccionPedido';
 import { cardStyle, columnaStyle, mutedStyle, touchStyle } from './styles';
 
 export const RUTA_TOPES = '/motored/pedidos/topes';
@@ -21,7 +25,14 @@ function Topes() {
   );
 }
 
-const PANELES = { indicadores: SeccionIndicadores, comisiones: SeccionComisiones };
+const PANELES = {
+  pedido: SeccionPedido,
+  avisos: SeccionAvisos,
+  cargas: SeccionCargas,
+  limpieza: SeccionLimpieza,
+  indicadores: SeccionIndicadores,
+  comisiones: SeccionComisiones,
+};
 
 export default function SeccionPanel({ seccion, data = null, recargar, onGuardar }) {
   const Panel = PANELES[seccion.id];
@@ -34,9 +45,7 @@ export default function SeccionPanel({ seccion, data = null, recargar, onGuardar
   }
   return (
     <section style={cardStyle} role="tabpanel" aria-label={seccion.label}>
-      {seccion.id === 'topes'
-        ? <Topes />
-        : <p style={mutedStyle}>Esta sección se completa en una próxima entrega.</p>}
+      {seccion.id === 'topes' && <Topes />}
     </section>
   );
 }

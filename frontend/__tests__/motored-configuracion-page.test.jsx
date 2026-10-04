@@ -1,6 +1,6 @@
 /**
  * /motored/configuracion: ADMIN-only page with the seven section tabs.
- * The sections are empty placeholders in T1 (Topes links to its own screen).
+ * Every section but Topes renders its own notice (Topes links to its own screen).
  */
 import React from 'react';
 import { render, screen, renderHook, waitFor, fireEvent } from '@testing-library/react';
@@ -73,7 +73,7 @@ describe('ConfiguracionPage', () => {
     const tabs = screen.getAllByRole('tab');
     expect(tabs.map((t) => t.textContent)).toEqual(ETIQUETAS);
     expect(screen.getByRole('tab', { name: 'Pedido' })).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByText(/se completa en una próxima entrega/i)).toBeInTheDocument();
+    expect(screen.getByText(/Los cambios aplican a los pedidos nuevos/)).toBeInTheDocument();
   });
 
   it('asks the API for the configuration once', async () => {

@@ -100,6 +100,7 @@ export function formatearValor(spec, valor) {
   switch (spec.tipo) {
     case 'bool': return valor ? 'Sí' : 'No';
     case 'lista':
+    case 'lista_opciones':
     case 'lista_digitos': return valor.length ? valor.join(', ') : '(vacía)';
     case 'k_fms':
     case 'objeto_numerico':
