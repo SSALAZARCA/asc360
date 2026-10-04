@@ -102,6 +102,13 @@ describe('zone strip stacking', () => {
     expect([0, 1, 2, 3, 4].map(stackTop)).toEqual([32, 18, 46, 4, 60]);
   });
 
+  it('stacks values on a slot edge the same way whatever float noise they carry', () => {
+    // 2.1 / 1.4 = 1.5000000000000002 while 0.7 / 1.4 = 0.5: both sit on a bucket edge
+    expect(stackLevels([2.1, 2.1000000000000001, 2.1])).toEqual([0, 1, 2]);
+    expect(stackLevels([0.7, 0.70000000001])).toEqual([0, 1]);
+    expect(stackLevels([2.1, 2.09999999999])).toEqual([0, 1]);
+  });
+
   it('keeps separated dots on the lane', () => {
     expect(stackLevels([0, 50, 100])).toEqual([0, 0, 0]);
   });

@@ -6,8 +6,11 @@ import { gaugeGeometry, semaforoTone } from './geometry';
  * Semicircle gauge with a needle. `value` is a fraction (0.78 = 78%), `cortes` the semaforo cuts in
  * percentage points ({verde_desde, ambar_desde}); `label` goes below ("$1.554 M de $1.993 M").
  */
-export default function Gauge({ value, cortes, title = 'Cumplimiento', label = '', maxWidth = 260 }) {
-  const tone = semaforoTone(Number.isFinite(value) ? value * 100 : null, cortes);
+const aFraccion = (v) => (v === null || v === undefined || v === '' || typeof v === 'boolean' || !Number.isFinite(Number(v)) ? null : Number(v));
+
+export default function Gauge({ value: crudo, cortes, title = 'Cumplimiento', label = '', maxWidth = 260 }) {
+  const value = aFraccion(crudo);
+  const tone = semaforoTone(value === null ? null : value * 100, cortes);
   const g = gaugeGeometry(value);
   const texto = pct(value);
   const resumen = [`${title}: ${texto}`, label].filter(Boolean).join('. ');

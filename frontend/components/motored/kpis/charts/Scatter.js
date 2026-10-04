@@ -2,6 +2,14 @@ import { COLOR } from '../tokens';
 
 const CAJA = { width: 600, height: 320, padL: 52, padR: 20, padT: 16, padB: 40 };
 
+const finito = (v) => Number.isFinite(v);
+
+/** A usable [min, max]: the given one, or the points' extent; never zero-width or non-finite. */
+function dominio(dado, valores) {
+  const base = Array.isArray(dado) && dado.every(finito) ? dado : valores.length ? [Math.min(...valores), Math.max(...valores)] : [0, 1];
+  return base[0] === base[1] ? [base[0] - 1, base[1] + 1] : base;
+}
+
 function escalas(xDomain, yDomain) {
   const { width, height, padL, padR, padT, padB } = CAJA;
   return {
@@ -17,7 +25,7 @@ const porCien = (valor, total) => `${((valor / total) * 100).toFixed(2)}%`;
  * Axis titles and labels are HTML overlays; dots and lines are SVG (the box keeps its aspect ratio, so dots stay round).
  */
 export default function Scatter({ points, xDomain, yDomain, quadrant, xLabel, yLabel, highlight = [], ariaLabel = 'Dispersión' }) {
-  const { x, y } = escalas(xDomain, yDomain);
+  const { x, y } = escalas(dominio(xDomain, points.map((p) => p.x).filter(finito)), dominio(yDomain, points.map((p) => p.y).filter(finito)));
   const { width, height, padL, padR, padT, padB } = CAJA;
   return (
     <div role="img" aria-label={ariaLabel} style={{ position: 'relative', width: '100%', aspectRatio: `${width} / ${height}` }}>

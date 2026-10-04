@@ -71,7 +71,8 @@ const SALTO = 14;
 export function stackLevels(posiciones) {
   const usados = {};
   return posiciones.map((x) => {
-    const ranura = Math.round(x / RANURA);
+    // toFixed absorbs float noise so values on a slot edge (2.1 / 1.4 = 1.5000000000000002) share a slot
+    const ranura = Math.round(Number((x / RANURA).toFixed(6)));
     usados[ranura] = (usados[ranura] || 0) + 1;
     return usados[ranura] - 1;
   });

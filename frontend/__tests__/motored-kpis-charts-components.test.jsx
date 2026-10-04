@@ -227,6 +227,54 @@ describe('Treemap', () => {
   });
 });
 
+describe('Gauge input coercion', () => {
+  it('treats a numeric string like the number it spells', () => {
+    const { rerender } = render(<Gauge value={0.78} cortes={CORTES} />);
+    const num = screen.getByRole('img');
+    const ref = [num.getAttribute('aria-label'), num.getAttribute('data-tone')];
+    rerender(<Gauge value="0.78" cortes={CORTES} />);
+    const str = screen.getByRole('img');
+    expect([str.getAttribute('aria-label'), str.getAttribute('data-tone')]).toEqual(ref);
+  });
+
+  it('draws the arc that its label announces', () => {
+    const { container } = render(<Gauge value="0.9" cortes={CORTES} />);
+    expect(container.querySelector('path[stroke-dasharray]')).not.toBeNull();
+    expect(screen.getByRole('img')).toHaveAttribute('data-tone', 'good');
+  });
+
+  it('rejects non-numeric input consistently', () => {
+    const { container } = render(<Gauge value="abc" cortes={CORTES} />);
+    expect(screen.getByRole('img')).toHaveAttribute('data-tone', 'none');
+    expect(screen.getByRole('img').getAttribute('aria-label')).toContain('—');
+    expect(container.querySelector('path[stroke-dasharray]')).toBeNull();
+  });
+});
+
+describe('Scatter degenerate domains', () => {
+  const noNaN = (container) => {
+    const markup = container.innerHTML;
+    expect(markup).not.toMatch(/NaN|Infinity/);
+  };
+
+  it('keeps finite positions when min equals max', () => {
+    const pts = [{ id: 'a', x: 5, y: 7, tip: 'A' }, { id: 'b', x: 5, y: 7, tip: 'B' }];
+    const { container } = render(<Scatter points={pts} xDomain={[5, 5]} yDomain={[7, 7]} quadrant={{ x: 5, y: 7 }} highlight={['a']} />);
+    noNaN(container);
+  });
+
+  it('renders with no points and no domain', () => {
+    const { container } = render(<Scatter points={[]} quadrant={{ x: 1, y: 1 }} />);
+    noNaN(container);
+  });
+
+  it('derives the domain from the points when it is not given', () => {
+    const pts = [{ id: 'a', x: 1, y: 2, tip: 'A' }, { id: 'b', x: 3, y: 4, tip: 'B' }];
+    const { container } = render(<Scatter points={pts} />);
+    noNaN(container);
+  });
+});
+
 describe('Scatter', () => {
   const points = [
     { id: 'a', x: 10, y: 20, r: 6, color: '#111', tip: 'Tienda A' },
