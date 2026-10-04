@@ -7,6 +7,7 @@
 import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import PasswordField from './PasswordField';
+import TelegramVinculoPanel from './TelegramVinculoPanel';
 import { changeOwnPassword } from '../../../lib/motored/api';
 import { MOTORED_USER_KEY } from '../../../lib/motored/motoredFetch';
 import { PASSWORD_HINT, FORCED_CHANGE_BANNER, newPasswordProblem } from '../../../lib/motored/passwordRules';
@@ -80,6 +81,7 @@ export default function MiCuentaContainer() {
           {busy ? 'Guardando...' : 'Guardar contraseña'}
         </button>
       </form>
+      <TelegramVinculoPanel />
     </section>
   );
 }

@@ -19,8 +19,8 @@ sdd/motored-ventas-perdidas-bot, Phase 4 "Approval service + Usuarios UI"
   `services/solicitudes.py::resolver_solicitud`, la MISMA función que la
   Fase 5 hará llamar desde los botones inline del bot -- nunca una
   segunda implementación de la transición acá.
-- `POST /usuarios/me/telegram/codigo` | `DELETE /usuarios/me/telegram` --
-  vinculación de Telegram de un ADMIN para notificaciones push, siempre
+- `POST /usuarios/me/telegram/codigo` | `GET|DELETE /usuarios/me/telegram` --
+  vinculación de Telegram de un ADMIN o COMPRAS para notificaciones push, siempre
   sobre SU PROPIA fila (nunca la de otro usuario -- spec "ADMIN
   telegram-linking independent of role").
 
@@ -53,6 +53,9 @@ router = APIRouter(
 )
 
 _require_admin = require_roles("ADMIN")
+# Vincular el PROPIO Telegram: ADMIN y COMPRAS (el aviso anticipado de
+# antigüedad de datos le llega a COMPRAS por el bot Lore).
+_require_telegram_propio = require_roles("ADMIN", "COMPRAS")
 
 PAGE_SIZE_DEFAULT = 50
 PAGE_SIZE_MAX = 200
@@ -289,10 +292,10 @@ async def rechazar_usuario(
 @router.post("/me/telegram/codigo")
 async def generar_codigo_telegram(
     db: AsyncSession = Depends(get_motored_db_or_503),
-    user: MotoredUser = Depends(_require_admin),
+    user: MotoredUser = Depends(_require_telegram_propio),
 ) -> dict:
     """Genera un código de vinculación de un solo uso para la PROPIA fila
-    del ADMIN autenticado (nunca la de otro usuario -- design D5, spec
+    del ADMIN o COMPRAS autenticado (nunca la de otro usuario -- design D5, spec
     "ADMIN telegram-linking independent of role"). El código se muestra
     UNA sola vez acá; solo su hash queda persistido
     (`services/vinculacion.py::generar_codigo_vinculacion`)."""
@@ -302,13 +305,23 @@ async def generar_codigo_telegram(
     return {"codigo": codigo, "expira_en": usuario.codigo_vinculacion_expira.isoformat()}
 
 
+@router.get("/me/telegram")
+async def estado_telegram(
+    db: AsyncSession = Depends(get_motored_db_or_503),
+    user: MotoredUser = Depends(_require_telegram_propio),
+) -> dict:
+    """Si la PROPIA fila ya tiene un Telegram vinculado (nunca el id)."""
+    usuario = await _get_or_404(db, uuid.UUID(user.user_id))
+    return {"telegram_vinculado": usuario.telegram_id is not None}
+
+
 @router.delete("/me/telegram")
 async def desvincular_telegram(
     db: AsyncSession = Depends(get_motored_db_or_503),
-    user: MotoredUser = Depends(_require_admin),
+    user: MotoredUser = Depends(_require_telegram_propio),
 ) -> dict:
-    """Desvincula el `telegram_id` de la PROPIA fila del ADMIN autenticado
-    -- deja de recibir notificaciones push, sin afectar su rol ni sus
+    """Desvincula el `telegram_id` de la PROPIA fila del usuario autenticado
+    (ADMIN o COMPRAS) -- deja de recibir notificaciones push, sin afectar su rol ni sus
     permisos existentes."""
     usuario = await _get_or_404(db, uuid.UUID(user.user_id))
     usuario.telegram_id = None

@@ -36,6 +36,9 @@ from tests.motored.conftest import (
 )
 
 ALL_ROLES = ["ADMIN", "COMPRAS", "SUCURSAL", "CONSULTA"]
+# Quien puede vincular SU PROPIO Telegram (el aviso de antigüedad llega a COMPRAS).
+TELEGRAM_ROLES = ["ADMIN", "COMPRAS"]
+TELEGRAM_DENIED = ["SUCURSAL", "CONSULTA", "SERVICIO_CLIENTE"]
 USUARIOS_URL = "/api/motored/usuarios"
 
 
@@ -279,22 +282,27 @@ def test_aprobar_race_second_call_gets_409(monkeypatch):
 # POST /usuarios/me/telegram/codigo | DELETE /usuarios/me/telegram
 # ---------------------------------------------------------------------------
 
-@pytest.mark.parametrize("role", ALL_ROLES)
-def test_generar_codigo_telegram_restricted_to_admin_only(role):
-    admin = _admin()
-    admin_id = str(admin.id)
-    execute_queue = [[admin]] if role == "ADMIN" else [[]]
-    client = _client_as(role, execute_queue=execute_queue, user_id=admin_id)
+@pytest.mark.parametrize("role", TELEGRAM_ROLES)
+def test_generar_codigo_telegram_allowed_for_admin_and_compras(role):
+    usuario = _admin(role=role)
+    client = _client_as(role, execute_queue=[[usuario]], user_id=str(usuario.id))
 
     response = client.post(f"{USUARIOS_URL}/me/telegram/codigo")
 
-    if role == "ADMIN":
-        assert response.status_code == 200, response.text
-        body = response.json()
-        assert len(body["codigo"]) == 8
-        assert "expira_en" in body
-    else:
-        assert response.status_code == 403
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert len(body["codigo"]) == 8
+    assert "expira_en" in body
+    assert usuario.codigo_vinculacion_hash is not None
+
+
+@pytest.mark.parametrize("role", TELEGRAM_DENIED)
+def test_generar_codigo_telegram_denied_to_the_other_roles(role):
+    client = _client_as(role, execute_queue=[[]])
+
+    response = client.post(f"{USUARIOS_URL}/me/telegram/codigo")
+
+    assert response.status_code == 403
 
 
 def test_generar_codigo_telegram_only_affects_the_acting_admins_own_row():
@@ -324,16 +332,40 @@ def test_desvincular_telegram_clears_own_telegram_id():
     assert response.json()["telegram_vinculado"] is False
 
 
-@pytest.mark.parametrize("role", ALL_ROLES)
-def test_desvincular_telegram_restricted_to_admin_only(role):
-    admin = _admin(telegram_id=123456)
-    admin_id = str(admin.id)
-    execute_queue = [[admin]] if role == "ADMIN" else [[]]
-    client = _client_as(role, execute_queue=execute_queue, user_id=admin_id)
+@pytest.mark.parametrize("role", TELEGRAM_ROLES)
+def test_desvincular_telegram_allowed_for_admin_and_compras(role):
+    usuario = _admin(role=role, telegram_id=123456)
+    client = _client_as(role, execute_queue=[[usuario]], user_id=str(usuario.id))
 
     response = client.delete(f"{USUARIOS_URL}/me/telegram")
 
-    if role == "ADMIN":
-        assert response.status_code == 200
-    else:
-        assert response.status_code == 403
+    assert response.status_code == 200
+    assert usuario.telegram_id is None
+
+
+@pytest.mark.parametrize("role", TELEGRAM_DENIED)
+def test_desvincular_telegram_denied_to_the_other_roles(role):
+    client = _client_as(role, execute_queue=[[]])
+
+    response = client.delete(f"{USUARIOS_URL}/me/telegram")
+
+    assert response.status_code == 403
+
+
+@pytest.mark.parametrize("role", TELEGRAM_ROLES)
+@pytest.mark.parametrize("telegram_id,esperado", [(None, False), (777, True)])
+def test_estado_telegram_propio_for_admin_and_compras(role, telegram_id, esperado):
+    usuario = _admin(role=role, telegram_id=telegram_id)
+    client = _client_as(role, execute_queue=[[usuario]], user_id=str(usuario.id))
+
+    response = client.get(f"{USUARIOS_URL}/me/telegram")
+
+    assert response.status_code == 200, response.text
+    assert response.json() == {"telegram_vinculado": esperado}
+
+
+@pytest.mark.parametrize("role", TELEGRAM_DENIED)
+def test_estado_telegram_propio_denied_to_the_other_roles(role):
+    client = _client_as(role, execute_queue=[[]])
+
+    assert client.get(f"{USUARIOS_URL}/me/telegram").status_code == 403

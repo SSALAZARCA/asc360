@@ -325,9 +325,14 @@ export async function rechazarUsuario(id) {
 }
 
 /** Genera un código de un solo uso (10 min) para vincular el Telegram
- * PROPIO del ADMIN autenticado -- nunca el de otro usuario. */
+ * PROPIO del ADMIN o COMPRAS autenticado -- nunca el de otro usuario. */
 export async function generarCodigoTelegram() {
   return motoredFetchJson('/usuarios/me/telegram/codigo', { method: 'POST' });
+}
+
+/** `{ telegram_vinculado }` de la PROPIA cuenta (ADMIN o COMPRAS). */
+export async function estadoTelegram() {
+  return motoredFetchJson('/usuarios/me/telegram');
 }
 
 export async function desvincularTelegram() {

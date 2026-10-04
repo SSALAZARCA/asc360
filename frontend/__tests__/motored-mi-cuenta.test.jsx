@@ -3,7 +3,11 @@ import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 
 const mockChange = jest.fn();
-jest.mock('../lib/motored/api', () => ({ changeOwnPassword: (...a) => mockChange(...a) }));
+jest.mock('../lib/motored/api', () => ({
+  changeOwnPassword: (...a) => mockChange(...a),
+  // The Telegram panel (ADMIN/COMPRAS) reads its state on mount; this suite does not care about it.
+  estadoTelegram: () => new Promise(() => {}),
+}));
 jest.mock('next/navigation', () => ({
   useRouter: () => ({ push: jest.fn() }),
   usePathname: () => '/motored/mi-cuenta',

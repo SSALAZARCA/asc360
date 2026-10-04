@@ -22,6 +22,7 @@ jest.mock('next/image', () => {
 jest.mock('../lib/motored/api', () => ({
   login: (...a) => mockLogin(...a),
   changeOwnPassword: (...a) => mockChange(...a),
+  estadoTelegram: () => new Promise(() => {}),
 }));
 
 import MotoredLoginPage from '../app/motored/login/page';
