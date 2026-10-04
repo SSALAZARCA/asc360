@@ -38,6 +38,7 @@ from app.motored.api import (
     referencias_busqueda,
     salud,
     tablero_asesores,
+    tablero_kpis,
     usuarios,
     vendedores,
 )
@@ -57,6 +58,8 @@ router.include_router(clientes_tecnired.router)
 router.include_router(vendedores.router)
 # T4 tablero-asesores: `/tablero-asesores` es un prefijo propio, solo ADMIN|COMPRAS.
 router.include_router(tablero_asesores.router)
+# KPI's (motored-kpis, B6): cuelga de `/tablero-asesores/kpis`, dentro del prefijo de GERENCIA.
+router.include_router(tablero_kpis.router)
 router.include_router(usuarios.router)
 router.include_router(parametros.router)
 # Fase 2 "Ingesta" (sdd/motored-pedidos-ingesta, task 9.4): `/cargas` es un

@@ -123,7 +123,7 @@ def test_exactamente_12_meses_es_valido(_motored_ready, llamadas):
 
 
 def test_el_tablero_tiene_su_propia_ruta_y_no_cuelga_de_corridas():
-    rutas = [p for p in app.openapi()["paths"] if "tablero-asesores" in p]
+    rutas = [p for p in app.openapi()["paths"] if "tablero-asesores" in p and "/kpis/" not in p]
     assert rutas == [URL]
 
 

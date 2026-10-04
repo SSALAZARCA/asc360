@@ -455,3 +455,15 @@ async def calcular_kpis_asesores(db: AsyncSession, filtro: Filtro) -> Dict[str, 
     cumplimiento = await cargar_cumplimiento(db, filtro, cubo, nombres)
     tablero["cumplimiento"] = _recortar(cumplimiento, ("asesores", "conteos", "advertencias"))
     return tablero
+
+
+async def calcular_opciones(db: AsyncSession) -> Dict[str, Any]:
+    """Datos de los filtros: `{meses_disponibles, ultimo_mes, tiendas}`. El
+    `ultimo_mes` (el ultimo con ventas, None si no hay) permite proponer "ano
+    corrido": de enero de ese ano a ese mes."""
+    meses = await q.meses_disponibles(db)
+    return {
+        "meses_disponibles": meses,
+        "ultimo_mes": meses[-1] if meses else None,
+        "tiendas": await qk.consultar_tiendas_activas(db),
+    }

@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.motored.models.carga_archivo import CargaArchivo
 from app.motored.models.cliente_tecnired import ClienteTecnired
 from app.motored.models.inventario_detalle import InventarioDetalle
+from app.motored.models.sucursal import Sucursal
 from app.motored.models.venta_detalle import VentaDetalle
 from app.motored.services import tablero_asesores as t
 from app.motored.services import tablero_asesores_consultas as q
@@ -128,3 +129,10 @@ async def consultar_costo_venta(
         select(tienda, func.coalesce(func.sum(VentaDetalle.cantidad * costos.c.costo_unitario), 0)).group_by(tienda),
         ventana, lineas, solo_lineas_reconocidas=False, costos=costos, con_vendedor=False)
     return {s: Decimal(v) for s, v in (await db.execute(consulta)).all()}, dias
+
+
+async def consultar_tiendas_activas(db: AsyncSession) -> List[Dict[str, str]]:
+    """`[{id, nombre}]` de las sucursales activas, por nombre (para el filtro de tiendas)."""
+    filas = await db.execute(
+        select(Sucursal.id, Sucursal.nombre).where(Sucursal.activa.is_(True)).order_by(func.upper(Sucursal.nombre)))
+    return [{"id": str(id_), "nombre": nombre} for id_, nombre in filas.all()]

@@ -211,3 +211,26 @@ def test_admin_can_create_a_gerencia_user_with_web_credentials():
     created = session.added_of_type(Usuario)
     assert created and created[0].role is MotoredRole.GERENCIA
     assert created[0].email == "g@x.com" and created[0].hashed_password
+
+
+@pytest.mark.parametrize("pestana", ["ventas", "tiendas", "asesores", "opciones"])
+def test_gerencia_reaches_the_kpis_endpoints_through_the_real_confinement(monkeypatch, pestana):
+    from app.motored.services import tablero_asesores as t
+    from app.motored.services import tablero_asesores_consultas as consultas
+    from app.motored.services import tablero_kpis as kpis
+
+    async def _filtro(db, meses, modo_hmcl, sucursal_ids=None):
+        return t.filtro_de_meses(t.validar_meses(meses), modo_hmcl, sucursal_ids)
+
+    async def _calculo(db, filtro=None):
+        return {"ok": True}
+
+    monkeypatch.setattr(consultas, "cargar_filtro", _filtro)
+    for nombre in ("calcular_kpis_ventas", "calcular_kpis_tiendas", "calcular_kpis_asesores", "calcular_opciones"):
+        monkeypatch.setattr(kpis, nombre, _calculo)
+
+    path = f"/api/motored/tablero-asesores/kpis/{pestana}?meses=2026-01"
+
+    assert _request("GERENCIA", path).status_code == 200
+    assert _request("COMPRAS", path).status_code == 200
+    assert _request("CONSULTA", path).status_code == 403

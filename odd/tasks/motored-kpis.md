@@ -77,8 +77,8 @@ The user designed the dashboard in the artifact and approved it. The budgets mas
 - [x] **B2 Filter object.** Explicit month list (consecutive months merged into OR ranges), `sucursal_ids`, API params `meses` and `sucursales`. Cube always `incluir`, with the HMCL mode applied in Python.
 - [x] **B3 Store dimension + accumulators.** A cube key parameter (asesor/sucursal/total), facturas and clientes per dimension, `por_mes_linea`, Tecnired by month and by line, growth 3M and nueva classification.
 - [x] **B4 Budgets + cumplimiento.** Join `presupuesto_por_asesor`/`presupuesto_por_sucursal` (min/max then filter), per-asesor and per-store cumplimiento per the rules above, semáforo, rows for budgeted asesores without sales, "sin presupuesto".
-- [ ] **B5 New queries.** Distinct Tecnired clients, top-5 Tecnired clients with `razon_social`, días de inventario per store.
-- [ ] **B6 Per-tab endpoints.** `/tablero-asesores/kpis/{ventas|tiendas|asesores}` (stays inside the GERENCIA prefix), plus the store list for the filter.
+- [x] **B5 New queries.** Distinct Tecnired clients, top-5 Tecnired clients with `razon_social`, días de inventario per store.
+- [x] **B6 Per-tab endpoints.** `/tablero-asesores/kpis/{ventas|tiendas|asesores}` (stays inside the GERENCIA prefix), plus the store list for the filter.
 - [ ] **F1 Chart primitives.** Gauge, donut, strip (zones), bars with value inside, stacked area, heatmap, treemap, scatter, segmented toggle. Plus color tokens in `layout.js`.
 - [ ] **F2 Header + shell.** Period popover (año corrido / multi-month), store multi-select with search, HMCL popover, tabs, data hook with a per-tab cache, sidebar rename "KPI's", permisos matrix update.
 - [ ] **F3 Ventas tab.**
@@ -137,5 +137,28 @@ The user designed the dashboard in the artifact and approved it. The budgets mas
   - After the rebase, the parent ran the KPI and tablero unit tests: 96 passed.
 - **TDD note:** RED evidence came from removing the source after implementing (collection errors), not strict RED-first.
 
+- **Delivery:** commits 95967dc, c63f2b3 and a7d4fe0, pushed to main.
+- **Native review:** risk medium (1,711 lines). Consent granted; the R3 lens approved and the result was acknowledged.
+- **Advisories, carried to B5**
+  - R3-semaforo-nan (WARNING): NaN semáforo cuts may pass validation (`tablero_asesores.py:112-127`).
+  - R3-meses-orden (suggestion, `:360`).
+
+**Fix + B5 + B6, done.** Route: one delegated writer, three commits.
+- **Commit 8ceab58, fix:** NaN or infinite semáforo cuts fall back to the default; `filtro_de_meses` sorts and de-duplicates.
+- **Commit f8b832b, B5:**
+  - New `services/tablero_kpis_consultas.py`.
+  - Tecnired: distinct clients, clients per month, `venta_por_cliente`, and top-5 with `razon_social`.
+  - Días de inventario: inventory at the latest corte (lines with null/≤0 cost excluded and counted) ÷ daily cost of sales over the 3 calendar months ending at the last selected month, using the same median cost per referencia as margin. A store appears only if it has inventory loaded.
+- **Commit 1915a78, B6:** router `api/tablero_kpis.py` under `/api/motored/tablero-asesores/kpis`:
+  - `GET /ventas|/tiendas|/asesores` with `meses` (required), `sucursales` and `hmcl`.
+  - `GET /opciones` returns `meses_disponibles`, `ultimo_mes` and the active `tiendas`.
+  - Roles: ADMIN, COMPRAS and GERENCIA. GERENCIA is covered by the existing prefix confinement, which matches on segment boundaries.
+- **TDD evidence:** RED for commit 0 (5 failed); B5 failed at collection on an ImportError; B6 API had 48 errors and 1 failure. The pg_real end-to-end tests were written after the implementation.
+- **Checks**
+  - Unit suite: 5235 passed.
+  - pg_real: 503 passed / 2 skipped / 2 known retention failures.
+  - After the rebase, the parent ran the KPI API, B5, tablero API and gerencia tests: 121 passed.
+- **Follow-up:** `tablero_kpis_consultas.py` calls private helpers of `tablero_asesores_consultas` (a gga note).
+
 ## Next step
-Native review + push of fix/B3/B4, then B5 + B6.
+Native review + push of B5/B6. Then F1 (chart primitives).
