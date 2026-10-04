@@ -16,6 +16,7 @@ Convenciones del resultado:
 """
 import datetime
 import logging
+import math
 import re
 import unicodedata
 from collections import defaultdict
@@ -113,9 +114,10 @@ def _numero_de_corte(valor: Any) -> Optional[float]:
     if isinstance(valor, bool):
         return None
     try:
-        return float(valor)
+        numero = float(valor)
     except (TypeError, ValueError):
         return None
+    return numero if math.isfinite(numero) else None
 
 
 def _semaforo_valido(valor: Any) -> Optional[Dict[str, float]]:
@@ -357,7 +359,8 @@ def filtro_de_meses(
     reglas: Reglas = REGLAS_POR_DEFECTO,
 ) -> Filtro:
     ids = frozenset(sucursal_ids) if sucursal_ids else None
-    return Filtro(tuple(rangos_de_meses(meses)), modo_hmcl, ids, reglas, tuple(meses))
+    ordenados = sorted(set(meses))
+    return Filtro(tuple(rangos_de_meses(ordenados)), modo_hmcl, ids, reglas, tuple(ordenados))
 
 
 def filtrar_cubo_por_hmcl(cubo: Iterable[FilaCubo], modo_hmcl: str) -> List[FilaCubo]:

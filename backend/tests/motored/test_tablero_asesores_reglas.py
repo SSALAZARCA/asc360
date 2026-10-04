@@ -129,6 +129,10 @@ def test_una_linea_de_configuracion_con_tildes_coincide_con_la_de_la_cte():
     ("kpi_semaforo_cortes", {"verde_desde": "alto", "ambar_desde": 70}),
     ("kpi_semaforo_cortes", {"verde_desde": 60, "ambar_desde": 70}),
     ("kpi_semaforo_cortes", {"verde_desde": 90}),
+    ("kpi_semaforo_cortes", {"verde_desde": "nan", "ambar_desde": 70}),
+    ("kpi_semaforo_cortes", {"verde_desde": float("inf"), "ambar_desde": 70}),
+    ("kpi_semaforo_cortes", {"verde_desde": 90, "ambar_desde": float("-inf")}),
+    ("kpi_semaforo_cortes", {"verde_desde": 90, "ambar_desde": float("nan")}),
     ("cumplimiento_base", "otra"),
     ("cumplimiento_base", 7),
 ])
@@ -157,3 +161,10 @@ def test_un_semaforo_numerico_se_conserva_como_numeros():
     reglas = t.reglas_desde_valores(_valores(kpi_semaforo_cortes={"verde_desde": "95", "ambar_desde": 60.5}))
 
     assert reglas.semaforo == {"verde_desde": 95.0, "ambar_desde": 60.5}
+
+
+def test_the_filter_keeps_the_months_sorted_and_unique_even_if_built_unsorted():
+    filtro = t.filtro_de_meses(["2026-03", "2026-01", "2026-03"])
+
+    assert filtro.meses == ("2026-01", "2026-03")
+    assert filtro.rangos[0][0] == datetime.date(2026, 1, 1)
