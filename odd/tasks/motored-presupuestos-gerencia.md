@@ -217,5 +217,21 @@ Give Motored a monthly, versioned **sales budget per asesor**: the base for KPI 
   - Compile check: `/motored/usuarios` returned 200 on `next dev --webpack`.
 - **Rebase:** onto -22's d461d5d. The parent re-ran the affected jest suites (24 suites / 250 passed).
 
+- **Delivery:** commits 646dbc6 and 71fdb9a, pushed to main.
+- **Native review:** risk medium (`slice_budget_reached`, 526 lines). Consent granted; the R3 lens approved and the result was acknowledged.
+- **Advisories, all suggestions**
+  - The clear-error test is weak.
+  - A successful detail fetch also clears a list error.
+  - The Telegram row in `permisosPorRol.js` has no guard against drift from the backend rule.
+
+## Status
+**Feature complete.** All 4 tasks are on main. Follow-ups:
+- Frontend pages are not role-confined in `motored-layout.js` (from the T1 advisory; the API already returns 403).
+- The login test doesn't exercise GERENCIA.
+- Stale ADMIN|COMPRAS docstrings in tablero files.
+- Make `_parse_excel_upload` public.
+- Extract a `usePresupuestosMes` hook.
+- The T4 suggestions above.
+
 ## Next step
-Native review + push of T4. Then the feature is complete; remaining follow-ups are listed above.
+None for this feature. Next: the KPI's work (Etapa 1). It reads the budgets through `presupuesto_por_asesor`/`presupuesto_por_sucursal`, and the Configuración keys through `vigente_en`.
