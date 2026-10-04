@@ -33,6 +33,7 @@ from app.motored.schemas.vendedor import limpiar_cedula
 from app.motored.services import presupuestos as pres
 from app.motored.services import tablero_asesores as t
 from app.motored.services import tablero_asesores_consultas as q
+from app.motored.services import tablero_kpis_consultas as qk
 from app.motored.services.tablero_asesores import DIM_ASESOR, DIM_SUCURSAL, DIM_TOTAL, Filtro
 
 
@@ -277,6 +278,91 @@ async def cargar_cumplimiento(
         sucursales=sucursales, nombres=nombres, nombres_por_clave=nombres_por_clave)
 
 
+# --- Tecnired y dias de inventario (B5) ----------------------------------------------------------
+
+
+def construir_tecnired(
+    clientes: Dict[str, Any], distintos: int, distintos_por_mes: Dict[str, int],
+    top: Iterable[qk.FilaTopTecnired], meses: Iterable[str],
+) -> Dict[str, Any]:
+    """Bloque Tecnired de la red: `clientes` es el bloque `clientes` del total
+    (venta, pct, por mes y por linea), `distintos` los clientes Tecnired distintos
+    y `venta_por_cliente` el promedio de la red (None sin clientes). `top5` rotula
+    con la razon social, o el NIT si la lista no la trae; `pct` es la parte de la venta Tecnired."""
+    venta = clientes["venta_tecnired"]
+    por_mes = clientes["tecnired_por_mes"]
+    return {
+        "venta": venta,
+        "pct": clientes["pct_tecnired"],
+        "clientes": distintos,
+        "venta_por_cliente": venta / distintos if distintos else None,
+        "por_mes": {m: {"venta": por_mes.get(m, 0.0), "clientes": distintos_por_mes.get(m, 0)} for m in meses},
+        "por_linea": clientes["tecnired_por_linea"],
+        "top5": [
+            {"nit": f.nit, "razon_social": f.razon_social or f.nit, "venta": float(round(f.venta, 2)),
+             "pct": t.ratio(f.venta, Decimal(str(venta)))}
+            for f in top
+        ],
+    }
+
+
+def dias_de_inventario(valor: Decimal, costo_venta: Optional[Decimal], dias_ventana: int) -> Optional[float]:
+    """Dias que dura el inventario: valor / (costo de venta / dias de la ventana).
+    None si no hubo costo de venta (no se puede dividir)."""
+    if not costo_venta or costo_venta <= 0:
+        return None
+    return float(Decimal(valor) * dias_ventana / costo_venta)
+
+
+def _inventario_de(
+    valor: Decimal, costo_venta: Decimal, dias_ventana: int, sin_costo: int, corte: Optional[str],
+) -> Dict[str, Any]:
+    return {
+        "valor_inventario": float(round(valor, 2)),
+        "costo_venta_diario": float(costo_venta / dias_ventana),
+        "dias": dias_de_inventario(valor, costo_venta, dias_ventana),
+        "lineas_sin_costo": sin_costo,
+        "fecha_corte": corte,
+    }
+
+
+def construir_inventario(
+    filas: Iterable[qk.FilaInventario], costo_venta: Dict[str, Decimal], dias_ventana: int,
+    fecha_corte: Optional[datetime.date],
+) -> Dict[str, Any]:
+    """Dias de inventario por tienda (solo las que tienen inventario cargado) y de
+    la red, que suma esas mismas tiendas. Sin inventario: `tiendas` vacio y
+    `fecha_corte` None."""
+    corte = fecha_corte.isoformat() if fecha_corte else None
+    filas = list(filas)
+    tiendas = {
+        f.sucursal_id: _inventario_de(f.valor, costo_venta.get(f.sucursal_id, Decimal(0)), dias_ventana,
+                                      f.sin_costo, corte)
+        for f in filas
+    }
+    red = _inventario_de(
+        sum((f.valor for f in filas), Decimal(0)),
+        sum((costo_venta.get(f.sucursal_id, Decimal(0)) for f in filas), Decimal(0)),
+        dias_ventana, sum(f.sin_costo for f in filas), corte)
+    return {"fecha_corte": corte, "dias_ventana": dias_ventana, "tiendas": tiendas, "red": red}
+
+
+async def cargar_inventario(db: AsyncSession, filtro: Filtro, fecha_corte: Optional[datetime.date]) -> Dict[str, Any]:
+    """Dias de inventario por tienda con su corte, ver `construir_inventario`."""
+    _, dias = qk.filtro_costo_venta(filtro)
+    if fecha_corte is None:
+        return construir_inventario([], {}, dias, None)
+    filas = await qk.consultar_inventario(db, filtro, fecha_corte)
+    costo_venta, dias = await qk.consultar_costo_venta(db, filtro, fecha_corte)
+    return construir_inventario(filas, costo_venta, dias, fecha_corte)
+
+
+async def cargar_tecnired(db: AsyncSession, filtro: Filtro, clientes: Dict[str, Any]) -> Dict[str, Any]:
+    distintos, por_mes = await qk.consultar_clientes_tecnired(db, filtro)
+    top = await qk.consultar_top_tecnired(db, filtro)
+    return construir_tecnired(clientes, distintos, por_mes, top, filtro.meses)
+
+
 def _recortar(cumplimiento: Dict[str, Any], claves: Iterable[str]) -> Dict[str, Any]:
     return {k: cumplimiento[k] for k in claves}
 
@@ -312,15 +398,19 @@ async def calcular_kpis_tiendas(db: AsyncSession, filtro: Filtro) -> Dict[str, A
     indicadores, su `crecimiento` y su `cumplimiento` (None si no tiene presupuesto);
     `cumplimiento` agrega `tiendas` (TODAS las que tienen presupuesto, vendan o no),
     `red` y `conteos` por semaforo."""
-    cubo = await q.consultar_cubo(db, filtro, await q.fecha_corte_costos(db), DIM_SUCURSAL)
+    corte = await q.fecha_corte_costos(db)
+    cubo = await q.consultar_cubo(db, filtro, corte, DIM_SUCURSAL)
     tiendas, sin_linea = await _filas_de_tiendas(db, filtro, cubo, completas=True)
     cumplimiento = await cargar_cumplimiento(db, filtro)
     por_tienda = {f["sucursal_id"]: f for f in cumplimiento["tiendas"]}
+    inventario = await cargar_inventario(db, filtro, corte)
     for fila in tiendas:
         fila["cumplimiento"] = por_tienda.get(fila["sucursal_id"])
+        fila["dias_inventario"] = inventario["tiendas"].get(fila["sucursal_id"])
     return {
         **_encabezado(filtro),
         "tiendas": tiendas,
+        "inventario": inventario,
         "cumplimiento": _recortar(cumplimiento, ("tiendas", "red", "conteos")),
         "resumen_crecimiento": resumen_crecimiento(tiendas),
         "venta_sin_linea": float(round(sin_linea, 2)),
@@ -346,6 +436,7 @@ async def calcular_kpis_ventas(db: AsyncSession, filtro: Filtro) -> Dict[str, An
     return {
         **_encabezado(filtro),
         "total": total,
+        "tecnired": await cargar_tecnired(db, filtro, total["clientes"]),
         "cumplimiento": _recortar(cumplimiento, ("red", "tiendas", "conteos")),
         "tiendas": [
             {k: f[k] for k in ("sucursal_id", "nombre", "venta", "costo")} for f in tiendas
