@@ -45,7 +45,7 @@ export default function KpisContent() {
   if (!allowed) return null;
   const sinVentas = opciones && !opciones.ultimo_mes;
   return (
-    <div style={{ fontFamily: 'var(--motored-font-kpi)', color: COLOR.ink, display: 'flex', flexDirection: 'column', gap: 22, maxWidth: 1240, minWidth: 0 }}>
+    <div style={{ fontFamily: 'var(--motored-font-kpi)', color: COLOR.ink, display: 'flex', flexDirection: 'column', gap: 22, maxWidth: 1240, minWidth: 0, overflowX: 'clip' }}>
       <KpiHeader opciones={opciones} filtros={filtros} onChange={cambiar} />
       <KpiTabs value={tab} onChange={setTab} />
       {error && <Mensaje error>{error}</Mensaje>}

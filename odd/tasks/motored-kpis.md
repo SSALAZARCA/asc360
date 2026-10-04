@@ -80,8 +80,8 @@ The user designed the dashboard in the artifact and approved it. The budgets mas
 - [x] **B5 New queries.** Distinct Tecnired clients, top-5 Tecnired clients with `razon_social`, días de inventario per store.
 - [x] **B6 Per-tab endpoints.** `/tablero-asesores/kpis/{ventas|tiendas|asesores}` (stays inside the GERENCIA prefix), plus the store list for the filter.
 - [x] **F1 Chart primitives.** Gauge, donut, strip (zones), bars with value inside, stacked area, heatmap, treemap, scatter, segmented toggle. Plus color tokens in `layout.js`.
-- [ ] **F2 Header + shell.** Period popover (año corrido / multi-month), store multi-select with search, HMCL popover, tabs, data hook with a per-tab cache, sidebar rename "KPI's", permisos matrix update.
-- [ ] **F3 Ventas tab.**
+- [x] **F2 Header + shell.** Period popover (año corrido / multi-month), store multi-select with search, HMCL popover, tabs, data hook with a per-tab cache, sidebar rename "KPI's", permisos matrix update.
+- [x] **F3 Ventas tab.**
 - [ ] **F4 Tiendas tab.**
 - [ ] **F5 Asesores tab.**
 - [ ] **F6 Cleanup.** Remove the old TableroTable/columnas/fixtures and update the sidebar/gate tests.
@@ -181,5 +181,32 @@ The user designed the dashboard in the artifact and approved it. The budgets mas
   - After the rebase, the parent re-ran the charts and layout suites: 77 passed.
 - **Open for F2:** Manrope is not loaded yet. `--motored-font-kpi` falls back to Mulish, and loading Manrope needs `layout.js` `next/font` plus an update to `motored-layout-metadata.test.jsx`.
 
+- **Delivery:** commits 1969be1 and 846fe8e, pushed to main.
+- **Native review:** risk medium (1,573 lines). Consent granted; the R3 lens approved and the result was acknowledged.
+- **Advisories, carried to F2**
+  - Gauge: numeric-string coercion mismatch (`Gauge.js:10-12`).
+  - Scatter: a degenerate domain is not handled.
+  - `stackLevels`: bucket boundary (`geometry.js:71-78`).
+
+**Fix + F2 + F3, done.** Route: one delegated writer, three commits.
+- **Commit 34d35da, fix:** Gauge coercion, Scatter degenerate domain, and the `stackLevels` edge.
+- **Commit 0905388, F2:**
+  - `kpisApi.js`, `useKpis` (per-tab cache and stale guard), `useKpiFiltros`, and the header with Período/Punto de venta/HMCL popovers.
+  - KpiTabs; the sidebar and permisos label is now "KPI's"; Manrope is loaded via `next/font`.
+  - The route stays `/motored/tablero-asesores`.
+  - Temporary tabs: Tiendas shows "Próximamente"; Asesores shows the legacy table, `embedded`.
+- **Commit 7c5ee5b, F3:** the Ventas tab per the design:
+  - gauge + 6 KPIs;
+  - zone strip;
+  - semáforo/barras card;
+  - stacked area by line + share tiles;
+  - Tecnired donut, monthly bars, line mix and top 5.
+- **Deviations:** the stacked area is taller; the Tecnired cards wrap on tablet; the Barras right column is 96px.
+- **Checks**
+  - Full jest: 172 suites / 1820 tests.
+  - Webpack compile: 200.
+  - Screenshots at 1440 and 1024 (synthetic fixture), copied to the user's `Documents\Motored\capturas_kpis`. The user approved the push.
+- **Notes from gga:** `VentaPorLinea` has a duplicate import; `VentasTab` has an unused `filtros` prop.
+
 ## Next step
-Native review + push of F1, then F2 (header + shell).
+Native review + push of F2/F3, then F4 (Tiendas tab).

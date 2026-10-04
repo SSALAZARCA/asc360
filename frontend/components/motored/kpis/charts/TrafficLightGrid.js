@@ -8,7 +8,7 @@ function Celda({ item, cortes }) {
   return (
     <div
       data-testid="traffic-cell" data-tone={tone} title={`${item.name}: ${pct(item.pct)}${item.detail ? ` · ${item.detail}` : ''}`}
-      style={{ display: 'flex', alignItems: 'center', gap: 10, background: t.soft, borderRadius: 10, padding: '10px 12px', minWidth: 0 }}
+      style={{ display: 'flex', alignItems: 'center', gap: 10, background: t.soft, borderRadius: 12, padding: '10px 12px', minWidth: 0 }}
     >
       <span style={{ width: 14, height: 14, borderRadius: 999, background: t.color, boxShadow: `0 0 0 4px ${t.ring}`, flex: 'none' }} />
       <span style={{ flex: 1, minWidth: 0 }}>
@@ -17,7 +17,7 @@ function Celda({ item, cortes }) {
         </span>
         {item.detail && <span style={{ display: 'block', fontSize: 10.5, color: COLOR.muted }}>{item.detail}</span>}
       </span>
-      <strong style={{ fontSize: 14, color: t.ink, fontVariantNumeric: 'tabular-nums' }}>{pct(item.pct)}</strong>
+      <strong style={{ fontSize: 13, color: COLOR.ink, fontVariantNumeric: 'tabular-nums' }}>{pct(item.pct)}</strong>
     </div>
   );
 }
@@ -25,7 +25,7 @@ function Celda({ item, cortes }) {
 /** The "Semáforo" grid. `items` [{id, name, pct (fraction or null), detail}]; color by `cortes` {verde_desde, ambar_desde}. */
 export default function TrafficLightGrid({ items, cortes }) {
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 8 }}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gap: 10 }}>
       {items.map((item) => <Celda key={item.id ?? item.name} item={item} cortes={cortes} />)}
     </div>
   );

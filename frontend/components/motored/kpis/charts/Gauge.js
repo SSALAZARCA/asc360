@@ -28,11 +28,12 @@ export default function Gauge({ value: crudo, cortes, title = 'Cumplimiento', la
           <line x1="100" y1="104" x2={g.needleX} y2={g.needleY} strokeWidth="3" strokeLinecap="round" style={{ stroke: COLOR.ink }} />
           <circle cx="100" cy="104" r="5" style={{ fill: COLOR.ink }} />
         </svg>
-        <div style={{ position: 'absolute', left: 0, right: 0, bottom: '-2%', fontSize: 28, fontWeight: 700, color: COLOR.ink }}>
-          {texto}
-        </div>
+        {[['10%', '0'], ['90%', '100%']].map(([left, texto]) => (
+          <span key={texto} style={{ position: 'absolute', left, top: '88%', transform: 'translateX(-50%)', fontSize: 10, color: COLOR.soft }}>{texto}</span>
+        ))}
       </div>
-      {label && <p style={{ margin: '14px 0 0', fontSize: 12.5, color: COLOR.muted }}>{label}</p>}
+      <p style={{ margin: 0, fontSize: 30, fontWeight: 700, letterSpacing: '-.01em', color: COLOR.ink, fontVariantNumeric: 'tabular-nums' }}>{texto}</p>
+      {label && <p style={{ margin: '8px 0 0', fontSize: 12.5, color: COLOR.muted }}>{label}</p>}
     </div>
   );
 }
