@@ -119,7 +119,9 @@ async def test_configuracion_groups_by_registry_group_inside_a_section():
     pedido = next(s for s in cfg if s["seccion"] == "pedido")
     assert [g["grupo"] for g in pedido["grupos"]] == [pc.GRUPO_MOTOR]
     avisos = next(s for s in cfg if s["seccion"] == "avisos")
-    assert avisos["grupos"] == []
+    assert [g["grupo"] for g in avisos["grupos"]] == [pc.GRUPO_OPERACION]
+    cargas = next(s for s in cfg if s["seccion"] == "cargas")
+    assert [g["grupo"] for g in cargas["grupos"]] == [pc.GRUPO_INGESTA]
 
 
 async def test_configuracion_shows_default_global_override_and_scheduled():

@@ -27,7 +27,9 @@ import logging
 import uuid
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
-from typing import Awaitable, Callable, Dict, List, Mapping, Sequence, Tuple
+from typing import (
+    Awaitable, Callable, Dict, List, Mapping, Optional, Sequence, Tuple,
+)
 
 from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert
@@ -36,8 +38,9 @@ from app.motored.models.aviso_antiguedad_enviado import (
     AvisoAntiguedadEnviado,
 )
 from app.motored.models.usuario import MotoredRole, Usuario
+from app.motored.services import parametros
 from app.motored.services.corridas import parametros_corrida, vigencia
-from app.motored.services.reloj import BOGOTA_OFFSET
+from app.motored.services.reloj import BOGOTA_OFFSET, hoy_bogota
 
 logger = logging.getLogger("motored.avisos_antiguedad")
 
@@ -49,6 +52,56 @@ HORA_DIA = time(8, 30)
 ROLES_DESTINO = (MotoredRole.COMPRAS,)
 
 Enviar = Callable[[int, str], Awaitable[bool]]
+
+CLAVE_HORA_VISPERA = "aviso_hora_vispera"
+CLAVE_HORA_DIA = "aviso_hora_dia"
+CLAVE_ROLES_DESTINO = "aviso_roles_destino"
+
+
+def parsear_hora(texto: str) -> time:
+    """"HH:MM" -> `time` (el registro ya garantiza el formato)."""
+    horas, minutos = texto.split(":")
+    return time(int(horas), int(minutos))
+
+
+@dataclass(frozen=True)
+class ConfigAvisos:
+    """Lo que el loop lee de la Configuración en cada tick."""
+
+    hora_vispera: time
+    hora_dia: time
+    roles: Tuple[MotoredRole, ...]
+
+    @property
+    def primera_hora(self) -> time:
+        """Antes de esta hora ningún aviso puede tocar."""
+        return min(self.hora_vispera, self.hora_dia)
+
+
+CONFIG_POR_DEFECTO = ConfigAvisos(HORA_VISPERA, HORA_DIA, ROLES_DESTINO)
+
+
+def _respaldos() -> Dict[str, object]:
+    """Las constantes de siempre, en la forma que guarda el registro."""
+    return {
+        CLAVE_HORA_VISPERA: HORA_VISPERA.strftime("%H:%M"),
+        CLAVE_HORA_DIA: HORA_DIA.strftime("%H:%M"),
+        CLAVE_ROLES_DESTINO: [r.value for r in ROLES_DESTINO],
+    }
+
+
+async def leer_config(
+    db, ahora: datetime, memoria: dict,
+) -> ConfigAvisos:
+    """Una lectura por tick. Nunca lanza: un fallo conserva el último valor
+    conocido (`memoria`) y, sin él, las constantes."""
+    valores = await parametros.leer_con_memoria(
+        db, hoy_bogota(ahora), _respaldos(), memoria)
+    return ConfigAvisos(
+        parsear_hora(valores[CLAVE_HORA_VISPERA]),
+        parsear_hora(valores[CLAVE_HORA_DIA]),
+        tuple(MotoredRole(r) for r in valores[CLAVE_ROLES_DESTINO]),
+    )
 
 
 @dataclass(frozen=True)
@@ -95,14 +148,15 @@ def avisos_del_dia(
 
 def umbrales_a_enviar(
     vencimientos: Sequence[Vencimiento], ahora: datetime,
+    config: ConfigAvisos = CONFIG_POR_DEFECTO,
 ) -> List[Tuple[str, Vencimiento]]:
     """Qué avisos tocan ya, con `ahora` en hora de Bogotá."""
     hoy, hora = ahora.date(), ahora.timetz().replace(tzinfo=None)
     tocan = []
     for venc, etiqueta in avisos_del_dia(vencimientos, hoy):
-        if etiqueta == "hoy" and hora >= HORA_DIA:
+        if etiqueta == "hoy" and hora >= config.hora_dia:
             tocan.append((UMBRAL_DIA, venc))
-        elif etiqueta == "manana" and hora >= HORA_VISPERA:
+        elif etiqueta == "manana" and hora >= config.hora_vispera:
             tocan.append((UMBRAL_VISPERA, venc))
     return tocan
 
@@ -138,12 +192,14 @@ async def leer_vencimientos(db, hoy: date) -> List[Vencimiento]:
     return calcular_vencimientos(hechos, params.limites_antiguedad, hoy)
 
 
-async def destinatarios(db) -> List[int]:
-    """Chats de Telegram de los usuarios activos y aprobados del rol
+async def destinatarios(
+    db, roles: Sequence[MotoredRole] = ROLES_DESTINO,
+) -> List[int]:
+    """Chats de Telegram de los usuarios activos y aprobados de los roles
     destino, sin repetir (varios usuarios pueden compartir un chat)."""
     filas = await db.execute(
         select(Usuario.telegram_id).where(
-            Usuario.role.in_(ROLES_DESTINO),
+            Usuario.role.in_(list(roles)),
             Usuario.activo.is_(True),
             Usuario.status == "approved",
             Usuario.telegram_id.is_not(None),
@@ -205,17 +261,23 @@ async def _enviar_grupo(
     return recibidos
 
 
-async def procesar_avisos(db, ahora: datetime, enviar: Enviar) -> int:
+async def procesar_avisos(
+    db, ahora: datetime, enviar: Enviar,
+    config: Optional[ConfigAvisos] = None,
+) -> int:
     """Un tick: manda los avisos que tocan y aún no salieron. Devuelve el
-    total de mensajes entregados. `ahora` debe traer zona horaria."""
+    total de mensajes entregados. `ahora` debe traer zona horaria. `config`
+    trae las horas y los roles de la Configuración (sin él, las constantes
+    de siempre)."""
+    config = config or CONFIG_POR_DEFECTO
     local = ahora.astimezone(BOGOTA_OFFSET)
-    if local.timetz().replace(tzinfo=None) < HORA_DIA:
+    if local.timetz().replace(tzinfo=None) < config.primera_hora:
         return 0
     vencimientos = await leer_vencimientos(db, local.date())
-    tocan = umbrales_a_enviar(vencimientos, local)
+    tocan = umbrales_a_enviar(vencimientos, local, config)
     if not tocan:
         return 0
-    chats = await destinatarios(db)
+    chats = await destinatarios(db, config.roles)
     if not chats:
         return 0
     grupos: Dict[str, List[Vencimiento]] = {}

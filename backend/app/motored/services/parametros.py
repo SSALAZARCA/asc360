@@ -397,3 +397,68 @@ async def leer_configuracion(db, hoy: date) -> List[dict]:
          "grupos": [{"grupo": g, "claves": c} for g, c in grupos.items()]}
         for nombre, grupos in secciones.items()
     ]
+
+
+# ---------------------------------------------------------------------------
+# Lectura de ciclo (Configuración T3-T5): los trabajos de fondo (avisos,
+# purgas, ingesta) leen sus ajustes UNA vez por ciclo con esta función. Una
+# fila vigente (y válida) gana; si no hay, vale el respaldo del llamador
+# (la constante o la variable de entorno de siempre). Un fallo de lectura
+# nunca tumba el ciclo: se usa el último valor conocido y, sin él, el respaldo.
+# ---------------------------------------------------------------------------
+
+
+async def leer_valores(
+    db, fecha: date, respaldos: Mapping[str, Any],
+) -> dict:
+    """`{clave: valor}` de cada clave de `respaldos`: la versión vigente al
+    día 1 del mes de `fecha` o, sin fila (o con una que ya no cumple la
+    regla del registro), el respaldo."""
+    vigentes = await obtener_vigentes_motor(
+        db, list(respaldos), primer_dia_del_mes(fecha))
+    valores = {}
+    for clave, respaldo in respaldos.items():
+        resolucion = vigentes.resolver(clave)
+        valores[clave] = respaldo
+        if resolucion.fuente == FUENTE_DEFAULT:
+            continue
+        espec = REGISTRO.get(clave)
+        if espec is not None and not espec.validar(resolucion.valor):
+            logger.warning(
+                "parametro_metodologia %s: el valor guardado %r ya no "
+                "cumple la regla; se usa el respaldo", clave,
+                resolucion.valor)
+            continue
+        valores[clave] = resolucion.valor
+    return valores
+
+
+async def _deshacer(db) -> None:
+    """Limpia la transacción abortada por un fallo de lectura; si la sesión
+    tampoco puede, sigue: el llamador ya tiene su respaldo."""
+    try:
+        await db.rollback()
+    except Exception:  # noqa: BLE001 -- nunca hacia el ciclo
+        logger.warning("no se pudo deshacer la lectura fallida")
+
+
+async def leer_con_memoria(
+    db, fecha: date, respaldos: Mapping[str, Any], memoria: dict,
+    deshacer: bool = True,
+) -> dict:
+    """`leer_valores` que jamás lanza. Guarda cada lectura buena en
+    `memoria` (un dict del módulo que lee); si la siguiente falla, devuelve
+    esa memoria y, sin ella, `respaldos`. Con `deshacer=False` no hace
+    rollback (para sesiones con trabajo pendiente)."""
+    try:
+        valores = await leer_valores(db, fecha, respaldos)
+    except Exception:  # noqa: BLE001 -- un ajuste no tumba el ciclo
+        logger.exception(
+            "no se pudieron leer los ajustes %s; se usa el último valor "
+            "conocido", sorted(respaldos))
+        if deshacer:
+            await _deshacer(db)
+        return dict(memoria) if memoria else dict(respaldos)
+    memoria.clear()
+    memoria.update(valores)
+    return valores

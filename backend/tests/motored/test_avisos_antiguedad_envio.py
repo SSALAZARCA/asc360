@@ -40,7 +40,7 @@ def mundo(monkeypatch):
     async def leer(db, hoy):
         return estado["vencs"]
 
-    async def chats(db):
+    async def chats(db, roles=None):
         return estado["chats"]
 
     async def reservar(db, tipo, umbral, vence, ahora):

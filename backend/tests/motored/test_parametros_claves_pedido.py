@@ -199,7 +199,8 @@ def test_the_switch_reads_false_by_default_and_true_when_written():
 
 TIPOS = {
     "bool", "entero", "decimal", "opcion", "k_fms", "lista",
-    "lista_digitos", "mapa_opcion", "objeto_numerico", "tramos",
+    "lista_digitos", "mapa_opcion", "objeto_numerico", "tramos", "hora",
+    "lista_opciones",
 }
 
 
@@ -222,7 +223,7 @@ def test_only_the_option_keys_have_options():
 
     assert con_opciones == {
         "modo_mes_en_curso", "modo_redondeo_empaque", "grupo_por_cargo",
-        "comision_base_pago", "cumplimiento_base",
+        "comision_base_pago", "cumplimiento_base", "aviso_roles_destino",
     }
 
 

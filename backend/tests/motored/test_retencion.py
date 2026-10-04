@@ -38,15 +38,16 @@ def test_retencion_enabled_default_is_false():
 
 
 async def test_ejecutar_si_corresponde_no_hace_nada_si_esta_deshabilitado(monkeypatch):
-    """Disabled must short-circuit BEFORE any query — no due-check, no
-    active-job check, nothing — regardless of how overdue the purge is."""
+    """Disabled must short-circuit after reading its settings — no due-check,
+    no active-job check, nothing — regardless of how overdue the purge is."""
     monkeypatch.setattr(settings, "MOTORED_RETENCION_ENABLED", False)
-    session = FakeAsyncSession(execute_queue=[])
+    # lectura de la configuración
+    session = FakeAsyncSession(execute_queue=[[]])
 
     resultado = await retencion.ejecutar_si_corresponde(session)
 
     assert resultado is None
-    assert session.executed_statements == []
+    assert len(session.executed_statements) == 1
 
 
 # ---------------------------------------------------------------------------
@@ -70,12 +71,12 @@ async def test_ejecutar_si_corresponde_se_salta_cuando_hay_job_activo(monkeypatc
     even if the retention window is badly overdue. Only ONE query should
     fire — the active-job check — proving the due-check never even runs."""
     monkeypatch.setattr(settings, "MOTORED_RETENCION_ENABLED", True)
-    session = FakeAsyncSession(execute_queue=[[(uuid.uuid4(),)]])
+    session = FakeAsyncSession(execute_queue=[[], [(uuid.uuid4(),)]])
 
     resultado = await retencion.ejecutar_si_corresponde(session)
 
     assert resultado is None
-    assert len(session.executed_statements) == 1
+    assert len(session.executed_statements) == 2
 
 
 # ---------------------------------------------------------------------------
@@ -287,10 +288,12 @@ async def test_la_purga_borra_el_detalle_antes_que_el_snapshot_con_la_misma_fech
 
 async def test_la_purga_sigue_cubierta_por_el_guard_de_job_activo(monkeypatch):
     monkeypatch.setattr(settings, "MOTORED_RETENCION_ENABLED", True)
-    session = FakeAsyncSession(execute_queue=[[(uuid.uuid4(),)]])  # hay_job_activo -> True
+    # config, hay_job_activo -> True
+    session = FakeAsyncSession(execute_queue=[[], [(uuid.uuid4(),)]])
 
     assert await retencion.ejecutar_si_corresponde(session) is None
-    assert len(session.executed_statements) == 1  # ni el detalle ni el snapshot se tocan
+    # ni el detalle ni el snapshot se tocan
+    assert len(session.executed_statements) == 2
 
 
 # ---------------------------------------------------------------------------
@@ -307,6 +310,7 @@ async def test_ejecutar_si_corresponde_ejecuta_la_purga_completa_cuando_correspo
 
     session = FakeAsyncSession(
         execute_queue=[
+            [],  # lectura de la configuración: sin filas -> env
             [],  # hay_job_activo: sin filas activas
             [ultima_ejecucion],  # esta_vencida: última corrida hace 25h -> vencida
             [max_fecha_corte],  # ejecutar_purga_inventario: max(fecha_corte)
@@ -328,6 +332,7 @@ async def test_ejecutar_si_corresponde_no_hace_nada_si_no_esta_vencida(monkeypat
 
     session = FakeAsyncSession(
         execute_queue=[
+            [],  # lectura de la configuración: sin filas -> env
             [],  # hay_job_activo: sin filas activas
             [ultima_ejecucion],  # esta_vencida: corrió hace 1h -> no vencida
         ]
@@ -336,4 +341,4 @@ async def test_ejecutar_si_corresponde_no_hace_nada_si_no_esta_vencida(monkeypat
     resultado = await retencion.ejecutar_si_corresponde(session, now=now)
 
     assert resultado is None
-    assert len(session.executed_statements) == 2
+    assert len(session.executed_statements) == 3

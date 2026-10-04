@@ -4,8 +4,10 @@ Motored: loop asyncio del aviso anticipado de antiguedad de datos.
 Mismo patron que `supervisor_corridas.py`: arranque PEREZOSO desde
 `deps.require_motored_ready` (`ensure_started()`, O(1) despues de la primera
 llamada), cierre por cancelacion del task y un tick que falla se registra
-sin matar el loop. Cada tick es barato: antes de las 08:30 de Bogota no toca
-la base, y sin `LORE_BOT_TOKEN` tampoco (se avisa UNA vez por arranque).
+sin matar el loop. Cada tick es barato: sin `LORE_BOT_TOKEN` no toca la base
+(se avisa UNA vez por arranque) y con token hace UNA lectura de las horas y
+los roles de la Configuracion (`aviso_*`); si esa lectura falla, sigue con
+el ultimo valor conocido y, sin el, con las constantes de siempre.
 
 Interruptores (`app/config.py`): `MOTORED_ENABLED=false` apaga todo Motored;
 `MOTORED_AVISOS_ANTIGUEDAD_ENABLED=false` apaga solo este loop.
@@ -26,6 +28,9 @@ logger = logging.getLogger("motored.trabajos.supervisor_avisos")
 
 _task: Optional[asyncio.Task] = None
 _aviso_sin_token = False
+# Último valor leído de la Configuración: si una lectura falla, el tick
+# sigue con lo último que se supo (y, sin eso, con las constantes).
+_memoria_config: dict = {}
 
 
 def ensure_started() -> None:
@@ -72,8 +77,10 @@ async def run_tick(
         return await avisos_telegram.enviar_mensaje(token, chat_id, texto)
 
     async with fabrica() as db:
+        config = await avisos_antiguedad.leer_config(
+            db, ahora, _memoria_config)
         return await avisos_antiguedad.procesar_avisos(
-            db, ahora, enviar or por_defecto)
+            db, ahora, enviar or por_defecto, config)
 
 
 async def _run_forever(dormir: Callable = asyncio.sleep) -> None:
@@ -93,6 +100,7 @@ async def detener() -> None:
     global _task, _aviso_sin_token
     tarea, _task = _task, None
     _aviso_sin_token = False
+    _memoria_config.clear()
     if tarea is not None and not tarea.done():
         tarea.cancel()
         try:

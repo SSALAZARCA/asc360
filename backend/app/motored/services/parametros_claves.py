@@ -23,6 +23,7 @@ from decimal import Decimal, InvalidOperation
 from fractions import Fraction
 from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
 
+from app.config import settings
 from app.motored.services.corridas import codigos
 
 AMBITO_GLOBAL = "GLOBAL"
@@ -112,10 +113,13 @@ def _booleana(clave: str, default: bool, grupo: str = GRUPO_MOTOR,
 
 
 def _entera(clave, default, minimo, maximo, grupo=GRUPO_MOTOR,
-            ambito=AMBITO_GLOBAL, seccion=""):
+            ambito=AMBITO_GLOBAL, seccion="", explicacion=""):
+    """`explicacion` (opcional) se agrega al dominio que ve la persona."""
+    dominio = f"un entero entre {minimo} y {maximo}"
+    if explicacion:
+        dominio += f" ({explicacion})"
     return EspecClave(
-        clave, default, ambito, grupo,
-        f"un entero entre {minimo} y {maximo}",
+        clave, default, ambito, grupo, dominio,
         lambda v: _entero(v) and minimo <= v <= maximo, _identidad,
         tipo="entero", minimo=minimo, maximo=maximo, seccion=seccion,
     )
@@ -162,6 +166,38 @@ def lista_de_texto(clave: str, default: list, grupo: str = GRUPO_OPERACION,
 
 def _sin_repetidos(valor: list) -> bool:
     return len(set(valor)) == len(valor)
+
+
+_HORA = re.compile(r"([01][0-9]|2[0-3]):[0-5][0-9]")
+
+
+def hora_hhmm(clave: str, default: str, grupo: str = GRUPO_OPERACION,
+              seccion: str = "") -> EspecClave:
+    """Hora del día como texto "HH:MM" (24 horas)."""
+    return EspecClave(
+        clave, default, AMBITO_GLOBAL, grupo,
+        "una hora en formato HH:MM, de 00:00 a 23:59",
+        lambda v: isinstance(v, str) and _HORA.fullmatch(v) is not None,
+        _identidad, tipo="hora", seccion=seccion,
+    )
+
+
+def lista_de_opciones(clave: str, default: list, opciones: tuple,
+                      grupo: str = GRUPO_OPERACION,
+                      seccion: str = "") -> EspecClave:
+    """Lista no vacía y sin repetidos de valores tomados de `opciones`."""
+    def valido(valor):
+        return isinstance(valor, list) and len(valor) > 0 and all(
+            isinstance(x, str) and x in opciones for x in valor
+        ) and _sin_repetidos(valor)
+
+    return EspecClave(
+        clave, default, AMBITO_GLOBAL, grupo,
+        "una lista no vacía, sin repetidos, con valores de: "
+        + ", ".join(opciones),
+        valido, _identidad, tipo="lista_opciones",
+        opciones=tuple(opciones), seccion=seccion,
+    )
 
 
 def _lista_texto(clave: str, default: list):
@@ -386,6 +422,52 @@ def _claves_comisiones() -> list:
     ]
 
 
+# Roles web que pueden vincular Telegram y por tanto recibir avisos.
+_ROLES_AVISO = ("ADMIN", "COMPRAS")
+_MINIMO_DIAS_INVENTARIO = 30
+_MINIMO_DIAS_CORRIDAS = 7
+_MAXIMO_DIAS_RETENCION = 3650
+
+
+def _claves_avisos() -> list:
+    """T3: horas y destinatarios del aviso de antigüedad de datos. Los
+    valores por defecto son las constantes de `avisos_antiguedad` (una
+    prueba guarda que no se desvíen)."""
+    return [
+        hora_hhmm("aviso_hora_vispera", "16:30", seccion="avisos"),
+        hora_hhmm("aviso_hora_dia", "08:30", seccion="avisos"),
+        lista_de_opciones(
+            "aviso_roles_destino", ["COMPRAS"], _ROLES_AVISO,
+            seccion="avisos"),
+    ]
+
+
+def _claves_limpieza() -> list:
+    """T5: la purga de inventario y de corridas. Los valores por defecto
+    son los de las variables de entorno que reemplazan (se usan también
+    cuando no hay fila guardada)."""
+    def dias(clave, default, minimo, motivo):
+        return _entera(
+            clave, default, minimo, _MAXIMO_DIAS_RETENCION,
+            GRUPO_OPERACION, seccion="limpieza",
+            explicacion=f"menos de {minimo} días {motivo}")
+
+    return [
+        _booleana("retencion_inventario_habilitada",
+                  settings.MOTORED_RETENCION_ENABLED,
+                  GRUPO_OPERACION, "limpieza"),
+        dias("retencion_inventario_dias", settings.MOTORED_RETENCION_DIAS,
+             _MINIMO_DIAS_INVENTARIO,
+             "borraría inventario que todavía se consulta"),
+        _booleana("retencion_corridas_habilitada",
+                  settings.MOTORED_CORRIDA_RETENCION_ENABLED,
+                  GRUPO_OPERACION, "limpieza"),
+        dias("retencion_corridas_dias",
+             settings.MOTORED_CORRIDA_RETENCION_DIAS, _MINIMO_DIAS_CORRIDAS,
+             "borraría corridas recién descartadas"),
+    ]
+
+
 def _construir_registro() -> Mapping[str, EspecClave]:
     especs = [
         # Claves de la ingesta F2 (ya en uso en producción).
@@ -398,6 +480,10 @@ def _construir_registro() -> Mapping[str, EspecClave]:
         _lista_texto("estados_backorder_vigentes", ["BACKORDER"]),
         _entera("dias_ventana_ingresos", 45, 1, 3650, GRUPO_INGESTA),
         _decimal("tolerancia_ingreso_pct", 2.0, grupo=GRUPO_INGESTA),
+        _decimal(
+            "periodo_tolerancia_pct",
+            settings.MOTORED_INGESTA_PERIODO_TOLERANCIA_PCT, 100,
+            grupo=GRUPO_INGESTA),
         # Interruptores y parámetros del motor (preset legacy por defecto).
         _booleana("incluir_demanda_perdida_en_ponderada", False),
         _decimal("factor_demanda_perdida", "1"),
@@ -427,6 +513,7 @@ def _construir_registro() -> Mapping[str, EspecClave]:
         _tope_por_tienda(CLAVE_TOPE_PEDIDO),
     ]
     especs += _claves_indicadores() + _claves_comisiones()
+    especs += _claves_avisos() + _claves_limpieza()
     return {e.clave: e for e in especs}
 
 

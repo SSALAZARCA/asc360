@@ -473,14 +473,16 @@ async def test_the_supervisor_runner_only_makes_sure_the_loop_runs(
 def retencion_activa(monkeypatch):
     monkeypatch.setattr(settings, "MOTORED_CORRIDA_RETENCION_ENABLED", True)
     monkeypatch.setattr(settings, "MOTORED_CORRIDA_RETENCION_DIAS", 45)
+    rc._memoria_config.clear()
 
 
-async def test_the_retention_is_off_by_default_and_never_queries(monkeypatch):
+async def test_the_retention_is_off_by_default_and_only_reads_its_config(
+        monkeypatch):
     monkeypatch.setattr(settings, "MOTORED_CORRIDA_RETENCION_ENABLED", False)
-    db = SesionConCommits()
+    db = SesionConCommits(execute_queue=[[]])
 
     assert await rc.ejecutar_si_corresponde(db, AHORA) is None
-    assert db.executed_statements == []
+    assert len(db.executed_statements) == 1
 
 
 def test_the_retention_setting_defaults_are_the_design_values():
@@ -494,20 +496,20 @@ def test_the_retention_setting_defaults_are_the_design_values():
 
 async def test_the_retention_waits_for_its_daily_due_check(retencion_activa):
     ayer = (AHORA - datetime.timedelta(hours=2)).replace(tzinfo=None)
-    db = SesionConCommits(execute_queue=[[ayer]])
+    db = SesionConCommits(execute_queue=[[], [ayer]])
 
     assert await rc.ejecutar_si_corresponde(db, AHORA) is None
-    assert len(db.executed_statements) == 1
+    assert len(db.executed_statements) == 2
 
 
 async def test_the_retention_deletes_only_annulled_failed_or_draft_corridas(
         retencion_activa):
-    db = SesionConCommits(execute_queue=[[None], [ID, ID], [], []])
+    db = SesionConCommits(execute_queue=[[], [None], [ID, ID], [], []])
 
     borradas = await rc.ejecutar_si_corresponde(db, AHORA)
 
     assert borradas == 2
-    seleccion = db.executed_statements[1]
+    seleccion = db.executed_statements[2]
     valores = _sql(seleccion).params.values()
     estados_en_consulta = next(v for v in valores if isinstance(v, list))
     assert sorted(estados_en_consulta) == sorted(
@@ -520,11 +522,11 @@ async def test_the_retention_keeps_corridas_with_events_or_closed_tiendas(
     """F4 (B3a): una corrida BORRADOR cuyo pedido ya tuvo un evento
     (cerrado, reabierto) o cuya tienda está CERRADO/ENVIADO es historia del
     negocio, aunque su estado de cálculo sea purgable."""
-    db = SesionConCommits(execute_queue=[[None], [], []])
+    db = SesionConCommits(execute_queue=[[], [None], [], []])
 
     await rc.ejecutar_si_corresponde(db, AHORA)
 
-    sql = str(db.executed_statements[1].compile(
+    sql = str(db.executed_statements[2].compile(
         dialect=postgresql.dialect(),
         compile_kwargs={"literal_binds": True}))
     assert "NOT (EXISTS (SELECT * \nFROM pedido_evento" in sql
@@ -534,17 +536,17 @@ async def test_the_retention_keeps_corridas_with_events_or_closed_tiendas(
 
 
 async def test_the_retention_cutoff_is_45_days_before_now(retencion_activa):
-    db = SesionConCommits(execute_queue=[[None], [ID], []])
+    db = SesionConCommits(execute_queue=[[], [None], [ID], []])
 
     await rc.ejecutar_si_corresponde(db, AHORA)
 
     limite = (AHORA - datetime.timedelta(days=45)).replace(tzinfo=None)
-    assert limite in _sql(db.executed_statements[1]).params.values()
+    assert limite in _sql(db.executed_statements[2]).params.values()
 
 
 async def test_the_retention_writes_one_ledger_row_for_the_corrida_table(
         retencion_activa):
-    db = SesionConCommits(execute_queue=[[None], [ID, ID], []])
+    db = SesionConCommits(execute_queue=[[], [None], [ID, ID], []])
 
     await rc.ejecutar_si_corresponde(db, AHORA)
 
@@ -557,7 +559,7 @@ async def test_the_retention_writes_one_ledger_row_for_the_corrida_table(
 
 
 async def test_the_retention_deletes_in_bounded_chunks(retencion_activa):
-    db = SesionConCommits(execute_queue=[[None], [ID, ID], [], [ID], []])
+    db = SesionConCommits(execute_queue=[[], [None], [ID, ID], [], [ID], []])
 
     borradas = await rc.ejecutar_si_corresponde(db, AHORA, tamano=2)
 
@@ -566,16 +568,16 @@ async def test_the_retention_deletes_in_bounded_chunks(retencion_activa):
 
 async def test_the_due_check_reads_the_ledger_rows_of_the_corrida_table(
         retencion_activa):
-    db = SesionConCommits(execute_queue=[[None], []])
+    db = SesionConCommits(execute_queue=[[], [None], []])
 
     await rc.ejecutar_si_corresponde(db, AHORA)
 
-    assert "corrida" in _sql(db.executed_statements[0]).params.values()
+    assert "corrida" in _sql(db.executed_statements[1]).params.values()
 
 
 async def test_a_run_with_nothing_to_delete_still_records_the_ledger_row(
         retencion_activa):
-    db = SesionConCommits(execute_queue=[[None], []])
+    db = SesionConCommits(execute_queue=[[], [None], []])
 
     borradas = await rc.ejecutar_si_corresponde(db, AHORA)
 

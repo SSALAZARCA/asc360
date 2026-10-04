@@ -20,7 +20,11 @@ entirely in Postgres:
   snapshot`, never to `now()` -- a pause in loading can never purge
   everything.
 
-Gated by `MOTORED_RETENCION_ENABLED` (default `False`, see `app/config.py`).
+Gated by the `retencion_inventario_habilitada` key of the Configuración page;
+with no stored row it falls back to `MOTORED_RETENCION_ENABLED` (default
+`False`, see `app/config.py`), and the days to `MOTORED_RETENCION_DIAS`.
+The settings are read ONCE per cycle (`leer_config`) and travel with the
+call, so a change applies from the next run and never mid-purge.
 
 Deliberate deviation from the design's literal wording: ADR-3 says
 "20 000-row `ctid`-bounded chunks". `ctid` is a Postgres physical row
@@ -37,7 +41,7 @@ from __future__ import annotations
 
 import time
 from datetime import date, datetime, timedelta, timezone
-from typing import Optional
+from typing import NamedTuple, Optional
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -47,9 +51,35 @@ from app.motored.models.carga_archivo import CargaArchivo
 from app.motored.models.inventario_detalle import InventarioDetalle
 from app.motored.models.inventario_snapshot import InventarioSnapshot
 from app.motored.models.retencion_ejecucion import RetencionEjecucion
+from app.motored.services import parametros
 
 TABLA_INVENTARIO_SNAPSHOT = "inventario_snapshot"
 TABLA_INVENTARIO_DETALLE = "inventario_detalle"
+
+CLAVE_HABILITADA = "retencion_inventario_habilitada"
+CLAVE_DIAS = "retencion_inventario_dias"
+
+# Last settings read from the Configuración page: a failed read keeps them.
+_memoria_config: dict = {}
+
+
+class ConfigRetencion(NamedTuple):
+    """Switch and window of a purge, as read at the start of a cycle."""
+
+    habilitada: bool
+    dias: int
+
+
+async def leer_config(session, now: datetime) -> ConfigRetencion:
+    """One read per cycle. Never raises: a failure keeps the last known
+    value and, without one, the env settings."""
+    valores = await parametros.leer_con_memoria(
+        session, now.date(),
+        {CLAVE_HABILITADA: settings.MOTORED_RETENCION_ENABLED,
+         CLAVE_DIAS: settings.MOTORED_RETENCION_DIAS},
+        _memoria_config)
+    return ConfigRetencion(valores[CLAVE_HABILITADA], valores[CLAVE_DIAS])
+
 
 # ADR-3's due-check interval: "if older than 24 h".
 INTERVALO_DEBIDO = timedelta(hours=24)
@@ -128,9 +158,12 @@ async def ejecutar_purga_inventario(
     session: AsyncSession,
     now: Optional[datetime] = None,
     chunk_size: int = TAMANO_CHUNK,
+    dias: Optional[int] = None,
 ) -> Optional[RetencionEjecucion]:
     """The chunked delete itself (ADR-3). Bounded to `fecha_corte <
-    max(fecha_corte) - MOTORED_RETENCION_DIAS`; runs in `chunk_size`-bounded
+    max(fecha_corte) - dias` (`dias` defaults to `MOTORED_RETENCION_DIAS`;
+    the caller passes the value it read at the start of the cycle); runs in
+    `chunk_size`-bounded
     batches, one commit per batch. Writes exactly one `retencion_ejecucion`
     row per table per run (rows removed, limit date, duration) -- the
     snapshot's row is ledger AND scheduler anchor for the next
@@ -145,7 +178,8 @@ async def ejecutar_purga_inventario(
     if fecha_corte_maxima is None:
         return None
 
-    fecha_limite = calcular_fecha_limite(fecha_corte_maxima, settings.MOTORED_RETENCION_DIAS)
+    ventana = settings.MOTORED_RETENCION_DIAS if dias is None else dias
+    fecha_limite = calcular_fecha_limite(fecha_corte_maxima, ventana)
 
     # El detalle por bodega va PRIMERO, con la misma `fecha_limite` y en la
     # misma corrida (mismo guard de job activo) que el snapshot.
@@ -201,16 +235,17 @@ async def _purgar_tabla(
 async def ejecutar_si_corresponde(
     session: AsyncSession, now: Optional[datetime] = None
 ) -> Optional[RetencionEjecucion]:
-    """Entry point called from the supervisor's own tick (ADR-3). No-op
-    unless `MOTORED_RETENCION_ENABLED` -- checked FIRST, before any query,
-    so a disabled purge never touches the database regardless of how
-    overdue it is. Then the "no active job" gate, THEN the due-check, in
-    that order, so a live job short-circuits with a single query and never
-    even asks whether the purge is due."""
-    if not settings.MOTORED_RETENCION_ENABLED:
-        return None
-
+    """Entry point called from the supervisor's own tick (ADR-3). Reads
+    the settings once (`leer_config`); a no-op unless the purge is enabled
+    -- checked FIRST, before the other queries, so a disabled purge never
+    touches the data regardless of how overdue it is. Then the "no active
+    job" gate, THEN the due-check, in that order, so a live job
+    short-circuits with a single query and never even asks whether the
+    purge is due."""
     now = now or _now_utc()
+    config = await leer_config(session, now)
+    if not config.habilitada:
+        return None
 
     if await hay_job_activo(session):
         return None
@@ -218,4 +253,5 @@ async def ejecutar_si_corresponde(
     if not await esta_vencida(session, now=now):
         return None
 
-    return await ejecutar_purga_inventario(session, now=now)
+    return await ejecutar_purga_inventario(
+        session, now=now, dias=config.dias)
