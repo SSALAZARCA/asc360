@@ -11,6 +11,8 @@
  * progreso (design §API).
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useRouter } from 'next/navigation';
+import { ArrowLeft } from 'lucide-react';
 import { getCarga } from '../../../lib/motored/api';
 import { labelTipo } from './tiposCarga';
 import EstadoBadge from './EstadoBadge';
@@ -23,6 +25,33 @@ const TABS = [
   { id: 'errores', label: 'Errores' },
   { id: 'preview', label: 'Vista previa' },
 ];
+
+// carga.tipo -> id of its tab in /motored/maestros (app/motored/maestros/page.js).
+const TAB_POR_TIPO = {
+  VENTAS: 'ventas',
+  INVENTARIO: 'inventario',
+  BACKORDER: 'backorder',
+  DEMANDA_PERDIDA: 'demanda_perdida',
+  FACTURAS_PEDIDOS: 'facturas_pedidos',
+  INGRESOS_FACTURAS: 'ingresos_facturas',
+};
+
+function BotonVolver({ carga }) {
+  const router = useRouter();
+  const tab = carga ? TAB_POR_TIPO[carga.tipo] : null;
+  const destino = tab ? `/motored/maestros?tab=${tab}` : '/motored/maestros';
+  const label = carga && tab ? labelTipo(carga.tipo) : 'Maestros';
+  return (
+    <button
+      type="button"
+      className="motored-btn motored-btn-tertiary"
+      style={{ alignSelf: 'flex-start', minHeight: '44px' }}
+      onClick={() => router.push(destino)}
+    >
+      <ArrowLeft size={14} /> Volver a {label}
+    </button>
+  );
+}
 
 const ESTADOS_EN_PROGRESO = new Set(['PROCESANDO', 'APLICANDO']);
 export const POLL_INTERVALO_MS = 3000;
@@ -70,14 +99,23 @@ export default function CargaDetalle({ cargaId }) {
   const { carga, error, reload } = useCargaPolling(cargaId);
   const [activeTab, setActiveTab] = useState('resumen');
 
-  if (error) return <p style={{ color: 'var(--motored-danger, #c0392b)', fontSize: '0.85rem' }}>{error}</p>;
-  if (!carga) return <p style={{ color: 'var(--motored-text-muted, #5a5a5a)', fontSize: '0.85rem' }}>Cargando...</p>;
+  if (error || !carga) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        <BotonVolver carga={carga} />
+        {error
+          ? <p style={{ color: 'var(--motored-danger, #c0392b)', fontSize: '0.85rem' }}>{error}</p>
+          : <p style={{ color: 'var(--motored-text-muted, #5a5a5a)', fontSize: '0.85rem' }}>Cargando...</p>}
+      </div>
+    );
+  }
 
   const enProgreso = ESTADOS_EN_PROGRESO.has(carga.estado);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+        <BotonVolver carga={carga} />
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           <h1 className="motored-h-pantalla">{labelTipo(carga.tipo)} — {carga.nombre_archivo}</h1>
           <EstadoBadge estado={carga.estado} />

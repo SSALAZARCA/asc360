@@ -32,6 +32,7 @@
  * inside its own box (`overflowX: auto`) instead of widening the page.
  */
 import { Fragment, useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { getSalud } from '../../../lib/motored/api';
 import AvisosSalud from './AvisosSalud';
 
@@ -91,7 +92,10 @@ function EstadoDot({ estado }) {
 }
 
 export default function MaestrosTabs({ tabs }) {
-  const [activeId, setActiveId] = useState(tabs[0].id);
+  const tabPedido = useSearchParams()?.get('tab');
+  const [activeId, setActiveId] = useState(
+    tabs.some((t) => t.id === tabPedido) ? tabPedido : tabs[0].id,
+  );
   const { porEntidad: saludPorEntidad, hallazgos } = useSaludPorEntidad();
   const active = tabs.find((t) => t.id === activeId);
   const hallazgosActivos = active.entidadSalud

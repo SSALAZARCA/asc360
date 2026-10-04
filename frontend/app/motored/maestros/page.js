@@ -28,6 +28,7 @@
  * nothing being checked for it yet. The 6 movement tabs never had a health
  * check either, same reasoning.
  */
+import { Suspense } from 'react';
 import MotoredLayout from '../motored-layout';
 import MaestrosTabs from '../../../components/motored/maestros/MaestrosTabs';
 import SucursalesTab from '../../../components/motored/maestros/SucursalesTab';
@@ -54,7 +55,9 @@ const TABS = [
 export default function MaestrosPage() {
   return (
     <MotoredLayout>
-      <MaestrosTabs tabs={TABS} />
+      <Suspense fallback={null}>
+        <MaestrosTabs tabs={TABS} />
+      </Suspense>
     </MotoredLayout>
   );
 }
