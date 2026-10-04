@@ -154,7 +154,8 @@ async def test_the_cost_of_sales_uses_the_last_3_months_and_the_median_cost(sesi
 async def test_the_inventory_is_valued_at_the_latest_cutoff_and_counts_lines_without_cost(sesion):
     w = await _mundo(sesion)
 
-    filas = {f.sucursal_id: f for f in await qk.consultar_inventario(sesion, await _filtro(sesion), CORTE)}
+    filas = {f.sucursal_id: f for f in await qk.consultar_inventario(
+        sesion, await _filtro(sesion, sucursales=[s.id for s in w.s]), CORTE)}
 
     assert {k_: (f.valor, f.sin_costo) for k_, f in filas.items()} == {
         str(w.s[0].id): (D(2500), 2), str(w.s[1].id): (D(4000), 0), str(w.s[2].id): (D(0), 1)}
@@ -165,7 +166,8 @@ async def test_the_inventory_is_valued_at_the_latest_cutoff_and_counts_lines_wit
 async def test_the_tiendas_block_has_the_inventory_days_per_store(sesion):
     w = await _mundo(sesion)
 
-    r = await k.calcular_kpis_tiendas(sesion, await _filtro(sesion))
+    # Scoped to this world's stores so rows already in the database cannot change the totals.
+    r = await k.calcular_kpis_tiendas(sesion, await _filtro(sesion, sucursales=[s.id for s in w.s]))
 
     por_tienda = {f["sucursal_id"]: f for f in r["tiendas"]}
     s1, s2 = por_tienda[str(w.s[0].id)]["dias_inventario"], por_tienda[str(w.s[1].id)]["dias_inventario"]
@@ -179,9 +181,10 @@ async def test_the_tiendas_block_has_the_inventory_days_per_store(sesion):
 
 
 async def test_without_inventory_loaded_the_days_are_empty(sesion):
-    await _mundo(sesion, con_inventario=False)
+    w = await _mundo(sesion, con_inventario=False)
 
-    r = await k.calcular_kpis_tiendas(sesion, await _filtro(sesion))
+    r = await k.calcular_kpis_tiendas(sesion, await _filtro(sesion, sucursales=[s.id for s in w.s]))
 
     assert r["inventario"]["fecha_corte"] is None and r["inventario"]["tiendas"] == {}
     assert all(f["dias_inventario"] is None for f in r["tiendas"])
+

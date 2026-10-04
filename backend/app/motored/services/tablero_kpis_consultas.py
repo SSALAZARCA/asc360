@@ -86,7 +86,11 @@ async def consultar_inventario(
 ) -> List[FilaInventario]:
     """Inventario a costo por tienda en `fecha_corte` (existencia x costo unitario
     de cada linea con costo positivo), de las cargas no ANULADAS y de las tiendas
-    del filtro. Sin corte no hay inventario."""
+    del filtro. Sin corte no hay inventario.
+
+    Por diseno usa el ULTIMO corte GLOBAL: la carga de inventario trae todas las
+    tiendas en un solo archivo por dia, asi que una tienda ausente de ese archivo
+    no aparece."""
     if fecha_corte is None:
         return []
     con_costo = InventarioDetalle.costo_unitario > 0
@@ -109,7 +113,8 @@ async def consultar_inventario(
 def filtro_costo_venta(filtro: Filtro) -> Tuple[Filtro, int]:
     """El filtro sobre los 3 meses de calendario que terminan en el ultimo mes
     elegido (con HMCL incluido: es el costo de TODA la venta de la tienda) y los
-    dias que suman."""
+    dias que suman. HMCL entra a proposito: los dias de inventario miden toda la
+    salida de mercancia, no solo la venta que cuenta para el presupuesto."""
     ultimo = filtro.meses[-1]
     inicio, fin = t.limites_de_fecha(t.mes_desplazado(ultimo, -(MESES_COSTO_VENTA - 1)), ultimo)
     return filtro._replace(rangos=((inicio, fin),), modo_hmcl=t.HMCL_INCLUIR), (fin - inicio).days
