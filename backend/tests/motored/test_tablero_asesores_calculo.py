@@ -355,3 +355,44 @@ def test_el_tablero_marca_el_conflicto_de_cargos_de_una_persona():
 def test_el_tablero_no_marca_conflicto_con_un_solo_cargo(tablero):
     a = _fila(tablero, A)
     assert a["cargo_conflicto"] is False and a["cargos"] == ["ASESOR DE REPUESTOS"]
+
+
+# --- Reglas de Configuracion -----------------------------------------------------------------
+
+
+def test_las_reglas_por_defecto_son_las_constantes_historicas():
+    r = t.REGLAS_POR_DEFECTO
+    assert r.lineas == t.LINEAS and r.hmcl_nits == t.HMCL_NITS
+    assert r.grupo_por_cargo == t.GRUPO_POR_CARGO
+    assert r.semaforo == {"verde_desde": 90, "ambar_desde": 70}
+    assert r.cumplimiento_base == "con_hmcl"
+
+
+def test_normalizar_linea_usa_la_lista_de_lineas_recibida():
+    assert t.normalizar_linea("gps", ("GPS", "CASCOS")) == "GPS"
+    assert t.normalizar_linea("repuestos", ("GPS", "CASCOS")) is None
+
+
+def test_grupo_de_cargo_usa_el_mapa_recibido():
+    mapa = {"JEFE DE TALLER": t.TIPO_PERSONA}
+    assert t.grupo_de_cargo("JEFE DE TALLER", mapa) == t.TIPO_PERSONA
+    assert t.grupo_de_cargo("ASESOR DE REPUESTOS", mapa) == t.GRUPO_OTROS
+
+
+def test_una_lista_de_lineas_reducida_cambia_los_indicadores():
+    reglas = t.Reglas(lineas=("REPUESTOS", "ACCESORIOS"))
+
+    r = t.construir_tablero(CUBO, FACTURAS, CLIENTES, PERSONAS, MESES, reglas)
+
+    a = _fila(r, A)
+    assert list(a["venta"]["por_linea"]) == ["REPUESTOS", "ACCESORIOS"]
+    assert a["venta"]["total"] == 3000.0  # LLANTAS (500) sale del total de Ana
+    assert list(a["facturas"]["pct_con_linea"]) == ["REPUESTOS", "ACCESORIOS"]
+    # La venta de LLANTAS y LUBRICANTES, ya fuera de las lineas, se informa aparte.
+    assert r["venta_sin_linea"] == 700.0 + 500.0 + 400.0
+    # El ranking por LUBRICANTES no revienta cuando la linea no esta configurada.
+    assert a["ranking"]["rank_lubricantes"] == 1
+
+
+def test_sin_reglas_el_resultado_es_el_de_siempre(tablero):
+    assert t.construir_tablero(CUBO, FACTURAS, CLIENTES, PERSONAS, MESES, t.REGLAS_POR_DEFECTO) == tablero

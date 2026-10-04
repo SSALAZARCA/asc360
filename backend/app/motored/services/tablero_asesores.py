@@ -53,6 +53,23 @@ GRUPO_POR_CARGO: Dict[str, str] = {
 TILDES_ORIGEN = "ÁÉÍÓÚÜáéíóúü"
 TILDES_DESTINO = "AEIOUUaeiouu"
 
+CUMPLIMIENTO_CON_HMCL, CUMPLIMIENTO_SIN_HMCL = "con_hmcl", "sin_hmcl"
+SEMAFORO_POR_DEFECTO: Dict[str, float] = {"verde_desde": 90, "ambar_desde": 70}
+
+
+class Reglas(NamedTuple):
+    """Reglas de negocio del tablero que vienen de Configuracion (vigentes en
+    el ultimo mes elegido). Los valores por defecto (`REGLAS_POR_DEFECTO`) son
+    las constantes historicas de este modulo."""
+    lineas: Tuple[str, ...] = LINEAS
+    hmcl_nits: Tuple[str, ...] = HMCL_NITS
+    grupo_por_cargo: Dict[str, str] = GRUPO_POR_CARGO
+    semaforo: Dict[str, float] = SEMAFORO_POR_DEFECTO
+    cumplimiento_base: str = CUMPLIMIENTO_CON_HMCL
+
+
+REGLAS_POR_DEFECTO = Reglas()
+
 
 class FilaCubo(NamedTuple):
     """Venta agregada de UNA fila del tablero en un mes y una linea. `linea`
@@ -109,19 +126,20 @@ class FilaVendedorVenta(NamedTuple):
 # --- Normalizacion y claves ----------------------------------------------------------------
 
 
-def normalizar_linea(texto: Optional[str]) -> Optional[str]:
+def normalizar_linea(texto: Optional[str], lineas: Iterable[str] = LINEAS) -> Optional[str]:
     """Recorta, pasa a mayusculas y quita tildes; devuelve la linea solo si es
-    una de las 7 (cualquier otra cosa, incluida la vacia, es None)."""
+    una de `lineas` (por defecto las 7; cualquier otra cosa, incluida la vacia,
+    es None)."""
     if not texto:
         return None
     descompuesto = unicodedata.normalize("NFD", texto.strip())
     limpio = "".join(c for c in descompuesto if unicodedata.category(c) != "Mn").upper()
-    return limpio if limpio in LINEAS else None
+    return limpio if limpio in tuple(lineas) else None
 
 
-def grupo_de_cargo(cargo: str) -> str:
+def grupo_de_cargo(cargo: str, grupo_por_cargo: Dict[str, str] = GRUPO_POR_CARGO) -> str:
     """Grupo de una persona registrada y activa segun su cargo."""
-    return GRUPO_POR_CARGO.get(cargo, GRUPO_OTROS)
+    return grupo_por_cargo.get(cargo, GRUPO_OTROS)
 
 
 def clave_persona(vendedor_id: Any) -> str:
@@ -300,6 +318,7 @@ def _indicadores(
     facturas: Optional[FilaFacturas],
     clientes: Optional[FilaClientes],
     meses: List[str],
+    lineas: Tuple[str, ...] = LINEAS,
 ) -> Dict[str, Any]:
     venta = acum.venta
     n_facturas = facturas.facturas if facturas else 0
@@ -310,7 +329,7 @@ def _indicadores(
             (m for m, d in acum.descuento_por_mes.items() if d > 0),
             key=lambda m: (-acum.descuento_por_mes[m], m),
         )
-    con_linea = facturas.con_linea if facturas else (0,) * len(LINEAS)
+    con_linea = facturas.con_linea if facturas else (0,) * len(lineas)
     return {
         "venta": {
             "total": _dinero(venta),
@@ -318,8 +337,8 @@ def _indicadores(
             "sin_hmcl": _dinero(venta - acum.hmcl),
             "pct_hmcl": ratio(acum.hmcl, venta),
             "por_mes": {m: _dinero(acum.venta_por_mes.get(m, Decimal(0))) for m in meses},
-            "por_linea": {linea: _dinero(acum.venta_por_linea.get(linea, Decimal(0))) for linea in LINEAS},
-            "mix": {linea: ratio(acum.venta_por_linea.get(linea, Decimal(0)), venta) for linea in LINEAS},
+            "por_linea": {linea: _dinero(acum.venta_por_linea.get(linea, Decimal(0))) for linea in lineas},
+            "mix": {linea: ratio(acum.venta_por_linea.get(linea, Decimal(0)), venta) for linea in lineas},
         },
         "costo": {
             "costo_venta": _dinero(acum.costo),
@@ -334,7 +353,7 @@ def _indicadores(
             "ticket_promedio": ratio(venta, Decimal(n_facturas)),
             "unidades": _dinero(acum.cantidad),
             "items_por_factura": ratio(Decimal(acum.lineas), Decimal(n_facturas)),
-            "pct_con_linea": {linea: ratio(Decimal(n), Decimal(n_facturas)) for linea, n in zip(LINEAS, con_linea)},
+            "pct_con_linea": {linea: ratio(Decimal(n), Decimal(n_facturas)) for linea, n in zip(lineas, con_linea)},
             "pct_multilinea": ratio(Decimal(facturas.multilinea if facturas else 0), Decimal(n_facturas)),
         },
         "descuentos": {
@@ -367,10 +386,10 @@ def _orden_de_fila(fila: Dict[str, Any]) -> Tuple:
 ORDEN_GRUPOS = (GRUPO_COMERCIALES, GRUPO_OTROS, GRUPO_RESTO)
 
 
-def _fila_total(acum, facturas, clientes, personas, meses) -> Dict[str, Any]:
+def _fila_total(acum, facturas, clientes, personas, meses, lineas=LINEAS) -> Dict[str, Any]:
     fila = {"clave": CLAVE_TOTAL, "tipo": "TOTAL", "nombre": "TOTAL", "cargo": None,
             "punto_venta": None, "cargos": [], "cargo_conflicto": False, "personas": personas}
-    fila.update(_indicadores(acum, facturas, clientes, meses))
+    fila.update(_indicadores(acum, facturas, clientes, meses, lineas))
     return fila
 
 
@@ -380,13 +399,14 @@ def construir_tablero(
     clientes: Iterable[FilaClientes],
     personas: Iterable[FilaPersona],
     meses: List[str],
+    reglas: Reglas = REGLAS_POR_DEFECTO,
 ) -> Dict[str, Any]:
     """Filas del tablero (personas, grupos), fila TOTAL y la venta excluida por
     no tener linea comercial reconocida."""
     acumulados: Dict[str, _Acumulado] = {CLAVE_TOTAL: _Acumulado()}
     sin_linea = Decimal(0)
     for f in cubo:
-        if f.linea is None:
+        if f.linea is None or f.linea not in reglas.lineas:
             sin_linea += f.venta
             continue
         acumulados.setdefault(f.clave, _Acumulado()).sumar(f)
@@ -418,7 +438,7 @@ def construir_tablero(
                 tipo="GRUPO", nombre=nombre_de_grupo(clave, n), cargo=None, punto_venta=None,
                 cargos=[], cargo_conflicto=False, personas=n,
             )
-        fila.update(_indicadores(acum, facturas_por.get(clave), clientes_por.get(clave), meses))
+        fila.update(_indicadores(acum, facturas_por.get(clave), clientes_por.get(clave), meses, reglas.lineas))
         filas.append(fila)
     filas.sort(key=_orden_de_fila)
 
@@ -429,7 +449,7 @@ def construir_tablero(
         "filas": filas,
         "total": _fila_total(
             acumulados[CLAVE_TOTAL], facturas_por.get(CLAVE_TOTAL), clientes_por.get(CLAVE_TOTAL),
-            sum(f["personas"] for f in filas), meses),
+            sum(f["personas"] for f in filas), meses, reglas.lineas),
         "venta_sin_linea": _dinero(sin_linea),
         "pct_venta_sin_linea": ratio(sin_linea, sin_linea + venta_total),
     }
@@ -446,7 +466,7 @@ def _agregar_ranking(personas: List[Dict[str, Any]]) -> None:
     promedio = sum(ventas.values(), Decimal(0)) / len(ventas)
     rank_total = rankear(ventas)
     rank_linea = {
-        campo: rankear({f["clave"]: Decimal(str(f["venta"]["por_linea"][linea])) for f in personas})
+        campo: rankear({f["clave"]: Decimal(str(f["venta"]["por_linea"].get(linea, 0))) for f in personas})
         for campo, linea in _RANKINGS_POR_LINEA.items()
     }
     for f in personas:

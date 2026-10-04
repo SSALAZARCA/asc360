@@ -16,8 +16,9 @@ Reglas que comparten TODAS las consultas (`_desde_ventas`):
 - Fila del tablero (`_expr_clave`): una persona por asesor de repuestos (una
   persona = una CEDULA: todos los nombres del ERP con la misma cedula son una
   fila; sin cedula, una fila por nombre), un grupo para asesores comerciales, otro para otros cargos y "resto" para quien
-  no esta (activo) en el maestro. El mapa cargo -> grupo es
-  `tablero_asesores.GRUPO_POR_CARGO`.
+  no esta (activo) en el maestro. El mapa cargo -> grupo, las lineas, los NIT HMCL
+  y el semaforo salen de Configuracion (`Reglas`, vigentes en el ultimo mes
+  elegido); sus valores por defecto son las constantes de `tablero_asesores`.
 
 Costo unitario por referencia: MEDIANA de los costos > 0 de las lineas de
 `inventario_detalle` del ultimo `fecha_corte` con carga no ANULADA
@@ -40,9 +41,10 @@ from app.motored.models.referencia import Referencia
 from app.motored.models.sucursal import Sucursal
 from app.motored.models.vendedor import Vendedor
 from app.motored.models.venta_detalle import VentaDetalle
+from app.motored.services import parametros
 from app.motored.services import tablero_asesores as t
 from app.motored.services.tablero_asesores import (
-    CLAVE_TOTAL, FilaClientes, FilaCubo, FilaFacturas, FilaPersona,
+    CLAVE_TOTAL, FilaClientes, FilaCubo, FilaFacturas, FilaPersona, Reglas,
 )
 
 TOP_CLIENTES = 5
@@ -71,14 +73,15 @@ def _expr_identidad():
     )
 
 
-def _expr_clave():
+def _expr_clave(reglas: Reglas):
     """Fila del tablero a la que pertenece cada linea de venta."""
+    mapa = reglas.grupo_por_cargo
     ramas = []
-    personas = [c for c, g in t.GRUPO_POR_CARGO.items() if g == t.TIPO_PERSONA]
+    personas = [c for c, g in mapa.items() if g == t.TIPO_PERSONA]
     ramas.append((Vendedor.id.is_(None), _constante(t.GRUPO_RESTO)))
     ramas.append((Vendedor.cargo.in_(personas), _constante(t.PREFIJO_PERSONA).concat(_expr_identidad())))
-    for grupo in sorted(set(t.GRUPO_POR_CARGO.values()) - {t.TIPO_PERSONA}):
-        cargos = [c for c, g in t.GRUPO_POR_CARGO.items() if g == grupo]
+    for grupo in sorted(set(mapa.values()) - {t.TIPO_PERSONA}):
+        cargos = [c for c, g in mapa.items() if g == grupo]
         ramas.append((Vendedor.cargo.in_(cargos), _constante(grupo)))
     return case(*ramas, else_=_constante(t.GRUPO_OTROS))
 
@@ -96,7 +99,7 @@ def _expr_cliente_norm():
     )
 
 
-def _lineas_por_referencia():
+def _lineas_por_referencia(reglas: Reglas):
     """CTE `(id, linea)` por referencia: la linea comercial normalizada
     (recortada, mayusculas, sin tildes) si es una de las 7, y NULL en cualquier
     otro caso. Se calcula UNA vez por referencia (miles) y no por cada linea de
@@ -106,7 +109,7 @@ def _lineas_por_referencia():
     return (
         select(
             Referencia.id.label("id"),
-            case((normalizada.in_(t.LINEAS), normalizada), else_=None).label("linea"),
+            case((normalizada.in_(list(reglas.lineas)), normalizada), else_=None).label("linea"),
         )
         .cte("linea_por_referencia")
         .prefix_with("MATERIALIZED")
@@ -121,10 +124,10 @@ def _expr_mes():
     return func.to_char(VentaDetalle.fecha, "YYYY-MM")
 
 
-def _expr_es_hmcl(cliente_norm):
+def _expr_es_hmcl(cliente_norm, reglas: Reglas):
     """Un cliente NULL cuenta como NO HMCL (`NOT IN` con NULL daria NULL y la
     linea desapareceria del filtro `excluir`)."""
-    return func.coalesce(cliente_norm.in_(t.HMCL_NITS), false())
+    return func.coalesce(cliente_norm.in_(list(reglas.hmcl_nits)), false())
 
 
 def _expr_es_mostrador():
@@ -150,7 +153,7 @@ def _subconsulta_costos(fecha_corte: Optional[datetime.date]):
     )
 
 
-def _desde_ventas(consulta, inicio, fin, modo_hmcl, lineas, *, solo_lineas_reconocidas, costos=None):
+def _desde_ventas(consulta, inicio, fin, modo_hmcl, lineas, reglas, *, solo_lineas_reconocidas, costos=None):
     """FROM/JOIN/WHERE comunes de todas las consultas del tablero."""
     consulta = (
         consulta.select_from(VentaDetalle)
@@ -163,16 +166,16 @@ def _desde_ventas(consulta, inicio, fin, modo_hmcl, lineas, *, solo_lineas_recon
     consulta = consulta.where(
         CargaArchivo.estado != "ANULADO", VentaDetalle.fecha >= inicio, VentaDetalle.fecha < fin)
     if modo_hmcl == t.HMCL_SOLO:
-        consulta = consulta.where(_expr_es_hmcl(_expr_cliente_norm()))
+        consulta = consulta.where(_expr_es_hmcl(_expr_cliente_norm(), reglas))
     elif modo_hmcl == t.HMCL_EXCLUIR:
-        consulta = consulta.where(~_expr_es_hmcl(_expr_cliente_norm()))
+        consulta = consulta.where(~_expr_es_hmcl(_expr_cliente_norm(), reglas))
     if solo_lineas_reconocidas:
         consulta = consulta.where(lineas.c.linea.is_not(None))
     return consulta
 
 
-def _clave_de(por_grupo: bool):
-    return _expr_clave() if por_grupo else _constante(CLAVE_TOTAL)
+def _clave_de(por_grupo: bool, reglas: Reglas):
+    return _expr_clave(reglas) if por_grupo else _constante(CLAVE_TOTAL)
 
 
 # --- Consultas -------------------------------------------------------------------------------
@@ -202,15 +205,15 @@ async def meses_disponibles(db: AsyncSession) -> List[str]:
     return [m for (m,) in filas.all()]
 
 
-async def consultar_cubo(db, inicio, fin, modo_hmcl, fecha_corte) -> List[FilaCubo]:
+async def consultar_cubo(db, inicio, fin, modo_hmcl, fecha_corte, reglas: Reglas) -> List[FilaCubo]:
     costos = _subconsulta_costos(fecha_corte)
-    lineas = _lineas_por_referencia()
+    lineas = _lineas_por_referencia(reglas)
     cliente = _expr_cliente_norm()
     columnas = [
-        _expr_clave().label("clave"),
+        _expr_clave(reglas).label("clave"),
         _expr_mes().label("mes"),
         lineas.c.linea.label("linea"),
-        _expr_es_hmcl(cliente).label("es_hmcl"),
+        _expr_es_hmcl(cliente, reglas).label("es_hmcl"),
         cliente.in_(select(ClienteTecnired.nit)).label("es_tecnired"),
         _expr_es_mostrador().label("es_mostrador"),
         costos.c.costo_unitario.is_not(None).label("con_costo"),
@@ -224,7 +227,7 @@ async def consultar_cubo(db, inicio, fin, modo_hmcl, fecha_corte) -> List[FilaCu
         func.count(),
         func.coalesce(func.sum(VentaDetalle.cantidad * costos.c.costo_unitario), 0),
     ).group_by(*columnas)
-    consulta = _desde_ventas(consulta, inicio, fin, modo_hmcl, lineas, solo_lineas_reconocidas=False, costos=costos)
+    consulta = _desde_ventas(consulta, inicio, fin, modo_hmcl, lineas, reglas, solo_lineas_reconocidas=False, costos=costos)
     return [
         FilaCubo(clave, mes, linea, hmcl, tec, mostr, costo_ok,
                  Decimal(venta), Decimal(bruto), Decimal(desc), Decimal(cant), int(n), Decimal(costo))
@@ -233,27 +236,27 @@ async def consultar_cubo(db, inicio, fin, modo_hmcl, fecha_corte) -> List[FilaCu
     ]
 
 
-async def consultar_facturas(db, inicio, fin, modo_hmcl, *, por_grupo: bool) -> List[FilaFacturas]:
+async def consultar_facturas(db, inicio, fin, modo_hmcl, reglas: Reglas, *, por_grupo: bool) -> List[FilaFacturas]:
     """Una factura = (nro_documento, sucursal) distinta DENTRO de la fila: por
     cada una se marca que lineas trae y cuantas lineas distintas tiene."""
-    lineas = _lineas_por_referencia()
+    lineas = _lineas_por_referencia(reglas)
     linea = lineas.c.linea
-    clave = _clave_de(por_grupo).label("clave")
+    clave = _clave_de(por_grupo, reglas).label("clave")
     marcas = [
         func.max(case((linea == nombre, 1), else_=0)).label(f"l{i}")
-        for i, nombre in enumerate(t.LINEAS)
+        for i, nombre in enumerate(reglas.lineas)
     ]
     por_factura = [VentaDetalle.nro_documento, VentaDetalle.sucursal_id] + ([clave] if por_grupo else [])
     interna = _desde_ventas(
         select(clave, func.count(func.distinct(linea)).label("lineas_distintas"), *marcas)
         .group_by(*por_factura),
-        inicio, fin, modo_hmcl, lineas, solo_lineas_reconocidas=True,
+        inicio, fin, modo_hmcl, lineas, reglas, solo_lineas_reconocidas=True,
     ).subquery("por_factura")
     externa = select(
         interna.c.clave if por_grupo else _constante(CLAVE_TOTAL),
         func.count(),
         func.coalesce(func.sum(case((interna.c.lineas_distintas > 1, 1), else_=0)), 0),
-        *[func.coalesce(func.sum(interna.c[f"l{i}"]), 0) for i in range(len(t.LINEAS))],
+        *[func.coalesce(func.sum(interna.c[f"l{i}"]), 0) for i in range(len(reglas.lineas))],
     )
     if por_grupo:
         externa = externa.group_by(interna.c.clave)
@@ -263,15 +266,15 @@ async def consultar_facturas(db, inicio, fin, modo_hmcl, *, por_grupo: bool) -> 
     ]
 
 
-async def consultar_clientes(db, inicio, fin, modo_hmcl, *, por_grupo: bool) -> List[FilaClientes]:
+async def consultar_clientes(db, inicio, fin, modo_hmcl, reglas: Reglas, *, por_grupo: bool) -> List[FilaClientes]:
     """Clientes distintos y venta de los 5 mayores, por fila."""
-    lineas = _lineas_por_referencia()
+    lineas = _lineas_por_referencia(reglas)
     cliente = _expr_cliente_norm().label("cliente")
-    clave = _clave_de(por_grupo).label("clave")
+    clave = _clave_de(por_grupo, reglas).label("clave")
     por_cliente = [cliente] + ([clave] if por_grupo else [])
     interna = _desde_ventas(
         select(clave, cliente, func.sum(_expr_venta()).label("venta")).group_by(*por_cliente),
-        inicio, fin, modo_hmcl, lineas, solo_lineas_reconocidas=True,
+        inicio, fin, modo_hmcl, lineas, reglas, solo_lineas_reconocidas=True,
     ).subquery("por_cliente")
     posicion = func.row_number().over(
         partition_by=interna.c.clave if por_grupo else None, order_by=interna.c.venta.desc())
@@ -289,20 +292,20 @@ async def consultar_clientes(db, inicio, fin, modo_hmcl, *, por_grupo: bool) -> 
     ]
 
 
-async def consultar_personas(db, inicio, fin, modo_hmcl) -> List[FilaPersona]:
+async def consultar_personas(db, inicio, fin, modo_hmcl, reglas: Reglas) -> List[FilaPersona]:
     """Quienes hay detras de cada fila: cuantas personas distintas (por cedula) y,
     para una persona, su nombre, cargo y punto de venta (sucursal principal) --
     los del nombre del ERP con mas ventas en el rango. La venta es la misma del
     tablero (solo las 7 lineas)."""
-    lineas = _lineas_por_referencia()
-    clave = _expr_clave().label("clave")
+    lineas = _lineas_por_referencia(reglas)
+    clave = _expr_clave(reglas).label("clave")
     identidad = _expr_identidad().label("identidad")
     columnas = [
         clave, identidad, VentaDetalle.vendedor_norm, Vendedor.nombre, Vendedor.cargo, Sucursal.nombre,
     ]
     consulta = _desde_ventas(
         select(*columnas, func.sum(_expr_venta())).group_by(*columnas),
-        inicio, fin, modo_hmcl, lineas, solo_lineas_reconocidas=True,
+        inicio, fin, modo_hmcl, lineas, reglas, solo_lineas_reconocidas=True,
     ).outerjoin(Sucursal, Sucursal.id == Vendedor.sucursal_id)
     filas = [
         t.FilaVendedorVenta(clave_, identidad_, nombre, cargo, punto, Decimal(venta))
@@ -311,26 +314,56 @@ async def consultar_personas(db, inicio, fin, modo_hmcl) -> List[FilaPersona]:
     return t.construir_personas(filas)
 
 
+async def cargar_reglas(db: AsyncSession, fecha: datetime.date) -> Reglas:
+    """Reglas de Configuracion vigentes al dia 1 del mes de `fecha`. Sin fila
+    vigente (o con una invalida) rige el valor por defecto del registro."""
+    defecto = t.REGLAS_POR_DEFECTO
+    valores = await parametros.leer_valores(db, fecha, {
+        "lineas_comerciales": list(defecto.lineas),
+        "hmcl_nits": list(defecto.hmcl_nits),
+        "grupo_por_cargo": dict(defecto.grupo_por_cargo),
+        "kpi_semaforo_cortes": dict(defecto.semaforo),
+        "cumplimiento_base": defecto.cumplimiento_base,
+    })
+    return Reglas(
+        lineas=tuple(valores["lineas_comerciales"]),
+        hmcl_nits=tuple(valores["hmcl_nits"]),
+        grupo_por_cargo=dict(valores["grupo_por_cargo"]),
+        semaforo=dict(valores["kpi_semaforo_cortes"]),
+        cumplimiento_base=valores["cumplimiento_base"],
+    )
+
+
+def _eco_reglas(reglas: Reglas, vigencia: str) -> Dict[str, Any]:
+    return {
+        "semaforo": dict(reglas.semaforo),
+        "cumplimiento_base": reglas.cumplimiento_base,
+        "vigencia": vigencia,
+    }
+
+
 async def calcular_tablero(db: AsyncSession, desde: str, hasta: str, modo_hmcl: str) -> Dict[str, Any]:
     """Tablero completo del rango `desde`..`hasta` (AAAA-MM). Lanza
     `ValueError` si el rango no es valido."""
     meses = t.validar_rango(desde, hasta)
     inicio, fin = t.limites_de_fecha(desde, hasta)
+    reglas = await cargar_reglas(db, fin - datetime.timedelta(days=1))
     corte = await fecha_corte_costos(db)
 
-    cubo = await consultar_cubo(db, inicio, fin, modo_hmcl, corte)
-    facturas = (await consultar_facturas(db, inicio, fin, modo_hmcl, por_grupo=True)
-                + await consultar_facturas(db, inicio, fin, modo_hmcl, por_grupo=False))
-    clientes = (await consultar_clientes(db, inicio, fin, modo_hmcl, por_grupo=True)
-                + await consultar_clientes(db, inicio, fin, modo_hmcl, por_grupo=False))
-    personas = await consultar_personas(db, inicio, fin, modo_hmcl)
+    cubo = await consultar_cubo(db, inicio, fin, modo_hmcl, corte, reglas)
+    facturas = (await consultar_facturas(db, inicio, fin, modo_hmcl, reglas, por_grupo=True)
+                + await consultar_facturas(db, inicio, fin, modo_hmcl, reglas, por_grupo=False))
+    clientes = (await consultar_clientes(db, inicio, fin, modo_hmcl, reglas, por_grupo=True)
+                + await consultar_clientes(db, inicio, fin, modo_hmcl, reglas, por_grupo=False))
+    personas = await consultar_personas(db, inicio, fin, modo_hmcl, reglas)
 
-    tablero = t.construir_tablero(cubo, facturas, clientes, personas, meses)
+    tablero = t.construir_tablero(cubo, facturas, clientes, personas, meses, reglas)
     tablero.update(
         desde=desde,
         hasta=hasta,
         hmcl=modo_hmcl,
         meses=meses,
+        reglas=_eco_reglas(reglas, meses[-1]),
         meses_disponibles=await meses_disponibles(db),
         fecha_corte_costos=corte.isoformat() if corte else None,
     )

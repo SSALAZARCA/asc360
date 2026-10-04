@@ -318,8 +318,8 @@ async def test_un_cliente_nulo_cuenta_como_no_hmcl(sesion):
     from sqlalchemy import null, select, cast as sa_cast, String
 
     nulo = sa_cast(null(), String)
-    es_hmcl = (await sesion.execute(select(q._expr_es_hmcl(nulo)))).scalar_one()
-    no_es_hmcl = (await sesion.execute(select(~q._expr_es_hmcl(nulo)))).scalar_one()
+    es_hmcl = (await sesion.execute(select(q._expr_es_hmcl(nulo, t.REGLAS_POR_DEFECTO)))).scalar_one()
+    no_es_hmcl = (await sesion.execute(select(~q._expr_es_hmcl(nulo, t.REGLAS_POR_DEFECTO)))).scalar_one()
 
     assert es_hmcl is False
     assert no_es_hmcl is True
