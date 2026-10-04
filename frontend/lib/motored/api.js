@@ -410,8 +410,12 @@ export async function resolverErroresCarga(cargaId, acciones) {
   });
 }
 
+// Aplicar corre sincrono en el servidor: un mes real de VENTAS (~43k filas)
+// supera el timeout por defecto de 30 s.
+const APLICAR_TIMEOUT_MS = 10 * 60 * 1000;
+
 export async function aplicarCarga(cargaId) {
-  return motoredFetchJson(`/cargas/${cargaId}/aplicar`, { method: 'POST' });
+  return motoredFetchJson(`/cargas/${cargaId}/aplicar`, { method: 'POST', timeout: APLICAR_TIMEOUT_MS });
 }
 
 export async function anularCarga(cargaId) {
