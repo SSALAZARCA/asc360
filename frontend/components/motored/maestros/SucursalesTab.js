@@ -15,7 +15,7 @@
  */
 import MotoredTableScroll from '../MotoredTableScroll';
 import MotoredIconAction from '../MotoredIconAction';
-import { Fragment, useEffect, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import {
   listMaestros,
   createMaestro,
@@ -419,10 +419,32 @@ export default function SucursalesTab() {
     form, setForm, editingId, codigoRequerido, formError, startEdit, cancelEdit, handleSubmit,
   } = useSucursalesEditor(save);
   const [showBulkModal, setShowBulkModal] = useState(false);
+  // The form sits above a long table: editing a row far down, or a failed
+  // save, must bring the form and its message into view.
+  const formRef = useRef(null);
+  const mostrarFormulario = () => formRef.current?.scrollIntoView?.(
+    { behavior: 'smooth', block: 'start' }
+  );
+  const editar = (s) => {
+    startEdit(s);
+    mostrarFormulario();
+  };
+  const nombreEditado = sucursales.find((s) => s.id === editingId)?.nombre;
+
+  useEffect(() => {
+    if (error || formError) mostrarFormulario();
+  }, [error, formError]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
       <SucursalesHeader onOpenBulk={() => setShowBulkModal(true)} />
+
+      <div ref={formRef} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+      {editingId && (
+        <p style={{ fontSize: '0.85rem', fontWeight: 600 }}>
+          Editando: {nombreEditado || 'sucursal'}
+        </p>
+      )}
 
       {error && <p style={{ color: 'var(--motored-danger, #c0392b)', fontSize: '0.8rem' }}>{error}</p>}
 
@@ -437,11 +459,12 @@ export default function SucursalesTab() {
         onCancel={cancelEdit}
         sucursales={sucursales}
       />
+      </div>
 
       {loading ? (
         <p style={{ color: 'var(--motored-text-muted, #5a5a5a)', fontSize: '0.8rem' }}>Cargando...</p>
       ) : (
-        <SucursalesTable sucursales={sucursales} onEdit={startEdit} onDeactivate={deactivate} onReactivate={reactivate} />
+        <SucursalesTable sucursales={sucursales} onEdit={editar} onDeactivate={deactivate} onReactivate={reactivate} />
       )}
 
       {showBulkModal && (
