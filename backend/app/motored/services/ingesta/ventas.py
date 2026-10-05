@@ -75,6 +75,7 @@ from app.motored.services.ingesta.resolucion import (
     CacheResolucion,
     MarcaFila,
     es_bodega_excluida,
+    normalizar_codigo_co,
     resolver_referencia,
     resolver_sucursal_por_codigo_o_nombre,
 )
@@ -101,6 +102,22 @@ COLUMNAS_ESPERADAS: Tuple[str, ...] = (
     "Cliente factura",
     "Nro documento",
 )
+
+# Columna OPCIONAL "C.O." (centro de operación, el código de la tienda en
+# el ERP). Si el archivo la trae, la fila va a la sucursal de su C.O., sin
+# importar de qué bodega salió el repuesto (regla del dueño). Todos los
+# alias se mapean; `_extraer_co` toma el primero presente.
+ALIAS_COLUMNA_CO: Tuple[str, ...] = (
+    "C.O.",
+    "CO",
+    "Centro de operación",
+    "Centro de operacion",
+)
+COLUMNA_CO = "C.O."
+CODIGO_CO_NO_ENCONTRADO = "CO_NO_ENCONTRADO"
+# Marca del payload: la fila traía la columna C.O. vacía y se resolvió por
+# la bodega. El orquestador la cuenta en `log["filas_co_vacio"]`.
+CLAVE_CO_VACIO = "co_vacio"
 
 ESTADO_APROBADA = "Aprobada"
 CODIGO_FECHA_INVALIDA = "FECHA_INVALIDA"
@@ -339,37 +356,105 @@ def _resolver_campos_detalle(
     return campos, None
 
 
+def tiene_columna_co(mapa_columnas: Dict[str, int]) -> bool:
+    """True si el encabezado trae la columna C.O. (con cualquier alias)."""
+    return any(alias in mapa_columnas for alias in ALIAS_COLUMNA_CO)
+
+
+def _extraer_co(
+    fila_raw: Sequence[Any], mapa_columnas: Dict[str, int]
+) -> str:
+    """C.O. de la fila, recortado y en mayúsculas; `""` si está vacío o
+    el archivo no trae la columna."""
+    for alias in ALIAS_COLUMNA_CO:
+        if alias in mapa_columnas:
+            return normalizar_codigo_co(
+                _extraer(fila_raw, mapa_columnas, alias))
+    return ""
+
+
+def tiene_co_vacio(fila: CargaFilaStaging) -> bool:
+    """True si la fila traía la columna C.O. vacía y se resolvió por la
+    bodega."""
+    return bool(fila.payload.get(CLAVE_CO_VACIO))
+
+
+def _error_co_no_encontrado(
+    carga_id: uuid.UUID, numero_fila: int, codigo_co: str
+) -> CargaError:
+    """Código propio (no `SUCURSAL_NO_ENCONTRADA`): "Mapear a" guarda un
+    alias de texto, que no arregla un C.O.; se arregla en el maestro."""
+    return errores_mod.construir_error(
+        carga_id, numero_fila, COLUMNA_CO, codigo_co,
+        CODIGO_CO_NO_ENCONTRADO,
+        f"El C.O. '{codigo_co}' no corresponde a ninguna sucursal. "
+        "Cárguelo en Maestros > Sucursales.",
+    )
+
+
+def _resolver_sucursal_por_bodega(
+    fila_raw: Sequence[Any], mapa_columnas: Dict[str, int],
+    cache: CacheResolucion, carga_id: uuid.UUID, numero_fila: int,
+) -> Tuple[Optional[uuid.UUID], Optional[CargaError]]:
+    """Código de bodega primero, nombre (`Desc.bodega`/alias) después."""
+    desc_bodega = _texto(_extraer(fila_raw, mapa_columnas, "Desc.bodega"))
+    codigo_bodega = _texto(_extraer(fila_raw, mapa_columnas, "Bodega"))
+    sucursal_id = resolver_sucursal_por_codigo_o_nombre(
+        cache, codigo_bodega, desc_bodega)
+    if sucursal_id is not None:
+        return sucursal_id, None
+    # `valor` del error sigue siendo el nombre (o el codigo si no hay
+    # nombre): es el texto que "Mapear a" guarda como `sucursal_alias`.
+    # El codigo va en el mensaje.
+    return None, errores_mod.error_sucursal_no_encontrada(
+        carga_id, numero_fila, "Desc.bodega", desc_bodega or codigo_bodega,
+        codigo_bodega=codigo_bodega,
+    )
+
+
+def _resolver_sucursal(
+    fila_raw: Sequence[Any], mapa_columnas: Dict[str, int],
+    cache: CacheResolucion, sucursal_por_co: Optional[Dict[str, uuid.UUID]],
+    carga_id: uuid.UUID, numero_fila: int,
+) -> Tuple[Optional[uuid.UUID], Optional[CargaError]]:
+    """Con columna C.O. (`sucursal_por_co` no es `None`) gana el C.O.; un
+    C.O. desconocido es error de fila, sin caer a la bodega. Sin columna,
+    o con el C.O. vacío, resuelve por la bodega."""
+    codigo_co = _extraer_co(fila_raw, mapa_columnas)
+    if sucursal_por_co is None or not codigo_co:
+        return _resolver_sucursal_por_bodega(
+            fila_raw, mapa_columnas, cache, carga_id, numero_fila)
+    sucursal_id = sucursal_por_co.get(codigo_co)
+    if sucursal_id is None:
+        return None, _error_co_no_encontrado(
+            carga_id, numero_fila, codigo_co)
+    return sucursal_id, None
+
+
 def _resolver_claves(
     fila_raw: Sequence[Any],
     mapa_columnas: Dict[str, int],
     cache: CacheResolucion,
     carga_id: uuid.UUID,
     numero_fila: int,
-    proveedor_id: uuid.UUID,
+    sucursal_por_co: Optional[Dict[str, uuid.UUID]],
 ) -> Tuple[Optional[uuid.UUID], Optional[uuid.UUID], List[CargaError]]:
     """Resuelve sucursal/referencia contra el cache de ADR-8. Sucursal y/o
     referencia sin resolver NO abortan la fila -- spec "Per-row tolerance
     for movement loads": se retorna el/los id(s) en `None` (para que
     `Aplicar` sólo re-resuelva los `NULL`, ADR-2) junto con el
     `carga_error` correspondiente."""
-    desc_bodega = _texto(_extraer(fila_raw, mapa_columnas, "Desc.bodega"))
-    codigo_bodega = _texto(_extraer(fila_raw, mapa_columnas, "Bodega"))
-    # `valor` del error sigue siendo el nombre (o el codigo si no hay nombre): es el
-    # texto que "Mapear a" guarda como `sucursal_alias`. El codigo va en el mensaje.
-    texto_sucursal = desc_bodega or codigo_bodega
-    sucursal_id = resolver_sucursal_por_codigo_o_nombre(cache, codigo_bodega, desc_bodega)
+    sucursal_id, error_sucursal = _resolver_sucursal(
+        fila_raw, mapa_columnas, cache, sucursal_por_co, carga_id,
+        numero_fila)
 
-    codigo_referencia = _texto(_extraer(fila_raw, mapa_columnas, "Referencia"))
+    codigo_referencia = _texto(
+        _extraer(fila_raw, mapa_columnas, "Referencia"))
     referencia_id = resolver_referencia(cache, codigo_referencia)
 
     errores: List[CargaError] = []
-    if sucursal_id is None:
-        errores.append(
-            errores_mod.error_sucursal_no_encontrada(
-                carga_id, numero_fila, "Desc.bodega", texto_sucursal,
-                codigo_bodega=codigo_bodega,
-            )
-        )
+    if error_sucursal is not None:
+        errores.append(error_sucursal)
     if referencia_id is None:
         errores.append(
             errores_mod.error_referencia_no_encontrada(
@@ -388,6 +473,7 @@ def _procesar_fila_solo_detalle(
     cache: CacheResolucion,
     carga_id: uuid.UUID,
     proveedor_id: uuid.UUID,
+    sucursal_por_co: Optional[Dict[str, uuid.UUID]],
 ) -> Optional[CargaFilaStaging]:
     """Fila aprobada de un tipo de inventario excluido de `venta_mensual`
     (p.ej. "0001 - MOTOCICLETA"). Se stagea con `solo_detalle: True` para que
@@ -409,27 +495,19 @@ def _procesar_fila_solo_detalle(
     if campos_detalle is None:
         return None
     sucursal_id, referencia_id, _ = _resolver_claves(
-        fila_raw, mapa_columnas, cache, carga_id, numero_fila, proveedor_id
+        fila_raw, mapa_columnas, cache, carga_id, numero_fila,
+        sucursal_por_co,
     )
     if sucursal_id is None or referencia_id is None:
         return None
-    modulo = _texto(_extraer(fila_raw, mapa_columnas, "Módulo")) or ""
-    return CargaFilaStaging(
-        carga_id=carga_id,
-        fila=numero_fila,
-        lote=lote,
-        payload={
-            "anio": fecha.year,
-            "mes": fecha.month,
-            "dia": fecha.day,
-            "origen": modulo.upper(),
-            "cantidad": str(cantidad),
-            **campos_detalle,
-            CLAVE_SOLO_DETALLE: True,
-        },
-        sucursal_id=sucursal_id,
-        referencia_id=referencia_id,
+    fila = _staging_de_venta(
+        fecha=fecha, cantidad=cantidad, campos_detalle=campos_detalle,
+        modulo=_texto(_extraer(fila_raw, mapa_columnas, "Módulo")) or "",
+        numero_fila=numero_fila, lote=lote, carga_id=carga_id,
+        sucursal_id=sucursal_id, referencia_id=referencia_id,
     )
+    fila.payload = {**fila.payload, CLAVE_SOLO_DETALLE: True}
+    return fila
 
 
 ResultadoFila = Union[
@@ -471,6 +549,7 @@ def _procesar_fila_incluida(
     cache: CacheResolucion,
     carga_id: uuid.UUID,
     proveedor_id: uuid.UUID,
+    sucursal_por_co: Optional[Dict[str, uuid.UUID]],
 ) -> Tuple[Optional[CargaFilaStaging], List[CargaError]]:
     """Fila aprobada de un tipo incluido en `venta_mensual`: valida fecha,
     cantidad y campos de detalle, y resuelve sucursal/referencia."""
@@ -492,7 +571,8 @@ def _procesar_fila_incluida(
         return None, [error_detalle]
 
     sucursal_id, referencia_id, errores = _resolver_claves(
-        fila_raw, mapa_columnas, cache, carga_id, numero_fila, proveedor_id
+        fila_raw, mapa_columnas, cache, carga_id, numero_fila,
+        sucursal_por_co,
     )
     fila_staging = _staging_de_venta(
         fecha=fecha, cantidad=cantidad, campos_detalle=campos_detalle,
@@ -514,11 +594,16 @@ def procesar_fila(
     proveedor_id: uuid.UUID,
     tipos_inventario_incluidos: Sequence[str],
     bodegas_excluidas: FrozenSet[str] = frozenset(),
+    sucursal_por_co: Optional[Dict[str, uuid.UUID]] = None,
 ) -> ResultadoFila:
     """Procesa UNA fila cruda de VENTAS. Retorna `(fila_staging, errores)`
     orquestando los tres pasos de la transformación (ver los docstrings de
     `_pasa_filtros_negocio`/`_resolver_fecha_o_error`/`_resolver_claves`),
     o `MarcaFila.BODEGA_EXCLUIDA` si la bodega no es una tienda.
+
+    `sucursal_por_co` (`{C.O. -> sucursal_id}`) se pasa solo cuando el
+    archivo trae la columna C.O.: la sucursal sale del C.O. de la fila
+    (ver `_resolver_sucursal`). `None` mantiene la resolución por bodega.
 
     Una linea aprobada de un tipo NO incluido no entra a `venta_mensual`,
     pero `venta_detalle` la guarda igual: ver `_procesar_fila_solo_detalle`."""
@@ -532,10 +617,23 @@ def procesar_fila(
         return MarcaFila.BODEGA_EXCLUIDA
     comunes = dict(
         numero_fila=numero_fila, lote=lote, mapa_columnas=mapa_columnas,
-        cache=cache, carga_id=carga_id, proveedor_id=proveedor_id)
+        cache=cache, carga_id=carga_id, proveedor_id=proveedor_id,
+        sucursal_por_co=sucursal_por_co)
     if not _tipo_incluido(fila_raw, mapa_columnas, tipos_inventario_incluidos):
-        return _procesar_fila_solo_detalle(fila_raw, **comunes), []
-    return _procesar_fila_incluida(fila_raw, **comunes)
+        resultado = _procesar_fila_solo_detalle(fila_raw, **comunes), []
+    else:
+        resultado = _procesar_fila_incluida(fila_raw, **comunes)
+    if sucursal_por_co is not None and not _extraer_co(
+            fila_raw, mapa_columnas):
+        _marcar_co_vacio(resultado[0])
+    return resultado
+
+
+def _marcar_co_vacio(fila: Optional[CargaFilaStaging]) -> None:
+    """Deja en el payload que la fila se resolvió por la bodega porque su
+    C.O. venía vacío."""
+    if fila is not None:
+        fila.payload = {**fila.payload, CLAVE_CO_VACIO: True}
 
 
 ClaveVentaMensual = Tuple[uuid.UUID, uuid.UUID, int, int, str]

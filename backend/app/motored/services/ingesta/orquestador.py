@@ -112,6 +112,20 @@ _COLUMNAS_POR_TIPO: Dict[str, Tuple[str, ...]] = {
 }
 
 
+# Alias de columnas opcionales que se MAPEAN pero no van a la plantilla
+# (`deteccion.COLUMNAS_OPCIONALES_POR_TIPO` sí va): los 4 alias del C.O.
+# de VENTAS no deben aparecer como 4 columnas en la plantilla.
+_ALIAS_OPCIONALES_POR_TIPO: Dict[str, Tuple[str, ...]] = {
+    "VENTAS": ventas_mod.ALIAS_COLUMNA_CO,
+}
+
+
+def _columnas_opcionales(tipo: str) -> Tuple[str, ...]:
+    """Columnas que el encabezado puede traer sin ser obligatorias."""
+    return (deteccion_mod.COLUMNAS_OPCIONALES_POR_TIPO.get(tipo, ())
+            + _ALIAS_OPCIONALES_POR_TIPO.get(tipo, ()))
+
+
 class ProveedorPrincipalError(Exception):
     """`proveedor.es_principal` no resuelve a EXACTAMENTE una fila -- nunca
     debe llegar como un 500/stack trace al usuario (project convention,
@@ -183,9 +197,15 @@ async def _procesador_ventas(db, en_fecha, comunes) -> _Construido:
     if fue_default:
         defaults[parametros.CLAVE_TIPOS_INVENTARIO_INCLUIDOS] = tipos
     bodegas_excluidas = await _leer_bodegas_excluidas(db)
+    # El mapa C.O. se lee solo si el archivo trae la columna: sin ella la
+    # resolución sigue siendo por bodega.
+    sucursal_por_co = None
+    if ventas_mod.tiene_columna_co(comunes["mapa_columnas"]):
+        sucursal_por_co = await resolucion_mod.leer_sucursal_por_co(db)
     return _con_parametros(
         ventas_mod, comunes, tipos_inventario_incluidos=tipos,
-        bodegas_excluidas=bodegas_excluidas), defaults
+        bodegas_excluidas=bodegas_excluidas,
+        sucursal_por_co=sucursal_por_co), defaults
 
 
 async def _procesador_inventario(db, en_fecha, comunes) -> _Construido:
@@ -309,6 +329,8 @@ class _EstadoLoteDryRun:
         # Filas de una bodega que no es tienda (`bodegas_excluidas`):
         # ignoradas sin staging ni error.
         self.filas_bodega_excluida = 0
+        # Filas de VENTAS con la columna C.O. vacía, resueltas por bodega.
+        self.filas_co_vacio = 0
         self.histograma: Dict[Tuple[int, int], int] = {}
         # Fecha de venta mas reciente del archivo (solo VENTAS), acumulada en
         # la misma pasada que `histograma`; `_verificar_periodo_ventas` la
@@ -428,6 +450,9 @@ def _procesar_filas_del_lote(
             session.add(error)
         if errores_fila:
             estado.filas_con_error += 1
+        if fila_staging is not None and ventas_mod.tiene_co_vacio(
+                fila_staging):
+            estado.filas_co_vacio += 1
         if fila_staging is not None and ventas_mod.es_solo_detalle(fila_staging):
             # Solo alimenta `venta_detalle`: ni valida, ni al histograma ni a
             # `fecha_max` -- `venta_mensual` y el periodo no la ven.
@@ -577,6 +602,8 @@ async def _cerrar_dry_run(
         log["filas_solo_detalle"] = estado.filas_solo_detalle
     if estado.filas_bodega_excluida:
         log["filas_bodega_excluida"] = estado.filas_bodega_excluida
+    if estado.filas_co_vacio:
+        log["filas_co_vacio"] = estado.filas_co_vacio
     if estado.parametros_default_usados:
         log["parametros_default_usados"] = dict(estado.parametros_default_usados)
     await _verificar_corte_backorder(session, carga, log)
@@ -613,7 +640,7 @@ def _acumular_ventas_del_lote(
 async def _dry_run(session: AsyncSession, carga: CargaArchivo) -> None:
     tipo = carga.tipo
     columnas_esperadas = _COLUMNAS_POR_TIPO[tipo]
-    columnas_opcionales = deteccion_mod.COLUMNAS_OPCIONALES_POR_TIPO.get(tipo, ())
+    columnas_opcionales = _columnas_opcionales(tipo)
 
     loop = asyncio.get_event_loop()
     file_bytes = await loop.run_in_executor(

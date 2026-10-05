@@ -44,7 +44,7 @@ GRUPO_OPERACION = "OPERACION"
 # Bodegas que no son tiendas (bodega central, producto terminado): sus
 # líneas se ignoran al cargar ventas e inventario, sin marcar error.
 CLAVE_BODEGAS_EXCLUIDAS = "bodegas_excluidas"
-BODEGAS_EXCLUIDAS_DEFAULT = ("99999", "PYM01")
+BODEGAS_EXCLUIDAS_DEFAULT = ("99999", "PYM01", "PAF01")
 
 # Pestañas de la pantalla de Configuración, en orden.
 SECCIONES = (

@@ -34,9 +34,10 @@ Let the owner load the corrected Sucursales file in one go, and model physical p
 - [x] T5 (store code C.O.: owner asked for it at the start; I wrongly deferred it)
 - [x] T5b (C.O. is the sucursal business key: upload matches stores by C.O., name is a mutable attribute; C.O. required in upload and form; first upload backfills by name for stores without C.O.; "Sucursal principal" accepts C.O.)
 - [ ] T4 (edit secondary bodegas from the Sucursales screen)
-- [ ] T6 (REINSTATED, owner confirmed verbatim): VENTAS ingest resolves the sucursal by the row's C.O.; bodegas_excluidas checked first; bodega only as fallback for files without C.O.; unknown C.O. = row error; non-store C.O. (MR/PAF01) needs an exclusion. No re-upload of old ventas. Runs after T5 (single writer); coordinate ventas.py with the KPI session (R6).
+- [x] T6 (REINSTATED, owner confirmed verbatim): VENTAS ingest resolves the sucursal by the row's C.O.; bodegas_excluidas checked first; bodega only as fallback for files without C.O.; unknown C.O. = row error; non-store C.O. (MR/PAF01) needs an exclusion. No re-upload of old ventas. Runs after T5 (single writer); coordinate ventas.py with the KPI session (R6).
 - [ ] T7 (presupuestos and vendedores recognize the store by C.O., name as fallback). KPI session files: coordinate; they may implement it.
 - [ ] T8 (per-store data-control report for the owner before the first pedido)
+- [ ] T9 (BUG found while validating the owner file): the Sucursales upload and form never sync the `bodega` record of a store's PRINCIPAL bodega. A moved principal (BA071 → A07, BC111/BA011/... → new stores) keeps a stale or NULL `sucursal_id`, and secondaries chain to it via `bodega_principal`, so inventory resolves to the wrong store or none (MCD01, MCB11). Fix: when a store's principal is set or changed, upsert that bodega record with sucursal_id = store and bodega_principal = NULL, and re-point the old record. MUST land before the owner uploads.
 
 ## Constraints
 - **Python 3.11, gga style:** lines of 79 characters or fewer, functions of 50 lines or fewer, no mid-file imports.
@@ -98,3 +99,10 @@ Let the owner load the corrected Sucursales file in one go, and model physical p
   - Out-of-surface tests (rbac matrix, reemplazo api) were updated by the parent.
   - Results: tests/motored 5516 passed plus the 3 fixed; pg_real 578 passed, 2 skipped; jest 1867 passed.
   - Follow-up: make `codigo_co` NOT NULL and the check blocking after the owner's backfill upload.
+- 2026-10-04: final owner file v2 built (`Documents/Motored/Sucursales_carga_final_v2_2026-10-04.xlsx`): 48 stores, one per sales C.O. (MR and Z01 excluded), C.O. first; new stores A07 and C11 with invented SICs 9008 and 9009; A16 principal BA161; A11 inactive. It validates with 0 errors, but emulating the result exposed bug T9. The upload is blocked until T9 lands.
+- 2026-10-04: T6 done.
+  - VENTAS rows resolve the sucursal by C.O. when the file has that column: aliases C.O., CO, Centro de operación. The `bodegas_excluidas` check runs first.
+  - A blank C.O. falls back to the bodega and is counted in `filas_co_vacio`.
+  - An unknown C.O. returns the new error `CO_NO_ENCONTRADO`.
+  - The parent added PAF01 (the administrative non-store bodega, C.O. MR) to the default `bodegas_excluidas`.
+  - Results: tests/motored 5560 passed; pg_real 600 passed, 2 skipped (writer run).

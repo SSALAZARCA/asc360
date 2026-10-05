@@ -75,7 +75,7 @@ def _procesar_inventario(fila, excluidas=EXCLUIDAS):
 
 def test_la_clave_esta_en_operacion_global_y_fuera_del_snapshot():
     espec = pc.REGISTRO[CLAVE]
-    assert espec.default == ["99999", "PYM01"]
+    assert espec.default == ["99999", "PYM01", "PAF01"]
     assert espec.grupo == pc.GRUPO_OPERACION
     assert espec.ambito == pc.AMBITO_GLOBAL
     assert pc.es_snapshotted(CLAVE) is False
@@ -439,7 +439,7 @@ async def test_la_lectura_falla_y_se_usa_el_default_del_registro():
 
     excluidas = await orquestador._leer_bodegas_excluidas(SesionRota())
 
-    assert excluidas == EXCLUIDAS
+    assert excluidas == EXCLUIDAS | {"PAF01"}
 
 
 # --- la marca es explicita --------------------------------------------------

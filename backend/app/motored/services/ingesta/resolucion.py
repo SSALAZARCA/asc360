@@ -215,6 +215,30 @@ def es_bodega_excluida(
     return bool(codigo) and codigo in excluidas
 
 
+def normalizar_codigo_co(valor: Any) -> str:
+    """C.O. crudo de una celda (o de `sucursal.codigo_co`), recortado y en
+    mayúsculas: `"mr "` -> `"MR"`. Vacío -> `""`. Mismo criterio que un
+    código de bodega."""
+    return normalizar_codigo_bodega(valor)
+
+
+async def leer_sucursal_por_co(
+    session: AsyncSession,
+) -> Dict[str, uuid.UUID]:
+    """Una lectura por carga: `{C.O. normalizado -> sucursal_id}` de toda
+    sucursal con `codigo_co` (activa o no, igual que el cache por nombre).
+    Las filas de VENTAS lo consultan en memoria (ADR-8)."""
+    filas = (await session.execute(
+        select(Sucursal.codigo_co, Sucursal.id)
+        .where(Sucursal.codigo_co.isnot(None))
+    )).all()
+    return {
+        normalizar_codigo_co(codigo_co): sucursal_id
+        for codigo_co, sucursal_id in filas
+        if normalizar_codigo_co(codigo_co)
+    }
+
+
 def resolver_sucursal_por_sic(cache: CacheResolucion, sic: Optional[str]) -> Optional[uuid.UUID]:
     """Lookup PURO en memoria por `sucursal.sic` (Phase 7, spec §5.3
     BACKORDER) -- NUNCA toca la base de datos (ADR-8), mismo contrato que
