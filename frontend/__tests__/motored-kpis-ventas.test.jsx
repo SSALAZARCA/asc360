@@ -138,6 +138,21 @@ describe('Ventas tab: monthly sales by line and Tecnired', () => {
     expect(within(tarjeta).getAllByText('Baterías')).toHaveLength(2);
   });
 
+  it('shows the average ticket of each line next to its value, and a dash when it has no invoices', () => {
+    montar();
+    const tarjeta = seccion('Venta mensual por línea');
+    expect(within(tarjeta).getByText(/\$800 M · ticket \$86\.420/)).toBeInTheDocument();
+    expect(within(tarjeta).getByText(/\$50 M · ticket \$21\.000/)).toBeInTheDocument();
+    expect(within(tarjeta).getByText(/\$80 M · ticket —/)).toBeInTheDocument();
+    expect(within(tarjeta).getAllByTitle('Venta promedio por factura que incluye esta línea').length).toBeGreaterThan(0);
+  });
+
+  it('shows a dash for the ticket when the answer carries no per-line tickets', () => {
+    const sin = { ...VENTAS, total: { ...VENTAS.total, facturas: { ...VENTAS.total.facturas, ticket_por_linea: undefined } } };
+    montar(sin);
+    expect(within(seccion('Venta mensual por línea')).getByText(/\$800 M · ticket —/)).toBeInTheDocument();
+  });
+
   it('shows the Tecnired donut, stats, monthly bars with percentages and the line mix', () => {
     montar();
     const tarjeta = seccion('Clientes Tecnired');
@@ -169,6 +184,21 @@ describe('Ventas tab: empty states and growth', () => {
     expect(avisos.length).toBeGreaterThanOrEqual(2);
     expect(screen.getAllByRole('link', { name: /Maestros → Presupuestos/ })[0]).toHaveAttribute('href', '/motored/maestros');
     expect(screen.queryByRole('img', { name: /Cumplimiento:/ })).toBeNull();
+  });
+
+  it('shows the empty state, never NaN or a crash, when the company block is missing', () => {
+    const sin = { ...VENTAS, cumplimiento: { ...VENTAS.cumplimiento, compania: null } };
+    montar(sin);
+    expect(screen.getAllByText(/Cargá los presupuestos en Maestros → Presupuestos/).length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByRole('img', { name: /Cumplimiento:/ })).toBeNull();
+    expect(document.body.textContent).not.toMatch(/NaN/);
+  });
+
+  it('shows the empty state when the company has no budget even if the network figure has one', () => {
+    const c = VENTAS.cumplimiento.compania;
+    const sin = { ...VENTAS, cumplimiento: { ...VENTAS.cumplimiento, compania: { ...c, presupuesto: 0, pct: null } } };
+    montar(sin);
+    expect(within(seccion('Cumplimiento presupuesto compañía')).getByText(/Cargá los presupuestos/)).toBeInTheDocument();
   });
 
   it('shows the margin as a dash with a tooltip when there is no cost data', () => {

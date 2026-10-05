@@ -540,12 +540,18 @@ def _bloque_facturas(
 ) -> Dict[str, Any]:
     n_facturas = Decimal(facturas.facturas if facturas else 0)
     con_linea = facturas.con_linea if facturas else (0,) * len(lineas)
+    venta_linea = acum.venta_por_linea
     return {
         "facturas": int(n_facturas),
         "ticket_promedio": ratio(acum.venta, n_facturas),
         "unidades": _dinero(acum.cantidad),
         "items_por_factura": ratio(Decimal(acum.lineas), n_facturas),
         "pct_con_linea": {linea: ratio(Decimal(n), n_facturas) for linea, n in zip(lineas, con_linea)},
+        "facturas_con_linea": {linea: int(n) for linea, n in zip(lineas, con_linea)},
+        # venta de la linea / facturas con al menos un item de esa linea (None sin facturas)
+        "ticket_por_linea": {
+            linea: ratio(venta_linea.get(linea, Decimal(0)), Decimal(n)) for linea, n in zip(lineas, con_linea)
+        },
         "pct_multilinea": ratio(Decimal(facturas.multilinea if facturas else 0), n_facturas),
     }
 

@@ -88,10 +88,11 @@ export function zonasSemaforo(data, entidad = 'tiendas') {
 /** Sales by line sorted from the heaviest, plus the months x lines matrix in millions of pesos. */
 export function ventaPorLinea(data) {
   const { por_linea: porLinea, por_mes_linea: porMesLinea } = data.total.venta;
+  const tickets = data.total.facturas?.ticket_por_linea ?? {};
   const lineas = Object.keys(porLinea).sort((a, b) => porLinea[b] - porLinea[a]);
   const meses = Object.keys(porMesLinea).sort();
   return {
     meses,
-    lineas: lineas.map((l) => ({ id: l, name: nombreLinea(l), total: porLinea[l], values: meses.map((m) => (porMesLinea[m][l] ?? 0) / 1e6) })),
+    lineas: lineas.map((l) => ({ id: l, name: nombreLinea(l), total: porLinea[l], ticket: esNumero(tickets[l]) ? tickets[l] : null, values: meses.map((m) => (porMesLinea[m][l] ?? 0) / 1e6) })),
   };
 }

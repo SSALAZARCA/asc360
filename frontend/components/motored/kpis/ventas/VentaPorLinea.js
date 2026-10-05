@@ -1,8 +1,10 @@
 import { StackedArea } from '../charts';
-import { millones, miles } from '../format';
+import { millones, miles, moneda } from '../format';
 import { CATEGORIA, COLOR } from '../tokens';
 import { mesCorto, ventaPorLinea } from './datos';
 import { CABECERA, NUM, TARJETA, TITULO } from './estilos';
+
+const TIP_TICKET = 'Venta promedio por factura que incluye esta línea';
 
 function Leyenda({ lineas }) {
   return (
@@ -24,7 +26,9 @@ function Fichas({ lineas }) {
         <div key={l.id} style={{ padding: '10px 12px', borderRadius: 10, background: COLOR.wash, borderLeft: `4px solid ${l.color}` }}>
           <div style={{ fontSize: 11.5, fontWeight: 500, color: COLOR.muted }}>{l.name}</div>
           <div style={{ ...NUM, fontSize: 20, fontWeight: 700 }}>{total > 0 ? `${((l.total / total) * 100).toFixed(1).replace('.', ',')}%` : '—'}</div>
-          <div style={{ ...NUM, fontSize: 11.5, color: COLOR.muted }}>{millones(l.total)}</div>
+          <div title={TIP_TICKET} style={{ ...NUM, fontSize: 11.5, color: COLOR.muted }}>
+            {`${millones(l.total)} · ticket ${l.ticket ? moneda(l.ticket) : '—'}`}
+          </div>
         </div>
       ))}
     </div>

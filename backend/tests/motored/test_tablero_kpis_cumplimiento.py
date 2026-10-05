@@ -367,3 +367,15 @@ def test_los_conteos_de_tiendas_siguen_la_venta_total_y_la_red_sigue_siendo_de_a
 
     assert r["conteos"]["tiendas"] == {k.VERDE: 1, k.AMBAR: 1, k.VIOLETA: 0}
     assert r["red"]["venta_cumplimiento"] == 0.0  # asesor-based: the cube has no persons
+
+
+def test_a_venta_row_with_an_unexpected_group_key_does_not_raise():
+    cubo = [_venta("1", "2026-08", 100, clave="GRUPO_RARO"), _venta("2", "2026-08", 50, clave="P:2")]
+    pres = dict([_pres("2026-08", "2", S1, 1000)])
+    compania = k.construir_compania(cubo, pres, t.REGLAS_POR_DEFECTO, _RED)
+    assert compania["venta"] == 150.0
+    por_grupo = {g["grupo"]: g["venta"] for g in compania["por_grupo"]}
+    assert por_grupo["Otros roles de posventa"] == 100.0 and sum(por_grupo.values()) == 150.0
+
+
+_RED = {"presupuesto": 0, "venta_cumplimiento": 0, "cumplimiento_pct": None, "semaforo": None}

@@ -220,6 +220,25 @@ def test_facturas_ticket_items_y_multilinea(tablero):
     assert f["pct_multilinea"] == 0.25
 
 
+def test_ticket_por_linea_divide_la_venta_de_la_linea_entre_las_facturas_que_la_incluyen(tablero):
+    f = _fila(tablero, A)["facturas"]
+    assert f["facturas_con_linea"]["REPUESTOS"] == 3 and f["facturas_con_linea"]["LLANTAS"] == 1
+    assert f["ticket_por_linea"]["REPUESTOS"] == 1000.0  # 3000 / 3
+    assert f["ticket_por_linea"]["LLANTAS"] == 500.0  # 500 / 1
+
+
+def test_ticket_por_linea_es_none_sin_facturas_con_esa_linea(tablero):
+    f = _fila(tablero, A)["facturas"]
+    assert f["facturas_con_linea"]["CASCOS"] == 0
+    assert f["ticket_por_linea"]["CASCOS"] is None
+
+
+def test_ticket_por_linea_sin_facturas_no_divide_entre_cero():
+    bloque = t._bloque_facturas(t._Acumulado(), None, ("REPUESTOS", "GPS"))
+    assert bloque["facturas_con_linea"] == {"REPUESTOS": 0, "GPS": 0}
+    assert bloque["ticket_por_linea"] == {"REPUESTOS": None, "GPS": None}
+
+
 def test_descuentos_mes_mayor_y_porcentaje(tablero):
     d = _fila(tablero, A)["descuentos"]
     assert d["total"] == 400.0

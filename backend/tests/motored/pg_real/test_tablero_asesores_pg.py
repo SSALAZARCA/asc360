@@ -192,6 +192,10 @@ async def test_fila_de_una_persona_con_todos_los_indicadores(sesion):
     assert f["pct_con_linea"]["REPUESTOS"] == 0.75
     assert f["pct_con_linea"]["ACCESORIOS"] == 0.25 and f["pct_con_linea"]["LLANTAS"] == 0.25
     assert f["pct_con_linea"]["GPS"] == 0.0 and f["pct_multilinea"] == 0.25
+    assert f["facturas_con_linea"]["REPUESTOS"] == 3 and f["facturas_con_linea"]["GPS"] == 0
+    assert f["ticket_por_linea"]["GPS"] is None
+    assert f["ticket_por_linea"]["REPUESTOS"] == pytest.approx(1560 / 3)
+    assert f["ticket_por_linea"]["ACCESORIOS"] == 500.0 and f["ticket_por_linea"]["LLANTAS"] == 810.0
     d = ana["descuentos"]
     assert d["total"] == 230.0 and d["mes_mayor"] == "2098-01"
     assert d["pct_en_mes_mayor"] == pytest.approx(100 / 230)

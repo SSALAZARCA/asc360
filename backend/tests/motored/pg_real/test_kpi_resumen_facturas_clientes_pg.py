@@ -149,6 +149,11 @@ async def test_the_dashboards_are_identical_with_the_switch_on_and_off(sesion, m
     desde_resumen = {nombre: sin_frescura(await llamar()) for nombre, llamar in llamadas.items()}
 
     assert desde_resumen == en_vivo
+    # the per-line average ticket travels in the dashboards compared above, and is really computed
+    ventas = [v for (_, _, nombre), v in desde_resumen.items() if nombre == "ventas"]
+    assert any(
+        valor is not None for v in ventas for valor in v["total"]["facturas"]["ticket_por_linea"].values()
+    ), "no per-line ticket was exercised"
 
 
 async def test_the_comparison_detects_a_summary_that_drifted(sesion):

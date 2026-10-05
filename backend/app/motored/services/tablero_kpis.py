@@ -237,7 +237,13 @@ GRUPOS_COMPANIA = (
 
 
 def _grupo_compania(clave: str) -> str:
-    return "asesores" if t.es_clave_persona(clave) else clave
+    """Grupo de la venta de la compania; una clave inesperada cae en OTROS (nunca KeyError)."""
+    if t.es_clave_persona(clave):
+        return "asesores"
+    return clave if clave in _CLAVES_GRUPO_COMPANIA else t.GRUPO_OTROS
+
+
+_CLAVES_GRUPO_COMPANIA = frozenset(grupo for grupo, _ in GRUPOS_COMPANIA)
 
 
 def construir_compania(

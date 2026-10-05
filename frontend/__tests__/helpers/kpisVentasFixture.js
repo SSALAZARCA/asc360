@@ -43,7 +43,9 @@ export const VENTAS = {
       por_mes_linea: porMesLinea,
     },
     costo: { costo_venta: totalLinea * 0.73, venta_con_costo: totalLinea, utilidad_bruta: totalLinea * 0.27, pct_margen: 0.271, pct_venta_con_costo: 1 },
-    facturas: { facturas: 154387, ticket_promedio: 85615, unidades: 477698, items_por_factura: 2.66, pct_con_linea: {}, pct_multilinea: 0.4 },
+    facturas: { facturas: 154387, ticket_promedio: 85615, unidades: 477698, items_por_factura: 2.66, pct_con_linea: {}, pct_multilinea: 0.4,
+      facturas_con_linea: { REPUESTOS: 100000, GPS: 0 },
+      ticket_por_linea: { REPUESTOS: 86420.4, ACCESORIOS: 21000, GPS: null } },
     descuentos: { total: 176 * M, mes_mayor: '2026-06', pct_en_mes_mayor: 0.4, pct_descuento: 0.0131 },
     clientes: {
       pct_mostrador: 0.9, venta_tecnired: 945 * M, pct_tecnired: 0.063, clientes_unicos: 95289, pct_top5: 0.1,
