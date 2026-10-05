@@ -29,6 +29,7 @@ from tests.motored.conftest import FakeAsyncSession
 from tests.motored.sql_upsert import upsert_set_clause
 
 from app.motored.models.carga_fila_staging import CargaFilaStaging
+from app.motored.services import kpi_resumen
 from app.motored.services.ingesta import columnas, inventario, numeros
 from app.motored.services.ingesta.resolucion import CacheResolucion
 
@@ -45,6 +46,20 @@ _MAPA_COLUMNAS = {
     "Existencia": 3,
     "Costo prom. uni.": 4,
 }
+
+
+@pytest.fixture(autouse=True)
+def _marcas_de_sucio(monkeypatch):
+    """The KPI summaries' dirty flag (R7a) is spied on, not written: this suite's fake session
+    has a fixed query queue. The SQL is covered in `pg_real/test_kpi_resumen_sucio_pg.py`."""
+    marcas = []
+
+    async def marcar(db):
+        marcas.append(db)
+        return True
+
+    monkeypatch.setattr(kpi_resumen, "marcar_sucio_si_construido", marcar)
+    return marcas
 
 
 def _cache(sucursales=(), referencias=()) -> CacheResolucion:
@@ -527,3 +542,13 @@ async def test_aplicar_detalle_sin_filas_resueltas_no_ejecuta_nada():
     )
 
     assert session.executed_statements == []
+
+
+async def test_aplicar_detalle_marca_sucios_los_resumenes_de_kpi_solo_si_escribio(_marcas_de_sucio):
+    con_filas = FakeAsyncSession(execute_queue=[[]] * 2)
+    sin_filas = FakeAsyncSession()
+
+    await inventario.aplicar_detalle(con_filas, [_staging_detalle()], date(2026, 9, 15), CARGA_ID)
+    await inventario.aplicar_detalle(sin_filas, [_staging_detalle(sucursal_id=None)], date(2026, 9, 15), CARGA_ID)
+
+    assert _marcas_de_sucio == [con_filas]

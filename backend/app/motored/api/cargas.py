@@ -756,6 +756,9 @@ async def anular_carga(
         # without autoflush, so the new state is flushed first for the refresh to see it.
         await db.flush()
         await kpi_resumen.refrescar_si_construido(db, await kpi_resumen.claves_de_carga(db, carga_id))
+    elif carga.tipo == "INVENTARIO":
+        # The cost and inventory summaries hide the annulled cortes: a full rebuild is pending.
+        await kpi_resumen.marcar_sucio_si_construido(db)
     await db.execute(delete(CargaFilaStaging).where(CargaFilaStaging.carga_id == carga_id))
     await db.commit()
     return CargaArchivoRead.model_validate(carga)

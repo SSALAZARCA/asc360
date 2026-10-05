@@ -64,6 +64,9 @@ class Settings(BaseSettings):
     # Lee los agregados de ventas del KPI desde las tablas resumen `kpi_*` (cuando estan
     # construidas y al dia) en vez de recorrer venta_detalle. Apagado = consultas en vivo.
     MOTORED_KPI_RESUMEN_ENABLED: bool = False
+    # Cuanto espera una carga de ventas (o un cambio de configuracion que deja sucios los
+    # resumenes) por el candado de una reconstruccion en curso antes de fallar con un mensaje claro.
+    MOTORED_KPI_RESUMEN_LOCK_TIMEOUT_SEGUNDOS: int = 60
     MOTORED_RETENCION_ENABLED: bool = False
     MOTORED_RETENCION_DIAS: int = 90
     MOTORED_INGESTA_PERIODO_TOLERANCIA_PCT: float = 0.5

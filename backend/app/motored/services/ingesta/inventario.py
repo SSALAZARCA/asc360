@@ -64,6 +64,7 @@ from app.motored.models.carga_error import CargaError
 from app.motored.models.carga_fila_staging import CargaFilaStaging
 from app.motored.models.inventario_detalle import InventarioDetalle
 from app.motored.models.inventario_snapshot import InventarioSnapshot
+from app.motored.services import kpi_resumen
 from app.motored.services.ingesta import errores as errores_mod
 from app.motored.services.ingesta import numeros as numeros_mod
 # El costo usa la misma limpieza de dinero y el mismo tope de `Numeric(16, 2)`
@@ -378,6 +379,9 @@ async def aplicar_detalle(
         await session.execute(
             pg_insert(InventarioDetalle).values(detalle[inicio:inicio + TAMANO_LOTE_DETALLE])
         )
+    # The KPI cost and inventory summaries come from this table: they need a full rebuild
+    # (done in the background; the apply stays fast).
+    await kpi_resumen.marcar_sucio_si_construido(session)
 
 
 def fecha_corte_fuera_de_ventana(

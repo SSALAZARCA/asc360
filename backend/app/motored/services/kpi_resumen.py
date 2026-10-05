@@ -58,8 +58,10 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import ARRAY, aggregate_order_by
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.motored.models.carga_archivo import CargaArchivo
 from app.motored.models.cliente_tecnired import ClienteTecnired
 from app.motored.models.inventario_detalle import InventarioDetalle
@@ -121,8 +123,31 @@ async def _uniones(db: AsyncSession) -> Tuple[Tuple[str, ...], Tuple[str, ...]]:
             union_nits(v for c, v in filas if c == "hmcl_nits"))
 
 
+class ResumenOcupadoError(RuntimeError):
+    """The summaries are being rebuilt and the wait for the lock ran out."""
+
+
+_BLOQUEO_NO_DISPONIBLE = "55P03"  # lock_not_available (the SQLSTATE of `lock_timeout`)
+
+
 async def _bloquear(db: AsyncSession) -> None:
-    await db.execute(select(func.pg_advisory_xact_lock(LOCK_KEY)))
+    """Takes the advisory lock, waiting at most `MOTORED_KPI_RESUMEN_LOCK_TIMEOUT_SEGUNDOS`
+    (a `lock_timeout` scoped to this wait, restored afterwards so it does not leak to the
+    caller's other statements). A full rebuild holds the lock while it runs, so a carga apply
+    or a Configuracion change that arrives meanwhile fails with a clear message instead of
+    hanging until the rebuild ends."""
+    anterior = (await db.execute(select(func.current_setting("lock_timeout")))).scalar_one()
+    espera = max(int(settings.MOTORED_KPI_RESUMEN_LOCK_TIMEOUT_SEGUNDOS), 1)
+    await db.execute(select(func.set_config("lock_timeout", f"{espera}s", True)))
+    try:
+        await db.execute(select(func.pg_advisory_xact_lock(LOCK_KEY)))
+    except DBAPIError as exc:
+        if getattr(getattr(exc, "orig", None), "sqlstate", None) != _BLOQUEO_NO_DISPONIBLE:
+            raise
+        raise ResumenOcupadoError(
+            "Los resúmenes de KPI se están reconstruyendo y la operación no pudo esperar a que "
+            "terminen. Intente de nuevo en unos minutos.") from exc
+    await db.execute(select(func.set_config("lock_timeout", anterior, True)))
 
 
 # --- State row --------------------------------------------------------------------------------
@@ -145,6 +170,38 @@ async def _guardar_estado(db: AsyncSession, inicial: dict, cambios: dict) -> Non
 async def marcar_sucio(db: AsyncSession) -> None:
     """Flags the summaries as out of date (a full rebuild is pending)."""
     await _guardar_estado(db, {"sucio": True}, {"sucio": True})
+
+
+async def marcar_sucio_si_construido(db: AsyncSession) -> bool:
+    """`marcar_sucio`, but only once the summaries were fully built at least once (the first
+    full build reads every input anyway). Meant for the code paths that change an input of the
+    summaries, in THEIR transaction. The lock is taken first, as in `refrescar_si_construido`:
+    a rebuild in flight read the inputs before this change committed, so the flag must land
+    after that rebuild's own commit (which clears it) for the next rebuild to see the change.
+    True when it marked."""
+    marca = _transaccion_actual(db)
+    if marca is not None and db.info.get(_CLAVE_MARCA) is marca:
+        return True  # already flagged in this transaction (a mass edit calls this once per row)
+    await _bloquear(db)
+    actual = await estado(db)
+    if actual is None or actual.ultima_reconstruccion_total is None:
+        return False
+    await marcar_sucio(db)
+    if marca is not None:
+        db.info[_CLAVE_MARCA] = marca
+    return True
+
+
+_CLAVE_MARCA = "kpi_resumen_sucio_en"
+
+
+def _transaccion_actual(db: AsyncSession) -> Any:
+    """The session's current transaction object (None when it cannot be told). Compared by
+    identity, and kept referenced in `db.info`, so a recycled `id()` can never match."""
+    try:
+        return db.sync_session.get_transaction()
+    except AttributeError:
+        return None
 
 
 async def _marcar_reconstruido(db: AsyncSession) -> None:

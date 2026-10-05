@@ -34,8 +34,22 @@ from app.motored.models.auditoria_maestro import AuditoriaMaestro
 from app.motored.models.proveedor import Proveedor
 from app.motored.models.referencia import Referencia
 from app.motored.models.sucursal import Sucursal
-from app.motored.services import carga, reemplazo_referencias
+from app.motored.services import carga, kpi_resumen, reemplazo_referencias
 from tests.motored.conftest import FakeAsyncSession
+
+
+@pytest.fixture(autouse=True)
+def _marcas_de_sucio(monkeypatch):
+    """The KPI summaries' dirty flag (R7a) is spied on, not written: this suite's fake session
+    has a fixed query queue. The SQL is covered in `pg_real/test_kpi_resumen_sucio_pg.py`."""
+    marcas = []
+
+    async def marcar(db):
+        marcas.append(db)
+        return True
+
+    monkeypatch.setattr(kpi_resumen, "marcar_sucio_si_construido", marcar)
+    return marcas
 
 HMCL = Proveedor(id=uuid.uuid4(), codigo="HMCL", nombre="HMCL", es_principal=True)
 OTRO = Proveedor(id=uuid.uuid4(), codigo="OTRO", nombre="Otro", es_principal=False)

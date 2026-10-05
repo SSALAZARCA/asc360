@@ -30,7 +30,7 @@ from app.motored.schemas.sucursal import (
     normalizar_codigo_co,
 )
 from app.motored.schemas.vendedor import VendedorCreate, VendedorUpdate
-from app.motored.services import auditoria, sucursal_grupo
+from app.motored.services import auditoria, kpi_resumen, sucursal_grupo
 from app.motored.services.sucursal_grupo import FILA_SUCURSAL_ID
 from app.motored.services.ingesta.ventas import normalizar_vendedor
 from app.motored.services.validators import coerce_unidad_empaque, normalize_sucursal_nombre
@@ -716,6 +716,9 @@ async def update_referencia(
 
     before, after = _apply_and_diff(referencia, update_dict)
     auditoria.diff_and_audit(db, "referencia", referencia.id, usuario_id, before, after)
+    if before.get("linea_comercial") != after.get("linea_comercial"):
+        # The KPI summaries bake the referencia's line in: they need a full rebuild.
+        await kpi_resumen.marcar_sucio_si_construido(db)
     return referencia
 
 
@@ -783,6 +786,9 @@ async def reemplazar_clientes_tecnired(
     eliminados = resultado.rowcount or 0
     for datos in nuevos:
         db.add(ClienteTecnired(**datos))
+    if eliminados or nuevos:
+        # The KPI summaries classify clients by this list: they need a full rebuild.
+        await kpi_resumen.marcar_sucio_si_construido(db)
     return len(nuevos), eliminados, advertencias
 
 

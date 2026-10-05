@@ -468,6 +468,20 @@ def test_anular_succeeds_unconditionally_against_empty_corrida_set(estado):
     assert response.json()["estado"] == "ANULADO"
 
 
+@pytest.fixture(autouse=True)
+def _marcas_de_sucio(monkeypatch):
+    """The KPI summaries' dirty flag (R7a) is spied on, not written: this suite's fake session
+    has a fixed query queue. The SQL is covered in `pg_real/test_kpi_resumen_sucio_pg.py`."""
+    marcas = []
+
+    async def marcar(db):
+        marcas.append(db)
+        return True
+
+    monkeypatch.setattr(cargas_api.kpi_resumen, "marcar_sucio_si_construido", marcar)
+    return marcas
+
+
 def _espiar_refresco(monkeypatch, claves):
     llamadas = []
 
@@ -496,14 +510,24 @@ def test_anular_una_carga_de_ventas_refresca_los_resumenes_de_kpi_de_sus_meses(m
     assert [(nombre, dato) for nombre, dato, _ in llamadas] == [("claves", carga.id), ("refrescar", claves)]
 
 
-def test_anular_una_carga_de_otro_tipo_no_toca_los_resumenes_de_kpi(monkeypatch):
+def test_anular_una_carga_de_inventario_marca_sucios_los_resumenes_sin_refrescarlos(monkeypatch, _marcas_de_sucio):
     carga = _carga(estado="APLICADO", tipo="INVENTARIO")
     llamadas = _espiar_refresco(monkeypatch, set())
     client = _client_as("ADMIN", execute_queue=_cola_anular_sin_corridas(carga))
 
     assert client.post(f"{CARGAS_URL}/{carga.id}/anular").status_code == 200
 
-    assert llamadas == []
+    assert llamadas == [] and len(_marcas_de_sucio) == 1
+
+
+def test_anular_una_carga_de_otro_tipo_no_toca_los_resumenes_de_kpi(monkeypatch, _marcas_de_sucio):
+    carga = _carga(estado="APLICADO", tipo="PEDIDOS")
+    llamadas = _espiar_refresco(monkeypatch, set())
+    client = _client_as("ADMIN", execute_queue=_cola_anular_sin_corridas(carga))
+
+    assert client.post(f"{CARGAS_URL}/{carga.id}/anular").status_code == 200
+
+    assert llamadas == [] and _marcas_de_sucio == []
 
 
 def test_si_el_refresco_falla_la_anulacion_no_se_confirma(monkeypatch):

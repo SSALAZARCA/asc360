@@ -21,11 +21,16 @@ from sqlalchemy import select
 
 from app.motored.models.parametro_metodologia import ParametroMetodologia
 from app.motored.models.usuario import Usuario
+from app.motored.services import kpi_resumen
 from app.motored.services.parametros_claves import (
     REGISTRO, SECCIONES, ficha,
 )
 
 logger = logging.getLogger(__name__)
+
+# Configuracion keys the KPI summaries are built against (their union of historical values
+# decides which lines / NITs are kept apart): writing one needs a full rebuild.
+CLAVES_DE_RESUMEN_KPI = frozenset({"hmcl_nits", "lineas_comerciales"})
 
 
 async def registrar_cambio(
@@ -49,6 +54,8 @@ async def registrar_cambio(
         created_by=usuario_id,
     )
     db.add(nueva_version)
+    if clave in CLAVES_DE_RESUMEN_KPI:
+        await kpi_resumen.marcar_sucio_si_construido(db)
     return nueva_version
 
 
