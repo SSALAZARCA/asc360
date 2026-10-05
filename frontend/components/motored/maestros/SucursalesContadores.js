@@ -24,11 +24,15 @@ function Contador({ label, value, tooltip }) {
   return (
     <div
       data-contador
-      style={{ background: COLOR.wash, borderRadius: 10, padding: '10px 14px', minWidth: 140, flex: '1 1 140px' }}
+      style={{
+        background: COLOR.wash, borderRadius: 10, padding: '10px 16px', flex: '0 0 auto',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center',
+      }}
     >
       <p
         style={{
-          margin: 0, display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 500,
+          margin: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+          whiteSpace: 'nowrap', fontSize: 11.5, fontWeight: 500,
           letterSpacing: '.04em', textTransform: 'uppercase', color: COLOR.muted,
         }}
       >
@@ -54,7 +58,7 @@ export default function SucursalesContadores({ sucursales, loading = false }) {
   const activas = loading ? '—' : conteo.activas;
   const principales = loading ? '—' : conteo.principales;
   return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, minWidth: 0 }}>
+    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'stretch', gap: 10, minWidth: 0 }}>
       <Contador label="Sucursales activas" value={activas} tooltip="Total de sucursales en estado Activa." />
       <Contador
         label="Tiendas principales"
