@@ -287,8 +287,20 @@ Each tab scans `venta_detalle` (~1M rows Jan–Sep) 6–8 times per request, wit
   - The savepoint cache is proven only with fakes.
   - The stale flag assumes the total timeout.
 
+## Status
+**Feature complete and enabled in production (2026-10-05).** The user set `MOTORED_KPI_RESUMEN_ENABLED=true` in Coolify, redeployed, and confirmed the KPI's tabs now load fast.
+
+**Follow-ups**
+- The advisories above: apply-rollback and stale-flag tests are proven only with fakes; poll after unmount.
+- Lesson from session 1a: pg_real fixtures use autoflush=True while production uses False, which can hide flush-ordering bugs. Review the R6 anular flush and the summary writes under autoflush=False.
+- Retention purge of `inventario_detalle` is unhooked (old cortes only).
+
 ## Next step
-Switch-on. Then verify the production summary state: the user, as ADMIN, opens KPI's and sees the note "Resumen precalculado: listo (actualizado …) · aún no activo". Then the user sets `MOTORED_KPI_RESUMEN_ENABLED=true` in Coolify and redeploys (a server setting). After that, check that the tabs show "Datos actualizados a las …" and load in about 1 s.
+None for this feature. The user's data loads are still pending:
+- Sucursales final with C.O.;
+- the corrected budgets file;
+- inventory with cost;
+- then presupuestos/vendedores files with C.O. Then verify the production summary state: the user, as ADMIN, opens KPI's and sees the note "Resumen precalculado: listo (actualizado …) · aún no activo". Then the user sets `MOTORED_KPI_RESUMEN_ENABLED=true` in Coolify and redeploys (a server setting). After that, check that the tabs show "Datos actualizados a las …" and load in about 1 s.
 
 Pending user data, still open:
 - -c4/1a's `Sucursales_carga_final_...`;
