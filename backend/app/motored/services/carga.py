@@ -191,6 +191,10 @@ async def _aplicar_columnas_de_sucursal(
         db, [(obj, fila["nombre"], creada) for obj, fila, creada in subidas],
         usuario_id,
     )
+    # The session runs with autoflush off and `bodega` has no relationship
+    # to `sucursal`: the file's new stores must be INSERTed before a
+    # bodega row points at them (bodega_sucursal_id_fkey).
+    await db.flush()
     secundarias = [
         (obj, fila[bodegas_secundarias.FILA_CLAVE])
         for obj, fila, _ in subidas
