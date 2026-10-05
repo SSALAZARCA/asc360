@@ -18,7 +18,7 @@ from collections import defaultdict
 from decimal import Decimal as D
 
 import pytest
-from sqlalchemy import delete, select, text
+from sqlalchemy import delete, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 from app.motored.models.carga_archivo import CargaArchivo
@@ -35,6 +35,7 @@ from app.motored.models.venta_detalle import VentaDetalle
 from app.motored.schemas.cliente_tecnired import normalizar_nit
 from app.motored.services import kpi_resumen as k
 from app.motored.services import tablero_asesores as t
+from app.motored.services import tablero_asesores_consultas as q
 
 URL = os.environ.get("MOTORED_TEST_PG_URL")
 pytestmark = [
@@ -357,3 +358,86 @@ async def test_the_rebuild_holds_the_advisory_lock_until_the_transaction_ends(se
         await otro.dispose()
 
     assert ocupado is False and libre is True
+
+
+async def test_blank_clients_are_kept_like_the_live_query_counts_them(sesion):
+    """`cliente_factura` is NOT NULL, but a blank one normalizes to '': the live client count
+    treats it as one more client, so the summary keeps it (and never aborts the rebuild)."""
+    mundo = await Mundo().crear(sesion)
+    await mundo.linea(sesion, mundo.s1, "R1", "ANA", "   ", 1, 11, "B1", 1, 70, 0, "VENTA", mundo.c_venta)
+    await sesion.execute(text("UPDATE venta_detalle SET cliente_factura = '' WHERE cliente_factura = '   '"))
+    await sesion.flush()
+
+    await k.reconstruir_todo(sesion)
+
+    venta, _firmas, clientes = await _leer(sesion, _ids(mundo))
+    ene = datetime.date(2097, 1, 1)
+    assert clientes[(ene, mundo.s1.id, "ANA", "", "REPUESTOS")] == D("70")
+    assert venta[(ene, mundo.s1.id, "ANA", "REPUESTOS", None, False, True)][0] == D("70")  # blank client's sale counted
+    filtro = t.filtro_de_meses(["2097-01", "2097-02", "2097-03"], t.HMCL_INCLUIR, _ids(mundo))
+    en_vivo = {f.clave: f.clientes for f in await q.consultar_clientes(sesion, filtro, dimension=t.DIM_TOTAL)}
+    assert en_vivo[t.CLAVE_TOTAL] == len({c[3] for c in clientes})
+
+
+async def test_the_unit_cost_equals_the_live_cost_even_with_a_fractional_median(sesion):
+    mundo = await Mundo().crear(sesion)
+    for costo, bodega in (("100.01", "B7"), ("100.02", "B8")):
+        sesion.add(InventarioDetalle(
+            id=uuid.uuid4(), carga_id=mundo.c_inv.id, fecha_corte=CORTE, sucursal_id=mundo.s2.id,
+            referencia_id=mundo.refs["R4"].id, bodega=bodega, existencia=D(1), costo_unitario=D(costo)))
+    await mundo.linea(sesion, mundo.s2, "R4", "ANA", "Taller X", 1, 12, "Q1", 3, 900, 0, "VENTA", mundo.c_venta)
+    await sesion.flush()
+
+    await k.reconstruir_todo(sesion)
+
+    vivo = q._subconsulta_costos(CORTE)
+    en_vivo = {r.referencia_id: r.costo_unitario for r in (await sesion.execute(select(vivo))).all()}
+    resumen = {
+        r.referencia_id: r.costo_unitario for r in (await sesion.execute(
+            select(KpiCostoReferencia).where(KpiCostoReferencia.fuente == "inventario"))).scalars()}
+    assert resumen == en_vivo and resumen[mundo.refs["R4"].id] == D("100.0150")
+    costo = (await sesion.execute(
+        select(func.sum(KpiVentaMes.costo)).where(
+            KpiVentaMes.sucursal_id == mundo.s2.id, KpiVentaMes.anio_mes == datetime.date(2097, 1, 1),
+            KpiVentaMes.linea_norm.is_(None), KpiVentaMes.vendedor_norm == "ANA"))).scalar()
+    assert costo == D("300.045000")  # 3 x 100.015 -- no rounding drift in the stored cost
+
+
+async def test_without_an_inventory_cut_the_master_price_prices_everything(sesion):
+    mundo = await Mundo().crear(sesion)
+    mundo.c_inv.estado = "ANULADO"
+    await sesion.flush()
+
+    await k.reconstruir_todo(sesion)
+
+    hoy = datetime.date.today()
+    costos = {
+        r.referencia_id: (r.costo_unitario, r.fuente, r.fecha_corte)
+        for r in (await sesion.execute(select(KpiCostoReferencia))).scalars()
+        if r.referencia_id in {v.id for v in mundo.refs.values()}}
+    assert costos == {mundo.refs[c].id: (D(p), "maestro", hoy) for c, p in
+                      (("R2", "10"), ("R3", "80"), ("R6", "5"), ("R7", "7"))}
+    assert not (await sesion.execute(
+        select(KpiInventarioCorte).where(KpiInventarioCorte.sucursal_id.in_(list(_ids(mundo)))))).scalars().all()
+    venta = (await _leer(sesion, _ids(mundo)))[0]
+    r1 = (datetime.date(2097, 1, 1), mundo.s1.id, "ANA", "REPUESTOS", None, True, False)
+    assert venta[r1][5] == D(0) and venta[r1][6] == D(0)  # R1 has no master price: uncosted
+    llantas = (datetime.date(2097, 2, 1), mundo.s1.id, "ANA", "LLANTAS", HMCL, False, True)
+    assert venta[llantas][5] == D("80") == venta[llantas][6]
+
+
+async def test_inventory_lines_are_valued_at_cost_then_master_price_else_uncosted(sesion):
+    mundo = await Mundo().crear(sesion)
+    for ref, costo, bodega in (("R7", "0", "B9"), ("R4", "0", "B9"), ("R2", None, "B10")):
+        sesion.add(InventarioDetalle(
+            id=uuid.uuid4(), carga_id=mundo.c_inv.id, fecha_corte=CORTE, sucursal_id=mundo.s2.id,
+            referencia_id=mundo.refs[ref].id, bodega=bodega, existencia=D(2),
+            costo_unitario=D(costo) if costo is not None else None))
+    await sesion.flush()
+
+    await k.reconstruir_todo(sesion)
+
+    fila = (await sesion.execute(
+        select(KpiInventarioCorte).where(KpiInventarioCorte.sucursal_id == mundo.s2.id))).scalar_one()
+    # base 245 (R3 240 + R6 5) + R7 0-cost -> 2 x 7 + R4 uncosted + R2 null -> 2 x 10
+    assert (fila.valor, fila.lineas_sin_costo, fila.lineas_costo_maestro) == (D("279"), 1, 4)
