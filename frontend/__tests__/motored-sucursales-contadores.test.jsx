@@ -27,6 +27,18 @@ describe('SucursalesContadores', () => {
     expect(valueOf('Tiendas principales')).toBe('2');
   });
 
+  it('shows a dash instead of zero while the list is loading', () => {
+    render(<SucursalesContadores sucursales={[]} loading />);
+    expect(valueOf('Sucursales activas')).toBe('—');
+    expect(valueOf('Tiendas principales')).toBe('—');
+  });
+
+  it('treats a missing list as zero once loaded', () => {
+    render(<SucursalesContadores sucursales={null} />);
+    expect(valueOf('Sucursales activas')).toBe('0');
+    expect(valueOf('Tiendas principales')).toBe('0');
+  });
+
   it('shows the help tooltips', () => {
     render(<SucursalesContadores sucursales={[suc('a')]} />);
     expect(screen.getAllByRole('note', { name: 'Total de sucursales en estado Activa.' })).toHaveLength(1);

@@ -48,8 +48,11 @@ function Contador({ label, value, tooltip }) {
   );
 }
 
-export default function SucursalesContadores({ sucursales }) {
-  const { activas, principales } = contarSucursales(sucursales);
+export default function SucursalesContadores({ sucursales, loading = false }) {
+  const conteo = contarSucursales(sucursales);
+  // While the list loads, a dash avoids flashing a misleading zero.
+  const activas = loading ? '—' : conteo.activas;
+  const principales = loading ? '—' : conteo.principales;
   return (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, minWidth: 0 }}>
       <Contador label="Sucursales activas" value={activas} tooltip="Total de sucursales en estado Activa." />

@@ -265,7 +265,7 @@ function SucursalesTable({ sucursales, onEdit, onDeactivate, onReactivate }) {
   );
 }
 
-function SucursalesHeader({ onOpenBulk, sucursales }) {
+function SucursalesHeader({ onOpenBulk, sucursales, loading }) {
   return (
     <div
       style={{
@@ -281,7 +281,7 @@ function SucursalesHeader({ onOpenBulk, sucursales }) {
         </p>
       </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.75rem', minWidth: 0 }}>
-        <SucursalesContadores sucursales={sucursales} />
+        <SucursalesContadores sucursales={sucursales} loading={loading} />
         <button type="button" className="motored-btn motored-btn-secondary" onClick={onOpenBulk}>
           Carga masiva
         </button>
@@ -441,7 +441,7 @@ export default function SucursalesTab() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-      <SucursalesHeader sucursales={sucursales} onOpenBulk={() => setShowBulkModal(true)} />
+      <SucursalesHeader sucursales={sucursales} loading={loading} onOpenBulk={() => setShowBulkModal(true)} />
 
       <div ref={formRef} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
       {editingId && (
