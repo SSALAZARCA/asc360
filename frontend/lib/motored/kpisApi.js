@@ -15,3 +15,7 @@ export const getOpciones = () => motoredFetchJson(`${BASE}/opciones`);
 export const getVentas = (filtros) => motoredFetchJson(rutaKpis('ventas', filtros));
 export const getTiendas = (filtros) => motoredFetchJson(rutaKpis('tiendas', filtros));
 export const getAsesores = (filtros) => motoredFetchJson(rutaKpis('asesores', filtros));
+
+export const getEstado = () => motoredFetchJson(`${BASE}/estado`);
+/** ADMIN only: asks for a full rebuild of the summaries. A 409 carries the "busy" message. */
+export const recalcular = () => motoredFetchJson(`${BASE}/recalcular`, { method: 'POST' });

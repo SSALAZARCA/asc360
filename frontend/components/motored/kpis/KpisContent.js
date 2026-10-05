@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import useTableroGate from '../tablero-asesores/useTableroGate';
 import { getAsesores, getTiendas, getVentas } from '../../../lib/motored/kpisApi';
+import KpiFrescura from './KpiFrescura';
 import KpiHeader from './KpiHeader';
 import KpiTabs from './KpiTabs';
 import { COLOR } from './tokens';
@@ -48,6 +49,7 @@ export default function KpisContent() {
       <KpiHeader opciones={opciones} filtros={filtros} onChange={cambiar} />
       <KpiTabs value={tab} onChange={setTab} />
       {error && <Mensaje error>{error}</Mensaje>}
+      {opciones && !sinVentas && <KpiFrescura data={kpis.data} alRecalcular={kpis.recargar} />}
       {sinVentas ? <Mensaje>Todavía no hay ventas cargadas.</Mensaje> : opciones && <Pestana tab={tab} kpis={kpis} />}
     </div>
   );

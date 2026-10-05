@@ -3,7 +3,7 @@
  * Data of the active KPI's tab. Only the active tab is fetched, responses are cached in memory per
  * (tab, months, stores, hmcl) and a response that arrives after a newer request is discarded.
  */
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import * as kpisApi from '../../../lib/motored/kpisApi';
 
 const MENSAJE_ERROR = "No pudimos cargar los KPI's. Intentá de nuevo en unos segundos.";
@@ -20,6 +20,13 @@ export default function useKpis(tab, filtros, api = API) {
   const activo = Boolean(fetcher && filtros.meses?.length);
   const clave = activo ? claveKpis(tab, filtros) : null;
   const [estado, setEstado] = useState({ clave: null, data: null, error: null });
+  const [version, setVersion] = useState(0);
+  /** Drops every cached response and fetches the active tab again (after a summary rebuild). */
+  const recargar = useCallback(() => {
+    cache.current.clear();
+    pendientes.current.clear();
+    setVersion((v) => v + 1);
+  }, []);
 
   useEffect(() => {
     if (!clave) return undefined;
@@ -46,9 +53,9 @@ export default function useKpis(tab, filtros, api = API) {
     return undefined;
     // `filtros` is summarized by `clave`; the fetcher is stable per tab.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clave]);
+  }, [clave, version]);
 
-  if (!clave) return { data: null, loading: false, error: null };
-  if (estado.clave !== clave) return { data: cache.current.get(clave) ?? null, loading: !cache.current.has(clave), error: null };
-  return { data: estado.data, loading: !estado.data && !estado.error, error: estado.error };
+  if (!clave) return { data: null, loading: false, error: null, recargar };
+  if (estado.clave !== clave) return { data: cache.current.get(clave) ?? null, loading: !cache.current.has(clave), error: null, recargar };
+  return { data: estado.data, loading: !estado.data && !estado.error, error: estado.error, recargar };
 }

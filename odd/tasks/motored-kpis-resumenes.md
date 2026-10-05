@@ -93,7 +93,7 @@ Each tab scans `venta_detalle` (~1M rows Jan–Sep) 6–8 times per request, wit
   - the opciones tiendas list and the store filter show principals only, and selecting a principal includes its associated stores.
 
   Summaries stay on the raw `sucursal_id`, so a relation change needs no rebuild. Equivalence tests include an associated store.
-- [ ] **R8 Frontend + perf verification.** "Datos actualizados a las HH:MM" and an ADMIN "Recalcular" button on the KPI's page. Measure endpoint timings (before/after) on a large synthetic dataset in pg_real and record them.
+- [x] **R8 Frontend + perf verification.** "Datos actualizados a las HH:MM" and an ADMIN "Recalcular" button on the KPI's page. Measure endpoint timings (before/after) on a large synthetic dataset in pg_real and record them.
 
 ## Progress / evidence
 **R1 + R2, done.** Route: one delegated writer, two commits, rebased onto 8b1823b.
@@ -253,8 +253,36 @@ Each tab scans `venta_detalle` (~1M rows Jan–Sep) 6–8 times per request, wit
   - R3-loop-leak-tests (suggestion, `deps.py:214`).
 - **Production note:** the loop is enabled by default, so the first full build runs automatically after deploy. The read switch stays OFF.
 
-## Next step (session paused 2026-10-05 at the user's request)
-1. Fix the R7 advisories, especially the busy error mapping.
-2. R8: UI "Datos actualizados a las HH:MM" + ADMIN "Recalcular" button; measure endpoint timings before/after.
-3. Verify the production summaries were built (`GET /kpis/estado`); the parent turns on `MOTORED_KPI_RESUMEN_ENABLED` in Coolify only after the user confirms. That env var is set by the user in Coolify, a server setting.
-4. Pending user data: load -c4's `Sucursales_carga_final_...` (with C.O.), upload `Presupuesto asesores 2026_corregido.xlsx`, load the inventory with cost. Then rebuild the presupuestos and vendedores files with C.O.
+**R7 fixes + R8, done (2026-10-05).** Route: delegated writer, commits 1fcdc17 and ade8ed0.
+- **Commit 1fcdc17, fixes:**
+  - A router-level yield dependency in `api/router.py` maps `ResumenOcupadoError` to 409 "Los indicadores se están recalculando; intente de nuevo en unos minutos." on every Motored endpoint.
+  - `orquestador.ejecutar_aplicar` rolls back and re-raises on the busy error, so the carga stays VALIDADO (retryable).
+  - The dirty cache is keyed on the innermost transaction (savepoint-safe).
+  - A stale `reconstruyendo` resets after timeout + 300 s, timed in-process.
+  - conftest stops `supervisor_kpis`.
+- **Commit ade8ed0, R8:**
+  - `KpiFrescura`: "Datos actualizados a las HH:MM" in Bogotá time when `usando_resumen` is true. For ADMIN only, a summary state note ("listo… aún no activo"), plus a Recalcular button that polls `/kpis/estado` every 10 s (stops after 15 min), shows the 409 text, and refreshes the tab cache.
+  - Perf test `test_kpi_perf_pg.py`, guarded by `MOTORED_KPI_PERF=1`.
+- **PERF** (1,008,000 venta_detalle rows, 40 stores, 9 months, PG 18, best of 2, summary results equal live):
+
+  | Tab | Live | Summary | Speed-up |
+  |---|---|---|---|
+  | ventas | 9.29 s | 0.42 s | ×22 |
+  | tiendas | 10.64 s | 0.88 s | ×12 |
+  | asesores | 10.25 s | 1.02 s | ×10 |
+
+  A full rebuild takes 19.9 s.
+- **Checks**
+  - Unit suite: 5632 passed.
+  - pg_real: 625 passed / 3 skipped (1 wording test fixed afterwards; its file passes, 11).
+  - Jest: 176 suites / 1881 tests.
+  - Webpack compile: 200.
+
+## Next step
+Native review + push of R7 fixes + R8. Then verify the production summary state: the user, as ADMIN, opens KPI's and sees the note "Resumen precalculado: listo (actualizado …) · aún no activo". Then the user sets `MOTORED_KPI_RESUMEN_ENABLED=true` in Coolify and redeploys (a server setting). After that, check that the tabs show "Datos actualizados a las …" and load in about 1 s.
+
+Pending user data, still open:
+- -c4/1a's `Sucursales_carga_final_...`;
+- `Presupuesto asesores 2026_corregido.xlsx`;
+- the inventory with cost;
+- then the presupuestos/vendedores files with C.O.

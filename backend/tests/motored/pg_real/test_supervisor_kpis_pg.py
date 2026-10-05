@@ -224,4 +224,4 @@ async def test_recalcular_while_a_rebuild_holds_the_lock_is_a_409_with_the_reaso
     finally:
         await motor.dispose()
 
-    assert respuesta.status_code == 409 and "reconstruyendo" in respuesta.json()["detail"]
+    assert respuesta.status_code == 409 and "recalculando" in respuesta.json()["detail"]
