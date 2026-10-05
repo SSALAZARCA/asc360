@@ -128,3 +128,9 @@ Let the owner load the corrected Sucursales file in one go, and model physical p
   - Chips editor in `SucursalesTab`. The corrida picker hides associated stores.
   - Results: tests/motored 5644 passed; pg_real 629 passed, 2 skipped; jest 1881 passed.
   - Open finding: neither the form nor the upload checks whether a store's PRINCIPAL code already belongs to another store.
+- 2026-10-05: the owner uploaded Sucursales v2 successfully. After a page reload all stores have a C.O. and no health warnings remain.
+  - Pending (small): the Maestros health warnings are fetched only once, on mount (`MaestrosTabs.useSaludPorEntidad`). They should refresh after a save or an upload.
+  - The `codigo_co` NOT NULL migration is now unblocked. Ping the KPI session first, because its pg_real fixtures create sucursales without a C.O.
+- 2026-10-05: the health warnings now refresh by themselves.
+  - Maestros writes (create, update, deactivate, reactivate, row upload, file upload) go through `api._escribirMaestro`, which announces `motored:maestros-cambiaron` (`lib/motored/maestrosEventos.js`). `MaestrosTabs` fetches `/maestros/salud` again when it hears it.
+  - RED was observed first (module missing). Full jest: 1903 passed.

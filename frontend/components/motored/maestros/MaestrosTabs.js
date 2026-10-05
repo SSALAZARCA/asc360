@@ -34,6 +34,7 @@
 import { Fragment, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { getSalud } from '../../../lib/motored/api';
+import { escucharMaestrosCambiaron } from '../../../lib/motored/maestrosEventos';
 import AvisosSalud from './AvisosSalud';
 
 const groupLabelStyle = {
@@ -66,9 +67,11 @@ function useSaludPorEntidad(habilitado) {
   useEffect(() => {
     // A role with no tab that carries a health dot (GERENCIA) must not call an
     // endpoint it cannot read.
-    if (!habilitado) return;
-    getSalud()
+    if (!habilitado) return undefined;
+    let vigente = true;
+    const cargar = () => getSalud()
       .then((salud) => {
+        if (!vigente) return;
         setPorEntidad(estadoPorEntidad(salud.hallazgos));
         setHallazgos(salud.hallazgos || []);
       })
@@ -78,6 +81,14 @@ function useSaludPorEntidad(habilitado) {
         // fallo no debe desaparecer sin dejar rastro.
         console.error('No se pudo cargar la salud de maestros para los indicadores de pestaña:', err);
       });
+    cargar();
+    // A save or upload elsewhere on the page fixes or adds warnings:
+    // fetch them again instead of waiting for a reload.
+    const dejarDeEscuchar = escucharMaestrosCambiaron(cargar);
+    return () => {
+      vigente = false;
+      dejarDeEscuchar();
+    };
   }, [habilitado]);
   return { porEntidad, hallazgos };
 }

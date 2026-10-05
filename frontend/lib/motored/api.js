@@ -13,6 +13,7 @@
  */
 import { motoredFetch, motoredFetchJson, getMotoredApiUrl } from './motoredFetch';
 import { httpErrorMessage, NETWORK_MESSAGE } from './httpErrors';
+import { avisarMaestrosCambiaron } from './maestrosEventos';
 
 export { getMotoredApiUrl };
 
@@ -54,6 +55,14 @@ export async function changeOwnPassword(actual, nueva) {
 // `backend/app/motored/api/maestros.py`'s `_CONFIGS` keys.
 // ---------------------------------------------------------------------------
 
+// A successful write announces the change (`maestrosEventos.js`) so the
+// health warnings refresh without reloading the page.
+async function _escribirMaestro(path, options) {
+  const resultado = await motoredFetchJson(path, options);
+  avisarMaestrosCambiaron();
+  return resultado;
+}
+
 export async function listMaestros(entidadPlural) {
   return motoredFetchJson(`/maestros/${entidadPlural}`);
 }
@@ -63,27 +72,27 @@ export async function getMaestro(entidadPlural, id) {
 }
 
 export async function createMaestro(entidadPlural, payload) {
-  return motoredFetchJson(`/maestros/${entidadPlural}`, {
+  return _escribirMaestro(`/maestros/${entidadPlural}`, {
     method: 'POST',
     body: JSON.stringify(payload),
   });
 }
 
 export async function updateMaestro(entidadPlural, id, payload) {
-  return motoredFetchJson(`/maestros/${entidadPlural}/${id}`, {
+  return _escribirMaestro(`/maestros/${entidadPlural}/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(payload),
   });
 }
 
 export async function deactivateMaestro(entidadPlural, id) {
-  return motoredFetchJson(`/maestros/${entidadPlural}/${id}`, {
+  return _escribirMaestro(`/maestros/${entidadPlural}/${id}`, {
     method: 'DELETE',
   });
 }
 
 export async function reactivateMaestro(entidadPlural, id) {
-  return motoredFetchJson(`/maestros/${entidadPlural}/${id}/reactivar`, {
+  return _escribirMaestro(`/maestros/${entidadPlural}/${id}/reactivar`, {
     method: 'POST',
   });
 }
@@ -146,7 +155,7 @@ export async function validarCarga(entidadSingular, filas) {
  * siempre ({ filas }) y el resto de los maestros no cambia.
  */
 export async function subirCarga(entidadSingular, filas, opciones = {}) {
-  return motoredFetchJson(`/maestros/${entidadSingular}/carga`, {
+  return _escribirMaestro(`/maestros/${entidadSingular}/carga`, {
     method: 'POST',
     body: JSON.stringify({ filas, ..._confirmacionesBody(opciones) }),
   });
@@ -241,7 +250,7 @@ export async function subirCargaArchivo(entidadSingular, file, opciones = {}) {
   if (opciones.codigosInactivar?.length) {
     formData.append('codigos_inactivar', JSON.stringify(opciones.codigosInactivar));
   }
-  return motoredFetchJson(`/maestros/${entidadSingular}/carga/excel${qs ? `?${qs}` : ''}`, {
+  return _escribirMaestro(`/maestros/${entidadSingular}/carga/excel${qs ? `?${qs}` : ''}`, {
     method: 'POST',
     body: formData,
   });
