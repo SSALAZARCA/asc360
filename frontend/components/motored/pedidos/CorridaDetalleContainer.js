@@ -1,5 +1,5 @@
 'use client';
-/** Corrida detail screen: header, data age, progress (while calculating), lifecycle actions and the Tiendas table. */
+/** Corrida detail screen: header, data age, progress (while calculating), the corrida totals, lifecycle actions and the Tiendas table. */
 import { useCallback, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import usePedidosGate from '../../../lib/motored/usePedidosGate';
@@ -21,6 +21,7 @@ import TopeResumenCorrida from './TopeResumenCorrida';
 import ComparacionContainer from './ComparacionContainer';
 import ConsolidadoContainer from './ConsolidadoContainer';
 import CorridaTabs from './CorridaTabs';
+import TotalesCorrida from './TotalesCorrida';
 import { estaCalculando, fechaCorta } from './reglas';
 import { errorStyle, mutedStyle, volverStyle } from './styles';
 
@@ -82,6 +83,7 @@ export default function CorridaDetalleContainer({ corridaId }) {
         <>
           <Cabecera corrida={data} onTerminal={reload} />
           <AntiguedadDatos antiguedad={data.antiguedad} advertencias={data.advertencias} />
+          <TotalesCorrida totales={data.totales_corrida} />
           <CorridaTabs tabs={data.es_escenario ? [...PESTANAS, PESTANA_COMPARAR] : PESTANAS} value={pestana} onChange={setPestana} />
           {pestana === 'consolidado' && <ConsolidadoContainer corridaId={corridaId} />}
           {pestana === 'comparar' && data.es_escenario && <ComparacionContainer escenario={data} />}

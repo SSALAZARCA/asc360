@@ -505,11 +505,14 @@ async def test_the_detail_reads_the_corrida_sucursales_resumen_and_cargas():
         estado="APLICADO", periodo_desde=None, periodo_hasta=None)
     db = FakeAsyncSession(execute_queue=[
         [_corrida()], [_suc(SUC_A, "UNO", 1)],
-        [_res(SUC_A, "TOTAL", "10", 2, "100")], [carga], [], []])
+        [_res(SUC_A, "TOTAL", "10", 2, "100")], [carga], [], [], []])
 
     detalle = await cq.detalle(db, fx.CORRIDA_ID, None)
 
-    assert len(db.executed_statements) == 6
+    assert len(db.executed_statements) == 7
+    totales = _sql(db.executed_statements[-1])
+    assert "count(DISTINCT corrida_linea.codigo_referencia)" in totales
+    assert "sum(corrida_linea.valor_pedido)" in totales
     assert detalle["codigo"] == "PED-2026-S39-001"
     assert detalle["sucursales"][0]["nombre"] == "UNO"
     assert detalle["totales"]["unidades"] == D("10")
@@ -525,12 +528,13 @@ async def test_an_unknown_corrida_has_no_detail_and_no_more_queries():
 
 async def test_a_scoped_detail_restricts_sucursales_and_resumen():
     db = FakeAsyncSession(execute_queue=[
-        [_corrida()], [_suc(SUC_A, "UNO", 1)], [], [], [], []])
+        [_corrida()], [_suc(SUC_A, "UNO", 1)], [], [], [], [], []])
 
     await cq.detalle(db, fx.CORRIDA_ID, frozenset({SUC_A}))
 
-    corrida, sucursales, resumen, cargas, a_pedir, _ = (
+    corrida, sucursales, resumen, cargas, a_pedir, _, totales = (
         _sql(s) for s in db.executed_statements)
+    assert f"corrida_linea.sucursal_id IN ('{SUC_A}')" in totales
     assert "EXISTS" in corrida
     assert f"corrida_sucursal.sucursal_id IN ('{SUC_A}')" in sucursales
     assert f"corrida_resumen.sucursal_id IN ('{SUC_A}')" in resumen
@@ -540,7 +544,7 @@ async def test_a_scoped_detail_restricts_sucursales_and_resumen():
 
 async def test_an_unrestricted_detail_adds_no_scope_to_any_query():
     db = FakeAsyncSession(execute_queue=[
-        [_corrida()], [_suc(SUC_A, "UNO", 1)], [], [], [], []])
+        [_corrida()], [_suc(SUC_A, "UNO", 1)], [], [], [], [], []])
 
     await cq.detalle(db, fx.CORRIDA_ID, None)
 

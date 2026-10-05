@@ -270,11 +270,11 @@ async def test_the_detail_reads_the_last_event_of_each_tienda():
     db = FakeAsyncSession(execute_queue=[
         [_corrida()], [_suc(SUC_A, "UNO", 1, estado_pedido="CERRADO")],
         [], [], [_pedir(SUC_A, "AF", "10", "1000")],
-        [(SUC_A, "CERRADO", "Maria", AHORA)]])
+        [(SUC_A, "CERRADO", "Maria", AHORA)], []])
 
     detalle = await cq.detalle(db, fx.CORRIDA_ID, None)
 
-    assert len(db.executed_statements) == 6
+    assert len(db.executed_statements) == 7
     assert detalle["sucursales"][0]["ultimo_evento"] == {
         "evento": "CERRADO", "usuario": "Maria", "creado_en": AHORA}
     sql = _sql(db.executed_statements[5])
@@ -285,7 +285,7 @@ async def test_the_detail_reads_the_last_event_of_each_tienda():
 
 async def test_the_sucursal_query_reads_the_pedido_state():
     db = FakeAsyncSession(execute_queue=[
-        [_corrida()], [_suc(SUC_A, "UNO", 1)], [], [], [], []])
+        [_corrida()], [_suc(SUC_A, "UNO", 1)], [], [], [], [], []])
 
     await cq.detalle(db, fx.CORRIDA_ID, None)
 
@@ -295,7 +295,7 @@ async def test_the_sucursal_query_reads_the_pedido_state():
 
 async def test_a_scoped_detail_scopes_the_events_too():
     db = FakeAsyncSession(execute_queue=[
-        [_corrida()], [_suc(SUC_A, "UNO", 1)], [], [], [], []])
+        [_corrida()], [_suc(SUC_A, "UNO", 1)], [], [], [], [], []])
 
     await cq.detalle(db, fx.CORRIDA_ID, frozenset({SUC_A}))
 

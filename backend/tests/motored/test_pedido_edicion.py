@@ -496,7 +496,7 @@ async def test_the_history_of_a_line_outside_the_corrida_is_none():
 async def test_the_detail_also_reads_a_pedir_grouped_by_sucursal_and_class():
     db = FakeAsyncSession(execute_queue=[
         [_corrida()], [_suc(fx.SUC_A, "UNO", 1)], [], [],
-        [_fila_a_pedir(fx.SUC_A, "AF", "60", 2, "600")], []])
+        [_fila_a_pedir(fx.SUC_A, "AF", "60", 2, "600")], [], []])
 
     detalle = await cq.detalle(db, fx.CORRIDA_ID, None)
 

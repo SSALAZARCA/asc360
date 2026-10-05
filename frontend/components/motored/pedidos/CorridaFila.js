@@ -7,7 +7,8 @@ import ResumenPedidosChip from './ResumenPedidosChip';
 import ProgresoCorrida from './ProgresoCorrida';
 import PruebaBadge from './PruebaBadge';
 import { avisoAntiguedad, estaCalculando, fechaCorta, puedeAnular } from './reglas';
-import { mutedStyle, tdStyle } from './styles';
+import { mutedStyle, numStyle, tdStyle } from './styles';
+import { cifrasTotales } from './totales';
 
 const AVISO_STYLE = { display: 'inline-flex', alignItems: 'center', fontSize: '0.7rem', fontWeight: 700, color: 'var(--motored-warning, #d97706)' };
 const INVALIDADA_TEXTO = 'Datos invalidados: se anuló una carga que esta corrida usó, por eso ya no se puede cerrar ninguna tienda. Calcule una corrida nueva.';
@@ -59,6 +60,9 @@ export default function CorridaFila({ corrida, onOpen, onAnular, onTerminal }) {
       <td style={tdStyle}>{fechaCorta(corrida.fecha_corte)}</td>
       <td style={{ ...tdStyle, whiteSpace: 'normal' }}><Calculo corrida={corrida} onTerminal={onTerminal} /></td>
       <td style={tdStyle}><ResumenPedidosChip pedidos={corrida.pedidos} /></td>
+      {cifrasTotales(corrida.totales_corrida).map((cifra) => (
+        <td key={cifra.clave} style={{ ...tdStyle, ...numStyle }}>{cifra.valor}</td>
+      ))}
       <td style={{ ...tdStyle, ...mutedStyle }}>{fechaCorta(corrida.created_at)}</td>
     </tr>
   );

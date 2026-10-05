@@ -116,6 +116,15 @@ class AntiguedadPeor(BaseModel):
     supera_limite: bool
 
 
+class TotalesCorrida(BaseModel):
+    """The whole corrida: value and units to order (the sum of the
+    per-store "A pedir") and the distinct referencias ordered."""
+
+    valor_total: Decimal
+    referencias: int
+    unidades: Decimal
+
+
 class CorridaItem(BaseModel):
     id: uuid.UUID
     codigo: str
@@ -133,6 +142,8 @@ class CorridaItem(BaseModel):
     cerrada_en: Optional[datetime.datetime] = None
     pedidos: Optional[ResumenPedidos] = None
     antiguedad_peor: Optional[AntiguedadPeor] = None
+    # The whole corrida (all visible stores); null until it is calculated.
+    totales_corrida: Optional[TotalesCorrida] = None
 
 
 class PaginaCorridas(BaseModel):

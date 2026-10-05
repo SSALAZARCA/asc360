@@ -36,7 +36,7 @@ Let the owner load the corrected Sucursales file in one go, and model physical p
 - [x] T4 (edit secondary bodegas from the Sucursales screen)
 - [x] T6 (REINSTATED, owner confirmed verbatim): VENTAS ingest resolves the sucursal by the row's C.O.; bodegas_excluidas checked first; bodega only as fallback for files without C.O.; unknown C.O. = row error; non-store C.O. (MR/PAF01) needs an exclusion. No re-upload of old ventas. Runs after T5 (single writer); coordinate ventas.py with the KPI session (R6).
 - [ ] T7 (presupuestos and vendedores recognize the store by C.O., name as fallback). KPI session files: coordinate; they may implement it.
-- [ ] T8 (per-store data-control report for the owner before the first pedido)
+- [-] T8 cancelled by the owner (2026-10-05, option A): review the first pedido in its BORRADOR state instead of a separate data-control screen
 - [x] T9 (BUG found while validating the owner file): the Sucursales upload and form never sync the `bodega` record of a store's PRINCIPAL bodega. A moved principal (BA071 → A07, BC111/BA011/... → new stores) keeps a stale or NULL `sucursal_id`, and secondaries chain to it via `bodega_principal`, so inventory resolves to the wrong store or none (MCD01, MCB11). Fix: when a store's principal is set or changed, upsert that bodega record with sucursal_id = store and bodega_principal = NULL, and re-point the old record. MUST land before the owner uploads.
 
 ## Constraints
@@ -143,3 +143,11 @@ Let the owner load the corrected Sucursales file in one go, and model physical p
   - "Crear como OTROS" creates the referencia, but the rejected row is NOT re-staged, so it only loads on the next carga.
   - Fix: show "Referencia creada: la fila entra en la próxima carga", and mark resolved rows.
   - The owner hit this with 90605-200000S.
+- 2026-10-05: the owner linked the associated stores in the screen. T8 cancelled (option A): the first pedido is reviewed in BORRADOR before closing and sending.
+- 2026-10-05: GAP found by the owner. The corrida preflight requires an APPLIED BACKORDER carga (and facturas and ingresos) within the age limit. A file with zero rows ends CON_ERRORES (`CODIGO_SIN_FILAS_VALIDAS`, `orquestador.py`), so when HMCL has no backorder there is no way to unblock the corrida. Pending owner decision: (A) an explicit "Sin backorder a esta fecha" declaration, or (B) make it a warning.
+- 2026-10-05: corrida totals.
+  - New `services/corridas/totales_corrida.py` computes the totals with the same rule as per-store "A pedir": sum of `pedido_final` and `valor_pedido` over non-excluded lines, plus distinct referencias with quantity > 0.
+  - Detail field `totales_corrida`, one extra read, last.
+  - The list gets the totals through a LATERAL join, with no extra query.
+  - KPI-style boxes in the corrida detail and three columns in the corridas list.
+  - Results: tests/motored 5706 passed; pg_real 645 passed; jest 1953 passed.

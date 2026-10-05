@@ -18,7 +18,7 @@ from datetime import date
 from typing import Any, Dict, FrozenSet, Iterable, List, Optional, Tuple
 from uuid import UUID
 
-from sqlalchemy import and_, exists, func, or_, select
+from sqlalchemy import and_, exists, func, or_, select, true
 from sqlalchemy.dialects.postgresql import distinct_on
 
 from app.motored.models.carga_archivo import CargaArchivo
@@ -35,6 +35,7 @@ from app.motored.services.corridas import (
     lecturas_pedido,
     pedido_tienda,
     proyecciones,
+    totales_corrida,
     valores,
 )
 
@@ -139,6 +140,9 @@ def _contar_sucursales(alcance: Alcance, solo_procesadas: bool):
 
 
 def _consulta_lista(alcance: Alcance):
+    """The page select; the corrida totals come from a LATERAL aggregate
+    per row (`totales_corrida`), still inside this one query."""
+    totales = totales_corrida.subconsulta_lista(Corrida.id, alcance)
     return select(
         Corrida.id, Corrida.codigo, Corrida.proveedor_id,
         Corrida.fecha_corte, Corrida.estado, Corrida.es_escenario,
@@ -147,7 +151,10 @@ def _consulta_lista(alcance: Alcance):
         Corrida.log[0]["nota"].astext.label("nota"),
         Corrida.seleccion_datos["antiguedad"].label("antiguedad_datos"),
         _contar_sucursales(alcance, False).label("sucursales_total"),
-        _contar_sucursales(alcance, True).label("sucursales_procesadas"))
+        _contar_sucursales(alcance, True).label("sucursales_procesadas"),
+        totales.c.valor_total, totales.c.referencias_total,
+        totales.c.unidades_total,
+    ).outerjoin(totales, true())
 
 
 async def listar(
@@ -168,7 +175,10 @@ async def listar(
         _consulta_lista(alcance).where(*filtros)
         .order_by(Corrida.created_at.desc(), Corrida.codigo.desc())
         .limit(limite).offset(offset))
-    items = [proyecciones.item_de_fila(f) for f in filas.all()]
+    items = [
+        {**proyecciones.item_de_fila(f),
+         "totales_corrida": totales_corrida.de_fila(f)}
+        for f in filas.all()]
     resumen = await pedido_tienda.resumen_pedidos(
         db, [item["id"] for item in items], alcance)
     for item in items:
@@ -205,9 +215,12 @@ async def detalle(
     eventos = await lecturas_pedido.ultimos_eventos(
         db, corrida_id, alcance)
     envios = await _envios(db, corrida_id, alcance, sucursales)
-    return proyecciones.armar_detalle(
+    cuerpo = proyecciones.armar_detalle(
         corrida, sucursales, resumen.scalars().all(), cargas.all(), alcance,
         a_pedir, eventos, envios)
+    cuerpo["totales_corrida"] = await totales_corrida.de_corrida(
+        db, corrida, alcance)
+    return cuerpo
 
 
 async def _envios(db, corrida_id: UUID, alcance: Alcance, sucursales) -> dict:

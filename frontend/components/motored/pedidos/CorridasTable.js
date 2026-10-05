@@ -4,6 +4,7 @@ import InfoTooltip from '../InfoTooltip';
 import MotoredTableScroll from '../MotoredTableScroll';
 import CorridaFila from './CorridaFila';
 import { thStyle } from './styles';
+import { AYUDA_REFERENCIAS, AYUDA_UNIDADES, AYUDA_VALOR } from './totales';
 
 const CORTE_TEXTO = 'Fecha de corte: el día hasta el que se toman las ventas y el inventario para calcular el pedido.';
 const CALCULO_TEXTO = 'Cálculo: avance del cálculo de la corrida. Cada tienda tiene después su propio pedido.';
@@ -31,6 +32,9 @@ export default function CorridasTable({ corridas, onOpen, onAnular, onTerminal }
             <Encabezado texto="Corte" ayuda={CORTE_TEXTO} />
             <Encabezado texto="Cálculo" ayuda={CALCULO_TEXTO} />
             <Encabezado texto="Pedidos" ayuda={PEDIDOS_TEXTO} />
+            <Encabezado texto="Valor total" ayuda={AYUDA_VALOR} />
+            <Encabezado texto="Referencias" ayuda={AYUDA_REFERENCIAS} />
+            <Encabezado texto="Unidades" ayuda={AYUDA_UNIDADES} />
             <Encabezado texto="Creada" />
           </tr>
         </thead>

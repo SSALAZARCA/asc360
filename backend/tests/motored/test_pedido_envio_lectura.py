@@ -172,8 +172,10 @@ async def test_the_envios_can_be_narrowed_to_one_tienda_and_to_the_scope():
 
 
 def _cola_detalle(sucursales, envios=None):
+    """Corrida, sucursales, resumen, cargas, a pedir, eventos, the
+    envios (only with a sent tienda) and the corrida totals (last)."""
     cola = [[_corrida()], sucursales, [], [], [], []]
-    return cola + ([envios] if envios is not None else [])
+    return cola + ([envios] if envios is not None else []) + [[]]
 
 
 async def test_a_detail_with_a_sent_tienda_asks_one_extra_query_for_envios():
@@ -184,7 +186,7 @@ async def test_a_detail_with_a_sent_tienda_asks_one_extra_query_for_envios():
 
     detalle = await cq.detalle(db, fx.CORRIDA_ID, None)
 
-    assert len(db.executed_statements) == 7
+    assert len(db.executed_statements) == 8
     assert "FROM corrida_envio" in _sql(db.executed_statements[6])
     uno, dos = detalle["sucursales"]
     assert uno["envio"] == BLOQUE and dos["envio"] is None
@@ -197,7 +199,7 @@ async def test_a_detail_with_no_sent_tienda_pays_for_no_extra_query():
 
     detalle = await cq.detalle(db, fx.CORRIDA_ID, None)
 
-    assert len(db.executed_statements) == 6
+    assert len(db.executed_statements) == 7
     assert [s["envio"] for s in detalle["sucursales"]] == [None, None]
 
 
