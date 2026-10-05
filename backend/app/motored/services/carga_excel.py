@@ -115,6 +115,13 @@ ALIASES_POR_ENTIDAD: Dict[str, List[Dict[str, Any]]] = {
             "key": "fecha_apertura", "label": "Fecha de apertura", "required": False,
             "aliases": ["fecha_apertura", "fecha apertura"],
         },
+        # Sí/No estricto: el texto llega crudo y `validators` lo interpreta
+        # (un valor desconocido es error de fila, nunca un False silencioso).
+        {
+            "key": "activa", "label": "Activa", "required": False,
+            "type": "string",
+            "aliases": ["activa", "activo", "estado activa", "activa (si/no)"],
+        },
     ],
     # Nota de alcance (idéntica a la del frontend): la sucursal de cada
     # bodega NO se asigna por Excel en esta carga masiva.

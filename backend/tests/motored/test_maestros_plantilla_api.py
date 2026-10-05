@@ -81,6 +81,7 @@ def test_plantilla_sucursal_returns_expected_headers_in_order():
     header = _header_row(response.content)
     assert header[0] == "Nombre"
     assert "SIC" in header
+    assert header[-1] == "Activa"
 
 
 def test_plantilla_bodega_and_proveedor_also_round_trip():

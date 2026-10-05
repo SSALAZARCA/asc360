@@ -93,7 +93,10 @@ class TestResolverFilas:
 
         _, errores = await _resolver_relaciones(
             db, "sucursal",
-            [_fila("CALI", "BA061", "BA066"), _fila("PASTO", "BA070", "BA066")],
+            [
+                _fila("CALI", "BA061", "BA066"),
+                _fila("PASTO", "BA070", "BA066"),
+            ],
         )
 
         assert [e["fila"] for e in errores] == [2]
@@ -165,6 +168,81 @@ class TestResolverFilas:
         assert len(errores) == 1
         assert "PASTO" in errores[0]["motivo"]
         assert "Quítela primero" in errores[0]["motivo"]
+
+    async def test_code_released_by_its_owner_later_can_move(self):
+        pasto = _suc_db("PASTO", "BA070")
+        db = FakeAsyncSession(execute_queue=[[pasto], [("BA066", pasto[0])]])
+
+        _, errores = await _resolver_relaciones(
+            db, "sucursal",
+            [_fila("CALI", "BA061", "BA066"), _fila("PASTO", "BA070", "")],
+        )
+
+        assert errores == []
+
+    async def test_code_released_by_its_owner_earlier_can_move(self):
+        pasto = _suc_db("PASTO", "BA070")
+        db = FakeAsyncSession(execute_queue=[[pasto], [("BA066", pasto[0])]])
+
+        _, errores = await _resolver_relaciones(
+            db, "sucursal",
+            [
+                _fila("PASTO", "BA070", "BA067"),
+                _fila("CALI", "BA061", "BA066"),
+            ],
+        )
+
+        assert errores == []
+
+    async def test_owner_row_without_the_column_does_not_release(self):
+        pasto = _suc_db("PASTO", "BA070")
+        db = FakeAsyncSession(execute_queue=[[pasto], [("BA066", pasto[0])]])
+
+        _, errores = await _resolver_relaciones(
+            db, "sucursal",
+            [_fila("CALI", "BA061", "BA066"), _fila("PASTO", "BA070")],
+        )
+
+        assert [e["fila"] for e in errores] == [1]
+        assert "Quítela primero" in errores[0]["motivo"]
+
+    async def test_owner_that_still_lists_the_code_keeps_it_a_row_error(self):
+        pasto = _suc_db("PASTO", "BA070")
+        db = FakeAsyncSession(execute_queue=[[pasto], [("BA066", pasto[0])]])
+
+        _, errores = await _resolver_relaciones(
+            db, "sucursal",
+            [
+                _fila("CALI", "BA061", "BA066"),
+                _fila("PASTO", "BA070", "BA066"),
+            ],
+        )
+
+        assert errores != []
+        assert all("BA066" in e["motivo"] for e in errores)
+
+    async def test_owner_principal_still_in_effect_cannot_move(self):
+        pasto = _suc_db("PASTO", "BA070")
+        db = FakeAsyncSession(execute_queue=[[pasto], [("BA070", pasto[0])]])
+
+        _, errores = await _resolver_relaciones(
+            db, "sucursal",
+            [_fila("CALI", "BA061", "BA070"), _fila("PASTO", "BA070", "")],
+        )
+
+        assert [e["fila"] for e in errores] == [1]
+        assert "bodega principal" in errores[0]["motivo"].lower()
+
+    async def test_old_principal_replaced_and_released_can_move(self):
+        pasto = _suc_db("PASTO", "BA070")
+        db = FakeAsyncSession(execute_queue=[[pasto], [("BA070", pasto[0])]])
+
+        _, errores = await _resolver_relaciones(
+            db, "sucursal",
+            [_fila("CALI", "BA061", "BA070"), _fila("PASTO", "BA071", "")],
+        )
+
+        assert errores == []
 
     async def test_secondary_linked_in_db_to_the_same_sucursal_is_fine(self):
         cali = _suc_db("CALI", "BA061")
@@ -317,6 +395,38 @@ class TestAplicar:
         assert resultado.ok is True
         assert resultado.bodegas_secundarias is None
         assert db.added_of_type(Bodega) == []
+
+    @pytest.mark.parametrize("cali_first", [True, False])
+    async def test_bodega_moves_between_stores_in_one_upload(self, cali_first):
+        cali = _sucursal("CALI", "BA061")
+        pasto = _sucursal("PASTO", "BA070")
+        movida = _bodega("BA066", pasto.id, "BA070")
+        filas = [_fila("CALI", "BA061", "BA066"), _fila("PASTO", "BA070", "")]
+        upserts = [[cali], [pasto]]
+        if not cali_first:
+            filas.reverse()
+            upserts.reverse()
+        sucursales = [
+            (cali.id, "CALI", "BA061"), (pasto.id, "PASTO", "BA070"),
+        ]
+        # resolver: sucursales, bodegas | upserts | apply: bodegas
+        db = FakeAsyncSession(
+            execute_queue=[
+                sucursales, [("BA066", pasto.id)], *upserts, [movida],
+            ]
+        )
+
+        resultado = await _resolver_y_procesar_carga(
+            db, "sucursal", filas, USER_ID
+        )
+
+        assert resultado.ok is True
+        assert movida.sucursal_id == cali.id
+        assert movida.bodega_principal == "BA061"
+        resumen = resultado.bodegas_secundarias
+        assert resumen.vinculadas == [{"sucursal": "CALI", "bodega": "BA066"}]
+        assert resumen.desvinculadas == []
+        assert db.committed is True
 
     async def test_row_error_rejects_the_whole_file_and_writes_nothing(self):
         pasto = _suc_db("PASTO", "BA070")

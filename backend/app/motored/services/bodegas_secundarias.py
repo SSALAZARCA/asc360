@@ -24,9 +24,14 @@ son sus secundarias y las que tenía vinculadas y ya no figuran quedan con
 Una celda en blanco desvincula todas las de esa tienda. Las sucursales que no
 están en el archivo no se tocan. La fila `bodega` de la propia bodega principal
 nunca se desvincula.
+
+Mover una secundaria de tienda en UNA sola carga: un código vinculado a otra
+tienda se acepta si el mismo archivo lo libera, es decir, si la tienda dueña
+también viene en el archivo con la columna y ya no lo lista. Si sigue siendo
+su bodega principal (la del archivo o, en blanco, la guardada) se rechaza.
 """
 import uuid
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 
 from sqlalchemy import or_, select
 
@@ -119,11 +124,38 @@ async def resolver_filas(
     return resueltas, errores
 
 
+def _codigos_liberados(
+    filas: List[Dict[str, Any]],
+    sucursales_db: Sequence[Tuple[uuid.UUID, str, Optional[str]]],
+    bodegas_db: Dict[str, Optional[uuid.UUID]],
+) -> Set[str]:
+    """Códigos que el propio archivo libera: su tienda dueña viene en el
+    archivo CON la columna y ya no los lista. Si el código sigue siendo la
+    principal de esa tienda lo rechaza `_motivo_de_codigo`."""
+    id_por_nombre = {nombre: sid for sid, nombre, _ in sucursales_db}
+    liberados: Set[str] = set()
+    for fila in filas:
+        sucursal_id = id_por_nombre.get(_texto(fila.get("nombre")))
+        if sucursal_id is None or FILA_CLAVE not in fila:
+            continue
+        listados = set(fila[FILA_CLAVE])
+        liberados.update(
+            codigo for codigo, duena in bodegas_db.items()
+            if duena == sucursal_id and codigo not in listados
+        )
+    return liberados
+
+
 def _errores_de_codigos(
     filas: List[Dict[str, Any]],
     sucursales_db: Sequence[Tuple[uuid.UUID, str, Optional[str]]],
     bodegas_db: Dict[str, Optional[uuid.UUID]],
 ) -> List[Dict[str, Any]]:
+    liberados = _codigos_liberados(filas, sucursales_db, bodegas_db)
+    bodegas_db = {
+        codigo: duena for codigo, duena in bodegas_db.items()
+        if codigo not in liberados
+    }
     efectivas = _principales_efectivas(filas, sucursales_db)
     principal_de: Dict[str, str] = {}
     for nombre, principal in efectivas.items():
@@ -205,6 +237,8 @@ async def aplicar(
     bodegas listadas y las ya vinculadas a esas sucursales."""
     codigos = {codigo for _, lista in entradas for codigo in lista}
     ids = [sucursal.id for sucursal, _ in entradas]
+    # A code another store of the file lists is moving, not being released:
+    # skipping it keeps the result identical whatever the row order is.
     condiciones = [Bodega.sucursal_id.in_(ids)]
     if codigos:
         condiciones.append(Bodega.codigo.in_(codigos))
@@ -226,7 +260,11 @@ async def aplicar(
                 )
             resumen.vinculadas.append({"sucursal": sucursal.nombre, "bodega": codigo})
         for bodega in existentes:
-            if bodega.sucursal_id == sucursal.id and bodega.codigo != principal and bodega.codigo not in listados:
+            if (
+                bodega.sucursal_id == sucursal.id
+                and bodega.codigo != principal
+                and bodega.codigo not in codigos
+            ):
                 await maestros.update_bodega(
                     db, bodega, BodegaUpdate(sucursal_id=None, bodega_principal=None), usuario_id
                 )

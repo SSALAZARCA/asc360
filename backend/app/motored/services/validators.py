@@ -19,6 +19,7 @@ from app.motored.schemas.proveedor import ProveedorCreate
 from app.motored.schemas.referencia import ReferenciaCreate
 from app.motored.schemas.sucursal import SucursalCreate
 from app.motored.schemas.vendedor import VendedorCreate, limpiar_cedula, normalizar_cargo_de_fila
+from app.motored.services.texto import normalizar_encabezado
 
 Row = Dict[str, Any]
 RowError = Dict[str, Any]
@@ -124,6 +125,30 @@ def _apply_entity_normalizations(entidad: str, cleaned: Row) -> List[str]:
     return warnings
 
 
+_ACTIVA_SI = frozenset({"si", "s", "yes", "y", "true", "1", "x"})
+_ACTIVA_NO = frozenset({"no", "n", "false", "0"})
+
+
+def _activa_error(entidad: str, cleaned: Row) -> Optional[str]:
+    """Interpreta la columna "Activa" de una sucursal IN-PLACE con un Sí/No
+    estricto (sin importar mayúsculas ni tildes). A diferencia de
+    `carga_excel._to_boolean`, un texto desconocido NO se vuelve False: es
+    un error de fila, porque inactivar una tienda por un typo no se nota.
+    Una celda en blanco ya no llega acá (`_strip_blank_values`). Retorna el
+    motivo del error, o `None`."""
+    valor = cleaned.get("activa")
+    if entidad != "sucursal" or valor is None or isinstance(valor, bool):
+        return None
+    texto = normalizar_encabezado(valor)
+    if texto in _ACTIVA_SI or texto in _ACTIVA_NO:
+        cleaned["activa"] = texto in _ACTIVA_SI
+        return None
+    return (
+        f"Columna 'Activa': el valor '{valor}' no es válido. "
+        "Escriba Sí o No, o deje la celda en blanco."
+    )
+
+
 def _schema_validation_error(entidad: str, cleaned: Row) -> Optional[str]:
     """Un campo requerido presente pero con formato inválido (p.ej.
     `proveedor_id: "no-es-un-uuid"`, `precio_normal: "abc"`) pasa el chequeo
@@ -189,10 +214,8 @@ def validate_rows(entidad: str, rows: List[Row]) -> Tuple[List[Row], List[RowErr
       once").
 
     Un `errores` no vacío es la señal de "todo o nada": la fila-completa
-    debe rechazarse SIN escribir nada (esa decisión la toma
-    `services/carga.py`, esta función solo reporta). Solo orquesta el
-    orden -- ver `_strip_blank_values`/`_apply_entity_normalizations`/
-    `_schema_validation_error` para el detalle de cada paso.
+    debe rechazarse SIN escribir nada (lo decide `services/carga.py`;
+    esta función solo reporta y orquesta el orden de los pasos).
     """
     valid_rows: List[Row] = []
     errors: List[RowError] = []
@@ -214,9 +237,10 @@ def validate_rows(entidad: str, rows: List[Row]) -> Tuple[List[Row], List[RowErr
         cleaned = _strip_blank_values(dict(row))
         warnings = _apply_entity_normalizations(entidad, cleaned)
 
-        schema_error = _schema_validation_error(entidad, cleaned)
-        if schema_error:
-            errors.append({"fila": index, "motivo": schema_error})
+        row_error = _activa_error(entidad, cleaned)
+        row_error = row_error or _schema_validation_error(entidad, cleaned)
+        if row_error:
+            errors.append({"fila": index, "motivo": row_error})
             continue
 
         cleaned["_warnings"] = warnings

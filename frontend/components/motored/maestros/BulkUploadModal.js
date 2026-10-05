@@ -93,6 +93,13 @@ const COLUMNAS_POR_ENTIDAD = {
       aliases: ['fecha_apertura', 'fecha apertura'],
       help: 'Fecha en que la sucursal abrió operaciones. Se usa más adelante para no contar meses en los que todavía no existía.',
     },
+    // No `type: 'boolean'` on purpose: the backend validates Sí/No strictly
+    // and rejects any other text, so the raw value is sent untouched.
+    {
+      key: 'activa', label: 'Activa', required: false,
+      aliases: ['activa', 'activo', 'estado activa', 'activa (si/no)'],
+      help: 'Escribí "Sí" si la sucursal opera o "No" si está cerrada. Vacío conserva el estado actual (una sucursal nueva queda activa). Cualquier otro texto es un error.',
+    },
   ],
   // Nota de alcance: la sucursal de cada bodega NO se asigna por CSV en
   // esta carga masiva (el back-end espera el `id` real de la sucursal, no

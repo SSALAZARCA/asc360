@@ -16,6 +16,8 @@ class SucursalCreate(BaseModel):
     departamento: Optional[str] = None
     ciudad: Optional[str] = None
     fecha_apertura: Optional[date] = None
+    # None = not provided: a new store is created active.
+    activa: Optional[bool] = None
 
 
 class SucursalUpdate(BaseModel):
@@ -28,6 +30,7 @@ class SucursalUpdate(BaseModel):
     departamento: Optional[str] = None
     ciudad: Optional[str] = None
     fecha_apertura: Optional[date] = None
+    activa: Optional[bool] = None
 
 
 class SucursalRead(BaseModel):

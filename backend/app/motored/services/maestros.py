@@ -155,11 +155,30 @@ async def create_sucursal(db, data: SucursalCreate, usuario_id: Optional[uuid.UU
         departamento=data.departamento,
         ciudad=data.ciudad,
         fecha_apertura=data.fecha_apertura,
+        activa=data.activa is not False,
         created_by=usuario_id,
     )
     db.add(sucursal)
     auditoria.audit_create(db, "sucursal", sucursal.id, usuario_id)
+    if not sucursal.activa:
+        auditoria.audit_deactivate(db, "sucursal", sucursal.id, usuario_id)
     return sucursal
+
+
+def _set_activa_sucursal(
+    db, sucursal: Sucursal, activa: Optional[bool],
+    usuario_id: Optional[uuid.UUID],
+) -> None:
+    """Changes the active flag with the same audit entry as the
+    deactivate/reactivate buttons. `None` or an unchanged value is a no-op
+    (a blank "Activa" cell keeps the stored value)."""
+    if activa is None or activa == sucursal.activa:
+        return
+    sucursal.activa = activa
+    if activa:
+        auditoria.audit_reactivate(db, "sucursal", sucursal.id, usuario_id)
+    else:
+        auditoria.audit_deactivate(db, "sucursal", sucursal.id, usuario_id)
 
 
 async def update_sucursal(
@@ -168,6 +187,8 @@ async def update_sucursal(
     update_dict = data.model_dump(exclude_unset=True)
     if "nombre" in update_dict and update_dict["nombre"] is not None:
         update_dict["nombre"] = normalize_sucursal_nombre(update_dict["nombre"])
+    activa = update_dict.pop("activa", None)
+    _set_activa_sucursal(db, sucursal, activa, usuario_id)
     before, after = _apply_and_diff(sucursal, update_dict)
     auditoria.diff_and_audit(db, "sucursal", sucursal.id, usuario_id, before, after)
     return sucursal

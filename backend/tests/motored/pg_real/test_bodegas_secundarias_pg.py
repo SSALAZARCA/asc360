@@ -145,3 +145,31 @@ async def test_una_bodega_de_otra_tienda_se_rechaza_sin_escribir(sesion):
     assert resultado.ok is False
     assert "Quítela primero" in resultado.errores[0].motivo
     assert await _sucursal(sesion, f"DOS {s}") is None
+
+
+@pytest.mark.parametrize("destino_primero", [True, False])
+async def test_mover_una_secundaria_de_tienda_en_una_sola_carga(
+    sesion, destino_primero
+):
+    s = _sufijo()
+    origen, destino, sec = f"ORIGEN {s}", f"DESTINO {s}", f"A{s}"
+    await _subir(
+        sesion, _fila(origen, f"P1{s}", sec), _fila(destino, f"P2{s}", "")
+    )
+    await sesion.flush()
+
+    filas = [_fila(destino, f"P2{s}", sec), _fila(origen, f"P1{s}", "")]
+    if not destino_primero:
+        filas.reverse()
+    resultado = await _subir(sesion, *filas)
+    await sesion.flush()
+
+    assert resultado.ok is True
+    movida = await _bodega(sesion, sec)
+    assert movida.sucursal_id == (await _sucursal(sesion, destino)).id
+    assert movida.bodega_principal == f"P2{s}"
+    assert resultado.bodegas_secundarias.desvinculadas == []
+    cache = await resolucion.construir_cache(sesion)
+    assert resolucion.resolver_sucursal_por_codigo_o_nombre(
+        cache, sec, None
+    ) == (await _sucursal(sesion, destino)).id
