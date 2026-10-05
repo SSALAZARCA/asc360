@@ -30,7 +30,8 @@ Let the owner load the corrected Sucursales file in one go, and model physical p
 
 - [x] T1
 - [x] T2
-- [ ] T3
+- [x] T3
+- [ ] T4 (edit secondary bodegas from the Sucursales screen)
 
 ## Constraints
 - **Python 3.11, gga style:** lines of 79 characters or fewer, functions of 50 lines or fewer, no mid-file imports.
@@ -57,3 +58,12 @@ Let the owner load the corrected Sucursales file in one go, and model physical p
   - Form select and table column in Sucursales.
   - Health checks: `asociada_principal_inactiva` and `asociada_activa` are warnings. `sucursal_sin_sic` now skips associated stores.
   - Results: tests/motored 5432 passed (after updating the 2 head-pin tests); pg_real 547 passed, 2 skipped (run with `-m pg_real`); alembic downgrade -1 and upgrade head both OK; jest 1851 passed. The parent spot check passed 67.
+- 2026-10-04: T4 added by the owner: edit a store's secondary bodegas from the Sucursales screen (add/remove, same rules as the upload: no duplicates across stores, not another store's principal). Route: delegated writer, after T3, so only one writer runs at a time.
+- 2026-10-04: T4 requirement: swapping a store's principal and secondary bodega (e.g. Quilichao BA071 <-> BA161) must work in ONE save, validated against the final state.
+- 2026-10-04: T3 done.
+  - Groups are frozen in `seleccion_datos["grupos"]` when the corrida is created.
+  - `cargar_entradas` queries `.in_(miembros)` and merges tránsito across the group.
+  - `_resolver_sucursales` keeps only principals. An explicitly selected associated store is rejected with E-CORRIDA-011.
+  - Reproduction is unchanged: it uses the stored line inputs.
+  - Results: tests/motored 5445 passed; pg_real 552 passed, 2 skipped. RED was observed on HEAD.
+  - Pending: the corrida store picker in the frontend may still list associated stores. That goes into T4.

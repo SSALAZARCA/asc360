@@ -81,8 +81,11 @@ class Sesion(FakeAsyncSession):
             raise self._errores_flush.pop(0)
 
 
-def _sucursal(sucursal_id, nombre, activa=True):
-    return SimpleNamespace(id=sucursal_id, nombre=nombre, activa=activa)
+def _sucursal(sucursal_id, nombre, activa=True, principal=None):
+    return SimpleNamespace(
+        id=sucursal_id, nombre=nombre, activa=activa,
+        principal_id=None if principal is None else principal[0],
+        principal_nombre=None if principal is None else principal[1])
 
 
 def _params(sucursales=(SUC_A, SUC_B), filas=(), overrides=None):
@@ -162,10 +165,15 @@ def entorno(monkeypatch):
     return estado
 
 
-def _cola_crear(ultimo_codigo=None, sucursales=None):
+def _cola_crear(ultimo_codigo=None, sucursales=None, principales=None):
+    """Sucursales elegidas, el mapa `principal_de` y el último código."""
     sucursales = sucursales if sucursales is not None else [
         _sucursal(SUC_B, "B SUCURSAL"), _sucursal(SUC_A, "A SUCURSAL")]
-    return [sucursales, [] if ultimo_codigo is None else [ultimo_codigo]]
+    if principales is None:
+        principales = [(fila.id, None) for fila in sucursales]
+    return [
+        sucursales, principales,
+        [] if ultimo_codigo is None else [ultimo_codigo]]
 
 
 async def _crear(db, **kwargs):
@@ -315,6 +323,71 @@ async def test_a_network_without_active_sucursales_is_rejected(entorno):
         await _crear(db)
 
     assert error.value.codigo == codigos.E_CORRIDA_SUCURSAL_INVALIDA
+
+
+SUC_X, SUC_Y = uuid.UUID(int=103), uuid.UUID(int=104)
+
+
+def _sql_de(sentencia) -> str:
+    return str(sentencia.compile(
+        dialect=postgresql.dialect(),
+        compile_kwargs={"literal_binds": True}))
+
+
+async def test_the_default_selection_leaves_out_associated_stores(entorno):
+    db = Sesion(execute_queue=_cola_crear())
+
+    await _crear(db)
+
+    consulta = _sql_de(db.executed_statements[0])
+    assert "sucursal.principal_id IS NULL" in consulta
+    assert "sucursal.activa IS true" in consulta
+
+
+async def test_an_explicit_associated_store_is_rejected_naming_its_principal(
+        entorno):
+    db = Sesion(execute_queue=[[
+        _sucursal(SUC_X, "PUNTO NORTE ", principal=(SUC_A, "A SUCURSAL ")),
+        _sucursal(SUC_A, "A SUCURSAL")]])
+
+    with pytest.raises(pe.ErrorCorrida) as error:
+        await _crear(db, sucursal_ids=[SUC_A, SUC_X])
+
+    assert error.value.codigo == codigos.E_CORRIDA_SUCURSAL_INVALIDA
+    assert (
+        "La tienda PUNTO NORTE está asociada a A SUCURSAL: su pedido se "
+        "calcula en A SUCURSAL") in error.value.mensaje
+    assert db.added == []
+
+
+async def test_an_inactive_associated_store_is_rejected_as_associated(
+        entorno):
+    db = Sesion(execute_queue=[[_sucursal(
+        SUC_X, "CERRADO", False, principal=(SUC_A, "A SUCURSAL"))]])
+
+    with pytest.raises(pe.ErrorCorrida) as error:
+        await _crear(db, sucursal_ids=[SUC_X])
+
+    assert "está asociada a A SUCURSAL" in error.value.mensaje
+    assert "inactiva" not in error.value.mensaje
+
+
+async def test_the_group_of_each_principal_is_frozen_on_the_corrida(
+        entorno):
+    db = Sesion(execute_queue=_cola_crear(principales=[
+        (SUC_A, None), (SUC_B, None), (SUC_Y, SUC_A), (SUC_X, SUC_A)]))
+
+    corrida = await _crear(db)
+
+    assert corrida.seleccion_datos["grupos"] == {
+        str(SUC_A): [str(SUC_X), str(SUC_Y)]}
+
+
+async def test_a_corrida_without_associated_stores_freezes_no_group(
+        entorno):
+    corrida = await _crear(Sesion(execute_queue=_cola_crear()))
+
+    assert corrida.seleccion_datos["grupos"] == {}
 
 
 async def test_a_future_corte_is_rejected_before_any_query(entorno):
@@ -741,6 +814,30 @@ async def test_the_context_uses_the_frozen_cortes_and_the_snapshot_days(
     assert ctx.dias_entre_pedidos == {SUC_A: 30, SUC_B: 30}
     assert ctx.mes_en_curso is None and ctx.consolidar is False
     assert ctx.resoluciones == {}
+
+
+async def test_the_loader_context_uses_the_frozen_group(calculo):
+    corrida = _corrida_congelada()
+    corrida.seleccion_datos["grupos"] = {str(SUC_A): [str(SUC_X)]}
+
+    db = _sesion_calculo(corrida)
+    await sv.calcular_corrida(db, corrida.id)
+
+    assert calculo.contextos[0].grupos == {SUC_A: (SUC_X,)}
+    assert calculo.contextos[0].miembros(SUC_A) == (SUC_A, SUC_X)
+    assert calculo.contextos[0].miembros(SUC_B) == (SUC_B,)
+    assert len(db.executed_statements) == 2
+
+
+async def test_an_old_corrida_without_a_frozen_group_runs_single_stores(
+        calculo):
+    corrida = _corrida_congelada()
+    corrida.seleccion_datos.pop("grupos", None)
+
+    await sv.calcular_corrida(_sesion_calculo(corrida), corrida.id)
+
+    assert calculo.contextos[0].grupos == {}
+    assert calculo.contextos[0].miembros(SUC_A) == (SUC_A,)
 
 
 async def test_the_frozen_mes_en_curso_reaches_the_loader_context(calculo):

@@ -7,7 +7,11 @@ ADR-5/ADR-9, decisiones #14 y #16): servicio de la corrida.
   de antigüedades por tipo) y congela los insumos en la cabecera: parámetros
   con su fuente, maestro de sustitución, cortes, antigüedades y mes en curso
   efectivo. Los parámetros se resuelven AL CORTE (spec "version effective at
-  the corte"), no a la fecha de creación.
+  the corte"), no a la fecha de creación. Sólo las tiendas principales
+  tienen pedido: una asociada (`sucursal.principal_id`) nunca entra, y el
+  grupo de cada principal (sus asociadas) queda congelado en
+  `seleccion_datos["grupos"]`; el cálculo lee ese congelado, nunca la
+  asociación viva.
 - `calcular_corrida` es el recorrido directo en la transacción del llamador.
   El job de S6b (`ejecucion.py`) usa las mismas piezas (`preparar`,
   `procesar_sucursal`, `finalizar_corrida`) pero confirma cada sucursal,
@@ -45,11 +49,13 @@ from sqlalchemy.exc import (
     NotSupportedError,
     ProgrammingError,
 )
+from sqlalchemy.orm import aliased
 
 from app.motored.models.corrida import Corrida
 from app.motored.models.corrida_sucursal import CorridaSucursal
 from app.motored.models.sucursal import Sucursal
 from app.motored.services import parametros, parametros_claves as pc
+from app.motored.services import sucursal_grupo
 from app.motored.services.corridas import (
     bloqueos,
     cargador,
@@ -64,7 +70,7 @@ from app.motored.services.corridas import (
     vigencia,
 )
 from app.motored.services.corridas.cargador import (
-    ContextoCarga, ErrorCargador, indexar_transito)
+    ContextoCarga, ErrorCargador, grupos_desde_seleccion, indexar_transito)
 from app.motored.services.corridas.codigos import ErrorCorrida
 from app.motored.services.motor.motor import calcular_sucursal
 from app.motored.services.motor.sustitucion import resolver_cadenas
@@ -147,22 +153,43 @@ def _validar_overrides(overrides: Optional[Mapping[str, Any]]) -> None:
         raise ErrorCorrida(error.codigo, error.mensaje) from error
 
 
+def _motivo_fila(fila) -> Optional[str]:
+    """Por qué una sucursal elegida no puede tener pedido, o None. Una
+    asociada se rechaza activa o no: su pedido se calcula en la principal."""
+    nombre = fila.nombre.strip()
+    if fila.principal_id is not None:
+        principal = (fila.principal_nombre or "").strip()
+        return (
+            f"La tienda {nombre} está asociada a {principal}: su pedido se "
+            f"calcula en {principal}")
+    if not fila.activa:
+        return f"{nombre} está inactiva"
+    return None
+
+
 def _sucursales_invalidas(filas, sucursal_ids) -> List[str]:
     if sucursal_ids is None:
         return [] if filas else ["no hay sucursales activas"]
     existentes = {fila.id for fila in filas}
     faltan = [str(i) for i in sucursal_ids if i not in existentes]
-    inactivas = [fila.nombre.strip() for fila in filas if not fila.activa]
+    motivos = [_motivo_fila(fila) for fila in filas]
     return (
         [f"no existe {i}" for i in faltan]
-        + [f"{nombre} está inactiva" for nombre in inactivas])
+        + [motivo for motivo in motivos if motivo])
 
 
 async def _resolver_sucursales(db, sucursal_ids: Optional[Sequence[UUID]]):
-    """Filas `(id, nombre, activa)` en orden de nombre."""
-    consulta = select(Sucursal.id, Sucursal.nombre, Sucursal.activa)
+    """Filas `(id, nombre, activa, principal_id, principal_nombre)` en orden
+    de nombre. Sin selección: las activas que no están asociadas."""
+    principal = aliased(Sucursal)
+    consulta = select(
+        Sucursal.id, Sucursal.nombre, Sucursal.activa,
+        Sucursal.principal_id,
+        principal.nombre.label("principal_nombre"),
+    ).outerjoin(principal, principal.id == Sucursal.principal_id)
     if sucursal_ids is None:
-        consulta = consulta.where(Sucursal.activa.is_(True))
+        consulta = consulta.where(
+            Sucursal.activa.is_(True), Sucursal.principal_id.is_(None))
     else:
         consulta = consulta.where(Sucursal.id.in_(list(sucursal_ids)))
     filas = (await db.execute(consulta)).all()
@@ -184,11 +211,27 @@ async def _correr_preflight(db, fecha_corte: date, params):
             error.codigo, error.mensaje, error.detalle) from error
 
 
-def _seleccion_congelada(resultado) -> Dict[str, Any]:
+async def _grupos_congelados(
+    db, ids: Sequence[UUID],
+) -> Dict[str, List[str]]:
+    """`{principal: [asociadas ordenadas]}` de las sucursales de la corrida
+    que tienen asociadas (en texto, para el JSON de `seleccion_datos`)."""
+    mapa = await sucursal_grupo.principal_de(db)
+    grupos = {}
+    for principal_id in ids:
+        asociadas = sucursal_grupo.grupo_de(mapa, principal_id)[1:]
+        if asociadas:
+            grupos[str(principal_id)] = [str(i) for i in asociadas]
+    return grupos
+
+
+def _seleccion_congelada(resultado, grupos) -> Dict[str, Any]:
     """`seleccion_datos` con las antigüedades por tipo (decisión #16), los
-    cortes, el mes en curso efectivo y los avisos del preflight."""
+    cortes, el mes en curso efectivo, los avisos del preflight y el grupo
+    de cada tienda principal."""
     return {
         **resultado.seleccion_datos,
+        "grupos": grupos,
         "advertencias": [
             {"codigo": aviso.codigo, "mensaje": aviso.mensaje}
             for aviso in resultado.advertencias],
@@ -197,8 +240,9 @@ def _seleccion_congelada(resultado) -> Dict[str, Any]:
 
 def _valores_corrida(
     fecha_corte: date, proveedor, params, resultado, maestro,
-    overrides: Optional[Mapping[str, Any]], alcance: str, total: int,
-    usuario_id: Optional[UUID], nota: Optional[str] = None,
+    overrides: Optional[Mapping[str, Any]], alcance: str, grupos,
+    ids: Sequence[UUID], usuario_id: Optional[UUID],
+    nota: Optional[str] = None,
 ) -> Dict[str, Any]:
     creada: Dict[str, Any] = {
         "evento": "CREADA", "en": _ahora().isoformat(),
@@ -215,8 +259,8 @@ def _valores_corrida(
         "parametros_en_fecha": fecha_corte,
         "parametros_snapshot": params.snapshot,
         "maestro_sustitucion": persistencia.maestro_a_json(maestro),
-        "seleccion_datos": _seleccion_congelada(resultado),
-        "sucursales_total": total,
+        "seleccion_datos": _seleccion_congelada(resultado, grupos),
+        "sucursales_total": len(ids),
         "usuario_id": usuario_id,
         "log": [creada],
     }
@@ -239,6 +283,7 @@ async def crear_corrida(
     _validar_overrides(overrides)
     filas = await _resolver_sucursales(db, sucursal_ids)
     ids = [fila.id for fila in filas]
+    grupos = await _grupos_congelados(db, ids)
     proveedor = await cargador.cargar_proveedor_principal(db)
     params = await parametros_corrida.cargar_parametros_corrida(
         db, fecha_corte, ids, overrides)
@@ -246,7 +291,7 @@ async def crear_corrida(
     maestro = await cargador.cargar_maestro(db, proveedor.id)
     valores = _valores_corrida(
         fecha_corte, proveedor, params, resultado, maestro, overrides,
-        "TODAS" if sucursal_ids is None else "SELECCION", len(ids),
+        "TODAS" if sucursal_ids is None else "SELECCION", grupos, ids,
         usuario_id, nota)
     corrida = await _insertar_corrida(db, valores, bool(overrides))
     for orden, sucursal_id in enumerate(ids, start=1):
@@ -323,6 +368,7 @@ async def preparar(db, corrida: Corrida):
         resoluciones=(
             resolver_cadenas(maestro) if motor.consolidar_sustituidas
             else {}),
+        grupos=grupos_desde_seleccion(seleccion),
     )
     return motor, ctx
 

@@ -689,3 +689,86 @@ def test_the_context_resolves_the_chains_only_with_consolidation_on():
     assert encendido.consolidar is True
     assert encendido.resoluciones == resolver_cadenas(_maestro())
     assert encendido.resoluciones[REF_A].final_id == REF_B
+
+
+# --- Grupo de la tienda principal (sucursales asociadas) -----------------
+
+
+ASOCIADA = uuid.uuid4()
+
+
+async def test_the_group_reads_every_source_for_the_principal_and_members():
+    _, db = await _cargar(grupos={SUC: (ASOCIADA,)})
+
+    for posicion in range(4):
+        consulta = _sql(db.executed_statements[posicion])
+        assert str(SUC) in consulta and str(ASOCIADA) in consulta
+        assert str(OTRA_SUC) not in consulta
+        assert "activa" not in consulta
+
+
+async def test_the_group_rows_sum_by_reference_and_merge_the_transit():
+    resultado, db = await _cargar(
+        [_serie(REF_A, (5, 0, 0, 0, 0, 4))],
+        perdidas=[_serie(REF_A, (1, 0, 0, 0, 0, 2))],
+        inventario=[_total(REF_A, "27"), _total(REF_A, "3")],
+        backorder=[_total(REF_A, "6"), _total(REF_A, "1")],
+        referencias=[_attr(REF_A, "A-1")],
+        transito={SUC: {REF_A: Decimal(70)},
+                  ASOCIADA: {REF_A: Decimal(8), REF_B: Decimal(2)},
+                  OTRA_SUC: {REF_A: Decimal(100)}},
+        grupos={SUC: (ASOCIADA,)})
+
+    entrada = resultado.entradas[0]
+    assert entrada.ventas[-1] == Decimal(4) and entrada.perdidas[0] == 1
+    assert (entrada.inventario, entrada.transito, entrada.backorder) == (
+        Decimal(30), Decimal(78), Decimal(7))
+    for posicion in (0, 1, 2, 3):
+        assert "GROUP BY" in _sql(db.executed_statements[posicion])
+
+
+async def test_a_member_transit_counts_for_a_reference_of_the_principal():
+    resultado, _ = await _cargar(
+        [_serie(REF_A, (5, 0, 0, 0, 0, 0))],
+        referencias=[_attr(REF_A, "A-1")],
+        transito={ASOCIADA: {REF_A: Decimal(9)}},
+        grupos={SUC: (ASOCIADA,)})
+
+    assert resultado.entradas[0].transito == Decimal(9)
+
+
+async def test_without_a_frozen_group_the_store_reads_only_itself():
+    _, db = await _cargar(transito={ASOCIADA: {REF_A: Decimal(9)}})
+
+    for posicion in range(4):
+        assert str(ASOCIADA) not in _sql(db.executed_statements[posicion])
+    assert cg.ContextoCarga(
+        proveedor=PROVEEDOR, fecha_corte=CORTE,
+        corte_inventario=CORTE_INVENTARIO,
+        corte_backorder=CORTE_BACKORDER).miembros(SUC) == (SUC,)
+
+
+async def test_the_group_uses_the_principal_row_and_its_own_attributes():
+    fila = SimpleNamespace(
+        id=SUC, nombre="PRINCIPAL", sic="S", fecha_apertura=None,
+        dias_empaque=3, dias_transito=2, dias_seguridad=Decimal("2.5"))
+    db = FakeAsyncSession(execute_queue=[
+        [fila], [_serie(REF_A, (5, 0, 0, 0, 0, 0))], [], [], [],
+        [_attr(REF_A, "A-1")]])
+
+    datos = await cg.cargar_sucursal(db, SUC, _contexto(
+        dias_entre_pedidos={SUC: 7, ASOCIADA: 30},
+        grupos={SUC: (ASOCIADA,)}))
+
+    assert str(ASOCIADA) not in _sql(db.executed_statements[0])
+    assert datos.atributos.sucursal_id == SUC
+    assert datos.atributos.nombre == "PRINCIPAL"
+    assert datos.atributos.dias_entre_pedidos == Decimal(7)
+
+
+def test_the_frozen_groups_are_read_back_from_the_seleccion():
+    seleccion = {"grupos": {str(SUC): [str(ASOCIADA)]}}
+
+    assert cg.grupos_desde_seleccion(seleccion) == {SUC: (ASOCIADA,)}
+    assert cg.grupos_desde_seleccion({}) == {}
+    assert cg.grupos_desde_seleccion({"grupos": None}) == {}

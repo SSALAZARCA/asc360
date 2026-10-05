@@ -13,7 +13,15 @@ ronda las 11.700 referencias) y un armado puro de `EntradaReferencia`:
 5. atributos de las referencias del universo.
 
 W (tránsito al corte) llega ya calculado y llaveado por sucursal desde
-`transito_corte`. Toda lectura se limita al proveedor principal (HMCL) y
+`transito_corte`.
+
+Grupo (sucursales asociadas, `sucursal.principal_id`): sólo la tienda
+principal tiene pedido, y sus cinco fuentes (ventas, demanda perdida,
+inventario, backorder y W) suman el GRUPO congelado en la corrida
+(`seleccion_datos["grupos"]`): la principal más sus asociadas, activas o
+no, con toda su historia. Los atributos, días, tope y SIC siguen siendo los
+de la principal. Una corrida sin grupo congelado (anterior a la asociación)
+lee cada sucursal sola. Toda lectura se limita al proveedor principal (HMCL) y
 descarta las filas de cargas EXCEL en estado ANULADO (F2 no las borra al
 anular); las filas BOT de demanda perdida quedan exentas, porque su anulación
 ya revierte el monto en su lugar.
@@ -30,7 +38,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from decimal import Decimal
-from typing import Iterable, Mapping, Optional, Set, Tuple
+from typing import Any, Dict, Iterable, Mapping, Optional, Set, Tuple
 from uuid import UUID
 
 from sqlalchemy import and_, func, or_, select, tuple_
@@ -98,7 +106,8 @@ class ContextoCarga:
     """Lo que es común a todas las sucursales de UNA corrida.
 
     `transito` es W por sucursal y referencia; `resoluciones` va vacío con
-    `consolidar` OFF (identidad con el motor sin consolidación).
+    `consolidar` OFF (identidad con el motor sin consolidación). `grupos`
+    es el congelado de la corrida: principal -> sus asociadas.
     """
 
     proveedor: FilaProveedor
@@ -111,6 +120,11 @@ class ContextoCarga:
     dias_entre_pedidos: Mapping[UUID, int] = field(default_factory=dict)
     consolidar: bool = False
     resoluciones: Mapping[UUID, Resolucion] = field(default_factory=dict)
+    grupos: Mapping[UUID, Tuple[UUID, ...]] = field(default_factory=dict)
+
+    def miembros(self, sucursal_id: UUID) -> Tuple[UUID, ...]:
+        """La sucursal y, si es principal de un grupo, sus asociadas."""
+        return (sucursal_id, *self.grupos.get(sucursal_id, ()))
 
 
 @dataclass(frozen=True)
@@ -153,6 +167,18 @@ def indexar_transito(
     return dict(por_sucursal)
 
 
+def grupos_desde_seleccion(
+    seleccion: Mapping[str, Any],
+) -> Dict[UUID, Tuple[UUID, ...]]:
+    """`seleccion_datos["grupos"]` (`{principal: [asociadas]}` en texto)
+    como UUID; vacío en una corrida congelada antes de los grupos."""
+    grupos = seleccion.get("grupos") or {}
+    return {
+        UUID(principal): tuple(UUID(miembro) for miembro in miembros)
+        for principal, miembros in grupos.items()
+    }
+
+
 def construir_contexto(
     proveedor: FilaProveedor,
     fecha_corte: date,
@@ -188,7 +214,9 @@ def _suma(valor, condicion, etiqueta: str):
     return func.sum(valor).filter(condicion).label(etiqueta)
 
 
-def _consulta_ventas(sucursal_id: UUID, ctx: ContextoCarga):
+def _consulta_ventas(
+    sucursal_ids: Tuple[UUID, ...], ctx: ContextoCarga,
+):
     cerrados = meses_cerrados(ctx.fecha_corte)
     primero_m0 = ctx.fecha_corte.replace(day=1)
     anio, mes = VentaMensual.anio, VentaMensual.mes
@@ -209,7 +237,7 @@ def _consulta_ventas(sucursal_id: UUID, ctx: ContextoCarga):
         .join(Referencia, Referencia.id == VentaMensual.referencia_id)
         .join(CargaArchivo, CargaArchivo.id == VentaMensual.carga_id)
         .where(
-            VentaMensual.sucursal_id == sucursal_id,
+            VentaMensual.sucursal_id.in_(sucursal_ids),
             Referencia.proveedor_id == ctx.proveedor.id,
             CargaArchivo.estado != ESTADO_ANULADO,
             VentaMensual.origen.in_(ORIGENES_VENTA),
@@ -220,7 +248,9 @@ def _consulta_ventas(sucursal_id: UUID, ctx: ContextoCarga):
     )
 
 
-def _consulta_perdidas(sucursal_id: UUID, ctx: ContextoCarga):
+def _consulta_perdidas(
+    sucursal_ids: Tuple[UUID, ...], ctx: ContextoCarga,
+):
     cerrados = meses_cerrados(ctx.fecha_corte)
     primero_m0 = ctx.fecha_corte.replace(day=1)
     fecha = DemandaPerdida.fecha
@@ -243,7 +273,7 @@ def _consulta_perdidas(sucursal_id: UUID, ctx: ContextoCarga):
         .join(Referencia, Referencia.id == DemandaPerdida.referencia_id)
         .join(CargaArchivo, CargaArchivo.id == DemandaPerdida.carga_id)
         .where(
-            DemandaPerdida.sucursal_id == sucursal_id,
+            DemandaPerdida.sucursal_id.in_(sucursal_ids),
             Referencia.proveedor_id == ctx.proveedor.id,
             fecha >= cerrados[0],
             tope,
@@ -254,7 +284,9 @@ def _consulta_perdidas(sucursal_id: UUID, ctx: ContextoCarga):
     )
 
 
-def _consulta_inventario(sucursal_id: UUID, ctx: ContextoCarga):
+def _consulta_inventario(
+    sucursal_ids: Tuple[UUID, ...], ctx: ContextoCarga,
+):
     return (
         select(
             InventarioSnapshot.referencia_id,
@@ -262,7 +294,7 @@ def _consulta_inventario(sucursal_id: UUID, ctx: ContextoCarga):
         .join(Referencia, Referencia.id == InventarioSnapshot.referencia_id)
         .join(CargaArchivo, CargaArchivo.id == InventarioSnapshot.carga_id)
         .where(
-            InventarioSnapshot.sucursal_id == sucursal_id,
+            InventarioSnapshot.sucursal_id.in_(sucursal_ids),
             InventarioSnapshot.fecha_corte == ctx.corte_inventario,
             Referencia.proveedor_id == ctx.proveedor.id,
             CargaArchivo.estado != ESTADO_ANULADO,
@@ -271,7 +303,9 @@ def _consulta_inventario(sucursal_id: UUID, ctx: ContextoCarga):
     )
 
 
-def _consulta_backorder(sucursal_id: UUID, ctx: ContextoCarga):
+def _consulta_backorder(
+    sucursal_ids: Tuple[UUID, ...], ctx: ContextoCarga,
+):
     return (
         select(
             BackorderLinea.referencia_id,
@@ -279,7 +313,7 @@ def _consulta_backorder(sucursal_id: UUID, ctx: ContextoCarga):
         .join(Referencia, Referencia.id == BackorderLinea.referencia_id)
         .join(CargaArchivo, CargaArchivo.id == BackorderLinea.carga_id)
         .where(
-            BackorderLinea.sucursal_id == sucursal_id,
+            BackorderLinea.sucursal_id.in_(sucursal_ids),
             BackorderLinea.fecha_corte == ctx.corte_backorder,
             Referencia.proveedor_id == ctx.proveedor.id,
             CargaArchivo.estado != ESTADO_ANULADO,
@@ -534,21 +568,37 @@ async def cargar_sucursal_fila(db, sucursal_id: UUID) -> FilaSucursal:
         fila.dias_empaque, fila.dias_transito, fila.dias_seguridad)
 
 
+def _transito_grupo(
+    ctx: ContextoCarga, miembros: Tuple[UUID, ...],
+) -> Mapping[UUID, Decimal]:
+    """W del grupo: el de cada miembro, sumado por referencia."""
+    if len(miembros) == 1:
+        return ctx.transito.get(miembros[0], {})
+    total: Dict[UUID, Decimal] = defaultdict(Decimal)
+    for miembro in miembros:
+        for referencia_id, cantidad in ctx.transito.get(miembro, {}).items():
+            total[referencia_id] += cantidad
+    return dict(total)
+
+
 async def cargar_entradas(
     db, sucursal_id: UUID, ctx: ContextoCarga,
 ) -> EntradasCargadas:
-    """Las cinco consultas de la sucursal y el armado de sus entradas."""
-    ventas = await db.execute(_consulta_ventas(sucursal_id, ctx))
-    perdidas = await db.execute(_consulta_perdidas(sucursal_id, ctx))
-    inventario = await db.execute(_consulta_inventario(sucursal_id, ctx))
-    backorder = await db.execute(_consulta_backorder(sucursal_id, ctx))
+    """Las cinco consultas del grupo de la sucursal (ella sola si no es
+    principal de nadie) y el armado de sus entradas. Cada consulta agrupa
+    por referencia, así que suma los miembros."""
+    miembros = ctx.miembros(sucursal_id)
+    ventas = await db.execute(_consulta_ventas(miembros, ctx))
+    perdidas = await db.execute(_consulta_perdidas(miembros, ctx))
+    inventario = await db.execute(_consulta_inventario(miembros, ctx))
+    backorder = await db.execute(_consulta_backorder(miembros, ctx))
     con_m0 = m0_activo(ctx)
     insumos = _Insumos(
         ventas=_indexar_series(ventas.all(), con_m0),
         perdidas=_indexar_series(perdidas.all(), con_m0),
         inventario=_indexar_totales(inventario.all()),
         backorder=_indexar_totales(backorder.all()),
-        transito=ctx.transito.get(sucursal_id, {}),
+        transito=_transito_grupo(ctx, miembros),
         con_m0=con_m0,
     )
     ids = seleccionar_ids(insumos, ctx)
