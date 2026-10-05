@@ -15,7 +15,7 @@
  */
 import MotoredTableScroll from '../MotoredTableScroll';
 import MotoredIconAction from '../MotoredIconAction';
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import {
   listMaestros,
   createMaestro,
@@ -25,6 +25,7 @@ import {
 } from '../../../lib/motored/api';
 import BulkUploadModal from './BulkUploadModal';
 import FormField from './FormField';
+import BodegasSecundariasEditor from './BodegasSecundariasEditor';
 import InfoTooltip from '../InfoTooltip';
 
 const ENTIDAD_PLURAL = 'sucursales';
@@ -34,6 +35,7 @@ const emptyForm = {
   nombre: '', codigo_co: '', sic: '', dias_seguridad: '2.5',
   dias_empaque: '', dias_transito: '', bodega_principal: '',
   departamento: '', ciudad: '', fecha_apertura: '', principal_id: '',
+  bodegas_secundarias: [],
 };
 
 // Without an explicit color the option text is invisible in the dark theme.
@@ -160,7 +162,18 @@ function SucursalForm({ form, setForm, editingId, codigoRequerido, onSubmit, onC
   return (
     <form onSubmit={onSubmit} style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
       <CodigoCoField form={form} setForm={setForm} required={codigoRequerido} />
-      {FIELDS.map((f) => <SucursalFormField key={f.key} f={f} form={form} setForm={setForm} />)}
+      {FIELDS.map((f) => (
+        <Fragment key={f.key}>
+          <SucursalFormField f={f} form={form} setForm={setForm} />
+          {/* The secondaries sit next to the principal they chain to. */}
+          {f.key === 'bodega_principal' && (
+            <BodegasSecundariasEditor
+              value={form.bodegas_secundarias}
+              onChange={(codigos) => setForm((actual) => ({ ...actual, bodegas_secundarias: codigos }))}
+            />
+          )}
+        </Fragment>
+      ))}
       <PrincipalSelect form={form} setForm={setForm} sucursales={sucursales} editingId={editingId} />
       <button type="submit" className="motored-btn motored-btn-primary">{editingId ? 'Guardar cambios' : 'Crear sucursal'}</button>
       {editingId && (
@@ -189,6 +202,10 @@ const TABLE_COLUMNS = [
   { label: 'Código C.O.', cell: (s) => s.codigo_co || <em>—</em> },
   { label: 'Tienda principal', cell: (s, todas) => <RelacionPrincipal s={s} sucursales={todas} /> },
   { label: 'Bodega principal', cell: (s) => s.bodega_principal || <em>—</em> },
+  {
+    label: 'Bodegas secundarias',
+    cell: (s) => (s.bodegas_secundarias && s.bodegas_secundarias.length ? s.bodegas_secundarias.join(', ') : <em>—</em>),
+  },
   { label: 'Departamento', cell: (s) => s.departamento || <em>—</em> },
   { label: 'Ciudad', cell: (s) => s.ciudad || <em>—</em> },
   { label: 'Fecha apertura', cell: (s) => s.fecha_apertura || <em>—</em> },
@@ -353,6 +370,7 @@ function useSucursalesEditor(save) {
       ciudad: s.ciudad || '',
       fecha_apertura: s.fecha_apertura || '',
       principal_id: s.principal_id || '',
+      bodegas_secundarias: s.bodegas_secundarias || [],
     });
   };
 
@@ -377,11 +395,14 @@ function useSucursalesEditor(save) {
         dias_seguridad: form.dias_seguridad,
         dias_empaque: form.dias_empaque ? Number(form.dias_empaque) : null,
         dias_transito: form.dias_transito ? Number(form.dias_transito) : null,
-        bodega_principal: form.bodega_principal || null,
+        // Same normalization as the secondaries, so a swap matches codes.
+        bodega_principal: form.bodega_principal.trim().toUpperCase() || null,
         departamento: form.departamento || null,
         ciudad: form.ciudad || null,
         fecha_apertura: form.fecha_apertura || null,
         principal_id: form.principal_id || null,
+        // The final set: the backend links, releases and validates it.
+        bodegas_secundarias: form.bodegas_secundarias,
       },
       editingId
     );

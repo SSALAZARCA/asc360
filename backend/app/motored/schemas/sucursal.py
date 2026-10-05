@@ -2,7 +2,7 @@ import re
 import uuid
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Any, Optional
+from typing import Any, List, Optional
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
@@ -55,6 +55,10 @@ class SucursalCreate(BaseModel):
     activa: Optional[bool] = None
     # Principal store this one rolls up into; None = its own principal.
     principal_id: Optional[uuid.UUID] = None
+    # Form only: the store's final set of secondary bodega codes, saved
+    # by the route (`bodegas_secundarias.guardar_de_sucursal`). None (or
+    # omitted) leaves them as they are; [] releases them all.
+    bodegas_secundarias: Optional[List[str]] = None
 
     _codigo_co = field_validator("codigo_co", mode="before")(
         _validar_codigo_co
@@ -76,6 +80,10 @@ class SucursalUpdate(BaseModel):
     activa: Optional[bool] = None
     # Explicit null dissociates; omitted keeps the stored value.
     principal_id: Optional[uuid.UUID] = None
+    # Form only: the store's final set of secondary bodega codes, saved
+    # by the route (`bodegas_secundarias.guardar_de_sucursal`). None (or
+    # omitted) leaves them as they are; [] releases them all.
+    bodegas_secundarias: Optional[List[str]] = None
 
     _codigo_co = field_validator("codigo_co", mode="before")(
         _validar_codigo_co
@@ -98,5 +106,8 @@ class SucursalRead(BaseModel):
     fecha_apertura: Optional[date] = None
     activa: bool
     principal_id: Optional[uuid.UUID] = None
+    # The store's secondary bodega codes, filled by the routes that load
+    # them (list, create, update); None = not loaded.
+    bodegas_secundarias: Optional[List[str]] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None

@@ -46,6 +46,13 @@ through P to a store it does not belong to. Ingest only follows the
 records, never `sucursal.bodega_principal`, so without this a principal
 moved to another store, or a secondary promoted to principal, kept
 resolving to its old store or to none.
+
+The Sucursales form (`guardar_de_sucursal`, wired in `api/maestros.py`)
+saves ONE store's final list of secondaries with the same normalization,
+rules, `aplicar` and `sincronizar_principales`, validated against the
+state the save leaves, so a principal/secondary swap is one save. Unlike
+the upload, it never moves a code owned by another store: that is
+rejected naming the store (remove it there first, or use the upload).
 """
 import uuid
 from typing import Any, Dict, Hashable, List, Optional, Sequence, Set, Tuple
@@ -71,8 +78,43 @@ COLUMNA = "bodegas_secundarias"
 FILA_CLAVE = "_bodegas_secundarias"
 
 
+# How a rejected code's message ends, per path: the upload re-reads the
+# whole file; the form saves one store and never moves a code between
+# stores (that is the upload's job, which can release it in the same file).
+_REINTENTO_CARGA = "vuelva a subir el archivo"
+_REINTENTO_FORMULARIO = (
+    "vuelva a guardar (para moverla de una vez, use la carga masiva de "
+    "Sucursales)"
+)
+
+
+class BodegasSecundariasInvalidasError(ValueError):
+    """The secondaries a store's form lists break a rule of this module.
+    The message, in Spanish, names every rejected code."""
+
+
 def _texto(valor: Any) -> str:
     return str(valor).strip() if valor is not None else ""
+
+
+def normalizar_codigos(valor: Any) -> List[str]:
+    """The bodega codes of a cell (upload) or a list (form): split on
+    comma or semicolon, trimmed, upper-cased, without blanks or repeats,
+    in order. `None` -> `[]`."""
+    codigos: List[str] = []
+    for codigo in split_multivalor(valor):
+        codigo = codigo.upper()
+        if codigo not in codigos:
+            codigos.append(codigo)
+    return codigos
+
+
+def _motivo_sin_principal(nombre: str) -> str:
+    return (
+        f"La sucursal '{nombre}' lista 'Bodegas secundarias' "
+        "pero no tiene 'Bodega principal'. Cárguela primero: "
+        "las secundarias se enlazan a la principal."
+    )
 
 
 _SucursalDb = Tuple[uuid.UUID, str, Optional[str]]
@@ -157,7 +199,7 @@ async def resolver_filas(
         if COLUMNA in fila:
             # Por fila: una fila sin la clave (JSON) no toca las
             # secundarias de su sucursal.
-            fila[FILA_CLAVE] = split_multivalor(fila.pop(COLUMNA))
+            fila[FILA_CLAVE] = normalizar_codigos(fila.pop(COLUMNA))
         resueltas.append(fila)
 
     errores = _errores_de_sucursal_repetida(resueltas)
@@ -227,12 +269,7 @@ def _errores_de_codigos(
         principal = efectivas.get(clave_de_fila(index, fila))
         if not principal:
             errores.append({
-                "fila": index,
-                "motivo": (
-                    f"La sucursal '{nombre}' lista 'Bodegas secundarias' "
-                    "pero no tiene 'Bodega principal'. Cárguela primero: "
-                    "las secundarias se enlazan a la principal."
-                ),
+                "fila": index, "motivo": _motivo_sin_principal(nombre),
             })
             continue
         for codigo in codigos:
@@ -255,6 +292,7 @@ def _motivo_de_codigo(
     bodegas_db: Dict[str, Optional[uuid.UUID]],
     sucursal_id: Optional[uuid.UUID],
     nombre_por_sucursal_id: Dict[uuid.UUID, str],
+    reintento: str = _REINTENTO_CARGA,
 ) -> Optional[str]:
     if codigo == principal:
         return (
@@ -281,7 +319,7 @@ def _motivo_de_codigo(
         return (
             f"La bodega '{codigo}' ya está asociada a la sucursal "
             f"'{otra}'. Quítela primero de 'Bodegas secundarias' de "
-            f"'{otra}' y vuelva a subir el archivo."
+            f"'{otra}' y {reintento}."
         )
     return None
 
@@ -420,3 +458,83 @@ async def sincronizar_principales(
             await maestros.create_bodega(db, BodegaCreate(
                 codigo=codigo, sucursal_id=sucursal_id,
             ), usuario_id)
+
+
+async def _validar_de_sucursal(
+    db, sucursal: Sucursal, codigos: List[str],
+) -> None:
+    """The form's rules for the secondaries of ONE store, against the
+    final state: the store's principal is the one the save just set (in
+    memory, never re-read), and the codes it owns may be listed, so a
+    principal/secondary swap is one save. Two queries, none without
+    codes. Raises `BodegasSecundariasInvalidasError` with every motive."""
+    if not codigos:
+        return
+    principal = _texto(sucursal.bodega_principal)
+    if not principal:
+        raise BodegasSecundariasInvalidasError(
+            _motivo_sin_principal(sucursal.nombre)
+        )
+    otras = (await db.execute(
+        select(Sucursal.nombre, Sucursal.bodega_principal).where(
+            Sucursal.bodega_principal.in_(codigos),
+            Sucursal.id != sucursal.id,
+        )
+    )).all()
+    duenas = (await db.execute(
+        select(Bodega.codigo, Bodega.sucursal_id, Sucursal.nombre)
+        .outerjoin(Sucursal, Sucursal.id == Bodega.sucursal_id)
+        .where(Bodega.codigo.in_(codigos))
+    )).all()
+    principal_de = {codigo: nombre for nombre, codigo in otras}
+    bodegas_db = {codigo: duena for codigo, duena, _ in duenas}
+    nombres = {duena: nombre for _, duena, nombre in duenas if duena}
+    motivos = [
+        _motivo_de_codigo(
+            codigo, sucursal.nombre, principal, principal_de, {},
+            bodegas_db, sucursal.id, nombres, _REINTENTO_FORMULARIO,
+        )
+        for codigo in codigos
+    ]
+    motivos = [motivo for motivo in motivos if motivo]
+    if motivos:
+        raise BodegasSecundariasInvalidasError(" ".join(motivos))
+
+
+async def guardar_de_sucursal(
+    db, sucursal: Sucursal, codigos: Optional[Sequence[Any]],
+    usuario_id: Optional[uuid.UUID],
+) -> Optional[List[str]]:
+    """The Sucursales form's save of a store's bodegas, after the store
+    itself was created or updated in the session (the caller commits).
+    `codigos` None leaves the secondaries as they are; a list (maybe empty)
+    is the final set: validated, then linked and released by `aplicar`.
+    Either way the principal's own record is synced last, as the upload
+    does. Returns the normalized codes, or None when none were given."""
+    normalizados = None
+    if codigos is not None:
+        normalizados = normalizar_codigos(list(codigos))
+        await _validar_de_sucursal(db, sucursal, normalizados)
+        await aplicar(db, [(sucursal, normalizados)], usuario_id)
+    await sincronizar_principales(db, [sucursal], usuario_id)
+    return normalizados
+
+
+async def secundarias_por_sucursal(
+    db, sucursales: Sequence[Sucursal],
+) -> Dict[uuid.UUID, List[str]]:
+    """store id -> the codes of its records other than its principal,
+    sorted, for the stores given. One query; none without stores."""
+    if not sucursales:
+        return {}
+    principal_de = {s.id: s.bodega_principal for s in sucursales}
+    filas = (await db.execute(
+        select(Bodega.sucursal_id, Bodega.codigo)
+        .where(Bodega.sucursal_id.in_(list(principal_de)))
+        .order_by(Bodega.codigo)
+    )).all()
+    resultado: Dict[uuid.UUID, List[str]] = {}
+    for sucursal_id, codigo in filas:
+        if codigo != principal_de.get(sucursal_id):
+            resultado.setdefault(sucursal_id, []).append(codigo)
+    return resultado

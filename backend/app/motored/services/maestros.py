@@ -290,6 +290,8 @@ async def update_sucursal(
     verificar_codigo_co: bool = True,
 ) -> Sucursal:
     update_dict = data.model_dump(exclude_unset=True)
+    # Not a column: the route saves the secondaries after this update.
+    update_dict.pop("bodegas_secundarias", None)
     if "nombre" in update_dict and update_dict["nombre"] is not None:
         update_dict["nombre"] = normalize_sucursal_nombre(update_dict["nombre"])
     await _validar_cambio_principal(db, sucursal, update_dict)

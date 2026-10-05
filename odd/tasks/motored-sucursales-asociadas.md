@@ -33,7 +33,7 @@ Let the owner load the corrected Sucursales file in one go, and model physical p
 - [x] T3
 - [x] T5 (store code C.O.: owner asked for it at the start; I wrongly deferred it)
 - [x] T5b (C.O. is the sucursal business key: upload matches stores by C.O., name is a mutable attribute; C.O. required in upload and form; first upload backfills by name for stores without C.O.; "Sucursal principal" accepts C.O.)
-- [ ] T4 (edit secondary bodegas from the Sucursales screen)
+- [x] T4 (edit secondary bodegas from the Sucursales screen)
 - [x] T6 (REINSTATED, owner confirmed verbatim): VENTAS ingest resolves the sucursal by the row's C.O.; bodegas_excluidas checked first; bodega only as fallback for files without C.O.; unknown C.O. = row error; non-store C.O. (MR/PAF01) needs an exclusion. No re-upload of old ventas. Runs after T5 (single writer); coordinate ventas.py with the KPI session (R6).
 - [ ] T7 (presupuestos and vendedores recognize the store by C.O., name as fallback). KPI session files: coordinate; they may implement it.
 - [ ] T8 (per-store data-control report for the owner before the first pedido)
@@ -111,3 +111,20 @@ Let the owner load the corrected Sucursales file in one go, and model physical p
   - In the owner scenario every bodega resolves to its new store, in both row orders.
   - Results: tests/motored 5575 passed; pg_real 603 passed, 2 skipped.
   - Pending: the CRUD form path in `maestros.py` has the same bug. It goes into T4, after the KPI session's R7 lands. Call `sincronizar_principales` from `api/maestros.py` after create or update.
+- 2026-10-05: the KPI session's R7 is on main (785ac8c), so `maestros.py` is free for T4 and the T9 form path.
+  - Note for T4 tests: `maestros.update_referencia` and `reemplazar_clientes_tecnired` now call `kpi_resumen.marcar_sucio_si_construido`. FakeAsyncSession tests on those paths need the `_sin_marca_de_sucio` stub.
+  - The new `supervisor_kpis` loop holds an advisory lock while it rebuilds. A VENTAS apply can then wait up to 60 s and fail with "try again".
+  - Stopped for the day at the owner's request.
+- 2026-10-05: hotfix 93cfaef.
+  - Uploading v2 failed in production with `bodega_sucursal_id_fkey`, shown to the owner as "otra carga".
+  - Cause: autoflush is off and there is no relationship between bodega and sucursal, so new stores were not yet INSERTed when their bodegas pointed at them.
+  - Fix: flush right after the renames in `_aplicar_columnas_de_sucursal`.
+  - Regression test: `test_sucursal_carga_autoflush_pg.py`, with a production-like session. RED reproduced the error, then GREEN; pg_real 627 passed.
+  - Follow-up: make the IntegrityError handler surface the real constraint, and switch the pg_real Sucursales fixtures to `autoflush=False`.
+- 2026-10-05: T4 done.
+  - `bodegas_secundarias` is optional in sucursal create/update, so a swap happens in one atomic save.
+  - Shared rules: `normalizar_codigos` and `guardar_de_sucursal`. A code owned by another store is rejected with a message that names that store.
+  - The form path syncs principals in `api/maestros._guardar_bodegas`. The list payload includes the secondaries (one extra read).
+  - Chips editor in `SucursalesTab`. The corrida picker hides associated stores.
+  - Results: tests/motored 5644 passed; pg_real 629 passed, 2 skipped; jest 1881 passed.
+  - Open finding: neither the form nor the upload checks whether a store's PRINCIPAL code already belongs to another store.

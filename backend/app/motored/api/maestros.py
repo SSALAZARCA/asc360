@@ -23,7 +23,7 @@ este fix.
 import io
 import uuid
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Type
+from typing import Any, Callable, Dict, List, Optional, Type
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from openpyxl import Workbook
@@ -42,7 +42,12 @@ from app.motored.schemas.bodega import BodegaCreate, BodegaRead, BodegaUpdate
 from app.motored.schemas.proveedor import ProveedorCreate, ProveedorRead, ProveedorUpdate
 from app.motored.schemas.referencia import ReferenciaCreate, ReferenciaRead, ReferenciaUpdate
 from app.motored.schemas.sucursal import SucursalCreate, SucursalRead, SucursalUpdate
-from app.motored.services import auditoria, maestros, sucursal_grupo
+from app.motored.services import (
+    auditoria,
+    bodegas_secundarias,
+    maestros,
+    sucursal_grupo,
+)
 from app.motored.services.carga_excel import column_labels
 
 router = APIRouter(
@@ -166,7 +171,15 @@ async def list_maestro(
     config = _config_or_404(entidad)
     result = await db.execute(select(config.model))
     rows = [row for row in result.scalars().all() if _in_sucursal_scope(entidad, row, user)]
-    return [_to_read(config, row) for row in rows]
+    reads = [_to_read(config, row) for row in rows]
+    if entidad == "sucursales" and rows:
+        # One query for every store, never one per store.
+        por_id = await bodegas_secundarias.secundarias_por_sucursal(
+            db, rows
+        )
+        for read, row in zip(reads, rows):
+            read["bodegas_secundarias"] = por_id.get(row.id, [])
+    return reads
 
 
 @router.get("/{entidad}/plantilla.xlsx")
@@ -272,7 +285,38 @@ _ERRORES_DE_DATO = (
     maestros.CodigoCoEnUsoError,
     maestros.CodigoCoRequeridoError,
     sucursal_grupo.PrincipalInvalidaError,
+    bodegas_secundarias.BodegasSecundariasInvalidasError,
 )
+# Fields of a store's save that touch its `bodega` records.
+_CAMPOS_DE_BODEGAS = {"bodega_principal", "bodegas_secundarias"}
+
+
+async def _guardar_bodegas(
+    db: AsyncSession, entidad: str, obj: Any, data: BaseModel,
+    usuario_id: uuid.UUID,
+) -> Optional[List[str]]:
+    """Sucursales only, after the store was saved in the session: its
+    secondaries (when the payload lists them) and its principal's own
+    record (bug T9), validated against the final state, so a
+    principal/secondary swap is one save. Wired here, not in
+    `services/maestros.py`: `bodegas_secundarias` imports `maestros`, so
+    the reverse import would be circular."""
+    if entidad != "sucursales":
+        return None
+    if not data.model_fields_set & _CAMPOS_DE_BODEGAS:
+        return None
+    return await bodegas_secundarias.guardar_de_sucursal(
+        db, obj, data.bodegas_secundarias, usuario_id
+    )
+
+
+def _read_guardado(
+    config: _MaestroConfig, obj: Any, secundarias: Optional[List[str]]
+) -> dict:
+    read = _to_read(config, obj)
+    if secundarias is not None:
+        read["bodegas_secundarias"] = secundarias
+    return read
 
 
 @router.post("/{entidad}", status_code=status.HTTP_201_CREATED)
@@ -285,14 +329,21 @@ async def create_maestro(
     config = _config_or_404(entidad)
     data = _validated_or_422(config.create_schema, payload)
 
+    usuario_id = uuid.UUID(user.user_id)
     try:
-        created = await config.create_fn(db, data, uuid.UUID(user.user_id))
+        created = await config.create_fn(db, data, usuario_id)
+        # `create_referencia` retorna `(referencia, advertencia_o_None)`;
+        # el resto retorna el objeto solo -- única asimetría entre las 4
+        # funciones `create_*` de `services/maestros.py`.
+        obj = created[0] if isinstance(created, tuple) else created
+        secundarias = await _guardar_bodegas(
+            db, entidad, obj, data, usuario_id
+        )
     except _ERRORES_DE_DATO as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
-    # `create_referencia` retorna `(referencia, advertencia_o_None)`; el
-    # resto retorna el objeto solo -- única asimetría entre las 4 funciones
-    # `create_*` de `services/maestros.py`.
-    obj = created[0] if isinstance(created, tuple) else created
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        )
 
     try:
         await db.commit()
@@ -301,7 +352,7 @@ async def create_maestro(
         # (p.ej. el código de la referencia ya existe) es un 409.
         await db.rollback()
         raise _respuesta_de_integridad(entidad, data, exc)
-    return _to_read(config, obj)
+    return _read_guardado(config, obj, secundarias)
 
 
 @router.patch("/{entidad}/{entity_id}")
@@ -316,10 +367,17 @@ async def update_maestro(
     obj = await _get_or_404(db, config, entity_id)
     data = _validated_or_422(config.update_schema, payload)
 
+    usuario_id = uuid.UUID(user.user_id)
     try:
-        updated = await config.update_fn(db, obj, data, uuid.UUID(user.user_id))
+        updated = await config.update_fn(db, obj, data, usuario_id)
+        secundarias = await _guardar_bodegas(
+            db, entidad, updated, data, usuario_id
+        )
     except _ERRORES_DE_DATO as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        )
     except maestros.CodigoProveedorBloqueadoError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
     try:
@@ -327,7 +385,7 @@ async def update_maestro(
     except IntegrityError as exc:
         await db.rollback()
         raise _respuesta_de_integridad(entidad, data, exc)
-    return _to_read(config, updated)
+    return _read_guardado(config, updated, secundarias)
 
 
 @router.delete("/{entidad}/{entity_id}")

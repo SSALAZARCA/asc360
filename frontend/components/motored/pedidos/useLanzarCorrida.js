@@ -31,7 +31,7 @@ export default function useLanzarCorrida(onCreada, overrides) {
   const cargarTiendas = useCallback(async () => {
     try {
       const todas = await listMaestros('sucursales');
-      setTiendas({ items: todas.filter((s) => s.activa !== false), error: '' });
+      setTiendas({ items: todas.filter((s) => s.activa !== false && !s.principal_id), error: '' });
     } catch (fallo) {
       setTiendas({ items: null, error: mensajeConCodigo(fallo, 'No se pudo cargar las tiendas.') });
     }

@@ -42,7 +42,8 @@ describe('SucursalesTab — table', () => {
     const table = await renderTab();
 
     expect(headerLabels(table)).toEqual([
-      'Nombre', 'Código C.O.', 'Tienda principal', 'Bodega principal', 'Departamento', 'Ciudad', 'Fecha apertura', 'Estado', '',
+      'Nombre', 'Código C.O.', 'Tienda principal', 'Bodega principal', 'Bodegas secundarias',
+      'Departamento', 'Ciudad', 'Fecha apertura', 'Estado', '',
     ]);
   });
 
@@ -297,5 +298,96 @@ describe('SucursalesTab — the C.O. identifies the store', () => {
 
     await waitFor(() => expect(mockCreateMaestro).toHaveBeenCalled());
     expect(screen.queryByText('El Código C.O. es obligatorio: identifica a la sucursal.')).not.toBeInTheDocument();
+  });
+});
+
+const QUILICHAO = {
+  id: 'q1', nombre: 'QUILICHAO', codigo_co: 'A16', dias_seguridad: '2.5',
+  bodega_principal: 'BA071', bodegas_secundarias: ['BA161', 'MC001'], activa: true,
+};
+const SIN_SECUNDARIAS = {
+  id: 'q2', nombre: 'PASTO', codigo_co: 'C06', dias_seguridad: '2.5',
+  bodega_principal: 'BP001', bodegas_secundarias: [], activa: true,
+};
+const secundariasInput = () => screen.getByLabelText(/Bodegas secundarias/, { selector: 'input' });
+const chipTexts = () => screen.queryAllByRole('listitem').map((li) => li.firstChild.textContent);
+
+async function renderBodegas() {
+  mockListMaestros.mockResolvedValue([QUILICHAO, SIN_SECUNDARIAS]);
+  render(<SucursalesTab />);
+  await waitFor(() => expect(screen.getByRole('table')).toBeInTheDocument());
+  return screen.getByRole('table');
+}
+
+function editar(table, nombre) {
+  fireEvent.click(within(rowOf(table, nombre)).getByRole('button', { name: 'Editar' }));
+}
+
+describe('SucursalesTab — bodegas secundarias', () => {
+  beforeEach(() => {
+    mockCreateMaestro.mockReset().mockResolvedValue({});
+    mockUpdateMaestro.mockReset().mockResolvedValue({});
+  });
+
+  it('shows each store\'s secondaries in the table', async () => {
+    const table = await renderBodegas();
+
+    expect(rowOf(table, 'QUILICHAO')).toHaveTextContent('BA161, MC001');
+    const celdas = Array.from(rowOf(table, 'PASTO').querySelectorAll('td')).map((td) => td.textContent);
+    expect(celdas[4]).toBe('—');
+  });
+
+  it('puts the editor right after "Bodega principal" in the form', async () => {
+    await renderBodegas();
+    const form = secundariasInput().closest('form');
+    const inputs = Array.from(form.querySelectorAll('input'));
+    const principal = screen.getByLabelText(/Bodega principal/, { selector: 'input' });
+
+    expect(inputs.indexOf(secundariasInput())).toBe(inputs.indexOf(principal) + 1);
+  });
+
+  it('loads the stored secondaries when editing', async () => {
+    const table = await renderBodegas();
+    editar(table, 'QUILICHAO');
+
+    expect(chipTexts()).toEqual(['BA161', 'MC001']);
+  });
+
+  it('swaps principal and secondary in one save', async () => {
+    const table = await renderBodegas();
+    editar(table, 'QUILICHAO');
+    fireEvent.change(screen.getByLabelText(/Bodega principal/, { selector: 'input' }), { target: { value: ' ba161 ' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Quitar BA161' }));
+    fireEvent.change(secundariasInput(), { target: { value: 'ba071' } });
+    fireEvent.keyDown(secundariasInput(), { key: 'Enter' });
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+
+    await waitFor(() => expect(mockUpdateMaestro).toHaveBeenCalledTimes(1));
+    expect(mockUpdateMaestro.mock.calls[0][2]).toMatchObject({
+      bodega_principal: 'BA161', bodegas_secundarias: ['MC001', 'BA071'],
+    });
+  });
+
+  it('sends an empty list on create when none was added', async () => {
+    await renderBodegas();
+    fireEvent.change(screen.getByLabelText(/Nombre/, { selector: 'input' }), { target: { value: 'NUEVA' } });
+    fireEvent.change(screen.getByLabelText(/Código C\.O\./, { selector: 'input' }), { target: { value: 'A07' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Crear sucursal' }));
+
+    await waitFor(() => expect(mockCreateMaestro).toHaveBeenCalled());
+    expect(mockCreateMaestro.mock.calls[0][1].bodegas_secundarias).toEqual([]);
+  });
+
+  it('shows the backend rejection in Spanish and keeps the form', async () => {
+    const motivo = "La bodega 'MC002' ya está asociada a la sucursal 'PASTO'.";
+    mockUpdateMaestro.mockReset().mockRejectedValue(new Error(motivo));
+    const table = await renderBodegas();
+    editar(table, 'QUILICHAO');
+    fireEvent.change(secundariasInput(), { target: { value: 'mc002' } });
+    fireEvent.keyDown(secundariasInput(), { key: 'Enter' });
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+
+    expect(await screen.findByText(motivo)).toBeInTheDocument();
+    expect(chipTexts()).toEqual(['BA161', 'MC001', 'MC002']);
   });
 });

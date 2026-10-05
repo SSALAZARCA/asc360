@@ -84,8 +84,9 @@ def _client_as(role: str, execute_queue) -> TestClient:
 def test_sucursal_user_lists_only_own_branch_sucursales():
     rows = [_sucursal(B1_ID, "B1"), _sucursal(B2_ID, "B2")]
     # First queue slot is `get_motored_db_or_503`'s `SELECT 1` connectivity
-    # probe (harmless empty result); the second is the real list query.
-    client = _client_scoped_to(B1_ID, execute_queue=[[], rows])
+    # probe (harmless empty result); the second is the real list query,
+    # the third the secondary bodegas of the listed stores.
+    client = _client_scoped_to(B1_ID, execute_queue=[[], rows, []])
     response = client.get("/api/motored/maestros/sucursales")
     assert response.status_code == 200
     ids = {row["id"] for row in response.json()}
@@ -165,7 +166,7 @@ def test_sucursal_user_with_no_assigned_branches_sees_empty_lists():
 @pytest.mark.parametrize("role", ["ADMIN", "COMPRAS", "CONSULTA"])
 def test_non_sucursal_roles_still_see_every_branch_unfiltered(role):
     rows = [_sucursal(B1_ID, "B1"), _sucursal(B2_ID, "B2")]
-    client = _client_as(role, execute_queue=[[], rows])
+    client = _client_as(role, execute_queue=[[], rows, []])
     response = client.get("/api/motored/maestros/sucursales")
     assert response.status_code == 200
     ids = {row["id"] for row in response.json()}
