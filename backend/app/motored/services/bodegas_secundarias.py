@@ -25,13 +25,17 @@ Una celda en blanco desvincula todas las de esa tienda. Las sucursales que no
 están en el archivo no se tocan. La fila `bodega` de la propia bodega principal
 nunca se desvincula.
 
+Each row keys on the store it writes (`sucursal_grupo.clave_de_fila`: the
+saved store the C.O. resolver matched, or the new store of that row), never
+on its name, so a store renamed in the same file keeps its bodegas.
+
 Mover una secundaria de tienda en UNA sola carga: un código vinculado a otra
 tienda se acepta si el mismo archivo lo libera, es decir, si la tienda dueña
 también viene en el archivo con la columna y ya no lo lista. Si sigue siendo
 su bodega principal (la del archivo o, en blanco, la guardada) se rechaza.
 """
 import uuid
-from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
+from typing import Any, Dict, Hashable, List, Optional, Sequence, Set, Tuple
 
 from sqlalchemy import or_, select
 
@@ -40,6 +44,10 @@ from app.motored.models.sucursal import Sucursal
 from app.motored.schemas.bodega import BodegaCreate, BodegaUpdate
 from app.motored.schemas.carga import ResumenBodegasSecundarias
 from app.motored.services import maestros
+from app.motored.services.sucursal_grupo import (
+    FILA_SUCURSAL_ID,
+    clave_de_fila,
+)
 from app.motored.services.texto import split_multivalor
 
 # Clave canónica de la columna tal como llega en cada fila del archivo.
@@ -54,23 +62,70 @@ def _texto(valor: Any) -> str:
     return str(valor).strip() if valor is not None else ""
 
 
+_SucursalDb = Tuple[uuid.UUID, str, Optional[str]]
+
+
 def _principales_efectivas(
-    filas: Sequence[Dict[str, Any]], sucursales_db: Sequence[Tuple[uuid.UUID, str, Optional[str]]]
-) -> Dict[str, Optional[str]]:
-    """nombre de sucursal -> código de su bodega principal DESPUÉS de aplicar
+    filas: Sequence[Dict[str, Any]], sucursales_db: Sequence[_SucursalDb]
+) -> Dict[Hashable, Optional[str]]:
+    """clave de sucursal -> código de su bodega principal DESPUÉS de aplicar
     el archivo: el valor del archivo si la celda trae uno; si no, el guardado
     (una celda en blanco es "no provisto" y conserva lo que había)."""
-    efectivas: Dict[str, Optional[str]] = {nombre: principal for _, nombre, principal in sucursales_db}
-    for fila in filas:
-        nombre = _texto(fila.get("nombre"))
-        if not nombre:
+    efectivas: Dict[Hashable, Optional[str]] = {
+        sid: principal for sid, _, principal in sucursales_db
+    }
+    for index, fila in enumerate(filas, start=1):
+        if not _texto(fila.get("nombre")):
             continue
+        clave = clave_de_fila(index, fila)
         principal = _texto(fila.get("bodega_principal"))
         if principal:
-            efectivas[nombre] = principal
+            efectivas[clave] = principal
         else:
-            efectivas.setdefault(nombre, None)
+            efectivas.setdefault(clave, None)
     return efectivas
+
+
+def _nombres_finales(
+    filas: Sequence[Dict[str, Any]], sucursales_db: Sequence[_SucursalDb]
+) -> Dict[Hashable, str]:
+    """clave de sucursal -> su nombre DESPUÉS de aplicar el archivo (una fila
+    puede renombrar su tienda), para los mensajes."""
+    nombres: Dict[Hashable, str] = {
+        sid: nombre for sid, nombre, _ in sucursales_db
+    }
+    for index, fila in enumerate(filas, start=1):
+        nombre = _texto(fila.get("nombre"))
+        if nombre:
+            nombres[clave_de_fila(index, fila)] = nombre
+    return nombres
+
+
+def _errores_de_sucursal_repetida(
+    filas: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """Una misma tienda (por su clave, no por su nombre) en dos filas: la
+    columna sería ambigua, error en la segunda."""
+    errores: List[Dict[str, Any]] = []
+    vistos: Dict[Hashable, int] = {}
+    for index, fila in enumerate(filas, start=1):
+        nombre = _texto(fila.get("nombre"))
+        if not nombre:
+            continue  # `validate_rows` ya la rechaza como campo requerido
+        clave = clave_de_fila(index, fila)
+        if clave not in vistos:
+            vistos[clave] = index
+            continue
+        errores.append({
+            "fila": index,
+            "motivo": (
+                f"La sucursal '{nombre}' aparece repetida en el "
+                f"archivo (igual a la fila {vistos[clave]}). Dejá una "
+                "sola fila por sucursal para que 'Bodegas "
+                "secundarias' no sea ambigua."
+            ),
+        })
+    return errores
 
 
 async def resolver_filas(
@@ -90,23 +145,7 @@ async def resolver_filas(
             fila[FILA_CLAVE] = split_multivalor(fila.pop(COLUMNA))
         resueltas.append(fila)
 
-    errores: List[Dict[str, Any]] = []
-    vistos: Dict[str, int] = {}
-    for index, fila in enumerate(resueltas, start=1):
-        nombre = _texto(fila.get("nombre"))
-        if not nombre:
-            continue  # `validate_rows` ya la rechaza como campo requerido
-        if nombre in vistos:
-            errores.append({
-                "fila": index,
-                "motivo": (
-                    f"La sucursal '{nombre}' aparece repetida en el archivo (igual a la fila {vistos[nombre]}). "
-                    "Dejá una sola fila por sucursal para que 'Bodegas secundarias' no sea ambigua."
-                ),
-            })
-        else:
-            vistos[nombre] = index
-
+    errores = _errores_de_sucursal_repetida(resueltas)
     todos_los_codigos = {codigo for fila in resueltas for codigo in fila.get(FILA_CLAVE, [])}
     if not todos_los_codigos:
         return resueltas, errores
@@ -126,16 +165,15 @@ async def resolver_filas(
 
 def _codigos_liberados(
     filas: List[Dict[str, Any]],
-    sucursales_db: Sequence[Tuple[uuid.UUID, str, Optional[str]]],
     bodegas_db: Dict[str, Optional[uuid.UUID]],
 ) -> Set[str]:
     """Códigos que el propio archivo libera: su tienda dueña viene en el
     archivo CON la columna y ya no los lista. Si el código sigue siendo la
-    principal de esa tienda lo rechaza `_motivo_de_codigo`."""
-    id_por_nombre = {nombre: sid for sid, nombre, _ in sucursales_db}
+    principal de esa tienda lo rechaza `_motivo_de_codigo`. La tienda dueña
+    es la que resolvió el C.O. (`FILA_SUCURSAL_ID`), no la del nombre."""
     liberados: Set[str] = set()
     for fila in filas:
-        sucursal_id = id_por_nombre.get(_texto(fila.get("nombre")))
+        sucursal_id = fila.get(FILA_SUCURSAL_ID)
         if sucursal_id is None or FILA_CLAVE not in fila:
             continue
         listados = set(fila[FILA_CLAVE])
@@ -151,18 +189,17 @@ def _errores_de_codigos(
     sucursales_db: Sequence[Tuple[uuid.UUID, str, Optional[str]]],
     bodegas_db: Dict[str, Optional[uuid.UUID]],
 ) -> List[Dict[str, Any]]:
-    liberados = _codigos_liberados(filas, sucursales_db, bodegas_db)
+    liberados = _codigos_liberados(filas, bodegas_db)
     bodegas_db = {
         codigo: duena for codigo, duena in bodegas_db.items()
         if codigo not in liberados
     }
     efectivas = _principales_efectivas(filas, sucursales_db)
+    nombres = _nombres_finales(filas, sucursales_db)
     principal_de: Dict[str, str] = {}
-    for nombre, principal in efectivas.items():
+    for clave, principal in efectivas.items():
         if principal:
-            principal_de.setdefault(principal, nombre)
-    sucursal_id_por_nombre = {nombre: sid for sid, nombre, _ in sucursales_db}
-    nombre_por_sucursal_id = {sid: nombre for sid, nombre, _ in sucursales_db}
+            principal_de.setdefault(principal, nombres.get(clave, ""))
 
     errores: List[Dict[str, Any]] = []
     primera_fila_de: Dict[str, int] = {}
@@ -171,7 +208,7 @@ def _errores_de_codigos(
         nombre = _texto(fila.get("nombre"))
         if not codigos or not nombre:
             continue
-        principal = efectivas.get(nombre)
+        principal = efectivas.get(clave_de_fila(index, fila))
         if not principal:
             errores.append({
                 "fila": index,
@@ -184,7 +221,7 @@ def _errores_de_codigos(
         for codigo in codigos:
             motivo = _motivo_de_codigo(
                 codigo, nombre, principal, principal_de, primera_fila_de,
-                bodegas_db, sucursal_id_por_nombre.get(nombre), nombre_por_sucursal_id,
+                bodegas_db, fila.get(FILA_SUCURSAL_ID), nombres,
             )
             if motivo:
                 errores.append({"fila": index, "motivo": motivo})

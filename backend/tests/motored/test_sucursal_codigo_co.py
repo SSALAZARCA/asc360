@@ -4,9 +4,10 @@ Sucursal store code "C.O." (centro de operación).
 Each store has an ERP code: one region letter plus two digits (E05, C06).
 A different C.O. is a different store, so the code is unique across stores.
 It is stored trimmed and upper-cased, validated with one named pattern, and
-checked in the CRUD forms and in the Sucursales upload (in-file duplicates
-and duplicates against the stores already saved). A blank upload cell keeps
-the stored code, and an Excel number never reaches the database as a number.
+checked in the CRUD forms and in the Sucursales upload, where it is the
+store's key and is required on every row (`test_sucursal_clave_co.py`
+covers renames and the first upload of codes). An Excel number never
+reaches the database as a number.
 """
 import io
 import uuid
@@ -27,6 +28,7 @@ from app.motored.schemas.sucursal import (
     SucursalUpdate,
 )
 from app.motored.services import maestros, salud
+from app.motored.services.sucursal_grupo import FILA_SUCURSAL_ID
 from app.motored.services.carga_excel import column_labels, parse_excel_rows
 from app.motored.services.validators import validate_rows
 from app.motored.services.auth import MotoredUser
@@ -98,8 +100,8 @@ class TestFormat:
 
 
 class TestColumn:
-    def test_template_puts_the_column_right_after_the_name(self):
-        assert column_labels("sucursal")[:2] == ["Nombre", "Código C.O."]
+    def test_template_puts_the_column_first_before_the_name(self):
+        assert column_labels("sucursal")[:2] == ["Código C.O.", "Nombre"]
 
     @pytest.mark.parametrize(
         "header",
@@ -157,16 +159,17 @@ class TestUploadUniqueness:
     async def test_without_codes_nothing_is_queried(self):
         db = FakeAsyncSession(execute_queue=[])
 
-        errores = await maestros.errores_codigo_co_carga(
+        _, errores = await maestros.resolver_sucursales_carga(
             db, [{"nombre": "A"}, {"nombre": "B", "codigo_co": " "}]
         )
 
-        assert errores == []
+        assert [e["fila"] for e in errores] == [1, 2]
+        assert all("obligatorio" in e["motivo"] for e in errores)
 
     async def test_duplicate_in_the_file_is_an_error_on_both_rows(self):
         db = FakeAsyncSession(execute_queue=[[]])
 
-        errores = await maestros.errores_codigo_co_carga(
+        _, errores = await maestros.resolver_sucursales_carga(
             db,
             [{"nombre": "A", "codigo_co": "E05"},
              {"nombre": "B", "codigo_co": "C06"},
@@ -177,31 +180,35 @@ class TestUploadUniqueness:
         assert all("'E05'" in e["motivo"] for e in errores)
         assert all("filas 1 y 3" in e["motivo"] for e in errores)
 
-    async def test_code_of_another_saved_store_is_an_error(self):
-        db = FakeAsyncSession(execute_queue=[[("CALI NORTE", "E05")]])
+    async def test_code_of_a_saved_store_matches_that_store(self):
+        db = FakeAsyncSession(
+            execute_queue=[[(CALI_ID, "CALI NORTE", "E05")]]
+        )
 
-        errores = await maestros.errores_codigo_co_carga(
+        filas, errores = await maestros.resolver_sucursales_carga(
             db, [{"nombre": "PASTO", "codigo_co": "E05"}]
         )
 
-        assert _motivos(errores) == [(1, (
-            "Columna 'Código C.O.': el código 'E05' ya es de la sucursal "
-            "'CALI NORTE'. Cada C.O. es una tienda distinta."
-        ))]
+        assert errores == []
+        assert filas[0][FILA_SUCURSAL_ID] == CALI_ID
 
     async def test_same_store_keeping_its_code_is_fine(self):
-        db = FakeAsyncSession(execute_queue=[[("CALI", "E05")]])
+        db = FakeAsyncSession(execute_queue=[[(CALI_ID, "CALI", "E05")]])
 
-        errores = await maestros.errores_codigo_co_carga(
+        filas, errores = await maestros.resolver_sucursales_carga(
             db, [{"nombre": " CALI ", "codigo_co": "E05"}]
         )
 
         assert errores == []
+        assert filas[0][FILA_SUCURSAL_ID] == CALI_ID
 
-    async def test_two_stores_can_swap_codes_in_one_file(self):
-        db = FakeAsyncSession(execute_queue=[[("A", "E05"), ("B", "C06")]])
+    async def test_two_stores_can_swap_names_in_one_file(self):
+        a, b = uuid.uuid4(), uuid.uuid4()
+        db = FakeAsyncSession(
+            execute_queue=[[(a, "A", "E05"), (b, "B", "C06")]]
+        )
 
-        errores = await maestros.errores_codigo_co_carga(
+        _, errores = await maestros.resolver_sucursales_carga(
             db,
             [{"nombre": "A", "codigo_co": "C06"},
              {"nombre": "B", "codigo_co": "E05"}],
@@ -212,7 +219,7 @@ class TestUploadUniqueness:
     async def test_invalid_format_is_left_to_row_validation(self):
         db = FakeAsyncSession(execute_queue=[])
 
-        errores = await maestros.errores_codigo_co_carga(
+        _, errores = await maestros.resolver_sucursales_carga(
             db, [{"nombre": "A", "codigo_co": "5"}]
         )
 
@@ -222,7 +229,9 @@ class TestUploadUniqueness:
 class TestUpload:
     async def test_upload_sets_the_code(self):
         existente = _sucursal()
-        db = FakeAsyncSession(execute_queue=[[], [existente]])
+        db = FakeAsyncSession(execute_queue=[
+            [(existente.id, "CALI", None)], [existente],
+        ])
 
         resultado = await _resolver_y_procesar_carga(
             db, "sucursal", [{"nombre": "CALI", "codigo_co": "e05"}],
@@ -232,9 +241,9 @@ class TestUpload:
         assert resultado.ok is True
         assert existente.codigo_co == "E05"
 
-    async def test_blank_cell_keeps_the_stored_code(self):
+    async def test_blank_cell_rejects_the_file(self):
         existente = _sucursal(codigo_co="E05")
-        db = FakeAsyncSession(execute_queue=[[existente]])
+        db = FakeAsyncSession(execute_queue=[])
 
         resultado = await _resolver_y_procesar_carga(
             db, "sucursal",
@@ -242,11 +251,14 @@ class TestUpload:
             USER_ID,
         )
 
-        assert resultado.ok is True
+        assert resultado.ok is False
+        assert "obligatorio" in resultado.errores[0].motivo
         assert existente.codigo_co == "E05"
 
-    async def test_duplicate_against_the_database_rejects_the_file(self):
-        db = FakeAsyncSession(execute_queue=[[("CALI NORTE", "E05")]])
+    async def test_a_name_taken_by_another_store_rejects_the_file(self):
+        db = FakeAsyncSession(execute_queue=[[
+            (CALI_ID, "CALI NORTE", "E05"), (uuid.uuid4(), "PASTO", "C06"),
+        ]])
 
         resultado = await _resolver_y_procesar_carga(
             db, "sucursal",
@@ -254,7 +266,7 @@ class TestUpload:
         )
 
         assert resultado.ok is False
-        assert "'CALI NORTE'" in resultado.errores[0].motivo
+        assert "'C06'" in resultado.errores[0].motivo
         assert db.committed is False
 
 
@@ -285,11 +297,12 @@ class TestCrud:
     async def test_create_without_a_code_never_queries(self):
         db = FakeAsyncSession(execute_queue=[])
 
-        creada = await maestros.create_sucursal(
-            db, SucursalCreate(nombre="CALI"), USER_ID
-        )
+        with pytest.raises(maestros.CodigoCoRequeridoError):
+            await maestros.create_sucursal(
+                db, SucursalCreate(nombre="CALI"), USER_ID
+            )
 
-        assert creada.codigo_co is None
+        assert db.added == []
 
     async def test_update_to_a_used_code_is_rejected(self):
         sucursal = _sucursal(nombre="PASTO")
@@ -322,15 +335,16 @@ class TestCrud:
 
         assert sucursal.codigo_co == "C06"
 
-    async def test_explicit_null_clears_the_code(self):
+    async def test_explicit_null_cannot_clear_the_code(self):
         sucursal = _sucursal(codigo_co="E05")
         db = FakeAsyncSession(execute_queue=[])
 
-        await maestros.update_sucursal(
-            db, sucursal, SucursalUpdate(codigo_co=None), USER_ID
-        )
+        with pytest.raises(maestros.CodigoCoRequeridoError):
+            await maestros.update_sucursal(
+                db, sucursal, SucursalUpdate(codigo_co=None), USER_ID
+            )
 
-        assert sucursal.codigo_co is None
+        assert sucursal.codigo_co == "E05"
 
 
 @pytest.fixture

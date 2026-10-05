@@ -143,6 +143,7 @@ describe('SucursalesTab — associated stores', () => {
   it('sends principal_id on create and null for the empty option', async () => {
     await renderGrupo();
     fireEvent.change(screen.getByLabelText(/Nombre/, { selector: 'input' }), { target: { value: 'EXPO 3' } });
+    fireEvent.change(screen.getByLabelText(/Código C\.O\./, { selector: 'input' }), { target: { value: 'E13' } });
     fireEvent.change(principalSelect(), { target: { value: 'p1' } });
     fireEvent.click(screen.getByRole('button', { name: 'Crear sucursal' }));
 
@@ -215,13 +216,86 @@ describe('SucursalesTab — Código C.O.', () => {
     expect(mockCreateMaestro.mock.calls[0][1].codigo_co).toBe('C06');
   });
 
-  it('sends null when the code is cleared on edit', async () => {
+  it('refuses to clear a stored code on edit', async () => {
     await renderTab();
     fireEvent.click(screen.getByRole('button', { name: 'Editar' }));
     fireEvent.change(coInput(), { target: { value: '' } });
     fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
 
+    expect(await screen.findByText('El Código C.O. no se puede borrar: identifica a la sucursal.')).toBeInTheDocument();
+    expect(mockUpdateMaestro).not.toHaveBeenCalled();
+  });
+});
+
+describe('SucursalesTab — the C.O. identifies the store', () => {
+  beforeEach(() => {
+    mockCreateMaestro.mockReset().mockResolvedValue({});
+    mockUpdateMaestro.mockReset().mockResolvedValue({});
+  });
+
+  const nombreInput = () => screen.getByLabelText(/Nombre/, { selector: 'input' });
+
+  it('puts the code first in the form and marks it required', async () => {
+    await renderTab();
+
+    const inputs = Array.from(document.querySelectorAll('form input'));
+    expect(inputs[0]).toBe(coInput());
+    expect(coInput().closest('label')).toHaveTextContent('Código C.O. *');
+    expect(coInput()).toBeRequired();
+  });
+
+  it('blocks a create without a code', async () => {
+    await renderTab();
+    fireEvent.change(nombreInput(), { target: { value: 'SUR' } });
+    fireEvent.submit(nombreInput().closest('form'));
+
+    expect(await screen.findByText('El Código C.O. es obligatorio: identifica a la sucursal.')).toBeInTheDocument();
+    expect(mockCreateMaestro).not.toHaveBeenCalled();
+  });
+
+  it('pre-validates the format before saving', async () => {
+    await renderTab();
+    fireEvent.change(nombreInput(), { target: { value: 'SUR' } });
+    fireEvent.change(coInput(), { target: { value: '5' } });
+    fireEvent.submit(nombreInput().closest('form'));
+
+    expect(await screen.findByText(/Código C\.O\. '5' no es válido/)).toBeInTheDocument();
+    expect(mockCreateMaestro).not.toHaveBeenCalled();
+  });
+
+  it('still edits a legacy store that has no code yet', async () => {
+    mockListMaestros.mockResolvedValue([{ ...SUC, codigo_co: null }]);
+    render(<SucursalesTab />);
+    await waitFor(() => expect(screen.getByRole('table')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'Editar' }));
+
+    expect(coInput()).not.toBeRequired();
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+
     await waitFor(() => expect(mockUpdateMaestro).toHaveBeenCalled());
     expect(mockUpdateMaestro.mock.calls[0][2].codigo_co).toBeNull();
+  });
+
+  it('renames a store freely, keeping its code', async () => {
+    await renderTab();
+    fireEvent.click(screen.getByRole('button', { name: 'Editar' }));
+    fireEvent.change(nombreInput(), { target: { value: 'NORTE NUEVO' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+
+    await waitFor(() => expect(mockUpdateMaestro).toHaveBeenCalled());
+    expect(mockUpdateMaestro.mock.calls[0][2]).toMatchObject({ nombre: 'NORTE NUEVO', codigo_co: 'E05' });
+  });
+
+  it('clears the form error once a save goes through', async () => {
+    await renderTab();
+    fireEvent.change(nombreInput(), { target: { value: 'SUR' } });
+    fireEvent.submit(nombreInput().closest('form'));
+    await screen.findByText('El Código C.O. es obligatorio: identifica a la sucursal.');
+
+    fireEvent.change(coInput(), { target: { value: 'c06' } });
+    fireEvent.submit(nombreInput().closest('form'));
+
+    await waitFor(() => expect(mockCreateMaestro).toHaveBeenCalled());
+    expect(screen.queryByText('El Código C.O. es obligatorio: identifica a la sucursal.')).not.toBeInTheDocument();
   });
 });

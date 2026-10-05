@@ -158,10 +158,13 @@ class TestValidarPrincipal:
 
 class TestCrud:
     async def test_create_with_a_principal_validates_and_stores_it(self):
-        db = FakeAsyncSession(execute_queue=[[(A, "LA 33", None)]])
+        # principal, then the C.O. is free
+        db = FakeAsyncSession(execute_queue=[[(A, "LA 33", None)], []])
 
         creada = await maestros.create_sucursal(
-            db, SucursalCreate(nombre="EXPO 2", principal_id=A), USER_ID
+            db, SucursalCreate(nombre="EXPO 2", codigo_co="E12",
+                               principal_id=A),
+            USER_ID,
         )
 
         assert creada.principal_id == A
@@ -171,7 +174,8 @@ class TestCrud:
 
         with pytest.raises(sucursal_grupo.PrincipalInvalidaError):
             await maestros.create_sucursal(
-                db, SucursalCreate(nombre="EXPO 2", principal_id=A),
+                db, SucursalCreate(nombre="EXPO 2", codigo_co="E12",
+                                   principal_id=A),
                 USER_ID,
             )
         assert db.added_of_type(Sucursal) == []

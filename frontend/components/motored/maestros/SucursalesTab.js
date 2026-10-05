@@ -89,17 +89,35 @@ const codigoCoLabelStyle = {
 };
 
 // Same rule as the backend's CODIGO_CO_PATRON (one letter, two digits); the
-// browser checks it before saving, the backend has the final word.
-function CodigoCoField({ form, setForm }) {
+// form checks it before saving, the backend has the final word.
+const CODIGO_CO_PATRON = /^[A-Z][0-9]{2}$/;
+const CODIGO_CO_OBLIGATORIO = 'El Código C.O. es obligatorio: identifica a la sucursal.';
+const CODIGO_CO_NO_SE_BORRA = 'El Código C.O. no se puede borrar: identifica a la sucursal.';
+
+// The C.O. identifies the store, so it is required, except when editing a
+// legacy store that has none yet (it still edits without one). The input
+// uses aria-required, not required: the browser's own bubble would hide
+// this Spanish message.
+function errorCodigoCo(codigo, editingId, codigoGuardado) {
+  if (!codigo) {
+    if (!editingId) return CODIGO_CO_OBLIGATORIO;
+    return codigoGuardado ? CODIGO_CO_NO_SE_BORRA : '';
+  }
+  if (CODIGO_CO_PATRON.test(codigo)) return '';
+  return `Código C.O. '${codigo}' no es válido: debe ser una letra seguida de dos números (ej: E05).`;
+}
+
+function CodigoCoField({ form, setForm, required }) {
   return (
     <label style={codigoCoLabelStyle}>
       <span>
-        Código C.O.
+        Código C.O. <span aria-hidden="true">*</span>
         <InfoTooltip text={CODIGO_CO_TOOLTIP} />
       </span>
       <input
         type="text"
         value={form.codigo_co}
+        aria-required={required}
         maxLength={3}
         pattern="[A-Za-z][0-9]{2}"
         title="Una letra y dos números (ej: E05)"
@@ -137,14 +155,12 @@ function SucursalFormField({ f, form, setForm }) {
   );
 }
 
-// The C.O. goes right after the name: together they identify the store.
-function SucursalForm({ form, setForm, editingId, onSubmit, onCancel, sucursales }) {
-  const [nombre, ...resto] = FIELDS;
+// The C.O. goes first: it identifies the store. The name may change.
+function SucursalForm({ form, setForm, editingId, codigoRequerido, onSubmit, onCancel, sucursales }) {
   return (
     <form onSubmit={onSubmit} style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
-      <SucursalFormField f={nombre} form={form} setForm={setForm} />
-      <CodigoCoField form={form} setForm={setForm} />
-      {resto.map((f) => <SucursalFormField key={f.key} f={f} form={form} setForm={setForm} />)}
+      <CodigoCoField form={form} setForm={setForm} required={codigoRequerido} />
+      {FIELDS.map((f) => <SucursalFormField key={f.key} f={f} form={form} setForm={setForm} />)}
       <PrincipalSelect form={form} setForm={setForm} sucursales={sucursales} editingId={editingId} />
       <button type="submit" className="motored-btn motored-btn-primary">{editingId ? 'Guardar cambios' : 'Crear sucursal'}</button>
       {editingId && (
@@ -318,9 +334,13 @@ function useSucursales() {
 function useSucursalesEditor(save) {
   const [form, setForm] = useState(emptyForm);
   const [editingId, setEditingId] = useState(null);
+  const [codigoGuardado, setCodigoGuardado] = useState('');
+  const [formError, setFormError] = useState('');
 
   const startEdit = (s) => {
     setEditingId(s.id);
+    setCodigoGuardado(s.codigo_co || '');
+    setFormError('');
     setForm({
       nombre: s.nombre,
       codigo_co: s.codigo_co || '',
@@ -338,15 +358,21 @@ function useSucursalesEditor(save) {
 
   const cancelEdit = () => {
     setEditingId(null);
+    setCodigoGuardado('');
+    setFormError('');
     setForm(emptyForm);
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    const codigo = form.codigo_co.trim().toUpperCase();
+    const errorCodigo = errorCodigoCo(codigo, editingId, codigoGuardado);
+    setFormError(errorCodigo);
+    if (errorCodigo) return;
     const ok = await save(
       {
         nombre: form.nombre,
-        codigo_co: form.codigo_co.trim().toUpperCase() || null,
+        codigo_co: codigo || null,
         sic: form.sic || null,
         dias_seguridad: form.dias_seguridad,
         dias_empaque: form.dias_empaque ? Number(form.dias_empaque) : null,
@@ -362,12 +388,15 @@ function useSucursalesEditor(save) {
     if (ok) cancelEdit();
   };
 
-  return { form, setForm, editingId, startEdit, cancelEdit, handleSubmit };
+  const codigoRequerido = !editingId || Boolean(codigoGuardado);
+  return { form, setForm, editingId, codigoRequerido, formError, startEdit, cancelEdit, handleSubmit };
 }
 
 export default function SucursalesTab() {
   const { sucursales, loading, error, save, deactivate, reactivate, reload } = useSucursales();
-  const { form, setForm, editingId, startEdit, cancelEdit, handleSubmit } = useSucursalesEditor(save);
+  const {
+    form, setForm, editingId, codigoRequerido, formError, startEdit, cancelEdit, handleSubmit,
+  } = useSucursalesEditor(save);
   const [showBulkModal, setShowBulkModal] = useState(false);
 
   return (
@@ -376,10 +405,13 @@ export default function SucursalesTab() {
 
       {error && <p style={{ color: 'var(--motored-danger, #c0392b)', fontSize: '0.8rem' }}>{error}</p>}
 
+      {formError && <p role="alert" style={{ color: 'var(--motored-danger, #c0392b)', fontSize: '0.8rem' }}>{formError}</p>}
+
       <SucursalForm
         form={form}
         setForm={setForm}
         editingId={editingId}
+        codigoRequerido={codigoRequerido}
         onSubmit={handleSubmit}
         onCancel={cancelEdit}
         sucursales={sucursales}

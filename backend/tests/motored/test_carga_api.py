@@ -51,13 +51,17 @@ def _motored_ready(monkeypatch):
 
 
 def test_validar_with_one_invalid_row_reports_error_and_writes_nothing():
-    session = FakeAsyncSession(execute_queue=[[]])  # only the readiness probe
+    # readiness probe + the C.O. resolver's read of the saved stores
+    session = FakeAsyncSession(execute_queue=[[], []])
     override_motored_db(session)
 
     with TestClient(app) as client:
         response = client.post(
             VALIDAR_URL,
-            json={"filas": [{"nombre": "CALI NORTE"}, {"nombre": ""}]},
+            json={"filas": [
+                {"nombre": "CALI NORTE", "codigo_co": "E01"},
+                {"nombre": "", "codigo_co": "E02"},
+            ]},
         )
 
     assert response.status_code == 200
@@ -71,11 +75,14 @@ def test_validar_with_one_invalid_row_reports_error_and_writes_nothing():
 def test_validar_with_fully_valid_file_writes_nothing_either():
     """`validar` is a DRY RUN -- even a fully valid file must not write,
     that is exactly what distinguishes it from `carga`."""
-    session = FakeAsyncSession(execute_queue=[[]])
+    session = FakeAsyncSession(execute_queue=[[], []])
     override_motored_db(session)
 
     with TestClient(app) as client:
-        response = client.post(VALIDAR_URL, json={"filas": [{"nombre": "CALI NORTE"}]})
+        response = client.post(
+            VALIDAR_URL,
+            json={"filas": [{"nombre": "CALI NORTE", "codigo_co": "E01"}]},
+        )
 
     assert response.status_code == 200
     assert response.json()["ok"] is True
@@ -84,13 +91,16 @@ def test_validar_with_fully_valid_file_writes_nothing_either():
 
 
 def test_carga_with_one_invalid_row_rejects_whole_file_and_writes_nothing():
-    session = FakeAsyncSession(execute_queue=[[]])
+    session = FakeAsyncSession(execute_queue=[[], []])
     override_motored_db(session)
 
     with TestClient(app) as client:
         response = client.post(
             CARGA_URL,
-            json={"filas": [{"nombre": "CALI NORTE"}, {"nombre": ""}]},
+            json={"filas": [
+                {"nombre": "CALI NORTE", "codigo_co": "E01"},
+                {"nombre": "", "codigo_co": "E02"},
+            ]},
         )
 
     assert response.status_code == 200
@@ -102,12 +112,16 @@ def test_carga_with_one_invalid_row_rejects_whole_file_and_writes_nothing():
 
 
 def test_carga_with_fully_valid_file_commits_atomically():
-    # probe + get_sucursal_by_nombre (no match) -> create path, one commit
-    session = FakeAsyncSession(execute_queue=[[], []])
+    # probe + C.O. resolver + upsert lookup (no match) -> create path,
+    # one commit
+    session = FakeAsyncSession(execute_queue=[[], [], []])
     override_motored_db(session)
 
     with TestClient(app) as client:
-        response = client.post(CARGA_URL, json={"filas": [{"nombre": "CALI NORTE  "}]})
+        response = client.post(
+            CARGA_URL,
+            json={"filas": [{"nombre": "CALI NORTE  ", "codigo_co": "E01"}]},
+        )
 
     assert response.status_code == 200
     body = response.json()

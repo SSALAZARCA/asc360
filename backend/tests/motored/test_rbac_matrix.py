@@ -65,7 +65,7 @@ def test_maestros_read_allowed_for_every_role(role):
 @pytest.mark.parametrize("role", ALL_ROLES)
 def test_maestros_write_restricted_to_admin_and_compras(role):
     client = _client_as(role)
-    response = client.post("/api/motored/maestros/sucursales", json={"nombre": "CALI NORTE"})
+    response = client.post("/api/motored/maestros/sucursales", json={"nombre": "CALI NORTE", "codigo_co": "E01"})
     if role in WRITE_ROLES:
         assert response.status_code in (200, 201), response.text
     else:

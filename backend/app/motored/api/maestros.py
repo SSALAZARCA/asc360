@@ -270,6 +270,7 @@ def _detalle_duplicado(entidad: str, data: Any) -> str:
 _ERRORES_DE_DATO = (
     maestros.SustitutaInvalidaError,
     maestros.CodigoCoEnUsoError,
+    maestros.CodigoCoRequeridoError,
     sucursal_grupo.PrincipalInvalidaError,
 )
 

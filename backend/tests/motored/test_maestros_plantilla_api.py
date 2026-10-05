@@ -79,7 +79,7 @@ def test_plantilla_sucursal_returns_expected_headers_in_order():
 
     assert response.status_code == 200
     header = _header_row(response.content)
-    assert header[:2] == ["Nombre", "Código C.O."]
+    assert header[:2] == ["Código C.O.", "Nombre"]
     assert "SIC" in header
     assert header[-2:] == ["Activa", "Sucursal principal"]
 

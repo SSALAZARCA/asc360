@@ -10,8 +10,10 @@ at COMMIT, which these tests never reach: `SET CONSTRAINTS ... IMMEDIATE`
 forces the check where a test needs it.
 
 Covers what the doubles cannot: the constraint itself (deferred, NULLs on
-many rows), two stores swapping codes in one upload, and the service
-queries on real rows.
+many rows), two stores swapping their (code, name) pairs in one upload
+(the C.O. is the key, so it is a swap of names), and the service queries
+on real rows. `test_sucursal_clave_co_pg.py` covers renames and the first
+upload of codes.
 """
 import os
 import random
@@ -114,42 +116,43 @@ async def test_crud_check_names_the_store_holding_the_code(sesion):
     await maestros.validar_codigo_co_libre(sesion, duena.id, codigo)
 
 
-async def test_upload_swaps_two_codes_in_one_file(sesion):
+async def test_upload_swaps_two_code_name_pairs_in_one_file(sesion):
     primero, segundo = await _codigos_libres(sesion, 2)
-    a = await _crear(sesion, f"SWAP A {_sufijo()}", primero)
-    b = await _crear(sesion, f"SWAP B {_sufijo()}", segundo)
+    nombre_a, nombre_b = f"SWAP A {_sufijo()}", f"SWAP B {_sufijo()}"
+    await _crear(sesion, nombre_a, primero)
+    await _crear(sesion, nombre_b, segundo)
 
     resultado = await _resolver_y_procesar_carga(
         sesion, "sucursal",
-        [{"nombre": a.nombre, "codigo_co": segundo.lower()},
-         {"nombre": b.nombre, "codigo_co": f" {primero} "}],
+        [{"nombre": nombre_a, "codigo_co": segundo.lower()},
+         {"nombre": nombre_b, "codigo_co": f" {primero} "}],
         USER_ID,
     )
 
     assert resultado.ok is True
+    await sesion.flush()
     await sesion.execute(_INMEDIATA)
-    assert await _codigo_de(sesion, a.nombre) == segundo
-    assert await _codigo_de(sesion, b.nombre) == primero
+    assert await _codigo_de(sesion, nombre_a) == segundo
+    assert await _codigo_de(sesion, nombre_b) == primero
 
 
-async def test_upload_rejects_a_code_held_by_another_store(sesion):
-    (codigo,) = await _codigos_libres(sesion, 1)
-    duena = await _crear(sesion, f"DUENA {_sufijo()}", codigo)
-    nueva = f"NUEVA {_sufijo()}"
+async def test_upload_rejects_a_code_and_a_name_of_different_stores(
+    sesion,
+):
+    usado, libre = await _codigos_libres(sesion, 2)
+    duena = await _crear(sesion, f"DUENA {_sufijo()}", usado)
 
     resultado = await _resolver_y_procesar_carga(
-        sesion, "sucursal", [{"nombre": nueva, "codigo_co": codigo}],
+        sesion, "sucursal", [{"nombre": duena.nombre, "codigo_co": libre}],
         USER_ID,
     )
 
     assert resultado.ok is False
-    assert f"'{duena.nombre}'" in resultado.errores[0].motivo
-    assert (await sesion.execute(
-        select(Sucursal).where(Sucursal.nombre == nueva)
-    )).scalars().first() is None
+    assert f"'{usado}'" in resultado.errores[0].motivo
+    assert await _codigo_de(sesion, duena.nombre) == usado
 
 
-async def test_upload_blank_cell_keeps_the_stored_code(sesion):
+async def test_upload_blank_cell_is_a_row_error(sesion):
     (codigo,) = await _codigos_libres(sesion, 1)
     tienda = await _crear(sesion, f"GUARDA {_sufijo()}", codigo)
 
@@ -159,5 +162,5 @@ async def test_upload_blank_cell_keeps_the_stored_code(sesion):
         USER_ID,
     )
 
-    assert resultado.ok is True
+    assert resultado.ok is False
     assert await _codigo_de(sesion, tienda.nombre) == codigo

@@ -5,7 +5,8 @@ archivo COMPLETO primero (`validators.validate_rows`, que acumula TODOS los
 errores en un solo pase); si hay AL MENOS una fila inválida, no se escribe
 absolutamente nada y se retorna el reporte completo. Un archivo totalmente
 válido se sube en una única transacción, con upsert por llave natural
-(owner decision #2; `referencia` por `codigo`), reutilizando exactamente las mismas funciones de
+(owner decision #2; `referencia` por `codigo`, `sucursal` por su Código
+C.O., que puede renombrarla), reutilizando exactamente las mismas funciones de
 `services/maestros.py` que usa el CRUD unitario -- una sola fuente de
 verdad para la coerción de `unidad_empaque` y el trim de `sucursal.nombre`.
 
@@ -179,15 +180,22 @@ async def _reemplazar_referencias(
 async def _aplicar_columnas_de_sucursal(
     db, subidas: List[tuple], usuario_id: Optional[uuid.UUID]
 ):
-    """Sucursales columns that are not schema fields, applied after every
-    row was upserted: "Bodegas secundarias" and "Sucursal principal".
-    Returns the secondary-bodegas summary, or None without that column."""
+    """Sucursales steps applied after every row `(obj, fila, created)` was
+    upserted: the names (the C.O. matched the store, so a row may rename
+    it), then the columns that are not schema fields: "Bodegas
+    secundarias" and "Sucursal principal". Returns the secondary-bodegas
+    summary, or None without that column."""
+    await maestros.renombrar_sucursales_carga(
+        db, [(obj, fila["nombre"], creada) for obj, fila, creada in subidas],
+        usuario_id,
+    )
     secundarias = [
-        (obj, fila[bodegas_secundarias.FILA_CLAVE]) for obj, fila in subidas
+        (obj, fila[bodegas_secundarias.FILA_CLAVE])
+        for obj, fila, _ in subidas
         if bodegas_secundarias.FILA_CLAVE in fila
     ]
     principales = [
-        (obj, fila[sucursal_grupo.FILA_CLAVE]) for obj, fila in subidas
+        (obj, fila[sucursal_grupo.FILA_CLAVE]) for obj, fila, _ in subidas
         if sucursal_grupo.FILA_CLAVE in fila
     ]
     resumen = None
@@ -197,7 +205,7 @@ async def _aplicar_columnas_de_sucursal(
         )
     if principales:
         await sucursal_grupo.aplicar(
-            db, principales, [obj for obj, _ in subidas], usuario_id
+            db, principales, [obj for obj, _, _ in subidas], usuario_id
         )
     return resumen
 
@@ -252,10 +260,10 @@ async def procesar_carga(
     resumen_bodegas = None
 
     try:
-        subidas: List[tuple] = []  # (obj, fila) in file order
+        subidas: List[tuple] = []  # (obj, fila, created) in file order
         for index, row in enumerate(valid_rows, start=1):
             obj, created, row_warnings = await _upsert_row(db, entidad, row, usuario_id)
-            subidas.append((obj, row))
+            subidas.append((obj, row, created))
             if created:
                 insertados += 1
             else:

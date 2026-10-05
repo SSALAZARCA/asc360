@@ -2,13 +2,16 @@
 Phase 3 "Models/Schemas/Services" — task 3.3 (sdd/motored-pedidos-cimientos).
 
 `services/maestros.py`: CRUD + soft-delete ONLY (never a real SQL DELETE)
-for every master, plus natural-key upsert (`sucursal` by nombre trimmed,
+for every master, plus natural-key upsert (`sucursal` by its C.O., then by
+nombre trimmed while it has no C.O.,
 `bodega` by codigo, `proveedor` by codigo). `referencia` is identified by
 codigo and uploaded through `reemplazo_referencias` (full replace).
 """
+import ast
+import inspect
 import uuid
-
-import pytest
+from datetime import date
+from decimal import Decimal
 
 from app.motored.models.auditoria_maestro import AuditoriaMaestro
 from app.motored.models.bodega import Bodega
@@ -50,7 +53,7 @@ class TestProveedorUpsertByCodigo:
 class TestSucursalUpsertByNombreTrimmed:
     async def test_create_trims_nombre_before_storing(self):
         db = FakeAsyncSession(execute_queue=[[]])
-        data = SucursalCreate(nombre="CALI NORTE   ")
+        data = SucursalCreate(nombre="CALI NORTE   ", codigo_co="E01")
 
         sucursal, _, created = await maestros.upsert_sucursal(db, data)
 
@@ -160,9 +163,6 @@ class TestSoftDeleteNeverHardDeletes:
         """Static guard: no function in `services/maestros.py` may ever
         call `db.delete(...)` — deleting a master is ALWAYS `activa = false`
         (owner decision #3 / spec "No endpoint offers hard delete")."""
-        import ast
-        import inspect
-
         source = inspect.getsource(maestros)
         tree = ast.parse(source)
         delete_calls = [
@@ -182,11 +182,10 @@ class TestNewSpecFieldsPersistOnCreate:
     be extended to include the spec fields the original build dropped."""
 
     async def test_create_sucursal_persists_the_six_new_fields(self):
-        db = FakeAsyncSession()
-        from datetime import date
-
+        db = FakeAsyncSession(execute_queue=[[]])  # the C.O. is free
         data = SucursalCreate(
             nombre="CALI NORTE",
+            codigo_co="E01",
             dias_empaque=3,
             dias_transito=5,
             bodega_principal="BE051",
@@ -206,8 +205,6 @@ class TestNewSpecFieldsPersistOnCreate:
 
     async def test_create_proveedor_persists_dias_seguridad_default(self):
         db = FakeAsyncSession()
-        from decimal import Decimal
-
         data = ProveedorCreate(codigo="HMCL", nombre="HMCL Colombia", dias_seguridad_default=Decimal("3.0"))
 
         proveedor = await maestros.create_proveedor(db, data)

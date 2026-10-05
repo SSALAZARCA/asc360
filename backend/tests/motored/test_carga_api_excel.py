@@ -60,9 +60,12 @@ def _motored_ready(monkeypatch):
 
 
 def test_validar_excel_with_valid_file_writes_nothing():
-    session = FakeAsyncSession(execute_queue=[[]])  # only the readiness probe
+    # readiness probe + the C.O. resolver's read of the saved stores
+    session = FakeAsyncSession(execute_queue=[[], []])
     override_motored_db(session)
-    file_bytes = _xlsx_bytes(["Nombre"], [["CALI NORTE"]])
+    file_bytes = _xlsx_bytes(
+        ["Código C.O.", "Nombre"], [["E01", "CALI NORTE"]]
+    )
 
     with TestClient(app) as client:
         response = client.post(VALIDAR_EXCEL_URL, files=_upload_file("sucursales.xlsx", file_bytes))
@@ -92,10 +95,13 @@ def test_carga_excel_with_fully_valid_file_commits_atomically_same_as_json_path(
     """Same 1-row sucursal upsert as
     `test_carga_api.py::test_carga_with_fully_valid_file_commits_atomically`
     -- proves the Excel path reaches the exact same `procesar_carga`
-    codepath (same execute_queue shape: probe + get-by-nombre lookup)."""
-    session = FakeAsyncSession(execute_queue=[[], []])
+    codepath (same execute_queue shape: probe + C.O. resolver + upsert
+    lookup)."""
+    session = FakeAsyncSession(execute_queue=[[], [], []])
     override_motored_db(session)
-    file_bytes = _xlsx_bytes(["Nombre"], [["CALI NORTE  "]])
+    file_bytes = _xlsx_bytes(
+        ["Código C.O.", "Nombre"], [["E01", "CALI NORTE  "]]
+    )
 
     with TestClient(app) as client:
         response = client.post(CARGA_EXCEL_URL, files=_upload_file("sucursales.xlsx", file_bytes))
@@ -108,10 +114,11 @@ def test_carga_excel_with_fully_valid_file_commits_atomically_same_as_json_path(
 
 
 def test_validar_excel_rejects_an_unknown_activa_value_naming_the_column():
-    session = FakeAsyncSession(execute_queue=[[]])  # only the readiness probe
+    session = FakeAsyncSession(execute_queue=[[], []])  # probe + C.O. resolver
     override_motored_db(session)
     file_bytes = _xlsx_bytes(
-        ["Nombre", "Activa"], [["CALI", "No"], ["PASTO", "cerrada"]]
+        ["C.O.", "Nombre", "Activa"],
+        [["E01", "CALI", "No"], ["E02", "PASTO", "cerrada"]],
     )
 
     with TestClient(app) as client:
@@ -152,9 +159,12 @@ def test_validar_excel_reports_a_duplicate_codigo_co_on_both_rows():
 
 
 def test_carga_excel_creates_a_closed_store_inactive():
-    session = FakeAsyncSession(execute_queue=[[], []])  # probe + lookup
+    # probe + C.O. resolver + upsert lookup
+    session = FakeAsyncSession(execute_queue=[[], [], []])
     override_motored_db(session)
-    file_bytes = _xlsx_bytes(["Nombre", "Activa"], [["CERRADA", "no"]])
+    file_bytes = _xlsx_bytes(
+        ["C.O.", "Nombre", "Activa"], [["E09", "CERRADA", "no"]]
+    )
 
     with TestClient(app) as client:
         response = client.post(
@@ -167,13 +177,16 @@ def test_carga_excel_creates_a_closed_store_inactive():
 
 
 def test_carga_excel_with_invalid_row_rejects_whole_file_and_writes_nothing():
-    session = FakeAsyncSession(execute_queue=[[]])
+    session = FakeAsyncSession(execute_queue=[[], []])  # probe + C.O. resolver
     override_motored_db(session)
     # Row 2 has a blank Nombre but a populated SIC -- NOT a fully-blank row
     # (which would be silently skipped, mirroring papaparse's
     # `skipEmptyLines`), so it reaches validation and is correctly reported
     # as invalid.
-    file_bytes = _xlsx_bytes(["Nombre", "SIC"], [["CALI NORTE", "S001"], ["", "S002"]])
+    file_bytes = _xlsx_bytes(
+        ["C.O.", "Nombre", "SIC"],
+        [["E01", "CALI NORTE", "S001"], ["E02", "", "S002"]],
+    )
 
     with TestClient(app) as client:
         response = client.post(CARGA_EXCEL_URL, files=_upload_file("sucursales.xlsx", file_bytes))

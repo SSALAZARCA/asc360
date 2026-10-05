@@ -79,12 +79,26 @@ describe('BulkUploadModal — sucursal "Sucursal principal" column', () => {
 });
 
 describe('BulkUploadModal — sucursal "Código C.O." column', () => {
-  it('lists the column right after the name, with its tooltip', () => {
+  it('lists the column first, before the name, with its tooltip', () => {
     render(<BulkUploadModal entidad="sucursal" onClose={jest.fn()} onSuccess={jest.fn()} />);
 
-    const etiqueta = screen.getByText('Código C.O.');
-    expect(etiqueta).toBeInTheDocument();
+    const items = screen.getAllByRole('listitem').map((li) => li.querySelector('strong').textContent);
+    expect(items.slice(0, 2)).toEqual(['Código C.O.', 'Nombre']);
     expect(screen.getByRole('note', { name: /centro de operación/ })).toBeInTheDocument();
+  });
+
+  it('marks the column required because it identifies the store', () => {
+    render(<BulkUploadModal entidad="sucursal" onClose={jest.fn()} onSuccess={jest.fn()} />);
+
+    const item = screen.getByText('Código C.O.').closest('li');
+    expect(item).toHaveTextContent('(obligatoria)');
+    expect(screen.getByRole('note', { name: /identifica a la sucursal/ })).toBeInTheDocument();
+  });
+
+  it('explains that "Sucursal principal" takes a C.O. or a name', () => {
+    render(<BulkUploadModal entidad="sucursal" onClose={jest.fn()} onSuccess={jest.fn()} />);
+
+    expect(screen.getByRole('note', { name: /Código C\.O\. \(ej: E05\) o el nombre de la tienda principal/ })).toBeInTheDocument();
   });
 
   it('maps the "C.O." header and sends the code as text', async () => {

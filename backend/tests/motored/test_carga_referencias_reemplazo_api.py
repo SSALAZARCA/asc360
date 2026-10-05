@@ -211,10 +211,13 @@ def test_aplicar_excel_con_codigos_que_no_son_una_lista_json_es_422():
 
 
 def test_otras_entidades_ignoran_las_banderas_y_no_piden_confirmacion():
-    session = FakeAsyncSession(execute_queue=[[], []])
+    session = FakeAsyncSession(execute_queue=[[], [], []])
     override_motored_db(session)
 
     with TestClient(app) as client:
-        response = client.post("/api/motored/maestros/sucursal/carga", json={"filas": [{"nombre": "CALI"}]})
+        response = client.post(
+            "/api/motored/maestros/sucursal/carga",
+            json={"filas": [{"nombre": "CALI", "codigo_co": "E01"}]},
+        )
 
     assert response.status_code == 200 and response.json()["ok"] is True

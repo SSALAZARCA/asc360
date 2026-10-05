@@ -46,8 +46,8 @@ class TestAllOrNothing:
     async def test_fully_valid_file_commits_all_rows_in_one_transaction(self):
         db = FakeAsyncSession(execute_queue=[[], []])  # no existing sucursal for either row
         rows = [
-            {"nombre": "CALI NORTE", "sic": "S1"},
-            {"nombre": "BOGOTA", "sic": "S2"},
+            {"nombre": "CALI NORTE", "codigo_co": "E01", "sic": "S1"},
+            {"nombre": "BOGOTA", "codigo_co": "C01", "sic": "S2"},
         ]
 
         resultado = await carga.procesar_carga(db, "sucursal", rows)
@@ -128,7 +128,7 @@ class TestErroresPreviosBlockEntireWriteAllOrNothing:
 
     async def test_no_errores_previos_behaves_exactly_as_before(self):
         db = FakeAsyncSession(execute_queue=[[]])
-        rows = [{"nombre": "CALI NORTE"}]
+        rows = [{"nombre": "CALI NORTE", "codigo_co": "E01"}]
 
         resultado = await carga.procesar_carga(db, "sucursal", rows)
 

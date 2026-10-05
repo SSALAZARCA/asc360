@@ -32,6 +32,7 @@ Let the owner load the corrected Sucursales file in one go, and model physical p
 - [x] T2
 - [x] T3
 - [x] T5 (store code C.O.: owner asked for it at the start; I wrongly deferred it)
+- [x] T5b (C.O. is the sucursal business key: upload matches stores by C.O., name is a mutable attribute; C.O. required in upload and form; first upload backfills by name for stores without C.O.; "Sucursal principal" accepts C.O.)
 - [ ] T4 (edit secondary bodegas from the Sucursales screen)
 - [ ] T6 (REINSTATED, owner confirmed verbatim): VENTAS ingest resolves the sucursal by the row's C.O.; bodegas_excluidas checked first; bodega only as fallback for files without C.O.; unknown C.O. = row error; non-store C.O. (MR/PAF01) needs an exclusion. No re-upload of old ventas. Runs after T5 (single writer); coordinate ventas.py with the KPI session (R6).
 - [ ] T7 (presupuestos and vendedores recognize the store by C.O., name as fallback). KPI session files: coordinate; they may implement it.
@@ -88,3 +89,12 @@ Let the owner load the corrected Sucursales file in one go, and model physical p
     - `start.sh` starts the server even when a migration fails.
     - A JSON upload can carry a raw `principal_id` that is not checked against other rows in the same file.
     - Associated stores without a SIC are no longer flagged.
+- 2026-10-04: the owner stated that the C.O. identifies the sucursal and the name can change, so the name must not be the key. Added T5b: the C.O. becomes the business key.
+- 2026-10-04: T5b done.
+  - The upload matches stores by C.O. It falls back to the name only for stores without a C.O., and renames work through a temporary name.
+  - The C.O. is required on every upload row and in CRUD create, and a stored C.O. cannot be cleared.
+  - "Sucursal principal" accepts a C.O. or a name.
+  - The C.O. column is first in the template.
+  - Out-of-surface tests (rbac matrix, reemplazo api) were updated by the parent.
+  - Results: tests/motored 5516 passed plus the 3 fixed; pg_real 578 passed, 2 skipped; jest 1867 passed.
+  - Follow-up: make `codigo_co` NOT NULL and the check blocking after the owner's backfill upload.

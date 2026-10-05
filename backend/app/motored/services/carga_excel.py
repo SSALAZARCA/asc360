@@ -85,9 +85,11 @@ class LimiteFilasExcedidoError(CargaExcelError):
 # ---------------------------------------------------------------------------
 ALIASES_POR_ENTIDAD: Dict[str, List[Dict[str, Any]]] = {
     "sucursal": [
-        {"key": "nombre", "label": "Nombre", "required": True, "aliases": ["nombre", "sucursal"]},
-        # ERP store code (e.g. E05). Always text: a number never reaches the
-        # schema as a number. Blank keeps the stored value.
+        # ERP store code (e.g. E05), FIRST: it identifies the store (the
+        # name may change). Always text: a number never reaches the schema
+        # as a number. Required on every row, checked per row by
+        # `maestros.resolver_sucursales_carga` (a file without the column
+        # gets that error on each row), not as a header requirement here.
         {
             "key": "codigo_co", "label": "Código C.O.", "required": False,
             "type": "string",
@@ -95,6 +97,10 @@ ALIASES_POR_ENTIDAD: Dict[str, List[Dict[str, Any]]] = {
                 "codigo_co", "código c.o.", "codigo co", "c.o.", "co",
                 "centro de operación",
             ],
+        },
+        {
+            "key": "nombre", "label": "Nombre", "required": True,
+            "aliases": ["nombre", "sucursal"],
         },
         {"key": "sic", "label": "SIC", "required": False, "aliases": ["sic"]},
         {

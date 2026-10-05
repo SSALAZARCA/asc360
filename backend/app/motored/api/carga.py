@@ -487,9 +487,10 @@ async def _resolver_y_procesar_carga(
 async def _resolve_sucursal_relaciones(
     db: AsyncSession, filas: List[Dict[str, Any]]
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
-    """Sucursales: "Bodegas secundarias", "Sucursal principal" and the
-    uniqueness of "Código C.O.", with their errors merged in row order."""
-    errores_co = await maestros.errores_codigo_co_carga(db, filas)
+    """Sucursales: the store each row writes (by "Código C.O.", required),
+    then "Bodegas secundarias" and "Sucursal principal", which key on that
+    store; their errors merged in row order."""
+    filas, errores_co = await maestros.resolver_sucursales_carga(db, filas)
     filas, errores = await bodegas_secundarias.resolver_filas(db, filas)
     filas, errores_principal = await sucursal_grupo.resolver_filas(
         db, filas

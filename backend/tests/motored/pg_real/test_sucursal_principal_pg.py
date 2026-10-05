@@ -11,6 +11,8 @@ file links a store to a principal created further down the same file, and
 the group helpers on real rows.
 """
 import os
+import random
+import string
 import uuid
 
 import pytest
@@ -54,6 +56,21 @@ async def _crear(sesion, nombre, principal_id=None):
     return sucursal
 
 
+async def _codigos_libres(sesion, cuantos):
+    """Well-formed store codes (C.O.) that no saved store holds."""
+    usados = set((await sesion.execute(
+        select(Sucursal.codigo_co).where(Sucursal.codigo_co.isnot(None))
+    )).scalars().all())
+    libres = []
+    while len(libres) < cuantos:
+        codigo = random.choice(string.ascii_uppercase) + (
+            f"{random.randint(0, 99):02d}"
+        )
+        if codigo not in usados and codigo not in libres:
+            libres.append(codigo)
+    return libres
+
+
 async def _por_nombre(sesion, nombre):
     return (await sesion.execute(
         select(Sucursal).where(Sucursal.nombre == nombre)
@@ -90,9 +107,12 @@ async def test_upload_links_to_a_principal_created_later_in_the_file(
     sesion,
 ):
     s = _sufijo()
+    expo, nueva = await _codigos_libres(sesion, 2)
     filas = [
-        {"nombre": f"EXPO {s}", "sucursal_principal": f"nueva {s}"},
-        {"nombre": f"NUEVA {s}", "sucursal_principal": ""},
+        {"nombre": f"EXPO {s}", "codigo_co": expo,
+         "sucursal_principal": f"nueva {s}"},
+        {"nombre": f"NUEVA {s}", "codigo_co": nueva,
+         "sucursal_principal": ""},
     ]
 
     resultado = await _resolver_y_procesar_carga(
@@ -110,10 +130,12 @@ async def test_upload_rejects_a_chain_against_the_database(sesion):
     s = _sufijo()
     principal = await _crear(sesion, f"LA 33 {s}")
     await _crear(sesion, f"EXPO 1 {s}", principal.id)
+    (codigo,) = await _codigos_libres(sesion, 1)
 
     resultado = await _resolver_y_procesar_carga(
         sesion, "sucursal",
-        [{"nombre": f"EXPO 2 {s}", "sucursal_principal": f"EXPO 1 {s}"}],
+        [{"nombre": f"EXPO 2 {s}", "codigo_co": codigo,
+          "sucursal_principal": f"EXPO 1 {s}"}],
         USER_ID,
     )
 

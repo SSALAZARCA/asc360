@@ -50,14 +50,17 @@ import ReemplazoReferenciasResumen, { totalInactivadas } from './ReemplazoRefere
 // Columnas esperadas por maestro (sucursal/bodega/proveedor/referencia).
 // `aliases` es case/acento-insensible: cubre variantes razonables del
 // encabezado tal como puede venir de Excel.
+// `requiredPerRow`: shown as required, but checked by the backend on every
+// row (a file without the column gets that row error) instead of blocking
+// the file here like `required` does.
 const COLUMNAS_POR_ENTIDAD = {
   sucursal: [
-    { key: 'nombre', label: 'Nombre', required: true, aliases: ['nombre', 'sucursal'] },
     {
-      key: 'codigo_co', label: 'Código C.O.', required: false,
+      key: 'codigo_co', label: 'Código C.O.', required: false, requiredPerRow: true,
       aliases: ['codigo_co', 'código c.o.', 'codigo co', 'c.o.', 'co', 'centro de operación'],
-      help: 'Código del centro de operación en el ERP: una letra y dos números (ej: E05). Cada C.O. es una tienda distinta, así que no puede repetirse. Vacío conserva el código actual.',
+      help: 'Código del centro de operación en el ERP: una letra y dos números (ej: E05). Es obligatorio en cada fila: identifica a la sucursal. Si el C.O. ya existe, la fila actualiza esa sucursal (y le cambia el nombre si viene distinto). Si la sucursal todavía no tiene C.O., se la reconoce por el nombre y se le asigna. Cada C.O. es una tienda distinta, así que no puede repetirse.',
     },
+    { key: 'nombre', label: 'Nombre', required: true, aliases: ['nombre', 'sucursal'] },
     {
       key: 'sic', label: 'SIC', required: false, aliases: ['sic'],
       help: 'Código con el que el proveedor (HMCL) identifica esta sucursal en sus sistemas.',
@@ -108,7 +111,7 @@ const COLUMNAS_POR_ENTIDAD = {
     {
       key: 'sucursal_principal', label: 'Sucursal principal', required: false,
       aliases: ['sucursal_principal', 'sucursal principal', 'tienda principal', 'principal'],
-      help: 'Nombre de la tienda principal bajo la que opera este punto (puede venir en el mismo archivo). El punto conserva sus datos, pero su pedido y sus indicadores se suman a la principal: solo la principal recibe pedido. Vacío conserva lo actual; escribí "Ninguna" para que vuelva a ser tienda principal.',
+      help: 'Código C.O. (ej: E05) o el nombre de la tienda principal bajo la que opera este punto (puede venir en el mismo archivo); mejor el C.O., porque el nombre puede cambiar. El punto conserva sus datos, pero su pedido y sus indicadores se suman a la principal: solo la principal recibe pedido. Vacío conserva lo actual; escribí "Ninguna" para que vuelva a ser tienda principal.',
     },
   ],
   // Nota de alcance: la sucursal de cada bodega NO se asigna por CSV en
@@ -457,7 +460,7 @@ function ColumnasEsperadas({ entidad }) {
         {spec.map((col) => (
           <li key={col.key}>
             <strong style={{ color: 'var(--motored-text, #1a1a18)' }}>{col.label}</strong>
-            {col.required ? ' (obligatoria)' : ' (opcional)'}
+            {col.required || col.requiredPerRow ? ' (obligatoria)' : ' (opcional)'}
             {col.help && <InfoTooltip text={col.help} />}
           </li>
         ))}

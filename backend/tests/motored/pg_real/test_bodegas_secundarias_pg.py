@@ -13,6 +13,8 @@ que el inventario de la principal y de la secundaria se consolida en una sola
 clave, y que desvincular deja la bodega sin tienda sin borrarla.
 """
 import os
+import random
+import string
 import uuid
 from decimal import Decimal
 
@@ -33,6 +35,8 @@ pytestmark = [
 ]
 
 USER_ID = None  # `auditoria_maestro.usuario_id` is a real FK to `usuario`
+# Store name -> its code (C.O.), the key the upload matches stores by.
+_CODIGOS = {}
 
 
 @pytest.fixture
@@ -56,8 +60,28 @@ def _fila(nombre, principal, secundarias=None):
     return fila
 
 
+async def _codigo_de(db, nombre):
+    """The code of the store `nombre`: the same one on every upload, and
+    one that no saved store holds the first time."""
+    if nombre not in _CODIGOS:
+        usados = set((await db.execute(
+            select(Sucursal.codigo_co).where(Sucursal.codigo_co.isnot(None))
+        )).scalars().all()) | set(_CODIGOS.values())
+        codigo = None
+        while codigo is None or codigo in usados:
+            codigo = random.choice(string.ascii_uppercase) + (
+                f"{random.randint(0, 99):02d}"
+            )
+        _CODIGOS[nombre] = codigo
+    return _CODIGOS[nombre]
+
+
 async def _subir(db, *filas):
-    return await _resolver_y_procesar_carga(db, "sucursal", list(filas), USER_ID)
+    filas = [
+        {**fila, "codigo_co": await _codigo_de(db, fila["nombre"])}
+        for fila in filas
+    ]
+    return await _resolver_y_procesar_carga(db, "sucursal", filas, USER_ID)
 
 
 async def _bodega(db, codigo):

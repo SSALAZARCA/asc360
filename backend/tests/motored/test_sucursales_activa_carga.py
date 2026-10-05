@@ -39,9 +39,14 @@ def _xlsx(*rows):
 
 def _sucursal(activa=True):
     return Sucursal(
-        id=uuid.uuid4(), nombre="CALI", bodega_principal="BA061",
-        activa=activa,
+        id=uuid.uuid4(), nombre="CALI", codigo_co="E01",
+        bodega_principal="BA061", activa=activa,
     )
+
+
+def _guardada(sucursal):
+    """The C.O. resolver's read of a saved store."""
+    return [(sucursal.id, sucursal.nombre, sucursal.codigo_co)]
 
 
 def _auditorias(db):
@@ -131,7 +136,7 @@ class TestService:
         db = FakeAsyncSession(execute_queue=[[]])
 
         sucursal, _, _ = await maestros.upsert_sucursal(
-            db, SucursalCreate(nombre="CALI")
+            db, SucursalCreate(nombre="CALI", codigo_co="E01")
         )
 
         assert sucursal.activa is True
@@ -140,7 +145,9 @@ class TestService:
         db = FakeAsyncSession(execute_queue=[[]])
 
         sucursal, _, _ = await maestros.upsert_sucursal(
-            db, SucursalCreate(nombre="CALI", activa=False), USER_ID
+            db,
+            SucursalCreate(nombre="CALI", codigo_co="E01", activa=False),
+            USER_ID
         )
 
         assert sucursal.activa is False
@@ -151,7 +158,9 @@ class TestService:
         db = FakeAsyncSession(execute_queue=[[existente]])
 
         await maestros.upsert_sucursal(
-            db, SucursalCreate(nombre="CALI", activa=False), USER_ID
+            db,
+            SucursalCreate(nombre="CALI", codigo_co="E01", activa=False),
+            USER_ID
         )
 
         assert existente.activa is False
@@ -162,7 +171,9 @@ class TestService:
         db = FakeAsyncSession(execute_queue=[[existente]])
 
         await maestros.upsert_sucursal(
-            db, SucursalCreate(nombre="CALI", activa=True), USER_ID
+            db,
+            SucursalCreate(nombre="CALI", codigo_co="E01", activa=True),
+            USER_ID
         )
 
         assert existente.activa is True
@@ -173,7 +184,9 @@ class TestService:
         db = FakeAsyncSession(execute_queue=[[existente]])
 
         await maestros.upsert_sucursal(
-            db, SucursalCreate(nombre="CALI", activa=False), USER_ID
+            db,
+            SucursalCreate(nombre="CALI", codigo_co="E01", activa=False),
+            USER_ID
         )
 
         assert existente.activa is False
@@ -184,7 +197,9 @@ class TestService:
         db = FakeAsyncSession(execute_queue=[[existente]])
 
         await maestros.upsert_sucursal(
-            db, SucursalCreate(nombre="CALI", ciudad="Cali"), USER_ID
+            db,
+            SucursalCreate(nombre="CALI", codigo_co="E01", ciudad="Cali"),
+            USER_ID
         )
 
         assert existente.activa is False
@@ -193,10 +208,14 @@ class TestService:
 class TestUpload:
     async def test_upload_deactivates_an_existing_store(self):
         existente = _sucursal(activa=True)
-        db = FakeAsyncSession(execute_queue=[[existente]])
+        db = FakeAsyncSession(
+            execute_queue=[_guardada(existente), [existente]]
+        )
 
         resultado = await _resolver_y_procesar_carga(
-            db, "sucursal", [{"nombre": "CALI", "activa": "No"}], USER_ID
+            db, "sucursal",
+            [{"nombre": "CALI", "codigo_co": "E01", "activa": "No"}],
+            USER_ID,
         )
 
         assert resultado.ok is True
@@ -205,23 +224,27 @@ class TestUpload:
 
     async def test_blank_cell_keeps_an_inactive_store_inactive(self):
         existente = _sucursal(activa=False)
-        db = FakeAsyncSession(execute_queue=[[existente]])
+        db = FakeAsyncSession(
+            execute_queue=[_guardada(existente), [existente]]
+        )
 
         resultado = await _resolver_y_procesar_carga(
             db, "sucursal",
-            [{"nombre": "CALI", "activa": "", "ciudad": "Cali"}], USER_ID,
+            [{"nombre": "CALI", "codigo_co": "E01", "activa": "",
+              "ciudad": "Cali"}],
+            USER_ID,
         )
 
         assert resultado.ok is True
         assert existente.activa is False
 
     async def test_unknown_text_rejects_the_whole_file(self):
-        db = FakeAsyncSession(execute_queue=[])
+        db = FakeAsyncSession(execute_queue=[[]])
 
         resultado = await _resolver_y_procesar_carga(
             db, "sucursal",
-            [{"nombre": "CALI", "activa": "No"},
-             {"nombre": "PASTO", "activa": "cerrada"}],
+            [{"nombre": "CALI", "codigo_co": "E01", "activa": "No"},
+             {"nombre": "PASTO", "codigo_co": "E02", "activa": "cerrada"}],
             USER_ID,
         )
 
