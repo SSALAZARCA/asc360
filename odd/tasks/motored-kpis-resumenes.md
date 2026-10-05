@@ -244,5 +244,17 @@ Each tab scans `venta_detalle` (~1M rows Jan–Sep) 6–8 times per request, wit
 - **Checks:** unit suite 5584 passed (with the stub patch); pg_real 622 passed / 2 skipped.
 - **Parent fix:** 6 out-of-surface fake-session tests needed an autouse stub for the dirty hook. Committed separately; those 3 files pass (82).
 
-## Next step
-Native review + push of R7, then ping -c4 (maestros.py free for their form-path fix). **The user asked to STOP after R7 and continue tomorrow** with R8 (UI timestamp + Recalcular button + perf measurement) and the switch-on (the parent turns it on after verifying a production build).
+- **Delivery:** commits 2933995, a7c98f3 and 785ac8c, pushed to main after rebasing onto -c4's 2b30376. Full unit suite 5624 green post-rebase. -c4 was pinged.
+- **Native review:** risk medium (1,494 lines). Consent granted; the R3 lens approved and the result was acknowledged.
+- **Advisories (fix early in the next session)**
+  - R3-uncaught-busy-error (WARNING, `kpi_resumen.py:139-150`): `ResumenOcupadoError` may surface as a 500 in some callers (VENTAS apply, parametros write, inventory apply). Map it to a clear 409/user message everywhere.
+  - R3-tx-cache-savepoint (WARNING, `kpi_resumen.py:191-200`): the per-transaction dirty cache vs a savepoint rollback could skip a mark.
+  - R3-stale-reconstruyendo (suggestion, `supervisor_kpis.py:116-130`): `reconstruyendo` stays true if the process dies mid-rebuild. Add a staleness timeout.
+  - R3-loop-leak-tests (suggestion, `deps.py:214`).
+- **Production note:** the loop is enabled by default, so the first full build runs automatically after deploy. The read switch stays OFF.
+
+## Next step (session paused 2026-10-05 at the user's request)
+1. Fix the R7 advisories, especially the busy error mapping.
+2. R8: UI "Datos actualizados a las HH:MM" + ADMIN "Recalcular" button; measure endpoint timings before/after.
+3. Verify the production summaries were built (`GET /kpis/estado`); the parent turns on `MOTORED_KPI_RESUMEN_ENABLED` in Coolify only after the user confirms. That env var is set by the user in Coolify, a server setting.
+4. Pending user data: load -c4's `Sucursales_carga_final_...` (with C.O.), upload `Presupuesto asesores 2026_corregido.xlsx`, load the inventory with cost. Then rebuild the presupuestos and vendedores files with C.O.
