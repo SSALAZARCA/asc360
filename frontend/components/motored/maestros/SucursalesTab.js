@@ -27,6 +27,7 @@ import BulkUploadModal from './BulkUploadModal';
 import FormField from './FormField';
 import BodegasSecundariasEditor from './BodegasSecundariasEditor';
 import InfoTooltip from '../InfoTooltip';
+import SucursalesContadores from './SucursalesContadores';
 
 const ENTIDAD_PLURAL = 'sucursales';
 const ENTIDAD_SINGULAR = 'sucursal';
@@ -264,24 +265,27 @@ function SucursalesTable({ sucursales, onEdit, onDeactivate, onReactivate }) {
   );
 }
 
-function SucursalesHeader({ onOpenBulk }) {
+function SucursalesHeader({ onOpenBulk, sucursales }) {
   return (
     <div
       style={{
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem',
         padding: '0.85rem 1rem', background: 'var(--motored-surface-alt, #f4f4f5)',
         border: '1px solid var(--motored-border, #e4e4e7)', borderRadius: 'var(--motored-radius-md, 8px)',
       }}
     >
-      <div>
+      <div style={{ flex: '1 1 260px', minWidth: 0 }}>
         <h2 className="motored-h-seccion">Sucursales</h2>
         <p style={{ margin: '0.2rem 0 0', fontSize: '0.75rem', color: 'var(--motored-text-muted, #5a5a5a)' }}>
           ¿Tenés muchas sucursales para cargar de una vez? Subí un archivo CSV con "Carga masiva" en vez de crearlas una por una.
         </p>
       </div>
-      <button type="button" className="motored-btn motored-btn-secondary" onClick={onOpenBulk}>
-        Carga masiva
-      </button>
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.75rem', minWidth: 0 }}>
+        <SucursalesContadores sucursales={sucursales} />
+        <button type="button" className="motored-btn motored-btn-secondary" onClick={onOpenBulk}>
+          Carga masiva
+        </button>
+      </div>
     </div>
   );
 }
@@ -437,7 +441,7 @@ export default function SucursalesTab() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-      <SucursalesHeader onOpenBulk={() => setShowBulkModal(true)} />
+      <SucursalesHeader sucursales={sucursales} onOpenBulk={() => setShowBulkModal(true)} />
 
       <div ref={formRef} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
       {editingId && (

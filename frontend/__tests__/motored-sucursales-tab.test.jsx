@@ -391,3 +391,19 @@ describe('SucursalesTab — bodegas secundarias', () => {
     expect(chipTexts()).toEqual(['BA161', 'MC001', 'MC002']);
   });
 });
+
+describe('SucursalesTab — counters', () => {
+  it('shows the counters in the header from the loaded list', async () => {
+    mockListMaestros.mockResolvedValue([
+      SUC,
+      { ...SUC, id: 's2', nombre: 'SUR', principal_id: 's1' },
+      { ...SUC, id: 's3', nombre: 'OESTE', activa: false },
+    ]);
+    render(<SucursalesTab />);
+    await waitFor(() => expect(screen.getByRole('table')).toBeInTheDocument());
+    const activas = screen.getByText('Sucursales activas').closest('[data-contador]');
+    const principales = screen.getByText('Tiendas principales').closest('[data-contador]');
+    expect(within(activas).getByTestId('contador-valor')).toHaveTextContent('2');
+    expect(within(principales).getByTestId('contador-valor')).toHaveTextContent('1');
+  });
+});
