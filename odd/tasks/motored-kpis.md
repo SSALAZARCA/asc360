@@ -243,5 +243,18 @@ The user designed the dashboard in the artifact and approved it. The budgets mas
   - Screenshots, retaken by the parent after the label fix (synthetic fixtures): 0px horizontal overflow at 1440 and 1024. The user approved the push.
   - After the rebase, the parent re-ran the affected suites: 336 passed.
 
+- **Delivery:** commits 7a4fbea, 4fc8fcc, fae8e27, bb8b512 and 35181b7, pushed to main.
+- **Native review:** risk medium (2,476 lines). Consent granted; the R3 lens approved and the result was acknowledged.
+- **Advisory, follow-up:** R3-001 in `kpis/asesores/datos.js:47-50`. The "Mejor margen" and "Mayor ticket" chips always use the `up` (green) variant, even when they show ▼ below the network. The variant should follow the arrow.
+
+## Status
+**Feature complete.** All 12 tasks are on main.
+
+**Follow-ups**
+- R3-001 chip variant.
+- Asesores `tendencia` still uses the list-position 3M, not calendar months.
+- `tablero_kpis_consultas` uses private helpers.
+- The scatter shows few labels when crowded (tooltips cover it).
+
 ## Next step
-Native review + push. Then a new feature: precomputed KPI summary tables (Ventas takes over 10 s in production; inventory is loaded weekly).
+New feature: precomputed KPI summary tables, `motored-kpis-resumenes`. Ventas takes over 10 s in production. Inventory is loaded weekly, so a background full rebuild of costs on each inventory upload is fine. Design exploration done (2026-10-04).
