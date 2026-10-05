@@ -18,15 +18,22 @@
  * mounted ONLY for `tipo="DEMANDA_PERDIDA"` -- Excel stays the contingency
  * path there, and this is a non-blocking visibility aid, never a gate, for
  * that tab alone.
+ *
+ * "Declarar sin datos" (odd/tasks/motored-cargas-sin-datos.md) sits next to
+ * "Subir archivo" only on the tipos that can be declared empty
+ * (`textoSinDatos`) and only for ADMIN/COMPRAS.
  */
 import { useState, useEffect, useCallback } from 'react';
 import UploadMovimientoModal from './UploadMovimientoModal';
 import CargasHistoryTable from './CargasHistoryTable';
 import CoberturaBotIndicator from './CoberturaBotIndicator';
+import DeclararSinDatosModal from './DeclararSinDatosModal';
+import { textoSinDatos } from './tiposCarga';
 import { getRolActual } from '../../../lib/motored/motoredFetch';
 
 export default function MovimientoTab({ tipo, label }) {
   const [showUpload, setShowUpload] = useState(false);
+  const [showSinDatos, setShowSinDatos] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [puedeSubir, setPuedeSubir] = useState(false);
 
@@ -41,12 +48,19 @@ export default function MovimientoTab({ tipo, label }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
         <h2 className="motored-h-seccion">{label}</h2>
         {puedeSubir && (
-          <button type="button" className="motored-btn motored-btn-primary" onClick={() => setShowUpload(true)}>
-            Subir archivo
-          </button>
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            {textoSinDatos(tipo) && (
+              <button type="button" className="motored-btn motored-btn-secondary" onClick={() => setShowSinDatos(true)}>
+                Declarar sin datos
+              </button>
+            )}
+            <button type="button" className="motored-btn motored-btn-primary" onClick={() => setShowUpload(true)}>
+              Subir archivo
+            </button>
+          </div>
         )}
       </div>
 
@@ -60,6 +74,15 @@ export default function MovimientoTab({ tipo, label }) {
           label={label}
           onClose={() => setShowUpload(false)}
           onUploaded={handleUploaded}
+        />
+      )}
+
+      {showSinDatos && (
+        <DeclararSinDatosModal
+          tipo={tipo}
+          label={label}
+          onClose={() => setShowSinDatos(false)}
+          onDeclared={handleUploaded}
         />
       )}
     </div>

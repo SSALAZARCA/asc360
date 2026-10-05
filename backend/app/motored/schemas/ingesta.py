@@ -20,7 +20,7 @@ import uuid
 from datetime import date, datetime
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import AliasPath, BaseModel, ConfigDict, Field
 
 
 class CargaArchivoSubidaResponse(BaseModel):
@@ -59,6 +59,18 @@ class CargaArchivoRead(BaseModel):
     latido_en: Optional[datetime]
     aplicado_en: Optional[datetime]
     created_at: datetime
+    # A "no data at this date" declaration (`services.ingesta.sin_datos`),
+    # read from `log` without exposing the whole log to every role.
+    sin_datos: bool = Field(
+        False, validation_alias=AliasPath("log", "sin_datos"))
+
+
+class DeclaracionSinDatosRequest(BaseModel):
+    """`POST /cargas/sin-datos`. `tipo` is checked by the service so the
+    rejection reads in Spanish."""
+
+    tipo: str
+    fecha: date
 
 
 class CargaErrorRead(BaseModel):

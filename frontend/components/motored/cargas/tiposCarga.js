@@ -23,10 +23,10 @@
 export const TIPOS_CARGA = [
   { value: 'VENTAS', label: 'Ventas', declaraPeriodo: true, periodoLabel: 'mes' },
   { value: 'INVENTARIO', label: 'Inventario', declaraPeriodo: true, periodoLabel: 'fecha de corte' },
-  { value: 'BACKORDER', label: 'Backorder', declaraPeriodo: true, periodoLabel: 'fecha de corte' },
+  { value: 'BACKORDER', label: 'Backorder', declaraPeriodo: true, periodoLabel: 'fecha de corte', sinDatos: 'backorder' },
   { value: 'DEMANDA_PERDIDA', label: 'Demanda perdida', declaraPeriodo: true, periodoLabel: 'fecha' },
-  { value: 'FACTURAS_PEDIDOS', label: 'Facturas de pedidos', declaraPeriodo: false },
-  { value: 'INGRESOS_FACTURAS', label: 'Ingresos de facturas', declaraPeriodo: false },
+  { value: 'FACTURAS_PEDIDOS', label: 'Facturas de pedidos', declaraPeriodo: false, sinDatos: 'facturas' },
+  { value: 'INGRESOS_FACTURAS', label: 'Ingresos de facturas', declaraPeriodo: false, sinDatos: 'ingresos' },
 ];
 
 export const ESTADOS_CARGA = [
@@ -45,6 +45,14 @@ export function tipoDeclaraPeriodo(tipo) {
  * range -- the backend takes `periodo_desde` as its `fecha_corte`. */
 export function tipoUsaFechaDeCorte(tipo) {
   return TIPOS_CARGA.find((t) => t.value === tipo)?.periodoLabel === 'fecha de corte';
+}
+
+/** What a "no data at this date" declaration says is missing (BACKORDER,
+ * FACTURAS_PEDIDOS, INGRESOS_FACTURAS), or `null` when the tipo cannot be
+ * declared empty -- mirrors `TIPOS_SIN_DATOS` in
+ * `backend/app/motored/services/ingesta/sin_datos.py`. */
+export function textoSinDatos(tipo) {
+  return TIPOS_CARGA.find((t) => t.value === tipo)?.sinDatos || null;
 }
 
 const ESTADO_COLOR = {

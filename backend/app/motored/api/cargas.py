@@ -97,6 +97,7 @@ from app.motored.schemas.ingesta import (
     CargaArchivoSubidaResponse,
     CargaErrorRead,
     CargaInformeResponse,
+    DeclaracionSinDatosRequest,
     ResolverErroresRequest,
     ResolverErroresResultado,
 )
@@ -113,6 +114,7 @@ from app.motored.services.ingesta import orquestador
 from app.motored.services.ingesta import periodo as periodo_mod
 from app.motored.services.ingesta import plantillas as plantillas_mod
 from app.motored.services.ingesta import resolucion as resolucion_mod
+from app.motored.services.ingesta import sin_datos as sin_datos_mod
 from app.motored.services.trabajos.runner import JobRunner, SupervisorRunner
 
 router = APIRouter(
@@ -310,6 +312,34 @@ async def subir_carga(
         carga_id=carga.id,
         duplicado_de=duplicado_de,
     )
+
+
+@router.post(
+    "/sin-datos",
+    status_code=status.HTTP_201_CREATED,
+    response_model=CargaArchivoRead,
+)
+async def declarar_sin_datos(
+    payload: DeclaracionSinDatosRequest,
+    db: AsyncSession = Depends(get_motored_db_or_503),
+    user: MotoredUser = Depends(_require_write),
+):
+    """Declare that HMCL has no backorder, facturas or ingresos at
+    `fecha`: an APLICADO carga with zero rows that the corrida preflight
+    accepts like any other, auditable and anulable. See
+    `services.ingesta.sin_datos`."""
+    try:
+        carga = await sin_datos_mod.declarar_sin_datos(
+            db, payload.tipo, payload.fecha, uuid.UUID(user.user_id))
+    except sin_datos_mod.DeclaracionInvalida as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc))
+    except sin_datos_mod.DeclaracionEnConflicto as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+    await db.commit()
+    return CargaArchivoRead.model_validate(carga)
 
 
 @router.patch("/{carga_id}", response_model=CargaArchivoRead)

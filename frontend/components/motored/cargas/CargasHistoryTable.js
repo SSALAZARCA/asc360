@@ -119,14 +119,20 @@ function TablaCargas({ cargas, onFilaClick }) {
               style={{ borderTop: '1px solid var(--motored-border, #e4e4e7)', cursor: 'pointer' }}
               onClick={() => onFilaClick(carga.id)}
             >
-              <td style={tdStyle}>{carga.nombre_archivo}</td>
+              <td style={tdStyle}>
+                {carga.sin_datos ? <em>Sin datos (declarado)</em> : carga.nombre_archivo}
+              </td>
               <td style={tdStyle}>{labelTipo(carga.tipo)}</td>
               <td style={tdStyle}><EstadoBadge estado={carga.estado} size="sm" /></td>
               <td style={tdStyle} className="motored-mono">
                 {carga.periodo_desde ? `${carga.periodo_desde} → ${carga.periodo_hasta}` : <em>—</em>}
               </td>
               <td style={tdStyle} className="motored-mono">
-                {carga.filas_leidas} / {carga.filas_validas} / {carga.filas_rechazadas}
+                {carga.sin_datos ? (
+                  <span style={{ color: 'var(--motored-text-muted, #5a5a5a)' }}>Sin filas</span>
+                ) : (
+                  `${carga.filas_leidas} / ${carga.filas_validas} / ${carga.filas_rechazadas}`
+                )}
               </td>
               <td style={tdStyle}>{new Date(carga.created_at).toLocaleString('es-CO')}</td>
             </tr>

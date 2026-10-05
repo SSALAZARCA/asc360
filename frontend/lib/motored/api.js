@@ -399,6 +399,15 @@ export async function subirCargaMovimiento(file, tipo, { periodoDesde, periodoHa
   return motoredFetchJson('/cargas', { method: 'POST', body: formData });
 }
 
+/** `POST /cargas/sin-datos` -- declares that HMCL has no backorder,
+ * facturas or ingresos at `fecha` (YYYY-MM-DD). Returns the new carga. */
+export async function declararSinDatos(tipo, fecha) {
+  return motoredFetchJson('/cargas/sin-datos', {
+    method: 'POST',
+    body: JSON.stringify({ tipo, fecha }),
+  });
+}
+
 /** `GET /cargas/{id}` -- superficie de polling (estado, filas_leidas,
  * lotes_staged, latido_en). */
 export async function getCarga(cargaId) {
