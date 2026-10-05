@@ -140,7 +140,10 @@ export default function MaestrosTabs({ tabs }) {
         })}
       </div>
       <AvisosSalud key={active.id} hallazgos={hallazgosActivos} />
-      {active.render()}
+      {/* Keyed by tab: tabs that render the same component (the movement
+          tabs) must not share its state, or a list keeps the type of the
+          first tab opened. */}
+      <Fragment key={active.id}>{active.render()}</Fragment>
     </div>
   );
 }
