@@ -61,6 +61,9 @@ class Settings(BaseSettings):
     MOTORED_MINIO_BUCKET: str = "motored-cargas"
     MOTORED_MAX_MOVIMIENTO_UPLOAD_MB: int = 150
     MOTORED_MAX_MOVIMIENTO_ROWS: int = 500000
+    # Lee los agregados de ventas del KPI desde las tablas resumen `kpi_*` (cuando estan
+    # construidas y al dia) en vez de recorrer venta_detalle. Apagado = consultas en vivo.
+    MOTORED_KPI_RESUMEN_ENABLED: bool = False
     MOTORED_RETENCION_ENABLED: bool = False
     MOTORED_RETENCION_DIAS: int = 90
     MOTORED_INGESTA_PERIODO_TOLERANCIA_PCT: float = 0.5

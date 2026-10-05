@@ -30,6 +30,7 @@ from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.motored.schemas.vendedor import limpiar_cedula
+from app.motored.services import kpi_resumen_lectura as lectura
 from app.motored.services import presupuestos as pres
 from app.motored.services import tablero_asesores as t
 from app.motored.services import tablero_asesores_consultas as q
@@ -267,7 +268,7 @@ async def cargar_cumplimiento(
     y no la venta del asesor, que cuenta completa."""
     if cubo_asesores is None or filtro.sucursal_ids:
         # Cost is not needed here: a NULL cut-off date joins no inventory.
-        cubo_asesores = await q.consultar_cubo(db, filtro._replace(sucursal_ids=None), None, DIM_ASESOR)
+        cubo_asesores = await lectura.cubo(db, filtro._replace(sucursal_ids=None), None, DIM_ASESOR)
     primero, ultimo = (datetime.date(int(m[:4]), int(m[5:]), 1) for m in (filtro.meses[0], filtro.meses[-1]))
     presupuestos = presupuestos_del_rango(
         await pres.presupuesto_por_asesor(db, primero, ultimo), filtro.meses, filtro.sucursal_ids)
@@ -355,7 +356,7 @@ async def cargar_inventario(db: AsyncSession, filtro: Filtro, fecha_corte: Optio
     if fecha_corte is None:
         return construir_inventario([], {}, dias, None)
     filas = await qk.consultar_inventario(db, filtro, fecha_corte)
-    costo_venta, dias = await qk.consultar_costo_venta(db, filtro, fecha_corte)
+    costo_venta, dias = await lectura.costo_venta(db, filtro, fecha_corte)
     return construir_inventario(filas, costo_venta, dias, fecha_corte)
 
 
@@ -387,7 +388,7 @@ async def _filas_de_tiendas(db: AsyncSession, filtro: Filtro, cubo, *, completas
         facturas = await q.consultar_facturas(db, filtro, dimension=DIM_SUCURSAL)
         clientes = await q.consultar_clientes(db, filtro, dimension=DIM_SUCURSAL)
         ventana = ventana_por_clave(
-            await q.consultar_ventana_mensual(db, filtro_de_ventana(filtro), DIM_SUCURSAL), filtro.modo_hmcl)
+            await lectura.ventana_mensual(db, filtro_de_ventana(filtro), DIM_SUCURSAL), filtro.modo_hmcl)
     sucursales = await q.consultar_sucursales(db, {f.clave for f in cubo})
     return construir_filas_sucursal(
         t.filtrar_cubo_por_hmcl(cubo, filtro.modo_hmcl), facturas, clientes, ventana, sucursales,
@@ -401,7 +402,7 @@ async def calcular_kpis_tiendas(db: AsyncSession, filtro: Filtro) -> Dict[str, A
     `cumplimiento` agrega `tiendas` (TODAS las que tienen presupuesto, vendan o no),
     `red` y `conteos` por semaforo."""
     corte = await q.fecha_corte_costos(db)
-    cubo = await q.consultar_cubo(db, filtro, corte, DIM_SUCURSAL)
+    cubo = await lectura.cubo(db, filtro, corte, DIM_SUCURSAL)
     tiendas, sin_linea = await _filas_de_tiendas(db, filtro, cubo, completas=True)
     cumplimiento = await cargar_cumplimiento(db, filtro)
     por_tienda = {f["sucursal_id"]: f for f in cumplimiento["tiendas"]}
@@ -425,7 +426,7 @@ async def calcular_kpis_ventas(db: AsyncSession, filtro: Filtro) -> Dict[str, An
     `total` son los indicadores de toda la red (venta, mix, por mes y linea,
     Tecnired por mes y linea, facturas, clientes distintos de la red); `tiendas`,
     una fila liviana por tienda (venta, margen, por mes) para el grafico de cumplimiento."""
-    cubo = await q.consultar_cubo(db, filtro, await q.fecha_corte_costos(db), DIM_SUCURSAL)
+    cubo = await lectura.cubo(db, filtro, await q.fecha_corte_costos(db), DIM_SUCURSAL)
     tiendas, sin_linea = await _filas_de_tiendas(db, filtro, cubo, completas=False)
     acumulados, _ = t.acumular_cubo(t.filtrar_cubo_por_hmcl(cubo, filtro.modo_hmcl), filtro.reglas)
     facturas = await q.consultar_facturas(db, filtro, dimension=DIM_TOTAL)
@@ -463,7 +464,7 @@ async def calcular_opciones(db: AsyncSession) -> Dict[str, Any]:
     """Datos de los filtros: `{meses_disponibles, ultimo_mes, tiendas}`. El
     `ultimo_mes` (el ultimo con ventas, None si no hay) permite proponer "ano
     corrido": de enero de ese ano a ese mes."""
-    meses = await q.meses_disponibles(db)
+    meses = await lectura.meses(db)
     return {
         "meses_disponibles": meses,
         "ultimo_mes": meses[-1] if meses else None,

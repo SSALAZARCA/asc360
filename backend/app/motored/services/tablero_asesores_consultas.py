@@ -66,39 +66,42 @@ def _constante(texto: str):
 # --- Expresiones ----------------------------------------------------------------------------
 
 
-def _expr_identidad():
+def _expr_identidad(vendedor_norm=None):
     """Quien es la persona detras de la linea: su cedula (el maestro tiene una
     fila por nombre del ERP, todas con la misma cedula) o, sin cedula, el propio
     vendedor; para quien no esta en el maestro, su nombre normalizado. Misma
-    regla que `tablero_asesores.identidad_de_vendedor`."""
+    regla que `tablero_asesores.identidad_de_vendedor`. `vendedor_norm` es la
+    columna del nombre normalizado (por defecto la de la venta; el resumen pasa la suya)."""
+    vendedor_norm = VentaDetalle.vendedor_norm if vendedor_norm is None else vendedor_norm
     cedula = func.nullif(func.trim(Vendedor.cedula), _constante(""))
     return case(
-        (Vendedor.id.is_(None), VentaDetalle.vendedor_norm),
+        (Vendedor.id.is_(None), vendedor_norm),
         else_=func.coalesce(cedula, cast(Vendedor.id, String)),
     )
 
 
-def _expr_clave(reglas: Reglas):
+def _expr_clave(reglas: Reglas, vendedor_norm=None):
     """Fila del tablero a la que pertenece cada linea de venta."""
     mapa = reglas.grupo_por_cargo
     ramas = []
     personas = [c for c, g in mapa.items() if g == t.TIPO_PERSONA]
     ramas.append((Vendedor.id.is_(None), _constante(t.GRUPO_RESTO)))
-    ramas.append((Vendedor.cargo.in_(personas), _constante(t.PREFIJO_PERSONA).concat(_expr_identidad())))
+    ramas.append((Vendedor.cargo.in_(personas), _constante(t.PREFIJO_PERSONA).concat(_expr_identidad(vendedor_norm))))
     for grupo in sorted(set(mapa.values()) - {t.TIPO_PERSONA}):
         cargos = [c for c, g in mapa.items() if g == grupo]
         ramas.append((Vendedor.cargo.in_(cargos), _constante(grupo)))
     return case(*ramas, else_=_constante(t.GRUPO_OTROS))
 
 
-def _expr_dimension(dimension: str, reglas: Reglas):
+def _expr_dimension(dimension: str, reglas: Reglas, sucursal=None, vendedor_norm=None):
     """Clave de la fila del cubo segun la dimension: el asesor/grupo del tablero,
     la sucursal de la venta (todas las ventas, tambien las de RESTO y COMERCIALES)
-    o una sola fila TOTAL."""
+    o una sola fila TOTAL. `sucursal` y `vendedor_norm` son las columnas de origen
+    (por defecto las de la venta; el resumen pasa las suyas)."""
     if dimension == DIM_ASESOR:
-        return _expr_clave(reglas)
+        return _expr_clave(reglas, vendedor_norm)
     if dimension == DIM_SUCURSAL:
-        return cast(VentaDetalle.sucursal_id, String)
+        return cast(VentaDetalle.sucursal_id if sucursal is None else sucursal, String)
     assert dimension == DIM_TOTAL, dimension
     return _constante(CLAVE_TOTAL)
 
@@ -495,16 +498,19 @@ async def cargar_filtro(
 async def tablero_de_filtro(db: AsyncSession, filtro: Filtro) -> Tuple[Dict[str, Any], List[FilaCubo]]:
     """Tablero de asesores y el cubo de asesores SIN filtrar por HMCL (lo necesita
     el cumplimiento, que mide la venta con HMCL aunque el modo la excluya)."""
+    # Imported here: the summary reads import this module for the shared expressions.
+    from app.motored.services import kpi_resumen_lectura as lectura
+
     meses, reglas, modo_hmcl = list(filtro.meses), filtro.reglas, filtro.modo_hmcl
     corte = await fecha_corte_costos(db)
 
-    cubo_completo = await consultar_cubo(db, filtro, corte)
+    cubo_completo = await lectura.cubo(db, filtro, corte)
     cubo = t.filtrar_cubo_por_hmcl(cubo_completo, modo_hmcl)
     facturas = (await consultar_facturas(db, filtro, dimension=DIM_ASESOR)
                 + await consultar_facturas(db, filtro, dimension=DIM_TOTAL))
     clientes = (await consultar_clientes(db, filtro, dimension=DIM_ASESOR)
                 + await consultar_clientes(db, filtro, dimension=DIM_TOTAL))
-    personas = await consultar_personas(db, filtro)
+    personas = await lectura.personas(db, filtro)
 
     tablero = t.construir_tablero(cubo, facturas, clientes, personas, meses, reglas)
     tablero.update(
@@ -514,7 +520,7 @@ async def tablero_de_filtro(db: AsyncSession, filtro: Filtro) -> Tuple[Dict[str,
         meses=meses,
         sucursales=sorted(str(s) for s in (filtro.sucursal_ids or ())),
         reglas=eco_reglas(reglas, meses[-1]),
-        meses_disponibles=await meses_disponibles(db),
+        meses_disponibles=await lectura.meses(db),
         fecha_corte_costos=corte.isoformat() if corte else None,
     )
     return tablero, cubo_completo

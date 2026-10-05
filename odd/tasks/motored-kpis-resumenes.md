@@ -79,14 +79,20 @@ Each tab scans `venta_detalle` (~1M rows Jan–Sep) 6–8 times per request, wit
 - Apply the rule in BOTH the live queries and the summaries, so the equivalence tests hold.
 
 ## Tasks
-- [ ] **C1 Cost fallback in the live path** (before R3). `_subconsulta_costos` and the TKC inventory/cost-of-sales queries fall back to `precio_normal`. Expose `venta_costo_maestro` / `pct_costo_estimado` in the margin block. In the UI, add a margin tooltip showing the estimated %. Tests.
+- [x] **C1 Cost fallback in the live path** (before R3). `_subconsulta_costos` and the TKC inventory/cost-of-sales queries fall back to `precio_normal`. Expose `venta_costo_maestro` / `pct_costo_estimado` in the margin block. In the UI, add a margin tooltip showing the estimated %. Tests.
 - [x] **R1 Tables + models + migration.** The 6 tables, indexes and models. The migration only creates tables; the backfill is done by the rebuild.
 - [x] **R2 Build/refresh service** `services/kpi_resumen.py`: full build and per-(sucursal, año, mes) refresh from `venta_detalle` (non-annulled cargas), a costs build, the estado row, and an advisory lock. pg_real tests: a summary built from a seeded world equals the raw aggregates.
-- [ ] **R3 Read path for `kpi_venta_mes`.** Cube (all dimensions), growth window, cost of sales, months available, personas venta. Behind the flag, with a fallback to live. Equivalence tests.
+- [x] **R3 Read path for `kpi_venta_mes`.** Cube (all dimensions), growth window, cost of sales, months available, personas venta. Behind the flag, with a fallback to live. Equivalence tests.
 - [ ] **R4 Read path for facturas (firma) + clientes (`kpi_cliente_mes`)**, including Tecnired clients and top-5. Equivalence tests incl. HMCL modes, store filter and a Configuración change.
 - [ ] **R5 Costs + inventory summaries** and their use in margin and días de inventario. Equivalence tests.
 - [ ] **R6 VENTAS carga triggers.** Incremental refresh inside apply, sync refresh on anular. Write-path audit first; coordinate with -c4.
 - [ ] **R7 Full rebuild orchestration.** Dirty flag set by referencias/linea, Tecnired, `hmcl_nits`/`lineas_comerciales` and inventory triggers; a `supervisor_kpis` loop (nightly plus dirty); ADMIN `POST /tablero-asesores/kpis/recalcular`; `actualizado_en` in the responses.
+- [ ] **R9 Associated-store roll-up** (user decision 2026-10-04; blocked until session -c4 lands `sucursal.principal_id` + `principal_de(db)`). In live AND summary reads, group and filter by `coalesce(principal_id, id)`:
+  - store dimension, facturas/clientes per store, growth window, inventory and cost of sales per store;
+  - budget lines roll into the principal;
+  - the opciones tiendas list and the store filter show principals only, and selecting a principal includes its associated stores.
+
+  Summaries stay on the raw `sucursal_id`, so a relation change needs no rebuild. Equivalence tests include an associated store.
 - [ ] **R8 Frontend + perf verification.** "Datos actualizados a las HH:MM" and an ADMIN "Recalcular" button on the KPI's page. Measure endpoint timings (before/after) on a large synthetic dataset in pg_real and record them.
 
 ## Progress / evidence
@@ -107,5 +113,39 @@ Each tab scans `venta_detalle` (~1M rows Jan–Sep) 6–8 times per request, wit
   - pg_real: 522 passed / 2 skipped.
   - After the rebase, the parent re-ran the summary/migration unit tests: 23 passed.
 
+- **Delivery:** commits fa60d5b and fbde48c, pushed to main.
+- **Native review:** risk medium (1,260 lines). Consent granted; the R3 lens approved and the result was acknowledged.
+- **Incident (2026-10-04):** a parent `git stash push <untracked path>` no-op followed by `git stash pop` applied the user's preserved stash (the backorder investigation of 2026-08-13).
+  - It was recovered with `git fsck` + `git stash store`, verified by patch-id and blob hashes, and the worktree was cleaned.
+  - The commit was not affected.
+  - Memory feedback was saved.
+- **Advisories, carried to the next writer**
+  - R3-cliente-null-aborts-rebuild (WARNING, `kpi_resumen.py:238-242`): a sale with a null client aborts the full rebuild.
+  - R3-costo-rounding-drift (WARNING, `:261-265`): rounding of cost in the summary may drift from the live calculation.
+  - Untested branches (`:259-270`).
+
+**Fix + C1 + R3, done.** Route: one delegated writer, three commits.
+- **Commit 000e4b0 (tests only):** the R2 advisories were not real defects.
+  - `cliente_factura` is NOT NULL, and a blank client normalizes to `''`, which live counts as one client; the summary keeps it.
+  - Cost rounding fits `Numeric(24,6)` exactly.
+  - New tests cover a blank client, a fractional median vs live, no inventory corte, and the valuation fallback.
+- **Commit e7571db, C1:**
+  - `_subconsulta_costos` returns (`referencia_id`, `costo_unitario`, `fuente`): the inventory median, else `precio_normal`. `_valoracion_inventario` does the same for valuation. `kpi_resumen.py` reuses both, so live and summary share one rule.
+  - Responses gain `costo_estimado`, `pct_costo_estimado` and `lineas_costo_maestro`.
+  - UI: the margin tooltips say "X% del costo es estimado (Precio normal)".
+  - Four pg_real fixtures that used `precio_normal=1` as a placeholder now use `None`.
+- **Commit cc30303, R3:**
+  - New `kpi_resumen_lectura.py` (`cubo_resumen`, `ventana_mensual_resumen`, `costo_venta_resumen`, `meses_resumen`, `personas_resumen`), with Configuración applied at read time.
+  - Switch: `MOTORED_KPI_RESUMEN_ENABLED` (default False) AND the estado row is built and not dirty. Dispatchers fall back to the live functions.
+  - Equivalence tests: 4 month sets × 3 HMCL modes × with/without store filter × default and changed config, plus whole-endpoint dicts equal with the switch on and off. A mutation check proves they detect drift.
+- **Checks**
+  - Unit suite: 5339 passed.
+  - pg_real: 539 passed / 2 skipped.
+  - Jest: 174 suites / 1839 tests.
+- **Notes**
+  - The live `consultar_cubo(DIM_TOTAL)` fails in PG (a constant in GROUP BY) and is unused; the summary version omits the constant.
+  - A Configuración change after a build needs R7's dirty flag to rebuild.
+  - **Behavior change in production with C1:** margins now include master-price costs, with the estimated share shown.
+
 ## Next step
-Native review + push of R1/R2, then C1 (cost fallback in the live path) + R3.
+Native review + push, then R4 (facturas firma + clientes reads) + R5 (costs/inventory reads).
