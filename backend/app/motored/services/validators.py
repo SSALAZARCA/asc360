@@ -17,7 +17,11 @@ from app.motored.schemas.bodega import BodegaCreate
 from app.motored.schemas.cliente_tecnired import ClienteTecniredCreate, normalizar_nit
 from app.motored.schemas.proveedor import ProveedorCreate
 from app.motored.schemas.referencia import ReferenciaCreate
-from app.motored.schemas.sucursal import SucursalCreate
+from app.motored.schemas.sucursal import (
+    SucursalCreate,
+    motivo_codigo_co_invalido,
+    normalizar_codigo_co,
+)
 from app.motored.schemas.vendedor import VendedorCreate, limpiar_cedula, normalizar_cargo_de_fila
 from app.motored.services.texto import normalizar_encabezado
 
@@ -149,6 +153,27 @@ def _activa_error(entidad: str, cleaned: Row) -> Optional[str]:
     )
 
 
+def _codigo_co_error(entidad: str, cleaned: Row) -> Optional[str]:
+    """Normalizes the "Código C.O." cell IN-PLACE (trim, upper case) and
+    checks its format, naming the column. A blank cell already left
+    (`_strip_blank_values`): it keeps the stored code. Uniqueness needs the
+    database: `maestros.errores_codigo_co_carga`."""
+    if entidad != "sucursal" or "codigo_co" not in cleaned:
+        return None
+    codigo = normalizar_codigo_co(cleaned["codigo_co"])
+    cleaned["codigo_co"] = codigo
+    motivo = motivo_codigo_co_invalido(codigo)
+    return f"Columna 'Código C.O.': {motivo}" if motivo else None
+
+
+def _sucursal_error(entidad: str, cleaned: Row) -> Optional[str]:
+    """Sucursal columns checked before the schema: "Activa" and "Código
+    C.O." (both normalize the row IN-PLACE). The first reason, or None."""
+    return _activa_error(entidad, cleaned) or _codigo_co_error(
+        entidad, cleaned
+    )
+
+
 def _schema_validation_error(entidad: str, cleaned: Row) -> Optional[str]:
     """Un campo requerido presente pero con formato inválido (p.ej.
     `proveedor_id: "no-es-un-uuid"`, `precio_normal: "abc"`) pasa el chequeo
@@ -237,7 +262,7 @@ def validate_rows(entidad: str, rows: List[Row]) -> Tuple[List[Row], List[RowErr
         cleaned = _strip_blank_values(dict(row))
         warnings = _apply_entity_normalizations(entidad, cleaned)
 
-        row_error = _activa_error(entidad, cleaned)
+        row_error = _sucursal_error(entidad, cleaned)
         row_error = row_error or _schema_validation_error(entidad, cleaned)
         if row_error:
             errors.append({"fila": index, "motivo": row_error})

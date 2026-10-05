@@ -22,6 +22,10 @@ KPIs, presupuestos, vendedores) while keeping its own data. Depth 1 only:
 the CHECK forbids pointing at itself and `services/sucursal_grupo.py`
 enforces the rest. ON DELETE RESTRICT: stores are only soft-deleted, and a
 silent SET NULL would turn an associate into a principal with its own pedido.
+
+`codigo_co` (ERP "centro de operación", e.g. E05): a different C.O. is a
+different store, so it is UNIQUE (NULLs allowed). The constraint is
+DEFERRABLE INITIALLY DEFERRED so one upload can swap two stores' codes.
 """
 import uuid
 from datetime import datetime
@@ -36,6 +40,7 @@ from sqlalchemy import (
     Integer,
     Numeric,
     String,
+    UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import UUID
 
@@ -48,10 +53,15 @@ class Sucursal(MotoredBase):
         CheckConstraint(
             "principal_id <> id", name="ck_sucursal_principal_no_propia"
         ),
+        UniqueConstraint(
+            "codigo_co", name="uq_sucursal_codigo_co",
+            deferrable=True, initially="DEFERRED",
+        ),
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     nombre = Column(String(255), unique=True, nullable=False)
+    codigo_co = Column(String(10), nullable=True)
     sic = Column(String(50), nullable=True)
     dias_seguridad = Column(Numeric(5, 2), nullable=False, default=2.5)
     dias_empaque = Column(Integer, nullable=True)

@@ -57,6 +57,7 @@ from app.motored.models.referencia import Referencia
 from app.motored.schemas.carga import CargaRequest, CargaResultado
 from app.motored.services import (
     bodegas_secundarias,
+    maestros,
     reemplazo_referencias,
     sucursal_grupo,
 )
@@ -486,13 +487,16 @@ async def _resolver_y_procesar_carga(
 async def _resolve_sucursal_relaciones(
     db: AsyncSession, filas: List[Dict[str, Any]]
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
-    """Sucursales: "Bodegas secundarias" and "Sucursal principal" columns,
-    with their errors merged in row order."""
+    """Sucursales: "Bodegas secundarias", "Sucursal principal" and the
+    uniqueness of "Código C.O.", with their errors merged in row order."""
+    errores_co = await maestros.errores_codigo_co_carga(db, filas)
     filas, errores = await bodegas_secundarias.resolver_filas(db, filas)
     filas, errores_principal = await sucursal_grupo.resolver_filas(
         db, filas
     )
-    errores = sorted(errores + errores_principal, key=lambda e: e["fila"])
+    errores = sorted(
+        errores + errores_principal + errores_co, key=lambda e: e["fila"]
+    )
     return filas, errores
 
 

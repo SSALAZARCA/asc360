@@ -21,7 +21,12 @@ from app.motored.models.vendedor import Vendedor
 from app.motored.schemas.bodega import BodegaCreate, BodegaUpdate
 from app.motored.schemas.proveedor import ProveedorCreate, ProveedorUpdate
 from app.motored.schemas.referencia import ReferenciaCreate, ReferenciaUpdate
-from app.motored.schemas.sucursal import SucursalCreate, SucursalUpdate
+from app.motored.schemas.sucursal import (
+    SucursalCreate,
+    SucursalUpdate,
+    motivo_codigo_co_invalido,
+    normalizar_codigo_co,
+)
 from app.motored.schemas.vendedor import VendedorCreate, VendedorUpdate
 from app.motored.services import auditoria, sucursal_grupo
 from app.motored.services.ingesta.ventas import normalizar_vendedor
@@ -143,14 +148,53 @@ async def get_sucursal_by_nombre(db, nombre: str) -> Optional[Sucursal]:
     return result.scalars().first()
 
 
-async def create_sucursal(db, data: SucursalCreate, usuario_id: Optional[uuid.UUID] = None) -> Sucursal:
+class CodigoCoEnUsoError(ValueError):
+    """The store code (C.O.) already belongs to another store: a different
+    C.O. is a different store. The message names that store."""
+
+
+def _mensaje_codigo_co_en_uso(
+    codigo: str, otra: str, sujeto: str = "El Código C.O."
+) -> str:
+    return (
+        f"{sujeto} '{codigo}' ya es de la sucursal '{otra}'. "
+        "Cada C.O. es una tienda distinta."
+    )
+
+
+async def validar_codigo_co_libre(
+    db, sucursal_id: Optional[uuid.UUID], codigo: Optional[str]
+) -> None:
+    """Raises `CodigoCoEnUsoError` when another store holds `codigo`. No
+    code means nothing to check (and no query)."""
+    if codigo is None:
+        return
+    fila = (await db.execute(
+        select(Sucursal.id, Sucursal.nombre).where(
+            Sucursal.codigo_co == codigo
+        )
+    )).first()
+    if fila is not None and fila[0] != sucursal_id:
+        raise CodigoCoEnUsoError(_mensaje_codigo_co_en_uso(codigo, fila[1]))
+
+
+async def create_sucursal(
+    db, data: SucursalCreate, usuario_id: Optional[uuid.UUID] = None,
+    verificar_codigo_co: bool = True,
+) -> Sucursal:
+    """`verificar_codigo_co=False` only for the upload, which checks every
+    code of the file against the final state beforehand
+    (`errores_codigo_co_carga`)."""
     nombre = normalize_sucursal_nombre(data.nombre)
     await sucursal_grupo.validar_principal(
         db, None, data.principal_id, nombre
     )
+    if verificar_codigo_co:
+        await validar_codigo_co_libre(db, None, data.codigo_co)
     sucursal = Sucursal(
         id=uuid.uuid4(),
         nombre=nombre,
+        codigo_co=data.codigo_co,
         sic=data.sic,
         dias_seguridad=data.dias_seguridad,
         dias_empaque=data.dias_empaque,
@@ -202,13 +246,33 @@ async def _validar_cambio_principal(
     )
 
 
+async def _validar_cambio_codigo_co(
+    db, sucursal: Sucursal, update_dict: Dict[str, Any], verificar: bool
+) -> None:
+    """Drops an unchanged `codigo_co` and checks a changed one is free."""
+    if "codigo_co" not in update_dict:
+        return
+    if update_dict["codigo_co"] == sucursal.codigo_co:
+        update_dict.pop("codigo_co")
+        return
+    if verificar:
+        await validar_codigo_co_libre(
+            db, sucursal.id, update_dict["codigo_co"]
+        )
+
+
 async def update_sucursal(
-    db, sucursal: Sucursal, data: SucursalUpdate, usuario_id: Optional[uuid.UUID] = None
+    db, sucursal: Sucursal, data: SucursalUpdate,
+    usuario_id: Optional[uuid.UUID] = None,
+    verificar_codigo_co: bool = True,
 ) -> Sucursal:
     update_dict = data.model_dump(exclude_unset=True)
     if "nombre" in update_dict and update_dict["nombre"] is not None:
         update_dict["nombre"] = normalize_sucursal_nombre(update_dict["nombre"])
     await _validar_cambio_principal(db, sucursal, update_dict)
+    await _validar_cambio_codigo_co(
+        db, sucursal, update_dict, verificar_codigo_co
+    )
     activa = update_dict.pop("activa", None)
     _set_activa_sucursal(db, sucursal, activa, usuario_id)
     before, after = _apply_and_diff(sucursal, update_dict)
@@ -229,10 +293,79 @@ async def upsert_sucursal(
     existing = await get_sucursal_by_nombre(db, data.nombre)
     if existing:
         update_fields = _updateable_fields(data, {"nombre"})
-        updated = await update_sucursal(db, existing, SucursalUpdate(**update_fields), usuario_id)
+        updated = await update_sucursal(
+            db, existing, SucursalUpdate(**update_fields), usuario_id,
+            verificar_codigo_co=False,
+        )
         return updated, None, False
-    created = await create_sucursal(db, data, usuario_id)
+    created = await create_sucursal(
+        db, data, usuario_id, verificar_codigo_co=False
+    )
     return created, None, True
+
+
+def _codigos_co_del_archivo(
+    filas: List[Dict[str, Any]],
+) -> Dict[int, Tuple[str, str]]:
+    """Row number (1-indexed) -> (store name, normalized code) for the rows
+    with a well-formed code. Blank cells keep the stored code and a bad
+    format is reported by `validators`, so both are left out here."""
+    codigos = {}
+    for index, fila in enumerate(filas, start=1):
+        codigo = normalizar_codigo_co(fila.get("codigo_co"))
+        if codigo is None or motivo_codigo_co_invalido(codigo):
+            continue
+        nombre = normalize_sucursal_nombre(str(fila.get("nombre") or ""))
+        codigos[index] = (nombre, codigo)
+    return codigos
+
+
+def _errores_codigo_co_repetido(
+    codigos: Dict[int, Tuple[str, str]],
+) -> Dict[int, str]:
+    """A code on two or more rows of the file: an error on every one."""
+    filas_por_codigo: Dict[str, List[int]] = {}
+    for index, (_, codigo) in codigos.items():
+        filas_por_codigo.setdefault(codigo, []).append(index)
+    errores = {}
+    for codigo, indices in filas_por_codigo.items():
+        if len(indices) < 2:
+            continue
+        lista = ", ".join(str(i) for i in indices[:-1])
+        motivo = (
+            f"Columna 'Código C.O.': el código '{codigo}' está repetido "
+            f"en las filas {lista} y {indices[-1]} del archivo."
+        )
+        errores.update({index: motivo for index in indices})
+    return errores
+
+
+async def errores_codigo_co_carga(
+    db, filas: List[Dict[str, Any]]
+) -> List[Dict[str, Any]]:
+    """Upload check of the "Código C.O." column on the state the file
+    leaves: duplicates inside the file, and codes that end up on another
+    saved store (two stores may swap codes in one file). Rows match saved
+    stores by name, like the upsert. Queries only when a row has a code.
+    Returns `{fila, motivo}` errors in row order."""
+    codigos = _codigos_co_del_archivo(filas)
+    if not codigos:
+        return []
+    errores = _errores_codigo_co_repetido(codigos)
+    guardados = (await db.execute(
+        select(Sucursal.nombre, Sucursal.codigo_co).where(
+            Sucursal.codigo_co.isnot(None)
+        )
+    )).all()
+    final = {nombre: codigo for nombre, codigo in guardados}
+    final.update(dict(codigos.values()))
+    for index, (nombre, codigo) in codigos.items():
+        otras = [n for n, c in final.items() if c == codigo and n != nombre]
+        if index not in errores and otras:
+            errores[index] = _mensaje_codigo_co_en_uso(
+                codigo, otras[0], "Columna 'Código C.O.': el código"
+            )
+    return [{"fila": i, "motivo": errores[i]} for i in sorted(errores)]
 
 
 # ---------------------------------------------------------------------------

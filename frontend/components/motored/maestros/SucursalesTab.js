@@ -31,7 +31,7 @@ const ENTIDAD_PLURAL = 'sucursales';
 const ENTIDAD_SINGULAR = 'sucursal';
 
 const emptyForm = {
-  nombre: '', sic: '', dias_seguridad: '2.5',
+  nombre: '', codigo_co: '', sic: '', dias_seguridad: '2.5',
   dias_empaque: '', dias_transito: '', bodega_principal: '',
   departamento: '', ciudad: '', fecha_apertura: '', principal_id: '',
 };
@@ -81,6 +81,36 @@ function PrincipalSelect({ form, setForm, sucursales, editingId }) {
   );
 }
 
+const CODIGO_CO_TOOLTIP = 'Código del centro de operación en el ERP (ej: E05). Cada C.O. es una tienda distinta.';
+
+const codigoCoLabelStyle = {
+  display: 'flex', flexDirection: 'column', fontSize: '0.7rem',
+  color: 'var(--motored-text-muted, #5a5a5a)',
+};
+
+// Same rule as the backend's CODIGO_CO_PATRON (one letter, two digits); the
+// browser checks it before saving, the backend has the final word.
+function CodigoCoField({ form, setForm }) {
+  return (
+    <label style={codigoCoLabelStyle}>
+      <span>
+        Código C.O.
+        <InfoTooltip text={CODIGO_CO_TOOLTIP} />
+      </span>
+      <input
+        type="text"
+        value={form.codigo_co}
+        maxLength={3}
+        pattern="[A-Za-z][0-9]{2}"
+        title="Una letra y dos números (ej: E05)"
+        placeholder="ej: E05"
+        style={{ width: '6rem' }}
+        onChange={(e) => setForm({ ...form, codigo_co: e.target.value.trim().toUpperCase() })}
+      />
+    </label>
+  );
+}
+
 const FIELDS = [
   { key: 'nombre', label: 'Nombre', required: true },
   { key: 'sic', label: 'SIC', tooltip: 'Código con el que el proveedor (HMCL) identifica esta sucursal en sus sistemas. Sin este dato, el sistema no puede cruzar automáticamente las facturas y envíos que llegan de HMCL con la sucursal correcta.' },
@@ -93,21 +123,28 @@ const FIELDS = [
   { key: 'fecha_apertura', label: 'Fecha de apertura', tooltip: 'Fecha en que la sucursal abrió operaciones. Se usa más adelante para no contar meses en los que todavía no existía.', type: 'date' },
 ];
 
+function SucursalFormField({ f, form, setForm }) {
+  return (
+    <FormField
+      label={f.label}
+      tooltip={f.tooltip}
+      required={f.required}
+      type={f.type}
+      placeholder={f.placeholder}
+      value={form[f.key]}
+      onChange={(e) => setForm({ ...form, [f.key]: e.target.value })}
+    />
+  );
+}
+
+// The C.O. goes right after the name: together they identify the store.
 function SucursalForm({ form, setForm, editingId, onSubmit, onCancel, sucursales }) {
+  const [nombre, ...resto] = FIELDS;
   return (
     <form onSubmit={onSubmit} style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
-      {FIELDS.map((f) => (
-        <FormField
-          key={f.key}
-          label={f.label}
-          tooltip={f.tooltip}
-          required={f.required}
-          type={f.type}
-          placeholder={f.placeholder}
-          value={form[f.key]}
-          onChange={(e) => setForm({ ...form, [f.key]: e.target.value })}
-        />
-      ))}
+      <SucursalFormField f={nombre} form={form} setForm={setForm} />
+      <CodigoCoField form={form} setForm={setForm} />
+      {resto.map((f) => <SucursalFormField key={f.key} f={f} form={form} setForm={setForm} />)}
       <PrincipalSelect form={form} setForm={setForm} sucursales={sucursales} editingId={editingId} />
       <button type="submit" className="motored-btn motored-btn-primary">{editingId ? 'Guardar cambios' : 'Crear sucursal'}</button>
       {editingId && (
@@ -133,6 +170,7 @@ function RelacionPrincipal({ s, sucursales }) {
 
 const TABLE_COLUMNS = [
   { label: 'Nombre', cell: (s) => s.nombre },
+  { label: 'Código C.O.', cell: (s) => s.codigo_co || <em>—</em> },
   { label: 'Tienda principal', cell: (s, todas) => <RelacionPrincipal s={s} sucursales={todas} /> },
   { label: 'Bodega principal', cell: (s) => s.bodega_principal || <em>—</em> },
   { label: 'Departamento', cell: (s) => s.departamento || <em>—</em> },
@@ -285,6 +323,7 @@ function useSucursalesEditor(save) {
     setEditingId(s.id);
     setForm({
       nombre: s.nombre,
+      codigo_co: s.codigo_co || '',
       sic: s.sic || '',
       dias_seguridad: String(s.dias_seguridad),
       dias_empaque: s.dias_empaque != null ? String(s.dias_empaque) : '',
@@ -307,6 +346,7 @@ function useSucursalesEditor(save) {
     const ok = await save(
       {
         nombre: form.nombre,
+        codigo_co: form.codigo_co.trim().toUpperCase() || null,
         sic: form.sic || null,
         dias_seguridad: form.dias_seguridad,
         dias_empaque: form.dias_empaque ? Number(form.dias_empaque) : null,

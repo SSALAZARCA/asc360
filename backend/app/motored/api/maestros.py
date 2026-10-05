@@ -102,7 +102,12 @@ def _validated_or_422(schema_cls: Type[BaseModel], payload: Dict[str, Any]) -> B
     try:
         return schema_cls(**payload)
     except ValidationError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=exc.errors())
+        # Without the context: a validator's `ValueError` in `ctx` is not
+        # JSON-serializable and turned the 422 into a 500.
+        detail = exc.errors(include_url=False, include_context=False)
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=detail
+        )
 
 
 async def _get_or_404(db: AsyncSession, config: _MaestroConfig, entity_id: uuid.UUID):
@@ -264,6 +269,7 @@ def _detalle_duplicado(entidad: str, data: Any) -> str:
 # Service errors about the submitted data: shown as a 422 with the message.
 _ERRORES_DE_DATO = (
     maestros.SustitutaInvalidaError,
+    maestros.CodigoCoEnUsoError,
     sucursal_grupo.PrincipalInvalidaError,
 )
 

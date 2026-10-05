@@ -4,6 +4,8 @@ cimientos, Fase 3, task 3.5, §7.12). Clasificación:
 
 - `sucursal` sin `sic` -> el ÚNICO hallazgo BLOQUEANTE. Solo tiendas
   principales: una tienda asociada nunca tiene pedido propio.
+- Tienda activa sin Código C.O. (centro de operación del ERP) ->
+  ADVERTENCIA.
 - Tienda asociada con su principal inactiva, o tienda asociada activa (no
   tendrá pedido propio) -> ADVERTENCIA.
 - Referencia activa sin `precio_normal`, `unidad_empaque` corregido (fila
@@ -55,6 +57,22 @@ def _sucursales_sin_sic(sucursales: Sequence[Sucursal]) -> List[Hallazgo]:
     ]
 
 
+def _sucursales_sin_codigo_co(
+    sucursales: Sequence[Sucursal],
+) -> List[Hallazgo]:
+    """Active stores without their ERP code (C.O.). A warning: the code
+    tells stores apart, but nothing is computed from it yet."""
+    return [
+        Hallazgo(
+            tipo="sucursal_sin_codigo_co", entidad="sucursal",
+            entidad_id=s.id, bloqueante=False,
+            mensaje=f"Sucursal '{s.nombre}' no tiene Código C.O. asignado",
+        )
+        for s in sucursales
+        if s.activa and s.codigo_co is None
+    ]
+
+
 def _aviso_de_asociada(
     asociada: Sucursal, principal: Sucursal
 ) -> Optional[Hallazgo]:
@@ -97,6 +115,7 @@ async def evaluar_salud(db) -> SaludMaestros:
 
     sucursales = (await db.execute(select(Sucursal))).scalars().all()
     hallazgos += _sucursales_sin_sic(sucursales)
+    hallazgos += _sucursales_sin_codigo_co(sucursales)
     hallazgos += await _hallazgos_de(
         db,
         select(Referencia).where(Referencia.activa == True, Referencia.precio_normal.is_(None)),  # noqa: E712

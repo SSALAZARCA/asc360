@@ -74,9 +74,10 @@ class TestGreenBoard:
 
 
 def _tienda(nombre, activa=True, principal_id=None, sic="S1"):
+    # With a C.O.: these tests are about the association warnings only.
     return Sucursal(
         id=uuid.uuid4(), nombre=nombre, sic=sic, activa=activa,
-        principal_id=principal_id,
+        principal_id=principal_id, codigo_co="E01",
     )
 
 

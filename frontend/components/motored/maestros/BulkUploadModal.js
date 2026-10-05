@@ -54,6 +54,11 @@ const COLUMNAS_POR_ENTIDAD = {
   sucursal: [
     { key: 'nombre', label: 'Nombre', required: true, aliases: ['nombre', 'sucursal'] },
     {
+      key: 'codigo_co', label: 'Código C.O.', required: false,
+      aliases: ['codigo_co', 'código c.o.', 'codigo co', 'c.o.', 'co', 'centro de operación'],
+      help: 'Código del centro de operación en el ERP: una letra y dos números (ej: E05). Cada C.O. es una tienda distinta, así que no puede repetirse. Vacío conserva el código actual.',
+    },
+    {
       key: 'sic', label: 'SIC', required: false, aliases: ['sic'],
       help: 'Código con el que el proveedor (HMCL) identifica esta sucursal en sus sistemas.',
     },

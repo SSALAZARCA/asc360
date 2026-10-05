@@ -128,6 +128,29 @@ def test_validar_excel_rejects_an_unknown_activa_value_naming_the_column():
     assert session.committed is False
 
 
+def test_validar_excel_reports_a_duplicate_codigo_co_on_both_rows():
+    # probe + the stored C.O. codes
+    session = FakeAsyncSession(execute_queue=[[], []])
+    override_motored_db(session)
+    file_bytes = _xlsx_bytes(
+        ["Nombre", "Código C.O."],
+        [["CALI", "E05"], ["PASTO", "C06"], ["NEIVA", "e05"]],
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            VALIDAR_EXCEL_URL,
+            files=_upload_file("sucursales.xlsx", file_bytes),
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is False
+    assert [e["fila"] for e in body["errores"]] == [1, 3]
+    assert "Código C.O." in body["errores"][0]["motivo"]
+    assert session.committed is False
+
+
 def test_carga_excel_creates_a_closed_store_inactive():
     session = FakeAsyncSession(execute_queue=[[], []])  # probe + lookup
     override_motored_db(session)

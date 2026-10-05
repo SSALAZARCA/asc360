@@ -31,7 +31,11 @@ Let the owner load the corrected Sucursales file in one go, and model physical p
 - [x] T1
 - [x] T2
 - [x] T3
+- [x] T5 (store code C.O.: owner asked for it at the start; I wrongly deferred it)
 - [ ] T4 (edit secondary bodegas from the Sucursales screen)
+- [ ] T6 (REINSTATED, owner confirmed verbatim): VENTAS ingest resolves the sucursal by the row's C.O.; bodegas_excluidas checked first; bodega only as fallback for files without C.O.; unknown C.O. = row error; non-store C.O. (MR/PAF01) needs an exclusion. No re-upload of old ventas. Runs after T5 (single writer); coordinate ventas.py with the KPI session (R6).
+- [ ] T7 (presupuestos and vendedores recognize the store by C.O., name as fallback). KPI session files: coordinate; they may implement it.
+- [ ] T8 (per-store data-control report for the owner before the first pedido)
 
 ## Constraints
 - **Python 3.11, gga style:** lines of 79 characters or fewer, functions of 50 lines or fewer, no mid-file imports.
@@ -67,3 +71,20 @@ Let the owner load the corrected Sucursales file in one go, and model physical p
   - Reproduction is unchanged: it uses the stored line inputs.
   - Results: tests/motored 5445 passed; pg_real 552 passed, 2 skipped. RED was observed on HEAD.
   - Pending: the corrida store picker in the frontend may still list associated stores. That goes into T4.
+- 2026-10-04: owner rule: the C.O. identifies the sucursal. Ventas, KPIs and pedidos fall on the sucursal by C.O.; bodegas belong to sucursales. Added T6 and T7.
+- 2026-10-04: the owner clarified that a sale goes to the sucursal that owns the bodega, so the 892 cross-store rows go to the bodega's sucursal. T6 is cancelled and VENTAS ingest is unchanged.
+- 2026-10-04: the owner confirmed verbatim: "Cada venta se registra en la sucursal de su C.O. (columna G), sin importar de qué bodega salió el repuesto." T6 is reinstated. The earlier cancellation came from my misunderstanding. Ventas already loaded will not be re-uploaded.
+- 2026-10-04: T8 added: a per-store data-control report (bodegas, 6-month ventas, stock, associated points, anomalies) for the owner to approve before the first pedido.
+- 2026-10-04: T5 done.
+  - Migration `b5d9e3a7c418` adds `sucursal.codigo_co`, unique and DEFERRABLE (so codes can swap in one upload). Format `^[A-Z][0-9]{2}$`.
+  - Upload column "Código C.O." placed after Nombre. Form input and table column added.
+  - Non-blocking health warning `sucursal_sin_codigo_co`.
+  - The 422 response no longer becomes a 500 on schema errors.
+  - Results: tests/motored 5493 passed; pg_real 559 passed, 2 skipped; jest 1859 passed.
+- 2026-10-04: independent audit of T1–T3 (cd7797f vs 2bd7596).
+  - With no associations, pedido output is invariant: the queries differ only in `= X` vs `IN (X)`.
+  - Uploads and KPIs are unchanged. Migration is safe, with no table rewrite.
+  - Low risks recorded:
+    - `start.sh` starts the server even when a migration fails.
+    - A JSON upload can carry a raw `principal_id` that is not checked against other rows in the same file.
+    - Associated stores without a SIC are no longer flagged.

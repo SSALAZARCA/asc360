@@ -86,6 +86,16 @@ class LimiteFilasExcedidoError(CargaExcelError):
 ALIASES_POR_ENTIDAD: Dict[str, List[Dict[str, Any]]] = {
     "sucursal": [
         {"key": "nombre", "label": "Nombre", "required": True, "aliases": ["nombre", "sucursal"]},
+        # ERP store code (e.g. E05). Always text: a number never reaches the
+        # schema as a number. Blank keeps the stored value.
+        {
+            "key": "codigo_co", "label": "Código C.O.", "required": False,
+            "type": "string",
+            "aliases": [
+                "codigo_co", "código c.o.", "codigo co", "c.o.", "co",
+                "centro de operación",
+            ],
+        },
         {"key": "sic", "label": "SIC", "required": False, "aliases": ["sic"]},
         {
             "key": "dias_seguridad", "label": "Días de seguridad", "required": False,

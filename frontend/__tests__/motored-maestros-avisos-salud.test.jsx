@@ -77,3 +77,15 @@ describe('AvisosSalud — associated stores', () => {
     expect(screen.getByText('EXPO 1')).toBeInTheDocument();
   });
 });
+
+describe('AvisosSalud — stores without C.O.', () => {
+  it('groups them under their own title with the store name', () => {
+    render(<AvisosSalud hallazgos={[
+      { tipo: 'sucursal_sin_codigo_co', entidad: 'sucursal', mensaje: "Sucursal 'CALI' no tiene Código C.O. asignado", bloqueante: false },
+    ]} />);
+    fireEvent.click(screen.getByRole('button', { name: /1 advertencia/ }));
+
+    expect(screen.getByText(/Sin Código C\.O\. \(1\)/)).toBeInTheDocument();
+    expect(screen.getByText('CALI')).toBeInTheDocument();
+  });
+});

@@ -77,3 +77,33 @@ describe('BulkUploadModal — sucursal "Sucursal principal" column', () => {
     ]);
   });
 });
+
+describe('BulkUploadModal — sucursal "Código C.O." column', () => {
+  it('lists the column right after the name, with its tooltip', () => {
+    render(<BulkUploadModal entidad="sucursal" onClose={jest.fn()} onSuccess={jest.fn()} />);
+
+    const etiqueta = screen.getByText('Código C.O.');
+    expect(etiqueta).toBeInTheDocument();
+    expect(screen.getByRole('note', { name: /centro de operación/ })).toBeInTheDocument();
+  });
+
+  it('maps the "C.O." header and sends the code as text', async () => {
+    mockSubirCarga.mockResolvedValue({ ok: true, total_filas: 2, errores: [] });
+    const { container } = render(
+      <BulkUploadModal entidad="sucursal" onClose={jest.fn()} onSuccess={jest.fn()} />
+    );
+
+    const input = container.querySelector('input[type="file"]');
+    fireEvent.change(input, {
+      target: { files: [csvFile('Nombre,C.O.\nCALI,E05\nPASTO,\n')] },
+    });
+    await waitFor(() => expect(screen.getByText(/Vista previa/i)).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Cargar'));
+
+    await waitFor(() => expect(mockSubirCarga).toHaveBeenCalled());
+    expect(mockSubirCarga).toHaveBeenCalledWith('sucursal', [
+      { nombre: 'CALI', codigo_co: 'E05' },
+      { nombre: 'PASTO', codigo_co: '' },
+    ]);
+  });
+});
