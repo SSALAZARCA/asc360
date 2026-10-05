@@ -41,14 +41,13 @@ from app.motored.models.kpi_resumen import KpiClienteMes as C
 from app.motored.models.kpi_resumen import KpiFacturaFirma as F
 from app.motored.models.kpi_resumen import KpiInventarioCorte as Corte
 from app.motored.models.kpi_resumen import KpiVentaMes as V
-from app.motored.models.sucursal import Sucursal
 from app.motored.models.vendedor import Vendedor
 from app.motored.services import kpi_resumen
 from app.motored.services import tablero_asesores as t
 from app.motored.services import tablero_asesores_consultas as q
 from app.motored.services import tablero_kpis_consultas as qk
 from app.motored.services.tablero_asesores import (
-    CLAVE_TOTAL, DIM_ASESOR, DIM_TOTAL, FilaClientes, FilaCubo, FilaFacturas, FilaPersona, Filtro,
+    CLAVE_TOTAL, DIM_ASESOR, DIM_SUCURSAL, DIM_TOTAL, FilaClientes, FilaCubo, FilaFacturas, FilaPersona, Filtro,
 )
 
 
@@ -97,7 +96,7 @@ def _donde_periodo(consulta, tabla, filtro: Filtro, mes=None):
     mes = tabla.anio_mes if mes is None else mes
     consulta = consulta.where(or_(*[and_(mes >= inicio, mes < fin) for inicio, fin in filtro.rangos]))
     if filtro.sucursal_ids:
-        consulta = consulta.where(tabla.sucursal_id.in_(sorted(filtro.sucursal_ids, key=str)))
+        consulta = consulta.where(q.donde_sucursales(tabla.sucursal_id, filtro.sucursal_ids))
     return consulta
 
 
@@ -111,9 +110,12 @@ def _donde_hmcl(consulta, filtro: Filtro, columna):
 
 
 def _desde(consulta, filtro: Filtro, *, tabla=V, con_vendedor=False, solo_lineas_reconocidas=False,
-           aplicar_hmcl=False, columna_hmcl=None):
-    """FROM/WHERE of every read: the live `_desde_ventas` over the summary table."""
+           aplicar_hmcl=False, columna_hmcl=None, por_sucursal=False):
+    """FROM/WHERE of every read: the live `_desde_ventas` over the summary table. `por_sucursal`
+    joins the principal of the store (an associated store rolls into it at read time)."""
     consulta = consulta.select_from(tabla)
+    if por_sucursal:
+        consulta = q.con_principal(consulta, tabla.sucursal_id)
     if con_vendedor:
         consulta = _con_vendedor(consulta, tabla.vendedor_norm)
     consulta = _donde_periodo(consulta, tabla, filtro)
@@ -137,7 +139,7 @@ async def cubo_resumen(db: AsyncSession, filtro: Filtro, dimension: str = DIM_AS
         clave, *columnas, func.sum(V.venta), func.sum(V.bruto), func.sum(V.descuentos), func.sum(V.cantidad),
         func.sum(V.lineas), func.sum(V.costo), func.sum(V.costo_estimado),
     ).group_by(*columnas, *([] if dimension == DIM_TOTAL else [clave]))
-    consulta = _desde(consulta, filtro, con_vendedor=dimension == DIM_ASESOR)
+    consulta = _desde(consulta, filtro, con_vendedor=dimension == DIM_ASESOR, por_sucursal=dimension == DIM_SUCURSAL)
     return [
         FilaCubo(clave_, mes, linea, hmcl, tec, mostr, costo_ok, Decimal(venta), Decimal(bruto), Decimal(desc),
                  Decimal(cant), int(n), Decimal(costo), Decimal(estimado))
@@ -152,15 +154,15 @@ async def ventana_mensual_resumen(db: AsyncSession, filtro: Filtro, dimension: s
     columnas = [_dimension(dimension, reglas).label("clave"), _mes().label("mes"), _es_hmcl(reglas).label("es_hmcl")]
     consulta = _desde(
         select(*columnas, func.sum(V.venta)).group_by(*columnas), filtro,
-        con_vendedor=dimension == DIM_ASESOR, solo_lineas_reconocidas=True)
+        con_vendedor=dimension == DIM_ASESOR, solo_lineas_reconocidas=True, por_sucursal=dimension == DIM_SUCURSAL)
     return [q.FilaVentana(c, m, bool(h), Decimal(v)) for c, m, h, v in (await db.execute(consulta)).all()]
 
 
 async def costo_venta_resumen(db: AsyncSession, filtro: Filtro) -> Tuple[Dict[str, Decimal], int]:
     """`qk.consultar_costo_venta` from the summary: the cost per store over the 3 calendar months."""
     ventana, dias = qk.filtro_costo_venta(filtro)
-    tienda = cast(V.sucursal_id, String)
-    consulta = _desde(select(tienda, func.sum(V.costo)).group_by(tienda), ventana)
+    tienda = cast(q.principal_expr(V.sucursal_id), String)
+    consulta = _desde(select(tienda, func.sum(V.costo)).group_by(tienda), ventana, por_sucursal=True)
     return {s: Decimal(v) for s, v in (await db.execute(consulta)).all()}, dias
 
 
@@ -175,11 +177,12 @@ async def personas_resumen(db: AsyncSession, filtro: Filtro) -> List[FilaPersona
     reglas = filtro.reglas
     columnas = [q._expr_clave(reglas, V.vendedor_norm).label("clave"),
                 q._expr_identidad(V.vendedor_norm).label("identidad"),
-                V.vendedor_norm, Vendedor.nombre, Vendedor.cargo, Sucursal.nombre]
+                V.vendedor_norm, Vendedor.nombre, Vendedor.cargo, q.PV1.nombre]
     consulta = _desde(
         select(*columnas, func.sum(V.venta)).group_by(*columnas), filtro,
         con_vendedor=True, solo_lineas_reconocidas=True, aplicar_hmcl=True,
-    ).outerjoin(Sucursal, Sucursal.id == Vendedor.sucursal_id)
+    )
+    consulta = q.con_punto_de_venta(consulta, Vendedor.sucursal_id)
     filas = [
         t.FilaVendedorVenta(clave_, identidad_, nombre, cargo, punto, Decimal(venta))
         for clave_, identidad_, _norm, nombre, cargo, punto, venta in (await db.execute(consulta)).all()
@@ -200,6 +203,8 @@ def _factura_regular(filtro: Filtro, dimension: str):
     marcas = [func.max(case((linea == nombre, 1), else_=0)).label(f"l{i}") for i, nombre in enumerate(reglas.lineas)]
     consulta = select(F.id.label("fila"), clave, F.n_facturas.label("n"), func.count().label("distintas"), *marcas)
     consulta = consulta.select_from(F).join(desanidada, true())
+    if dimension == DIM_SUCURSAL:
+        consulta = q.con_principal(consulta, F.sucursal_id)
     if dimension == DIM_ASESOR:
         consulta = _con_vendedor(consulta, F.vendedor_norm)
     consulta = _donde_periodo(consulta, F, filtro)
@@ -226,6 +231,8 @@ def _factura_irregular(filtro: Filtro, dimension: str):
         F.id.label("fila"), clave, F.n_facturas.label("n"), func.count(func.distinct(linea)).label("distintas"),
         *marcas)
     consulta = consulta.select_from(F).join(desanidada, true())
+    if dimension == DIM_SUCURSAL:
+        consulta = q.con_principal(consulta, F.sucursal_id)
     if dimension == DIM_ASESOR:
         consulta = _con_vendedor(consulta, vendedor)
     consulta = _donde_periodo(consulta, F, filtro, mes=mes)
@@ -254,10 +261,10 @@ async def facturas_resumen(db: AsyncSession, filtro: Filtro, *, dimension: str) 
     ]
 
 
-def _desde_clientes(consulta, filtro: Filtro, *, con_vendedor=False):
+def _desde_clientes(consulta, filtro: Filtro, *, con_vendedor=False, por_sucursal=False):
     """Recognized lines only, the HMCL mode applied to the client (as live does)."""
     return _desde(consulta, filtro, tabla=C, con_vendedor=con_vendedor, solo_lineas_reconocidas=True,
-                  aplicar_hmcl=True, columna_hmcl=C.cliente_norm)
+                  aplicar_hmcl=True, columna_hmcl=C.cliente_norm, por_sucursal=por_sucursal)
 
 
 async def clientes_resumen(db: AsyncSession, filtro: Filtro, *, dimension: str) -> List[FilaClientes]:
@@ -266,7 +273,8 @@ async def clientes_resumen(db: AsyncSession, filtro: Filtro, *, dimension: str) 
     clave = _dimension(dimension, filtro.reglas, C).label("clave")
     interna = _desde_clientes(
         select(clave, func.sum(C.venta).label("venta")).group_by(C.cliente_norm, *([clave] if por_grupo else [])),
-        filtro, con_vendedor=dimension == DIM_ASESOR).subquery("por_cliente")
+        filtro, con_vendedor=dimension == DIM_ASESOR, por_sucursal=dimension == DIM_SUCURSAL,
+    ).subquery("por_cliente")
     return q._filas_de_clientes(await db.execute(q._agregar_clientes(interna, por_grupo)))
 
 
@@ -308,11 +316,13 @@ async def inventario_resumen(
     """`qk.consultar_inventario` from `kpi_inventario_corte` (only the latest cut is kept)."""
     if fecha_corte is None:
         return []
-    consulta = select(
-        cast(Corte.sucursal_id, String), Corte.valor, Corte.lineas_sin_costo, Corte.lineas_costo_maestro,
-    ).where(Corte.fecha_corte == fecha_corte)
+    tienda = cast(q.principal_expr(Corte.sucursal_id), String)  # an associated store rolls up
+    consulta = q.con_principal(
+        select(tienda, func.sum(Corte.valor), func.sum(Corte.lineas_sin_costo), func.sum(Corte.lineas_costo_maestro))
+        .select_from(Corte), Corte.sucursal_id,
+    ).where(Corte.fecha_corte == fecha_corte).group_by(tienda)
     if filtro.sucursal_ids:
-        consulta = consulta.where(Corte.sucursal_id.in_(sorted(filtro.sucursal_ids, key=str)))
+        consulta = consulta.where(q.donde_sucursales(Corte.sucursal_id, filtro.sucursal_ids))
     return [qk.FilaInventario(s, Decimal(v), int(n), int(m)) for s, v, n, m in (await db.execute(consulta)).all()]
 
 

@@ -98,15 +98,14 @@ async def consultar_inventario(
     if fecha_corte is None:
         return []
     valor, sin_costo, costo_maestro = q._valoracion_inventario()
-    consulta = (
-        select(cast(InventarioDetalle.sucursal_id, String), valor, sin_costo, costo_maestro)
-        .join(CargaArchivo, CargaArchivo.id == InventarioDetalle.carga_id)
-        .outerjoin(Referencia, Referencia.id == InventarioDetalle.referencia_id)
-        .where(InventarioDetalle.fecha_corte == fecha_corte, CargaArchivo.estado != "ANULADO")
-        .group_by(InventarioDetalle.sucursal_id)
-    )
+    tienda = cast(q.principal_expr(InventarioDetalle.sucursal_id), String)  # an associated store rolls up
+    consulta = q.con_principal(
+        select(tienda, valor, sin_costo, costo_maestro).select_from(InventarioDetalle), InventarioDetalle.sucursal_id,
+    ).join(CargaArchivo, CargaArchivo.id == InventarioDetalle.carga_id).outerjoin(
+        Referencia, Referencia.id == InventarioDetalle.referencia_id,
+    ).where(InventarioDetalle.fecha_corte == fecha_corte, CargaArchivo.estado != "ANULADO").group_by(tienda)
     if filtro.sucursal_ids:
-        consulta = consulta.where(InventarioDetalle.sucursal_id.in_(sorted(filtro.sucursal_ids, key=str)))
+        consulta = consulta.where(q.donde_sucursales(InventarioDetalle.sucursal_id, filtro.sucursal_ids))
     return [FilaInventario(s, Decimal(v), int(n), int(m)) for s, v, n, m in (await db.execute(consulta)).all()]
 
 
@@ -129,15 +128,17 @@ async def consultar_costo_venta(
     ventana, dias = filtro_costo_venta(filtro)
     costos = q._subconsulta_costos(fecha_corte)
     lineas = q._lineas_por_referencia(ventana.reglas)
-    tienda = cast(VentaDetalle.sucursal_id, String)
+    tienda = cast(q.principal_expr(VentaDetalle.sucursal_id), String)
     consulta = q._desde_ventas(
         select(tienda, func.coalesce(func.sum(VentaDetalle.cantidad * costos.c.costo_unitario), 0)).group_by(tienda),
-        ventana, lineas, solo_lineas_reconocidas=False, costos=costos, con_vendedor=False)
+        ventana, lineas, solo_lineas_reconocidas=False, costos=costos, con_vendedor=False, por_sucursal=True)
     return {s: Decimal(v) for s, v in (await db.execute(consulta)).all()}, dias
 
 
 async def consultar_tiendas_activas(db: AsyncSession) -> List[Dict[str, str]]:
-    """`[{id, nombre}]` de las sucursales activas, por nombre (para el filtro de tiendas)."""
+    """`[{id, nombre}]` de las sucursales activas que son principales, por nombre (para el filtro
+    de tiendas): las asociadas se ven dentro de su principal."""
     filas = await db.execute(
-        select(Sucursal.id, Sucursal.nombre).where(Sucursal.activa.is_(True)).order_by(func.upper(Sucursal.nombre)))
+        select(Sucursal.id, Sucursal.nombre).where(Sucursal.activa.is_(True), Sucursal.principal_id.is_(None))
+        .order_by(func.upper(Sucursal.nombre)))
     return [{"id": str(id_), "nombre": nombre} for id_, nombre in filas.all()]

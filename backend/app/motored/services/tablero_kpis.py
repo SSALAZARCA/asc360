@@ -35,6 +35,7 @@ from app.motored.services import presupuestos as pres
 from app.motored.services import tablero_asesores as t
 from app.motored.services import tablero_asesores_consultas as q
 from app.motored.services import tablero_kpis_consultas as qk
+from app.motored.services.sucursal_grupo import principal_de
 from app.motored.services.tablero_asesores import DIM_ASESOR, DIM_SUCURSAL, DIM_TOTAL, Filtro
 
 
@@ -156,14 +157,19 @@ def venta_para_cumplimiento(
 
 def presupuestos_del_rango(
     crudos: Dict[tuple, pres.LineaPresupuesto], meses: Iterable[str], sucursal_ids: Optional[Iterable[Any]] = None,
+    principales: Optional[Dict[Any, Any]] = None,
 ) -> Dict[Tuple[str, str], pres.LineaPresupuesto]:
     """`{(mes AAAA-MM, cedula limpia): linea}` solo de los meses elegidos (la
-    lectura trae de el menor al mayor) y, si hay filtro, de las lineas asignadas a esas tiendas."""
+    lectura trae de el menor al mayor) y, si hay filtro, de las lineas asignadas a esas tiendas.
+    Una linea asignada a una tienda asociada cuenta en su principal (`principales`, ver
+    `sucursal_grupo`): la linea devuelta ya trae la sucursal principal."""
     elegidos = set(meses)
     tiendas = {str(s) for s in sucursal_ids} if sucursal_ids else None
+    mapa = principales or {}
     resultado: Dict[Tuple[str, str], pres.LineaPresupuesto] = {}
     for (mes, cedula), linea in crudos.items():
         texto, limpia = f"{mes:%Y-%m}", cedula_limpia(cedula)
+        linea = linea._replace(sucursal_id=mapa.get(linea.sucursal_id, linea.sucursal_id))
         if texto in elegidos and limpia and (tiendas is None or str(linea.sucursal_id) in tiendas):
             resultado[(texto, limpia)] = linea
     return resultado
@@ -271,7 +277,8 @@ async def cargar_cumplimiento(
         cubo_asesores = await lectura.cubo(db, filtro._replace(sucursal_ids=None), None, DIM_ASESOR)
     primero, ultimo = (datetime.date(int(m[:4]), int(m[5:]), 1) for m in (filtro.meses[0], filtro.meses[-1]))
     presupuestos = presupuestos_del_rango(
-        await pres.presupuesto_por_asesor(db, primero, ultimo), filtro.meses, filtro.sucursal_ids)
+        await pres.presupuesto_por_asesor(db, primero, ultimo), filtro.meses, filtro.sucursal_ids,
+        await principal_de(db))
     sucursales = await q.consultar_sucursales(db, {str(linea.sucursal_id) for linea in presupuestos.values()})
     nombres = await q.consultar_nombres_por_cedula(db, {cedula for _, cedula in presupuestos})
     return construir_cumplimiento(

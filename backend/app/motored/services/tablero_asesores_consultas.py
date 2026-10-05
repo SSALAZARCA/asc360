@@ -36,6 +36,7 @@ from typing import Any, Dict, Iterable, List, NamedTuple, Optional, Tuple
 
 from sqlalchemy import Numeric, String, and_, case, cast, false, func, literal_column, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from app.motored.models.carga_archivo import CargaArchivo
 from app.motored.models.cliente_tecnired import ClienteTecnired
@@ -47,12 +48,45 @@ from app.motored.models.venta_detalle import VentaDetalle
 from app.motored.schemas.vendedor import limpiar_cedula
 from app.motored.services import parametros
 from app.motored.services import tablero_asesores as t
+from app.motored.services.sucursal_grupo import principal_de
 from app.motored.services.tablero_asesores import (
     CLAVE_TOTAL, DIM_ASESOR, DIM_SUCURSAL, DIM_TOTAL, FilaClientes, FilaCubo, FilaFacturas, FilaPersona, Filtro,
     Reglas,
 )
 
 TOP_CLIENTES = 5
+
+# Associated stores roll into their principal at READ time (`sucursal.principal_id`). `SP` is the
+# store row of a raw `sucursal_id` (joined with `con_principal`); the principal is its
+# `principal_id`, or the store itself. `PV0`/`PV1` do the same for a vendedor's point of sale.
+SP = aliased(Sucursal, name="sp")
+PV0 = aliased(Sucursal, name="pv0")
+PV1 = aliased(Sucursal, name="pv1")
+_GRUPO = aliased(Sucursal, name="grupo")
+
+
+def con_principal(consulta, sucursal):
+    """Joins `SP` to the raw store column, so `principal_expr(sucursal)` can be used."""
+    return consulta.outerjoin(SP, SP.id == sucursal)
+
+
+def principal_expr(sucursal):
+    """The effective principal of the raw store column `sucursal` (needs `con_principal`)."""
+    return func.coalesce(SP.principal_id, sucursal)
+
+
+def donde_sucursales(sucursal, ids):
+    """`sucursal` is one of the stores selected in the UI (principals) or one associated to
+    them: a selected principal includes its associates."""
+    grupo = select(_GRUPO.id).where(
+        func.coalesce(_GRUPO.principal_id, _GRUPO.id).in_(sorted(ids, key=str))).correlate(None)
+    return sucursal.in_(grupo)
+
+
+def con_punto_de_venta(consulta, sucursal):
+    """Joins the principal of the store column `sucursal` (a vendedor's store) as `PV1`."""
+    return consulta.outerjoin(PV0, PV0.id == sucursal).outerjoin(
+        PV1, PV1.id == func.coalesce(PV0.principal_id, PV0.id))
 
 
 def _constante(texto: str):
@@ -95,13 +129,13 @@ def _expr_clave(reglas: Reglas, vendedor_norm=None):
 
 def _expr_dimension(dimension: str, reglas: Reglas, sucursal=None, vendedor_norm=None):
     """Clave de la fila del cubo segun la dimension: el asesor/grupo del tablero,
-    la sucursal de la venta (todas las ventas, tambien las de RESTO y COMERCIALES)
-    o una sola fila TOTAL. `sucursal` y `vendedor_norm` son las columnas de origen
+    la sucursal PRINCIPAL de la venta (todas las ventas, tambien las de RESTO y COMERCIALES;
+    la consulta debe llamar `con_principal`) o una sola fila TOTAL. `sucursal` y `vendedor_norm` son las columnas de origen
     (por defecto las de la venta; el resumen pasa las suyas)."""
     if dimension == DIM_ASESOR:
         return _expr_clave(reglas, vendedor_norm)
     if dimension == DIM_SUCURSAL:
-        return cast(VentaDetalle.sucursal_id if sucursal is None else sucursal, String)
+        return cast(principal_expr(VentaDetalle.sucursal_id if sucursal is None else sucursal), String)
     assert dimension == DIM_TOTAL, dimension
     return _constante(CLAVE_TOTAL)
 
@@ -221,14 +255,15 @@ def _valoracion_inventario():
 
 def _desde_ventas(
     consulta, filtro: Filtro, lineas, *, solo_lineas_reconocidas, costos=None, aplicar_hmcl=True,
-    con_vendedor=True,
+    con_vendedor=True, por_sucursal=False,
 ):
     """FROM/JOIN/WHERE comunes de todas las consultas del tablero. Las fechas
     son rangos `fecha >= a AND fecha < b` unidos con OR (sin funciones sobre la
     columna: el indice `venta_detalle(sucursal_id, fecha)` sigue sirviendo).
     `aplicar_hmcl=False` deja el modo HMCL para Python (ver el cubo).
     `con_vendedor=False` omite el cruce con el maestro (solo la dimension
-    `asesor` y las personas lo necesitan)."""
+    `asesor` y las personas lo necesitan). `por_sucursal=True` cruza con la sucursal
+    principal de la venta (la dimension `sucursal` y el costo de venta por tienda)."""
     consulta = (
         consulta.select_from(VentaDetalle)
         .join(CargaArchivo, CargaArchivo.id == VentaDetalle.carga_id)
@@ -237,6 +272,8 @@ def _desde_ventas(
     if con_vendedor:
         consulta = consulta.outerjoin(
             Vendedor, (Vendedor.nombre_norm == VentaDetalle.vendedor_norm) & Vendedor.activo.is_(True))
+    if por_sucursal:
+        consulta = con_principal(consulta, VentaDetalle.sucursal_id)
     if costos is not None:
         consulta = consulta.outerjoin(costos, costos.c.referencia_id == VentaDetalle.referencia_id)
     consulta = consulta.where(
@@ -244,7 +281,7 @@ def _desde_ventas(
         or_(*[and_(VentaDetalle.fecha >= inicio, VentaDetalle.fecha < fin) for inicio, fin in filtro.rangos]),
     )
     if filtro.sucursal_ids:
-        consulta = consulta.where(VentaDetalle.sucursal_id.in_(sorted(filtro.sucursal_ids, key=str)))
+        consulta = consulta.where(donde_sucursales(VentaDetalle.sucursal_id, filtro.sucursal_ids))
     if aplicar_hmcl and filtro.modo_hmcl == t.HMCL_SOLO:
         consulta = consulta.where(_expr_es_hmcl(_expr_cliente_norm(), filtro.reglas))
     elif aplicar_hmcl and filtro.modo_hmcl == t.HMCL_EXCLUIR:
@@ -310,7 +347,7 @@ async def consultar_cubo(db, filtro: Filtro, fecha_corte, dimension: str = DIM_A
     ).group_by(*columnas)
     consulta = _desde_ventas(
         consulta, filtro, lineas, solo_lineas_reconocidas=False, costos=costos, aplicar_hmcl=False,
-        con_vendedor=dimension == DIM_ASESOR,
+        con_vendedor=dimension == DIM_ASESOR, por_sucursal=dimension == DIM_SUCURSAL,
     )
     return [
         FilaCubo(clave, mes, linea, hmcl, tec, mostr, costo_ok,
@@ -338,6 +375,7 @@ async def consultar_facturas(db, filtro: Filtro, *, dimension: str) -> List[Fila
         select(clave, func.count(func.distinct(linea)).label("lineas_distintas"), *marcas)
         .group_by(*por_factura),
         filtro, lineas, solo_lineas_reconocidas=True, con_vendedor=dimension == DIM_ASESOR,
+        por_sucursal=dimension == DIM_SUCURSAL,
     ).subquery("por_factura")
     externa = select(
         interna.c.clave if por_grupo else _constante(CLAVE_TOTAL),
@@ -364,6 +402,7 @@ async def consultar_clientes(db, filtro: Filtro, *, dimension: str) -> List[Fila
     interna = _desde_ventas(
         select(clave, cliente, func.sum(_expr_venta()).label("venta")).group_by(*por_cliente),
         filtro, lineas, solo_lineas_reconocidas=True, con_vendedor=dimension == DIM_ASESOR,
+        por_sucursal=dimension == DIM_SUCURSAL,
     ).subquery("por_cliente")
     return _filas_de_clientes(await db.execute(_agregar_clientes(interna, por_grupo)))
 
@@ -390,7 +429,7 @@ def _filas_de_clientes(resultado) -> List[FilaClientes]:
 
 async def consultar_personas(db, filtro: Filtro) -> List[FilaPersona]:
     """Quienes hay detras de cada fila: cuantas personas distintas (por cedula) y,
-    para una persona, su nombre, cargo y punto de venta (sucursal principal) --
+    para una persona, su nombre, cargo y punto de venta (la tienda principal de su sucursal) --
     los del nombre del ERP con mas ventas en el rango. La venta es la misma del
     tablero (solo las 7 lineas)."""
     reglas = filtro.reglas
@@ -398,12 +437,13 @@ async def consultar_personas(db, filtro: Filtro) -> List[FilaPersona]:
     clave = _expr_clave(reglas).label("clave")
     identidad = _expr_identidad().label("identidad")
     columnas = [
-        clave, identidad, VentaDetalle.vendedor_norm, Vendedor.nombre, Vendedor.cargo, Sucursal.nombre,
+        clave, identidad, VentaDetalle.vendedor_norm, Vendedor.nombre, Vendedor.cargo, PV1.nombre,
     ]
     consulta = _desde_ventas(
         select(*columnas, func.sum(_expr_venta())).group_by(*columnas),
         filtro, lineas, solo_lineas_reconocidas=True,
-    ).outerjoin(Sucursal, Sucursal.id == Vendedor.sucursal_id)
+    )
+    consulta = con_punto_de_venta(consulta, Vendedor.sucursal_id)
     filas = [
         t.FilaVendedorVenta(clave_, identidad_, nombre, cargo, punto, Decimal(venta))
         for clave_, identidad_, _norm, nombre, cargo, punto, venta in (await db.execute(consulta)).all()
@@ -455,7 +495,7 @@ async def consultar_ventana_mensual(db, filtro: Filtro, dimension: str) -> List[
     consulta = _desde_ventas(
         select(*columnas, func.sum(_expr_venta())).group_by(*columnas),
         filtro, lineas, solo_lineas_reconocidas=True, aplicar_hmcl=False,
-        con_vendedor=dimension == DIM_ASESOR,
+        con_vendedor=dimension == DIM_ASESOR, por_sucursal=dimension == DIM_SUCURSAL,
     )
     return [FilaVentana(c, m, bool(h), Decimal(v)) for c, m, h, v in (await db.execute(consulta)).all()]
 
@@ -499,7 +539,19 @@ async def cargar_filtro(
     Configuracion vigentes en el ULTIMO mes elegido. `ValueError` si la lista no es valida."""
     meses = t.validar_meses(meses)
     ultimo = datetime.date(int(meses[-1][:4]), int(meses[-1][5:]), 1)
-    return t.filtro_de_meses(meses, modo_hmcl, sucursal_ids, await cargar_reglas(db, ultimo))
+    ids = await _principales(db, sucursal_ids)
+    return t.filtro_de_meses(meses, modo_hmcl, ids, await cargar_reglas(db, ultimo))
+
+
+async def _principales(db: AsyncSession, sucursal_ids: Optional[Iterable[Any]]) -> Optional[Iterable[Any]]:
+    """The stores selected in the UI as their principals (a stale id of an associated store
+    means its principal). The queries expand each principal to its group."""
+    pedidas = list(sucursal_ids) if sucursal_ids else []
+    if not pedidas:
+        return sucursal_ids
+    mapa = await principal_de(db)
+    ids = [i if isinstance(i, uuid.UUID) else uuid.UUID(str(i)) for i in pedidas]
+    return [mapa.get(i, i) for i in ids]
 
 
 async def tablero_de_filtro(db: AsyncSession, filtro: Filtro) -> Tuple[Dict[str, Any], List[FilaCubo]]:

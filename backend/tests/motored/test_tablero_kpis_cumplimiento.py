@@ -226,3 +226,19 @@ def test_los_presupuestos_se_filtran_a_los_meses_elegidos_y_a_las_tiendas():
 
     assert set(todos) == {("2026-01", "100"), ("2026-03", "100"), ("2026-03", "200")}
     assert set(solo_s2) == set(como_texto) == {("2026-03", "200")}
+
+
+def test_una_linea_de_una_tienda_asociada_cuenta_en_su_principal():
+    crudos = {
+        (datetime.date(2026, 1, 1), "100"): LineaPresupuesto(S1, 10),
+        (datetime.date(2026, 1, 1), "200"): LineaPresupuesto(S2, 40),  # S2 is associated to S1
+    }
+    principales = {S1: S1, S2: S1}
+
+    todas = k.presupuestos_del_rango(crudos, ["2026-01"], None, principales)
+    solo_s1 = k.presupuestos_del_rango(crudos, ["2026-01"], [S1], principales)
+    solo_s2 = k.presupuestos_del_rango(crudos, ["2026-01"], [S2], principales)
+
+    assert {linea.sucursal_id for linea in todas.values()} == {S1}
+    assert set(solo_s1) == {("2026-01", "100"), ("2026-01", "200")}
+    assert solo_s2 == {}  # the UI only offers principals; the stale id of an associate selects nothing here
