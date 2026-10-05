@@ -84,8 +84,8 @@ describe('Motored drawer menu', () => {
     await renderLayout();
     fireEvent.click(openMenuButton());
 
-    // "Usuarios" is a group: opening it keeps the drawer open.
-    fireEvent.click(screen.getByRole('button', { name: /Usuarios/ }));
+    // "Configuración" is a group: opening it keeps the drawer open.
+    fireEvent.click(screen.getByRole('button', { name: /^Configuración$/ }));
     expect(drawer()).toHaveClass('is-open');
 
     fireEvent.click(screen.getByRole('button', { name: /Gestión de usuarios/ }));

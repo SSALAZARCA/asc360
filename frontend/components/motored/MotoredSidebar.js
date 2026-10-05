@@ -39,35 +39,47 @@ import { useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Image from 'next/image';
 import {
-  LogOut, Warehouse, Users, TrendingDown, ClipboardCheck, MessageSquareWarning, KeyRound, History,
-  UserCog, ChevronDown, ChevronRight, ShoppingCart, BarChart3, Settings,
+  LogOut, Warehouse, TrendingDown, ClipboardCheck, MessageSquareWarning, KeyRound, History,
+  UserCog, ChevronDown, ChevronRight, ShoppingCart, BarChart3, Settings, SlidersHorizontal,
 } from 'lucide-react';
 import { MOTORED_TOKEN_KEY, MOTORED_USER_KEY } from '../../lib/motored/motoredFetch';
 
+// A group (`children`) is a collapsible header that always starts folded; a
+// click opens or closes it. While folded on one of its pages, the header is
+// marked as the current section. Visibility rules live on the pages only: a
+// group shows when at least one of its children is visible to the user.
+// `excludeRoles` (optional) hides an item from those roles only; `roles`
+// (optional) restricts an item to those roles; `adminOnly` and items without
+// either keep their original behaviour. SERVICIO_CLIENTE only ever sees items
+// that list it in `roles`.
 const ALL_ITEMS = [
-  // Pedidos (Fase 4, decision F4-16): ADMIN and COMPRAS only.
-  { id: 'pedidos', name: 'Pedidos', icon: ShoppingCart, path: '/motored/pedidos', roles: ['ADMIN', 'COMPRAS'] },
   { id: 'tablero-asesores', name: "KPI's", icon: BarChart3, path: '/motored/tablero-asesores', roles: ['ADMIN', 'COMPRAS', 'GERENCIA'] },
-  { id: 'maestros', name: 'Maestros', icon: Warehouse, path: '/motored/maestros' },
-  // A group (`children`) is a collapsible header that always starts folded; a
-  // click opens or closes it. While folded on one of its pages, the header is
-  // marked as the current section.
   {
-    id: 'usuarios', name: 'Usuarios', icon: Users, adminOnly: true,
+    id: 'grupo-pedidos', name: 'Pedidos', icon: ShoppingCart,
     children: [
-      { id: 'usuarios-gestion', name: 'Gestión de usuarios', icon: UserCog, path: '/motored/usuarios' },
-      { id: 'ingresos', name: 'Registro de ingresos', icon: History, path: '/motored/ingresos' },
+      // Pedidos (Fase 4, decision F4-16): ADMIN and COMPRAS only.
+      { id: 'pedidos', name: 'Registro de pedidos', icon: ShoppingCart, path: '/motored/pedidos', roles: ['ADMIN', 'COMPRAS'] },
+      { id: 'maestros', name: 'Maestros', icon: Warehouse, path: '/motored/maestros' },
+      { id: 'ventas-perdidas', name: 'Ventas perdidas', icon: TrendingDown, path: '/motored/ventas-perdidas', adminOnly: true },
     ],
   },
-  { id: 'ventas-perdidas', name: 'Ventas perdidas', icon: TrendingDown, path: '/motored/ventas-perdidas', adminOnly: true },
-  // `excludeRoles` (optional) hides an item from those roles only; `roles` (optional) restricts an item to those roles; `adminOnly` and items
-  // without either keep their original behaviour. SERVICIO_CLIENTE only ever
-  // sees items that list it in `roles`.
-  { id: 'encuesta-satisfaccion', name: 'Encuesta satisfacción', icon: ClipboardCheck, path: '/motored/encuesta-satisfaccion', roles: ['ADMIN', 'SERVICIO_CLIENTE'] },
-  { id: 'detractores', name: 'Detractores', icon: MessageSquareWarning, path: '/motored/detractores', roles: ['ADMIN', 'SERVICIO_CLIENTE'] },
+  {
+    id: 'grupo-encuestas', name: 'Encuestas satisfacción', icon: ClipboardCheck,
+    children: [
+      { id: 'encuesta-satisfaccion', name: 'Cargue de encuestas', icon: ClipboardCheck, path: '/motored/encuesta-satisfaccion', roles: ['ADMIN', 'SERVICIO_CLIENTE'] },
+      { id: 'detractores', name: 'Gestión de detractores', icon: MessageSquareWarning, path: '/motored/detractores', roles: ['ADMIN', 'SERVICIO_CLIENTE'] },
+    ],
+  },
+  {
+    id: 'grupo-configuracion', name: 'Configuración', icon: Settings,
+    children: [
+      // Every business-operation setting, edited from the app (ADMIN only).
+      { id: 'configuracion', name: 'Configuración parámetros', icon: SlidersHorizontal, path: '/motored/configuracion', roles: ['ADMIN'] },
+      { id: 'usuarios-gestion', name: 'Gestión de usuarios', icon: UserCog, path: '/motored/usuarios', adminOnly: true },
+      { id: 'ingresos', name: 'Registro de ingresos', icon: History, path: '/motored/ingresos', adminOnly: true },
+    ],
+  },
   { id: 'mi-cuenta', name: 'Cambiar mi contraseña', icon: KeyRound, path: '/motored/mi-cuenta', roles: ['ADMIN', 'COMPRAS', 'SUCURSAL', 'CONSULTA', 'SERVICIO_CLIENTE', 'GERENCIA'] },
-  // Configuración (ADMIN only): every business-operation setting, edited from the app.
-  { id: 'configuracion', name: 'Configuración', icon: Settings, path: '/motored/configuracion', roles: ['ADMIN'] },
 ];
 
 const asideStyle = {
@@ -137,14 +149,23 @@ function MenuGroup({ group, pathname, onNavigate }) {
   );
 }
 
-/** The menu entries a user sees (also read by the Roles y permisos matrix). */
+function isPageVisible(item, user) {
+  if (user?.must_change_password) return item.id === 'mi-cuenta';
+  if (item.excludeRoles?.includes(user?.role)) return false;
+  if (item.roles) return item.roles.includes(user?.role);
+  if (user?.role === 'SERVICIO_CLIENTE') return false;
+  return !item.adminOnly || user?.role === 'ADMIN';
+}
+
+/**
+ * The menu entries a user sees (also read by the Roles y permisos matrix).
+ * Groups keep only their visible children and drop out when none is left.
+ */
 export function menuItemsFor(user) {
-  return ALL_ITEMS.filter((item) => {
-    if (user?.must_change_password) return item.id === 'mi-cuenta';
-    if (item.excludeRoles?.includes(user?.role)) return false;
-    if (item.roles) return item.roles.includes(user?.role);
-    if (user?.role === 'SERVICIO_CLIENTE') return false;
-    return !item.adminOnly || user?.role === 'ADMIN';
+  return ALL_ITEMS.flatMap((item) => {
+    if (!item.children) return isPageVisible(item, user) ? [item] : [];
+    const children = item.children.filter((child) => isPageVisible(child, user));
+    return children.length ? [{ ...item, children }] : [];
   });
 }
 

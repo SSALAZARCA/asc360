@@ -1,6 +1,7 @@
 /**
- * "Usuarios" is a collapsible group in the Motored sidebar holding the user
- * management screen and the login log, so the main menu stays short.
+ * "Configuración" is a collapsible group in the Motored sidebar holding the
+ * settings screen, user management and the login log (it replaced the former
+ * "Usuarios" group), so the main menu stays short.
  */
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
@@ -21,10 +22,10 @@ beforeEach(() => {
   mockPathname = '/motored/maestros';
 });
 
-describe('MotoredSidebar — Usuarios submenu', () => {
+describe('MotoredSidebar — Configuración submenu (users)', () => {
   it('starts collapsed outside its pages and expands on click', () => {
     render(<MotoredSidebar user={ADMIN} />);
-    const group = screen.getByRole('button', { name: 'Usuarios' });
+    const group = screen.getByRole('button', { name: 'Configuración' });
     expect(group).toHaveAttribute('aria-expanded', 'false');
     expect(screen.queryByText('Registro de ingresos')).toBeNull();
 
@@ -37,7 +38,7 @@ describe('MotoredSidebar — Usuarios submenu', () => {
 
   it('navigates from each child entry', () => {
     render(<MotoredSidebar user={ADMIN} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Usuarios' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Configuración' }));
     fireEvent.click(screen.getByText('Gestión de usuarios'));
     expect(pushMock).toHaveBeenCalledWith('/motored/usuarios');
     fireEvent.click(screen.getByText('Registro de ingresos'));
@@ -47,7 +48,7 @@ describe('MotoredSidebar — Usuarios submenu', () => {
   it.each(['/motored/usuarios', '/motored/ingresos'])('starts collapsed even on %s, marked as current', (path) => {
     mockPathname = path;
     render(<MotoredSidebar user={ADMIN} />);
-    const group = screen.getByRole('button', { name: 'Usuarios' });
+    const group = screen.getByRole('button', { name: 'Configuración' });
     expect(group).toHaveAttribute('aria-expanded', 'false');
     expect(group).toHaveAttribute('aria-current', 'true');
     expect(screen.queryByText('Registro de ingresos')).toBeNull();
@@ -56,7 +57,7 @@ describe('MotoredSidebar — Usuarios submenu', () => {
   it.each(['/motored/usuarios', '/motored/ingresos'])('can be collapsed and reopened on %s', (path) => {
     mockPathname = path;
     render(<MotoredSidebar user={ADMIN} />);
-    const group = screen.getByRole('button', { name: 'Usuarios' });
+    const group = screen.getByRole('button', { name: 'Configuración' });
     fireEvent.click(group);
     expect(group).toHaveAttribute('aria-expanded', 'true');
     expect(screen.getByText('Registro de ingresos')).toBeInTheDocument();
@@ -67,7 +68,7 @@ describe('MotoredSidebar — Usuarios submenu', () => {
 
   it('collapses again after being opened elsewhere', () => {
     render(<MotoredSidebar user={ADMIN} />);
-    const group = screen.getByRole('button', { name: 'Usuarios' });
+    const group = screen.getByRole('button', { name: 'Configuración' });
     fireEvent.click(group);
     fireEvent.click(group);
     expect(group).toHaveAttribute('aria-expanded', 'false');
@@ -77,19 +78,19 @@ describe('MotoredSidebar — Usuarios submenu', () => {
     const { rerender } = render(<MotoredSidebar user={ADMIN} />);
     mockPathname = '/motored/ingresos';
     rerender(<MotoredSidebar user={ADMIN} />);
-    expect(screen.getByRole('button', { name: 'Usuarios' })).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByRole('button', { name: 'Configuración' })).toHaveAttribute('aria-expanded', 'false');
   });
 
   it('keeps Registro de ingresos out of the top level', () => {
     render(<MotoredSidebar user={ADMIN} />);
     const labels = screen.getAllByRole('button').map((b) => b.textContent);
     expect(labels).not.toContain('Registro de ingresos');
-    expect(labels).toContain('Usuarios');
+    expect(labels).toContain('Configuración');
   });
 
   it.each(['COMPRAS', 'SUCURSAL', 'CONSULTA', 'SERVICIO_CLIENTE'])('is hidden from %s', (role) => {
     render(<MotoredSidebar user={{ nombre: 'U', role }} />);
-    expect(screen.queryByRole('button', { name: 'Usuarios' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Configuración' })).toBeNull();
     expect(screen.queryByText('Registro de ingresos')).toBeNull();
   });
 });

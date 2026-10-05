@@ -1,6 +1,6 @@
 /**
  * "KPI's" sidebar entry (route /motored/tablero-asesores):
- * ADMIN, COMPRAS and GERENCIA, placed right after "Pedidos".
+ * ADMIN, COMPRAS and GERENCIA, placed first in the menu.
  */
 import React from 'react';
 import { render, screen } from '@testing-library/react';
@@ -23,9 +23,9 @@ describe('MotoredSidebar - KPIs', () => {
     expect(screen.queryByText("KPI's")).not.toBeInTheDocument();
   });
 
-  it('va justo después de Pedidos', () => {
+  it('is the first entry, right before the Pedidos group', () => {
     render(<MotoredSidebar user={{ nombre: 'U', role: 'ADMIN' }} />);
     const nombres = screen.getAllByRole('button').map((b) => b.textContent);
-    expect(nombres.indexOf("KPI's")).toBe(nombres.indexOf('Pedidos') + 1);
+    expect(nombres.slice(0, 2)).toEqual(["KPI's", 'Pedidos']);
   });
 });

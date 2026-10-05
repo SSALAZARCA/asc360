@@ -5,7 +5,7 @@
  * The backend is the real enforcement; these guards are UX only.
  */
 import React from 'react';
-import { render, screen, waitFor, renderHook } from '@testing-library/react';
+import { render, screen, waitFor, renderHook, fireEvent } from '@testing-library/react';
 
 const pushMock = jest.fn();
 let mockPathname = '/motored/tablero-asesores';
@@ -64,16 +64,21 @@ describe('GERENCIA sidebar', () => {
     render(<MotoredSidebar user={{ nombre: 'G', role: 'GERENCIA' }} />);
     const labels = screen.getAllByRole('button').map((b) => b.textContent.trim());
 
-    expect(labels).toEqual(["KPI's", 'Maestros', 'Cambiar mi contraseña', 'Salir']);
+    expect(labels).toEqual(["KPI's", 'Pedidos', 'Cambiar mi contraseña', 'Salir']);
+    fireEvent.click(screen.getByRole('button', { name: 'Pedidos' }));
+    const opened = screen.getAllByRole('button').map((b) => b.textContent.trim());
+    expect(opened).toEqual(["KPI's", 'Pedidos', 'Maestros', 'Cambiar mi contraseña', 'Salir']);
   });
 
   it.each(['ADMIN', 'COMPRAS', 'SUCURSAL', 'CONSULTA', 'ASESOR_MOSTRADOR'])('keeps Maestros for %s', (role) => {
     render(<MotoredSidebar user={{ nombre: 'U', role }} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Pedidos' }));
     expect(screen.getByRole('button', { name: 'Maestros' })).toBeInTheDocument();
   });
 
   it('keeps Maestros hidden from SERVICIO_CLIENTE', () => {
     render(<MotoredSidebar user={{ nombre: 'U', role: 'SERVICIO_CLIENTE' }} />);
+    expect(screen.queryByRole('button', { name: 'Pedidos' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Maestros' })).not.toBeInTheDocument();
   });
 });

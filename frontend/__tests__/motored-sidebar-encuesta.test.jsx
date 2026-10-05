@@ -9,36 +9,46 @@ jest.mock('next/navigation', () => ({
 
 import MotoredSidebar from '../components/motored/MotoredSidebar';
 
+const GROUP = 'Encuestas satisfacción';
+const openGroup = (name) => fireEvent.click(screen.getByRole('button', { name }));
+
 beforeEach(() => pushMock.mockClear());
 
-describe('MotoredSidebar — Encuesta satisfacción entry', () => {
-  it('shows only the survey entry to SERVICIO_CLIENTE', () => {
+describe('MotoredSidebar — Encuestas satisfacción group', () => {
+  it('shows only the survey group and the account page to SERVICIO_CLIENTE', () => {
     render(<MotoredSidebar user={{ nombre: 'Sc', role: 'SERVICIO_CLIENTE' }} />);
+    openGroup(GROUP);
 
-    expect(screen.getByText('Encuesta satisfacción')).toBeInTheDocument();
-    expect(screen.queryByText('Maestros')).not.toBeInTheDocument();
-    expect(screen.queryByText('Usuarios')).not.toBeInTheDocument();
-    expect(screen.queryByText('Ventas perdidas')).not.toBeInTheDocument();
+    expect(screen.getByText('Cargue de encuestas')).toBeInTheDocument();
+    expect(screen.getByText('Gestión de detractores')).toBeInTheDocument();
+    ['Pedidos', 'Maestros', 'Configuración', 'Ventas perdidas'].forEach((t) =>
+      expect(screen.queryByText(t)).not.toBeInTheDocument()
+    );
   });
 
-  it('shows the survey entry together with the existing ones to ADMIN', () => {
+  it('shows the survey group together with the existing ones to ADMIN', () => {
     render(<MotoredSidebar user={{ nombre: 'Ad', role: 'ADMIN' }} />);
+    [GROUP, 'Pedidos', 'Configuración'].forEach(openGroup);
 
-    ['Encuesta satisfacción', 'Maestros', 'Usuarios', 'Ventas perdidas'].forEach((t) =>
+    ['Cargue de encuestas', 'Gestión de detractores', 'Maestros', 'Gestión de usuarios', 'Ventas perdidas'].forEach((t) =>
       expect(screen.getByText(t)).toBeInTheDocument()
     );
   });
 
-  it.each(['COMPRAS', 'SUCURSAL', 'CONSULTA'])('hides the survey entry from %s but keeps Maestros', (role) => {
+  it.each(['COMPRAS', 'SUCURSAL', 'CONSULTA', 'GERENCIA'])('hides the survey group from %s but keeps Maestros', (role) => {
     render(<MotoredSidebar user={{ nombre: 'X', role }} />);
 
-    expect(screen.queryByText('Encuesta satisfacción')).not.toBeInTheDocument();
+    expect(screen.queryByText(GROUP)).not.toBeInTheDocument();
+    openGroup('Pedidos');
     expect(screen.getByText('Maestros')).toBeInTheDocument();
   });
 
-  it('navigates to the survey admin page on click', () => {
+  it('navigates to the survey admin page and the detractors page', () => {
     render(<MotoredSidebar user={{ nombre: 'Ad', role: 'ADMIN' }} />);
-    fireEvent.click(screen.getByText('Encuesta satisfacción'));
+    openGroup(GROUP);
+    fireEvent.click(screen.getByText('Cargue de encuestas'));
     expect(pushMock).toHaveBeenCalledWith('/motored/encuesta-satisfaccion');
+    fireEvent.click(screen.getByText('Gestión de detractores'));
+    expect(pushMock).toHaveBeenCalledWith('/motored/detractores');
   });
 });
