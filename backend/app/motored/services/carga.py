@@ -183,8 +183,10 @@ async def _aplicar_columnas_de_sucursal(
     """Sucursales steps applied after every row `(obj, fila, created)` was
     upserted: the names (the C.O. matched the store, so a row may rename
     it), then the columns that are not schema fields: "Bodegas
-    secundarias" and "Sucursal principal". Returns the secondary-bodegas
-    summary, or None without that column."""
+    secundarias" and "Sucursal principal"; last, the `bodega` record of
+    the principal bodega of each row that sets one, against that final
+    state. Returns the
+    secondary-bodegas summary, or None without that column."""
     await maestros.renombrar_sucursales_carga(
         db, [(obj, fila["nombre"], creada) for obj, fila, creada in subidas],
         usuario_id,
@@ -207,7 +209,17 @@ async def _aplicar_columnas_de_sucursal(
         await sucursal_grupo.aplicar(
             db, principales, [obj for obj, _, _ in subidas], usuario_id
         )
+    await bodegas_secundarias.sincronizar_principales(
+        db, [obj for obj, fila, _ in subidas if _trae_principal(fila)],
+        usuario_id,
+    )
     return resumen
+
+
+def _trae_principal(fila: Dict[str, Any]) -> bool:
+    """The row sets the store's principal bodega. A blank cell keeps the
+    saved one, and its record is left as it is."""
+    return bool(str(fila.get("bodega_principal") or "").strip())
 
 
 async def procesar_carga(

@@ -249,6 +249,7 @@ class TestUpload:
             contexto,  # "Sucursal principal" resolver
             [a], [b],  # one upsert per row
             [ba066],  # bodegas aplicar
+            [ba066, _bodega_raiz("BA061", a), _bodega_raiz("BA075", b)],
         ])
 
         resultado = await _resolver_y_procesar_carga(
@@ -267,6 +268,12 @@ class TestUpload:
             b.id, "BA075"
         )
         assert b.principal_id == a.id
+
+
+def _bodega_raiz(codigo, sucursal):
+    """The record of a store's principal bodega, as the principal sync
+    reads it back."""
+    return Bodega(id=uuid.uuid4(), codigo=codigo, sucursal_id=sucursal.id)
 
 
 class TestPrincipalByCode:

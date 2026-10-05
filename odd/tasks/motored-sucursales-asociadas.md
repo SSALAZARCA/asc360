@@ -37,7 +37,7 @@ Let the owner load the corrected Sucursales file in one go, and model physical p
 - [x] T6 (REINSTATED, owner confirmed verbatim): VENTAS ingest resolves the sucursal by the row's C.O.; bodegas_excluidas checked first; bodega only as fallback for files without C.O.; unknown C.O. = row error; non-store C.O. (MR/PAF01) needs an exclusion. No re-upload of old ventas. Runs after T5 (single writer); coordinate ventas.py with the KPI session (R6).
 - [ ] T7 (presupuestos and vendedores recognize the store by C.O., name as fallback). KPI session files: coordinate; they may implement it.
 - [ ] T8 (per-store data-control report for the owner before the first pedido)
-- [ ] T9 (BUG found while validating the owner file): the Sucursales upload and form never sync the `bodega` record of a store's PRINCIPAL bodega. A moved principal (BA071 → A07, BC111/BA011/... → new stores) keeps a stale or NULL `sucursal_id`, and secondaries chain to it via `bodega_principal`, so inventory resolves to the wrong store or none (MCD01, MCB11). Fix: when a store's principal is set or changed, upsert that bodega record with sucursal_id = store and bodega_principal = NULL, and re-point the old record. MUST land before the owner uploads.
+- [x] T9 (BUG found while validating the owner file): the Sucursales upload and form never sync the `bodega` record of a store's PRINCIPAL bodega. A moved principal (BA071 → A07, BC111/BA011/... → new stores) keeps a stale or NULL `sucursal_id`, and secondaries chain to it via `bodega_principal`, so inventory resolves to the wrong store or none (MCD01, MCB11). Fix: when a store's principal is set or changed, upsert that bodega record with sucursal_id = store and bodega_principal = NULL, and re-point the old record. MUST land before the owner uploads.
 
 ## Constraints
 - **Python 3.11, gga style:** lines of 79 characters or fewer, functions of 50 lines or fewer, no mid-file imports.
@@ -106,3 +106,8 @@ Let the owner load the corrected Sucursales file in one go, and model physical p
   - An unknown C.O. returns the new error `CO_NO_ENCONTRADO`.
   - The parent added PAF01 (the administrative non-store bodega, C.O. MR) to the default `bodegas_excluidas`.
   - Results: tests/motored 5560 passed; pg_real 600 passed, 2 skipped (writer run).
+- 2026-10-05: T9 upload path done.
+  - `bodegas_secundarias.sincronizar_principales` runs last in the Sucursales upload. It makes each principal record the root of its store, chains the store's other records to that root, and cuts foreign chains to it.
+  - In the owner scenario every bodega resolves to its new store, in both row orders.
+  - Results: tests/motored 5575 passed; pg_real 603 passed, 2 skipped.
+  - Pending: the CRUD form path in `maestros.py` has the same bug. It goes into T4, after the KPI session's R7 lands. Call `sincronizar_principales` from `api/maestros.py` after create or update.

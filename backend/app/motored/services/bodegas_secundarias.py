@@ -1,11 +1,11 @@
 """
 Motored — columna "Bodegas secundarias" de la carga de Sucursales.
 
-Una tienda puede tener varias bodegas, pero el archivo de Sucursales solo traía
-"Bodega principal". La columna nueva lista los códigos de las bodegas
-secundarias (separados por coma). Al cargar, cada código se guarda como una fila
-`bodega` con `sucursal_id` = la tienda y `bodega_principal` = el código de la
-bodega principal de esa tienda: la misma cadena que sigue
+Una tienda puede tener varias bodegas, pero el archivo de Sucursales solo
+traía "Bodega principal". La columna nueva lista los códigos de las bodegas
+secundarias (separados por coma). Al cargar, cada código se guarda como una
+fila `bodega` con `sucursal_id` = la tienda y `bodega_principal` = el
+código de la bodega principal de esa tienda: la misma cadena que sigue
 `ingesta.resolucion._resolver_sucursal_de_bodega` y de la que depende la
 consolidación de INVENTARIO.
 
@@ -18,9 +18,10 @@ Dos pasos, los dos todo-o-nada junto con el resto del archivo:
   vincula lo listado y desvincula lo que ya no figura.
 
 Reglas de desvinculación: sin la columna en el archivo no se toca ninguna
-secundaria; con la columna, para cada sucursal DEL ARCHIVO los códigos listados
-son sus secundarias y las que tenía vinculadas y ya no figuran quedan con
-`sucursal_id` y `bodega_principal` en NULL (la fila `bodega` nunca se borra).
+secundaria; con la columna, para cada sucursal DEL ARCHIVO los códigos
+listados son sus secundarias y las que tenía vinculadas y ya no figuran
+quedan con `sucursal_id` y `bodega_principal` en NULL (la fila `bodega`
+nunca se borra).
 Una celda en blanco desvincula todas las de esa tienda. Las sucursales que no
 están en el archivo no se tocan. La fila `bodega` de la propia bodega principal
 nunca se desvincula.
@@ -33,6 +34,18 @@ Mover una secundaria de tienda en UNA sola carga: un código vinculado a otra
 tienda se acepta si el mismo archivo lo libera, es decir, si la tienda dueña
 también viene en el archivo con la columna y ya no lo lista. Si sigue siendo
 su bodega principal (la del archivo o, en blanco, la guardada) se rechaza.
+
+The principal bodega's own record (`sincronizar_principales`, run after
+every row, the secondaries and the associations were applied): for every
+store of the file with a principal code P, the record of P belongs to the
+store and is the root of its chain (`bodega_principal` NULL), created when
+missing; every other record of the store chains to P; and a record of
+another store, or of none, that still chains to P has its chain cut
+(`bodega_principal` NULL), so it resolves by its own `sucursal_id`, never
+through P to a store it does not belong to. Ingest only follows the
+records, never `sucursal.bodega_principal`, so without this a principal
+moved to another store, or a secondary promoted to principal, kept
+resolving to its old store or to none.
 """
 import uuid
 from typing import Any, Dict, Hashable, List, Optional, Sequence, Set, Tuple
@@ -53,8 +66,8 @@ from app.motored.services.texto import split_multivalor
 # Clave canónica de la columna tal como llega en cada fila del archivo.
 COLUMNA = "bodegas_secundarias"
 # Clave interna que deja `resolver_filas`: lista de códigos ya normalizados.
-# Solo existe si la columna vino en el archivo (con `_` para que `_row_to_schema`
-# la descarte antes de construir el schema de sucursal).
+# Solo existe si la columna vino en el archivo (con `_` para que
+# `_row_to_schema` la descarte antes de construir el schema de sucursal).
 FILA_CLAVE = "_bodegas_secundarias"
 
 
@@ -133,7 +146,8 @@ async def resolver_filas(
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     """Retorna `(filas_resueltas, errores)` con el mismo shape `{fila, motivo}`
     (1-indexado) que el resto de los resolvers de `api/carga.py`. Sin la
-    columna en el archivo devuelve las filas tal cual, sin consultar la base."""
+    columna en el archivo devuelve las filas tal cual, sin consultar la
+    base."""
     if not any(COLUMNA in fila for fila in filas):
         return filas, []
 
@@ -141,23 +155,25 @@ async def resolver_filas(
     for fila in filas:
         fila = dict(fila)
         if COLUMNA in fila:
-            # Por fila: una fila sin la clave (JSON) no toca las secundarias de su sucursal.
+            # Por fila: una fila sin la clave (JSON) no toca las
+            # secundarias de su sucursal.
             fila[FILA_CLAVE] = split_multivalor(fila.pop(COLUMNA))
         resueltas.append(fila)
 
     errores = _errores_de_sucursal_repetida(resueltas)
-    todos_los_codigos = {codigo for fila in resueltas for codigo in fila.get(FILA_CLAVE, [])}
+    todos_los_codigos = {
+        codigo for fila in resueltas for codigo in fila.get(FILA_CLAVE, [])
+    }
     if not todos_los_codigos:
         return resueltas, errores
 
-    sucursales_db = [tuple(r) for r in (
-        await db.execute(select(Sucursal.id, Sucursal.nombre, Sucursal.bodega_principal))
-    ).all()]
-    bodegas_db = dict(
-        tuple(r) for r in (
-            await db.execute(select(Bodega.codigo, Bodega.sucursal_id).where(Bodega.codigo.in_(todos_los_codigos)))
-        ).all()
-    )
+    sucursales_db = [tuple(r) for r in (await db.execute(select(
+        Sucursal.id, Sucursal.nombre, Sucursal.bodega_principal
+    ))).all()]
+    bodegas_db = dict(tuple(r) for r in (await db.execute(
+        select(Bodega.codigo, Bodega.sucursal_id)
+        .where(Bodega.codigo.in_(todos_los_codigos))
+    )).all())
     errores += _errores_de_codigos(resueltas, sucursales_db, bodegas_db)
     errores.sort(key=lambda e: e["fila"])
     return resueltas, errores
@@ -213,8 +229,9 @@ def _errores_de_codigos(
             errores.append({
                 "fila": index,
                 "motivo": (
-                    f"La sucursal '{nombre}' lista 'Bodegas secundarias' pero no tiene 'Bodega principal'. "
-                    "Cárguela primero: las secundarias se enlazan a la principal."
+                    f"La sucursal '{nombre}' lista 'Bodegas secundarias' "
+                    "pero no tiene 'Bodega principal'. Cárguela primero: "
+                    "las secundarias se enlazan a la principal."
                 ),
             })
             continue
@@ -241,37 +258,42 @@ def _motivo_de_codigo(
 ) -> Optional[str]:
     if codigo == principal:
         return (
-            f"La bodega '{codigo}' es la bodega principal de esta misma sucursal ('{nombre}'); "
-            "no puede ser también secundaria."
+            f"La bodega '{codigo}' es la bodega principal de esta "
+            f"misma sucursal ('{nombre}'); no puede ser también "
+            "secundaria."
         )
     duena = principal_de.get(codigo)
     if duena is not None:
         return (
-            f"La bodega '{codigo}' es la bodega principal de la sucursal '{duena}'; "
-            "una bodega principal no puede ser secundaria de otra sucursal."
+            f"La bodega '{codigo}' es la bodega principal de la "
+            f"sucursal '{duena}'; una bodega principal no puede ser "
+            "secundaria de otra sucursal."
         )
     if codigo in primera_fila_de:
         return (
-            f"La bodega '{codigo}' ya aparece como secundaria en la fila {primera_fila_de[codigo]}; "
-            "una bodega solo puede pertenecer a una sucursal."
+            f"La bodega '{codigo}' ya aparece como secundaria en la "
+            f"fila {primera_fila_de[codigo]}; una bodega solo puede "
+            "pertenecer a una sucursal."
         )
     vinculada_a = bodegas_db.get(codigo)
     if vinculada_a is not None and vinculada_a != sucursal_id:
         otra = nombre_por_sucursal_id.get(vinculada_a, "otra sucursal")
         return (
-            f"La bodega '{codigo}' ya está asociada a la sucursal '{otra}'. "
-            f"Quítela primero de 'Bodegas secundarias' de '{otra}' y vuelva a subir el archivo."
+            f"La bodega '{codigo}' ya está asociada a la sucursal "
+            f"'{otra}'. Quítela primero de 'Bodegas secundarias' de "
+            f"'{otra}' y vuelva a subir el archivo."
         )
     return None
 
 
 async def aplicar(
-    db, entradas: List[Tuple[Sucursal, List[str]]], usuario_id: Optional[uuid.UUID]
+    db, entradas: List[Tuple[Sucursal, List[str]]],
+    usuario_id: Optional[uuid.UUID],
 ) -> ResumenBodegasSecundarias:
     """Vincula y desvincula en la sesión (el `commit()` lo hace el caller).
     `entradas`: cada sucursal del archivo ya guardada, con su lista final de
-    códigos secundarios (vacía = desvincular todas). Con UN solo query trae las
-    bodegas listadas y las ya vinculadas a esas sucursales."""
+    códigos secundarios (vacía = desvincular todas). Con UN solo query trae
+    las bodegas listadas y las ya vinculadas a esas sucursales."""
     codigos = {codigo for _, lista in entradas for codigo in lista}
     ids = [sucursal.id for sucursal, _ in entradas]
     # A code another store of the file lists is moving, not being released:
@@ -279,41 +301,122 @@ async def aplicar(
     condiciones = [Bodega.sucursal_id.in_(ids)]
     if codigos:
         condiciones.append(Bodega.codigo.in_(codigos))
-    existentes = (await db.execute(select(Bodega).where(or_(*condiciones)))).scalars().all()
+    existentes = (await db.execute(
+        select(Bodega).where(or_(*condiciones))
+    )).scalars().all()
     por_codigo = {b.codigo: b for b in existentes}
 
     resumen = ResumenBodegasSecundarias()
     for sucursal, listados in entradas:
-        principal = sucursal.bodega_principal
         for codigo in listados:
-            bodega = por_codigo.get(codigo)
-            if bodega is None:
-                await _crear(db, codigo, sucursal, principal, usuario_id, por_codigo)
-            elif bodega.sucursal_id == sucursal.id and bodega.bodega_principal == principal:
-                continue
-            else:
-                await maestros.update_bodega(
-                    db, bodega, BodegaUpdate(sucursal_id=sucursal.id, bodega_principal=principal), usuario_id
+            if await _vincular(db, codigo, sucursal, usuario_id, por_codigo):
+                resumen.vinculadas.append(
+                    {"sucursal": sucursal.nombre, "bodega": codigo}
                 )
-            resumen.vinculadas.append({"sucursal": sucursal.nombre, "bodega": codigo})
         for bodega in existentes:
             if (
                 bodega.sucursal_id == sucursal.id
-                and bodega.codigo != principal
+                and bodega.codigo != sucursal.bodega_principal
                 and bodega.codigo not in codigos
             ):
-                await maestros.update_bodega(
-                    db, bodega, BodegaUpdate(sucursal_id=None, bodega_principal=None), usuario_id
+                await _escribir(db, bodega, None, None, usuario_id)
+                resumen.desvinculadas.append(
+                    {"sucursal": sucursal.nombre, "bodega": bodega.codigo}
                 )
-                resumen.desvinculadas.append({"sucursal": sucursal.nombre, "bodega": bodega.codigo})
     return resumen
 
 
-async def _crear(
-    db, codigo: str, sucursal: Sucursal, principal: Optional[str],
+async def _vincular(
+    db, codigo: str, sucursal: Sucursal,
     usuario_id: Optional[uuid.UUID], por_codigo: Dict[str, Bodega],
+) -> bool:
+    """Links one listed secondary to its store. False when it already was."""
+    principal = sucursal.bodega_principal
+    bodega = por_codigo.get(codigo)
+    if bodega is None:
+        por_codigo[codigo] = await maestros.create_bodega(db, BodegaCreate(
+            codigo=codigo, sucursal_id=sucursal.id,
+            bodega_principal=principal,
+        ), usuario_id)
+        return True
+    destino = (sucursal.id, principal)
+    if (bodega.sucursal_id, bodega.bodega_principal) == destino:
+        return False
+    await _escribir(db, bodega, sucursal.id, principal, usuario_id)
+    return True
+
+
+async def _escribir(
+    db, bodega: Bodega, sucursal_id: Optional[uuid.UUID],
+    principal: Optional[str], usuario_id: Optional[uuid.UUID],
 ) -> None:
-    creada = await maestros.create_bodega(
-        db, BodegaCreate(codigo=codigo, sucursal_id=sucursal.id, bodega_principal=principal), usuario_id
-    )
-    por_codigo[codigo] = creada
+    await maestros.update_bodega(db, bodega, BodegaUpdate(
+        sucursal_id=sucursal_id, bodega_principal=principal,
+    ), usuario_id)
+
+
+def _principales_de(
+    sucursales: Sequence[Sucursal],
+) -> Dict[str, uuid.UUID]:
+    """principal code -> its store, for the stores that have one. The
+    upload validation keeps a code as the principal of one store only."""
+    raiz_de: Dict[str, uuid.UUID] = {}
+    for sucursal in sucursales:
+        codigo = _texto(sucursal.bodega_principal)
+        if codigo:
+            raiz_de[codigo] = sucursal.id
+    return raiz_de
+
+
+def _destino(
+    bodega: Bodega,
+    raiz_de: Dict[str, uuid.UUID],
+    principal_de: Dict[uuid.UUID, str],
+) -> Tuple[Optional[uuid.UUID], Optional[str]]:
+    """`(sucursal_id, bodega_principal)` the record must end with: the root
+    of its store when it is a principal; chained to its store's principal
+    when that store is in the file; with its chain cut when it still
+    chains to a principal of the file without belonging to that store
+    (otherwise ingest would follow the chain into the wrong store);
+    unchanged otherwise."""
+    if bodega.codigo in raiz_de:
+        return raiz_de[bodega.codigo], None
+    principal = principal_de.get(bodega.sucursal_id)
+    if principal is not None:
+        return bodega.sucursal_id, principal
+    if bodega.bodega_principal in raiz_de:
+        return bodega.sucursal_id, None
+    return bodega.sucursal_id, bodega.bodega_principal
+
+
+async def sincronizar_principales(
+    db, sucursales: Sequence[Sucursal], usuario_id: Optional[uuid.UUID],
+) -> None:
+    """Syncs the `bodega` records of the principals of `sucursales` (every
+    store of the file, already saved). Runs after every other step of the
+    upload, so it sees the final state whatever the row order. One query,
+    and no query when no store has a principal. Writes only what changes,
+    through the same audited service functions as `aplicar`."""
+    raiz_de = _principales_de(sucursales)
+    if not raiz_de:
+        return
+    principal_de = {sucursal_id: codigo
+                    for codigo, sucursal_id in raiz_de.items()}
+    # The session runs with autoflush off: the query must see the
+    # secondaries `aplicar` just linked or created.
+    await db.flush()
+    bodegas = (await db.execute(select(Bodega).where(or_(
+        Bodega.codigo.in_(raiz_de),
+        Bodega.sucursal_id.in_(principal_de),
+        Bodega.bodega_principal.in_(raiz_de),
+    )))).scalars().all()
+    existentes = {bodega.codigo for bodega in bodegas}
+    for bodega in bodegas:
+        destino = _destino(bodega, raiz_de, principal_de)
+        if (bodega.sucursal_id, bodega.bodega_principal) != destino:
+            await _escribir(db, bodega, *destino, usuario_id)
+    for codigo, sucursal_id in raiz_de.items():
+        if codigo not in existentes:
+            await maestros.create_bodega(db, BodegaCreate(
+                codigo=codigo, sucursal_id=sucursal_id,
+            ), usuario_id)

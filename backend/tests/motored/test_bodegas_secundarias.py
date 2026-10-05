@@ -309,10 +309,17 @@ def _sucursal(nombre, principal):
     return Sucursal(id=uuid.uuid4(), nombre=nombre, bodega_principal=principal, activa=True)
 
 
+def _raiz(codigo, sucursal):
+    """The record of a store's principal bodega, already in sync: what the
+    principal sync reads back after the secondaries were applied."""
+    return _bodega(codigo, sucursal.id, None)
+
+
 class TestAplicar:
     async def test_link_creates_the_bodega_with_sucursal_and_principal(self):
         # C.O. | resolver: sucursales, bodegas | upsert | apply: bodegas
-        db = _db([], [], [], [], [])
+        # | principal sync: bodegas
+        db = _db([], [], [], [], [], [])
 
         resultado = await _resolver_y_procesar_carga(
             db, "sucursal", [_fila("CALI", "BA061", "BA066, BA067")], USER_ID
@@ -321,6 +328,10 @@ class TestAplicar:
         assert resultado.ok is True
         sucursal = db.added_of_type(Sucursal)[0]
         bodegas = {b.codigo: b for b in db.added_of_type(Bodega)}
+        raiz = bodegas.pop("BA061")  # the principal's record, as root
+        assert (raiz.sucursal_id, raiz.bodega_principal) == (
+            sucursal.id, None
+        )
         assert set(bodegas) == {"BA066", "BA067"}
         assert all(b.sucursal_id == sucursal.id for b in bodegas.values())
         assert all(b.bodega_principal == "BA061" for b in bodegas.values())
@@ -334,7 +345,10 @@ class TestAplicar:
         huerfana = _bodega("BA066")
         # C.O. | resolver: sucursales, bodegas | upsert | apply: bodegas
         guardadas = [(cali.id, "CALI", "BA061")]
-        db = _db(guardadas, guardadas, [("BA066", None)], [cali], [huerfana])
+        db = _db(
+            guardadas, guardadas, [("BA066", None)], [cali], [huerfana],
+            [huerfana, _raiz("BA061", cali)],
+        )
 
         resultado = await _resolver_y_procesar_carga(
             db, "sucursal", [_fila("CALI", "BA061", "BA066")], USER_ID
@@ -351,7 +365,8 @@ class TestAplicar:
         vinculada = _bodega("BA066", cali.id, "BA061")
         guardadas = [(cali.id, "CALI", "BA061")]
         db = _db(
-            guardadas, guardadas, [("BA066", cali.id)], [cali], [vinculada]
+            guardadas, guardadas, [("BA066", cali.id)], [cali], [vinculada],
+            [vinculada, _raiz("BA061", cali)],
         )
 
         resultado = await _resolver_y_procesar_carga(
@@ -368,7 +383,7 @@ class TestAplicar:
         guardadas = [(cali.id, "CALI", "BA061")]
         db = _db(
             guardadas, guardadas, [("BA067", cali.id)], [cali],
-            [vieja, queda],
+            [vieja, queda], [queda, _raiz("BA061", cali)],
         )
 
         resultado = await _resolver_y_procesar_carga(
@@ -385,7 +400,9 @@ class TestAplicar:
         a = _bodega("BA066", cali.id, "BA061")
         b = _bodega("BA067", cali.id, "BA061")
         # blank cell -> no codes at all -> the resolver makes no query
-        db = _db([(cali.id, "CALI")], [cali], [a, b])
+        db = _db(
+            [(cali.id, "CALI")], [cali], [a, b], [_raiz("BA061", cali)]
+        )
 
         resultado = await _resolver_y_procesar_carga(
             db, "sucursal", [_fila("CALI", "BA061", "")], USER_ID
@@ -397,7 +414,7 @@ class TestAplicar:
     async def test_the_principal_bodega_row_is_never_unlinked(self):
         cali = _sucursal("CALI", "BA061")
         principal = _bodega("BA061", cali.id, None)
-        db = _db([(cali.id, "CALI")], [cali], [principal])
+        db = _db([(cali.id, "CALI")], [cali], [principal], [principal])
 
         resultado = await _resolver_y_procesar_carga(
             db, "sucursal", [_fila("CALI", "BA061", "")], USER_ID
@@ -435,9 +452,11 @@ class TestAplicar:
             (cali.id, "CALI", "BA061"), (pasto.id, "PASTO", "BA070"),
         ]
         # C.O. | resolver: sucursales, bodegas | upserts | apply: bodegas
+        # | principal sync: bodegas
         db = _db(
             sucursales, sucursales, [("BA066", pasto.id)], *upserts,
             [movida],
+            [movida, _raiz("BA061", cali), _raiz("BA070", pasto)],
         )
 
         resultado = await _resolver_y_procesar_carga(
@@ -502,8 +521,8 @@ def test_bodegas_bulk_upload_is_gone(_motored_ready, path):
 
 
 def test_sucursal_upload_still_works_over_http(_motored_ready):
-    # probe, C.O. resolver, upsert, apply
-    session = FakeAsyncSession(execute_queue=[[], [], [], []])
+    # probe, C.O. resolver, upsert, apply, principal sync
+    session = FakeAsyncSession(execute_queue=[[], [], [], [], []])
     override_motored_db(session)
 
     with TestClient(app) as client:
@@ -556,7 +575,7 @@ async def test_bodega_sin_sucursal_is_shown_under_the_sucursales_tab():
 
 
 async def test_concurrent_bodega_creation_is_a_409_not_a_500():
-    db = _db([], [], [], [], [], raise_integrity_error=True)
+    db = _db([], [], [], [], [], [], raise_integrity_error=True)
 
     with pytest.raises(HTTPException) as exc:
         await _resolver_y_procesar_carga(
@@ -577,6 +596,7 @@ async def test_row_that_omits_the_column_keeps_its_secondaries_in_a_mixed_file()
     db = _db(
         guardadas, guardadas, [("BA066", None)], [cali], [pasto],
         [nueva, de_pasto],
+        [nueva, de_pasto, _raiz("BA061", cali), _raiz("BA071", pasto)],
     )
     # JSON row without the key
     omite = {
@@ -595,7 +615,7 @@ async def test_row_that_omits_the_column_keeps_its_secondaries_in_a_mixed_file()
 async def test_row_with_empty_list_still_unlinks_all():
     cali = _sucursal("CALI", "BA061")
     a = _bodega("BA066", cali.id, "BA061")
-    db = _db([(cali.id, "CALI")], [cali], [a])
+    db = _db([(cali.id, "CALI")], [cali], [a], [_raiz("BA061", cali)])
 
     await _resolver_y_procesar_carga(db, "sucursal", [_fila("CALI", "BA061", [])], USER_ID)
 
