@@ -311,6 +311,19 @@ def test_construir_detalle_toma_las_mismas_filas_que_venta_mensual():
     assert d["nro_documento"] == "FV-1001"
 
 
+@pytest.fixture(autouse=True)
+def refrescos(monkeypatch):
+    """The KPI summary refresh (covered in `pg_real/test_kpi_resumen_cargas_pg.py`) recorded, not run."""
+    llamadas = []
+
+    async def refrescar(session, claves):
+        llamadas.append((session, claves))
+        return True
+
+    monkeypatch.setattr(ventas.kpi_resumen, "refrescar_si_construido", refrescar)
+    return llamadas
+
+
 async def test_aplicar_detalle_borra_por_clave_y_luego_inserta():
     session = FakeAsyncSession(execute_queue=[[], []])
 
@@ -336,3 +349,18 @@ async def test_aplicar_detalle_sin_filas_no_ejecuta_nada():
     await ventas.aplicar_detalle(session, [_staging(1, extra=False)], CARGA_ID)
 
     assert session.executed_statements == []
+
+
+async def test_aplicar_detalle_refresca_los_resumenes_de_kpi_de_las_claves_de_la_carga(refrescos):
+    session = FakeAsyncSession(execute_queue=[[], []])
+
+    await ventas.aplicar_detalle(session, [_staging(1), _staging(2)], CARGA_ID)
+
+    assert refrescos == [(session, {(SUCURSAL_ID, 2026, 9)})]
+    assert len(session.executed_statements) == 2  # the refresh runs after the delete and the insert
+
+
+async def test_aplicar_detalle_sin_filas_no_refresca_los_resumenes(refrescos):
+    await ventas.aplicar_detalle(FakeAsyncSession(), [_staging(1, extra=False)], CARGA_ID)
+
+    assert refrescos == []

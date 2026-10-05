@@ -169,6 +169,15 @@ def test_construir_detalle_incluye_las_filas_solo_detalle():
     assert len(detalle) == 2
 
 
+@pytest.fixture(autouse=True)
+def _sin_refresco_de_resumenes(monkeypatch):
+    """The KPI summary refresh is covered in `pg_real/test_kpi_resumen_cargas_pg.py`; not run on fakes."""
+    async def refrescar(session, claves):
+        return False
+
+    monkeypatch.setattr(ventas.kpi_resumen, "refrescar_si_construido", refrescar)
+
+
 async def test_aplicar_con_periodo_no_rechaza_por_filas_solo_detalle_de_otro_mes():
     # Declarado septiembre; el unico dato de venta_mensual es de septiembre.
     # Cien filas excluidas de agosto no pueden volcar el veredicto a RECHAZO.

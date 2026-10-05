@@ -101,6 +101,7 @@ from app.motored.schemas.ingesta import (
     ResolverErroresResultado,
 )
 from app.motored.services import demanda_perdida_bot as demanda_perdida_bot_mod
+from app.motored.services import kpi_resumen
 from app.motored.services import maestros as maestros_mod
 from app.motored.services import storage
 from app.motored.services.corridas.codigos import ErrorCorrida
@@ -749,6 +750,12 @@ async def anular_carga(
 
     await _aplicar_guarda_corridas(db, carga)
     carga.estado = "ANULADO"
+    if carga.tipo == "VENTAS":
+        # The KPI summaries hide the annulled lines: refresh the months this carga touched, in
+        # this same transaction (a failure rolls the annulment back with it). The session runs
+        # without autoflush, so the new state is flushed first for the refresh to see it.
+        await db.flush()
+        await kpi_resumen.refrescar_si_construido(db, await kpi_resumen.claves_de_carga(db, carga_id))
     await db.execute(delete(CargaFilaStaging).where(CargaFilaStaging.carga_id == carga_id))
     await db.commit()
     return CargaArchivoRead.model_validate(carga)

@@ -85,9 +85,9 @@ Each tab scans `venta_detalle` (~1M rows Jan–Sep) 6–8 times per request, wit
 - [x] **R3 Read path for `kpi_venta_mes`.** Cube (all dimensions), growth window, cost of sales, months available, personas venta. Behind the flag, with a fallback to live. Equivalence tests.
 - [x] **R4 Read path for facturas (firma) + clientes (`kpi_cliente_mes`)**, including Tecnired clients and top-5. Equivalence tests incl. HMCL modes, store filter and a Configuración change.
 - [x] **R5 Costs + inventory summaries** and their use in margin and días de inventario. Equivalence tests.
-- [ ] **R6 VENTAS carga triggers.** Incremental refresh inside apply, sync refresh on anular. Write-path audit first; coordinate with -c4.
+- [x] **R6 VENTAS carga triggers.** Incremental refresh inside apply, sync refresh on anular. Write-path audit first; coordinate with -c4.
 - [ ] **R7 Full rebuild orchestration.** Dirty flag set by referencias/linea, Tecnired, `hmcl_nits`/`lineas_comerciales` and inventory triggers; a `supervisor_kpis` loop (nightly plus dirty); ADMIN `POST /tablero-asesores/kpis/recalcular`; `actualizado_en` in the responses.
-- [ ] **R9 Associated-store roll-up** (user decision 2026-10-04; blocked until session -c4 lands `sucursal.principal_id` + `principal_de(db)`). In live AND summary reads, group and filter by `coalesce(principal_id, id)`:
+- [x] **R9 Associated-store roll-up** (user decision 2026-10-04; blocked until session -c4 lands `sucursal.principal_id` + `principal_de(db)`). In live AND summary reads, group and filter by `coalesce(principal_id, id)`:
   - store dimension, facturas/clientes per store, growth window, inventory and cost of sales per store;
   - budget lines roll into the principal;
   - the opciones tiendas list and the store filter show principals only, and selecting a principal includes its associated stores.
@@ -171,5 +171,39 @@ Each tab scans `venta_detalle` (~1M rows Jan–Sep) 6–8 times per request, wit
   - The `firma` docstring in `models/kpi_resumen.py` is stale for irregular rows.
   - R7 must mark the summaries dirty on Configuración writes.
 
+- **Delivery:** commits 7017f7a and e531efe, pushed to main after rebasing onto -c4's cd7797f.
+- **Native review:** risk medium (719 lines). Consent granted; the R3 lens approved and the result was acknowledged.
+- **Advisories, carried to the next writer**
+  - R3-simple-flag-null-drops-invoice (WARNING, `kpi_resumen.py:244-255`).
+  - R3-token-delimiter-unescaped (suggestion, `:239`): escape `|` in the tokens.
+- **Coordination (-c4)**
+  - T5 `sucursal.codigo_co` is in progress and touches `services/maestros.py`: hold R7's maestros edits until -c4 pings.
+  - R6 files (`ventas.py`, `api/cargas.py`) are clear.
+  - T7 (presupuestos and vendedores resolve the store by C.O., name fallback) goes to this session once T5 lands.
+
+- **Update (-c4):**
+  - T5 is on main (941c988): `sucursal.codigo_co` with a unique deferrable constraint; the alembic head is `b5d9e3a7c418`.
+  - -c4 is now on T5b (C.O. becomes the business key of sucursal). It touches `maestros.py`, `validators.py`, `carga_excel.py`, `carga.py`, `api/carga.py`, `api/maestros.py`, `sucursal_grupo.py`, `bodegas_secundarias.py` and the Sucursales frontend, so keep holding R7's maestros edits.
+  - After R6 lands, ping -c4: their T6 (VENTAS resolved by C.O.) edits `ventas.py` `procesar_fila` and `resolucion.py`.
+- [ ] **T7 Store resolution by C.O. in presupuestos + vendedores.** Resolve by `codigo_co` first, then by name/alias, in `services/sucursal_texto.py`, the shared resolver used by the presupuestos upload/edit and the vendedores bulk upload via `api/carga.py`. Avoid editing `api/carga.py` while T5b is open. Update the presupuestos plantilla/help to mention that the C.O. is accepted. Tests.
+
+**Fix + R9 + R6, done.** Route: one delegated writer, three commits.
+- **Commit df6cab0, fix:** `_es_simple()` is null-safe (`IS NOT DISTINCT FROM`). A `|` inside a token's line/NIT is escaped as `\x1f`. The `firma` docstring in `models/kpi_resumen.py` still needs a manual update (it was outside the writer's surfaces).
+- **Commit 66f935b, R9:**
+  - Live and summary queries group by `coalesce(principal_id, sucursal_id)`: cube, ventana, facturas, clientes, costo_venta and inventario.
+  - `cargar_filtro` maps filter ids to principals and expands their groups.
+  - Budget lines roll into the principal (`presupuestos_del_rango`).
+  - `punto_venta` shows the principal's name; `/kpis/opciones` lists principals only.
+  - Equivalence tests include an associated store.
+  - **Behavior change in production:** KPIs now roll associated stores up.
+- **Commit 6f162f9, R6:**
+  - Write-path audit: only `ventas.aplicar_detalle` (`ventas.py:667/673`) and `api/cargas.anular_carga` (`:741-751`) touch VENTAS detail or state. The bot annul is DEMANDA_PERDIDA; the supervisor resets happen before any detail exists; there is no purge.
+  - `refrescar_si_construido()` takes the advisory lock, then checks the estado row, then refreshes. It is called in the same transaction in `aplicar_detalle` and in `anular_carga` (after a flush). A failure rolls back the apply or annul.
+  - pg_real compares incremental vs full rebuild after apply, re-upload and annul.
+- **Checks**
+  - Unit suite: 5456 passed.
+  - pg_real: 584 passed / 2 skipped.
+- **Note:** the live `DIM_TOTAL` cube and ventana are invalid SQL and unused; the tests skip them.
+
 ## Next step
-Native review + push of R4/R5, then R9 (associated-store roll-up; -c4 landed `principal_id` in 6e588b8, migration head `a8c4e2f61d07`), then R6 + R7.
+Native review + push of fix/R9/R6, then ping -c4 (T6 may start). Then T7. Then R7 after -c4's T5b.

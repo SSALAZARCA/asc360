@@ -65,6 +65,7 @@ from app.motored.models.carga_error import CargaError
 from app.motored.models.carga_fila_staging import CargaFilaStaging
 from app.motored.models.venta_detalle import VentaDetalle
 from app.motored.models.venta_mensual import VentaMensual
+from app.motored.services import kpi_resumen
 from app.motored.services.ingesta import columnas as columnas_mod
 from app.motored.services.ingesta import errores as errores_mod
 from app.motored.services.ingesta import numeros as numeros_mod
@@ -658,7 +659,11 @@ async def aplicar_detalle(
     """Escribe `venta_detalle` en la MISMA transaccion que el upsert de
     `venta_mensual` (sin `commit()`). Delete-on-replace: borra el detalle de
     cada (sucursal, anio, mes) presente en ESTA carga y lo inserta de nuevo,
-    por lotes. Nunca se llama para una carga rechazada ni se borra al anular."""
+    por lotes. Nunca se llama para una carga rechazada ni se borra al anular.
+
+    Los resumenes de KPI (`kpi_resumen`) de esas mismas claves se refrescan en la MISMA
+    transaccion, solo si ya se construyeron alguna vez. Si el refresco falla, el apply
+    falla y se revierte con el: el resumen nunca queda distinto de `venta_detalle`."""
     detalle = construir_detalle(filas_staging, carga_id)
     if not detalle:
         return
@@ -672,6 +677,7 @@ async def aplicar_detalle(
         await session.execute(
             pg_insert(VentaDetalle).values(detalle[inicio:inicio + TAMANO_LOTE_DETALLE])
         )
+    await kpi_resumen.refrescar_si_construido(session, claves)
 
 
 def construir_filas_por_periodo(

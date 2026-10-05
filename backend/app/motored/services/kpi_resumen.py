@@ -340,6 +340,31 @@ async def refrescar_periodos(db: AsyncSession, claves: Set[Clave]) -> None:
     await _marcar_actualizado(db)
 
 
+async def refrescar_si_construido(db: AsyncSession, claves: Set[Clave]) -> bool:
+    """`refrescar_periodos`, but only once the summaries were fully built at least once (the
+    first full build reads every line anyway). The lock is taken BEFORE looking at the state:
+    a first build that is running holds it until it commits, so either its commit is visible
+    here (and we refresh) or it starts after ours (and reads our lines). Anything that fails
+    propagates: the caller's transaction (a carga apply or annul) rolls back with the summary,
+    which therefore never silently diverges from `venta_detalle`. True when it refreshed."""
+    if not claves:
+        return False
+    await _bloquear(db)
+    actual = await estado(db)
+    if actual is None or actual.ultima_reconstruccion_total is None:
+        return False
+    await refrescar_periodos(db, claves)
+    return True
+
+
+async def claves_de_carga(db: AsyncSession, carga_id: Any) -> Set[Clave]:
+    """The `(sucursal_id, anio, mes)` keys that a carga's lines of `venta_detalle` belong to."""
+    filas = await db.execute(
+        select(VentaDetalle.sucursal_id, VentaDetalle.anio, VentaDetalle.mes)
+        .where(VentaDetalle.carga_id == carga_id).distinct())
+    return {(sucursal, anio, mes) for sucursal, anio, mes in filas.all()}
+
+
 async def reconstruir_todo(db: AsyncSession) -> None:
     """Full rebuild of every summary (costs first: the ventas rows are priced from them)."""
     await _bloquear(db)

@@ -468,6 +468,61 @@ def test_anular_succeeds_unconditionally_against_empty_corrida_set(estado):
     assert response.json()["estado"] == "ANULADO"
 
 
+def _espiar_refresco(monkeypatch, claves):
+    llamadas = []
+
+    async def claves_de_carga(db, carga_id):
+        llamadas.append(("claves", carga_id, db))
+        return claves
+
+    async def refrescar(db, pedidas):
+        llamadas.append(("refrescar", pedidas, db))
+        return True
+
+    monkeypatch.setattr(cargas_api.kpi_resumen, "claves_de_carga", claves_de_carga)
+    monkeypatch.setattr(cargas_api.kpi_resumen, "refrescar_si_construido", refrescar)
+    return llamadas
+
+
+def test_anular_una_carga_de_ventas_refresca_los_resumenes_de_kpi_de_sus_meses(monkeypatch):
+    carga = _carga(estado="APLICADO", tipo="VENTAS")
+    claves = {(uuid.uuid4(), 2026, 9)}
+    llamadas = _espiar_refresco(monkeypatch, claves)
+    client = _client_as("ADMIN", execute_queue=_cola_anular_sin_corridas(carga))
+
+    response = client.post(f"{CARGAS_URL}/{carga.id}/anular")
+
+    assert response.status_code == 200, response.text
+    assert [(nombre, dato) for nombre, dato, _ in llamadas] == [("claves", carga.id), ("refrescar", claves)]
+
+
+def test_anular_una_carga_de_otro_tipo_no_toca_los_resumenes_de_kpi(monkeypatch):
+    carga = _carga(estado="APLICADO", tipo="INVENTARIO")
+    llamadas = _espiar_refresco(monkeypatch, set())
+    client = _client_as("ADMIN", execute_queue=_cola_anular_sin_corridas(carga))
+
+    assert client.post(f"{CARGAS_URL}/{carga.id}/anular").status_code == 200
+
+    assert llamadas == []
+
+
+def test_si_el_refresco_falla_la_anulacion_no_se_confirma(monkeypatch):
+    carga = _carga(estado="APLICADO", tipo="VENTAS")
+
+    async def falla(db, carga_id):
+        raise RuntimeError("summary refresh failed")
+
+    monkeypatch.setattr(cargas_api.kpi_resumen, "claves_de_carga", falla)
+    db = FakeAsyncSession(execute_queue=_cola_anular_sin_corridas(carga))
+    override_motored_user(MotoredUser(user_id=str(uuid.uuid4()), role="ADMIN"))
+    override_motored_db(db)
+
+    with pytest.raises(RuntimeError):
+        TestClient(app).post(f"{CARGAS_URL}/{carga.id}/anular")
+
+    assert db.committed is False
+
+
 def test_anular_ya_anulada_is_409_not_a_silent_noop():
     carga = _carga(estado="ANULADO")
     client = _client_as("ADMIN", execute_queue=[[], [carga]])
