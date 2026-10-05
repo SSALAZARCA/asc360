@@ -19,8 +19,18 @@ from app.config import settings
 from app.main import app
 from app.motored.models.cliente_tecnired import ClienteTecnired
 from app.motored.services import carga, carga_excel, validators
+from app.motored.services import kpi_resumen
 from app.motored.services.auth import MotoredUser
 from tests.motored.conftest import FakeAsyncSession, override_motored_db, override_motored_user
+
+
+@pytest.fixture(autouse=True)
+def _sin_marca_de_sucio(monkeypatch):
+    """The KPI summaries' dirty flag (R7a) needs a real session (`pg_real/test_kpi_resumen_sucio_pg.py`)."""
+    async def marcar(db):
+        return True
+
+    monkeypatch.setattr(kpi_resumen, "marcar_sucio_si_construido", marcar)
 
 
 # --- Normalizacion del NIT --------------------------------------------------

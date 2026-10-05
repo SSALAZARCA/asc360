@@ -86,7 +86,7 @@ Each tab scans `venta_detalle` (~1M rows Jan–Sep) 6–8 times per request, wit
 - [x] **R4 Read path for facturas (firma) + clientes (`kpi_cliente_mes`)**, including Tecnired clients and top-5. Equivalence tests incl. HMCL modes, store filter and a Configuración change.
 - [x] **R5 Costs + inventory summaries** and their use in margin and días de inventario. Equivalence tests.
 - [x] **R6 VENTAS carga triggers.** Incremental refresh inside apply, sync refresh on anular. Write-path audit first; coordinate with -c4.
-- [ ] **R7 Full rebuild orchestration.** Dirty flag set by referencias/linea, Tecnired, `hmcl_nits`/`lineas_comerciales` and inventory triggers; a `supervisor_kpis` loop (nightly plus dirty); ADMIN `POST /tablero-asesores/kpis/recalcular`; `actualizado_en` in the responses.
+- [x] **R7 Full rebuild orchestration.** Dirty flag set by referencias/linea, Tecnired, `hmcl_nits`/`lineas_comerciales` and inventory triggers; a `supervisor_kpis` loop (nightly plus dirty); ADMIN `POST /tablero-asesores/kpis/recalcular`; `actualizado_en` in the responses.
 - [x] **R9 Associated-store roll-up** (user decision 2026-10-04; blocked until session -c4 lands `sucursal.principal_id` + `principal_de(db)`). In live AND summary reads, group and filter by `coalesce(principal_id, id)`:
   - store dimension, facturas/clientes per store, growth window, inventory and cost of sales per store;
   - budget lines roll into the principal;
@@ -218,5 +218,31 @@ Each tab scans `venta_detalle` (~1M rows Jan–Sep) 6–8 times per request, wit
 - **Checks:** unit suite 5509 passed; pg_real files 40 passed; jest presupuestos 32 passed.
 - **User support (2026-10-04):** the user's own `Presupuesto asesores 2026.xlsx` had 17 errors: 9 rows "SANTANDER DE QUILICHAO" (the app has "SANTANDER DE QUILICHAO DOS"), 5 rows "CALI CC UNICO" (app: "CC UNICO") and 3 rows with 0. A corrected copy, `Presupuesto asesores 2026_corregido.xlsx`, was delivered.
 
+- **T7 delivery:** commit 29548f9, pushed. Native review medium, granted, R3 approved, acknowledged. Advisories (suggestion/warning): C.O. on the edit path is uncovered; the pg C.O. fixture has low entropy.
+
+**R7, done.** Route: delegated writer, commits c14068f (R7a) and 73b7e2b (R7b), plus the parent's test-stub commit.
+- **R7a audit and hooks:** `kpi_resumen.marcar_sucio_si_construido` takes the advisory lock, is a no-op if never built, and is cached per transaction. It is hooked into:
+  - `maestros.update_referencia`, only when `linea_comercial` changed (this also covers the Excel replace via `_escribir_fila`);
+  - `maestros.reemplazar_clientes_tecnired` (`api/clientes_tecnired.py` is read-only);
+  - `parametros.registrar_cambio` for `hmcl_nits`/`lineas_comerciales` (the only writer);
+  - `ingesta/inventario.aplicar_detalle`;
+  - `api/cargas.anular_carga` for INVENTARIO.
+- **Not hooked**
+  - `services/retencion.ejecutar_purga_inventario` deletes old cortes only, so it is probably irrelevant; unaudited.
+  - The `conftest` `_reset_motored_supervisor` doesn't stop `supervisor_kpis` (tidy-up).
+- **R7b loop:** `trabajos/supervisor_kpis.py` is started lazily from `deps.require_motored_ready`.
+  - It rebuilds on the first build (once data exists), on a dirty flag, or nightly (Bogotá 01:00–05:00 when the last full rebuild is ≥20 h old).
+  - It sleeps one poll interval before the first tick; failures retry after 10 minutes.
+  - Settings: `MOTORED_KPI_RESUMEN_LOOP_ENABLED` (True), `_POLL_SEGUNDOS` (60), `_LOCK_TIMEOUT_SEGUNDOS` (60), `_REBUILD_TIMEOUT_SEGUNDOS` (1800).
+  - `reconstruyendo` is committed before the rebuild and cleared in `finally`.
+- **Lock mitigation:** `lock_timeout` of 60 s on the advisory lock. A waiter gets `ResumenOcupadoError` ("intente en unos minutos"; 409 on recalcular). The rebuild runs with `statement_timeout`.
+- **R7b endpoints**
+  - `GET /kpis/estado` (ADMIN/COMPRAS/GERENCIA).
+  - `POST /kpis/recalcular` (ADMIN only).
+  - Tab responses include `usando_resumen` and `datos_actualizados_en`.
+- **TDD evidence:** R7a RED (7 of 11 pg_real tests with the hooks reverted). R7b tests were written after the code, with mutation checks instead.
+- **Checks:** unit suite 5584 passed (with the stub patch); pg_real 622 passed / 2 skipped.
+- **Parent fix:** 6 out-of-surface fake-session tests needed an autouse stub for the dirty hook. Committed separately; those 3 files pass (82).
+
 ## Next step
-Native review + push of T7. Then R7 after -c4's T5b ping. Then R8 and the switch-on.
+Native review + push of R7, then ping -c4 (maestros.py free for their form-path fix). **The user asked to STOP after R7 and continue tomorrow** with R8 (UI timestamp + Recalcular button + perf measurement) and the switch-on (the parent turns it on after verifying a production build).

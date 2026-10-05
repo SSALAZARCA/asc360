@@ -28,9 +28,20 @@ from app.motored.models.parametro_metodologia import ParametroMetodologia
 from app.motored.schemas.carga import CargaResultado
 from app.motored.services import parametros
 from app.motored.services.carga_excel import ColumnaObligatoriaFaltanteError
+from app.motored.services import kpi_resumen
 from app.motored.services.ingesta import maestros_adapter
 from app.motored.services.ingesta import orquestador
 from app.motored.services.ingesta import periodo as periodo_mod
+
+
+@pytest.fixture(autouse=True)
+def _sin_marca_de_sucio(monkeypatch):
+    """The KPI summaries' dirty flag (R7a) needs a real session (`pg_real/test_kpi_resumen_sucio_pg.py`)."""
+    async def marcar(db):
+        return True
+
+    monkeypatch.setattr(kpi_resumen, "marcar_sucio_si_construido", marcar)
+
 
 PROVEEDOR_ID = uuid.uuid4()
 SUCURSAL_ID = uuid.uuid4()

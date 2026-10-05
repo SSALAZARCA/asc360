@@ -14,13 +14,24 @@ import uuid
 from decimal import Decimal
 
 import openpyxl
+import pytest
 
 from app.motored.api.carga import _resolve_referencia_relaciones
 from app.motored.models.proveedor import Proveedor
 from app.motored.models.referencia import Referencia
+from app.motored.services import kpi_resumen
 from app.motored.services.carga import procesar_carga
 from app.motored.services.carga_excel import column_labels, parse_excel_rows
 from tests.motored.conftest import FakeAsyncSession
+
+
+@pytest.fixture(autouse=True)
+def _sin_marca_de_sucio(monkeypatch):
+    """The KPI summaries' dirty flag (R7a) needs a real session (`pg_real/test_kpi_resumen_sucio_pg.py`)."""
+    async def marcar(db):
+        return True
+
+    monkeypatch.setattr(kpi_resumen, "marcar_sucio_si_construido", marcar)
 
 
 def _xlsx(headers, rows):
