@@ -61,10 +61,29 @@ function usePagina(total) {
   return { pagina, setPagina, totalPaginas };
 }
 
-function AccionFila({ error: err, puedeEscribir, sucursales, onAccion }) {
+/** What the user sees after a resolve action, from the action and the
+ * server's count (`acciones_aplicadas` is 0 when nothing changed). */
+export function mensajeDeAccion(accion, resultado) {
+  const aplicada = (resultado?.acciones_aplicadas || 0) > 0;
+  const valor = accion.valor || '';
+  if (accion.accion === 'crear_referencia') {
+    return aplicada
+      ? `Referencia ${valor} creada en el catálogo (proveedor OTROS). Esta fila no entra en esta carga: entra en la próxima carga.`
+      : `La referencia ${valor} ya existía en el catálogo: no se creó otra. Esta fila entra en la próxima carga.`;
+  }
+  if (accion.accion === 'mapear_sucursal') {
+    return `"${valor}" quedó asociado a la tienda elegida. Se reconoce desde la próxima carga.`;
+  }
+  return `Fila ignorada: no se carga.`;
+}
+
+function AccionFila({ error: err, puedeEscribir, sucursales, onAccion, resuelta }) {
   const [sucursalId, setSucursalId] = useState('');
 
   if (!puedeEscribir) return null;
+  if (resuelta) {
+    return <span style={{ color: 'var(--motored-success, #15803d)', fontSize: '0.75rem', fontWeight: 600 }}>Resuelta</span>;
+  }
 
   if (err.codigo_error === 'SUCURSAL_NO_ENCONTRADA') {
     return (
@@ -111,7 +130,7 @@ function AccionFila({ error: err, puedeEscribir, sucursales, onAccion }) {
   );
 }
 
-function ErroresGrid({ pageRows, puedeEscribir, sucursales, onAccion }) {
+function ErroresGrid({ pageRows, puedeEscribir, sucursales, onAccion, resueltas }) {
   return (
     <MotoredTableScroll>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }} data-testid="errores-grid">
@@ -135,7 +154,10 @@ function ErroresGrid({ pageRows, puedeEscribir, sucursales, onAccion }) {
               <td style={{ padding: '10px 12px 10px 0' }}>{err.mensaje}</td>
               {puedeEscribir && (
                 <td style={{ padding: '10px 0' }}>
-                  <AccionFila error={err} puedeEscribir={puedeEscribir} sucursales={sucursales} onAccion={onAccion} />
+                  <AccionFila
+                    error={err} puedeEscribir={puedeEscribir} sucursales={sucursales}
+                    onAccion={onAccion} resuelta={resueltas.has(`${err.codigo_error}|${err.valor}`)}
+                  />
                 </td>
               )}
             </tr>
@@ -166,6 +188,10 @@ export default function ErroresTab({ carga }) {
   const [rol, setRol] = useState(null);
   const [sucursales, setSucursales] = useState([]);
   const [accionError, setAccionError] = useState('');
+  const [accionMensaje, setAccionMensaje] = useState('');
+  // Rows already resolved in this visit: the server keeps the error rows
+  // (they document the original file), so the screen marks them instead.
+  const [resueltas, setResueltas] = useState(() => new Set());
   const [csvError, setCsvError] = useState('');
   const { pagina, setPagina, totalPaginas } = usePagina(errores.length);
 
@@ -178,8 +204,11 @@ export default function ErroresTab({ carga }) {
 
   const handleAccion = async (accion) => {
     setAccionError('');
+    setAccionMensaje('');
     try {
-      await resolverErroresCarga(carga.id, [accion]);
+      const resultado = await resolverErroresCarga(carga.id, [accion]);
+      setAccionMensaje(mensajeDeAccion(accion, resultado));
+      setResueltas((prev) => new Set(prev).add(`${accion.codigo_error}|${accion.valor}`));
       await reload();
     } catch (err) {
       setAccionError(err.message || 'No se pudo aplicar la acción');
@@ -212,6 +241,9 @@ export default function ErroresTab({ carga }) {
 
       {csvError && <p style={{ margin: 0, color: 'var(--motored-danger, #c0392b)', fontSize: '0.75rem' }}>{csvError}</p>}
       {accionError && <p style={{ margin: 0, color: 'var(--motored-danger, #c0392b)', fontSize: '0.75rem' }}>{accionError}</p>}
+      {accionMensaje && (
+        <p role="status" style={{ margin: 0, color: 'var(--motored-success, #15803d)', fontSize: '0.8rem' }}>{accionMensaje}</p>
+      )}
 
       {loading ? (
         <p style={{ color: 'var(--motored-text-muted, #5a5a5a)', fontSize: '0.8rem' }}>Cargando...</p>
@@ -219,7 +251,10 @@ export default function ErroresTab({ carga }) {
         <p style={{ color: 'var(--motored-text-muted, #5a5a5a)', fontSize: '0.8rem' }}>Sin errores — todas las filas pasaron.</p>
       ) : (
         <>
-          <ErroresGrid pageRows={pageRows} puedeEscribir={puedeEscribir} sucursales={sucursales} onAccion={handleAccion} />
+          <ErroresGrid
+            pageRows={pageRows} puedeEscribir={puedeEscribir} sucursales={sucursales}
+            onAccion={handleAccion} resueltas={resueltas}
+          />
           <Paginacion pagina={pagina} setPagina={setPagina} totalPaginas={totalPaginas} />
         </>
       )}

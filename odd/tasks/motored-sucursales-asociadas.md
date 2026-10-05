@@ -134,3 +134,12 @@ Let the owner load the corrected Sucursales file in one go, and model physical p
 - 2026-10-05: the health warnings now refresh by themselves.
   - Maestros writes (create, update, deactivate, reactivate, row upload, file upload) go through `api._escribirMaestro`, which announces `motored:maestros-cambiaron` (`lib/motored/maestrosEventos.js`). `MaestrosTabs` fetches `/maestros/salud` again when it hears it.
   - RED was observed first (module missing). Full jest: 1903 passed.
+- 2026-10-05: the owner loaded `Presupuesto asesores 2026_corregido.xlsx` (Jan–Sep, per asesor; store budget split equally for this first load only). Each asesor is then edited separately.
+  - Idea parked by the owner ("por ahora dejémoslo así"): a "Nuevo mes" button in Presupuestos that copies the previous month, so a new month can be created without a file. This is the KPI session's area.
+- 2026-10-05: owner inventory file `INVENTARIO_05_10.xlsx` reviewed: OK to upload. 59,856 rows; every bodega resolves (PYM01 and 99999 excluded); 829 unknown-referencia rows (motorcycles and GPS gifts; only real part missing: 90605-200000S); 810 negative costs (ignored by the cost reader); declare corte 2026-10-05.
+  - Pending finding: INVENTARIO ingest never applies `tipos_inventario_incluidos` (only VENTAS does). Decide with the owner whether inventory should be filtered by tipo the same way.
+  - Pending finding: the 6 closed stores receive 122 stock rows; they roll up once associated to their principals.
+- 2026-10-05: FIXED UX defect (Cargas > Errores). The "Crear como OTROS" and "Ignorar" actions give no feedback, and the error row stays in the list.
+  - "Crear como OTROS" creates the referencia, but the rejected row is NOT re-staged, so it only loads on the next carga.
+  - Fix: show "Referencia creada: la fila entra en la próxima carga", and mark resolved rows.
+  - The owner hit this with 90605-200000S.
