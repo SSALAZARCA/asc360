@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { SegmentedToggle, TrafficLightGrid } from '../charts';
+import InfoTooltip from '../../InfoTooltip';
 import { periodoCorto } from '../periodo';
 import CumplimientoBarras from './CumplimientoBarras';
 import { filasCumplimiento, hayPresupuesto, zonasSemaforo } from './datos';
@@ -8,6 +9,7 @@ import LeyendaZonas from './LeyendaZonas';
 import SinPresupuesto from './SinPresupuesto';
 import { CABECERA, TARJETA, TITULO } from './estilos';
 
+export const TIP_TIENDA = 'Venta total de la tienda contra la suma de los presupuestos de sus asesores.';
 const VISTAS = [{ id: 'semaforo', label: 'Semáforo' }, { id: 'barras', label: 'Barras' }];
 
 function Semaforo({ filas, zonas }) {
@@ -24,7 +26,10 @@ export default function CumplimientoPorTienda({ data }) {
   return (
     <section aria-label="Cumplimiento por tienda" style={TARJETA}>
       <div style={CABECERA}>
-        <h2 style={TITULO}>Cumplimiento por tienda · {periodoCorto(data.meses)}</h2>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <h2 style={TITULO}>Cumplimiento por tienda · {periodoCorto(data.meses)}</h2>
+          <InfoTooltip text={TIP_TIENDA} />
+        </div>
         {conPresupuesto && <SegmentedToggle options={VISTAS} value={vista} onChange={setVista} />}
         {conPresupuesto && <LeyendaZonas zonas={zonas} />}
       </div>

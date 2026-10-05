@@ -12,7 +12,7 @@ describe('Ventas tab: layout', () => {
     montar();
     const titulos = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent);
     expect(titulos).toEqual([
-      'Cumplimiento presupuesto · may–jul',
+      'Cumplimiento presupuesto compañía · may–jul',
       'Dónde cae cada tienda · cumplimiento may–jul',
       'Cumplimiento por tienda · may–jul',
       'Venta mensual por línea',
@@ -21,12 +21,41 @@ describe('Ventas tab: layout', () => {
     ]);
   });
 
-  it('shows the gauge with the compliance and the "$X M de $Y M" label formatted es-CO', () => {
+  it('shows the gauge with the COMPANY sales against the total budget, formatted es-CO', () => {
     montar();
-    const gauge = within(seccion('Cumplimiento presupuesto')).getByRole('img');
-    expect(gauge).toHaveAttribute('aria-label', expect.stringContaining('78,0%'));
+    const gauge = within(seccion('Cumplimiento presupuesto compañía')).getByRole('img', { name: /Cumplimiento/ });
+    expect(gauge).toHaveAttribute('aria-label', expect.stringContaining('82,8%'));
     expect(gauge).toHaveAttribute('data-tone', 'mid');
-    expect(screen.getByText('$1.554 M de $1.993 M')).toBeInTheDocument();
+    expect(screen.getByText('$1.650 M de $1.993 M')).toBeInTheDocument();
+    expect(screen.queryByText('$1.554 M de $1.993 M')).toBeNull();
+  });
+
+  it('explains the gauge with a tooltip', () => {
+    montar();
+    expect(within(seccion('Cumplimiento presupuesto compañía')).getAllByRole('note')[0]).toHaveAttribute(
+      'aria-label',
+      'Venta total de la compañía (todas las ventas) contra la suma de los presupuestos de los asesores en los meses con presupuesto.',
+    );
+  });
+
+  it('splits the company sales by seller group, with the asesores own compliance', () => {
+    montar();
+    const filas = within(seccion('Venta por grupo de vendedores')).getAllByTestId('grupo-fila');
+    expect(filas).toHaveLength(4);
+    expect(filas[0]).toHaveTextContent('Asesores de repuestos');
+    expect(filas[0]).toHaveTextContent('$1.554 M · 94,2%');
+    expect(within(filas[0]).getByTestId('asesores-cumplimiento')).toHaveTextContent('$1.554 M de $1.993 M · 78,0%');
+    expect(filas[1]).toHaveTextContent('Comerciales');
+    expect(filas[2]).toHaveTextContent('Otros roles de posventa');
+    expect(filas[3]).toHaveTextContent('Resto de compañía');
+    expect(filas[3]).toHaveTextContent('$50 M · 3,0%');
+    expect(within(filas[1]).queryByTestId('asesores-cumplimiento')).toBeNull();
+  });
+
+  it('explains the per-store compliance as total store sales against the budgets', () => {
+    montar();
+    expect(within(seccion('Cumplimiento por tienda')).getByRole('note')).toHaveAttribute(
+      'aria-label', 'Venta total de la tienda contra la suma de los presupuestos de sus asesores.');
   });
 
   it('shows the six mini KPIs with the HMCL and discount chips', () => {

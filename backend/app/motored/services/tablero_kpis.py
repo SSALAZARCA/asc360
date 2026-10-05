@@ -230,6 +230,86 @@ def _conteo(filas: Iterable[Dict[str, Any]], con_sin_presupuesto: bool) -> Dict[
     return conteo
 
 
+GRUPOS_COMPANIA = (
+    ("asesores", "Asesores de repuestos"), (t.GRUPO_COMERCIALES, "Comerciales"),
+    (t.GRUPO_OTROS, "Otros roles de posventa"), (t.GRUPO_RESTO, "Resto de compañía"),
+)
+
+
+def _grupo_compania(clave: str) -> str:
+    return "asesores" if t.es_clave_persona(clave) else clave
+
+
+def construir_compania(
+    cubo_compania: Iterable[t.FilaCubo], presupuestos: Dict[Tuple[str, str], pres.LineaPresupuesto],
+    reglas: t.Reglas, red: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Cumplimiento de la COMPANIA: toda la venta de la red (cubo de asesores con el filtro
+    de tiendas, que trae tambien RESTO, COMERCIALES, OTROS y asesores sin presupuesto; mismas
+    lineas que el indicador `venta`) contra la suma de TODAS las lineas de presupuesto.
+    Se mide segun `cumplimiento_base` y solo en los meses con algun presupuesto (los demas
+    quedan fuera de la venta y del presupuesto). `por_grupo` reparte esa venta entre los
+    cuatro grupos de vendedores (suman la venta de la compania) y `asesores` es el
+    cumplimiento propio de los asesores de repuestos (`red`), los unicos con presupuesto."""
+    meses_pres = {mes for mes, _ in presupuestos}
+    por_grupo: Dict[str, Decimal] = {grupo: Decimal(0) for grupo, _ in GRUPOS_COMPANIA}
+    for f in cubo_compania:
+        if f.mes not in meses_pres or f.linea is None or f.linea not in reglas.lineas:
+            continue
+        if reglas.cumplimiento_base == t.CUMPLIMIENTO_SIN_HMCL and f.es_hmcl:
+            continue
+        por_grupo[_grupo_compania(f.clave)] += f.venta
+    venta = sum(por_grupo.values(), Decimal(0))
+    presupuesto = sum(linea.monto for linea in presupuestos.values())
+    return {
+        "venta": float(round(venta, 2)),
+        "presupuesto": presupuesto,
+        "pct": t.ratio(venta, Decimal(presupuesto)) if presupuesto else None,
+        "semaforo": semaforo_de(venta, presupuesto, reglas.semaforo),
+        "meses_con_presupuesto": len(meses_pres),
+        "por_grupo": [
+            {"grupo": rotulo, "venta": float(round(por_grupo[grupo], 2)), "pct": t.ratio(por_grupo[grupo], venta)}
+            for grupo, rotulo in GRUPOS_COMPANIA
+        ],
+        "asesores": {k: red[k] for k in ("presupuesto", "venta_cumplimiento", "cumplimiento_pct", "semaforo")},
+    }
+
+
+def construir_tiendas_total(
+    cubo_sucursal: Iterable[t.FilaCubo], presupuestos: Dict[Tuple[str, str], pres.LineaPresupuesto],
+    sucursales: Dict[str, Tuple[str, Optional[datetime.date]]], reglas: t.Reglas,
+) -> List[Dict[str, Any]]:
+    """Cumplimiento por tienda con la venta TOTAL de la tienda (todos los vendedores, tambien
+    RESTO, COMERCIALES y OTROS; cubo por sucursal con la sucursal principal ya aplicada)
+    contra la suma de las lineas de presupuesto asignadas a la tienda. Cada tienda se mide
+    solo en los meses en que tiene presupuesto; sin presupuesto no aparece (queda
+    `sin_presupuesto` en el cliente)."""
+    presupuesto: Dict[str, int] = defaultdict(int)
+    meses: Dict[str, Set[str]] = defaultdict(set)
+    asesores: Dict[str, Set[str]] = defaultdict(set)
+    for (mes, cedula), linea in presupuestos.items():
+        tienda = str(linea.sucursal_id)
+        presupuesto[tienda] += linea.monto
+        meses[tienda].add(mes)
+        asesores[tienda].add(cedula)
+    venta: Dict[str, Decimal] = defaultdict(Decimal)
+    for f in cubo_sucursal:
+        if f.clave not in presupuesto or f.mes not in meses[f.clave]:
+            continue
+        if f.linea is None or f.linea not in reglas.lineas:
+            continue
+        if reglas.cumplimiento_base == t.CUMPLIMIENTO_SIN_HMCL and f.es_hmcl:
+            continue
+        venta[f.clave] += f.venta
+    filas = [
+        {"sucursal_id": tienda, "nombre": sucursales.get(tienda, (tienda, None))[0],
+         "asesores_con_presupuesto": len(asesores[tienda]),
+         **_resultado(presupuesto[tienda], venta[tienda], reglas.semaforo)}
+        for tienda in presupuesto
+    ]
+    return sorted(filas, key=lambda f: (f["nombre"].upper(), f["sucursal_id"]))
+
+
 def construir_cumplimiento(
     cubo: Iterable[t.FilaCubo],
     presupuestos: Dict[Tuple[str, str], pres.LineaPresupuesto],
@@ -238,8 +318,14 @@ def construir_cumplimiento(
     sucursales: Optional[Dict[str, Tuple[str, Optional[datetime.date]]]] = None,
     nombres: Optional[Dict[str, str]] = None,
     nombres_por_clave: Optional[Dict[str, str]] = None,
+    cubo_compania: Optional[Iterable[t.FilaCubo]] = None,
+    cubo_sucursal: Optional[Iterable[t.FilaCubo]] = None,
 ) -> Dict[str, Any]:
     """Cumplimiento por asesor, por tienda y de la red (suma de las tiendas).
+    Con `cubo_compania` (cubo de asesores CON el filtro de tiendas, HMCL incluido) agrega `compania`;
+    con `cubo_sucursal` (cubo por sucursal, HMCL incluido) `tiendas` (y sus conteos) se miden con la venta
+    TOTAL de la tienda en vez de la de sus asesores (pestanas Ventas y Tiendas). `red` y `asesores`
+    siguen siendo de los asesores con presupuesto.
     `cubo` es el de asesores con HMCL incluido y `presupuestos` sale de
     `presupuestos_del_rango`. Un asesor con presupuesto y sin ventas aparece con
     venta 0 (0 %); quien vendio y no tiene presupuesto (o no tiene cedula) queda
@@ -252,7 +338,13 @@ def construir_cumplimiento(
     red = _resultado(
         sum(f["presupuesto"] for f in tiendas),
         sum((Decimal(str(f["venta_cumplimiento"])) for f in tiendas), Decimal(0)), cortes)
+    extra = {}
+    if cubo_compania is not None:
+        extra["compania"] = construir_compania(cubo_compania, presupuestos, reglas, red)
+    if cubo_sucursal is not None:
+        tiendas = construir_tiendas_total(cubo_sucursal, presupuestos, sucursales or {}, reglas)
     return {
+        **extra,
         "asesores": asesores,
         "tiendas": tiendas,
         "red": red,
@@ -266,7 +358,8 @@ def construir_cumplimiento(
 
 async def cargar_cumplimiento(
     db: AsyncSession, filtro: Filtro, cubo_asesores: Optional[List[t.FilaCubo]] = None,
-    nombres_por_clave: Optional[Dict[str, str]] = None,
+    nombres_por_clave: Optional[Dict[str, str]] = None, cubo_compania: Optional[List[t.FilaCubo]] = None,
+    cubo_sucursal: Optional[List[t.FilaCubo]] = None,
 ) -> Dict[str, Any]:
     """Lee presupuestos (ultima version de cada mes), nombres y, si hace falta,
     el cubo de asesores, y arma `construir_cumplimiento`. El cubo debe ser el de
@@ -284,7 +377,8 @@ async def cargar_cumplimiento(
     nombres = await q.consultar_nombres_por_cedula(db, {cedula for _, cedula in presupuestos})
     return construir_cumplimiento(
         cubo_asesores, presupuestos, filtro.reglas,
-        sucursales=sucursales, nombres=nombres, nombres_por_clave=nombres_por_clave)
+        sucursales=sucursales, nombres=nombres, nombres_por_clave=nombres_por_clave,
+        cubo_compania=cubo_compania, cubo_sucursal=cubo_sucursal)
 
 
 # --- Tecnired y dias de inventario (B5) ----------------------------------------------------------
@@ -412,7 +506,7 @@ async def calcular_kpis_tiendas(db: AsyncSession, filtro: Filtro) -> Dict[str, A
     corte = await lectura.fecha_corte_costos(db)
     cubo = await lectura.cubo(db, filtro, corte, DIM_SUCURSAL)
     tiendas, sin_linea = await _filas_de_tiendas(db, filtro, cubo, completas=True)
-    cumplimiento = await cargar_cumplimiento(db, filtro)
+    cumplimiento = await cargar_cumplimiento(db, filtro, cubo_sucursal=cubo)
     por_tienda = {f["sucursal_id"]: f for f in cumplimiento["tiendas"]}
     inventario = await cargar_inventario(db, filtro, corte)
     for fila in tiendas:
@@ -431,7 +525,7 @@ async def calcular_kpis_tiendas(db: AsyncSession, filtro: Filtro) -> Dict[str, A
 
 async def calcular_kpis_ventas(db: AsyncSession, filtro: Filtro) -> Dict[str, Any]:
     """Pestana Ventas: `{meses, hmcl, sucursales, reglas, total, tiendas, cumplimiento,
-    venta_sin_linea}`; `cumplimiento` trae `red` (el medidor), `tiendas` y `conteos`.
+    venta_sin_linea}`; `cumplimiento` trae `compania` (el medidor), `red`, `tiendas` y `conteos`.
     `total` son los indicadores de toda la red (venta, mix, por mes y linea,
     Tecnired por mes y linea, facturas, clientes distintos de la red); `tiendas`,
     una fila liviana por tienda (venta, margen, por mes) para el grafico de cumplimiento."""
@@ -444,13 +538,15 @@ async def calcular_kpis_ventas(db: AsyncSession, filtro: Filtro) -> Dict[str, An
         acumulados[t.CLAVE_TOTAL], facturas[0] if facturas else None, clientes[0] if clientes else None,
         list(filtro.meses), filtro.reglas.lineas)
     del total["ranking"], total["tendencia"]
-    cumplimiento = await cargar_cumplimiento(db, filtro)
+    cubo_compania = await lectura.cubo(db, filtro, None, DIM_ASESOR)
+    cumplimiento = await cargar_cumplimiento(
+        db, filtro, cubo_compania=cubo_compania, cubo_sucursal=cubo)
     return {
         **_encabezado(filtro),
         **await lectura.frescura(db),
         "total": total,
         "tecnired": await cargar_tecnired(db, filtro, total["clientes"]),
-        "cumplimiento": _recortar(cumplimiento, ("red", "tiendas", "conteos")),
+        "cumplimiento": _recortar(cumplimiento, ("compania", "red", "tiendas", "conteos")),
         "tiendas": [
             {k: f[k] for k in ("sucursal_id", "nombre", "venta", "costo")} for f in tiendas
         ],

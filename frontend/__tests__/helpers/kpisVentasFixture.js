@@ -64,6 +64,16 @@ export const VENTAS = {
     ],
   },
   cumplimiento: {
+    compania: {
+      venta: 1650 * M, presupuesto: 1993 * M, pct: 1650 / 1993, semaforo: 'ambar', meses_con_presupuesto: 3,
+      por_grupo: [
+        { grupo: 'Asesores de repuestos', venta: 1554 * M, pct: 1554 / 1650 },
+        { grupo: 'Comerciales', venta: 30 * M, pct: 30 / 1650 },
+        { grupo: 'Otros roles de posventa', venta: 16 * M, pct: 16 / 1650 },
+        { grupo: 'Resto de compañía', venta: 50 * M, pct: 50 / 1650 },
+      ],
+      asesores: { presupuesto: 1993 * M, venta_cumplimiento: 1554 * M, cumplimiento_pct: 1554 / 1993, semaforo: 'ambar' },
+    },
     red: cumpl(null, 'Red', 1554 * M, 1993 * M),
     tiendas: [
       cumpl('t1', 'Bogotá Av. Boyacá', 200 * M, 180 * M),
@@ -84,6 +94,10 @@ export const VENTAS_SIN_PRESUPUESTO = {
   ...VENTAS,
   total: { ...VENTAS.total, costo: { ...VENTAS.total.costo, venta_con_costo: 0, pct_margen: null } },
   cumplimiento: {
+    compania: {
+      venta: 0, presupuesto: 0, pct: null, semaforo: null, meses_con_presupuesto: 0,
+      por_grupo: [], asesores: { presupuesto: 0, venta_cumplimiento: 0, cumplimiento_pct: null, semaforo: null },
+    },
     red: cumpl(null, 'Red', 0, 0),
     tiendas: [],
     conteos: { asesores: {}, tiendas: { verde: 0, ambar: 0, violeta: 0 } },

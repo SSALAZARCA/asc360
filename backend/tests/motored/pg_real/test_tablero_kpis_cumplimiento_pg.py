@@ -180,10 +180,11 @@ async def test_cumplimiento_por_tienda_con_un_asesor_reasignado_entre_tiendas(se
 
     por_id = {f["sucursal_id"]: f for f in r["cumplimiento"]["tiendas"]}
     n, s = por_id[str(norte.id)], por_id[str(sur.id)]
-    # Norte: Ana Jan 1200 + Ana Feb 1000 + Beto Feb 500; sales credited per month by the budget store.
-    assert (n["presupuesto"], n["venta_cumplimiento"]) == (2700, 1500.0 + 800.0 + 600.0)
-    assert n["cumplimiento_pct"] == pytest.approx(2900 / 2700) and n["cumple"] is True
-    # Sur: Beto Jan 800 + Cami Jan 300 + Cami Mar 300; only Beto's January sales (400).
+    # Norte (budget Jan-Feb: 1200 + 1000 + 500): the store's TOTAL sales of those months, whoever sold
+    # them: Jan Ana 1500 + Dani 100 + Eli 50, Feb Ana 800 (Beto's February sale was at Sur).
+    assert (n["presupuesto"], n["venta_cumplimiento"]) == (2700, 1500.0 + 100.0 + 50.0 + 800.0)
+    assert n["cumplimiento_pct"] == pytest.approx(2450 / 2700) and n["cumple"] is True
+    # Sur (budget Jan and Mar: 800 + 300 + 300): total sales of those months, only Beto's January 400.
     assert (s["presupuesto"], s["venta_cumplimiento"], s["semaforo"]) == (1400, 400.0, k.VIOLETA)
     assert (n["asesores_con_presupuesto"], s["asesores_con_presupuesto"]) == (2, 2)
     red = r["cumplimiento"]["red"]
@@ -224,6 +225,6 @@ async def test_la_pestana_ventas_trae_el_medidor_de_la_red_y_las_tiendas(sesion)
     r = await k.calcular_kpis_ventas(sesion, await _filtro(sesion))
 
     c = r["cumplimiento"]
-    assert set(c) == {"red", "tiendas", "conteos"}
+    assert set(c) == {"compania", "red", "tiendas", "conteos"}
     assert (c["red"]["presupuesto"], c["red"]["venta_cumplimiento"]) == (4100, 3300.0)
     assert {f["sucursal_id"] for f in c["tiendas"]} == {str(norte.id), str(sur.id)}

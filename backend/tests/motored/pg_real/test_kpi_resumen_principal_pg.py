@@ -223,4 +223,8 @@ async def test_the_dashboards_are_identical_with_the_switch_on_and_off(sesion, m
         monkeypatch.setattr(settings, "MOTORED_KPI_RESUMEN_ENABLED", True)
         assert await lectura.usar_resumen(sesion)
         assert {nombre: sin_frescura(await llamar()) for nombre, llamar in llamadas.items()} == en_vivo
+        compania = en_vivo["ventas"]["cumplimiento"]["compania"]  # the company block is part of what must match
+        assert compania["presupuesto"] > 0 and compania["venta"] > 0
+        assert len(compania["por_grupo"]) == 4 and compania["asesores"]["presupuesto"] > 0
+        assert sum(g["venta"] for g in compania["por_grupo"]) == pytest.approx(compania["venta"])
         assert {f["sucursal_id"] for f in en_vivo["tiendas"]["tiendas"]} == {str(mundo.s1.id)}

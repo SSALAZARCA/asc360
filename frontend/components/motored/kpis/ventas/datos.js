@@ -24,7 +24,7 @@ const chipCrecimiento = (fraccion) => (fraccion === null ? {} : {
   chip: `${fraccion >= 0 ? '▲' : '▼'} ${pct(Math.abs(fraccion))} 3M`, chipVariant: fraccion >= 0 ? 'up' : 'down',
 });
 
-export const hayPresupuesto = (data) => Boolean(data.cumplimiento?.red?.presupuesto);
+export const hayPresupuesto = (data) => Boolean(data.cumplimiento?.compania?.presupuesto ?? data.cumplimiento?.red?.presupuesto);
 
 /** Tooltip sentence when part of the cost comes from `precio_normal` (the inventory had no cost); '' otherwise. */
 export function notaCostoEstimado(costo) {

@@ -242,3 +242,128 @@ def test_una_linea_de_una_tienda_asociada_cuenta_en_su_principal():
     assert {linea.sucursal_id for linea in todas.values()} == {S1}
     assert set(solo_s1) == {("2026-01", "100"), ("2026-01", "200")}
     assert solo_s2 == {}  # the UI only offers principals; the stale id of an associate selects nothing here
+
+
+# --- Compania (Ventas gauge) --------------------------------------------------------------------
+
+
+def _compania(cubo, lineas_presupuesto, reglas=t.REGLAS_POR_DEFECTO):
+    resultado = _calcular(cubo, lineas_presupuesto, reglas, cubo_compania=cubo)
+    return resultado["compania"]
+
+
+def _cubo_compania():
+    return [
+        _venta("100", "2026-01", 1000), _venta("100", "2026-01", 500, hmcl=True),
+        _venta("200", "2026-01", 100),  # asesor without budget
+        _venta("100", "2026-02", 800),
+        _venta("100", "2026-03", 9999),  # month without any budget
+        _venta("", "2026-01", 70, clave="RESTO"), _venta("", "2026-02", 30, clave="COMERCIALES"),
+        _venta("", "2026-01", 20, clave="OTROS"),
+        _venta("", "2026-01", 7, linea=None, clave="RESTO"),  # unrecognised line: out, like the network venta
+    ]
+
+
+PRESUPUESTOS_COMPANIA = [_pres("2026-01", "100", S1, 1200), _pres("2026-02", "100", S1, 1000)]
+
+
+def test_la_compania_compara_toda_la_venta_con_toda_la_suma_de_presupuestos():
+    c = _compania(_cubo_compania(), PRESUPUESTOS_COMPANIA)
+
+    # Jan: 1000+500+100+70+20, Feb: 800+30; March has no budget so it is out of both sides.
+    assert c["venta"] == 2520.0 and c["presupuesto"] == 2200
+    assert c["pct"] == pytest.approx(2520 / 2200) and c["semaforo"] == k.VERDE
+    assert c["meses_con_presupuesto"] == 2
+
+
+def test_la_compania_incluye_resto_y_asesores_sin_presupuesto_aunque_el_asesor_no_los_cuente():
+    resultado = _calcular(_cubo_compania(), PRESUPUESTOS_COMPANIA, cubo_compania=_cubo_compania())
+
+    assert resultado["red"]["venta_cumplimiento"] == 2300.0  # asesores with budget only
+    assert resultado["compania"]["venta"] == 2520.0
+
+
+def test_la_compania_con_base_sin_hmcl_descuenta_la_venta_hmcl():
+    reglas = t.REGLAS_POR_DEFECTO._replace(cumplimiento_base=t.CUMPLIMIENTO_SIN_HMCL)
+
+    assert _compania(_cubo_compania(), PRESUPUESTOS_COMPANIA, reglas)["venta"] == 2020.0
+
+
+def test_la_compania_reparte_la_venta_en_los_cuatro_grupos_y_suman_el_medidor():
+    c = _compania(_cubo_compania(), PRESUPUESTOS_COMPANIA)
+
+    assert [g["grupo"] for g in c["por_grupo"]] == [
+        "Asesores de repuestos", "Comerciales", "Otros roles de posventa", "Resto de compañía"]
+    assert [g["venta"] for g in c["por_grupo"]] == [2400.0, 30.0, 20.0, 70.0]
+    assert sum(g["venta"] for g in c["por_grupo"]) == c["venta"]
+    assert c["por_grupo"][0]["pct"] == pytest.approx(2400 / 2520)
+    assert sum(g["pct"] for g in c["por_grupo"]) == pytest.approx(1)
+
+
+def test_la_compania_trae_el_cumplimiento_propio_de_los_asesores():
+    c = _compania(_cubo_compania(), PRESUPUESTOS_COMPANIA)
+
+    assert c["asesores"]["presupuesto"] == 2200 and c["asesores"]["venta_cumplimiento"] == 2300.0
+    assert c["asesores"]["cumplimiento_pct"] == pytest.approx(2300 / 2200) and c["asesores"]["semaforo"] == k.VERDE
+
+
+def test_la_compania_sin_presupuesto_no_tiene_pct_ni_semaforo():
+    c = _compania(_cubo_compania(), [])
+
+    assert (c["venta"], c["presupuesto"], c["pct"], c["semaforo"], c["meses_con_presupuesto"]) == (0.0, 0, None, None, 0)
+    assert all(g["pct"] is None for g in c["por_grupo"])
+
+
+def test_sin_cubo_de_compania_el_bloque_no_existe():
+    assert "compania" not in _calcular(_cubo_compania(), PRESUPUESTOS_COMPANIA)
+
+
+# --- Tiendas con venta total ------------------------------------------------------------------
+
+
+def _cubo_tiendas():
+    norte, sur = str(S1), str(S2)
+    return [
+        _venta("", "2026-01", 1000, clave=norte), _venta("", "2026-01", 500, hmcl=True, clave=norte),
+        _venta("", "2026-02", 700, clave=norte),  # Norte has no budget in February: out
+        _venta("", "2026-01", 300, clave=sur), _venta("", "2026-02", 100, clave=sur),
+        _venta("", "2026-01", 40, linea=None, clave=sur),  # unrecognised line: out
+        _venta("", "2026-01", 999, clave=str(uuid.uuid4())),  # store without budget: no row
+    ]
+
+
+PRESUPUESTOS_TIENDAS = [
+    _pres("2026-01", "100", S1, 1200), _pres("2026-01", "200", S1, 300),
+    _pres("2026-01", "300", S2, 400), _pres("2026-02", "300", S2, 100),
+]
+
+
+def _tiendas_total(reglas=t.REGLAS_POR_DEFECTO):
+    r = _calcular(_cubo_tiendas(), PRESUPUESTOS_TIENDAS, reglas, cubo_sucursal=_cubo_tiendas())
+    return r, {f["sucursal_id"]: f for f in r["tiendas"]}
+
+
+def test_la_tienda_se_mide_con_su_venta_total_contra_la_suma_de_sus_presupuestos():
+    _, por_tienda = _tiendas_total()
+
+    norte, sur = por_tienda[str(S1)], por_tienda[str(S2)]
+    assert (norte["venta_cumplimiento"], norte["presupuesto"]) == (1500.0, 1500)
+    assert norte["cumplimiento_pct"] == pytest.approx(1.0) and norte["semaforo"] == k.VERDE
+    assert (sur["venta_cumplimiento"], sur["presupuesto"]) == (400.0, 500)
+    assert sur["cumplimiento_pct"] == pytest.approx(0.8) and sur["estado"] == k.EN_CAMINO
+    assert set(por_tienda) == {str(S1), str(S2)}  # the store without budget is not listed
+
+
+def test_la_tienda_con_base_sin_hmcl_descuenta_la_venta_hmcl():
+    reglas = t.REGLAS_POR_DEFECTO._replace(cumplimiento_base=t.CUMPLIMIENTO_SIN_HMCL)
+
+    _, por_tienda = _tiendas_total(reglas)
+
+    assert por_tienda[str(S1)]["venta_cumplimiento"] == 1000.0
+
+
+def test_los_conteos_de_tiendas_siguen_la_venta_total_y_la_red_sigue_siendo_de_asesores():
+    r, _ = _tiendas_total()
+
+    assert r["conteos"]["tiendas"] == {k.VERDE: 1, k.AMBAR: 1, k.VIOLETA: 0}
+    assert r["red"]["venta_cumplimiento"] == 0.0  # asesor-based: the cube has no persons
