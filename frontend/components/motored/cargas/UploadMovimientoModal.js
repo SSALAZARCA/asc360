@@ -20,7 +20,7 @@
 import { useState } from 'react';
 import { subirCargaMovimiento, getCarga, descargarPlantillaMovimiento } from '../../../lib/motored/api';
 import InfoTooltip from '../InfoTooltip';
-import { tipoDeclaraPeriodo, excedeUnMes } from './tiposCarga';
+import { tipoDeclaraPeriodo, tipoUsaFechaDeCorte, excedeUnMes } from './tiposCarga';
 
 const overlayStyle = {
   position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
@@ -80,6 +80,18 @@ function CamposPeriodo({ periodoDesde, setPeriodoDesde, periodoHasta, setPeriodo
   );
 }
 
+function CampoFechaDeCorte({ fecha, setFecha, disabled }) {
+  return (
+    <label style={labelStyle}>
+      <span>
+        Fecha de corte
+        <InfoTooltip text="El día de la foto del inventario: el stock que trae el archivo es el de esa fecha." />
+      </span>
+      <input type="date" aria-label="Fecha de corte" value={fecha} onChange={(e) => setFecha(e.target.value)} disabled={disabled} />
+    </label>
+  );
+}
+
 function useSubirMovimiento(tipo, onUploaded) {
   const [file, setFile] = useState(null);
   const [periodoDesde, setPeriodoDesde] = useState('');
@@ -90,6 +102,7 @@ function useSubirMovimiento(tipo, onUploaded) {
   const [completo, setCompleto] = useState(false);
 
   const necesitaPeriodo = tipoDeclaraPeriodo(tipo);
+  const fechaDeCorte = tipoUsaFechaDeCorte(tipo);
 
   const handleDescargarPlantilla = async () => {
     setError('');
@@ -103,14 +116,17 @@ function useSubirMovimiento(tipo, onUploaded) {
   const handleSubir = async () => {
     if (!file) return;
     if (necesitaPeriodo && !periodoDesde) {
-      setError('Declará el período de este archivo antes de continuar.');
+      setError(fechaDeCorte
+        ? 'Declará la fecha de corte de este archivo antes de continuar.'
+        : 'Declará el período de este archivo antes de continuar.');
       return;
     }
     setLoading(true);
     setError('');
     try {
       const res = await subirCargaMovimiento(file, tipo, {
-        periodoDesde, periodoHasta: periodoHasta || periodoDesde,
+        periodoDesde,
+        periodoHasta: (!fechaDeCorte && periodoHasta) || periodoDesde,
       });
       if (res.duplicado_de) {
         try {
@@ -133,7 +149,7 @@ function useSubirMovimiento(tipo, onUploaded) {
 
   return {
     file, setFile, periodoDesde, setPeriodoDesde, periodoHasta, setPeriodoHasta,
-    necesitaPeriodo, duplicadoInfo, loading, error, completo, handleSubir, handleDescargarPlantilla,
+    necesitaPeriodo, fechaDeCorte, duplicadoInfo, loading, error, completo, handleSubir, handleDescargarPlantilla,
   };
 }
 
@@ -181,13 +197,16 @@ function ZonaArchivo({ file, setFile, label }) {
 function FormularioSubida({ estado, onSubir }) {
   const {
     file, setFile, periodoDesde, setPeriodoDesde, periodoHasta, setPeriodoHasta,
-    necesitaPeriodo, loading, label,
+    necesitaPeriodo, fechaDeCorte, loading, label,
   } = estado;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
       <ZonaArchivo file={file} setFile={setFile} label={label} />
 
-      {necesitaPeriodo && (
+      {fechaDeCorte && (
+        <CampoFechaDeCorte fecha={periodoDesde} setFecha={setPeriodoDesde} />
+      )}
+      {necesitaPeriodo && !fechaDeCorte && (
         <CamposPeriodo
           periodoDesde={periodoDesde} setPeriodoDesde={setPeriodoDesde}
           periodoHasta={periodoHasta} setPeriodoHasta={setPeriodoHasta}

@@ -41,6 +41,12 @@ export function tipoDeclaraPeriodo(tipo) {
   return TIPOS_CARGA.find((t) => t.value === tipo)?.declaraPeriodo ?? false;
 }
 
+/** A snapshot type (INVENTARIO, BACKORDER): one cutoff date, never a
+ * range -- the backend takes `periodo_desde` as its `fecha_corte`. */
+export function tipoUsaFechaDeCorte(tipo) {
+  return TIPOS_CARGA.find((t) => t.value === tipo)?.periodoLabel === 'fecha de corte';
+}
+
 const ESTADO_COLOR = {
   PENDIENTE: { fg: 'var(--motored-text-muted, #5a5a5a)', bg: 'var(--motored-surface-alt, #f4f4f5)' },
   PROCESANDO: { fg: 'var(--motored-warning, #d97706)', bg: 'var(--motored-warning-bg, #fef3e2)' },
