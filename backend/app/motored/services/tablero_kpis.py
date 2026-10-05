@@ -355,7 +355,7 @@ async def cargar_inventario(db: AsyncSession, filtro: Filtro, fecha_corte: Optio
     _, dias = qk.filtro_costo_venta(filtro)
     if fecha_corte is None:
         return construir_inventario([], {}, dias, None)
-    filas = await qk.consultar_inventario(db, filtro, fecha_corte)
+    filas = await lectura.inventario(db, filtro, fecha_corte)
     costo_venta, dias = await lectura.costo_venta(db, filtro, fecha_corte)
     return construir_inventario(filas, costo_venta, dias, fecha_corte)
 
@@ -401,7 +401,7 @@ async def calcular_kpis_tiendas(db: AsyncSession, filtro: Filtro) -> Dict[str, A
     indicadores, su `crecimiento` y su `cumplimiento` (None si no tiene presupuesto);
     `cumplimiento` agrega `tiendas` (TODAS las que tienen presupuesto, vendan o no),
     `red` y `conteos` por semaforo."""
-    corte = await q.fecha_corte_costos(db)
+    corte = await lectura.fecha_corte_costos(db)
     cubo = await lectura.cubo(db, filtro, corte, DIM_SUCURSAL)
     tiendas, sin_linea = await _filas_de_tiendas(db, filtro, cubo, completas=True)
     cumplimiento = await cargar_cumplimiento(db, filtro)
@@ -426,7 +426,7 @@ async def calcular_kpis_ventas(db: AsyncSession, filtro: Filtro) -> Dict[str, An
     `total` son los indicadores de toda la red (venta, mix, por mes y linea,
     Tecnired por mes y linea, facturas, clientes distintos de la red); `tiendas`,
     una fila liviana por tienda (venta, margen, por mes) para el grafico de cumplimiento."""
-    cubo = await lectura.cubo(db, filtro, await q.fecha_corte_costos(db), DIM_SUCURSAL)
+    cubo = await lectura.cubo(db, filtro, await lectura.fecha_corte_costos(db), DIM_SUCURSAL)
     tiendas, sin_linea = await _filas_de_tiendas(db, filtro, cubo, completas=False)
     acumulados, _ = t.acumular_cubo(t.filtrar_cubo_por_hmcl(cubo, filtro.modo_hmcl), filtro.reglas)
     facturas = await lectura.facturas(db, filtro, dimension=DIM_TOTAL)

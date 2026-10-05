@@ -509,7 +509,7 @@ async def tablero_de_filtro(db: AsyncSession, filtro: Filtro) -> Tuple[Dict[str,
     from app.motored.services import kpi_resumen_lectura as lectura
 
     meses, reglas, modo_hmcl = list(filtro.meses), filtro.reglas, filtro.modo_hmcl
-    corte = await fecha_corte_costos(db)
+    corte = await lectura.fecha_corte_costos(db)
 
     cubo_completo = await lectura.cubo(db, filtro, corte)
     cubo = t.filtrar_cubo_por_hmcl(cubo_completo, modo_hmcl)

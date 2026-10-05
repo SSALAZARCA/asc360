@@ -39,6 +39,7 @@ from app.config import settings
 from app.motored.models.cliente_tecnired import ClienteTecnired
 from app.motored.models.kpi_resumen import KpiClienteMes as C
 from app.motored.models.kpi_resumen import KpiFacturaFirma as F
+from app.motored.models.kpi_resumen import KpiInventarioCorte as Corte
 from app.motored.models.kpi_resumen import KpiVentaMes as V
 from app.motored.models.sucursal import Sucursal
 from app.motored.models.vendedor import Vendedor
@@ -298,6 +299,28 @@ async def top_tecnired_resumen(
     return [qk.FilaTopTecnired(nit, razon, Decimal(v)) for nit, razon, v in (await db.execute(consulta)).all()]
 
 
+# --- Inventory and the cost cut ---------------------------------------------------------------
+
+
+async def inventario_resumen(
+    db: AsyncSession, filtro: Filtro, fecha_corte: Optional[datetime.date],
+) -> List[qk.FilaInventario]:
+    """`qk.consultar_inventario` from `kpi_inventario_corte` (only the latest cut is kept)."""
+    if fecha_corte is None:
+        return []
+    consulta = select(
+        cast(Corte.sucursal_id, String), Corte.valor, Corte.lineas_sin_costo, Corte.lineas_costo_maestro,
+    ).where(Corte.fecha_corte == fecha_corte)
+    if filtro.sucursal_ids:
+        consulta = consulta.where(Corte.sucursal_id.in_(sorted(filtro.sucursal_ids, key=str)))
+    return [qk.FilaInventario(s, Decimal(v), int(n), int(m)) for s, v, n, m in (await db.execute(consulta)).all()]
+
+
+async def fecha_corte_costos_resumen(db: AsyncSession) -> Optional[datetime.date]:
+    """`q.fecha_corte_costos` from the summary: the cut of `kpi_inventario_corte` (empty without inventory)."""
+    return (await db.execute(select(func.max(Corte.fecha_corte)))).scalar()
+
+
 # --- Dispatch: the summary when usable, the live query otherwise -----------------------------
 
 
@@ -357,3 +380,19 @@ async def top_tecnired(db: AsyncSession, filtro: Filtro, limite: int = qk.TOP_TE
     if await usar_resumen(db):
         return await top_tecnired_resumen(db, filtro, limite)
     return await qk.consultar_top_tecnired(db, filtro, limite)
+
+
+async def inventario(
+    db: AsyncSession, filtro: Filtro, fecha_corte: Optional[datetime.date],
+) -> List[qk.FilaInventario]:
+    """The summary holds one cut only: a different date (a stale summary) is answered live."""
+    if fecha_corte is not None and await usar_resumen(db):
+        if await fecha_corte_costos_resumen(db) == fecha_corte:
+            return await inventario_resumen(db, filtro, fecha_corte)
+    return await qk.consultar_inventario(db, filtro, fecha_corte)
+
+
+async def fecha_corte_costos(db: AsyncSession) -> Optional[datetime.date]:
+    if await usar_resumen(db):
+        return await fecha_corte_costos_resumen(db)
+    return await q.fecha_corte_costos(db)

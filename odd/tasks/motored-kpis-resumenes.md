@@ -83,8 +83,8 @@ Each tab scans `venta_detalle` (~1M rows Jan–Sep) 6–8 times per request, wit
 - [x] **R1 Tables + models + migration.** The 6 tables, indexes and models. The migration only creates tables; the backfill is done by the rebuild.
 - [x] **R2 Build/refresh service** `services/kpi_resumen.py`: full build and per-(sucursal, año, mes) refresh from `venta_detalle` (non-annulled cargas), a costs build, the estado row, and an advisory lock. pg_real tests: a summary built from a seeded world equals the raw aggregates.
 - [x] **R3 Read path for `kpi_venta_mes`.** Cube (all dimensions), growth window, cost of sales, months available, personas venta. Behind the flag, with a fallback to live. Equivalence tests.
-- [ ] **R4 Read path for facturas (firma) + clientes (`kpi_cliente_mes`)**, including Tecnired clients and top-5. Equivalence tests incl. HMCL modes, store filter and a Configuración change.
-- [ ] **R5 Costs + inventory summaries** and their use in margin and días de inventario. Equivalence tests.
+- [x] **R4 Read path for facturas (firma) + clientes (`kpi_cliente_mes`)**, including Tecnired clients and top-5. Equivalence tests incl. HMCL modes, store filter and a Configuración change.
+- [x] **R5 Costs + inventory summaries** and their use in margin and días de inventario. Equivalence tests.
 - [ ] **R6 VENTAS carga triggers.** Incremental refresh inside apply, sync refresh on anular. Write-path audit first; coordinate with -c4.
 - [ ] **R7 Full rebuild orchestration.** Dirty flag set by referencias/linea, Tecnired, `hmcl_nits`/`lineas_comerciales` and inventory triggers; a `supervisor_kpis` loop (nightly plus dirty); ADMIN `POST /tablero-asesores/kpis/recalcular`; `actualizado_en` in the responses.
 - [ ] **R9 Associated-store roll-up** (user decision 2026-10-04; blocked until session -c4 lands `sucursal.principal_id` + `principal_de(db)`). In live AND summary reads, group and filter by `coalesce(principal_id, id)`:
@@ -147,5 +147,29 @@ Each tab scans `venta_detalle` (~1M rows Jan–Sep) 6–8 times per request, wit
   - A Configuración change after a build needs R7's dirty flag to rebuild.
   - **Behavior change in production with C1:** margins now include master-price costs, with the estimated share shown.
 
+- **Delivery:** commits 000e4b0, e7571db and 2bd7596, pushed to main.
+- **Native review:** risk medium (942 lines). Consent granted; the R3 lens approved and the result was acknowledged.
+- **Advisories**
+  - R3-inventory-inner-join-referencia (WARNING, `tablero_kpis_consultas.py:103`): inventory lines whose referencia is missing from the master are dropped from valuation. Carried to R5.
+  - R3-switch-serves-stale-summary (WARNING, `kpi_resumen_lectura.py:50-56`): R7's dirty flag covers it, and the switch stays off until then.
+  - R3-cumplimiento-null-corte (suggestion).
+
+**R4 + R5, done.** Route: one delegated writer, two commits.
+- **Commit e64a344, R4:** reads for facturas, clientes, Tecnired clients and top-5 come from the summaries, with dispatchers behind the switch.
+  - **Invoice grain fix, hybrid with no schema change:** a plain invoice (one month, vendor and special NIT) stays a `firma` row. An irregular invoice becomes one row with the sentinel `nit_especial='~'`, whose `firma` holds `YYYY-MM-DD|linea|nit|vendedor` tokens, so the read splits it exactly like live. `n_facturas` acts as a weight.
+  - `refrescar_periodos` now re-derives `kpi_factura_firma` for ALL months of the affected stores, because invoices can span months. This matters for R6's cost per carga.
+  - Shared live/summary client aggregation via `_agregar_clientes` and `_filas_de_clientes`.
+- **Commit 162bc87, R5:**
+  - The inventory valuation uses an outer join to referencia (the advisory): an orphan line is valued at its own cost when positive, else counted sin_costo.
+  - Dispatchers `lectura.inventario` and `lectura.fecha_corte_costos` read `kpi_inventario_corte`.
+- **Checks**
+  - Unit suite: 5339 passed.
+  - pg_real: 554 passed / 2 skipped.
+  - Equivalence matrix: invoices, clients, Tecnired, inventory and whole endpoints.
+  - Mutation checks fail as expected.
+- **Notes**
+  - The `firma` docstring in `models/kpi_resumen.py` is stale for irregular rows.
+  - R7 must mark the summaries dirty on Configuración writes.
+
 ## Next step
-Native review + push, then R4 (facturas firma + clientes reads) + R5 (costs/inventory reads).
+Native review + push of R4/R5, then R9 (associated-store roll-up; -c4 landed `principal_id` in 6e588b8, migration head `a8c4e2f61d07`), then R6 + R7.

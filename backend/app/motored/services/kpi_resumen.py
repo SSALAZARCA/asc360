@@ -295,7 +295,7 @@ async def _insertar_inventario(db: AsyncSession, corte: datetime.date) -> None:
     consulta = (
         select(literal(corte, Date), InventarioDetalle.sucursal_id, valor, sin_costo, costo_maestro)
         .join(CargaArchivo, CargaArchivo.id == InventarioDetalle.carga_id)
-        .join(Referencia, Referencia.id == InventarioDetalle.referencia_id)
+        .outerjoin(Referencia, Referencia.id == InventarioDetalle.referencia_id)
         .where(InventarioDetalle.fecha_corte == corte, CargaArchivo.estado != "ANULADO")
         .group_by(InventarioDetalle.sucursal_id)
     )

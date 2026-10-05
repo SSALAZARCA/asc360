@@ -88,7 +88,8 @@ async def consultar_inventario(
     db: AsyncSession, filtro: Filtro, fecha_corte: Optional[datetime.date],
 ) -> List[FilaInventario]:
     """Inventario a costo por tienda en `fecha_corte` (existencia x costo unitario
-    de cada linea; sin costo propio, a `precio_normal`), de las cargas no ANULADAS y de las tiendas
+    de cada linea; sin costo propio, a `precio_normal`; una linea cuya referencia no
+    esta en el maestro vale con su costo propio o queda sin costo, nunca se descarta), de las cargas no ANULADAS y de las tiendas
     del filtro. Sin corte no hay inventario.
 
     Por diseno usa el ULTIMO corte GLOBAL: la carga de inventario trae todas las
@@ -100,7 +101,7 @@ async def consultar_inventario(
     consulta = (
         select(cast(InventarioDetalle.sucursal_id, String), valor, sin_costo, costo_maestro)
         .join(CargaArchivo, CargaArchivo.id == InventarioDetalle.carga_id)
-        .join(Referencia, Referencia.id == InventarioDetalle.referencia_id)
+        .outerjoin(Referencia, Referencia.id == InventarioDetalle.referencia_id)
         .where(InventarioDetalle.fecha_corte == fecha_corte, CargaArchivo.estado != "ANULADO")
         .group_by(InventarioDetalle.sucursal_id)
     )
