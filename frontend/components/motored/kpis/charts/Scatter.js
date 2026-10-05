@@ -1,4 +1,5 @@
 import { COLOR } from '../tokens';
+import { placeLabels } from './geometry';
 
 const CAJA = { width: 600, height: 320, padL: 52, padR: 20, padT: 16, padB: 40 };
 
@@ -22,6 +23,18 @@ const porCien = (valor, total) => `${((valor / total) * 100).toFixed(2)}%`;
 
 const TICK = { position: 'absolute', whiteSpace: 'nowrap', fontSize: 10.5, color: COLOR.soft, fontVariantNumeric: 'tabular-nums' };
 const ESQUINA = { position: 'absolute', fontSize: 11, fontWeight: 700 };
+
+const LINEA = 14;
+const CHAR_PX = 6;
+
+/** Reserved boxes of the corner captions, in chart units, so point labels never cover them. */
+function cajasEsquina(corner) {
+  const { width, height, padL, padR, padT, padB } = CAJA;
+  const cajas = [];
+  if (corner?.topRight) { const w = corner.topRight.length * CHAR_PX; cajas.push({ left: width - padR - 6 - w, top: padT + 6, w, h: LINEA }); }
+  if (corner?.bottomLeft) cajas.push({ left: padL + 6, top: height - padB - 6 - LINEA, w: corner.bottomLeft.length * CHAR_PX, h: LINEA });
+  return cajas;
+}
 
 function Ejes({ x, y, xTicks, yTicks, corner }) {
   const { width, height, padL, padR, padT, padB } = CAJA;
@@ -49,6 +62,12 @@ export default function Scatter({
 }) {
   const { x, y } = escalas(dominio(xDomain, points.map((p) => p.x).filter(finito)), dominio(yDomain, points.map((p) => p.y).filter(finito)));
   const { width, height, padL, padR, padT, padB } = CAJA;
+  const sitios = placeLabels({
+    labels: points.filter((p) => highlight.includes(p.id)).map((p) => ({ id: p.id, cx: x(p.x), cy: y(p.y), r: p.r || 5, text: p.label ?? p.tip })),
+    dots: points.map((p) => ({ cx: x(p.x), cy: y(p.y), r: p.r || 5 })),
+    obstacles: cajasEsquina(cornerLabels),
+    bounds: { x: padL, y: padT, w: width - padL - padR, h: height - padT - padB },
+  });
   return (
     <div role="img" aria-label={ariaLabel} style={{ position: 'relative', width: '100%', aspectRatio: `${width} / ${height}` }}>
       <svg viewBox={`0 0 ${width} ${height}`} width="100%" height="100%" aria-hidden="true" focusable="false" style={{ display: 'block' }}>
@@ -61,22 +80,17 @@ export default function Scatter({
           </circle>
         ))}
       </svg>
-      {points.filter((p) => highlight.includes(p.id)).map((p) => {
-        // Labels of dots in the right third go to the left of the dot so they never leave the box.
-        const aLaIzquierda = x(p.x) > width * 0.7;
-        const borde = (p.r || 5) + 3;
-        return (
-          <span
-            key={p.id} data-testid={`point-label-${p.id}`}
-            style={{
-              position: 'absolute', left: porCien(aLaIzquierda ? x(p.x) - borde : x(p.x) + borde, width), top: porCien(y(p.y), height),
-              transform: aLaIzquierda ? 'translate(-100%, -50%)' : 'translateY(-50%)', fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap', color: COLOR.ink,
-            }}
-          >
-            {p.label ?? p.tip}
-          </span>
-        );
-      })}
+      {points.filter((p) => highlight.includes(p.id) && sitios[p.id]).map((p) => (
+        <span
+          key={p.id} data-testid={`point-label-${p.id}`}
+          style={{
+            position: 'absolute', left: porCien(sitios[p.id].left, width), top: porCien(sitios[p.id].top, height), height: porCien(LINEA, height),
+            lineHeight: `${LINEA}px`, fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap', color: COLOR.ink,
+          }}
+        >
+          {p.label ?? p.tip}
+        </span>
+      ))}
       <Ejes x={x} y={y} xTicks={xTicks} yTicks={yTicks} corner={cornerLabels} />
       {xLabel && <span style={{ position: 'absolute', left: '50%', bottom: 0, transform: 'translateX(-50%)', fontSize: 11.5, color: COLOR.muted }}>{xLabel}</span>}
       {yLabel && <span style={{ position: 'absolute', left: 0, top: 0, fontSize: 11.5, color: COLOR.muted }}>{yLabel}</span>}

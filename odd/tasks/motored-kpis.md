@@ -82,9 +82,9 @@ The user designed the dashboard in the artifact and approved it. The budgets mas
 - [x] **F1 Chart primitives.** Gauge, donut, strip (zones), bars with value inside, stacked area, heatmap, treemap, scatter, segmented toggle. Plus color tokens in `layout.js`.
 - [x] **F2 Header + shell.** Period popover (año corrido / multi-month), store multi-select with search, HMCL popover, tabs, data hook with a per-tab cache, sidebar rename "KPI's", permisos matrix update.
 - [x] **F3 Ventas tab.**
-- [ ] **F4 Tiendas tab.**
-- [ ] **F5 Asesores tab.**
-- [ ] **F6 Cleanup.** Remove the old TableroTable/columnas/fixtures and update the sidebar/gate tests.
+- [x] **F4 Tiendas tab.**
+- [x] **F5 Asesores tab.**
+- [x] **F6 Cleanup.** Remove the old TableroTable/columnas/fixtures and update the sidebar/gate tests.
 
 ## Progress / evidence
 **B1 + B2, done.** Route: one delegated writer (multi-file backend) with two commits, rebased onto 1b6e094.
@@ -208,5 +208,40 @@ The user designed the dashboard in the artifact and approved it. The budgets mas
   - Screenshots at 1440 and 1024 (synthetic fixture), copied to the user's `Documents\Motored\capturas_kpis`. The user approved the push.
 - **Notes from gga:** `VentaPorLinea` has a duplicate import; `VentasTab` has an unused `filtros` prop.
 
+- **Delivery:** commits 34d35da, 0905388 and aa6d750, pushed to main.
+- **Native review:** risk medium (1,816 lines). Consent granted; the R3 lens approved and the result was acknowledged.
+- **Advisories, carried to F4**
+  - The period filter: unavailable months can get stuck selected (`PeriodoFilter.js:33-37`).
+  - `useKpis` can fire duplicate in-flight requests (suggestion).
+
+**Fix + F4 + F5 + F6 + label fix, done.** Route: delegated writers; five commits, rebased onto 88906e4.
+- **Commit 7a4fbea, fix:** unavailable months are no longer stuck; `useKpis` dedupes in-flight requests; gga cleanups.
+- **Commit 4fc8fcc, F4 Tiendas:**
+  - tendencia donut + 6 KPIs (including días de inventario);
+  - zone strip;
+  - ranking with Venta, Crecimiento and Mezcla views;
+  - heatmap vs the store's own average;
+  - venta vs margen scatter.
+- **Commit fae8e27, F5 Asesores:**
+  - donut of who meets the target + 6 KPIs;
+  - zone strip;
+  - Top 10 by venta and Bottom 10 by cumplimiento, with Venta and Mezcla views;
+  - Tecnired treemap + % bars;
+  - venta por grupo (4 groups).
+- **Commit bb8b512, F6:** the legacy tablero UI is removed; the backend endpoint is kept.
+- **Commit 66b85ff, label fix:**
+  - Scatter: `placeLabels` avoids collisions with other labels, the corner captions and dots, skipping a label that doesn't fit (the tooltip stays).
+  - BarList: `valuePlacement` puts the text inside, outside or on the sub-line, so "venta / presupuesto" stays readable.
+- **Deviations:** see the writer report. Highlights:
+  - `globals.css` forces `td` centering, so names are wrapped in a block;
+  - scatter domains are data-driven;
+  - best/growth KPIs exclude tiny or new stores;
+  - group sales show 4 groups.
+- **Checks**
+  - Full jest: 173 suites / 1830 tests.
+  - Webpack compile: 200.
+  - Screenshots, retaken by the parent after the label fix (synthetic fixtures): 0px horizontal overflow at 1440 and 1024. The user approved the push.
+  - After the rebase, the parent re-ran the affected suites: 336 passed.
+
 ## Next step
-Native review + push of F2/F3, then F4 (Tiendas tab).
+Native review + push. Then a new feature: precomputed KPI summary tables (Ventas takes over 10 s in production; inventory is loaded weekly).

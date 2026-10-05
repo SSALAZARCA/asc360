@@ -305,6 +305,51 @@ describe('Scatter', () => {
   });
 });
 
+describe('BarList long value text', () => {
+  const largo = '$450 M / $2.133 M';
+  const items = [
+    { name: 'Alfa', value: 100, valueText: '$9 M' },
+    { name: 'Beta', value: 22, valueText: largo, sub: 'Cali' },
+  ];
+
+  it('writes it outside the fill, in dark ink, when the bar is too short to hold it', () => {
+    render(<BarList items={items} />);
+    const texto = screen.getByText(largo);
+    expect(texto).toHaveAttribute('data-label', 'outside');
+    expect(texto).toHaveStyle({ color: '#3D3D3A' });
+  });
+
+  it('moves it to the sub-line when it fits neither inside nor outside', () => {
+    render(<BarList items={[{ name: 'Beta', value: 45, valueText: largo, sub: 'Cali' }, { name: 'Alfa', value: 100, valueText: '$9 M' }]} trackWidth={180} />);
+    expect(screen.getByText(`${largo} · Cali`)).toBeInTheDocument();
+    expect(screen.queryByText(largo)).toBeNull();
+  });
+});
+
+describe('Scatter label collisions', () => {
+  it('keeps crowded labels apart and clear of the corner caption', () => {
+    const pts = [
+      { id: 'a', x: 90, y: 80, r: 6, label: 'Bogotá Av. Boyacá' },
+      { id: 'b', x: 91, y: 79, r: 6, label: 'Cali Cra 1 Dos' },
+      { id: 'c', x: 98, y: 97, r: 6, label: 'Bogotá Bosa' },
+    ];
+    render(<Scatter points={pts} xDomain={[0, 100]} yDomain={[0, 100]} highlight={['a', 'b', 'c']} cornerLabels={{ topRight: 'Alta venta · alto margen' }} />);
+    const caja = (id) => {
+      const el = screen.queryByTestId(`point-label-${id}`);
+      if (!el) return null;
+      return { left: parseFloat(el.style.left) * 6, top: parseFloat(el.style.top) * 3.2, w: el.textContent.length * 6, h: 14 };
+    };
+    const cajas = ['a', 'b', 'c'].map(caja).filter(Boolean);
+    expect(cajas.length).toBeGreaterThanOrEqual(2);
+    const esquina = { left: 600 - 26 - 24 * 6, top: 22, w: 24 * 6, h: 14 };
+    cajas.forEach((c, i) => {
+      const choca = (p, q) => p.left < q.left + q.w && q.left < p.left + p.w && p.top < q.top + q.h && q.top < p.top + p.h;
+      expect(choca(c, esquina)).toBe(false);
+      cajas.slice(i + 1).forEach((o) => expect(choca(c, o)).toBe(false));
+    });
+  });
+});
+
 describe('SegmentedToggle', () => {
   const options = [{ id: 'semaforo', label: 'Semáforo' }, { id: 'barras', label: 'Barras' }];
 

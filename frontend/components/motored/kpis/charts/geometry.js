@@ -61,6 +61,58 @@ export function donutSegments(items, radio = 66) {
 /** Where a bar writes its value: inside from `minimo`% of width, outside (after the bar) below. */
 export const barPlacement = (anchoPct, minimo = 20) => (anchoPct >= minimo ? 'inside' : 'outside');
 
+const CHAR_PX = 6;
+const BAR_PAD = 7;
+const BAR_GAP = 6;
+
+/**
+ * Where a bar's value text goes, from estimated text width (about 6px a character): `inside` the fill,
+ * `outside` right of the fill, or `sub` (the sub-line) when it fits neither without clipping or leaving the track.
+ */
+export function valuePlacement({ widthPct, text, trackPx = 300, minimo = 20 }) {
+  const texto = String(text ?? '').length * CHAR_PX;
+  const relleno = (widthPct / 100) * trackPx;
+  if (barPlacement(widthPct, minimo) === 'inside' && texto + BAR_PAD * 2 <= relleno) return 'inside';
+  return relleno + BAR_GAP + texto <= trackPx ? 'outside' : 'sub';
+}
+
+// --- Scatter labels -------------------------------------------------------------------------
+
+const solapa = (a, b) => a.left < b.left + b.w && b.left < a.left + a.w && a.top < b.top + b.h && b.top < a.top + a.h;
+const choqueCirculo = (c, d) => {
+  const x = Math.min(Math.max(d.cx, c.left), c.left + c.w);
+  const y = Math.min(Math.max(d.cy, c.top), c.top + c.h);
+  return (x - d.cx) ** 2 + (y - d.cy) ** 2 < d.r ** 2;
+};
+
+/**
+ * Deterministic label placement in chart units. `labels` [{id, cx, cy, r, text}] in priority order; `obstacles`
+ * [{left, top, w, h}] are reserved boxes (e.g. corner captions); `dots` [{cx, cy, r}] every drawn dot; `bounds`
+ * {x, y, w, h} is the plot box. Each label takes the first of right / left / above / below that stays inside the
+ * bounds and touches no placed label, obstacle or other dot; it is `null` (tooltip only) when none fits.
+ * Returns {id: {left, top, w, h} | null}.
+ */
+export function placeLabels({ labels, obstacles = [], dots = [], bounds, charPx = CHAR_PX, lineH = 14, gap = 3 }) {
+  const ocupadas = [...obstacles];
+  const salida = {};
+  labels.forEach((l) => {
+    const w = String(l.text ?? '').length * charPx;
+    const sep = (l.r || 5) + gap;
+    const candidatos = [
+      { left: l.cx + sep, top: l.cy - lineH / 2 },
+      { left: l.cx - sep - w, top: l.cy - lineH / 2 },
+      { left: l.cx - w / 2, top: l.cy - sep - lineH },
+      { left: l.cx - w / 2, top: l.cy + sep },
+    ].map((c) => ({ ...c, w, h: lineH }));
+    const otros = dots.filter((d) => !(d.cx === l.cx && d.cy === l.cy));
+    const libre = candidatos.find((c) => c.left >= bounds.x && c.top >= bounds.y && c.left + c.w <= bounds.x + bounds.w && c.top + c.h <= bounds.y + bounds.h
+      && !ocupadas.some((o) => solapa(c, o)) && !otros.some((d) => choqueCirculo(c, d)));
+    salida[l.id] = libre ?? null;
+    if (libre) ocupadas.push(libre);
+  });
+  return salida;
+}
+
 // --- Zone strip -----------------------------------------------------------------------------
 
 const RANURA = 1.4;

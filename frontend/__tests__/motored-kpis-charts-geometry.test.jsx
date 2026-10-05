@@ -1,5 +1,5 @@
 import {
-  barPlacement, donutSegments, gaugeGeometry, heatLevel, heatRows, niceMax, semaforoTone,
+  barPlacement, donutSegments, placeLabels, valuePlacement, gaugeGeometry, heatLevel, heatRows, niceMax, semaforoTone,
   squarify, stackLevels, stackTop, stackedAreaGeometry, zoneStripLayout,
 } from '../components/motored/kpis/charts/geometry';
 import {
@@ -204,5 +204,51 @@ describe('stacked area geometry', () => {
     expect(g.layers[0].path.startsWith('M')).toBe(true);
     expect(g.grid.map((x) => x.value)).toEqual([0, 100, 200, 300, 400]);
     expect(g.totals[0].leftPct).toBeLessThan(g.totals[2].leftPct);
+  });
+});
+
+const choca = (a, b) => a.left < b.left + b.w && b.left < a.left + a.w && a.top < b.top + b.h && b.top < a.top + a.h;
+const BOUNDS = { x: 52, y: 16, w: 528, h: 264 };
+
+describe('placeLabels', () => {
+  const crowded = [
+    { id: 'a', cx: 300, cy: 120, r: 6, text: 'Bogotá Av. Boyacá' },
+    { id: 'b', cx: 306, cy: 124, r: 6, text: 'Cali Cra 1 Dos' },
+    { id: 'c', cx: 312, cy: 118, r: 6, text: 'Medellín Centro' },
+    { id: 'd', cx: 560, cy: 30, r: 6, text: 'Bogotá Bosa' },
+  ];
+  const esquina = { left: 360, top: 22, w: 25 * 6, h: 14 };
+
+  it('never overlaps labels with each other or with reserved boxes, and is deterministic', () => {
+    const args = { labels: crowded, obstacles: [esquina], bounds: BOUNDS };
+    const out = placeLabels(args);
+    expect(placeLabels(args)).toEqual(out);
+    const puestas = Object.entries(out).filter(([, v]) => v).map(([id, v]) => ({ id, ...v }));
+    expect(puestas.length).toBeGreaterThanOrEqual(3);
+    puestas.forEach((p, i) => {
+      expect(choca(p, esquina)).toBe(false);
+      expect(p.left).toBeGreaterThanOrEqual(BOUNDS.x);
+      expect(p.left + p.w).toBeLessThanOrEqual(BOUNDS.x + BOUNDS.w);
+      puestas.slice(i + 1).forEach((q) => expect(choca(p, q)).toBe(false));
+    });
+  });
+
+  it('uses the first free candidate and skips a label that fits nowhere', () => {
+    const solo = placeLabels({ labels: [{ id: 'a', cx: 200, cy: 100, r: 5, text: 'Alfa' }], bounds: BOUNDS });
+    expect(solo.a.left).toBeGreaterThan(200);
+    const lleno = placeLabels({ labels: [{ id: 'a', cx: 200, cy: 100, r: 5, text: 'Alfa' }], bounds: BOUNDS, obstacles: [{ left: 0, top: 0, w: 700, h: 400 }] });
+    expect(lleno.a).toBeNull();
+  });
+});
+
+describe('valuePlacement', () => {
+  it('keeps the text inside when it fits the filled part', () => {
+    expect(valuePlacement({ widthPct: 80, text: '$450 M / $2.133 M', trackPx: 300 })).toBe('inside');
+  });
+  it('moves it outside right of the fill when a short bar cannot hold it', () => {
+    expect(valuePlacement({ widthPct: 25, text: '$450 M / $2.133 M', trackPx: 300 })).toBe('outside');
+  });
+  it('falls back to the sub-line when it fits neither inside nor outside', () => {
+    expect(valuePlacement({ widthPct: 45, text: '$450 M / $2.133 M', trackPx: 180 })).toBe('sub');
   });
 });
