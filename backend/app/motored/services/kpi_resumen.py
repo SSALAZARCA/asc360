@@ -29,8 +29,9 @@ configuration needs:
   two shapes: a plain invoice (all its lines in ONE month, vendedor and special NIT) is a
   row of that key whose `firma` is the sorted distinct lines; any other invoice is ONE
   row of the sentinel NIT `NIT_FACTURA_IRREGULAR` (month = its first, vendedor ''),
-  whose `firma` holds one `YYYY-MM-DD|linea|nit|vendedor` token per combination, which
-  the read splits and filters like the live query does line by line.
+  whose `firma` holds one `YYYY-MM-DD|linea|nit|vendedor` token per combination (a pipe inside
+  the line or the NIT is stored as `ESCAPE_DELIMITADOR`; the vendedor is last, so it is read whole),
+  which the read splits and filters like the live query does line by line.
 
 Costs: the unit cost of a referencia is the median of its positive costs in the
 latest non-annulled inventory cut (`fuente = 'inventario'`); a referencia with no
@@ -72,6 +73,7 @@ from app.motored.services import tablero_asesores as t
 from app.motored.services import tablero_asesores_consultas as q
 
 LOCK_KEY = 7_203_581_101
+ESCAPE_DELIMITADOR = "\x1f"  # stands for a `|` inside the line / NIT fields of an irregular-invoice token
 NIT_FACTURA_IRREGULAR = "~"  # `kpi_factura_firma.nit_especial` of the invoices that span several combinations
 FUENTE_MAESTRO = q.FUENTE_MAESTRO
 Clave = Tuple[Any, int, int]  # (sucursal_id, anio, mes)
@@ -223,6 +225,20 @@ async def _insertar_venta_mes(db, base) -> None:
     await db.execute(insert(KpiVentaMes).from_select(columnas, consulta))
 
 
+def _escapar(columna):
+    """A token field with its pipes replaced by `ESCAPE_DELIMITADOR` (the read undoes it)."""
+    return func.replace(columna, "|", ESCAPE_DELIMITADOR)
+
+
+def _es_simple(anio_mes, vendedor_norm, nit):
+    """True when all the lines of an invoice share the month, the vendedor and the special NIT.
+    Null-safe: with `=` a NULL key makes the flag NULL, which is neither simple nor irregular,
+    and the invoice would be dropped from both shapes."""
+    return (func.min(anio_mes).is_not_distinct_from(func.max(anio_mes))
+            & func.min(vendedor_norm).is_not_distinct_from(func.max(vendedor_norm))
+            & func.min(nit).is_not_distinct_from(func.max(nit)))
+
+
 async def _insertar_factura_firma(db, base) -> None:
     """Plain invoices as `(mes, sucursal, vendedor, nit, firma)` rows; the ones that span
     several months, vendedores or special NITs as one sentinel row of tokens (see the module
@@ -236,13 +252,15 @@ async def _insertar_factura_firma(db, base) -> None:
     ).subquery("por_linea")
     c = por_linea.c
     sin_nit = func.coalesce(c.nit_especial, "")
-    marca = (func.to_char(c.anio_mes, "YYYY-MM-DD") + "|" + c.linea + "|" + sin_nit + "|" + c.vendedor_norm)
+    # The vendedor is the LAST field (the read takes everything after the third delimiter), so it
+    # needs no escaping; the line and the NIT do: `ESCAPE_DELIMITADOR` stands for a literal pipe.
+    marca = (func.to_char(c.anio_mes, "YYYY-MM-DD") + "|" + _escapar(c.linea) + "|" + _escapar(sin_nit) + "|"
+             + c.vendedor_norm)
     por_factura = select(
         c.sucursal_id, c.nro_documento,
         func.min(c.anio_mes).label("anio_mes"), func.min(c.vendedor_norm).label("vendedor_norm"),
         func.min(c.nit_especial).label("nit_especial"),
-        ((func.min(c.anio_mes) == func.max(c.anio_mes)) & (func.min(c.vendedor_norm) == func.max(c.vendedor_norm))
-         & (func.min(sin_nit) == func.max(sin_nit))).label("simple"),
+        _es_simple(c.anio_mes, c.vendedor_norm, sin_nit).label("simple"),
         func.array_remove(func.array_agg(aggregate_order_by(c.linea, c.linea)), null(), type_=ARRAY(Text)).label("firma"),
         func.array_remove(func.array_agg(aggregate_order_by(marca, marca)), null(), type_=ARRAY(Text)).label("marcas"),
     ).group_by(c.sucursal_id, c.nro_documento).subquery("por_factura")

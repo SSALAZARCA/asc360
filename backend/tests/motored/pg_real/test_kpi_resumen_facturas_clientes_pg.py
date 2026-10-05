@@ -202,3 +202,36 @@ async def test_the_dispatch_reads_the_summary_only_when_usable(sesion, monkeypat
         sesion, filtro, dimension=t.DIM_SUCURSAL)
     assert await lectura.clientes_tecnired(sesion, filtro) == await qk.consultar_clientes_tecnired(sesion, filtro)
     assert await lectura.top_tecnired(sesion, filtro) == await qk.consultar_top_tecnired(sesion, filtro)
+
+
+async def test_an_invoice_with_a_null_key_is_never_dropped_from_the_firma_table(sesion):
+    from sqlalchemy import Date, Text, cast, func, literal, null
+
+    # The grain flag must be null-safe: with NULL keys `min = max` is NULL, which is neither
+    # "simple" nor "irregular", so the invoice would vanish from both shapes.
+    nulos = select(
+        cast(null(), Date).label("anio_mes"), cast(null(), Text).label("vendedor_norm"),
+        cast(null(), Text).label("nit"), literal("A").label("grupo")).subquery()
+    bandera = k._es_simple(nulos.c.anio_mes, nulos.c.vendedor_norm, nulos.c.nit)
+    assert (await sesion.execute(select(bandera).group_by(nulos.c.grupo))).scalar_one() is True
+
+
+async def test_pipes_inside_the_invoice_tokens_do_not_change_the_split(sesion):
+    mundo = await _mundo_con_facturas(sesion, False)
+    # An irregular invoice (two months) whose vendedor and special NIT both contain the delimiter.
+    sesion.add(ClienteTecnired(id=uuid.uuid4(), nit="900|1", razon_social="Pipe SAS"))
+    await mundo.linea(sesion, mundo.s1, "R1", "ZOE|PIPE", "900|1", 1, 29, "MLP", 1, 10, 0, "VENTA", mundo.c_venta)
+    await mundo.linea(sesion, mundo.s1, "R2", "ZOE|PIPE", "900|1", 2, 3, "MLP", 1, 20, 0, "VENTA", mundo.c_venta)
+    await sesion.flush()
+    await k.reconstruir_todo(sesion)
+
+    for meses in MESES.values():
+        for modo in (t.HMCL_INCLUIR, t.HMCL_EXCLUIR, t.HMCL_SOLO):
+            filtro = await q.cargar_filtro(sesion, meses, modo, None)
+            for dimension in DIMENSIONES:
+                vivo = await q.consultar_facturas(sesion, filtro, dimension=dimension)
+                assert sorted(await lectura.facturas_resumen(sesion, filtro, dimension=dimension),
+                              key=_clave) == sorted(vivo, key=_clave), (meses, modo, dimension)
+    tokens = (await sesion.execute(
+        select(KpiFacturaFirma.firma).where(KpiFacturaFirma.nit_especial == k.NIT_FACTURA_IRREGULAR))).scalars().all()
+    assert any("ZOE|PIPE" in marca and "900" + k.ESCAPE_DELIMITADOR + "1" in marca for firma in tokens for marca in firma)

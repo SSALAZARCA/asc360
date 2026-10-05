@@ -217,8 +217,8 @@ def _factura_irregular(filtro: Filtro, dimension: str):
     desanidada = func.unnest(F.firma).table_valued("marca").render_derived()
     marca = desanidada.c.marca
     mes = cast(func.split_part(marca, "|", 1), Date)
-    linea = func.split_part(marca, "|", 2)
-    nit = func.nullif(func.split_part(marca, "|", 3), "")
+    linea = func.replace(func.split_part(marca, "|", 2), kpi_resumen.ESCAPE_DELIMITADOR, "|")
+    nit = func.nullif(func.replace(func.split_part(marca, "|", 3), kpi_resumen.ESCAPE_DELIMITADOR, "|"), "")
     vendedor = func.regexp_replace(marca, r"^[^|]*\|[^|]*\|[^|]*\|", "")
     clave = _dimension(dimension, reglas, F, vendedor).label("clave")
     marcas = [func.max(case((linea == nombre, 1), else_=0)).label(f"l{i}") for i, nombre in enumerate(reglas.lineas)]
