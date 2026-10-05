@@ -1,17 +1,19 @@
 /**
  * `SucursalesTab` table and single-record form. The table shows the business
  * columns Nombre, Bodega principal, Departamento, Ciudad, Fecha apertura and
- * Estado. "SIC", "Días seguridad", "Días empaque" and "Días tránsito" are
+ * Estado, plus the "Tienda principal" relation. "SIC", "Días seguridad", "Días empaque" and "Días tránsito" are
  * hidden from the table (business decision) but stay as form fields.
  */
 import React from 'react';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 
 const mockListMaestros = jest.fn();
+const mockCreateMaestro = jest.fn();
+const mockUpdateMaestro = jest.fn();
 jest.mock('../lib/motored/api', () => ({
   listMaestros: (...args) => mockListMaestros(...args),
-  createMaestro: jest.fn(),
-  updateMaestro: jest.fn(),
+  createMaestro: (...args) => mockCreateMaestro(...args),
+  updateMaestro: (...args) => mockUpdateMaestro(...args),
   deactivateMaestro: jest.fn(),
   reactivateMaestro: jest.fn(),
 }));
@@ -40,7 +42,7 @@ describe('SucursalesTab — table', () => {
     const table = await renderTab();
 
     expect(headerLabels(table)).toEqual([
-      'Nombre', 'Bodega principal', 'Departamento', 'Ciudad', 'Fecha apertura', 'Estado', '',
+      'Nombre', 'Tienda principal', 'Bodega principal', 'Departamento', 'Ciudad', 'Fecha apertura', 'Estado', '',
     ]);
   });
 
@@ -74,5 +76,95 @@ describe('SucursalesTab — form', () => {
 
     expect(screen.getByLabelText(/SIC/, { selector: 'input' })).toHaveValue('SIC-77');
     expect(screen.getByLabelText(/Días seguridad/, { selector: 'input' })).toHaveValue('3.5');
+  });
+});
+
+const base = { sic: 'S', dias_seguridad: '2.5', activa: true };
+const LA33 = { ...base, id: 'p1', nombre: 'LA 33', principal_id: null };
+const EXPO1 = { ...base, id: 'a1', nombre: 'EXPO 1', principal_id: 'p1' };
+const EXPO2 = { ...base, id: 'a2', nombre: 'EXPO 2', principal_id: 'p1', activa: false };
+const CERRADA = { ...base, id: 'p2', nombre: 'CERRADA', principal_id: null, activa: false };
+const GRUPO = [LA33, EXPO1, EXPO2, CERRADA];
+
+async function renderGrupo() {
+  mockListMaestros.mockResolvedValue(GRUPO);
+  render(<SucursalesTab />);
+  await waitFor(() => expect(screen.getByRole('table')).toBeInTheDocument());
+  return screen.getByRole('table');
+}
+
+const principalSelect = () => screen.getByLabelText(/Tienda principal/, { selector: 'select' });
+const optionTexts = () => within(principalSelect()).getAllByRole('option').map((o) => o.textContent);
+const rowOf = (table, nombre) => within(table).getByText(nombre).closest('tr');
+
+describe('SucursalesTab — associated stores', () => {
+  beforeEach(() => {
+    mockCreateMaestro.mockReset().mockResolvedValue({});
+    mockUpdateMaestro.mockReset().mockResolvedValue({});
+  });
+
+  it('offers only principals, inactive ones labelled, with an empty option', async () => {
+    await renderGrupo();
+
+    expect(optionTexts()).toEqual([
+      '— Ninguna (es tienda principal) —', 'LA 33', 'CERRADA (inactiva)',
+    ]);
+  });
+
+  it('gives every option an explicit color for the dark theme', async () => {
+    await renderGrupo();
+
+    within(principalSelect()).getAllByRole('option').forEach((o) => {
+      expect(o.style.color).not.toBe('');
+    });
+  });
+
+  it('never offers the store being edited as its own principal', async () => {
+    const table = await renderGrupo();
+    fireEvent.click(within(rowOf(table, 'CERRADA')).getByRole('button', { name: 'Editar' }));
+
+    expect(optionTexts()).toEqual(['— Ninguna (es tienda principal) —', 'LA 33']);
+  });
+
+  it('preselects the principal when editing an associated store', async () => {
+    const table = await renderGrupo();
+    fireEvent.click(within(rowOf(table, 'EXPO 2')).getByRole('button', { name: 'Editar' }));
+
+    expect(principalSelect()).toHaveValue('p1');
+  });
+
+  it('disables the select on a store that already has associated stores', async () => {
+    const table = await renderGrupo();
+    fireEvent.click(within(rowOf(table, 'LA 33')).getByRole('button', { name: 'Editar' }));
+
+    expect(principalSelect()).toBeDisabled();
+  });
+
+  it('sends principal_id on create and null for the empty option', async () => {
+    await renderGrupo();
+    fireEvent.change(screen.getByLabelText(/Nombre/, { selector: 'input' }), { target: { value: 'EXPO 3' } });
+    fireEvent.change(principalSelect(), { target: { value: 'p1' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Crear sucursal' }));
+
+    await waitFor(() => expect(mockCreateMaestro).toHaveBeenCalled());
+    expect(mockCreateMaestro.mock.calls[0][1].principal_id).toBe('p1');
+  });
+
+  it('sends null to dissociate when editing', async () => {
+    const table = await renderGrupo();
+    fireEvent.click(within(rowOf(table, 'EXPO 1')).getByRole('button', { name: 'Editar' }));
+    fireEvent.change(principalSelect(), { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+
+    await waitFor(() => expect(mockUpdateMaestro).toHaveBeenCalled());
+    expect(mockUpdateMaestro.mock.calls[0][2].principal_id).toBeNull();
+  });
+
+  it('shows the relation in the table', async () => {
+    const table = await renderGrupo();
+
+    expect(rowOf(table, 'EXPO 1')).toHaveTextContent('Asociada a: LA 33');
+    expect(rowOf(table, 'LA 33')).toHaveTextContent('Principal de 2 puntos');
+    expect(rowOf(table, 'CERRADA')).not.toHaveTextContent('Asociada a');
   });
 });

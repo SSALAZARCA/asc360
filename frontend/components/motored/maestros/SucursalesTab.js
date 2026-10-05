@@ -25,6 +25,7 @@ import {
 } from '../../../lib/motored/api';
 import BulkUploadModal from './BulkUploadModal';
 import FormField from './FormField';
+import InfoTooltip from '../InfoTooltip';
 
 const ENTIDAD_PLURAL = 'sucursales';
 const ENTIDAD_SINGULAR = 'sucursal';
@@ -32,8 +33,53 @@ const ENTIDAD_SINGULAR = 'sucursal';
 const emptyForm = {
   nombre: '', sic: '', dias_seguridad: '2.5',
   dias_empaque: '', dias_transito: '', bodega_principal: '',
-  departamento: '', ciudad: '', fecha_apertura: '',
+  departamento: '', ciudad: '', fecha_apertura: '', principal_id: '',
 };
+
+// Without an explicit color the option text is invisible in the dark theme.
+const optionStyle = { color: '#1a1a18' };
+
+const PRINCIPAL_TOOLTIP = 'Tienda bajo la que opera este punto. El punto conserva sus propios datos, pero su pedido, ventas, inventario, presupuestos e indicadores se suman a los de la tienda principal: solo la principal recibe pedido. Dejá "Ninguna" si este punto es una tienda principal.';
+
+const principalLabelStyle = {
+  display: 'flex', flexDirection: 'column', fontSize: '0.7rem',
+  color: 'var(--motored-text-muted, #5a5a5a)', minWidth: '180px',
+};
+
+// Stores that may be a principal: never the store itself, and never a store
+// that is already associated to another one (depth 1).
+function principalesPosibles(sucursales, editingId) {
+  return sucursales.filter((s) => s.id !== editingId && !s.principal_id);
+}
+
+function asociadasDe(sucursales, id) {
+  return sucursales.filter((s) => s.principal_id === id);
+}
+
+function PrincipalSelect({ form, setForm, sucursales, editingId }) {
+  const tieneAsociadas = editingId && asociadasDe(sucursales, editingId).length > 0;
+  return (
+    <label style={principalLabelStyle}>
+      <span>
+        Tienda principal
+        <InfoTooltip text={PRINCIPAL_TOOLTIP} />
+      </span>
+      <select
+        value={form.principal_id}
+        disabled={Boolean(tieneAsociadas)}
+        title={tieneAsociadas ? 'Esta tienda ya tiene puntos asociados: no puede asociarse a otra.' : undefined}
+        onChange={(e) => setForm({ ...form, principal_id: e.target.value })}
+      >
+        <option value="" style={optionStyle}>— Ninguna (es tienda principal) —</option>
+        {principalesPosibles(sucursales, editingId).map((s) => (
+          <option key={s.id} value={s.id} style={optionStyle}>
+            {s.nombre}{s.activa === false ? ' (inactiva)' : ''}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
 
 const FIELDS = [
   { key: 'nombre', label: 'Nombre', required: true },
@@ -47,7 +93,7 @@ const FIELDS = [
   { key: 'fecha_apertura', label: 'Fecha de apertura', tooltip: 'Fecha en que la sucursal abrió operaciones. Se usa más adelante para no contar meses en los que todavía no existía.', type: 'date' },
 ];
 
-function SucursalForm({ form, setForm, editingId, onSubmit, onCancel }) {
+function SucursalForm({ form, setForm, editingId, onSubmit, onCancel, sucursales }) {
   return (
     <form onSubmit={onSubmit} style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
       {FIELDS.map((f) => (
@@ -62,6 +108,7 @@ function SucursalForm({ form, setForm, editingId, onSubmit, onCancel }) {
           onChange={(e) => setForm({ ...form, [f.key]: e.target.value })}
         />
       ))}
+      <PrincipalSelect form={form} setForm={setForm} sucursales={sucursales} editingId={editingId} />
       <button type="submit" className="motored-btn motored-btn-primary">{editingId ? 'Guardar cambios' : 'Crear sucursal'}</button>
       {editingId && (
         <button type="button" className="motored-btn motored-btn-secondary" onClick={onCancel}>
@@ -74,8 +121,19 @@ function SucursalForm({ form, setForm, editingId, onSubmit, onCancel }) {
 
 // SIC and the three "Días" values are hidden from the table (business
 // decision) but stay as data and as form fields (FIELDS above).
+function RelacionPrincipal({ s, sucursales }) {
+  if (s.principal_id) {
+    const principal = sucursales.find((p) => p.id === s.principal_id);
+    return <span>Asociada a: {principal ? principal.nombre : '—'}</span>;
+  }
+  const total = asociadasDe(sucursales, s.id).length;
+  if (total === 0) return <em>—</em>;
+  return <span>Principal de {total} {total === 1 ? 'punto' : 'puntos'}</span>;
+}
+
 const TABLE_COLUMNS = [
   { label: 'Nombre', cell: (s) => s.nombre },
+  { label: 'Tienda principal', cell: (s, todas) => <RelacionPrincipal s={s} sucursales={todas} /> },
   { label: 'Bodega principal', cell: (s) => s.bodega_principal || <em>—</em> },
   { label: 'Departamento', cell: (s) => s.departamento || <em>—</em> },
   { label: 'Ciudad', cell: (s) => s.ciudad || <em>—</em> },
@@ -124,7 +182,7 @@ function SucursalesTable({ sucursales, onEdit, onDeactivate, onReactivate }) {
           {sucursales.map((s) => (
             <tr key={s.id} style={{ borderTop: '1px solid var(--motored-border, #e4e4e7)' }}>
               {TABLE_COLUMNS.map(({ label, cell }) => (
-                <td key={label} style={tdStyle}>{cell(s)}</td>
+                <td key={label} style={tdStyle}>{cell(s, sucursales)}</td>
               ))}
               <SucursalRowActions s={s} onEdit={onEdit} onDeactivate={onDeactivate} onReactivate={onReactivate} />
             </tr>
@@ -235,6 +293,7 @@ function useSucursalesEditor(save) {
       departamento: s.departamento || '',
       ciudad: s.ciudad || '',
       fecha_apertura: s.fecha_apertura || '',
+      principal_id: s.principal_id || '',
     });
   };
 
@@ -256,6 +315,7 @@ function useSucursalesEditor(save) {
         departamento: form.departamento || null,
         ciudad: form.ciudad || null,
         fecha_apertura: form.fecha_apertura || null,
+        principal_id: form.principal_id || null,
       },
       editingId
     );
@@ -282,6 +342,7 @@ export default function SucursalesTab() {
         editingId={editingId}
         onSubmit={handleSubmit}
         onCancel={cancelEdit}
+        sucursales={sucursales}
       />
 
       {loading ? (

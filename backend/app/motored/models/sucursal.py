@@ -15,11 +15,28 @@ resolución del fallback es del motor de cálculo, de una fase posterior.
 `fecha_apertura` se usa recién en §6.4.4 (excluir meses sin operación) pero
 el campo debe existir desde ya porque §7.12 lo lista como campo Fase-1 de la
 pestaña Sucursales.
+
+`principal_id` (associated stores): NULL means the store is its own
+principal; otherwise it rolls up into that principal at READ time (pedido,
+KPIs, presupuestos, vendedores) while keeping its own data. Depth 1 only:
+the CHECK forbids pointing at itself and `services/sucursal_grupo.py`
+enforces the rest. ON DELETE RESTRICT: stores are only soft-deleted, and a
+silent SET NULL would turn an associate into a principal with its own pedido.
 """
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, Column, Date, DateTime, ForeignKey, Integer, Numeric, String
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    Column,
+    Date,
+    DateTime,
+    ForeignKey,
+    Integer,
+    Numeric,
+    String,
+)
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.motored.database import MotoredBase
@@ -27,6 +44,11 @@ from app.motored.database import MotoredBase
 
 class Sucursal(MotoredBase):
     __tablename__ = "sucursal"
+    __table_args__ = (
+        CheckConstraint(
+            "principal_id <> id", name="ck_sucursal_principal_no_propia"
+        ),
+    )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     nombre = Column(String(255), unique=True, nullable=False)
@@ -39,6 +61,12 @@ class Sucursal(MotoredBase):
     ciudad = Column(String(120), nullable=True)
     fecha_apertura = Column(Date, nullable=True)
     activa = Column(Boolean, nullable=False, default=True)
+    principal_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("sucursal.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
 
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

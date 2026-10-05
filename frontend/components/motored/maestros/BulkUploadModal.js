@@ -100,6 +100,11 @@ const COLUMNAS_POR_ENTIDAD = {
       aliases: ['activa', 'activo', 'estado activa', 'activa (si/no)'],
       help: 'Escribí "Sí" si la sucursal opera o "No" si está cerrada. Vacío conserva el estado actual (una sucursal nueva queda activa). Cualquier otro texto es un error.',
     },
+    {
+      key: 'sucursal_principal', label: 'Sucursal principal', required: false,
+      aliases: ['sucursal_principal', 'sucursal principal', 'tienda principal', 'principal'],
+      help: 'Nombre de la tienda principal bajo la que opera este punto (puede venir en el mismo archivo). El punto conserva sus datos, pero su pedido y sus indicadores se suman a la principal: solo la principal recibe pedido. Vacío conserva lo actual; escribí "Ninguna" para que vuelva a ser tienda principal.',
+    },
   ],
   // Nota de alcance: la sucursal de cada bodega NO se asigna por CSV en
   // esta carga masiva (el back-end espera el `id` real de la sucursal, no

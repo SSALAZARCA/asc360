@@ -18,6 +18,8 @@ class SucursalCreate(BaseModel):
     fecha_apertura: Optional[date] = None
     # None = not provided: a new store is created active.
     activa: Optional[bool] = None
+    # Principal store this one rolls up into; None = its own principal.
+    principal_id: Optional[uuid.UUID] = None
 
 
 class SucursalUpdate(BaseModel):
@@ -31,6 +33,8 @@ class SucursalUpdate(BaseModel):
     ciudad: Optional[str] = None
     fecha_apertura: Optional[date] = None
     activa: Optional[bool] = None
+    # Explicit null dissociates; omitted keeps the stored value.
+    principal_id: Optional[uuid.UUID] = None
 
 
 class SucursalRead(BaseModel):
@@ -47,5 +51,6 @@ class SucursalRead(BaseModel):
     ciudad: Optional[str] = None
     fecha_apertura: Optional[date] = None
     activa: bool
+    principal_id: Optional[uuid.UUID] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None

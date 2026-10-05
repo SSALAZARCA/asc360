@@ -23,7 +23,7 @@ from app.motored.schemas.proveedor import ProveedorCreate, ProveedorUpdate
 from app.motored.schemas.referencia import ReferenciaCreate, ReferenciaUpdate
 from app.motored.schemas.sucursal import SucursalCreate, SucursalUpdate
 from app.motored.schemas.vendedor import VendedorCreate, VendedorUpdate
-from app.motored.services import auditoria
+from app.motored.services import auditoria, sucursal_grupo
 from app.motored.services.ingesta.ventas import normalizar_vendedor
 from app.motored.services.validators import coerce_unidad_empaque, normalize_sucursal_nombre
 
@@ -144,9 +144,13 @@ async def get_sucursal_by_nombre(db, nombre: str) -> Optional[Sucursal]:
 
 
 async def create_sucursal(db, data: SucursalCreate, usuario_id: Optional[uuid.UUID] = None) -> Sucursal:
+    nombre = normalize_sucursal_nombre(data.nombre)
+    await sucursal_grupo.validar_principal(
+        db, None, data.principal_id, nombre
+    )
     sucursal = Sucursal(
         id=uuid.uuid4(),
-        nombre=normalize_sucursal_nombre(data.nombre),
+        nombre=nombre,
         sic=data.sic,
         dias_seguridad=data.dias_seguridad,
         dias_empaque=data.dias_empaque,
@@ -156,6 +160,7 @@ async def create_sucursal(db, data: SucursalCreate, usuario_id: Optional[uuid.UU
         ciudad=data.ciudad,
         fecha_apertura=data.fecha_apertura,
         activa=data.activa is not False,
+        principal_id=data.principal_id,
         created_by=usuario_id,
     )
     db.add(sucursal)
@@ -181,12 +186,29 @@ def _set_activa_sucursal(
         auditoria.audit_deactivate(db, "sucursal", sucursal.id, usuario_id)
 
 
+async def _validar_cambio_principal(
+    db, sucursal: Sucursal, update_dict: Dict[str, Any]
+) -> None:
+    """Drops an unchanged `principal_id` and validates a changed one
+    (depth-1 rules, `sucursal_grupo`). The diff audit records it."""
+    if "principal_id" not in update_dict:
+        return
+    if update_dict["principal_id"] == sucursal.principal_id:
+        update_dict.pop("principal_id")
+        return
+    await sucursal_grupo.validar_principal(
+        db, sucursal, update_dict["principal_id"],
+        update_dict.get("nombre") or sucursal.nombre,
+    )
+
+
 async def update_sucursal(
     db, sucursal: Sucursal, data: SucursalUpdate, usuario_id: Optional[uuid.UUID] = None
 ) -> Sucursal:
     update_dict = data.model_dump(exclude_unset=True)
     if "nombre" in update_dict and update_dict["nombre"] is not None:
         update_dict["nombre"] = normalize_sucursal_nombre(update_dict["nombre"])
+    await _validar_cambio_principal(db, sucursal, update_dict)
     activa = update_dict.pop("activa", None)
     _set_activa_sucursal(db, sucursal, activa, usuario_id)
     before, after = _apply_and_diff(sucursal, update_dict)

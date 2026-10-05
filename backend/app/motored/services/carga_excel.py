@@ -122,6 +122,16 @@ ALIASES_POR_ENTIDAD: Dict[str, List[Dict[str, Any]]] = {
             "type": "string",
             "aliases": ["activa", "activo", "estado activa", "activa (si/no)"],
         },
+        # Not a schema field: `services/sucursal_grupo.py` resolves the
+        # name. Blank keeps the stored value; "Ninguna" dissociates.
+        {
+            "key": "sucursal_principal", "label": "Sucursal principal",
+            "required": False, "type": "string",
+            "aliases": [
+                "sucursal_principal", "sucursal principal",
+                "tienda principal", "principal",
+            ],
+        },
     ],
     # Nota de alcance (idéntica a la del frontend): la sucursal de cada
     # bodega NO se asigna por Excel en esta carga masiva.

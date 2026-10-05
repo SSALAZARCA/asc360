@@ -42,7 +42,7 @@ from app.motored.schemas.bodega import BodegaCreate, BodegaRead, BodegaUpdate
 from app.motored.schemas.proveedor import ProveedorCreate, ProveedorRead, ProveedorUpdate
 from app.motored.schemas.referencia import ReferenciaCreate, ReferenciaRead, ReferenciaUpdate
 from app.motored.schemas.sucursal import SucursalCreate, SucursalRead, SucursalUpdate
-from app.motored.services import auditoria, maestros
+from app.motored.services import auditoria, maestros, sucursal_grupo
 from app.motored.services.carga_excel import column_labels
 
 router = APIRouter(
@@ -261,6 +261,13 @@ def _detalle_duplicado(entidad: str, data: Any) -> str:
     return "Ya existe un registro con esos datos."
 
 
+# Service errors about the submitted data: shown as a 422 with the message.
+_ERRORES_DE_DATO = (
+    maestros.SustitutaInvalidaError,
+    sucursal_grupo.PrincipalInvalidaError,
+)
+
+
 @router.post("/{entidad}", status_code=status.HTTP_201_CREATED)
 async def create_maestro(
     entidad: str,
@@ -273,7 +280,7 @@ async def create_maestro(
 
     try:
         created = await config.create_fn(db, data, uuid.UUID(user.user_id))
-    except maestros.SustitutaInvalidaError as exc:
+    except _ERRORES_DE_DATO as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
     # `create_referencia` retorna `(referencia, advertencia_o_None)`; el
     # resto retorna el objeto solo -- única asimetría entre las 4 funciones
@@ -304,7 +311,7 @@ async def update_maestro(
 
     try:
         updated = await config.update_fn(db, obj, data, uuid.UUID(user.user_id))
-    except maestros.SustitutaInvalidaError as exc:
+    except _ERRORES_DE_DATO as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
     except maestros.CodigoProveedorBloqueadoError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))

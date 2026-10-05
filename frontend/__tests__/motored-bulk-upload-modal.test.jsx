@@ -49,3 +49,31 @@ describe('BulkUploadModal — sucursal "Activa" column', () => {
     ]);
   });
 });
+
+describe('BulkUploadModal — sucursal "Sucursal principal" column', () => {
+  it('lists the column with its tooltip', () => {
+    render(<BulkUploadModal entidad="sucursal" onClose={jest.fn()} onSuccess={jest.fn()} />);
+
+    expect(screen.getByText('Sucursal principal')).toBeInTheDocument();
+  });
+
+  it('maps the "Tienda principal" header and sends the name untouched', async () => {
+    mockSubirCarga.mockResolvedValue({ ok: true, total_filas: 2, errores: [] });
+    const { container } = render(
+      <BulkUploadModal entidad="sucursal" onClose={jest.fn()} onSuccess={jest.fn()} />
+    );
+
+    const input = container.querySelector('input[type="file"]');
+    fireEvent.change(input, {
+      target: { files: [csvFile('Nombre,Tienda principal\nEXPO 2,Medellín la 33\nLA 33,\n')] },
+    });
+    await waitFor(() => expect(screen.getByText(/Vista previa/i)).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Cargar'));
+
+    await waitFor(() => expect(mockSubirCarga).toHaveBeenCalled());
+    expect(mockSubirCarga).toHaveBeenCalledWith('sucursal', [
+      { nombre: 'EXPO 2', sucursal_principal: 'Medellín la 33' },
+      { nombre: 'LA 33', sucursal_principal: '' },
+    ]);
+  });
+});

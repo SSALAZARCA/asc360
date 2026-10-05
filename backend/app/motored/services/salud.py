@@ -2,7 +2,10 @@
 Motored Pedidos — tablero de salud de maestros (sdd/motored-pedidos-
 cimientos, Fase 3, task 3.5, §7.12). Clasificación:
 
-- `sucursal` sin `sic` -> el ÚNICO hallazgo BLOQUEANTE.
+- `sucursal` sin `sic` -> el ÚNICO hallazgo BLOQUEANTE. Solo tiendas
+  principales: una tienda asociada nunca tiene pedido propio.
+- Tienda asociada con su principal inactiva, o tienda asociada activa (no
+  tendrá pedido propio) -> ADVERTENCIA.
 - Referencia activa sin `precio_normal`, `unidad_empaque` corregido (fila
   con `unidad_empaque_advertencia = true`), bodega sin `sucursal_id` ->
   siempre ADVERTENCIA, nunca bloqueante (spec "Masters health board").
@@ -14,7 +17,7 @@ referencia activa es, por definición en Fase 1, potencialmente ordenable, y
 es el proxy más cercano disponible sin la tabla de demanda real. Documentado
 como desviación en el apply-progress.
 """
-from typing import Callable, List
+from typing import Callable, List, Optional, Sequence
 
 from sqlalchemy import Select, select
 
@@ -38,17 +41,62 @@ async def _hallazgos_de(
     ]
 
 
+def _sucursales_sin_sic(sucursales: Sequence[Sucursal]) -> List[Hallazgo]:
+    """Active PRINCIPAL stores without SIC. An associated store never gets
+    its own pedido, so it does not need a SIC."""
+    return [
+        Hallazgo(
+            tipo="sucursal_sin_sic", entidad="sucursal", entidad_id=s.id,
+            mensaje=f"Sucursal '{s.nombre}' no tiene SIC asignado",
+            bloqueante=True,
+        )
+        for s in sucursales
+        if s.activa and s.sic is None and s.principal_id is None
+    ]
+
+
+def _aviso_de_asociada(
+    asociada: Sucursal, principal: Sucursal
+) -> Optional[Hallazgo]:
+    if not principal.activa:
+        return Hallazgo(
+            tipo="asociada_principal_inactiva", entidad="sucursal",
+            entidad_id=asociada.id, bloqueante=False,
+            mensaje=(
+                f"La sucursal '{asociada.nombre}' está asociada a "
+                f"'{principal.nombre}', que está inactiva: su pedido y sus "
+                "indicadores se suman a una tienda cerrada."
+            ),
+        )
+    if asociada.activa:
+        return Hallazgo(
+            tipo="asociada_activa", entidad="sucursal",
+            entidad_id=asociada.id, bloqueante=False,
+            mensaje=(
+                f"La sucursal '{asociada.nombre}' está activa pero asociada "
+                f"a '{principal.nombre}': no tiene pedido propio, se suma "
+                "al de su tienda principal."
+            ),
+        )
+    return None
+
+
+def _hallazgos_de_asociadas(sucursales: Sequence[Sucursal]) -> List[Hallazgo]:
+    """Associated stores whose principal is inactive, and active associated
+    stores (they never get their own pedido). Warnings, never blocking."""
+    por_id = {s.id: s for s in sucursales}
+    avisos = (
+        _aviso_de_asociada(s, por_id[s.principal_id])
+        for s in sucursales if s.principal_id in por_id
+    )
+    return [aviso for aviso in avisos if aviso is not None]
+
+
 async def evaluar_salud(db) -> SaludMaestros:
     hallazgos: List[Hallazgo] = []
 
-    hallazgos += await _hallazgos_de(
-        db,
-        select(Sucursal).where(Sucursal.activa == True, Sucursal.sic.is_(None)),  # noqa: E712
-        tipo="sucursal_sin_sic",
-        entidad="sucursal",
-        mensaje_fn=lambda s: f"Sucursal '{s.nombre}' no tiene SIC asignado",
-        bloqueante=True,
-    )
+    sucursales = (await db.execute(select(Sucursal))).scalars().all()
+    hallazgos += _sucursales_sin_sic(sucursales)
     hallazgos += await _hallazgos_de(
         db,
         select(Referencia).where(Referencia.activa == True, Referencia.precio_normal.is_(None)),  # noqa: E712
@@ -78,6 +126,8 @@ async def evaluar_salud(db) -> SaludMaestros:
         ),
         bloqueante=False,
     )
+
+    hallazgos += _hallazgos_de_asociadas(sucursales)
 
     if any(h.bloqueante for h in hallazgos):
         estado = "bloqueado"

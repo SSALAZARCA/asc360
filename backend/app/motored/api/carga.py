@@ -55,7 +55,11 @@ from app.motored.deps import MotoredUser, get_motored_db_or_503, require_motored
 from app.motored.models.proveedor import Proveedor
 from app.motored.models.referencia import Referencia
 from app.motored.schemas.carga import CargaRequest, CargaResultado
-from app.motored.services import bodegas_secundarias, reemplazo_referencias
+from app.motored.services import (
+    bodegas_secundarias,
+    reemplazo_referencias,
+    sucursal_grupo,
+)
 from app.motored.services.carga import procesar_carga
 from app.motored.services.carga_excel import CargaExcelError, LimiteFilasExcedidoError, parse_excel_rows
 from app.motored.services.ingesta.resolucion import normalizar_texto_sucursal
@@ -479,6 +483,19 @@ async def _resolver_y_procesar_carga(
     )
 
 
+async def _resolve_sucursal_relaciones(
+    db: AsyncSession, filas: List[Dict[str, Any]]
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """Sucursales: "Bodegas secundarias" and "Sucursal principal" columns,
+    with their errors merged in row order."""
+    filas, errores = await bodegas_secundarias.resolver_filas(db, filas)
+    filas, errores_principal = await sucursal_grupo.resolver_filas(
+        db, filas
+    )
+    errores = sorted(errores + errores_principal, key=lambda e: e["fila"])
+    return filas, errores
+
+
 async def _resolver_relaciones(
     db: AsyncSession, entidad: str, filas: List[Dict[str, Any]]
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
@@ -490,7 +507,7 @@ async def _resolver_relaciones(
     if entidad == "vendedor":
         return await _resolve_vendedor_relaciones(db, filas)
     if entidad == "sucursal":
-        return await bodegas_secundarias.resolver_filas(db, filas)
+        return await _resolve_sucursal_relaciones(db, filas)
     return await _resolve_referencia_relaciones(db, entidad, filas)
 
 

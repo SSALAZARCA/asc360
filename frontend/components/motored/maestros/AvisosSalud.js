@@ -11,6 +11,8 @@ const TITULOS = {
   unidad_empaque_corregida: 'Unidad de empaque corregida a 1',
   sucursal_sin_sic: 'Sin código SIC',
   bodega_sin_sucursal: 'Sin sucursal asociada',
+  asociada_principal_inactiva: 'Asociada a una tienda principal inactiva',
+  asociada_activa: 'Tienda asociada activa',
 };
 
 const AYUDAS = {
@@ -18,6 +20,8 @@ const AYUDAS = {
   unidad_empaque_corregida: 'Venían con empaque 0 o vacío. Revise el empaque real.',
   sucursal_sin_sic: 'Sin SIC no se puede identificar la tienda ante HMCL ni calcular su pedido.',
   bodega_sin_sucursal: "Su inventario no se asigna a ninguna tienda. Agréguela en 'Bodegas secundarias' de su sucursal con la carga masiva de Sucursales.",
+  asociada_principal_inactiva: 'Su pedido y sus indicadores se suman a una tienda cerrada. Elija otra tienda principal o reactive la principal.',
+  asociada_activa: 'No tendrá pedido propio: sus ventas e inventario se suman al pedido de su tienda principal. Si debe tener pedido propio, quítele la tienda principal.',
 };
 
 const CODIGO_ENTRE_COMILLAS = /'([^']+)'/;

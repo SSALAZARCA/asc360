@@ -27,7 +27,12 @@ from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError
 
 from app.motored.schemas.carga import CargaErrorRow, CargaResultado
-from app.motored.services import bodegas_secundarias, maestros, reemplazo_referencias
+from app.motored.services import (
+    bodegas_secundarias,
+    maestros,
+    reemplazo_referencias,
+    sucursal_grupo,
+)
 from app.motored.services.validators import _SCHEMA_BY_ENTIDAD, ENTIDADES_DE_REEMPLAZO, validate_rows
 
 _UPSERT_BY_ENTIDAD = {
@@ -171,6 +176,32 @@ async def _reemplazar_referencias(
     )
 
 
+async def _aplicar_columnas_de_sucursal(
+    db, subidas: List[tuple], usuario_id: Optional[uuid.UUID]
+):
+    """Sucursales columns that are not schema fields, applied after every
+    row was upserted: "Bodegas secundarias" and "Sucursal principal".
+    Returns the secondary-bodegas summary, or None without that column."""
+    secundarias = [
+        (obj, fila[bodegas_secundarias.FILA_CLAVE]) for obj, fila in subidas
+        if bodegas_secundarias.FILA_CLAVE in fila
+    ]
+    principales = [
+        (obj, fila[sucursal_grupo.FILA_CLAVE]) for obj, fila in subidas
+        if sucursal_grupo.FILA_CLAVE in fila
+    ]
+    resumen = None
+    if secundarias:
+        resumen = await bodegas_secundarias.aplicar(
+            db, secundarias, usuario_id
+        )
+    if principales:
+        await sucursal_grupo.aplicar(
+            db, principales, [obj for obj, _ in subidas], usuario_id
+        )
+    return resumen
+
+
 async def procesar_carga(
     db,
     entidad: str,
@@ -221,11 +252,10 @@ async def procesar_carga(
     resumen_bodegas = None
 
     try:
-        secundarias: List[tuple] = []  # (sucursal, códigos) de las filas con la columna
+        subidas: List[tuple] = []  # (obj, fila) in file order
         for index, row in enumerate(valid_rows, start=1):
             obj, created, row_warnings = await _upsert_row(db, entidad, row, usuario_id)
-            if entidad == "sucursal" and bodegas_secundarias.FILA_CLAVE in row:
-                secundarias.append((obj, row[bodegas_secundarias.FILA_CLAVE]))
+            subidas.append((obj, row))
             if created:
                 insertados += 1
             else:
@@ -233,8 +263,10 @@ async def procesar_carga(
             if row_warnings:
                 advertencias.append({"fila": index, "advertencias": row_warnings})
 
-        if secundarias:
-            resumen_bodegas = await bodegas_secundarias.aplicar(db, secundarias, usuario_id)
+        if entidad == "sucursal":
+            resumen_bodegas = await _aplicar_columnas_de_sucursal(
+                db, subidas, usuario_id
+            )
         await db.commit()
     except IntegrityError:
         # Otra carga creó la misma llave natural (p.ej. la misma bodega

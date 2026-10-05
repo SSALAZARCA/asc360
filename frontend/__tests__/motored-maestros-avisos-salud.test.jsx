@@ -11,6 +11,7 @@ jest.mock('../lib/motored/api', () => ({
 }));
 
 import MaestrosTabs from '../components/motored/maestros/MaestrosTabs';
+import AvisosSalud from '../components/motored/maestros/AvisosSalud';
 
 const TABS = [
   { id: 'ref', label: 'Referencias', entidadSalud: 'referencia', render: () => <p>contenido referencias</p> },
@@ -59,5 +60,20 @@ describe('MaestrosTabs health warnings', () => {
     render(<MaestrosTabs tabs={TABS} />);
     fireEvent.click(await screen.findByRole('button', { name: /1 advertencia/ }));
     expect(screen.getByText('Algo raro en X')).toBeInTheDocument();
+  });
+});
+
+describe('AvisosSalud — associated stores', () => {
+  it('groups the associated-store warnings with a title and the store name', () => {
+    render(<AvisosSalud hallazgos={[
+      { tipo: 'asociada_principal_inactiva', entidad: 'sucursal', mensaje: "La sucursal 'EXPO 2' está asociada a 'LA 33', que está inactiva", bloqueante: false },
+      { tipo: 'asociada_activa', entidad: 'sucursal', mensaje: "La sucursal 'EXPO 1' está activa pero asociada a 'LA 33'", bloqueante: false },
+    ]} />);
+    fireEvent.click(screen.getByRole('button', { name: /2 advertencias/ }));
+
+    expect(screen.getByText(/Asociada a una tienda principal inactiva \(1\)/)).toBeInTheDocument();
+    expect(screen.getByText('EXPO 2')).toBeInTheDocument();
+    expect(screen.getByText(/Tienda asociada activa \(1\)/)).toBeInTheDocument();
+    expect(screen.getByText('EXPO 1')).toBeInTheDocument();
   });
 });

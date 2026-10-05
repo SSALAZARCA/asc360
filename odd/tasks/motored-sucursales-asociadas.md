@@ -29,7 +29,7 @@ Let the owner load the corrected Sucursales file in one go, and model physical p
 | T3 | Corridas rollup: `cargador.cargar_entradas` queries the store group; associated stores never get their own pedido; the group is frozen on the corrida for reproduction. | delegated writer |
 
 - [x] T1
-- [ ] T2
+- [x] T2
 - [ ] T3
 
 ## Constraints
@@ -50,3 +50,10 @@ Let the owner load the corrected Sucursales file in one go, and model physical p
   - RED observed first.
   - Results: tests/motored 5376 passed; pg_real 509 passed, 2 skipped (throwaway PG 18); jest 1835 passed. The parent spot check passed 77.
 - 2026-10-04: the owner accepted the pedido rules ("se suma todo"). The 6 closed points will be associated by hand from the Sucursales screen, so no reprocess button is needed.
+- 2026-10-04: T2 done.
+  - Migration `a8c4e2f61d07`: `sucursal.principal_id` self-FK with ON DELETE RESTRICT, a CHECK that a store is not its own principal, and an index.
+  - Depth-1 rule in `motivo_asociacion`, plus the `sucursal_grupo` helpers (`principal_de`, `grupo_de`, `principal_efectivo_expr`).
+  - Upload column "Sucursal principal": blank keeps the value, "Ninguna"/"-" clears it.
+  - Form select and table column in Sucursales.
+  - Health checks: `asociada_principal_inactiva` and `asociada_activa` are warnings. `sucursal_sin_sic` now skips associated stores.
+  - Results: tests/motored 5432 passed (after updating the 2 head-pin tests); pg_real 547 passed, 2 skipped (run with `-m pg_real`); alembic downgrade -1 and upgrade head both OK; jest 1851 passed. The parent spot check passed 67.
