@@ -61,6 +61,11 @@ it('explains the Año + Mes columns and that the old format still works', () => 
   expect(ayuda).toHaveTextContent('El formato anterior también sigue funcionando');
 });
 
+it('says the Tienda column accepts a C.O. or a name', () => {
+  setup();
+  expect(screen.getByText(/Columnas: Año/)).toHaveTextContent('Tienda (C.O. o nombre)');
+});
+
 it('keeps Validar disabled until a file is chosen', () => {
   setup();
   expect(screen.getByRole('button', { name: 'Validar' })).toBeDisabled();

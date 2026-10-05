@@ -178,7 +178,7 @@ def test_un_archivo_de_vendedores_vacio_no_es_error():
 
 
 async def test_sucursal_conocida_se_resuelve_por_nombre_normalizado():
-    db = FakeAsyncSession(execute_queue=[[(SUC_ID, "CALI NORTE")], []])  # sucursales, alias
+    db = FakeAsyncSession(execute_queue=[[(SUC_ID, "CALI NORTE", None)], []])  # sucursales, alias
     filas = [{"nombre": "Ana", "cargo": "OTRO", "sucursal_nombre": "MR Cali  Norte"}]
 
     resueltas, errores = await _resolver_relaciones(db, "vendedor", filas)
@@ -187,8 +187,21 @@ async def test_sucursal_conocida_se_resuelve_por_nombre_normalizado():
     assert resueltas[0]["sucursal_id"] == SUC_ID
 
 
+async def test_sucursal_se_resuelve_por_codigo_co_sin_importar_mayusculas():
+    db = FakeAsyncSession(execute_queue=[[(SUC_ID, "CALI NORTE", "B08")], []])
+    filas = [
+        {"nombre": "Ana", "cargo": "OTRO", "sucursal_nombre": "B08"},
+        {"nombre": "Beto", "cargo": "OTRO", "sucursal_nombre": " b08 "},
+    ]
+
+    resueltas, errores = await _resolver_relaciones(db, "vendedor", filas)
+
+    assert errores == []
+    assert [f["sucursal_id"] for f in resueltas] == [SUC_ID, SUC_ID]
+
+
 async def test_sucursal_desconocida_es_error_de_fila():
-    db = FakeAsyncSession(execute_queue=[[(SUC_ID, "CALI NORTE")], []])
+    db = FakeAsyncSession(execute_queue=[[(SUC_ID, "CALI NORTE", None)], []])
     filas = [
         {"nombre": "Ana", "cargo": "OTRO", "sucursal_nombre": "CALI NORTE"},
         {"nombre": "Luis", "cargo": "OTRO", "sucursal_nombre": "NO EXISTE"},

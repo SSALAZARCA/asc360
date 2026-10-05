@@ -509,3 +509,28 @@ async def test_tiendas_lists_only_active_sucursales_ordered_by_name(esc):
     assert tiendas[str(esc.cali.id)] == esc.cali.nombre and tiendas[str(esc.bogota.id)] == esc.bogota.nombre
     assert str(esc.cerrada.id) not in tiendas
     assert list(tiendas.values()) == sorted(tiendas.values())
+
+
+async def test_the_tienda_column_accepts_the_codigo_co_and_the_summary_shows_the_name(esc):
+    co = "Y" + str(int(esc.sufijo, 16) % 100).zfill(2)
+    esc.cali.codigo_co = co
+    await esc.db.flush()
+
+    resumen = await presupuestos.validar_archivo(
+        esc.db, [esc.fila(0, tienda=co.lower()), esc.fila(1, tienda=f" {co} ")])
+
+    assert resumen["errores"] == []
+    [mes] = resumen["meses"]
+    assert [t["tienda"] for t in mes["por_tienda"]] == [esc.cali.nombre]
+
+    await _aplicar(esc, [esc.fila(0, tienda=co)])
+    assert await _lineas(esc.db, MARZO, 1) == {esc.cedulas[0]: 1_000_000}
+
+
+async def test_an_inactive_store_is_still_rejected_when_named_by_its_codigo_co(esc):
+    esc.cerrada.codigo_co = "Y" + str(int(esc.sufijo, 16) % 100).zfill(2)
+    await esc.db.flush()
+
+    resumen = await presupuestos.validar_archivo(esc.db, [esc.fila(0, tienda=esc.cerrada.codigo_co)])
+
+    assert any("inactiva" in e["mensaje"] for e in resumen["errores"])

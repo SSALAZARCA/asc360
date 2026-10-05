@@ -118,6 +118,24 @@ async def test_la_sucursal_se_resuelve_por_nombre_prefijo_mr_y_alias(sesion):
     assert [e["fila"] for e in errores] == [3]
 
 
+async def test_la_sucursal_se_resuelve_por_codigo_co_sin_importar_mayusculas(sesion):
+    sfx = _sufijo()
+    co = "Y" + str(int(sfx, 16) % 100).zfill(2)
+    suc = Sucursal(id=uuid.uuid4(), nombre=f"Cali Sur {sfx}", sic=f"S-{sfx}", codigo_co=co)
+    sesion.add(suc)
+    await sesion.flush()
+    filas = [
+        {"nombre": f"A {sfx}", "cargo": "OTRO", "cedula": "75", "sucursal_nombre": co},
+        {"nombre": f"B {sfx}", "cargo": "OTRO", "cedula": "76", "sucursal_nombre": f" {co.lower()} "},
+        {"nombre": f"C {sfx}", "cargo": "OTRO", "cedula": "77", "sucursal_nombre": "Z99"},
+    ]
+
+    resueltas, errores = await _resolver_relaciones(sesion, "vendedor", filas)
+
+    assert resueltas[0]["sucursal_id"] == suc.id and resueltas[1]["sucursal_id"] == suc.id
+    assert [e["fila"] for e in errores] == [3]
+
+
 async def _mundo_ventas(db, sfx):
     proveedor = Proveedor(
         id=uuid.uuid4(), codigo=f"P-{sfx}", nombre="P", es_principal=True,

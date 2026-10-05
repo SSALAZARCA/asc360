@@ -161,6 +161,7 @@ def test_template_has_anio_mes_headers_and_example_rows():
     assert filas[0] == ("Año", "Mes", "Cédula", "Tienda", "Presupuesto")
     assert len(filas) >= 2 and all(celda is not None for celda in filas[1])
     assert filas[1][:2] == (2026, 10)
+    assert "C.O." in filas[1][3]  # the example says a C.O. or a name is accepted
 
 
 def test_apply_passes_the_file_name_and_the_user_to_the_service(_servicio):

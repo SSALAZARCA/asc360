@@ -52,8 +52,8 @@ _XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 _MES_PATH = Path(pattern=r"^[1-9]\d{3}-(0[1-9]|1[0-2])$", description="Mes, formato AAAA-MM")
 _CEDULA_PATH = Path(max_length=30)
 _EJEMPLOS = [
-    (2026, 10, "1130123456", "Nombre de una tienda", 1500000),
-    (2026, 10, "1130654321", "Nombre de una tienda", 1200000),
+    (2026, 10, "1130123456", "C.O. o nombre de la tienda", 1500000),
+    (2026, 10, "1130654321", "C.O. o nombre de la tienda", 1200000),
 ]
 
 

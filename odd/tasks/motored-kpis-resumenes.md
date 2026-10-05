@@ -185,7 +185,7 @@ Each tab scans `venta_detalle` (~1M rows Jan–Sep) 6–8 times per request, wit
   - T5 is on main (941c988): `sucursal.codigo_co` with a unique deferrable constraint; the alembic head is `b5d9e3a7c418`.
   - -c4 is now on T5b (C.O. becomes the business key of sucursal). It touches `maestros.py`, `validators.py`, `carga_excel.py`, `carga.py`, `api/carga.py`, `api/maestros.py`, `sucursal_grupo.py`, `bodegas_secundarias.py` and the Sucursales frontend, so keep holding R7's maestros edits.
   - After R6 lands, ping -c4: their T6 (VENTAS resolved by C.O.) edits `ventas.py` `procesar_fila` and `resolucion.py`.
-- [ ] **T7 Store resolution by C.O. in presupuestos + vendedores.** Resolve by `codigo_co` first, then by name/alias, in `services/sucursal_texto.py`, the shared resolver used by the presupuestos upload/edit and the vendedores bulk upload via `api/carga.py`. Avoid editing `api/carga.py` while T5b is open. Update the presupuestos plantilla/help to mention that the C.O. is accepted. Tests.
+- [x] **T7 Store resolution by C.O. in presupuestos + vendedores.** Resolve by `codigo_co` first, then by name/alias, in `services/sucursal_texto.py`, the shared resolver used by the presupuestos upload/edit and the vendedores bulk upload via `api/carga.py`. Avoid editing `api/carga.py` while T5b is open. Update the presupuestos plantilla/help to mention that the C.O. is accepted. Tests.
 
 **Fix + R9 + R6, done.** Route: one delegated writer, three commits.
 - **Commit df6cab0, fix:** `_es_simple()` is null-safe (`IS NOT DISTINCT FROM`). A `|` inside a token's line/NIT is escaped as `\x1f`. The `firma` docstring in `models/kpi_resumen.py` still needs a manual update (it was outside the writer's surfaces).
@@ -205,5 +205,18 @@ Each tab scans `venta_detalle` (~1M rows Jan–Sep) 6–8 times per request, wit
   - pg_real: 584 passed / 2 skipped.
 - **Note:** the live `DIM_TOTAL` cube and ventana are invalid SQL and unused; the tests skip them.
 
+- **Delivery:** commits 44d9389, b7d9a0f and 3bfbc00, pushed to main. -c4 was pinged that T6 may start.
+- **Native review:** risk medium (838 lines). Consent granted; the R3 lens approved and the result was acknowledged.
+- **Advisories**
+  - R3-refresh-lock-serializes-apply-with-rebuild (WARNING, `kpi_resumen.py:350-357`): a full rebuild holding the advisory lock blocks VENTAS applies until it ends. R7 must keep full rebuilds short/off-hours, or rebuild into staging and swap.
+  - R3-principal-expr-implicit-join-dependency (suggestion, `tablero_asesores_consultas.py:139`).
+
+**T7, done.** Route: delegated writer, commit 4b65dd6.
+- `sucursal_texto.py` resolves C.O. first (format letter+2 digits, case-insensitive; a name that looks like another store's C.O. can't take it over), then name, then alias. The presupuestos upload/edit and the vendedores bulk upload gain it automatically.
+- The plantilla example and the modal help say "C.O. o nombre". The header stays "Tienda".
+- **TDD evidence:** RED: 4 unit, 1 jest and 4 pg_real failures.
+- **Checks:** unit suite 5509 passed; pg_real files 40 passed; jest presupuestos 32 passed.
+- **User support (2026-10-04):** the user's own `Presupuesto asesores 2026.xlsx` had 17 errors: 9 rows "SANTANDER DE QUILICHAO" (the app has "SANTANDER DE QUILICHAO DOS"), 5 rows "CALI CC UNICO" (app: "CC UNICO") and 3 rows with 0. A corrected copy, `Presupuesto asesores 2026_corregido.xlsx`, was delivered.
+
 ## Next step
-Native review + push of fix/R9/R6, then ping -c4 (T6 may start). Then T7. Then R7 after -c4's T5b.
+Native review + push of T7. Then R7 after -c4's T5b ping. Then R8 and the switch-on.
