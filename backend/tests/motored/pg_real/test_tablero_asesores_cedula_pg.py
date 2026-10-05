@@ -70,7 +70,7 @@ async def _mundo(db):
     refs = {
         k: Referencia(
             id=uuid.uuid4(), codigo=f"{k}-{sfx}", proveedor_id=prov.id, unidad_empaque=1,
-            precio_normal=D("1"), linea_comercial=v)
+            precio_normal=None, linea_comercial=v)
         for k, v in lineas.items()
     }
     carga = CargaArchivo(

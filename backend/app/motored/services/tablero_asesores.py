@@ -185,6 +185,7 @@ class FilaCubo(NamedTuple):
     cantidad: Decimal
     lineas: int
     costo: Decimal
+    costo_estimado: Decimal = Decimal(0)  # la parte de `costo` valorada con `precio_normal`
 
 
 class FilaFacturas(NamedTuple):
@@ -472,7 +473,7 @@ class _Acumulado:
         self.tecnired_por_linea: Dict[str, Decimal] = defaultdict(Decimal)
         self.descuento_por_mes: Dict[str, Decimal] = defaultdict(Decimal)
         self.hmcl = self.tecnired = self.mostrador = Decimal(0)
-        self.con_costo = self.costo = self.bruto = self.cantidad = Decimal(0)
+        self.con_costo = self.costo = self.costo_estimado = self.bruto = self.cantidad = Decimal(0)
         self.lineas = 0
 
     def sumar(self, f: FilaCubo) -> None:
@@ -491,6 +492,7 @@ class _Acumulado:
         if f.con_costo:
             self.con_costo += f.venta
             self.costo += f.costo
+            self.costo_estimado += f.costo_estimado
         self.bruto += f.bruto
         self.cantidad += f.cantidad
         self.lineas += f.lineas
@@ -524,6 +526,8 @@ def _bloque_venta(acum: _Acumulado, meses: List[str], lineas: Tuple[str, ...]) -
 def _bloque_costo(acum: _Acumulado) -> Dict[str, Any]:
     return {
         "costo_venta": _dinero(acum.costo),
+        "costo_estimado": _dinero(acum.costo_estimado),
+        "pct_costo_estimado": ratio(acum.costo_estimado, acum.costo) or 0.0,
         "venta_con_costo": _dinero(acum.con_costo),
         "utilidad_bruta": _dinero(acum.con_costo - acum.costo),
         "pct_margen": ratio(acum.con_costo - acum.costo, acum.con_costo),

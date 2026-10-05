@@ -26,6 +26,13 @@ const chipCrecimiento = (fraccion) => (fraccion === null ? {} : {
 
 export const hayPresupuesto = (data) => Boolean(data.cumplimiento?.red?.presupuesto);
 
+/** Tooltip sentence when part of the cost comes from `precio_normal` (the inventory had no cost); '' otherwise. */
+export function notaCostoEstimado(costo) {
+  return esNumero(costo?.pct_costo_estimado) && costo.pct_costo_estimado > 0
+    ? ` ${pct(costo.pct_costo_estimado)} del costo es estimado (Precio normal).`
+    : '';
+}
+
 /** The six figures next to the gauge. `tip` explains the non-obvious ones. */
 export function miniKpis(data) {
   const { venta, costo, facturas, clientes, descuentos } = data.total;
@@ -38,7 +45,7 @@ export function miniKpis(data) {
     },
     {
       label: 'Margen', value: conCosto ? pct(costo.pct_margen) : '—',
-      tip: conCosto ? 'Utilidad bruta sobre la venta que tiene costo en el inventario.' : 'Falta cargar el inventario con costo',
+      tip: conCosto ? `Utilidad bruta sobre la venta que tiene costo en el inventario.${notaCostoEstimado(costo)}` : 'Falta cargar el inventario con costo',
       ...(conCosto ? { chip: millones(costo.utilidad_bruta), chipVariant: 'flat' } : {}),
     },
     { label: 'Ticket', value: moneda(facturas.ticket_promedio), tip: 'Venta promedio por factura.', chip: `${decimales(facturas.items_por_factura, 2)} ítems`, chipVariant: 'flat' },

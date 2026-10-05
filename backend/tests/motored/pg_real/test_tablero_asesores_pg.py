@@ -80,7 +80,7 @@ async def _mundo(db):
     for clave, linea in lineas.items():
         refs[clave] = Referencia(
             id=uuid.uuid4(), codigo=f"{clave}-{sfx}", proveedor_id=prov.id, unidad_empaque=1,
-            precio_normal=D("1"), linea_comercial=linea)
+            precio_normal=None, linea_comercial=linea)
     db.add_all(refs.values())
     c_venta, c_anulada_v = _carga("VENTAS", "APLICADO"), _carga("VENTAS", "ANULADO")
     c_inv, c_anulada_i = _carga("INVENTARIO", "APLICADO"), _carga("INVENTARIO", "ANULADO")

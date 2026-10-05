@@ -48,7 +48,7 @@ async def _mundo(db, con_inventario=True):
     db.add_all([prov, *w.s])
     await db.flush()
     refs = {c: Referencia(id=uuid.uuid4(), codigo=f"{c}-{sfx}", proveedor_id=prov.id, unidad_empaque=1,
-                          precio_normal=D("1"), linea_comercial=lin)
+                          precio_normal=None, linea_comercial=lin)
             for c, lin in (("R1", "REPUESTOS"), ("R2", "ACCESORIOS"), ("R3", "NO APLICA"))}
     db.add_all(refs.values())
     c_venta, c_anulada = _carga("VENTAS", "APLICADO"), _carga("VENTAS", "ANULADO")

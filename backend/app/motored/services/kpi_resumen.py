@@ -67,7 +67,7 @@ from app.motored.services import tablero_asesores as t
 from app.motored.services import tablero_asesores_consultas as q
 
 LOCK_KEY = 7_203_581_101
-FUENTE_INVENTARIO, FUENTE_MAESTRO = "inventario", "maestro"
+FUENTE_MAESTRO = q.FUENTE_MAESTRO
 Clave = Tuple[Any, int, int]  # (sucursal_id, anio, mes)
 
 
@@ -259,34 +259,19 @@ async def _reconstruir_costos_e_inventario(db: AsyncSession) -> None:
     await db.execute(delete(KpiCostoReferencia))
     await db.execute(delete(KpiInventarioCorte))
     fecha = corte or datetime.date.today()
-    if corte is not None:
-        mediana = q._subconsulta_costos(corte)
-        await db.execute(insert(KpiCostoReferencia).from_select(
-            ["fecha_corte", "referencia_id", "costo_unitario", "fuente"],
-            select(literal(corte, Date), mediana.c.referencia_id, mediana.c.costo_unitario,
-                   literal(FUENTE_INVENTARIO))))
-    con_inventario = select(KpiCostoReferencia.referencia_id).where(KpiCostoReferencia.fecha_corte == fecha)
+    costos = q._subconsulta_costos(corte)  # the live rule itself: median, else precio_normal
     await db.execute(insert(KpiCostoReferencia).from_select(
         ["fecha_corte", "referencia_id", "costo_unitario", "fuente"],
-        select(literal(fecha, Date), Referencia.id, Referencia.precio_normal, literal(FUENTE_MAESTRO))
-        .where(Referencia.precio_normal > 0, Referencia.id.not_in(con_inventario))))
+        select(literal(fecha, Date), costos.c.referencia_id, costos.c.costo_unitario, costos.c.fuente)))
     if corte is not None:
         await _insertar_inventario(db, corte)
 
 
 async def _insertar_inventario(db: AsyncSession, corte: datetime.date) -> None:
-    """Inventory at cost per store: a line is valued at its own positive cost, else at
-    `precio_normal` (> 0), else it is uncosted."""
-    con_costo = func.coalesce(InventarioDetalle.costo_unitario > 0, False)
-    con_maestro = and_(~con_costo, func.coalesce(Referencia.precio_normal > 0, False))
-    valor = case((con_costo, InventarioDetalle.existencia * InventarioDetalle.costo_unitario),
-                 (con_maestro, InventarioDetalle.existencia * Referencia.precio_normal), else_=0)
+    """Inventory at cost per store, valued by the live rule (`q._valoracion_inventario`)."""
+    valor, sin_costo, costo_maestro = q._valoracion_inventario()
     consulta = (
-        select(
-            literal(corte, Date), InventarioDetalle.sucursal_id, func.sum(valor),
-            func.sum(case((or_(con_costo, con_maestro), 0), else_=1)),
-            func.sum(case((con_maestro, 1), else_=0)),
-        )
+        select(literal(corte, Date), InventarioDetalle.sucursal_id, valor, sin_costo, costo_maestro)
         .join(CargaArchivo, CargaArchivo.id == InventarioDetalle.carga_id)
         .join(Referencia, Referencia.id == InventarioDetalle.referencia_id)
         .where(InventarioDetalle.fecha_corte == corte, CargaArchivo.estado != "ANULADO")

@@ -316,12 +316,14 @@ def dias_de_inventario(valor: Decimal, costo_venta: Optional[Decimal], dias_vent
 
 def _inventario_de(
     valor: Decimal, costo_venta: Decimal, dias_ventana: int, sin_costo: int, corte: Optional[str],
+    costo_maestro: int = 0,
 ) -> Dict[str, Any]:
     return {
         "valor_inventario": float(round(valor, 2)),
         "costo_venta_diario": float(costo_venta / dias_ventana),
         "dias": dias_de_inventario(valor, costo_venta, dias_ventana),
         "lineas_sin_costo": sin_costo,
+        "lineas_costo_maestro": costo_maestro,
         "fecha_corte": corte,
     }
 
@@ -337,13 +339,13 @@ def construir_inventario(
     filas = list(filas)
     tiendas = {
         f.sucursal_id: _inventario_de(f.valor, costo_venta.get(f.sucursal_id, Decimal(0)), dias_ventana,
-                                      f.sin_costo, corte)
+                                      f.sin_costo, corte, f.costo_maestro)
         for f in filas
     }
     red = _inventario_de(
         sum((f.valor for f in filas), Decimal(0)),
         sum((costo_venta.get(f.sucursal_id, Decimal(0)) for f in filas), Decimal(0)),
-        dias_ventana, sum(f.sin_costo for f in filas), corte)
+        dias_ventana, sum(f.sin_costo for f in filas), corte, sum(f.costo_maestro for f in filas))
     return {"fecha_corte": corte, "dias_ventana": dias_ventana, "tiendas": tiendas, "red": red}
 
 

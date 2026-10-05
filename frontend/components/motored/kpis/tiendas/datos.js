@@ -2,7 +2,7 @@
 import { fechaCorta, miles, millones, moneda, pct, pctSigned } from '../format';
 import { niceMax } from '../charts/geometry';
 import { CATEGORIA, COLOR } from '../tokens';
-import { mesCorto, nombreLinea } from '../ventas/datos';
+import { mesCorto, nombreLinea, notaCostoEstimado } from '../ventas/datos';
 
 const esNumero = (v) => typeof v === 'number' && Number.isFinite(v);
 const suma = (valores) => valores.reduce((t, v) => t + v, 0);
@@ -18,6 +18,13 @@ export const tiendasConVenta = (data) => data.tiendas.filter((t) => t.venta.tota
 export function margenRed(tiendas) {
   const base = suma(tiendas.filter((t) => margenDe(t) !== null).map((t) => t.costo.venta_con_costo));
   return base > 0 ? suma(tiendas.filter((t) => margenDe(t) !== null).map((t) => t.costo.utilidad_bruta)) / base : null;
+}
+
+/** Estimated share of the cost over the stores with a margin (same base as `margenRed`). */
+function costoEstimadoRed(tiendas) {
+  const con = tiendas.filter((t) => margenDe(t) !== null);
+  const costo = suma(con.map((t) => t.costo.costo_venta ?? 0));
+  return { pct_costo_estimado: costo > 0 ? suma(con.map((t) => t.costo.costo_estimado ?? 0)) / costo : 0 };
 }
 
 /** Donut segments: stores that grow, fall or are new, from the endpoint's own classification. */
@@ -57,7 +64,7 @@ export function miniKpisTiendas(data) {
       label: 'Venta promedio por tienda', value: promedio === null ? '—' : millones(promedio), chip: `${n} ${n === 1 ? 'mes' : 'meses'}`, chipVariant: 'flat',
       tip: 'Venta de la red en los meses elegidos dividida por las tiendas que vendieron.',
     },
-    ficha('Mejor margen', 'Utilidad bruta sobre la venta con costo. Solo tiendas que no son nuevas y venden al menos el 10% de una tienda promedio.', extremo(candidatas, margenDe, true), (t) => pct(margenDe(t)), 'up'),
+    ficha('Mejor margen', `Utilidad bruta sobre la venta con costo. Solo tiendas que no son nuevas y venden al menos el 10% de una tienda promedio.${notaCostoEstimado(costoEstimadoRed(todas))}`, extremo(candidatas, margenDe, true), (t) => pct(margenDe(t)), 'up'),
     ficha('Mayor crecimiento', 'Últimos 3 meses contra los 3 anteriores. Las tiendas nuevas no cuentan.', extremo(candidatas, crecimiento, true), (t) => pctSigned(crecimiento(t)), 'up'),
     caida && crecimiento(caida) < 0
       ? ficha('Mayor caída', 'Últimos 3 meses contra los 3 anteriores. Las tiendas nuevas no cuentan.', caida, (t) => pctSigned(crecimiento(t)), 'down')

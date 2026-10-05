@@ -15,12 +15,13 @@ import datetime
 from decimal import Decimal
 from typing import Dict, List, NamedTuple, Optional, Tuple
 
-from sqlalchemy import String, case, cast, func, select
+from sqlalchemy import String, cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.motored.models.carga_archivo import CargaArchivo
 from app.motored.models.cliente_tecnired import ClienteTecnired
 from app.motored.models.inventario_detalle import InventarioDetalle
+from app.motored.models.referencia import Referencia
 from app.motored.models.sucursal import Sucursal
 from app.motored.models.venta_detalle import VentaDetalle
 from app.motored.services import tablero_asesores as t
@@ -39,10 +40,12 @@ class FilaTopTecnired(NamedTuple):
 
 class FilaInventario(NamedTuple):
     """Inventario a costo de una tienda: `sin_costo` cuenta las lineas con costo
-    nulo o no positivo, que no entran en `valor`."""
+    nulo o no positivo que tampoco tienen `precio_normal` (valen 0); `costo_maestro`
+    las que se valoraron con `precio_normal`."""
     sucursal_id: str
     valor: Decimal
     sin_costo: int
+    costo_maestro: int = 0
 
 
 def _ventas_tecnired(consulta, filtro: Filtro):
@@ -85,7 +88,7 @@ async def consultar_inventario(
     db: AsyncSession, filtro: Filtro, fecha_corte: Optional[datetime.date],
 ) -> List[FilaInventario]:
     """Inventario a costo por tienda en `fecha_corte` (existencia x costo unitario
-    de cada linea con costo positivo), de las cargas no ANULADAS y de las tiendas
+    de cada linea; sin costo propio, a `precio_normal`), de las cargas no ANULADAS y de las tiendas
     del filtro. Sin corte no hay inventario.
 
     Por diseno usa el ULTIMO corte GLOBAL: la carga de inventario trae todas las
@@ -93,21 +96,17 @@ async def consultar_inventario(
     no aparece."""
     if fecha_corte is None:
         return []
-    con_costo = InventarioDetalle.costo_unitario > 0
+    valor, sin_costo, costo_maestro = q._valoracion_inventario()
     consulta = (
-        select(
-            cast(InventarioDetalle.sucursal_id, String),
-            func.coalesce(func.sum(case((con_costo, InventarioDetalle.existencia * InventarioDetalle.costo_unitario),
-                                        else_=0)), 0),
-            func.coalesce(func.sum(case((con_costo, 0), else_=1)), 0),
-        )
+        select(cast(InventarioDetalle.sucursal_id, String), valor, sin_costo, costo_maestro)
         .join(CargaArchivo, CargaArchivo.id == InventarioDetalle.carga_id)
+        .join(Referencia, Referencia.id == InventarioDetalle.referencia_id)
         .where(InventarioDetalle.fecha_corte == fecha_corte, CargaArchivo.estado != "ANULADO")
         .group_by(InventarioDetalle.sucursal_id)
     )
     if filtro.sucursal_ids:
         consulta = consulta.where(InventarioDetalle.sucursal_id.in_(sorted(filtro.sucursal_ids, key=str)))
-    return [FilaInventario(s, Decimal(v), int(n)) for s, v, n in (await db.execute(consulta)).all()]
+    return [FilaInventario(s, Decimal(v), int(n), int(m)) for s, v, n, m in (await db.execute(consulta)).all()]
 
 
 def filtro_costo_venta(filtro: Filtro) -> Tuple[Filtro, int]:

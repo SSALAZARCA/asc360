@@ -1,6 +1,7 @@
 /** View-models of the Asesores tab, derived from `GET /kpis/asesores` (pure, no React). */
 import { decimales, miles, millones, moneda, pct } from '../format';
 import { CATEGORIA, COLOR, TONO } from '../tokens';
+import { notaCostoEstimado } from '../ventas/datos';
 
 const esNumero = (v) => typeof v === 'number' && Number.isFinite(v);
 const suma = (valores) => valores.reduce((t, v) => t + v, 0);
@@ -48,7 +49,7 @@ export function miniKpisAsesores(data) {
       (f) => (red === null ? f.nombre : `${margenDe(f) >= red ? '▲' : '▼'} vs ${pct(red)} red`), 'up'),
     ficha('Mayor ticket', 'Venta promedio por factura.', extremo(candidatas, ticketDe), (f) => moneda(ticketDe(f)),
       (f) => (esNumero(ticketRed) && ticketRed > 0 ? `▲ ${decimales(ticketDe(f) / ticketRed, 1)}× la red` : f.nombre), 'up'),
-    { label: 'Margen red', value: red === null ? '—' : pct(red), chip: `${periodo} ${periodo === 1 ? 'mes' : 'meses'}`, chipVariant: 'flat', tip: 'Margen de toda la red en los meses elegidos.' },
+    { label: 'Margen red', value: red === null ? '—' : pct(red), chip: `${periodo} ${periodo === 1 ? 'mes' : 'meses'}`, chipVariant: 'flat', tip: `Margen de toda la red en los meses elegidos.${notaCostoEstimado(data.total.costo)}` },
     { label: 'Ticket red', value: moneda(ticketRed), chip: `${decimales(data.total.facturas.items_por_factura, 2)} ítems`, chipVariant: 'flat', tip: 'Venta promedio por factura de toda la red.' },
   ];
 }

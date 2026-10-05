@@ -25,7 +25,7 @@ Reglas que comparten TODAS las consultas (`_desde_ventas`):
 Costo unitario por referencia: MEDIANA de los costos > 0 de las lineas de
 `inventario_detalle` del ultimo `fecha_corte` con carga no ANULADA
 (`percentile_cont(0.5)`, la misma mediana de la hoja COSTO REFERENCIA del
-Excel). Es especifico de PostgreSQL: la suite prueba estas consultas solo con
+Excel); si la referencia no tiene costo en ese corte, su `precio_normal` (> 0). Es especifico de PostgreSQL: la suite prueba estas consultas solo con
 `pg_real` (los dobles de sesion no ejecutan SQL), asi que no hay respaldo
 portable.
 """
@@ -151,8 +151,11 @@ def _expr_es_mostrador():
     return func.upper(func.trim(VentaDetalle.origen)) == "MOSTRADOR"
 
 
-def _subconsulta_costos(fecha_corte: Optional[datetime.date]):
-    """Costo unitario por referencia: mediana de los costos positivos."""
+FUENTE_INVENTARIO, FUENTE_MAESTRO = "inventario", "maestro"
+
+
+def _mediana_de_inventario(fecha_corte: Optional[datetime.date]):
+    """Mediana de los costos positivos de cada referencia en el corte dado."""
     mediana = func.percentile_cont(0.5).within_group(InventarioDetalle.costo_unitario)
     return (
         select(
@@ -166,7 +169,50 @@ def _subconsulta_costos(fecha_corte: Optional[datetime.date]):
             CargaArchivo.estado != "ANULADO",
         )
         .group_by(InventarioDetalle.referencia_id)
+        .subquery("costos_inventario")
+    )
+
+
+def _subconsulta_costos(fecha_corte: Optional[datetime.date]):
+    """Costo unitario por referencia, `(referencia_id, costo_unitario, fuente)`:
+    la mediana de los costos positivos del corte (`fuente = 'inventario'`) y, si la
+    referencia no esta en ese corte o su costo es nulo o no positivo, su
+    `precio_normal` cuando es > 0 (`fuente = 'maestro'`); sin ninguno, no hay fila.
+    Es LA regla de costo: el resumen `kpi_resumen` la reutiliza tal cual."""
+    inventario = _mediana_de_inventario(fecha_corte)
+    maestro = cast(Referencia.precio_normal, Numeric(18, 4))
+    con_inventario = inventario.c.costo_unitario.is_not(None)
+    return (
+        select(
+            Referencia.id.label("referencia_id"),
+            case((con_inventario, inventario.c.costo_unitario), else_=maestro).label("costo_unitario"),
+            case((con_inventario, _constante(FUENTE_INVENTARIO)), else_=_constante(FUENTE_MAESTRO)).label("fuente"),
+        )
+        .select_from(Referencia)
+        .outerjoin(inventario, inventario.c.referencia_id == Referencia.id)
+        .where(or_(con_inventario, Referencia.precio_normal > 0))
         .subquery("costos")
+    )
+
+
+def _expr_costo_estimado(costos):
+    """Parte del costo de una linea de venta tomada del maestro (`precio_normal`)."""
+    return func.coalesce(func.sum(case(
+        (costos.c.fuente == FUENTE_MAESTRO, VentaDetalle.cantidad * costos.c.costo_unitario), else_=0)), 0)
+
+
+def _valoracion_inventario():
+    """`(valor, sin_costo, costo_maestro)` por linea de `inventario_detalle` (hay que
+    cruzar con `Referencia`): una linea vale `existencia x costo` si su costo es > 0,
+    si no `existencia x precio_normal` (> 0), si no queda sin costo (vale 0)."""
+    con_costo = func.coalesce(InventarioDetalle.costo_unitario > 0, False)
+    con_maestro = and_(~con_costo, func.coalesce(Referencia.precio_normal > 0, False))
+    valor = case((con_costo, InventarioDetalle.existencia * InventarioDetalle.costo_unitario),
+                 (con_maestro, InventarioDetalle.existencia * Referencia.precio_normal), else_=0)
+    return (
+        func.coalesce(func.sum(valor), 0),
+        func.coalesce(func.sum(case((or_(con_costo, con_maestro), 0), else_=1)), 0),
+        func.coalesce(func.sum(case((con_maestro, 1), else_=0)), 0),
     )
 
 
@@ -257,6 +303,7 @@ async def consultar_cubo(db, filtro: Filtro, fecha_corte, dimension: str = DIM_A
         func.sum(VentaDetalle.cantidad),
         func.count(),
         func.coalesce(func.sum(VentaDetalle.cantidad * costos.c.costo_unitario), 0),
+        _expr_costo_estimado(costos),
     ).group_by(*columnas)
     consulta = _desde_ventas(
         consulta, filtro, lineas, solo_lineas_reconocidas=False, costos=costos, aplicar_hmcl=False,
@@ -264,8 +311,9 @@ async def consultar_cubo(db, filtro: Filtro, fecha_corte, dimension: str = DIM_A
     )
     return [
         FilaCubo(clave, mes, linea, hmcl, tec, mostr, costo_ok,
-                 Decimal(venta), Decimal(bruto), Decimal(desc), Decimal(cant), int(n), Decimal(costo))
-        for clave, mes, linea, hmcl, tec, mostr, costo_ok, venta, bruto, desc, cant, n, costo
+                 Decimal(venta), Decimal(bruto), Decimal(desc), Decimal(cant), int(n), Decimal(costo),
+                 Decimal(estimado))
+        for clave, mes, linea, hmcl, tec, mostr, costo_ok, venta, bruto, desc, cant, n, costo, estimado
         in (await db.execute(consulta)).all()
     ]
 

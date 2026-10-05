@@ -391,11 +391,11 @@ async def test_the_unit_cost_equals_the_live_cost_even_with_a_fractional_median(
     await k.reconstruir_todo(sesion)
 
     vivo = q._subconsulta_costos(CORTE)
-    en_vivo = {r.referencia_id: r.costo_unitario for r in (await sesion.execute(select(vivo))).all()}
+    en_vivo = {r.referencia_id: (r.costo_unitario, r.fuente) for r in (await sesion.execute(select(vivo))).all()}
     resumen = {
-        r.referencia_id: r.costo_unitario for r in (await sesion.execute(
-            select(KpiCostoReferencia).where(KpiCostoReferencia.fuente == "inventario"))).scalars()}
-    assert resumen == en_vivo and resumen[mundo.refs["R4"].id] == D("100.0150")
+        r.referencia_id: (r.costo_unitario, r.fuente)
+        for r in (await sesion.execute(select(KpiCostoReferencia))).scalars()}
+    assert resumen == en_vivo and resumen[mundo.refs["R4"].id] == (D("100.0150"), "inventario")
     costo = (await sesion.execute(
         select(func.sum(KpiVentaMes.costo)).where(
             KpiVentaMes.sucursal_id == mundo.s2.id, KpiVentaMes.anio_mes == datetime.date(2097, 1, 1),
