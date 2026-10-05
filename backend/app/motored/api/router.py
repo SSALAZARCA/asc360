@@ -15,8 +15,9 @@ desconocido") en vez de llegar al tablero de salud real. `carga` no tiene
 este problema (sus rutas tienen un segmento extra, `/maestros/{entidad}/
 carga[...]`), así que su posición relativa a `maestros` no importa.
 """
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, HTTPException, status
 
+from app.motored.services.kpi_resumen import ResumenOcupadoError
 from app.motored.api import (
     auth,
     avisos_antiguedad,
@@ -43,7 +44,22 @@ from app.motored.api import (
     vendedores,
 )
 
-router = APIRouter()
+MENSAJE_RESUMEN_OCUPADO = "Los indicadores se están recalculando; intente de nuevo en unos minutos."
+
+
+async def _traducir_resumen_ocupado():
+    """A write that needs the KPI summaries' advisory lock (carga apply/annul, Configuracion,
+    referencias, Tecnired, recalcular) gives up after `MOTORED_KPI_RESUMEN_LOCK_TIMEOUT_SEGUNDOS`
+    while a full rebuild runs. That is a retryable conflict, never a 500. FastAPI has no
+    per-router exception handlers, so this router-level dependency (it sees the endpoint's
+    exceptions) maps it to one 409 for EVERY Motored endpoint."""
+    try:
+        yield
+    except ResumenOcupadoError:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=MENSAJE_RESUMEN_OCUPADO)
+
+
+router = APIRouter(dependencies=[Depends(_traducir_resumen_ocupado)])
 
 router.include_router(auth.router)
 router.include_router(salud.router)  # antes de maestros -- ver nota arriba

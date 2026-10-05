@@ -205,10 +205,14 @@ _CLAVE_MARCA = "kpi_resumen_sucio_en"
 
 
 def _transaccion_actual(db: AsyncSession) -> Any:
-    """The session's current transaction object (None when it cannot be told). Compared by
-    identity, and kept referenced in `db.info`, so a recycled `id()` can never match."""
+    """The session's INNERMOST transaction object (a SAVEPOINT when one is open; None when it
+    cannot be told). A mark written inside a savepoint that is later rolled back must not hide
+    the next mark, so the cache is keyed on the savepoint, not on the outer transaction: it
+    can only skip a mark in the very same (sub)transaction that wrote it. Compared by identity,
+    and kept referenced in `db.info`, so a recycled `id()` can never match."""
     try:
-        return db.sync_session.get_transaction()
+        sesion = db.sync_session
+        return sesion.get_nested_transaction() or sesion.get_transaction()
     except AttributeError:
         return None
 

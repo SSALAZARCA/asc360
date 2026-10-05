@@ -64,10 +64,15 @@ MOTIVO_NOCTURNA = "nocturna"
 HORAS_NOCTURNA = 20
 VENTANA_NOCTURNA = (datetime.time(1, 0), datetime.time(5, 0))  # hora de Bogota, [inicio, fin)
 ESPERA_TRAS_FALLO_SEGUNDOS = 600
+# Extra wait, on top of the rebuild timeout, before a `reconstruyendo` flag counts as stale.
+MARGEN_RECONSTRUCCION_SEGUNDOS = 300
 
 _task: Optional[asyncio.Task] = None
 # Hasta cuando no se reintenta tras un fallo (reloj monotonico del loop, en UTC).
 _no_reintentar_antes: Optional[DateTime] = None
+# Since when this process has seen `reconstruyendo=true` without a rebuild of its own running
+# (None while the flag is false). The state row has no "since" column, so the loop times it.
+_reconstruyendo_desde: Optional[DateTime] = None
 
 
 def ensure_started() -> None:
@@ -129,6 +134,25 @@ async def reconstruir(fabrica) -> None:
             logger.exception("no se pudo limpiar la bandera reconstruyendo")
 
 
+async def _vigilar_bandera(fabrica, estado: Optional[kpi_resumen.Estado], ahora: DateTime) -> None:
+    """Resets a `reconstruyendo` flag a dead process left behind. Ticks never overlap a rebuild
+    of this process, so a flag seen at tick time belongs to another replica or to a crash; once
+    it has been seen for longer than the rebuild timeout (+ margin), no live rebuild can own it
+    (the statement timeout would have cut it) and the UI must stop saying "recalculando"."""
+    global _reconstruyendo_desde
+    if estado is None or not estado.reconstruyendo:
+        _reconstruyendo_desde = None
+        return
+    if _reconstruyendo_desde is None:
+        _reconstruyendo_desde = ahora
+        return
+    tope = max(int(settings.MOTORED_KPI_RESUMEN_REBUILD_TIMEOUT_SEGUNDOS), 1) + MARGEN_RECONSTRUCCION_SEGUNDOS
+    if ahora - _reconstruyendo_desde > datetime.timedelta(seconds=tope):
+        logger.warning("resumenes de KPI: bandera reconstruyendo vencida, se limpia")
+        await _poner_reconstruyendo(fabrica, False)
+        _reconstruyendo_desde = None
+
+
 async def run_tick(*, session_factory=None, ahora: Optional[DateTime] = None) -> Optional[str]:
     """Un tick. Devuelve el motivo de la reconstruccion que hizo, o None si no tocaba (o si
     todavia esta en espera tras un fallo). Un fallo de la reconstruccion se propaga."""
@@ -139,6 +163,7 @@ async def run_tick(*, session_factory=None, ahora: Optional[DateTime] = None) ->
         return None
     async with fabrica() as db:
         estado = await kpi_resumen.estado(db)
+    await _vigilar_bandera(fabrica, estado, ahora)
     motivo = decidir(estado, ahora)
     if motivo is None:
         return None
@@ -172,9 +197,10 @@ async def _run_forever(dormir: Callable = asyncio.sleep) -> None:
 
 async def detener() -> None:
     """Cancela el task y limpia el estado (cierre limpio y tests)."""
-    global _task, _no_reintentar_antes
+    global _task, _no_reintentar_antes, _reconstruyendo_desde
     tarea, _task = _task, None
     _no_reintentar_antes = None
+    _reconstruyendo_desde = None
     if tarea is not None and not tarea.done():
         tarea.cancel()
         try:

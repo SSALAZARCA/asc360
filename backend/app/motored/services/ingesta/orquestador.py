@@ -55,7 +55,7 @@ from app.motored.models.factura_proveedor_linea import FacturaProveedorLinea
 from app.motored.models.ingreso_factura import IngresoFactura
 from app.motored.models.proveedor import Proveedor
 from app.motored.schemas.carga import CargaResultado
-from app.motored.services import parametros, parametros_claves
+from app.motored.services import kpi_resumen, parametros, parametros_claves
 from app.motored.services import storage
 from app.motored.services.carga_excel import CargaExcelError
 from app.motored.services.ingesta import backorder as backorder_mod
@@ -828,6 +828,17 @@ async def ejecutar_aplicar(session: AsyncSession, carga: CargaArchivo) -> None:
     simplemente quedan excluidas de la agregación, exactamente como cada
     `agregar_*`/`consolidar_*` ya hace por sí solo. Corregir esto requiere
     tocar el payload de 5 transforms, fuera del alcance de este batch."""
+    try:
+        await _aplicar_carga(session, carga)
+    except kpi_resumen.ResumenOcupadoError:
+        # A KPI rebuild holds the summaries' lock: nothing of this apply may survive (the
+        # summary refresh runs in the apply's own transaction). The carga stays VALIDADO, so
+        # the user can apply it again once the rebuild ends; the API answers 409.
+        await session.rollback()
+        raise
+
+
+async def _aplicar_carga(session: AsyncSession, carga: CargaArchivo) -> None:
     if carga.estado != "VALIDADO":
         raise EstadoInvalidoParaAplicarError(
             f"No se puede aplicar una carga en estado '{carga.estado}' (se esperaba VALIDADO)."

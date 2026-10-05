@@ -35,7 +35,7 @@ Respuestas (los importes son numeros, nunca texto; cada una repite `meses`,
 import uuid
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.motored.api.tablero_asesores import _error_422, _sucursales
@@ -112,10 +112,6 @@ async def kpis_estado(
 async def kpis_recalcular(
     user: MotoredUser = Depends(_require_admin), db: AsyncSession = Depends(get_motored_db_or_503),
 ) -> Dict[str, Any]:
-    try:
-        await kpi_resumen.solicitar_recalculo(db)
-    except kpi_resumen.ResumenOcupadoError as exc:
-        await db.rollback()
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+    await kpi_resumen.solicitar_recalculo(db)  # a busy lock is a 409 (router-level translation)
     await db.commit()
     return await kpis.calcular_estado(db)

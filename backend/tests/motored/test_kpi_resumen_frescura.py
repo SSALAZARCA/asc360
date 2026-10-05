@@ -141,7 +141,7 @@ def test_a_recalculation_that_cannot_get_the_lock_is_a_409_with_the_reason(_moto
 
     respuesta = _llamar("POST", "recalcular")
 
-    assert respuesta.status_code == 409 and "reconstruyendo" in respuesta.json()["detail"]
+    assert respuesta.status_code == 409 and "recalculando" in respuesta.json()["detail"]
 
 
 @pytest.mark.parametrize("rol", ["ADMIN", "COMPRAS", "GERENCIA"])

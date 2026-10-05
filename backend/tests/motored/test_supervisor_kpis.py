@@ -277,3 +277,79 @@ async def test_ensure_started_is_idempotent_and_detener_cancels(monkeypatch):
         await sup.detener()
 
     assert sup._task is None and primera.cancelled()
+
+
+# --- a `reconstruyendo` flag left behind by a dead process ---------------------------------------
+
+
+class _FabricaVacia:
+    def __call__(self):
+        return self
+
+    async def __aenter__(self):
+        return object()
+
+    async def __aexit__(self, *exc):
+        return False
+
+
+@pytest.fixture
+def pasos(monkeypatch):
+    registro = []
+    monkeypatch.setattr(settings, "MOTORED_KPI_RESUMEN_REBUILD_TIMEOUT_SEGUNDOS", 1800)
+    monkeypatch.setattr(sup, "_reconstruyendo_desde", None)
+
+    async def limpiar(fabrica, valor):
+        registro.append(("flag", valor))
+
+    monkeypatch.setattr(sup, "_poner_reconstruyendo", limpiar)
+    return registro
+
+
+def _con_estado(monkeypatch, estado):
+    async def leer(db):
+        return estado
+
+    monkeypatch.setattr(k, "estado", leer)
+
+
+async def test_a_reconstruyendo_flag_that_outlives_the_rebuild_timeout_is_reset(monkeypatch, pasos):
+    _con_estado(monkeypatch, _estado(reconstruyendo=True))
+    inicio = _en_bogota(14)
+    limite = datetime.timedelta(seconds=1800 + sup.MARGEN_RECONSTRUCCION_SEGUNDOS)
+
+    await sup.run_tick(session_factory=_FabricaVacia(), ahora=inicio)
+    await sup.run_tick(session_factory=_FabricaVacia(), ahora=inicio + limite)
+    assert pasos == []  # still within timeout + margin: a live rebuild may own the flag
+
+    await sup.run_tick(session_factory=_FabricaVacia(), ahora=inicio + limite + datetime.timedelta(seconds=1))
+    assert pasos == [("flag", False)]
+
+
+async def test_a_new_rebuild_is_allowed_once_a_stale_flag_is_reset(monkeypatch, pasos):
+    _con_estado(monkeypatch, _estado(reconstruyendo=True, sucio=True))
+    hechas = []
+
+    async def reconstruir(fabrica):
+        hechas.append("reconstruir")
+
+    monkeypatch.setattr(sup, "reconstruir", reconstruir)
+    inicio = _en_bogota(14)
+    await sup.run_tick(session_factory=_FabricaVacia(), ahora=inicio)
+
+    tarde = inicio + datetime.timedelta(hours=3)
+    assert await sup.run_tick(session_factory=_FabricaVacia(), ahora=tarde) == sup.MOTIVO_SUCIA
+    assert pasos == [("flag", False)] and hechas == ["reconstruir", "reconstruir"]
+
+
+async def test_the_staleness_clock_restarts_when_the_flag_clears(monkeypatch, pasos):
+    inicio = _en_bogota(14)
+    _con_estado(monkeypatch, _estado(reconstruyendo=True))
+    await sup.run_tick(session_factory=_FabricaVacia(), ahora=inicio)
+    _con_estado(monkeypatch, _estado(reconstruyendo=False))
+    await sup.run_tick(session_factory=_FabricaVacia(), ahora=inicio + datetime.timedelta(minutes=5))
+
+    _con_estado(monkeypatch, _estado(reconstruyendo=True))
+    await sup.run_tick(session_factory=_FabricaVacia(), ahora=inicio + datetime.timedelta(hours=3))
+
+    assert pasos == []  # a flag first seen just now is not stale
