@@ -278,8 +278,17 @@ Each tab scans `venta_detalle` (~1M rows Jan–Sep) 6–8 times per request, wit
   - Jest: 176 suites / 1881 tests.
   - Webpack compile: 200.
 
+- **Delivery:** commits c5bdceb and dd950ca, pushed to main after rebasing onto 93cfaef. Full unit suite 5632 green.
+- **Native review:** risk medium (837 lines). Consent granted; the R3 lens approved and the result was acknowledged.
+- **Follow-up advisories**
+  - The apply rollback on a busy error is proven only with fakes (WARNING, `orquestador.py:831-838`): add a pg_real test.
+  - The stale-flag test doesn't prove gating (WARNING, `test_supervisor_kpis.py:329-342`).
+  - Polling may start after unmount (`useRecalculo.js:39-49`).
+  - The savepoint cache is proven only with fakes.
+  - The stale flag assumes the total timeout.
+
 ## Next step
-Native review + push of R7 fixes + R8. Then verify the production summary state: the user, as ADMIN, opens KPI's and sees the note "Resumen precalculado: listo (actualizado …) · aún no activo". Then the user sets `MOTORED_KPI_RESUMEN_ENABLED=true` in Coolify and redeploys (a server setting). After that, check that the tabs show "Datos actualizados a las …" and load in about 1 s.
+Switch-on. Then verify the production summary state: the user, as ADMIN, opens KPI's and sees the note "Resumen precalculado: listo (actualizado …) · aún no activo". Then the user sets `MOTORED_KPI_RESUMEN_ENABLED=true` in Coolify and redeploys (a server setting). After that, check that the tabs show "Datos actualizados a las …" and load in about 1 s.
 
 Pending user data, still open:
 - -c4/1a's `Sucursales_carga_final_...`;
