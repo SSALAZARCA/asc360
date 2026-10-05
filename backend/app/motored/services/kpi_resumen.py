@@ -23,9 +23,14 @@ configuration needs:
 - `nit_especial` is the normalized client when it belongs to the union of ALL
   historical `hmcl_nits` values (plus the default) or to `cliente_tecnired`; else
   NULL. Plain clients are not stored in `kpi_venta_mes` / `kpi_factura_firma`.
-- An invoice is `(nro_documento, sucursal_id)` inside a month, vendedor and
-  special NIT: an invoice whose lines span several months, vendedores or special
-  NITs counts once in each (the live query counts it once per filter).
+- An invoice is `(nro_documento, sucursal_id)`. The live queries count it once per
+  group of the request (per asesor row, store or in total), however many months,
+  vendedores or special NITs its lines span, so `kpi_factura_firma` keeps it in one of
+  two shapes: a plain invoice (all its lines in ONE month, vendedor and special NIT) is a
+  row of that key whose `firma` is the sorted distinct lines; any other invoice is ONE
+  row of the sentinel NIT `NIT_FACTURA_IRREGULAR` (month = its first, vendedor ''),
+  whose `firma` holds one `YYYY-MM-DD|linea|nit|vendedor` token per combination, which
+  the read splits and filters like the live query does line by line.
 
 Costs: the unit cost of a referencia is the median of its positive costs in the
 latest non-annulled inventory cut (`fuente = 'inventario'`); a referencia with no
@@ -45,7 +50,7 @@ that commits while a rebuild runs is picked up by that carga's own refresh, whic
 waits for the lock and runs afterwards.
 """
 import datetime
-from typing import Any, Iterable, List, NamedTuple, Optional, Sequence, Set, Tuple
+from typing import Any, Iterable, NamedTuple, Optional, Sequence, Set, Tuple
 
 from sqlalchemy import (
     Date, Text, and_, case, cast, delete, func, insert, literal, null, or_, select, tuple_,
@@ -67,6 +72,7 @@ from app.motored.services import tablero_asesores as t
 from app.motored.services import tablero_asesores_consultas as q
 
 LOCK_KEY = 7_203_581_101
+NIT_FACTURA_IRREGULAR = "~"  # `kpi_factura_firma.nit_especial` of the invoices that span several combinations
 FUENTE_MAESTRO = q.FUENTE_MAESTRO
 Clave = Tuple[Any, int, int]  # (sucursal_id, anio, mes)
 
@@ -163,7 +169,7 @@ def _filtro_claves(claves: Sequence[Clave]):
         for s, a, m in claves])
 
 
-def _base(lineas: Tuple[str, ...], nits: Tuple[str, ...], claves: Optional[Sequence[Clave]]):
+def _base(lineas: Tuple[str, ...], nits: Tuple[str, ...], claves: Optional[Sequence[Clave]], sucursales=None):
     """One row per venta_detalle line with every derived column the three tables
     group by. The key filter uses plain date ranges (never `date_trunc` in WHERE)."""
     cte = q._lineas_por_referencia(t.Reglas(lineas=lineas))
@@ -200,6 +206,8 @@ def _base(lineas: Tuple[str, ...], nits: Tuple[str, ...], claves: Optional[Seque
     )
     if claves is not None:
         consulta = consulta.where(_filtro_claves(claves))
+    if sucursales is not None:
+        consulta = consulta.where(VentaDetalle.sucursal_id.in_(sorted(sucursales, key=str)))
     return consulta.subquery("base")
 
 
@@ -216,6 +224,9 @@ async def _insertar_venta_mes(db, base) -> None:
 
 
 async def _insertar_factura_firma(db, base) -> None:
+    """Plain invoices as `(mes, sucursal, vendedor, nit, firma)` rows; the ones that span
+    several months, vendedores or special NITs as one sentinel row of tokens (see the module
+    docstring). An invoice with no recognized line is a plain row with an empty `firma`."""
     por_linea = select(
         base.c.anio_mes, base.c.sucursal_id, base.c.vendedor_norm, base.c.nit_especial, base.c.nro_documento,
         base.c.linea,
@@ -223,18 +234,27 @@ async def _insertar_factura_firma(db, base) -> None:
         base.c.anio_mes, base.c.sucursal_id, base.c.vendedor_norm, base.c.nit_especial, base.c.nro_documento,
         base.c.linea,
     ).subquery("por_linea")
-    llave = [por_linea.c.anio_mes, por_linea.c.sucursal_id, por_linea.c.vendedor_norm, por_linea.c.nit_especial,
-             por_linea.c.nro_documento]
-    firma = func.array_remove(
-        func.array_agg(aggregate_order_by(por_linea.c.linea, por_linea.c.linea)), null(), type_=ARRAY(Text))
-    por_factura = select(*llave[:4], firma.label("firma")).group_by(*llave).subquery("por_factura")
-    final = select(
-        por_factura.c.anio_mes, por_factura.c.sucursal_id, por_factura.c.vendedor_norm,
-        por_factura.c.nit_especial, por_factura.c.firma, func.count(),
-    ).group_by(por_factura.c.anio_mes, por_factura.c.sucursal_id, por_factura.c.vendedor_norm,
-               por_factura.c.nit_especial, por_factura.c.firma)
-    await db.execute(insert(KpiFacturaFirma).from_select(
-        ["anio_mes", "sucursal_id", "vendedor_norm", "nit_especial", "firma", "n_facturas"], final))
+    c = por_linea.c
+    sin_nit = func.coalesce(c.nit_especial, "")
+    marca = (func.to_char(c.anio_mes, "YYYY-MM-DD") + "|" + c.linea + "|" + sin_nit + "|" + c.vendedor_norm)
+    por_factura = select(
+        c.sucursal_id, c.nro_documento,
+        func.min(c.anio_mes).label("anio_mes"), func.min(c.vendedor_norm).label("vendedor_norm"),
+        func.min(c.nit_especial).label("nit_especial"),
+        ((func.min(c.anio_mes) == func.max(c.anio_mes)) & (func.min(c.vendedor_norm) == func.max(c.vendedor_norm))
+         & (func.min(sin_nit) == func.max(sin_nit))).label("simple"),
+        func.array_remove(func.array_agg(aggregate_order_by(c.linea, c.linea)), null(), type_=ARRAY(Text)).label("firma"),
+        func.array_remove(func.array_agg(aggregate_order_by(marca, marca)), null(), type_=ARRAY(Text)).label("marcas"),
+    ).group_by(c.sucursal_id, c.nro_documento).subquery("por_factura")
+    f = por_factura.c
+    columnas = ["anio_mes", "sucursal_id", "vendedor_norm", "nit_especial", "firma", "n_facturas"]
+    simples = select(f.anio_mes, f.sucursal_id, f.vendedor_norm, f.nit_especial, f.firma, func.count()).where(
+        f.simple).group_by(f.anio_mes, f.sucursal_id, f.vendedor_norm, f.nit_especial, f.firma)
+    irregulares = select(
+        f.anio_mes, f.sucursal_id, literal(""), literal(NIT_FACTURA_IRREGULAR), f.marcas, func.count(),
+    ).where(~f.simple, func.cardinality(f.marcas) > 0).group_by(f.anio_mes, f.sucursal_id, f.marcas)
+    await db.execute(insert(KpiFacturaFirma).from_select(columnas, simples))
+    await db.execute(insert(KpiFacturaFirma).from_select(columnas, irregulares))
 
 
 async def _insertar_cliente_mes(db, base) -> None:
@@ -247,7 +267,9 @@ async def _insertar_cliente_mes(db, base) -> None:
 async def _insertar_ventas(db: AsyncSession, claves: Optional[Sequence[Clave]]) -> None:
     lineas, nits = await _uniones(db)
     await _insertar_venta_mes(db, _base(lineas, nits, claves))
-    await _insertar_factura_firma(db, _base(lineas, nits, claves))
+    # An invoice can span months: its rows are derived from ALL the months of its stores.
+    await _insertar_factura_firma(
+        db, _base(lineas, nits, None, None if claves is None else {c[0] for c in claves}))
     await _insertar_cliente_mes(db, _base(lineas, nits, claves))
 
 
@@ -293,8 +315,9 @@ async def refrescar_periodos(db: AsyncSession, claves: Set[Clave]) -> None:
     ordenadas = sorted(claves, key=lambda c: (str(c[0]), c[1], c[2]))
     await _bloquear(db)
     meses = [(s, datetime.date(a, m, 1)) for s, a, m in ordenadas]
-    for modelo in (KpiVentaMes, KpiFacturaFirma, KpiClienteMes):
+    for modelo in (KpiVentaMes, KpiClienteMes):
         await db.execute(delete(modelo).where(tuple_(modelo.sucursal_id, modelo.anio_mes).in_(meses)))
+    await db.execute(delete(KpiFacturaFirma).where(KpiFacturaFirma.sucursal_id.in_({c[0] for c in claves})))
     await _insertar_ventas(db, ordenadas)
     await _marcar_actualizado(db)
 

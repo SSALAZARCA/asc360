@@ -365,6 +365,12 @@ async def consultar_clientes(db, filtro: Filtro, *, dimension: str) -> List[Fila
         select(clave, cliente, func.sum(_expr_venta()).label("venta")).group_by(*por_cliente),
         filtro, lineas, solo_lineas_reconocidas=True, con_vendedor=dimension == DIM_ASESOR,
     ).subquery("por_cliente")
+    return _filas_de_clientes(await db.execute(_agregar_clientes(interna, por_grupo)))
+
+
+def _agregar_clientes(interna, por_grupo: bool):
+    """`(clave, clientes distintos, venta de los 5 mayores)` sobre una subconsulta
+    `(clave, venta)` con una fila por cliente y fila. La comparte la lectura del resumen."""
     posicion = func.row_number().over(
         partition_by=interna.c.clave if por_grupo else None, order_by=interna.c.venta.desc())
     medio = select(interna.c.clave, interna.c.venta, posicion.label("posicion")).subquery("ordenados")
@@ -375,10 +381,11 @@ async def consultar_clientes(db, filtro: Filtro, *, dimension: str) -> List[Fila
     )
     if por_grupo:
         externa = externa.group_by(medio.c.clave)
-    return [
-        FilaClientes(clave_, int(n), Decimal(top5))
-        for clave_, n, top5 in (await db.execute(externa)).all()
-    ]
+    return externa
+
+
+def _filas_de_clientes(resultado) -> List[FilaClientes]:
+    return [FilaClientes(clave_, int(n), Decimal(top5)) for clave_, n, top5 in resultado.all()]
 
 
 async def consultar_personas(db, filtro: Filtro) -> List[FilaPersona]:
@@ -506,10 +513,10 @@ async def tablero_de_filtro(db: AsyncSession, filtro: Filtro) -> Tuple[Dict[str,
 
     cubo_completo = await lectura.cubo(db, filtro, corte)
     cubo = t.filtrar_cubo_por_hmcl(cubo_completo, modo_hmcl)
-    facturas = (await consultar_facturas(db, filtro, dimension=DIM_ASESOR)
-                + await consultar_facturas(db, filtro, dimension=DIM_TOTAL))
-    clientes = (await consultar_clientes(db, filtro, dimension=DIM_ASESOR)
-                + await consultar_clientes(db, filtro, dimension=DIM_TOTAL))
+    facturas = (await lectura.facturas(db, filtro, dimension=DIM_ASESOR)
+                + await lectura.facturas(db, filtro, dimension=DIM_TOTAL))
+    clientes = (await lectura.clientes(db, filtro, dimension=DIM_ASESOR)
+                + await lectura.clientes(db, filtro, dimension=DIM_TOTAL))
     personas = await lectura.personas(db, filtro)
 
     tablero = t.construir_tablero(cubo, facturas, clientes, personas, meses, reglas)

@@ -361,8 +361,8 @@ async def cargar_inventario(db: AsyncSession, filtro: Filtro, fecha_corte: Optio
 
 
 async def cargar_tecnired(db: AsyncSession, filtro: Filtro, clientes: Dict[str, Any]) -> Dict[str, Any]:
-    distintos, por_mes = await qk.consultar_clientes_tecnired(db, filtro)
-    top = await qk.consultar_top_tecnired(db, filtro)
+    distintos, por_mes = await lectura.clientes_tecnired(db, filtro)
+    top = await lectura.top_tecnired(db, filtro)
     return construir_tecnired(clientes, distintos, por_mes, top, filtro.meses)
 
 
@@ -385,8 +385,8 @@ async def _filas_de_tiendas(db: AsyncSession, filtro: Filtro, cubo, *, completas
     facturas = clientes = []
     ventana: Dict[str, Dict[str, Decimal]] = {}
     if completas:
-        facturas = await q.consultar_facturas(db, filtro, dimension=DIM_SUCURSAL)
-        clientes = await q.consultar_clientes(db, filtro, dimension=DIM_SUCURSAL)
+        facturas = await lectura.facturas(db, filtro, dimension=DIM_SUCURSAL)
+        clientes = await lectura.clientes(db, filtro, dimension=DIM_SUCURSAL)
         ventana = ventana_por_clave(
             await lectura.ventana_mensual(db, filtro_de_ventana(filtro), DIM_SUCURSAL), filtro.modo_hmcl)
     sucursales = await q.consultar_sucursales(db, {f.clave for f in cubo})
@@ -429,8 +429,8 @@ async def calcular_kpis_ventas(db: AsyncSession, filtro: Filtro) -> Dict[str, An
     cubo = await lectura.cubo(db, filtro, await q.fecha_corte_costos(db), DIM_SUCURSAL)
     tiendas, sin_linea = await _filas_de_tiendas(db, filtro, cubo, completas=False)
     acumulados, _ = t.acumular_cubo(t.filtrar_cubo_por_hmcl(cubo, filtro.modo_hmcl), filtro.reglas)
-    facturas = await q.consultar_facturas(db, filtro, dimension=DIM_TOTAL)
-    clientes = await q.consultar_clientes(db, filtro, dimension=DIM_TOTAL)
+    facturas = await lectura.facturas(db, filtro, dimension=DIM_TOTAL)
+    clientes = await lectura.clientes(db, filtro, dimension=DIM_TOTAL)
     total = t.indicadores(
         acumulados[t.CLAVE_TOTAL], facturas[0] if facturas else None, clientes[0] if clientes else None,
         list(filtro.meses), filtro.reglas.lineas)

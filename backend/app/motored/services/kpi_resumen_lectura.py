@@ -32,11 +32,13 @@ import datetime
 from decimal import Decimal
 from typing import Dict, List, Optional, Tuple
 
-from sqlalchemy import String, and_, case, cast, false, func, or_, select
+from sqlalchemy import Date, String, and_, case, cast, false, func, or_, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.motored.models.cliente_tecnired import ClienteTecnired
+from app.motored.models.kpi_resumen import KpiClienteMes as C
+from app.motored.models.kpi_resumen import KpiFacturaFirma as F
 from app.motored.models.kpi_resumen import KpiVentaMes as V
 from app.motored.models.sucursal import Sucursal
 from app.motored.models.vendedor import Vendedor
@@ -44,7 +46,9 @@ from app.motored.services import kpi_resumen
 from app.motored.services import tablero_asesores as t
 from app.motored.services import tablero_asesores_consultas as q
 from app.motored.services import tablero_kpis_consultas as qk
-from app.motored.services.tablero_asesores import DIM_ASESOR, DIM_TOTAL, FilaCubo, FilaPersona, Filtro
+from app.motored.services.tablero_asesores import (
+    CLAVE_TOTAL, DIM_ASESOR, DIM_TOTAL, FilaClientes, FilaCubo, FilaFacturas, FilaPersona, Filtro,
+)
 
 
 async def usar_resumen(db: AsyncSession) -> bool:
@@ -59,8 +63,8 @@ async def usar_resumen(db: AsyncSession) -> bool:
 # --- Expressions over kpi_venta_mes ----------------------------------------------------------
 
 
-def _mes():
-    return func.to_char(V.anio_mes, "YYYY-MM")
+def _mes(tabla=V):
+    return func.to_char(tabla.anio_mes, "YYYY-MM")
 
 
 def _linea(reglas: t.Reglas):
@@ -68,34 +72,54 @@ def _linea(reglas: t.Reglas):
     return case((V.linea_norm.in_(list(reglas.lineas)), V.linea_norm), else_=None)
 
 
-def _es_hmcl(reglas: t.Reglas):
-    return func.coalesce(V.nit_especial.in_(list(reglas.hmcl_nits)), false())
+def _es_hmcl(reglas: t.Reglas, columna=V.nit_especial):
+    return func.coalesce(columna.in_(list(reglas.hmcl_nits)), false())
 
 
 def _es_tecnired():
     return func.coalesce(V.nit_especial.in_(select(ClienteTecnired.nit)), false())
 
 
-def _dimension(dimension: str, reglas: t.Reglas):
-    return q._expr_dimension(dimension, reglas, sucursal=V.sucursal_id, vendedor_norm=V.vendedor_norm)
+def _dimension(dimension: str, reglas: t.Reglas, tabla=V, vendedor_norm=None):
+    return q._expr_dimension(
+        dimension, reglas, sucursal=tabla.sucursal_id,
+        vendedor_norm=tabla.vendedor_norm if vendedor_norm is None else vendedor_norm)
 
 
-def _desde(consulta, filtro: Filtro, *, con_vendedor=False, solo_lineas_reconocidas=False, aplicar_hmcl=False):
-    """FROM/WHERE of every read: the live `_desde_ventas` over the summary table."""
-    reglas = filtro.reglas
-    consulta = consulta.select_from(V)
-    if con_vendedor:
-        consulta = consulta.outerjoin(
-            Vendedor, (Vendedor.nombre_norm == V.vendedor_norm) & Vendedor.activo.is_(True))
-    consulta = consulta.where(or_(*[and_(V.anio_mes >= inicio, V.anio_mes < fin) for inicio, fin in filtro.rangos]))
+def _con_vendedor(consulta, vendedor_norm):
+    """The live outer join with the master vendedor (active rows), fed with the summary's column."""
+    return consulta.outerjoin(Vendedor, (Vendedor.nombre_norm == vendedor_norm) & Vendedor.activo.is_(True))
+
+
+def _donde_periodo(consulta, tabla, filtro: Filtro, mes=None):
+    """Months (the filter's `[inicio, fin)` ranges over `anio_mes`, or over `mes`) and stores."""
+    mes = tabla.anio_mes if mes is None else mes
+    consulta = consulta.where(or_(*[and_(mes >= inicio, mes < fin) for inicio, fin in filtro.rangos]))
     if filtro.sucursal_ids:
-        consulta = consulta.where(V.sucursal_id.in_(sorted(filtro.sucursal_ids, key=str)))
-    if aplicar_hmcl and filtro.modo_hmcl == t.HMCL_SOLO:
-        consulta = consulta.where(_es_hmcl(reglas))
-    elif aplicar_hmcl and filtro.modo_hmcl == t.HMCL_EXCLUIR:
-        consulta = consulta.where(~_es_hmcl(reglas))
+        consulta = consulta.where(tabla.sucursal_id.in_(sorted(filtro.sucursal_ids, key=str)))
+    return consulta
+
+
+def _donde_hmcl(consulta, filtro: Filtro, columna):
+    """The HMCL mode over `columna` (the NIT the line / invoice / client is billed to)."""
+    if filtro.modo_hmcl == t.HMCL_SOLO:
+        return consulta.where(_es_hmcl(filtro.reglas, columna))
+    if filtro.modo_hmcl == t.HMCL_EXCLUIR:
+        return consulta.where(~_es_hmcl(filtro.reglas, columna))
+    return consulta
+
+
+def _desde(consulta, filtro: Filtro, *, tabla=V, con_vendedor=False, solo_lineas_reconocidas=False,
+           aplicar_hmcl=False, columna_hmcl=None):
+    """FROM/WHERE of every read: the live `_desde_ventas` over the summary table."""
+    consulta = consulta.select_from(tabla)
+    if con_vendedor:
+        consulta = _con_vendedor(consulta, tabla.vendedor_norm)
+    consulta = _donde_periodo(consulta, tabla, filtro)
+    if aplicar_hmcl:
+        consulta = _donde_hmcl(consulta, filtro, tabla.nit_especial if columna_hmcl is None else columna_hmcl)
     if solo_lineas_reconocidas:
-        consulta = consulta.where(V.linea_norm.in_(list(reglas.lineas)))
+        consulta = consulta.where(tabla.linea_norm.in_(list(filtro.reglas.lineas)))
     return consulta
 
 
@@ -162,6 +186,118 @@ async def personas_resumen(db: AsyncSession, filtro: Filtro) -> List[FilaPersona
     return t.construir_personas(filas)
 
 
+# --- Invoices and clients ---------------------------------------------------------------------
+
+
+def _factura_regular(filtro: Filtro, dimension: str):
+    """One row per `(invoice-group, summary row)` of the plain invoices: the lines of its
+    signature that the request's Configuracion recognizes, with the marks per line."""
+    reglas = filtro.reglas
+    desanidada = func.unnest(F.firma).table_valued("linea").render_derived()
+    linea = desanidada.c.linea
+    clave = _dimension(dimension, reglas, F).label("clave")
+    marcas = [func.max(case((linea == nombre, 1), else_=0)).label(f"l{i}") for i, nombre in enumerate(reglas.lineas)]
+    consulta = select(F.id.label("fila"), clave, F.n_facturas.label("n"), func.count().label("distintas"), *marcas)
+    consulta = consulta.select_from(F).join(desanidada, true())
+    if dimension == DIM_ASESOR:
+        consulta = _con_vendedor(consulta, F.vendedor_norm)
+    consulta = _donde_periodo(consulta, F, filtro)
+    consulta = _donde_hmcl(consulta, filtro, F.nit_especial)
+    consulta = consulta.where(F.nit_especial.is_distinct_from(kpi_resumen.NIT_FACTURA_IRREGULAR),
+                              linea.in_(list(reglas.lineas)))
+    return consulta.group_by(F.id, F.n_facturas, *([clave] if dimension != DIM_TOTAL else []))
+
+
+def _factura_irregular(filtro: Filtro, dimension: str):
+    """The same for the invoices that span months, vendors or special NITs: their signature
+    holds one `month|line|nit|vendedor` token per combination (see `kpi_resumen`), which is
+    filtered and grouped here exactly as the live query does line by line."""
+    reglas = filtro.reglas
+    desanidada = func.unnest(F.firma).table_valued("marca").render_derived()
+    marca = desanidada.c.marca
+    mes = cast(func.split_part(marca, "|", 1), Date)
+    linea = func.split_part(marca, "|", 2)
+    nit = func.nullif(func.split_part(marca, "|", 3), "")
+    vendedor = func.regexp_replace(marca, r"^[^|]*\|[^|]*\|[^|]*\|", "")
+    clave = _dimension(dimension, reglas, F, vendedor).label("clave")
+    marcas = [func.max(case((linea == nombre, 1), else_=0)).label(f"l{i}") for i, nombre in enumerate(reglas.lineas)]
+    consulta = select(
+        F.id.label("fila"), clave, F.n_facturas.label("n"), func.count(func.distinct(linea)).label("distintas"),
+        *marcas)
+    consulta = consulta.select_from(F).join(desanidada, true())
+    if dimension == DIM_ASESOR:
+        consulta = _con_vendedor(consulta, vendedor)
+    consulta = _donde_periodo(consulta, F, filtro, mes=mes)
+    consulta = _donde_hmcl(consulta, filtro, nit)
+    consulta = consulta.where(F.nit_especial == kpi_resumen.NIT_FACTURA_IRREGULAR, linea.in_(list(reglas.lineas)))
+    return consulta.group_by(F.id, F.n_facturas, *([clave] if dimension != DIM_TOTAL else []))
+
+
+async def facturas_resumen(db: AsyncSession, filtro: Filtro, *, dimension: str) -> List[FilaFacturas]:
+    """`q.consultar_facturas` from `kpi_factura_firma`. An invoice counts once per group, like
+    live: a summary row stands for `n_facturas` identical invoices (the weight of every sum)."""
+    reglas = filtro.reglas
+    por_grupo = dimension != DIM_TOTAL
+    todas = _factura_regular(filtro, dimension).union_all(_factura_irregular(filtro, dimension)).subquery("por_factura")
+    externa = select(
+        todas.c.clave if por_grupo else q._constante(CLAVE_TOTAL),
+        func.coalesce(func.sum(todas.c.n), 0),
+        func.coalesce(func.sum(case((todas.c.distintas > 1, todas.c.n), else_=0)), 0),
+        *[func.coalesce(func.sum(todas.c[f"l{i}"] * todas.c.n), 0) for i in range(len(reglas.lineas))],
+    )
+    if por_grupo:
+        externa = externa.group_by(todas.c.clave)
+    return [
+        FilaFacturas(fila[0], int(fila[1]), int(fila[2]), tuple(int(n) for n in fila[3:]))
+        for fila in (await db.execute(externa)).all()
+    ]
+
+
+def _desde_clientes(consulta, filtro: Filtro, *, con_vendedor=False):
+    """Recognized lines only, the HMCL mode applied to the client (as live does)."""
+    return _desde(consulta, filtro, tabla=C, con_vendedor=con_vendedor, solo_lineas_reconocidas=True,
+                  aplicar_hmcl=True, columna_hmcl=C.cliente_norm)
+
+
+async def clientes_resumen(db: AsyncSession, filtro: Filtro, *, dimension: str) -> List[FilaClientes]:
+    """`q.consultar_clientes` from `kpi_cliente_mes`: distinct clients and top-5 sale share."""
+    por_grupo = dimension != DIM_TOTAL
+    clave = _dimension(dimension, filtro.reglas, C).label("clave")
+    interna = _desde_clientes(
+        select(clave, func.sum(C.venta).label("venta")).group_by(C.cliente_norm, *([clave] if por_grupo else [])),
+        filtro, con_vendedor=dimension == DIM_ASESOR).subquery("por_cliente")
+    return q._filas_de_clientes(await db.execute(q._agregar_clientes(interna, por_grupo)))
+
+
+def _desde_tecnired(consulta, filtro: Filtro):
+    """Sales of Tecnired clients (recognized lines), with the filter."""
+    return _desde_clientes(consulta, filtro).where(C.cliente_norm.in_(select(ClienteTecnired.nit)))
+
+
+async def clientes_tecnired_resumen(db: AsyncSession, filtro: Filtro) -> Tuple[int, Dict[str, int]]:
+    """`qk.consultar_clientes_tecnired` from `kpi_cliente_mes`."""
+    total = await db.execute(_desde_tecnired(select(func.count(func.distinct(C.cliente_norm))), filtro))
+    mes = _mes(C)
+    por_mes = await db.execute(
+        _desde_tecnired(select(mes, func.count(func.distinct(C.cliente_norm))).group_by(mes), filtro))
+    return int(total.scalar() or 0), {m: int(n) for m, n in por_mes.all()}
+
+
+async def top_tecnired_resumen(
+    db: AsyncSession, filtro: Filtro, limite: int = qk.TOP_TECNIRED,
+) -> List[qk.FilaTopTecnired]:
+    """`qk.consultar_top_tecnired` from `kpi_cliente_mes`."""
+    venta = func.sum(C.venta)
+    consulta = _desde_tecnired(select(ClienteTecnired.nit, ClienteTecnired.razon_social, venta), filtro)
+    consulta = (
+        consulta.join(ClienteTecnired, ClienteTecnired.nit == C.cliente_norm)
+        .group_by(ClienteTecnired.nit, ClienteTecnired.razon_social)
+        .order_by(venta.desc(), ClienteTecnired.nit)
+        .limit(limite)
+    )
+    return [qk.FilaTopTecnired(nit, razon, Decimal(v)) for nit, razon, v in (await db.execute(consulta)).all()]
+
+
 # --- Dispatch: the summary when usable, the live query otherwise -----------------------------
 
 
@@ -197,3 +333,27 @@ async def personas(db: AsyncSession, filtro: Filtro) -> List[FilaPersona]:
     if await usar_resumen(db):
         return await personas_resumen(db, filtro)
     return await q.consultar_personas(db, filtro)
+
+
+async def facturas(db: AsyncSession, filtro: Filtro, *, dimension: str) -> List[FilaFacturas]:
+    if await usar_resumen(db):
+        return await facturas_resumen(db, filtro, dimension=dimension)
+    return await q.consultar_facturas(db, filtro, dimension=dimension)
+
+
+async def clientes(db: AsyncSession, filtro: Filtro, *, dimension: str) -> List[FilaClientes]:
+    if await usar_resumen(db):
+        return await clientes_resumen(db, filtro, dimension=dimension)
+    return await q.consultar_clientes(db, filtro, dimension=dimension)
+
+
+async def clientes_tecnired(db: AsyncSession, filtro: Filtro) -> Tuple[int, Dict[str, int]]:
+    if await usar_resumen(db):
+        return await clientes_tecnired_resumen(db, filtro)
+    return await qk.consultar_clientes_tecnired(db, filtro)
+
+
+async def top_tecnired(db: AsyncSession, filtro: Filtro, limite: int = qk.TOP_TECNIRED) -> List[qk.FilaTopTecnired]:
+    if await usar_resumen(db):
+        return await top_tecnired_resumen(db, filtro, limite)
+    return await qk.consultar_top_tecnired(db, filtro, limite)
