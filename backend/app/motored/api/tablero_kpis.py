@@ -20,6 +20,14 @@ Respuestas (los importes son numeros, nunca texto; cada una repite `meses`,
   tiendas, red}, `cumplimiento`, `resumen_crecimiento`, `venta_sin_linea`.
 - `GET /kpis/asesores`: el tablero de asesores mas `cumplimiento` {asesores,
   conteos, advertencias}.
+- `GET /kpis/estado` (ADMIN, COMPRAS, GERENCIA): `actualizado_en`, `sucio`,
+  `reconstruyendo`, `ultima_reconstruccion_total` y `usando_resumen` de las
+  tablas resumen (ver `services/trabajos/supervisor_kpis`).
+- `POST /kpis/recalcular` (SOLO ADMIN): pide una reconstruccion completa de las
+  tablas resumen (la hace el loop en segundo plano) y devuelve el estado. 409 si
+  una reconstruccion en curso no deja tomar el candado a tiempo.
+- Las tres pestanas agregan `usando_resumen` y `datos_actualizados_en` (la hora
+  de las tablas resumen; null cuando contesta la consulta en vivo).
 - `GET /kpis/opciones` (sin filtros): `meses_disponibles` (AAAA-MM con ventas),
   `ultimo_mes` y `tiendas` [{id, nombre}] activas, para armar los filtros (el
   "ano corrido" va de enero al `ultimo_mes` de ese ano).
@@ -27,11 +35,12 @@ Respuestas (los importes son numeros, nunca texto; cada una repite `meses`,
 import uuid
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.motored.api.tablero_asesores import _error_422, _sucursales
 from app.motored.deps import MotoredUser, get_motored_db_or_503, require_motored_ready, require_roles
+from app.motored.services import kpi_resumen
 from app.motored.services import tablero_asesores_consultas as consultas
 from app.motored.services import tablero_kpis as kpis
 from app.motored.services.tablero_asesores import HMCL_EXCLUIR, HMCL_INCLUIR, HMCL_SOLO, Filtro
@@ -43,6 +52,7 @@ router = APIRouter(
 )
 
 _require_rol = require_roles("ADMIN", "COMPRAS", "GERENCIA")
+_require_admin = require_roles("ADMIN")
 
 
 async def _filtro(
@@ -89,3 +99,23 @@ async def kpis_opciones(
     user: MotoredUser = Depends(_require_rol), db: AsyncSession = Depends(get_motored_db_or_503),
 ) -> Dict[str, Any]:
     return await kpis.calcular_opciones(db)
+
+
+@router.get("/estado")
+async def kpis_estado(
+    user: MotoredUser = Depends(_require_rol), db: AsyncSession = Depends(get_motored_db_or_503),
+) -> Dict[str, Any]:
+    return await kpis.calcular_estado(db)
+
+
+@router.post("/recalcular")
+async def kpis_recalcular(
+    user: MotoredUser = Depends(_require_admin), db: AsyncSession = Depends(get_motored_db_or_503),
+) -> Dict[str, Any]:
+    try:
+        await kpi_resumen.solicitar_recalculo(db)
+    except kpi_resumen.ResumenOcupadoError as exc:
+        await db.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+    await db.commit()
+    return await kpis.calcular_estado(db)

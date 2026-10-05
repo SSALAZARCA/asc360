@@ -38,6 +38,13 @@ MESES = {"todo": ["2097-01", "2097-02", "2097-03"], "salteado": ["2097-01", "209
          "ultimo": ["2097-03"]}
 
 
+def sin_frescura(respuesta):
+    """A tab's answer without the fields that say which source answered (they differ by design)."""
+    if isinstance(respuesta, dict):
+        return {k: v for k, v in respuesta.items() if k not in ("usando_resumen", "datos_actualizados_en")}
+    return respuesta
+
+
 async def _mundo(db, configuracion):
     mundo = await Mundo().crear(db)
     cedula = str(uuid.uuid4().int)[:10]
@@ -155,10 +162,10 @@ async def test_the_dashboards_are_identical_with_the_switch_on_and_off(sesion, m
     }
 
     monkeypatch.setattr(settings, "MOTORED_KPI_RESUMEN_ENABLED", False)
-    en_vivo = {nombre: await llamar() for nombre, llamar in llamadas.items()}
+    en_vivo = {nombre: sin_frescura(await llamar()) for nombre, llamar in llamadas.items()}
     monkeypatch.setattr(settings, "MOTORED_KPI_RESUMEN_ENABLED", True)
     assert await lectura.usar_resumen(sesion)
-    desde_resumen = {nombre: await llamar() for nombre, llamar in llamadas.items()}
+    desde_resumen = {nombre: sin_frescura(await llamar()) for nombre, llamar in llamadas.items()}
 
     assert desde_resumen == en_vivo
 

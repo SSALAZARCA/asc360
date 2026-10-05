@@ -51,6 +51,7 @@ def _marcas_de_sucio(monkeypatch):
     monkeypatch.setattr(kpi_resumen, "marcar_sucio_si_construido", marcar)
     return marcas
 
+
 HMCL = Proveedor(id=uuid.uuid4(), codigo="HMCL", nombre="HMCL", es_principal=True)
 OTRO = Proveedor(id=uuid.uuid4(), codigo="OTRO", nombre="Otro", es_principal=False)
 HOY = datetime.date(2026, 10, 3)

@@ -167,6 +167,15 @@ async def _guardar_estado(db: AsyncSession, inicial: dict, cambios: dict) -> Non
     await db.execute(consulta.on_conflict_do_update(index_elements=[KpiResumenEstado.id], set_=cambios))
 
 
+async def hay_datos(db: AsyncSession) -> bool:
+    """True when there is something to summarize: any line of `venta_detalle` or any row of
+    `inventario_detalle`. The loop does not run its first build over an empty database."""
+    for modelo in (VentaDetalle, InventarioDetalle):
+        if (await db.execute(select(modelo.id).limit(1))).first() is not None:
+            return True
+    return False
+
+
 async def marcar_sucio(db: AsyncSession) -> None:
     """Flags the summaries as out of date (a full rebuild is pending)."""
     await _guardar_estado(db, {"sucio": True}, {"sucio": True})
@@ -202,6 +211,22 @@ def _transaccion_actual(db: AsyncSession) -> Any:
         return db.sync_session.get_transaction()
     except AttributeError:
         return None
+
+
+async def solicitar_recalculo(db: AsyncSession) -> None:
+    """An ADMIN asked for a full rebuild: flags the summaries dirty even if they were never
+    built (the first build is a rebuild too) and the background loop picks it up. Takes the
+    lock first, like `marcar_sucio_si_construido`, so a rebuild in flight cannot clear the
+    request when it finishes. Raises `ResumenOcupadoError` when that wait runs out."""
+    await _bloquear(db)
+    await marcar_sucio(db)
+
+
+async def marcar_reconstruyendo(db: AsyncSession, valor: bool) -> None:
+    """Sets the `reconstruyendo` flag (creating the state row, dirty, when it does not exist).
+    The caller commits it on its own, in a short transaction apart from the rebuild's, so the
+    UI can show the rebuild while it runs."""
+    await _guardar_estado(db, {"sucio": True, "reconstruyendo": valor}, {"reconstruyendo": valor})
 
 
 async def _marcar_reconstruido(db: AsyncSession) -> None:

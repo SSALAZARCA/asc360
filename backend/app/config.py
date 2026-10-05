@@ -1,5 +1,6 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+
 class Settings(BaseSettings):
     # Base de datos — requerido, sin default para forzar configuración explícita
     DATABASE_URL: str
@@ -64,9 +65,17 @@ class Settings(BaseSettings):
     # Lee los agregados de ventas del KPI desde las tablas resumen `kpi_*` (cuando estan
     # construidas y al dia) en vez de recorrer venta_detalle. Apagado = consultas en vivo.
     MOTORED_KPI_RESUMEN_ENABLED: bool = False
-    # Cuanto espera una carga de ventas (o un cambio de configuracion que deja sucios los
-    # resumenes) por el candado de una reconstruccion en curso antes de fallar con un mensaje claro.
+    # Loop que reconstruye las tablas resumen en segundo plano (primera carga, cambios que las
+    # dejan sucias y reconstruccion nocturna). Independiente del interruptor de lectura de arriba:
+    # con la lectura apagada igual las deja construidas. Apagarlo = nadie las reconstruye.
+    # - POLL: cada cuantos segundos mira si toca reconstruir.
+    # - LOCK_TIMEOUT: cuanto espera una carga de ventas (o un cambio de configuracion) por el
+    #   candado de una reconstruccion en curso antes de fallar con un mensaje claro.
+    # - REBUILD_TIMEOUT: tope de una reconstruccion completa (suelta el candado al cortarse).
+    MOTORED_KPI_RESUMEN_LOOP_ENABLED: bool = True
+    MOTORED_KPI_RESUMEN_POLL_SEGUNDOS: int = 60
     MOTORED_KPI_RESUMEN_LOCK_TIMEOUT_SEGUNDOS: int = 60
+    MOTORED_KPI_RESUMEN_REBUILD_TIMEOUT_SEGUNDOS: int = 1800
     MOTORED_RETENCION_ENABLED: bool = False
     MOTORED_RETENCION_DIAS: int = 90
     MOTORED_INGESTA_PERIODO_TOLERANCIA_PCT: float = 0.5

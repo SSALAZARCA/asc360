@@ -29,7 +29,7 @@ from app.motored.services import tablero_asesores_consultas as q
 from app.motored.services import tablero_kpis as kpis
 from app.motored.services import tablero_kpis_consultas as qk
 from tests.motored.pg_real.test_kpi_resumen_facturas_clientes_pg import _mundo_con_facturas
-from tests.motored.pg_real.test_kpi_resumen_lectura_pg import MESES, _llave_cubo
+from tests.motored.pg_real.test_kpi_resumen_lectura_pg import MESES, _llave_cubo, sin_frescura
 from tests.motored.pg_real.test_kpi_resumen_pg import pytestmark, sesion  # noqa: F401
 
 DIMENSIONES = (t.DIM_ASESOR, t.DIM_SUCURSAL, t.DIM_TOTAL)
@@ -219,8 +219,8 @@ async def test_the_dashboards_are_identical_with_the_switch_on_and_off(sesion, m
             "ventas": lambda: kpis.calcular_kpis_ventas(sesion, filtro),
         }
         monkeypatch.setattr(settings, "MOTORED_KPI_RESUMEN_ENABLED", False)
-        en_vivo = {nombre: await llamar() for nombre, llamar in llamadas.items()}
+        en_vivo = {nombre: sin_frescura(await llamar()) for nombre, llamar in llamadas.items()}
         monkeypatch.setattr(settings, "MOTORED_KPI_RESUMEN_ENABLED", True)
         assert await lectura.usar_resumen(sesion)
-        assert {nombre: await llamar() for nombre, llamar in llamadas.items()} == en_vivo
+        assert {nombre: sin_frescura(await llamar()) for nombre, llamar in llamadas.items()} == en_vivo
         assert {f["sucursal_id"] for f in en_vivo["tiendas"]["tiendas"]} == {str(mundo.s1.id)}

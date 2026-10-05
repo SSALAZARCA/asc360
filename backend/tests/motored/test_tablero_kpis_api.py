@@ -133,6 +133,6 @@ def test_the_options_endpoint_returns_the_filter_data(_motored_ready, llamadas):
     assert set(r.json()) == {"meses_disponibles", "ultimo_mes", "tiendas"}
 
 
-def test_kpis_routes_are_the_four_documented_paths():
+def test_kpis_routes_are_the_documented_paths():
     rutas = sorted(p for p in app.openapi()["paths"] if p.startswith(BASE))
-    assert rutas == sorted(f"{BASE}/{n}" for n in PESTANAS + ["opciones"])
+    assert rutas == sorted(f"{BASE}/{n}" for n in PESTANAS + ["opciones", "estado", "recalcular"])

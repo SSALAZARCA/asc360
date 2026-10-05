@@ -60,6 +60,19 @@ async def usar_resumen(db: AsyncSession) -> bool:
     return estado is not None and estado.ultima_reconstruccion_total is not None and not estado.sucio
 
 
+async def frescura(db: AsyncSession) -> Dict[str, object]:
+    """What the KPI tabs say about their own data: `usando_resumen` (the summaries answer, the
+    same rule as `usar_resumen`) and `datos_actualizados_en` (ISO timestamp of the summary's last
+    update; None when the live queries answer, since live data is current by definition)."""
+    if not settings.MOTORED_KPI_RESUMEN_ENABLED:
+        return {"usando_resumen": False, "datos_actualizados_en": None}
+    estado = await kpi_resumen.estado(db)
+    if estado is None or estado.ultima_reconstruccion_total is None or estado.sucio:
+        return {"usando_resumen": False, "datos_actualizados_en": None}
+    cuando = estado.actualizado_en or estado.ultima_reconstruccion_total
+    return {"usando_resumen": True, "datos_actualizados_en": cuando.isoformat()}
+
+
 # --- Expressions over kpi_venta_mes ----------------------------------------------------------
 
 

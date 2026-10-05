@@ -30,6 +30,7 @@ from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.motored.schemas.vendedor import limpiar_cedula
+from app.motored.services import kpi_resumen
 from app.motored.services import kpi_resumen_lectura as lectura
 from app.motored.services import presupuestos as pres
 from app.motored.services import tablero_asesores as t
@@ -419,6 +420,7 @@ async def calcular_kpis_tiendas(db: AsyncSession, filtro: Filtro) -> Dict[str, A
         fila["dias_inventario"] = inventario["tiendas"].get(fila["sucursal_id"])
     return {
         **_encabezado(filtro),
+        **await lectura.frescura(db),
         "tiendas": tiendas,
         "inventario": inventario,
         "cumplimiento": _recortar(cumplimiento, ("tiendas", "red", "conteos")),
@@ -445,6 +447,7 @@ async def calcular_kpis_ventas(db: AsyncSession, filtro: Filtro) -> Dict[str, An
     cumplimiento = await cargar_cumplimiento(db, filtro)
     return {
         **_encabezado(filtro),
+        **await lectura.frescura(db),
         "total": total,
         "tecnired": await cargar_tecnired(db, filtro, total["clientes"]),
         "cumplimiento": _recortar(cumplimiento, ("red", "tiendas", "conteos")),
@@ -464,7 +467,26 @@ async def calcular_kpis_asesores(db: AsyncSession, filtro: Filtro) -> Dict[str, 
     nombres = {f["clave"]: f["nombre"] for f in tablero["filas"] if f["tipo"] == "PERSONA"}
     cumplimiento = await cargar_cumplimiento(db, filtro, cubo, nombres)
     tablero["cumplimiento"] = _recortar(cumplimiento, ("asesores", "conteos", "advertencias"))
+    tablero.update(await lectura.frescura(db))
     return tablero
+
+
+def _en_iso(valor: Optional[datetime.datetime]) -> Optional[str]:
+    return None if valor is None else valor.isoformat()
+
+
+async def calcular_estado(db: AsyncSession) -> Dict[str, Any]:
+    """Freshness of the summaries: `{actualizado_en, sucio, reconstruyendo,
+    ultima_reconstruccion_total, usando_resumen}` (timestamps in ISO, None when never). A
+    summary that was never built counts as dirty."""
+    estado = await kpi_resumen.estado(db)
+    return {
+        "actualizado_en": _en_iso(estado and estado.actualizado_en),
+        "sucio": True if estado is None else estado.sucio,
+        "reconstruyendo": bool(estado and estado.reconstruyendo),
+        "ultima_reconstruccion_total": _en_iso(estado and estado.ultima_reconstruccion_total),
+        "usando_resumen": (await lectura.frescura(db))["usando_resumen"],
+    }
 
 
 async def calcular_opciones(db: AsyncSession) -> Dict[str, Any]:
