@@ -151,15 +151,16 @@ def test_unauthenticated_requests_are_401(metodo, ruta, kwargs):
     assert respuesta.status_code == 401
 
 
-def test_template_has_the_four_headers_and_an_example_row():
+def test_template_has_anio_mes_headers_and_example_rows():
     respuesta = _llamar("GERENCIA", "GET", "/plantilla.xlsx")
 
     assert respuesta.headers["content-type"].startswith(XLSX)
     assert respuesta.headers["content-disposition"] == 'attachment; filename="plantilla_presupuestos.xlsx"'
     libro = openpyxl.load_workbook(io.BytesIO(respuesta.content))
     filas = list(libro.active.iter_rows(values_only=True))
-    assert filas[0] == ("Cédula", "Mes", "Tienda", "Presupuesto")
+    assert filas[0] == ("Año", "Mes", "Cédula", "Tienda", "Presupuesto")
     assert len(filas) >= 2 and all(celda is not None for celda in filas[1])
+    assert filas[1][:2] == (2026, 10)
 
 
 def test_apply_passes_the_file_name_and_the_user_to_the_service(_servicio):

@@ -142,8 +142,10 @@ export default function CargaPresupuestosModal({ onAplicado, onClose }) {
           </button>
         </div>
         <p style={mutedStyle}>
-          Columnas: Cédula, Mes, Tienda y Presupuesto. El archivo puede traer uno o varios meses; cada mes
-          reemplaza solo a ese mes y crea una versión nueva.
+          Columnas: Año (4 dígitos, ej. 2026), Mes (número de 1 a 12), Cédula, Tienda y Presupuesto.
+          El archivo puede traer uno o varios meses; cada mes reemplaza solo a ese mes y crea una versión
+          nueva. El formato anterior también sigue funcionando: sin la columna Año, una sola columna Mes
+          con la fecha completa (AAAA-MM o MM/AAAA).
         </p>
         {!resultado && (
           <>

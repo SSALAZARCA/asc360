@@ -54,6 +54,13 @@ it('downloads the template', () => {
   expect(mockApi.descargarPlantillaPresupuestos).toHaveBeenCalled();
 });
 
+it('explains the Año + Mes columns and that the old format still works', () => {
+  setup();
+  const ayuda = screen.getByText(/Columnas: Año/);
+  expect(ayuda).toHaveTextContent('Mes (número de 1 a 12)');
+  expect(ayuda).toHaveTextContent('El formato anterior también sigue funcionando');
+});
+
 it('keeps Validar disabled until a file is chosen', () => {
   setup();
   expect(screen.getByRole('button', { name: 'Validar' })).toBeDisabled();

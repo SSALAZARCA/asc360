@@ -32,7 +32,7 @@ from app.motored.schemas.vendedor import limpiar_cedula
 from app.motored.services.presupuestos_archivo import (
     Catalogos,
     LineaValida,
-    parse_mes,
+    mes_de_fila,
     resumir,
     validar_filas,
 )
@@ -81,7 +81,7 @@ async def _cargar_catalogos(db: AsyncSession, filas: List[Dict[str, Any]]) -> Ca
         except ValueError:
             pass
         try:
-            meses.add(parse_mes(fila.get("mes")))
+            meses.add(mes_de_fila(fila))
         except ValueError:
             pass
     cedula_activa = await _cedulas_activas(db, cedulas)

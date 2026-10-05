@@ -227,10 +227,15 @@ ALIASES_POR_ENTIDAD: Dict[str, List[Dict[str, Any]]] = {
     ],
     # Presupuestos de venta por asesor (`services/presupuestos_archivo.py`).
     # NO es un maestro del registro de carga masiva: solo reusa este parser.
-    # Todo llega como texto; `presupuestos_archivo` interpreta Mes y monto.
+    # Todo llega como texto; `presupuestos_archivo` interpreta Año/Mes y monto.
+    # "Año" es opcional: sin esa columna, Mes trae la fecha completa.
     "presupuesto": [
-        {"key": "cedula", "label": "Cédula", "required": True, "type": "string", "aliases": ["cedula"]},
+        {
+            "key": "anio", "label": "Año", "required": False,
+            "type": "string", "aliases": ["ano", "anio", "year"],
+        },
         {"key": "mes", "label": "Mes", "required": True, "type": "string", "aliases": ["mes"]},
+        {"key": "cedula", "label": "Cédula", "required": True, "type": "string", "aliases": ["cedula"]},
         {"key": "tienda", "label": "Tienda", "required": True, "type": "string", "aliases": ["tienda", "sucursal"]},
         {
             "key": "presupuesto", "label": "Presupuesto", "required": True, "type": "string",

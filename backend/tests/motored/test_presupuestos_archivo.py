@@ -17,7 +17,10 @@ import pytest
 from app.motored.services.carga_excel import ColumnaObligatoriaFaltanteError, parse_excel_rows
 from app.motored.services.presupuestos_archivo import (
     Catalogos,
+    mes_de_fila,
+    parse_anio,
     parse_mes,
+    parse_mes_numero,
     parse_monto,
     resumir,
     validar_filas,
@@ -224,3 +227,124 @@ class TestExcelParsing:
 
         with pytest.raises(ColumnaObligatoriaFaltanteError):
             parse_excel_rows("presupuesto", "p.xlsx", contenido)
+
+
+def _xlsx_bytes(encabezados, filas):
+    libro = openpyxl.Workbook()
+    libro.active.append(list(encabezados))
+    for fila in filas:
+        libro.active.append(list(fila))
+    buffer = io.BytesIO()
+    libro.save(buffer)
+    return buffer.getvalue()
+
+
+def _validar_xlsx_bytes(encabezados, filas):
+    contenido = _xlsx_bytes(encabezados, filas)
+    canonicas = parse_excel_rows("presupuesto", "p.xlsx", contenido)
+    return validar_filas(canonicas, _catalogos())
+
+
+class TestAnioMesDosColumnas:
+    @pytest.mark.parametrize("valor, esperado", [
+        (2026, 2026), ("2026", 2026), ("2026.0", 2026), (2026.0, 2026),
+    ])
+    def test_year_accepts_numbers_and_numeric_text(self, valor, esperado):
+        assert parse_anio(valor) == esperado
+
+    @pytest.mark.parametrize("valor", [26, "26", "20266", "", None, "abc",
+                                       2026.5, True])
+    def test_year_needs_four_digits(self, valor):
+        with pytest.raises(ValueError, match="4 dígitos"):
+            parse_anio(valor)
+
+    @pytest.mark.parametrize("valor, esperado", [
+        (10, 10), ("10", 10), ("10.0", 10), (10.0, 10), ("07", 7), (" 1 ", 1),
+    ])
+    def test_month_number_accepts_excel_floats(self, valor, esperado):
+        assert parse_mes_numero(valor) == esperado
+
+    @pytest.mark.parametrize("valor", [0, 13, "0", "abc", "", None, 1.5])
+    def test_month_number_out_of_range(self, valor):
+        with pytest.raises(ValueError, match="de 1 a 12$"):
+            parse_mes_numero(valor)
+
+    @pytest.mark.parametrize("valor", [
+        "2026-07", "07/2026", "2026-07-01 00:00:00",
+        datetime.datetime(2026, 7, 1),
+    ])
+    def test_full_month_with_year_column_explains_both_layouts(self, valor):
+        with pytest.raises(ValueError, match="quite la columna Año"):
+            parse_mes_numero(valor)
+
+    def test_row_with_anio_key_uses_two_columns(self):
+        assert mes_de_fila({"anio": "2026.0", "mes": "10.0"}) == D(2026, 10, 1)
+
+    def test_row_without_anio_key_keeps_legacy_parsing(self):
+        assert mes_de_fila({"mes": "2026-07"}) == D(2026, 7, 1)
+
+    def test_errors_name_the_offending_column(self):
+        filas = [_fila(mes="13"), _fila(mes="2026-07")]
+        for fila in filas:
+            fila["anio"] = "2026"
+        filas[1]["cedula"] = "222"
+        filas.append({**_fila(cedula="333"), "anio": "26"})
+        resultado = validar_filas(filas, _catalogos())
+
+        assert [(e["fila"], e["columna"]) for e in resultado.errores] == [
+            (1, "Mes"), (2, "Mes"), (3, "Año")]
+        assert resultado.errores[0]["mensaje"] == (
+            "El mes debe ser un número de 1 a 12")
+        assert resultado.errores[2]["mensaje"] == (
+            "El año debe tener 4 dígitos (ej. 2026)")
+
+    def test_blank_year_cell_is_an_error_when_the_column_exists(self):
+        resultado = validar_filas([{**_fila(mes="10"), "anio": ""}],
+                                  _catalogos())
+
+        assert resultado.errores[0]["columna"] == "Año"
+
+
+class TestArchivoExcelDosLayouts:
+    def test_new_layout_from_xlsx_with_excel_floats(self):
+        resultado = _validar_xlsx_bytes(
+            ("Año", "Mes", "Cédula", "Tienda", "Presupuesto"),
+            [(2026.0, 10.0, "111", "Cali", 1500000),
+             ("2026", "10.0", "222", "Bogotá", 1200000)])
+
+        assert resultado.errores == []
+        assert {x.mes for x in resultado.lineas} == {D(2026, 10, 1)}
+
+    @pytest.mark.parametrize("encabezado", ["Ano", "AÑO", "año", "Year"])
+    def test_year_header_aliases(self, encabezado):
+        resultado = _validar_xlsx_bytes(
+            (encabezado, "Mes", "Cédula", "Tienda", "Presupuesto"),
+            [(2026, 10, "111", "Cali", 1500000)])
+
+        assert resultado.errores == []
+
+    def test_legacy_file_with_month_as_text_still_loads(self):
+        resultado = _validar_xlsx_bytes(
+            ("Cédula", "Mes", "Tienda", "Presupuesto"),
+            [("111", "2026-07", "Cali", 1500000)])
+
+        assert resultado.errores == []
+        assert resultado.lineas[0].mes == D(2026, 7, 1)
+
+    def test_legacy_file_with_date_cell_and_latin_text(self):
+        resultado = _validar_xlsx_bytes(
+            ("Cédula", "Mes", "Tienda", "Presupuesto"),
+            [("111", datetime.datetime(2026, 7, 15), "Cali", 1),
+             ("222", "07/2026", "Cali", 2)])
+
+        assert resultado.errores == []
+        assert {x.mes for x in resultado.lineas} == {D(2026, 7, 1)}
+
+    def test_mixed_layout_reports_a_clear_row_error(self):
+        resultado = _validar_xlsx_bytes(
+            ("Año", "Mes", "Cédula", "Tienda", "Presupuesto"),
+            [(2026, "2026-07", "111", "Cali", 1500000)])
+
+        assert resultado.lineas == []
+        assert resultado.errores[0]["columna"] == "Mes"
+        assert "quite la columna Año" in resultado.errores[0]["mensaje"]

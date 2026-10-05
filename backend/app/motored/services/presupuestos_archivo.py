@@ -22,6 +22,14 @@ _MES_ISO_DIA_RE = re.compile(r"^\d{4}-\d{2}-\d{2}")
 _MES_LATINO_RE = re.compile(r"^(\d{1,2})/(\d{4})$")
 _MONTO_MILES_RE = re.compile(r"^\d{1,3}(?:[.,]\d{3})+$")
 _MONTO_ENTERO_RE = re.compile(r"^(\d+)(?:\.0+)?$")
+_ANIO_RE = re.compile(r"^[1-9]\d{3}$")
+_MSG_ANIO = "El año debe tener 4 dígitos (ej. 2026)"
+_MSG_MES_NUM = "El mes debe ser un número de 1 a 12"
+_MSG_DOS_FORMATOS = (
+    "Con la columna Año, el Mes debe ser un número de 1 a 12 (ej. Año "
+    "2026, Mes 7). Para usar una sola columna Mes con '2026-07', quite "
+    "la columna Año"
+)
 
 
 def parse_mes(valor: Any) -> datetime.date:
@@ -41,6 +49,69 @@ def parse_mes(valor: Any) -> datetime.date:
     except ValueError:
         pass
     raise ValueError("El mes debe ser una fecha, 'AAAA-MM' o 'MM/AAAA'")
+
+
+def _entero_texto(valor: Any) -> str:
+    """Number or numeric text ('10', '10.0' from an Excel float) -> digits;
+    anything else -> ''."""
+    if isinstance(valor, bool):
+        return ""
+    if isinstance(valor, float):
+        return str(int(valor)) if valor.is_integer() else ""
+    texto = "" if valor is None else str(valor).strip()
+    encontrado = _MONTO_ENTERO_RE.match(texto)
+    return encontrado.group(1) if encontrado else ""
+
+
+def parse_anio(valor: Any) -> int:
+    """Year column: exactly 4 digits."""
+    digitos = _entero_texto(valor)
+    if not _ANIO_RE.match(digitos):
+        raise ValueError(_MSG_ANIO)
+    return int(digitos)
+
+
+def _parece_mes_completo(valor: Any) -> bool:
+    if isinstance(valor, datetime.date):  # datetime is a date subclass
+        return True
+    texto = "" if valor is None else str(valor).strip()
+    return any(p.match(texto) for p in (
+        _MES_ISO_RE, _MES_ISO_DIA_RE, _MES_LATINO_RE))
+
+
+def parse_mes_numero(valor: Any) -> int:
+    """Month column of the two-column layout: 1 to 12."""
+    digitos = _entero_texto(valor)
+    if digitos and 1 <= int(digitos) <= 12:
+        return int(digitos)
+    if _parece_mes_completo(valor):
+        raise ValueError(_MSG_DOS_FORMATOS)
+    raise ValueError(_MSG_MES_NUM)
+
+
+class ErrorMesFila(ValueError):
+    """A month error that names the offending column."""
+
+    def __init__(self, columna: str, mensaje: str):
+        super().__init__(mensaje)
+        self.columna = columna
+
+
+def mes_de_fila(fila: Mapping[str, Any]) -> datetime.date:
+    """First day of the row's month. Layout by header: a canonical row with
+    the `anio` key came from a file WITH an "Año" column (two columns);
+    otherwise `mes` holds a date, 'AAAA-MM' or 'MM/AAAA'."""
+    if "anio" not in fila:
+        return parse_mes(fila.get("mes"))
+    try:
+        anio = parse_anio(fila.get("anio"))
+    except ValueError as exc:
+        raise ErrorMesFila("Año", str(exc)) from exc
+    try:
+        mes = parse_mes_numero(fila.get("mes"))
+    except ValueError as exc:
+        raise ErrorMesFila("Mes", str(exc)) from exc
+    return datetime.date(anio, mes, 1)
 
 
 def parse_monto(valor: Any) -> int:
@@ -134,6 +205,7 @@ def _valor_o_error(analizar, fila: int, columna: str, crudo: Any, resultado: Val
     try:
         return analizar(crudo)
     except ValueError as exc:
+        columna = getattr(exc, "columna", columna)
         resultado.errores.append(_incidencia(fila, columna, str(exc)))
         return None
 
@@ -146,7 +218,7 @@ def validar_filas(filas: List[Dict[str, Any]], catalogos: Catalogos) -> Validaci
     candidatas: List[LineaValida] = []
     for numero, fila in enumerate(filas, start=1):
         cedula = _validar_cedula(numero, fila.get("cedula"), catalogos, resultado)
-        mes = _valor_o_error(parse_mes, numero, "Mes", fila.get("mes"), resultado)
+        mes = _valor_o_error(mes_de_fila, numero, "Mes", fila, resultado)
         sucursal_id = _validar_tienda(numero, fila.get("tienda"), catalogos, resultado)
         monto = _valor_o_error(parse_monto, numero, "Presupuesto", fila.get("presupuesto"), resultado)
         if None not in (cedula, mes, sucursal_id, monto):
