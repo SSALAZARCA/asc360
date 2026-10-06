@@ -1,12 +1,13 @@
 """
 Motored "Inicio": `GET /api/motored/inicio` and its service.
 
-One page, the same for every role that reaches it: Repuestos sales of the
-last complete month and of the year to date, the active principal stores
-and the active vendedores. Each figure is computed on its own savepoint and
-fails soft. These tests use fake sessions and patch the KPI reads where a
-real database would be needed; `pg_real/test_inicio_pg.py` covers the SQL
-(the annulled loads, the inactive stores and vendedores).
+One page, the same for every role that reaches it: the KPI Ventas tab's
+total of the last complete month and of its "Año corrido", the active
+principal stores and the asesores with sales in the last complete month.
+Each figure is computed on its own savepoint and fails soft. These tests
+use fake sessions and patch the KPI reads where a real database would be
+needed; `pg_real/test_inicio_pg.py` covers the SQL
+(the annulled loads, the inactive stores, the asesores with sales).
 """
 import uuid
 from datetime import date
@@ -70,38 +71,53 @@ def _sql(sentencia) -> str:
 
 
 TIENDA_1, TIENDA_2 = str(uuid.uuid4()), str(uuid.uuid4())
+CORTE = date(2026, 9, 30)
+HASTA_SEPTIEMBRE = [f"2026-{m:02d}" for m in range(1, 10)]
 
 
-def _fila(mes, linea, venta, hmcl=False, tienda=TIENDA_1):
+def _fila(mes, linea, venta, hmcl=False, clave=TIENDA_1):
     venta = Decimal(venta)
     return t.FilaCubo(
-        tienda, mes, linea, hmcl, False, False, False, venta,
+        clave, mes, linea, hmcl, False, False, False, venta,
         venta, Decimal(0), Decimal(1), 1, Decimal(0))
 
 
 CUBO = [
     _fila("2026-09", "REPUESTOS", "1000.25"),
-    _fila("2026-09", "REPUESTOS", "500", hmcl=True, tienda=TIENDA_2),
+    _fila("2026-09", "REPUESTOS", "500", hmcl=True, clave=TIENDA_2),
     _fila("2026-09", "ACCESORIOS", "9999"),
     _fila("2026-09", None, "7777"),
 ]
+# Every recognized line, HMCL included; the line-less row never counts.
+TOTAL_CUBO = 11499.25
 
 
-def _kpi(monkeypatch, cubo=CUBO, reglas=t.REGLAS_POR_DEFECTO):
+def _kpi(monkeypatch, cubo=CUBO, reglas=t.REGLAS_POR_DEFECTO,
+         disponibles=HASTA_SEPTIEMBRE):
     """Patches the KPI reads; returns the calls `(meses, hmcl, tiendas,
-    dimension)` they received."""
+    dimension)` they received. `disponibles` are the months with sales
+    (`kpi_resumen_lectura.meses`)."""
     llamadas = []
 
     async def _filtro(db, meses, modo_hmcl, sucursal_ids=None):
         llamadas.append([list(meses), modo_hmcl, sucursal_ids])
         return t.filtro_de_meses(meses, modo_hmcl, sucursal_ids, reglas)
 
+    async def _corte(db):
+        return CORTE
+
     async def _cubo(db, filtro, fecha_corte, dimension=t.DIM_ASESOR):
+        assert fecha_corte == CORTE  # the KPI's own cost cut
         llamadas[-1].append(dimension)
         return cubo
 
+    async def _meses(db):
+        return list(disponibles)
+
     monkeypatch.setattr(tablero_asesores_consultas, "cargar_filtro", _filtro)
+    monkeypatch.setattr(kpi_resumen_lectura, "fecha_corte_costos", _corte)
     monkeypatch.setattr(kpi_resumen_lectura, "cubo", _cubo)
+    monkeypatch.setattr(kpi_resumen_lectura, "meses", _meses)
     return llamadas
 
 
@@ -159,17 +175,17 @@ async def test_every_figure_can_fail_on_its_own(monkeypatch):
         n: {"disponible": False} for n in FIGURAS}
 
 
-# --- Repuestos sales ---------------------------------------------------------
+# --- Sales: the KPI Ventas tab's total ---------------------------------------
 
 
-async def test_ventas_mes_is_the_last_complete_month_of_repuestos(
+async def test_ventas_mes_is_the_kpi_total_of_the_last_complete_month(
         monkeypatch):
     llamadas = _kpi(monkeypatch)
 
     datos = await inicio.CONSTRUCTORES["ventas_mes"](_ctx(Sesion()))
 
-    # HMCL included, as the KPI's default; only the REPUESTOS line.
-    assert datos == {"valor": 1500.25, "mes": "2026-09"}
+    # HMCL included, as the KPI's default; every commercial line.
+    assert datos == {"valor": TOTAL_CUBO, "mes": "2026-09"}
     assert llamadas == [[["2026-09"], t.HMCL_INCLUIR, None, t.DIM_SUCURSAL]]
 
 
@@ -184,38 +200,59 @@ async def test_ventas_mes_in_january_is_december_of_last_year(
     assert llamadas[0][0] == ["2026-12"]
 
 
-async def test_ventas_anio_runs_from_january_to_today(monkeypatch):
+async def test_ventas_anio_is_the_kpi_ano_corrido(monkeypatch):
+    """January to the last month with sales, the KPI's `ultimo_mes`."""
     llamadas = _kpi(monkeypatch)
 
     datos = await inicio.CONSTRUCTORES["ventas_anio"](_ctx(Sesion()))
 
     assert datos == {
-        "valor": 1500.25, "desde": "2026-01-01", "hasta": "2026-10-06"}
-    assert llamadas == [[
-        [f"2026-{m:02d}" for m in range(1, 11)], t.HMCL_INCLUIR, None,
-        t.DIM_SUCURSAL]]
+        "valor": TOTAL_CUBO, "desde": "2026-01", "hasta": "2026-09"}
+    assert llamadas == [
+        [HASTA_SEPTIEMBRE, t.HMCL_INCLUIR, None, t.DIM_SUCURSAL]]
 
 
-async def test_ventas_anio_on_new_years_day_is_january_only(monkeypatch):
-    llamadas = _kpi(monkeypatch, cubo=[])
+async def test_ventas_anio_follows_the_kpi_when_the_month_has_sales(
+        monkeypatch):
+    """Like the KPI's "Año corrido": a month with sales loaded counts,
+    even the current one."""
+    llamadas = _kpi(monkeypatch, disponibles=["2025-12", "2026-10"])
+
+    datos = await inicio.CONSTRUCTORES["ventas_anio"](_ctx(Sesion()))
+
+    assert (datos["desde"], datos["hasta"]) == ("2026-01", "2026-10")
+    assert llamadas[0][0] == [f"2026-{m:02d}" for m in range(1, 11)]
+
+
+async def test_ventas_anio_is_the_year_of_the_last_month_with_sales(
+        monkeypatch):
+    llamadas = _kpi(monkeypatch, disponibles=["2026-11", "2026-12"])
 
     datos = await inicio.CONSTRUCTORES["ventas_anio"](
-        _ctx(Sesion(), date(2027, 1, 1)))
+        _ctx(Sesion(), date(2027, 1, 3)))
 
-    assert datos == {
-        "valor": 0.0, "desde": "2027-01-01", "hasta": "2027-01-01"}
-    assert llamadas[0][0] == ["2027-01"]
+    assert (datos["desde"], datos["hasta"]) == ("2026-01", "2026-12")
+    assert llamadas[0][0] == [f"2026-{m:02d}" for m in range(1, 13)]
 
 
-async def test_repuestos_follows_the_configured_lines(monkeypatch):
-    """Without REPUESTOS among the configured lines the KPI does not
-    recognize it either: nothing is counted."""
+async def test_ventas_anio_without_any_sales_is_zero(monkeypatch):
+    llamadas = _kpi(monkeypatch, disponibles=[])
+
+    datos = await inicio.CONSTRUCTORES["ventas_anio"](_ctx(Sesion()))
+
+    assert datos == {"valor": 0.0, "desde": None, "hasta": None}
+    assert llamadas == []
+
+
+async def test_sales_follow_the_configured_lines(monkeypatch):
+    """A line outside the configured ones is not recognized by the KPI
+    either: it is not counted."""
     reglas = t.REGLAS_POR_DEFECTO._replace(lineas=("ACCESORIOS",))
     _kpi(monkeypatch, reglas=reglas)
 
     datos = await inicio.CONSTRUCTORES["ventas_mes"](_ctx(Sesion()))
 
-    assert datos["valor"] == 0.0
+    assert datos["valor"] == 9999.0
 
 
 def test_the_bogota_today_is_the_default(monkeypatch):
@@ -239,15 +276,28 @@ async def test_puntos_venta_counts_the_active_principal_stores():
     assert "sucursal.principal_id IS NULL" in sql
 
 
-async def test_asesores_counts_the_active_vendedores():
-    sesion = Sesion(execute_queue=[[(37,)]])
+CUBO_ASESORES = [
+    _fila("2026-09", "REPUESTOS", "100", clave="P:ANA"),
+    _fila("2026-09", "LLANTAS", "50", hmcl=True, clave="P:LUIS"),
+    _fila("2026-09", None, "900", clave="P:SIN-LINEA"),
+    _fila("2026-09", "REPUESTOS", "100", clave="P:DEVOLVIO"),
+    _fila("2026-09", "REPUESTOS", "-100", clave="P:DEVOLVIO"),
+    _fila("2026-09", "REPUESTOS", "800", clave=t.GRUPO_RESTO),
+    _fila("2026-09", "REPUESTOS", "700", clave=t.GRUPO_OTROS),
+]
 
-    datos = await inicio.CONSTRUCTORES["asesores"](_ctx(sesion))
 
-    assert datos == {"cantidad": 37}
-    sql = _sql(sesion.executed_statements[0])
-    assert "count(" in sql
-    assert "vendedor.activo IS true" in sql
+async def test_asesores_are_the_kpi_asesores_with_sales_last_month(
+        monkeypatch):
+    """Like KPIs > Asesores "con venta": a person row of the asesor cube
+    with a positive sale; groups, line-less sales and a net zero do not
+    count."""
+    llamadas = _kpi(monkeypatch, cubo=CUBO_ASESORES)
+
+    datos = await inicio.CONSTRUCTORES["asesores"](_ctx(Sesion()))
+
+    assert datos == {"cantidad": 2, "mes": "2026-09"}
+    assert llamadas == [[["2026-09"], t.HMCL_INCLUIR, None, t.DIM_ASESOR]]
 
 
 # --- HTTP and the role guard -------------------------------------------------

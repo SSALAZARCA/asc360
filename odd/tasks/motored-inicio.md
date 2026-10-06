@@ -52,3 +52,22 @@ Inicio now looks the same for every role that reaches it (ADMIN, COMPRAS, GERENC
   - tests/motored: 5837 passed.
   - pg_real (full, PG 18 throwaway): 654 passed, 3 skipped.
   - jest: 2089 passed.
+
+## Owner correction (2026-10-06): sales are the KPI total, asesores are the ones with sales
+The sales figures were only the Repuestos line. They must equal the KPI Ventas tab's headline: "Venta 1 mes" (Sep 2026, $1.872 M) and "Venta 9 meses" (Jan–Sep 2026, $15.092 M), the total of all the commercial lines. Asesores means the asesores with sales in the last complete month.
+
+| ID | Task | Route |
+|---|---|---|
+| T3 | `ventas_mes` / `ventas_anio` = `calcular_kpis_ventas(...)["total"]["venta"]["total"]` for the last complete month and the KPI "Año corrido". `asesores` = KPIs › Asesores "con venta" for the last complete month (`{cantidad, mes}`). Titles drop "— Repuestos"; tooltips name the lines and the KPI equality; the Asesores subtitle shows the month. | delegated writer (2+ non-trivial files) |
+
+- [x] T3
+
+### T3 log
+- Sales: `inicio._acumulados` replays the KPI read (`cargar_filtro` with HMCL incluir and all stores, `fecha_corte_costos`, `cubo` by store, `filtrar_cubo_por_hmcl`, `acumular_cubo`). `venta_kpi` returns `round(acum[TOTAL].venta, 2)`, which is `_bloque_venta`'s `"total"`, shown by the KPI front as "Venta N meses" (`kpis/ventas/datos.js` `miniKpis`).
+- "Año corrido" in the KPI runs from January to `ultimo_mes`, the last month with sales (`tablero_kpis.calcular_opciones`, `periodo.js` `presetMeses('ytd')`). It is not "last complete month". Inicio uses the same rule, so `ventas_anio` is `{valor, desde: "AAAA-01", hasta: ultimo_mes}`. Once the current month has loaded sales, it includes that month, exactly like the KPI. With no sales at all it returns `{valor: 0, desde: null, hasta: null}`.
+- Asesores: the KPI front counts `filas` with `tipo == "PERSONA"` and `venta.total > 0` (`kpis/asesores/datos.js` `miniKpisAsesores`). A PERSONA is an active vendedor whose cargo maps to a person in `grupo_por_cargo`, identified by cedula (`_expr_clave`). Inicio counts the same keys (`es_clave_persona`) in the asesor cube of the last complete month. The old count (`vendedor.activo` in the master) is gone.
+- RED observed: unit tests 8 failed; pg_real `ventas_mes` failed against the HEAD service; jest 10 failed. All GREEN after the change.
+- Results:
+  - tests/motored: 5839 passed.
+  - pg_real (full, PG 18 throwaway): 654 passed, 3 skipped.
+  - jest: 2092 passed.

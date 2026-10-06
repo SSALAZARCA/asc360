@@ -1,7 +1,8 @@
 /**
  * Motored "Inicio": one page, the same for every role that reaches it. The
- * greeting, then four stat boxes (Repuestos sales of the last month and of
- * the year, puntos de venta, asesores) with their tooltips, and the loading,
+ * greeting, then four stat boxes (the KPI sales total of the last month and
+ * of the year, puntos de venta, asesores with sales last month) with their
+ * tooltips, and the loading,
  * unavailable and error states. No links or buttons in the body.
  */
 import React from 'react';
@@ -43,17 +44,18 @@ function relojEn(iso) {
 }
 
 const ROLES = ['ADMIN', 'COMPRAS', 'GERENCIA', 'SERVICIO_CLIENTE'];
-const MES = 'Ventas del último mes — Repuestos';
-const ANIO = 'Ventas acumuladas del año — Repuestos';
+const MES = 'Ventas del último mes';
+const ANIO = 'Ventas acumuladas del año';
+const LINEAS = 'Total de las líneas comerciales (repuestos, accesorios, llantas, lubricantes, baterías, GPS y cascos)';
 const PUNTOS = 'Puntos de venta';
 const ASESORES = 'Asesores';
 
 const RESPUESTA = {
   hoy: '2026-10-06',
   ventas_mes: { disponible: true, valor: 152340000.4, mes: '2026-09' },
-  ventas_anio: { disponible: true, valor: 1234567890, desde: '2026-01-01', hasta: '2026-10-06' },
+  ventas_anio: { disponible: true, valor: 1234567890, desde: '2026-01', hasta: '2026-09' },
   puntos_venta: { disponible: true, cantidad: 12 },
-  asesores: { disponible: true, cantidad: 1234 },
+  asesores: { disponible: true, cantidad: 1234, mes: '2026-09' },
 };
 
 function entrarComo(rol, nombre = 'Ana María Pérez', cambios = {}) {
@@ -118,7 +120,7 @@ describe('Inicio - greeting', () => {
 });
 
 describe('Inicio - the four boxes', () => {
-  it('shows the Repuestos sales of the last complete month in pesos', async () => {
+  it('shows the KPI sales total of the last complete month in pesos', async () => {
     entrarComo('GERENCIA');
 
     const region = await caja(MES);
@@ -126,17 +128,35 @@ describe('Inicio - the four boxes', () => {
     expect(region).toHaveTextContent(cop(152340000.4));
     expect(region).toHaveTextContent('Septiembre 2026');
     expect(ayuda(region)).toBe(
-      'Suma de ventas de la línea Repuestos en septiembre de 2026, todas las tiendas.');
+      `${LINEAS} en septiembre de 2026, todas las tiendas. Es la misma venta que muestra KPIs.`);
   });
 
-  it('shows the Repuestos sales from January to today in pesos', async () => {
+  it('shows the KPI sales total of the "Año corrido" in pesos', async () => {
     entrarComo('ADMIN');
 
     const region = await caja(ANIO);
     expect(region).toHaveTextContent(cop(1234567890));
-    expect(region).toHaveTextContent('Enero a hoy');
+    expect(region).toHaveTextContent('Enero a septiembre 2026');
     expect(ayuda(region)).toBe(
-      'Suma de ventas de la línea Repuestos desde el 1 de enero de 2026 hasta hoy, todas las tiendas.');
+      `${LINEAS} de enero a septiembre de 2026, todas las tiendas. Es la misma venta del "Año corrido" de KPIs.`);
+  });
+
+  it('names a single month when the year has only January', async () => {
+    entrarComo('ADMIN', 'Ana', { ventas_anio: { disponible: true, valor: 5, desde: '2027-01', hasta: '2027-01' } });
+
+    const region = await caja(ANIO);
+    expect(region).toHaveTextContent('Enero 2027');
+    expect(ayuda(region)).toBe(
+      `${LINEAS} en enero de 2027, todas las tiendas. Es la misma venta del "Año corrido" de KPIs.`);
+  });
+
+  it('shows the asesores with sales in the last complete month', async () => {
+    entrarComo('ADMIN');
+
+    const region = await caja(ASESORES);
+    expect(region).toHaveTextContent('Con ventas en septiembre 2026');
+    expect(ayuda(region)).toBe(
+      'Asesores con venta en septiembre de 2026, los mismos que cuenta KPIs › Asesores.');
   });
 
   it('shows the counts as plain integers with Colombian separators', async () => {
@@ -147,7 +167,7 @@ describe('Inicio - the four boxes', () => {
     expect(ayuda(puntos)).toMatch(/principales activas/);
     const asesores = await caja(ASESORES);
     expect(within(asesores).getByText('1.234')).toBeInTheDocument();
-    expect(ayuda(asesores)).toMatch(/activos en el maestro de Vendedores/);
+    expect(ayuda(asesores)).toMatch(/con venta en septiembre de 2026/);
   });
 
   it('has exactly four level-2 headings, in order', async () => {
@@ -196,8 +216,19 @@ describe('Inicio - loading, unavailable and errors', () => {
     const region = await caja(MES);
     expect(region).toHaveTextContent('No disponible por ahora');
     expect(ayuda(region)).toBe(
-      'Suma de ventas de la línea Repuestos del último mes completo, todas las tiendas.');
+      `${LINEAS} del último mes completo, todas las tiendas. Es la misma venta que muestra KPIs.`);
     expect(await caja(ANIO)).toHaveTextContent(cop(1234567890));
+  });
+
+  it('explains the unavailable year and asesores without a month', async () => {
+    entrarComo('ADMIN', 'Ana', { ventas_anio: { disponible: false }, asesores: { disponible: false } });
+
+    expect(ayuda(await caja(ANIO))).toBe(
+      `${LINEAS} de enero al último mes con ventas, todas las tiendas. Es la misma venta del "Año corrido" de KPIs.`);
+    const asesores = await caja(ASESORES);
+    expect(asesores).not.toHaveTextContent('Con ventas en');
+    expect(ayuda(asesores)).toBe(
+      'Asesores con venta en el último mes completo, los mismos que cuenta KPIs › Asesores.');
   });
 
   it('shows every box as unavailable when the request fails', async () => {

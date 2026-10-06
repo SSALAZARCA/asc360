@@ -6,10 +6,12 @@ at a database migrated with `alembic -c alembic_motored.ini upgrade head`.
 One connection inside a transaction rolled back at the end
 (`join_transaction_mode="create_savepoint"`), so the database stays clean.
 
-Covers what the fakes cannot: the KPI's real SQL behind the Repuestos
-sales (lines, months, annulled loads), the store and vendedor counts, and
-that each figure runs on its own savepoint (a failed one does not poison
-the next). Sales are dated 2097 so they cannot meet other data.
+Covers what the fakes cannot: Inicio equals the KPI tabs on the real SQL
+(the Ventas total of the month and of "Año corrido" across lines, months
+and annulled loads; the Asesores "con venta" by cedula and cargo), the
+store count, and that each figure runs on its own savepoint (a failed one
+does not poison the next). Sales are dated 2097 so they cannot meet other
+data.
 """
 import datetime
 import os
@@ -84,16 +86,29 @@ async def _sembrar_tiendas(db, sfx):
 
 
 async def _sembrar_vendedores(db, sfx):
-    """Two active vendedores and an inactive one."""
-    def persona(nombre, activo=True):
-        return Vendedor(
-            id=uuid.uuid4(), nombre=f"{nombre} {sfx}",
-            nombre_norm=normalizar_vendedor(f"{nombre} {sfx}"),
-            cargo="ASESOR DE REPUESTOS", activo=activo)
-
-    db.add_all([persona("Ana"), persona("Luis"),
-                persona("Dora", activo=False)])
+    """`{alias: vendedor_norm}`. Ana is in the master twice (one cedula),
+    Dora is inactive (the company's rest), Carla is a comercial (a group,
+    not a person)."""
+    asesor, comercial = (
+        "ASESOR DE REPUESTOS", "ASESOR COMERCIAL DE SERVICIO POSVENTA")
+    filas = {
+        "ana": ("Ana", asesor, "C1", True),
+        "ana2": ("Ana Maria", asesor, "C1", True),
+        "luis": ("Luis", asesor, "C2", True),
+        "sofia": ("Sofia", asesor, "C3", True),
+        "mario": ("Mario", asesor, "C4", True),
+        "dora": ("Dora", asesor, "C5", False),
+        "carla": ("Carla", comercial, "C6", True),
+    }
+    normas = {}
+    for alias, (nombre, cargo, cedula, activo) in filas.items():
+        completo = f"{nombre} {sfx}"
+        normas[alias] = normalizar_vendedor(completo)
+        db.add(Vendedor(
+            id=uuid.uuid4(), nombre=completo, nombre_norm=normas[alias],
+            cargo=cargo, cedula=f"{cedula}-{sfx}", activo=activo))
     await db.flush()
+    return normas
 
 
 async def _referencias(db, sfx):
@@ -114,73 +129,90 @@ async def _referencias(db, sfx):
     return refs
 
 
-async def _sembrar_ventas(db, sfx, principal, asociada):
-    """September 2097: Repuestos 900 + 300 (the associated store is sold
-    from too); August 200 and October 50; the rest must not count."""
+async def _sembrar_ventas(db, sfx, principal, asociada, normas):
+    """September 2097: Ana 900 + 300 (with her second name, at the
+    associated store), Sofia 5000 in Accesorios, Dora 700 and Carla 600;
+    Mario sells only without a line and Luis only in an annulled load.
+    August 200 and October 50 (Luis); last year 7000."""
     refs = await _referencias(db, sfx)
     viva, anulada = _carga("APLICADO"), _carga("ANULADO")
     db.add_all([viva, anulada])
     await db.flush()
 
-    def venta(ref, fecha, bruto, desc=0, carga=viva, tienda=principal):
+    def venta(quien, ref, fecha, bruto, desc=0, carga=viva,
+              tienda=principal):
         db.add(VentaDetalle(
             id=uuid.uuid4(), carga_id=carga.id, fecha=fecha,
             anio=fecha.year, mes=fecha.month, sucursal_id=tienda.id,
             referencia_id=refs[ref].id, origen="MOSTRADOR",
-            cantidad=D(1), vendedor="X", vendedor_norm="X",
-            valor_bruto=D(bruto), valor_descuentos=D(desc),
-            cliente_factura="Taller", nro_documento=f"F-{uuid.uuid4()}"))
+            cantidad=D(1), vendedor=normas[quien],
+            vendedor_norm=normas[quien], valor_bruto=D(bruto),
+            valor_descuentos=D(desc), cliente_factura="Taller",
+            nro_documento=f"F-{uuid.uuid4()}"))
 
     dia = datetime.date
-    venta("R", dia(2097, 9, 1), 1000, 100)
-    venta("R", dia(2097, 9, 30), 300, tienda=asociada)
-    venta("A", dia(2097, 9, 15), 5000)  # another line
-    venta("N", dia(2097, 9, 15), 4000)  # no line at all
-    venta("R", dia(2097, 9, 15), 99999, carga=anulada)  # annulled
-    venta("R", dia(2097, 8, 31), 200)
-    venta("R", dia(2097, 10, 3), 50)
-    venta("R", dia(2096, 12, 31), 7000)  # last year
+    venta("ana", "R", dia(2097, 9, 1), 1000, 100)
+    venta("ana2", "R", dia(2097, 9, 30), 300, tienda=asociada)
+    venta("sofia", "A", dia(2097, 9, 15), 5000)
+    venta("mario", "N", dia(2097, 9, 15), 4000)  # no line at all
+    venta("luis", "R", dia(2097, 9, 15), 99999, carga=anulada)
+    venta("dora", "R", dia(2097, 9, 20), 700)
+    venta("carla", "A", dia(2097, 9, 21), 600)
+    venta("luis", "R", dia(2097, 8, 31), 200)
+    venta("luis", "R", dia(2097, 10, 3), 50)
+    venta("luis", "R", dia(2096, 12, 31), 7000)  # last year
     await db.flush()
 
 
-async def _venta_del_tablero(db, meses):
-    """What the KPI Ventas tab shows for Repuestos in `meses`."""
+async def _kpi_ventas(db, meses):
+    """The KPI Ventas tab's headline "Venta N meses" for `meses`."""
     filtro = await q.cargar_filtro(db, meses, HMCL_INCLUIR, None)
     ventas = await tablero_kpis.calcular_kpis_ventas(db, filtro)
-    return ventas["total"]["venta"]["por_linea"]["REPUESTOS"]
+    return ventas["total"]["venta"]["total"]
 
 
-async def _contar(db):
-    respuesta = await inicio.construir_inicio(db, HOY)
-    return (respuesta["puntos_venta"]["cantidad"],
-            respuesta["asesores"]["cantidad"])
+async def _kpi_asesores(db, meses):
+    """The KPI Asesores tab's "Asesores con venta" for `meses`."""
+    filtro = await q.cargar_filtro(db, meses, HMCL_INCLUIR, None)
+    tablero = await tablero_kpis.calcular_kpis_asesores(db, filtro)
+    return sum(1 for f in tablero["filas"]
+               if f["tipo"] == "PERSONA" and f["venta"]["total"] > 0)
 
 
-async def test_the_four_figures_from_a_seeded_database(fabrica):
+async def _sembrar(db, sfx):
+    principal, asociada = await _sembrar_tiendas(db, sfx)
+    normas = await _sembrar_vendedores(db, sfx)
+    await _sembrar_ventas(db, sfx, principal, asociada, normas)
+
+
+async def test_the_four_figures_equal_the_kpi_tabs(fabrica):
     sfx = uuid.uuid4().hex[:8].upper()
+    corrido = [f"2097-{m:02d}" for m in range(1, 11)]
     async with fabrica() as db:
-        tiendas_antes, asesores_antes = await _contar(db)
-        principal, asociada = await _sembrar_tiendas(db, sfx)
-        await _sembrar_vendedores(db, sfx)
-        await _sembrar_ventas(db, sfx, principal, asociada)
+        tiendas_antes = (await inicio.construir_inicio(db, HOY))[
+            "puntos_venta"]["cantidad"]
+        await _sembrar(db, sfx)
 
         respuesta = await inicio.construir_inicio(db, HOY)
-        tablero_mes = await _venta_del_tablero(db, ["2097-09"])
-        tablero_anio = await _venta_del_tablero(
-            db, [f"2097-{m:02d}" for m in range(1, 11)])
+        kpi_mes = await _kpi_ventas(db, ["2097-09"])
+        kpi_anio = await _kpi_ventas(db, corrido)
+        kpi_asesores = await _kpi_asesores(db, ["2097-09"])
 
     assert respuesta["hoy"] == "2097-10-06"
-    assert respuesta["ventas_mes"]["valor"] == tablero_mes
-    assert respuesta["ventas_anio"]["valor"] == tablero_anio
     assert respuesta["ventas_mes"] == {
-        "disponible": True, "valor": 1200.0, "mes": "2097-09"}
+        "disponible": True, "valor": kpi_mes, "mes": "2097-09"}
+    assert kpi_mes == 7500.0
+    # The KPI's "Año corrido" ends at the last month with sales (October).
     assert respuesta["ventas_anio"] == {
-        "disponible": True, "valor": 1450.0, "desde": "2097-01-01",
-        "hasta": "2097-10-06"}
+        "disponible": True, "valor": kpi_anio, "desde": "2097-01",
+        "hasta": "2097-10"}
+    assert kpi_anio == 7750.0
     assert respuesta["puntos_venta"] == {
         "disponible": True, "cantidad": tiendas_antes + 1}
+    # Ana (two names, one cedula) and Sofia.
     assert respuesta["asesores"] == {
-        "disponible": True, "cantidad": asesores_antes + 2}
+        "disponible": True, "cantidad": kpi_asesores, "mes": "2097-09"}
+    assert kpi_asesores == 2
 
 
 async def test_a_failed_query_does_not_poison_the_next_figure(
