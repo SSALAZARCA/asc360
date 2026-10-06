@@ -78,8 +78,9 @@ def _motivos(errores):
 # ---------------------------------------------------------------------------
 
 class TestResolverFilas:
-    async def test_column_absent_makes_no_query_and_leaves_rows_alone(self):
-        db = _db([])
+    async def test_column_absent_leaves_rows_alone(self):
+        # C.O. | principal owner: sucursales, bodegas
+        db = _db([], [], [])
         filas = [_fila("CALI", "BA061")]
 
         resueltas, errores = await _resolver_relaciones(db, "sucursal", filas)
@@ -87,8 +88,9 @@ class TestResolverFilas:
         assert errores == []
         assert FILA_CLAVE not in resueltas[0]
 
-    async def test_column_present_without_codes_makes_no_query(self):
-        db = _db([])
+    async def test_column_present_without_codes_reads_only_the_owners(self):
+        # C.O. | principal owner: sucursales, bodegas
+        db = _db([], [], [])
 
         resueltas, errores = await _resolver_relaciones(
             db, "sucursal", [_fila("CALI", "BA061", ""), _fila("PASTO", "BA070", None)]
@@ -399,9 +401,11 @@ class TestAplicar:
         cali = _sucursal("CALI", "BA061")
         a = _bodega("BA066", cali.id, "BA061")
         b = _bodega("BA067", cali.id, "BA061")
-        # blank cell -> no codes at all -> the resolver makes no query
+        # blank cell -> no codes: the resolver reads only the owners of
+        # the principals (sucursales, bodegas)
         db = _db(
-            [(cali.id, "CALI")], [cali], [a, b], [_raiz("BA061", cali)]
+            [(cali.id, "CALI")], [], [], [cali], [a, b],
+            [_raiz("BA061", cali)],
         )
 
         resultado = await _resolver_y_procesar_carga(
@@ -414,7 +418,9 @@ class TestAplicar:
     async def test_the_principal_bodega_row_is_never_unlinked(self):
         cali = _sucursal("CALI", "BA061")
         principal = _bodega("BA061", cali.id, None)
-        db = _db([(cali.id, "CALI")], [cali], [principal], [principal])
+        db = _db(
+            [(cali.id, "CALI")], [], [], [cali], [principal], [principal]
+        )
 
         resultado = await _resolver_y_procesar_carga(
             db, "sucursal", [_fila("CALI", "BA061", "")], USER_ID
@@ -521,8 +527,9 @@ def test_bodegas_bulk_upload_is_gone(_motored_ready, path):
 
 
 def test_sucursal_upload_still_works_over_http(_motored_ready):
-    # probe, C.O. resolver, upsert, apply, principal sync
-    session = FakeAsyncSession(execute_queue=[[], [], [], [], []])
+    # probe, C.O. resolver, principal owner (sucursales, bodegas), upsert,
+    # apply, principal sync
+    session = FakeAsyncSession(execute_queue=[[], [], [], [], [], [], []])
     override_motored_db(session)
 
     with TestClient(app) as client:
@@ -615,7 +622,9 @@ async def test_row_that_omits_the_column_keeps_its_secondaries_in_a_mixed_file()
 async def test_row_with_empty_list_still_unlinks_all():
     cali = _sucursal("CALI", "BA061")
     a = _bodega("BA066", cali.id, "BA061")
-    db = _db([(cali.id, "CALI")], [cali], [a], [_raiz("BA061", cali)])
+    db = _db(
+        [(cali.id, "CALI")], [], [], [cali], [a], [_raiz("BA061", cali)]
+    )
 
     await _resolver_y_procesar_carga(db, "sucursal", [_fila("CALI", "BA061", [])], USER_ID)
 

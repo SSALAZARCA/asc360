@@ -176,9 +176,10 @@ async def test_store_without_principal_makes_no_query():
 
 async def test_the_upload_syncs_the_principal_record():
     cali = _sucursal("CALI", "BA061")
-    # C.O. | upsert | principal sync: bodegas
+    # C.O. | principal owner: sucursales, bodegas | upsert | principal
+    # sync: bodegas
     db = FakeAsyncSession(execute_queue=[[(cali.id, "CALI", "E01")],
-                                         [cali], []])
+                                         [], [], [cali], []])
 
     resultado = await _resolver_y_procesar_carga(
         db, "sucursal",

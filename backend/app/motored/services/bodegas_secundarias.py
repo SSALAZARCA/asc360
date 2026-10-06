@@ -187,12 +187,11 @@ async def resolver_filas(
     db, filas: List[Dict[str, Any]]
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     """Retorna `(filas_resueltas, errores)` con el mismo shape `{fila, motivo}`
-    (1-indexado) que el resto de los resolvers de `api/carga.py`. Sin la
-    columna en el archivo devuelve las filas tal cual, sin consultar la
-    base."""
-    if not any(COLUMNA in fila for fila in filas):
-        return filas, []
-
+    (1-indexado) que el resto de los resolvers de `api/carga.py`: las
+    secundarias de la columna y la dueña de cada "Bodega principal"
+    (`errores_de_principales_en`). Sin códigos listados ni bodega principal
+    en el archivo devuelve las filas tal cual, sin consultar la base."""
+    con_columna = any(COLUMNA in fila for fila in filas)
     resueltas: List[Dict[str, Any]] = []
     for fila in filas:
         fila = dict(fila)
@@ -202,11 +201,13 @@ async def resolver_filas(
             fila[FILA_CLAVE] = normalizar_codigos(fila.pop(COLUMNA))
         resueltas.append(fila)
 
-    errores = _errores_de_sucursal_repetida(resueltas)
-    todos_los_codigos = {
+    errores = _errores_de_sucursal_repetida(resueltas) if con_columna else []
+    listados = {
         codigo for fila in resueltas for codigo in fila.get(FILA_CLAVE, [])
     }
-    if not todos_los_codigos:
+    principales = {_texto(fila.get("bodega_principal")) for fila in filas}
+    principales.discard("")
+    if not listados and not principales:
         return resueltas, errores
 
     sucursales_db = [tuple(r) for r in (await db.execute(select(
@@ -214,9 +215,13 @@ async def resolver_filas(
     ))).all()]
     bodegas_db = dict(tuple(r) for r in (await db.execute(
         select(Bodega.codigo, Bodega.sucursal_id)
-        .where(Bodega.codigo.in_(todos_los_codigos))
+        .where(Bodega.codigo.in_(listados | principales))
     )).all())
-    errores += _errores_de_codigos(resueltas, sucursales_db, bodegas_db)
+    if listados:
+        errores += _errores_de_codigos(resueltas, sucursales_db, bodegas_db)
+    errores += errores_de_principales_en(
+        resueltas, sucursales_db, bodegas_db
+    )
     errores.sort(key=lambda e: e["fila"])
     return resueltas, errores
 
@@ -240,6 +245,65 @@ def _codigos_liberados(
             if duena == sucursal_id and codigo not in listados
         )
     return liberados
+
+
+def _motivo_principal_ajena(codigo: str, nombre: str) -> str:
+    return (
+        f"La bodega {codigo} ya es de la sucursal {nombre}. Quítela de "
+        "esa sucursal primero o muévala con la carga masiva."
+    )
+
+
+def _duena_ajena(
+    codigo: str,
+    clave: Hashable,
+    efectivas: Dict[Hashable, Optional[str]],
+    principal_db: Dict[uuid.UUID, Optional[str]],
+    bodegas_db: Dict[str, Optional[uuid.UUID]],
+    liberados: Set[str],
+) -> Optional[Hashable]:
+    """The other store that keeps `codigo` once the file is applied: as
+    its final principal, or as a secondary record the file does not
+    release. The record of a store's saved principal follows that
+    principal, so a store the file gives another principal releases it."""
+    for otra, principal in efectivas.items():
+        if otra != clave and principal == codigo:
+            return otra
+    duena = bodegas_db.get(codigo)
+    if duena is None or duena == clave or codigo in liberados:
+        return None
+    if principal_db.get(duena) == codigo:
+        return None
+    return duena
+
+
+def errores_de_principales_en(
+    filas: List[Dict[str, Any]],
+    sucursales_db: Sequence[_SucursalDb],
+    bodegas_db: Dict[str, Optional[uuid.UUID]],
+) -> List[Dict[str, Any]]:
+    """A row whose principal bodega another store keeps in the final
+    state (`_duena_ajena`): an error naming that store. Two rows of one
+    store (same final name) are reported by the C.O. and name checks.
+    `bodegas_db`: code -> owner, for at least the principal codes."""
+    efectivas = _principales_efectivas(filas, sucursales_db)
+    nombres = _nombres_finales(filas, sucursales_db)
+    principal_db = {sid: principal for sid, _, principal in sucursales_db}
+    liberados = _codigos_liberados(filas, bodegas_db)
+    errores: List[Dict[str, Any]] = []
+    for index, fila in enumerate(filas, start=1):
+        codigo = _texto(fila.get("bodega_principal"))
+        if not codigo or not _texto(fila.get("nombre")):
+            continue
+        clave = clave_de_fila(index, fila)
+        otra = _duena_ajena(
+            codigo, clave, efectivas, principal_db, bodegas_db, liberados,
+        )
+        if otra is not None and nombres.get(otra) != nombres.get(clave):
+            errores.append({"fila": index, "motivo": _motivo_principal_ajena(
+                codigo, nombres.get(otra, "otra sucursal")
+            )})
+    return errores
 
 
 def _errores_de_codigos(
@@ -460,36 +524,58 @@ async def sincronizar_principales(
             ), usuario_id)
 
 
+def _motivo_principal_de_formulario(
+    sucursal: Sucursal,
+    principal: str,
+    principal_de: Dict[str, str],
+    bodegas_db: Dict[str, Optional[uuid.UUID]],
+    nombres: Dict[uuid.UUID, str],
+) -> Optional[str]:
+    """The form never takes a bodega from another store: its principal
+    may only be a record of its own, or of none."""
+    otra = principal_de.get(principal)
+    duena = bodegas_db.get(principal)
+    if otra is None and duena is not None and duena != sucursal.id:
+        otra = nombres.get(duena, "otra sucursal")
+    if otra is None:
+        return None
+    return _motivo_principal_ajena(principal, otra)
+
+
 async def _validar_de_sucursal(
     db, sucursal: Sucursal, codigos: List[str],
 ) -> None:
-    """The form's rules for the secondaries of ONE store, against the
-    final state: the store's principal is the one the save just set (in
+    """The form's rules for the bodegas of ONE store, against the final
+    state: the store's principal is the one the save just set (in
     memory, never re-read), and the codes it owns may be listed, so a
-    principal/secondary swap is one save. Two queries, none without
-    codes. Raises `BodegasSecundariasInvalidasError` with every motive."""
-    if not codigos:
-        return
+    principal/secondary swap is one save. The principal must not be
+    another store's. Two queries, none without codes or principal.
+    Raises `BodegasSecundariasInvalidasError` with every motive."""
     principal = _texto(sucursal.bodega_principal)
     if not principal:
-        raise BodegasSecundariasInvalidasError(
-            _motivo_sin_principal(sucursal.nombre)
-        )
+        if codigos:
+            raise BodegasSecundariasInvalidasError(
+                _motivo_sin_principal(sucursal.nombre)
+            )
+        return
+    buscados = [*codigos, principal]
     otras = (await db.execute(
         select(Sucursal.nombre, Sucursal.bodega_principal).where(
-            Sucursal.bodega_principal.in_(codigos),
+            Sucursal.bodega_principal.in_(buscados),
             Sucursal.id != sucursal.id,
         )
     )).all()
     duenas = (await db.execute(
         select(Bodega.codigo, Bodega.sucursal_id, Sucursal.nombre)
         .outerjoin(Sucursal, Sucursal.id == Bodega.sucursal_id)
-        .where(Bodega.codigo.in_(codigos))
+        .where(Bodega.codigo.in_(buscados))
     )).all()
     principal_de = {codigo: nombre for nombre, codigo in otras}
     bodegas_db = {codigo: duena for codigo, duena, _ in duenas}
     nombres = {duena: nombre for _, duena, nombre in duenas if duena}
-    motivos = [
+    motivos = [_motivo_principal_de_formulario(
+        sucursal, principal, principal_de, bodegas_db, nombres,
+    )] + [
         _motivo_de_codigo(
             codigo, sucursal.nombre, principal, principal_de, {},
             bodegas_db, sucursal.id, nombres, _REINTENTO_FORMULARIO,
@@ -518,7 +604,8 @@ async def guardar_de_sucursal(
     normalizados = None
     if codigos is not None:
         normalizados = normalizar_codigos(list(codigos))
-        await _validar_de_sucursal(db, sucursal, normalizados)
+    await _validar_de_sucursal(db, sucursal, normalizados or [])
+    if normalizados is not None:
         await aplicar(db, [(sucursal, normalizados)], usuario_id)
     await sincronizar_principales(db, [sucursal], usuario_id)
     return normalizados

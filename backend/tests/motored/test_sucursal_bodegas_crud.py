@@ -108,7 +108,8 @@ class TestAddAndRemove:
         ba161 = _bodega("BA161", tienda.id, "BA071")
         bodegas = [ba071, ba161]
 
-        await _guardar(tienda, [], [bodegas, bodegas])
+        # principal owner: sucursales, bodegas | apply | principal sync
+        await _guardar(tienda, [], [[], [], bodegas, bodegas])
 
         assert _estado(ba161) == (None, None)
         assert _estado(ba071) == (tienda.id, None)
@@ -118,7 +119,8 @@ class TestAddAndRemove:
         ba071 = _bodega("BA071", tienda.id)
         ba161 = _bodega("BA161", tienda.id, "BA071")
 
-        await _guardar(tienda, None, [[ba071, ba161]])
+        # principal owner: sucursales, bodegas | principal sync
+        await _guardar(tienda, None, [[], [], [ba071, ba161]])
 
         assert _estado(ba161) == (tienda.id, None)
         assert _estado(ba071) == (tienda.id, "BA161")
@@ -292,7 +294,7 @@ class TestCrudApi:
     def test_update_of_the_principal_syncs_its_record(self, api):
         tienda = _sucursal()
         ba071 = _bodega("BA071", tienda.id)
-        _cliente([[], [tienda], [ba071]])
+        _cliente([[], [tienda], [], [], [ba071]])
 
         with TestClient(app) as client:
             response = client.patch(

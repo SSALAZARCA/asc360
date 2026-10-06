@@ -316,10 +316,10 @@ async def resolver_filas(
 ) -> Tuple[List[Fila], List[Error]]:
     """Returns `(filas_resueltas, errores)` with the `{fila, motivo}` shape
     of the other `api/carga.py` resolvers. Each row with a non-blank cell
-    gets `FILA_CLAVE` = `PrincipalPedida`. Queries the database only when
-    some cell has a value."""
-    if not any(COLUMNA in fila for fila in filas):
-        return filas, []
+    gets `FILA_CLAVE` = `PrincipalPedida`. A raw `principal_id` is always
+    dropped, even without the column: only the named column associates
+    stores, so a JSON row cannot skip the depth-1 checks. Queries the
+    database only when some cell has a value."""
     filas, textos = _sacar_textos(filas)
     if not textos:
         return filas, []

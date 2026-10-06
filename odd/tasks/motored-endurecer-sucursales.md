@@ -12,7 +12,7 @@ Close the gaps found while loading the owner's Sucursales file and in the indepe
 
 - [x] T1
 - [x] T2
-- [ ] T3
+- [x] T3
 
 ## Out of scope
 - `start.sh` keeps starting the app when a migration fails. That is a deploy-behavior decision for the owner.
@@ -20,3 +20,11 @@ Close the gaps found while loading the owner's Sucursales file and in the indepe
 ## Checks
 - `tests/motored`, full pg_real on a throwaway PG, full jest.
 - Test-first.
+
+## Log
+- 2026-10-06: T1 to T3 done.
+  - Migration `c6e1f8a2d953` (NOT NULL; it refuses to run if any C.O. is NULL). The upload no longer matches stores by name.
+  - New module `errores_integridad` turns IntegrityErrors into readable messages.
+  - Real bugs fixed: a form create with secondaries hit the FK ordering problem, and a duplicate C.O. under two names caused a KeyError (500).
+  - The principal bodega's ownership is validated in the upload and the form. A raw `principal_id` in upload rows is always stripped.
+  - Results: tests/motored 5871 passed; pg_real 667 passed, 3 skipped (downgrade and upgrade OK); jest 2091 passed.
