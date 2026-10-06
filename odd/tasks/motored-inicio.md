@@ -71,3 +71,4 @@ The sales figures were only the Repuestos line. They must equal the KPI Ventas t
   - tests/motored: 5839 passed.
   - pg_real (full, PG 18 throwaway): 654 passed, 3 skipped.
   - jest: 2092 passed.
+- 2026-10-06: owner confirmed that the yearly figure includes the current month up to the latest loaded sales, the same as the KPI "Año corrido". No change needed.
