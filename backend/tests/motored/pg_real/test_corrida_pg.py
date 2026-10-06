@@ -42,6 +42,7 @@ from app.motored.services.corridas.cargador import DatosSucursal
 from app.motored.services.motor.motor import calcular_sucursal
 from app.motored.services.motor.tipos import ParametrosMotor
 from tests.motored.fixtures.motor.constructores import atributos
+from tests.motored.pg_real.codigos_co import codigo_co_unico
 
 URL = os.environ.get("MOTORED_TEST_PG_URL")
 pytestmark = [
@@ -79,7 +80,8 @@ def _carga(tipo, desde=None, hasta=None, aplicado=None, log=None):
 def _sucursal(nombre, **campos):
     valores = dict(
         id=uuid.uuid4(), nombre=f"{nombre} {uuid.uuid4().hex[:6]}",
-        sic=f"SIC-{uuid.uuid4().hex[:6]}", dias_empaque=3, dias_transito=2)
+        sic=f"SIC-{uuid.uuid4().hex[:6]}", codigo_co=codigo_co_unico(),
+        dias_empaque=3, dias_transito=2)
     return Sucursal(**{**valores, **campos})
 
 

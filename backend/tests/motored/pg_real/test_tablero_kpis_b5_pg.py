@@ -29,6 +29,7 @@ from app.motored.models.venta_detalle import VentaDetalle
 from app.motored.services import tablero_asesores_consultas as q
 from app.motored.services import tablero_kpis as k
 from app.motored.services import tablero_kpis_consultas as qk
+from tests.motored.pg_real.codigos_co import codigo_co_unico
 from tests.motored.pg_real.test_tablero_asesores_pg import URL, _carga, pytestmark, sesion  # noqa: F401
 
 D = Decimal
@@ -44,7 +45,9 @@ async def _mundo(db, con_inventario=True):
     w, sfx = Mundo(), uuid.uuid4().hex[:6].upper()
     prov = Proveedor(id=uuid.uuid4(), codigo=f"P-{sfx}", nombre="P", es_principal=True,
                      dias_empaque_default=4, dias_transito_default=5, dias_seguridad_default=D("3"))
-    w.s = [Sucursal(id=uuid.uuid4(), nombre=f"S{i} {sfx}", sic=f"S{i}-{sfx}") for i in (1, 2, 3)]
+    w.s = [Sucursal(
+        id=uuid.uuid4(), nombre=f"S{i} {sfx}", sic=f"S{i}-{sfx}",
+        codigo_co=codigo_co_unico()) for i in (1, 2, 3)]
     db.add_all([prov, *w.s])
     await db.flush()
     refs = {c: Referencia(id=uuid.uuid4(), codigo=f"{c}-{sfx}", proveedor_id=prov.id, unidad_empaque=1,

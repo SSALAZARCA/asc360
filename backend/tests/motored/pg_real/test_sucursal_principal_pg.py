@@ -24,6 +24,8 @@ from app.motored.api.carga import _resolver_y_procesar_carga
 from app.motored.models.sucursal import Sucursal
 from app.motored.services import sucursal_grupo
 
+from tests.motored.pg_real.codigos_co import codigo_co_unico
+
 URL = os.environ.get("MOTORED_TEST_PG_URL")
 pytestmark = [
     pytest.mark.pg_real,
@@ -49,7 +51,8 @@ def _sufijo():
 
 async def _crear(sesion, nombre, principal_id=None):
     sucursal = Sucursal(
-        id=uuid.uuid4(), nombre=nombre, principal_id=principal_id,
+        id=uuid.uuid4(), nombre=nombre, codigo_co=codigo_co_unico(),
+        principal_id=principal_id,
     )
     sesion.add(sucursal)
     await sesion.flush()

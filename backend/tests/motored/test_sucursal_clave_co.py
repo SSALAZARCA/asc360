@@ -3,8 +3,8 @@ The store code "C.O." is the business key of a sucursal.
 
 The C.O. identifies the store; the name is a mutable attribute. The
 Sucursales upload matches a saved store by its C.O. and renames it when the
-name differs. On the first upload of codes (a store without a C.O. yet) the
-row matches by name and fills the code in. Every per-row resolver of the
+name differs (every store has its C.O.: the column is NOT NULL, so there
+is no matching by name). Every per-row resolver of the
 upload ("Bodegas secundarias", "Sucursal principal") keys on the resolved
 store, so a rename, a bodega move and an association work in one file. The
 "Sucursal principal" column accepts a C.O. or a name. The CRUD requires the
@@ -88,17 +88,6 @@ class TestResolver:
             "'C06'. Cada sucursal necesita un nombre distinto."
         ))]
 
-    async def test_first_upload_matches_a_store_without_code_by_name(self):
-        cali = _sucursal("CALI")
-        db = FakeAsyncSession(execute_queue=[[_guardada(cali)]])
-
-        filas, errores = await maestros.resolver_sucursales_carga(
-            db, [{"nombre": " CALI ", "codigo_co": "e05"}]
-        )
-
-        assert errores == []
-        assert filas[0][FILA_SUCURSAL_ID] == cali.id
-
     async def test_code_and_name_of_different_stores_is_a_row_error(self):
         cali = _sucursal("CALI", "E05")
         db = FakeAsyncSession(execute_queue=[[_guardada(cali)]])
@@ -128,14 +117,14 @@ class TestResolver:
         assert errores == []
         assert [f[FILA_SUCURSAL_ID] for f in filas] == [a.id, b.id]
 
-    async def test_two_rows_filling_in_the_same_store_are_an_error(self):
-        cali = _sucursal("CALI")
+    async def test_two_rows_with_one_code_are_an_error(self):
+        cali = _sucursal("CALI", "E05")
         db = FakeAsyncSession(execute_queue=[[_guardada(cali)]])
 
         _, errores = await maestros.resolver_sucursales_carga(
             db,
             [{"nombre": "CALI", "codigo_co": "E05"},
-             {"nombre": "CALI", "codigo_co": "C06"}],
+             {"nombre": "CALI SUR", "codigo_co": "E05"}],
         )
 
         assert [e["fila"] for e in errores] == [1, 2]
@@ -190,18 +179,6 @@ class TestUpload:
         assert resultado.ok is False
         assert resultado.errores[0].motivo == OBLIGATORIO
         assert db.committed is False
-
-    async def test_first_upload_fills_in_the_code_by_name(self):
-        cali = _sucursal("CALI")
-        db = FakeAsyncSession(execute_queue=[[_guardada(cali)], [cali]])
-
-        resultado = await _resolver_y_procesar_carga(
-            db, "sucursal", [{"nombre": "CALI", "codigo_co": "E05"}],
-            USER_ID,
-        )
-
-        assert resultado.ok is True
-        assert cali.codigo_co == "E05"
 
     async def test_two_stores_swap_names_in_one_file(self):
         a = _sucursal("A", "E05")
@@ -382,17 +359,6 @@ class TestCrud:
             )
 
         assert cali.codigo_co == "E05"
-
-    async def test_a_store_without_code_still_edits_without_one(self):
-        cali = _sucursal("CALI")
-        db = FakeAsyncSession(execute_queue=[])
-
-        await maestros.update_sucursal(
-            db, cali,
-            maestros.SucursalUpdate(codigo_co=None, ciudad="Cali"),
-        )
-
-        assert (cali.codigo_co, cali.ciudad) == (None, "Cali")
 
     async def test_the_form_may_rename_freely(self):
         cali = _sucursal("CALI", "E05")

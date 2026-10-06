@@ -31,6 +31,8 @@ from app.motored.models.referencia import Referencia
 from app.motored.models.sucursal import Sucursal
 from app.motored.models.usuario import MotoredRole, Usuario
 
+from tests.motored.pg_real.codigos_co import codigo_co_unico
+
 CORTE = datetime.date(2026, 9, 21)
 D = Decimal
 CEROS = D("0.00")
@@ -81,7 +83,8 @@ async def tiendas(db, sufijo: str, cantidad: int, desde: int = 0) -> list:
     orden de creación)."""
     filas = [
         Sucursal(id=uuid.uuid4(), nombre=f"T{i:02d}-{sufijo}",
-                 sic=f"S{i:02d}-{sufijo}", dias_empaque=1, dias_transito=1)
+                 sic=f"S{i:02d}-{sufijo}", codigo_co=codigo_co_unico(),
+                 dias_empaque=1, dias_transito=1)
         for i in range(desde, desde + cantidad)]
     db.add_all(filas)
     await db.flush()

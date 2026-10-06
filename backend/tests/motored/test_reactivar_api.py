@@ -46,7 +46,10 @@ def _proveedor(**kw):
 
 
 def _sucursal(**kw):
-    return Sucursal(id=uuid.uuid4(), nombre="Norte", dias_seguridad=1, activa=False, **kw)
+    return Sucursal(
+        id=uuid.uuid4(), nombre="Norte", codigo_co="E05", dias_seguridad=1,
+        activa=False, **kw,
+    )
 
 
 def _bodega(**kw):

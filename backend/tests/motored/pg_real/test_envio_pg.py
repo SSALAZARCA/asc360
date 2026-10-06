@@ -46,6 +46,7 @@ from app.motored.services.corridas import (
     pedido_tienda,
     servicio,
 )
+from tests.motored.pg_real.codigos_co import codigo_co_unico
 from tests.motored.pg_real.test_corrida_pg import CORTE, _carga
 
 URL = os.environ.get("MOTORED_TEST_PG_URL")
@@ -85,7 +86,8 @@ def _objetos(sufijo):
         email=f"e-{sufijo}@x.co", hashed_password="x")
     tiendas = [
         Sucursal(id=uuid.uuid4(), nombre=f"{n} {sufijo}",
-                 sic=f"S-{n}-{sufijo}", dias_empaque=1, dias_transito=1)
+                 sic=f"S-{n}-{sufijo}", codigo_co=codigo_co_unico(),
+                 dias_empaque=1, dias_transito=1)
         for n in ("A", "B")]
     referencia = Referencia(
         id=uuid.uuid4(), codigo=f"R1-{sufijo}", proveedor_id=proveedor.id,

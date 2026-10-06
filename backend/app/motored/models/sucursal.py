@@ -24,8 +24,9 @@ enforces the rest. ON DELETE RESTRICT: stores are only soft-deleted, and a
 silent SET NULL would turn an associate into a principal with its own pedido.
 
 `codigo_co` (ERP "centro de operación", e.g. E05): a different C.O. is a
-different store, so it is UNIQUE (NULLs allowed). The constraint is
-DEFERRABLE INITIALLY DEFERRED so one upload can swap two stores' codes.
+different store, so it is UNIQUE and required (NOT NULL since migration
+c6e1f8a2d953). The constraint is DEFERRABLE INITIALLY DEFERRED so one
+upload can swap two stores' codes.
 """
 import uuid
 from datetime import datetime
@@ -61,7 +62,7 @@ class Sucursal(MotoredBase):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     nombre = Column(String(255), unique=True, nullable=False)
-    codigo_co = Column(String(10), nullable=True)
+    codigo_co = Column(String(10), nullable=False)
     sic = Column(String(50), nullable=True)
     dias_seguridad = Column(Numeric(5, 2), nullable=False, default=2.5)
     dias_empaque = Column(Integer, nullable=True)

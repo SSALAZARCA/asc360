@@ -39,6 +39,8 @@ from app.motored.models.venta_mensual import VentaMensual
 from app.motored.schemas.referencia import ReferenciaCreate
 from app.motored.services import carga, maestros, reemplazo_referencias
 
+from tests.motored.pg_real.codigos_co import codigo_co_unico
+
 URL = os.environ.get("MOTORED_TEST_PG_URL")
 pytestmark = [
     pytest.mark.pg_real,
@@ -206,7 +208,9 @@ async def _crear(db, codigo, proveedor, **extra):
 async def test_mover_una_referencia_conserva_su_id_y_su_venta_mensual(sesion):
     sfx = _sfx()
     hmcl, otro = await _proveedores(sesion)
-    sucursal = Sucursal(id=uuid.uuid4(), nombre=f"S {sfx}", sic=f"SIC-{sfx}")
+    sucursal = Sucursal(
+        id=uuid.uuid4(), nombre=f"S {sfx}", sic=f"SIC-{sfx}",
+        codigo_co=codigo_co_unico())
     carga_ventas = CargaArchivo(id=uuid.uuid4(), tipo="VENTAS", origen="EXCEL", estado="APLICADO",
                                 nombre_archivo="v.xlsx", hash_sha256="h" * 64, ruta_objeto="r", bytes=1)
     sesion.add_all([sucursal, carga_ventas])
@@ -321,7 +325,9 @@ async def test_las_ausentes_siguen_activas_salvo_las_elegidas_y_un_codigo_ajeno_
 async def test_el_resumen_marca_las_desactivadas_con_ventas_de_los_ultimos_6_meses(sesion):
     sfx = _sfx()
     hmcl, _ = await _proveedores(sesion)
-    sucursal = Sucursal(id=uuid.uuid4(), nombre=f"S {sfx}", sic=f"SIC-{sfx}")
+    sucursal = Sucursal(
+        id=uuid.uuid4(), nombre=f"S {sfx}", sic=f"SIC-{sfx}",
+        codigo_co=codigo_co_unico())
     carga_v = CargaArchivo(id=uuid.uuid4(), tipo="VENTAS", origen="EXCEL", estado="APLICADO",
                            nombre_archivo="v.xlsx", hash_sha256="h" * 64, ruta_objeto="r", bytes=1)
     sesion.add_all([sucursal, carga_v])

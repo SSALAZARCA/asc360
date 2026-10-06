@@ -9,11 +9,11 @@ The UNIQUE constraint is DEFERRABLE INITIALLY DEFERRED, so it only fires
 at COMMIT, which these tests never reach: `SET CONSTRAINTS ... IMMEDIATE`
 forces the check where a test needs it.
 
-Covers what the doubles cannot: the constraint itself (deferred, NULLs on
-many rows), two stores swapping their (code, name) pairs in one upload
-(the C.O. is the key, so it is a swap of names), and the service queries
-on real rows. `test_sucursal_clave_co_pg.py` covers renames and the first
-upload of codes.
+Covers what the doubles cannot: the constraint itself (deferred; NOT
+NULL is covered by `test_codigo_co_obligatorio_pg.py`), two stores
+swapping their (code, name) pairs in one upload (the C.O. is the key, so
+it is a swap of names), and the service queries on real rows.
+`test_sucursal_clave_co_pg.py` covers renames.
 """
 import os
 import random
@@ -68,7 +68,7 @@ async def _codigos_libres(sesion, cuantos):
     return libres
 
 
-async def _crear(sesion, nombre, codigo_co=None):
+async def _crear(sesion, nombre, codigo_co):
     sucursal = Sucursal(id=uuid.uuid4(), nombre=nombre, codigo_co=codigo_co)
     sesion.add(sucursal)
     await sesion.flush()
@@ -98,13 +98,6 @@ async def test_two_stores_with_one_code_fail_at_the_check(sesion):
     with pytest.raises(IntegrityError, match="uq_sucursal_codigo_co"):
         async with sesion.begin_nested():
             await sesion.execute(_INMEDIATA)
-
-
-async def test_many_stores_without_a_code_are_allowed(sesion):
-    await _crear(sesion, f"SIN CO A {_sufijo()}")
-    await _crear(sesion, f"SIN CO B {_sufijo()}")
-
-    await sesion.execute(_INMEDIATA)
 
 
 async def test_crud_check_names_the_store_holding_the_code(sesion):

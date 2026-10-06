@@ -28,6 +28,7 @@ from app.motored.services import tablero_asesores as t
 from app.motored.services import tablero_asesores_consultas as q
 from app.motored.services import tablero_kpis as k
 from app.motored.services import tablero_kpis_consultas as qk
+from tests.motored.pg_real.codigos_co import codigo_co_unico
 from tests.motored.pg_real.test_tablero_asesores_pg import URL, _carga, pytestmark, sesion  # noqa: F401
 
 CORTE = datetime.date(2099, 12, 29)
@@ -41,7 +42,9 @@ async def _mundo(db):
     w, sfx = Mundo(), uuid.uuid4().hex[:6].upper()
     prov = Proveedor(id=uuid.uuid4(), codigo=f"P-{sfx}", nombre="P", es_principal=True,
                      dias_empaque_default=4, dias_transito_default=5, dias_seguridad_default=D("3"))
-    w.s1 = Sucursal(id=uuid.uuid4(), nombre=f"S1 {sfx}", sic=f"S1-{sfx}")
+    w.s1 = Sucursal(
+        id=uuid.uuid4(), nombre=f"S1 {sfx}", sic=f"S1-{sfx}",
+        codigo_co=codigo_co_unico())
     db.add_all([prov, w.s1])
     await db.flush()
     refs = {c: Referencia(id=uuid.uuid4(), codigo=f"{c}-{sfx}", proveedor_id=prov.id, unidad_empaque=1,

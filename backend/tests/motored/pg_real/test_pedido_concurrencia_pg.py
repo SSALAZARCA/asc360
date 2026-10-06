@@ -45,6 +45,8 @@ from app.motored.services.corridas import (
     tope,
 )
 
+from tests.motored.pg_real.codigos_co import codigo_co_unico
+
 URL = os.environ.get("MOTORED_TEST_PG_URL")
 pytestmark = [
     pytest.mark.pg_real,
@@ -82,7 +84,8 @@ def _objetos(sufijo):
         email=f"c-{sufijo}@x.co", hashed_password="x")
     tiendas = [
         Sucursal(id=uuid.uuid4(), nombre=f"{n} {sufijo}",
-                 sic=f"S-{n}-{sufijo}", dias_empaque=1, dias_transito=1)
+                 sic=f"S-{n}-{sufijo}", codigo_co=codigo_co_unico(),
+                 dias_empaque=1, dias_transito=1)
         for n in ("A", "B")]
     referencias = [
         Referencia(

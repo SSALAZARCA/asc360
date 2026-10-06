@@ -10,6 +10,8 @@ from app.motored.models.sucursal_alias import SucursalAlias
 from app.motored.services.ingesta.resolucion import normalizar_texto_sucursal
 from app.motored.services.sucursal_texto import sucursal_id_por_texto
 
+from tests.motored.pg_real.codigos_co import codigo_co_unico
+
 URL = os.environ.get("MOTORED_TEST_PG_URL")
 pytestmark = [
     pytest.mark.pg_real,
@@ -33,9 +35,12 @@ def _co():
 async def test_codigo_co_resolves_first_then_name_then_alias(sesion):
     sfx = uuid.uuid4().hex[:8].upper()
     co = _co()
-    cali = Sucursal(id=uuid.uuid4(), nombre=f"Cali {sfx}", sic=f"C-{sfx}", codigo_co=co)
+    cali = Sucursal(
+        id=uuid.uuid4(), nombre=f"Cali {sfx}", sic=f"C-{sfx}", codigo_co=co)
     # A store whose NAME is another store's C.O. must not steal it.
-    impostora = Sucursal(id=uuid.uuid4(), nombre=co, sic=f"I-{sfx}")
+    otro_co = next(c for c in iter(codigo_co_unico, None) if c != co)
+    impostora = Sucursal(
+        id=uuid.uuid4(), nombre=co, sic=f"I-{sfx}", codigo_co=otro_co)
     sesion.add_all([cali, impostora])
     await sesion.flush()
     sesion.add(SucursalAlias(id=uuid.uuid4(), texto_normalizado=f"SEDE VIEJA {sfx}", sucursal_id=cali.id))

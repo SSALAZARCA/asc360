@@ -6,8 +6,8 @@ A different C.O. is a different store, so the code is unique across stores.
 It is stored trimmed and upper-cased, validated with one named pattern, and
 checked in the CRUD forms and in the Sucursales upload, where it is the
 store's key and is required on every row (`test_sucursal_clave_co.py`
-covers renames and the first upload of codes). An Excel number never
-reaches the database as a number.
+covers renames). An Excel number never reaches the database as a
+number.
 """
 import io
 import uuid
@@ -227,20 +227,6 @@ class TestUploadUniqueness:
 
 
 class TestUpload:
-    async def test_upload_sets_the_code(self):
-        existente = _sucursal()
-        db = FakeAsyncSession(execute_queue=[
-            [(existente.id, "CALI", None)], [existente],
-        ])
-
-        resultado = await _resolver_y_procesar_carga(
-            db, "sucursal", [{"nombre": "CALI", "codigo_co": "e05"}],
-            USER_ID,
-        )
-
-        assert resultado.ok is True
-        assert existente.codigo_co == "E05"
-
     async def test_blank_cell_rejects_the_file(self):
         existente = _sucursal(codigo_co="E05")
         db = FakeAsyncSession(execute_queue=[])
@@ -405,23 +391,12 @@ def _avisos_co(resultado):
 
 
 class TestHealth:
-    async def test_active_store_without_code_is_a_warning(self):
-        db = FakeAsyncSession(
-            execute_queue=[[_sucursal(nombre="CALI")], [], [], []]
-        )
-
-        resultado = await salud.evaluar_salud(db)
-
-        avisos = _avisos_co(resultado)
-        assert len(avisos) == 1
-        assert avisos[0].bloqueante is False
-        assert "'CALI'" in avisos[0].mensaje
-        assert resultado.estado == "advertencia"
-
-    async def test_store_with_code_or_inactive_is_not_reported(self):
+    async def test_a_missing_code_is_no_longer_a_health_check(self):
+        """The column is NOT NULL (migration c6e1f8a2d953): a store
+        always has its code, so the health board never checks it."""
         db = FakeAsyncSession(execute_queue=[[
-            _sucursal(nombre="CALI", codigo_co="E05"),
-            _sucursal(nombre="CERRADA", activa=False),
+            _sucursal(nombre="CALI"),
+            _sucursal(nombre="PASTO", codigo_co="E05"),
         ], [], [], []])
 
         resultado = await salud.evaluar_salud(db)

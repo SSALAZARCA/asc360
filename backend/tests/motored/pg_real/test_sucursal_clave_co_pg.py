@@ -9,8 +9,8 @@ transaction rolled back at the end (`commit()` is degraded to `flush()`).
 Covers what the doubles cannot: `sucursal.nombre` is UNIQUE and NOT
 deferrable, so a rename, two stores swapping names, and a new store taking
 a name another store leaves must reach the database in an order Postgres
-accepts. Also the first upload of codes (by name) and a rename together
-with a bodega move and an association in one file.
+accepts. Also a rename together with a bodega move and an association in
+one file.
 """
 import os
 import random
@@ -64,7 +64,7 @@ async def _codigos_libres(sesion, cuantos):
     return libres
 
 
-async def _crear(sesion, nombre, codigo_co=None, bodega_principal=None):
+async def _crear(sesion, nombre, codigo_co, bodega_principal=None):
     sucursal = Sucursal(
         id=uuid.uuid4(), nombre=nombre, codigo_co=codigo_co,
         bodega_principal=bodega_principal,
@@ -137,19 +137,6 @@ async def test_two_stores_swap_names_and_a_new_store_takes_a_left_name(
         select(Sucursal.codigo_co).where(Sucursal.nombre == f"C {s}")
     )).scalar_one()
     assert creada == nuevo
-
-
-async def test_first_upload_fills_in_the_code_by_name(sesion):
-    (codigo,) = await _codigos_libres(sesion, 1)
-    tienda = await _crear(sesion, f"SIN CO {_sufijo()}")
-
-    resultado = await _subir(
-        sesion, {"nombre": tienda.nombre, "codigo_co": codigo.lower()}
-    )
-
-    assert resultado.ok is True, resultado.errores
-    await sesion.execute(_INMEDIATA)
-    assert await _leer(sesion, tienda.id) == (tienda.nombre, codigo, None)
 
 
 async def test_rename_bodega_move_and_association_in_one_file(sesion):

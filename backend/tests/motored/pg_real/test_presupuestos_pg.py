@@ -39,6 +39,8 @@ from app.motored.services.presupuestos import (
     PresupuestoNoEncontrado,
 )
 
+from tests.motored.pg_real.codigos_co import codigo_co_unico
+
 URL = os.environ.get("MOTORED_TEST_PG_URL")
 pytestmark = [
     pytest.mark.pg_real,
@@ -58,9 +60,15 @@ class Escenario:
         self.usuario = Usuario(
             id=uuid.uuid4(), nombre=f"Gerente {sufijo}", role=MotoredRole.GERENCIA,
             email=f"g-{sufijo}@x.co", hashed_password="x")
-        self.cali = Sucursal(id=uuid.uuid4(), nombre=f"Cali {sufijo}", sic=f"C-{sufijo}")
-        self.bogota = Sucursal(id=uuid.uuid4(), nombre=f"Bogotá {sufijo}", sic=f"B-{sufijo}")
-        self.cerrada = Sucursal(id=uuid.uuid4(), nombre=f"Cerrada {sufijo}", sic=f"X-{sufijo}", activa=False)
+        self.cali = Sucursal(
+            id=uuid.uuid4(), nombre=f"Cali {sufijo}", sic=f"C-{sufijo}",
+            codigo_co=codigo_co_unico())
+        self.bogota = Sucursal(
+            id=uuid.uuid4(), nombre=f"Bogotá {sufijo}", sic=f"B-{sufijo}",
+            codigo_co=codigo_co_unico())
+        self.cerrada = Sucursal(
+            id=uuid.uuid4(), nombre=f"Cerrada {sufijo}", sic=f"X-{sufijo}",
+            codigo_co=codigo_co_unico(), activa=False)
         self.alias = SucursalAlias(
             id=uuid.uuid4(), texto_normalizado=f"SEDE VIEJA {sufijo.upper()}", sucursal_id=self.cali.id)
         c0, c1, c2, c3 = self.cedulas

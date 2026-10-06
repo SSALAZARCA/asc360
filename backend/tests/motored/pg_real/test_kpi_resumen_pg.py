@@ -37,6 +37,8 @@ from app.motored.services import kpi_resumen as k
 from app.motored.services import tablero_asesores as t
 from app.motored.services import tablero_asesores_consultas as q
 
+from tests.motored.pg_real.codigos_co import codigo_co_unico
+
 URL = os.environ.get("MOTORED_TEST_PG_URL")
 pytestmark = [
     pytest.mark.pg_real,
@@ -71,8 +73,12 @@ class Mundo:
         prov = Proveedor(
             id=uuid.uuid4(), codigo=f"P-{sfx}", nombre="P", es_principal=True,
             dias_empaque_default=4, dias_transito_default=5, dias_seguridad_default=D("3"))
-        self.s1 = Sucursal(id=uuid.uuid4(), nombre=f"Uno {sfx}", sic=f"U-{sfx}")
-        self.s2 = Sucursal(id=uuid.uuid4(), nombre=f"Dos {sfx}", sic=f"D-{sfx}")
+        self.s1 = Sucursal(
+            id=uuid.uuid4(), nombre=f"Uno {sfx}", sic=f"U-{sfx}",
+            codigo_co=codigo_co_unico())
+        self.s2 = Sucursal(
+            id=uuid.uuid4(), nombre=f"Dos {sfx}", sic=f"D-{sfx}",
+            codigo_co=codigo_co_unico())
         db.add_all([prov, self.s1, self.s2])
         await db.flush()
         self.refs = {}

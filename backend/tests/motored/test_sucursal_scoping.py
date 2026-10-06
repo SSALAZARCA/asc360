@@ -74,7 +74,8 @@ def _motored_ready(monkeypatch):
 def _sucursal(sucursal_id, nombre):
     return Sucursal(
         id=sucursal_id, nombre=nombre, sic="SIC-" + nombre,
-        dias_seguridad="2.5", activa=True,
+        codigo_co="E" + nombre[-1].zfill(2), dias_seguridad="2.5",
+        activa=True,
     )
 
 

@@ -28,6 +28,7 @@ from app.motored.services import tablero_asesores as t
 from app.motored.services import tablero_asesores_consultas as q
 from app.motored.services import tablero_kpis as k
 from app.motored.services.ingesta.ventas import normalizar_vendedor
+from tests.motored.pg_real.codigos_co import codigo_co_unico
 from tests.motored.pg_real.test_tablero_asesores_pg import URL, pytestmark, sesion  # noqa: F401
 
 D = Decimal
@@ -39,8 +40,12 @@ async def _mundo(db):
     prov = Proveedor(
         id=uuid.uuid4(), codigo=f"P-{sfx}", nombre="P", es_principal=True,
         dias_empaque_default=4, dias_transito_default=5, dias_seguridad_default=D("3"))
-    norte = Sucursal(id=uuid.uuid4(), nombre=f"Norte {sfx}", sic=f"N-{sfx}")
-    sur = Sucursal(id=uuid.uuid4(), nombre=f"Sur {sfx}", sic=f"S-{sfx}")
+    norte = Sucursal(
+        id=uuid.uuid4(), nombre=f"Norte {sfx}", sic=f"N-{sfx}",
+        codigo_co=codigo_co_unico())
+    sur = Sucursal(
+        id=uuid.uuid4(), nombre=f"Sur {sfx}", sic=f"S-{sfx}",
+        codigo_co=codigo_co_unico())
     db.add_all([prov, norte, sur])
     await db.flush()
     ref = Referencia(

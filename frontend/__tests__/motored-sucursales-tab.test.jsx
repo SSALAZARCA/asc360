@@ -81,10 +81,10 @@ describe('SucursalesTab — form', () => {
 });
 
 const base = { sic: 'S', dias_seguridad: '2.5', activa: true };
-const LA33 = { ...base, id: 'p1', nombre: 'LA 33', principal_id: null };
-const EXPO1 = { ...base, id: 'a1', nombre: 'EXPO 1', principal_id: 'p1' };
-const EXPO2 = { ...base, id: 'a2', nombre: 'EXPO 2', principal_id: 'p1', activa: false };
-const CERRADA = { ...base, id: 'p2', nombre: 'CERRADA', principal_id: null, activa: false };
+const LA33 = { ...base, id: 'p1', nombre: 'LA 33', codigo_co: 'E33', principal_id: null };
+const EXPO1 = { ...base, id: 'a1', nombre: 'EXPO 1', codigo_co: 'E01', principal_id: 'p1' };
+const EXPO2 = { ...base, id: 'a2', nombre: 'EXPO 2', codigo_co: 'E02', principal_id: 'p1', activa: false };
+const CERRADA = { ...base, id: 'p2', nombre: 'CERRADA', codigo_co: 'E09', principal_id: null, activa: false };
 const GRUPO = [LA33, EXPO1, EXPO2, CERRADA];
 
 async function renderGrupo() {
@@ -264,17 +264,11 @@ describe('SucursalesTab — the C.O. identifies the store', () => {
     expect(mockCreateMaestro).not.toHaveBeenCalled();
   });
 
-  it('still edits a legacy store that has no code yet', async () => {
-    mockListMaestros.mockResolvedValue([{ ...SUC, codigo_co: null }]);
-    render(<SucursalesTab />);
-    await waitFor(() => expect(screen.getByRole('table')).toBeInTheDocument());
+  it('keeps the code required when editing a store', async () => {
+    await renderTab();
     fireEvent.click(screen.getByRole('button', { name: 'Editar' }));
 
-    expect(coInput()).not.toBeRequired();
-    fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
-
-    await waitFor(() => expect(mockUpdateMaestro).toHaveBeenCalled());
-    expect(mockUpdateMaestro.mock.calls[0][2].codigo_co).toBeNull();
+    expect(coInput()).toBeRequired();
   });
 
   it('renames a store freely, keeping its code', async () => {

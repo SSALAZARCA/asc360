@@ -39,6 +39,7 @@ from app.motored.models.usuario import MotoredRole, Usuario
 from app.motored.database import get_motored_db
 from app.main import app
 from app.motored.services.corridas import tope
+from tests.motored.pg_real.codigos_co import codigo_co_unico
 from tests.motored.pg_real.test_corridas_api_pg import (  # noqa: F401
     BASE,
     URL,
@@ -98,7 +99,8 @@ async def _sembrar(db, *, modo=True, tope_a="9000"):
         email=f"t-{sufijo}@x.co", hashed_password="x")
     a, b = (
         Sucursal(id=uuid.uuid4(), nombre=f"{n} {sufijo}", sic=f"S-{n}",
-                 dias_empaque=1, dias_transito=1) for n in ("A", "B"))
+                 codigo_co=codigo_co_unico(), dias_empaque=1,
+                 dias_transito=1) for n in ("A", "B"))
     db.add_all([proveedor, usuario, a, b])
     await db.flush()
     corrida = Corrida(

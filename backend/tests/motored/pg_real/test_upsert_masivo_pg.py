@@ -21,6 +21,8 @@ from app.motored.models.sucursal import Sucursal
 from app.motored.models.venta_mensual import VentaMensual
 from app.motored.services.ingesta import inventario, ventas
 
+from tests.motored.pg_real.codigos_co import codigo_co_unico
+
 URL = os.environ.get("MOTORED_TEST_PG_URL")
 pytestmark = [
     pytest.mark.pg_real,
@@ -46,7 +48,9 @@ async def _mundo(db, n_sucursales, n_referencias):
         es_principal=True, dias_empaque_default=4, dias_transito_default=5,
         dias_seguridad_default=Decimal("3"))
     sucursales = [
-        Sucursal(id=uuid.uuid4(), nombre=f"S{i} {uuid.uuid4().hex[:6]}", sic=f"SIC-{i}")
+        Sucursal(
+            id=uuid.uuid4(), nombre=f"S{i} {uuid.uuid4().hex[:6]}",
+            sic=f"SIC-{i}", codigo_co=codigo_co_unico())
         for i in range(n_sucursales)]
     db.add_all([proveedor, *sucursales])
     await db.flush()

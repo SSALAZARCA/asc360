@@ -14,6 +14,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 from app.motored.models.sucursal import Sucursal
 
+from tests.motored.pg_real.codigos_co import codigo_co_unico
+
 URL = os.environ.get("MOTORED_TEST_PG_URL")
 pytestmark = [
     pytest.mark.pg_real,
@@ -42,7 +44,9 @@ async def sesion():
 
 async def _sucursal(db):
     sfx = uuid.uuid4().hex[:8].upper()
-    sucursal = Sucursal(id=uuid.uuid4(), nombre=f"Kpi {sfx}", sic=f"K-{sfx}")
+    sucursal = Sucursal(
+        id=uuid.uuid4(), nombre=f"Kpi {sfx}", sic=f"K-{sfx}",
+        codigo_co=codigo_co_unico())
     db.add(sucursal)
     await db.flush()
     return sucursal.id

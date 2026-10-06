@@ -95,7 +95,8 @@ class SucursalRead(BaseModel):
 
     id: uuid.UUID
     nombre: str
-    codigo_co: Optional[str] = None
+    # NOT NULL in the database: every store has its C.O.
+    codigo_co: str
     sic: Optional[str] = None
     dias_seguridad: Decimal
     dias_empaque: Optional[int] = None

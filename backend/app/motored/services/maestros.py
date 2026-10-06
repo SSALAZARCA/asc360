@@ -12,7 +12,7 @@ change), `bodega` por `codigo`, `proveedor` por `codigo` (owner decision
 import uuid
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-from sqlalchemy import delete, or_, select
+from sqlalchemy import delete, select
 
 from app.motored.models.bodega import Bodega
 from app.motored.models.cliente_tecnired import ClienteTecnired
@@ -269,8 +269,7 @@ async def _validar_cambio_codigo_co(
     db, sucursal: Sucursal, update_dict: Dict[str, Any], verificar: bool
 ) -> None:
     """Drops an unchanged `codigo_co` and checks a changed one is free. A
-    stored code cannot be cleared; a legacy store without one still edits
-    without setting it."""
+    stored code cannot be cleared."""
     if "codigo_co" not in update_dict:
         return
     if update_dict["codigo_co"] == sucursal.codigo_co:
@@ -314,27 +313,15 @@ async def deactivate_sucursal(db, sucursal: Sucursal, usuario_id: Optional[uuid.
 async def _sucursal_de_carga(
     db, data: SucursalCreate
 ) -> Optional[Sucursal]:
-    """The saved store an upload row updates: the one with the row's C.O.;
-    else, while the stores get their codes for the first time, the one with
-    the row's name when it has no C.O. yet (a row without a code, only from
-    direct callers, matches by name). One query. `resolver_sucursales_carga`
-    already rejected every other case. Names are compared as stored: the
-    upload renames only after every row (`renombrar_sucursales_carga`)."""
-    nombre = normalize_sucursal_nombre(data.nombre)
-    condiciones = [Sucursal.nombre == nombre]
-    if data.codigo_co is not None:
-        condiciones.append(Sucursal.codigo_co == data.codigo_co)
-    candidatas = (await db.execute(
-        select(Sucursal).where(or_(*condiciones))
-    )).scalars().all()
-    for sucursal in candidatas:
-        if data.codigo_co is not None and sucursal.codigo_co == data.codigo_co:
-            return sucursal
-    for sucursal in candidatas:
-        sin_conflicto = data.codigo_co is None or sucursal.codigo_co is None
-        if sucursal.nombre == nombre and sin_conflicto:
-            return sucursal
-    return None
+    """The saved store an upload row updates: the one with the row's C.O.
+    Every store has its code (NOT NULL) and `resolver_sucursales_carga`
+    requires it on every row, so a row without one matches nothing and
+    `create_sucursal` rejects it."""
+    if data.codigo_co is None:
+        return None
+    return (await db.execute(
+        select(Sucursal).where(Sucursal.codigo_co == data.codigo_co)
+    )).scalars().first()
 
 
 async def upsert_sucursal(
@@ -391,7 +378,7 @@ async def renombrar_sucursales_carga(
 
 
 # A saved store as the upload resolver reads it: (id, nombre, codigo_co).
-_Guardada = Tuple[uuid.UUID, str, Optional[str]]
+_Guardada = Tuple[uuid.UUID, str, str]
 # The store an upload row writes: its id, or ("fila", n) for a new store.
 _Clave = Any
 
@@ -471,57 +458,30 @@ def _destinos_de_filas(
     codigos: Dict[int, Tuple[str, str]], guardadas: List[_Guardada],
     errores: Dict[int, str],
 ) -> Dict[int, Optional[uuid.UUID]]:
-    """Row -> the saved store it writes (None = a new store): by C.O.;
-    else by name while that store has no C.O. yet. A name that a store
-    matched by its C.O. leaves in this file is free (final state). A name
-    of a store with another C.O. is an error (in `errores`)."""
-    por_codigo = {codigo: sid for sid, _, codigo in guardadas if codigo}
-    por_nombre = {nombre: (sid, codigo) for sid, nombre, codigo in guardadas}
+    """Row -> the saved store it writes, by C.O. (None = a new store). A
+    new code with the name of a saved store is an error (in `errores`),
+    unless a store matched by its C.O. leaves that name in this file
+    (final state)."""
+    por_codigo = {codigo: sid for sid, _, codigo in guardadas}
+    por_nombre = {nombre: codigo for _, nombre, codigo in guardadas}
     actual = {sid: nombre for sid, nombre, _ in guardadas}
-    destinos: Dict[int, Optional[uuid.UUID]] = {
-        index: por_codigo[codigo]
-        for index, (_, codigo) in codigos.items() if codigo in por_codigo
+    destinos = {
+        index: por_codigo.get(codigo)
+        for index, (_, codigo) in codigos.items()
     }
     dejados = {
         actual[sid] for index, sid in destinos.items()
-        if codigos[index][0] != actual[sid]
+        if sid is not None and codigos[index][0] != actual[sid]
     }
     for index, (nombre, codigo) in codigos.items():
-        if index in destinos:
+        if destinos[index] is not None or nombre in dejados:
             continue
-        sid, propio = (None, None)
-        if nombre not in dejados:
-            sid, propio = por_nombre.get(nombre, (None, None))
-        if propio is not None:
+        if nombre in por_nombre:
             errores.setdefault(index, _mensaje_co_y_nombre_distintos(
-                codigo, nombre, propio
+                codigo, nombre, por_nombre[nombre]
             ))
-            continue
-        destinos[index] = sid
-    for index, motivo in _errores_destino_repetido(destinos, actual).items():
-        errores.setdefault(index, motivo)
+            del destinos[index]
     return destinos
-
-
-def _errores_destino_repetido(
-    destinos: Dict[int, Optional[uuid.UUID]], actual: Dict[uuid.UUID, str],
-) -> Dict[int, str]:
-    """Two rows on one saved store (two codes filling in one store without
-    a C.O.): an error on every one."""
-    filas_por_destino: Dict[uuid.UUID, List[int]] = {}
-    for index, destino in sorted(destinos.items()):
-        if destino is not None:
-            filas_por_destino.setdefault(destino, []).append(index)
-    return _errores_repetidos(filas_por_destino, lambda sid, filas: (
-        f"La sucursal '{actual[sid]}' aparece en las filas {filas} del "
-        "archivo. Deje una sola fila por sucursal."
-    ))
-
-
-def _describir_sucursal(nombre: str, codigo: Optional[str]) -> str:
-    if codigo:
-        return f"la sucursal con C.O. '{codigo}'"
-    return f"la sucursal '{nombre}' (sin Código C.O.)"
 
 
 def _errores_de_nombre_final(
@@ -532,7 +492,7 @@ def _errores_de_nombre_final(
     with its final name and code (keyed by store, so rows may swap names),
     plus the new stores. A row whose name another store keeps is an error
     naming both."""
-    final: Dict[_Clave, Tuple[str, Optional[str]]] = {
+    final: Dict[_Clave, Tuple[str, str]] = {
         sid: (nombre, codigo) for sid, nombre, codigo in guardadas
     }
     for index, destino in destinos.items():
@@ -544,12 +504,14 @@ def _errores_de_nombre_final(
     for index, destino in destinos.items():
         nombre, codigo = codigos[index]
         clave = _clave_de_destino(index, destino)
-        otras = [c for c in duenas[nombre] if c != clave]
+        # A repeated code (already an error) leaves one row's name out
+        # of `final`: nothing to compare for that row.
+        otras = [c for c in duenas.get(nombre, []) if c != clave]
         if otras:
             errores[index] = (
                 f"Columna 'Nombre': la sucursal con C.O. '{codigo}' no "
-                f"puede llamarse '{nombre}': ese nombre es de "
-                f"{_describir_sucursal(*final[otras[0]])}. Cada sucursal "
+                f"puede llamarse '{nombre}': ese nombre es de la "
+                f"sucursal con C.O. '{final[otras[0]][1]}'. Cada sucursal "
                 "necesita un nombre distinto."
             )
     return errores
@@ -561,10 +523,9 @@ async def resolver_sucursales_carga(
     """Upload resolver of the store key, on the state the file leaves
     together with the database. The C.O. is required on every row. Each
     row with a well-formed code gets `FILA_SUCURSAL_ID`: the saved store it
-    writes (by C.O.; on the first upload of codes, by the name of a store
-    without one), or None for a new store. Errors: a missing or repeated
-    code, a code and a name of different stores, two rows on one store,
-    and a final name another store keeps. Queries only when a row has a
+    writes (by C.O.), or None for a new store. Errors: a missing or
+    repeated code, a code and a name of different stores, and a final
+    name another store keeps. Queries only when a row has a
     code. Returns `(filas, errores)` with `{fila, motivo}` in row order."""
     filas = [dict(fila) for fila in filas]
     errores = _errores_codigo_co_faltante(filas)

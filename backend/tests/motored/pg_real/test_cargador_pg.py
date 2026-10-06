@@ -31,6 +31,8 @@ from app.motored.services.motor.motor import calcular_sucursal
 from app.motored.services.motor.sustitucion import resolver_cadenas
 from app.motored.services.motor.tipos import MesEnCurso, ParametrosMotor
 
+from tests.motored.pg_real.codigos_co import codigo_co_unico
+
 URL = os.environ.get("MOTORED_TEST_PG_URL")
 pytestmark = [
     pytest.mark.pg_real,
@@ -116,9 +118,10 @@ async def _sembrar(db):
         nombre="Otro", es_principal=False)
     suc = Sucursal(
         id=uuid.uuid4(), nombre=f"S {uuid.uuid4().hex[:6]}  ", sic="SIC-1",
-        dias_empaque=3, dias_transito=2)
+        codigo_co=codigo_co_unico(), dias_empaque=3, dias_transito=2)
     otra = Sucursal(
-        id=uuid.uuid4(), nombre=f"T {uuid.uuid4().hex[:6]}", sic="SIC-2")
+        id=uuid.uuid4(), nombre=f"T {uuid.uuid4().hex[:6]}", sic="SIC-2",
+        codigo_co=codigo_co_unico())
     await _guardar(db, hmcl, otro, suc, otra)
     a = _referencia("A-1", hmcl)
     b = _referencia("B-1", hmcl)

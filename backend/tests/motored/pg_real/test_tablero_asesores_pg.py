@@ -35,6 +35,8 @@ from app.motored.services import tablero_asesores as t
 from app.motored.services import tablero_asesores_consultas as q
 from app.motored.services.ingesta.ventas import normalizar_vendedor
 
+from tests.motored.pg_real.codigos_co import codigo_co_unico
+
 URL = os.environ.get("MOTORED_TEST_PG_URL")
 pytestmark = [
     pytest.mark.pg_real,
@@ -67,8 +69,12 @@ async def _mundo(db):
     prov = Proveedor(
         id=uuid.uuid4(), codigo=f"P-{sfx}", nombre="P", es_principal=True,
         dias_empaque_default=4, dias_transito_default=5, dias_seguridad_default=D("3"))
-    s1 = Sucursal(id=uuid.uuid4(), nombre=f"Cali Norte {sfx}", sic=f"S1-{sfx}")
-    s2 = Sucursal(id=uuid.uuid4(), nombre=f"Bogota {sfx}", sic=f"S2-{sfx}")
+    s1 = Sucursal(
+        id=uuid.uuid4(), nombre=f"Cali Norte {sfx}", sic=f"S1-{sfx}",
+        codigo_co=codigo_co_unico())
+    s2 = Sucursal(
+        id=uuid.uuid4(), nombre=f"Bogota {sfx}", sic=f"S2-{sfx}",
+        codigo_co=codigo_co_unico())
     db.add_all([prov, s1, s2])
     await db.flush()
 

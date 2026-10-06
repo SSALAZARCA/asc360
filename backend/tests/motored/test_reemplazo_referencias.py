@@ -534,9 +534,15 @@ async def test_aplicar_devuelve_el_resumen_de_lo_aplicado():
 
 
 async def test_otras_entidades_siguen_con_celda_en_blanco_igual_a_no_provisto():
-    existente = Sucursal(id=uuid.uuid4(), nombre="CALI NORTE", sic="S1", activa=True)
+    existente = Sucursal(
+        id=uuid.uuid4(), nombre="CALI NORTE", codigo_co="E01", sic="S1",
+        activa=True,
+    )
     db = FakeAsyncSession(execute_queue=[[existente]])
 
-    resultado = await carga.procesar_carga(db, "sucursal", [{"nombre": "CALI NORTE", "sic": ""}])
+    resultado = await carga.procesar_carga(
+        db, "sucursal",
+        [{"nombre": "CALI NORTE", "codigo_co": "E01", "sic": ""}],
+    )
 
     assert resultado.ok is True and existente.sic == "S1"

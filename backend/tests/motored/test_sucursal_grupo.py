@@ -227,8 +227,8 @@ class TestCrud:
     def test_read_schema_exposes_the_principal(self):
         leida = SucursalRead.model_validate(
             Sucursal(
-                id=B, nombre="EXPO 2", principal_id=A, activa=True,
-                dias_seguridad=2.5,
+                id=B, nombre="EXPO 2", codigo_co="E02", principal_id=A,
+                activa=True, dias_seguridad=2.5,
             )
         )
 

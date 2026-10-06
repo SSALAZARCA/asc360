@@ -34,6 +34,8 @@ from app.motored.models.venta_detalle import VentaDetalle
 from app.motored.services import carga
 from app.motored.services.ingesta.ventas import normalizar_vendedor
 
+from tests.motored.pg_real.codigos_co import codigo_co_unico
+
 URL = os.environ.get("MOTORED_TEST_PG_URL")
 pytestmark = [
     pytest.mark.pg_real,
@@ -101,7 +103,9 @@ async def test_el_indice_unico_impide_dos_vendedores_con_el_mismo_nombre_norm(se
 
 async def test_la_sucursal_se_resuelve_por_nombre_prefijo_mr_y_alias(sesion):
     sfx = _sufijo()
-    suc = Sucursal(id=uuid.uuid4(), nombre=f"Cali Norte {sfx}", sic=f"S-{sfx}")
+    suc = Sucursal(
+        id=uuid.uuid4(), nombre=f"Cali Norte {sfx}", sic=f"S-{sfx}",
+        codigo_co=codigo_co_unico())
     sesion.add(suc)
     await sesion.flush()
     sesion.add(SucursalAlias(id=uuid.uuid4(), texto_normalizado=f"SEDE VIEJA {sfx}", sucursal_id=suc.id))
@@ -121,7 +125,9 @@ async def test_la_sucursal_se_resuelve_por_nombre_prefijo_mr_y_alias(sesion):
 async def test_la_sucursal_se_resuelve_por_codigo_co_sin_importar_mayusculas(sesion):
     sfx = _sufijo()
     co = "Y" + str(int(sfx, 16) % 100).zfill(2)
-    suc = Sucursal(id=uuid.uuid4(), nombre=f"Cali Sur {sfx}", sic=f"S-{sfx}", codigo_co=co)
+    suc = Sucursal(
+        id=uuid.uuid4(), nombre=f"Cali Sur {sfx}", sic=f"S-{sfx}",
+        codigo_co=co)
     sesion.add(suc)
     await sesion.flush()
     filas = [
@@ -140,7 +146,9 @@ async def _mundo_ventas(db, sfx):
     proveedor = Proveedor(
         id=uuid.uuid4(), codigo=f"P-{sfx}", nombre="P", es_principal=True,
         dias_empaque_default=4, dias_transito_default=5, dias_seguridad_default=Decimal("3"))
-    sucursal = Sucursal(id=uuid.uuid4(), nombre=f"S {sfx}", sic=f"SIC-{sfx}")
+    sucursal = Sucursal(
+        id=uuid.uuid4(), nombre=f"S {sfx}", sic=f"SIC-{sfx}",
+        codigo_co=codigo_co_unico())
     db.add_all([proveedor, sucursal])
     await db.flush()
     referencia = Referencia(

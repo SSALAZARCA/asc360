@@ -36,6 +36,7 @@ from app.motored.models.proveedor import Proveedor
 from app.motored.models.sucursal import Sucursal
 from app.motored.models.usuario import MotoredRole, Usuario
 from app.motored.services.corridas import codigos, guardas, pedido_tienda
+from tests.motored.pg_real.codigos_co import codigo_co_unico
 from tests.motored.pg_real.test_corrida_pg import CORTE, _carga
 
 URL = os.environ.get("MOTORED_TEST_PG_URL")
@@ -62,7 +63,7 @@ async def escenario():
         email=f"g-{sufijo}@x.co", hashed_password="x")
     tienda = Sucursal(
         id=uuid.uuid4(), nombre=f"GUARDA {sufijo}", sic=f"G-{sufijo}",
-        dias_empaque=1, dias_transito=1)
+        codigo_co=codigo_co_unico(), dias_empaque=1, dias_transito=1)
     carga = _carga(
         "VENTAS", datetime.date(2026, 3, 1), datetime.date(2026, 9, 14))
     corrida = Corrida(

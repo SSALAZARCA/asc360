@@ -28,6 +28,7 @@ from app.motored.services import kpi_resumen_lectura as lectura
 from app.motored.services import tablero_asesores as t
 from app.motored.services import tablero_asesores_consultas as q
 from app.motored.services import tablero_kpis as kpis
+from tests.motored.pg_real.codigos_co import codigo_co_unico
 from tests.motored.pg_real.test_kpi_resumen_pg import URL, sesion  # noqa: F401
 
 pytestmark = [
@@ -79,7 +80,9 @@ async def _sembrar(db):
                                  nombre_archivo="x.xlsx", hash_sha256="h" * 64, ruta_objeto="r", bytes=1)
               for tipo in ("VENTAS", "INVENTARIO")}
     db.add_all(cargas.values())
-    sucursales = [Sucursal(id=uuid.uuid4(), nombre=f"PERF{sfx} {n:02d}", sic=f"P{sfx}{n}") for n in range(TIENDAS)]
+    sucursales = [Sucursal(
+        id=uuid.uuid4(), nombre=f"PERF{sfx} {n:02d}", sic=f"P{sfx}{n}",
+        codigo_co=codigo_co_unico()) for n in range(TIENDAS)]
     db.add_all(sucursales)
     lineas = list(t.LINEAS) + ["NO APLICA", None]
     db.add_all([

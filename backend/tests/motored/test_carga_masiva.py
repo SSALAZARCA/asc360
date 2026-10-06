@@ -60,9 +60,12 @@ class TestAllOrNothing:
 
 class TestUpsertByNaturalKey:
     async def test_reuploading_matching_row_updates_instead_of_duplicating(self):
-        existing = Sucursal(id=uuid.uuid4(), nombre="CALI NORTE", sic=None, activa=True)
+        existing = Sucursal(
+            id=uuid.uuid4(), nombre="CALI NORTE", codigo_co="E01", sic=None,
+            activa=True,
+        )
         db = FakeAsyncSession(execute_queue=[[existing]])
-        rows = [{"nombre": "CALI NORTE", "sic": "S1"}]
+        rows = [{"nombre": "CALI NORTE", "codigo_co": "E01", "sic": "S1"}]
 
         resultado = await carga.procesar_carga(db, "sucursal", rows)
 

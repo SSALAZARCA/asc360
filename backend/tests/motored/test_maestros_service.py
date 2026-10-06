@@ -61,9 +61,14 @@ class TestSucursalUpsertByNombreTrimmed:
         assert created is True
 
     async def test_upsert_matches_existing_row_ignoring_trailing_whitespace(self):
-        existing = Sucursal(id=uuid.uuid4(), nombre="CALI NORTE", sic=None, activa=True)
+        existing = Sucursal(
+            id=uuid.uuid4(), nombre="CALI NORTE", codigo_co="E01", sic=None,
+            activa=True,
+        )
         db = FakeAsyncSession(execute_queue=[[existing]])
-        data = SucursalCreate(nombre="CALI NORTE   ", sic="S1")
+        data = SucursalCreate(
+            nombre="CALI NORTE   ", codigo_co="E01", sic="S1"
+        )
 
         sucursal, _, created = await maestros.upsert_sucursal(db, data)
 

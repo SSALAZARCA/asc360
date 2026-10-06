@@ -38,6 +38,8 @@ from app.motored.services import tablero_kpis
 from app.motored.services.tablero_asesores import HMCL_INCLUIR
 from app.motored.services.ingesta.ventas import normalizar_vendedor
 
+from tests.motored.pg_real.codigos_co import codigo_co_unico
+
 URL = os.environ.get("MOTORED_TEST_PG_URL")
 pytestmark = [
     pytest.mark.pg_real,
@@ -71,15 +73,16 @@ async def _sembrar_tiendas(db, sfx):
     """An active principal, an active store associated to it and an
     inactive principal: only the first one is a punto de venta."""
     principal = Sucursal(
-        id=uuid.uuid4(), nombre=f"Cali {sfx}", sic=f"S1-{sfx}")
+        id=uuid.uuid4(), nombre=f"Cali {sfx}", sic=f"S1-{sfx}",
+        codigo_co=codigo_co_unico())
     inactiva = Sucursal(
         id=uuid.uuid4(), nombre=f"Pasto {sfx}", sic=f"S3-{sfx}",
-        activa=False)
+        codigo_co=codigo_co_unico(), activa=False)
     db.add_all([principal, inactiva])
     await db.flush()
     asociada = Sucursal(
         id=uuid.uuid4(), nombre=f"Cali Sur {sfx}", sic=f"S2-{sfx}",
-        principal_id=principal.id)
+        codigo_co=codigo_co_unico(), principal_id=principal.id)
     db.add(asociada)
     await db.flush()
     return principal, asociada
