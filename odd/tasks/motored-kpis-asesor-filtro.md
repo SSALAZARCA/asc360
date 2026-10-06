@@ -36,8 +36,40 @@ The user wants to inspect one asesor's results. The current indicators were desi
 - Strict TDD; Python 3.11; no `git stash`.
 
 ## Tasks
-- [ ] **A1 Backend detail payload** + tests (pure, API, pg_real live/summary equivalence).
-- [ ] **A2 Frontend filter + Todos additions + Un asesor view** + jest + webpack compile.
+- [x] **A1 Backend detail payload** + tests (pure, API, pg_real live/summary equivalence).
+- [x] **A2 Frontend filter + Todos additions + Un asesor view** + jest + webpack compile.
+
+## Progress
+**A1 + A2 done (2026-10-06).** Route: one delegated writer. Commits 126b3da and 5ce56b8.
+
+**Backend**
+- `services/tablero_asesor_detalle.py` (pure) plus `calcular_kpis_asesor_detalle`.
+- `GET /kpis/asesores/detalle?cedula=` returns 404 or 422 on bad input.
+- `GET /kpis/asesores/opciones`.
+- `cumplimiento_por_mes`.
+- Tecnired top clients per asesor, with the live and summary paths giving identical results.
+
+**Frontend**
+- The Asesor filter pill, searchable and clearable; it follows the Punto de venta filter.
+- On Todos: the hint chip and clickable names.
+- `AsesorDetalle` per the canvas.
+- Omitted fields: fecha ingreso and antigüedad, which have no data source. The canvas placeholders were not carried over. The label reads "Este asesor" instead of the first name.
+
+**Checks**
+- unit 5909, green;
+- pg_real 104, green (switch ON equals OFF across asesores, periods, stores and HMCL modes);
+- jest 2125 (194 suites), green;
+- webpack compile 200.
+
+**Native review**
+- Medium risk, 2489 lines. Consent was granted; R3 approved and was acknowledged.
+- Advisories:
+  - `KpisContent.js:55-58`: the selection is cleared when the asesor is missing from the options;
+  - `tablero_kpis.py:622-624`: the master store scope does not roll an associated store up to its principal.
+
+**Not done**
+- No real-browser or tablet check.
+- The Tecnired treemap tiles are not clickable.
 
 ## Next step
-A1 + A2 by one delegated writer.
+The user checks the Asesores tab in production. Follow-ups: the two advisories.
