@@ -3,11 +3,14 @@
  * other key). `Control` edits the same draft the generic control edits;
  * `validar(borrador)` returns the Spanish messages that block saving.
  */
+import EditorBonosLinea from './EditorBonosLinea';
 import EditorLista, { itemsDe } from './EditorLista';
 import EditorMapaCargos from './EditorMapaCargos';
 import EditorSemaforo from './EditorSemaforo';
 import EditorTramos from './EditorTramos';
-import { validarLista, validarSemaforo, validarTramos } from './validaciones';
+import {
+  validarBonosLinea, validarLista, validarSemaforo, validarTramos,
+} from './validaciones';
 
 const deLista = (opciones) => ({
   Control: (props) => <EditorLista {...props} {...opciones} />,
@@ -24,6 +27,7 @@ export const EDITORES = {
   grupo_por_cargo: { Control: EditorMapaCargos },
   kpi_semaforo_cortes: { Control: EditorSemaforo, validar: validarSemaforo },
   comision_tramos: { Control: EditorTramos, validar: validarTramos },
+  comision_lineas: { Control: EditorBonosLinea, validar: (borrador) => validarBonosLinea(borrador) },
 };
 
 export const editorDe = (spec) => EDITORES[spec.clave] || null;

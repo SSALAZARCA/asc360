@@ -1,8 +1,12 @@
 'use client';
-/** Comisiones tab: the commission rules (not read by anything yet). */
+/**
+ * Comisiones tab: the commission rules the KPI tablero (Comisiones tab) reads
+ * to pay each asesor. A key the server does not return yet is skipped.
+ */
+import { useMemo } from 'react';
 import CamposDeSeccion from './CamposDeSeccion';
 
-const AVISO = 'Se aplican cuando estén activos los indicadores de comisiones.';
+const AVISO = 'El tablero de KPI usa estas reglas para calcular la comisión de cada asesor en el mes liquidado.';
 
 const CAMPOS = [
   {
@@ -25,8 +29,41 @@ const CAMPOS = [
     etiqueta: 'Cargos que comisionan',
     ayuda: 'Los cargos que reciben comisión como asesores. Los nombres se escriben en mayúsculas, igual que en el maestro de personas.',
   },
+  {
+    clave: 'comision_lineas',
+    etiqueta: 'Bonos por línea',
+    ayuda: 'Un asesor gana el bono de una línea cuando la venta de esa línea es al menos el porcentaje meta de SU venta TOTAL del mes (incluidas las ventas a HMCL). Una línea apagada no se paga. Los bonos se suman a la comisión y no dependen del cumplimiento del presupuesto.',
+  },
 ];
 
-export default function SeccionComisiones(props) {
-  return <CamposDeSeccion {...props} aviso={AVISO} campos={CAMPOS} />;
+const normalizar = (texto) => String(texto).trim().toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+
+function lineasConfiguradas(data) {
+  for (const seccion of data.secciones || []) {
+    for (const grupo of seccion.grupos) {
+      const spec = grupo.claves.find((c) => c.clave === 'lineas_comerciales');
+      const valor = spec?.efectivo_global?.valor;
+      if (Array.isArray(valor)) return valor.map(normalizar).filter(Boolean);
+    }
+  }
+  return null;
+}
+
+/** Hands the configured lineas_comerciales to the comision_lineas editor (as `spec.lineas`). */
+export function conLineasComerciales(data) {
+  const lineas = data ? lineasConfiguradas(data) : null;
+  if (!lineas) return data;
+  const conLineas = (c) => (c.clave === 'comision_lineas' ? { ...c, lineas } : c);
+  return {
+    ...data,
+    secciones: data.secciones.map((s) => ({
+      ...s, grupos: s.grupos.map((g) => ({ ...g, claves: g.claves.map(conLineas) })),
+    })),
+  };
+}
+
+export default function SeccionComisiones({ data, ...props }) {
+  // Memoised: a new spec object on every render would reset the field's draft.
+  const datos = useMemo(() => conLineasComerciales(data), [data]);
+  return <CamposDeSeccion {...props} data={datos} aviso={AVISO} campos={CAMPOS} />;
 }

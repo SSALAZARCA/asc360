@@ -5,7 +5,7 @@
  * `formatearValor` writes it for a person. The server stays the judge of
  * ranges and cross-field rules; here only the shape and "is it a number".
  */
-import { etiquetaDe } from './etiquetas';
+import { etiquetaDe, etiquetaLinea } from './etiquetas';
 
 const ENTERO = /^-?\d+$/;
 const DECIMAL = /^\d+([.,]\d+)?$/;
@@ -64,7 +64,29 @@ function tramos(borrador) {
   return { valor };
 }
 
+/** comision_lineas has its own shape whatever `tipo` the server gives it. */
+const esBonosLinea = (spec) => spec.clave === 'comision_lineas';
+const pesosTexto = (v) => textoDe(v).trim().replace(/\.0+$/, '');
+
+function bonosLinea(borrador) {
+  const valor = [];
+  for (const fila of borrador) {
+    const pct = numeroTexto(fila.pct_meta);
+    const bono = pesosTexto(fila.bono);
+    if (pct === null || !/^\d+$/.test(bono)) {
+      return { error: `Línea ${etiquetaLinea(fila.linea)}: la meta y el bono necesitan un número.` };
+    }
+    valor.push({ linea: fila.linea, pct_meta: pct, bono, activo: Boolean(fila.activo) });
+  }
+  return { valor };
+}
+
+const bonosABorrador = (valor) => (valor || []).map((f) => ({
+  linea: f.linea, pct_meta: textoDe(f.pct_meta), bono: pesosTexto(f.bono), activo: f.activo !== false,
+}));
+
 export function desdeBorrador(spec, borrador) {
+  if (esBonosLinea(spec)) return bonosLinea(borrador);
   switch (spec.tipo) {
     case 'entero': return entero(borrador);
     case 'decimal': return decimal(borrador);
@@ -79,6 +101,7 @@ export function desdeBorrador(spec, borrador) {
 }
 
 export function aBorrador(spec, valor) {
+  if (esBonosLinea(spec)) return bonosABorrador(valor);
   switch (spec.tipo) {
     case 'entero':
     case 'decimal': return textoDe(valor);
@@ -119,6 +142,15 @@ const camposLegibles = (spec, valor) => spec.campos.map((c) => campoLegible(c, v
 
 const tramoLegible = (t) => `${t.nombre} desde ${numeroLegible(t.desde_pct)}% (${numeroLegible(t.tasa_pct)}%)`;
 
+/** Whole pesos with dot thousands: 35000 -> "$ 35.000". */
+const pesosLegibles = (n) => `$ ${pesosTexto(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.')}`;
+
+const bonoLegible = (f) => [
+  `${etiquetaLinea(f.linea)} ≥${numeroLegible(Number(f.pct_meta))}%`,
+  pesosLegibles(f.bono),
+  f.activo === false ? 'apagado' : 'activo',
+].join(' · ');
+
 function textoSeguro(valor) {
   if (typeof valor === 'object') return JSON.stringify(valor);
   return String(valor);
@@ -126,6 +158,7 @@ function textoSeguro(valor) {
 
 export function formatearValor(spec, valor) {
   if (valor === null || valor === undefined) return 'Sin valor';
+  if (esBonosLinea(spec)) return valor.length ? valor.map(bonoLegible).join('; ') : '(vacía)';
   switch (spec.tipo) {
     case 'bool': return valor ? 'Sí' : 'No';
     case 'decimal': return numeroLegible(valor);

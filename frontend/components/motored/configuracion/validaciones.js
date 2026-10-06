@@ -3,6 +3,7 @@
  * list of Spanish messages (empty = fine). They mirror the backend rules so
  * the person sees the problem before saving; the server stays the judge.
  */
+import { etiquetaLinea } from './etiquetas';
 import { numeroTexto } from './valor';
 
 const texto = (v) => (v === null || v === undefined ? '' : String(v));
@@ -80,5 +81,33 @@ export function validarLista(valores, { digitos = false, unicos = false } = {}) 
   if (unicos) {
     repetidos(valores).forEach((v) => mensajes.push(`«${v}» está repetido.`));
   }
+  return mensajes;
+}
+
+function mensajesDeBono(fila) {
+  const nombre = etiquetaLinea(fila.linea);
+  const mensajes = [];
+  const pct = numeroTexto(fila.pct_meta);
+  if (pct === null || Number(pct) <= 0 || Number(pct) > 100) {
+    mensajes.push(`${nombre}: la meta debe ser un porcentaje mayor que 0 y hasta 100.`);
+  }
+  if (!/^\d+$/.test(limpio(fila.bono))) mensajes.push(`${nombre}: el bono debe ser un valor entero en pesos, 0 o más.`);
+  return mensajes;
+}
+
+/**
+ * Per-line bonuses (comision_lineas). An empty list is fine. `lineas` (the
+ * configured lineas_comerciales plus TECNIRED) enables the unknown-line
+ * check; without it the server stays the judge of which lines exist.
+ */
+export function validarBonosLinea(borrador, lineas = null) {
+  const mensajes = borrador.flatMap(mensajesDeBono);
+  const codigos = borrador.map((f) => limpio(f.linea));
+  if (lineas) {
+    codigos.filter((c) => !lineas.includes(c)).forEach((c) => {
+      mensajes.push(`La línea «${etiquetaLinea(c)}» no está en las líneas comerciales configuradas.`);
+    });
+  }
+  repetidos(codigos).forEach((c) => mensajes.push(`La línea «${etiquetaLinea(c)}» está repetida.`));
   return mensajes;
 }

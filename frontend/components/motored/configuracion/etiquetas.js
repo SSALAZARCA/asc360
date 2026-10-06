@@ -14,3 +14,17 @@ export const ETIQUETA_OPCION = {
 };
 
 export const etiquetaDe = (codigo) => ETIQUETA_OPCION[codigo] || codigo;
+
+/** The lines of the per-line bonus (comision_lineas): stored code -> business name. */
+export const ETIQUETA_LINEA = {
+  REPUESTOS: 'Repuestos',
+  ACCESORIOS: 'Otros accesorios',
+  LLANTAS: 'Llantas',
+  LUBRICANTES: 'Lubricantes',
+  BATERIAS: 'Baterías',
+  GPS: 'GPS',
+  CASCOS: 'Cascos',
+  TECNIRED: 'Tecnired (clientes)',
+};
+
+export const etiquetaLinea = (codigo) => ETIQUETA_LINEA[codigo] || codigo;

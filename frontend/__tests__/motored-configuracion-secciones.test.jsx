@@ -125,7 +125,7 @@ describe('Indicadores tab', () => {
 describe('Comisiones tab', () => {
   it('shows the notice, the four fields and the readable base options', () => {
     montar('comisiones', 'Comisiones', COMISIONES);
-    expect(screen.getByText('Se aplican cuando estén activos los indicadores de comisiones.')).toBeInTheDocument();
+    expect(screen.getByText(/El tablero de KPI usa estas reglas/)).toBeInTheDocument();
     ['Tramos de comisión', 'Base para pagar la comisión', 'Base del cumplimiento', 'Cargos que comisionan'].forEach((t) => {
       expect(screen.getByText(t)).toBeInTheDocument();
     });
