@@ -17,7 +17,7 @@ import uuid
 
 import pytest
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.motored.models.bodega import Bodega
 from app.motored.models.sucursal import Sucursal
@@ -37,7 +37,11 @@ USER_ID = None  # `auditoria_maestro.usuario_id` is a real FK to `usuario`
 @pytest.fixture
 async def sesion():
     motor = create_async_engine(URL)
-    async with AsyncSession(motor, expire_on_commit=False) as db:
+    # Same session settings as production (`database.py`): autoflush off.
+    fabrica = async_sessionmaker(
+        motor, expire_on_commit=False, autoflush=False
+    )
+    async with fabrica() as db:
         yield db
         await db.rollback()
     await motor.dispose()

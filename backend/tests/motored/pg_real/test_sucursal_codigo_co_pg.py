@@ -23,7 +23,7 @@ import uuid
 import pytest
 from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.motored.api.carga import _resolver_y_procesar_carga
 from app.motored.models.sucursal import Sucursal
@@ -42,7 +42,11 @@ _INMEDIATA = text("SET CONSTRAINTS uq_sucursal_codigo_co IMMEDIATE")
 @pytest.fixture
 async def sesion(monkeypatch):
     motor = create_async_engine(URL)
-    async with AsyncSession(motor, expire_on_commit=False) as db:
+    # Same session settings as production (`database.py`): autoflush off.
+    fabrica = async_sessionmaker(
+        motor, expire_on_commit=False, autoflush=False
+    )
+    async with fabrica() as db:
         monkeypatch.setattr(db, "commit", db.flush)
         yield db
         await db.rollback()

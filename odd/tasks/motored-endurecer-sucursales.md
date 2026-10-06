@@ -11,7 +11,7 @@ Close the gaps found while loading the owner's Sucursales file and in the indepe
 | T3 | Reject (upload and form) a store's principal bodega that already belongs to another store as its principal or secondary, unless the same file or save releases it. Spanish message naming the other store. Also ignore or validate a raw `principal_id` sent in JSON upload rows. | delegated writer (same) |
 
 - [x] T1
-- [ ] T2
+- [x] T2
 - [ ] T3
 
 ## Out of scope

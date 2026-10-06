@@ -45,6 +45,7 @@ from app.motored.schemas.sucursal import SucursalCreate, SucursalRead, SucursalU
 from app.motored.services import (
     auditoria,
     bodegas_secundarias,
+    errores_integridad,
     maestros,
     sucursal_grupo,
 )
@@ -238,29 +239,33 @@ async def get_maestro(
 _CONSTRAINT_CODIGO = "uq_referencia_codigo"  # llave única del código (migración f3a8d1c5b704)
 
 
-def _nombre_de_restriccion(exc: IntegrityError) -> str:
-    """Nombre de la restricción violada, sin asumir el driver: `diag`
-    (psycopg), atributo directo o `__cause__` (asyncpg) y, de último, el texto."""
-    orig = getattr(exc, "orig", None)
-    for fuente in (orig, getattr(orig, "__cause__", None)):
-        if fuente is None:
-            continue
-        nombre = getattr(getattr(fuente, "diag", None), "constraint_name", None) or getattr(
-            fuente, "constraint_name", None
-        )
-        if isinstance(nombre, str) and nombre:
-            return nombre
-    return str(orig or "")
-
-
-def _respuesta_de_integridad(entidad: str, data: Any, exc: IntegrityError) -> HTTPException:
-    """Solo la llave única del código de referencia es "ya existe"; una FK o un
-    NOT NULL violados son un dato inválido (422), no un duplicado."""
-    nombre = _nombre_de_restriccion(exc)
-    es_unica = _CONSTRAINT_CODIGO in nombre or nombre.startswith("uq_") or "duplicate key" in nombre.lower()
+def _respuesta_de_integridad(
+    entidad: str, data: Any, exc: IntegrityError
+) -> HTTPException:
+    """A known constraint has its own message (`errores_integridad`). A
+    store's save only breaks a constraint of its own (the name, the C.O.,
+    a bodega code) or one of the bodegas sync, a bug: never "falta un
+    dato". Otherwise only a unique key is "ya existe"; a FK or a NOT NULL
+    violated is invalid data (422), not a duplicate."""
+    violacion = errores_integridad.describir(exc, f"maestros.{entidad}")
+    conocida = violacion.restriccion in errores_integridad.MENSAJES_CONOCIDOS
+    duplicado = _detalle_duplicado(entidad, data)
+    if conocida or entidad == "sucursales":
+        return errores_integridad.respuesta(violacion, duplicado)
+    nombre = violacion.restriccion or str(exc.orig or "")
+    es_unica = (
+        violacion.sqlstate == errores_integridad.VIOLACION_UNICA
+        or _CONSTRAINT_CODIGO in nombre or nombre.startswith("uq_")
+        or "duplicate key" in nombre.lower()
+    )
     if es_unica:
-        return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=_detalle_duplicado(entidad, data))
-    return HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=_detalle_invalido(entidad))
+        return HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail=duplicado
+        )
+    return HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        detail=_detalle_invalido(entidad),
+    )
 
 
 def _detalle_invalido(entidad: str) -> str:

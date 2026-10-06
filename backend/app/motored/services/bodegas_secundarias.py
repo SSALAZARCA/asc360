@@ -511,6 +511,10 @@ async def guardar_de_sucursal(
     is the final set: validated, then linked and released by `aplicar`.
     Either way the principal's own record is synced last, as the upload
     does. Returns the normalized codes, or None when none were given."""
+    # The session runs with autoflush off and `bodega` has no relationship
+    # to `sucursal`: a store created by this save must be INSERTed before
+    # a bodega row points at it (bodega_sucursal_id_fkey).
+    await db.flush()
     normalizados = None
     if codigos is not None:
         normalizados = normalizar_codigos(list(codigos))

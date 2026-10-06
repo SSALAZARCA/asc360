@@ -30,6 +30,7 @@ from sqlalchemy.exc import IntegrityError
 from app.motored.schemas.carga import CargaErrorRow, CargaResultado
 from app.motored.services import (
     bodegas_secundarias,
+    errores_integridad,
     maestros,
     reemplazo_referencias,
     sucursal_grupo,
@@ -95,17 +96,11 @@ async def _reemplazar_lista(
     )
     try:
         await db.commit()
-    except IntegrityError:
+    except IntegrityError as exc:
         # Otra carga reemplazo la lista entre el DELETE y este COMMIT y choco
         # con el indice unico: se ve como un conflicto, no como un 500.
         await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=(
-                "Otra carga está reemplazando esta lista en este momento. "
-                "Espere unos segundos y vuelva a subir el archivo."
-            ),
-        )
+        raise _error_de_integridad(exc, entidad, _CARRERA_LISTA)
     return CargaResultado(
         ok=True,
         total_filas=len(valid_rows),
@@ -117,6 +112,26 @@ async def _reemplazar_lista(
 
 def _conflicto(detalle: str) -> HTTPException:
     return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detalle)
+
+
+_CARRERA_LISTA = (
+    "Otra carga está reemplazando esta lista en este momento. "
+    "Espere unos segundos y vuelva a subir el archivo."
+)
+_CARRERA_REFERENCIAS = (
+    "Otra carga modificó las referencias en este momento. Espere unos "
+    "segundos y vuelva a subir el archivo."
+)
+
+
+def _error_de_integridad(
+    exc: IntegrityError, entidad: str,
+    carrera: str = errores_integridad.MENSAJE_CARRERA,
+) -> HTTPException:
+    """The upload's answer to an IntegrityError (`errores_integridad`):
+    `carrera` only for a real race on a natural key."""
+    violacion = errores_integridad.describir(exc, f"carga.{entidad}")
+    return errores_integridad.respuesta(violacion, carrera)
 
 
 async def _reemplazar_referencias(
@@ -162,11 +177,9 @@ async def _reemplazar_referencias(
     try:
         await reemplazo_referencias.aplicar(db, plan, resumen, usuario_id, a_inactivar)
         await db.commit()
-    except IntegrityError:
+    except IntegrityError as exc:
         await db.rollback()
-        raise _conflicto(
-            "Otra carga modificó las referencias en este momento. Espere unos segundos y vuelva a subir el archivo."
-        )
+        raise _error_de_integridad(exc, "referencia", _CARRERA_REFERENCIAS)
     return CargaResultado(
         ok=True,
         total_filas=len(valid_rows),
@@ -292,13 +305,12 @@ async def procesar_carga(
                 db, subidas, usuario_id
             )
         await db.commit()
-    except IntegrityError:
-        # Otra carga creó la misma llave natural (p.ej. la misma bodega
-        # secundaria) entre nuestro SELECT y el flush/COMMIT: es un conflicto, no un 500.
+    except IntegrityError as exc:
+        # A race on a natural key (another upload created the same
+        # secondary bodega between our SELECT and the flush/COMMIT) is a
+        # 409; any other constraint is a bug, reported as such.
         await db.rollback()
-        raise _conflicto(
-            "Otra carga modificó estos registros en este momento. Espere unos segundos y vuelva a subir el archivo."
-        )
+        raise _error_de_integridad(exc, entidad)
 
     return CargaResultado(
         ok=True,
