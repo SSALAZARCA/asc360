@@ -1,6 +1,7 @@
 'use client';
 /** Presentational table of past customer-base uploads. */
 import MotoredTableScroll from '../MotoredTableScroll';
+import { fechaHoraBogota } from '../../../lib/motored/fechas';
 import { cardStyle, errorStyle } from './styles';
 
 const thStyle = { padding: '0 12px 8px 0', textAlign: 'left' };
@@ -36,7 +37,7 @@ export default function CargasRealizadas({ cargas, loading, error }) {
               {cargas.map((c) => (
                 <tr key={c.id} style={{ borderTop: '1px solid var(--motored-border, #e4e4e7)' }}>
                   <td style={tdStyle}>{c.nombre_archivo}</td>
-                  <td style={tdStyle}>{c.created_at ? new Date(c.created_at).toLocaleString('es-CO') : '—'}</td>
+                  <td style={tdStyle}>{fechaHoraBogota(c.created_at)}</td>
                   <td style={tdStyle}>{c.usuario || '—'}</td>
                   <td style={tdStyle}>{c.total_registros}</td>
                   <td style={tdStyle}>{respondidas(c)}</td>

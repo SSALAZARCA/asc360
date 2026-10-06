@@ -10,13 +10,12 @@
  * from the original inline version.
  */
 import MotoredIconAction from '../MotoredIconAction';
+import { fechaHoraBogota } from '../../../lib/motored/fechas';
 
 const tdStyle = { padding: '10px 12px 10px 0' };
 const badgeStyle = { marginLeft: '0.4rem', fontSize: '0.7rem', color: 'var(--motored-text-muted, #5a5a5a)' };
 
-function formatFechaHora(iso) {
-  return iso ? new Date(iso).toLocaleString('es-CO') : '—';
-}
+const formatFechaHora = fechaHoraBogota;
 
 export default function VentasPerdidasRow({
   linea,

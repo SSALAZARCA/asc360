@@ -1,6 +1,7 @@
 /**
  * Display helpers shared by the budget components (Maestros > Presupuestos).
  */
+import { fechaBogota } from '../../../../lib/motored/fechas';
 
 /** Each `<option>` needs its own color: the dark theme hides the text of an unstyled one. */
 export const optionStyle = { color: '#1a1a18' };
@@ -36,8 +37,8 @@ export function mesLegible(mes) {
   return texto.charAt(0).toUpperCase() + texto.slice(1);
 }
 
-/** ISO timestamp -> `3/10/2026`; unreadable values come back unchanged. */
+/** ISO timestamp -> `03/10/2026` in Colombia time; unreadable values come back unchanged. */
 export function fechaLegible(iso) {
-  const fecha = new Date(iso);
-  return Number.isNaN(fecha.getTime()) ? String(iso || '—') : fecha.toLocaleDateString('es-CO');
+  const texto = fechaBogota(iso);
+  return texto === '—' ? String(iso || '—') : texto;
 }

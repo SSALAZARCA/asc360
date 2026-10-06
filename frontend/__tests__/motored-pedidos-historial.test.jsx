@@ -66,7 +66,7 @@ describe('Historial drawer - tienda timeline', () => {
     expect(items).toHaveLength(4);
     expect(items[0]).toHaveTextContent('Cerrado');
     expect(items[0]).toHaveTextContent('Compras Uno');
-    expect(items[0]).toHaveTextContent('02/10/2026 09:15');
+    expect(items[0]).toHaveTextContent('02/10/2026 04:15');
     expect(items[1]).toHaveTextContent('Reabierto');
     expect(items[1]).toHaveTextContent('Corrección de cantidades');
     expect(items[2]).toHaveTextContent('Orden 12345');
@@ -115,7 +115,7 @@ describe('Historial drawer - one line', () => {
     expect(items[0]).toHaveTextContent('50 → 60');
     expect(items[0]).toHaveTextContent('Manual');
     expect(items[0]).toHaveTextContent('Compras Uno');
-    expect(items[0]).toHaveTextContent('02/10/2026 10:15');
+    expect(items[0]).toHaveTextContent('02/10/2026 05:15');
     expect(items[1]).toHaveTextContent('60 → 55');
     expect(items[1]).toHaveTextContent('Recorte por presupuesto');
   });

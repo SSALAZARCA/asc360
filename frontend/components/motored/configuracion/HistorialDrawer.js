@@ -2,6 +2,7 @@
 /** Side drawer with every saved version of one setting, newest first. */
 import { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
+import { fechaHoraBogota } from '../../../lib/motored/fechas';
 import { formatearValor } from './valor';
 import { errorStyle, mutedStyle, touchStyle } from './styles';
 
@@ -14,7 +15,7 @@ const drawerStyle = {
 const celdaStyle = { padding: '6px 10px 6px 0', textAlign: 'left', verticalAlign: 'top' };
 
 const mes = (fecha) => (fecha ? fecha.slice(0, 7) : '—');
-const instante = (texto) => (texto ? texto.replace('T', ' ').slice(0, 16) : '—');
+const instante = fechaHoraBogota;
 
 function Fila({ spec, version }) {
   return (

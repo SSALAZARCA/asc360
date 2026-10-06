@@ -1,4 +1,6 @@
 /** Spanish labels and pure formatters for the login log screen. */
+import { fechaHoraBogota, horaBogota } from '../../../lib/motored/fechas';
+
 export const RESULTADO_LABELS = { EXITO: 'Éxito', FALLO: 'Fallido', BLOQUEADO: 'Bloqueado' };
 
 export const MOTIVO_LABELS = {
@@ -8,17 +10,11 @@ export const MOTIVO_LABELS = {
   CUENTA_BLOQUEADA: 'Cuenta bloqueada',
 };
 
-const BOGOTA = 'America/Bogota';
-
-/** Colombia date and time, 24h ("30/9/2026, 15:15:00"). */
-export function formatFechaHoraCo(iso) {
-  return iso ? new Date(iso).toLocaleString('es-CO', { timeZone: BOGOTA, hour12: false }) : '—';
-}
+/** Colombia date and time, 24h ("30/09/2026 15:15"). */
+export const formatFechaHoraCo = fechaHoraBogota;
 
 /** Colombia time "HH:MM". */
-export function formatHoraCo(iso) {
-  return new Date(iso).toLocaleTimeString('es-CO', { timeZone: BOGOTA, hour12: false, hour: '2-digit', minute: '2-digit' });
-}
+export const formatHoraCo = horaBogota;
 
 // Order matters: Edge and Opera also say Chrome; Chrome also says Safari.
 const BROWSERS = [[/Edg\//, 'Edge'], [/OPR\//, 'Opera'], [/Firefox\//, 'Firefox'], [/Chrome\//, 'Chrome'], [/Safari\//, 'Safari'], [/curl\//, 'curl']];

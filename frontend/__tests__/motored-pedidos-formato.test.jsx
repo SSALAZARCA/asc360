@@ -18,8 +18,9 @@ describe('unidades', () => {
 });
 
 describe('fechaHora', () => {
-  it('shows day/month/year and the hour without any time-zone shift', () => {
-    expect(fechaHora('2026-10-02T09:15:00')).toBe('02/10/2026 09:15');
+  it('shows day/month/year and the hour in Colombia time', () => {
+    expect(fechaHora('2026-10-02T14:15:00')).toBe('02/10/2026 09:15');
+    expect(fechaHora('2026-10-02T14:15:00+00:00')).toBe('02/10/2026 09:15');
   });
 
   it('shows only the date when the value has no time', () => {

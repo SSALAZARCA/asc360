@@ -96,7 +96,7 @@ describe('inline edit - saving', () => {
     expect(patches(calls)[0].path).toBe('/corridas/c1/lineas/1');
     expect(patches(calls)[0].body).toEqual({ pedido_final: 60, esperado: '48.00' });
     const fila = screen.getByText('94109-12000S').closest('tr');
-    await waitFor(() => expect(within(fila).getByRole('note', { name: 'Editado por Compras Uno el 02/10/2026 10:15' })).toBeInTheDocument());
+    await waitFor(() => expect(within(fila).getByRole('note', { name: 'Editado por Compras Uno el 02/10/2026 05:15' })).toBeInTheDocument());
     expect(within(fila).getByRole('textbox')).toHaveValue('60');
     expect(fila).toHaveTextContent(/900\.000/);
   });

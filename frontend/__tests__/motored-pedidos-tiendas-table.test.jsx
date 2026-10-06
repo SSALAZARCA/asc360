@@ -127,7 +127,7 @@ describe('corrida detail - Tiendas table', () => {
     render(<CorridaDetallePage />);
     const pereira = await fila('Pereira');
     expect(pereira).toHaveTextContent('Cerrado por Compras Uno');
-    expect(pereira).toHaveTextContent('02/10/2026 09:15');
+    expect(pereira).toHaveTextContent('02/10/2026 04:15');
     expect(await fila('Manizales')).toHaveTextContent('Sin movimientos');
   });
 

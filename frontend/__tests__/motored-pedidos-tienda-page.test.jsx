@@ -91,7 +91,7 @@ describe('tienda pedido - header', () => {
     await screen.findByRole('heading', { name: 'Pereira' });
     expect(screen.getByText('Cerrado')).toBeInTheDocument();
     expect(screen.getByText('Pedido cerrado: reábralo para ajustar')).toBeInTheDocument();
-    expect(screen.getByText(/Cerrado por Compras Uno/)).toHaveTextContent('02/10/2026 09:15');
+    expect(screen.getByText(/Cerrado por Compras Uno/)).toHaveTextContent('02/10/2026 04:15');
   });
 
   it('shows Enviado with the HMCL order number and no adjust note for Cerrado', async () => {

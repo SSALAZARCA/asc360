@@ -1,4 +1,6 @@
 /** Wording of the "Datos actualizados" line of the KPI's. Times are shown in Bogota (UTC-5, no DST). */
+import { parseInstante } from '../../../lib/motored/fechas';
+
 const ZONA = 'America/Bogota';
 
 const partes = (fecha) => {
@@ -10,8 +12,8 @@ const partes = (fecha) => {
 
 /** `a las 10:30` for today, `el 02/10 a las 22:00` for another day (both in Bogota time); '' when invalid. */
 export function momentoActualizacion(iso, ahora = new Date()) {
-  const fecha = iso ? new Date(iso) : null;
-  if (!fecha || Number.isNaN(fecha.getTime())) return '';
+  const fecha = parseInstante(iso);
+  if (!fecha) return '';
   const f = partes(fecha);
   const hoy = partes(ahora);
   const hora = `a las ${f.hour}:${f.minute}`;

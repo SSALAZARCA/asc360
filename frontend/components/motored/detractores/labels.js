@@ -1,4 +1,6 @@
 /** Labels and pure formatters shared by the detractors screens. */
+import { fechaBogota, fechaHoraBogota } from '../../../lib/motored/fechas';
+
 export const ESTADO_LABELS = { ABIERTO: 'Abierto', EN_GESTION: 'En gestión', CERRADO: 'Cerrado' };
 
 export const RESULTADO_LABELS = {
@@ -28,13 +30,9 @@ export const MATRIX_ROWS = [
   ['p_originalidad_repuestos', 'La confianza en la procedencia y originalidad de los repuestos'],
 ];
 
-export function formatFecha(iso) {
-  return iso ? new Date(iso).toLocaleDateString('es-CO') : '—';
-}
+export const formatFecha = fechaBogota;
 
-export function formatFechaHora(iso) {
-  return iso ? new Date(iso).toLocaleString('es-CO') : '—';
-}
+export const formatFechaHora = fechaHoraBogota;
 
 /** wa.me link only when the digits look like a Colombian mobile (3XXXXXXXXX). */
 export function whatsappUrl(celular) {

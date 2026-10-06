@@ -87,7 +87,7 @@ describe('lines table - columns and content', () => {
     installFetch(rutas());
     render(<PedidoTiendaPage />);
     const editada = await fila('55512-A');
-    expect(within(editada).getByRole('note', { name: 'Editado por Compras Uno el 02/10/2026 10:15' })).toBeInTheDocument();
+    expect(within(editada).getByRole('note', { name: 'Editado por Compras Uno el 02/10/2026 05:15' })).toBeInTheDocument();
     expect(within(await fila('94109-12000S')).queryByRole('note', { name: /Editado por/ })).not.toBeInTheDocument();
   });
 

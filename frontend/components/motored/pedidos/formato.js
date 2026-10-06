@@ -1,4 +1,6 @@
 /** Display helpers of the Pedidos screens (the backend sends decimals as text). */
+import { fechaHoraBogota } from '../../../lib/motored/fechas';
+
 const NUMERO = new Intl.NumberFormat('es-CO', { maximumFractionDigits: 2 });
 
 const QUIEBRE = {
@@ -42,14 +44,8 @@ export function abreviarTienda(nombre) {
   return texto.length > LARGO_TIENDA ? `${texto.slice(0, LARGO_TIENDA)}…` : texto;
 }
 
-/** `2026-10-02T09:15:00` as `02/10/2026 09:15`, read from the text (no time-zone shift). */
-export function fechaHora(iso) {
-  const [fecha, hora] = String(iso || '').split('T');
-  const [anio, mes, dia] = fecha.split('-');
-  if (!anio || !mes || !dia) return '—';
-  const dmy = `${dia}/${mes}/${anio}`;
-  return hora ? `${dmy} ${hora.slice(0, 5)}` : dmy;
-}
+/** An instant as `02/10/2026 09:15` in Colombia time (a date-only value shows just the date). */
+export const fechaHora = fechaHoraBogota;
 
 /** Spanish wording of the engine stock state; unknown values pass through. */
 export function etiquetaQuiebre(estado) {

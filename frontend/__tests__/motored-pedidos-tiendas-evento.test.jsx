@@ -18,14 +18,14 @@ const celdaEvento = (nombre) => {
 describe('Último evento tooltip', () => {
   it('carries the whole sentence (event, who, when) as a tooltip, whatever the width', () => {
     render(<TiendasTable tiendas={[T_CERRADO, T_ENVIADO]} onOpen={() => {}} />);
-    expect(within(celdaEvento('Pereira')).getByTitle('Cerrado por Compras Uno · 02/10/2026 09:15')).toBeInTheDocument();
-    expect(within(celdaEvento('Cali')).getByTitle('Enviado por Ana Gómez · 02/10/2026 11:00')).toBeInTheDocument();
+    expect(within(celdaEvento('Pereira')).getByTitle('Cerrado por Compras Uno · 02/10/2026 04:15')).toBeInTheDocument();
+    expect(within(celdaEvento('Cali')).getByTitle('Enviado por Ana Gómez · 02/10/2026 06:00')).toBeInTheDocument();
   });
 
   it('leaves out the "por" part when the user is unknown', () => {
     const sinUsuario = otraTienda({ ...T_CERRADO, ultimo_evento: { evento: 'CERRADO', usuario: null, creado_en: '2026-10-02T09:15:00' } }, 's9', 'Neiva', 9);
     render(<TiendasTable tiendas={[sinUsuario]} onOpen={() => {}} />);
-    expect(within(celdaEvento('Neiva')).getByTitle('Cerrado · 02/10/2026 09:15')).toBeInTheDocument();
+    expect(within(celdaEvento('Neiva')).getByTitle('Cerrado · 02/10/2026 04:15')).toBeInTheDocument();
   });
 
   it('has no tooltip for a tienda without movements', () => {

@@ -19,6 +19,7 @@
  */
 import { useState } from 'react';
 import { subirCargaMovimiento, getCarga, descargarPlantillaMovimiento } from '../../../lib/motored/api';
+import { fechaBogota } from '../../../lib/motored/fechas';
 import InfoTooltip from '../InfoTooltip';
 import { tipoDeclaraPeriodo, tipoUsaFechaDeCorte, excedeUnMes } from './tiposCarga';
 
@@ -132,7 +133,7 @@ function useSubirMovimiento(tipo, onUploaded) {
         try {
           const previa = await getCarga(res.duplicado_de);
           setDuplicadoInfo(
-            `Ya existe una carga idéntica del ${new Date(previa.created_at).toLocaleDateString('es-CO')}. Igual podés continuar.`
+            `Ya existe una carga idéntica del ${fechaBogota(previa.created_at)}. Igual podés continuar.`
           );
         } catch {
           setDuplicadoInfo('Ya existe una carga idéntica anterior. Igual podés continuar.');

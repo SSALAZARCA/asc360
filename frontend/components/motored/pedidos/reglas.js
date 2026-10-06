@@ -1,4 +1,5 @@
 /** Pure rules of the corridas list: which states are in flight, who can be anulada. */
+import { fechaBogota } from '../../../lib/motored/fechas';
 import { dias, etiquetaDataset } from './formato';
 
 export const EN_CURSO = ['PENDIENTE', 'CALCULANDO'];
@@ -13,11 +14,8 @@ export function puedeAnular(corrida) {
   return cerrados + enviados === 0;
 }
 
-/** `2026-10-01` (or an ISO datetime) as `01/10/2026`, without time-zone shifts. */
-export function fechaCorta(iso) {
-  const [anio, mes, dia] = String(iso || '').slice(0, 10).split('-');
-  return anio && mes && dia ? `${dia}/${mes}/${anio}` : '—';
-}
+/** `2026-10-01` as `01/10/2026` (no shift); an instant as its Colombia calendar date. */
+export const fechaCorta = fechaBogota;
 
 /** The stale-data warning of a list row (UX-06), or null when the data is within its limit or unknown. */
 export function avisoAntiguedad(corrida) {

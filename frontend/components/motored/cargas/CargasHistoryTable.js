@@ -22,6 +22,7 @@ import MotoredTableScroll from '../MotoredTableScroll';
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { listarCargas } from '../../../lib/motored/api';
+import { fechaHoraBogota } from '../../../lib/motored/fechas';
 import { TIPOS_CARGA, ESTADOS_CARGA, labelTipo } from './tiposCarga';
 import EstadoBadge from './EstadoBadge';
 
@@ -134,7 +135,7 @@ function TablaCargas({ cargas, onFilaClick }) {
                   `${carga.filas_leidas} / ${carga.filas_validas} / ${carga.filas_rechazadas}`
                 )}
               </td>
-              <td style={tdStyle}>{new Date(carga.created_at).toLocaleString('es-CO')}</td>
+              <td style={tdStyle}>{fechaHoraBogota(carga.created_at)}</td>
             </tr>
           ))}
         </tbody>
