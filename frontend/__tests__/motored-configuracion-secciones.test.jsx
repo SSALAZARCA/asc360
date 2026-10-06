@@ -49,7 +49,7 @@ const campo = (nombre) => screen.getByText(nombre).closest('section');
 describe('Indicadores tab', () => {
   it('shows the notice and the four fields, each with a tooltip', () => {
     montar('indicadores', 'Indicadores', INDICADORES);
-    expect(screen.getByText(/Se aplican cuando estén activos los indicadores de comisiones/)).toBeInTheDocument();
+    expect(screen.getByText(/El tablero de KPI usa estos valores para calcular ventas/)).toBeInTheDocument();
     expect(screen.getAllByRole('note').length).toBeGreaterThanOrEqual(4);
     ['NIT de HMCL', 'Grupo de cada cargo', 'Líneas comerciales', 'Colores del semáforo'].forEach((t) => {
       expect(screen.getByText(t)).toBeInTheDocument();
