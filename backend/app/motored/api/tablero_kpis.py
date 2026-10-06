@@ -28,7 +28,9 @@ Respuestas (los importes son numeros, nunca texto; cada una repite `meses`,
 - `GET /kpis/comisiones`: liquida el ULTIMO mes de `meses` (`mes_liquidado`) con las reglas de
   comision vigentes ese mes: `reglas` (con `comision_*`), `resumen`, `tramos` (con la cuenta de
   asesores de cada uno), `asesores` (mayor comision primero), `cerca_de_subir` y `advertencias` {sin_presupuesto,
-  cargo_desconocido, sin_cedula, sin_presupuestos}. El selector `hmcl` no cambia las bases.
+  cargo_desconocido, sin_cedula, sin_presupuestos}. El selector `hmcl` no cambia las bases. Bonos por linea
+  (`comision_lineas`, compuerta `comision_bono_umbral_pct`): cada asesor trae `gate`, `bonos`, `bono_total` y
+  `total_a_pagar` (comision + bonos); `resumen` suma `bonos_total`, `total_a_pagar` y `por_linea`.
 - `GET /kpis/comisiones/excel`: el mismo calculo en un .xlsx (`comisiones_AAAA-MM.xlsx`): hoja
   "Comisiones" (encabezado con mes, tiendas y reglas, una fila por asesor con su cedula como TEXTO,
   totales) y hoja "Sin presupuesto".

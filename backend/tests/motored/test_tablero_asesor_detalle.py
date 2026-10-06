@@ -75,7 +75,10 @@ COMISION = {
     ],
     "asesores": [{
         "cedula": "100", "presupuesto": 1000, "venta_cumplimiento": 700.0, "venta_comision": 700.0,
-        "tramo": "BASE", "tasa_pct": 1.0, "comision": 7.0,
+        "tramo": "BASE", "tasa_pct": 1.0, "comision": 7.0, "cumplimiento_pct": 0.7,
+        "gate": {"umbral": 95.0, "cumple": False}, "bono_total": 0, "total_a_pagar": 7.0,
+        "bonos": [{"linea": "CASCOS", "etiqueta": "Cascos", "venta": 70.0, "pct_real": 0.1, "pct_meta": 6.0,
+                   "bono": 30000, "cumple": True, "paga": False, "activo": True, "bono_pagado": 0}],
         "sig": {"nombre": "PRO", "desde_pct": 90.0, "tasa_pct": 1.5, "falta": 200.0, "gana": 3.5},
     }],
 }
@@ -177,6 +180,8 @@ def test_comision_reuses_the_liquidation_of_the_last_month():
     assert r["comision"] == {
         "mes": "2026-03", "tramo": "BASE", "tasa_pct": 1.0, "comision": 7.0, "venta_base": 700.0,
         "base_pago": "sin_hmcl", "presupuesto": 1000, "promedio_red": 394000.0,
+        "cumplimiento_pct": 0.7, "gate": {"umbral": 95.0, "cumple": False}, "bono_total": 0, "total_a_pagar": 7.0,
+        "bonos": COMISION["asesores"][0]["bonos"],
         "sig": {"tramo": "PRO", "desde_pct": 90.0, "tasa_pct": 1.5, "falta": 200.0, "gana": 3.5, "meta": 900.0},
     }
 

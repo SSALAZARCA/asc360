@@ -40,6 +40,7 @@ def _detalle(mes, id_=str(ID)):
     return {
         "id": id_, "mes": mes, "version": 1, "origen": "EXCEL", "archivo_nombre": None, "nota": None,
         "created_at": "2031-03-01T00:00:00", "asesores": 0, "total": 0, "lineas": [], "por_tienda": [],
+        "lineas_bono": [], "umbral_bono_pct": 95.0, "totales_minimos": {},
     }
 
 
@@ -296,3 +297,20 @@ def test_a_database_integrity_error_on_a_write_is_a_409(monkeypatch):
     respuesta = _llamar("ADMIN", "PUT", "/meses/2031-03/asesores/123", json={"sucursal_id": str(ID), "monto": 5})
 
     assert respuesta.status_code == 409 and "Intente de nuevo" in respuesta.json()["detail"]
+
+
+def test_the_month_detail_serializes_the_bonus_minimums(monkeypatch):
+    fila = {"cedula": "1", "asesor": "Ana", "sucursal_id": str(ID), "tienda": "Cali", "monto": 1000000,
+            "minimos": {"CASCOS": 57000}}
+    cuerpo = {**_detalle("2031-03"), "asesores": 1, "total": 1000000, "lineas": [fila],
+              "lineas_bono": [{"linea": "CASCOS", "etiqueta": "Cascos", "pct_meta": 6.0, "bono": 30000}],
+              "umbral_bono_pct": 95.0, "totales_minimos": {"CASCOS": 57000}}
+
+    async def detalle(db, mes):
+        return cuerpo
+
+    monkeypatch.setattr(presupuestos, "detalle_mes", detalle)
+    datos = _llamar("GERENCIA", "GET", "/meses/2031-03").json()
+
+    assert datos["lineas"][0]["minimos"] == {"CASCOS": 57000} and datos["totales_minimos"] == {"CASCOS": 57000}
+    assert datos["lineas_bono"] == cuerpo["lineas_bono"] and datos["umbral_bono_pct"] == 95.0

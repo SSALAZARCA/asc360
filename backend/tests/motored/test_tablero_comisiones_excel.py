@@ -21,11 +21,27 @@ from tests.motored.conftest import FakeAsyncSession, override_motored_db, overri
 BASE = "/api/motored/tablero-asesores/kpis/comisiones/excel"
 CABECERA = [
     "Cédula", "Asesor", "Tienda", "Cargo", "Presupuesto", "Venta con HMCL (base de cumplimiento)",
-    "Cumplimiento %", "Tramo", "% comisión", "Venta sin HMCL (base de pago)", "Comisión"]
+    "Cumplimiento %", "Tramo", "% comisión", "Venta sin HMCL (base de pago)", "Comisión",
+    "Bono Cascos (≥ 6%)", "Bono Tecnired (clientes) (≥ 6,5%)", "Bono total", "Total a pagar"]
+LINEAS = [
+    {"linea": "CASCOS", "etiqueta": "Cascos", "pct_meta": 6.0, "bono": 30000, "activo": True},
+    {"linea": "TECNIRED", "etiqueta": "Tecnired (clientes)", "pct_meta": 6.5, "bono": 25000, "activo": False}]
 
 
-def _asesor(cedula, nombre, presupuesto, vcump, vcom, tramo, tasa, comision):
+def _bonos(cascos, tecnired, paga_cascos):
+    return [
+        {"linea": "CASCOS", "etiqueta": "Cascos", "venta": 1.0, "pct_real": 0.1, "pct_meta": 6.0, "bono": 30000,
+         "cumple": cascos, "paga": paga_cascos, "activo": True, "bono_pagado": 30000 if paga_cascos else 0},
+        {"linea": "TECNIRED", "etiqueta": "Tecnired (clientes)", "venta": 1.0, "pct_real": 0.1, "pct_meta": 6.5,
+         "bono": 25000, "cumple": tecnired, "paga": False, "activo": False, "bono_pagado": 0}]
+
+
+def _asesor(cedula, nombre, presupuesto, vcump, vcom, tramo, tasa, comision, bonos=None):
+    bonos = bonos or _bonos(False, False, False)
+    bono_total = sum(b["bono_pagado"] for b in bonos)
     return {
+        "bonos": bonos, "bono_total": bono_total, "total_a_pagar": comision + bono_total,
+        "gate": {"umbral": 95.0, "cumple": vcump / presupuesto >= 0.95},
         "cedula": cedula, "nombre": nombre, "tienda": "Norte", "sucursal_id": "s1", "cargo": "ASESOR DE REPUESTOS",
         "presupuesto": presupuesto, "venta_cumplimiento": vcump, "venta_comision": vcom,
         "cumplimiento_pct": vcump / presupuesto, "tramo": tramo, "tasa_pct": tasa, "comision": comision, "sig": None}
@@ -36,9 +52,10 @@ DATOS = {
     "reglas": {
         "cumplimiento_base": "con_hmcl", "comision_base_pago": "sin_hmcl",
         "comision_tramos": [{"nombre": "BASE", "desde_pct": 0, "tasa_pct": 1.0}, {"nombre": "PRO", "desde_pct": 90, "tasa_pct": 1.5}],
-        "comision_cargos_asesor": ["ASESOR DE REPUESTOS"]},
+        "comision_cargos_asesor": ["ASESOR DE REPUESTOS"], "comision_lineas": LINEAS,
+        "comision_bono_umbral_pct": 95.0},
     "asesores": [
-        _asesor("0012345678", "Ana", 1000000, 950000, 900000, "PRO", 1.5, 13500.0),
+        _asesor("0012345678", "Ana", 1000000, 950000, 900000, "PRO", 1.5, 13500.0, _bonos(True, True, True)),
         _asesor("987", "Beto", 500000, 100000, 90000, "BASE", 1.0, 900.0)],
     "advertencias": {"sin_presupuesto": [{"cedula": "0555", "nombre": "Eli", "venta": 50000.0}]},
 }
@@ -78,7 +95,9 @@ def test_amounts_are_numbers_and_percentages_are_percent_formatted():
     inicio, tabla = _tabla(hoja)
 
     ana = tabla[1]
-    assert ana[1:] == ["Ana", "Norte", "ASESOR DE REPUESTOS", 1000000, 950000, pytest.approx(0.95), "PRO", pytest.approx(0.015), 900000, 13500.0]
+    assert ana[1:11] == [
+        "Ana", "Norte", "ASESOR DE REPUESTOS", 1000000, 950000, pytest.approx(0.95), "PRO", pytest.approx(0.015),
+        900000, 13500.0]
     fila = inicio + 2
     for columna in (5, 6, 10, 11):
         assert hoja.cell(row=fila, column=columna).number_format == "#,##0"
@@ -90,7 +109,36 @@ def test_the_footer_totals_the_money_columns():
     _, tabla = _tabla(_libro()["Comisiones"])
 
     total = tabla[-1]
-    assert total[0] == "Total" and total[4:7] == [1500000, 1050000, None] and total[9:] == [990000, 14400.0]
+    assert total[0] == "Total" and total[4:7] == [1500000, 1050000, None] and total[9:11] == [990000, 14400.0]
+    assert total[11:] == [30000, 0, 30000, 44400.0]
+
+
+def test_each_line_column_shows_met_or_not_with_the_bonus_and_the_totals_follow():
+    hoja = _libro()["Comisiones"]
+    inicio, tabla = _tabla(hoja)
+
+    ana, beto = tabla[1], tabla[2]
+    assert ana[11:] == ["✓ $30.000", "✓ no se paga (línea apagada)", 30000, 43500.0]
+    assert beto[11:] == ["✗", "✗", 0, 900.0]
+    for columna in (14, 15):
+        assert hoja.cell(row=inicio + 2, column=columna).number_format == "#,##0"
+
+
+def test_a_met_line_behind_the_gate_is_marked_as_not_paid():
+    activa = [{**LINEAS[0]}]
+    bonos = [{**_bonos(True, False, False)[0]}]
+    datos = {**DATOS, "reglas": {**DATOS["reglas"], "comision_lineas": activa},
+             "asesores": [_asesor("1", "Zoe", 1000000, 500000, 500000, "BASE", 1.0, 5000.0, bonos)]}
+
+    _, tabla = _tabla(_libro(datos)["Comisiones"])
+
+    assert tabla[1][11:] == ["✓ no se paga (sin cumplir el 95%)", 0, 5000.0]
+
+
+def test_the_rules_rows_say_the_threshold_and_the_bonus_lines():
+    texto = "\n".join(str(v) for f in _filas(_libro()["Comisiones"]) for v in f if v is not None)
+
+    assert "Bonos por línea" in texto and "95%" in texto and "Cascos" in texto
 
 
 def test_the_header_rows_say_the_month_the_stores_and_the_rules():

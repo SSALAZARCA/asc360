@@ -16,6 +16,7 @@ Los valores por defecto son JSON nativo (los decimales van como texto, p. ej.
 `parsear` los convierte a `Fraction` para el motor.
 """
 import re
+import unicodedata
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import date
@@ -344,6 +345,88 @@ def tramos_ordenados(clave: str, default: list, grupo: str = GRUPO_OPERACION,
     )
 
 
+_CAMPOS_BONO = ("linea", "pct_meta", "bono", "activo")
+_BONOS_POR_DEFECTO = [
+    {"linea": linea, "pct_meta": pct, "bono": bono, "activo": True}
+    for linea, pct, bono in (
+        ("LUBRICANTES", "21", "35000"), ("CASCOS", "6", "30000"),
+        ("ACCESORIOS", "3", "25000"), ("LLANTAS", "1", "25000"),
+        ("BATERIAS", "1", "25000"), ("TECNIRED", "6", "25000"))
+]
+
+
+def _linea_normalizada(valor: Any) -> bool:
+    """Código de línea: mayúsculas, sin tildes ni espacios al borde."""
+    if not isinstance(valor, str) or not valor:
+        return False
+    sin_tildes = "".join(
+        c for c in unicodedata.normalize("NFD", valor)
+        if unicodedata.category(c) != "Mn")
+    return valor == sin_tildes and _normalizado(valor)
+
+
+def _pesos_enteros(valor: Any) -> Optional[int]:
+    """Pesos enteros >= 0 de un int, un float entero o un texto de dígitos
+    (admite un `.0` final, como lo manda la pantalla); None si no lo es."""
+    if isinstance(valor, bool):
+        return None
+    if isinstance(valor, int):
+        return valor if valor >= 0 else None
+    if isinstance(valor, float):
+        return int(valor) if valor >= 0 and valor == int(valor) else None
+    if isinstance(valor, str):
+        m = re.fullmatch(r"([0-9]+)(\.0+)?", valor.strip())
+        return int(m.group(1)) if m else None
+    return None
+
+
+def _porcentaje_meta(valor: Any) -> Optional[Fraction]:
+    n = _numero(valor)
+    return n if n is not None and 0 < n <= 100 else None
+
+
+def _texto_decimal(n: Fraction) -> str:
+    """"6" para 6, "6.5" para 13/2 (el decimal exacto más corto)."""
+    texto = format(Decimal(n.numerator) / Decimal(n.denominator), "f")
+    return texto.rstrip("0").rstrip(".") if "." in texto else texto
+
+
+def _bono_valido(fila: Any) -> bool:
+    return (
+        isinstance(fila, dict) and set(fila) == set(_CAMPOS_BONO)
+        and _linea_normalizada(fila["linea"])
+        and _porcentaje_meta(fila["pct_meta"]) is not None
+        and _pesos_enteros(fila["bono"]) is not None
+        and isinstance(fila["activo"], bool))
+
+
+def bonos_por_linea(clave: str, default: list, grupo: str = GRUPO_OPERACION,
+                    seccion: str = "") -> EspecClave:
+    """Lista (puede ser vacía) de {linea, pct_meta, bono, activo}: `linea`
+    única y normalizada, `pct_meta` en (0, 100], `bono` en pesos enteros
+    >= 0. Que la línea exista en `lineas_comerciales` (o sea TECNIRED) no se
+    contrasta aquí: un validador del registro ve una sola clave; una línea
+    sin ventas simplemente no gana nada."""
+    def valido(valor):
+        return (
+            isinstance(valor, list) and all(_bono_valido(f) for f in valor)
+            and _sin_repetidos([f["linea"] for f in valor]))
+
+    def convertir(valor):
+        return [{"linea": f["linea"],
+                 "pct_meta": _texto_decimal(_porcentaje_meta(f["pct_meta"])),
+                 "bono": str(_pesos_enteros(f["bono"])),
+                 "activo": f["activo"]} for f in valor]
+
+    return EspecClave(
+        clave, default, AMBITO_GLOBAL, grupo,
+        "una lista (puede ser vacía) de líneas únicas, en mayúsculas y sin "
+        "tildes, con pct_meta mayor que 0 y hasta 100, bono en pesos enteros "
+        ">= 0 y activo verdadero o falso",
+        valido, convertir, tipo="lista", campos=_CAMPOS_BONO,
+        seccion=seccion)
+
+
 def _tope_por_tienda(clave: str):
     """Decimal > 0 o nulo ("sin tope"), sólo por sucursal (F4, ADR-6)."""
     def valido(valor):
@@ -425,7 +508,8 @@ def _claves_indicadores() -> list:
 
 
 def _claves_comisiones() -> list:
-    """T7: reglas de comisión; aún nadie las lee (el tablero las usará)."""
+    """T7: reglas de comisión; la pestaña Comisiones de KPI's las lee (tramos,
+    bases, cargos y bonos por línea) para liquidar cada mes con las vigentes."""
     return [
         tramos_ordenados(
             "comision_tramos",
@@ -440,6 +524,11 @@ def _claves_comisiones() -> list:
         lista_de_texto(
             "comision_cargos_asesor",
             ["ASESOR DE REPUESTOS", "ASESOR DE REPUESTOS SUPERNUMERARIO"],
+            seccion="comisiones"),
+        bonos_por_linea(
+            "comision_lineas", _BONOS_POR_DEFECTO, seccion="comisiones"),
+        _decimal(
+            "comision_bono_umbral_pct", "95", 200, grupo=GRUPO_OPERACION,
             seccion="comisiones"),
     ]
 

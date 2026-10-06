@@ -3,7 +3,7 @@ Motored budgets (odd/motored-presupuestos-gerencia, T2): request and response
 schemas of `/presupuestos`. Money is integer pesos; months are `YYYY-MM`.
 """
 import uuid
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -88,6 +88,15 @@ class LineaOut(BaseModel):
     sucursal_id: str
     tienda: str
     monto: int
+    # Smallest sale per active bonus line that earns it with this budget: {LINEA: pesos}.
+    minimos: Dict[str, int]
+
+
+class LineaBonoOut(BaseModel):
+    linea: str
+    etiqueta: str
+    pct_meta: float
+    bono: int
 
 
 class VersionDetalleOut(BaseModel):
@@ -102,6 +111,11 @@ class VersionDetalleOut(BaseModel):
     total: int
     lineas: List[LineaOut]
     por_tienda: List[TiendaTotalOut]
+    # Per-line bonuses in force for THIS month (Configuración): the active lines in config order, the
+    # gate (% of cumplimiento) and the sum of every asesor's minimums per line.
+    lineas_bono: List[LineaBonoOut]
+    umbral_bono_pct: float
+    totales_minimos: Dict[str, int]
 
 
 class VersionHistorialOut(BaseModel):

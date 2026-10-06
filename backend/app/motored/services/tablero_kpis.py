@@ -669,7 +669,7 @@ async def _cargos_del_mes(
 
 
 async def _liquidar(
-    db: AsyncSession, filtro: Filtro, mes: str, ventas, claves, presupuestos,
+    db: AsyncSession, filtro: Filtro, mes: str, ventas, claves, presupuestos, por_linea=None,
 ) -> Tuple[c.ReglasComision, List[Dict[str, Any]], Dict[str, Any]]:
     """Liquidates ONE month with the rules in force that month."""
     reglas = await q.cargar_reglas_comision(db, mes)
@@ -680,7 +680,8 @@ async def _liquidar(
     nombres = await q.consultar_nombres_por_cedula(db, cedulas)
     sucursales = await q.consultar_sucursales(db, {str(x.sucursal_id) for x in pres_mes.values()})
     tiendas = {i: nombre for i, (nombre, _) in sucursales.items()}
-    asesores, advertencias = c.liquidar_mes(ventas_mes, pres_mes, nombres, cargos, tiendas, reglas)
+    lineas_mes = {ced: v for (ced, m), v in (por_linea or {}).items() if m == mes}
+    asesores, advertencias = c.liquidar_mes(ventas_mes, pres_mes, nombres, cargos, tiendas, reglas, lineas_mes)
     advertencias["sin_presupuestos"] = not pres_mes
     return reglas, asesores, advertencias
 
@@ -695,11 +696,13 @@ async def calcular_kpis_comisiones(db: AsyncSession, filtro: Filtro) -> Dict[str
         sucursal_ids=None, modo_hmcl=HMCL_INCLUIR, meses=(mes,), rangos=t.rangos_de_meses([mes]))
     cubo = await lectura.cubo(db, solo_mes, None, DIM_ASESOR)
     ventas, claves, sin_cedula = c.ventas_por_cedula_mes(cubo, filtro.reglas.lineas)
+    por_linea = c.ventas_por_linea_cedula_mes(cubo, filtro.reglas.lineas)
     primero = datetime.date(int(mes[:4]), int(mes[5:]), 1)
     presupuestos = presupuestos_del_rango(
         await pres.presupuesto_por_asesor(db, primero, primero), [mes], filtro.sucursal_ids,
         await principal_de(db))
-    reglas, asesores, advertencias = await _liquidar(db, filtro, mes, ventas, claves, presupuestos)
+    reglas, asesores, advertencias = await _liquidar(
+        db, filtro, mes, ventas, claves, presupuestos, por_linea)
     advertencias["sin_cedula"] = {
         "personas": len(sin_cedula.get(mes, {})),
         "venta": float(round(sum(sin_cedula.get(mes, {}).values(), Decimal(0)), 2)),
@@ -709,7 +712,7 @@ async def calcular_kpis_comisiones(db: AsyncSession, filtro: Filtro) -> Dict[str
         **await lectura.frescura(db),
         "mes_liquidado": mes,
         "reglas": {**q.eco_reglas(filtro.reglas, mes), **c.eco_reglas_comision(reglas)},
-        "resumen": c.resumen_de(asesores),
+        "resumen": c.resumen_de(asesores, reglas),
         "tramos": c.tramos_con_conteo(asesores, reglas),
         "asesores": sorted(asesores, key=lambda a: (-a["comision"], a["cedula"])),
         "cerca_de_subir": c.cerca_de_subir(asesores),

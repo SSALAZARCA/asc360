@@ -314,6 +314,14 @@ async def listar_meses(db: AsyncSession) -> List[Dict[str, Any]]:
     ]
 
 
+async def _reglas_de_bonos(db: AsyncSession, mes: datetime.date):
+    """The bonus rules in force on the first day of `mes`. Imported here: the commission module imports this one."""
+    from app.motored.services import parametros, tablero_comisiones as comisiones
+
+    return comisiones, comisiones.reglas_desde_valores(
+        await parametros.leer_valores(db, mes, comisiones.respaldos()))
+
+
 async def _detalle(db: AsyncSession, cabecera: PresupuestoVersion) -> Dict[str, Any]:
     filas = (await db.execute(
         select(PresupuestoLinea.cedula, PresupuestoLinea.sucursal_id, Sucursal.nombre, PresupuestoLinea.monto)
@@ -324,6 +332,12 @@ async def _detalle(db: AsyncSession, cabecera: PresupuestoVersion) -> Dict[str, 
         ({"cedula": cedula, "asesor": nombres.get(cedula, ""), "sucursal_id": str(sucursal_id),
           "tienda": tienda, "monto": monto} for cedula, sucursal_id, tienda, monto in filas),
         key=lambda linea: (linea["tienda"], linea["asesor"], linea["cedula"]))
+    comisiones, reglas = await _reglas_de_bonos(db, cabecera.mes)
+    totales_minimos: Dict[str, int] = {}
+    for linea in lineas:
+        linea["minimos"] = comisiones.minimos_de_presupuesto(reglas, linea["monto"])
+        for clave, minimo in linea["minimos"].items():
+            totales_minimos[clave] = totales_minimos.get(clave, 0) + minimo
     por_tienda: Dict[str, Dict[str, Any]] = {}
     for linea in lineas:
         grupo = por_tienda.setdefault(linea["sucursal_id"], {
@@ -336,6 +350,8 @@ async def _detalle(db: AsyncSession, cabecera: PresupuestoVersion) -> Dict[str, 
         "created_at": a_utc_iso(cabecera.created_at),
         "asesores": len(lineas), "total": sum(linea["monto"] for linea in lineas),
         "lineas": lineas, "por_tienda": list(por_tienda.values()),
+        "lineas_bono": comisiones.lineas_con_bono(reglas), "umbral_bono_pct": float(reglas.umbral_bono_pct),
+        "totales_minimos": totales_minimos,
     }
 
 

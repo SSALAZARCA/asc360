@@ -105,6 +105,8 @@ def _comision(comision: Optional[Dict[str, Any]], cedula: str) -> Optional[Dict[
         "comision": fila["comision"], "venta_base": fila["venta_comision"],
         "base_pago": comision["reglas"]["comision_base_pago"], "presupuesto": fila["presupuesto"],
         "promedio_red": comision["resumen"]["comision_promedio"],
+        "cumplimiento_pct": fila["cumplimiento_pct"], "gate": fila["gate"], "bonos": fila["bonos"],
+        "bono_total": fila["bono_total"], "total_a_pagar": fila["total_a_pagar"],
         "sig": None if sig is None else {
             "tramo": sig["nombre"], "desde_pct": sig["desde_pct"], "tasa_pct": sig["tasa_pct"],
             "falta": sig["falta"], "gana": sig["gana"], "meta": fila["presupuesto"] * sig["desde_pct"] / 100,
