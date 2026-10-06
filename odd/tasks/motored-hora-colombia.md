@@ -34,13 +34,28 @@ The audit (sdd-explore, 2026-10-05) found:
   - `ingresos/labels.js` (reuse).
 
 ## Tasks
-- [ ] **H1** Backend serializer + apply + tests.
-- [ ] **H2** Frontend helper + replace all formatters + tests (Bogotá with a fixed UTC instant; a naive string treated as UTC; a date that crosses midnight after 19:00 Bogotá).
+- [x] **H1** Backend serializer + apply + tests.
+- [x] **H2** Frontend helper + replace all formatters + tests (Bogotá with a fixed UTC instant; a naive string treated as UTC; a date that crosses midnight after 19:00 Bogotá).
 
 ## Acceptance
 - An instant of 12:43 UTC renders as 07:43 everywhere.
 - A 00:30 UTC instant renders as the previous day, 19:30.
 - Unit, jest and pg_real stay green.
 
+## Progress
+**H1 + H2 done (2026-10-05).** Route: one delegated writer. Commits 42ac1f9 and 3046079, pushed to main.
+- **Backend:** `services/fechas_utc.py` (`a_utc_iso`, `UtcDatetime`, JSON-only serializer) is applied to the ingesta, corrida, pedido, parametro, demanda_perdida_panel and encuesta_cargas schemas and to the detractor/presupuestos dicts.
+- **Frontend:** `lib/motored/fechas.js` (`parseInstante`, `fechaHoraBogota`, `fechaBogota`, `horaBogota`) replaces the formatters in:
+  - cargas (history, upload modal), encuesta-admin;
+  - detractores;
+  - pedidos `fechaHora`/`fechaCorta`, ventas perdidas;
+  - configuración historial, presupuestos;
+  - kpis frescura (defensive), ingresos.
+- **Format change:** most screens now show `05/10/2026 07:43`. Ingresos lost its seconds.
+- **KPI header:** confirmed correct. 12:43 was the Bogotá time of the last recalculation; the user misread it as the current time.
+- **Checks:** unit 5767, jest 2025 (189 suites), webpack 200. pg_real not run.
+- **Native review:** medium, 410 lines. Consent granted; R3 approved (1 suggestion: frescura numeric input) and acknowledged.
+- **Not covered:** render tests for cargas table, CargasRealizadas, VentasPerdidasRow, UploadMovimientoModal, configuración HistorialDrawer; presupuestos dict unit test.
+
 ## Next step
-H1 + H2 by one delegated writer (many non-trivial files).
+None. The user checks the screens in production.
