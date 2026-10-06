@@ -1,6 +1,7 @@
 /**
- * The welcome page's data (`GET /api/motored/inicio`): the sections of the
- * caller's role, each `{ disponible, ...numbers }`. Errors carry their HTTP
+ * The welcome page's data (`GET /api/motored/inicio`): the same four
+ * figures for every role (`ventas_mes`, `ventas_anio`, `puntos_venta`,
+ * `asesores`), each `{ disponible, ...numbers }`. Errors carry their HTTP
  * status (`motoredFetchJson`).
  */
 import { motoredFetchJson } from './motoredFetch';

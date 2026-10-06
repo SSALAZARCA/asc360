@@ -1,4 +1,4 @@
-/** Inicio: the greeting band (date, greeting with the first name, role chip). */
+/** Inicio: the greeting band (date, greeting with the first name, role label), the same for every role. */
 import { BAJADA, ROL_NOMBRE, fechaLarga, iniciales, momentoDelDia, primerNombre } from './textos';
 
 const banda = {
@@ -37,7 +37,7 @@ export default function Saludo({ usuario, ahora }) {
           {fechaLarga(ahora)}
         </div>
         <h1 id="inicio-saludo" style={titulo}>{nombre ? `${momento}, ${nombre}` : momento}</h1>
-        <p style={{ margin: 0, fontSize: '16px', color: muted, maxWidth: '56ch' }}>{BAJADA[usuario?.role] || ''}</p>
+        <p style={{ margin: 0, fontSize: '16px', color: muted, maxWidth: '56ch' }}>{BAJADA}</p>
       </div>
       <div style={persona}>
         <div style={avatar} aria-hidden="true">{iniciales(usuario?.nombre)}</div>

@@ -1,5 +1,5 @@
 'use client';
-/** Inicio: the welcome page of every role with screens (ADMIN, COMPRAS, GERENCIA, SERVICIO_CLIENTE). */
+/** Inicio: the same welcome page for every role with screens (ADMIN, COMPRAS, GERENCIA, SERVICIO_CLIENTE). */
 import MotoredLayout from '../motored-layout';
 import InicioContainer from '../../../components/motored/inicio/InicioContainer';
 

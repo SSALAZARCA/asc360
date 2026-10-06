@@ -1,9 +1,9 @@
 """
 Motored: `GET /api/motored/inicio`, the data of the welcome page.
 
-Returns the sections of the caller's role (`services/inicio.py`); each one
-answers `{"disponible": false}` on its own failure instead of failing the
-page. Read only. RBAC: ADMIN, COMPRAS, GERENCIA and SERVICIO_CLIENTE; the
+Returns the same four figures for every role (`services/inicio.py`); each
+one answers `{"disponible": false}` on its own failure instead of failing
+the page. Read only. RBAC: ADMIN, COMPRAS, GERENCIA and SERVICIO_CLIENTE; the
 last two are path-confined, so `/api/motored/inicio` is in their allow-lists
 (`deps.py`). SUCURSAL and CONSULTA get the central 403.
 """
@@ -13,7 +13,6 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.motored.deps import (
-    MotoredUser,
     get_motored_db_or_503,
     require_motored_ready,
     require_roles,
@@ -29,10 +28,10 @@ router = APIRouter(
 )
 
 
-@router.get("")
+@router.get("", dependencies=[Depends(require_roles(*ROLES_INICIO))])
 async def leer_inicio(
     db: AsyncSession = Depends(get_motored_db_or_503),
-    user: MotoredUser = Depends(require_roles(*ROLES_INICIO)),
 ) -> Dict[str, Any]:
-    """`{rol, hoy, secciones: {nombre: {disponible, ...}}}`."""
-    return await inicio.construir_inicio(db, user.role)
+    """`{hoy, ventas_mes, ventas_anio, puntos_venta, asesores}`, each
+    figure `{disponible, ...}`."""
+    return await inicio.construir_inicio(db)
