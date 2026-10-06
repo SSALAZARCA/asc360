@@ -29,6 +29,7 @@ from app.motored.models.sucursal import Sucursal
 from app.motored.models.usuario import Usuario
 from app.motored.models.vendedor import Vendedor
 from app.motored.schemas.vendedor import limpiar_cedula
+from app.motored.services.fechas_utc import a_utc_iso
 from app.motored.services.presupuestos_archivo import (
     Catalogos,
     LineaValida,
@@ -308,7 +309,7 @@ async def listar_meses(db: AsyncSession) -> List[Dict[str, Any]]:
     ).group_by(PresupuestoVersion.id).order_by(PresupuestoVersion.mes.desc())
     return [
         {"mes": _mes_texto(mes), "version": version, "origen": origen,
-         "created_at": creada.isoformat(), "asesores": asesores, "total": int(total)}
+         "created_at": a_utc_iso(creada), "asesores": asesores, "total": int(total)}
         for mes, version, origen, creada, asesores, total in (await db.execute(consulta)).all()
     ]
 
@@ -332,7 +333,7 @@ async def _detalle(db: AsyncSession, cabecera: PresupuestoVersion) -> Dict[str, 
     return {
         "id": str(cabecera.id), "mes": _mes_texto(cabecera.mes), "version": cabecera.version,
         "origen": cabecera.origen, "archivo_nombre": cabecera.archivo_nombre, "nota": cabecera.nota,
-        "created_at": cabecera.created_at.isoformat(),
+        "created_at": a_utc_iso(cabecera.created_at),
         "asesores": len(lineas), "total": sum(linea["monto"] for linea in lineas),
         "lineas": lineas, "por_tienda": list(por_tienda.values()),
     }
@@ -362,7 +363,7 @@ async def historial_mes(db: AsyncSession, mes: datetime.date) -> List[Dict[str, 
     ).group_by(PresupuestoVersion.id, Usuario.nombre).order_by(PresupuestoVersion.version.desc())
     return [
         {"id": str(c.id), "version": c.version, "origen": c.origen, "archivo_nombre": c.archivo_nombre,
-         "nota": c.nota, "created_at": c.created_at.isoformat(), "created_by_nombre": autor,
+         "nota": c.nota, "created_at": a_utc_iso(c.created_at), "created_by_nombre": autor,
          "lineas": lineas, "total": int(total)}
         for c, autor, lineas, total in (await db.execute(consulta)).all()
     ]

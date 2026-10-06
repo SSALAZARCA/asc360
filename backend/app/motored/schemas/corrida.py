@@ -15,6 +15,8 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 from typing_extensions import Annotated
 
+from app.motored.services.fechas_utc import UtcDatetime
+
 Nota = Annotated[
     str, StringConstraints(strip_whitespace=True, max_length=500)]
 Motivo = Annotated[
@@ -81,7 +83,7 @@ class UltimoEvento(BaseModel):
 
     evento: str
     usuario: Optional[str] = None
-    creado_en: datetime.datetime
+    creado_en: UtcDatetime
 
 
 class AccionesTienda(BaseModel):
@@ -103,7 +105,7 @@ class EnvioInfo(BaseModel):
     numero_orden: str
     fecha_envio: datetime.date
     enviado_por: Optional[str] = None
-    enviado_en: datetime.datetime
+    enviado_en: UtcDatetime
 
 
 class AntiguedadPeor(BaseModel):
@@ -137,9 +139,9 @@ class CorridaItem(BaseModel):
     sucursales_total: int
     sucursales_procesadas: int
     nota: Optional[str] = None
-    created_at: Optional[datetime.datetime] = None
-    terminado_en: Optional[datetime.datetime] = None
-    cerrada_en: Optional[datetime.datetime] = None
+    created_at: Optional[UtcDatetime] = None
+    terminado_en: Optional[UtcDatetime] = None
+    cerrada_en: Optional[UtcDatetime] = None
     pedidos: Optional[ResumenPedidos] = None
     antiguedad_peor: Optional[AntiguedadPeor] = None
     # The whole corrida (all visible stores); null until it is calculated.
@@ -225,8 +227,8 @@ class CorridaDetalle(CorridaItem):
     overrides: Optional[Dict[str, Any]] = None
     motivo_invalidacion: Optional[Dict[str, Any]] = None
     motivo_anulacion: Optional[str] = None
-    iniciado_en: Optional[datetime.datetime] = None
-    anulada_en: Optional[datetime.datetime] = None
+    iniciado_en: Optional[UtcDatetime] = None
+    anulada_en: Optional[UtcDatetime] = None
     intentos: int
     cargas_usadas: Dict[str, List[CargaUsada]]
     parametros: Dict[str, Any]
@@ -251,7 +253,7 @@ class Progreso(BaseModel):
     omitidas: int
     fallidas: int
     actual: Optional[str] = None
-    latido_en: Optional[datetime.datetime] = None
+    latido_en: Optional[UtcDatetime] = None
     intentos: int
     errores: List[Aviso]
     advertencias: List[Aviso]
@@ -330,7 +332,7 @@ class LineaRead(BaseModel):
     fuera_de_empaque: bool = False
     editada: bool = False
     editado_por: Optional[str] = None
-    editado_en: Optional[datetime.datetime] = None
+    editado_en: Optional[UtcDatetime] = None
     motivo_edicion: Optional[str] = None
 
 

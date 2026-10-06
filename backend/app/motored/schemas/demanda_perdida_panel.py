@@ -19,10 +19,12 @@ alcance); queda inerte hasta que Phase 5 la use.
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime
+from datetime import date
 from typing import Optional
 
 from pydantic import BaseModel
+
+from app.motored.services.fechas_utc import UtcDatetime
 
 
 class PersonaRef(BaseModel):
@@ -50,16 +52,16 @@ class BotLineaAdminRead(BaseModel):
     cantidad: float
     estado: str
     metodo: Optional[str] = None
-    created_at: Optional[datetime] = None
+    created_at: Optional[UtcDatetime] = None
 
     asesor: PersonaRef
     sucursal: SucursalRef
     referencia: ReferenciaRef
 
     editado_por: Optional[PersonaRef] = None
-    editado_en: Optional[datetime] = None
+    editado_en: Optional[UtcDatetime] = None
     anulado_por: Optional[PersonaRef] = None
-    anulado_en: Optional[datetime] = None
+    anulado_en: Optional[UtcDatetime] = None
 
 
 class AnularLineaAdminResponse(BotLineaAdminRead):

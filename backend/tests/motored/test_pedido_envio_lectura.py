@@ -47,7 +47,7 @@ BASE = "/api/motored/corridas"
 USUARIO = str(uuid.UUID(int=900))
 JSON_BLOQUE = {
     "numero_orden": "12345", "fecha_envio": "2026-09-22",
-    "enviado_por": "Maria", "enviado_en": "2026-09-22T14:05:00"}
+    "enviado_por": "Maria", "enviado_en": "2026-09-22T14:05:00+00:00"}
 
 
 def _sql(sentencia) -> str:

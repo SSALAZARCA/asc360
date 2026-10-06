@@ -146,6 +146,7 @@ def test_list_shape_pagination_and_counts():
     }
     assert first["satisfaccion_general"] == 2 and first["autoriza_datos"] is False
     assert first["ultima_accion_at"] is not None
+    assert first["created_at"] == "2026-09-01T10:00:00+00:00"  # naive UTC leaves with its offset
     assert second["asignado_a"] == {"id": str(asignado), "nombre": "Carla"}
     assert second["ultima_accion_at"] is None
     page_sql = _sql(session.executed_statements[2])
@@ -206,7 +207,7 @@ def test_detail_has_consent_flag_full_registro_respuesta_and_ordered_log():
     assert body["registro"] == {
         "nombre": "Ana Perez", "cedula": "123", "celular": "300", "linea": "Xtreet 401",
         "placa": "ABC12D", "sic": "S1", "centro_servicio": "Cali Norte", "tipo": "SERVICIO_TALLER",
-        "carga": {"nombre_archivo": "mayo.xlsx", "fecha": "2026-08-30T00:00:00"},
+        "carga": {"nombre_archivo": "mayo.xlsx", "fecha": "2026-08-30T00:00:00+00:00"},
     }
     respuesta = body["respuesta"]
     assert respuesta["satisfaccion_general"] == 2 and respuesta["autoriza_datos"] is False

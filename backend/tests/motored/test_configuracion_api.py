@@ -117,7 +117,7 @@ def test_historial_returns_versions_with_the_author_name():
     assert filas[0]["created_by_nombre"] == "Ana"
     assert filas[0]["created_by"] == str(autor)
     assert filas[0]["vigente_desde"] == "2026-10-01"
-    assert filas[0]["created_at"].startswith("2026-09-01")
+    assert filas[0]["created_at"] == "2026-09-01T12:00:00+00:00"
     assert filas[0]["sucursal_id"] is None
     assert filas[1]["created_by_nombre"] is None
 

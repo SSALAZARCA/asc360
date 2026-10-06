@@ -23,6 +23,7 @@ from app.motored.models.encuesta_carga import EncuestaCarga
 from app.motored.models.encuesta_registro import EncuestaRegistro
 from app.motored.models.encuesta_respuesta import MATRIX_COLUMNS, EncuestaRespuesta
 from app.motored.models.usuario import Usuario
+from app.motored.services.fechas_utc import a_utc_iso
 from app.motored.services.referencias_busqueda import _condicion_texto
 
 ESTADOS = ("ABIERTO", "EN_GESTION", "CERRADO")
@@ -68,8 +69,8 @@ def _resumen(row) -> Dict[str, Any]:
         "codigo": codigo_caso(row.numero, row.created_at),
         "estado": row.estado,
         "resultado": row.resultado,
-        "created_at": row.created_at,
-        "cerrado_at": row.cerrado_at,
+        "created_at": a_utc_iso(row.created_at),
+        "cerrado_at": a_utc_iso(row.cerrado_at),
         "asignado_a": _asignado(row.asignado_id, row.asignado_nombre),
         "cliente": {
             "nombre": row.nombre, "cedula": row.cedula, "celular": row.celular,
@@ -77,7 +78,7 @@ def _resumen(row) -> Dict[str, Any]:
         },
         "satisfaccion_general": row.satisfaccion_general,
         "autoriza_datos": row.autoriza_datos,
-        "ultima_accion_at": row.ultima_accion_at,
+        "ultima_accion_at": a_utc_iso(row.ultima_accion_at),
     }
 
 
@@ -163,7 +164,7 @@ def _accion_dict(row) -> Dict[str, Any]:
     return {
         "id": row.id, "tipo": row.tipo, "descripcion": row.descripcion,
         "estado_anterior": row.estado_anterior, "estado_nuevo": row.estado_nuevo,
-        "created_at": row.created_at, "usuario": _asignado(row.usuario_id, row.usuario_nombre),
+        "created_at": a_utc_iso(row.created_at), "usuario": _asignado(row.usuario_id, row.usuario_nombre),
     }
 
 
@@ -202,14 +203,14 @@ async def detalle(db: AsyncSession, caso_id: uuid.UUID) -> Dict[str, Any]:
         "nombre": row.nombre, "cedula": row.cedula, "celular": row.celular, "linea": row.linea,
         "placa": row.placa, "sic": row.sic, "centro_servicio": row.centro_servicio,
         "tipo": row.tipo,
-        "carga": {"nombre_archivo": row.carga_nombre_archivo, "fecha": row.carga_created_at},
+        "carga": {"nombre_archivo": row.carga_nombre_archivo, "fecha": a_utc_iso(row.carga_created_at)},
     }
     detail["respuesta"] = {
         "satisfaccion_general": row.satisfaccion_general,
         **{col: getattr(row, col) for col in MATRIX_COLUMNS},
         "observaciones": row.observaciones,
         "autoriza_datos": row.autoriza_datos,
-        "created_at": row.respuesta_created_at,
+        "created_at": a_utc_iso(row.respuesta_created_at),
     }
     detail["acciones"] = [_accion_dict(a) for a in acciones]
     return detail

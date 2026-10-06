@@ -17,10 +17,12 @@ nunca la misma forma que el camino todo-o-nada de Fase 1.
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime
+from datetime import date
 from typing import Any, Dict, List, Optional
 
 from pydantic import AliasPath, BaseModel, ConfigDict, Field
+
+from app.motored.services.fechas_utc import UtcDatetime
 
 
 class CargaArchivoSubidaResponse(BaseModel):
@@ -56,9 +58,9 @@ class CargaArchivoRead(BaseModel):
     periodo_hasta: Optional[date]
     lotes_staged: int
     ultimo_lote_aplicado: int
-    latido_en: Optional[datetime]
-    aplicado_en: Optional[datetime]
-    created_at: datetime
+    latido_en: Optional[UtcDatetime]
+    aplicado_en: Optional[UtcDatetime]
+    created_at: UtcDatetime
     # A "no data at this date" declaration (`services.ingesta.sin_datos`),
     # read from `log` without exposing the whole log to every role.
     sin_datos: bool = Field(

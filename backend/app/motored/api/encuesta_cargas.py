@@ -27,6 +27,7 @@ from app.motored.models.usuario import Usuario
 from app.motored.schemas.carga import CargaResultado
 from app.motored.services import encuesta_carga as servicio
 from app.motored.services.carga_excel import CargaExcelError, LimiteFilasExcedidoError
+from app.motored.services.fechas_utc import UtcDatetime
 
 router = APIRouter(
     prefix="/encuesta/cargas",
@@ -46,7 +47,7 @@ class EncuestaCargaRead(BaseModel):
     id: uuid.UUID
     nombre_archivo: str
     total_registros: int
-    created_at: Optional[Any] = None
+    created_at: Optional[UtcDatetime] = None
     usuario: Optional[str] = None
     respondidos: int
 

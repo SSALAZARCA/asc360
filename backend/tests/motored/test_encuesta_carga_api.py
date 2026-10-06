@@ -376,7 +376,7 @@ def test_list_returns_batches_with_answered_counts():
     assert response.status_code == 200
     assert response.json() == [{
         "id": str(cid), "nombre_archivo": "mayo.xlsx", "total_registros": 10,
-        "created_at": created.isoformat(), "usuario": "Agente SC", "respondidos": 4,
+        "created_at": "2026-09-29T12:00:00+00:00", "usuario": "Agente SC", "respondidos": 4,
     }]
     assert "encuesta_carga" in str(session.executed_statements[-1])
     assert "ORDER BY encuesta_carga.created_at DESC" in str(session.executed_statements[-1])

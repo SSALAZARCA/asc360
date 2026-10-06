@@ -1,8 +1,10 @@
 import uuid
-from datetime import date, datetime
+from datetime import date
 from typing import Any, List, Optional
 
 from pydantic import BaseModel, ConfigDict
+
+from app.motored.services.fechas_utc import UtcDatetime
 
 
 class ParametroMetodologiaCreate(BaseModel):
@@ -21,7 +23,7 @@ class ParametroMetodologiaRead(BaseModel):
     valor: Any
     vigente_desde: date
     sucursal_id: Optional[uuid.UUID] = None
-    created_at: Optional[datetime] = None
+    created_at: Optional[UtcDatetime] = None
 
 
 class HistorialParametro(BaseModel):
@@ -34,7 +36,7 @@ class HistorialParametro(BaseModel):
     sucursal_id: Optional[uuid.UUID] = None
     created_by: Optional[uuid.UUID] = None
     created_by_nombre: Optional[str] = None
-    created_at: Optional[datetime] = None
+    created_at: Optional[UtcDatetime] = None
 
 
 class ConfiguracionEfectivo(BaseModel):

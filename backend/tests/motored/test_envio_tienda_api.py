@@ -89,7 +89,7 @@ def test_sending_one_tienda_returns_its_envio_and_commits_ci_25(espia):
         "corrida_id": str(CORRIDA), "sucursal_id": str(fx.SUC_A),
         "estado_pedido": "ENVIADO", "numero_pedido_proveedor": "12345",
         "fecha_envio": "2026-09-22", "enviada_por": str(fx.USUARIO_EDITOR),
-        "enviada_en": "2026-09-21T10:00:00"}
+        "enviada_en": "2026-09-21T10:00:00+00:00"}
     _, args, _ = espia.ultima("enviar_tienda")
     assert args == (
         CORRIDA, fx.SUC_A, "12345", "2026-09-22", uuid.UUID(USUARIO))

@@ -26,6 +26,7 @@ from app.motored.schemas.corrida import (
     LineaRead,
     UltimoEvento,
 )
+from app.motored.services.fechas_utc import UtcDatetime
 
 
 class LineaEditar(BaseModel):
@@ -66,7 +67,7 @@ class HistorialLinea(BaseModel):
     detalle: Optional[Dict[str, Any]] = None
     usuario_id: uuid.UUID
     usuario: str
-    creado_en: datetime.datetime
+    creado_en: UtcDatetime
 
 
 # --- Ciclo de vida del pedido por tienda (B3a) ------------------------------
@@ -146,7 +147,7 @@ class EnvioTienda(BaseModel):
     numero_pedido_proveedor: str
     fecha_envio: datetime.date
     enviada_por: uuid.UUID
-    enviada_en: datetime.datetime
+    enviada_en: UtcDatetime
 
 
 class EnvioLote(BaseModel):
@@ -198,7 +199,7 @@ class EventoPedido(BaseModel):
     detalle: Optional[Dict[str, Any]] = None
     usuario_id: Optional[uuid.UUID] = None
     usuario: Optional[str] = None
-    creado_en: datetime.datetime
+    creado_en: UtcDatetime
 
 
 # --- Tope de presupuesto por tienda (B5a, F4-7) ------------------------------

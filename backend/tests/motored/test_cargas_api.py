@@ -193,6 +193,12 @@ def test_get_cargas_list_allowed_for_every_role(role):
     assert response.status_code == 200, response.text
 
 
+def test_get_cargas_list_sends_created_at_as_utc_with_its_offset():
+    client = _client_as("ADMIN", execute_queue=[[], [_carga(created_at=datetime(2026, 10, 5, 12, 43))]])
+    item = client.get(CARGAS_URL).json()[0]
+    assert item["created_at"] == "2026-10-05T12:43:00+00:00"
+
+
 @pytest.mark.parametrize("role", ALL_ROLES)
 def test_get_carga_by_id_allowed_for_every_role(role):
     carga = _carga()
