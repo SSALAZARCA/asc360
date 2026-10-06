@@ -48,6 +48,7 @@ from app.motored.models.venta_detalle import VentaDetalle
 from app.motored.schemas.vendedor import limpiar_cedula
 from app.motored.services import parametros
 from app.motored.services import tablero_asesores as t
+from app.motored.services import tablero_comisiones as comisiones
 from app.motored.services.sucursal_grupo import principal_de
 from app.motored.services.tablero_asesores import (
     CLAVE_TOTAL, DIM_ASESOR, DIM_SUCURSAL, DIM_TOTAL, FilaClientes, FilaCubo, FilaFacturas, FilaPersona, Filtro,
@@ -465,6 +466,12 @@ async def cargar_reglas(db: AsyncSession, fecha: datetime.date) -> Reglas:
     return t.reglas_desde_valores(valores)
 
 
+async def cargar_reglas_comision(db: AsyncSession, mes: str) -> comisiones.ReglasComision:
+    """Reglas de comision vigentes al dia 1 de `mes` (AAAA-MM); lo invalido vuelve al defecto."""
+    fecha = datetime.date(int(mes[:4]), int(mes[5:]), 1)
+    return comisiones.reglas_desde_valores(await parametros.leer_valores(db, fecha, comisiones.respaldos()))
+
+
 def eco_reglas(reglas: Reglas, vigencia: str) -> Dict[str, Any]:
     return {
         "semaforo": dict(reglas.semaforo),
@@ -530,6 +537,28 @@ async def consultar_nombres_por_cedula(db: AsyncSession, cedulas: Iterable[str])
         if limpia in pedidas:
             nombres.setdefault(limpia, nombre)
     return nombres
+
+
+async def consultar_cargos_por_cedula(db: AsyncSession, cedulas: Iterable[str]) -> Dict[str, Tuple[str, ...]]:
+    """`{cedula limpia: cargos}` del maestro de vendedores (los de sus registros activos; si ninguno
+    esta activo, los de todos). Sirve para quien tiene presupuesto pero no vendio en el mes."""
+    pedidas = set(cedulas)
+    if not pedidas:
+        return {}
+    filas = await db.execute(
+        select(Vendedor.cedula, Vendedor.cargo, Vendedor.activo).where(Vendedor.cedula.is_not(None)))
+    activos: Dict[str, set] = {}
+    todos: Dict[str, set] = {}
+    for cedula, cargo, activo in filas.all():
+        try:
+            limpia = limpiar_cedula(cedula)
+        except ValueError:
+            continue
+        if limpia in pedidas and cargo:
+            todos.setdefault(limpia, set()).add(cargo)
+            if activo:
+                activos.setdefault(limpia, set()).add(cargo)
+    return {c: tuple(sorted(activos.get(c) or todos[c])) for c in todos}
 
 
 async def cargar_filtro(

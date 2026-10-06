@@ -19,7 +19,7 @@ from app.motored.services.auth import MotoredUser
 from tests.motored.conftest import FakeAsyncSession, override_motored_db, override_motored_user
 
 BASE = "/api/motored/tablero-asesores/kpis"
-PESTANAS = ["ventas", "tiendas", "asesores"]
+PESTANAS = ["ventas", "tiendas", "asesores", "comisiones"]
 UUID_A, UUID_B = "11111111-1111-1111-1111-111111111111", "22222222-2222-2222-2222-222222222222"
 
 

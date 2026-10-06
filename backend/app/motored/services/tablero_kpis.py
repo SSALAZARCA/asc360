@@ -35,9 +35,10 @@ from app.motored.services import kpi_resumen_lectura as lectura
 from app.motored.services import presupuestos as pres
 from app.motored.services import tablero_asesores as t
 from app.motored.services import tablero_asesores_consultas as q
+from app.motored.services import tablero_comisiones as c
 from app.motored.services import tablero_kpis_consultas as qk
 from app.motored.services.sucursal_grupo import principal_de
-from app.motored.services.tablero_asesores import DIM_ASESOR, DIM_SUCURSAL, DIM_TOTAL, Filtro
+from app.motored.services.tablero_asesores import DIM_ASESOR, DIM_SUCURSAL, DIM_TOTAL, HMCL_INCLUIR, Filtro
 
 
 def filtro_de_ventana(filtro: Filtro) -> Filtro:
@@ -571,6 +572,68 @@ async def calcular_kpis_asesores(db: AsyncSession, filtro: Filtro) -> Dict[str, 
     tablero["cumplimiento"] = _recortar(cumplimiento, ("asesores", "conteos", "advertencias"))
     tablero.update(await lectura.frescura(db))
     return tablero
+
+
+async def _cargos_del_mes(
+    db: AsyncSession, filtro: Filtro, mes: str, claves: Dict[str, str], cedulas: Iterable[str],
+) -> Dict[str, Iterable[str]]:
+    """`{cedula: cargos}` of the people of `mes`; whoever has no sales that month (a budget only)
+    is looked up in the vendedores master."""
+    personas = await lectura.personas(db, t.filtro_de_meses([mes], HMCL_INCLUIR, None, filtro.reglas))
+    por_clave = {p.clave: set(p.cargos) | ({p.cargo} if p.cargo else set()) for p in personas}
+    cargos = {ced: por_clave[claves[ced]] for ced in cedulas if claves.get(ced) in por_clave}
+    faltan = [ced for ced in cedulas if ced not in cargos]
+    cargos.update(await q.consultar_cargos_por_cedula(db, faltan))
+    return cargos
+
+
+async def _liquidar(
+    db: AsyncSession, filtro: Filtro, mes: str, ventas, claves, presupuestos,
+) -> Tuple[c.ReglasComision, List[Dict[str, Any]], Dict[str, Any]]:
+    """Liquidates ONE month with the rules in force that month."""
+    reglas = await q.cargar_reglas_comision(db, mes)
+    ventas_mes = {ced: v for (ced, m), v in ventas.items() if m == mes}
+    pres_mes = {ced: linea for (m, ced), linea in presupuestos.items() if m == mes}
+    cedulas = sorted(set(ventas_mes) | set(pres_mes))
+    cargos = await _cargos_del_mes(db, filtro, mes, claves, cedulas)
+    nombres = await q.consultar_nombres_por_cedula(db, cedulas)
+    sucursales = await q.consultar_sucursales(db, {str(x.sucursal_id) for x in pres_mes.values()})
+    tiendas = {i: nombre for i, (nombre, _) in sucursales.items()}
+    asesores, advertencias = c.liquidar_mes(ventas_mes, pres_mes, nombres, cargos, tiendas, reglas)
+    advertencias["sin_presupuestos"] = not pres_mes
+    return reglas, asesores, advertencias
+
+
+async def calcular_kpis_comisiones(db: AsyncSession, filtro: Filtro) -> Dict[str, Any]:
+    """Pestana Comisiones: liquida el ULTIMO mes del filtro con las reglas vigentes ese mes; el filtro
+    de tiendas acota los presupuestos y el periodo no cambia las cifras. La venta cuenta completa (HMCL
+    incluido en la consulta; cada base decide) y no depende del selector HMCL. Vivo y resumen dan lo
+    mismo (`lectura.cubo`)."""
+    mes = filtro.meses[-1]
+    solo_mes = filtro._replace(
+        sucursal_ids=None, modo_hmcl=HMCL_INCLUIR, meses=(mes,), rangos=t.rangos_de_meses([mes]))
+    cubo = await lectura.cubo(db, solo_mes, None, DIM_ASESOR)
+    ventas, claves, sin_cedula = c.ventas_por_cedula_mes(cubo, filtro.reglas.lineas)
+    primero = datetime.date(int(mes[:4]), int(mes[5:]), 1)
+    presupuestos = presupuestos_del_rango(
+        await pres.presupuesto_por_asesor(db, primero, primero), [mes], filtro.sucursal_ids,
+        await principal_de(db))
+    reglas, asesores, advertencias = await _liquidar(db, filtro, mes, ventas, claves, presupuestos)
+    advertencias["sin_cedula"] = {
+        "personas": len(sin_cedula.get(mes, {})),
+        "venta": float(round(sum(sin_cedula.get(mes, {}).values(), Decimal(0)), 2)),
+    }
+    return {
+        **_encabezado(filtro),
+        **await lectura.frescura(db),
+        "mes_liquidado": mes,
+        "reglas": {**q.eco_reglas(filtro.reglas, mes), **c.eco_reglas_comision(reglas)},
+        "resumen": c.resumen_de(asesores),
+        "tramos": c.tramos_con_conteo(asesores, reglas),
+        "asesores": sorted(asesores, key=lambda a: (-a["comision"], a["cedula"])),
+        "cerca_de_subir": c.cerca_de_subir(asesores),
+        "advertencias": advertencias,
+    }
 
 
 def _en_iso(valor: Optional[datetime.datetime]) -> Optional[str]:

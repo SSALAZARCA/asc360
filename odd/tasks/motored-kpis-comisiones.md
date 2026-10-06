@@ -1,7 +1,7 @@
 # Motored KPI's — Comisiones tab
 
 ## Objective
-Add the **Comisiones** tab to KPI's (after Asesores), implementing the approved design in the "Motored KPIs" canvas (`project/Main.dc.html`, tab id `presupuesto`, lines ~777-913 and helpers ~1515-1539), plus one dual-axis trend chart: sales vs commissions.
+Add the **Comisiones** tab to KPI's (after Asesores), implementing the approved design in the "Motored KPIs" canvas (`project/Main.dc.html`, tab id `presupuesto`, lines ~777-913 and helpers ~1515-1539).
 
 ## Why
 Gerencia needs to see what each asesor earns under the configurable commission rules, and how close each one is to the next tier. The rules are already in Configuración (`comision_*` keys, still unread) and the budgets per asesor exist.
@@ -14,10 +14,7 @@ Gerencia needs to see what each asesor earns under the configurable commission r
   - "Dónde cae cada asesor";
   - "Comisión por asesor", with a Comisión | Cumplimiento toggle;
   - "Cerca de subir de tramo".
-- **Addition.** A dual-axis trend chart, "Ventas vs comisiones":
-  - Monthly bars show the commission-base sales (venta sin HMCL of commissioned asesores), on the left axis in $ M.
-  - A line shows the total commissions, on the right axis.
-  - It covers the months of the selected period; each month is computed with its own rules.
+- **Trend chart dropped (2026-10-05).** The user first asked for a dual-axis chart (sales vs commissions). After seeing it in the canvas, as bars then as lines, they rejected it: "no me dice nada". It is removed from the canvas and from scope.
 - **Rules and defaults** (taken from the docs and the config; the user did not object):
   - The rate is flat on the whole base: comisión = venta (`comision_base_pago`, default sin HMCL) × tier rate.
   - Cumplimiento = venta (`cumplimiento_base`, default con HMCL) ÷ the asesor's budget for that month.
@@ -33,7 +30,7 @@ Gerencia needs to see what each asesor earns under the configurable commission r
   - `calcular_kpis_comisiones` in `services/tablero_kpis.py`, with pure calc helpers.
   - The comisión rules reader.
   - Live and summary paths identical through `lectura.cubo`.
-- **Frontend:** the `kpis/comisiones/*` tab, wiring in `KpiTabs`/`KpisContent`/`useKpis`/`kpisApi`, and a dual-axis chart component.
+- **Frontend:** the `kpis/comisiones/*` tab, wiring in `KpiTabs`/`KpisContent`/`useKpis`/`kpisApi`,.
 
 ## Constraints
 - Brand manual: red only for the brand; tier colors ELITE #0F766E, PRO #1D4E89, BASE #A3A39E.
@@ -42,9 +39,9 @@ Gerencia needs to see what each asesor earns under the configurable commission r
 
 ## Tasks
 - [ ] **C1 Backend calc + endpoint.**
-  - Pure: tier selection, commission per asesor, summary, `cerca de subir` (falta/gana as in the design), trend per month.
+  - Pure: tier selection, commission per asesor, summary, `cerca de subir` (falta/gana as in the design).
   - Endpoint plus tests, including pg_real live/summary equivalence.
-- [ ] **C2 Frontend tab.** The design sections, the dual-axis trend chart and the wiring; jest tests; webpack compile.
+- [ ] **C2 Frontend tab.** The design sections and the wiring; jest tests; webpack compile.
 
 ## Acceptance
 - The numbers match a hand calculation on fixtures.

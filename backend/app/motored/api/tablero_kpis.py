@@ -20,6 +20,10 @@ Respuestas (los importes son numeros, nunca texto; cada una repite `meses`,
   tiendas, red}, `cumplimiento`, `resumen_crecimiento`, `venta_sin_linea`.
 - `GET /kpis/asesores`: el tablero de asesores mas `cumplimiento` {asesores,
   conteos, advertencias}.
+- `GET /kpis/comisiones`: liquida el ULTIMO mes de `meses` (`mes_liquidado`) con las reglas de
+  comision vigentes ese mes: `reglas` (con `comision_*`), `resumen`, `tramos` (con la cuenta de
+  asesores de cada uno), `asesores` (mayor comision primero), `cerca_de_subir` y `advertencias` {sin_presupuesto,
+  cargo_desconocido, sin_cedula, sin_presupuestos}. El selector `hmcl` no cambia las bases.
 - `GET /kpis/estado` (ADMIN, COMPRAS, GERENCIA): `actualizado_en`, `sucio`,
   `reconstruyendo`, `ultima_reconstruccion_total` y `usando_resumen` de las
   tablas resumen (ver `services/trabajos/supervisor_kpis`).
@@ -92,6 +96,13 @@ async def kpis_asesores(
     filtro: Filtro = Depends(_filtro), db: AsyncSession = Depends(get_motored_db_or_503),
 ) -> Dict[str, Any]:
     return await kpis.calcular_kpis_asesores(db, filtro)
+
+
+@router.get("/comisiones")
+async def kpis_comisiones(
+    filtro: Filtro = Depends(_filtro), db: AsyncSession = Depends(get_motored_db_or_503),
+) -> Dict[str, Any]:
+    return await kpis.calcular_kpis_comisiones(db, filtro)
 
 
 @router.get("/opciones")
