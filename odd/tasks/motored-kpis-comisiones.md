@@ -38,10 +38,10 @@ Gerencia needs to see what each asesor earns under the configurable commission r
 - Python 3.11; strict TDD; no `git stash`.
 
 ## Tasks
-- [ ] **C1 Backend calc + endpoint.**
+- [x] **C1 Backend calc + endpoint.**
   - Pure: tier selection, commission per asesor, summary, `cerca de subir` (falta/gana as in the design).
   - Endpoint plus tests, including pg_real live/summary equivalence.
-- [ ] **C2 Frontend tab.** The design sections and the wiring; jest tests; webpack compile.
+- [x] **C2 Frontend tab.** The design sections and the wiring; jest tests; webpack compile.
 
 ## Acceptance
 - The numbers match a hand calculation on fixtures.
@@ -50,7 +50,34 @@ Gerencia needs to see what each asesor earns under the configurable commission r
 - The full unit, jest and pg_real suites stay green.
 
 ## Progress
-(none yet)
+**C1 + C2 done (2026-10-05).** Route: one delegated writer (2+ non-trivial files). Commits d585d40 and b55a68e.
+- **Backend:**
+  - `services/tablero_comisiones.py` is the pure calc: tier inclusive without division, flat rate, cerca de subir.
+  - `calcular_kpis_comisiones` settles the last month only, with rules by vigencia.
+  - `GET /kpis/comisiones`.
+  - `GET /kpis/comisiones/excel` (`services/tablero_comisiones_excel.py`):
+    - the cédula is text;
+    - columns: Cédula, Asesor, Tienda, Cargo, Presupuesto, Venta con HMCL, Cumplimiento %, Tramo, % comisión, Venta sin HMCL, Comisión, with totals;
+    - a "Sin presupuesto" sheet;
+    - header rows with the mes, filtros and tramos;
+    - file name `comisiones_<AAAA-MM>.xlsx`.
+- **Frontend:** `kpis/comisiones/*` per the canvas design, with the "Mes liquidado" chip, the empty state, tooltips and the "Descargar Excel" button in the "Comisión por asesor" header (user request).
+- **Writer's assumptions:**
+  - A person is commissioned if any of their cargos is in `comision_cargos_asesor`.
+  - A person with no known cargo is excluded (`advertencias.cargo_desconocido`).
+  - "Cerca de subir" means a gap of 15 points or less with venta above 0.
+- **Checks:**
+  - unit 5761 green;
+  - pg_real 110 green (switch ON/OFF identical; the HMCL selector doesn't change the figures);
+  - jest 1972 green;
+  - webpack compile 200.
+- **Native review:** medium, 1677 lines. Consent granted; R3 approved and acknowledged.
+- **Advisories (informational):**
+  - `tablero_kpis.py:595-596`;
+  - `comisiones/datos.js:30` and `:68-75`. The strip loop can't underflow, because the config validator forces the first tier `desde_pct` to 0.
+
+## Status
+Delivered to main; awaiting the user's check in production with real budgets.
 
 ## Next step
-C1 + C2 by one delegated writer (2+ non-trivial files).
+The user checks the Comisiones tab with real data (September budgets loaded).
