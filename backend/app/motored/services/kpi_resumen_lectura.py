@@ -320,6 +320,34 @@ async def top_tecnired_resumen(
     return [qk.FilaTopTecnired(nit, razon, Decimal(v)) for nit, razon, v in (await db.execute(consulta)).all()]
 
 
+def _desde_tecnired_de_asesor(consulta, filtro: Filtro, clave: str):
+    """Tecnired sales of the tablero row `clave`: the clients table keeps the vendor name."""
+    return _desde_clientes(consulta, filtro, con_vendedor=True).where(
+        C.cliente_norm.in_(select(ClienteTecnired.nit)), q._expr_clave(filtro.reglas, C.vendedor_norm) == clave)
+
+
+async def clientes_tecnired_de_asesor_resumen(db: AsyncSession, filtro: Filtro, clave: str) -> int:
+    """`q.consultar_clientes_tecnired_de_asesor` from `kpi_cliente_mes`."""
+    total = await db.execute(_desde_tecnired_de_asesor(select(func.count(func.distinct(C.cliente_norm))), filtro, clave))
+    return int(total.scalar() or 0)
+
+
+async def top_tecnired_de_asesor_resumen(
+    db: AsyncSession, filtro: Filtro, clave: str, limite: int = q.TOP_CLIENTES,
+) -> List[q.FilaTecniredAsesor]:
+    """`q.consultar_top_tecnired_de_asesor` from `kpi_cliente_mes`."""
+    venta = func.sum(C.venta)
+    consulta = _desde_tecnired_de_asesor(
+        select(ClienteTecnired.nit, ClienteTecnired.razon_social, venta), filtro, clave)
+    consulta = (
+        consulta.join(ClienteTecnired, ClienteTecnired.nit == C.cliente_norm)
+        .group_by(ClienteTecnired.nit, ClienteTecnired.razon_social)
+        .order_by(venta.desc(), ClienteTecnired.nit)
+        .limit(limite)
+    )
+    return [q.FilaTecniredAsesor(nit, razon, Decimal(v)) for nit, razon, v in (await db.execute(consulta)).all()]
+
+
 # --- Inventory and the cost cut ---------------------------------------------------------------
 
 
@@ -403,6 +431,20 @@ async def top_tecnired(db: AsyncSession, filtro: Filtro, limite: int = qk.TOP_TE
     if await usar_resumen(db):
         return await top_tecnired_resumen(db, filtro, limite)
     return await qk.consultar_top_tecnired(db, filtro, limite)
+
+
+async def clientes_tecnired_de_asesor(db: AsyncSession, filtro: Filtro, clave: str) -> int:
+    if await usar_resumen(db):
+        return await clientes_tecnired_de_asesor_resumen(db, filtro, clave)
+    return await q.consultar_clientes_tecnired_de_asesor(db, filtro, clave)
+
+
+async def top_tecnired_de_asesor(
+    db: AsyncSession, filtro: Filtro, clave: str, limite: int = q.TOP_CLIENTES,
+) -> List[q.FilaTecniredAsesor]:
+    if await usar_resumen(db):
+        return await top_tecnired_de_asesor_resumen(db, filtro, clave, limite)
+    return await q.consultar_top_tecnired_de_asesor(db, filtro, clave, limite)
 
 
 async def inventario(

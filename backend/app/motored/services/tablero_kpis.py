@@ -33,6 +33,7 @@ from app.motored.schemas.vendedor import limpiar_cedula
 from app.motored.services import kpi_resumen
 from app.motored.services import kpi_resumen_lectura as lectura
 from app.motored.services import presupuestos as pres
+from app.motored.services import tablero_asesor_detalle as detalle
 from app.motored.services import tablero_asesores as t
 from app.motored.services import tablero_asesores_consultas as q
 from app.motored.services import tablero_comisiones as c
@@ -363,6 +364,40 @@ def construir_cumplimiento(
     }
 
 
+def cumplimiento_por_mes(
+    cubo: Iterable[t.FilaCubo], presupuestos: Dict[Tuple[str, str], pres.LineaPresupuesto], reglas: t.Reglas,
+    meses: Iterable[str], **extra: Any,
+) -> Dict[str, Dict[str, Any]]:
+    """`{mes: construir_cumplimiento de ese mes}`: cada mes se mide solo contra los presupuestos
+    de ese mes (por eso un asesor sin presupuesto en un mes queda `sin_presupuesto` en el)."""
+    cubo = list(cubo)
+    return {
+        mes: construir_cumplimiento(
+            cubo, {clave: linea for clave, linea in presupuestos.items() if clave[0] == mes}, reglas, **extra)
+        for mes in meses
+    }
+
+
+async def _cubo_de_cumplimiento(
+    db: AsyncSession, filtro: Filtro, cubo_asesores: Optional[List[t.FilaCubo]] = None,
+) -> List[t.FilaCubo]:
+    """The asesores cube with HMCL included that cumplimiento measures. A store filter limits the
+    PRESUPUESTOS (to the chosen stores) and not the asesor's sale, which counts in full, so
+    with one the cube is queried again without it."""
+    if cubo_asesores is None or filtro.sucursal_ids:
+        # Cost is not needed here: a NULL cut-off date joins no inventory.
+        return await lectura.cubo(db, filtro._replace(sucursal_ids=None), None, DIM_ASESOR)
+    return cubo_asesores
+
+
+async def _presupuestos_del_filtro(db: AsyncSession, filtro: Filtro) -> Dict[Tuple[str, str], pres.LineaPresupuesto]:
+    """`{(mes, cedula): linea}` of the filter's months (latest version of each) and stores."""
+    primero, ultimo = (datetime.date(int(m[:4]), int(m[5:]), 1) for m in (filtro.meses[0], filtro.meses[-1]))
+    return presupuestos_del_rango(
+        await pres.presupuesto_por_asesor(db, primero, ultimo), filtro.meses, filtro.sucursal_ids,
+        await principal_de(db))
+
+
 async def cargar_cumplimiento(
     db: AsyncSession, filtro: Filtro, cubo_asesores: Optional[List[t.FilaCubo]] = None,
     nombres_por_clave: Optional[Dict[str, str]] = None, cubo_compania: Optional[List[t.FilaCubo]] = None,
@@ -370,16 +405,9 @@ async def cargar_cumplimiento(
 ) -> Dict[str, Any]:
     """Lee presupuestos (ultima version de cada mes), nombres y, si hace falta,
     el cubo de asesores, y arma `construir_cumplimiento`. El cubo debe ser el de
-    asesores con HMCL incluido; si hay filtro de tiendas se vuelve a consultar sin
-    el, porque el filtro de tiendas acota los PRESUPUESTOS (a las tiendas elegidas)
-    y no la venta del asesor, que cuenta completa."""
-    if cubo_asesores is None or filtro.sucursal_ids:
-        # Cost is not needed here: a NULL cut-off date joins no inventory.
-        cubo_asesores = await lectura.cubo(db, filtro._replace(sucursal_ids=None), None, DIM_ASESOR)
-    primero, ultimo = (datetime.date(int(m[:4]), int(m[5:]), 1) for m in (filtro.meses[0], filtro.meses[-1]))
-    presupuestos = presupuestos_del_rango(
-        await pres.presupuesto_por_asesor(db, primero, ultimo), filtro.meses, filtro.sucursal_ids,
-        await principal_de(db))
+    asesores con HMCL incluido (ver `_cubo_de_cumplimiento`)."""
+    cubo_asesores = await _cubo_de_cumplimiento(db, filtro, cubo_asesores)
+    presupuestos = await _presupuestos_del_filtro(db, filtro)
     sucursales = await q.consultar_sucursales(db, {str(linea.sucursal_id) for linea in presupuestos.values()})
     nombres = await q.consultar_nombres_por_cedula(db, {cedula for _, cedula in presupuestos})
     return construir_cumplimiento(
@@ -572,6 +600,62 @@ async def calcular_kpis_asesores(db: AsyncSession, filtro: Filtro) -> Dict[str, 
     tablero["cumplimiento"] = _recortar(cumplimiento, ("asesores", "conteos", "advertencias"))
     tablero.update(await lectura.frescura(db))
     return tablero
+
+
+async def calcular_kpis_asesor_detalle(db: AsyncSession, filtro: Filtro, cedula: str) -> Optional[Dict[str, Any]]:
+    """Vista de UN asesor (`cedula` limpia): `{meses, hmcl, sucursales, reglas, asesor, puestos,
+    cumplimiento_mes, comision, tiles, tendencia, lineas, strip, comparacion, tecnired}` (ver
+    `tablero_asesor_detalle`), o None si la cedula no tiene ventas, presupuesto ni fila en el maestro
+    dentro del filtro. Todo sale de los mismos constructores de la pestana (tablero, cumplimiento,
+    comisiones) y de las lecturas con interruptor, asi que vivo y resumen dan lo mismo."""
+    tablero, cubo = await q.tablero_de_filtro(db, filtro)
+    cubo = await _cubo_de_cumplimiento(db, filtro, cubo)
+    presupuestos = await _presupuestos_del_filtro(db, filtro)
+    nombres_por_clave = {f["clave"]: f["nombre"] for f in tablero["filas"] if f["tipo"] == t.TIPO_PERSONA}
+    extra = {
+        "sucursales": await q.consultar_sucursales(db, {str(x.sucursal_id) for x in presupuestos.values()}),
+        "nombres": await q.consultar_nombres_por_cedula(db, {ced for _, ced in presupuestos}),
+        "nombres_por_clave": nombres_por_clave,
+    }
+    periodo = construir_cumplimiento(cubo, presupuestos, filtro.reglas, **extra)
+    por_mes = cumplimiento_por_mes(cubo, presupuestos, filtro.reglas, filtro.meses, **extra)
+    maestro = next((m for m in await q.consultar_asesores_maestro(db) if m.cedula == cedula), None)
+    if maestro and filtro.sucursal_ids and maestro.sucursal_id not in {str(s) for s in filtro.sucursal_ids}:
+        maestro = None  # out of the chosen stores
+    clave = detalle.clave_de_asesor(tablero, cedula)
+    clientes, top = 0, []
+    if clave is not None:
+        clientes = await lectura.clientes_tecnired_de_asesor(db, filtro, clave)
+        top = await lectura.top_tecnired_de_asesor(db, filtro, clave)
+    resultado = detalle.construir_detalle(
+        cedula, tablero, periodo, por_mes, await calcular_kpis_comisiones(db, filtro), clientes, top,
+        None if maestro is None else {
+            "nombre": maestro.nombre, "cargo": maestro.cargo, "tienda": maestro.tienda,
+            "sucursal_id": maestro.sucursal_id},
+        {i: nombre for i, (nombre, _) in extra["sucursales"].items()})
+    if resultado is None:
+        return None
+    return {**_encabezado(filtro), **await lectura.frescura(db), **resultado}
+
+
+async def calcular_opciones_asesores(
+    db: AsyncSession, sucursal_ids: Optional[Iterable[Any]] = None,
+) -> Dict[str, Any]:
+    """Opciones del filtro "Asesor": `{asesores: [{cedula, nombre, tienda, sucursal_id}]}` de las
+    personas ACTIVAS del maestro con cedula y cargo de asesor de repuestos (segun Configuracion), por
+    nombre. Con `sucursal_ids` (las tiendas elegidas; una asociada cuenta como su principal) solo
+    las de esas tiendas. No depende del periodo."""
+    reglas = await q.cargar_reglas(db, datetime.date.today().replace(day=1))
+    tiendas = None
+    if sucursal_ids:
+        mapa = await principal_de(db)
+        tiendas = {str(mapa.get(i, i)) for i in sucursal_ids}
+    return {"asesores": [
+        {"cedula": m.cedula, "nombre": m.nombre, "tienda": m.tienda, "sucursal_id": m.sucursal_id}
+        for m in await q.consultar_asesores_maestro(db)
+        if m.activo and t.grupo_de_cargo(m.cargo, reglas.grupo_por_cargo) == t.TIPO_PERSONA
+        and (tiendas is None or m.sucursal_id in tiendas)
+    ]}
 
 
 async def _cargos_del_mes(

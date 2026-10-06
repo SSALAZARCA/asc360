@@ -452,6 +452,72 @@ async def consultar_personas(db, filtro: Filtro) -> List[FilaPersona]:
     return t.construir_personas(filas)
 
 
+class FilaAsesorMaestro(NamedTuple):
+    """Una persona del maestro de vendedores con cedula valida: su nombre, cargo y la tienda PRINCIPAL
+    de su punto de venta (`sucursal_id` como texto)."""
+    cedula: str
+    nombre: str
+    cargo: str
+    activo: bool
+    sucursal_id: Optional[str]
+    tienda: Optional[str]
+
+
+async def consultar_asesores_maestro(db: AsyncSession) -> List[FilaAsesorMaestro]:
+    """Una fila por cedula valida del maestro (varios nombres del ERP comparten cedula): la de un
+    registro activo si lo hay y, entre iguales, la del primer nombre alfabetico."""
+    consulta = (
+        select(Vendedor.cedula, Vendedor.nombre, Vendedor.cargo, Vendedor.activo, PV1.id, PV1.nombre)
+        .select_from(Vendedor)
+        .where(Vendedor.cedula.is_not(None))
+        .order_by(Vendedor.activo.desc(), func.upper(Vendedor.nombre), Vendedor.nombre)
+    )
+    consulta = con_punto_de_venta(consulta, Vendedor.sucursal_id)
+    filas: Dict[str, FilaAsesorMaestro] = {}
+    for cedula, nombre, cargo, activo, tienda_id, tienda in (await db.execute(consulta)).all():
+        try:
+            limpia = limpiar_cedula(cedula)
+        except ValueError:
+            continue
+        filas.setdefault(limpia, FilaAsesorMaestro(
+            limpia, nombre, cargo, bool(activo), None if tienda_id is None else str(tienda_id), tienda))
+    return sorted(filas.values(), key=lambda f: (f.nombre.upper(), f.cedula))
+
+
+class FilaTecniredAsesor(NamedTuple):
+    nit: str
+    razon_social: Optional[str]
+    venta: Decimal
+
+
+def _ventas_tecnired_de_asesor(consulta, filtro: Filtro, clave: str):
+    """Ventas de clientes Tecnired (lineas reconocidas, con el filtro) de la fila `clave` del tablero."""
+    lineas = _lineas_por_referencia(filtro.reglas)
+    consulta = _desde_ventas(consulta, filtro, lineas, solo_lineas_reconocidas=True, con_vendedor=True)
+    return consulta.where(_expr_cliente_norm().in_(select(ClienteTecnired.nit)), _expr_clave(filtro.reglas) == clave)
+
+
+async def consultar_clientes_tecnired_de_asesor(db, filtro: Filtro, clave: str) -> int:
+    """Clientes Tecnired distintos que compraron a la fila `clave` del tablero."""
+    consulta = _ventas_tecnired_de_asesor(select(func.count(func.distinct(_expr_cliente_norm()))), filtro, clave)
+    return int((await db.execute(consulta)).scalar() or 0)
+
+
+async def consultar_top_tecnired_de_asesor(
+    db, filtro: Filtro, clave: str, limite: int = TOP_CLIENTES,
+) -> List[FilaTecniredAsesor]:
+    """Los `limite` clientes Tecnired de mayor venta de la fila `clave`; empates por NIT."""
+    venta = func.sum(_expr_venta())
+    consulta = _ventas_tecnired_de_asesor(select(ClienteTecnired.nit, ClienteTecnired.razon_social, venta), filtro, clave)
+    consulta = (
+        consulta.join(ClienteTecnired, ClienteTecnired.nit == _expr_cliente_norm())
+        .group_by(ClienteTecnired.nit, ClienteTecnired.razon_social)
+        .order_by(venta.desc(), ClienteTecnired.nit)
+        .limit(limite)
+    )
+    return [FilaTecniredAsesor(nit, razon, Decimal(v)) for nit, razon, v in (await db.execute(consulta)).all()]
+
+
 async def cargar_reglas(db: AsyncSession, fecha: datetime.date) -> Reglas:
     """Reglas de Configuracion vigentes al dia 1 del mes de `fecha`. Sin fila
     vigente (o con una invalida) rige el valor por defecto del registro."""

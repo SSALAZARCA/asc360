@@ -20,6 +20,10 @@ Respuestas (los importes son numeros, nunca texto; cada una repite `meses`,
   tiendas, red}, `cumplimiento`, `resumen_crecimiento`, `venta_sin_linea`.
 - `GET /kpis/asesores`: el tablero de asesores mas `cumplimiento` {asesores,
   conteos, advertencias}.
+- `GET /kpis/asesores/detalle?cedula=`: la vista de UN asesor (mismos parametros del filtro; 404
+  "Asesor no encontrado" sin ventas, presupuesto ni maestro en el filtro; 422 con una cedula invalida).
+- `GET /kpis/asesores/opciones?sucursales=`: `asesores` [{cedula, nombre, tienda, sucursal_id}], los
+  asesores activos del maestro (de esas tiendas) para el filtro "Asesor".
 - `GET /kpis/comisiones`: liquida el ULTIMO mes de `meses` (`mes_liquidado`) con las reglas de
   comision vigentes ese mes: `reglas` (con `comision_*`), `resumen`, `tramos` (con la cuenta de
   asesores de cada uno), `asesores` (mayor comision primero), `cerca_de_subir` y `advertencias` {sin_presupuesto,
@@ -42,10 +46,11 @@ Respuestas (los importes son numeros, nunca texto; cada una repite `meses`,
 import uuid
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.motored.api.tablero_asesores import _error_422, _sucursales
+from app.motored.schemas.vendedor import limpiar_cedula
 from app.motored.deps import MotoredUser, get_motored_db_or_503, require_motored_ready, require_roles
 from app.motored.services import kpi_resumen
 from app.motored.services import tablero_asesores_consultas as consultas
@@ -100,6 +105,29 @@ async def kpis_asesores(
     filtro: Filtro = Depends(_filtro), db: AsyncSession = Depends(get_motored_db_or_503),
 ) -> Dict[str, Any]:
     return await kpis.calcular_kpis_asesores(db, filtro)
+
+
+@router.get("/asesores/detalle")
+async def kpis_asesor_detalle(
+    cedula: Optional[str] = Query(None, description="Cédula del asesor"),
+    filtro: Filtro = Depends(_filtro), db: AsyncSession = Depends(get_motored_db_or_503),
+) -> Dict[str, Any]:
+    try:
+        limpia = limpiar_cedula(cedula)
+    except ValueError as exc:
+        raise _error_422(str(exc))
+    resultado = await kpis.calcular_kpis_asesor_detalle(db, filtro, limpia)
+    if resultado is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asesor no encontrado")
+    return resultado
+
+
+@router.get("/asesores/opciones")
+async def kpis_asesores_opciones(
+    sucursales: Optional[str] = Query(None, description="Ids de sucursal separados por coma; sin ellos, todas"),
+    user: MotoredUser = Depends(_require_rol), db: AsyncSession = Depends(get_motored_db_or_503),
+) -> Dict[str, Any]:
+    return await kpis.calcular_opciones_asesores(db, _sucursales(sucursales))
 
 
 @router.get("/comisiones")

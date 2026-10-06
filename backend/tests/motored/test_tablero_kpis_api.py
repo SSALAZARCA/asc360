@@ -55,6 +55,17 @@ def llamadas(monkeypatch):
     for pestana in PESTANAS:
         monkeypatch.setattr(kpis, f"calcular_kpis_{pestana}", falso_calculo(pestana))
     monkeypatch.setattr(kpis, "calcular_opciones", falsas_opciones)
+
+    async def falso_detalle(db, filtro, cedula):
+        registro.append(("detalle", filtro.meses, filtro.modo_hmcl, filtro.sucursal_ids, cedula))
+        return None if cedula == "999" else {"asesor": {"cedula": cedula}}
+
+    async def falsas_opciones_asesores(db, sucursal_ids=None):
+        registro.append(("opciones_asesores", sucursal_ids))
+        return {"asesores": [{"cedula": "100", "nombre": "Ana", "tienda": "Norte", "sucursal_id": UUID_A}]}
+
+    monkeypatch.setattr(kpis, "calcular_kpis_asesor_detalle", falso_detalle)
+    monkeypatch.setattr(kpis, "calcular_opciones_asesores", falsas_opciones_asesores)
     return registro
 
 
@@ -135,4 +146,87 @@ def test_the_options_endpoint_returns_the_filter_data(_motored_ready, llamadas):
 
 def test_kpis_routes_are_the_documented_paths():
     rutas = sorted(p for p in app.openapi()["paths"] if p.startswith(BASE))
-    assert rutas == sorted(f"{BASE}/{n}" for n in PESTANAS + ["opciones", "estado", "recalcular", "comisiones/excel"])
+    assert rutas == sorted(f"{BASE}/{n}" for n in PESTANAS + [
+        "opciones", "estado", "recalcular", "comisiones/excel", "asesores/detalle", "asesores/opciones"])
+
+
+# --- Single-asesor detail and the asesor options ---------------------------------------------------
+
+
+@pytest.mark.parametrize("ruta, params", [
+    ("asesores/detalle", {"meses": "2026-01", "cedula": "100"}), ("asesores/opciones", {}),
+])
+@pytest.mark.parametrize("rol", ["CONSULTA", "SUCURSAL", "SERVICIO_CLIENTE"])
+def test_asesor_routes_forbid_the_other_roles(_motored_ready, llamadas, ruta, params, rol):
+    _como(rol)
+
+    assert _get(ruta, **params).status_code == 403
+    assert llamadas == []
+
+
+@pytest.mark.parametrize("ruta, params", [
+    ("asesores/detalle", {"meses": "2026-01", "cedula": "100"}), ("asesores/opciones", {}),
+])
+def test_asesor_routes_need_authentication(_motored_ready, llamadas, ruta, params):
+    override_motored_db(FakeAsyncSession(execute_queue=[[]]))
+
+    assert _get(ruta, **params).status_code == 401
+
+
+@pytest.mark.parametrize("rol", ["ADMIN", "COMPRAS", "GERENCIA"])
+def test_the_detail_is_returned_with_the_filter_and_the_clean_cedula(_motored_ready, llamadas, rol):
+    _como(rol)
+
+    r = _get("asesores/detalle", meses="2026-03,2026-01", hmcl="excluir", sucursales=UUID_A, cedula=" 1.130.123 ")
+
+    assert r.status_code == 200 and r.json() == {"asesor": {"cedula": "1130123"}}
+    assert llamadas[-1][0] == "detalle" and llamadas[-1][1:3] == (("2026-01", "2026-03"), "excluir")
+    assert llamadas[-1][4] == "1130123"
+
+
+def test_an_asesor_without_data_is_a_404_in_spanish(_motored_ready, llamadas):
+    _como("ADMIN")
+
+    r = _get("asesores/detalle", meses="2026-01", cedula="999")
+
+    assert r.status_code == 404 and r.json()["detail"] == "Asesor no encontrado"
+
+
+@pytest.mark.parametrize("params, motivo", [
+    ({"meses": "2026-01"}, "cédula"),
+    ({"meses": "2026-01", "cedula": ""}, "cédula"),
+    ({"meses": "2026-01", "cedula": "12ab"}, "números"),
+    ({"meses": "2026-01", "cedula": "12-34"}, "números"),
+    ({"cedula": "100"}, "meses"),
+])
+def test_the_detail_rejects_a_bad_cedula_or_filter_with_a_422(_motored_ready, llamadas, params, motivo):
+    _como("COMPRAS")
+
+    r = _get("asesores/detalle", **params)
+
+    assert r.status_code == 422 and motivo in r.json()["detail"]
+    assert not [x for x in llamadas if x[0] == "detalle"]
+
+
+def test_the_asesor_options_are_scoped_by_the_store_filter(_motored_ready, llamadas):
+    _como("GERENCIA")
+
+    r = _get("asesores/opciones", sucursales=f"{UUID_A},{UUID_B}")
+
+    assert r.status_code == 200 and r.json()["asesores"][0]["cedula"] == "100"
+    assert [str(i) for i in llamadas[-1][1]] == [UUID_A, UUID_B]
+
+
+def test_the_asesor_options_without_a_filter_list_everyone(_motored_ready, llamadas):
+    _como("ADMIN")
+
+    assert _get("asesores/opciones").status_code == 200
+    assert llamadas[-1] == ("opciones_asesores", None)
+
+
+def test_the_asesor_options_reject_a_bad_store_id(_motored_ready, llamadas):
+    _como("ADMIN")
+
+    r = _get("asesores/opciones", sucursales="no-es-uuid")
+
+    assert r.status_code == 422 and "Sucursal" in r.json()["detail"]
