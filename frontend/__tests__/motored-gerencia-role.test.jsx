@@ -1,6 +1,6 @@
 /**
  * GERENCIA role (budgets/management, T1/T3): valid session role, lands on
- * Maestros (Presupuestos), sees Maestros and the dashboard (plus account), is offered when
+ * Inicio, sees Inicio, Maestros and the dashboard (plus account), is offered when
  * creating users, and never bounces into a screen the backend would 403.
  * The backend is the real enforcement; these guards are UX only.
  */
@@ -24,7 +24,7 @@ import usePedidosGate from '../lib/motored/usePedidosGate';
 import useDetractoresGate from '../lib/motored/useDetractoresGate';
 
 const TABLERO_PATH = '/motored/tablero-asesores';
-const MAESTROS_PATH = '/motored/maestros';
+const INICIO_PATH = '/motored/inicio';
 
 function login(role, extra = {}) {
   sessionStorage.setItem('motored_user', JSON.stringify({ nombre: 'G', role, ...extra }));
@@ -47,14 +47,14 @@ describe('GERENCIA session', () => {
     expect(pushMock).not.toHaveBeenCalledWith('/motored/login');
   });
 
-  it('lands on Maestros (Presupuestos) after login and after a forced change', () => {
-    expect(homePathFor('GERENCIA')).toBe(MAESTROS_PATH);
-    expect(landingPathFor({ role: 'GERENCIA' })).toBe(MAESTROS_PATH);
+  it('lands on Inicio after login and after a forced change', () => {
+    expect(homePathFor('GERENCIA')).toBe(INICIO_PATH);
+    expect(landingPathFor({ role: 'GERENCIA' })).toBe(INICIO_PATH);
   });
 
-  it('keeps ADMIN and COMPRAS landing on Maestros', () => {
-    for (const role of ['ADMIN', 'COMPRAS']) {
-      expect(homePathFor(role)).toBe('/motored/maestros');
+  it('lands ADMIN, COMPRAS and SERVICIO_CLIENTE on Inicio too', () => {
+    for (const role of ['ADMIN', 'COMPRAS', 'SERVICIO_CLIENTE']) {
+      expect(homePathFor(role)).toBe(INICIO_PATH);
     }
   });
 
@@ -66,14 +66,14 @@ describe('GERENCIA session', () => {
 });
 
 describe('GERENCIA sidebar', () => {
-  it('shows Maestros, the dashboard and the account page only', () => {
+  it('shows Inicio, Maestros, the dashboard and the account page only', () => {
     render(<MotoredSidebar user={{ nombre: 'G', role: 'GERENCIA' }} />);
     const labels = screen.getAllByRole('button').map((b) => b.textContent.trim());
 
-    expect(labels).toEqual(["KPI's", 'Pedidos', 'Cambiar mi contraseña', 'Salir']);
+    expect(labels).toEqual(['Inicio', "KPI's", 'Pedidos', 'Cambiar mi contraseña', 'Salir']);
     fireEvent.click(screen.getByRole('button', { name: 'Pedidos' }));
     const opened = screen.getAllByRole('button').map((b) => b.textContent.trim());
-    expect(opened).toEqual(["KPI's", 'Pedidos', 'Maestros', 'Cambiar mi contraseña', 'Salir']);
+    expect(opened).toEqual(['Inicio', "KPI's", 'Pedidos', 'Maestros', 'Cambiar mi contraseña', 'Salir']);
   });
 
   it.each(['SUCURSAL', 'CONSULTA', 'ASESOR_MOSTRADOR'])('hides Maestros from %s', (role) => {
@@ -105,15 +105,15 @@ describe('GERENCIA in the create-user form', () => {
   });
 });
 
-describe('gates send GERENCIA to its home (Maestros, which has no gate)', () => {
+describe('gates send GERENCIA to its home (Inicio, which has no gate)', () => {
   it.each([
     ['useAdminGate', useAdminGate],
     ['usePedidosGate', usePedidosGate],
     ['useDetractoresGate', useDetractoresGate],
-  ])('%s sends GERENCIA to Maestros', async (_name, hook) => {
+  ])('%s sends GERENCIA to Inicio', async (_name, hook) => {
     login('GERENCIA');
     renderHook(() => hook());
 
-    await waitFor(() => expect(pushMock).toHaveBeenCalledWith(MAESTROS_PATH));
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith(INICIO_PATH));
   });
 });

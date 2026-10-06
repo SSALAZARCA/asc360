@@ -35,6 +35,7 @@ const enSidebar = (id, rol) => menuItemsFor({ role: rol })
 const enMaestros = (tab, rol) => enSidebar('maestros', rol) && filtrarTabsPorRol([tab], rol).length > 0;
 
 export const PANTALLAS = [
+  { id: 'inicio', nombre: 'Inicio', sidebarId: 'inicio', nota: 'Resumen del día de cada rol.', visible: (rol) => enSidebar('inicio', rol) },
   { id: 'maestros', nombre: 'Maestros', sidebarId: 'maestros', nota: 'GERENCIA entra solo a la pestaña Presupuestos.', visible: (rol) => enSidebar('maestros', rol) },
   { id: 'maestros-datos', nombre: 'Maestros: datos y catálogos', nota: 'Sucursales, proveedores, referencias, clientes y vendedores.', visible: (rol) => enMaestros({}, rol) },
   { id: 'cargas', nombre: 'Cargas de archivos', nota: 'Pestañas de movimientos dentro de Maestros.', visible: (rol) => enMaestros({}, rol) },

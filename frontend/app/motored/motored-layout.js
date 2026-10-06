@@ -13,7 +13,7 @@
  * "Wrong role" here means a role string outside the 6 valid Motored roles
  * (ADMIN|COMPRAS|SUCURSAL|CONSULTA|SERVICIO_CLIENTE|GERENCIA) -- e.g. a corrupted/forged session
  * value. All 6 real roles get past this gate (SERVICIO_CLIENTE is then kept
- * inside its survey pages by the allow-list redirect); per-screen role restriction
+ * inside its survey pages and Inicio by the allow-list redirect); per-screen role restriction
  * (like `/motored/usuarios` being ADMIN-only) is enforced by the page
  * itself, same division of responsibility as asc360's `admin-layout.js`
  * (route-level gate) vs `Sidebar.js` (menu-visibility) vs the backend
@@ -25,10 +25,10 @@ import MotoredSidebar from '../../components/motored/MotoredSidebar';
 import MotoredTopBar from '../../components/motored/MotoredTopBar';
 import useDrawerMenu from '../../components/motored/useDrawerMenu';
 import { MOTORED_USER_KEY, MOTORED_TOKEN_KEY } from '../../lib/motored/motoredFetch';
-import { MI_CUENTA_PATH, ROLE_GERENCIA, rolSinAcceso } from '../../lib/motored/session';
 import {
-  ROLE_SERVICIO_CLIENTE, SURVEY_ADMIN_PATH, isServicioClientePath,
-} from '../../lib/motored/servicioCliente';
+  INICIO_PATH, MI_CUENTA_PATH, ROLE_GERENCIA, homePathFor, rolSinAcceso,
+} from '../../lib/motored/session';
+import { ROLE_SERVICIO_CLIENTE, isServicioClientePath } from '../../lib/motored/servicioCliente';
 
 export const VALID_ROLES = ['ADMIN', 'COMPRAS', 'SUCURSAL', 'CONSULTA', ROLE_SERVICIO_CLIENTE, ROLE_GERENCIA];
 
@@ -71,10 +71,12 @@ export default function MotoredLayout({ children }) {
         return;
       }
 
-      // SERVICIO_CLIENTE only works inside the survey module (UX guard; the
-      // backend answers 403 everywhere else). Never mount the other pages.
-      if (u.role === ROLE_SERVICIO_CLIENTE && !isServicioClientePath(pathname)) {
-        r.push(SURVEY_ADMIN_PATH);
+      // SERVICIO_CLIENTE only works inside the survey module and Inicio (UX
+      // guard; the backend answers 403 everywhere else). Never mount the
+      // other pages: send it home instead.
+      const scPermitido = isServicioClientePath(pathname) || pathname === INICIO_PATH;
+      if (u.role === ROLE_SERVICIO_CLIENTE && !scPermitido) {
+        r.push(homePathFor(u.role));
         return;
       }
 

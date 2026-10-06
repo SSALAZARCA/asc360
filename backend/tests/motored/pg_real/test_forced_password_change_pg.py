@@ -75,7 +75,7 @@ async def _create_and_login(http):
     email = f"nuevo{uuid.uuid4().hex[:10]}@test.co"
     created = await http.post(
         "/api/motored/usuarios", headers=_auth(admin_token),
-        json={"nombre": "Nuevo", "email": email, "password": INITIAL, "role": "CONSULTA"},
+        json={"nombre": "Nuevo", "email": email, "password": INITIAL, "role": "COMPRAS"},
     )
     assert created.status_code == 201, created.text
     login = await http.post("/api/motored/auth/login", json={"email": email, "password": INITIAL})

@@ -61,15 +61,18 @@ SERVICIO_CLIENTE_ALLOWED_PREFIXES = (
     "/api/motored/auth",
     "/api/motored/encuesta",
     "/api/motored/detractores",
+    "/api/motored/inicio",
 )
 
-# Management (`GERENCIA`) is confined the same way: auth, the budgets API and
-# the advisor dashboard only. A new prefix for this role must be added here.
+# Management (`GERENCIA`) is confined the same way: auth, the budgets API,
+# the advisor dashboard and the welcome page only. A new prefix for this
+# role must be added here.
 GERENCIA_ROLE = "GERENCIA"
 GERENCIA_ALLOWED_PREFIXES = (
     "/api/motored/auth",
     "/api/motored/presupuestos",
     "/api/motored/tablero-asesores",
+    "/api/motored/inicio",
 )
 
 # Owner decision 2026-10-05: `SUCURSAL` and `CONSULTA` have no screens yet.

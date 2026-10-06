@@ -29,14 +29,9 @@ beforeEach(() => {
 });
 
 describe('Motored login redirect', () => {
-  it('lands SERVICIO_CLIENTE on the survey admin page', async () => {
-    await submitAs('SERVICIO_CLIENTE');
-    expect(pushMock).toHaveBeenCalledWith('/motored/encuesta-satisfaccion');
-  });
-
-  it.each(['ADMIN', 'COMPRAS'])('keeps %s landing on maestros', async (role) => {
+  it.each(['ADMIN', 'COMPRAS', 'GERENCIA', 'SERVICIO_CLIENTE'])('lands %s on Inicio', async (role) => {
     await submitAs(role);
-    expect(pushMock).toHaveBeenCalledWith('/motored/maestros');
+    expect(pushMock).toHaveBeenCalledWith('/motored/inicio');
   });
 
   it.each(['SUCURSAL', 'CONSULTA'])('lands %s (no screens yet) on the account page', async (role) => {

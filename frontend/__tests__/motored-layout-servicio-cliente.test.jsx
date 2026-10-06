@@ -42,14 +42,23 @@ describe('MotoredLayout — SERVICIO_CLIENTE', () => {
     expect(sessionStorage.getItem('motored_user')).not.toBeNull();
   });
 
+  it('lets SERVICIO_CLIENTE open Inicio', async () => {
+    login('SERVICIO_CLIENTE');
+    mockPathname = '/motored/inicio';
+    render(<MotoredLayout><div>Contenido inicio</div></MotoredLayout>);
+
+    expect(await screen.findByText('Contenido inicio')).toBeInTheDocument();
+    expect(pushMock).not.toHaveBeenCalled();
+  });
+
   it.each(['/motored/maestros', '/motored/usuarios', '/motored/ventas-perdidas', '/motored/cargas'])(
-    'redirects SERVICIO_CLIENTE away from %s to the survey page without rendering content',
+    'redirects SERVICIO_CLIENTE away from %s to Inicio without rendering content',
     async (path) => {
       login('SERVICIO_CLIENTE');
       mockPathname = path;
       render(<MotoredLayout><div>Contenido protegido</div></MotoredLayout>);
 
-      await waitFor(() => expect(pushMock).toHaveBeenCalledWith('/motored/encuesta-satisfaccion'));
+      await waitFor(() => expect(pushMock).toHaveBeenCalledWith('/motored/inicio'));
       expect(screen.queryByText('Contenido protegido')).not.toBeInTheDocument();
       expect(sessionStorage.getItem('motored_user')).not.toBeNull();
     }
@@ -60,7 +69,7 @@ describe('MotoredLayout — SERVICIO_CLIENTE', () => {
     mockPathname = '/motored/encuesta-satisfaccionXYZ';
     render(<MotoredLayout><div>Contenido protegido</div></MotoredLayout>);
 
-    await waitFor(() => expect(pushMock).toHaveBeenCalledWith('/motored/encuesta-satisfaccion'));
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith('/motored/inicio'));
   });
 
   it.each(['ADMIN', 'COMPRAS'])(

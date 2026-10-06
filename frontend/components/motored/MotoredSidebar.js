@@ -40,7 +40,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import Image from 'next/image';
 import {
   LogOut, Warehouse, TrendingDown, ClipboardCheck, MessageSquareWarning, KeyRound, History,
-  UserCog, ChevronDown, ChevronRight, ShoppingCart, BarChart3, Settings, SlidersHorizontal,
+  UserCog, ChevronDown, ChevronRight, ShoppingCart, BarChart3, Settings, SlidersHorizontal, House,
 } from 'lucide-react';
 import { MOTORED_TOKEN_KEY, MOTORED_USER_KEY } from '../../lib/motored/motoredFetch';
 import { rolSinAcceso } from '../../lib/motored/session';
@@ -54,7 +54,10 @@ import { rolSinAcceso } from '../../lib/motored/session';
 // either keep their original behaviour. SERVICIO_CLIENTE only ever sees items
 // that list it in `roles`. SUCURSAL and CONSULTA have no screens yet (owner
 // decision 2026-10-05): they only ever see "Cambiar mi contraseña".
+// "Inicio" (the welcome page, `/motored/inicio`) is the home of every role
+// with screens and always comes first.
 const ALL_ITEMS = [
+  { id: 'inicio', name: 'Inicio', icon: House, path: '/motored/inicio', roles: ['ADMIN', 'COMPRAS', 'GERENCIA', 'SERVICIO_CLIENTE'] },
   { id: 'tablero-asesores', name: "KPI's", icon: BarChart3, path: '/motored/tablero-asesores', roles: ['ADMIN', 'COMPRAS', 'GERENCIA'] },
   {
     id: 'grupo-pedidos', name: 'Pedidos', icon: ShoppingCart,
@@ -116,7 +119,7 @@ function MenuItem({ item, isActive, onNavigate, indent = false }) {
   const Icon = item.icon;
   const style = indent ? { ...menuItemStyle(isActive), paddingLeft: '2.2rem' } : menuItemStyle(isActive);
   return (
-    <button type="button" onClick={() => onNavigate(item.path)} style={style}>
+    <button type="button" aria-current={isActive ? 'page' : undefined} onClick={() => onNavigate(item.path)} style={style}>
       <Icon size={16} />
       {item.name}
     </button>

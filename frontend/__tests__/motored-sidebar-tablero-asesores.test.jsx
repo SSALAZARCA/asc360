@@ -23,9 +23,9 @@ describe('MotoredSidebar - KPIs', () => {
     expect(screen.queryByText("KPI's")).not.toBeInTheDocument();
   });
 
-  it('is the first entry, right before the Pedidos group', () => {
+  it('comes right after Inicio, before the Pedidos group', () => {
     render(<MotoredSidebar user={{ nombre: 'U', role: 'ADMIN' }} />);
     const nombres = screen.getAllByRole('button').map((b) => b.textContent);
-    expect(nombres.slice(0, 2)).toEqual(["KPI's", 'Pedidos']);
+    expect(nombres.slice(0, 3)).toEqual(['Inicio', "KPI's", 'Pedidos']);
   });
 });

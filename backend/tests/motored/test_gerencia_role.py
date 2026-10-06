@@ -71,11 +71,12 @@ class TestMigration:
 
 
 class TestAllowList:
-    def test_is_exactly_auth_presupuestos_and_tablero(self):
+    def test_is_exactly_auth_presupuestos_tablero_and_inicio(self):
         assert set(GERENCIA_ALLOWED_PREFIXES) == {
             "/api/motored/auth",
             "/api/motored/presupuestos",
             "/api/motored/tablero-asesores",
+            "/api/motored/inicio",
         }
 
 

@@ -78,7 +78,7 @@ describe('IngresosPage', () => {
   it('redirects non-ADMIN users away', () => {
     sessionStorage.setItem('motored_user', JSON.stringify({ id: 'b', role: 'COMPRAS' }));
     render(<IngresosPage />);
-    expect(pushMock).toHaveBeenCalledWith('/motored/maestros');
+    expect(pushMock).toHaveBeenCalledWith('/motored/inicio');
     expect(mockList).not.toHaveBeenCalled();
   });
 });

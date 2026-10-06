@@ -63,7 +63,7 @@ describe('login routing', () => {
 
   it('keeps the normal landing when the flag is false', async () => {
     await loginAs({ role: 'COMPRAS', must_change_password: false });
-    expect(pushMock).toHaveBeenCalledWith('/motored/maestros');
+    expect(pushMock).toHaveBeenCalledWith('/motored/inicio');
   });
 });
 
@@ -120,7 +120,7 @@ describe('mi-cuenta', () => {
     expect(screen.queryByText(BANNER)).not.toBeInTheDocument();
   });
 
-  it.each([['COMPRAS', '/motored/maestros'], ['SERVICIO_CLIENTE', '/motored/encuesta-satisfaccion']])(
+  it.each([['COMPRAS', '/motored/inicio'], ['SERVICIO_CLIENTE', '/motored/inicio']])(
     'after a forced change, stores the fresh session and goes home (%s)', async (role, home) => {
       setSession({ role, must_change_password: true });
       mockChange.mockResolvedValue({ access_token: 'fresh', user: { role, must_change_password: false } });

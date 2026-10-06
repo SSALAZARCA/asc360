@@ -3,14 +3,14 @@
  * where each role lands, the forced-change flag and storing a fresh session.
  */
 import { MOTORED_TOKEN_KEY, MOTORED_USER_KEY } from './motoredFetch';
-import { ROLE_SERVICIO_CLIENTE, SURVEY_ADMIN_PATH } from './servicioCliente';
 
 export const MI_CUENTA_PATH = '/motored/mi-cuenta';
 export const PASSWORD_CHANGE_REQUIRED_CODE = 'PASSWORD_CHANGE_REQUIRED';
 
-/** Home page of a role (where it lands after login or after the forced change). */
 export const ROLE_GERENCIA = 'GERENCIA';
-export const GERENCIA_HOME_PATH = '/motored/maestros';
+
+/** Welcome page: the home of every role with screens. */
+export const INICIO_PATH = '/motored/inicio';
 
 /**
  * Roles with no screens yet (owner decision 2026-10-05): they only reach the
@@ -24,11 +24,13 @@ export function rolSinAcceso(role) {
   return ROLES_SIN_ACCESO.includes(role);
 }
 
+/** Home page of a role (where it lands after login, after the forced change
+ * and when a page gate turns it away): the account page for a role without
+ * screens, Inicio for everyone else (ADMIN, COMPRAS, GERENCIA and
+ * SERVICIO_CLIENTE; a missing or unknown role is then sent to login by the
+ * layout). */
 export function homePathFor(role) {
-  if (rolSinAcceso(role)) return MI_CUENTA_PATH;
-  if (role === ROLE_SERVICIO_CLIENTE) return SURVEY_ADMIN_PATH;
-  if (role === ROLE_GERENCIA) return GERENCIA_HOME_PATH;
-  return '/motored/maestros';
+  return rolSinAcceso(role) ? MI_CUENTA_PATH : INICIO_PATH;
 }
 
 /** Where a fresh session must go: the account page while a password change is pending. */

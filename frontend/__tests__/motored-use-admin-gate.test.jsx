@@ -5,7 +5,7 @@
  * This hook is a byte-for-byte extraction of the local `useAdminGate` that
  * already lives inline in `app/motored/usuarios/page.js` (lines 149-171 at
  * extraction time): reads `MOTORED_USER_KEY` from sessionStorage, redirects
- * to `/motored/maestros` when the parsed role isn't `'ADMIN'` (including a
+ * to the role's home (`/motored/inicio`) when the parsed role isn't `'ADMIN'` (including a
  * missing session or invalid JSON), and otherwise exposes `{ allowed: true,
  * ownUserId }`. `usuarios/page.js` itself is NOT changed to consume this
  * hook in this phase (design D6's own explicit, accepted duplication) --
@@ -27,12 +27,12 @@ beforeEach(() => {
 });
 
 describe('useAdminGate', () => {
-  it('redirects a non-ADMIN user to /motored/maestros and never allows the gate open', async () => {
+  it('redirects a non-ADMIN user to /motored/inicio and never allows the gate open', async () => {
     sessionStorage.setItem(MOTORED_USER_KEY, JSON.stringify({ id: 'u-1', role: 'COMPRAS' }));
 
     const { result } = renderHook(() => useAdminGate());
 
-    await waitFor(() => expect(pushMock).toHaveBeenCalledWith('/motored/maestros'));
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith('/motored/inicio'));
     expect(result.current.allowed).toBe(false);
     expect(result.current.ownUserId).toBeNull();
   });
@@ -40,7 +40,7 @@ describe('useAdminGate', () => {
   it('redirects when there is no Motored session at all', async () => {
     const { result } = renderHook(() => useAdminGate());
 
-    await waitFor(() => expect(pushMock).toHaveBeenCalledWith('/motored/maestros'));
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith('/motored/inicio'));
     expect(result.current.allowed).toBe(false);
   });
 
@@ -49,7 +49,7 @@ describe('useAdminGate', () => {
 
     const { result } = renderHook(() => useAdminGate());
 
-    await waitFor(() => expect(pushMock).toHaveBeenCalledWith('/motored/maestros'));
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith('/motored/inicio'));
     expect(result.current.allowed).toBe(false);
   });
 

@@ -39,6 +39,13 @@ describe('RolesPermisosMatriz', () => {
     expect(screen.getAllByRole('rowheader')).toHaveLength(PANTALLAS.length);
   });
 
+  it.each(['ADMIN', 'COMPRAS', 'GERENCIA', 'SERVICIO_CLIENTE'])('shows Inicio to %s', (rol) => {
+    render(<RolesPermisosMatriz />);
+
+    expect(marca('Inicio', rol)).toBe('Sí');
+    expect(PANTALLAS[0].id).toBe('inicio');
+  });
+
   it('shows GERENCIA with Presupuestos and KPIs only', () => {
     render(<RolesPermisosMatriz />);
 

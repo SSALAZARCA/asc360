@@ -1,6 +1,6 @@
 /**
- * Motored sidebar grouping: KPI's, then the Pedidos, Encuestas satisfacción
- * and Configuración groups, then "Cambiar mi contraseña". Grouping must not
+ * Motored sidebar grouping: Inicio, KPI's, then the Pedidos, Encuestas
+ * satisfacción and Configuración groups, then "Cambiar mi contraseña". Grouping must not
  * change which pages each role reaches.
  */
 import React from 'react';
@@ -20,23 +20,23 @@ const ADMIN = { nombre: 'U', role: 'ADMIN' };
 // Pages each role reaches. SUCURSAL and CONSULTA have no screens yet and
 // ASESOR_MOSTRADOR has no web access (owner decision 2026-10-05).
 const PAGES_BEFORE = {
-  ADMIN: ['pedidos', 'tablero-asesores', 'maestros', 'usuarios-gestion', 'ingresos', 'ventas-perdidas',
+  ADMIN: ['inicio', 'pedidos', 'tablero-asesores', 'maestros', 'usuarios-gestion', 'ingresos', 'ventas-perdidas',
     'encuesta-satisfaccion', 'detractores', 'mi-cuenta', 'configuracion'],
-  COMPRAS: ['pedidos', 'tablero-asesores', 'maestros', 'mi-cuenta'],
-  GERENCIA: ['tablero-asesores', 'maestros', 'mi-cuenta'],
+  COMPRAS: ['inicio', 'pedidos', 'tablero-asesores', 'maestros', 'mi-cuenta'],
+  GERENCIA: ['inicio', 'tablero-asesores', 'maestros', 'mi-cuenta'],
   SUCURSAL: ['mi-cuenta'],
   CONSULTA: ['mi-cuenta'],
-  SERVICIO_CLIENTE: ['encuesta-satisfaccion', 'detractores', 'mi-cuenta'],
+  SERVICIO_CLIENTE: ['inicio', 'encuesta-satisfaccion', 'detractores', 'mi-cuenta'],
   ASESOR_MOSTRADOR: [],
 };
 
 const TOP_LEVEL = {
-  ADMIN: ["KPI's", 'Pedidos', 'Encuestas satisfacción', 'Configuración', 'Cambiar mi contraseña'],
-  COMPRAS: ["KPI's", 'Pedidos', 'Cambiar mi contraseña'],
-  GERENCIA: ["KPI's", 'Pedidos', 'Cambiar mi contraseña'],
+  ADMIN: ['Inicio', "KPI's", 'Pedidos', 'Encuestas satisfacción', 'Configuración', 'Cambiar mi contraseña'],
+  COMPRAS: ['Inicio', "KPI's", 'Pedidos', 'Cambiar mi contraseña'],
+  GERENCIA: ['Inicio', "KPI's", 'Pedidos', 'Cambiar mi contraseña'],
   SUCURSAL: ['Cambiar mi contraseña'],
   CONSULTA: ['Cambiar mi contraseña'],
-  SERVICIO_CLIENTE: ['Encuestas satisfacción', 'Cambiar mi contraseña'],
+  SERVICIO_CLIENTE: ['Inicio', 'Encuestas satisfacción', 'Cambiar mi contraseña'],
   ASESOR_MOSTRADOR: [],
 };
 
@@ -64,7 +64,7 @@ describe('MotoredSidebar groups - order and labels', () => {
     render(<MotoredSidebar user={ADMIN} />);
     GROUPS.forEach(([group]) => fireEvent.click(screen.getByRole('button', { name: group })));
     expect(navLabels()).toEqual([
-      "KPI's",
+      'Inicio', "KPI's",
       'Pedidos', 'Registro de pedidos', 'Maestros', 'Ventas perdidas',
       'Encuestas satisfacción', 'Cargue de encuestas', 'Gestión de detractores',
       'Configuración', 'Configuración parámetros', 'Gestión de usuarios', 'Registro de ingresos',
@@ -97,7 +97,21 @@ describe('MotoredSidebar groups - per-role visibility', () => {
   it('shows GERENCIA only Maestros inside Pedidos', () => {
     render(<MotoredSidebar user={{ nombre: 'U', role: 'GERENCIA' }} />);
     fireEvent.click(screen.getByRole('button', { name: 'Pedidos' }));
-    expect(navLabels()).toEqual(["KPI's", 'Pedidos', 'Maestros', 'Cambiar mi contraseña']);
+    expect(navLabels()).toEqual(['Inicio', "KPI's", 'Pedidos', 'Maestros', 'Cambiar mi contraseña']);
+  });
+
+  it.each(['ADMIN', 'COMPRAS', 'GERENCIA', 'SERVICIO_CLIENTE'])('puts Inicio first for %s and navigates home', (role) => {
+    render(<MotoredSidebar user={{ nombre: 'U', role }} />);
+    const inicio = screen.getAllByRole('button')[0];
+    expect(inicio).toHaveTextContent('Inicio');
+    fireEvent.click(inicio);
+    expect(pushMock).toHaveBeenLastCalledWith('/motored/inicio');
+  });
+
+  it('marks Inicio as the current page on /motored/inicio', () => {
+    mockPathname = '/motored/inicio';
+    render(<MotoredSidebar user={ADMIN} />);
+    expect(screen.getByRole('button', { name: 'Inicio' })).toHaveAttribute('aria-current', 'page');
   });
 
   it('shows no user nothing and a pending password change only the account page', () => {

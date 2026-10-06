@@ -74,7 +74,7 @@ describe('VentasPerdidasPage — ADMIN gate', () => {
     setSession('COMPRAS');
     render(<VentasPerdidasPage />);
 
-    await waitFor(() => expect(pushMock).toHaveBeenCalledWith('/motored/maestros'));
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith('/motored/inicio'));
     expect(screen.queryByText('Ventas perdidas')).not.toBeInTheDocument();
     expect(mockListarBotLineas).not.toHaveBeenCalled();
   });

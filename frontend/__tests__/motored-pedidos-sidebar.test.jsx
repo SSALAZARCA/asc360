@@ -55,7 +55,7 @@ describe('MotoredSidebar - Registro de pedidos entry', () => {
     render(<MotoredSidebar user={{ nombre: 'U', role: 'COMPRAS' }} />);
     openGroup('Pedidos');
     const labels = screen.getAllByRole('button').map((b) => b.textContent);
-    expect(labels.slice(0, 4)).toEqual(["KPI's", 'Pedidos', PEDIDOS, 'Maestros']);
+    expect(labels.slice(0, 5)).toEqual(['Inicio', "KPI's", 'Pedidos', PEDIDOS, 'Maestros']);
     fireEvent.click(screen.getByRole('button', { name: PEDIDOS }));
     expect(pushMock).toHaveBeenCalledWith('/motored/pedidos');
   });

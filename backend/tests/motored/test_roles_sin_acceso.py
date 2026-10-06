@@ -79,6 +79,7 @@ REPRESENTATIVE_PATHS = [
     "/api/motored/encuesta/cargas",
     "/api/motored/detractores",
     "/api/motored/avisos-antiguedad",
+    "/api/motored/inicio",
 ]
 
 

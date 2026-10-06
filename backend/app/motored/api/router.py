@@ -33,6 +33,7 @@ from app.motored.api import (
     detractores,
     encuesta_cargas,
     encuesta_publica,
+    inicio,
     maestros,
     parametros,
     presupuestos,
@@ -121,3 +122,5 @@ router.include_router(avisos_antiguedad.router)
 # Sales budgets per asesor (ADMIN|GERENCIA): `/presupuestos` is its own prefix,
 # no path overlap with any router above.
 router.include_router(presupuestos.router)
+# Welcome page ("Inicio"): `/inicio` is its own prefix, no path overlap.
+router.include_router(inicio.router)
