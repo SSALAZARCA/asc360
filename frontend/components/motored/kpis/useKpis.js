@@ -7,7 +7,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import * as kpisApi from '../../../lib/motored/kpisApi';
 
 const MENSAJE_ERROR = "No pudimos cargar los KPI's. Intentá de nuevo en unos segundos.";
-const API = { ventas: kpisApi.getVentas, tiendas: kpisApi.getTiendas, asesores: kpisApi.getAsesores };
+const API = { ventas: kpisApi.getVentas, tiendas: kpisApi.getTiendas, asesores: kpisApi.getAsesores, comisiones: kpisApi.getComisiones };
 
 export const claveKpis = (tab, { meses, sucursales = [], hmcl }) =>
   [tab, [...meses].sort().join(','), [...sucursales].sort().join(','), hmcl].join('|');

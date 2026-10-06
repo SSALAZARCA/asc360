@@ -3,6 +3,7 @@ import { installFetch, jsonRes, setSession } from './helpers/pedidosFetch';
 import { OPCIONES, VENTAS } from './helpers/kpisVentasFixture';
 import { TIENDAS } from './helpers/kpisTiendasFixture';
 import { ASESORES } from './helpers/kpisAsesoresFixture';
+import { COMISIONES } from './helpers/kpisComisionesFixture';
 
 const pushMock = jest.fn();
 jest.mock('next/navigation', () => ({
@@ -21,6 +22,7 @@ const RUTAS = () => ({
   'GET /tablero-asesores/kpis/ventas': jsonRes(VENTAS),
   'GET /tablero-asesores/kpis/tiendas': jsonRes(TIENDAS),
   'GET /tablero-asesores/kpis/asesores': jsonRes(ASESORES),
+  'GET /tablero-asesores/kpis/comisiones': jsonRes(COMISIONES),
 });
 const llamadasA = (calls, ruta) => calls.filter((c) => c.path === ruta);
 
@@ -36,7 +38,7 @@ describe("KPI's shell", () => {
     render(<KpisPage />);
     expect(await screen.findByRole('heading', { name: "KPI's" })).toBeInTheDocument();
     const tabs = screen.getAllByRole('tab').map((t) => t.textContent);
-    expect(tabs).toEqual(['Ventas', 'Tiendas', 'Asesores']);
+    expect(tabs).toEqual(['Ventas', 'Tiendas', 'Asesores', 'Comisiones']);
     expect(screen.getByRole('tab', { name: 'Ventas' })).toHaveAttribute('aria-selected', 'true');
     await waitFor(() => expect(llamadasA(calls, '/tablero-asesores/kpis/ventas')).toHaveLength(1));
     const consulta = llamadasA(calls, '/tablero-asesores/kpis/ventas')[0].query;
@@ -73,6 +75,17 @@ describe("KPI's shell", () => {
     expect(screen.queryByRole('table', { name: /asesores/i })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('tab', { name: 'Ventas' }));
     expect(llamadasA(calls, '/tablero-asesores/kpis/ventas')).toHaveLength(1);
+  });
+
+  it('loads Comisiones with the same filters when its tab is opened', async () => {
+    setSession('GERENCIA');
+    const calls = installFetch(RUTAS());
+    render(<KpisPage />);
+    await screen.findByRole('tab', { name: 'Comisiones' });
+    fireEvent.click(screen.getByRole('tab', { name: 'Comisiones' }));
+    expect(await screen.findByText('Mes liquidado: julio 2026')).toBeInTheDocument();
+    expect(llamadasA(calls, '/tablero-asesores/kpis/comisiones')).toHaveLength(1);
+    expect(llamadasA(calls, '/tablero-asesores/kpis/comisiones')[0].query.get('hmcl')).toBe('incluir');
   });
 
   it('shows a Spanish error when the data cannot be loaded', async () => {

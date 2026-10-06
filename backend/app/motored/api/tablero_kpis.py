@@ -24,6 +24,9 @@ Respuestas (los importes son numeros, nunca texto; cada una repite `meses`,
   comision vigentes ese mes: `reglas` (con `comision_*`), `resumen`, `tramos` (con la cuenta de
   asesores de cada uno), `asesores` (mayor comision primero), `cerca_de_subir` y `advertencias` {sin_presupuesto,
   cargo_desconocido, sin_cedula, sin_presupuestos}. El selector `hmcl` no cambia las bases.
+- `GET /kpis/comisiones/excel`: el mismo calculo en un .xlsx (`comisiones_AAAA-MM.xlsx`): hoja
+  "Comisiones" (encabezado con mes, tiendas y reglas, una fila por asesor con su cedula como TEXTO,
+  totales) y hoja "Sin presupuesto".
 - `GET /kpis/estado` (ADMIN, COMPRAS, GERENCIA): `actualizado_en`, `sucio`,
   `reconstruyendo`, `ultima_reconstruccion_total` y `usando_resumen` de las
   tablas resumen (ver `services/trabajos/supervisor_kpis`).
@@ -39,13 +42,14 @@ Respuestas (los importes son numeros, nunca texto; cada una repite `meses`,
 import uuid
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.motored.api.tablero_asesores import _error_422, _sucursales
 from app.motored.deps import MotoredUser, get_motored_db_or_503, require_motored_ready, require_roles
 from app.motored.services import kpi_resumen
 from app.motored.services import tablero_asesores_consultas as consultas
+from app.motored.services import tablero_comisiones_excel as comisiones_excel
 from app.motored.services import tablero_kpis as kpis
 from app.motored.services.tablero_asesores import HMCL_EXCLUIR, HMCL_INCLUIR, HMCL_SOLO, Filtro
 
@@ -103,6 +107,20 @@ async def kpis_comisiones(
     filtro: Filtro = Depends(_filtro), db: AsyncSession = Depends(get_motored_db_or_503),
 ) -> Dict[str, Any]:
     return await kpis.calcular_kpis_comisiones(db, filtro)
+
+
+@router.get("/comisiones/excel")
+async def kpis_comisiones_excel(
+    filtro: Filtro = Depends(_filtro), db: AsyncSession = Depends(get_motored_db_or_503),
+) -> Response:
+    datos = await kpis.calcular_kpis_comisiones(db, filtro)
+    tiendas = await consultas.consultar_sucursales(db, datos["sucursales"])
+    nombres = sorted(nombre for nombre, _ in tiendas.values())
+    return Response(
+        content=comisiones_excel.construir_libro(datos, nombres),
+        media_type=comisiones_excel.XLSX,
+        headers={"Content-Disposition": f'attachment; filename="{comisiones_excel.nombre_de_archivo(datos)}"'},
+    )
 
 
 @router.get("/opciones")

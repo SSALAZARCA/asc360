@@ -40,6 +40,7 @@ async def test_the_settled_month_is_the_last_one_and_matches_the_hand_calculatio
     beto = r["asesores"][0]
     assert (beto["nombre"], beto["tienda"], beto["presupuesto"], beto["venta_comision"]) == (
         f"Beto {sfx}", f"Norte {sfx}", 500, 600.0)
+    assert beto["cargo"] == "ASESOR DE REPUESTOS"
     assert r["resumen"]["comision_total"] == 18.8 and r["resumen"]["venta_base"] == 1400.0
     assert [(x["nombre"], x["asesores"]) for x in r["tramos"]] == [("BASE", 1), ("PRO", 0), ("ELITE", 1)]
     assert [(f["cedula"], f["falta"], f["gana"]) for f in r["cerca_de_subir"]] == [("100", 100.0, 5.5)]

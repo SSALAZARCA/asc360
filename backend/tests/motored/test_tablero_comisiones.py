@@ -94,6 +94,7 @@ def test_the_rate_is_flat_over_the_whole_paid_base():
     assert (a["tramo"], a["tasa_pct"], a["comision"]) == ("ELITE", 1.8, 162.0)
     assert (a["venta_cumplimiento"], a["venta_comision"], a["cumplimiento_pct"]) == (11000.0, 9000.0, 1.1)
     assert (a["nombre"], a["tienda"], a["sucursal_id"], a["presupuesto"]) == ("Ana", "Norte", str(S1), 10000)
+    assert a["cargo"] == "ASESOR DE REPUESTOS"
     assert adv == {"sin_presupuesto": [], "cargo_desconocido": 0}
 
 

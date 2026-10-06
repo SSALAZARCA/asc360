@@ -2,7 +2,7 @@
 /** "KPI's": header filters + tabs. ADMIN, COMPRAS and GERENCIA only (`useTableroGate`). */
 import { useState } from 'react';
 import useTableroGate from '../tablero-asesores/useTableroGate';
-import { getAsesores, getTiendas, getVentas } from '../../../lib/motored/kpisApi';
+import { getAsesores, getComisiones, getTiendas, getVentas } from '../../../lib/motored/kpisApi';
 import KpiFrescura from './KpiFrescura';
 import KpiHeader from './KpiHeader';
 import KpiTabs from './KpiTabs';
@@ -10,11 +10,12 @@ import { COLOR } from './tokens';
 import useKpiFiltros from './useKpiFiltros';
 import useKpis from './useKpis';
 import AsesoresTab from './asesores/AsesoresTab';
+import ComisionesTab from './comisiones/ComisionesTab';
 import TiendasTab from './tiendas/TiendasTab';
 import VentasTab from './ventas/VentasTab';
 
-const FETCHERS = { ventas: getVentas, tiendas: getTiendas, asesores: getAsesores };
-const TABS = { ventas: VentasTab, tiendas: TiendasTab, asesores: AsesoresTab };
+const FETCHERS = { ventas: getVentas, tiendas: getTiendas, asesores: getAsesores, comisiones: getComisiones };
+const TABS = { ventas: VentasTab, tiendas: TiendasTab, asesores: AsesoresTab, comisiones: ComisionesTab };
 const SOMBRA = { background: COLOR.track, borderRadius: 14, height: 120 };
 
 function Esqueleto() {
@@ -30,11 +31,11 @@ function Mensaje({ children, error = false }) {
   return <p role={error ? 'alert' : undefined} style={{ margin: 0, fontSize: 14, color: error ? 'var(--motored-danger, #C0392B)' : COLOR.muted }}>{children}</p>;
 }
 
-function Pestana({ tab, kpis }) {
+function Pestana({ tab, kpis, filtros }) {
   if (kpis.error) return <Mensaje error>{kpis.error}</Mensaje>;
   if (!kpis.data) return <Esqueleto />;
   const Tab = TABS[tab];
-  return <Tab data={kpis.data} />;
+  return <Tab data={kpis.data} filtros={filtros} />;
 }
 
 export default function KpisContent() {
@@ -50,7 +51,7 @@ export default function KpisContent() {
       <KpiTabs value={tab} onChange={setTab} />
       {error && <Mensaje error>{error}</Mensaje>}
       {opciones && !sinVentas && <KpiFrescura data={kpis.data} alRecalcular={kpis.recargar} />}
-      {sinVentas ? <Mensaje>Todavía no hay ventas cargadas.</Mensaje> : opciones && <Pestana tab={tab} kpis={kpis} />}
+      {sinVentas ? <Mensaje>Todavía no hay ventas cargadas.</Mensaje> : opciones && <Pestana tab={tab} kpis={kpis} filtros={filtros} />}
     </div>
   );
 }

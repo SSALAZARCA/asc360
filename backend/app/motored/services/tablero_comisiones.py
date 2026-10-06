@@ -181,7 +181,9 @@ def liquidar_mes(
             sin_presupuesto.append({"cedula": cedula, "nombre": nombres.get(cedula), "venta": _dinero(v_com)})
             continue
         tienda = tiendas.get(str(linea.sucursal_id))
-        asesores.append(_fila(cedula, nombres.get(cedula), linea, v_cump, v_com, reglas, tienda))
+        fila = _fila(cedula, nombres.get(cedula), linea, v_cump, v_com, reglas, tienda)
+        fila["cargo"] = " / ".join(sorted(set(cargos[cedula])))
+        asesores.append(fila)
     advertencias = {"sin_presupuesto": sin_presupuesto, "cargo_desconocido": desconocido}
     return asesores, advertencias
 
