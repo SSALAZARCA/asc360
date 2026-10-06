@@ -638,24 +638,21 @@ async def calcular_kpis_asesor_detalle(db: AsyncSession, filtro: Filtro, cedula:
     return {**_encabezado(filtro), **await lectura.frescura(db), **resultado}
 
 
-async def calcular_opciones_asesores(
-    db: AsyncSession, sucursal_ids: Optional[Iterable[Any]] = None,
-) -> Dict[str, Any]:
-    """Opciones del filtro "Asesor": `{asesores: [{cedula, nombre, tienda, sucursal_id}]}` de las
-    personas ACTIVAS del maestro con cedula y cargo de asesor de repuestos (segun Configuracion), por
-    nombre. Con `sucursal_ids` (las tiendas elegidas; una asociada cuenta como su principal) solo
-    las de esas tiendas. No depende del periodo."""
-    reglas = await q.cargar_reglas(db, datetime.date.today().replace(day=1))
+async def calcular_opciones_asesores(db: AsyncSession, filtro: Filtro) -> Dict[str, Any]:
+    """Opciones del filtro "Asesor": `{asesores: [{cedula, nombre, tienda, sucursal_id, venta}]}` de
+    quienes VENDIERON en el periodo y las tiendas del filtro, la de mayor venta primero (es la seleccion
+    por defecto). Sale del mismo tablero de la pestana (ver `tablero_asesor_detalle.construir_opciones`),
+    asi que vivo y resumen dan lo mismo. Una tienda asociada cuenta como su principal."""
+    tablero, _ = await q.tablero_de_filtro(db, filtro)
     tiendas = None
-    if sucursal_ids:
+    if filtro.sucursal_ids:
         mapa = await principal_de(db)
-        tiendas = {str(mapa.get(i, i)) for i in sucursal_ids}
-    return {"asesores": [
-        {"cedula": m.cedula, "nombre": m.nombre, "tienda": m.tienda, "sucursal_id": m.sucursal_id}
+        tiendas = {str(mapa.get(i, i)) for i in filtro.sucursal_ids}
+    maestro = {
+        m.cedula: {"nombre": m.nombre, "tienda": m.tienda, "sucursal_id": m.sucursal_id}
         for m in await q.consultar_asesores_maestro(db)
-        if m.activo and t.grupo_de_cargo(m.cargo, reglas.grupo_por_cargo) == t.TIPO_PERSONA
-        and (tiendas is None or m.sucursal_id in tiendas)
-    ]}
+    }
+    return {"asesores": detalle.construir_opciones(tablero, maestro, tiendas)}
 
 
 async def _cargos_del_mes(

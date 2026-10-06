@@ -60,9 +60,9 @@ def llamadas(monkeypatch):
         registro.append(("detalle", filtro.meses, filtro.modo_hmcl, filtro.sucursal_ids, cedula))
         return None if cedula == "999" else {"asesor": {"cedula": cedula}}
 
-    async def falsas_opciones_asesores(db, sucursal_ids=None):
-        registro.append(("opciones_asesores", sucursal_ids))
-        return {"asesores": [{"cedula": "100", "nombre": "Ana", "tienda": "Norte", "sucursal_id": UUID_A}]}
+    async def falsas_opciones_asesores(db, filtro):
+        registro.append(("opciones_asesores", filtro.meses, filtro.modo_hmcl, filtro.sucursal_ids))
+        return {"asesores": [{"cedula": "100", "nombre": "Ana", "tienda": "Norte", "sucursal_id": UUID_A, "venta": 5.0}]}
 
     monkeypatch.setattr(kpis, "calcular_kpis_asesor_detalle", falso_detalle)
     monkeypatch.setattr(kpis, "calcular_opciones_asesores", falsas_opciones_asesores)
@@ -154,7 +154,7 @@ def test_kpis_routes_are_the_documented_paths():
 
 
 @pytest.mark.parametrize("ruta, params", [
-    ("asesores/detalle", {"meses": "2026-01", "cedula": "100"}), ("asesores/opciones", {}),
+    ("asesores/detalle", {"meses": "2026-01", "cedula": "100"}), ("asesores/opciones", {"meses": "2026-01"}),
 ])
 @pytest.mark.parametrize("rol", ["CONSULTA", "SUCURSAL", "SERVICIO_CLIENTE"])
 def test_asesor_routes_forbid_the_other_roles(_motored_ready, llamadas, ruta, params, rol):
@@ -165,7 +165,7 @@ def test_asesor_routes_forbid_the_other_roles(_motored_ready, llamadas, ruta, pa
 
 
 @pytest.mark.parametrize("ruta, params", [
-    ("asesores/detalle", {"meses": "2026-01", "cedula": "100"}), ("asesores/opciones", {}),
+    ("asesores/detalle", {"meses": "2026-01", "cedula": "100"}), ("asesores/opciones", {"meses": "2026-01"}),
 ])
 def test_asesor_routes_need_authentication(_motored_ready, llamadas, ruta, params):
     override_motored_db(FakeAsyncSession(execute_queue=[[]]))
@@ -208,25 +208,36 @@ def test_the_detail_rejects_a_bad_cedula_or_filter_with_a_422(_motored_ready, ll
     assert not [x for x in llamadas if x[0] == "detalle"]
 
 
-def test_the_asesor_options_are_scoped_by_the_store_filter(_motored_ready, llamadas):
+def test_the_asesor_options_follow_the_same_filter_as_the_tab(_motored_ready, llamadas):
     _como("GERENCIA")
 
-    r = _get("asesores/opciones", sucursales=f"{UUID_A},{UUID_B}")
+    r = _get("asesores/opciones", meses="2026-01,2026-02", hmcl="excluir", sucursales=f"{UUID_A},{UUID_B}")
 
     assert r.status_code == 200 and r.json()["asesores"][0]["cedula"] == "100"
-    assert [str(i) for i in llamadas[-1][1]] == [UUID_A, UUID_B]
+    registro = llamadas[-1]
+    assert registro[:3] == ("opciones_asesores", ("2026-01", "2026-02"), "excluir")
+    assert {str(i) for i in registro[3]} == {UUID_A, UUID_B}
 
 
-def test_the_asesor_options_without_a_filter_list_everyone(_motored_ready, llamadas):
+def test_the_asesor_options_without_a_store_filter_cover_the_whole_network(_motored_ready, llamadas):
     _como("ADMIN")
 
-    assert _get("asesores/opciones").status_code == 200
-    assert llamadas[-1] == ("opciones_asesores", None)
+    assert _get("asesores/opciones", meses="2026-01").status_code == 200
+    assert llamadas[-1] == ("opciones_asesores", ("2026-01",), "incluir", None)
+
+
+def test_the_asesor_options_need_the_period(_motored_ready, llamadas):
+    _como("ADMIN")
+
+    r = _get("asesores/opciones")
+
+    assert r.status_code == 422 and "meses" in r.json()["detail"]
+    assert not [x for x in llamadas if x[0] == "opciones_asesores"]
 
 
 def test_the_asesor_options_reject_a_bad_store_id(_motored_ready, llamadas):
     _como("ADMIN")
 
-    r = _get("asesores/opciones", sucursales="no-es-uuid")
+    r = _get("asesores/opciones", meses="2026-01", sucursales="no-es-uuid")
 
     assert r.status_code == 422 and "Sucursal" in r.json()["detail"]

@@ -277,3 +277,37 @@ def construir_detalle(
             cedula, fila, personas, total, sucursal_de, sucursal_id, nombre_tienda, ultimo, pct_del_mes, red_mes),
         "tecnired": _tecnired(fila, total, tecnired_clientes, tecnired_top),
     }
+
+
+def construir_opciones(
+    tablero: Dict[str, Any], maestro: Dict[str, Dict[str, Any]], tiendas: Optional[Iterable[str]],
+) -> List[Dict[str, Any]]:
+    """Options of the "Asesor" filter: whoever SOLD in the tablero's period, most sales first (ties by
+    name). `maestro` is `{cedula: {nombre, tienda, sucursal_id}}`; it names the asesor when she is in
+    it. With `tiendas` (the principal stores chosen), an asesor whose master store is another one is left
+    out, as the detail does; one that is not in the master stays (the tablero already scoped her sales).
+    The first item is the default selection."""
+    ventas: Dict[str, Dict[str, Any]] = {}
+    for fila in tablero["filas"]:
+        cedula = _cedula_de(fila["clave"]) if fila["tipo"] == t.TIPO_PERSONA else None
+        if cedula is None or fila["venta"]["total"] <= 0:
+            continue
+        acumulado = ventas.setdefault(cedula, {"venta": 0.0, "mayor": -1.0, "fila": fila})
+        acumulado["venta"] += fila["venta"]["total"]
+        if fila["venta"]["total"] > acumulado["mayor"]:
+            acumulado["mayor"], acumulado["fila"] = fila["venta"]["total"], fila
+    elegidas = None if tiendas is None else {str(i) for i in tiendas}
+    opciones = []
+    for cedula, acumulado in ventas.items():
+        propia = maestro.get(cedula)
+        if propia and elegidas is not None and propia["sucursal_id"] not in elegidas:
+            continue
+        fila = acumulado["fila"]
+        opciones.append({
+            "cedula": cedula,
+            "nombre": propia["nombre"] if propia else fila["nombre"],
+            "tienda": propia["tienda"] if propia else fila.get("punto_venta"),
+            "sucursal_id": propia["sucursal_id"] if propia else None,
+            "venta": acumulado["venta"],
+        })
+    return sorted(opciones, key=lambda o: (-o["venta"], (o["nombre"] or "").upper(), o["cedula"]))

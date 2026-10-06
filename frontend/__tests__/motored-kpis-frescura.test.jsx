@@ -2,7 +2,6 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { installFetch, jsonRes, setSession } from './helpers/pedidosFetch';
 import { OPCIONES, VENTAS } from './helpers/kpisVentasFixture';
 import { TIENDAS } from './helpers/kpisTiendasFixture';
-import { ASESORES } from './helpers/kpisAsesoresFixture';
 import { momentoActualizacion, textoActualizado } from '../components/motored/kpis/frescura';
 
 const pushMock = jest.fn();
@@ -28,7 +27,6 @@ const rutas = (ventas = VENTAS, extra = {}) => ({
   'GET /tablero-asesores/kpis/opciones': jsonRes(OPCIONES),
   'GET /tablero-asesores/kpis/ventas': jsonRes(ventas),
   'GET /tablero-asesores/kpis/tiendas': jsonRes(TIENDAS),
-  'GET /tablero-asesores/kpis/asesores': jsonRes(ASESORES),
   ...extra,
 });
 const conResumen = { ...VENTAS, usando_resumen: true, datos_actualizados_en: ACTUALIZADO };

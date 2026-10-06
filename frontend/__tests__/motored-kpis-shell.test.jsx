@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { installFetch, jsonRes, setSession } from './helpers/pedidosFetch';
 import { OPCIONES, VENTAS } from './helpers/kpisVentasFixture';
 import { TIENDAS } from './helpers/kpisTiendasFixture';
-import { ASESORES } from './helpers/kpisAsesoresFixture';
+import { ASESOR_DETALLE, OPCIONES_ASESORES } from './helpers/kpisAsesorDetalleFixture';
 import { COMISIONES } from './helpers/kpisComisionesFixture';
 
 const pushMock = jest.fn();
@@ -21,8 +21,9 @@ const RUTAS = () => ({
   'GET /tablero-asesores/kpis/opciones': jsonRes(OPCIONES),
   'GET /tablero-asesores/kpis/ventas': jsonRes(VENTAS),
   'GET /tablero-asesores/kpis/tiendas': jsonRes(TIENDAS),
-  'GET /tablero-asesores/kpis/asesores': jsonRes(ASESORES),
   'GET /tablero-asesores/kpis/comisiones': jsonRes(COMISIONES),
+  'GET /tablero-asesores/kpis/asesores/opciones': jsonRes(OPCIONES_ASESORES),
+  'GET /tablero-asesores/kpis/asesores/detalle': jsonRes(ASESOR_DETALLE),
 });
 const llamadasA = (calls, ruta) => calls.filter((c) => c.path === ruta);
 
@@ -70,9 +71,10 @@ describe("KPI's shell", () => {
     expect(llamadasA(calls, '/tablero-asesores/kpis/tiendas')).toHaveLength(1);
     expect(llamadasA(calls, '/tablero-asesores/kpis/tiendas')[0].query.get('hmcl')).toBe('incluir');
     fireEvent.click(screen.getByRole('tab', { name: 'Asesores' }));
-    expect(await screen.findByRole('region', { name: 'Asesores' })).toBeInTheDocument();
-    expect(llamadasA(calls, '/tablero-asesores/kpis/asesores')).toHaveLength(1);
-    expect(screen.queryByRole('table', { name: /asesores/i })).not.toBeInTheDocument();
+    expect(await screen.findByRole('region', { name: 'Detalle del asesor' })).toBeInTheDocument();
+    expect(llamadasA(calls, '/tablero-asesores/kpis/asesores/opciones')).toHaveLength(1);
+    expect(llamadasA(calls, '/tablero-asesores/kpis/asesores/detalle')).toHaveLength(1);
+    expect(llamadasA(calls, '/tablero-asesores/kpis/asesores')).toHaveLength(0);
     fireEvent.click(screen.getByRole('tab', { name: 'Ventas' }));
     expect(llamadasA(calls, '/tablero-asesores/kpis/ventas')).toHaveLength(1);
   });

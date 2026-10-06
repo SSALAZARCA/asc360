@@ -1,21 +1,21 @@
 /**
- * Fixtures of the single-asesor view: `GET /kpis/asesores/detalle` for Gómez Muñoz Paula (cédula `a8`, the same
- * asesor of `kpisAsesoresFixture`) and `GET /kpis/asesores/opciones`. Pesos; every pct is a fraction.
+ * Fixtures of the single-asesor view: `GET /kpis/asesores/detalle` for Gómez Muñoz Paula (cédula `a8`) and
+ * `GET /kpis/asesores/opciones`. Pesos; every pct is a fraction.
  */
 const M = 1e6;
 const MESES = ['2026-05', '2026-06', '2026-07'];
 
-const asesor = (cedula, nombre, tienda) => ({ cedula, nombre, tienda, sucursal_id: `s-${cedula}` });
+const asesor = (cedula, nombre, tienda, venta) => ({ cedula, nombre, tienda, sucursal_id: `s-${cedula}`, venta });
 
-// The twelve asesores of `kpisAsesoresFixture` (their cédula is the id of that fixture).
+// Twelve asesores, most sales first like the endpoint returns them: the first one is the default selection.
 export const OPCIONES_ASESORES = {
   asesores: [
-    asesor('a1', 'Jiménez Rangel Yulisa', 'Bogotá 1 de Mayo'), asesor('a2', 'Rojas Zapata Alejandra', 'Medellín La 33'),
-    asesor('a3', 'Cuenca Flórez Angie', 'Cali Alfonso López'), asesor('a4', 'Salgado Romero Andrea', 'Medellín La 33'),
-    asesor('a5', 'Aguja Rodríguez Yenny', 'Soacha El Dorado'), asesor('a6', 'Ruiz Erazo Angela', 'Cali Cra 1 Dos'),
-    asesor('a7', 'Giraldo Jaramillo Andres', 'Cali Cra 1 Dos'), asesor('a8', 'Gómez Muñoz Paula', 'Popayán'),
-    asesor('a9', 'Pinilla Guillén Luisa', 'Bogotá Kennedy'), asesor('a10', 'Riveros Barreto Natalia', 'Bogotá Venecia'),
-    asesor('a11', 'Zambrano Garcés Alam', 'Bucaramanga'), asesor('a12', 'Moreno Sánchez Viviana', 'Armenia'),
+    asesor('a1', 'Jiménez Rangel Yulisa', 'Bogotá 1 de Mayo', 120 * M), asesor('a2', 'Rojas Zapata Alejandra', 'Medellín La 33', 110 * M),
+    asesor('a3', 'Cuenca Flórez Angie', 'Cali Alfonso López', 100 * M), asesor('a4', 'Salgado Romero Andrea', 'Medellín La 33', 90 * M),
+    asesor('a5', 'Aguja Rodríguez Yenny', 'Soacha El Dorado', 80 * M), asesor('a6', 'Ruiz Erazo Angela', 'Cali Cra 1 Dos', 70 * M),
+    asesor('a7', 'Giraldo Jaramillo Andres', 'Cali Cra 1 Dos', 60 * M), asesor('a8', 'Gómez Muñoz Paula', 'Popayán', 50 * M),
+    asesor('a9', 'Pinilla Guillén Luisa', 'Bogotá Kennedy', 40 * M), asesor('a10', 'Riveros Barreto Natalia', 'Bogotá Venecia', 30 * M),
+    asesor('a11', 'Zambrano Garcés Alam', 'Bucaramanga', 20 * M), asesor('a12', 'Moreno Sánchez Viviana', 'Armenia', 10 * M),
   ],
 };
 

@@ -298,3 +298,37 @@ def test_an_asesor_known_only_by_the_master_has_a_payload_with_empty_numbers():
     assert _tile(r, "venta")["valor"] == 0 and _tile(r, "ticket")["valor"] is None
     assert all(p["pct"] is None for p in r["tendencia"]) and r["comision"] is None
     assert r["tecnired"]["top"] == [] and r["tecnired"]["venta"] == 0.0
+
+
+# --- Opciones del filtro "Asesor" ---------------------------------------------------------------
+
+
+def test_the_options_list_who_sold_in_the_period_most_sales_first():
+    tablero, _, _ = _mundo()
+    maestro = {
+        "100": {"nombre": "Ana M.", "tienda": "Norte", "sucursal_id": str(NORTE)},
+        "300": {"nombre": "Cami M.", "tienda": "Sur", "sucursal_id": str(SUR)},
+    }
+
+    r = d.construir_opciones(tablero, maestro, None)
+
+    assert [(o["cedula"], o["venta"]) for o in r] == [("100", 1900.0), ("200", 1200.0), ("300", 1100.0)]
+    assert r[0] == {"cedula": "100", "nombre": "Ana M.", "tienda": "Norte", "sucursal_id": str(NORTE), "venta": 1900.0}
+    # Beto is not in the master: the tablero row names him and has no store id.
+    assert r[1]["nombre"] == "Beto" and r[1]["tienda"] == "Norte" and r[1]["sucursal_id"] is None
+
+
+def test_the_options_leave_out_whoever_sold_nothing_in_the_period():
+    tablero, _, _ = _mundo(cubo=[c for c in CUBO if c.clave != "P:200"])
+
+    assert [o["cedula"] for o in d.construir_opciones(tablero, {}, None)] == ["100", "300"]
+
+
+def test_the_options_follow_the_store_of_the_master_like_the_detail_does():
+    tablero, _, _ = _mundo()
+    maestro = {
+        "100": {"nombre": "Ana", "tienda": "Norte", "sucursal_id": str(NORTE)},
+        "300": {"nombre": "Cami", "tienda": "Sur", "sucursal_id": str(SUR)},
+    }
+
+    assert [o["cedula"] for o in d.construir_opciones(tablero, maestro, {str(SUR)})] == ["200", "300"]

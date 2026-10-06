@@ -1,9 +1,7 @@
 import { miniKpis } from '../components/motored/kpis/ventas/datos';
 import { miniKpisTiendas } from '../components/motored/kpis/tiendas/datos';
-import { miniKpisAsesores } from '../components/motored/kpis/asesores/datos';
 import { VENTAS } from './helpers/kpisVentasFixture';
 import { TIENDAS } from './helpers/kpisTiendasFixture';
-import { ASESORES } from './helpers/kpisAsesoresFixture';
 
 const NOTA = /\d+,\d% del costo es estimado \(Precio normal\)/;
 const conEstimado = (costo, pct) => ({
@@ -25,12 +23,6 @@ describe('KPI margin: share of the cost estimated with the master price', () => 
   it('keeps the missing-inventory message when there is no cost at all', () => {
     const sinCosto = { ...ventasCon(0.5), total: { ...ventasCon(0.5).total, costo: { ...conEstimado(VENTAS.total.costo, 0.5), venta_con_costo: 0, pct_margen: null } } };
     expect(tip(miniKpis(sinCosto), 'Margen')).toBe('Falta cargar el inventario con costo');
-  });
-
-  it('explains it in the Asesores network margin tooltip', () => {
-    const data = { ...ASESORES, total: { ...ASESORES.total, costo: conEstimado(ASESORES.total.costo, 0.1) } };
-    expect(tip(miniKpisAsesores(data), 'Margen red')).toMatch(/10,0% del costo es estimado \(Precio normal\)/);
-    expect(tip(miniKpisAsesores(ASESORES), 'Margen red')).not.toMatch(NOTA);
   });
 
   it('explains the weighted share of the stores in the Tiendas best-margin tooltip', () => {

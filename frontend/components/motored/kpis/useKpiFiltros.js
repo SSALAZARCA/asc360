@@ -25,7 +25,7 @@ export default function useKpiFiltros(activo) {
     meses: opciones?.ultimo_mes ? presetMeses('ytd', opciones.ultimo_mes) : null,
     sucursales: [],
     hmcl: 'incluir',
-    asesor: null, // cédula of the asesor of the single view (Asesores tab); null = everyone
+    asesor: null, // cédula of the asesor of the single view (Asesores tab); null = not chosen yet (the default is the best seller)
     ...cambios,
   }), [opciones, cambios]);
   const cambiar = useCallback((parcial) => setCambios((previo) => ({ ...previo, ...parcial })), []);

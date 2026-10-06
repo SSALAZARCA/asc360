@@ -22,8 +22,9 @@ Respuestas (los importes son numeros, nunca texto; cada una repite `meses`,
   conteos, advertencias}.
 - `GET /kpis/asesores/detalle?cedula=`: la vista de UN asesor (mismos parametros del filtro; 404
   "Asesor no encontrado" sin ventas, presupuesto ni maestro en el filtro; 422 con una cedula invalida).
-- `GET /kpis/asesores/opciones?sucursales=`: `asesores` [{cedula, nombre, tienda, sucursal_id}], los
-  asesores activos del maestro (de esas tiendas) para el filtro "Asesor".
+- `GET /kpis/asesores/opciones`: (mismos parametros del filtro) `asesores` [{cedula, nombre, tienda,
+  sucursal_id, venta}], quienes vendieron en el periodo y las tiendas elegidas, la de mayor venta
+  primero (la seleccion por defecto del filtro "Asesor", que no tiene "Todos").
 - `GET /kpis/comisiones`: liquida el ULTIMO mes de `meses` (`mes_liquidado`) con las reglas de
   comision vigentes ese mes: `reglas` (con `comision_*`), `resumen`, `tramos` (con la cuenta de
   asesores de cada uno), `asesores` (mayor comision primero), `cerca_de_subir` y `advertencias` {sin_presupuesto,
@@ -124,10 +125,9 @@ async def kpis_asesor_detalle(
 
 @router.get("/asesores/opciones")
 async def kpis_asesores_opciones(
-    sucursales: Optional[str] = Query(None, description="Ids de sucursal separados por coma; sin ellos, todas"),
-    user: MotoredUser = Depends(_require_rol), db: AsyncSession = Depends(get_motored_db_or_503),
+    filtro: Filtro = Depends(_filtro), db: AsyncSession = Depends(get_motored_db_or_503),
 ) -> Dict[str, Any]:
-    return await kpis.calcular_opciones_asesores(db, _sucursales(sucursales))
+    return await kpis.calcular_opciones_asesores(db, filtro)
 
 
 @router.get("/comisiones")

@@ -158,19 +158,48 @@ async def test_the_store_filter_limits_what_counts_as_in_scope(sesion):
     assert cami["puestos"]["venta"] == {"puesto": 1, "de": 1}
 
 
-async def test_the_asesor_options_list_the_active_asesores_of_the_chosen_stores(sesion):
+async def _opciones(db, meses=MESES, sucursales=None, modo="incluir"):
+    return (await k.calcular_opciones_asesores(db, await q.cargar_filtro(db, meses, modo, sucursales)))["asesores"]
+
+
+async def test_the_asesor_options_list_who_sold_with_the_most_sales_first(sesion):
     mundo = await Mundo().crear(sesion)
     propias = set(mundo.cedulas.values())
 
-    todas = await k.calcular_opciones_asesores(sesion)
-    sur = await k.calcular_opciones_asesores(sesion, [mundo.sur.id])
+    todas = await _opciones(sesion)
+    sur = await _opciones(sesion, sucursales=[mundo.sur.id])
 
-    assert {a["cedula"] for a in todas["asesores"]} >= propias
-    assert {a["cedula"] for a in sur["asesores"]} & propias == {mundo.cedulas["cami"], mundo.cedulas["dora"]}
-    ana = next(a for a in todas["asesores"] if a["cedula"] == mundo.cedulas["ana"])
+    assert [a["cedula"] for a in todas if a["cedula"] in propias] == [
+        mundo.cedulas["ana"], mundo.cedulas["beto"], mundo.cedulas["cami"]]  # Dora sold nothing
+    assert [a["cedula"] for a in sur if a["cedula"] in propias] == [mundo.cedulas["cami"]]
+    ana = next(a for a in todas if a["cedula"] == mundo.cedulas["ana"])
     assert ana == {
         "cedula": mundo.cedulas["ana"], "nombre": f"Ana {mundo.sfx}", "tienda": f"Norte {mundo.sfx}",
-        "sucursal_id": str(mundo.norte.id)}
+        "sucursal_id": str(mundo.norte.id), "venta": 2700.0}
+    assert [a["venta"] for a in todas] == sorted((a["venta"] for a in todas), reverse=True)
+    assert [a["cedula"] for a in await _opciones(sesion, meses=["2097-03"]) if a["cedula"] in propias] == [
+        mundo.cedulas["beto"], mundo.cedulas["ana"], mundo.cedulas["cami"]]
+
+
+@pytest.mark.parametrize("modo", [t.HMCL_INCLUIR, t.HMCL_EXCLUIR, t.HMCL_SOLO])
+async def test_the_asesor_options_are_identical_from_the_summary_and_live(sesion, monkeypatch, modo):
+    mundo = await Mundo().crear(sesion)
+    await kpi_resumen.reconstruir_todo(sesion)
+    casos = [
+        (meses, tiendas)
+        for meses in (tuple(MESES), ("2097-02",), ("2097-01", "2097-03"))
+        for tiendas in (None, (mundo.norte.id,), (mundo.sur.id,))
+    ]
+
+    async def todo():
+        return {c: await _opciones(sesion, list(c[0]), c[1] and list(c[1]), modo) for c in casos}
+
+    monkeypatch.setattr(settings, "MOTORED_KPI_RESUMEN_ENABLED", False)
+    en_vivo = await todo()
+    monkeypatch.setattr(settings, "MOTORED_KPI_RESUMEN_ENABLED", True)
+    assert await lectura.usar_resumen(sesion)
+
+    assert await todo() == en_vivo
 
 
 @pytest.mark.parametrize("modo", [t.HMCL_INCLUIR, t.HMCL_EXCLUIR, t.HMCL_SOLO])
