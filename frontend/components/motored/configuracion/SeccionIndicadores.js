@@ -2,8 +2,8 @@
 /** Indicadores tab: what the tablero de asesores will read from the registry. */
 import CamposDeSeccion from './CamposDeSeccion';
 
-const AVISO = 'Se aplican cuando estén activos los indicadores de comisiones: '
-  + 'hasta entonces el tablero sigue usando los valores de siempre.';
+const AVISO = 'El tablero de KPI usa estos valores para calcular ventas, '
+  + 'cumplimiento y comisiones.';
 
 const CAMPOS = [
   {

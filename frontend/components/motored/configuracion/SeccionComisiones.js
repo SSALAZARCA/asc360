@@ -30,9 +30,14 @@ const CAMPOS = [
     ayuda: 'Los cargos que reciben comisión como asesores. Los nombres se escriben en mayúsculas, igual que en el maestro de personas.',
   },
   {
+    clave: 'comision_bono_umbral_pct',
+    etiqueta: 'Cumplimiento mínimo para los bonos',
+    ayuda: 'Los bonos por línea solo se activan si el asesor cumple al menos este porcentaje de su presupuesto total del mes (incluido: con 95 % justo ya califica).',
+  },
+  {
     clave: 'comision_lineas',
     etiqueta: 'Bonos por línea',
-    ayuda: 'Un asesor gana el bono de una línea cuando la venta de esa línea es al menos el porcentaje meta de SU venta TOTAL del mes (incluidas las ventas a HMCL). Una línea apagada no se paga. Los bonos se suman a la comisión y no dependen del cumplimiento del presupuesto.',
+    ayuda: 'Si el asesor pasa el cumplimiento mínimo, gana el bono de una línea cuando la venta de esa línea es al menos el porcentaje meta de SU venta TOTAL del mes (incluidas las ventas a HMCL). Cada línea se puede apagar: una línea apagada no se paga. Los bonos se suman a la comisión.',
   },
 ];
 
