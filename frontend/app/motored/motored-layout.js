@@ -25,7 +25,7 @@ import MotoredSidebar from '../../components/motored/MotoredSidebar';
 import MotoredTopBar from '../../components/motored/MotoredTopBar';
 import useDrawerMenu from '../../components/motored/useDrawerMenu';
 import { MOTORED_USER_KEY, MOTORED_TOKEN_KEY } from '../../lib/motored/motoredFetch';
-import { MI_CUENTA_PATH, ROLE_GERENCIA } from '../../lib/motored/session';
+import { MI_CUENTA_PATH, ROLE_GERENCIA, rolSinAcceso } from '../../lib/motored/session';
 import {
   ROLE_SERVICIO_CLIENTE, SURVEY_ADMIN_PATH, isServicioClientePath,
 } from '../../lib/motored/servicioCliente';
@@ -78,8 +78,10 @@ export default function MotoredLayout({ children }) {
         return;
       }
 
-      // Pending password change: the account page is the only place to be.
-      if (u.must_change_password && pathname !== MI_CUENTA_PATH) {
+      // Pending password change, or a role with no screens yet (SUCURSAL/
+      // CONSULTA, owner decision 2026-10-05): the account page is the only
+      // place to be. The backend answers 403 everywhere else.
+      if ((u.must_change_password || rolSinAcceso(u.role)) && pathname !== MI_CUENTA_PATH) {
         r.push(MI_CUENTA_PATH);
         return;
       }

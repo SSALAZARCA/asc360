@@ -192,7 +192,7 @@ def test_gerencia_is_not_blocked_on_login():
     assert response.status_code == 401
 
 
-@pytest.mark.parametrize("role", ["ADMIN", "CONSULTA"])
+@pytest.mark.parametrize("role", ["ADMIN", "COMPRAS"])
 def test_other_roles_are_not_confined(role):
     response = _request(role, "/api/motored/parametros/dias_seguridad/vigente")
     assert response.status_code == 404  # reached the handler (no vigente version)

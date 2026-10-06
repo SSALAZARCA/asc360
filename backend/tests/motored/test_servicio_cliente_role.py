@@ -194,7 +194,7 @@ def test_servicio_cliente_is_not_blocked_on_login():
     assert response.status_code == 401
 
 
-@pytest.mark.parametrize("role", ["ADMIN", "CONSULTA"])
+@pytest.mark.parametrize("role", ["ADMIN", "COMPRAS"])
 def test_other_roles_are_not_confined(role, probe_routes):
     # An endpoint with no role check: both roles must still get through.
     response = _request(role, "/api/motored/parametros/dias_seguridad/vigente")

@@ -48,6 +48,13 @@ describe('RolesPermisosMatriz', () => {
       .forEach((p) => expect(marca(p, 'GERENCIA')).toBe('No'));
   });
 
+  it.each(['SUCURSAL', 'CONSULTA'])('shows %s with the account page only', (rol) => {
+    render(<RolesPermisosMatriz />);
+
+    PANTALLAS.forEach((p) => expect(marca(p.nombre, rol)).toBe(p.id === 'mi-cuenta' ? 'Sí' : 'No'));
+    expect(PANTALLAS.filter((p) => tienePermiso(p.id, rol)).map((p) => p.id)).toEqual(['mi-cuenta']);
+  });
+
   it('shows ADMIN with access everywhere', () => {
     render(<RolesPermisosMatriz />);
 

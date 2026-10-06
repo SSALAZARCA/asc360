@@ -21,8 +21,8 @@ export const ROLES = [
   { id: 'ADMIN', ayuda: 'Administra toda la aplicación.' },
   { id: 'COMPRAS', ayuda: "Gestiona pedidos de repuestos y ve los KPI's." },
   { id: 'GERENCIA', ayuda: "Ve Presupuestos y KPI's" },
-  { id: 'SUCURSAL', ayuda: 'Usuario de una sucursal: consulta y carga de maestros.' },
-  { id: 'CONSULTA', ayuda: 'Solo consulta: sin pedidos ni administración.' },
+  { id: 'SUCURSAL', ayuda: 'Sin pantallas habilitadas por ahora: solo cambia su contraseña.' },
+  { id: 'CONSULTA', ayuda: 'Sin pantallas habilitadas por ahora: solo cambia su contraseña.' },
   { id: 'SERVICIO_CLIENTE', ayuda: 'Atiende la encuesta de satisfacción y los detractores.' },
 ];
 

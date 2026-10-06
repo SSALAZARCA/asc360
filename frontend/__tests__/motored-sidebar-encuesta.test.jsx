@@ -35,7 +35,13 @@ describe('MotoredSidebar — Encuestas satisfacción group', () => {
     );
   });
 
-  it.each(['COMPRAS', 'SUCURSAL', 'CONSULTA', 'GERENCIA'])('hides the survey group from %s but keeps Maestros', (role) => {
+  it.each(['SUCURSAL', 'CONSULTA'])('hides the survey group from %s', (role) => {
+    render(<MotoredSidebar user={{ nombre: 'X', role }} />);
+
+    expect(screen.queryByText(GROUP)).not.toBeInTheDocument();
+  });
+
+  it.each(['COMPRAS', 'GERENCIA'])('hides the survey group from %s but keeps Maestros', (role) => {
     render(<MotoredSidebar user={{ nombre: 'X', role }} />);
 
     expect(screen.queryByText(GROUP)).not.toBeInTheDocument();

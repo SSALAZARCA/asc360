@@ -61,7 +61,7 @@ describe('Tablero de asesores no sigue al gate de Pedidos', () => {
     setSession('SUCURSAL');
     const calls = installFetch({ 'GET /tablero-asesores': jsonRes({}) });
     render(<TableroAsesoresPage />);
-    await waitFor(() => expect(pushMock).toHaveBeenCalledWith('/motored/maestros'));
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith('/motored/mi-cuenta'));
     expect(calls).toHaveLength(0);
     expect(screen.queryByRole('heading', { name: "KPI's" })).not.toBeInTheDocument();
   });

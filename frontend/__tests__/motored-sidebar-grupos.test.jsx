@@ -17,26 +17,27 @@ import MotoredSidebar, { menuItemsFor } from '../components/motored/MotoredSideb
 
 const ADMIN = { nombre: 'U', role: 'ADMIN' };
 
-// Pages each role reached before the regrouping (flat menu of 2026-10-05).
+// Pages each role reaches. SUCURSAL and CONSULTA have no screens yet and
+// ASESOR_MOSTRADOR has no web access (owner decision 2026-10-05).
 const PAGES_BEFORE = {
   ADMIN: ['pedidos', 'tablero-asesores', 'maestros', 'usuarios-gestion', 'ingresos', 'ventas-perdidas',
     'encuesta-satisfaccion', 'detractores', 'mi-cuenta', 'configuracion'],
   COMPRAS: ['pedidos', 'tablero-asesores', 'maestros', 'mi-cuenta'],
   GERENCIA: ['tablero-asesores', 'maestros', 'mi-cuenta'],
-  SUCURSAL: ['maestros', 'mi-cuenta'],
-  CONSULTA: ['maestros', 'mi-cuenta'],
+  SUCURSAL: ['mi-cuenta'],
+  CONSULTA: ['mi-cuenta'],
   SERVICIO_CLIENTE: ['encuesta-satisfaccion', 'detractores', 'mi-cuenta'],
-  ASESOR_MOSTRADOR: ['maestros'],
+  ASESOR_MOSTRADOR: [],
 };
 
 const TOP_LEVEL = {
   ADMIN: ["KPI's", 'Pedidos', 'Encuestas satisfacción', 'Configuración', 'Cambiar mi contraseña'],
   COMPRAS: ["KPI's", 'Pedidos', 'Cambiar mi contraseña'],
   GERENCIA: ["KPI's", 'Pedidos', 'Cambiar mi contraseña'],
-  SUCURSAL: ['Pedidos', 'Cambiar mi contraseña'],
-  CONSULTA: ['Pedidos', 'Cambiar mi contraseña'],
+  SUCURSAL: ['Cambiar mi contraseña'],
+  CONSULTA: ['Cambiar mi contraseña'],
   SERVICIO_CLIENTE: ['Encuestas satisfacción', 'Cambiar mi contraseña'],
-  ASESOR_MOSTRADOR: ['Pedidos'],
+  ASESOR_MOSTRADOR: [],
 };
 
 const GROUPS = [
@@ -89,7 +90,8 @@ describe('MotoredSidebar groups - per-role visibility', () => {
 
   it.each(Object.keys(TOP_LEVEL))('shows %s only the groups holding one of its pages', (role) => {
     render(<MotoredSidebar user={{ nombre: 'U', role }} />);
-    expect(navLabels()).toEqual(TOP_LEVEL[role]);
+    const labels = screen.queryAllByRole('button').map((b) => b.textContent).filter((t) => !t.includes('Salir'));
+    expect(labels).toEqual(TOP_LEVEL[role]);
   });
 
   it('shows GERENCIA only Maestros inside Pedidos', () => {
@@ -98,8 +100,8 @@ describe('MotoredSidebar groups - per-role visibility', () => {
     expect(navLabels()).toEqual(["KPI's", 'Pedidos', 'Maestros', 'Cambiar mi contraseña']);
   });
 
-  it('keeps no user and a pending password change as before', () => {
-    expect(pagesOf(null)).toEqual(['maestros']);
+  it('shows no user nothing and a pending password change only the account page', () => {
+    expect(pagesOf(null)).toEqual([]);
     expect(pagesOf({ role: 'ADMIN', must_change_password: true })).toEqual(['mi-cuenta']);
   });
 });

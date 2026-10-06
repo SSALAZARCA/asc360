@@ -29,9 +29,17 @@ from sqlalchemy.exc import DBAPIError, OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.motored.auth import decode_motored_token, motored_secret_is_safe, token_predates_password_change
+from app.motored.auth import (
+    decode_motored_token,
+    motored_secret_is_safe,
+    token_predates_password_change,
+)
 from app.motored.database import get_motored_db
-from app.motored.services.auth import MotoredUser, MotoredUserLookup, crear_lookup_real
+from app.motored.services.auth import (
+    MotoredUser,
+    MotoredUserLookup,
+    crear_lookup_real,
+)
 from app.motored.services.trabajos import (
     supervisor,
     supervisor_avisos,
@@ -64,21 +72,58 @@ GERENCIA_ALLOWED_PREFIXES = (
     "/api/motored/tablero-asesores",
 )
 
+# Owner decision 2026-10-05: `SUCURSAL` and `CONSULTA` have no screens yet.
+# They may only log in and change their own password (`/auth`); every other
+# guarded endpoint answers 403 with this detail. Their scoping code
+# (e.g. `corridas_comun._alcance`, `cargas` row filters) stays in place for
+# when the roles get screens; drop them from here to re-enable access.
+ROLES_SIN_ACCESO = ("SUCURSAL", "CONSULTA")
+ROLES_SIN_ACCESO_ALLOWED_PREFIXES = ("/api/motored/auth",)
+ROL_SIN_PANTALLAS_DETAIL = "Tu rol todavía no tiene pantallas habilitadas."
+_CONFINED_DETAIL = "No tiene permisos para realizar esta acción."
+
 # While `must_change_password` is set, the only endpoint a user may call.
 PASSWORD_CHANGE_REQUIRED_DETAIL = {"code": "PASSWORD_CHANGE_REQUIRED"}
 PASSWORD_CHANGE_PATH = "/api/motored/auth/password"
 
 
-# Roles that may only reach a path allow-list (enforced in `get_current_motored_user`).
+# Roles that may only reach a path allow-list, with the 403 detail they get
+# outside it (enforced in `get_current_motored_user`).
 _CONFINED_ROLE_PREFIXES = {
-    SERVICIO_CLIENTE_ROLE: SERVICIO_CLIENTE_ALLOWED_PREFIXES,
-    GERENCIA_ROLE: GERENCIA_ALLOWED_PREFIXES,
+    SERVICIO_CLIENTE_ROLE: (SERVICIO_CLIENTE_ALLOWED_PREFIXES,
+                            _CONFINED_DETAIL),
+    GERENCIA_ROLE: (GERENCIA_ALLOWED_PREFIXES, _CONFINED_DETAIL),
+    **{
+        rol: (ROLES_SIN_ACCESO_ALLOWED_PREFIXES, ROL_SIN_PANTALLAS_DETAIL)
+        for rol in ROLES_SIN_ACCESO
+    },
 }
 
 
 def _path_in_prefixes(path: str, prefixes) -> bool:
-    """Prefix match on segment boundaries (`/encuesta-x` is not `/encuesta`)."""
+    """Prefix match on segment boundaries (`/encuesta-x` is not
+    `/encuesta`)."""
     return any(path == p or path.startswith(p + "/") for p in prefixes)
+
+
+def _enforce_path_rules(user: MotoredUser, path: str) -> None:
+    """403 for a pending forced password change, or for a confined role
+    outside its path allow-list. Every web endpoint resolves the user here,
+    so no endpoint can forget these checks."""
+    if user.must_change_password and path != PASSWORD_CHANGE_PATH:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=PASSWORD_CHANGE_REQUIRED_DETAIL,
+        )
+
+    confinement = _CONFINED_ROLE_PREFIXES.get(user.role)
+    if confinement is None:
+        return
+    prefixes, detail = confinement
+    if not _path_in_prefixes(path, prefixes):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail=detail,
+        )
 
 
 async def get_motored_db_or_503(
@@ -155,19 +200,7 @@ async def get_current_motored_user(
         # authenticated just because its token still decodes.
         raise credentials_exception
 
-    if user.must_change_password and request.url.path != PASSWORD_CHANGE_PATH:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=PASSWORD_CHANGE_REQUIRED_DETAIL,
-        )
-
-    confined_to = _CONFINED_ROLE_PREFIXES.get(user.role)
-    if confined_to is not None and not _path_in_prefixes(request.url.path, confined_to):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="No tiene permisos para realizar esta acción.",
-        )
-
+    _enforce_path_rules(user, request.url.path)
     return user
 
 
@@ -176,11 +209,13 @@ def require_roles(*roles: str):
     de los roles dados. Rechazo server-side siempre -- nunca confía en que
     la UI oculte la acción."""
 
-    async def _check_role(user: MotoredUser = Depends(get_current_motored_user)) -> MotoredUser:
+    async def _check_role(
+        user: MotoredUser = Depends(get_current_motored_user),
+    ) -> MotoredUser:
         if user.role not in roles:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="No tiene permisos para realizar esta acción.",
+                detail=_CONFINED_DETAIL,
             )
         return user
 
@@ -202,7 +237,8 @@ async def require_motored_ready() -> None:
     (sdd/motored-pedidos-motor, S6b): su `ensure_started()` no lanza nunca
     y se apaga con `MOTORED_CORRIDAS_LOOP_ENABLED=false`. Igual el loop del
     aviso de antigüedad (`MOTORED_AVISOS_ANTIGUEDAD_ENABLED=false`) y el
-    de las tablas resumen de los KPI's (`MOTORED_KPI_RESUMEN_LOOP_ENABLED=false`)."""
+    de las tablas resumen de los KPI's
+    (`MOTORED_KPI_RESUMEN_LOOP_ENABLED=false`)."""
     if not settings.MOTORED_ENABLED or not motored_secret_is_safe():
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

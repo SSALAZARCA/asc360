@@ -54,7 +54,7 @@ describe('Pedidos list - gate', () => {
     setSession(role);
     const calls = installFetch(rutas());
     render(<PedidosPage />);
-    await waitFor(() => expect(pushMock).toHaveBeenCalledWith('/motored/maestros'));
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith('/motored/mi-cuenta'));
     expect(calls).toHaveLength(0);
     expect(screen.queryByText('PED-2026-S40-001')).not.toBeInTheDocument();
   });

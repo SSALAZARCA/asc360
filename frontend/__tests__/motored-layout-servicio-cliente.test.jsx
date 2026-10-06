@@ -63,7 +63,7 @@ describe('MotoredLayout — SERVICIO_CLIENTE', () => {
     await waitFor(() => expect(pushMock).toHaveBeenCalledWith('/motored/encuesta-satisfaccion'));
   });
 
-  it.each(['ADMIN', 'COMPRAS', 'SUCURSAL', 'CONSULTA'])(
+  it.each(['ADMIN', 'COMPRAS'])(
     'leaves %s untouched on a non-survey page',
     async (role) => {
       login(role);

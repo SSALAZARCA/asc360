@@ -36,7 +36,7 @@ describe('corrida detail - gate', () => {
     setSession(role);
     const calls = installFetch(rutas());
     render(<CorridaDetallePage />);
-    await waitFor(() => expect(pushMock).toHaveBeenCalledWith('/motored/maestros'));
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith('/motored/mi-cuenta'));
     expect(calls).toHaveLength(0);
   });
 });

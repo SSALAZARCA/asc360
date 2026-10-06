@@ -34,8 +34,13 @@ describe('Motored login redirect', () => {
     expect(pushMock).toHaveBeenCalledWith('/motored/encuesta-satisfaccion');
   });
 
-  it.each(['ADMIN', 'COMPRAS', 'SUCURSAL', 'CONSULTA'])('keeps %s landing on maestros', async (role) => {
+  it.each(['ADMIN', 'COMPRAS'])('keeps %s landing on maestros', async (role) => {
     await submitAs(role);
     expect(pushMock).toHaveBeenCalledWith('/motored/maestros');
+  });
+
+  it.each(['SUCURSAL', 'CONSULTA'])('lands %s (no screens yet) on the account page', async (role) => {
+    await submitAs(role);
+    expect(pushMock).toHaveBeenCalledWith('/motored/mi-cuenta');
   });
 });

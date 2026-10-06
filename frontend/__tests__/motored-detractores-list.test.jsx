@@ -69,7 +69,7 @@ describe('Detractores list — gating', () => {
 
   it('redirects other roles away without fetching', async () => {
     await renderPage('CONSULTA');
-    await waitFor(() => expect(pushMock).toHaveBeenCalledWith('/motored/maestros'));
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith('/motored/mi-cuenta'));
     expect(mockFetch).not.toHaveBeenCalled();
     expect(screen.queryByText('Detractores')).not.toBeInTheDocument();
   });

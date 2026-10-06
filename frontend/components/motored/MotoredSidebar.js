@@ -43,6 +43,7 @@ import {
   UserCog, ChevronDown, ChevronRight, ShoppingCart, BarChart3, Settings, SlidersHorizontal,
 } from 'lucide-react';
 import { MOTORED_TOKEN_KEY, MOTORED_USER_KEY } from '../../lib/motored/motoredFetch';
+import { rolSinAcceso } from '../../lib/motored/session';
 
 // A group (`children`) is a collapsible header that always starts folded; a
 // click opens or closes it. While folded on one of its pages, the header is
@@ -51,7 +52,8 @@ import { MOTORED_TOKEN_KEY, MOTORED_USER_KEY } from '../../lib/motored/motoredFe
 // `excludeRoles` (optional) hides an item from those roles only; `roles`
 // (optional) restricts an item to those roles; `adminOnly` and items without
 // either keep their original behaviour. SERVICIO_CLIENTE only ever sees items
-// that list it in `roles`.
+// that list it in `roles`. SUCURSAL and CONSULTA have no screens yet (owner
+// decision 2026-10-05): they only ever see "Cambiar mi contraseña".
 const ALL_ITEMS = [
   { id: 'tablero-asesores', name: "KPI's", icon: BarChart3, path: '/motored/tablero-asesores', roles: ['ADMIN', 'COMPRAS', 'GERENCIA'] },
   {
@@ -59,7 +61,7 @@ const ALL_ITEMS = [
     children: [
       // Pedidos (Fase 4, decision F4-16): ADMIN and COMPRAS only.
       { id: 'pedidos', name: 'Registro de pedidos', icon: ShoppingCart, path: '/motored/pedidos', roles: ['ADMIN', 'COMPRAS'] },
-      { id: 'maestros', name: 'Maestros', icon: Warehouse, path: '/motored/maestros' },
+      { id: 'maestros', name: 'Maestros', icon: Warehouse, path: '/motored/maestros', roles: ['ADMIN', 'COMPRAS', 'GERENCIA'] },
       { id: 'ventas-perdidas', name: 'Ventas perdidas', icon: TrendingDown, path: '/motored/ventas-perdidas', adminOnly: true },
     ],
   },
@@ -150,7 +152,7 @@ function MenuGroup({ group, pathname, onNavigate }) {
 }
 
 function isPageVisible(item, user) {
-  if (user?.must_change_password) return item.id === 'mi-cuenta';
+  if (user?.must_change_password || rolSinAcceso(user?.role)) return item.id === 'mi-cuenta';
   if (item.excludeRoles?.includes(user?.role)) return false;
   if (item.roles) return item.roles.includes(user?.role);
   if (user?.role === 'SERVICIO_CLIENTE') return false;

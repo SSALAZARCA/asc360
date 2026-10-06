@@ -29,7 +29,7 @@ describe('MotoredSidebar — Ventas perdidas entry', () => {
   });
 
   it('hides "Ventas perdidas" for a non-ADMIN user', () => {
-    render(<MotoredSidebar user={{ nombre: 'Asesor', role: 'ASESOR_MOSTRADOR' }} />);
+    render(<MotoredSidebar user={{ nombre: 'Compras', role: 'COMPRAS' }} />);
     openPedidos();
 
     expect(screen.queryByText('Ventas perdidas')).not.toBeInTheDocument();
@@ -42,7 +42,7 @@ describe('MotoredSidebar — Ventas perdidas entry', () => {
   });
 
   it('still shows "Maestros" (non-admin item) for a non-ADMIN user', () => {
-    render(<MotoredSidebar user={{ nombre: 'Asesor', role: 'ASESOR_MOSTRADOR' }} />);
+    render(<MotoredSidebar user={{ nombre: 'Compras', role: 'COMPRAS' }} />);
     openPedidos();
 
     expect(screen.getByText('Maestros')).toBeInTheDocument();

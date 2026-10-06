@@ -28,9 +28,15 @@ describe('MotoredSidebar - Registro de pedidos entry', () => {
     expect(screen.getByRole('button', { name: PEDIDOS })).toBeInTheDocument();
   });
 
-  it.each(['CONSULTA', 'SUCURSAL', 'GERENCIA'])('hides Registro de pedidos from %s', (role) => {
-    render(<MotoredSidebar user={{ nombre: 'U', role }} />);
+  it('hides Registro de pedidos from GERENCIA', () => {
+    render(<MotoredSidebar user={{ nombre: 'U', role: 'GERENCIA' }} />);
     openGroup('Pedidos');
+    expect(screen.queryByRole('button', { name: PEDIDOS })).not.toBeInTheDocument();
+  });
+
+  it.each(['CONSULTA', 'SUCURSAL'])('hides the whole Pedidos group from %s', (role) => {
+    render(<MotoredSidebar user={{ nombre: 'U', role }} />);
+    expect(screen.queryByRole('button', { name: 'Pedidos' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: PEDIDOS })).not.toBeInTheDocument();
   });
 

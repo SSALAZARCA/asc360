@@ -52,9 +52,15 @@ describe('GERENCIA session', () => {
     expect(landingPathFor({ role: 'GERENCIA' })).toBe(MAESTROS_PATH);
   });
 
-  it('keeps the other roles landing on Maestros', () => {
-    for (const role of ['ADMIN', 'COMPRAS', 'SUCURSAL', 'CONSULTA']) {
+  it('keeps ADMIN and COMPRAS landing on Maestros', () => {
+    for (const role of ['ADMIN', 'COMPRAS']) {
       expect(homePathFor(role)).toBe('/motored/maestros');
+    }
+  });
+
+  it('sends the roles without screens to the account page', () => {
+    for (const role of ['SUCURSAL', 'CONSULTA']) {
+      expect(homePathFor(role)).toBe('/motored/mi-cuenta');
     }
   });
 });
@@ -70,7 +76,13 @@ describe('GERENCIA sidebar', () => {
     expect(opened).toEqual(["KPI's", 'Pedidos', 'Maestros', 'Cambiar mi contraseña', 'Salir']);
   });
 
-  it.each(['ADMIN', 'COMPRAS', 'SUCURSAL', 'CONSULTA', 'ASESOR_MOSTRADOR'])('keeps Maestros for %s', (role) => {
+  it.each(['SUCURSAL', 'CONSULTA', 'ASESOR_MOSTRADOR'])('hides Maestros from %s', (role) => {
+    render(<MotoredSidebar user={{ nombre: 'U', role }} />);
+    expect(screen.queryByRole('button', { name: 'Pedidos' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Maestros' })).not.toBeInTheDocument();
+  });
+
+  it.each(['ADMIN', 'COMPRAS'])('keeps Maestros for %s', (role) => {
     render(<MotoredSidebar user={{ nombre: 'U', role }} />);
     fireEvent.click(screen.getByRole('button', { name: 'Pedidos' }));
     expect(screen.getByRole('button', { name: 'Maestros' })).toBeInTheDocument();

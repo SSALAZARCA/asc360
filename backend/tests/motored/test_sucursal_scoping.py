@@ -23,6 +23,15 @@ SQL `WHERE` clause -- specifically so it is testable black-box: a queue
 holding BOTH branches' rows lets these tests fail (RED) against the
 original unfiltered code and pass (GREEN) once `list_maestro`/`get_maestro`
 apply `_in_scope`.
+
+Owner decision 2026-10-05: SUCURSAL and CONSULTA have no screens yet, so
+the REAL `get_current_motored_user` denies them every data endpoint
+(`deps.ROLES_SIN_ACCESO`, swept in `test_roles_sin_acceso.py`). The scoping
+helpers stay in place for when the roles return, so the tests below keep
+exercising them DIRECTLY: `override_motored_user` replaces the whole
+`get_current_motored_user` dependency (guard included), which is the only
+way to reach the dormant scoping code. `test_real_guard_blocks_sucursal`
+pins that, outside this harness, a SUCURSAL user gets the 403.
 """
 import uuid
 
@@ -36,7 +45,16 @@ from app.motored.models.proveedor import Proveedor
 from app.motored.models.referencia import Referencia
 from app.motored.models.sucursal import Sucursal
 from app.motored.services.auth import MotoredUser
-from tests.motored.conftest import FakeAsyncSession, override_motored_db, override_motored_user
+from app.motored.auth import create_motored_token
+from app.motored.deps import (
+    ROL_SIN_PANTALLAS_DETAIL,
+    get_motored_user_lookup,
+)
+from tests.motored.conftest import (
+    FakeAsyncSession,
+    override_motored_db,
+    override_motored_user,
+)
 
 B1_ID = uuid.uuid4()
 B2_ID = uuid.uuid4()
@@ -45,27 +63,32 @@ B2_ID = uuid.uuid4()
 @pytest.fixture(autouse=True)
 def _motored_ready(monkeypatch):
     monkeypatch.setattr(settings, "MOTORED_ENABLED", True)
-    monkeypatch.setattr(settings, "MOTORED_SECRET_KEY", "sucursal-scoping-test-motored-secret")
-    monkeypatch.setattr(settings, "SECRET_KEY", "sucursal-scoping-test-asc360-secret")
+    monkeypatch.setattr(
+        settings, "MOTORED_SECRET_KEY", "sucursal-scoping-test-motored")
+    monkeypatch.setattr(
+        settings, "SECRET_KEY", "sucursal-scoping-test-asc360")
     yield
     app.dependency_overrides.clear()
 
 
 def _sucursal(sucursal_id, nombre):
     return Sucursal(
-        id=sucursal_id, nombre=nombre, sic="SIC-" + nombre, dias_seguridad="2.5", activa=True
+        id=sucursal_id, nombre=nombre, sic="SIC-" + nombre,
+        dias_seguridad="2.5", activa=True,
     )
 
 
 def _bodega(codigo, sucursal_id, bodega_id=None):
     return Bodega(
-        id=bodega_id or uuid.uuid4(), codigo=codigo, sucursal_id=sucursal_id, activa=True
+        id=bodega_id or uuid.uuid4(), codigo=codigo,
+        sucursal_id=sucursal_id, activa=True,
     )
 
 
 def _client_scoped_to(*branch_ids, execute_queue) -> TestClient:
     user = MotoredUser(
-        user_id=str(uuid.uuid4()), role="SUCURSAL", sucursal_ids=[str(b) for b in branch_ids]
+        user_id=str(uuid.uuid4()), role="SUCURSAL",
+        sucursal_ids=[str(b) for b in branch_ids],
     )
     override_motored_user(user)
     override_motored_db(FakeAsyncSession(execute_queue=execute_queue))
@@ -138,7 +161,8 @@ def test_sucursal_user_can_read_own_branch_sucursal_and_bodega():
     assert sucursal_response.status_code == 200
     assert sucursal_response.json()["nombre"] == "B1"
 
-    bodega_response = client.get(f"/api/motored/maestros/bodegas/{own_bodega.id}")
+    bodega_response = client.get(
+        f"/api/motored/maestros/bodegas/{own_bodega.id}")
     assert bodega_response.status_code == 200
     assert bodega_response.json()["codigo"] == "BOD-B1"
 
@@ -178,8 +202,10 @@ def test_non_sucursal_roles_still_see_every_branch_unfiltered(role):
 
 def test_proveedor_list_is_not_filtered_for_sucursal_role():
     proveedores = [
-        Proveedor(id=uuid.uuid4(), codigo="HMCL", nombre="HMCL", es_principal=True, activa=True),
-        Proveedor(id=uuid.uuid4(), codigo="OTRO", nombre="Otro", es_principal=False, activa=True),
+        Proveedor(id=uuid.uuid4(), codigo="HMCL", nombre="HMCL",
+                  es_principal=True, activa=True),
+        Proveedor(id=uuid.uuid4(), codigo="OTRO", nombre="Otro",
+                  es_principal=False, activa=True),
     ]
     client = _client_scoped_to(B1_ID, execute_queue=[[], proveedores])
     response = client.get("/api/motored/maestros/proveedores")
@@ -211,3 +237,27 @@ def test_referencia_list_is_not_filtered_for_sucursal_role():
     response = client.get("/api/motored/maestros/referencias")
     assert response.status_code == 200
     assert len(response.json()) == 2
+
+
+# --- 8. Outside this harness the real guard denies SUCURSAL ----------------
+
+
+def test_real_guard_blocks_sucursal():
+    user = MotoredUser(
+        user_id=str(uuid.uuid4()), role="SUCURSAL",
+        sucursal_ids=[str(B1_ID)],
+    )
+
+    async def _lookup(user_id: str):
+        return user
+
+    app.dependency_overrides[get_motored_user_lookup] = lambda: _lookup
+    override_motored_db(FakeAsyncSession(execute_queue=[[], []]))
+    token = create_motored_token(sub=user.user_id, role=user.role)
+    response = TestClient(app).get(
+        "/api/motored/maestros/sucursales",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == ROL_SIN_PANTALLAS_DETAIL

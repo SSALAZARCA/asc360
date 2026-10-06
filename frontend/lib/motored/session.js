@@ -12,7 +12,20 @@ export const PASSWORD_CHANGE_REQUIRED_CODE = 'PASSWORD_CHANGE_REQUIRED';
 export const ROLE_GERENCIA = 'GERENCIA';
 export const GERENCIA_HOME_PATH = '/motored/maestros';
 
+/**
+ * Roles with no screens yet (owner decision 2026-10-05): they only reach the
+ * account page, which shows them this notice. The backend answers 403 on
+ * every other Motored endpoint (`deps.ROLES_SIN_ACCESO`).
+ */
+export const ROLES_SIN_ACCESO = ['SUCURSAL', 'CONSULTA'];
+export const ACCESO_NO_HABILITADO_NOTICE = 'Tu acceso todavía no está habilitado';
+
+export function rolSinAcceso(role) {
+  return ROLES_SIN_ACCESO.includes(role);
+}
+
 export function homePathFor(role) {
+  if (rolSinAcceso(role)) return MI_CUENTA_PATH;
   if (role === ROLE_SERVICIO_CLIENTE) return SURVEY_ADMIN_PATH;
   if (role === ROLE_GERENCIA) return GERENCIA_HOME_PATH;
   return '/motored/maestros';
