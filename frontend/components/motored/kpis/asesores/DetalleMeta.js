@@ -1,3 +1,4 @@
+import ChipBono from '../comisiones/ChipBono';
 import { COLOR } from '../tokens';
 import { ROTULO, TARJETA } from '../ventas/estilos';
 import { comisionDe, gaugeDe, mesNombre } from './detalle';
@@ -51,6 +52,17 @@ function Siguiente({ s }) {
   );
 }
 
+function Bonos({ b }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      {b.aviso && <p style={{ ...PIE, margin: 0, fontWeight: 700 }}>{b.aviso}</p>}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+        {b.lineas.map((l) => <ChipBono key={l.linea} chip={l} />)}
+      </div>
+    </div>
+  );
+}
+
 function TarjetaComision({ data }) {
   const c = comisionDe(data);
   if (!c) return null;
@@ -58,10 +70,12 @@ function TarjetaComision({ data }) {
     <section aria-label="Comisión estimada" style={{ ...TARJETA, display: 'flex', flexDirection: 'column', gap: 10 }}>
       <p style={ROTULO}>{c.titulo}</p>
       <p style={{ ...VALOR, margin: 0 }}>{c.valor}</p>
+      {c.desglose && <p style={{ ...PIE, margin: 0 }}>{c.desglose}</p>}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
         <span style={{ fontSize: 12, fontWeight: 700, color: '#FFFFFF', background: c.chip.color, borderRadius: 999, padding: '2px 8px' }}>{c.chip.texto}</span>
         <span style={{ ...PIE, margin: 0 }}>{c.base}</span>
       </div>
+      {c.bonos && <Bonos b={c.bonos} />}
       {c.siguiente && <Siguiente s={c.siguiente} />}
       <p style={{ ...PIE, margin: 0 }}>{c.nota}</p>
     </section>

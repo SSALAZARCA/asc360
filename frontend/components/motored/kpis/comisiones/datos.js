@@ -27,6 +27,14 @@ export function mesLiquidado(data) {
   return { largo, anio: mes.slice(0, 4), completo: `${largo} ${mes.slice(0, 4)}` };
 }
 
+/** The configured bonus lines in config order ([] when none, or when the payload predates the bonuses). */
+export const lineasBono = (data) => data.reglas?.comision_lineas ?? [];
+
+export const umbralBono = (data) => data.reglas?.comision_bono_umbral_pct;
+
+/** What is paid: commission + bonuses (the commission alone for a payload without bonuses). */
+export const totalAPagar = (data) => data.resumen.total_a_pagar ?? data.resumen.comision_total;
+
 export const sinPresupuestos = (data) => Boolean(data.advertencias?.sin_presupuestos) || data.asesores.length === 0;
 
 const baseTexto = (base) => (base === 'sin_hmcl' ? 'sin HMCL' : 'con HMCL');
@@ -98,11 +106,16 @@ export function puntosAsesores(data, escala) {
   }));
 }
 
-/** The KPI card: total and four figures (`tip` explains each one). */
+/** The KPI card: figures under the total to pay (`tip` explains each one); the bonus ones only with bonus lines. */
 export function miniKpis(data) {
   const r = data.resumen;
   const base = baseTexto(data.reglas.comision_base_pago);
+  const bonos = lineasBono(data).length === 0 ? [] : [
+    { label: 'comisión del mes', value: moneda(r.comision_total), tip: 'La comisión por tramo de todos los asesores liquidados, sin los bonos.' },
+    { label: 'bonos por línea', value: moneda(r.bonos_total), tip: 'Los bonos fijos ganados por línea: solo cuentan los asesores que llegan a la compuerta de cumplimiento y las líneas encendidas.' },
+  ];
   return [
+    ...bonos,
     { label: 'asesores', value: miles(r.asesores), tip: 'Asesores con presupuesto cargado en el mes y un cargo que gana comisión.' },
     { label: 'comisión promedio', value: moneda(r.comision_promedio), tip: 'Comisión total del mes dividida entre los asesores liquidados.' },
     {
@@ -113,7 +126,18 @@ export function miniKpis(data) {
   ];
 }
 
-/** The four steps of the calculation, with the top earner as the worked example. */
+const pesosTexto = (v) => moneda(v);
+
+function pasoBonos(data, a) {
+  const umbral = numero(umbralBono(data));
+  return {
+    n: '5', titulo: 'Bonos por línea',
+    regla: `Con un cumplimiento de al menos ${umbral}%, cada línea que llegue a su meta % de la venta total paga un bono fijo`,
+    ejemplo: a.gate?.cumple ? `Bonos ganados: ${pesosTexto(a.bono_total)}` : `${pct(a.cumplimiento_pct)} de cumplimiento: sin bonos`,
+  };
+}
+
+/** The steps of the calculation (a fifth one for the bonuses when there are bonus lines), with the top earner as the example. */
 export function pasosDeCalculo(data) {
   const a = data.asesores[0];
   if (!a) return [];
@@ -130,6 +154,7 @@ export function pasosDeCalculo(data) {
       n: '4', titulo: 'Comisión', regla: `Venta ${baseTexto(pago)} × % del tramo`,
       ejemplo: `${enMillones(a.venta_comision)} × ${numero(a.tasa_pct)}% = ${moneda(a.comision)}`,
     },
+    ...(lineasBono(data).length ? [pasoBonos(data, a)] : []),
   ];
 }
 
@@ -138,13 +163,35 @@ export const ejemploDe = (data) => {
   return a ? `Ejemplo: ${a.nombre ?? a.cedula} · ${a.tienda ?? '—'} · ${mesLiquidado(data).largo}` : '';
 };
 
-/** Rows of "Comisión por asesor" (the API already sorts them by commission). */
+const TIP_APAGADO = 'Bono apagado en Configuración';
+
+/** One chip per bonus line of an asesor: `apagado` (off), `cumple` (met and paid), `sin-compuerta` (met, below the gate) or `no-cumple`. */
+export function chipsDeBonos(a) {
+  return (a.bonos ?? []).map((b) => {
+    let estado = 'no-cumple';
+    let tip = `Meta: ≥ ${numero(b.pct_meta)}% de su venta (hoy ${pct(b.pct_real)})`;
+    if (!b.activo) {
+      estado = 'apagado';
+      tip = TIP_APAGADO;
+    } else if (b.cumple && b.paga) {
+      estado = 'cumple';
+      tip = `Gana ${moneda(b.bono_pagado)}`;
+    } else if (b.cumple) {
+      estado = 'sin-compuerta';
+      tip = `Cumple la línea, pero no llega al ${numero(a.gate.umbral)}% de cumplimiento: no se paga`;
+    }
+    return { linea: b.linea, texto: b.etiqueta, estado, tip };
+  });
+}
+
+/** Rows of "Comisión por asesor" (the API already sorts them by commission); the bar is what she is paid (commission + bonuses). */
 export function filasComision(data) {
-  const maximo = Math.max(1, ...data.asesores.map((a) => a.comision));
+  const pagado = (a) => a.total_a_pagar ?? a.comision;
+  const maximo = Math.max(1, ...data.asesores.map(pagado));
   const total = data.tramos.length;
   return data.asesores.map((a) => ({
     id: a.cedula, nombre: a.nombre ?? a.cedula, sub: `${a.tienda ?? '—'} · cumple ${pct(a.cumplimiento_pct)}`,
-    ancho: Math.max((a.comision / maximo) * 100, 0.5), valor: moneda(a.comision), tramo: a.tramo ?? '—',
+    ancho: Math.max((pagado(a) / maximo) * 100, 0.5), valor: moneda(pagado(a)), tramo: a.tramo ?? '—', chips: chipsDeBonos(a),
     color: colorDeTramo(a.tramo, Math.max(0, data.tramos.findIndex((x) => x.nombre === a.tramo)), total),
   }));
 }
@@ -166,6 +213,20 @@ export function tarjetasCerca(data) {
       id: c.cedula, nombre: c.nombre ?? c.cedula, gana: `+${moneda(c.gana)}`, actual: pct(c.cumplimiento_pct),
       meta: `${numero(meta)}%`, siguiente: c.siguiente, falta: c.falta < 1e6 ? moneda(c.falta) : enMillones(c.falta, true),
       ancho: Math.min(100, (c.cumplimiento_pct * 10000) / meta), color: colorDeTramo(c.tramo, indiceDe(c.tramo), total),
+    };
+  });
+}
+
+const ganadores = (n) => `${n} ${n === 1 ? 'ganador' : 'ganadores'}`;
+
+/** The "Bonos por línea" card: every configured line with its target, bonus, winners and amount paid. */
+export function filasBonos(data) {
+  const resumen = new Map((data.resumen.por_linea ?? []).map((x) => [x.linea, x]));
+  return lineasBono(data).map((l) => {
+    const r = resumen.get(l.linea) ?? { ganadores: 0, monto: 0 };
+    return {
+      id: l.linea, etiqueta: l.etiqueta, activo: l.activo,
+      regla: `≥ ${numero(l.pct_meta)}% de su venta · ${moneda(l.bono)}`, resultado: `${ganadores(r.ganadores)} · ${moneda(r.monto)}`,
     };
   });
 }

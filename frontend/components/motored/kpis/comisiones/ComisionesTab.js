@@ -3,9 +3,10 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import InfoTooltip from '../../InfoTooltip';
+import ChipBono from './ChipBono';
 import { KpiMiniGrid, RankBadge, SegmentedToggle, TrafficLightGrid, ZoneStrip } from '../charts';
 import { descargarComisionesExcel } from '../../../../lib/motored/kpisApi';
-import { enMillones, ejemploDe, escalaTramos, filasComision, leyendaTramos, mesLiquidado, miniKpis, pasosDeCalculo, puntosAsesores, celdasCumplimiento, sinPresupuestos, tarjetasCerca } from './datos';
+import { enMillones, ejemploDe, escalaTramos, filasBonos, filasComision, lineasBono, totalAPagar, umbralBono, numero, leyendaTramos, mesLiquidado, miniKpis, pasosDeCalculo, puntosAsesores, celdasCumplimiento, sinPresupuestos, tarjetasCerca } from './datos';
 import { COLOR } from '../tokens';
 import { CABECERA, LEYENDA, NUM, ROTULO, TARJETA, TITULO } from '../ventas/estilos';
 
@@ -26,7 +27,8 @@ function TarjetaKpi({ data }) {
   return (
     <section aria-label="Comisiones del mes" style={{ ...TARJETA, display: 'flex', flexDirection: 'column', gap: 12 }}>
       <h2 style={ROTULO}>Comisiones · {mesLiquidado(data).largo}</h2>
-      <p style={{ margin: 0, fontSize: 34, fontWeight: 700, ...NUM }}>{enMillones(data.resumen.comision_total, true)}</p>
+      <p style={{ margin: 0, fontSize: 12.5, fontWeight: 700, color: COLOR.muted }}>Total a pagar</p>
+      <p style={{ margin: '-8px 0 0', fontSize: 34, fontWeight: 700, ...NUM }}>{enMillones(totalAPagar(data), true)}</p>
       <KpiMiniGrid items={items} />
     </section>
   );
@@ -89,9 +91,14 @@ function FilaComision({ fila, rank }) {
   return (
     <div data-testid="fila-comision" style={{ display: 'grid', gridTemplateColumns: '28px minmax(120px, 200px) minmax(0, 1fr) 64px', gap: 10, alignItems: 'center' }}>
       <RankBadge rank={rank} />
-      <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+      <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0, gap: 2 }}>
         <span style={{ fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{fila.nombre}</span>
         <span style={{ fontSize: 11.5, color: COLOR.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{fila.sub}</span>
+        {fila.chips.length > 0 && (
+          <span style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+            {fila.chips.map((c) => <ChipBono key={c.linea} chip={c} />)}
+          </span>
+        )}
       </span>
       <div style={{ position: 'relative', height: 22, background: COLOR.wash, borderRadius: 5 }}>
         <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${fila.ancho}%`, background: fila.color, borderRadius: 5, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: 7, boxSizing: 'border-box' }}>
@@ -174,6 +181,30 @@ function TarjetaCerca({ data }) {
   );
 }
 
+function TarjetaBonos({ data }) {
+  return (
+    <section aria-label="Bonos por línea" style={TARJETA}>
+      <h2 style={TITULO}>Bonos por línea · {mesLiquidado(data).largo}</h2>
+      <p style={{ margin: '6px 0 0', fontSize: 12, color: COLOR.muted }}>
+        Se activan con un cumplimiento de al menos {numero(umbralBono(data))}%. Una línea apagada no se paga.
+      </p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
+        {filasBonos(data).map((f) => (
+          <div key={f.id} data-testid="fila-bono" style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', gap: 8, alignItems: 'baseline', padding: '8px 12px', borderRadius: 10, background: COLOR.wash, opacity: f.activo ? 1 : 0.7 }}>
+            <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+              <span style={{ fontSize: 13, fontWeight: 700 }}>
+                {f.etiqueta}{!f.activo && <span title="Bono apagado en Configuración" style={{ marginLeft: 6, fontSize: 11, color: COLOR.soft }}>Apagado</span>}
+              </span>
+              <span style={{ fontSize: 12, color: COLOR.ink2 }}>{f.regla}</span>
+            </span>
+            <span style={{ ...NUM, fontSize: 12.5, fontWeight: 700 }}>{f.resultado}</span>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function SinPresupuestoMes({ data }) {
   return (
     <p style={{ margin: 0, fontSize: 14 }}>
@@ -198,6 +229,7 @@ export default function ComisionesTab({ data, filtros }) {
             <TarjetaComision data={data} filtros={filtros} />
             <TarjetaCerca data={data} />
           </div>
+          {lineasBono(data).length > 0 && <TarjetaBonos data={data} />}
         </>
       )}
     </section>

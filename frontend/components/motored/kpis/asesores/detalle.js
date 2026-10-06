@@ -107,6 +107,30 @@ export function gaugeDe(data) {
   };
 }
 
+const TIP_APAGADO = 'Bono apagado en Configuración';
+const sinDecimalInutil = (v) => decimales(v, Number.isInteger(v) ? 0 : 1);
+
+/** Bonus status of her month: a notice when she is below the gate, and one entry per bonus line. Null for a payload without bonuses. */
+function bonosDe(c) {
+  if (!c.gate || !c.bonos) return null;
+  const { cumple: pasa, umbral } = c.gate;
+  const lineas = c.bonos.map((b) => {
+    const base = { linea: b.linea };
+    if (!b.activo) return { ...base, texto: `${b.etiqueta} · apagado`, estado: 'apagado', tip: TIP_APAGADO };
+    if (b.cumple && pasa) return { ...base, texto: `${b.etiqueta} · +${moneda(b.bono_pagado)}`, estado: 'cumple', tip: `Gana ${moneda(b.bono_pagado)}` };
+    if (b.cumple) {
+      return { ...base, texto: b.etiqueta, estado: 'sin-compuerta', tip: `Cumple la línea, pero no llega al ${sinDecimalInutil(umbral)}% de cumplimiento: no se paga` };
+    }
+    const meta = `Meta: ≥ ${sinDecimalInutil(b.pct_meta)}% de su venta (hoy ${pct(b.pct_real)})`;
+    const falta = decimales(b.pct_meta - (b.pct_real ?? 0) * 100, 1);
+    return { ...base, texto: pasa ? `${b.etiqueta} · le falta ${falta} pts` : b.etiqueta, estado: 'no-cumple', tip: meta };
+  });
+  return {
+    aviso: pasa ? null : `Necesita ≥${sinDecimalInutil(umbral)}% de cumplimiento para activar bonos (hoy ${pct(c.cumplimiento_pct)})`,
+    lineas,
+  };
+}
+
 /** Commission card: amount, tier chip, the gap to the next tier and the network average; null if not liquidated. */
 export function comisionDe(data) {
   const c = data.comision;
@@ -116,8 +140,11 @@ export function comisionDe(data) {
   const base = c.base_pago === 'sin_hmcl' ? 'sin HMCL' : 'con HMCL';
   const sig = c.sig;
   const avance = sig && sig.meta > 0 ? Math.min(Math.max(data.cumplimiento_mes.venta / sig.meta, 0), 1) : 0;
+  const bonos = bonosDe(c);
+  const total = c.total_a_pagar ?? c.comision;
   return {
-    titulo: `Comisión estimada · ${mesLargo(c.mes)}`, valor: moneda(c.comision),
+    titulo: `Comisión estimada · ${mesLargo(c.mes)}`, valor: moneda(total), bonos,
+    desglose: bonos ? `Comisión ${moneda(c.comision)} + bonos ${moneda(c.bono_total)} = ${moneda(total)}` : null,
     chip: { texto: `${c.tramo ?? 'Sin tramo'} ${decimales(c.tasa_pct, 1)}%`, color: colorDeTramo(c.tramo, tramos) },
     base: `${millones(c.venta_base, 1)} ${base} × ${decimales(c.tasa_pct, 1)}%`,
     siguiente: sig ? {

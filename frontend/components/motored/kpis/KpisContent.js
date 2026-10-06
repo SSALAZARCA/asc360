@@ -36,6 +36,15 @@ function Mensaje({ children, error = false }) {
   return <p role={error ? 'alert' : undefined} style={{ margin: 0, fontSize: 14, color: error ? 'var(--motored-danger, #C0392B)' : COLOR.muted }}>{children}</p>;
 }
 
+function ErrorAsesores({ reintentar }) {
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center' }}>
+      <Mensaje error>No pudimos cargar la lista de asesores. Intentá de nuevo.</Mensaje>
+      <button type="button" onClick={reintentar} style={{ appearance: 'none', border: `1px solid ${COLOR.line}`, background: COLOR.surface, color: COLOR.ink, fontFamily: 'inherit', fontSize: 12.5, fontWeight: 700, minHeight: 36, padding: '8px 14px', borderRadius: 10, cursor: 'pointer' }}>Reintentar</button>
+    </div>
+  );
+}
+
 function Pestana({ vista, kpis, filtros }) {
   if (kpis.error) return <Mensaje error>{kpis.error}</Mensaje>;
   if (!kpis.data) return <Esqueleto />;
@@ -51,7 +60,7 @@ export default function KpisContent() {
   const [tab, setTab] = useState('ventas');
   const { opciones, filtros, cambiar, error } = useKpiFiltros(allowed);
   const enAsesores = tab === 'asesores';
-  const asesores = useAsesorOpciones(allowed && enAsesores, filtros);
+  const { lista: asesores, fallo: falloAsesores, reintentar } = useAsesorOpciones(allowed && enAsesores, filtros);
   const asesor = enAsesores ? asesorEfectivo(asesores, filtros.asesor) : null;
   const vista = enAsesores ? 'asesor' : tab;
   const filtrosVista = useMemo(() => ({ ...filtros, asesor }), [filtros, asesor]);
@@ -66,10 +75,11 @@ export default function KpisContent() {
       <KpiHeader opciones={opciones} filtros={filtros} onChange={cambiar} tab={tab} asesores={asesores} asesor={asesor} onAsesor={seleccionar} />
       <KpiTabs value={tab} onChange={setTab} />
       {error && <Mensaje error>{error}</Mensaje>}
-      {opciones && !sinVentas && !sinAsesores && <KpiFrescura data={kpis.data} alRecalcular={kpis.recargar} />}
+      {opciones && !sinVentas && !sinAsesores && !(enAsesores && falloAsesores) && <KpiFrescura data={kpis.data} alRecalcular={kpis.recargar} />}
       {sinVentas && <Mensaje>Todavía no hay ventas cargadas.</Mensaje>}
       {!sinVentas && sinAsesores && <Mensaje>No hay asesores con venta en los filtros elegidos.</Mensaje>}
-      {!sinVentas && !sinAsesores && opciones && <Pestana vista={vista} kpis={kpis} filtros={filtros} />}
+      {opciones && enAsesores && falloAsesores && <ErrorAsesores reintentar={reintentar} />}
+      {!sinVentas && !sinAsesores && !(enAsesores && falloAsesores) && opciones && <Pestana vista={vista} kpis={kpis} filtros={filtros} />}
     </div>
   );
 }

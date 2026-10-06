@@ -132,6 +132,29 @@ describe('Default selection', () => {
   });
 });
 
+describe('Asesor options failure', () => {
+  const FALLA = { [`GET ${K}/asesores/opciones`]: jsonRes({}, 500) };
+
+  it('shows an error with a retry button instead of an endless skeleton, and fetches no detail', async () => {
+    const calls = await abrirAsesores(FALLA);
+    expect(await screen.findByRole('alert')).toHaveTextContent('No pudimos cargar la lista de asesores.');
+    expect(screen.getByRole('button', { name: 'Reintentar' })).toBeInTheDocument();
+    expect(screen.queryByRole('status', { name: 'Cargando' })).not.toBeInTheDocument();
+    expect(llamadasA(calls, 'asesores/detalle')).toHaveLength(0);
+  });
+
+  it('retrying asks again and, once it answers, shows the detail', async () => {
+    let intentos = 0;
+    const calls = await abrirAsesores({
+      [`GET ${K}/asesores/opciones`]: (url) => { intentos += 1; return intentos === 1 ? jsonRes({}, 500) : OPCIONES_DE(url); },
+    });
+    fireEvent.click(await screen.findByRole('button', { name: 'Reintentar' }));
+    expect(await screen.findByRole('region', { name: 'Detalle del asesor' })).toBeInTheDocument();
+    expect(llamadasA(calls, 'asesores/opciones')).toHaveLength(2);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+});
+
 describe('Selection', () => {
   it('picking one shows her detail with the same filters and the cédula, and the pill names her', async () => {
     const calls = await abrirConDetalle();

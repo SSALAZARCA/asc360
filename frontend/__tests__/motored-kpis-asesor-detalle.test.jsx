@@ -58,12 +58,39 @@ describe('single-asesor view-model', () => {
 
   it('comision: amount, tier chip, what is missing for the next tier and the network average', () => {
     const c = comisionDe(ASESOR_DETALLE);
-    expect(c.valor).toBe('$910.000');
+    expect(c.valor).toBe('$940.000');
+    expect(c.desglose).toBe('Comisión $910.000 + bonos $30.000 = $940.000');
     expect(c.chip.texto).toBe('PRO 1,5%');
     expect(c.base).toBe('$60,7 M sin HMCL × 1,5%');
     expect(c.siguiente.titulo).toBe('Le faltan $2,2 M para ELITE');
     expect(c.siguiente.meta).toBe('meta ELITE $63,0 M');
     expect(c.nota).toBe('En ELITE (1,8%) ganaría ≈ $1.134.000. Promedio de comisión de la red: $394.000.');
+  });
+
+  it('comision: per-line bonus status, with what is missing for each unmet active line', () => {
+    const { bonos } = comisionDe(ASESOR_DETALLE);
+    expect(bonos.aviso).toBeNull();
+    expect(bonos.lineas.map((l) => [l.texto, l.estado])).toEqual([
+      ['Lubricantes · le falta 2,7 pts', 'no-cumple'],
+      ['Cascos · +$30.000', 'cumple'],
+      ['Tecnired (clientes) · apagado', 'apagado'],
+    ]);
+    expect(bonos.lineas[2].tip).toBe('Bono apagado en Configuración');
+  });
+
+  it('comision: below the gate it asks for the cumplimiento instead of listing what is missing', () => {
+    const c = comisionDe(clonar({ comision: { ...ASESOR_DETALLE.comision, cumplimiento_pct: 0.8, gate: { umbral: 95, cumple: false }, bono_total: 0, total_a_pagar: 910000 } }));
+    expect(c.valor).toBe('$910.000');
+    expect(c.bonos.aviso).toBe('Necesita ≥95% de cumplimiento para activar bonos (hoy 80,0%)');
+    expect(c.bonos.lineas.map((l) => l.texto)).toEqual(['Lubricantes', 'Cascos', 'Tecnired (clientes) · apagado']);
+  });
+
+  it('comision: an older payload without bonuses still renders the commission alone', () => {
+    const vieja = { ...ASESOR_DETALLE.comision };
+    ['gate', 'bonos', 'bono_total', 'total_a_pagar', 'cumplimiento_pct'].forEach((k) => delete vieja[k]);
+    const c = comisionDe(clonar({ comision: vieja }));
+    expect(c.valor).toBe('$910.000');
+    expect(c.bonos).toBeNull();
   });
 
   it('comision: at the top tier there is no next one; without liquidation there is no card', () => {
@@ -118,7 +145,10 @@ describe('single-asesor view', () => {
     expect(within(seccion('Cumplimiento de su meta')).getByText('101,4%')).toBeInTheDocument();
     expect(within(seccion('Cumplimiento de su meta')).getByText('$60,8 M de $60,0 M · red 78,0%')).toBeInTheDocument();
     const comision = within(seccion('Comisión estimada'));
-    expect(comision.getByText('$910.000')).toBeInTheDocument();
+    expect(comision.getByText('$940.000')).toBeInTheDocument();
+    expect(comision.getByText('Comisión $910.000 + bonos $30.000 = $940.000')).toBeInTheDocument();
+    expect(comision.getAllByTestId('chip-bono').map((c) => c.textContent)).toEqual([
+      'Lubricantes · le falta 2,7 pts', 'Cascos · +$30.000', 'Tecnired (clientes) · apagado']);
     expect(comision.getByText('Le faltan $2,2 M para ELITE')).toBeInTheDocument();
     expect(within(seccion('Indicadores del asesor')).getAllByText(/^vs /)).toHaveLength(6);
     expect(within(seccion('Tendencia de cumplimiento')).getByRole('img')).toBeInTheDocument();

@@ -26,19 +26,34 @@ describe('Comisiones tab: layout', () => {
       'Dónde cae cada asesor · julio',
       'Comisión por asesor · julio',
       'Cerca de subir de tramo',
+      'Bonos por línea · julio',
     ]);
   });
 
-  it('KPI card: total and the four figures', () => {
+  it('KPI card: the total to pay (commission + bonuses) and the figures', () => {
     montar();
     const tarjeta = seccion('Comisiones del mes');
-    expect(within(tarjeta).getByText('$5,7 M')).toBeInTheDocument();
+    expect(within(tarjeta).getByText('Total a pagar')).toBeInTheDocument();
+    expect(within(tarjeta).getByText('$5,8 M')).toBeInTheDocument();
+    expect(within(tarjeta).getByText('comisión del mes')).toBeInTheDocument();
+    expect(within(tarjeta).getByText('$5.700.000')).toBeInTheDocument();
+    expect(within(tarjeta).getByText('bonos por línea')).toBeInTheDocument();
+    expect(within(tarjeta).getByText('$95.000')).toBeInTheDocument();
     expect(within(tarjeta).getByText('4')).toBeInTheDocument();
     expect(within(tarjeta).getByText('$1.425.000')).toBeInTheDocument();
     expect(within(tarjeta).getByText('$2.700.000')).toBeInTheDocument();
     expect(within(tarjeta).getByText('1,4%')).toBeInTheDocument();
     expect(within(tarjeta).getByText('de la venta sin HMCL')).toBeInTheDocument();
     expect(within(tarjeta).getAllByRole('note').length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('KPI card without bonus lines configured still shows the total to pay and no bonus figure', () => {
+    const sinBonos = { ...COMISIONES, reglas: { ...COMISIONES.reglas, comision_lineas: [] }, resumen: { ...COMISIONES.resumen, bonos_total: 0, total_a_pagar: 5.7e6, por_linea: [] } };
+    montar(sinBonos);
+    const tarjeta = seccion('Comisiones del mes');
+    expect(within(tarjeta).getByText('$5,7 M')).toBeInTheDocument();
+    expect(within(tarjeta).queryByText('bonos por línea')).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Bonos por línea' })).not.toBeInTheDocument();
   });
 });
 
@@ -55,6 +70,9 @@ describe('Comisiones tab: how it is calculated', () => {
     expect(within(tarjeta).getByText('PRO → 1,5%')).toBeInTheDocument();
     expect(within(tarjeta).getByText('Venta sin HMCL × % del tramo')).toBeInTheDocument();
     expect(within(tarjeta).getByText('$180 M × 1,5% = $2.700.000')).toBeInTheDocument();
+    expect(within(tarjeta).getByText('Bonos por línea')).toBeInTheDocument();
+    expect(within(tarjeta).getByText(/Con un cumplimiento de al menos 95%.*cada línea/)).toBeInTheDocument();
+    expect(within(tarjeta).getByText('Bonos ganados: $65.000')).toBeInTheDocument();
     expect(within(tarjeta).getByText('Ejemplo: Jiménez Rangel Yulisa · Bogotá 1 de Mayo · julio')).toBeInTheDocument();
   });
 
@@ -63,6 +81,19 @@ describe('Comisiones tab: how it is calculated', () => {
     const tarjeta = seccion('Cómo se calcula la comisión');
     expect(within(tarjeta).getByText('Venta sin HMCL ÷ meta')).toBeInTheDocument();
     expect(within(tarjeta).getByText('Venta con HMCL × % del tramo')).toBeInTheDocument();
+  });
+});
+
+describe('Comisiones tab: bonus step', () => {
+  it('says why the example asesor earns no bonus when she is below the gate', () => {
+    const debajo = { ...COMISIONES, asesores: [COMISIONES.asesores[2], ...COMISIONES.asesores] };
+    montar(debajo);
+    expect(within(seccion('Cómo se calcula la comisión')).getByText('85,0% de cumplimiento: sin bonos')).toBeInTheDocument();
+  });
+
+  it('has no fifth step when there are no bonus lines', () => {
+    montar({ ...COMISIONES, reglas: { ...COMISIONES.reglas, comision_lineas: [] } });
+    expect(within(seccion('Cómo se calcula la comisión')).queryByText('Bonos por línea')).not.toBeInTheDocument();
   });
 });
 
@@ -104,9 +135,33 @@ describe('Comisiones tab: commission by asesor', () => {
     const tarjeta = seccion('Comisión por asesor');
     const nombres = within(tarjeta).getAllByTestId('fila-comision').map((f) => within(f).getByText(/Zapata|Rangel|Romero|Flórez/).textContent);
     expect(nombres).toEqual(['Jiménez Rangel Yulisa', 'Rojas Zapata Alejandra', 'Salgado Romero Andrea', 'Cuenca Flórez Angie']);
-    expect(within(tarjeta).getByText('$2.700.000')).toBeInTheDocument();
+    expect(within(tarjeta).getByText('$2.765.000')).toBeInTheDocument();
     expect(within(tarjeta).getByText('Bogotá 1 de Mayo · cumple 95,0%')).toBeInTheDocument();
     expect(within(tarjeta).getAllByText('BASE')).toHaveLength(2);
+  });
+
+  it('shows a chip per bonus line: met (filled), not met (outline) and off (grey, with its tooltip)', () => {
+    montar();
+    const filas = within(seccion('Comisión por asesor')).getAllByTestId('fila-comision');
+    const chips = (fila) => within(fila).getAllByTestId('chip-bono').map((c) => [c.textContent, c.getAttribute('data-estado')]);
+    expect(chips(filas[0])).toEqual([['Lubricantes', 'cumple'], ['Cascos', 'cumple'], ['Tecnired (clientes)', 'apagado']]);
+    expect(chips(filas[1])).toEqual([['Lubricantes', 'no-cumple'], ['Cascos', 'cumple'], ['Tecnired (clientes)', 'apagado']]);
+    expect(within(filas[0]).getByText('Tecnired (clientes)')).toHaveAttribute('title', 'Bono apagado en Configuración');
+    expect(within(filas[0]).getByText('Lubricantes')).toHaveAttribute('title', 'Gana $35.000');
+  });
+
+  it('marks a line that is met but not paid because the asesor is below the gate', () => {
+    montar();
+    const salgado = within(seccion('Comisión por asesor')).getAllByTestId('fila-comision')[2];
+    const lub = within(salgado).getByText('Lubricantes');
+    expect(lub).toHaveAttribute('data-estado', 'sin-compuerta');
+    expect(lub).toHaveAttribute('title', 'Cumple la línea, pero no llega al 95% de cumplimiento: no se paga');
+  });
+
+  it('the semaforo view keeps working', () => {
+    montar();
+    fireEvent.click(within(seccion('Comisión por asesor')).getByRole('button', { name: 'Cumplimiento' }));
+    expect(within(seccion('Comisión por asesor')).queryAllByTestId('chip-bono')).toHaveLength(0);
   });
 
   it('toggles to the cumplimiento semaforo', () => {
@@ -138,6 +193,22 @@ describe('Comisiones tab: close to the next tier', () => {
   it('says so when nobody is close', () => {
     montar({ ...COMISIONES, cerca_de_subir: [] });
     expect(within(seccion('Cerca de subir de tramo')).getByText('Nadie está cerca de subir de tramo este mes.')).toBeInTheDocument();
+  });
+});
+
+describe('Comisiones tab: bonuses by line', () => {
+  it('summarizes each configured line: target, bonus, winners and amount, and says when they activate', () => {
+    montar();
+    const tarjeta = seccion('Bonos por línea');
+    expect(within(tarjeta).getByText(/Se activan con un cumplimiento de al menos 95%/)).toBeInTheDocument();
+    const filas = within(tarjeta).getAllByTestId('fila-bono');
+    expect(filas).toHaveLength(3);
+    expect(filas[0]).toHaveTextContent('Lubricantes');
+    expect(filas[0]).toHaveTextContent('≥ 21% de su venta · $35.000');
+    expect(filas[0]).toHaveTextContent('1 ganador · $35.000');
+    expect(filas[1]).toHaveTextContent('2 ganadores · $60.000');
+    expect(filas[2]).toHaveTextContent('Apagado');
+    expect(filas[2]).toHaveTextContent('0 ganadores · $0');
   });
 });
 
