@@ -8,6 +8,12 @@ const ENCIMA = { color: '#3D3D3A', position: 'absolute', left: 'calc(100% + 6px)
 const DENTRO = { color: '#FFFFFF', textShadow: '0 1px 1px rgba(0,0,0,.3)' };
 
 const PISTA_POR_DEFECTO = 300;
+const NOMBRE = { fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' };
+// A name that opens something (`item.onSelect`): a button that looks like the text, underlined so it reads as a link.
+const NOMBRE_ENLACE = {
+  ...NOMBRE, fontFamily: 'inherit', textAlign: 'left', padding: 0, border: 0, background: 'transparent', color: COLOR.ink, cursor: 'pointer',
+  textDecoration: 'underline', textDecorationColor: COLOR.line, textUnderlineOffset: 3, minWidth: 0,
+};
 
 /** Width in px of the track: measured when the browser can, else the given estimate. */
 function usePista(estimado) {
@@ -78,7 +84,9 @@ function Fila({ item, rank, ranked, maximo, color, reference, trackWidth }) {
       {ranked && <RankBadge rank={rank} colors={item.badge} />}
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 4, paddingTop: reference?.label ? 12 : 0 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
-          <span style={{ fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.name}</span>
+          {item.onSelect
+            ? <button type="button" title="Ver el detalle de este asesor" onClick={item.onSelect} style={NOMBRE_ENLACE}>{item.name}</button>
+            : <span style={NOMBRE}>{item.name}</span>}
           <span style={{ display: 'inline-flex', gap: 4, flex: 'none' }}>
             {(item.chips || []).map((c) => <Chip key={c.text} text={c.text} variant={c.variant} />)}
           </span>
@@ -94,7 +102,7 @@ function Fila({ item, rank, ranked, maximo, color, reference, trackWidth }) {
 
 /**
  * Horizontal bars with a rank badge. `items` [{name, sub, value, valueText, color, chips:[{text, variant}]}];
- * `badge` {bg, fg} recolors the rank badge; `tip` is the tooltip of the sub-line; `maxValue` is the full width (default the largest value); `reference` {at, label} draws a line
+ * `badge` {bg, fg} recolors the rank badge; `onSelect` turns the name into a button; `tip` is the tooltip of the sub-line; `maxValue` is the full width (default the largest value); `reference` {at, label} draws a line
  * (e.g. the 100% goal) in the same scale; `maxHeight` makes the list scroll inside its own box; `trackWidth` is the px estimate of the track when it cannot be measured.
  */
 export default function BarList({ items, maxValue, color = COLOR.info, reference, ranked = true, maxHeight, trackWidth = PISTA_POR_DEFECTO }) {

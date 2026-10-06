@@ -7,10 +7,15 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import * as kpisApi from '../../../lib/motored/kpisApi';
 
 const MENSAJE_ERROR = "No pudimos cargar los KPI's. Intentá de nuevo en unos segundos.";
-const API = { ventas: kpisApi.getVentas, tiendas: kpisApi.getTiendas, asesores: kpisApi.getAsesores, comisiones: kpisApi.getComisiones };
+export const MENSAJE_NO_ENCONTRADO = 'No encontramos a este asesor con los filtros elegidos.';
+const API = {
+  ventas: kpisApi.getVentas, tiendas: kpisApi.getTiendas, asesores: kpisApi.getAsesores, comisiones: kpisApi.getComisiones,
+  asesor: (filtros) => kpisApi.getAsesorDetalle(filtros, filtros.asesor),
+};
 
-export const claveKpis = (tab, { meses, sucursales = [], hmcl }) =>
-  [tab, [...meses].sort().join(','), [...sucursales].sort().join(','), hmcl].join('|');
+/** Cache key of a tab; the single-asesor view (`asesor`) also depends on the chosen cédula. */
+export const claveKpis = (tab, { meses, sucursales = [], hmcl, asesor }) =>
+  [tab, [...meses].sort().join(','), [...sucursales].sort().join(','), hmcl, ...(tab === 'asesor' ? [asesor] : [])].join('|');
 
 export default function useKpis(tab, filtros, api = API) {
   const cache = useRef(new Map());
@@ -48,7 +53,10 @@ export default function useKpis(tab, filtros, api = API) {
         cache.current.set(clave, data);
         if (numero === solicitud.current) setEstado({ clave, data, error: null });
       },
-      () => { if (numero === solicitud.current) setEstado({ clave, data: null, error: MENSAJE_ERROR }); },
+      (e) => {
+        const error = e?.status === 404 && tab === 'asesor' ? MENSAJE_NO_ENCONTRADO : MENSAJE_ERROR;
+        if (numero === solicitud.current) setEstado({ clave, data: null, error });
+      },
     );
     return undefined;
     // `filtros` is summarized by `clave`; the fetcher is stable per tab.

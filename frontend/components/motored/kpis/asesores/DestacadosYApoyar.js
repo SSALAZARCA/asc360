@@ -3,7 +3,8 @@ import { BarList, Chip, SegmentedToggle } from '../charts';
 import { periodoCorto } from '../periodo';
 import { COLOR } from '../tokens';
 import { CABECERA, NUM, TARJETA, TITULO } from '../ventas/estilos';
-import { COLUMNAS_MEZCLA, bottomCumplimiento, filaMezcla, topVenta } from './datos';
+import { COLUMNAS_MEZCLA, bottomCumplimiento, conSeleccion, filaMezcla, topVenta } from './datos';
+import { NOMBRE_ENLACE } from './enlace';
 
 const VISTAS = [{ id: 'venta', label: 'Venta' }, { id: 'mezcla', label: 'Mezcla' }];
 const ALTO = 380;
@@ -26,7 +27,9 @@ function Matriz({ items }) {
             return (
               <tr key={fila.id} data-testid="mezcla-fila">
                 <td style={{ padding: '4px 6px', maxWidth: 170 }}>
-                  <div style={{ fontWeight: 700, textAlign: 'left', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{fila.name}</div>
+                  <div style={{ fontWeight: 700, textAlign: 'left', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {fila.onSelect ? <button type="button" title="Ver el detalle de este asesor" onClick={fila.onSelect} style={{ ...NOMBRE_ENLACE, fontSize: 12.5 }}>{fila.name}</button> : fila.name}
+                  </div>
                 </td>
                 {fila.cells.map((c, i) => (
                   <td
@@ -61,7 +64,7 @@ function Columna({ nombre, titulo, chip, vista, items, children }) {
 }
 
 /** "Asesores destacados y a apoyar": best sellers and lowest compliance, as bars or as line-mix matrices. */
-export default function DestacadosYApoyar({ data }) {
+export default function DestacadosYApoyar({ data, onAsesor }) {
   const [vista, setVista] = useState('venta');
   const periodo = periodoCorto(data.meses);
   const bottom = bottomCumplimiento(data);
@@ -72,8 +75,8 @@ export default function DestacadosYApoyar({ data }) {
         <SegmentedToggle options={VISTAS} value={vista} onChange={setVista} />
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 340px), 1fr))', gap: 16, marginTop: 14 }}>
-        <Columna nombre="Top 10 · venta" titulo={`Top 10 · venta ${periodo}`} chip={<Chip text="▲ mayor venta" variant="up" />} vista={vista} items={topVenta(data)} />
-        <Columna nombre="Bottom 10 · cumplimiento" titulo={`Bottom 10 · cumplimiento ${periodo}`} chip={<Chip text="▼ menor cumplimiento" variant="down" />} vista={vista} items={bottom.items}>
+        <Columna nombre="Top 10 · venta" titulo={`Top 10 · venta ${periodo}`} chip={<Chip text="▲ mayor venta" variant="up" />} vista={vista} items={conSeleccion(topVenta(data), onAsesor)} />
+        <Columna nombre="Bottom 10 · cumplimiento" titulo={`Bottom 10 · cumplimiento ${periodo}`} chip={<Chip text="▼ menor cumplimiento" variant="down" />} vista={vista} items={conSeleccion(bottom.items, onAsesor)}>
           {bottom.sinPresupuesto > 0 && (
             <p style={NOTA}>
               {bottom.sinPresupuesto} {bottom.sinPresupuesto === 1 ? 'asesor sin presupuesto no aparece' : 'asesores sin presupuesto no aparecen'} en este ranking.

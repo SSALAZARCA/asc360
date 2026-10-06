@@ -4,6 +4,7 @@ import { periodoCorto } from '../periodo';
 import { CATEGORIA, COLOR } from '../tokens';
 import { CABECERA, NUM, TARJETA, TITULO } from '../ventas/estilos';
 import { tecniredAsesores, tonoTecnired } from './datos';
+import { NOMBRE_ENLACE } from './enlace';
 
 function Fichas({ kpis }) {
   return (
@@ -32,7 +33,7 @@ function Mapa({ tiles }) {
   );
 }
 
-function Barras({ filas, promedio, maximo }) {
+function Barras({ filas, promedio, maximo, onAsesor }) {
   const izquierda = promedio === null ? null : `${Math.min((promedio / maximo) * 100, 100).toFixed(1)}%`;
   return (
     <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -40,7 +41,9 @@ function Barras({ filas, promedio, maximo }) {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 300, overflowY: 'auto', paddingRight: 6 }}>
         {filas.map((f) => (
           <div key={f.id} data-testid="tecnired-fila" style={{ display: 'grid', gridTemplateColumns: 'minmax(100px, 150px) minmax(0, 1fr) 46px', gap: 8, alignItems: 'center' }}>
-            <span style={{ fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{f.name}</span>
+            {onAsesor && f.cedula
+              ? <button type="button" title="Ver el detalle de este asesor" onClick={() => onAsesor(f.cedula)} style={{ ...NOMBRE_ENLACE, fontSize: 12 }}>{f.name}</button>
+              : <span style={{ fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{f.name}</span>}
             <div style={{ position: 'relative', height: 12, background: COLOR.wash, borderRadius: 999 }}>
               <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${Math.min((f.pct / maximo) * 100, 100).toFixed(1)}%`, background: tonoTecnired(f.pct).bg, borderRadius: 999 }} />
               {izquierda && <span data-testid="tecnired-promedio" style={{ position: 'absolute', left: izquierda, top: -4, bottom: -4, width: 2, background: COLOR.ink }} />}
@@ -59,7 +62,7 @@ function Barras({ filas, promedio, maximo }) {
 }
 
 /** "Tecnired por asesor": chips, treemap of the sales to Tecnired and the share of each asesor's sales. */
-export default function TecniredAsesores({ data }) {
+export default function TecniredAsesores({ data, onAsesor }) {
   const t = tecniredAsesores(data);
   return (
     <section aria-label="Tecnired por asesor" style={TARJETA}>
@@ -69,7 +72,7 @@ export default function TecniredAsesores({ data }) {
       </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 18, marginTop: 14 }}>
         <div style={{ flex: '1.5 1 340px', minWidth: 0 }}><Mapa tiles={t.tiles} /></div>
-        <div style={{ flex: '1 1 280px', minWidth: 0 }}><Barras filas={t.filas} promedio={t.promedio} maximo={t.maximo} /></div>
+        <div style={{ flex: '1 1 280px', minWidth: 0 }}><Barras filas={t.filas} promedio={t.promedio} maximo={t.maximo} onAsesor={onAsesor} /></div>
       </div>
     </section>
   );

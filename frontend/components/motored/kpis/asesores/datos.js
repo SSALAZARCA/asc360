@@ -11,6 +11,17 @@ const margenDe = (f) => (esNumero(f.costo?.pct_margen) && f.costo.venta_con_cost
 const margenRed = (data) => margenDe(data.total);
 const TONO_DE = { verde: 'good', ambar: 'mid', violeta: 'bad' };
 
+/** Cédula of the tablero row `clave` (`P:...`): the one of its cumplimiento row, else the digits of the key; null if it has none. */
+function cedulaDe(data, clave) {
+  const fila = data.cumplimiento?.asesores?.find((a) => a.clave === clave);
+  if (fila?.cedula) return fila.cedula;
+  const limpia = String(clave).replace(/^P:/, '').replace(/\.0$/, '').replace(/[\s.]+/g, '');
+  return /^\d+$/.test(limpia) ? limpia : null;
+}
+
+/** Items of a ranking whose name selects the asesor (`onSelect`); without a cédula or a handler the name stays text. */
+export const conSeleccion = (items, onAsesor) => items.map((i) => (onAsesor && i.cedula ? { ...i, onSelect: () => onAsesor(i.cedula) } : i));
+
 /** Asesores with a budget: those that meet the goal (green) against the rest. */
 export function cumplen(data) {
   const c = data.cumplimiento.conteos.asesores;
@@ -73,7 +84,7 @@ const MEDALLA_BAJA = { bg: COLOR.badSoft, fg: COLOR.badInk };
 export function topVenta(data) {
   const red = margenRed(data);
   return personas(data).filter((f) => f.venta.total > 0).sort((a, b) => b.venta.total - a.venta.total).slice(0, 10).map((f) => ({
-    id: f.clave, name: f.nombre, value: f.venta.total, valueText: millones(f.venta.total),
+    id: f.clave, cedula: cedulaDe(data, f.clave), name: f.nombre, value: f.venta.total, valueText: millones(f.venta.total),
     sub: [f.punto_venta, `ticket ${moneda(f.facturas.ticket_promedio)}`].filter(Boolean).join(' · '), chips: [chipMargen(f, red)],
     fila: f,
   }));
@@ -91,7 +102,7 @@ export function bottomCumplimiento(data) {
     const f = filas.get(a.clave);
     const ticket = f && esNumero(f.facturas?.ticket_promedio) ? `ticket ${moneda(f.facturas.ticket_promedio)}` : null;
     return {
-      id: a.clave, name: a.nombre ?? 'Sin nombre', value: a.cumplimiento_pct, valueText: `${textoPesos(a.venta_cumplimiento)} / ${textoPesos(a.presupuesto)}`,
+      id: a.clave, cedula: a.cedula ?? cedulaDe(data, a.clave), name: a.nombre ?? 'Sin nombre', value: a.cumplimiento_pct, valueText: `${textoPesos(a.venta_cumplimiento)} / ${textoPesos(a.presupuesto)}`,
       color: TONO[TONO_DE[a.semaforo] ?? 'none'].color, badge: MEDALLA_BAJA,
       sub: [f?.punto_venta, `cumple ${pct(a.cumplimiento_pct)}`, ticket].filter(Boolean).join(' · '), chips: f ? [chipMargen(f, red)] : [],
       fila: f,
@@ -107,7 +118,7 @@ export function filaMezcla(item) {
   const f = item.fila;
   const total = f?.venta?.total ?? 0;
   return {
-    id: item.id, name: item.name,
+    id: item.id, name: item.name, onSelect: item.onSelect,
     cells: COLUMNAS_MEZCLA.map(([linea]) => {
       const share = total > 0 ? (f.venta.por_linea[linea] ?? 0) / total : null;
       const alpha = share === null ? 0.08 : Math.max(0.08, Math.min(1, share * 1.25));
@@ -146,7 +157,7 @@ export function tecniredAsesores(data) {
       sub: `${decimales((venta / total) * 100, 0)}% del total`, tip: `Otros ${resto.length} asesores`,
     });
   }
-  const filas = todas.map((f) => ({ id: f.clave, name: f.nombre, pct: f.clientes.pct_tecnired ?? 0 })).sort((a, b) => b.pct - a.pct);
+  const filas = todas.map((f) => ({ id: f.clave, cedula: cedulaDe(data, f.clave), name: f.nombre, pct: f.clientes.pct_tecnired ?? 0 })).sort((a, b) => b.pct - a.pct);
   const promedio = data.total.clientes.pct_tecnired;
   return {
     kpis: [

@@ -23,15 +23,18 @@ function useCierre(abierto, onClose) {
   return ref;
 }
 
-export default function FilterPopover({ rotulo, valor, dialogo, abierto, onToggle, onClose, lado = 'right', ancho = 300, resumen, children }) {
+export default function FilterPopover({ rotulo, valor, dialogo, abierto, onToggle, onClose, lado = 'right', ancho = 300, resumen, acciones, children }) {
   const ref = useCierre(abierto, onClose);
+  const boton = (
+    <button type="button" aria-haspopup="dialog" aria-expanded={abierto} onClick={onToggle} style={BOTON_FILTRO}>
+      <span>{valor}</span>
+      <span aria-hidden="true" style={{ fontSize: 10, color: COLOR.muted }}>▼</span>
+    </button>
+  );
   return (
     <div ref={ref} style={ROTULO_FILTRO}>
       {rotulo}
-      <button type="button" aria-haspopup="dialog" aria-expanded={abierto} onClick={onToggle} style={BOTON_FILTRO}>
-        <span>{valor}</span>
-        <span aria-hidden="true" style={{ fontSize: 10, color: COLOR.muted }}>▼</span>
-      </button>
+      {acciones ? <span style={{ display: 'inline-flex', gap: 6 }}>{boton}{acciones}</span> : boton}
       {abierto && (
         <div role="dialog" aria-label={dialogo} style={{ ...POPOVER, [lado]: 0, width: ancho, maxWidth: '90vw', gap: 12 }}>
           {children}

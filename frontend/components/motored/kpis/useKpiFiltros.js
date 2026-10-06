@@ -1,5 +1,5 @@
 'use client';
-/** Filters of the KPI's: loads the options once and keeps months, stores and HMCL mode (default: year to date). */
+/** Filters of the KPI's: loads the options once and keeps months, stores, HMCL mode (default: year to date) and the chosen asesor. */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { getOpciones } from '../../../lib/motored/kpisApi';
 import { presetMeses } from './periodo';
@@ -25,6 +25,7 @@ export default function useKpiFiltros(activo) {
     meses: opciones?.ultimo_mes ? presetMeses('ytd', opciones.ultimo_mes) : null,
     sucursales: [],
     hmcl: 'incluir',
+    asesor: null, // cédula of the asesor of the single view (Asesores tab); null = everyone
     ...cambios,
   }), [opciones, cambios]);
   const cambiar = useCallback((parcial) => setCambios((previo) => ({ ...previo, ...parcial })), []);

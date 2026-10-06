@@ -17,6 +17,14 @@ export const getVentas = (filtros) => motoredFetchJson(rutaKpis('ventas', filtro
 export const getTiendas = (filtros) => motoredFetchJson(rutaKpis('tiendas', filtros));
 export const getAsesores = (filtros) => motoredFetchJson(rutaKpis('asesores', filtros));
 export const getComisiones = (filtros) => motoredFetchJson(rutaKpis('comisiones', filtros));
+/** The single-asesor view: the same filters plus the `cedula` (the 404 "Asesor no encontrado" carries `status`). */
+export const getAsesorDetalle = (filtros, cedula) =>
+  motoredFetchJson(`${rutaKpis('asesores/detalle', filtros)}&cedula=${encodeURIComponent(cedula)}`);
+/** Options of the "Asesor" filter: the active asesores of the chosen stores (all without `sucursales`). */
+export const getAsesoresOpciones = (sucursales = []) => {
+  const query = sucursales.length ? `?sucursales=${[...sucursales].sort().join(',')}` : '';
+  return motoredFetchJson(`${BASE}/asesores/opciones${query}`);
+};
 /** Downloads the xlsx of the settled month `mes` (AAAA-MM) with the same filters as the tab. */
 export const descargarComisionesExcel = (filtros, mes) => descargarArchivo(rutaKpis('comisiones/excel', filtros), `comisiones_${mes}.xlsx`);
 
