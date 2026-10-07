@@ -50,12 +50,13 @@ def _fila(co="F03", bodega="BA061", desc="CALI NORTE", tipo="REPUESTOS",
             bodega, "REF1", "Ana Pérez", 1000, 0, "Taller", doc, co)
 
 
-def _procesar(fila, mapa=_MAPA_CON_CO, por_co=POR_CO):
+def _procesar(fila, mapa=_MAPA_CON_CO, por_co=POR_CO, linea="REPUESTOS"):
     return ventas.procesar_fila(
         fila, numero_fila=2, lote=1, mapa_columnas=mapa, cache=_cache(),
         carga_id=CARGA_ID, proveedor_id=PROVEEDOR_ID,
         tipos_inventario_incluidos=["REPUESTOS"],
-        bodegas_excluidas=EXCLUIDAS, sucursal_por_co=por_co)
+        bodegas_excluidas=EXCLUIDAS, sucursal_por_co=por_co,
+        linea_por_referencia={REFERENCIA_ID: linea})
 
 
 # --- procesar_fila ----------------------------------------------------------
@@ -131,7 +132,7 @@ def test_la_bodega_excluida_gana_aunque_el_co_sea_desconocido():
 
 
 def test_una_fila_solo_detalle_tambien_usa_el_co():
-    staging, errores = _procesar(_fila(tipo="MOTOCICLETA"))
+    staging, errores = _procesar(_fila(), linea="MOTOS")
 
     assert errores == []
     assert ventas.es_solo_detalle(staging)
@@ -139,7 +140,7 @@ def test_una_fila_solo_detalle_tambien_usa_el_co():
 
 
 def test_una_fila_solo_detalle_con_co_desconocido_se_omite_en_silencio():
-    staging, errores = _procesar(_fila(tipo="MOTOCICLETA", co="ZZZ"))
+    staging, errores = _procesar(_fila(co="ZZZ"), linea="MOTOS")
 
     assert (staging, errores) == (None, [])
 
@@ -203,7 +204,8 @@ def _cola(lectura_co):
         [(SUCURSAL_BODEGA, "CALI NORTE", None)], [], [],
         [("REF1", PROVEEDOR_ID, REFERENCIA_ID)], [PROVEEDOR_ID], [], [],
     ]
-    return base + lectura_co + [[]]
+    # ... + ventas_tipos_excluidos + linea del maestro + tolerancia.
+    return base + lectura_co + [[], [(REFERENCIA_ID, "REPUESTOS")], []]
 
 
 @pytest.fixture(autouse=True)

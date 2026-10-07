@@ -121,3 +121,49 @@ class ResolverErroresRequest(BaseModel):
 class ResolverErroresResultado(BaseModel):
     acciones_aplicadas: int
     acciones_ignoradas: int = 0
+
+
+class AsignarLineaRequest(BaseModel):
+    """Body of `PUT /cargas/{id}/referencias-sin-linea/{referencia_id}`."""
+
+    linea_comercial: str
+
+
+class AsignacionLineaItem(AsignarLineaRequest):
+    """One item of the bulk `PUT /cargas/{id}/referencias-sin-linea`."""
+
+    referencia_id: uuid.UUID
+
+
+class ReferenciaSinLineaRead(BaseModel):
+    referencia_id: uuid.UUID
+    codigo: str
+    nombre: Optional[str] = None
+    filas: int
+    unidades: float
+    valor: float
+
+
+class FueraDeLineaRead(BaseModel):
+    linea: str
+    filas: int
+
+
+class NoEncontradaRead(BaseModel):
+    codigo: str
+    filas: int
+
+
+class OpcionLineaRead(BaseModel):
+    valor: str
+    etiqueta: str
+
+
+class ReferenciasSinLineaResponse(BaseModel):
+    """What a VENTAS carga needs resolved before apply, live against the
+    current referencia master."""
+
+    sin_linea: List[ReferenciaSinLineaRead] = []
+    fuera_de_linea: List[FueraDeLineaRead] = []
+    no_encontradas: List[NoEncontradaRead] = []
+    opciones_linea: List[OpcionLineaRead] = []

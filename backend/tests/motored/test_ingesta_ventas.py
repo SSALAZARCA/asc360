@@ -88,7 +88,8 @@ def _procesar(fila_raw, **overrides):
         cache=_cache_resuelta(),
         carga_id=CARGA_ID,
         proveedor_id=PROVEEDOR_ID,
-        tipos_inventario_incluidos=["0002 - REPUESTOS"],
+        tipos_inventario_incluidos=["REPUESTOS"],
+        linea_por_referencia={REFERENCIA_ID: "REPUESTOS"},
     )
     kwargs.update(overrides)
     return ventas.procesar_fila(fila_raw, **kwargs)
@@ -106,12 +107,13 @@ def test_estado_distinto_de_aprobada_se_descarta_en_silencio():
     assert errores == []
 
 
-def test_tipo_inventario_no_incluido_no_entra_a_venta_mensual_ni_da_error():
-    """Solo alimenta `venta_detalle` (marca `solo_detalle`); ver
-    `test_ingesta_ventas_taller.py` para el detalle de esa ruta."""
+def test_linea_del_maestro_fuera_de_las_incluidas_no_entra_a_venta_mensual_ni_da_error():
+    """Se stagea con `solo_detalle` y su clase; el apply la descarta. Ver
+    `test_ingesta_ventas_lineas.py` para el detalle de esa ruta."""
     fila_staging, errores = _procesar(
-        _fila(tipo_inventario="0005 - ACCESORIOS"),
-        tipos_inventario_incluidos=["0002 - REPUESTOS"],
+        _fila(),
+        tipos_inventario_incluidos=["REPUESTOS"],
+        linea_por_referencia={REFERENCIA_ID: "MOTOS"},
     )
 
     assert errores == []

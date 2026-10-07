@@ -70,6 +70,7 @@ from app.motored.services.ingesta import columnas as columnas_mod
 from app.motored.services.ingesta import errores as errores_mod
 from app.motored.services.ingesta import numeros as numeros_mod
 from app.motored.services.ingesta import periodo as periodo_mod
+from app.motored.services.ingesta import ventas_lineas as lineas_mod
 from app.motored.services.ingesta.lotes import partir
 from app.motored.services.ingesta.resolucion import (
     CacheResolucion,
@@ -184,30 +185,9 @@ def _es_aprobada(fila_raw: Sequence[Any], mapa_columnas: Dict[str, int]) -> bool
     return _texto(_extraer(fila_raw, mapa_columnas, "Estado")) == ESTADO_APROBADA
 
 
-def _tipo_incluido(
-    fila_raw: Sequence[Any],
-    mapa_columnas: Dict[str, int],
-    tipos_inventario_incluidos: Sequence[str],
-) -> bool:
-    tipo_inventario = _texto(_extraer(fila_raw, mapa_columnas, "Tipo inventario"))
-    if tipo_inventario is None:
-        return False
-    # Sin distinguir mayusculas ni espacios sobrantes, en ambos lados.
-    clave = tipo_inventario.strip().casefold()
-    return any(clave == str(t).strip().casefold() for t in tipos_inventario_incluidos)
-
-
-def _pasa_filtros_negocio(
-    fila_raw: Sequence[Any],
-    mapa_columnas: Dict[str, int],
-    tipos_inventario_incluidos: Sequence[str],
-) -> bool:
-    """`Estado != 'Aprobada'` o tipo de inventario no incluido -- spec: esos
-    estados "se cuentan y reportan en el log, nunca se suman"; no es una
-    fila inválida, no genera `carga_error`."""
-    return _es_aprobada(fila_raw, mapa_columnas) and _tipo_incluido(
-        fila_raw, mapa_columnas, tipos_inventario_incluidos
-    )
+def _tipo_erp(fila_raw: Sequence[Any], mapa_columnas: Dict[str, int]) -> str:
+    """Código de tipo de venta del ERP ("Tipo inventario" del archivo)."""
+    return _texto(_extraer(fila_raw, mapa_columnas, "Tipo inventario")) or ""
 
 
 def _resolver_fecha_o_error(
@@ -595,18 +575,26 @@ def procesar_fila(
     tipos_inventario_incluidos: Sequence[str],
     bodegas_excluidas: FrozenSet[str] = frozenset(),
     sucursal_por_co: Optional[Dict[str, uuid.UUID]] = None,
+    linea_por_referencia: Optional[Dict[uuid.UUID, str]] = None,
+    tipos_excluidos: lineas_mod.ReglasExcluidas = (),
 ) -> ResultadoFila:
     """Procesa UNA fila cruda de VENTAS. Retorna `(fila_staging, errores)`
-    orquestando los tres pasos de la transformación (ver los docstrings de
-    `_pasa_filtros_negocio`/`_resolver_fecha_o_error`/`_resolver_claves`),
-    o `MarcaFila.BODEGA_EXCLUIDA` si la bodega no es una tienda.
+    orquestando los pasos de la transformación, `MarcaFila.BODEGA_EXCLUIDA`
+    si la bodega no es una tienda o `MarcaTipoExcluido.TIPO_EXCLUIDO` si el
+    tipo de venta del ERP está en `ventas_tipos_excluidos`.
 
     `sucursal_por_co` (`{C.O. -> sucursal_id}`) se pasa solo cuando el
     archivo trae la columna C.O.: la sucursal sale del C.O. de la fila
     (ver `_resolver_sucursal`). `None` mantiene la resolución por bodega.
 
-    Una linea aprobada de un tipo NO incluido no entra a `venta_mensual`,
-    pero `venta_detalle` la guarda igual: ver `_procesar_fila_solo_detalle`."""
+    La línea sale SOLO del maestro (`linea_por_referencia`, línea normalizada
+    por referencia; una referencia ausente no tiene línea) y se compara con
+    `tipos_inventario_incluidos` (las líneas que cuentan). Línea incluida:
+    entra a `venta_mensual` y `venta_detalle`. Otra línea, o sin línea: se
+    stagea con `solo_detalle: True` y su clase (`ventas_lineas`) para que el
+    informe y el apply la evalúen contra el maestro vigente, pero no entra
+    al histograma ni a `filas_validas`. Una referencia que el maestro no
+    tiene sigue la ruta de las filas incluidas (REFERENCIA_NO_ENCONTRADA)."""
     if not _es_aprobada(fila_raw, mapa_columnas):
         return None, []
     # Bodega que no es tienda: la fila no va a ninguna tabla (ni a
@@ -615,18 +603,34 @@ def procesar_fila(
         _extraer(fila_raw, mapa_columnas, "Bodega"), bodegas_excluidas
     ):
         return MarcaFila.BODEGA_EXCLUIDA
+    if lineas_mod.es_tipo_excluido(
+            _tipo_erp(fila_raw, mapa_columnas), tipos_excluidos):
+        return lineas_mod.MarcaTipoExcluido.TIPO_EXCLUIDO
     comunes = dict(
         numero_fila=numero_fila, lote=lote, mapa_columnas=mapa_columnas,
         cache=cache, carga_id=carga_id, proveedor_id=proveedor_id,
         sucursal_por_co=sucursal_por_co)
-    if not _tipo_incluido(fila_raw, mapa_columnas, tipos_inventario_incluidos):
-        resultado = _procesar_fila_solo_detalle(fila_raw, **comunes), []
-    else:
+    referencia_id = resolver_referencia(
+        cache, _texto(_extraer(fila_raw, mapa_columnas, "Referencia")))
+    clase = lineas_mod.clase_de_fila(
+        referencia_id, linea_por_referencia or {},
+        lineas_mod.normalizar_incluidas(tipos_inventario_incluidos),
+    ) or lineas_mod.CLASE_INCLUIDA
+    if clase == lineas_mod.CLASE_INCLUIDA:
         resultado = _procesar_fila_incluida(fila_raw, **comunes)
+    else:
+        resultado = _procesar_fila_solo_detalle(fila_raw, **comunes), []
+    _marcar_clase(resultado[0], clase)
     if sucursal_por_co is not None and not _extraer_co(
             fila_raw, mapa_columnas):
         _marcar_co_vacio(resultado[0])
     return resultado
+
+
+def _marcar_clase(fila: Optional[CargaFilaStaging], clase: str) -> None:
+    """Deja en el payload la clase de línea con que se stageó la fila."""
+    if fila is not None:
+        fila.payload = {**fila.payload, lineas_mod.CLAVE_CLASE_LINEA: clase}
 
 
 def _marcar_co_vacio(fila: Optional[CargaFilaStaging]) -> None:

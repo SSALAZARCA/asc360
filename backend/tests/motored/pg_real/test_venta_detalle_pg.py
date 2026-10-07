@@ -204,7 +204,10 @@ async def test_aplicar_archivo_mixto_taller_en_mensual_y_todo_en_detalle(sesion)
         staging, _ = ventas.procesar_fila(
             fila, numero_fila=n, lote=1, mapa_columnas=mapa, cache=cache,
             carga_id=c1.id, proveedor_id=ref.proveedor_id,
-            tipos_inventario_incluidos=["REPUESTOS", "ACCESORIOS", "LUBRICANTES", "LLANTAS", "BATERIAS", "CASCOS", "GPS"])
+            tipos_inventario_incluidos=["REPUESTOS", "ACCESORIOS", "LUBRICANTES", "LLANTAS", "BATERIAS", "CASCOS", "GPS"],
+            # La linea sale del maestro: la fila de moto es de una referencia MOTOS.
+            linea_por_referencia={
+                ref.id: "MOTOS" if fila[4].startswith("0001") else "REPUESTOS"})
         if staging is not None:
             staged.append(staging)
 

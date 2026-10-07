@@ -60,7 +60,7 @@ from __future__ import annotations
 
 import io
 import uuid
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timezone
 from typing import Any, Dict, List, Optional
 
 from fastapi import (
@@ -91,7 +91,10 @@ from app.motored.models.carga_error import CargaError
 from app.motored.models.carga_fila_staging import CargaFilaStaging
 from app.motored.models.referencia import Referencia
 from app.motored.models.sucursal_alias import SucursalAlias
+from app.motored.schemas.referencia import ReferenciaUpdate
 from app.motored.schemas.ingesta import (
+    AsignacionLineaItem,
+    AsignarLineaRequest,
     CargaArchivoPatch,
     CargaArchivoRead,
     CargaArchivoSubidaResponse,
@@ -99,8 +102,10 @@ from app.motored.schemas.ingesta import (
     CargaInformeResponse,
     DeclaracionSinDatosRequest,
     ResolverErroresRequest,
+    ReferenciasSinLineaResponse,
     ResolverErroresResultado,
 )
+from app.motored.services import parametros, parametros_claves, tablero_comisiones
 from app.motored.services import demanda_perdida_bot as demanda_perdida_bot_mod
 from app.motored.services import kpi_resumen
 from app.motored.services import maestros as maestros_mod
@@ -115,6 +120,7 @@ from app.motored.services.ingesta import periodo as periodo_mod
 from app.motored.services.ingesta import plantillas as plantillas_mod
 from app.motored.services.ingesta import resolucion as resolucion_mod
 from app.motored.services.ingesta import sin_datos as sin_datos_mod
+from app.motored.services.ingesta import ventas_lineas as lineas_mod
 from app.motored.services.trabajos.runner import JobRunner, SupervisorRunner
 
 router = APIRouter(
@@ -698,6 +704,152 @@ async def resolver_errores(
         ignoradas += int(not aplicada)
     await db.commit()
     return ResolverErroresResultado(acciones_aplicadas=aplicadas, acciones_ignoradas=ignoradas)
+
+
+async def _incluidas_de(db: AsyncSession, carga: CargaArchivo):
+    tipos, _ = await parametros.resolver_tipos_inventario_incluidos(
+        db, carga.periodo_desde or date.today())
+    return lineas_mod.normalizar_incluidas(tipos)
+
+
+async def _payload_sin_linea(
+    db: AsyncSession, carga: CargaArchivo, user: Optional[MotoredUser] = None,
+) -> Dict[str, Any]:
+    propias = (set(user.sucursal_ids)
+               if user is not None and user.role == "SUCURSAL" else None)
+    payload = await lineas_mod.informe(
+        db, carga.id, await _incluidas_de(db, carga), propias)
+    permitidas = await _lineas_permitidas(db)
+    payload["opciones_linea"] = [
+        {"valor": norm, "etiqueta": tablero_comisiones.etiqueta_de(norm)}
+        for norm in permitidas if norm != lineas_mod.LINEA_NO_COMERCIAL
+    ] + [{"valor": lineas_mod.LINEA_NO_COMERCIAL,
+          "etiqueta": "No es de repuestos (descartar)"}]
+    return payload
+
+
+def _exigir_ventas_abierta(carga: CargaArchivo) -> None:
+    if carga.tipo != "VENTAS":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Solo las cargas de VENTAS tienen referencias sin línea.")
+    if carga.estado in ("APLICADO", "ANULADO"):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"La carga ya está {carga.estado.lower()}: no se pueden "
+                   "asignar líneas.")
+
+
+async def _lineas_permitidas(db: AsyncSession) -> Dict[str, str]:
+    """`{línea normalizada: texto a guardar}`: `lineas_comerciales` vigente
+    más NO COMERCIAL (sacar la referencia del reparto sin bloquear)."""
+    clave = "lineas_comerciales"
+    valores = await parametros.leer_con_memoria(
+        db, datetime.now(timezone.utc).date(),
+        {clave: list(parametros_claves.REGISTRO[clave].default)}, {},
+        deshacer=False)
+    permitidas = {lineas_mod.normalizar_linea(v): str(v).strip()
+                  for v in valores[clave]}
+    permitidas[lineas_mod.LINEA_NO_COMERCIAL] = lineas_mod.LINEA_NO_COMERCIAL
+    return permitidas
+
+
+async def _asignar_lineas(
+    db: AsyncSession, carga: CargaArchivo, user: MotoredUser,
+    items: List[AsignacionLineaItem],
+) -> None:
+    """Todo o nada: valida TODOS los items contra la lista viva de
+    `sin_linea` y las líneas permitidas antes de escribir el primero."""
+    _exigir_ventas_abierta(carga)
+    if not items:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Indique al menos una referencia y su línea.")
+    if len({i.referencia_id for i in items}) != len(items):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Una referencia aparece más de una vez.")
+    vivas = {r["referencia_id"]
+             for r in (await _payload_sin_linea(db, carga))["sin_linea"]}
+    fuera = [i for i in items if i.referencia_id not in vivas]
+    if fuera:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="La referencia ya no está en la lista de referencias sin "
+                   "línea de esta carga.")
+    permitidas = await _lineas_permitidas(db)
+    invalidas = [i for i in items
+                 if lineas_mod.normalizar_linea(i.linea_comercial)
+                 not in permitidas]
+    if invalidas:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"La línea '{invalidas[0].linea_comercial}' no es una "
+                   "línea comercial válida.")
+    usuario_id = uuid.UUID(user.user_id)
+    auditoria = list((carga.log or {}).get("asignaciones_linea", []))
+    for item in items:
+        referencia = await db.get(Referencia, item.referencia_id)
+        linea = permitidas[lineas_mod.normalizar_linea(item.linea_comercial)]
+        await maestros_mod.update_referencia(
+            db, referencia, ReferenciaUpdate(linea_comercial=linea),
+            usuario_id, verificar_sustituta=False)
+        auditoria.append({
+            "referencia_id": str(item.referencia_id),
+            "codigo": referencia.codigo, "linea": linea,
+            "usuario_id": str(usuario_id),
+            "en": datetime.now(timezone.utc).isoformat()})
+    carga.log = {**(carga.log or {}), "asignaciones_linea": auditoria}
+    await db.flush()
+
+
+@router.get(
+    "/{carga_id}/referencias-sin-linea",
+    response_model=ReferenciasSinLineaResponse)
+async def listar_referencias_sin_linea(
+    carga_id: uuid.UUID,
+    db: AsyncSession = Depends(get_motored_db_or_503),
+    user: MotoredUser = Depends(get_current_motored_user),
+):
+    """Lo que falta resolver de una carga de VENTAS, calculado en vivo
+    contra el maestro de hoy (ver `services.ingesta.ventas_lineas`)."""
+    carga = await _carga_or_404(db, carga_id)
+    return await _payload_sin_linea(db, carga, user)
+
+
+@router.put(
+    "/{carga_id}/referencias-sin-linea",
+    response_model=ReferenciasSinLineaResponse)
+async def asignar_lineas(
+    carga_id: uuid.UUID,
+    payload: List[AsignacionLineaItem],
+    db: AsyncSession = Depends(get_motored_db_or_503),
+    user: MotoredUser = Depends(_require_write),
+):
+    """Asigna la línea de varias referencias a la vez, todo o nada."""
+    carga = await _carga_or_404(db, carga_id)
+    await _asignar_lineas(db, carga, user, payload)
+    await db.commit()
+    return await _payload_sin_linea(db, carga)
+
+
+@router.put(
+    "/{carga_id}/referencias-sin-linea/{referencia_id}",
+    response_model=ReferenciasSinLineaResponse)
+async def asignar_linea(
+    carga_id: uuid.UUID,
+    referencia_id: uuid.UUID,
+    payload: AsignarLineaRequest,
+    db: AsyncSession = Depends(get_motored_db_or_503),
+    user: MotoredUser = Depends(_require_write),
+):
+    """Asigna la línea de UNA referencia sin línea de esta carga."""
+    carga = await _carga_or_404(db, carga_id)
+    await _asignar_lineas(db, carga, user, [AsignacionLineaItem(
+        referencia_id=referencia_id,
+        linea_comercial=payload.linea_comercial)])
+    await db.commit()
+    return await _payload_sin_linea(db, carga)
 
 
 @router.post("/{carga_id}/aplicar", response_model=CargaArchivoRead)

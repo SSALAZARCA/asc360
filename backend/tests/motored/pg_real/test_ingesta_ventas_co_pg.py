@@ -85,7 +85,7 @@ async def _mundo(db):
     referencia = Referencia(
         id=uuid.uuid4(), codigo=f"R-{uuid.uuid4().hex[:6]}",
         proveedor_id=proveedor.id, unidad_empaque=1,
-        precio_normal=Decimal("100"))
+        precio_normal=Decimal("100"), linea_comercial="REPUESTOS")
     db.add_all([bodega, referencia])
     await db.flush()
     return tienda_a, tienda_b, bodega, referencia

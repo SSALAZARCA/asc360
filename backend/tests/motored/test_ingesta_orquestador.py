@@ -95,6 +95,11 @@ def _queue_cache_y_proveedor(sucursales=None, referencias=None):
     ]
 
 
+# Lo que `_procesador_ventas` lee tras bodegas_excluidas: los tipos de venta
+# excluidos (sin fila -> default) y la linea del maestro de cada referencia.
+LECTURAS_LINEA = [[], [(REFERENCIA_ID, "REPUESTOS")]]
+
+
 def _queue_inventario():
     """Cache + proveedor + la lectura de `bodegas_excluidas` (sin fila)."""
     return _queue_cache_y_proveedor() + [[]]
@@ -381,6 +386,7 @@ async def test_dry_run_ventas_periodo_mal_declarado_rechaza_archivo_completo(mon
     queue = _queue_cache_y_proveedor() + [
         [],  # parametros.resolver_tipos_inventario_incluidos -> obtener_vigente (usa default)
         [],  # bodegas_excluidas (sin fila -> default)
+        *LECTURAS_LINEA,
         [],  # periodo_tolerancia_pct (sin fila -> entorno)
         [],  # delete(CargaFilaStaging) execute
     ]
@@ -415,7 +421,7 @@ async def test_dry_run_ventas_periodo_correcto_queda_validado(monkeypatch):
     monkeypatch.setattr(orquestador.storage, "descargar_archivo", lambda ruta: file_bytes)
     # tipos_inventario_incluidos + bodegas_excluidas + periodo_tolerancia_pct,
     # los tres sin fila.
-    queue = _queue_cache_y_proveedor() + [[], [], []]
+    queue = _queue_cache_y_proveedor() + [[], [], *LECTURAS_LINEA, []]
     session = FakeAsyncSession(execute_queue=queue)
 
     await orquestador._dry_run(session, carga)
@@ -594,6 +600,7 @@ async def test_dry_run_ventas_periodo_advertencia_emite_carga_error_por_fila_fue
     queue = _queue_cache_y_proveedor() + [
         [],  # parametros.resolver_tipos_inventario_incluidos (sin fila vigente -> default)
         [],  # bodegas_excluidas (sin fila -> default)
+        *LECTURAS_LINEA,
         [],  # periodo_tolerancia_pct (sin fila -> entorno)
         [fila_agosto],  # re-select de staging para detectar la fila fuera de período
     ]
@@ -759,8 +766,8 @@ async def test_ejecutar_aplicar_ventas_uses_aplicar_con_periodo(monkeypatch):
         return periodo_mod.VeredictoPeriodo(tipo=periodo_mod.TipoVeredictoPeriodo.ACEPTADO)
 
     monkeypatch.setattr(orquestador.ventas_mod, "aplicar_con_periodo", _fake_aplicar_con_periodo)
-    # staging select vacío + periodo_tolerancia_pct + delete staging
-    session = FakeAsyncSession(execute_queue=[[], [], []])
+    # staging select vacío + tipos incluidos + periodo_tolerancia_pct + delete staging
+    session = FakeAsyncSession(execute_queue=[[], [], [], []])
 
     await orquestador.ejecutar_aplicar(session, carga)
 
@@ -797,6 +804,7 @@ async def test_dry_run_ventas_registra_default_usado_en_carga_log(monkeypatch):
     queue = _queue_cache_y_proveedor() + [
         [],  # parametros.resolver_tipos_inventario_incluidos -> SIN fila vigente
         [],  # bodegas_excluidas -> default
+        *LECTURAS_LINEA,
     ]
     session = FakeAsyncSession(execute_queue=queue)
 
@@ -832,6 +840,8 @@ async def test_dry_run_ventas_no_registra_default_cuando_la_clave_esta_configura
     )
     queue = _queue_cache_y_proveedor() + [
         [fila_configurada],  # parametros.resolver_tipos_inventario_incluidos -> CONFIGURADA
+        [],  # bodegas_excluidas
+        *LECTURAS_LINEA,
     ]
     session = FakeAsyncSession(execute_queue=queue)
 
@@ -991,6 +1001,7 @@ async def _dry_run_3pct(monkeypatch, filas_tolerancia):
     queue = _queue_cache_y_proveedor() + [
         [],  # tipos_inventario_incluidos -> default
         [],  # bodegas_excluidas -> default
+        *LECTURAS_LINEA,
         filas_tolerancia,  # periodo_tolerancia_pct
         [],  # SELECT de staging del ADVERTENCIA / DELETE del RECHAZO
         [],
@@ -1045,6 +1056,8 @@ async def test_aplicar_ventas_pasa_la_tolerancia_guardada(monkeypatch):
     async def _aplicar_falso(
             session, filas, desde, hasta, carga_id, tolerancia_pct=None):
         recibido["tolerancia"] = tolerancia_pct
+        return periodo_mod.VeredictoPeriodo(
+            tipo=periodo_mod.TipoVeredictoPeriodo.ACEPTADO)
 
     monkeypatch.setattr(
         orquestador.ventas_mod, "aplicar_con_periodo", _aplicar_falso)
@@ -1052,7 +1065,7 @@ async def test_aplicar_ventas_pasa_la_tolerancia_guardada(monkeypatch):
         "VENTAS", estado="VALIDADO", periodo_desde=date(2026, 9, 1),
         periodo_hasta=date(2026, 9, 30))
     session = FakeAsyncSession(
-        execute_queue=[[], [_fila_tolerancia(5)], []])
+        execute_queue=[[], [], [_fila_tolerancia(5)], []])
 
     await orquestador.ejecutar_aplicar(session, carga)
 

@@ -1,12 +1,12 @@
 """
-VENTAS: tipos de inventario de TALLER y detalle independiente del tipo.
+VENTAS: TALLER sales and the rows kept out of `venta_mensual`.
 
-Decision del owner: la demanda de taller cuenta para el pedido. Los archivos VENTAS traen la linea comercial en "Tipo inventario"
-(REPUESTOS, ACCESORIOS, LUBRICANTES, LLANTAS, BATERIAS, CASCOS, GPS); el default
-de `tipos_inventario_incluidos` las incluye todas. Aparte, `venta_detalle` guarda
-TODA linea aprobada sin importar el tipo ("0001 - MOTOCICLETA" incluido): esas
-filas se stagean con `solo_detalle` y `venta_mensual`, el periodo detectado y
-`fecha_max_detectada` jamas las ven.
+Owner decision: taller demand counts for the pedido. The line of a row comes
+from the referencia master (`linea_por_referencia`); the default of
+`tipos_inventario_incluidos` lists the 7 counted lines. A row whose master line
+is outside the list is staged with `solo_detalle` (and its class) so the apply
+can re-evaluate it; `venta_mensual`, the detected period and
+`fecha_max_detectada` never see it.
 """
 import uuid
 from datetime import date
@@ -51,11 +51,12 @@ def _fila(tipo="REPUESTOS", modulo="MOSTRADOR", fecha=_SERIAL_2026_09_15,
             vendedor, 1000, 0, "Taller", nro_doc)
 
 
-def _procesar(fila_raw, tipos=("REPUESTOS",)):
+def _procesar(fila_raw, tipos=("REPUESTOS",), linea="REPUESTOS"):
     return ventas.procesar_fila(
         fila_raw, numero_fila=2, lote=1, mapa_columnas=_MAPA, cache=_cache(),
         carga_id=CARGA_ID, proveedor_id=PROVEEDOR_ID,
         tipos_inventario_incluidos=list(tipos),
+        linea_por_referencia={REFERENCIA_ID: linea},
     )
 
 
@@ -100,14 +101,15 @@ def test_fila_taller_lubricantes_ivnlubgr_con_el_default_cae_en_venta_mensual():
     assert len(ventas.agregar_unidades([staging])) == 1
 
 
-def test_tipo_con_espacios_al_final_tambien_coincide():
-    staging, _ = _procesar(_fila(tipo="Lubricantes "), tipos=TIPOS_NUEVO_DEFAULT)
+def test_linea_del_maestro_se_normaliza_sin_tildes_ni_espacios():
+    from app.motored.services.ingesta import ventas_lineas
 
-    assert "solo_detalle" not in staging.payload
+    assert ventas_lineas.normalizar_linea("  Baterías ") == "BATERIAS"
+    assert ventas_lineas.normalizar_incluidas([" Baterías "]) == {"BATERIAS"}
 
 
-def test_fila_de_tipo_excluido_se_stagea_solo_para_detalle_sin_errores():
-    staging, errores = _procesar(_fila(tipo="0001 - MOTOCICLETA"))
+def test_fila_de_linea_fuera_de_las_incluidas_se_stagea_como_solo_detalle_sin_errores():
+    staging, errores = _procesar(_fila(), linea="MOTOS")
 
     assert errores == []
     assert staging.payload["solo_detalle"] is True
@@ -115,16 +117,15 @@ def test_fila_de_tipo_excluido_se_stagea_solo_para_detalle_sin_errores():
 
 
 @pytest.mark.parametrize("fila", [
-    _fila(tipo="0001 - MOTOCICLETA", ref="NOEXISTE"),
-    _fila(tipo="0001 - MOTOCICLETA", bodega="NOEXISTE"),
-    _fila(tipo="0001 - MOTOCICLETA", cantidad="abc"),
-    _fila(tipo="0001 - MOTOCICLETA", fecha="no es fecha"),
-    _fila(tipo="0001 - MOTOCICLETA", vendedor=None),
-    _fila(tipo="0001 - MOTOCICLETA", nro_doc=None),
-    _fila(tipo="0001 - MOTOCICLETA", estado="Pendiente"),
+    _fila(bodega="NOEXISTE"),
+    _fila(cantidad="abc"),
+    _fila(fecha="no es fecha"),
+    _fila(vendedor=None),
+    _fila(nro_doc=None),
+    _fila(estado="Pendiente"),
 ])
-def test_fila_excluida_con_problema_se_omite_en_silencio(fila):
-    assert _procesar(fila) == (None, [])
+def test_fila_fuera_de_linea_con_problema_se_omite_en_silencio(fila):
+    assert _procesar(fila, linea="MOTOS") == (None, [])
 
 
 def test_fila_de_tipo_incluido_con_referencia_desconocida_sigue_siendo_error():
@@ -209,55 +210,68 @@ async def test_aplicar_con_periodo_escribe_detalle_de_las_filas_solo_detalle_del
 _ENCABEZADO = list(ventas.COLUMNAS_ESPERADAS)
 
 
+REF_MOTOS_ID = uuid.uuid4()
+_REFERENCIAS_DOS = [("REF1", PROVEEDOR_ID, REFERENCIA_ID),
+                    ("REFM", PROVEEDOR_ID, REF_MOTOS_ID)]
+_LINEAS_DOS = [(REFERENCIA_ID, "REPUESTOS"), (REF_MOTOS_ID, "MOTOS")]
+
+
 async def _dry_run(monkeypatch, filas, tipos_resueltos=None, extra_queue=()):
     carga = _carga("VENTAS", periodo_desde=date(2026, 9, 1), periodo_hasta=date(2026, 9, 30))
     contenido = _build_xlsx_bytes([_ENCABEZADO] + [list(f) for f in filas])
     monkeypatch.setattr(orquestador.storage, "descargar_archivo", lambda ruta: contenido)
     vigente = [] if tipos_resueltos is None else [tipos_resueltos]
     sin_bodegas = [[]]  # bodegas_excluidas -> default
+    lecturas_linea = [[], _LINEAS_DOS]  # ventas_tipos_excluidos -> default; lineas
     sin_tolerancia = [[]]  # periodo_tolerancia_pct -> entorno
     session = FakeAsyncSession(
-        execute_queue=_queue_cache_y_proveedor() + [vigente]
-        + sin_bodegas + sin_tolerancia + list(extra_queue) + [[]])
+        execute_queue=_queue_cache_y_proveedor(referencias=_REFERENCIAS_DOS) + [vigente]
+        + sin_bodegas + lecturas_linea + sin_tolerancia + list(extra_queue) + [[]])
     await orquestador._dry_run(session, carga)
     return carga, session
 
 
-async def test_archivo_solo_mostrador_0002_deja_el_log_identico_al_de_antes(monkeypatch):
+async def test_archivo_solo_repuestos_deja_el_log_identico_con_o_sin_filas_de_otras_lineas(monkeypatch):
     base = [_fila(nro_doc=f"FV-{i}") for i in range(3)]
     con_excluidas = base + [
-        _fila(tipo="0001 - MOTOCICLETA", nro_doc="X-1"),
-        _fila(tipo="0001 - MOTOCICLETA", fecha=_SERIAL_2026_08_15, nro_doc="X-2"),
-        _fila(tipo="0001 - MOTOCICLETA", ref="NOEXISTE", nro_doc="X-3"),
+        _fila(ref="REFM", nro_doc="X-1"),
+        _fila(ref="REFM", fecha=_SERIAL_2026_08_15, nro_doc="X-2"),
+        _fila(ref="NOEXISTE", nro_doc="X-3"),
     ]
 
     carga_a, sesion_a = await _dry_run(monkeypatch, base)
     carga_b, sesion_b = await _dry_run(monkeypatch, con_excluidas)
 
-    # Sin filas excluidas: ninguna clave nueva en el log.
+    # Sin filas de otras lineas: ninguna clave nueva en el log.
     assert "filas_solo_detalle" not in carga_a.log
-    # Con ellas: venta_mensual, periodo y fecha_max son EXACTAMENTE los mismos.
+    assert "filas_fuera_de_linea" not in carga_a.log
+    # Con ellas: periodo y fecha_max son EXACTAMENTE los mismos.
     log_b = dict(carga_b.log)
-    assert log_b.pop("filas_solo_detalle") == 2  # la de ref desconocida no se cuenta
-    assert log_b == carga_a.log
+    assert log_b.pop("filas_solo_detalle") == 2
+    assert log_b.pop("filas_fuera_de_linea") == 2
+    # La referencia desconocida (X-3) sigue la ruta de siempre: error de fila,
+    # staged con referencia None y contada en el histograma.
+    assert log_b.pop("filas_con_error") == 1
+    assert log_b.pop("filas_por_periodo") == {"2026-09": 4}
+    log_a = dict(carga_a.log)
+    assert log_a.pop("filas_por_periodo") == {"2026-09": 3}
+    log_a.pop("filas_con_error")
+    assert log_b == log_a
     assert carga_b.estado == carga_a.estado == "VALIDADO"
     assert carga_b.log["fecha_max_detectada"] == "2026-09-15"
-    assert carga_b.filas_validas == carga_a.filas_validas == 3
-    assert carga_b.filas_rechazadas == carga_a.filas_rechazadas == 0
-    assert (carga_b.periodo_desde, carga_b.periodo_hasta) == (
-        carga_a.periodo_desde, carga_a.periodo_hasta)
-    assert sesion_b.added_of_type(CargaError) == []
+    assert carga_b.filas_validas == 4
     solo = [f for f in sesion_b.added_of_type(CargaFilaStaging)
             if f.payload.get("solo_detalle")]
     assert len(solo) == 2
+    assert all(f.payload["linea_clase"] == "fuera_de_linea" for f in solo)
 
 
-async def test_mezcla_de_tipos_deja_taller_en_venta_mensual(monkeypatch):
+async def test_mezcla_de_lineas_deja_taller_en_venta_mensual(monkeypatch):
     filas = [
-        _fila(tipo="REPUESTOS", modulo="MOSTRADOR", nro_doc="M-1"),
-        _fila(tipo="ACCESORIOS", modulo="TALLER", nro_doc="T-1"),
-        _fila(tipo="LUBRICANTES", modulo="TALLER", nro_doc="T-2", cantidad=5),
-        _fila(tipo="0001 - MOTOCICLETA", modulo="MOSTRADOR", nro_doc="O-1"),
+        _fila(modulo="MOSTRADOR", nro_doc="M-1"),
+        _fila(modulo="TALLER", nro_doc="T-1"),
+        _fila(modulo="TALLER", nro_doc="T-2", cantidad=5),
+        _fila(ref="REFM", modulo="MOSTRADOR", nro_doc="O-1"),
     ]
 
     carga, sesion = await _dry_run(monkeypatch, filas)  # default nuevo
@@ -277,8 +291,8 @@ async def test_fila_solo_detalle_fuera_del_periodo_no_genera_carga_error(monkeyp
     # Caso ADVERTENCIA (1 de 200 filas en un mes adyacente): solo la fila de
     # venta_mensual puede recibir A-CARGA-043; la excluida de agosto no.
     filas = [_fila(nro_doc=f"FV-{i}") for i in range(199)]
-    filas.append(_fila(fecha=46265, nro_doc="AGO"))  # 2026-08-31, 0002
-    filas.append(_fila(tipo="0001 - MOTOCICLETA", fecha=_SERIAL_2026_08_15, nro_doc="X"))
+    filas.append(_fila(fecha=46265, nro_doc="AGO"))  # 2026-08-31
+    filas.append(_fila(ref="REFM", fecha=_SERIAL_2026_08_15, nro_doc="X"))
     agosto = CargaFilaStaging(
         carga_id=CARGA_ID, fila=201, lote=1, sucursal_id=SUCURSAL_ID,
         referencia_id=REFERENCIA_ID,
@@ -298,8 +312,8 @@ async def test_fila_solo_detalle_fuera_del_periodo_no_genera_carga_error(monkeyp
 
 async def test_fila_gps_cuenta_en_venta_mensual_con_el_default(monkeypatch):
     filas = [
-        _fila(tipo="REPUESTOS", modulo="MOSTRADOR", nro_doc="M-1"),
-        _fila(tipo="GPS", modulo="MOSTRADOR", nro_doc="O-1", cantidad=4),
+        _fila(modulo="MOSTRADOR", nro_doc="M-1"),
+        _fila(modulo="MOSTRADOR", nro_doc="O-1", cantidad=4),
     ]
 
     carga, sesion = await _dry_run(monkeypatch, filas)  # default nuevo
@@ -313,8 +327,8 @@ async def test_fila_gps_cuenta_en_venta_mensual_con_el_default(monkeypatch):
     assert "filas_solo_detalle" not in carga.log
 
 
-def test_tipo_en_mayusculas_distintas_y_con_espacio_cuenta_en_venta_mensual_con_el_default():
-    staging, errores = _procesar(_fila(tipo="Lubricantes "), tipos=TIPOS_NUEVO_DEFAULT)
+def test_linea_en_mayusculas_distintas_y_con_espacio_cuenta_en_venta_mensual_con_el_default():
+    staging, errores = _procesar(_fila(), tipos=TIPOS_NUEVO_DEFAULT, linea="LUBRICANTES")
 
     assert errores == []
     assert "solo_detalle" not in staging.payload
@@ -323,6 +337,6 @@ def test_tipo_en_mayusculas_distintas_y_con_espacio_cuenta_en_venta_mensual_con_
 
 
 def test_lista_configurada_con_mayusculas_y_espacios_tambien_coincide():
-    staging, _ = _procesar(_fila(tipo="gps"), tipos=[" Gps "])
+    staging, _ = _procesar(_fila(), tipos=[" Gps "], linea="GPS")
 
     assert "solo_detalle" not in staging.payload

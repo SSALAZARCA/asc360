@@ -17,7 +17,7 @@ from tests.motored.conftest import FakeAsyncSession
 
 from app.motored.models.carga_archivo import CargaArchivo
 from app.motored.models.carga_fila_staging import CargaFilaStaging
-from app.motored.services.ingesta import orquestador, ventas
+from app.motored.services.ingesta import orquestador, periodo, ventas
 from app.motored.services.ingesta.resolucion import CacheResolucion
 
 PROVEEDOR_ID = uuid.uuid4()
@@ -72,6 +72,8 @@ def _cola_dry_run():
         [PROVEEDOR_ID],
         [],  # tipos_inventario_incluidos -> default
         [],  # bodegas_excluidas -> default
+        [],  # ventas_tipos_excluidos -> default
+        [(REFERENCIA_ID, "REPUESTOS")],  # linea del maestro
         [],  # periodo_tolerancia_pct -> entorno
     ]
 
@@ -93,6 +95,7 @@ def _procesar(fecha):
         ),
         carga_id=uuid.uuid4(), proveedor_id=PROVEEDOR_ID,
         tipos_inventario_incluidos=["REPUESTOS"],
+        linea_por_referencia={REFERENCIA_ID: "REPUESTOS"},
     )
 
 
@@ -179,10 +182,11 @@ async def test_dry_run_rechazado_por_periodo_no_rompe_y_mantiene_el_veredicto(mo
 
 async def _aplicar(monkeypatch, carga) -> None:
     async def _aplicar_falso(session, filas_staging, desde, hasta, carga_id, tolerancia_pct=None):
-        return None
+        return periodo.VeredictoPeriodo(tipo=periodo.TipoVeredictoPeriodo.ACEPTADO)
 
     monkeypatch.setattr(orquestador.ventas_mod, "aplicar_con_periodo", _aplicar_falso)
-    await orquestador.ejecutar_aplicar(FakeAsyncSession(execute_queue=[[], [], []]), carga)
+    # staging, tipos incluidos, tolerancia, delete staging
+    await orquestador.ejecutar_aplicar(FakeAsyncSession(execute_queue=[[], [], [], []]), carga)
 
 
 async def test_aplicar_conserva_el_valor_calculado_en_el_dry_run(monkeypatch):

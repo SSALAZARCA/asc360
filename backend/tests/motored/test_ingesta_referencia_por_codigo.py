@@ -50,7 +50,7 @@ async def _cache(referencias=_REFERENCIAS):
 
 
 def _fila_venta(referencia, cantidad):
-    return ("Aprobada", "MOSTRADOR", _SERIAL_2026_09_15, cantidad, "0002 - REPUESTOS",
+    return ("Aprobada", "MOSTRADOR", _SERIAL_2026_09_15, cantidad, "REPUESTOS",
             "CALI NORTE", "BA061", referencia, "Ana Pérez", 1000, 0, "Taller El Rayo", f"FV-{referencia}")
 
 
@@ -59,7 +59,8 @@ def _procesar_ventas(cache, filas):
     for numero, fila in enumerate(filas, start=2):
         fila_staging, errores_fila = ventas.procesar_fila(
             fila, numero_fila=numero, lote=1, mapa_columnas=_MAPA_VENTAS, cache=cache,
-            carga_id=CARGA_ID, proveedor_id=HMCL, tipos_inventario_incluidos=["0002 - REPUESTOS"])
+            carga_id=CARGA_ID, proveedor_id=HMCL, tipos_inventario_incluidos=["REPUESTOS"],
+            linea_por_referencia={r: "REPUESTOS" for r in (REF_HMCL_1, REF_HMCL_2, REF_OTRO, REF_INACTIVA)})
         if fila_staging is not None:
             staging.append(fila_staging)
         errores += errores_fila

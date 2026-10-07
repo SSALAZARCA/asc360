@@ -60,7 +60,8 @@ def _procesar_venta(fila, excluidas=EXCLUIDAS, tipos=("REPUESTOS",)):
     return ventas.procesar_fila(
         fila, numero_fila=2, lote=1, mapa_columnas=_MAPA_VENTAS,
         cache=_cache(), carga_id=CARGA_ID, proveedor_id=PROVEEDOR_ID,
-        tipos_inventario_incluidos=list(tipos), bodegas_excluidas=excluidas)
+        tipos_inventario_incluidos=list(tipos), bodegas_excluidas=excluidas,
+        linea_por_referencia={REFERENCIA_ID: "REPUESTOS"})
 
 
 def _procesar_inventario(fila, excluidas=EXCLUIDAS):
@@ -146,7 +147,8 @@ def test_venta_excluida_aunque_la_bodega_si_resuelva_a_una_tienda():
         _fila_venta(bodega="99999"), numero_fila=2, lote=1,
         mapa_columnas=_MAPA_VENTAS, cache=cache, carga_id=CARGA_ID,
         proveedor_id=PROVEEDOR_ID, tipos_inventario_incluidos=["REPUESTOS"],
-        bodegas_excluidas=EXCLUIDAS)
+        bodegas_excluidas=EXCLUIDAS,
+        linea_por_referencia={REFERENCIA_ID: "REPUESTOS"})
 
     assert resultado is resolucion.MarcaFila.BODEGA_EXCLUIDA
 
@@ -265,8 +267,10 @@ async def _dry_run_ventas(monkeypatch, filas, bodegas=None):
     contenido = _xlsx(ventas.COLUMNAS_ESPERADAS, filas)
     monkeypatch.setattr(
         orquestador.storage, "descargar_archivo", lambda ruta: contenido)
-    # tipos_inventario_incluidos, bodegas_excluidas, periodo_tolerancia_pct
-    cola = _cola([[], [] if bodegas is None else [bodegas], []])
+    # tipos_inventario_incluidos, bodegas_excluidas, ventas_tipos_excluidos,
+    # linea del maestro, periodo_tolerancia_pct
+    cola = _cola([[], [] if bodegas is None else [bodegas], [],
+                  [(REFERENCIA_ID, "REPUESTOS")], []])
     session = FakeAsyncSession(execute_queue=cola + [[]])
     await orquestador._dry_run(session, carga)
     return carga, session

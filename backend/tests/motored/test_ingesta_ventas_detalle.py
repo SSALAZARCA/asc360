@@ -19,6 +19,7 @@ from tests.motored.test_ingesta_orquestador import (
     _build_xlsx_bytes,
     _carga,
     _queue_cache_y_proveedor,
+    LECTURAS_LINEA,
 )
 
 from app.motored.models.carga_fila_staging import CargaFilaStaging
@@ -56,6 +57,7 @@ def _procesar(fila_raw):
         fila_raw, numero_fila=2, lote=1, mapa_columnas=_MAPA, cache=_cache(),
         carga_id=CARGA_ID, proveedor_id=PROVEEDOR_ID,
         tipos_inventario_incluidos=["REPUESTOS"],
+        linea_por_referencia={REFERENCIA_ID: "REPUESTOS"},
     )
 
 
@@ -258,7 +260,8 @@ async def test_archivo_completo_de_13_columnas_pasa(monkeypatch):
     carga = _carga("VENTAS", periodo_desde=date(2026, 9, 1), periodo_hasta=date(2026, 9, 30))
     contenido = _build_xlsx_bytes([list(ventas.COLUMNAS_ESPERADAS), list(_fila())])
     monkeypatch.setattr(orquestador.storage, "descargar_archivo", lambda ruta: contenido)
-    session = FakeAsyncSession(execute_queue=_queue_cache_y_proveedor() + [[]])
+    session = FakeAsyncSession(execute_queue=_queue_cache_y_proveedor() + [
+        [], [], *LECTURAS_LINEA, []])
 
     await orquestador._dry_run(session, carga)
 

@@ -1,0 +1,215 @@
+"""
+VENTAS line rules (pure parts): the ERP type denylist, the class of a row by
+its master line, the apply-time re-evaluation and the PUT guards/roles.
+The end-to-end behavior against Postgres is in
+`pg_real/test_ingesta_ventas_lineas_pg.py`.
+"""
+import uuid
+from datetime import datetime
+
+import pytest
+from fastapi.testclient import TestClient
+
+from app.config import settings
+from app.main import app
+from app.motored.models.carga_archivo import CargaArchivo
+from app.motored.models.carga_fila_staging import CargaFilaStaging
+from app.motored.services.auth import MotoredUser
+from app.motored.services.ingesta import ventas, ventas_lineas as vl
+from app.motored.services.ingesta.resolucion import CacheResolucion
+from tests.motored.conftest import (
+    FakeAsyncSession,
+    override_motored_db,
+    override_motored_user,
+)
+
+REGLAS = vl.compilar_excluidos([
+    {"codigo": "IM19", "modo": "prefijo"},
+    {"codigo": "ST003", "modo": "exacto"},
+    {"codigo": " obs2 ", "modo": "exacto"},
+])
+
+
+@pytest.mark.parametrize("tipo, esperado", [
+    ("IM19", True), ("IM1901", True), ("im19xx", True), ("  IM19 ", True),
+    ("IM1", False), ("XIM19", False),
+    ("ST003", True), (" st003 ", True), ("ST0031", False), ("ST00", False),
+    ("OBS2", True), ("OBS", False),
+    ("REPUE", False), ("", False), (None, False),
+])
+def test_denylist_prefix_vs_exact_ignoring_case_and_spaces(tipo, esperado):
+    assert vl.es_tipo_excluido(tipo, REGLAS) is esperado
+
+
+def test_empty_denylist_excludes_nothing():
+    assert vl.es_tipo_excluido("IM1901", vl.compilar_excluidos([])) is False
+
+
+@pytest.mark.parametrize("linea, clase", [
+    ("REPUESTOS", vl.CLASE_INCLUIDA),
+    ("MOTOS", vl.CLASE_FUERA_DE_LINEA),
+    ("NO COMERCIAL", vl.CLASE_FUERA_DE_LINEA),
+    ("", vl.CLASE_SIN_LINEA),
+])
+def test_class_of_a_row_by_its_master_line(linea, clase):
+    assert vl.clasificar(linea, frozenset({"REPUESTOS"})) == clase
+
+
+def test_line_normalization_matches_the_kpi_rule():
+    assert vl.normalizar_linea("  Baterías ") == "BATERIAS"
+    assert vl.normalizar_linea(None) == ""
+    assert vl.normalizar_linea("   ") == ""
+
+
+# --- procesar_fila ----------------------------------------------------------
+
+REF = uuid.uuid4()
+SUC = uuid.uuid4()
+MAPA = {n: i for i, n in enumerate(ventas.COLUMNAS_ESPERADAS)}
+
+
+def _procesar(tipo, linea="REPUESTOS", reglas=REGLAS, ref="R1"):
+    fila = ("Aprobada", "MOSTRADOR", 46280, 5, tipo, "CALI", "BA061", ref,
+            "Ana", 1000, 0, "Taller", "FV-1")
+    return ventas.procesar_fila(
+        fila, numero_fila=2, lote=1, mapa_columnas=MAPA,
+        cache=CacheResolucion(
+            sucursal_por_texto={"CALI": SUC, "BA061": SUC},
+            referencia_por_codigo={"R1": (REF, uuid.uuid4())}),
+        carga_id=uuid.uuid4(), proveedor_id=uuid.uuid4(),
+        tipos_inventario_incluidos=["REPUESTOS"],
+        linea_por_referencia={REF: linea} if linea else {},
+        tipos_excluidos=reglas)
+
+
+def test_an_excluded_erp_type_is_discarded_with_a_marker_and_no_error():
+    assert _procesar("IM1901") is vl.MarcaTipoExcluido.TIPO_EXCLUIDO
+
+
+def test_denylist_wins_even_if_the_referencia_is_unknown():
+    assert _procesar("ST003", ref="NOEXISTE") is vl.MarcaTipoExcluido.TIPO_EXCLUIDO
+
+
+def test_the_erp_code_never_decides_the_line():
+    staging, errores = _procesar("REPUE")  # a code, not a line name
+
+    assert errores == []
+    assert staging.payload[vl.CLAVE_CLASE_LINEA] == vl.CLASE_INCLUIDA
+    assert "solo_detalle" not in staging.payload
+
+
+def test_empty_master_line_is_staged_as_sin_linea_not_as_the_file_text():
+    staging, errores = _procesar("REPUESTOS", linea="")
+
+    assert errores == []
+    assert staging.payload[vl.CLAVE_CLASE_LINEA] == vl.CLASE_SIN_LINEA
+    assert staging.payload["solo_detalle"] is True
+
+
+def test_unknown_referencia_keeps_the_existing_row_error():
+    staging, errores = _procesar("REPUE", ref="NOEXISTE")
+
+    assert [e.codigo_error for e in errores] == ["REFERENCIA_NO_ENCONTRADA"]
+    assert staging.referencia_id is None
+
+
+# --- reclasificar -----------------------------------------------------------
+
+
+def _staged(clase, ref=REF, solo=False, **extra):
+    payload = {"anio": 2026, "mes": 9, "dia": 15, "origen": "MOSTRADOR",
+               "cantidad": "1", vl.CLAVE_CLASE_LINEA: clase, **extra}
+    if solo:
+        payload["solo_detalle"] = True
+    return CargaFilaStaging(
+        carga_id=uuid.uuid4(), fila=1, lote=1, payload=payload,
+        sucursal_id=SUC, referencia_id=ref)
+
+
+def test_reclasificar_keeps_only_rows_whose_current_line_is_included():
+    incluidas = frozenset({"REPUESTOS"})
+    filas = [_staged(vl.CLASE_SIN_LINEA, solo=True)]
+
+    aplicables = vl.reclasificar(filas, {REF: "REPUESTOS"}, incluidas)
+    assert len(aplicables) == 1
+    assert "solo_detalle" not in aplicables[0].payload
+    assert "solo_detalle" in filas[0].payload  # the ORM row is not touched
+
+    assert vl.reclasificar(filas, {REF: "MOTOS"}, incluidas) == []
+    assert vl.reclasificar(filas, {}, incluidas) == []
+
+
+def test_reclasificar_passes_unresolved_and_legacy_rows_through():
+    sin_referencia = _staged(vl.CLASE_INCLUIDA, ref=None)
+    legado = _staged(vl.CLASE_INCLUIDA)
+    del legado.payload[vl.CLAVE_CLASE_LINEA]
+
+    aplicables = vl.reclasificar(
+        [sin_referencia, legado], {}, frozenset({"REPUESTOS"}))
+
+    assert len(aplicables) == 2
+
+
+# --- PUT: roles and guards (fake session) -----------------------------------
+
+URL = "/api/motored/cargas"
+
+
+@pytest.fixture(autouse=True)
+def _motored_ready(monkeypatch):
+    monkeypatch.setattr(settings, "MOTORED_ENABLED", True)
+    monkeypatch.setattr(settings, "MOTORED_SECRET_KEY", "lineas-motored-secret")
+    monkeypatch.setattr(settings, "SECRET_KEY", "lineas-asc360-secret")
+    yield
+    app.dependency_overrides.clear()
+
+
+def _carga(tipo="VENTAS", estado="VALIDADO"):
+    return CargaArchivo(
+        id=uuid.uuid4(), tipo=tipo, origen="EXCEL", nombre_archivo="a.xlsx",
+        hash_sha256="a" * 64, ruta_objeto="x", bytes=1, estado=estado,
+        filas_leidas=0, filas_validas=0, filas_rechazadas=0, lotes_staged=0,
+        ultimo_lote_aplicado=0, subido_por=uuid.uuid4(),
+        created_at=datetime(2026, 9, 21, 10))
+
+
+def _cliente(rol, cola):
+    override_motored_user(MotoredUser(user_id=str(uuid.uuid4()), role=rol))
+    override_motored_db(FakeAsyncSession(execute_queue=cola))
+    return TestClient(app)
+
+
+def _puts(carga):
+    una = f"{URL}/{carga.id}/referencias-sin-linea/{uuid.uuid4()}"
+    return [
+        ("single", una, {"linea_comercial": "GPS"}),
+        ("bulk", f"{URL}/{carga.id}/referencias-sin-linea",
+         [{"referencia_id": str(uuid.uuid4()), "linea_comercial": "GPS"}]),
+    ]
+
+
+@pytest.mark.parametrize("rol", ["SUCURSAL", "CONSULTA"])
+def test_only_admin_and_compras_can_assign_lines(rol):
+    carga = _carga()
+    for _, url, cuerpo in _puts(carga):
+        assert _cliente(rol, [[], [carga]]).put(url, json=cuerpo).status_code == 403
+
+
+@pytest.mark.parametrize("rol", ["ADMIN", "COMPRAS"])
+@pytest.mark.parametrize("tipo, estado", [
+    ("INVENTARIO", "VALIDADO"), ("VENTAS", "APLICADO"), ("VENTAS", "ANULADO")])
+def test_assignment_needs_an_open_ventas_carga(rol, tipo, estado):
+    carga = _carga(tipo, estado)
+    for _, url, cuerpo in _puts(carga):
+        respuesta = _cliente(rol, [[], [carga]]).put(url, json=cuerpo)
+        assert respuesta.status_code == 409, respuesta.text
+        assert isinstance(respuesta.json()["detail"], str)
+
+
+def test_an_empty_bulk_body_is_a_422_in_spanish():
+    carga = _carga()
+    respuesta = _cliente("ADMIN", [[], [carga]]).put(
+        f"{URL}/{carga.id}/referencias-sin-linea", json=[])
+
+    assert respuesta.status_code == 422
+    assert isinstance(respuesta.json()["detail"], str)

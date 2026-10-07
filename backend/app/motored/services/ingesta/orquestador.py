@@ -72,6 +72,7 @@ from app.motored.services.ingesta import periodo as periodo_mod
 from app.motored.services.ingesta import resolucion as resolucion_mod
 from app.motored.services.ingesta import transito as transito_mod
 from app.motored.services.ingesta import ventas as ventas_mod
+from app.motored.services.ingesta import ventas_lineas as lineas_mod
 from app.motored.services.trabajos import jobs
 from app.motored.services.trabajos.supervisor import POOL_INGESTA
 
@@ -81,6 +82,7 @@ CLAVE_TOLERANCIA_PERIODO = "periodo_tolerancia_pct"
 # Ultimo valor leido bien: si una lectura falla, se sigue con este.
 _memoria_tolerancia: dict = {}
 _memoria_bodegas_excluidas: dict = {}
+_memoria_tipos_excluidos: dict = {}
 
 TIPOS_MOVIMIENTO: Tuple[str, ...] = (
     "VENTAS",
@@ -172,6 +174,17 @@ async def _leer_bodegas_excluidas(
     return resolucion_mod.normalizar_bodegas_excluidas(valores[clave])
 
 
+async def _leer_tipos_excluidos(db: AsyncSession) -> lineas_mod.ReglasExcluidas:
+    """Una lectura por carga de `ventas_tipos_excluidos`. Mismo contrato
+    que `_leer_bodegas_excluidas`: nunca lanza, sin rollback."""
+    clave = parametros_claves.CLAVE_VENTAS_TIPOS_EXCLUIDOS
+    valores = await parametros.leer_con_memoria(
+        db, datetime.now(timezone.utc).date(),
+        {clave: list(parametros_claves.REGISTRO[clave].default)},
+        _memoria_tipos_excluidos, deshacer=False)
+    return lineas_mod.compilar_excluidos(valores[clave])
+
+
 ProcesadorFila = Callable[
     [Sequence[Any], int, int], Tuple[Optional[CargaFilaStaging], List[Any]]
 ]
@@ -205,7 +218,9 @@ async def _procesador_ventas(db, en_fecha, comunes) -> _Construido:
     return _con_parametros(
         ventas_mod, comunes, tipos_inventario_incluidos=tipos,
         bodegas_excluidas=bodegas_excluidas,
-        sucursal_por_co=sucursal_por_co), defaults
+        sucursal_por_co=sucursal_por_co,
+        tipos_excluidos=await _leer_tipos_excluidos(db),
+        linea_por_referencia=await lineas_mod.leer_lineas(db)), defaults
 
 
 async def _procesador_inventario(db, en_fecha, comunes) -> _Construido:
@@ -331,6 +346,10 @@ class _EstadoLoteDryRun:
         self.filas_bodega_excluida = 0
         # Filas de VENTAS con la columna C.O. vacía, resueltas por bodega.
         self.filas_co_vacio = 0
+        # Filas de VENTAS por línea del maestro (ver `ventas_lineas`).
+        self.filas_tipo_excluido = 0
+        self.filas_fuera_de_linea = 0
+        self.filas_sin_linea = 0
         self.histograma: Dict[Tuple[int, int], int] = {}
         # Fecha de venta mas reciente del archivo (solo VENTAS), acumulada en
         # la misma pasada que `histograma`; `_verificar_periodo_ventas` la
@@ -425,6 +444,16 @@ async def _resolver_encabezado(
     return lote[idx + 1:]
 
 
+def _contar_clase_de_linea(
+    estado: "_EstadoLoteDryRun", fila: Optional[CargaFilaStaging]
+) -> None:
+    clase = fila.payload.get(lineas_mod.CLAVE_CLASE_LINEA) if fila else None
+    if clase == lineas_mod.CLASE_FUERA_DE_LINEA:
+        estado.filas_fuera_de_linea += 1
+    elif clase == lineas_mod.CLASE_SIN_LINEA:
+        estado.filas_sin_linea += 1
+
+
 def _procesar_filas_del_lote(
     estado: _EstadoLoteDryRun,
     datos_del_lote: Sequence[Sequence[Any]],
@@ -445,6 +474,9 @@ def _procesar_filas_del_lote(
         if resultado is resolucion_mod.MarcaFila.BODEGA_EXCLUIDA:
             estado.filas_bodega_excluida += 1
             continue
+        if resultado is lineas_mod.MarcaTipoExcluido.TIPO_EXCLUIDO:
+            estado.filas_tipo_excluido += 1
+            continue
         fila_staging, errores_fila = resultado
         for error in errores_fila:
             session.add(error)
@@ -453,6 +485,7 @@ def _procesar_filas_del_lote(
         if fila_staging is not None and ventas_mod.tiene_co_vacio(
                 fila_staging):
             estado.filas_co_vacio += 1
+        _contar_clase_de_linea(estado, fila_staging)
         if fila_staging is not None and ventas_mod.es_solo_detalle(fila_staging):
             # Solo alimenta `venta_detalle`: ni valida, ni al histograma ni a
             # `fecha_max` -- `venta_mensual` y el periodo no la ven.
@@ -604,6 +637,13 @@ async def _cerrar_dry_run(
         log["filas_bodega_excluida"] = estado.filas_bodega_excluida
     if estado.filas_co_vacio:
         log["filas_co_vacio"] = estado.filas_co_vacio
+    for clave, cantidad in (
+        ("filas_tipo_excluido", estado.filas_tipo_excluido),
+        ("filas_fuera_de_linea", estado.filas_fuera_de_linea),
+        ("filas_sin_linea", estado.filas_sin_linea),
+    ):
+        if cantidad:
+            log[clave] = cantidad
     if estado.parametros_default_usados:
         log["parametros_default_usados"] = dict(estado.parametros_default_usados)
     await _verificar_corte_backorder(session, carga, log)
@@ -838,6 +878,38 @@ async def ejecutar_aplicar(session: AsyncSession, carga: CargaArchivo) -> None:
         raise
 
 
+async def _aplicar_ventas(
+    session: AsyncSession, carga: CargaArchivo,
+    filas_staging: Sequence[CargaFilaStaging],
+) -> None:
+    """VENTAS contra el maestro VIGENTE: con una referencia sin línea no se
+    escribe nada (409); las filas de una línea fuera de las incluidas se
+    descartan. Un veredicto de período RECHAZO (las líneas asignadas pueden
+    mover el histograma) tampoco aplica: la carga sigue VALIDADO."""
+    en_fecha = carga.periodo_desde or date.today()
+    tipos, _ = await parametros.resolver_tipos_inventario_incluidos(
+        session, en_fecha)
+    incluidas = lineas_mod.normalizar_incluidas(tipos)
+    lineas = await lineas_mod.leer_lineas(
+        session,
+        {f.referencia_id for f in filas_staging if f.referencia_id})
+    sin_linea = {
+        f.referencia_id for f in filas_staging
+        if lineas_mod.clase_de_fila(f.referencia_id, lineas, incluidas)
+        == lineas_mod.CLASE_SIN_LINEA}
+    if sin_linea:
+        raise EstadoInvalidoParaAplicarError(
+            lineas_mod.mensaje_sin_linea(len(sin_linea)))
+    veredicto = await ventas_mod.aplicar_con_periodo(
+        session, lineas_mod.reclasificar(filas_staging, lineas, incluidas),
+        carga.periodo_desde, carga.periodo_hasta, carga.id,
+        await _leer_tolerancia_periodo(session))
+    if veredicto.tipo == periodo_mod.TipoVeredictoPeriodo.RECHAZO:
+        raise EstadoInvalidoParaAplicarError(
+            "El período declarado ya no coincide con las filas que se "
+            "aplicarían; revise las líneas asignadas.")
+
+
 async def _aplicar_carga(session: AsyncSession, carga: CargaArchivo) -> None:
     if carga.estado != "VALIDADO":
         raise EstadoInvalidoParaAplicarError(
@@ -850,10 +922,7 @@ async def _aplicar_carga(session: AsyncSession, carga: CargaArchivo) -> None:
     filas_staging = result.scalars().all()
 
     if tipo == "VENTAS":
-        await ventas_mod.aplicar_con_periodo(
-            session, filas_staging, carga.periodo_desde, carga.periodo_hasta,
-            carga.id, await _leer_tolerancia_periodo(session),
-        )
+        await _aplicar_ventas(session, carga, filas_staging)
     elif tipo == "INVENTARIO":
         consolidado = inventario_mod.consolidar_existencias(filas_staging)
         await inventario_mod.aplicar(session, consolidado, carga.periodo_desde, carga.id)
