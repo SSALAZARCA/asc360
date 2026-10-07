@@ -48,6 +48,25 @@ def _propias(resultado, mundo):
     return {c: v for c, v in resultado["reportes"].items() if c in set(mundo.cedulas.values())}
 
 
+def _afirmar_detalle_contra_endpoint(detalle, endpoint, tendencia_anio, quien):
+    """Field by field against the raw output of the asesor detail endpoint (money in whole pesos)."""
+    asesor, mes, tarjeta = endpoint["asesor"], endpoint["cumplimiento_mes"], endpoint["comision"]
+    assert detalle["ficha"] == {
+        "nombre": asesor["nombre"], "cedula": asesor["cedula"], "tienda": asesor["tienda"], "cargo": asesor["cargo"],
+        "sucursal_id": asesor["sucursal_id"], "tramo": tarjeta["tramo"]}, quien
+    assert detalle["cumplimiento_mes"] == {
+        "mes": mes["mes"], "venta": round(mes["venta"]), "presupuesto": mes["presupuesto"], "pct": mes["pct"],
+        "semaforo": mes["semaforo"], "base": mes["base"]}, quien
+    assert len(detalle["tendencia"]) == 3 and [x["mes"] for x in detalle["tendencia"]] == MESES, quien
+    assert [x["pct"] for x in detalle["tendencia"]] == [x["pct"] for x in tendencia_anio], quien
+    assert [(x["id"]) for x in detalle["tiles"]] == [x["id"] for x in endpoint["tiles"]], quien
+    assert [x["linea"] for x in detalle["lineas"]] == [x["linea"] for x in endpoint["lineas"]], quien
+    assert [x["pct"] for x in detalle["lineas"]] == [x["pct"] for x in endpoint["lineas"]], quien
+    assert detalle["tecnired"]["clientes"] == endpoint["tecnired"]["clientes"], quien
+    assert detalle["tecnired"]["pct"] == endpoint["tecnired"]["pct"], quien
+    assert [x["nit"] for x in detalle["tecnired"]["top"]] == [x["nit"] for x in endpoint["tecnired"]["top"]], quien
+
+
 async def test_the_report_of_each_asesor_matches_the_hand_computed_world(sesion):
     mundo = await Mundo().crear(sesion)
 
@@ -72,9 +91,8 @@ async def test_the_detail_equals_the_asesor_detail_endpoint_for_the_same_asesor_
         del_mes = await _detalle_endpoint(sesion, mundo, quien, ["2097-03"])
         del_anio = await _detalle_endpoint(sesion, mundo, quien, MESES)
         reporte = resultado["reportes"][cedula]
-        esperado = d.para_reporte(del_mes, del_anio["tendencia"])
-        assert reporte["detalle"] == esperado, quien
-        assert len(reporte["detalle"]["tendencia"]) == 3
+        detalle = reporte["detalle"]
+        _afirmar_detalle_contra_endpoint(detalle, del_mes, del_anio["tendencia"], quien)
         tarjeta = del_mes["comision"]
         assert reporte["comision"] == round(tarjeta["comision"])
         assert reporte["total_a_pagar"] == round(tarjeta["total_a_pagar"])
@@ -86,8 +104,31 @@ async def test_the_detail_equals_the_asesor_detail_endpoint_for_the_same_asesor_
         assert comparaciones["puestos"] == del_mes["puestos"]
         assert comparaciones["comparacion"] == del_mes["comparacion"]
         assert comparaciones["strip_otros"] == del_mes["strip"]["otros"]
-    ana = resultado["reportes"][mundo.cedulas["ana"]]["detalle"]
-    assert ana["tecnired"]["clientes"] == 0 and ana["tiles"][0] == {"id": "venta", "valor": 700}
+
+
+async def test_the_detail_of_ana_matches_the_hand_computed_world(sesion):
+    """Explicit expectations worked out by hand (module docstring), independent of the builders."""
+    mundo = await Mundo().crear(sesion)
+
+    ana = (await r.reportes_asesores(sesion, FECHA))["reportes"][mundo.cedulas["ana"]]["detalle"]
+
+    assert ana["ficha"] == {
+        "nombre": f"Ana {mundo.sfx}", "cedula": mundo.cedulas["ana"], "tienda": f"Norte {mundo.sfx}",
+        "cargo": "ASESOR DE REPUESTOS", "sucursal_id": str(mundo.norte.id), "tramo": "BASE"}
+    mes = ana["cumplimiento_mes"]
+    assert (mes["mes"], mes["venta"], mes["presupuesto"]) == ("2097-03", 700, 800)
+    assert mes["pct"] == pytest.approx(0.875) and mes["semaforo"] == k.AMBAR
+    tarjeta = ana["comision"]
+    assert (tarjeta["tramo"], tarjeta["comision"], tarjeta["venta_base"], tarjeta["presupuesto"]) == ("BASE", 7, 700, 800)
+    assert (tarjeta["falta_100"], tarjeta["falta_compuerta"], tarjeta["fecha_datos"]) == (100, 60, "2097-03-05")
+    assert (tarjeta["sig"]["tramo"], tarjeta["sig"]["falta"], tarjeta["sig"]["meta"]) == ("PRO", 20, 720)
+    tiles = {x["id"]: x["valor"] for x in ana["tiles"]}
+    assert (tiles["venta"], tiles["ticket"], tiles["facturas"], tiles["clientes_unicos"]) == (700, 700, 1, 1)
+    assert [x["mes"] for x in ana["tendencia"]] == MESES
+    assert [x["pct"] for x in ana["tendencia"]] == [pytest.approx(1.0), pytest.approx(1.0), pytest.approx(0.875)]
+    assert ana["tecnired"] == {"venta": 0, "pct": 0.0, "clientes": 0, "top": []}
+    assert sorted(ana["comparaciones"]["strip_otros"]) == [pytest.approx(0.25), pytest.approx(1.5)]
+    assert ana["comparaciones"]["red"]["cumplimiento_pct"] == pytest.approx(1700 / 1800)
 
 
 async def test_the_tecnired_top_of_each_asesor_comes_from_one_grouped_query(sesion):
@@ -119,7 +160,8 @@ async def test_it_is_month_to_date_sales_after_fecha_do_not_count(sesion):
     ana_mitad, ana_fin = (x["reportes"][mundo.cedulas["ana"]] for x in (a_mitad, a_fin))
     assert (ana_mitad["venta_cumplimiento"], ana_mitad["fecha_datos"]) == (700, "2097-03-05")
     assert (ana_fin["venta_cumplimiento"], ana_fin["fecha_datos"]) == (1000, "2097-03-25")
-    assert ana_fin["tramo"]["nombre"] == "ELITE" or ana_fin["cumplimiento_pct"] == pytest.approx(1.25)
+    assert ana_fin["cumplimiento_pct"] == pytest.approx(1.25)
+    assert ana_fin["tramo"] == {"nombre": "ELITE", "tasa_pct": 1.8}
     assert ana_mitad["detalle"]["cumplimiento_mes"]["venta"] == 700
 
 
@@ -175,6 +217,38 @@ async def test_it_is_identical_from_the_summary_and_live(sesion, monkeypatch):
     desde_resumen = _propias(await r.reportes_asesores(sesion, FECHA), mundo)
 
     assert len(en_vivo) == 3 and desde_resumen == en_vivo
+
+
+async def _fuente_usada(db, fecha, monkeypatch):
+    usadas = []
+    original = r._periodo
+
+    async def espiar(db_, fecha_):
+        periodo = await original(db_, fecha_)
+        usadas.append(periodo.fuente)
+        return periodo
+
+    with monkeypatch.context() as parche:
+        parche.setattr(r, "_periodo", espiar)
+        resultado = await r.reportes_asesores(db, fecha)
+    return usadas, resultado
+
+
+async def test_the_source_is_live_when_the_month_has_sales_after_fecha_and_the_summary_at_month_end(sesion, monkeypatch):
+    mundo = await Mundo().crear(sesion)
+    _venta(sesion, mundo, "ana", "A8", 25, 300, mundo.norte)
+    await sesion.flush()
+    await kpi_resumen.reconstruir_todo(sesion)
+    monkeypatch.setattr(settings, "MOTORED_KPI_RESUMEN_ENABLED", True)
+    assert await lectura.usar_resumen(sesion)
+
+    a_mitad, rep_mitad = await _fuente_usada(sesion, FECHA, monkeypatch)
+    a_fin, rep_fin = await _fuente_usada(sesion, datetime.date(2097, 3, 31), monkeypatch)
+
+    assert a_mitad == [r._Vivo]  # the 25th is after fecha: the summary cannot answer "as of the 20th"
+    assert a_fin == [lectura]
+    assert rep_mitad["reportes"][mundo.cedulas["ana"]]["venta_cumplimiento"] == 700
+    assert rep_fin["reportes"][mundo.cedulas["ana"]]["venta_cumplimiento"] == 1000
 
 
 async def _selects(db, fecha):
