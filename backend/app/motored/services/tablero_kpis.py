@@ -687,6 +687,23 @@ async def _liquidar(
     return reglas, asesores, advertencias
 
 
+async def liquidar_cubo_del_mes(
+    db: AsyncSession, filtro: Filtro, mes: str, cubo, presupuestos,
+) -> Tuple[c.ReglasComision, List[Dict[str, Any]], Dict[str, Any], Dict[str, Decimal]]:
+    """Liquidates `mes` from an asesores cube (HMCL included) and the month's budgets, with the rules in
+    force that month: `(reglas, asesores, advertencias, {clave: venta})`, the last one being the sale of the
+    people without a valid cedula. The commissions tab and the daily asesor report both go through here."""
+    ventas, claves, sin_cedula = c.ventas_por_cedula_mes(cubo, filtro.reglas.lineas)
+    por_linea = c.ventas_por_linea_cedula_mes(cubo, filtro.reglas.lineas)
+    reglas, asesores, advertencias = await _liquidar(db, filtro, mes, ventas, claves, presupuestos, por_linea)
+    sin_cedula_mes = sin_cedula.get(mes, {})
+    advertencias["sin_cedula"] = {
+        "personas": len(sin_cedula_mes),
+        "venta": float(round(sum(sin_cedula_mes.values(), Decimal(0)), 2)),
+    }
+    return reglas, asesores, advertencias, sin_cedula_mes
+
+
 async def calcular_kpis_comisiones(db: AsyncSession, filtro: Filtro) -> Dict[str, Any]:
     """Pestana Comisiones: liquida el ULTIMO mes del filtro con las reglas vigentes ese mes; el filtro
     de tiendas acota los presupuestos y el periodo no cambia las cifras. La venta cuenta completa (HMCL
@@ -696,18 +713,11 @@ async def calcular_kpis_comisiones(db: AsyncSession, filtro: Filtro) -> Dict[str
     solo_mes = filtro._replace(
         sucursal_ids=None, modo_hmcl=HMCL_INCLUIR, meses=(mes,), rangos=t.rangos_de_meses([mes]))
     cubo = await lectura.cubo(db, solo_mes, None, DIM_ASESOR)
-    ventas, claves, sin_cedula = c.ventas_por_cedula_mes(cubo, filtro.reglas.lineas)
-    por_linea = c.ventas_por_linea_cedula_mes(cubo, filtro.reglas.lineas)
     primero = datetime.date(int(mes[:4]), int(mes[5:]), 1)
     presupuestos = presupuestos_del_rango(
         await pres.presupuesto_por_asesor(db, primero, primero), [mes], filtro.sucursal_ids,
         await principal_de(db))
-    reglas, asesores, advertencias = await _liquidar(
-        db, filtro, mes, ventas, claves, presupuestos, por_linea)
-    advertencias["sin_cedula"] = {
-        "personas": len(sin_cedula.get(mes, {})),
-        "venta": float(round(sum(sin_cedula.get(mes, {}).values(), Decimal(0)), 2)),
-    }
+    reglas, asesores, advertencias, _ = await liquidar_cubo_del_mes(db, filtro, mes, cubo, presupuestos)
     return {
         **_encabezado(filtro),
         **await lectura.frescura(db),

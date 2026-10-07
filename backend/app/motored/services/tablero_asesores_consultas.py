@@ -346,9 +346,11 @@ async def meses_disponibles(db: AsyncSession) -> List[str]:
     return [m for (m,) in filas.all()]
 
 
-async def ultima_fecha_venta(db, mes: str, sucursal_ids=None) -> Optional[datetime.date]:
-    """Day of the latest loaded (not ANULADO) sale of `mes` ("YYYY-MM") in the chosen stores, None when
-    the month has none. The summaries keep months, not days, so the live and summary paths both ask
+async def ultima_fecha_venta(
+    db, mes: str, sucursal_ids=None, hasta: Optional[datetime.date] = None,
+) -> Optional[datetime.date]:
+    """Day of the latest loaded (not ANULADO) sale of `mes` ("YYYY-MM") in the chosen stores (on or before
+    `hasta` when given), None when the month has none. The summaries keep months, not days, so the live and summary paths both ask
     here and agree."""
     inicio = datetime.date(int(mes[:4]), int(mes[5:]), 1)
     fin = (inicio + datetime.timedelta(days=32)).replace(day=1)
@@ -358,6 +360,8 @@ async def ultima_fecha_venta(db, mes: str, sucursal_ids=None) -> Optional[dateti
         .join(CargaArchivo, CargaArchivo.id == VentaDetalle.carga_id)
         .where(CargaArchivo.estado != "ANULADO", VentaDetalle.fecha >= inicio, VentaDetalle.fecha < fin)
     )
+    if hasta is not None:
+        consulta = consulta.where(VentaDetalle.fecha <= hasta)
     if sucursal_ids:
         consulta = consulta.where(donde_sucursales(VentaDetalle.sucursal_id, sucursal_ids))
     return (await db.execute(consulta)).scalar()
@@ -561,6 +565,28 @@ async def consultar_top_tecnired_de_asesor(
         .limit(limite)
     )
     return [FilaTecniredAsesor(nit, razon, Decimal(v)) for nit, razon, v in (await db.execute(consulta)).all()]
+
+
+async def consultar_tecnired_por_asesor(db, filtro: Filtro) -> Dict[str, List[FilaTecniredAsesor]]:
+    """ONE grouped query for the Tecnired clients of EVERY tablero row: `{clave: clientes}`, each list from the
+    biggest sale to the smallest (ties by NIT). Same filter as `consultar_top_tecnired_de_asesor`, which asks for
+    one asesor at a time; the daily report needs all of them without one query each."""
+    venta = func.sum(_expr_venta())
+    clave = _expr_clave(filtro.reglas)
+    lineas = _lineas_por_referencia(filtro.reglas)
+    consulta = _desde_ventas(
+        select(clave, ClienteTecnired.nit, ClienteTecnired.razon_social, venta), filtro, lineas,
+        solo_lineas_reconocidas=True, con_vendedor=True)
+    consulta = (
+        consulta.where(_expr_cliente_norm().in_(select(ClienteTecnired.nit)))
+        .join(ClienteTecnired, ClienteTecnired.nit == _expr_cliente_norm())
+        .group_by(clave, ClienteTecnired.nit, ClienteTecnired.razon_social)
+        .order_by(clave, venta.desc(), ClienteTecnired.nit)
+    )
+    por_clave: Dict[str, List[FilaTecniredAsesor]] = {}
+    for clave_, nit, razon, total in (await db.execute(consulta)).all():
+        por_clave.setdefault(clave_, []).append(FilaTecniredAsesor(nit, razon, Decimal(total)))
+    return por_clave
 
 
 async def cargar_reglas(db: AsyncSession, fecha: datetime.date) -> Reglas:

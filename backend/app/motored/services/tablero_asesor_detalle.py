@@ -23,12 +23,13 @@ Convenciones (las del tablero): dinero en pesos, todo `pct`/`red_pct` es una FRA
   razones (ticket, margen, % Tecnired).
 """
 import datetime
-from decimal import ROUND_CEILING, Decimal
+from decimal import ROUND_CEILING, ROUND_HALF_UP, Decimal
 from typing import Any, Dict, Iterable, List, Optional
 
 from app.motored.schemas.vendedor import limpiar_cedula
 from app.motored.services import festivos_colombia as festivos
 from app.motored.services import tablero_asesores as t
+from app.motored.services.tablero_comisiones import etiqueta_de
 
 
 def _cedula_de(clave: str) -> Optional[str]:
@@ -102,6 +103,32 @@ def _entero_hacia_arriba(valor: float) -> int:
     return int(Decimal(str(valor)).to_integral_value(rounding=ROUND_CEILING))
 
 
+def dias_habiles_restantes(mes: str, fecha_datos: datetime.date) -> int:
+    """Working days (Mon-Sat, no Colombian holidays) from the day after `fecha_datos` to the end of `mes`."""
+    fin = datetime.date(int(mes[:4]), int(mes[5:]), 1) + datetime.timedelta(days=32)
+    fin = fin.replace(day=1) - datetime.timedelta(days=1)
+    return festivos.dias_habiles(fecha_datos + datetime.timedelta(days=1), fin)
+
+
+def explicar_fila(fila: Dict[str, Any], mes: str, fecha_datos: Optional[datetime.date]) -> Dict[str, Any]:
+    """What the commission card explains about ONE liquidation row (`tablero_comisiones.liquidar_mes`):
+    working days left after `fecha_datos`, the gaps to the budget and to the bonus gate, the daily sale
+    needed and the next tier. The web card and the daily report both call this, so they always agree."""
+    sig = fila["sig"]
+    dias = None if fecha_datos is None else dias_habiles_restantes(mes, fecha_datos)
+    cumplida, presupuesto = fila["venta_cumplimiento"], fila["presupuesto"]
+    falta_100 = max(0.0, presupuesto - cumplida)
+    umbral = fila["gate"]["umbral"]
+    return {
+        "dias_habiles_restantes": dias,
+        "falta_100": falta_100,
+        "venta_diaria_necesaria": _entero_hacia_arriba(falta_100 / dias) if dias and falta_100 > 0 else None,
+        "falta_compuerta": max(0, _entero_hacia_arriba(umbral * presupuesto / 100 - cumplida)),
+        "siguiente_tramo": None if sig is None else {
+            "nombre": sig["nombre"], "falta": sig["falta"], "comision_si_llega": fila["comision"] + sig["gana"]},
+    }
+
+
 def _comision(
     comision: Optional[Dict[str, Any]], cedula: str, fecha_datos: Optional[datetime.date] = None,
 ) -> Optional[Dict[str, Any]]:
@@ -112,15 +139,7 @@ def _comision(
     if fila is None:
         return None
     sig = fila["sig"]
-    mes = comision["mes_liquidado"]
-    dias = None
-    if fecha_datos is not None:
-        fin = datetime.date(int(mes[:4]), int(mes[5:]), 1) + datetime.timedelta(days=32)
-        fin = fin.replace(day=1) - datetime.timedelta(days=1)
-        dias = festivos.dias_habiles(fecha_datos + datetime.timedelta(days=1), fin)
-    cumplida, presupuesto = fila["venta_cumplimiento"], fila["presupuesto"]
-    falta_100 = max(0.0, presupuesto - cumplida)
-    umbral = fila["gate"]["umbral"]
+    cumplida = fila["venta_cumplimiento"]
     return {
         "mes": comision["mes_liquidado"], "tramo": fila["tramo"], "tasa_pct": fila["tasa_pct"],
         "comision": fila["comision"], "venta_base": fila["venta_comision"],
@@ -133,12 +152,7 @@ def _comision(
             "falta": sig["falta"], "gana": sig["gana"], "meta": fila["presupuesto"] * sig["desde_pct"] / 100,
         },
         "fecha_datos": None if fecha_datos is None else fecha_datos.isoformat(),
-        "dias_habiles_restantes": dias,
-        "falta_100": falta_100,
-        "venta_diaria_necesaria": _entero_hacia_arriba(falta_100 / dias) if dias and falta_100 > 0 else None,
-        "falta_compuerta": max(0, _entero_hacia_arriba(umbral * presupuesto / 100 - cumplida)),
-        "siguiente_tramo": None if sig is None else {
-            "nombre": sig["nombre"], "falta": sig["falta"], "comision_si_llega": fila["comision"] + sig["gana"]},
+        **explicar_fila(fila, comision["mes_liquidado"], fecha_datos),
         "tramos": [
             {"nombre": x["nombre"], "desde_pct": x["desde_pct"], "tasa_pct": x["tasa_pct"]}
             for x in comision.get("tramos", ())],
@@ -211,7 +225,7 @@ def _cumplimiento_mes(
     }
 
 
-def _tendencia(por_mes: Dict[str, Dict[str, Any]], meses: List[str], cedula: str) -> List[Dict[str, Any]]:
+def tendencia_de(por_mes: Dict[str, Dict[str, Any]], meses: List[str], cedula: str) -> List[Dict[str, Any]]:
     return [
         {
             "mes": mes,
@@ -305,7 +319,7 @@ def construir_detalle(
             _fila_cumplimiento(del_mes, cedula), ultimo, red_mes, tablero["reglas"]["cumplimiento_base"]),
         "comision": _comision(comision, cedula, fecha_datos),
         "tiles": _tiles(fila, personas, total),
-        "tendencia": _tendencia(por_mes, meses, cedula),
+        "tendencia": tendencia_de(por_mes, meses, cedula),
         "lineas": _lineas(fila, total),
         "strip": _strip(con_pct, cedula, comision),
         "comparacion": _comparacion(
@@ -346,3 +360,79 @@ def construir_opciones(
             "venta": acumulado["venta"],
         })
     return sorted(opciones, key=lambda o: (-o["venta"], (o["nombre"] or "").upper(), o["cedula"]))
+
+
+# --- The same detail, shaped for the daily report (server-side PDF, no UI) ------------------------
+
+_PESOS_TARJETA = ("comision", "venta_base", "presupuesto", "bono_total", "total_a_pagar", "venta_hmcl", "promedio_red")
+
+
+def pesos(valor: Optional[float]) -> Optional[int]:
+    """Whole pesos, half up; None stays None."""
+    if valor is None:
+        return None
+    return int(Decimal(str(valor)).to_integral_value(rounding=ROUND_HALF_UP))
+
+
+def _tarjeta_en_pesos(tarjeta: Dict[str, Any]) -> Dict[str, Any]:
+    """The commission card with money as whole pesos. What is still missing (`falta_*`, daily sale) rounds UP."""
+    r = {k: (pesos(v) if k in _PESOS_TARJETA else v) for k, v in tarjeta.items() if k != "promedio_red"}
+    r["falta_100"] = _entero_hacia_arriba(tarjeta["falta_100"])
+    sig = tarjeta["sig"]
+    if sig is not None:
+        r["sig"] = {**sig, "falta": _entero_hacia_arriba(sig["falta"]), "gana": pesos(sig["gana"]),
+                    "meta": pesos(sig["meta"])}
+    r["siguiente_tramo"] = None if tarjeta["siguiente_tramo"] is None else {
+        **tarjeta["siguiente_tramo"], "falta": _entero_hacia_arriba(tarjeta["siguiente_tramo"]["falta"]),
+        "comision_si_llega": pesos(tarjeta["siguiente_tramo"]["comision_si_llega"])}
+    r["bonos"] = [
+        {**b, "venta": pesos(b["venta"])} for b in tarjeta["bonos"]]
+    return r
+
+
+_TILES_EN_PESOS = ("venta", "ticket")
+
+
+def para_reporte(detalle: Dict[str, Any], tendencia: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """The detail of ONE asesor (`construir_detalle`) shaped for the daily PDF: money in whole pesos,
+    percentages as fractions, no UI strings. Nothing of the detail is lost; everything that compares her with
+    the others (puestos, store and network averages, "vs red" references, the network line of the trend, the
+    other asesores of the strip, the network commission average) is grouped under `comparaciones`.
+    `tendencia` is her own trend over the months of the year to date (with the network pct per month)."""
+    asesor, comision = detalle["asesor"], detalle["comision"]
+    tarjeta = None if comision is None else _tarjeta_en_pesos(comision)
+    return {
+        "ficha": {
+            "nombre": asesor["nombre"], "cedula": asesor["cedula"], "tienda": asesor["tienda"],
+            "cargo": asesor["cargo"], "sucursal_id": asesor["sucursal_id"], "tramo": None if comision is None else comision["tramo"]},
+        "cumplimiento_mes": {
+            "mes": detalle["cumplimiento_mes"]["mes"], "venta": pesos(detalle["cumplimiento_mes"]["venta"]),
+            "presupuesto": detalle["cumplimiento_mes"]["presupuesto"], "pct": detalle["cumplimiento_mes"]["pct"],
+            "semaforo": detalle["cumplimiento_mes"]["semaforo"], "base": detalle["cumplimiento_mes"]["base"]},
+        "comision": tarjeta,
+        "tiles": [
+            {"id": x["id"], "valor": pesos(x["valor"]) if x["id"] in _TILES_EN_PESOS else x["valor"]}
+            for x in detalle["tiles"]],
+        "tendencia": [{"mes": x["mes"], "pct": x["pct"]} for x in tendencia],
+        "lineas": [
+            {"linea": x["linea"], "etiqueta": etiqueta_de(x["linea"]), "pct": x["pct"]} for x in detalle["lineas"]],
+        "tecnired": {
+            "venta": pesos(detalle["tecnired"]["venta"]), "pct": detalle["tecnired"]["pct"],
+            "clientes": detalle["tecnired"]["clientes"],
+            "top": [{**x, "venta": pesos(x["venta"])} for x in detalle["tecnired"]["top"]]},
+        "comparaciones": {
+            "puestos": detalle["puestos"],
+            "comparacion": detalle["comparacion"],
+            "strip_otros": detalle["strip"]["otros"], "strip_yo": detalle["strip"]["yo"],
+            "red": {
+                "cumplimiento_pct": detalle["cumplimiento_mes"]["red_pct"],
+                "comision_promedio": None if comision is None else pesos(comision["promedio_red"]),
+                "tendencia": [{"mes": x["mes"], "red_pct": x["red_pct"]} for x in tendencia],
+                "lineas": [{"linea": x["linea"], "red_pct": x["red_pct"]} for x in detalle["lineas"]],
+                "tiles": [
+                    {"id": x["id"], "ref": x["ref"], "ref_de": x["ref_de"], "dif_tipo": x["dif_tipo"],
+                     "dif": x["dif"]} for x in detalle["tiles"]],
+                "tecnired_pct": detalle["tecnired"]["red_pct"],
+            },
+        },
+    }
