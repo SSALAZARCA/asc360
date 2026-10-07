@@ -217,11 +217,11 @@ describe('Avisos tab', () => {
 });
 
 describe('Cargas tab', () => {
-  it('shows the six keys, the period tolerance included, with tooltips', () => {
+  it('shows the five keys, the period tolerance included, with tooltips', () => {
     montar('cargas', 'Cargas', CARGAS);
-    ['Líneas de inventario que cuentan', 'Estados de backorder vigentes', 'Ventana de ingresos (días)', 'Tolerancia de ingresos (%)', 'Tolerancia del período declarado (%)', 'Bodegas que no son tiendas']
+    ['Estados de backorder vigentes', 'Ventana de ingresos (días)', 'Tolerancia de ingresos (%)', 'Tolerancia del período declarado (%)', 'Bodegas que no son tiendas']
       .forEach((t) => expect(screen.getByText(t)).toBeInTheDocument());
-    expect(screen.getAllByRole('note').length).toBeGreaterThanOrEqual(6);
+    expect(screen.getAllByRole('note').length).toBeGreaterThanOrEqual(5);
     expect(campo('Tolerancia del período declarado (%)')).toHaveTextContent('Porcentaje máximo de líneas de otro mes que se acepta al declarar el período de un archivo.');
   });
 
@@ -234,14 +234,9 @@ describe('Cargas tab', () => {
     expect(onGuardar.mock.calls[0][0]).toMatchObject({ clave: 'periodo_tolerancia_pct', valor: '5' });
   });
 
-  it('edits the inventory lines as chips in capitals', async () => {
-    const { onGuardar } = montar('cargas', 'Cargas', CARGAS);
-    const c = campo('Líneas de inventario que cuentan');
-    fireEvent.change(within(c).getByLabelText('Nuevo valor'), { target: { value: 'llantas' } });
-    fireEvent.click(within(c).getByRole('button', { name: 'Agregar' }));
-    fireEvent.click(within(c).getByRole('button', { name: 'Guardar' }));
-    await waitFor(() => expect(onGuardar).toHaveBeenCalled());
-    expect(onGuardar.mock.calls[0][0].valor).toEqual(['REPUESTOS', 'GPS', 'LLANTAS']);
+  it('no longer offers the inventory lines (VENTAS keeps the catalog lines)', () => {
+    montar('cargas', 'Cargas', CARGAS);
+    expect(screen.queryByText('Líneas de inventario que cuentan')).toBeNull();
   });
 
   it('explains the excluded bodegas and shows them as chips', () => {

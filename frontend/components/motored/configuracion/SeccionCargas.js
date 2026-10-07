@@ -5,12 +5,9 @@ import CamposDeSeccion from './CamposDeSeccion';
 const AVISO = 'Reglas con las que se leen los archivos de carga. '
   + 'Cada carga usa el valor vigente en el momento de procesarla.';
 
+// tipos_inventario_incluidos is no longer offered: VENTAS keeps the rows
+// whose catalog line is one of the lineas_comerciales (Indicadores).
 const CAMPOS = [
-  {
-    clave: 'tipos_inventario_incluidos',
-    etiqueta: 'Líneas de inventario que cuentan',
-    ayuda: 'Las líneas de producto (columna «Tipo inventario» del archivo) que se incluyen al cargar ventas e inventario; las demás se ignoran. Si cambia esta lista, revise también las líneas comerciales de Indicadores.',
-  },
   {
     clave: 'estados_backorder_vigentes',
     etiqueta: 'Estados de backorder vigentes',
