@@ -23,8 +23,14 @@ hook reads the status so a 403 becomes 'bloqueado' (no retry) and a 429 is
 retried with backoff (`enviar_con_reintentos`). About one message per
 second.
 
+The ADMIN table (T3d): one row per asesor with sales (`filas_asesores`,
+from the same builder call as the counts) with an `estado` code, and
+`enviar_a_uno`, the "Enviar ahora" of one asesor, which bypasses the
+once-per-date rule and records a `reenvio` ledger row.
+
 Secrets: the token, the URL and the cédula are never logged nor stored in
-`detalle`; logs carry usuario ids and counts only.
+`detalle`; logs carry usuario ids and counts only. The table shows the
+cédula masked to its last 4 digits.
 """
 import logging
 import uuid
@@ -77,6 +83,18 @@ LOCK_REENVIO = 7_203_581_202
 
 ESTADO_APLICADO = "APLICADO"
 TIPO_VENTAS = "VENTAS"
+
+# `estado` of a table row, in precedence order (T3d), plus two codes only
+# the single send uses.
+SIN_USUARIO = "sin_usuario"
+CEDULA_PENDIENTE = "cedula_pendiente"
+USUARIO_INACTIVO = "usuario_inactivo"
+SIN_TELEGRAM = "sin_telegram"
+SIN_ENLACE = "sin_enlace"
+SIN_PRESUPUESTO = "sin_presupuesto"
+LISTO = "listo"
+SIN_CEDULA = "sin_cedula"
+SIN_VENTAS = "sin_ventas"
 
 
 # --- Configuración ---------------------------------------------------------
@@ -586,7 +604,7 @@ async def _ultimo_envio(db) -> dict:
 async def _disponible(db, fecha: Optional[date]) -> dict:
     vacio = {"elegibles": 0, "sin_enlace": [], "sin_cedula_aprobada": [],
              "sin_telegram": [], "sin_usuario": [], "sin_presupuesto": 0,
-             "sin_cedula": 0}
+             "sin_cedula": 0, "asesores": []}
     if fecha is None:
         return vacio
     datos = await reportes_asesores(db, fecha)
@@ -597,12 +615,13 @@ async def _disponible(db, fecha: Optional[date]) -> dict:
         "sin_telegram": clas.sin_telegram, "sin_usuario": clas.sin_usuario,
         "sin_presupuesto": len(datos.get("sin_presupuesto") or []),
         "sin_cedula": len(datos.get("sin_cedula") or []),
+        "asesores": await filas_asesores(db, datos),
     }
 
 
 async def estado_envio(db, hoy: date) -> dict:
-    """What the ADMIN sees in Configuración: names and counts, never a
-    token, URL or cédula."""
+    """What the ADMIN sees in Configuración: names, counts and the
+    per-asesor rows, never a token, URL or full cédula."""
     ahora = datetime.combine(hoy, time(12), tzinfo=BOGOTA_OFFSET)
     config = await leer_config(db, ahora, {})
     ultimo = await _ultimo_envio(db)
@@ -618,3 +637,217 @@ async def estado_envio(db, hoy: date) -> dict:
         "lista_hoy": esta_lista(fecha, hoy),
         **await _disponible(db, fecha),
     }
+
+
+# --- Per-asesor table (T3d) ------------------------------------------------
+
+@dataclass(frozen=True)
+class Titular:
+    """A usuario holding a cédula, whatever the state of its account."""
+    usuario_id: uuid.UUID
+    nombre: str
+    cedula: Optional[str]
+    cedula_aprobada: bool
+    activo: bool
+    status: str
+    telegram_id: Optional[int]
+    token: Optional[str] = field(default=None, repr=False)
+
+    def como_asesor(self) -> Asesor:
+        return Asesor(self.usuario_id, self.nombre, self.cedula,
+                      self.cedula_aprobada, self.telegram_id, self.token)
+
+
+@dataclass(frozen=True)
+class UltimoEnvio:
+    enviado_en: datetime
+    estado: str
+
+
+async def _leer_titulares(db, condicion) -> List[Titular]:
+    """Usuarios matching `condicion`, with their active link's token
+    (None without one). One query."""
+    stmt = select(
+        Usuario.id, Usuario.nombre, Usuario.cedula,
+        Usuario.cedula_aprobada, Usuario.activo, Usuario.status,
+        Usuario.telegram_id, ReporteAsesorLink.token,
+    ).outerjoin(ReporteAsesorLink, and_(
+        ReporteAsesorLink.usuario_id == Usuario.id,
+        ReporteAsesorLink.revocado_en.is_(None),
+    )).where(condicion).order_by(Usuario.nombre, Usuario.id)
+    filas = (await db.execute(stmt)).all()
+    return [Titular(f[0], f[1], f[2], bool(f[3]), bool(f[4]), f[5], f[6],
+                    f[7]) for f in filas]
+
+
+async def leer_titulares(db, cedulas: Iterable[str]) -> List[Titular]:
+    """Every non-rejected usuario holding one of `cedulas`."""
+    cedulas = sorted(set(cedulas))
+    if not cedulas:
+        return []
+    return await _leer_titulares(db, and_(
+        Usuario.cedula.in_(cedulas), Usuario.status != "rejected"))
+
+
+async def leer_titular(db, usuario_id) -> Optional[Titular]:
+    filas = await _leer_titulares(db, Usuario.id == usuario_id)
+    return filas[0] if filas else None
+
+
+async def leer_ultimos_envios(db, usuario_ids: Iterable[uuid.UUID]
+                              ) -> Dict[uuid.UUID, UltimoEnvio]:
+    """The latest ledger row of each usuario: latest `fecha_datos`, then
+    latest `enviado_en`. One query."""
+    ids = list(set(usuario_ids))
+    if not ids:
+        return {}
+    orden = func.row_number().over(
+        partition_by=ReporteAsesorEnvio.usuario_id,
+        order_by=(ReporteAsesorEnvio.fecha_datos.desc(),
+                  ReporteAsesorEnvio.enviado_en.desc()),
+    ).label("orden")
+    sub = select(
+        ReporteAsesorEnvio.usuario_id, ReporteAsesorEnvio.enviado_en,
+        ReporteAsesorEnvio.estado, orden,
+    ).where(ReporteAsesorEnvio.usuario_id.in_(ids)).subquery()
+    stmt = select(sub.c.usuario_id, sub.c.enviado_en, sub.c.estado).where(
+        sub.c.orden == 1)
+    return {f[0]: UltimoEnvio(f[1], f[2])
+            for f in (await db.execute(stmt)).all()}
+
+
+def elegir_titular(titulares: Iterable[Titular]) -> Optional[Titular]:
+    """The approved holder (unique by index), else the first pending."""
+    titulares = list(titulares)
+    aprobados = [t for t in titulares if t.cedula_aprobada]
+    return (aprobados or titulares or [None])[0]
+
+
+def estado_titular(titular: Optional[Titular], con_reporte: bool,
+                   ultimo: Optional[UltimoEnvio]) -> str:
+    """The first thing missing for the message, in precedence order."""
+    if titular is None:
+        return SIN_USUARIO
+    if not titular.cedula_aprobada:
+        return CEDULA_PENDIENTE
+    if not titular.activo or titular.status != "approved":
+        return USUARIO_INACTIVO
+    if titular.telegram_id is None:
+        return SIN_TELEGRAM
+    if not titular.token:
+        return SIN_ENLACE
+    if not con_reporte:
+        return SIN_PRESUPUESTO
+    if ultimo is not None and ultimo.estado == BLOQUEADO:
+        return BLOQUEADO
+    return LISTO
+
+
+def con_ventas(datos: dict) -> Dict[str, dict]:
+    """Every cédula with sales in one builder output, with its name,
+    tienda and whether its report exists."""
+    ventas = {
+        cedula: {"nombre": r.get("nombre"), "tienda": r.get("tienda"),
+                 "con_reporte": True}
+        for cedula, r in datos["reportes"].items()
+    }
+    for fila in datos.get("sin_presupuesto") or []:
+        ventas.setdefault(fila["cedula"], {
+            "nombre": fila.get("nombre"), "tienda": None,
+            "con_reporte": False})
+    return ventas
+
+
+def enmascarar(cedula: str) -> str:
+    return "****" + (cedula or "")[-4:]
+
+
+def _ultimo_json(ultimo: Optional[UltimoEnvio]) -> Optional[dict]:
+    if ultimo is None:
+        return None
+    return {"en": ultimo.enviado_en.isoformat(), "estado": ultimo.estado}
+
+
+def fila_asesor(cedula: str, venta: dict, titular: Optional[Titular],
+                ultimo: Optional[UltimoEnvio]) -> dict:
+    estado = estado_titular(titular, venta["con_reporte"], ultimo)
+    return {
+        "cedula_mask": enmascarar(cedula),
+        "nombre": titular.nombre if titular else (venta["nombre"] or "?"),
+        "tienda": venta["tienda"],
+        "usuario_id": str(titular.usuario_id) if titular else None,
+        "estado": estado,
+        "ultimo_envio": _ultimo_json(ultimo),
+        "puede_enviar": estado == LISTO,
+    }
+
+
+async def filas_asesores(db, datos: dict) -> List[dict]:
+    """One row per asesor with sales in `datos` (one builder output),
+    sorted by name. Two queries, whatever the number of asesores."""
+    ventas = con_ventas(datos)
+    por_cedula: Dict[str, List[Titular]] = {}
+    for titular in await leer_titulares(db, ventas):
+        por_cedula.setdefault(titular.cedula, []).append(titular)
+    elegidos = {c: elegir_titular(por_cedula.get(c, [])) for c in ventas}
+    ultimos = await leer_ultimos_envios(
+        db, [t.usuario_id for t in elegidos.values() if t])
+    filas = [
+        fila_asesor(cedula, ventas[cedula], titular,
+                    ultimos.get(titular.usuario_id) if titular else None)
+        for cedula, titular in elegidos.items()
+    ]
+    return sorted(filas, key=lambda f: (f["nombre"] or "").lower())
+
+
+# --- Single send (T3d) -----------------------------------------------------
+
+class NoListo(Exception):
+    """The asesor cannot get the message now; `estado` says why."""
+
+    def __init__(self, estado: str):
+        super().__init__(estado)
+        self.estado = estado
+
+
+@dataclass(frozen=True)
+class EnvioUno:
+    estado: str
+    nombre: str
+
+
+async def _verificar_listo(db, titular: Titular, datos: dict) -> None:
+    venta = con_ventas(datos).get(titular.cedula)
+    if venta is None:
+        raise NoListo(SIN_VENTAS)
+    ultimos = await leer_ultimos_envios(db, [titular.usuario_id])
+    estado = estado_titular(
+        titular, venta["con_reporte"], ultimos.get(titular.usuario_id))
+    if estado != LISTO:
+        raise NoListo(estado)
+
+
+async def enviar_a_uno(db, usuario_id: uuid.UUID, fecha: date,
+                       enviar: Enviar, dormir,
+                       solicitado_por: uuid.UUID) -> EnvioUno:
+    """The "Enviar ahora" of one asesor: their message for `fecha`, sent
+    now whatever the ledger says, recorded as a `reenvio` by
+    `solicitado_por`. Raises `LookupError` for an unknown usuario and
+    `NoListo` when the message cannot go out."""
+    titular = await leer_titular(db, usuario_id)
+    if titular is None:
+        raise LookupError("usuario inexistente")
+    if not titular.cedula:
+        raise NoListo(SIN_CEDULA)
+    datos = await reportes_asesores(db, fecha)
+    await _verificar_listo(db, titular, datos)
+    destinos = armar_destinos(
+        [titular.como_asesor()], datos["reportes"], fecha)
+    conteo = await enviar_lote(
+        db, destinos, fecha, enviar, dormir, reenvio=True,
+        solicitado_por=solicitado_por)
+    if conteo.enviados:
+        return EnvioUno(ENVIADO, titular.nombre)
+    if conteo.bloqueados:
+        return EnvioUno(BLOQUEADO, titular.nombre)
+    return EnvioUno(FALLIDO, titular.nombre)

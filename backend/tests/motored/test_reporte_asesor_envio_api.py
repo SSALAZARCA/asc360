@@ -196,3 +196,125 @@ def test_reenviar_works_with_the_daily_switch_off(
 
     assert respuesta.status_code == 202
     ejecutar.assert_awaited_once()
+
+
+# --- POST /enviar/{usuario_id} (T3d) ---------------------------------------
+
+@pytest.fixture
+def uno(monkeypatch):
+    mock = AsyncMock(return_value=envio.EnvioUno(envio.ENVIADO, "Ana"))
+    monkeypatch.setattr(envio, "enviar_a_uno", mock)
+    monkeypatch.setattr(
+        envio, "ultima_fecha_datos", AsyncMock(return_value=AYER))
+    return mock
+
+
+@pytest.mark.parametrize("role", NO_ADMIN)
+def test_enviar_uno_is_admin_only(role, uno):
+    respuesta = _cliente(role).post(f"{URL}/enviar/{uuid.uuid4()}", json={})
+
+    assert respuesta.status_code == 403
+    uno.assert_not_awaited()
+
+
+def test_enviar_uno_sends_now_for_the_latest_date(uno):
+    admin, asesor = uuid.uuid4(), uuid.uuid4()
+
+    respuesta = _cliente("ADMIN", admin).post(f"{URL}/enviar/{asesor}")
+
+    assert respuesta.status_code == 200
+    assert respuesta.json()["estado"] == envio.ENVIADO
+    assert "Ana" in respuesta.json()["detalle"]
+    args = uno.await_args.args
+    assert args[1] == asesor and args[2] == AYER and args[5] == admin
+
+
+def test_enviar_uno_accepts_a_date(uno):
+    respuesta = _cliente("ADMIN").post(
+        f"{URL}/enviar/{uuid.uuid4()}", json={"fecha_datos": "2026-10-02"})
+
+    assert respuesta.status_code == 200
+    assert uno.await_args.args[2] == date(2026, 10, 2)
+
+
+@pytest.mark.parametrize("variable", ["LORE_BOT_TOKEN", "MOTORED_PUBLIC_URL"])
+def test_enviar_uno_refuses_without_settings(variable, monkeypatch, uno):
+    monkeypatch.setattr(settings, variable, "")
+
+    respuesta = _cliente("ADMIN").post(f"{URL}/enviar/{uuid.uuid4()}")
+
+    assert respuesta.status_code == 409
+    assert variable in respuesta.json()["detail"]
+    uno.assert_not_awaited()
+
+
+@pytest.mark.parametrize("estado, palabra", [
+    (envio.CEDULA_PENDIENTE, "cédula"),
+    (envio.USUARIO_INACTIVO, "inactivo"),
+    (envio.SIN_TELEGRAM, "Telegram"),
+    (envio.SIN_ENLACE, "enlace"),
+    (envio.SIN_PRESUPUESTO, "presupuesto"),
+    (envio.BLOQUEADO, "bloqueó"),
+    (envio.SIN_CEDULA, "cédula"),
+    (envio.SIN_VENTAS, "ventas"),
+])
+def test_enviar_uno_names_what_is_missing(estado, palabra, uno):
+    uno.side_effect = envio.NoListo(estado)
+
+    respuesta = _cliente("ADMIN").post(f"{URL}/enviar/{uuid.uuid4()}")
+
+    assert respuesta.status_code == 422
+    assert palabra in respuesta.json()["detail"]
+
+
+def test_enviar_uno_of_an_unknown_usuario_is_404(uno):
+    uno.side_effect = LookupError("no existe")
+
+    respuesta = _cliente("ADMIN").post(f"{URL}/enviar/{uuid.uuid4()}")
+
+    assert respuesta.status_code == 404
+
+
+def test_a_403_answers_bloqueado(uno):
+    uno.return_value = envio.EnvioUno(envio.BLOQUEADO, "Ana")
+
+    respuesta = _cliente("ADMIN").post(f"{URL}/enviar/{uuid.uuid4()}")
+
+    assert respuesta.status_code == 200
+    assert respuesta.json()["estado"] == envio.BLOQUEADO
+    assert "bloqueó a Lore" in respuesta.json()["detalle"]
+
+
+def test_a_telegram_failure_is_a_502(uno):
+    uno.return_value = envio.EnvioUno(envio.FALLIDO, "Ana")
+
+    respuesta = _cliente("ADMIN").post(f"{URL}/enviar/{uuid.uuid4()}")
+
+    assert respuesta.status_code == 502
+    assert "Telegram" in respuesta.json()["detail"]
+
+
+def test_enviar_uno_works_with_the_daily_switch_off(monkeypatch, uno):
+    leer = AsyncMock(side_effect=AssertionError("must not read the switch"))
+    monkeypatch.setattr(envio, "leer_config", leer)
+
+    respuesta = _cliente("ADMIN").post(f"{URL}/enviar/{uuid.uuid4()}")
+
+    assert respuesta.status_code == 200
+    uno.assert_awaited_once()
+
+
+async def test_the_default_sender_uses_the_lore_token(monkeypatch):
+    enviar = AsyncMock(return_value=envio.Respuesta(envio.RES_OK))
+    monkeypatch.setattr(envio, "enviar_telegram", enviar)
+
+    await reporte_asesor.enviar_por_lore(7, "hola")
+
+    enviar.assert_awaited_once_with("1:tok", 7, "hola")
+
+
+def test_enviar_uno_never_answers_the_token_or_url(uno, caplog):
+    respuesta = _cliente("ADMIN").post(f"{URL}/enviar/{uuid.uuid4()}")
+
+    assert "1:tok" not in respuesta.text and "m.co" not in respuesta.text
+    assert "1:tok" not in caplog.text

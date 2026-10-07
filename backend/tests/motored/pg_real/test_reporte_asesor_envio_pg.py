@@ -321,3 +321,51 @@ async def test_estado_lists_the_skipped_asesores(fabrica, telegram_falso):
     assert estado["elegibles"] == 2
     assert estado["sin_enlace"] == ["Cami Sin Enlace"]
     assert "token" not in str(estado)
+
+
+# --- the per-asesor table and the single send (T3d) ------------------------
+
+async def test_estado_has_one_row_per_asesor(fabrica, telegram_falso):
+    ana, beto, sin_link = await _sembrar(fabrica)
+    await sup.run_tick(
+        session_factory=fabrica, ahora=AHORA, dormir=_sin_pausa)
+    async with fabrica() as db:
+        db.add(ReporteAsesorEnvio(
+            id=uuid.uuid4(), usuario_id=beto.id, cedula=beto.cedula,
+            fecha_datos=FECHA, estado=envio.BLOQUEADO, reenvio=True,
+            enviado_en=AHORA + datetime.timedelta(minutes=5)))
+        await db.commit()
+        estado = await envio.estado_envio(db, date(2097, 3, 21))
+
+    filas = {f["usuario_id"]: f for f in estado["asesores"]}
+    assert filas[str(ana.id)]["estado"] == envio.LISTO
+    assert filas[str(ana.id)]["ultimo_envio"]["estado"] == envio.ENVIADO
+    assert filas[str(ana.id)]["cedula_mask"] == "****" + ana.cedula[-4:]
+    assert filas[str(beto.id)]["estado"] == envio.BLOQUEADO
+    assert filas[str(sin_link.id)]["estado"] == envio.SIN_ENLACE
+    assert filas[str(sin_link.id)]["ultimo_envio"] is None
+    assert ana.cedula not in str(estado["asesores"])
+
+
+async def test_enviar_a_uno_records_a_resend(fabrica, telegram_falso):
+    ana, _, sin_link = await _sembrar(fabrica)
+    admin = _asesor()
+    async with fabrica() as db:
+        db.add(admin)
+        await db.commit()
+
+    async def enviar(chat_id, texto):
+        return await envio.enviar_telegram("1:tok-pg", chat_id, texto)
+
+    async with fabrica() as db:
+        resultado = await envio.enviar_a_uno(
+            db, ana.id, FECHA, enviar, _sin_pausa, admin.id)
+        with pytest.raises(envio.NoListo) as error:
+            await envio.enviar_a_uno(
+                db, sin_link.id, FECHA, enviar, _sin_pausa, admin.id)
+
+    assert resultado == envio.EnvioUno(envio.ENVIADO, "Ana Pérez")
+    assert error.value.estado == envio.SIN_ENLACE
+    filas = [f for f in await _ledger(fabrica) if f.usuario_id == ana.id]
+    assert len(filas) == 1
+    assert filas[0].reenvio is True and filas[0].solicitado_por == admin.id
