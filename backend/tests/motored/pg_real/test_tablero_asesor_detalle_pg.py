@@ -117,7 +117,8 @@ async def test_the_detail_of_ana_matches_the_hand_computed_world(sesion):
         "cedula": mundo.cedulas["ana"], "nombre": f"Ana {mundo.sfx}", "cargo": "ASESOR DE REPUESTOS",
         "tienda": f"Norte {mundo.sfx}", "sucursal_id": str(mundo.norte.id)}
     assert r["puestos"] == {
-        "cumplimiento": {"puesto": 2, "de": 3}, "venta": {"puesto": 1, "de": 3}, "tecnired": {"puesto": 1, "de": 3}}
+        "cumplimiento": {"puesto": 2, "de": 3}, "venta": {"puesto": 1, "de": 3},
+        "venta_sin_hmcl": {"puesto": 1, "de": 3}, "tecnired": {"puesto": 1, "de": 3}}
     assert (r["cumplimiento_mes"]["venta"], r["cumplimiento_mes"]["presupuesto"]) == (700.0, 800)
     assert r["cumplimiento_mes"]["pct"] == pytest.approx(0.875) and r["cumplimiento_mes"]["semaforo"] == k.AMBAR
     assert r["cumplimiento_mes"]["red_pct"] == pytest.approx(1700 / 1800)
