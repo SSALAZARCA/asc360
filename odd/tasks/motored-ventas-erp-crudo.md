@@ -26,3 +26,8 @@ Status: **plan agreed between the 3 sessions; waiting for the owner's go. No cod
 - [ ] F1 (after A lands)
 - [ ] F2 (after C lands)
 - [ ] F3 (after D lands)
+
+## Owner decisions (relayed by 5d)
+- COMPRAS may set `linea_comercial`, but ONLY for refs in a VENTAS carga's "sin línea" list. This does not grant general master editing.
+  - Proposed scoped endpoint for 84: `PUT /cargas/{carga_id}/referencias-sin-linea/{referencia_id}` with body `{linea_comercial}`, for ADMIN and COMPRAS.
+- Everything outside the parts lines is discarded. The scope is repuestos sold through mostrador and taller.
