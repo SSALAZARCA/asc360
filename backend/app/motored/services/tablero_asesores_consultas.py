@@ -353,11 +353,15 @@ async def ultima_fecha_venta(
     here and agree."""
     inicio = datetime.date(int(mes[:4]), int(mes[5:]), 1)
     fin = (inicio + datetime.timedelta(days=32)).replace(day=1)
+    # The newest row of the month (`fecha` is NOT NULL), not `max(fecha)` over all of them: with
+    # `ix_venta_detalle_fecha` it stops at the first row of a not ANULADO carga instead of reading the month.
     consulta = (
-        select(func.max(VentaDetalle.fecha))
+        select(VentaDetalle.fecha)
         .select_from(VentaDetalle)
         .join(CargaArchivo, CargaArchivo.id == VentaDetalle.carga_id)
         .where(CargaArchivo.estado != "ANULADO", VentaDetalle.fecha >= inicio, VentaDetalle.fecha < fin)
+        .order_by(VentaDetalle.fecha.desc())
+        .limit(1)
     )
     if hasta is not None:
         consulta = consulta.where(VentaDetalle.fecha <= hasta)
