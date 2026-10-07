@@ -333,6 +333,35 @@ export async function rechazarUsuario(id) {
   return motoredFetchJson(`/usuarios/${id}/rechazar`, { method: 'POST' });
 }
 
+// ---------------------------------------------------------------------------
+// Usuarios -- cédula, the link to the vendedor master for the daily asesor
+// report (odd/motored-reporte-diario-asesor, T1). ADMIN only. Saving it
+// approves it; a cédula typed in Lore waits for "Aprobar cédula".
+// ---------------------------------------------------------------------------
+
+export async function fijarCedulaUsuario(id, cedula) {
+  return motoredFetchJson(`/usuarios/${id}/cedula`, {
+    method: 'PUT',
+    body: JSON.stringify({ cedula }),
+  });
+}
+
+export async function aprobarCedulaUsuario(id) {
+  return motoredFetchJson(`/usuarios/${id}/cedula/aprobar`, {
+    method: 'POST',
+  });
+}
+
+export async function rechazarCedulaUsuario(id) {
+  return motoredFetchJson(`/usuarios/${id}/cedula/rechazar`, {
+    method: 'POST',
+  });
+}
+
+export async function quitarCedulaUsuario(id) {
+  return motoredFetchJson(`/usuarios/${id}/cedula`, { method: 'DELETE' });
+}
+
 /** Genera un código de un solo uso (10 min) para vincular el Telegram
  * PROPIO del ADMIN o COMPRAS autenticado -- nunca el de otro usuario. */
 export async function generarCodigoTelegram() {

@@ -26,6 +26,10 @@
  *   `motored_user` session, never a different user's row -- design D5: an
  *   ADMIN links only their own `telegram_id`). Vincular shows a one-time
  *   code (`generarCodigoTelegram`) to type into the Lore bot.
+ *
+ * odd/motored-reporte-diario-asesor (T1) adds a "Cédula" column to both
+ * tables (`components/motored/usuarios/CedulaUsuario.js`): state, editor
+ * and the ADMIN approve/reject/clear actions.
  */
 import MotoredTableScroll from '../../../components/motored/MotoredTableScroll';
 import MotoredIconAction from '../../../components/motored/MotoredIconAction';
@@ -33,6 +37,9 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import MotoredLayout from '../motored-layout';
 import RolesPermisosMatriz from '../../../components/motored/usuarios/RolesPermisosMatriz';
+import {
+  CedulaCelda, CedulaHeader, useCedulaAcciones,
+} from '../../../components/motored/usuarios/CedulaUsuario';
 import UsuarioCreateForm from '../../../components/motored/UsuarioCreateForm';
 import CambiarPasswordForm from '../../../components/motored/CambiarPasswordForm';
 import {
@@ -57,7 +64,7 @@ function estaBloqueado(u) {
   return Boolean(u.bloqueado_hasta) && new Date(u.bloqueado_hasta) > new Date();
 }
 
-function UsuariosTable({ usuarios, onDeactivate, onReactivate, ownUserId, onVincularTelegram, onDesvincularTelegram, onCambiarPassword, onDesbloquear }) {
+function UsuariosTable({ usuarios, onDeactivate, onReactivate, ownUserId, onVincularTelegram, onDesvincularTelegram, onCambiarPassword, onDesbloquear, cedulaAcciones }) {
   const handleDeactivateClick = (u) => {
     if (window.confirm(`¿Desactivar a "${u.nombre}"? No se elimina, queda marcado como inactivo.`)) {
       onDeactivate(u.id);
@@ -77,6 +84,7 @@ function UsuariosTable({ usuarios, onDeactivate, onReactivate, ownUserId, onVinc
             <th style={{ padding: '0 12px 8px 0' }}>Nombre</th>
             <th style={{ padding: '0 12px 8px 0' }}>Email</th>
             <th style={{ padding: '0 12px 8px 0' }}>Rol</th>
+            <th style={{ padding: '0 12px 8px 0' }}><CedulaHeader /></th>
             <th style={{ padding: '0 12px 8px 0' }}>Estado</th>
             <th />
           </tr>
@@ -87,6 +95,9 @@ function UsuariosTable({ usuarios, onDeactivate, onReactivate, ownUserId, onVinc
               <td style={{ padding: '10px 12px 10px 0' }}>{u.nombre}</td>
               <td style={{ padding: '10px 12px 10px 0' }}>{u.email}</td>
               <td style={{ padding: '10px 12px 10px 0' }}>{u.role}</td>
+              <td style={{ padding: '10px 12px 10px 0' }}>
+                <CedulaCelda usuario={u} acciones={cedulaAcciones} />
+              </td>
               <td style={{ padding: '10px 12px 10px 0', whiteSpace: 'nowrap' }}>
                 {u.activo ? 'Activo' : 'Inactivo'}
                 {estaBloqueado(u) && <span style={LOCK_BADGE}>Bloqueado hasta {formatHoraCo(u.bloqueado_hasta)}</span>}
@@ -125,7 +136,7 @@ function UsuariosTable({ usuarios, onDeactivate, onReactivate, ownUserId, onVinc
   );
 }
 
-function SolicitudesPendientesTable({ solicitudes, onAprobar, onRechazar }) {
+function SolicitudesPendientesTable({ solicitudes, onAprobar, onRechazar, cedulaAcciones }) {
   if (solicitudes.length === 0) {
     return <p style={{ color: 'var(--motored-text-muted, #5a5a5a)', fontSize: '0.8rem' }}>No hay solicitudes pendientes.</p>;
   }
@@ -137,6 +148,7 @@ function SolicitudesPendientesTable({ solicitudes, onAprobar, onRechazar }) {
           <tr style={{ textAlign: 'left', color: 'var(--motored-text-muted, #5a5a5a)' }}>
             <th style={{ padding: '0 12px 8px 0' }}>Nombre</th>
             <th style={{ padding: '0 12px 8px 0' }}>Teléfono</th>
+            <th style={{ padding: '0 12px 8px 0' }}><CedulaHeader /></th>
             <th />
           </tr>
         </thead>
@@ -145,6 +157,9 @@ function SolicitudesPendientesTable({ solicitudes, onAprobar, onRechazar }) {
             <tr key={s.id} style={{ borderTop: '1px solid var(--motored-border, #e4e4e7)' }}>
               <td style={{ padding: '10px 12px 10px 0' }}>{s.nombre}</td>
               <td style={{ padding: '10px 12px 10px 0' }}>{s.phone}</td>
+              <td style={{ padding: '10px 12px 10px 0' }}>
+                <CedulaCelda usuario={s} acciones={cedulaAcciones} />
+              </td>
               <td style={{ padding: '10px 0', display: 'flex', gap: '0.5rem' }}>
                 <MotoredIconAction action="Aprobar" onClick={() => onAprobar(s.id)} />
                 <MotoredIconAction action="Rechazar" onClick={() => onRechazar(s.id)} />
@@ -224,7 +239,7 @@ function useSolicitudesPendientes(enabled) {
     }
   };
 
-  return { solicitudes, loading, error, aprobar, rechazar };
+  return { solicitudes, loading, error, aprobar, rechazar, reload: load };
 }
 
 function useTelegramVinculacion(onDesvinculado) {
@@ -397,7 +412,7 @@ function TelegramLinkPanel({ codigo, error }) {
  * of the 4 concerns `UsuariosContent` was mixing. Single purpose: render
  * the pending-requests section end-to-end.
  */
-function SolicitudesPendientesPanel({ solicitudes, loading, error, onAprobar, onRechazar }) {
+function SolicitudesPendientesPanel({ solicitudes, loading, error, onAprobar, onRechazar, cedulaAcciones }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
       <h3 className="motored-h-seccion">Solicitudes pendientes</h3>
@@ -405,7 +420,10 @@ function SolicitudesPendientesPanel({ solicitudes, loading, error, onAprobar, on
       {loading ? (
         <p style={{ color: 'var(--motored-text-muted, #5a5a5a)', fontSize: '0.8rem' }}>Cargando...</p>
       ) : (
-        <SolicitudesPendientesTable solicitudes={solicitudes} onAprobar={onAprobar} onRechazar={onRechazar} />
+        <SolicitudesPendientesTable
+          solicitudes={solicitudes} onAprobar={onAprobar}
+          onRechazar={onRechazar} cedulaAcciones={cedulaAcciones}
+        />
       )}
     </div>
   );
@@ -451,11 +469,12 @@ function UsuariosTabs({ activa, onChange }) {
 }
 
 /** "Gestión de usuarios" tab: create form, main table, Telegram code and pending requests. */
-function GestionUsuariosPanel({ ownUserId, users, solicitudesState, telegramState, passwordState }) {
+function GestionUsuariosPanel({ ownUserId, users, solicitudesState, telegramState, passwordState, cedulaAcciones }) {
   const { usuarios, loading, error, create, deactivate, reactivate, desbloquear } = users;
   return (
     <>
       {error && <p style={{ color: 'var(--motored-danger, #c0392b)', fontSize: '0.8rem' }}>{error}</p>}
+      {cedulaAcciones.error && <p role="alert" style={{ color: 'var(--motored-danger, #c0392b)', fontSize: '0.8rem' }}>{cedulaAcciones.error}</p>}
 
       <UsuarioCreateForm onCreate={create} />
 
@@ -471,6 +490,7 @@ function GestionUsuariosPanel({ ownUserId, users, solicitudesState, telegramStat
           onDesvincularTelegram={telegramState.desvincular}
           onCambiarPassword={passwordState.abrir}
           onDesbloquear={desbloquear}
+          cedulaAcciones={cedulaAcciones}
         />
       )}
 
@@ -484,6 +504,7 @@ function GestionUsuariosPanel({ ownUserId, users, solicitudesState, telegramStat
         error={solicitudesState.error}
         onAprobar={solicitudesState.aprobar}
         onRechazar={solicitudesState.rechazar}
+        cedulaAcciones={cedulaAcciones}
       />
     </>
   );
@@ -500,6 +521,9 @@ function UsuariosContent() {
   const solicitudesState = useSolicitudesPendientes(allowed);
   const telegramState = useTelegramVinculacion(users.reload);
   const passwordState = usePasswordReset();
+  const cedulaAcciones = useCedulaAcciones(async () => {
+    await Promise.all([users.reload(), solicitudesState.reload()]);
+  });
   const [pestana, setPestana] = useState('gestion');
   if (!allowed) return null;
 
@@ -514,6 +538,7 @@ function UsuariosContent() {
           solicitudesState={solicitudesState}
           telegramState={telegramState}
           passwordState={passwordState}
+          cedulaAcciones={cedulaAcciones}
         />
       )}
     </div>
