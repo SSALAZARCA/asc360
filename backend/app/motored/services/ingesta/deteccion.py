@@ -51,6 +51,7 @@ _FIRMAS_POR_TIPO: Dict[str, Tuple[str, ...]] = {
 # Columnas que un tipo puede traer pero no exige (`orquestador` no aborta si
 # faltan; `plantillas` las agrega al encabezado). Única definición.
 COLUMNAS_OPCIONALES_POR_TIPO: Dict[str, Tuple[str, ...]] = {
+    "VENTAS": ventas_mod.COLUMNAS_OPCIONALES,
     "BACKORDER": backorder_mod.COLUMNAS_OPCIONALES,
 }
 

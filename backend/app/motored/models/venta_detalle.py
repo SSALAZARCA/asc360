@@ -49,5 +49,8 @@ class VentaDetalle(MotoredBase):
     # Numero de factura: el detalle se agrega por factura (ticket, items por
     # factura, facturas multilinea).
     nro_documento = Column(String(50), nullable=False)
+    # Costo ERP de la linea (total, con el signo del archivo) tomado de la
+    # columna opcional "Costo promedio total"; NULL si el archivo no la trae.
+    costo = Column(Numeric(18, 2), nullable=True)
 
     created_at = Column(DateTime, default=datetime.utcnow)

@@ -345,6 +345,9 @@ class _EstadoLoteDryRun:
         self.filas_bodega_excluida = 0
         # Filas de VENTAS con la columna C.O. vacía, resueltas por bodega.
         self.filas_co_vacio = 0
+        # Filas de VENTAS cuya celda `Costo promedio total` no se pudo
+        # interpretar (quedó NULL, sin error de fila).
+        self.filas_costo_invalido = 0
         # Filas de VENTAS por línea del maestro (ver `ventas_lineas`).
         self.filas_tipo_excluido = 0
         self.filas_fuera_de_linea = 0
@@ -489,6 +492,9 @@ def _procesar_filas_del_lote(
         if fila_staging is not None and ventas_mod.tiene_co_vacio(
                 fila_staging):
             estado.filas_co_vacio += 1
+        if fila_staging is not None and ventas_mod.tiene_costo_invalido(
+                fila_staging):
+            estado.filas_costo_invalido += 1
         _contar_clase_de_linea(estado, fila_staging)
         if fila_staging is not None and ventas_mod.es_solo_detalle(fila_staging):
             # Solo alimenta `venta_detalle`: ni valida, ni al histograma ni a
@@ -625,6 +631,7 @@ def _volcar_contadores(log: Dict[str, Any], estado: "_EstadoLoteDryRun") -> None
         ("filas_solo_detalle", estado.filas_solo_detalle),
         ("filas_bodega_excluida", estado.filas_bodega_excluida),
         ("filas_co_vacio", estado.filas_co_vacio),
+        ("filas_costo_invalido", estado.filas_costo_invalido),
         ("filas_tipo_excluido", estado.filas_tipo_excluido),
         ("filas_fuera_de_linea", estado.filas_fuera_de_linea),
         ("filas_sin_linea", estado.filas_sin_linea),

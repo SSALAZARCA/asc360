@@ -104,6 +104,18 @@ COLUMNAS_ESPERADAS: Tuple[str, ...] = (
     "Nro documento",
 )
 
+# Columna OPCIONAL "Costo promedio total": el costo ERP de la linea (total,
+# no unitario) al momento de la venta; va a `venta_detalle.costo`. Ausente,
+# vacia o no interpretable -> NULL (nunca `carga_error`); se guarda tal cual
+# (un negativo se conserva). "Costo prom. uni." es otro encabezado y se
+# ignora. Se declara en `deteccion.COLUMNAS_OPCIONALES_POR_TIPO`.
+COLUMNA_COSTO = "Costo promedio total"
+COLUMNAS_OPCIONALES: Tuple[str, ...] = (COLUMNA_COSTO,)
+# Claves del payload: el costo (solo si hay valor) y la marca de la celda no
+# interpretable, que el orquestador cuenta en `log["filas_costo_invalido"]`.
+CLAVE_COSTO = "costo"
+CLAVE_COSTO_INVALIDO = "costo_invalido"
+
 # Columna OPCIONAL "C.O." (centro de operación, el código de la tienda en
 # el ERP). Si el archivo la trae, la fila va a la sucursal de su C.O., sin
 # importar de qué bodega salió el repuesto (regla del dueño). Todos los
@@ -304,13 +316,41 @@ def _resolver_texto_o_error(
     return texto, None
 
 
+def _resolver_costo(
+    fila_raw: Sequence[Any], mapa_columnas: Dict[str, int],
+) -> Tuple[Optional[Decimal], bool]:
+    """`(costo, invalido)` de `Costo promedio total`. Columna ausente o
+    celda vacia -> `(None, False)`; celda no interpretable (texto, ambigua,
+    error de Excel, demasiado grande) -> `(None, True)`. Mismo parser que
+    `Valor bruto`, pero nunca rechaza la fila: la columna es opcional."""
+    if COLUMNA_COSTO not in mapa_columnas:
+        return None, False
+    valor = limpiar_moneda(_extraer(fila_raw, mapa_columnas, COLUMNA_COSTO))
+    try:
+        decimal = numeros_mod.parsear_decimal(valor)
+    except numeros_mod.CeldaFaltanteError:
+        es_error_excel = isinstance(valor, str) and valor.strip()
+        return None, bool(es_error_excel)
+    except numeros_mod.CeldaInvalidaError:
+        return None, True
+    if abs(decimal) >= VALOR_MAX_ABS:
+        return None, True
+    return decimal, False
+
+
+def tiene_costo_invalido(fila: CargaFilaStaging) -> bool:
+    """True si la celda `Costo promedio total` de la fila no se pudo
+    interpretar (quedo NULL)."""
+    return bool(fila.payload.get(CLAVE_COSTO_INVALIDO))
+
+
 def _resolver_campos_detalle(
     fila_raw: Sequence[Any], mapa_columnas: Dict[str, int], carga_id: uuid.UUID,
     numero_fila: int,
-) -> Tuple[Optional[Dict[str, str]], Optional[CargaError]]:
+) -> Tuple[Optional[Dict[str, Any]], Optional[CargaError]]:
     """Las 5 columnas del detalle por linea. El primer problema rechaza la
     fila (`carga_error`); si todo esta bien devuelve el aporte al payload."""
-    campos: Dict[str, str] = {}
+    campos: Dict[str, Any] = {}
     for clave, columna, codigo, largo in (
         ("vendedor", "Nombre vendedor", CODIGO_VENDEDOR_FALTANTE, _LARGO_MAX_NOMBRE),
         ("cliente_factura", "Cliente factura", CODIGO_CLIENTE_FALTANTE, _LARGO_MAX_NOMBRE),
@@ -334,6 +374,11 @@ def _resolver_campos_detalle(
         if error is not None:
             return None, error
         campos[clave] = str(valor)
+    costo, costo_invalido = _resolver_costo(fila_raw, mapa_columnas)
+    if costo is not None:
+        campos[CLAVE_COSTO] = str(costo)
+    elif costo_invalido:
+        campos[CLAVE_COSTO_INVALIDO] = True
     return campos, None
 
 
@@ -810,6 +855,8 @@ def construir_detalle(
             "valor_descuentos": Decimal(payload["valor_descuentos"]),
             "cliente_factura": payload["cliente_factura"],
             "nro_documento": payload["nro_documento"],
+            "costo": (Decimal(payload[CLAVE_COSTO])
+                      if payload.get(CLAVE_COSTO) is not None else None),
         })
     return detalle
 
