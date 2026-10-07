@@ -45,6 +45,7 @@ GRUPO_OPERACION = "OPERACION"
 # Bodegas que no son tiendas (bodega central, producto terminado): sus
 # líneas se ignoran al cargar ventas e inventario, sin marcar error.
 CLAVE_BODEGAS_EXCLUIDAS = "bodegas_excluidas"
+CLAVE_VENTAS_TIPOS_EXCLUIDOS = "ventas_tipos_excluidos"
 BODEGAS_EXCLUIDAS_DEFAULT = ("99999", "PYM01", "PAF01")
 
 # Pestañas de la pantalla de Configuración, en orden.
@@ -427,6 +428,41 @@ def bonos_por_linea(clave: str, default: list, grupo: str = GRUPO_OPERACION,
         seccion=seccion)
 
 
+_CAMPOS_TIPO_EXCLUIDO = ("codigo", "modo")
+_MODOS_TIPO_EXCLUIDO = ("prefijo", "exacto")
+_TIPOS_EXCLUIDOS_POR_DEFECTO = (
+    [{"codigo": "IM19", "modo": "prefijo"}]
+    + [{"codigo": c, "modo": "exacto"}
+       for c in ("VS12", "VS13", *(f"ST00{n}" for n in range(1, 9)),
+                 "G01", "OBS2", "RPGOGORO")])
+
+
+def _tipo_excluido_valido(fila: Any) -> bool:
+    return (
+        isinstance(fila, dict) and set(fila) == set(_CAMPOS_TIPO_EXCLUIDO)
+        and isinstance(fila["codigo"], str) and _normalizado(fila["codigo"])
+        and fila["modo"] in _MODOS_TIPO_EXCLUIDO)
+
+
+def tipos_excluidos(clave: str, default: list, grupo: str = GRUPO_OPERACION,
+                    seccion: str = "") -> EspecClave:
+    """Lista (puede ser vacía) de {codigo, modo}: códigos de tipo de venta
+    del ERP que la carga descarta. `codigo` en mayúsculas y sin espacios al
+    borde; `modo` prefijo (empieza por) o exacto; sin pares repetidos."""
+    def valido(valor):
+        return isinstance(valor, list) and all(
+            _tipo_excluido_valido(f) for f in valor
+        ) and _sin_repetidos([(f["codigo"], f["modo"]) for f in valor])
+
+    return EspecClave(
+        clave, default, AMBITO_GLOBAL, grupo,
+        "una lista (puede ser vacía) de códigos del ERP en mayúsculas y "
+        "sin espacios al borde, cada uno con modo prefijo o exacto, sin "
+        "pares repetidos",
+        valido, _identidad, tipo="lista", campos=_CAMPOS_TIPO_EXCLUIDO,
+        seccion=seccion)
+
+
 def _tope_por_tienda(clave: str):
     """Decimal > 0 o nulo ("sin tope"), sólo por sucursal (F4, ADR-6)."""
     def valido(valor):
@@ -591,6 +627,9 @@ def _construir_registro() -> Mapping[str, EspecClave]:
         _lista_texto("estados_backorder_vigentes", ["BACKORDER"]),
         lista_de_codigos(
             CLAVE_BODEGAS_EXCLUIDAS, list(BODEGAS_EXCLUIDAS_DEFAULT),
+            seccion="cargas"),
+        tipos_excluidos(
+            CLAVE_VENTAS_TIPOS_EXCLUIDOS, _TIPOS_EXCLUIDOS_POR_DEFECTO,
             seccion="cargas"),
         _entera("dias_ventana_ingresos", 45, 1, 3650, GRUPO_INGESTA),
         _decimal("tolerancia_ingreso_pct", 2.0, grupo=GRUPO_INGESTA),
