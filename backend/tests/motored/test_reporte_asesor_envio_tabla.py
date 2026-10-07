@@ -3,7 +3,7 @@ The per-asesor send table and the single send
 (odd/motored-reporte-diario-asesor, T3d).
 
 - One row per asesor with sales (`reportes` plus `sin_presupuesto` of ONE
-  builder call), with the cédula masked to its last 4 digits.
+  light month read), with the cédula masked to its last 4 digits.
 - `estado` follows a fixed precedence: sin_usuario, cedula_pendiente,
   usuario_inactivo, sin_telegram, sin_enlace, sin_presupuesto, bloqueado,
   listo. Only 'listo' can be sent now.
@@ -20,6 +20,9 @@ import pytest
 from app.config import settings
 from app.motored.models.reporte_asesor_envio import ReporteAsesorEnvio
 from app.motored.services import reporte_asesor_envio as envio
+from app.motored.services.reporte_asesor_ventas import (
+    VentasDelMes, armar_ventas,
+)
 from tests.motored.conftest import FakeAsyncSession
 
 AYER = date(2026, 10, 6)
@@ -81,22 +84,18 @@ def test_the_mask_keeps_only_the_last_four_digits():
 
 # --- the rows -------------------------------------------------------------
 
-def _datos():
-    return {
-        "reportes": {
-            CEDULA: {"cedula": CEDULA, "nombre": "PEREZ ANA",
-                     "tienda": "Centro"},
-            "1001": {"cedula": "1001", "nombre": "GOMEZ JUAN",
-                     "tienda": "Norte"},
-        },
-        "sin_presupuesto": [
-            {"cedula": "2002", "nombre": "RUIZ EVA", "venta": 10}],
-        "sin_cedula": [{"nombre": "SIN CEDULA", "venta": 5}],
-    }
+def _datos() -> VentasDelMes:
+    return armar_ventas(
+        [{"cedula": CEDULA, "nombre": "PEREZ ANA", "tienda": "Centro",
+          "cumplimiento_pct": 0.875, "total_a_pagar": 1000},
+         {"cedula": "1001", "nombre": "GOMEZ JUAN", "tienda": "Norte",
+          "cumplimiento_pct": 0.5, "total_a_pagar": 10}],
+        [{"cedula": "2002", "nombre": "RUIZ EVA", "venta": 10}],
+        {"SIN CEDULA": 5})
 
 
 class Lectores:
-    """Monkeypatched readers; counts the builder calls."""
+    """Monkeypatched readers; counts the month reads."""
 
     def __init__(self, monkeypatch, titulares=(), ultimos=None):
         self.llamadas_reportes = 0
@@ -113,7 +112,7 @@ class Lectores:
         async def leer_ultimos_envios(db, ids):
             return {k: v for k, v in (ultimos or {}).items() if k in ids}
 
-        async def reportes_asesores(db, fecha):
+        async def ventas_del_mes(db, fecha):
             self.llamadas_reportes += 1
             return _datos()
 
@@ -121,7 +120,7 @@ class Lectores:
         monkeypatch.setattr(envio, "leer_titular", leer_titular)
         monkeypatch.setattr(
             envio, "leer_ultimos_envios", leer_ultimos_envios)
-        monkeypatch.setattr(envio, "reportes_asesores", reportes_asesores)
+        monkeypatch.setattr(envio, "ventas_del_mes", ventas_del_mes)
 
 
 async def test_one_row_per_asesor_with_sales(monkeypatch):
@@ -129,7 +128,8 @@ async def test_one_row_per_asesor_with_sales(monkeypatch):
     eva = _titular(nombre="Eva Ruiz", cedula="2002")
     Lectores(monkeypatch, [ana, eva], {ana.usuario_id: _ultimo()})
 
-    filas = await envio.filas_asesores(FakeAsyncSession(), _datos())
+    filas = await envio.filas_asesores(
+        FakeAsyncSession(), _datos().asesores)
 
     por_mask = {f["cedula_mask"]: f for f in filas}
     assert set(por_mask) == {"****5123", "****1001", "****2002"}
@@ -153,13 +153,14 @@ async def test_one_row_per_asesor_with_sales(monkeypatch):
 async def test_the_rows_are_sorted_by_name(monkeypatch):
     Lectores(monkeypatch)
 
-    filas = await envio.filas_asesores(FakeAsyncSession(), _datos())
+    filas = await envio.filas_asesores(
+        FakeAsyncSession(), _datos().asesores)
 
     assert [f["nombre"] for f in filas] == [
         "GOMEZ JUAN", "PEREZ ANA", "RUIZ EVA"]
 
 
-async def test_estado_envio_builds_the_rows_from_one_builder_call(
+async def test_estado_envio_builds_the_rows_from_one_month_read(
         monkeypatch):
     ana = _titular()
     lectores = Lectores(monkeypatch, [ana])
@@ -189,6 +190,7 @@ async def test_estado_envio_builds_the_rows_from_one_builder_call(
     assert lectores.cedulas_pedidas == {CEDULA, "1001", "2002"}
     assert len(estado["asesores"]) == 3
     assert estado["elegibles"] == 1
+    assert (estado["sin_presupuesto"], estado["sin_cedula"]) == (1, 1)
     assert CEDULA not in str(estado)
     assert ana.token not in str(estado)
 

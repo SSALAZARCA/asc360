@@ -17,6 +17,7 @@ from app.config import settings
 from app.motored.models.reporte_asesor_envio import ReporteAsesorEnvio
 from app.motored.services import kpi_resumen
 from app.motored.services import reporte_asesor_envio as envio
+from app.motored.services.reporte_asesor_ventas import VentasDelMes
 from tests.motored.conftest import FakeAsyncSession
 
 HOY = date(2026, 10, 7)
@@ -436,7 +437,7 @@ async def test_the_detalle_never_carries_the_token_or_url():
 # --- the daily run --------------------------------------------------------
 
 class Lectores:
-    """Monkeypatched readers of `envio_diario`; counts the builder calls."""
+    """Monkeypatched readers of `envio_diario`; counts the month reads."""
 
     def __init__(self, monkeypatch, *, fecha=AYER, resumen=True,
                  asesores=(), reportes=None, ledger=()):
@@ -454,16 +455,17 @@ class Lectores:
         async def leer_ledger(db, f):
             return list(ledger)
 
-        async def reportes_asesores(db, f):
+        async def ventas_del_mes(db, f):
             self.llamadas_reportes += 1
-            return {"reportes": reportes or {}, "sin_presupuesto": [],
-                    "sin_cedula": []}
+            return VentasDelMes({
+                c: {**r, "tienda": None, "con_reporte": True}
+                for c, r in (reportes or {}).items()}, 0)
 
         monkeypatch.setattr(envio, "ultima_fecha_datos", ultima)
         monkeypatch.setattr(envio, "resumen_listo", listo)
         monkeypatch.setattr(envio, "leer_asesores", leer_asesores)
         monkeypatch.setattr(envio, "leer_ledger", leer_ledger)
-        monkeypatch.setattr(envio, "reportes_asesores", reportes_asesores)
+        monkeypatch.setattr(envio, "ventas_del_mes", ventas_del_mes)
 
 
 def _bogota(hora, minuto=0):

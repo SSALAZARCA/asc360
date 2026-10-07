@@ -9,14 +9,21 @@ sent that day.
 
 When: never before `reporte_asesor_hora_minima`; then as soon as the KPI
 summary is up to date (`resumen_al_dia`), or anyway after
-`reporte_asesor_hora_limite`. While the summary is dirty the report builder
+`reporte_asesor_hora_limite`. While the summary is dirty the month read
 answers live (`kpi_resumen_lectura.usar_resumen`), so the deadline path
 never reads stale figures.
 
 Who: an active, approved usuario with an approved cédula, a Telegram, an
-active `ReporteAsesorLink`, sales in `reportes_asesores(...)` (called ONCE
+active `ReporteAsesorLink`, a report in `ventas_del_mes(...)` (called ONCE
 per run) and no 'enviado' ledger row for that date (`pendientes`). The
 ledger (`models/reporte_asesor_envio.py`) gets one committed row per send.
+
+Cost: `ventas_del_mes` (`reporte_asesor_ventas`) is the light read of the
+month: the same liquidation as the full report builder
+(`reportes_asesores`) and the same asesores, without the KPI board, the
+year trend or any asesor detail. The message only needs
+`cumplimiento_pct` and `total_a_pagar`, so nothing here runs the full
+builder; the report page builds it when the asesor opens the link.
 
 Telegram: `avisos_telegram.enviar_mensaje` does the call; an httpx event
 hook reads the status so a 403 becomes 'bloqueado' (no retry) and a 429 is
@@ -24,7 +31,7 @@ retried with backoff (`enviar_con_reintentos`). About one message per
 second.
 
 The ADMIN table (T3d): one row per asesor with sales (`filas_asesores`,
-from the same builder call as the counts) with an `estado` code, and
+from the same light read as the counts) with an `estado` code, and
 `enviar_a_uno`, the "Enviar ahora" of one asesor, which bypasses the
 once-per-date rule and records a `reenvio` ledger row.
 
@@ -53,7 +60,9 @@ from app.motored.models.usuario import Usuario
 from app.motored.services import avisos_telegram, kpi_resumen, parametros
 from app.motored.services import reporte_asesor_link as enlaces
 from app.motored.services.reloj import BOGOTA_OFFSET, hoy_bogota
-from app.motored.services.reportes_asesores import reportes_asesores
+from app.motored.services.reporte_asesor_ventas import (
+    VentasDelMes, ventas_del_mes,
+)
 
 logger = logging.getLogger("motored.reporte_asesor_envio")
 
@@ -162,7 +171,7 @@ def resumen_al_dia(estado: Optional[kpi_resumen.Estado]) -> bool:
 
 
 async def resumen_listo(db) -> bool:
-    """With the summaries switched off the builder reads live data, which
+    """With the summaries switched off the month read is live, which
     is always up to date: no query."""
     if not settings.MOTORED_KPI_RESUMEN_ENABLED:
         return True
@@ -367,10 +376,10 @@ def armar_destinos(asesores: Iterable[Asesor], reportes: dict,
 
 async def preparar_destinos(db, fecha: date) -> List[Destino]:
     """Every eligible asesor's message for `fecha` (the ADMIN resend):
-    the report builder runs once."""
-    datos = await reportes_asesores(db, fecha)
-    clas = clasificar(await leer_asesores(db), datos["reportes"])
-    return armar_destinos(clas.elegibles, datos["reportes"], fecha)
+    the light month read runs once."""
+    reportes = (await ventas_del_mes(db, fecha)).reportes
+    clas = clasificar(await leer_asesores(db), reportes)
+    return armar_destinos(clas.elegibles, reportes, fecha)
 
 
 # --- Telegram --------------------------------------------------------------
@@ -552,7 +561,7 @@ async def esperar_candado(db, clave: int, segundos: int) -> bool:
 async def _por_enviar(db, fecha: date,
                       sin_reporte: Dict[date, Set[uuid.UUID]]):
     """Complete asesores not yet served for `fecha` and not known to lack
-    sales; None when there is nobody (no builder call)."""
+    sales; None when there is nobody (no month read)."""
     completos = [a for a in await leer_asesores(db) if a.completo]
     olvidar = sin_reporte.setdefault(fecha, set())
     candidatos = [a for a in pendientes(completos, await leer_ledger(
@@ -565,8 +574,8 @@ async def envio_diario(db, ahora: datetime, config: ConfigEnvio,
                        sin_reporte: Dict[date, Set[uuid.UUID]]
                        ) -> Optional[Conteo]:
     """The automatic send of one tick (the caller holds `LOCK_ENVIO`).
-    `sin_reporte` remembers, per date, who has no sales, so the builder
-    does not run again every tick for them."""
+    `sin_reporte` remembers, per date, who has no sales, so the month
+    read does not run again every tick for them."""
     local = ahora.astimezone(BOGOTA_OFFSET)
     fecha = await ultima_fecha_datos(db, local.date())
     if not esta_lista(fecha, local.date()):
@@ -577,13 +586,13 @@ async def envio_diario(db, ahora: datetime, config: ConfigEnvio,
     candidatos = await _por_enviar(db, fecha, sin_reporte)
     if candidatos is None:
         return None
-    reportes = (await reportes_asesores(db, fecha))["reportes"]
-    con_ventas = [a for a in candidatos if a.cedula in reportes]
+    reportes = (await ventas_del_mes(db, fecha)).reportes
+    con_reporte = [a for a in candidatos if a.cedula in reportes]
     sin_reporte[fecha].update(
         a.usuario_id for a in candidatos if a.cedula not in reportes)
-    if not con_ventas:
+    if not con_reporte:
         return None
-    destinos = armar_destinos(con_ventas, reportes, fecha)
+    destinos = armar_destinos(con_reporte, reportes, fecha)
     return await enviar_lote(db, destinos, fecha, enviar, dormir)
 
 
@@ -602,20 +611,22 @@ async def _ultimo_envio(db) -> dict:
 
 
 async def _disponible(db, fecha: Optional[date]) -> dict:
+    """Counts and rows of `fecha` from ONE light month read (never the
+    full report builder: this runs on every open of the screen)."""
     vacio = {"elegibles": 0, "sin_enlace": [], "sin_cedula_aprobada": [],
              "sin_telegram": [], "sin_usuario": [], "sin_presupuesto": 0,
              "sin_cedula": 0, "asesores": []}
     if fecha is None:
         return vacio
-    datos = await reportes_asesores(db, fecha)
-    clas = clasificar(await leer_asesores(db), datos["reportes"])
+    ventas = await ventas_del_mes(db, fecha)
+    clas = clasificar(await leer_asesores(db), ventas.reportes)
     return {
         "elegibles": len(clas.elegibles), "sin_enlace": clas.sin_enlace,
         "sin_cedula_aprobada": clas.sin_cedula_aprobada,
         "sin_telegram": clas.sin_telegram, "sin_usuario": clas.sin_usuario,
-        "sin_presupuesto": len(datos.get("sin_presupuesto") or []),
-        "sin_cedula": len(datos.get("sin_cedula") or []),
-        "asesores": await filas_asesores(db, datos),
+        "sin_presupuesto": ventas.sin_presupuesto,
+        "sin_cedula": ventas.sin_cedula,
+        "asesores": await filas_asesores(db, ventas.asesores),
     }
 
 
@@ -743,21 +754,6 @@ def estado_titular(titular: Optional[Titular], con_reporte: bool,
     return LISTO
 
 
-def con_ventas(datos: dict) -> Dict[str, dict]:
-    """Every cédula with sales in one builder output, with its name,
-    tienda and whether its report exists."""
-    ventas = {
-        cedula: {"nombre": r.get("nombre"), "tienda": r.get("tienda"),
-                 "con_reporte": True}
-        for cedula, r in datos["reportes"].items()
-    }
-    for fila in datos.get("sin_presupuesto") or []:
-        ventas.setdefault(fila["cedula"], {
-            "nombre": fila.get("nombre"), "tienda": None,
-            "con_reporte": False})
-    return ventas
-
-
 def enmascarar(cedula: str) -> str:
     return "****" + (cedula or "")[-4:]
 
@@ -782,10 +778,10 @@ def fila_asesor(cedula: str, venta: dict, titular: Optional[Titular],
     }
 
 
-async def filas_asesores(db, datos: dict) -> List[dict]:
-    """One row per asesor with sales in `datos` (one builder output),
-    sorted by name. Two queries, whatever the number of asesores."""
-    ventas = con_ventas(datos)
+async def filas_asesores(db, ventas: Dict[str, dict]) -> List[dict]:
+    """One row per asesor of `ventas` (`VentasDelMes.asesores`: cédula to
+    name, tienda and `con_reporte`), sorted by name. Two queries, whatever
+    the number of asesores."""
     por_cedula: Dict[str, List[Titular]] = {}
     for titular in await leer_titulares(db, ventas):
         por_cedula.setdefault(titular.cedula, []).append(titular)
@@ -816,8 +812,9 @@ class EnvioUno:
     nombre: str
 
 
-async def _verificar_listo(db, titular: Titular, datos: dict) -> None:
-    venta = con_ventas(datos).get(titular.cedula)
+async def _verificar_listo(db, titular: Titular,
+                          ventas: VentasDelMes) -> None:
+    venta = ventas.asesores.get(titular.cedula)
     if venta is None:
         raise NoListo(SIN_VENTAS)
     ultimos = await leer_ultimos_envios(db, [titular.usuario_id])
@@ -839,10 +836,10 @@ async def enviar_a_uno(db, usuario_id: uuid.UUID, fecha: date,
         raise LookupError("usuario inexistente")
     if not titular.cedula:
         raise NoListo(SIN_CEDULA)
-    datos = await reportes_asesores(db, fecha)
-    await _verificar_listo(db, titular, datos)
+    ventas = await ventas_del_mes(db, fecha)
+    await _verificar_listo(db, titular, ventas)
     destinos = armar_destinos(
-        [titular.como_asesor()], datos["reportes"], fecha)
+        [titular.como_asesor()], ventas.reportes, fecha)
     conteo = await enviar_lote(
         db, destinos, fecha, enviar, dormir, reenvio=True,
         solicitado_por=solicitado_por)
