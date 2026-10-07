@@ -185,6 +185,19 @@ async def _carga_or_404(db: AsyncSession, carga_id: uuid.UUID) -> CargaArchivo:
     return carga
 
 
+async def _carga_bloqueada(db: AsyncSession, carga_id: uuid.UUID) -> CargaArchivo:
+    """`_carga_or_404` con `SELECT ... FOR UPDATE` y el estado releido: dos
+    asignaciones o aplicaciones concurrentes de la misma carga se serializan
+    y la segunda ve lo que dejo la primera."""
+    result = await db.execute(
+        select(CargaArchivo).where(CargaArchivo.id == carga_id)
+        .with_for_update().execution_options(populate_existing=True))
+    carga = result.scalars().first()
+    if carga is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Carga no encontrada.")
+    return carga
+
+
 def _requiere_periodo(tipo: Optional[str], periodo_desde: Optional[date]) -> bool:
     return tipo in periodo_mod.TIPOS_QUE_DECLARAN_PERIODO and periodo_desde is None
 
@@ -723,7 +736,7 @@ async def _payload_sin_linea(
                if user is not None and user.role == "SUCURSAL" else None)
     payload = await lineas_mod.informe(
         db, carga.id, await _incluidas_de(db, carga), propias)
-    permitidas = await _lineas_permitidas(db)
+    permitidas = await _lineas_permitidas(db, carga)
     payload["opciones_linea"] = [
         {"valor": norm, "etiqueta": tablero_comisiones.etiqueta_de(norm)}
         for norm in permitidas if norm != lineas_mod.LINEA_NO_COMERCIAL
@@ -744,14 +757,16 @@ def _exigir_ventas_abierta(carga: CargaArchivo) -> None:
                    "asignar líneas.")
 
 
-async def _lineas_permitidas(db: AsyncSession) -> Dict[str, str]:
-    """`{línea normalizada: texto a guardar}`: `lineas_comerciales` vigente
-    más NO COMERCIAL (sacar la referencia del reparto sin bloquear)."""
+async def _lineas_permitidas(
+    db: AsyncSession, carga: CargaArchivo
+) -> Dict[str, str]:
+    """`{línea normalizada: texto a guardar}`: `lineas_comerciales` vigentes al
+    periodo de la carga (las mismas que usa el apply) más NO COMERCIAL (sacar
+    la referencia del reparto sin bloquear)."""
     clave = "lineas_comerciales"
-    valores = await parametros.leer_con_memoria(
-        db, datetime.now(timezone.utc).date(),
-        {clave: list(parametros_claves.REGISTRO[clave].default)}, {},
-        deshacer=False)
+    valores = await parametros.leer_valores(
+        db, carga.periodo_desde or date.today(),
+        {clave: list(parametros_claves.REGISTRO[clave].default)})
     permitidas = {lineas_mod.normalizar_linea(v): str(v).strip()
                   for v in valores[clave]}
     permitidas[lineas_mod.LINEA_NO_COMERCIAL] = lineas_mod.LINEA_NO_COMERCIAL
@@ -781,7 +796,7 @@ async def _asignar_lineas(
             status_code=status.HTTP_409_CONFLICT,
             detail="La referencia ya no está en la lista de referencias sin "
                    "línea de esta carga.")
-    permitidas = await _lineas_permitidas(db)
+    permitidas = await _lineas_permitidas(db, carga)
     invalidas = [i for i in items
                  if lineas_mod.normalizar_linea(i.linea_comercial)
                  not in permitidas]
@@ -813,7 +828,7 @@ async def _asignar_lineas(
 async def listar_referencias_sin_linea(
     carga_id: uuid.UUID,
     db: AsyncSession = Depends(get_motored_db_or_503),
-    user: MotoredUser = Depends(get_current_motored_user),
+    user: MotoredUser = Depends(_require_write),
 ):
     """Lo que falta resolver de una carga de VENTAS, calculado en vivo
     contra el maestro de hoy (ver `services.ingesta.ventas_lineas`)."""
@@ -831,7 +846,7 @@ async def asignar_lineas(
     user: MotoredUser = Depends(_require_write),
 ):
     """Asigna la línea de varias referencias a la vez, todo o nada."""
-    carga = await _carga_or_404(db, carga_id)
+    carga = await _carga_bloqueada(db, carga_id)
     await _asignar_lineas(db, carga, user, payload)
     await db.commit()
     return await _payload_sin_linea(db, carga)
@@ -848,7 +863,7 @@ async def asignar_linea(
     user: MotoredUser = Depends(_require_write),
 ):
     """Asigna la línea de UNA referencia sin línea de esta carga."""
-    carga = await _carga_or_404(db, carga_id)
+    carga = await _carga_bloqueada(db, carga_id)
     await _asignar_lineas(db, carga, user, [AsignacionLineaItem(
         referencia_id=referencia_id,
         linea_comercial=payload.linea_comercial)])
@@ -871,13 +886,34 @@ async def obtener_vaciado_previsto(
         db, carga, await _incluidas_de(db, carga))
 
 
+async def _exigir_vaciado_confirmado(db: AsyncSession, carga: CargaArchivo) -> None:
+    """Una carga `reemplaza_mes_completo` que borraria las ventas de tiendas
+    que el archivo no trae solo se aplica con `confirmar_vaciado=true`. La
+    lista se calcula en vivo; sin confirmacion no se escribe nada."""
+    if not orquestador.reemplaza_mes_completo(carga):
+        return
+    previstas = await lineas_mod.vaciado_previsto(
+        db, carga, await _incluidas_de(db, carga))
+    if not previstas:
+        return
+    nombres = sorted({p["nombre"] or str(p["sucursal_id"]) for p in previstas})
+    visibles = ", ".join(nombres[:10]) + (", …" if len(nombres) > 10 else "")
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=f"Esta carga va a borrar ventas de {len(nombres)} tiendas: "
+               f"confirme antes de aplicar. ({visibles})")
+
+
 @router.post("/{carga_id}/aplicar", response_model=CargaArchivoRead)
 async def aplicar_carga(
     carga_id: uuid.UUID,
+    confirmar_vaciado: bool = Query(False),
     db: AsyncSession = Depends(get_motored_db_or_503),
     user: MotoredUser = Depends(_require_write),
 ):
-    carga = await _carga_or_404(db, carga_id)
+    carga = await _carga_bloqueada(db, carga_id)
+    if carga.estado == "VALIDADO" and not confirmar_vaciado:
+        await _exigir_vaciado_confirmado(db, carga)
     try:
         await orquestador.ejecutar_aplicar(db, carga)
     except orquestador.EstadoInvalidoParaAplicarError as exc:

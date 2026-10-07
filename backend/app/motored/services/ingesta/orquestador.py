@@ -349,6 +349,9 @@ class _EstadoLoteDryRun:
         self.filas_tipo_excluido = 0
         self.filas_fuera_de_linea = 0
         self.filas_sin_linea = 0
+        # VENTAS rows that really enter venta_mensual: an included line with a
+        # resolved referencia (an unknown code is not "kept").
+        self.filas_conservadas = 0
         self.histograma: Dict[Tuple[int, int], int] = {}
         # Fecha de venta mas reciente del archivo (solo VENTAS), acumulada en
         # la misma pasada que `histograma`; `_verificar_periodo_ventas` la
@@ -496,6 +499,8 @@ def _procesar_filas_del_lote(
             session.add(fila_staging)
             staged_del_lote.append(fila_staging)
             estado.filas_validas += 1
+            if fila_staging.referencia_id is not None:
+                estado.filas_conservadas += 1
         elif errores_fila:
             estado.filas_rechazadas += 1
         # Una fila descartada EN SILENCIO (sin staging, sin error) no
@@ -635,11 +640,14 @@ def _fijar_estado_final(
     usuario las asigne; `CON_ERRORES` con un error de archivo completo si
     todas las filas con datos quedaron fuera de las lineas incluidas, o si
     no hay ninguna fila valida."""
-    if estado.filas_validas or estado.filas_sin_linea:
+    es_ventas = carga.tipo == "VENTAS"
+    conservadas = estado.filas_conservadas if es_ventas else estado.filas_validas
+    if conservadas or estado.filas_sin_linea:
         carga.estado = "VALIDADO"
         return
     carga.estado = "CON_ERRORES"
-    if estado.filas_fuera_de_linea:
+    if es_ventas and (estado.filas_validas or estado.filas_solo_detalle
+                      or estado.filas_tipo_excluido):
         codigo, mensaje = CODIGO_NINGUNA_LINEA_INCLUIDA, lineas_mod.MENSAJE_NINGUNA_LINEA
     else:
         codigo, mensaje = CODIGO_SIN_FILAS_VALIDAS, (
@@ -928,8 +936,9 @@ async def _aplicar_ventas(
     aplicables = lineas_mod.reclasificar(filas_staging, lineas, incluidas)
     # "Consideradas": las que entran a venta_mensual o traen el error de su
     # referencia desconocida; las solo-detalle no cuentan.
-    if filas_staging and all(
-            a.payload.get("solo_detalle") for a in aplicables):
+    if filas_staging and not any(
+            not a.payload.get("solo_detalle") and a.referencia_id is not None
+            for a in aplicables):
         raise EstadoInvalidoParaAplicarError(lineas_mod.MENSAJE_NINGUNA_LINEA)
     aplicar = (ventas_mod.aplicar_reemplazando_meses
                if reemplaza_mes_completo(carga)

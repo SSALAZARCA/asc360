@@ -371,11 +371,50 @@ async def test_dry_run_con_solo_filas_sin_linea_espera_la_asignacion(monkeypatch
     assert _error_de_archivo(sesion) == []
 
 
-async def test_dry_run_con_filas_de_referencias_desconocidas_cuenta_como_consideradas(monkeypatch):
-    carga, _ = await _dry_run(monkeypatch, [_fila(ref="NOEXISTE", nro_doc="U-1")])
+async def test_dry_run_con_solo_referencias_desconocidas_no_cuenta_como_conservadas(monkeypatch):
+    carga, sesion = await _dry_run(monkeypatch, [_fila(ref="NOEXISTE", nro_doc="U-1")])
 
-    assert carga.estado == "VALIDADO"  # el error de fila ya existente, sin la marca nueva
-    assert carga.filas_validas == 1
+    assert carga.estado == "CON_ERRORES"  # R2: an unknown code is not "kept"
+    assert _error_de_archivo(sesion) == ["E-CARGA-051"]
+
+
+async def test_dry_run_con_una_desconocida_y_una_conservada_queda_validado(monkeypatch):
+    carga, sesion = await _dry_run(monkeypatch, [
+        _fila(ref="NOEXISTE", nro_doc="U-1"), _fila(nro_doc="K-1")])
+
+    assert carga.estado == "VALIDADO"
+    assert _error_de_archivo(sesion) == []
+
+
+async def test_dry_run_con_solo_tipos_excluidos_marca_la_carga(monkeypatch):
+    carga, sesion = await _dry_run(monkeypatch, [_fila(tipo="IM1901", nro_doc="D-1")])
+
+    assert carga.estado == "CON_ERRORES"
+    assert _error_de_archivo(sesion) == ["E-CARGA-051"]
+
+
+async def test_dry_run_sin_ninguna_fila_con_datos_no_usa_el_codigo_de_lineas(monkeypatch):
+    carga, sesion = await _dry_run(monkeypatch, [_fila(estado="Anulada")])
+
+    assert carga.estado == "CON_ERRORES"
+    assert _error_de_archivo(sesion) == ["E-CARGA-049"]
+
+
+async def test_aplicar_con_solo_referencias_desconocidas_responde_409_y_no_escribe():
+    carga = _carga("VENTAS", estado="VALIDADO",
+                   periodo_desde=date(2026, 9, 1), periodo_hasta=date(2026, 9, 30))
+    desconocida = CargaFilaStaging(
+        carga_id=carga.id, fila=1, lote=1, sucursal_id=SUCURSAL_ID,
+        referencia_id=None,
+        payload={"anio": 2026, "mes": 9, "dia": 15, "origen": "MOSTRADOR",
+                 "cantidad": "1", "linea_clase": "incluida"})
+    sesion = FakeAsyncSession(execute_queue=[[desconocida], [], []])
+
+    with pytest.raises(orquestador.EstadoInvalidoParaAplicarError) as error:
+        await orquestador.ejecutar_aplicar(sesion, carga)
+
+    assert str(error.value).startswith("Ninguna fila quedó en las líneas incluidas")
+    assert len(sesion.executed_statements) == 2
 
 
 async def test_aplicar_sin_ninguna_fila_en_las_lineas_incluidas_responde_409_y_no_escribe():

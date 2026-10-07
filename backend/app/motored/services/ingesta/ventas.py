@@ -619,6 +619,8 @@ def procesar_fila(
     ) or lineas_mod.CLASE_INCLUIDA
     if clase == lineas_mod.CLASE_INCLUIDA:
         resultado = _procesar_fila_incluida(fila_raw, **comunes)
+    elif clase == lineas_mod.CLASE_SIN_LINEA:
+        resultado = _procesar_fila_sin_linea(fila_raw, comunes)
     else:
         resultado = _procesar_fila_solo_detalle(fila_raw, **comunes), []
     _marcar_clase(resultado[0], clase)
@@ -626,6 +628,19 @@ def procesar_fila(
             fila_raw, mapa_columnas):
         _marcar_co_vacio(resultado[0])
     return resultado
+
+
+def _procesar_fila_sin_linea(
+    fila_raw: Sequence[Any], comunes: Dict[str, Any],
+) -> Tuple[Optional[CargaFilaStaging], List[CargaError]]:
+    """Una referencia sin linea en el maestro se valida y se stagea igual que
+    una fila incluida (mismos `carga_error` visibles si algo no resuelve): su
+    venta es demanda en cuanto un usuario le asigne la linea, asi que un dato
+    malo no puede perderse en silencio. Queda `solo_detalle` hasta entonces."""
+    fila, errores = _procesar_fila_incluida(fila_raw, **comunes)
+    if fila is not None:
+        fila.payload = {**fila.payload, CLAVE_SOLO_DETALLE: True}
+    return fila, errores
 
 
 def _procesar_tipo_excluido(

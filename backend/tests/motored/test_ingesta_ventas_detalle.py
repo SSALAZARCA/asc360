@@ -367,3 +367,53 @@ async def test_aplicar_detalle_sin_filas_no_refresca_los_resumenes(refrescos):
     await ventas.aplicar_detalle(FakeAsyncSession(), [_staging(1, extra=False)], CARGA_ID)
 
     assert refrescos == []
+
+
+# --- the apply refreshes the KPI summaries of the file's and the purged keys ---
+
+
+def _staged_aplicable(sucursal_id):
+    return CargaFilaStaging(
+        carga_id=CARGA_ID, fila=2, lote=1, sucursal_id=sucursal_id,
+        referencia_id=REFERENCIA_ID,
+        payload={"anio": 2026, "mes": 9, "dia": 15, "origen": "MOSTRADOR",
+                 "cantidad": "10", "vendedor": "Ana", "valor_bruto": "1000",
+                 "valor_descuentos": "0", "cliente_factura": "X",
+                 "nro_documento": "FV-1"})
+
+
+async def test_the_ventas_apply_refreshes_the_kpi_summaries_of_the_files_keys(monkeypatch):
+    llamadas = []
+
+    async def refrescar(session, claves):
+        llamadas.append(set(claves))
+
+    monkeypatch.setattr(ventas.kpi_resumen, "refrescar_si_construido", refrescar)
+    sesion = FakeAsyncSession(execute_queue=[[]] * 10)
+
+    await ventas.aplicar_con_periodo(
+        sesion, [_staged_aplicable(SUCURSAL_ID)], date(2026, 9, 1),
+        date(2026, 9, 30), CARGA_ID)
+
+    assert llamadas == [{(SUCURSAL_ID, 2026, 9)}]
+
+
+async def test_the_full_month_apply_also_refreshes_the_purged_keys_the_file_lacks(monkeypatch):
+    llamadas = []
+    otra = uuid.uuid4()
+
+    async def refrescar(session, claves):
+        llamadas.append(set(claves))
+
+    async def purgar(session, meses):
+        return {(SUCURSAL_ID, 2026, 9), (otra, 2026, 9)}
+
+    monkeypatch.setattr(ventas.kpi_resumen, "refrescar_si_construido", refrescar)
+    monkeypatch.setattr(ventas, "purgar_meses_completos", purgar)
+    sesion = FakeAsyncSession(execute_queue=[[]] * 10)
+
+    await ventas.aplicar_reemplazando_meses(
+        sesion, [_staged_aplicable(SUCURSAL_ID)], date(2026, 9, 1),
+        date(2026, 9, 30), CARGA_ID)
+
+    assert llamadas == [{(SUCURSAL_ID, 2026, 9)}, {(otra, 2026, 9)}]

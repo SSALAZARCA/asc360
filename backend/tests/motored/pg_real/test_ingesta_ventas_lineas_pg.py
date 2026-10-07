@@ -265,7 +265,7 @@ async def test_el_endpoint_de_aplicar_responde_409_con_el_mensaje(
 
     with pytest.raises(HTTPException) as error:
         await cargas_api.aplicar_carga(
-            carga.id, db=sesion, user=_usuario(m))
+            carga.id, confirmar_vaciado=False, db=sesion, user=_usuario(m))
 
     assert error.value.status_code == 409
     assert error.value.detail == (
@@ -828,3 +828,120 @@ async def test_el_costo_de_venta_incluye_las_filas_que_no_son_de_linea(
         sesion, filtro, datetime.date(2026, 10, 5))
 
     assert costo == {str(m.tienda.id): Decimal("2100")}  # (10 + 4 + 7) x 100
+
+
+# --- audit hardening (R1, D2, R3) --------------------------------------------
+
+
+async def test_una_fila_sin_linea_con_fecha_mala_da_el_mismo_carga_error_visible(
+        sesion, monkeypatch, espias):
+    m = await _mundo(sesion)
+    mala = list(_fila(m, m.sin_linea, 3, "SL-1"))
+    mala[2] = "no es una fecha"  # the Fecha column
+
+    carga = await _dry_run(sesion, monkeypatch, [
+        _fila(m, m.con_linea, 10, "OK-1"), tuple(mala)])
+
+    errores = (await sesion.execute(
+        select(CargaError).where(CargaError.carga_id == carga.id))).scalars().all()
+    assert [(e.fila, e.columna) for e in errores] == [(3, "Fecha")]
+    assert carga.log["filas_con_error"] == 1
+
+
+async def test_una_fila_sin_linea_asignada_a_una_linea_incluida_llega_a_mensual_y_detalle(
+        sesion, monkeypatch, espias):
+    m = await _mundo(sesion)
+    carga = await _dry_run(sesion, monkeypatch, [
+        _fila(m, m.con_linea, 10, "OK-1"), _fila(m, m.sin_linea, 3, "SL-1")])
+    assert carga.log["filas_sin_linea"] == 1
+
+    await _asignar(sesion, m, carga, m.sin_linea, "REPUESTOS")
+    await _aplicar(sesion, carga)
+
+    mensual, detalle = await _tablas(sesion, m)
+    assert mensual[(m.sin_linea.id, "MOSTRADOR")] == Decimal("3")
+    assert detalle == {"OK-1", "SL-1"}
+
+
+async def _versiones_de_lineas(db, antes, ahora):
+    from app.motored.models.parametro_metodologia import ParametroMetodologia
+
+    for lineas, desde in ((antes, datetime.date(2026, 1, 1)),
+                          (ahora, datetime.date(2026, 10, 1))):
+        db.add(ParametroMetodologia(
+            id=uuid.uuid4(), clave="lineas_comerciales", valor=lineas,
+            sucursal_id=None, vigente_desde=desde))
+    await db.flush()
+
+
+async def test_los_put_y_las_opciones_usan_las_lineas_vigentes_en_el_periodo_de_la_carga(
+        sesion, monkeypatch, espias):
+    m = await _mundo(sesion)
+    # September (the carga) had GPS; October (today) dropped it.
+    await _versiones_de_lineas(sesion, ["REPUESTOS", "GPS"], ["REPUESTOS"])
+    carga = await _dry_run(sesion, monkeypatch, [_fila(m, m.sin_linea, 3, "SL-1")])
+
+    informe = await _informe(sesion, carga)
+    assert "GPS" in {o["valor"] for o in informe["opciones_linea"]}
+    asignado = await _asignar(sesion, m, carga, m.sin_linea, "GPS")
+    assert asignado["sin_linea"] == []
+    assert m.sin_linea.linea_comercial == "GPS"
+
+
+async def test_una_linea_que_solo_existe_despues_del_periodo_se_rechaza(
+        sesion, monkeypatch, espias):
+    m = await _mundo(sesion)
+    await _versiones_de_lineas(sesion, ["REPUESTOS"], ["REPUESTOS", "GPS"])
+    carga = await _dry_run(sesion, monkeypatch, [_fila(m, m.sin_linea, 3, "SL-1")])
+
+    assert "GPS" not in {
+        o["valor"] for o in (await _informe(sesion, carga))["opciones_linea"]}
+    with pytest.raises(HTTPException) as error:
+        await _asignar(sesion, m, carga, m.sin_linea, "GPS")
+    with pytest.raises(HTTPException) as masivo:
+        await cargas_api.asignar_lineas(
+            carga.id, [AsignacionLineaItem(
+                referencia_id=m.sin_linea.id, linea_comercial="GPS")],
+            db=sesion, user=_usuario(m))
+
+    assert error.value.status_code == masivo.value.status_code == 422
+    assert m.sin_linea.linea_comercial is None
+
+
+async def test_aplicar_con_vaciado_previsto_exige_confirmar_y_no_escribe_sin_el(
+        sesion, monkeypatch, espias):
+    m, otra, carga_a = await _red_con_dos_tiendas(sesion, monkeypatch)
+    carga_b = await _dry_run(
+        sesion, monkeypatch, [_fila(m, m.con_linea, 4, "B-1")], log=REEMPLAZA)
+
+    with pytest.raises(HTTPException) as error:
+        await cargas_api.aplicar_carga(
+            carga_b.id, confirmar_vaciado=False, db=sesion, user=_usuario(m))
+
+    assert error.value.status_code == 409
+    assert error.value.detail.startswith(
+        "Esta carga va a borrar ventas de 1 tiendas: confirme antes de aplicar.")
+    assert otra.nombre in error.value.detail
+    assert carga_b.estado == "VALIDADO"
+    assert await _mensual_de(sesion, otra) == {
+        (m.con_linea.id, 2026, 9, "MOSTRADOR"): Decimal("3")}
+
+    await cargas_api.aplicar_carga(
+        carga_b.id, confirmar_vaciado=True, db=sesion, user=_usuario(m))
+
+    assert carga_b.estado == "APLICADO"
+    assert await _mensual_de(sesion, otra) == {}
+
+
+async def test_aplicar_sin_vaciado_previsto_no_pide_confirmacion(
+        sesion, monkeypatch, espias):
+    m, otra, carga_a = await _red_con_dos_tiendas(sesion, monkeypatch)
+    carga_b = await _dry_run(sesion, monkeypatch, [
+        _fila(m, m.con_linea, 4, "B-1"),
+        _fila_en(await _bodega_de(sesion, otra), m.con_linea, 1, "B-2")],
+        log=REEMPLAZA)
+
+    await cargas_api.aplicar_carga(
+        carga_b.id, confirmar_vaciado=False, db=sesion, user=_usuario(m))
+
+    assert carga_b.estado == "APLICADO"

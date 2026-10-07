@@ -120,6 +120,53 @@ def test_empty_master_line_is_staged_as_sin_linea_not_as_the_file_text():
     assert staging.payload["solo_detalle"] is True
 
 
+def test_a_sin_linea_row_stages_fully_resolved_like_an_included_row():
+    sin_linea, _ = _procesar("REPUESTOS", linea="")
+    incluida, _ = _procesar("REPUESTOS")
+
+    quitar = {"solo_detalle", vl.CLAVE_CLASE_LINEA}
+    assert ({k: v for k, v in sin_linea.payload.items() if k not in quitar}
+            == {k: v for k, v in incluida.payload.items() if k not in quitar})
+    assert (sin_linea.sucursal_id, sin_linea.referencia_id) == (SUC, REF)
+
+
+def test_a_sin_linea_row_with_a_bad_date_gives_the_same_visible_error_as_an_included_one():
+    fila = ("Aprobada", "MOSTRADOR", "no es fecha", 5, "REPUESTOS", "CALI",
+            "BA061", "R1", "Ana", 1000, 0, "Taller", "FV-1")
+
+    def procesar(linea):
+        return ventas.procesar_fila(
+            fila, numero_fila=2, lote=1, mapa_columnas=MAPA,
+            cache=CacheResolucion(
+                sucursal_por_texto={"CALI": SUC, "BA061": SUC},
+                referencia_por_codigo={"R1": (REF, uuid.uuid4())}),
+            carga_id=uuid.uuid4(), proveedor_id=uuid.uuid4(),
+            lineas_incluidas=["REPUESTOS"], linea_por_referencia={REF: linea},
+            tipos_excluidos=REGLAS)
+
+    staging, errores = procesar("")
+    _, errores_incluida = procesar("REPUESTOS")
+
+    assert staging is None
+    assert [e.codigo_error for e in errores] == [
+        e.codigo_error for e in errores_incluida] != []
+
+
+def test_a_sin_linea_row_with_an_unresolved_sucursal_keeps_the_visible_error():
+    fila = ("Aprobada", "MOSTRADOR", 46280, 5, "REPUESTOS", "NOEXISTE", "ZZ",
+            "R1", "Ana", 1000, 0, "Taller", "FV-1")
+    staging, errores = ventas.procesar_fila(
+        fila, numero_fila=2, lote=1, mapa_columnas=MAPA,
+        cache=CacheResolucion(
+            sucursal_por_texto={}, referencia_por_codigo={"R1": (REF, uuid.uuid4())}),
+        carga_id=uuid.uuid4(), proveedor_id=uuid.uuid4(),
+        lineas_incluidas=["REPUESTOS"], linea_por_referencia={},
+        tipos_excluidos=REGLAS)
+
+    assert len(errores) == 1
+    assert staging.payload["solo_detalle"] is True
+
+
 def test_unknown_referencia_keeps_the_existing_row_error():
     staging, errores = _procesar("REPUE", ref="NOEXISTE")
 
@@ -239,3 +286,44 @@ def test_an_empty_bulk_body_is_a_422_in_spanish():
 
     assert respuesta.status_code == 422
     assert isinstance(respuesta.json()["detail"], str)
+
+
+# --- D1, R4: GET roles and the row lock ---------------------------------------
+
+
+@pytest.mark.parametrize("rol", ["SUCURSAL", "CONSULTA", "GERENCIA"])
+def test_only_admin_and_compras_read_the_sin_linea_report(rol):
+    carga = _carga()
+    respuesta = _cliente(rol, [[], [carga]]).get(
+        f"{URL}/{carga.id}/referencias-sin-linea")
+
+    assert respuesta.status_code == 403
+
+
+def _bloqueos(sesion):
+    from sqlalchemy.dialects import postgresql
+
+    return [str(e.compile(dialect=postgresql.dialect()))
+            for e in sesion.executed_statements
+            if "FOR UPDATE" in str(e.compile(dialect=postgresql.dialect()))]
+
+
+def test_both_puts_and_the_apply_lock_the_carga_row_before_validating():
+    carga = _carga(estado="APLICADO")
+    pedidos = [
+        ("put", f"{URL}/{carga.id}/referencias-sin-linea/{uuid.uuid4()}",
+         {"linea_comercial": "GPS"}),
+        ("put", f"{URL}/{carga.id}/referencias-sin-linea",
+         [{"referencia_id": str(uuid.uuid4()), "linea_comercial": "GPS"}]),
+        ("post", f"{URL}/{carga.id}/aplicar", None),
+    ]
+    for metodo, url, cuerpo in pedidos:
+        override_motored_user(MotoredUser(user_id=str(uuid.uuid4()), role="ADMIN"))
+        sesion = FakeAsyncSession(execute_queue=[[], [carga]])
+        override_motored_db(sesion)
+        respuesta = getattr(TestClient(app), metodo)(url, json=cuerpo) \
+            if cuerpo is not None else TestClient(app).post(url)
+
+        assert respuesta.status_code == 409, (url, respuesta.text)
+        (bloqueo,) = _bloqueos(sesion)
+        assert "carga_archivo" in bloqueo
