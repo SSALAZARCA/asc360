@@ -21,8 +21,28 @@ Use the ERP cost at the moment of sale ("Costo promedio total", the line total) 
 - **Rollout.** The summary schema change marks the estado dirty, so the loop rebuilds it (about 20 s at 1M rows). Afterwards, verify `/kpis/estado`.
 
 ## Tasks
-- [ ] **C1** Migration (column on top of the current alembic head; update the head-pin tests) + ingest parse/store + optional column/plantilla + tests (present, absent, blank, 0, negative, decimal formats; old file has a byte-identical log; pg apply stores the cost). No KPI behavior change.
-- [ ] **C2** The KPI per-row cost rule in all readers + the summary column/migration + tests: pure tests for every branch (sign mismatch, negative qty fallback, zero qty, ±pairs); pg_real live = summary for a mixed month; an old month unchanged; días de inventario; a perf re-check with the 1M-row perf test.
+- [x] **C1** Migration (column on top of the current alembic head; update the head-pin tests) + ingest parse/store + optional column/plantilla + tests (present, absent, blank, 0, negative, decimal formats; old file has a byte-identical log; pg apply stores the cost). No KPI behavior change.
+- [x] **C2** The KPI per-row cost rule in all readers + the summary column/migration + tests: pure tests for every branch (sign mismatch, negative qty fallback, zero qty, ±pairs); pg_real live = summary for a mixed month; an old month unchanged; días de inventario; a perf re-check with the 1M-row perf test.
+
+## Progress
+**Done (2026-10-07).** One delegated writer. Commits: C1 4eabf64 (migration d2b7a94e5c61), C2 251305b (data migration e5c9b3d8f024, which marks the summary dirty). Pushed.
+
+- **Cost rule.** One shared helper, `_expr_costo_fila` in `tablero_asesores_consultas.py`, used by the live cube, `consultar_costo_venta` and the summary builder. The summary needed no new column: the builder applies the cost at build time.
+- **`costo_estimado`.** It stays as the cost priced from precio_normal on rows without a real cost, so all-NULL (old) months are exactly unchanged. `con_costo` = real cost OR fallback.
+- **Ingest.** The optional column is registered in `deteccion.COLUMNAS_OPCIONALES_POR_TIPO` (plantilla); invalid cells are counted as `filas_costo_invalido`, never as a carga_error.
+
+**Checks**
+- unit 6145, green;
+- pg_real 228 + 1 skipped (perf), green.
+
+**Perf** (1M rows):
+- summary reads are unchanged (0.58–0.94 s);
+- the rebuild is unchanged (18.7 s);
+- live queries are 5–13% slower (CASE expression).
+
+**Native review.** Medium risk, 794 lines. Consent was granted; R3 approved and was acknowledged, with 2 suggestions.
 
 ## Next step
-C1 and C2 by one delegated writer. Push after review; report hashes to 5d.
+- Verify `/kpis/estado` rebuilt after deploy.
+- The user reloads a month with the raw file to see real-cost margins.
+- Then the Comisiones UI decisions (bonus bar B + grey note, Bonos por línea A/B) once the user confirms them.
