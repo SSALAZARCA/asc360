@@ -145,3 +145,5 @@ No PDF. Each asesor gets a personal link through Lore that opens the single-ases
 - **Next:** T3b, the daily Lore send (ledger, readiness and deadline, Configuración switch OFF by default, "Reenviar a todos"); T3c, the `deps.py` allowlist once a7's endpoint is ready.
 - [x] T3b (4dce673 backend + migration e8f50a4c1a9b, ed99ef1 UI; backend 6397 passed, pg_real 763 passed, jest 2271 passed). The switch `reporte_asesor_envio_activo` is OFF by default.
 - **Pending:** T3c, the `deps.py` allowlist for a7's public endpoint; MOTORED_PUBLIC_URL in Coolify; owner approval of a real link before turning the switch on.
+- [x] T3c is not needed (verified): the path rules run only inside `get_current_motored_user`, and `api/publico_informe.py` (a7, 219dd4d) depends only on `require_motored_ready` and `get_motored_db_or_503`.
+- **End-to-end is ready.** The owner sets MOTORED_PUBLIC_URL in Coolify, generates one real link, opens it on a phone, and then turns on the switch.
