@@ -43,3 +43,23 @@ Every day, once the VENTAS carga that includes the previous day is applied, Lore
 - Behaviour when a month is reloaded.
 - Telegram rate limits.
 - Asesores who blocked the bot (403).
+
+## Audit (5d, 2026-10-07): accepted changes
+- **H1:**
+  - A cédula entered by the asesor in Lore stays PENDING until an ADMIN approves the link, through the existing Pendiente/Aprobado flow.
+  - No report goes out until the link is approved.
+  - An ADMIN entry in Gestión de usuarios is approved directly.
+  - The uniqueness check only counts approved links, so an impostor can't block the real owner.
+  - Owner confirmation goes through 5d.
+- **H2:** encrypt with AES-256 through pypdf (never RC4), and keep the content minimal.
+- **H3:** T2 maps cédula to sales through the KPI persona key (vendedor master, P:cedula), the same identity KPI's uses. Test it with 84.
+- **M1:** send only after the KPI summary has been rebuilt for that data. Never compute live.
+- **M2:**
+  - The ledger key is (cedula, fecha_datos), where fecha_datos is the last sales date covered.
+  - ADMIN gets a manual "Reenviar" for a date after a correction or reload.
+- **M3:** T2 reuses 84's helpers (festivos, días hábiles restantes, falta_100, siguiente tramo, venta diaria necesaria), so the PDF always matches the web card.
+- **M4:** the PDF is labelled "Comisión ESTIMADA · datos al <fecha>". It is not a payment statement.
+- **M5:** no carga (Sunday or holiday) means no report.
+- **LOW:**
+  - A 403 marks the asesor and lists them for the admin.
+  - A 429 is retried with backoff.
