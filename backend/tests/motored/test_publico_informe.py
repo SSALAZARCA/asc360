@@ -219,3 +219,10 @@ def test_an_unavailable_module_still_carries_the_headers(monkeypatch):
 
     assert r.status_code == 503
     _cabeceras(r)
+
+
+@pytest.mark.parametrize("valor", [
+    None, 12345, ["123"], {"c": "1"}, True, "abc", "",
+])
+def test_a_cedula_of_any_odd_type_is_just_a_mismatch(valor):
+    assert servicio.cedula_coincide(valor, "1234567") is False
