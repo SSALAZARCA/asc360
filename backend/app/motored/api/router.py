@@ -37,6 +37,7 @@ from app.motored.api import (
     maestros,
     parametros,
     presupuestos,
+    publico_informe,
     referencias_busqueda,
     reporte_asesor,
     salud,
@@ -103,6 +104,7 @@ router.include_router(demanda_perdida.router)
 router.include_router(encuesta_cargas.router)
 # Satisfaction survey (T4): PUBLIC `/encuesta/publico` (no auth, rate-limited).
 router.include_router(encuesta_publica.router)
+router.include_router(publico_informe.router)
 # Satisfaction survey (T5): `/detractores` is its own prefix, no path overlap.
 router.include_router(detractores.router)
 # Fase 3 "Motor" (sdd/motored-pedidos-motor, S7): `/corridas` es su propio

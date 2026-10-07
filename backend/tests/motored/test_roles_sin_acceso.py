@@ -57,6 +57,7 @@ PUBLIC_ROUTES = {
     ("POST", "/api/motored/bot/demanda-perdida/{carga_id}/anular"),
     ("POST", "/api/motored/encuesta/publico/identificar"),
     ("POST", "/api/motored/encuesta/publico/respuestas"),
+    ("POST", "/api/motored/publico/informe/{token}"),
 }
 
 # One representative read per router.
