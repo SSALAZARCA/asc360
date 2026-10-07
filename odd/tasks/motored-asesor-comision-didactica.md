@@ -24,8 +24,28 @@ In KPI › Asesores (single-asesor view), make the commission readable for the a
 - Brand rules apply, and tablet 768–1024 must work.
 
 ## Tasks
-- [ ] **D1 Backend:** in the detail payload, add `fecha_datos` (last loaded sale date in scope), `dias_habiles_restantes` (Mon–Sat minus Colombian holidays, computed by a pure helper covering fixed dates, Emiliani Monday moves and Easter-based dates), `falta_100`, `venta_diaria_necesaria` and `falta_compuerta`. Tests, including holiday dates for 2026 and 2027.
-- [ ] **D2 Frontend:** the card, the bigger gauge and the new section, per the canvas; jest; webpack compile.
+- [x] **D1 Backend:** in the detail payload, add `fecha_datos` (last loaded sale date in scope), `dias_habiles_restantes` (Mon–Sat minus Colombian holidays, computed by a pure helper covering fixed dates, Emiliani Monday moves and Easter-based dates), `falta_100`, `venta_diaria_necesaria` and `falta_compuerta`. Tests, including holiday dates for 2026 and 2027.
+- [x] **D2 Frontend:** the card, the bigger gauge and the new section, per the canvas; jest; webpack compile.
+
+## Progress
+**Done (2026-10-08).** Commits: D1 e1fc665, D2 f96e4be, pushed.
+- `festivos_colombia.py`; `ultima_fecha_venta` (a live max date shared by both paths); the new comisión fields plus `tramos`.
+- The gauge has three labeled ticks: 90% · PRO, 100% · Meta and 105% · ELITE.
+- Each asesor sees only the state that applies to them.
+
+**Checks**
+- unit 6158, green;
+- pg_real 114, green;
+- jest 2232, green;
+- webpack compile 200;
+- screenshots at 768, 1024 and 1440 px.
+
+**Native review:** approved and acknowledged. Advisories:
+- float noise in a ceil (`tablero_asesor_detalle.py:139`);
+- the month source used for `fecha_datos` (`tablero_kpis.py:630`);
+- the tier tooltip on older payloads.
+
+5d's audits are paused by the user.
 
 ## Next step
-D1 and D2 by one delegated writer; review, push, send hashes to 5d.
+The user checks the view in production. Then T2 of the daily asesor report (71's plan).
