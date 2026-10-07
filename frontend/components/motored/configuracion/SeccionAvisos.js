@@ -1,6 +1,11 @@
 'use client';
-/** Avisos tab: when and to whom the "data about to expire" notice goes out. */
+/**
+ * Avisos tab: when and to whom the "data about to expire" notice goes out,
+ * and the daily Lore message with each asesor's report link (its keys and
+ * the "Estado del envío" panel, shown only when the server returned them).
+ */
 import CamposDeSeccion from './CamposDeSeccion';
+import PanelEnvioReporte, { CAMPOS_REPORTE, CLAVE_ACTIVO } from './SeccionReporteAsesor';
 
 const AVISO = 'Avisos por Telegram cuando un dato del pedido está por vencerse. '
   + 'El cambio rige desde el mes elegido y se toma en el siguiente chequeo del sistema.';
@@ -23,6 +28,20 @@ const CAMPOS = [
   },
 ];
 
+const GRUPOS = [
+  { titulo: 'Datos del pedido por vencer', campos: CAMPOS },
+  { titulo: 'Informe diario de los asesores', campos: CAMPOS_REPORTE },
+];
+
+function tieneClave(data, clave) {
+  return ((data && data.secciones) || []).some((s) => s.grupos.some((g) => g.claves.some((c) => c.clave === clave)));
+}
+
 export default function SeccionAvisos(props) {
-  return <CamposDeSeccion {...props} aviso={AVISO} campos={CAMPOS} />;
+  return (
+    <>
+      <CamposDeSeccion {...props} aviso={AVISO} grupos={GRUPOS} />
+      {tieneClave(props.data, CLAVE_ACTIVO) && <PanelEnvioReporte />}
+    </>
+  );
 }

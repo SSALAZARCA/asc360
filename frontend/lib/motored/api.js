@@ -385,6 +385,28 @@ export async function anularEnlaceInforme(id) {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Configuración -- the daily Lore message with each asesor's report link
+// (odd/motored-reporte-diario-asesor, T3b). ADMIN only. No response ever
+// carries a token, a URL or a cédula.
+// ---------------------------------------------------------------------------
+
+/** Switch and hours, last send with its counts, eligible asesores now and
+ * the names of the skipped ones. */
+export async function getReporteAsesorEstado() {
+  return motoredFetchJson('/reporte-asesor/estado');
+}
+
+/** Resends to every eligible asesor in the background (202):
+ * `{ fecha_datos, a_enviar }`. `body.fecha_datos` (YYYY-MM-DD) is optional;
+ * by default the latest data date. */
+export async function reenviarReportesAsesores(body = {}) {
+  return motoredFetchJson('/reporte-asesor/reenviar', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
 /** Genera un código de un solo uso (10 min) para vincular el Telegram
  * PROPIO del ADMIN o COMPRAS autenticado -- nunca el de otro usuario. */
 export async function generarCodigoTelegram() {
