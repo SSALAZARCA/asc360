@@ -63,3 +63,8 @@ Every day, once the VENTAS carga that includes the previous day is applied, Lore
 - **LOW:**
   - A 403 marks the asesor and lists them for the admin.
   - A 429 is retried with backoff.
+- **2026-10-07, owner:** a button in Configuración, "Reenviar reportes a todos los asesores", ADMIN only.
+  - It resends the latest available date, or a date the admin picks.
+  - It asks for confirmation and shows how many asesores will receive the report.
+  - It bypasses the "one per day" ledger, and records each resend in the ledger with the user and time.
+  - This is part of T3.
