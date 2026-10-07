@@ -13,14 +13,15 @@ const conComision = (cambios) => clonar({ comision: { ...ASESOR_DETALLE.comision
 const sinCumplir = (cambios = {}) => conComision({ cumplimiento_pct: 0.8, tramo: 'BASE', tasa_pct: 1, ...cambios });
 
 describe('single-asesor view-model', () => {
-  it('ficha: name, role, store, cédula, tier chip and the three puestos', () => {
+  it('ficha: name, role, store, cédula, tier chip and the four puestos', () => {
     const f = fichaDe(ASESOR_DETALLE);
     expect(f.nombre).toBe('Gómez Muñoz Paula');
     expect(f.iniciales).toBe('GM');
     expect(f.partes).toEqual(['Asesor de repuestos', 'Popayán', 'C.C. a8']);
     expect(f.tramo).toEqual(expect.objectContaining({ texto: 'PRO · julio' }));
     expect(f.puestos).toEqual([
-      { label: 'Cumplimiento', val: 'Puesto 7 de 43' }, { label: 'Venta may–jul', val: 'Puesto 8 de 45' }, { label: 'Tecnired', val: 'Puesto 5 de 45' },
+      { label: 'Cumplimiento', val: 'Puesto 7 de 43' }, { label: 'Venta may–jul', val: 'Puesto 8 de 45' },
+      { label: 'Venta sin HMCL', val: 'Puesto 11 de 45', tip: 'Puesto por venta sin contar la venta a HMCL (NIT de Honda configurados).' }, { label: 'Tecnired', val: 'Puesto 5 de 45' },
     ]);
   });
 
@@ -29,7 +30,7 @@ describe('single-asesor view-model', () => {
       asesor: { ...ASESOR_DETALLE.asesor, tienda: null, cargo: null },
       puestos: { ...ASESOR_DETALLE.puestos, cumplimiento: { puesto: null, de: 43 } },
     }));
-    expect(sin.puestos.map((p) => p.label)).toEqual(['Venta may–jul', 'Tecnired']);
+    expect(sin.puestos.map((p) => p.label)).toEqual(['Venta may–jul', 'Venta sin HMCL', 'Tecnired']);
     expect(sin.partes).toEqual(['C.C. a8']);
   });
 
@@ -228,6 +229,10 @@ describe('single-asesor view', () => {
     expect(ficha.getByText('PRO · julio')).toBeInTheDocument();
     expect(ficha.getByText(/Asesor de repuestos · Popayán · C\.C\. a8/)).toBeInTheDocument();
     expect(ficha.getByText('Puesto 7 de 43')).toBeInTheDocument();
+    expect(ficha.getByText('Venta sin HMCL')).toBeInTheDocument();
+    expect(ficha.getByText('Puesto 11 de 45')).toBeInTheDocument();
+    expect(ficha.getByText('Puesto 8 de 45')).toBeInTheDocument();
+    expect(ficha.getByText('Puesto 5 de 45')).toBeInTheDocument();
     expect(within(seccion('Cumplimiento de su meta')).getByText('101,4%')).toBeInTheDocument();
     expect(within(seccion('Cumplimiento de su meta')).getByText('$60,8 M de $60,0 M · red 78,0%')).toBeInTheDocument();
     const comision = within(seccion('Comisión estimada'));
@@ -261,6 +266,13 @@ describe('single-asesor view', () => {
   it('shows tooltips on the figures whose name is not obvious', () => {
     montar();
     expect(within(seccion('Indicadores del asesor')).getAllByRole('note').length).toBeGreaterThanOrEqual(4);
+  });
+
+  it('ficha: the Venta sin HMCL box explains itself with a tooltip', () => {
+    montar();
+    const ficha = within(seccion('Ficha del asesor'));
+    expect(ficha.getAllByRole('note')).toHaveLength(1);
+    expect(ficha.getByRole('note')).toHaveTextContent('Puesto por venta sin contar la venta a HMCL (NIT de Honda configurados).');
   });
 
   it('never shows a placeholder or a field without a data source', () => {

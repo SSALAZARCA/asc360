@@ -40,14 +40,16 @@ export const mesNombre = mesDe;
 export function fichaDe(data) {
   const { asesor, puestos } = data;
   const tramo = tramoActual(data);
-  const puesto = (label, p) => (p && esNumero(p.puesto) ? { label, val: `Puesto ${p.puesto} de ${p.de}` } : null);
+  const puesto = (label, p, tip) => (p && esNumero(p.puesto) ? { label, val: `Puesto ${p.puesto} de ${p.de}`, ...(tip && { tip }) } : null);
   return {
     nombre: asesor.nombre ?? 'Sin nombre',
     iniciales: (asesor.nombre ?? '?').split(/\s+/).slice(0, 2).map((p) => p.charAt(0).toUpperCase()).join(''),
     partes: [capitalizar(asesor.cargo), asesor.tienda, `C.C. ${asesor.cedula}`].filter(Boolean),
     tramo: tramo ? { texto: `${tramo} · ${mesDe(data)}`, color: colorDeTramo(tramo, tramosDe(data)) } : null,
     puestos: [
-      puesto('Cumplimiento', puestos.cumplimiento), puesto(`Venta ${periodoDe(data)}`, puestos.venta), puesto('Tecnired', puestos.tecnired),
+      puesto('Cumplimiento', puestos.cumplimiento), puesto(`Venta ${periodoDe(data)}`, puestos.venta),
+      puesto('Venta sin HMCL', puestos.venta_sin_hmcl, 'Puesto por venta sin contar la venta a HMCL (NIT de Honda configurados).'),
+      puesto('Tecnired', puestos.tecnired),
     ].filter(Boolean),
   };
 }

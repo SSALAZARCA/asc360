@@ -30,7 +30,7 @@ function Ficha({ data }) {
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
         {f.puestos.map((p) => (
           <div key={p.label} style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: '10px 14px', borderRadius: 12, background: COLOR.wash, minWidth: 130 }}>
-            <span style={{ ...ROTULO, fontSize: 11 }}>{p.label}</span>
+            <span style={{ ...ROTULO, fontSize: 11 }}><EtiquetaConTip label={p.label} tip={p.tip} /></span>
             <span style={{ ...NUM, fontSize: 18, fontWeight: 700 }}>{p.val}</span>
           </div>
         ))}

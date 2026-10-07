@@ -148,6 +148,45 @@ def test_puestos_share_the_position_on_a_tie_and_skip_the_next():
     assert beto["venta"] == {"puesto": 2, "de": 3} and cami["venta"] == {"puesto": 3, "de": 3}
 
 
+def _con_hmcl_de_cami():
+    """Cami sells 5000 to HMCL on top of the CUBO and 100 more to others: first in venta, tied 2nd without HMCL."""
+    return [*CUBO, _v("300", "2026-03", 5000)._replace(es_hmcl=True), _v("300", "2026-03", 100)]
+
+
+def test_venta_sin_hmcl_puesto_leaves_the_hmcl_sale_out_of_the_ranking():
+    por_defecto = _detalle("300")["puestos"]
+    r = _detalle("300", cubo=_con_hmcl_de_cami())["puestos"]
+
+    assert por_defecto["venta_sin_hmcl"] == por_defecto["venta"] == {"puesto": 3, "de": 3}
+    assert r["venta"] == {"puesto": 1, "de": 3}  # with HMCL she is the top seller...
+    assert r["venta_sin_hmcl"] == {"puesto": 2, "de": 3}  # ...without it only Ana sold more
+
+
+def test_venta_sin_hmcl_puesto_shares_the_position_on_a_tie_and_skips_the_next():
+    cubo = _con_hmcl_de_cami()
+
+    beto, cami, ana = (_detalle(c, cubo=cubo)["puestos"]["venta_sin_hmcl"] for c in ("200", "300", "100"))
+
+    assert beto == cami == {"puesto": 2, "de": 3}  # 1200 without HMCL for both
+    assert ana == {"puesto": 1, "de": 3}
+
+
+def test_an_asesor_with_only_hmcl_sales_ranks_last_without_hmcl():
+    cubo = [f for f in CUBO if f.clave != "P:300"] + [_v("300", "2026-03", 9000)._replace(es_hmcl=True)]
+
+    r = _detalle("300", cubo=cubo)["puestos"]
+
+    assert r["venta"] == {"puesto": 1, "de": 3} and r["venta_sin_hmcl"] == {"puesto": 3, "de": 3}
+
+
+def test_the_daily_report_carries_the_venta_sin_hmcl_puesto_under_comparaciones():
+    completo = _detalle("300", cubo=_con_hmcl_de_cami())
+
+    reporte = d.para_reporte(completo, d.tendencia_de({}, [], "300"))
+
+    assert reporte["comparaciones"]["puestos"]["venta_sin_hmcl"] == {"puesto": 2, "de": 3}
+
+
 def test_an_asesor_without_budget_in_the_last_month_has_no_cumplimiento_puesto():
     presupuestos = {k_: v for k_, v in PRESUPUESTOS.items() if k_ != ("2026-03", "100")}
 

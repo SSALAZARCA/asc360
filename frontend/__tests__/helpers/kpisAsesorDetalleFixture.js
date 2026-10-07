@@ -26,7 +26,7 @@ export const ASESOR_DETALLE = {
   reglas: { semaforo: { verde_desde: 90, ambar_desde: 70 }, cumplimiento_base: 'con_hmcl', vigencia: '2026-07' },
   usando_resumen: false, datos_actualizados_en: null,
   asesor: { cedula: 'a8', nombre: 'Gómez Muñoz Paula', cargo: 'ASESOR DE REPUESTOS', tienda: 'Popayán', sucursal_id: 's-pop' },
-  puestos: { cumplimiento: { puesto: 7, de: 43 }, venta: { puesto: 8, de: 45 }, tecnired: { puesto: 5, de: 45 } },
+  puestos: { cumplimiento: { puesto: 7, de: 43 }, venta: { puesto: 8, de: 45 }, venta_sin_hmcl: { puesto: 11, de: 45 }, tecnired: { puesto: 5, de: 45 } },
   cumplimiento_mes: { mes: '2026-07', venta: 60.8 * M, presupuesto: 60 * M, pct: 1.014, semaforo: 'verde', red_pct: 0.78, base: 'con_hmcl' },
   comision: {
     mes: '2026-07', tramo: 'PRO', tasa_pct: 1.5, comision: 910000, venta_base: 60.7 * M, base_pago: 'sin_hmcl', presupuesto: 60 * M,

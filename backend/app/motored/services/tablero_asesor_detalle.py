@@ -210,6 +210,9 @@ def _puestos(
     return {
         "cumplimiento": _puesto(con_pct.values(), con_pct.get(cedula)),
         "venta": _puesto((f["venta"]["total"] for f in personas), fila["venta"]["total"] if fila else None),
+        # Same period and population as "venta", leaving out what was sold to the HMCL clients.
+        "venta_sin_hmcl": _puesto(
+            (f["venta"]["sin_hmcl"] for f in personas), fila["venta"]["sin_hmcl"] if fila else None),
         "tecnired": _puesto(
             (f["clientes"]["venta_tecnired"] for f in personas), fila["clientes"]["venta_tecnired"] if fila else None),
     }
