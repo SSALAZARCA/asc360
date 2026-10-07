@@ -32,8 +32,8 @@ Every day, once the VENTAS carga that includes the previous day is applied, Lore
 | T2 | Per-asesor report builder: compute the board and commissions once per day, then slice per cédula, with no peer comparisons | 84 (KPI owner); this session consumes it |
 | T3 | PDF rendering plus password (new dependency `pypdf`), `sendDocument` with throttle and 429 retry, ledger `reporte_asesor_enviado(cedula, fecha)`, daily supervisor loop, kill switch, admin list of skipped asesores | this session |
 
-- [ ] T1
-- [ ] T2
+- [x] T1 (53c1ef5 backend + migration c6d2f8a41b97, b45666b Lore, 6149f47 UI; backend 6226 passed, pg_real 735 passed, lore 429 passed, jest 2247 passed)
+- [x] T2 (84, 47cbcd3)
 - [ ] T3
 
 ## Risks to verify with 84 and 5d
@@ -140,3 +140,4 @@ No PDF. Each asesor gets a personal link through Lore that opens the single-ases
     - "Generar enlace nuevo": revokes the old link, creates a new one and sends it through Lore, after a confirmation.
     - "Anular enlace": after a confirmation.
   - **Configuración:** the daily-send on/off switch and "Reenviar a todos".
+- **Next (2026-10-08):** T3a token table migration on top of c6d2f8a41b97, then ping 84 with the model name and head.
