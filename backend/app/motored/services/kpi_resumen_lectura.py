@@ -348,11 +348,11 @@ def _desde_tecnired(consulta, filtro: Filtro):
 
 async def clientes_tecnired_resumen(db: AsyncSession, filtro: Filtro) -> Tuple[int, Dict[str, int]]:
     """`qk.consultar_clientes_tecnired` from `kpi_cliente_mes`."""
-    total = await db.execute(_desde_tecnired(select(func.count(func.distinct(C.cliente_norm))), filtro))
     mes = _mes(C)
-    por_mes = await db.execute(
-        _desde_tecnired(select(mes, func.count(func.distinct(C.cliente_norm))).group_by(mes), filtro))
-    return int(total.scalar() or 0), {m: int(n) for m, n in por_mes.all()}
+    consulta = _desde_tecnired(
+        select(mes, func.count(func.distinct(C.cliente_norm))).group_by(func.rollup(mes)), filtro)
+    filas = (await db.execute(consulta)).all()
+    return qk._total_y_por_mes(filas)
 
 
 async def top_tecnired_resumen(

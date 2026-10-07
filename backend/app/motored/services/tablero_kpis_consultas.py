@@ -60,11 +60,17 @@ async def consultar_clientes_tecnired(db: AsyncSession, filtro: Filtro) -> Tuple
     """`(clientes Tecnired distintos, {mes: distintos en el mes})`. Un cliente que
     compra en varios meses cuenta una vez en el total y una vez en cada mes."""
     cliente = q._expr_cliente_norm()
-    total = await db.execute(_ventas_tecnired(select(func.count(func.distinct(cliente))), filtro))
     mes = q._expr_mes()
-    por_mes = await db.execute(
-        _ventas_tecnired(select(mes, func.count(func.distinct(cliente))).group_by(mes), filtro))
-    return int(total.scalar() or 0), {m: int(n) for m, n in por_mes.all()}
+    # ROLLUP: one row per month and, with no month, the total (a client counts once in the total).
+    filas = (await db.execute(
+        _ventas_tecnired(select(mes, func.count(func.distinct(cliente))).group_by(func.rollup(mes)), filtro))).all()
+    return _total_y_por_mes(filas)
+
+
+def _total_y_por_mes(filas) -> Tuple[int, Dict[str, int]]:
+    """`(total, {mes: n})` of the `(mes, n)` rows of a `ROLLUP(mes)`: the row with no month is the total."""
+    total = next((int(n) for m, n in filas if m is None), 0)
+    return total, {m: int(n) for m, n in filas if m is not None}
 
 
 async def consultar_top_tecnired(

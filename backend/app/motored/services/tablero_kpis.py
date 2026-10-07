@@ -327,8 +327,10 @@ def construir_cumplimiento(
     nombres_por_clave: Optional[Dict[str, str]] = None,
     cubo_compania: Optional[Iterable[t.FilaCubo]] = None,
     cubo_sucursal: Optional[Iterable[t.FilaCubo]] = None,
+    venta: Optional[tuple] = None,
 ) -> Dict[str, Any]:
-    """Cumplimiento por asesor, por tienda y de la red (suma de las tiendas).
+    """Cumplimiento por asesor, por tienda y de la red (suma de las tiendas). `venta` es el resultado de
+    `venta_para_cumplimiento(cubo, reglas)` cuando ya se calculo (varios cumplimientos del mismo cubo).
     Con `cubo_compania` (cubo de asesores CON el filtro de tiendas, HMCL incluido) agrega `compania`;
     con `cubo_sucursal` (cubo por sucursal, HMCL incluido) `tiendas` (y sus conteos) se miden con la venta
     TOTAL de la tienda en vez de la de sus asesores (pestanas Ventas y Tiendas). `red` y `asesores`
@@ -338,7 +340,7 @@ def construir_cumplimiento(
     venta 0 (0 %); quien vendio y no tiene presupuesto (o no tiene cedula) queda
     `sin_presupuesto`. Cada asesor se mide solo en los meses con presupuesto suyo."""
     cortes = reglas.semaforo
-    ventas, claves, sin_cedula = venta_para_cumplimiento(cubo, reglas)
+    ventas, claves, sin_cedula = venta if venta is not None else venta_para_cumplimiento(cubo, reglas)
     asesores = _filas_de_asesores(
         ventas, claves, sin_cedula, presupuestos, nombres or {}, nombres_por_clave or {}, cortes)
     tiendas = _filas_de_tiendas_cumplimiento(ventas, presupuestos, sucursales or {}, cortes)
@@ -368,8 +370,10 @@ def cumplimiento_por_mes(
     meses: Iterable[str], **extra: Any,
 ) -> Dict[str, Dict[str, Any]]:
     """`{mes: construir_cumplimiento de ese mes}`: cada mes se mide solo contra los presupuestos
-    de ese mes (por eso un asesor sin presupuesto en un mes queda `sin_presupuesto` en el)."""
+    de ese mes (por eso un asesor sin presupuesto en un mes queda `sin_presupuesto` en el). La venta del
+    cubo se calcula una vez (`venta`, ver `construir_cumplimiento`) y no una por mes."""
     cubo = list(cubo)
+    extra.setdefault("venta", venta_para_cumplimiento(cubo, reglas))
     return {
         mes: construir_cumplimiento(
             cubo, {clave: linea for clave, linea in presupuestos.items() if clave[0] == mes}, reglas, **extra)
@@ -401,14 +405,20 @@ async def cargar_cumplimiento(
     db: AsyncSession, filtro: Filtro, cubo_asesores: Optional[List[t.FilaCubo]] = None,
     nombres_por_clave: Optional[Dict[str, str]] = None, cubo_compania: Optional[List[t.FilaCubo]] = None,
     cubo_sucursal: Optional[List[t.FilaCubo]] = None,
+    sucursales_conocidas: Optional[Dict[str, Tuple[str, Optional[datetime.date]]]] = None,
+    con_nombres: bool = True,
 ) -> Dict[str, Any]:
     """Lee presupuestos (ultima version de cada mes), nombres y, si hace falta,
     el cubo de asesores, y arma `construir_cumplimiento`. El cubo debe ser el de
-    asesores con HMCL incluido (ver `_cubo_de_cumplimiento`)."""
+    asesores con HMCL incluido (ver `_cubo_de_cumplimiento`). `sucursales_conocidas` son tiendas que el
+    llamador ya leyo (`consultar_sucursales`); sin `con_nombres` no se leen los nombres de los asesores
+    (solo los usa la lista de asesores del resultado)."""
     cubo_asesores = await _cubo_de_cumplimiento(db, filtro, cubo_asesores)
     presupuestos = await _presupuestos_del_filtro(db, filtro)
-    sucursales = await q.consultar_sucursales(db, {str(linea.sucursal_id) for linea in presupuestos.values()})
-    nombres = await q.consultar_nombres_por_cedula(db, {cedula for _, cedula in presupuestos})
+    sucursales = await _sucursales_de(
+        db, {str(linea.sucursal_id) for linea in presupuestos.values()}, sucursales_conocidas)
+    nombres = (await q.consultar_nombres_por_cedula(db, {cedula for _, cedula in presupuestos})
+               if con_nombres else {})
     return construir_cumplimiento(
         cubo_asesores, presupuestos, filtro.reglas,
         sucursales=sucursales, nombres=nombres, nombres_por_clave=nombres_por_clave,
@@ -516,8 +526,8 @@ def _encabezado(filtro: Filtro) -> Dict[str, Any]:
 
 
 async def _filas_de_tiendas(db: AsyncSession, filtro: Filtro, cubo, *, completas: bool):
-    """Filas de tienda del cubo ya consultado. `completas=False` omite facturas,
-    clientes y la ventana de crecimiento (la pestana Ventas solo muestra venta y margen)."""
+    """`(filas, venta sin linea, tiendas leidas)` de tienda del cubo ya consultado. `completas=False` omite
+    facturas, clientes y la ventana de crecimiento (la pestana Ventas solo muestra venta y margen)."""
     facturas = clientes = []
     ventana: Dict[str, Dict[str, Decimal]] = {}
     if completas:
@@ -526,9 +536,10 @@ async def _filas_de_tiendas(db: AsyncSession, filtro: Filtro, cubo, *, completas
         ventana = ventana_por_clave(
             await lectura.ventana_mensual(db, filtro_de_ventana(filtro), DIM_SUCURSAL), filtro.modo_hmcl)
     sucursales = await q.consultar_sucursales(db, {f.clave for f in cubo})
-    return construir_filas_sucursal(
+    filas, sin_linea = construir_filas_sucursal(
         t.filtrar_cubo_por_hmcl(cubo, filtro.modo_hmcl), facturas, clientes, ventana, sucursales,
         list(filtro.meses), filtro.reglas)
+    return filas, sin_linea, sucursales
 
 
 async def calcular_kpis_tiendas(db: AsyncSession, filtro: Filtro) -> Dict[str, Any]:
@@ -539,8 +550,9 @@ async def calcular_kpis_tiendas(db: AsyncSession, filtro: Filtro) -> Dict[str, A
     `red` y `conteos` por semaforo."""
     corte = await lectura.fecha_corte_costos(db)
     cubo = await lectura.cubo(db, filtro, corte, DIM_SUCURSAL)
-    tiendas, sin_linea = await _filas_de_tiendas(db, filtro, cubo, completas=True)
-    cumplimiento = await cargar_cumplimiento(db, filtro, cubo_sucursal=cubo)
+    tiendas, sin_linea, sucursales = await _filas_de_tiendas(db, filtro, cubo, completas=True)
+    cumplimiento = await cargar_cumplimiento(
+        db, filtro, cubo_sucursal=cubo, sucursales_conocidas=sucursales, con_nombres=False)
     por_tienda = {f["sucursal_id"]: f for f in cumplimiento["tiendas"]}
     inventario = await cargar_inventario(db, filtro, corte)
     for fila in tiendas:
@@ -564,7 +576,7 @@ async def calcular_kpis_ventas(db: AsyncSession, filtro: Filtro) -> Dict[str, An
     Tecnired por mes y linea, facturas, clientes distintos de la red); `tiendas`,
     una fila liviana por tienda (venta, margen, por mes) para el grafico de cumplimiento."""
     cubo = await lectura.cubo(db, filtro, await lectura.fecha_corte_costos(db), DIM_SUCURSAL)
-    tiendas, sin_linea = await _filas_de_tiendas(db, filtro, cubo, completas=False)
+    tiendas, sin_linea, sucursales = await _filas_de_tiendas(db, filtro, cubo, completas=False)
     acumulados, _ = t.acumular_cubo(t.filtrar_cubo_por_hmcl(cubo, filtro.modo_hmcl), filtro.reglas)
     facturas = await lectura.facturas(db, filtro, dimension=DIM_TOTAL)
     clientes = await lectura.clientes(db, filtro, dimension=DIM_TOTAL)
@@ -573,8 +585,10 @@ async def calcular_kpis_ventas(db: AsyncSession, filtro: Filtro) -> Dict[str, An
         list(filtro.meses), filtro.reglas.lineas)
     del total["ranking"], total["tendencia"]
     cubo_compania = await lectura.cubo(db, filtro, None, DIM_ASESOR)
+    # Without a store filter the asesores cube of the whole network is the company's: it is read once.
     cumplimiento = await cargar_cumplimiento(
-        db, filtro, cubo_compania=cubo_compania, cubo_sucursal=cubo)
+        db, filtro, cubo_compania=cubo_compania, cubo_sucursal=cubo, cubo_asesores=cubo_compania,
+        sucursales_conocidas=sucursales, con_nombres=False)
     return {
         **_encabezado(filtro),
         **await lectura.frescura(db),
@@ -616,6 +630,7 @@ async def calcular_kpis_asesor_detalle(db: AsyncSession, filtro: Filtro, cedula:
         "nombres": await q.consultar_nombres_por_cedula(db, {ced for _, ced in presupuestos}),
         "nombres_por_clave": nombres_por_clave,
     }
+    extra["venta"] = venta_para_cumplimiento(cubo, filtro.reglas)  # the periodo and every month use the same sales
     periodo = construir_cumplimiento(cubo, presupuestos, filtro.reglas, **extra)
     por_mes = cumplimiento_por_mes(cubo, presupuestos, filtro.reglas, filtro.meses, **extra)
     maestro = next((m for m in await q.consultar_asesores_maestro(db) if m.cedula == cedula), None)
