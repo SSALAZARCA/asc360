@@ -433,6 +433,31 @@ export async function resolverErroresCarga(cargaId, acciones) {
   });
 }
 
+/**
+ * Raw ERP VENTAS dry run (VALIDADO, before Aplicar). `GET` returns
+ * `{ sin_linea, fuera_de_linea, no_encontradas }`, computed live; both PUTs
+ * (ADMIN and COMPRAS, only refs of this list) answer with that same payload.
+ * The bulk PUT is all-or-nothing.
+ */
+export async function getReferenciasSinLinea(cargaId) {
+  return motoredFetchJson(`/cargas/${cargaId}/referencias-sin-linea`);
+}
+
+export async function asignarLineaReferencia(cargaId, referenciaId, lineaComercial) {
+  return motoredFetchJson(`/cargas/${cargaId}/referencias-sin-linea/${referenciaId}`, {
+    method: 'PUT',
+    body: JSON.stringify({ linea_comercial: lineaComercial }),
+  });
+}
+
+/** `asignaciones`: `[{ referencia_id, linea_comercial }]`. */
+export async function asignarLineasReferencias(cargaId, asignaciones) {
+  return motoredFetchJson(`/cargas/${cargaId}/referencias-sin-linea`, {
+    method: 'PUT',
+    body: JSON.stringify(asignaciones),
+  });
+}
+
 // Aplicar corre sincrono en el servidor: un mes real de VENTAS (~43k filas)
 // supera el timeout por defecto de 30 s.
 const APLICAR_TIMEOUT_MS = 10 * 60 * 1000;

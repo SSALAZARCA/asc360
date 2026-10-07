@@ -9,12 +9,18 @@
  * `Aplicar`/`Anular` -- restringidas a `ADMIN`/`COMPRAS` en el servidor
  * (`require_roles`), ocultas acá para el resto por la misma razón que
  * `app/motored/cargas/page.js` oculta "Subir carga".
+ *
+ * A raw ERP VENTAS carga in VALIDADO also shows its dry run
+ * (`PanelVentasErp`); Aplicar stays disabled while any ref has no line.
  */
 import { useEffect, useState, useCallback } from 'react';
 import { getInformeCarga, aplicarCarga, anularCarga } from '../../../lib/motored/api';
 import { getRolActual } from '../../../lib/motored/motoredFetch';
 import { mensajeConCodigo } from '../../../lib/motored/httpErrors';
 import InfoTooltip from '../InfoTooltip';
+import PanelVentasErp from './PanelVentasErp';
+import useReferenciasSinLinea from './useReferenciasSinLinea';
+import { muestraSimulacionVentas, textoBloqueoAplicar } from './ventasErp';
 
 const CONFIRMAR_ANULAR = '¿Anular esta carga? Se borran las filas en proceso (staging). '
   + 'Si ya está APLICADA y la usa el pedido cerrado o enviado de alguna tienda, el sistema no permitirá anularla.';
@@ -144,12 +150,20 @@ function useAccionesCarga({ cargaId, reload, onChanged }) {
   };
 }
 
-function AccionesCarga({ estado, accionando, onAplicar, onAnular }) {
+/** Why Aplicar is disabled by the VENTAS dry run: `{ bloqueado, mensaje }`. */
+function bloqueoDeSimulacion(activa, { datos, error }) {
+  if (!activa || error) return { bloqueado: false, mensaje: '' };
+  if (!datos) return { bloqueado: true, mensaje: '' };
+  const n = datos.sin_linea.length;
+  return { bloqueado: n > 0, mensaje: n > 0 ? textoBloqueoAplicar(n) : '' };
+}
+
+function AccionesCarga({ estado, accionando, bloqueo, onAplicar, onAnular }) {
   return (
-    <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+    <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
       <button
         type="button" className="motored-btn motored-btn-primary"
-        onClick={onAplicar} disabled={accionando || estado !== 'VALIDADO'}
+        onClick={onAplicar} disabled={accionando || estado !== 'VALIDADO' || bloqueo.bloqueado}
       >
         {accionando ? 'Aplicando...' : 'Aplicar'}
       </button>
@@ -159,6 +173,9 @@ function AccionesCarga({ estado, accionando, onAplicar, onAnular }) {
       >
         Anular
       </button>
+      {bloqueo.mensaje && (
+        <p style={{ margin: 0, fontSize: '0.8rem', fontWeight: 600, color: 'var(--motored-danger, #c0392b)' }}>{bloqueo.mensaje}</p>
+      )}
     </div>
   );
 }
@@ -169,6 +186,8 @@ export default function ResumenTab({ carga, onChanged }) {
   const { accionando, accionError, handleAplicar, handleAnular } = useAccionesCarga({
     cargaId: carga.id, reload, onChanged,
   });
+  const simulacion = muestraSimulacionVentas(carga);
+  const sinLinea = useReferenciasSinLinea(carga.id, simulacion);
 
   useEffect(() => {
     setRol(getRolActual());
@@ -194,11 +213,15 @@ export default function ResumenTab({ carga, onChanged }) {
 
       <PeriodoDetectado log={informe.log} />
       <VarianzaAviso variacion={informe.variacion_pct_vs_carga_anterior} />
+      {simulacion && <PanelVentasErp log={informe.log} estado={sinLinea} puedeAsignar={puedeEscribir} />}
 
       {accionError && <p role="alert" style={{ margin: 0, color: 'var(--motored-danger, #c0392b)', fontSize: '0.75rem' }}>{accionError}</p>}
 
       {puedeEscribir && (
-        <AccionesCarga estado={informe.estado} accionando={accionando} onAplicar={handleAplicar} onAnular={handleAnular} />
+        <AccionesCarga
+          estado={informe.estado} accionando={accionando} bloqueo={bloqueoDeSimulacion(simulacion, sinLinea)}
+          onAplicar={handleAplicar} onAnular={handleAnular}
+        />
       )}
     </div>
   );
