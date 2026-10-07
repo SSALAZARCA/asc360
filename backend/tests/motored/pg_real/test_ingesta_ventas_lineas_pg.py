@@ -144,7 +144,7 @@ def _fila(mundo, ref, cantidad, doc, tipo="REPUE", bruto=1000, modulo="MOSTRADOR
             bruto, 0, "Taller", doc)
 
 
-async def _dry_run(db, monkeypatch, filas):
+async def _dry_run(db, monkeypatch, filas, log=None):
     contenido = _xlsx(filas)
     monkeypatch.setattr(
         orquestador.storage, "descargar_archivo", lambda ruta: contenido)
@@ -152,7 +152,7 @@ async def _dry_run(db, monkeypatch, filas):
         id=uuid.uuid4(), tipo="VENTAS", origen="EXCEL", estado="PROCESANDO",
         nombre_archivo="a.xlsx", hash_sha256="h" * 64, ruta_objeto="r",
         bytes=len(contenido), periodo_desde=datetime.date(2026, 9, 1),
-        periodo_hasta=datetime.date(2026, 9, 30))
+        periodo_hasta=datetime.date(2026, 9, 30), log=log)
     db.add(carga)
     await db.flush()
     await orquestador._dry_run(db, carga)
@@ -489,7 +489,6 @@ async def test_los_consumidores_de_venta_mensual_ven_la_carga(
 
 # --- venta_mensual is rebuilt for the months in the file (V3) ---------------
 
-SERIAL_2026_08_15 = 46249
 
 
 async def _segunda_tienda(db):
@@ -586,3 +585,84 @@ async def test_tras_la_purga_las_filas_de_la_tienda_y_mes_son_de_la_carga_vigent
                 VentaMensual.sucursal_id == m.tienda.id))).scalars()}
 
     assert duenos == {carga_b.id}
+
+
+# --- full-month replace for the network (V4) --------------------------------
+
+REEMPLAZA = {"reemplaza_mes_completo": True}
+
+
+async def _red_con_dos_tiendas(db, monkeypatch):
+    """Carga A aplicada en dos tiendas (septiembre); devuelve lo necesario
+    para una carga B que solo trae la primera."""
+    m = await _mundo(db)
+    otra, bodega_otra = await _segunda_tienda(db)
+    carga_a = await _dry_run(db, monkeypatch, [
+        _fila(m, m.con_linea, 10, "A-1"),
+        _fila_en(bodega_otra, m.con_linea, 3, "A-2")])
+    await _aplicar(db, carga_a)
+    return m, otra, carga_a
+
+
+async def test_con_el_flag_el_apply_vacia_las_tiendas_que_el_archivo_no_trae(
+        sesion, monkeypatch, espias):
+    m, otra, carga_a = await _red_con_dos_tiendas(sesion, monkeypatch)
+    carga_b = await _dry_run(
+        sesion, monkeypatch, [_fila(m, m.con_linea, 4, "B-1")], log=REEMPLAZA)
+    assert carga_b.log["reemplaza_mes_completo"] is True  # survives the dry-run
+    espias["refrescar"].clear()
+
+    await _aplicar(sesion, carga_b)
+
+    assert await _mensual_de(sesion, m.tienda) == {
+        (m.con_linea.id, 2026, 9, "MOSTRADOR"): Decimal("4")}
+    assert await _mensual_de(sesion, otra) == {}
+    detalle_otra = (await sesion.execute(
+        select(VentaDetalle).where(VentaDetalle.sucursal_id == otra.id))).all()
+    assert detalle_otra == []
+    # KPI refresh for the store of the file and for the purged one.
+    refrescadas = set().union(*espias["refrescar"])
+    assert refrescadas == {(m.tienda.id, 2026, 9), (otra.id, 2026, 9)}
+    # The corrida preflight still counts the month as covered.
+    hechos = await vigencia.cargar_hechos(sesion, datetime.date(2026, 10, 5))
+    vistas = [c for c in hechos.cargas if c.carga_id == carga_b.id]
+    assert vigencia._meses_sin_cubrir(vistas, [datetime.date(2026, 9, 1)]) == []
+
+
+async def test_sin_el_flag_el_apply_no_toca_las_otras_tiendas(
+        sesion, monkeypatch, espias):
+    m, otra, carga_a = await _red_con_dos_tiendas(sesion, monkeypatch)
+    carga_b = await _dry_run(sesion, monkeypatch, [_fila(m, m.con_linea, 4, "B-1")])
+
+    await _aplicar(sesion, carga_b)
+
+    assert await _mensual_de(sesion, otra) == {
+        (m.con_linea.id, 2026, 9, "MOSTRADOR"): Decimal("3")}
+    assert await cargas_api.obtener_vaciado_previsto(
+        carga_b.id, db=sesion, user=_usuario(m)) == []
+
+
+async def test_el_vaciado_previsto_lista_en_vivo_las_tiendas_ausentes(
+        sesion, monkeypatch, espias):
+    m, otra, carga_a = await _red_con_dos_tiendas(sesion, monkeypatch)
+    carga_b = await _dry_run(
+        sesion, monkeypatch, [_fila(m, m.con_linea, 4, "B-1")], log=REEMPLAZA)
+
+    previsto = await cargas_api.obtener_vaciado_previsto(
+        carga_b.id, db=sesion, user=_usuario(m))
+
+    assert previsto == [{
+        "sucursal_id": otra.id, "nombre": otra.nombre, "mes": "2026-09",
+        "filas_actuales": 1}]
+    # Live: once the other store is covered by the file it no longer shows up.
+    carga_c = await _dry_run(sesion, monkeypatch, [
+        _fila(m, m.con_linea, 4, "C-1"),
+        _fila_en(await _bodega_de(sesion, otra), m.con_linea, 1, "C-2")],
+        log=REEMPLAZA)
+    assert await cargas_api.obtener_vaciado_previsto(
+        carga_c.id, db=sesion, user=_usuario(m)) == []
+
+
+async def _bodega_de(db, tienda):
+    return (await db.execute(
+        select(Bodega).where(Bodega.sucursal_id == tienda.id))).scalars().first()

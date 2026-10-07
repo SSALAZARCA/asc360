@@ -104,6 +104,7 @@ from app.motored.schemas.ingesta import (
     ResolverErroresRequest,
     ReferenciasSinLineaResponse,
     ResolverErroresResultado,
+    VaciadoPrevistoRead,
 )
 from app.motored.services import parametros, parametros_claves, tablero_comisiones
 from app.motored.services import demanda_perdida_bot as demanda_perdida_bot_mod
@@ -263,6 +264,7 @@ async def subir_carga(
     file: UploadFile = File(...),
     periodo_desde: Optional[date] = Form(None),
     periodo_hasta: Optional[date] = Form(None),
+    reemplaza_mes_completo: bool = Form(False),
     db: AsyncSession = Depends(get_motored_db_or_503),
     user: MotoredUser = Depends(_require_write),
     job_runner: JobRunner = Depends(get_job_runner),
@@ -308,6 +310,9 @@ async def subir_carga(
         periodo_desde=periodo_desde,
         periodo_hasta=periodo_hasta,
         subido_por=uuid.UUID(user.user_id),
+        # Solo VENTAS reemplaza meses; en los demas tipos se ignora.
+        log=({orquestador.CLAVE_REEMPLAZA_MES: True}
+             if reemplaza_mes_completo and tipo == "VENTAS" else None),
     )
     db.add(carga)
     await db.commit()
@@ -850,6 +855,21 @@ async def asignar_linea(
         linea_comercial=payload.linea_comercial)])
     await db.commit()
     return await _payload_sin_linea(db, carga)
+
+
+@router.get(
+    "/{carga_id}/vaciado-previsto", response_model=List[VaciadoPrevistoRead])
+async def obtener_vaciado_previsto(
+    carga_id: uuid.UUID,
+    db: AsyncSession = Depends(get_motored_db_or_503),
+    user: MotoredUser = Depends(_require_write),
+):
+    """Las tiendas cuyas ventas del mes borraria el apply de una carga
+    `reemplaza_mes_completo` porque el archivo no las trae. En vivo; vacio
+    si la carga no pidio el reemplazo."""
+    carga = await _carga_or_404(db, carga_id)
+    return await lineas_mod.vaciado_previsto(
+        db, carga, await _incluidas_de(db, carga))
 
 
 @router.post("/{carga_id}/aplicar", response_model=CargaArchivoRead)

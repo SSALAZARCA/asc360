@@ -25,12 +25,16 @@ from typing import (
     Sequence, Set, Tuple,
 )
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, tuple_
 
 from app.motored.models.carga_error import CargaError
 from app.motored.models.carga_fila_staging import CargaFilaStaging
+from app.motored.models.carga_archivo import CargaArchivo
 from app.motored.models.referencia import Referencia
+from app.motored.models.sucursal import Sucursal
+from app.motored.models.venta_mensual import VentaMensual
 from app.motored.services.ingesta import errores as errores_mod
+from app.motored.services.ingesta import periodo as periodo_mod
 
 CLAVE_CLASE_LINEA = "linea_clase"
 CLASE_INCLUIDA = "incluida"
@@ -262,3 +266,53 @@ async def _no_encontradas(
 def mensaje_sin_linea(cantidad: int) -> str:
     return (f"Hay {cantidad} referencias sin línea: "
             "asígnelas antes de aplicar.")
+
+
+async def vaciado_previsto(
+    session, carga: Any, incluidas: FrozenSet[str]
+) -> List[Dict[str, Any]]:
+    """VIVO: las tiendas con ventas en los meses del archivo que el archivo
+    NO trae para ese mes, y que un `reemplaza_mes_completo` borraria. Los
+    meses del archivo son los de las filas que se aplicarian (contra el
+    maestro de hoy) dentro del periodo declarado. `mes` sale 'YYYY-MM';
+    `filas_actuales` cuenta las filas de `venta_mensual` (las cargas
+    anuladas no cuentan). Vacio sin el flag o sin staging."""
+    if not (carga.log or {}).get("reemplaza_mes_completo"):
+        return []
+    filas = (await session.execute(
+        select(
+            CargaFilaStaging.fila, CargaFilaStaging.sucursal_id,
+            CargaFilaStaging.referencia_id, CargaFilaStaging.payload)
+        .where(CargaFilaStaging.carga_id == carga.id))).all()
+    lineas = await leer_lineas(
+        session, {f.referencia_id for f in filas if f.referencia_id})
+    declarados = periodo_mod.meses_en_rango(
+        carga.periodo_desde, carga.periodo_hasta)
+    en_archivo: Set[Tuple[uuid.UUID, int, int]] = set()
+    for f in reclasificar(filas, lineas, incluidas):
+        clave = (f.payload["anio"], f.payload["mes"])
+        if (clave in declarados and f.sucursal_id is not None
+                and f.referencia_id is not None):
+            en_archivo.add((f.sucursal_id, *clave))
+    meses = sorted({(anio, mes) for _, anio, mes in en_archivo})
+    if not meses:
+        return []
+    actuales = (await session.execute(
+        select(VentaMensual.sucursal_id, VentaMensual.anio, VentaMensual.mes,
+               func.count())
+        .join(CargaArchivo, CargaArchivo.id == VentaMensual.carga_id)
+        .where(tuple_(VentaMensual.anio, VentaMensual.mes).in_(meses),
+               CargaArchivo.estado != "ANULADO")
+        .group_by(VentaMensual.sucursal_id, VentaMensual.anio,
+                  VentaMensual.mes))).all()
+    ausentes = [a for a in actuales if (a[0], a[1], a[2]) not in en_archivo]
+    nombres = dict((await session.execute(
+        select(Sucursal.id, Sucursal.nombre)
+        .where(Sucursal.id.in_({a[0] for a in ausentes})))).all()
+    ) if ausentes else {}
+    lista = [
+        {"sucursal_id": sucursal, "nombre": nombres.get(sucursal, ""),
+         "mes": f"{anio:04d}-{mes:02d}", "filas_actuales": cantidad}
+        for sucursal, anio, mes, cantidad in ausentes]
+    lista.sort(key=lambda r: (r["mes"], r["nombre"]))
+    return lista

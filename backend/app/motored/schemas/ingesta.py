@@ -65,6 +65,9 @@ class CargaArchivoRead(BaseModel):
     # read from `log` without exposing the whole log to every role.
     sin_datos: bool = Field(
         False, validation_alias=AliasPath("log", "sin_datos"))
+    # A VENTAS upload that replaces the whole month for the network.
+    reemplaza_mes_completo: bool = Field(
+        False, validation_alias=AliasPath("log", "reemplaza_mes_completo"))
 
 
 class DeclaracionSinDatosRequest(BaseModel):
@@ -167,3 +170,13 @@ class ReferenciasSinLineaResponse(BaseModel):
     fuera_de_linea: List[FueraDeLineaRead] = []
     no_encontradas: List[NoEncontradaRead] = []
     opciones_linea: List[OpcionLineaRead] = []
+
+
+class VaciadoPrevistoRead(BaseModel):
+    """A store whose sales of a month the apply would erase because the
+    file does not bring it (`reemplaza_mes_completo`). `mes` is 'YYYY-MM'."""
+
+    sucursal_id: uuid.UUID
+    nombre: str
+    mes: str
+    filas_actuales: int

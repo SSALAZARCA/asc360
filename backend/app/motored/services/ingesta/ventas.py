@@ -54,10 +54,10 @@ import uuid
 from datetime import date
 from decimal import Decimal
 from typing import (
-    Any, Dict, FrozenSet, List, Optional, Sequence, Tuple, Union,
+    Any, Dict, FrozenSet, List, Optional, Sequence, Set, Tuple, Union,
 )
 
-from sqlalchemy import delete, tuple_
+from sqlalchemy import delete, select, tuple_
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.config import settings
@@ -714,7 +714,7 @@ def construir_statement_upsert(totales: Dict[ClaveVentaMensual, Decimal], carga_
 
 def claves_mensuales(
     totales: Dict[ClaveVentaMensual, Decimal]
-) -> set:
+) -> Set[Tuple[uuid.UUID, int, int]]:
     """`(sucursal_id, anio, mes)` de cada total: las claves que esta carga
     reescribe en `venta_mensual`, igual que `venta_detalle` las suyas."""
     return {(sucursal, anio, mes) for sucursal, _, anio, mes, _ in totales}
@@ -911,4 +911,62 @@ async def aplicar_con_periodo(
     await purgar_mensual(session, claves_mensuales(totales))
     await aplicar(session, totales, carga_id)
     await aplicar_detalle(session, filas_dentro_de_periodo, carga_id)
+    return veredicto
+
+
+async def purgar_meses_completos(
+    session, meses: Set[Tuple[int, int]]
+) -> Set[Tuple[uuid.UUID, int, int]]:
+    """Reemplazo de mes completo: borra `venta_detalle` y `venta_mensual` de
+    TODAS las tiendas para esos `(anio, mes)`, en la transaccion del caller
+    (sin `commit()`). Devuelve las `(sucursal_id, anio, mes)` que tenian
+    datos, para refrescar sus resumenes de KPI: una tienda que el archivo no
+    trae tambien cambia."""
+    if not meses:
+        return set()
+    lista = sorted(meses)
+    purgadas: Set[Tuple[uuid.UUID, int, int]] = set()
+    for modelo in (VentaDetalle, VentaMensual):
+        filas = await session.execute(
+            select(modelo.sucursal_id, modelo.anio, modelo.mes)
+            .where(tuple_(modelo.anio, modelo.mes).in_(lista)).distinct())
+        purgadas |= {(s, a, m) for s, a, m in filas.all()}
+        await session.execute(
+            delete(modelo).where(tuple_(modelo.anio, modelo.mes).in_(lista)))
+    return purgadas
+
+
+async def aplicar_reemplazando_meses(
+    session,
+    filas_staging: Sequence[CargaFilaStaging],
+    periodo_desde: date,
+    periodo_hasta: date,
+    carga_id: uuid.UUID,
+    tolerancia_pct: Optional[float] = None,
+) -> periodo_mod.VeredictoPeriodo:
+    """`aplicar_con_periodo` para una carga con `reemplaza_mes_completo`: con
+    un veredicto que aplica, primero vacia los meses del archivo para TODA la
+    red (los meses de las filas que si se aplican, dentro del periodo
+    declarado), luego aplica normal y por ultimo refresca los resumenes de KPI
+    de las tiendas vaciadas que el archivo no repuso (las del archivo ya las
+    refresco `aplicar_detalle`). Con `RECHAZO` no toca nada."""
+    meses_declarados = periodo_mod.meses_en_rango(periodo_desde, periodo_hasta)
+    veredicto = evaluar_periodo_declarado(
+        construir_filas_por_periodo(filas_staging), periodo_desde,
+        periodo_hasta, tolerancia_pct)
+    if veredicto.tipo == periodo_mod.TipoVeredictoPeriodo.RECHAZO:
+        return veredicto
+    dentro = [
+        f for f in filas_staging
+        if (f.payload["anio"], f.payload["mes"]) in meses_declarados]
+    meses = {(f.payload["anio"], f.payload["mes"]) for f in dentro
+             if f.sucursal_id is not None and f.referencia_id is not None}
+    purgadas = await purgar_meses_completos(session, meses)
+    veredicto = await aplicar_con_periodo(
+        session, filas_staging, periodo_desde, periodo_hasta, carga_id,
+        tolerancia_pct)
+    del_archivo = {
+        (d["sucursal_id"], d["anio"], d["mes"])
+        for d in construir_detalle(dentro, carga_id)}
+    await kpi_resumen.refrescar_si_construido(session, purgadas - del_archivo)
     return veredicto

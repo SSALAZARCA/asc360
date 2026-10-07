@@ -878,6 +878,16 @@ async def ejecutar_aplicar(session: AsyncSession, carga: CargaArchivo) -> None:
         raise
 
 
+CLAVE_REEMPLAZA_MES = "reemplaza_mes_completo"
+
+
+def reemplaza_mes_completo(carga: CargaArchivo) -> bool:
+    """La carga VENTAS pidio reemplazar el mes completo para toda la red
+    (se guarda en `carga.log` al subirla)."""
+    return carga.tipo == "VENTAS" and (carga.log or {}).get(
+        CLAVE_REEMPLAZA_MES) is True
+
+
 async def _aplicar_ventas(
     session: AsyncSession, carga: CargaArchivo,
     filas_staging: Sequence[CargaFilaStaging],
@@ -900,7 +910,10 @@ async def _aplicar_ventas(
     if sin_linea:
         raise EstadoInvalidoParaAplicarError(
             lineas_mod.mensaje_sin_linea(len(sin_linea)))
-    veredicto = await ventas_mod.aplicar_con_periodo(
+    aplicar = (ventas_mod.aplicar_reemplazando_meses
+               if reemplaza_mes_completo(carga)
+               else ventas_mod.aplicar_con_periodo)
+    veredicto = await aplicar(
         session, lineas_mod.reclasificar(filas_staging, lineas, incluidas),
         carga.periodo_desde, carga.periodo_hasta, carga.id,
         await _leer_tolerancia_periodo(session))
