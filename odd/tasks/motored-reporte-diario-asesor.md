@@ -95,3 +95,6 @@ Every day, once the VENTAS carga that includes the previous day is applied, Lore
   - T3 renders it server-side with WeasyPrint plus inline SVG charts (no JS), then encrypts it with AES-256.
 - 2026-10-07: owner decision, relayed by 84 (the owner answered 84 directly). The PDF is IDENTICAL to the screen, comparisons INCLUDED: puestos, comparison with the tienda and the red, the strip with other asesores' dots, and the "vs red" refs. This overrides "no peer comparisons". `detalle.comparaciones` is populated.
   - Privacy note given to the owner: each asesor sees peers' positions and values.
+- 2026-10-07: owner decision, relayed by 84: the PDF is ONE long continuous page, not split into pages.
+  - Width close to phone or tablet reading width (about 720–800 px).
+  - With WeasyPrint, render once to measure the content height, then set `@page` size to the width × the measured height (two passes).
