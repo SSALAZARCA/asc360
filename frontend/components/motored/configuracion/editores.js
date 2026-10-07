@@ -7,9 +7,10 @@ import EditorBonosLinea from './EditorBonosLinea';
 import EditorLista, { itemsDe } from './EditorLista';
 import EditorMapaCargos from './EditorMapaCargos';
 import EditorSemaforo from './EditorSemaforo';
+import EditorTiposExcluidos from './EditorTiposExcluidos';
 import EditorTramos from './EditorTramos';
 import {
-  validarBonosLinea, validarLista, validarSemaforo, validarTramos,
+  validarBonosLinea, validarLista, validarSemaforo, validarTiposExcluidos, validarTramos,
 } from './validaciones';
 
 const deLista = (opciones) => ({
@@ -27,6 +28,7 @@ export const EDITORES = {
   grupo_por_cargo: { Control: EditorMapaCargos },
   kpi_semaforo_cortes: { Control: EditorSemaforo, validar: validarSemaforo },
   comision_tramos: { Control: EditorTramos, validar: validarTramos },
+  ventas_tipos_excluidos: { Control: EditorTiposExcluidos, validar: validarTiposExcluidos },
   comision_lineas: { Control: EditorBonosLinea, validar: (borrador) => validarBonosLinea(borrador) },
 };
 

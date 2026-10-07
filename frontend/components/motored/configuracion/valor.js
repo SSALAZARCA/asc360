@@ -81,12 +81,33 @@ function bonosLinea(borrador) {
   return { valor };
 }
 
+/** ventas_tipos_excluidos: [{ codigo, modo }] rows, codes trimmed and in capitals. */
+const esTiposExcluidos = (spec) => spec.clave === 'ventas_tipos_excluidos';
+const MODOS_TIPO = ['prefijo', 'exacto'];
+
+const tiposABorrador = (valor) => (valor || []).map((f) => ({
+  codigo: textoDe(f.codigo), modo: MODOS_TIPO.includes(f.modo) ? f.modo : 'exacto',
+}));
+
+function tiposExcluidos(borrador) {
+  const valor = [];
+  for (const [i, fila] of borrador.entries()) {
+    const codigo = textoDe(fila.codigo).trim().toUpperCase();
+    if (!codigo) return { error: `Fila ${i + 1}: escriba un código.` };
+    valor.push({ codigo, modo: fila.modo });
+  }
+  return { valor };
+}
+
+const tipoLegible = (f) => `${f.codigo} (${f.modo === 'prefijo' ? 'empieza por' : 'exacto'})`;
+
 const bonosABorrador = (valor) => (valor || []).map((f) => ({
   linea: f.linea, pct_meta: textoDe(f.pct_meta), bono: pesosTexto(f.bono), activo: f.activo !== false,
 }));
 
 export function desdeBorrador(spec, borrador) {
   if (esBonosLinea(spec)) return bonosLinea(borrador);
+  if (esTiposExcluidos(spec)) return tiposExcluidos(borrador);
   switch (spec.tipo) {
     case 'entero': return entero(borrador);
     case 'decimal': return decimal(borrador);
@@ -102,6 +123,7 @@ export function desdeBorrador(spec, borrador) {
 
 export function aBorrador(spec, valor) {
   if (esBonosLinea(spec)) return bonosABorrador(valor);
+  if (esTiposExcluidos(spec)) return tiposABorrador(valor);
   switch (spec.tipo) {
     case 'entero':
     case 'decimal': return textoDe(valor);
@@ -159,6 +181,7 @@ function textoSeguro(valor) {
 export function formatearValor(spec, valor) {
   if (valor === null || valor === undefined) return 'Sin valor';
   if (esBonosLinea(spec)) return valor.length ? valor.map(bonoLegible).join('; ') : '(vacía)';
+  if (esTiposExcluidos(spec)) return valor.length ? valor.map(tipoLegible).join(', ') : '(vacía)';
   switch (spec.tipo) {
     case 'bool': return valor ? 'Sí' : 'No';
     case 'decimal': return numeroLegible(valor);

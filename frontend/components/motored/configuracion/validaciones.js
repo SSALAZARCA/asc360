@@ -111,3 +111,30 @@ export function validarBonosLinea(borrador, lineas = null) {
   repetidos(codigos).forEach((c) => mensajes.push(`La línea «${etiquetaLinea(c)}» está repetida.`));
   return mensajes;
 }
+
+/** Codes of ventas_tipos_excluidos: letters, digits, dot, dash and underscore. */
+const CODIGO_TIPO = /^[A-Z0-9._-]+$/;
+export const ETIQUETA_MODO_TIPO = { prefijo: 'Empieza por', exacto: 'Exacto' };
+
+function mensajeDeTipo(fila, i) {
+  const codigo = limpio(fila.codigo).toUpperCase();
+  if (!codigo) return `Fila ${i + 1}: escriba un código.`;
+  if (!CODIGO_TIPO.test(codigo)) {
+    return `«${limpio(fila.codigo)}» tiene caracteres no permitidos (use letras, números, punto, guion o guion bajo).`;
+  }
+  return null;
+}
+
+/** ERP inventory types discarded on a VENTAS load. An empty list is fine. */
+export function validarTiposExcluidos(borrador) {
+  const mensajes = borrador.map(mensajeDeTipo).filter(Boolean);
+  const vistos = new Set();
+  borrador.forEach((fila) => {
+    const codigo = limpio(fila.codigo).toUpperCase();
+    const clave = `${codigo}|${fila.modo}`;
+    const mensaje = `«${codigo}» (${ETIQUETA_MODO_TIPO[fila.modo] || fila.modo}) está repetido.`;
+    if (codigo && vistos.has(clave) && !mensajes.includes(mensaje)) mensajes.push(mensaje);
+    vistos.add(clave);
+  });
+  return mensajes;
+}

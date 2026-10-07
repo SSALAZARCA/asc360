@@ -36,6 +36,11 @@ const CAMPOS = [
     etiqueta: 'Bodegas que no son tiendas',
     ayuda: 'Códigos de bodega que no son tiendas (p. ej. bodega central o producto terminado). Sus líneas se ignoran al cargar ventas e inventario, sin marcar error. Una bodega que no esté aquí ni tenga tienda asignada sigue dando error.',
   },
+  {
+    clave: 'ventas_tipos_excluidos',
+    etiqueta: 'Tipos de inventario que se descartan',
+    ayuda: "Códigos de 'Tipo inventario' del ERP cuyas filas se descartan al cargar ventas (motos, SOAT, matrícula, mano de obra…). Se cuentan en el resumen, nunca son error.",
+  },
 ];
 
 export default function SeccionCargas(props) {
