@@ -14,10 +14,11 @@ const mockAsignarUna = jest.fn();
 const mockAsignarVarias = jest.fn();
 const mockGetParametro = jest.fn();
 const mockVaciado = jest.fn();
+const mockAplicar = jest.fn();
 
 jest.mock('../lib/motored/api', () => ({
   getInformeCarga: (...args) => mockGetInforme(...args),
-  aplicarCarga: jest.fn(),
+  aplicarCarga: (...args) => mockAplicar(...args),
   anularCarga: jest.fn(),
   getReferenciasSinLinea: (...args) => mockGetSinLinea(...args),
   asignarLineaReferencia: (...args) => mockAsignarUna(...args),
@@ -28,6 +29,7 @@ jest.mock('../lib/motored/api', () => ({
 
 import ResumenTab from '../components/motored/cargas/ResumenTab';
 import { MOTORED_USER_KEY } from '../lib/motored/motoredFetch';
+import { codedError } from '../lib/motored/httpErrors';
 
 const LOG = { filas_tipo_excluido: 1234, filas_fuera_de_linea: 56, filas_sin_linea: 7, filas_co_vacio: 1 };
 const informe = (log = LOG) => ({
@@ -255,19 +257,33 @@ describe('VENTAS dry-run panel -- bulk assignment', () => {
 });
 
 describe('VENTAS dry-run panel -- gating', () => {
-  it('shows read-only text for roles that cannot assign', async () => {
-    await renderizar({ role: 'CONSULTA' });
-    const t = await tabla();
-    expect(within(t).queryByRole('combobox')).not.toBeInTheDocument();
-    expect(within(t).queryByRole('checkbox')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Asignar/ })).not.toBeInTheDocument();
-    expect(within(filasDe(t)[0]).getByText('Sin línea')).toBeInTheDocument();
+  it.each(['GERENCIA', 'CONSULTA'])('requests nothing and shows only the summary for %s', async (role) => {
+    await renderizar({ role });
+    await screen.findByText('Filas válidas');
+    expect(screen.queryByText(/Referencias sin línea/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/descartadas por tipo/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Se van a borrar/)).not.toBeInTheDocument();
+    expect(mockGetSinLinea).not.toHaveBeenCalled();
+    expect(mockVaciado).not.toHaveBeenCalled();
   });
 
-  it('lets ADMIN assign too', async () => {
+  it('lets ADMIN review and assign too', async () => {
     await renderizar({ role: 'ADMIN' });
     await tabla();
     expect(screen.getByRole('button', { name: 'Asignar línea a B-200' })).toBeInTheDocument();
+    expect(mockGetSinLinea).toHaveBeenCalledWith('carga-1');
+    expect(mockVaciado).toHaveBeenCalledWith('carga-1');
+  });
+
+  it('shows the period-rejection detail of a 409 on Aplicar verbatim', async () => {
+    const detalle = 'RECHAZO: el 35 % de las líneas del archivo son de otro mes (tolerancia 5 %).';
+    mockGetSinLinea.mockResolvedValue(payload([]));
+    mockAplicar.mockRejectedValue(codedError(409, { detail: detalle }, 'HTTP 409'));
+    await renderizar();
+    await screen.findByText('Todas las referencias del archivo tienen línea.');
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Aplicar' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Aplicar' }));
+    expect(await screen.findByText(detalle)).toBeInTheDocument();
   });
 
   it.each([

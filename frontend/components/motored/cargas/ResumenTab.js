@@ -10,7 +10,7 @@
  * (`require_roles`), ocultas acá para el resto por la misma razón que
  * `app/motored/cargas/page.js` oculta "Subir carga".
  *
- * A raw ERP VENTAS carga in VALIDADO also shows its dry run
+ * For ADMIN and COMPRAS, a raw ERP VENTAS carga in VALIDADO also shows its dry run
  * (`PanelVentasErp`) and, when it replaces the whole month, the tiendas
  * whose sales Aplicar deletes (`AvisoVaciado`). Aplicar stays disabled while
  * any ref has no line or that deletion is not acknowledged.
@@ -180,13 +180,13 @@ export default function ResumenTab({ carga, onChanged }) {
   const { accionando, accionError, handleAplicar, handleAnular } = useAccionesCarga({
     cargaId: carga.id, reload, onChanged,
   });
-  const simulacion = useSimulacionVentas(carga);
 
   useEffect(() => {
     setRol(getRolActual());
   }, []);
 
   const puedeEscribir = rol === 'ADMIN' || rol === 'COMPRAS';
+  const simulacion = useSimulacionVentas(carga, puedeEscribir);
 
   if (error) return <p style={{ color: 'var(--motored-danger, #c0392b)', fontSize: '0.8rem' }}>{error}</p>;
   if (!informe) return <p style={{ color: 'var(--motored-text-muted, #5a5a5a)', fontSize: '0.8rem' }}>Cargando informe...</p>;
@@ -207,7 +207,7 @@ export default function ResumenTab({ carga, onChanged }) {
       <PeriodoDetectado log={informe.log} />
       <VarianzaAviso variacion={informe.variacion_pct_vs_carga_anterior} />
       {simulacion.activa && <PanelVentasErp log={informe.log} estado={simulacion.sinLinea} puedeAsignar={puedeEscribir} />}
-      {simulacion.activa && puedeEscribir && (
+      {simulacion.activa && (
         <AvisoVaciado vaciado={simulacion.vaciado} entendido={simulacion.entendido} onEntendido={simulacion.setEntendido} />
       )}
 

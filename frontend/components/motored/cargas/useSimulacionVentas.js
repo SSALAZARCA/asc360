@@ -3,7 +3,9 @@
  * Everything the Resumen tab needs before Aplicar on a raw ERP VENTAS carga
  * in VALIDADO: the refs without a line, the planned month purge, the
  * "Entiendo" acknowledgement and whether (and why) Aplicar is blocked.
- * Other cargas request nothing and never block.
+ * Both endpoints are ADMIN/COMPRAS only: `puedeRevisar` is false for any
+ * other role and while the role is not known yet. Other cargas and other
+ * roles request nothing and never block.
  */
 import { useEffect, useState } from 'react';
 import { getVaciadoPrevisto } from '../../../lib/motored/api';
@@ -36,8 +38,8 @@ function bloqueoAplicar({ sinLinea, vaciado, entendido }) {
   return { bloqueado: false, mensaje: '' };
 }
 
-export default function useSimulacionVentas(carga) {
-  const activa = muestraSimulacionVentas(carga);
+export default function useSimulacionVentas(carga, puedeRevisar) {
+  const activa = Boolean(puedeRevisar) && muestraSimulacionVentas(carga);
   const sinLinea = useReferenciasSinLinea(carga.id, activa);
   const vaciado = useVaciadoPrevisto(carga.id, activa);
   const [entendido, setEntendido] = useState(false);
