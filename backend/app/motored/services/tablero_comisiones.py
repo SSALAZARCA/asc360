@@ -205,10 +205,11 @@ def bonos_de_asesor(
         venta = Decimal(venta_tecnired) if b.linea == TECNIRED else Decimal(ventas_por_linea.get(b.linea, 0))
         cumple = venta > 0 and venta * 100 >= b.pct_meta * total
         paga = cumple_gate and b.activo and cumple
+        falta = 0 if cumple else max(minimo_linea(presupuesto, umbral_pct, b.pct_meta) - int(venta), 0)
         filas.append({
             "linea": b.linea, "etiqueta": etiqueta_de(b.linea), "venta": _dinero(venta),
             "pct_real": float(venta / total) if total > 0 else None, "pct_meta": float(b.pct_meta),
-            "bono": b.bono, "cumple": cumple, "paga": paga, "activo": b.activo,
+            "falta_venta": falta, "bono": b.bono, "cumple": cumple, "paga": paga, "activo": b.activo,
             "bono_pagado": b.bono if paga else 0,
         })
     return {

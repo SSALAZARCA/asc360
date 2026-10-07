@@ -71,18 +71,30 @@ describe('single-asesor view-model', () => {
     const { bonos } = comisionDe(ASESOR_DETALLE);
     expect(bonos.aviso).toBeNull();
     expect(bonos.lineas.map((l) => [l.texto, l.estado])).toEqual([
-      ['Lubricantes · le falta 2,7 pts', 'no-cumple'],
+      ['Lubricantes · le faltan $3,4 M', 'no-cumple'],
       ['Cascos · +$30.000', 'cumple'],
       ['Tecnired (clientes) · apagado', 'apagado'],
     ]);
+    expect(bonos.lineas[0].tip).toBe('Venta mínima de la línea según su presupuesto (presupuesto × 95% × meta). El bono se gana si la línea llega a la meta % de su venta real.');
     expect(bonos.lineas[2].tip).toBe('Bono apagado en Configuración');
   });
 
-  it('comision: below the gate it asks for the cumplimiento instead of listing what is missing', () => {
+  it('comision: the missing sale under 1 M is written in whole pesos, and it shows below the gate too', () => {
+    const base = ASESOR_DETALLE.comision;
+    const data = {
+      ...ASESOR_DETALLE,
+      comision: { ...base, gate: { umbral: 95, cumple: false }, bonos: base.bonos.map((b) => (b.linea === 'LUBRICANTES' ? { ...b, falta_venta: 850000 } : b)) },
+    };
+    const { bonos } = comisionDe(data);
+    expect(bonos.aviso).toMatch(/^Necesita/);
+    expect(bonos.lineas[0].texto).toBe('Lubricantes · le faltan $850.000');
+  });
+
+  it('comision: below the gate it asks for the cumplimiento and still shows what is missing per line', () => {
     const c = comisionDe(clonar({ comision: { ...ASESOR_DETALLE.comision, cumplimiento_pct: 0.8, gate: { umbral: 95, cumple: false }, bono_total: 0, total_a_pagar: 910000 } }));
     expect(c.valor).toBe('$910.000');
     expect(c.bonos.aviso).toBe('Necesita ≥95% de cumplimiento para activar bonos (hoy 80,0%)');
-    expect(c.bonos.lineas.map((l) => l.texto)).toEqual(['Lubricantes', 'Cascos', 'Tecnired (clientes) · apagado']);
+    expect(c.bonos.lineas.map((l) => l.texto)).toEqual(['Lubricantes · le faltan $3,4 M', 'Cascos', 'Tecnired (clientes) · apagado']);
   });
 
   it('comision: an older payload without bonuses still renders the commission alone', () => {
@@ -148,7 +160,7 @@ describe('single-asesor view', () => {
     expect(comision.getByText('$940.000')).toBeInTheDocument();
     expect(comision.getByText('Comisión $910.000 + bonos $30.000 = $940.000')).toBeInTheDocument();
     expect(comision.getAllByTestId('chip-bono').map((c) => c.textContent)).toEqual([
-      'Lubricantes · le falta 2,7 pts', 'Cascos · +$30.000', 'Tecnired (clientes) · apagado']);
+      'Lubricantes · le faltan $3,4 M', 'Cascos · +$30.000', 'Tecnired (clientes) · apagado']);
     expect(comision.getByText('Le faltan $2,2 M para ELITE')).toBeInTheDocument();
     expect(within(seccion('Indicadores del asesor')).getAllByText(/^vs /)).toHaveLength(6);
     expect(within(seccion('Tendencia de cumplimiento')).getByRole('img')).toBeInTheDocument();

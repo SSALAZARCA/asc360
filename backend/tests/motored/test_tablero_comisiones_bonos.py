@@ -134,7 +134,7 @@ def test_each_line_reports_its_target_label_and_sale():
     r = _calcular(1_000_000, 1_000_000, {"LUBRICANTES": 250_000})
     assert _linea_de(r, "LUBRICANTES") == {
         "linea": "LUBRICANTES", "etiqueta": "Lubricantes", "venta": 250_000.0, "pct_real": 0.25, "pct_meta": 21.0,
-        "bono": 35000, "cumple": True, "paga": True, "activo": True, "bono_pagado": 35000}
+        "falta_venta": 0, "bono": 35000, "cumple": True, "paga": True, "activo": True, "bono_pagado": 35000}
     assert [b["linea"] for b in r["bonos"]] == ["CASCOS", "LUBRICANTES", "TECNIRED"]
 
 
@@ -287,3 +287,30 @@ def test_the_minimums_of_a_budget_use_the_threshold_and_each_target():
 
     assert c.minimos_de_presupuesto(reglas, 1_000_000) == {"CASCOS": 54_000}
     assert c.minimos_de_presupuesto(c.reglas_desde_valores({"comision_lineas": []}), 1_000_000) == {}
+
+
+# --- falta_venta: what is left to reach the budget minimum of the line ------------------------
+
+
+def test_falta_venta_is_the_budget_minimum_minus_the_line_sale():
+    # 60.000.000 x 95 % x 6 % = 3.420.000
+    r = _calcular(40_000_000, 60_000_000, {"CASCOS": 1_000_000})
+    assert _linea_de(r, "CASCOS")["falta_venta"] == 2_420_000
+
+
+def test_falta_venta_is_zero_once_the_line_is_met():
+    r = _calcular(40_000_000, 60_000_000, {"CASCOS": 3_000_000})
+    assert _linea_de(r, "CASCOS")["cumple"] is True
+    assert _linea_de(r, "CASCOS")["falta_venta"] == 0
+
+
+def test_falta_venta_never_goes_negative_when_the_sale_exceeds_the_minimum_but_the_rule_is_not_met():
+    r = _calcular(1_000_000_000, 60_000_000, {"CASCOS": 4_000_000})
+    assert _linea_de(r, "CASCOS")["cumple"] is False
+    assert _linea_de(r, "CASCOS")["falta_venta"] == 0
+
+
+def test_falta_venta_uses_the_tecnired_sale_and_shows_below_the_gate():
+    r = _calcular(40_000_000, 60_000_000, {"CASCOS": 9_000_000}, tecnired=1_000_000)
+    assert r["gate"]["cumple"] is False
+    assert _linea_de(r, "TECNIRED")["falta_venta"] == 2_420_000

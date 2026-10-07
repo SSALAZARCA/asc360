@@ -32,7 +32,7 @@ export const ASESOR_DETALLE = {
     mes: '2026-07', tramo: 'PRO', tasa_pct: 1.5, comision: 910000, venta_base: 60.7 * M, base_pago: 'sin_hmcl', presupuesto: 60 * M,
     promedio_red: 394000, cumplimiento_pct: 1.014, gate: { umbral: 95, cumple: true }, bono_total: 30000, total_a_pagar: 940000,
     bonos: [
-      { linea: 'LUBRICANTES', etiqueta: 'Lubricantes', venta: 11 * M, pct_real: 0.183, pct_meta: 21, bono: 35000, cumple: false, paga: false, activo: true, bono_pagado: 0 },
+      { linea: 'LUBRICANTES', etiqueta: 'Lubricantes', venta: 11 * M, pct_real: 0.183, pct_meta: 21, falta_venta: 3.4 * M, bono: 35000, cumple: false, paga: false, activo: true, bono_pagado: 0 },
       { linea: 'CASCOS', etiqueta: 'Cascos', venta: 4.3 * M, pct_real: 0.0712, pct_meta: 6, bono: 30000, cumple: true, paga: true, activo: true, bono_pagado: 30000 },
       { linea: 'TECNIRED', etiqueta: 'Tecnired (clientes)', venta: 1.2 * M, pct_real: 0.02, pct_meta: 6, bono: 25000, cumple: false, paga: false, activo: false, bono_pagado: 0 },
     ],

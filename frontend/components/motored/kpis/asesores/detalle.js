@@ -110,6 +110,10 @@ export function gaugeDe(data) {
 const TIP_APAGADO = 'Bono apagado en Configuración';
 const sinDecimalInutil = (v) => decimales(v, Number.isInteger(v) ? 0 : 1);
 
+/** Missing sale of an unmet line in pesos: from 1 M on one decimal in millions (`$3,4 M`), below it whole pesos (`$850.000`). */
+const pesosFalta = (v) => (v >= 1e6 ? millones(v, 1) : moneda(v));
+const textoFalta = (b) => (b.falta_venta == null ? b.etiqueta : `${b.etiqueta} · le faltan ${pesosFalta(b.falta_venta)}`);
+
 /** Bonus status of her month: a notice when she is below the gate, and one entry per bonus line. Null for a payload without bonuses. */
 function bonosDe(c) {
   if (!c.gate || !c.bonos) return null;
@@ -121,9 +125,8 @@ function bonosDe(c) {
     if (b.cumple) {
       return { ...base, texto: b.etiqueta, estado: 'sin-compuerta', tip: `Cumple la línea, pero no llega al ${sinDecimalInutil(umbral)}% de cumplimiento: no se paga` };
     }
-    const meta = `Meta: ≥ ${sinDecimalInutil(b.pct_meta)}% de su venta (hoy ${pct(b.pct_real)})`;
-    const falta = decimales(b.pct_meta - (b.pct_real ?? 0) * 100, 1);
-    return { ...base, texto: pasa ? `${b.etiqueta} · le falta ${falta} pts` : b.etiqueta, estado: 'no-cumple', tip: meta };
+    const meta = `Venta mínima de la línea según su presupuesto (presupuesto × ${sinDecimalInutil(umbral)}% × meta). El bono se gana si la línea llega a la meta % de su venta real.`;
+    return { ...base, texto: textoFalta(b), estado: 'no-cumple', tip: meta };
   });
   return {
     aviso: pasa ? null : `Necesita ≥${sinDecimalInutil(umbral)}% de cumplimiento para activar bonos (hoy ${pct(c.cumplimiento_pct)})`,
