@@ -38,6 +38,7 @@ from app.motored.api import (
     parametros,
     presupuestos,
     referencias_busqueda,
+    reporte_asesor,
     salud,
     tablero_asesores,
     tablero_kpis,
@@ -124,3 +125,5 @@ router.include_router(avisos_antiguedad.router)
 router.include_router(presupuestos.router)
 # Welcome page ("Inicio"): `/inicio` is its own prefix, no path overlap.
 router.include_router(inicio.router)
+# Daily asesor report (ADMIN): `/reporte-asesor` is its own prefix.
+router.include_router(reporte_asesor.router)

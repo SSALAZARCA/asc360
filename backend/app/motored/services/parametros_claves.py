@@ -586,6 +586,18 @@ def _claves_avisos() -> list:
         lista_de_opciones(
             "aviso_roles_destino", ["COMPRAS"], _ROLES_AVISO,
             seccion="avisos"),
+    ] + _claves_reporte_asesor()
+
+
+def _claves_reporte_asesor() -> list:
+    """T3b (odd/motored-reporte-diario-asesor): the daily Lore message
+    with each asesor's report link. OFF by default until the owner
+    approves a real sample; hours in Bogotá ("HH:MM")."""
+    return [
+        _booleana("reporte_asesor_envio_activo", False, GRUPO_OPERACION,
+                  "avisos"),
+        hora_hhmm("reporte_asesor_hora_limite", "10:00", seccion="avisos"),
+        hora_hhmm("reporte_asesor_hora_minima", "06:00", seccion="avisos"),
     ]
 
 

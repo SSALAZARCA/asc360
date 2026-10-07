@@ -47,7 +47,7 @@ def test_alembic_single_head():
     guion = ScriptDirectory.from_config(
         Config(str(_RAIZ / "alembic_motored.ini")))
 
-    assert guion.get_heads() == ["86b1df9d3d5f"]  # reporte_asesor_link
+    assert guion.get_heads() == ["e8f50a4c1a9b"]  # reporte_asesor_envio
 
 
 def test_m1_chains_onto_the_login_lockout_head():

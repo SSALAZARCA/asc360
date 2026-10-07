@@ -246,7 +246,9 @@ def test_migration_is_the_single_head_on_top_of_the_cedula():
     guion = ScriptDirectory.from_config(
         Config(str(_RAIZ / "alembic_motored.ini")))
 
-    assert guion.get_heads() == ["86b1df9d3d5f"]
+    # The head itself is pinned in test_migration_fase4.py; here only
+    # check the chain stays linear and this revision sits on the cédula.
+    assert len(guion.get_heads()) == 1
     assert _migracion().down_revision == "c6d2f8a41b97"
 
 

@@ -423,12 +423,14 @@ async def _reset_motored_supervisor():
         supervisor_avisos,
         supervisor_corridas,
         supervisor_kpis,
+        supervisor_reporte_asesor,
     )
 
     await supervisor.reset_for_tests()
     await supervisor_corridas.detener()
     await supervisor_avisos.detener()
     await supervisor_kpis.detener()
+    await supervisor_reporte_asesor.detener()
 
 
 def override_motored_user(user) -> None:

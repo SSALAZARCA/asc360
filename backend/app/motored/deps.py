@@ -45,6 +45,7 @@ from app.motored.services.trabajos import (
     supervisor_avisos,
     supervisor_corridas,
     supervisor_kpis,
+    supervisor_reporte_asesor,
 )
 
 MOTORED_UNAVAILABLE_DETAIL = {"code": "MOTORED_UNAVAILABLE"}
@@ -241,7 +242,8 @@ async def require_motored_ready() -> None:
     y se apaga con `MOTORED_CORRIDAS_LOOP_ENABLED=false`. Igual el loop del
     aviso de antigüedad (`MOTORED_AVISOS_ANTIGUEDAD_ENABLED=false`) y el
     de las tablas resumen de los KPI's
-    (`MOTORED_KPI_RESUMEN_LOOP_ENABLED=false`)."""
+    (`MOTORED_KPI_RESUMEN_LOOP_ENABLED=false`), y el del mensaje diario
+    del informe a cada asesor (su interruptor vive en la Configuración)."""
     if not settings.MOTORED_ENABLED or not motored_secret_is_safe():
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -251,3 +253,4 @@ async def require_motored_ready() -> None:
     supervisor_corridas.ensure_started()
     supervisor_avisos.ensure_started()
     supervisor_kpis.ensure_started()
+    supervisor_reporte_asesor.ensure_started()
