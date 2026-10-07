@@ -31,10 +31,36 @@ The frontend belongs to the pedidos session (71); its plan is in `odd/tasks/` (r
 Coolify auto-deploys main. Each piece ships only when it works on its own, and the existing load must never break. Tests must be green and checked on Python 3.11 before each push.
 
 ## Tasks
-- [ ] **V1** `ventas_tipos_excluidos` key + validator + defaults (no behavior change yet).
-- [ ] **V2** Ingest core: the denylist, the master line with the legacy fallback, the counters, `no_encontradas` aggregation, plus `GET referencias-sin-linea` and the scoped `PUT`.
-- [ ] **V3** The venta_mensual purge for the file's keys, and `anular_carga` consistency.
-- [ ] **V4** `reemplaza_mes_completo` + `GET vaciado-previsto` + the full-month purge + the KPI refresh for the purged keys.
+- [x] **V1** `ventas_tipos_excluidos` key + validator + defaults (no behavior change yet).
+- [x] **V2** Ingest core: the denylist, the master line with the legacy fallback, the counters, `no_encontradas` aggregation, plus `GET referencias-sin-linea` and the scoped `PUT`.
+- [x] **V3** The venta_mensual purge for the file's keys, and `anular_carga` consistency.
+- [x] **V4** `reemplaza_mes_completo` + `GET vaciado-previsto` + the full-month purge + the KPI refresh for the purged keys.
+
+- [x] **V5** Match the line against `lineas_comerciales`, not `tipos_inventario_incluidos` (the stored value could hold old codes); a guard refuses to apply when 0 rows are kept (`E-CARGA-051`, apply 409).
+- [x] **V6** Keep the `solo_detalle` rows (`fuera_de_linea`, denylisted, NO COMERCIAL) in `venta_detalle`, never in `venta_mensual`. User decision via 5d: días de inventario stays unchanged.
+
+## Progress
+**Done (2026-10-06).** One delegated writer. Commits: V1 da53955, V2 c69d740, V3 e08b740, V4 2991e37, V5 f0f8849, V6 3871daf.
+
+**Team checks.** 84, 71 and 5d verified every deviation:
+- The legacy fallback was dropped; apply blocks while lines are missing instead.
+- Unknown references do NOT block, as today.
+- The NO COMERCIAL sentinel.
+- The bulk PUT.
+- The tipos-codes risk, fixed by V5.
+- solo_detalle stays, by user decision.
+
+**Checks**
+- unit 6080, green;
+- pg_real subset 109, green (ingesta, corrida, cargador, KPI resumen, costo);
+- all on Python 3.11.
+
+**Native review.** Medium risk, 2724 lines. Consent was granted; R3 approved and was acknowledged. Advisories:
+- `cargas.py:747-758`: the selectable lines are read at today's date, not the carga month;
+- `ventas.py:614-619`: an unknown ref takes the included path on purpose (REFERENCIA_NO_ENCONTRADA);
+- `cargas.py:722-725`: the SUCURSAL scope is untested (that role is currently blocked).
 
 ## Next step
-V1–V4 by one delegated writer, one commit each, pushed one by one after review. Ping 71 as each contract lands.
+- 71 merges `feat/ventas-erp-ui` and hides `tipos_inventario_incluidos`.
+- 5d audits the final hashes.
+- The user tests with a raw ERP file.
