@@ -72,3 +72,6 @@ Every day, once the VENTAS carga that includes the previous day is applied, Lore
   - `reportes_asesores(db, fecha)` returns `{reportes: {cedula: {cedula, nombre, tienda, mes, fecha_datos, venta_cumplimiento, venta_comision, presupuesto, cumplimiento_pct, tramo, comision, bono_total, total_a_pagar, siguiente_tramo, compuerta, falta_100, dias_habiles_restantes, venta_diaria_necesaria, bonos[], tramos[]}}, sin_presupuesto: [{cedula, nombre, venta}], sin_cedula: [{vendedor, venta}]}`.
   - Money is in whole pesos and percentages are fractions.
   - Readiness: an APLICADO VENTAS carga with `periodo_hasta ≥ yesterday` and the KPI summary not dirty; otherwise wait until the deadline (default 10:00).
+- 2026-10-07: owner decision (direct, "conmigo"): only the ADMIN sets the cédula, in Gestión de usuarios. It is validated against the active vendedor master and must be unique.
+  - There is no self-entry in Lore and no approval flow.
+  - This supersedes "Lore asks for the cédula at registration" and the H1 pending flow.
