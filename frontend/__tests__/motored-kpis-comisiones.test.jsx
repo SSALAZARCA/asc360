@@ -22,7 +22,6 @@ describe('Comisiones tab: layout', () => {
     montar();
     expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
       'Comisiones · julio',
-      'Cómo se calcula la comisión',
       'Dónde cae cada asesor · julio',
       'Comisión por asesor · julio',
       'Cerca de subir de tramo',
@@ -57,43 +56,11 @@ describe('Comisiones tab: layout', () => {
   });
 });
 
-describe('Comisiones tab: how it is calculated', () => {
-  it('walks the four steps with the top earner as the example', () => {
+describe('Comisiones tab: no calculation walkthrough', () => {
+  it('leaves the step-by-step explanation to the asesor view', () => {
     montar();
-    const tarjeta = seccion('Cómo se calcula la comisión');
-    expect(within(tarjeta).getByText(/Su presupuesto cargado del mes/)).toBeInTheDocument();
-    expect(within(tarjeta).queryByText(/Presupuesto de la tienda/)).not.toBeInTheDocument();
-    expect(within(tarjeta).getByText('Presupuesto cargado: $200 M')).toBeInTheDocument();
-    expect(within(tarjeta).getByText('Venta con HMCL ÷ meta')).toBeInTheDocument();
-    expect(within(tarjeta).getByText('$190 M ÷ $200 M = 95,0%')).toBeInTheDocument();
-    expect(within(tarjeta).getByText('BASE hasta 90% · PRO 90–105% · ELITE desde 105%')).toBeInTheDocument();
-    expect(within(tarjeta).getByText('PRO → 1,5%')).toBeInTheDocument();
-    expect(within(tarjeta).getByText('Venta sin HMCL × % del tramo')).toBeInTheDocument();
-    expect(within(tarjeta).getByText('$180 M × 1,5% = $2.700.000')).toBeInTheDocument();
-    expect(within(tarjeta).getByText('Bonos por línea')).toBeInTheDocument();
-    expect(within(tarjeta).getByText(/Con un cumplimiento de al menos 95%.*cada línea/)).toBeInTheDocument();
-    expect(within(tarjeta).getByText('Bonos ganados: $65.000')).toBeInTheDocument();
-    expect(within(tarjeta).getByText('Ejemplo: Jiménez Rangel Yulisa · Bogotá 1 de Mayo · julio')).toBeInTheDocument();
-  });
-
-  it('names the bases from the rules in force', () => {
-    montar({ ...COMISIONES, reglas: { ...COMISIONES.reglas, cumplimiento_base: 'sin_hmcl', comision_base_pago: 'con_hmcl' } });
-    const tarjeta = seccion('Cómo se calcula la comisión');
-    expect(within(tarjeta).getByText('Venta sin HMCL ÷ meta')).toBeInTheDocument();
-    expect(within(tarjeta).getByText('Venta con HMCL × % del tramo')).toBeInTheDocument();
-  });
-});
-
-describe('Comisiones tab: bonus step', () => {
-  it('says why the example asesor earns no bonus when she is below the gate', () => {
-    const debajo = { ...COMISIONES, asesores: [COMISIONES.asesores[2], ...COMISIONES.asesores] };
-    montar(debajo);
-    expect(within(seccion('Cómo se calcula la comisión')).getByText('85,0% de cumplimiento: sin bonos')).toBeInTheDocument();
-  });
-
-  it('has no fifth step when there are no bonus lines', () => {
-    montar({ ...COMISIONES, reglas: { ...COMISIONES.reglas, comision_lineas: [] } });
-    expect(within(seccion('Cómo se calcula la comisión')).queryByText('Bonos por línea')).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Cómo se calcula la comisión' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Cómo se calcula la comisión')).not.toBeInTheDocument();
   });
 });
 

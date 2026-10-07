@@ -1,17 +1,17 @@
 'use client';
-/** Comisiones tab, in the design's order: KPI card + how it is calculated, strip, ranked list + near tiers. */
+/** Comisiones tab, in the design's order: KPI card, strip, ranked list + near tiers, bonuses per line.
+ * The step-by-step calculation lives in the asesor detail view. */
 import Link from 'next/link';
 import { useState } from 'react';
 import InfoTooltip from '../../InfoTooltip';
 import { CSS_BONOS } from './estilosBonos';
 import { KpiMiniGrid, RankBadge, SegmentedToggle, TrafficLightGrid, ZoneStrip } from '../charts';
 import { descargarComisionesExcel } from '../../../../lib/motored/kpisApi';
-import { enMillones, ejemploDe, escalaTramos, filasComision, lineasBono, mosaicoBonos, totalAPagar, COLOR_BONO, numero, leyendaTramos, mesLiquidado, miniKpis, pasosDeCalculo, puntosAsesores, celdasCumplimiento, sinPresupuestos, tarjetasCerca } from './datos';
+import { enMillones, escalaTramos, filasComision, lineasBono, mosaicoBonos, totalAPagar, COLOR_BONO, numero, leyendaTramos, mesLiquidado, miniKpis, puntosAsesores, celdasCumplimiento, sinPresupuestos, tarjetasCerca } from './datos';
 import { COLOR } from '../tokens';
 import { CABECERA, LEYENDA, NUM, ROTULO, TARJETA, TITULO } from '../ventas/estilos';
 
 const TIP_MES = 'Las comisiones se calculan sobre el último mes del período elegido.';
-const TIP_META = 'La meta de cada asesor es el presupuesto que se le cargó en Maestros → Presupuestos para el mes.';
 
 function ChipMes({ data }) {
   return (
@@ -30,29 +30,6 @@ function TarjetaKpi({ data }) {
       <p style={{ margin: 0, fontSize: 12.5, fontWeight: 700, color: COLOR.muted }}>Total a pagar</p>
       <p style={{ margin: '-8px 0 0', fontSize: 34, fontWeight: 700, ...NUM }}>{enMillones(totalAPagar(data), true)}</p>
       <KpiMiniGrid items={items} />
-    </section>
-  );
-}
-
-function Paso({ paso }) {
-  return (
-    <div style={{ padding: 12, borderRadius: 12, background: COLOR.infoSoft, display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
-      <span style={{ width: 24, height: 24, borderRadius: 999, background: COLOR.info, color: '#FFFFFF', fontSize: 12, fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{paso.n}</span>
-      <span style={{ fontSize: 13, fontWeight: 700 }}>{paso.titulo}{paso.n === '1' && <> <InfoTooltip text={TIP_META} /></>}</span>
-      <span style={{ fontSize: 12, color: COLOR.ink2 }}>{paso.regla}</span>
-      <span style={{ ...NUM, marginTop: 'auto', fontSize: 12, fontWeight: 700, color: COLOR.info, background: COLOR.surface, borderRadius: 8, padding: '5px 8px' }}>{paso.ejemplo}</span>
-    </div>
-  );
-}
-
-function TarjetaPasos({ data }) {
-  return (
-    <section aria-label="Cómo se calcula la comisión" style={TARJETA}>
-      <h2 style={TITULO}>Cómo se calcula la comisión</h2>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, marginTop: 14 }}>
-        {pasosDeCalculo(data).map((p) => <Paso key={p.n} paso={p} />)}
-      </div>
-      <p style={{ margin: '10px 0 0', fontSize: 12, color: COLOR.muted }}>{ejemploDe(data)}</p>
     </section>
   );
 }
@@ -289,10 +266,7 @@ export default function ComisionesTab({ data, filtros }) {
       <ChipMes data={data} />
       {sinPresupuestos(data) ? <SinPresupuestoMes data={data} /> : (
         <>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 16 }}>
-            <TarjetaKpi data={data} />
-            <TarjetaPasos data={data} />
-          </div>
+          <TarjetaKpi data={data} />
           <TarjetaFranja data={data} />
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16 }}>
             <TarjetaComision data={data} filtros={filtros} />

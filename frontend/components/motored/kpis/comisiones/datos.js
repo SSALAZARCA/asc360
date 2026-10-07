@@ -128,41 +128,6 @@ export function miniKpis(data) {
 
 const pesosTexto = (v) => moneda(v);
 
-function pasoBonos(data, a) {
-  const umbral = numero(umbralBono(data));
-  return {
-    n: '5', titulo: 'Bonos por línea',
-    regla: `Con un cumplimiento de al menos ${umbral}%, cada línea que llegue a su meta % de la venta total paga un bono fijo`,
-    ejemplo: a.gate?.cumple ? `Bonos ganados: ${pesosTexto(a.bono_total)}` : `${pct(a.cumplimiento_pct)} de cumplimiento: sin bonos`,
-  };
-}
-
-/** The steps of the calculation (a fifth one for the bonuses when there are bonus lines), with the top earner as the example. */
-export function pasosDeCalculo(data) {
-  const a = data.asesores[0];
-  if (!a) return [];
-  const { cumplimiento_base: cumpl, comision_base_pago: pago } = data.reglas;
-  const rangos = rangosDeTramos(data.tramos).join(' · ');
-  return [
-    { n: '1', titulo: 'Meta del asesor', regla: 'Su presupuesto cargado del mes (el de cada asesor, no un reparto de la tienda)', ejemplo: `Presupuesto cargado: ${enMillones(a.presupuesto)}` },
-    {
-      n: '2', titulo: 'Cumplimiento', regla: `Venta ${baseTexto(cumpl)} ÷ meta`,
-      ejemplo: `${enMillones(a.venta_cumplimiento)} ÷ ${enMillones(a.presupuesto)} = ${pct(a.cumplimiento_pct)}`,
-    },
-    { n: '3', titulo: 'Tramo', regla: rangos, ejemplo: `${a.tramo ?? '—'} → ${numero(a.tasa_pct)}%` },
-    {
-      n: '4', titulo: 'Comisión', regla: `Venta ${baseTexto(pago)} × % del tramo`,
-      ejemplo: `${enMillones(a.venta_comision)} × ${numero(a.tasa_pct)}% = ${moneda(a.comision)}`,
-    },
-    ...(lineasBono(data).length ? [pasoBonos(data, a)] : []),
-  ];
-}
-
-export const ejemploDe = (data) => {
-  const a = data.asesores[0];
-  return a ? `Ejemplo: ${a.nombre ?? a.cedula} · ${a.tienda ?? '—'} · ${mesLiquidado(data).largo}` : '';
-};
-
 export const COLOR_BONO = '#B45309';
 const MAX_PUNTOS = 12;
 
