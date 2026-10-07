@@ -93,3 +93,5 @@ Every day, once the VENTAS carga that includes the previous day is applied, Lore
   - T2 adds `reportes[cedula].detalle`, the same structure as `/kpis/asesores/detalle` minus the peer fields.
   - Visual reference: `components/motored/kpis/asesores/AsesorDetalle.js` and the AsesoresUno canvas.
   - T3 renders it server-side with WeasyPrint plus inline SVG charts (no JS), then encrypts it with AES-256.
+- 2026-10-07: owner decision, relayed by 84 (the owner answered 84 directly). The PDF is IDENTICAL to the screen, comparisons INCLUDED: puestos, comparison with the tienda and the red, the strip with other asesores' dots, and the "vs red" refs. This overrides "no peer comparisons". `detalle.comparaciones` is populated.
+  - Privacy note given to the owner: each asesor sees peers' positions and values.
