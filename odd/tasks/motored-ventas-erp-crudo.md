@@ -23,9 +23,9 @@ Status: **plan agreed between the 3 sessions; waiting for the owner's go. No cod
 - **E.** Log counters: `filas_tipo_excluido`, `filas_fuera_de_linea`, `filas_sin_linea`, `filas_co_vacio`.
 
 ## Tasks
-- [ ] F1 (after A lands)
-- [ ] F2 (after C lands)
-- [ ] F3 (after D lands)
+- [x] F1 (978f918)
+- [x] F2 (11a0a76, 6186ac3 options from payload, 342adf8 ADMIN/COMPRAS gating)
+- [x] F3 (a17392b); hid tipos_inventario_incluidos in Cargas (d47e379)
 
 ## Owner decisions (relayed by 5d)
 - COMPRAS may set `linea_comercial`, but ONLY for refs in a VENTAS carga's "sin línea" list. This does not grant general master editing.
