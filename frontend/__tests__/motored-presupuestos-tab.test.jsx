@@ -1,6 +1,6 @@
 /**
- * Maestros > Presupuestos (budgets, T3): month selector, month grouped by
- * tienda with totals, manual edit/add/remove (each one a new version),
+ * Maestros > Presupuestos (budgets, T3): month selector, month as one flat
+ * table of asesores, manual edit/add/remove (each one a new version),
  * version history, and the explicit option style the dark theme needs.
  */
 import React from 'react';
@@ -61,16 +61,17 @@ describe('month list', () => {
 });
 
 describe('month view', () => {
-  it('shows version, origin, grand total, and budgets grouped by tienda with totals', async () => {
+  it('shows version, origin, grand total, and every asesor in one table with their tienda', async () => {
     render(<PresupuestosTab />);
 
-    const caliGrupo = (await screen.findByRole('region', { name: /Cali/ }));
-    expect(within(caliGrupo).getByText(pesos(2500000))).toBeInTheDocument();
-    expect(within(caliGrupo).getByText('Ana Gómez')).toBeInTheDocument();
-    expect(within(caliGrupo).getByText('111')).toBeInTheDocument();
-    expect(within(caliGrupo).getByText(pesos(1500000))).toBeInTheDocument();
-    const bogota = screen.getByRole('region', { name: /Bogotá/ });
-    expect(within(bogota).getByText('Carla Díaz')).toBeInTheDocument();
+    const tabla = await screen.findByRole('table', { name: 'Presupuestos del mes' });
+    const ana = within(tabla).getByText('Ana Gómez').closest('tr');
+    expect(within(ana).getByText('Cali')).toBeInTheDocument();
+    expect(within(ana).getByText('111')).toBeInTheDocument();
+    expect(within(ana).getByText(pesos(1500000))).toBeInTheDocument();
+    const carla = within(tabla).getByText('Carla Díaz').closest('tr');
+    expect(within(carla).getByText('Bogotá')).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: /Cali|Bogotá/ })).toBeNull();
     expect(screen.getByTestId('presupuesto-total')).toHaveTextContent(pesos(4500000));
     expect(screen.getByTestId('presupuesto-total')).toHaveTextContent(/3 asesores/);
     expect(screen.getByText(/Versión 2/)).toBeInTheDocument();
@@ -79,7 +80,7 @@ describe('month view', () => {
 
   it('explains version and origin with tooltips', async () => {
     render(<PresupuestosTab />);
-    await screen.findByRole('region', { name: /Cali/ });
+    await screen.findByRole('table', { name: 'Presupuestos del mes' });
 
     expect(screen.getByRole('note', { name: /última versión/i })).toBeInTheDocument();
     expect(screen.getByRole('note', { name: /Excel|manual/i })).toBeInTheDocument();
