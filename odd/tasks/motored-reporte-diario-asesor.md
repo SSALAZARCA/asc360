@@ -98,3 +98,13 @@ Every day, once the VENTAS carga that includes the previous day is applied, Lore
 - 2026-10-07: owner decision, relayed by 84: the PDF is ONE long continuous page, not split into pages.
   - Width close to phone or tablet reading width (about 720–800 px).
   - With WeasyPrint, render once to measure the content height, then set `@page` size to the width × the measured height (two passes).
+- 2026-10-07: owner priorities for the PDF, relayed by 84:
+  1. It looks identical to the asesor screen.
+  2. It is easy to read on a phone and never tiny.
+  - Layout rules:
+    - width about 720–800 px;
+    - body text at least 14 px, labels at least 12 px;
+    - big figures as on screen (total about 32 px, gauge % about 44 px);
+    - charts at full width;
+    - tables wrap instead of shrinking.
+  - **Gate:** before enabling the daily send, render ONE real asesor's PDF and have the owner approve it on a phone. The send stays OFF by default until then.
