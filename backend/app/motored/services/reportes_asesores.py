@@ -103,8 +103,8 @@ class _Vivo:
         return await q.consultar_facturas(db, filtro, dimension=dimension)
 
     @staticmethod
-    async def clientes(db, filtro, *, dimension):
-        return await q.consultar_clientes(db, filtro, dimension=dimension)
+    async def clientes(db, filtro, *, dimension, solo_unicos=False):
+        return await q.consultar_clientes(db, filtro, dimension=dimension, solo_unicos=solo_unicos)
 
     @staticmethod
     async def personas(db, filtro):
@@ -150,9 +150,8 @@ async def _tablero_del_mes(db: AsyncSession, p: _Periodo):
     facturas = [
         *await p.fuente.facturas(db, p.f_mes, dimension=DIM_ASESOR),
         *await p.fuente.facturas(db, p.f_mes, dimension=DIM_TOTAL)]
-    clientes = [
-        *await p.fuente.clientes(db, p.f_mes, dimension=DIM_ASESOR),
-        *await p.fuente.clientes(db, p.f_mes, dimension=DIM_TOTAL)]
+    # Only the asesores' client counts: the report never shows the top 5 share nor the network's clients.
+    clientes = await p.fuente.clientes(db, p.f_mes, dimension=DIM_ASESOR, solo_unicos=True)
     personas = await p.fuente.personas(db, p.f_mes)
     tablero = t.construir_tablero(
         [f for f in cubo_anio if f.mes == p.mes], facturas, clientes, personas, [p.mes], p.reglas)
@@ -175,7 +174,7 @@ async def _cumplimiento_y_liquidacion(db: AsyncSession, p: _Periodo, cubo_anio, 
     }
     por_mes = k.cumplimiento_por_mes(cubo_anio, presupuestos, p.reglas, p.meses_anio, **extra)
     del_mes = {clave: linea for clave, linea in presupuestos.items() if clave[0] == p.mes}
-    liquidacion = await k.liquidar_cubo_del_mes(db, p.f_anio, p.mes, cubo_anio, del_mes)
+    liquidacion = await k.liquidar_cubo_del_mes(db, p.f_anio, p.mes, cubo_anio, del_mes, sucursales)
     return (por_mes, sucursales, *liquidacion)
 
 

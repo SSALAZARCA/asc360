@@ -607,7 +607,7 @@ async def calcular_kpis_asesor_detalle(db: AsyncSession, filtro: Filtro, cedula:
     `tablero_asesor_detalle`), o None si la cedula no tiene ventas, presupuesto ni fila en el maestro
     dentro del filtro. Todo sale de los mismos constructores de la pestana (tablero, cumplimiento,
     comisiones) y de las lecturas con interruptor, asi que vivo y resumen dan lo mismo."""
-    tablero, cubo = await q.tablero_de_filtro(db, filtro)
+    tablero, cubo = await q.tablero_para_detalle(db, filtro)
     cubo = await _cubo_de_cumplimiento(db, filtro, cubo)
     presupuestos = await _presupuestos_del_filtro(db, filtro)
     nombres_por_clave = {f["clave"]: f["nombre"] for f in tablero["filas"] if f["tipo"] == t.TIPO_PERSONA}
@@ -628,7 +628,8 @@ async def calcular_kpis_asesor_detalle(db: AsyncSession, filtro: Filtro, cedula:
         top = await lectura.top_tecnired_de_asesor(db, filtro, clave)
     fecha_datos = await q.ultima_fecha_venta(db, filtro.meses[-1], filtro.sucursal_ids)
     resultado = detalle.construir_detalle(
-        cedula, tablero, periodo, por_mes, await calcular_kpis_comisiones(db, filtro), clientes, top,
+        cedula, tablero, periodo, por_mes,
+        await calcular_kpis_comisiones(db, filtro, presupuestos, extra["sucursales"]), clientes, top,
         None if maestro is None else {
             "nombre": maestro.nombre, "cargo": maestro.cargo, "tienda": maestro.tienda,
             "sucursal_id": maestro.sucursal_id},
@@ -643,7 +644,7 @@ async def calcular_opciones_asesores(db: AsyncSession, filtro: Filtro) -> Dict[s
     quienes VENDIERON en el periodo y las tiendas del filtro, la de mayor venta primero (es la seleccion
     por defecto). Sale del mismo tablero de la pestana (ver `tablero_asesor_detalle.construir_opciones`),
     asi que vivo y resumen dan lo mismo. Una tienda asociada cuenta como su principal."""
-    tablero, _ = await q.tablero_de_filtro(db, filtro)
+    tablero = await q.tablero_para_opciones(db, filtro)
     tiendas = None
     if filtro.sucursal_ids:
         mapa = await lectura.principales(db)
@@ -668,8 +669,17 @@ async def _cargos_del_mes(
     return cargos
 
 
+async def _sucursales_de(
+    db: AsyncSession, ids: Set[str], conocidas: Optional[Dict[str, Tuple[str, Optional[datetime.date]]]] = None,
+) -> Dict[str, Tuple[str, Optional[datetime.date]]]:
+    """`q.consultar_sucursales(ids)`, asking only for the ones `conocidas` (an earlier answer) does not have."""
+    conocidas = conocidas or {}
+    nuevas = await q.consultar_sucursales(db, {i for i in ids if i not in conocidas})
+    return {i: conocidas.get(i) or nuevas[i] for i in ids if i in conocidas or i in nuevas}
+
+
 async def _liquidar(
-    db: AsyncSession, filtro: Filtro, mes: str, ventas, claves, presupuestos, por_linea=None,
+    db: AsyncSession, filtro: Filtro, mes: str, ventas, claves, presupuestos, por_linea=None, sucursales=None,
 ) -> Tuple[c.ReglasComision, List[Dict[str, Any]], Dict[str, Any]]:
     """Liquidates ONE month with the rules in force that month."""
     reglas = await q.cargar_reglas_comision(db, mes)
@@ -678,7 +688,7 @@ async def _liquidar(
     cedulas = sorted(set(ventas_mes) | set(pres_mes))
     cargos = await _cargos_del_mes(db, filtro, mes, claves, cedulas)
     nombres = await q.consultar_nombres_por_cedula(db, cedulas)
-    sucursales = await q.consultar_sucursales(db, {str(x.sucursal_id) for x in pres_mes.values()})
+    sucursales = await _sucursales_de(db, {str(x.sucursal_id) for x in pres_mes.values()}, sucursales)
     tiendas = {i: nombre for i, (nombre, _) in sucursales.items()}
     lineas_mes = {ced: v for (ced, m), v in (por_linea or {}).items() if m == mes}
     asesores, advertencias = c.liquidar_mes(ventas_mes, pres_mes, nombres, cargos, tiendas, reglas, lineas_mes)
@@ -687,14 +697,15 @@ async def _liquidar(
 
 
 async def liquidar_cubo_del_mes(
-    db: AsyncSession, filtro: Filtro, mes: str, cubo, presupuestos,
+    db: AsyncSession, filtro: Filtro, mes: str, cubo, presupuestos, sucursales=None,
 ) -> Tuple[c.ReglasComision, List[Dict[str, Any]], Dict[str, Any], Dict[str, Decimal]]:
     """Liquidates `mes` from an asesores cube (HMCL included) and the month's budgets, with the rules in
     force that month: `(reglas, asesores, advertencias, {clave: venta})`, the last one being the sale of the
     people without a valid cedula. The commissions tab and the daily asesor report both go through here."""
     ventas, claves, sin_cedula = c.ventas_por_cedula_mes(cubo, filtro.reglas.lineas)
     por_linea = c.ventas_por_linea_cedula_mes(cubo, filtro.reglas.lineas)
-    reglas, asesores, advertencias = await _liquidar(db, filtro, mes, ventas, claves, presupuestos, por_linea)
+    reglas, asesores, advertencias = await _liquidar(
+        db, filtro, mes, ventas, claves, presupuestos, por_linea, sucursales)
     sin_cedula_mes = sin_cedula.get(mes, {})
     advertencias["sin_cedula"] = {
         "personas": len(sin_cedula_mes),
@@ -703,20 +714,30 @@ async def liquidar_cubo_del_mes(
     return reglas, asesores, advertencias, sin_cedula_mes
 
 
-async def calcular_kpis_comisiones(db: AsyncSession, filtro: Filtro) -> Dict[str, Any]:
+async def calcular_kpis_comisiones(
+    db: AsyncSession, filtro: Filtro,
+    presupuestos_del_filtro: Optional[Dict[Tuple[str, str], pres.LineaPresupuesto]] = None,
+    sucursales: Optional[Dict[str, Tuple[str, Optional[datetime.date]]]] = None,
+) -> Dict[str, Any]:
     """Pestana Comisiones: liquida el ULTIMO mes del filtro con las reglas vigentes ese mes; el filtro
     de tiendas acota los presupuestos y el periodo no cambia las cifras. La venta cuenta completa (HMCL
     incluido en la consulta; cada base decide) y no depende del selector HMCL. Vivo y resumen dan lo
-    mismo (`lectura.cubo`)."""
+    mismo (`lectura.cubo`). Quien ya leyo los presupuestos del filtro (`_presupuestos_del_filtro`) los pasa en
+    `presupuestos_del_filtro` y se evita leerlos otra vez: el mes liquidado es uno de sus meses; las tiendas
+    que ya conoce (`consultar_sucursales`) van en `sucursales`."""
     mes = filtro.meses[-1]
     solo_mes = filtro._replace(
         sucursal_ids=None, modo_hmcl=HMCL_INCLUIR, meses=(mes,), rangos=t.rangos_de_meses([mes]))
     cubo = await lectura.cubo(db, solo_mes, None, DIM_ASESOR)
-    primero = datetime.date(int(mes[:4]), int(mes[5:]), 1)
-    presupuestos = presupuestos_del_rango(
-        await pres.presupuesto_por_asesor(db, primero, primero), [mes], filtro.sucursal_ids,
-        await lectura.principales(db))
-    reglas, asesores, advertencias, _ = await liquidar_cubo_del_mes(db, filtro, mes, cubo, presupuestos)
+    if presupuestos_del_filtro is None:
+        primero = datetime.date(int(mes[:4]), int(mes[5:]), 1)
+        presupuestos = presupuestos_del_rango(
+            await pres.presupuesto_por_asesor(db, primero, primero), [mes], filtro.sucursal_ids,
+            await lectura.principales(db))
+    else:
+        presupuestos = {clave: linea for clave, linea in presupuestos_del_filtro.items() if clave[0] == mes}
+    reglas, asesores, advertencias, _ = await liquidar_cubo_del_mes(
+        db, filtro, mes, cubo, presupuestos, sucursales)
     return {
         **_encabezado(filtro),
         **await lectura.frescura(db),

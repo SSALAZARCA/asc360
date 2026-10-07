@@ -440,8 +440,9 @@ async def consultar_facturas(db, filtro: Filtro, *, dimension: str) -> List[Fila
     ]
 
 
-async def consultar_clientes(db, filtro: Filtro, *, dimension: str) -> List[FilaClientes]:
-    """Clientes distintos y venta de los 5 mayores, por fila."""
+async def consultar_clientes(db, filtro: Filtro, *, dimension: str, solo_unicos: bool = False) -> List[FilaClientes]:
+    """Clientes distintos y venta de los 5 mayores, por fila. Con `solo_unicos` no ordena a los clientes para
+    sacar los 5 mayores (la venta de los 5 mayores queda en 0): para quien solo necesita cuantos son."""
     reglas = filtro.reglas
     lineas = _lineas_por_referencia(reglas)
     cliente = _expr_cliente_norm().label("cliente")
@@ -453,12 +454,18 @@ async def consultar_clientes(db, filtro: Filtro, *, dimension: str) -> List[Fila
         filtro, lineas, solo_lineas_reconocidas=True, con_vendedor=dimension == DIM_ASESOR,
         por_sucursal=dimension == DIM_SUCURSAL,
     ).subquery("por_cliente")
-    return _filas_de_clientes(await db.execute(_agregar_clientes(interna, por_grupo)))
+    return _filas_de_clientes(await db.execute(_agregar_clientes(interna, por_grupo, solo_unicos)))
 
 
-def _agregar_clientes(interna, por_grupo: bool):
+def _agregar_clientes(interna, por_grupo: bool, solo_unicos: bool = False):
     """`(clave, clientes distintos, venta de los 5 mayores)` sobre una subconsulta
-    `(clave, venta)` con una fila por cliente y fila. La comparte la lectura del resumen."""
+    `(clave, venta)` con una fila por cliente y fila. La comparte la lectura del resumen. Con `solo_unicos`
+    la venta de los 5 mayores es 0 y no se calcula (sin la ventana que ordena a todos los clientes)."""
+    if solo_unicos:
+        externa = select(
+            interna.c.clave if por_grupo else _constante(CLAVE_TOTAL), func.count(), literal_column("0"),
+        ).select_from(interna)
+        return externa.group_by(interna.c.clave) if por_grupo else externa
     posicion = func.row_number().over(
         partition_by=interna.c.clave if por_grupo else None, order_by=interna.c.venta.desc())
     medio = select(interna.c.clave, interna.c.venta, posicion.label("posicion")).subquery("ordenados")
@@ -722,21 +729,38 @@ async def _principales(db: AsyncSession, sucursal_ids: Optional[Iterable[Any]]) 
     return [mapa.get(i, i) for i in ids]
 
 
-async def tablero_de_filtro(db: AsyncSession, filtro: Filtro) -> Tuple[Dict[str, Any], List[FilaCubo]]:
-    """Tablero de asesores y el cubo de asesores SIN filtrar por HMCL (lo necesita
-    el cumplimiento, que mide la venta con HMCL aunque el modo la excluya)."""
+class _Alcance(NamedTuple):
+    """What a tablero is built with. The complete one is the tab's; the others leave out the reads whose
+    figures their caller never looks at (the detail of one asesor, the options of the filter)."""
+    costos: bool = True  # the cost cut: the cube carries the margin
+    facturas: bool = True
+    clientes: Optional[str] = "top5"  # "top5", "unicos" (how many, not the top 5 share) or None
+    clientes_de_la_red: bool = True  # the TOTAL row of the clients
+    contexto: bool = True  # the months available and the cost cut date
+
+
+_ALCANCE_DETALLE = _Alcance(clientes="unicos", clientes_de_la_red=False, contexto=False)
+_ALCANCE_OPCIONES = _Alcance(costos=False, facturas=False, clientes=None, clientes_de_la_red=False, contexto=False)
+
+
+async def _tablero(db: AsyncSession, filtro: Filtro, alcance: _Alcance) -> Tuple[Dict[str, Any], List[FilaCubo]]:
     # Imported here: the summary reads import this module for the shared expressions.
     from app.motored.services import kpi_resumen_lectura as lectura
 
     meses, reglas, modo_hmcl = list(filtro.meses), filtro.reglas, filtro.modo_hmcl
-    corte = await lectura.fecha_corte_costos(db)
+    corte = await lectura.fecha_corte_costos(db) if alcance.costos else None
 
     cubo_completo = await lectura.cubo(db, filtro, corte)
     cubo = t.filtrar_cubo_por_hmcl(cubo_completo, modo_hmcl)
-    facturas = (await lectura.facturas(db, filtro, dimension=DIM_ASESOR)
-                + await lectura.facturas(db, filtro, dimension=DIM_TOTAL))
-    clientes = (await lectura.clientes(db, filtro, dimension=DIM_ASESOR)
-                + await lectura.clientes(db, filtro, dimension=DIM_TOTAL))
+    facturas, clientes = [], []
+    if alcance.facturas:
+        facturas = (await lectura.facturas(db, filtro, dimension=DIM_ASESOR)
+                    + await lectura.facturas(db, filtro, dimension=DIM_TOTAL))
+    if alcance.clientes:
+        aparte = {"solo_unicos": True} if alcance.clientes == "unicos" else {}
+        clientes = await lectura.clientes(db, filtro, dimension=DIM_ASESOR, **aparte)
+        if alcance.clientes_de_la_red:
+            clientes = clientes + await lectura.clientes(db, filtro, dimension=DIM_TOTAL, **aparte)
     personas = await lectura.personas(db, filtro)
 
     tablero = t.construir_tablero(cubo, facturas, clientes, personas, meses, reglas)
@@ -747,10 +771,32 @@ async def tablero_de_filtro(db: AsyncSession, filtro: Filtro) -> Tuple[Dict[str,
         meses=meses,
         sucursales=sorted(str(s) for s in (filtro.sucursal_ids or ())),
         reglas=eco_reglas(reglas, meses[-1]),
-        meses_disponibles=await lectura.meses(db),
-        fecha_corte_costos=corte.isoformat() if corte else None,
     )
+    if alcance.contexto:
+        tablero.update(
+            meses_disponibles=await lectura.meses(db),
+            fecha_corte_costos=corte.isoformat() if corte else None,
+        )
     return tablero, cubo_completo
+
+
+async def tablero_de_filtro(db: AsyncSession, filtro: Filtro) -> Tuple[Dict[str, Any], List[FilaCubo]]:
+    """Tablero de asesores y el cubo de asesores SIN filtrar por HMCL (lo necesita
+    el cumplimiento, que mide la venta con HMCL aunque el modo la excluya)."""
+    return await _tablero(db, filtro, _Alcance())
+
+
+async def tablero_para_detalle(db: AsyncSession, filtro: Filtro) -> Tuple[Dict[str, Any], List[FilaCubo]]:
+    """`tablero_de_filtro` for the detail of one asesor: the same figures it reads, without the share of
+    the top 5 clients (it only counts them), the clients of the whole network, the months available nor
+    the cost cut date, which it never looks at."""
+    return await _tablero(db, filtro, _ALCANCE_DETALLE)
+
+
+async def tablero_para_opciones(db: AsyncSession, filtro: Filtro) -> Dict[str, Any]:
+    """The tablero of the "Asesor" options: only who sold how much (the cube and the people), without
+    invoices, clients, costs nor the context the tab shows."""
+    return (await _tablero(db, filtro, _ALCANCE_OPCIONES))[0]
 
 
 async def _calcular(

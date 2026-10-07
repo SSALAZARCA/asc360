@@ -328,15 +328,17 @@ def _desde_clientes(consulta, filtro: Filtro, *, con_vendedor=False, por_sucursa
                   aplicar_hmcl=True, columna_hmcl=C.cliente_norm, por_sucursal=por_sucursal)
 
 
-async def clientes_resumen(db: AsyncSession, filtro: Filtro, *, dimension: str) -> List[FilaClientes]:
-    """`q.consultar_clientes` from `kpi_cliente_mes`: distinct clients and top-5 sale share."""
+async def clientes_resumen(
+    db: AsyncSession, filtro: Filtro, *, dimension: str, solo_unicos: bool = False,
+) -> List[FilaClientes]:
+    """`q.consultar_clientes` from `kpi_cliente_mes`: distinct clients and top-5 sale share (0 with `solo_unicos`)."""
     por_grupo = dimension != DIM_TOTAL
     clave = _dimension(dimension, filtro.reglas, C).label("clave")
     interna = _desde_clientes(
         select(clave, func.sum(C.venta).label("venta")).group_by(C.cliente_norm, *([clave] if por_grupo else [])),
         filtro, con_vendedor=dimension == DIM_ASESOR, por_sucursal=dimension == DIM_SUCURSAL,
     ).subquery("por_cliente")
-    return q._filas_de_clientes(await db.execute(q._agregar_clientes(interna, por_grupo)))
+    return q._filas_de_clientes(await db.execute(q._agregar_clientes(interna, por_grupo, solo_unicos)))
 
 
 def _desde_tecnired(consulta, filtro: Filtro):
@@ -463,10 +465,12 @@ async def facturas(db: AsyncSession, filtro: Filtro, *, dimension: str) -> List[
     return await q.consultar_facturas(db, filtro, dimension=dimension)
 
 
-async def clientes(db: AsyncSession, filtro: Filtro, *, dimension: str) -> List[FilaClientes]:
+async def clientes(
+    db: AsyncSession, filtro: Filtro, *, dimension: str, solo_unicos: bool = False,
+) -> List[FilaClientes]:
     if await usar_resumen(db):
-        return await clientes_resumen(db, filtro, dimension=dimension)
-    return await q.consultar_clientes(db, filtro, dimension=dimension)
+        return await clientes_resumen(db, filtro, dimension=dimension, solo_unicos=solo_unicos)
+    return await q.consultar_clientes(db, filtro, dimension=dimension, solo_unicos=solo_unicos)
 
 
 async def clientes_tecnired(db: AsyncSession, filtro: Filtro) -> Tuple[int, Dict[str, int]]:
