@@ -108,3 +108,24 @@ Every day, once the VENTAS carga that includes the previous day is applied, Lore
     - charts at full width;
     - tables wrap instead of shrinking.
   - **Gate:** before enabling the daily send, render ONE real asesor's PDF and have the owner approve it on a phone. The send stays OFF by default until then.
+
+## 2026-10-07 REDESIGN (owner: "un link para cada uno")
+No PDF. Each asesor gets a personal link through Lore that opens the single-asesor KPI view (identical, with comparisons) after the asesor enters their cédula.
+
+### This session
+- **T3a:** migration for the token table `reporte_asesor_link`. It goes on top of the head after T1, and 84 gets pinged with the model name and the head.
+  - Columns: token (32+ bytes urlsafe, unique), cedula, mes, vence_en (month end plus a few days), revocado_en, creado_por, ultimo_acceso_en, intentos_fallidos INT NOT NULL DEFAULT 0, bloqueado_hasta TIMESTAMPTZ NULL.
+  - Revoked automatically when the usuario is deactivated, the cédula is cleared or unapproved, or the Telegram changes.
+- **T3b:** the daily Lore message, which includes a summary line from T2 and the link, plus:
+  - the ledger (cedula, fecha_datos);
+  - readiness and the deadline;
+  - the "Reenviar a todos" button in Configuración;
+  - admin revocation;
+  - the kill switch, OFF by default until the owner approves a real sample.
+- **T3c:** a narrow public allowlist entry in `deps.py` for POST `/api/motored/publico/informe/`, in its own commit, timed with 84's endpoint.
+
+### 84
+- `POST /api/motored/publico/informe/{token}` with body `{cedula}`.
+- It returns the `/kpis/asesores/detalle` payload, rate-limited through the token row (5 failures lock it for 15 min).
+- Responses carry `Cache-Control: no-store` and `X-Robots-Tag: noindex`, and every failure gets the same generic error ("Enlace o cédula no válidos").
+- Public page `/motored/informe/[token]`, reusing `AsesorDetalle` read-only, mobile-first.
