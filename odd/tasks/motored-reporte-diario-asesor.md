@@ -129,3 +129,4 @@ No PDF. Each asesor gets a personal link through Lore that opens the single-ases
 - It returns the `/kpis/asesores/detalle` payload, rate-limited through the token row (5 failures lock it for 15 min).
 - Responses carry `Cache-Control: no-store` and `X-Robots-Tag: noindex`, and every failure gets the same generic error ("Enlace o cédula no válidos").
 - Public page `/motored/informe/[token]`, reusing `AsesorDetalle` read-only, mobile-first.
+- 2026-10-07: owner decision, relayed by 84: the link page asks for the cédula EVERY time it is opened. Nothing is remembered on the device: the cédula lives only in memory for the open page, with no localStorage, sessionStorage or cookie. The same link stays valid all month and shows live data.
