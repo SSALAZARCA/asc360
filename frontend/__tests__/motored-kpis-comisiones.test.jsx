@@ -140,22 +140,67 @@ describe('Comisiones tab: commission by asesor', () => {
     expect(within(tarjeta).getAllByText('BASE')).toHaveLength(2);
   });
 
-  it('shows a chip per bonus line: met (filled), not met (outline) and off (grey, with its tooltip)', () => {
+  it('draws the thin amber bonus bar only when a bonus was earned, listing the earned lines', () => {
     montar();
     const filas = within(seccion('Comisión por asesor')).getAllByTestId('fila-comision');
-    const chips = (fila) => within(fila).getAllByTestId('chip-bono').map((c) => [c.textContent, c.getAttribute('data-estado')]);
-    expect(chips(filas[0])).toEqual([['Lubricantes', 'cumple'], ['Cascos', 'cumple'], ['Tecnired (clientes)', 'apagado']]);
-    expect(chips(filas[1])).toEqual([['Lubricantes', 'no-cumple'], ['Cascos', 'cumple'], ['Tecnired (clientes)', 'apagado']]);
-    expect(within(filas[0]).getByText('Tecnired (clientes)')).toHaveAttribute('title', 'Bono apagado en Configuración');
-    expect(within(filas[0]).getByText('Lubricantes')).toHaveAttribute('title', 'Gana $35.000');
+    const barra = (fila) => within(fila).queryByTestId('barra-bono');
+    expect(barra(filas[0])).toHaveTextContent('+ $65.000 bonos (Lubricantes, Cascos)');
+    expect(barra(filas[0]).querySelector('[data-testid="barra-bono-relleno"]')).toHaveStyle({ background: '#B45309' });
+    expect(barra(filas[1])).toHaveTextContent('+ $30.000 bonos (Cascos)');
+    expect(barra(filas[2])).toBeNull();
+    expect(barra(filas[3])).toBeNull();
   });
 
-  it('marks a line that is met but not paid because the asesor is below the gate', () => {
+  it('shows the commission bar and the total payout on the right', () => {
     montar();
-    const salgado = within(seccion('Comisión por asesor')).getAllByTestId('fila-comision')[2];
-    const lub = within(salgado).getByText('Lubricantes');
-    expect(lub).toHaveAttribute('data-estado', 'sin-compuerta');
-    expect(lub).toHaveAttribute('title', 'Cumple la línea, pero no llega al 95% de cumplimiento: no se paga');
+    const filas = within(seccion('Comisión por asesor')).getAllByTestId('fila-comision');
+    expect(within(filas[0]).getByTestId('barra-comision')).toHaveTextContent('$2.700.000');
+    expect(within(filas[0]).getByTestId('total-fila')).toHaveTextContent('$2.765.000');
+    expect(within(filas[3]).getByTestId('total-fila')).toHaveTextContent('$400.000');
+  });
+
+  it('shows the grey note below the 95% gate and nowhere else', () => {
+    montar();
+    const filas = within(seccion('Comisión por asesor')).getAllByTestId('fila-comision');
+    expect(within(filas[0]).queryByText('No alcanza el 95% para bonos')).toBeNull();
+    expect(within(filas[2]).getByText('No alcanza el 95% para bonos')).toBeInTheDocument();
+    expect(within(filas[3]).getByText('No alcanza el 95% para bonos')).toBeInTheDocument();
+  });
+
+  it('does not show unmet or off lines in the collapsed row', () => {
+    montar();
+    const tarjeta = seccion('Comisión por asesor');
+    expect(within(tarjeta).queryAllByTestId('chip-bono')).toHaveLength(0);
+    expect(within(tarjeta).queryByText(/le faltan/)).toBeNull();
+    expect(within(tarjeta).queryByText(/apagado/i)).toBeNull();
+  });
+
+  it('expands the asesor with a real button: met lines with amount, unmet with what is missing, off lines', () => {
+    montar();
+    const fila = within(seccion('Comisión por asesor')).getAllByTestId('fila-comision')[1];
+    const boton = within(fila).getByRole('button', { name: /Rojas Zapata/ });
+    expect(boton).toHaveAttribute('aria-expanded', 'false');
+    expect(within(fila).queryByTestId('detalle-bonos')).toBeNull();
+    fireEvent.click(boton);
+    expect(boton).toHaveAttribute('aria-expanded', 'true');
+    const detalle = within(fila).getByTestId('detalle-bonos');
+    const items = within(detalle).getAllByRole('listitem').map((li) => li.textContent);
+    expect(items[0]).toContain('Lubricantes');
+    expect(items[0]).toMatch(/le faltan \$150\.000/);
+    expect(items[1]).toContain('✓');
+    expect(items[1]).toContain('Cascos');
+    expect(items[1]).toContain('$30.000');
+    expect(items[2]).toContain('Tecnired (clientes)');
+    expect(items[2]).toContain('apagado');
+    fireEvent.click(boton);
+    expect(within(fila).queryByTestId('detalle-bonos')).toBeNull();
+  });
+
+  it('a line met below the gate says it is not paid', () => {
+    montar();
+    const fila = within(seccion('Comisión por asesor')).getAllByTestId('fila-comision')[2];
+    fireEvent.click(within(fila).getByRole('button', { name: /Salgado Romero/ }));
+    expect(within(within(fila).getByTestId('detalle-bonos')).getByText(/Lubricantes/).closest('li')).toHaveTextContent('no llega al 95%');
   });
 
   it('the semaforo view keeps working', () => {
@@ -197,18 +242,47 @@ describe('Comisiones tab: close to the next tier', () => {
 });
 
 describe('Comisiones tab: bonuses by line', () => {
-  it('summarizes each configured line: target, bonus, winners and amount, and says when they activate', () => {
+  it('shows the header chips and one mosaic tile per configured line', () => {
     montar();
     const tarjeta = seccion('Bonos por línea');
-    expect(within(tarjeta).getByText(/Se activan con un cumplimiento de al menos 95%/)).toBeInTheDocument();
-    const filas = within(tarjeta).getAllByTestId('fila-bono');
-    expect(filas).toHaveLength(3);
-    expect(filas[0]).toHaveTextContent('Lubricantes');
-    expect(filas[0]).toHaveTextContent('≥ 21% de su venta · $35.000');
-    expect(filas[0]).toHaveTextContent('1 ganador · $35.000');
-    expect(filas[1]).toHaveTextContent('2 ganadores · $60.000');
-    expect(filas[2]).toHaveTextContent('Apagado');
-    expect(filas[2]).toHaveTextContent('0 ganadores · $0');
+    expect(within(tarjeta).getByTestId('chip-pagado')).toHaveTextContent(/Pagado en bonos\s*\$95\.000/);
+    expect(within(tarjeta).getByTestId('chip-ganados')).toHaveTextContent('3 bonos ganados');
+    const tiles = within(tarjeta).getAllByTestId('tile-bono');
+    expect(tiles).toHaveLength(3);
+    expect(tiles[0]).toHaveTextContent('Lubricantes');
+    expect(tiles[0]).toHaveTextContent('≥21% · $35.000 c/u');
+    expect(tiles[0]).toHaveTextContent('$35.000');
+    expect(tiles[0]).toHaveTextContent('1 asesor');
+    expect(tiles[1]).toHaveTextContent('$60.000');
+    expect(tiles[1]).toHaveTextContent('2 asesores');
+  });
+
+  it('draws one dot per winner and the share of the total paid', () => {
+    montar();
+    const tiles = within(seccion('Bonos por línea')).getAllByTestId('tile-bono');
+    expect(within(tiles[0]).getAllByTestId('punto-ganador')).toHaveLength(1);
+    expect(within(tiles[1]).getAllByTestId('punto-ganador')).toHaveLength(2);
+    expect(tiles[0]).toHaveTextContent('37% del total pagado');
+    expect(tiles[1]).toHaveTextContent('63% del total pagado');
+    expect(within(tiles[1]).getByTestId('barra-parte')).toHaveStyle({ width: '63.2%' });
+  });
+
+  it('caps the dots at 12 and shows +N', () => {
+    const muchos = { ...COMISIONES, resumen: { ...COMISIONES.resumen, por_linea: [{ linea: 'LUBRICANTES', etiqueta: 'Lubricantes', ganadores: 15, monto: 525000 }, ...COMISIONES.resumen.por_linea.slice(1)] } };
+    montar(muchos);
+    const tile = within(seccion('Bonos por línea')).getAllByTestId('tile-bono')[0];
+    expect(within(tile).getAllByTestId('punto-ganador')).toHaveLength(12);
+    expect(tile).toHaveTextContent('+3');
+  });
+
+  it('mutes an off line: Apagado chip, nothing paid and how many would have won it', () => {
+    montar();
+    const tile = within(seccion('Bonos por línea')).getAllByTestId('tile-bono')[2];
+    expect(tile).toHaveAttribute('data-activo', 'false');
+    expect(tile).toHaveTextContent('Apagado');
+    expect(tile).toHaveTextContent('$0');
+    expect(tile).toHaveTextContent('lo habrían ganado 1');
+    expect(within(tile).getAllByTestId('punto-ganador')[0]).toHaveStyle({ background: 'transparent' });
   });
 });
 

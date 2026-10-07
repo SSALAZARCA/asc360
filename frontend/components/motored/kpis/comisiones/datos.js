@@ -163,37 +163,42 @@ export const ejemploDe = (data) => {
   return a ? `Ejemplo: ${a.nombre ?? a.cedula} · ${a.tienda ?? '—'} · ${mesLiquidado(data).largo}` : '';
 };
 
-const TIP_APAGADO = 'Bono apagado en Configuración';
+export const COLOR_BONO = '#B45309';
+const MAX_PUNTOS = 12;
 
-/** One chip per bonus line of an asesor: `apagado` (off), `cumple` (met and paid), `sin-compuerta` (met, below the gate) or `no-cumple`. */
-export function chipsDeBonos(a) {
-  return (a.bonos ?? []).map((b) => {
-    let estado = 'no-cumple';
-    let tip = `Meta: ≥ ${numero(b.pct_meta)}% de su venta (hoy ${pct(b.pct_real)})`;
-    if (!b.activo) {
-      estado = 'apagado';
-      tip = TIP_APAGADO;
-    } else if (b.cumple && b.paga) {
-      estado = 'cumple';
-      tip = `Gana ${moneda(b.bono_pagado)}`;
-    } else if (b.cumple) {
-      estado = 'sin-compuerta';
-      tip = `Cumple la línea, pero no llega al ${numero(a.gate.umbral)}% de cumplimiento: no se paga`;
-    }
-    return { linea: b.linea, texto: b.etiqueta, estado, tip };
-  });
+/** Detail of one bonus line of an asesor, shown when her row is expanded: met and paid, met below the gate, unmet or off. */
+export function detalleBono(a, b) {
+  const base = { linea: b.linea, etiqueta: b.etiqueta };
+  if (!b.activo) return { ...base, estado: 'apagado', marca: '○', texto: 'apagado' };
+  if (b.cumple && b.paga) return { ...base, estado: 'cumple', marca: '✓', texto: moneda(b.bono_pagado) };
+  if (b.cumple) return { ...base, estado: 'sin-compuerta', marca: '○', texto: `cumple, pero no llega al ${numero(a.gate.umbral)}%: no se paga` };
+  return { ...base, estado: 'no-cumple', marca: '○', texto: `le faltan ${moneda(b.falta_venta)}` };
 }
 
-/** Rows of "Comisión por asesor" (the API already sorts them by commission); the bar is what she is paid (commission + bonuses). */
+/** Rows of "Comisión por asesor" (the API already sorts them by commission): commission bar, thin bonus bar, total and detail. */
 export function filasComision(data) {
   const pagado = (a) => a.total_a_pagar ?? a.comision;
-  const maximo = Math.max(1, ...data.asesores.map(pagado));
+  const maximo = Math.max(1, ...data.asesores.map((a) => a.comision));
   const total = data.tramos.length;
-  return data.asesores.map((a) => ({
-    id: a.cedula, nombre: a.nombre ?? a.cedula, sub: `${a.tienda ?? '—'} · cumple ${pct(a.cumplimiento_pct)}`,
-    ancho: Math.max((pagado(a) / maximo) * 100, 0.5), valor: moneda(pagado(a)), tramo: a.tramo ?? '—', chips: chipsDeBonos(a),
-    color: colorDeTramo(a.tramo, Math.max(0, data.tramos.findIndex((x) => x.nombre === a.tramo)), total),
-  }));
+  const conBonos = lineasBono(data).length > 0;
+  return data.asesores.map((a) => {
+    const ganados = (a.bonos ?? []).filter((b) => b.paga);
+    const bono = a.bono_total ?? 0;
+    const tramo = a.tramo ?? '—';
+    return {
+      id: a.cedula, nombre: a.nombre ?? a.cedula, sub: `${a.tienda ?? '—'} · cumple ${pct(a.cumplimiento_pct)}`,
+      ancho: Math.max((a.comision / maximo) * 100, 0.5), valor: moneda(a.comision), total: moneda(pagado(a)), tramo,
+      color: colorDeTramo(a.tramo, Math.max(0, data.tramos.findIndex((x) => x.nombre === a.tramo)), total),
+      textoSobreBase: tramo === 'BASE',
+      bono: bono > 0 ? {
+        ancho: Math.min(Math.max((bono / maximo) * 100, 0.5), 100),
+        etiqueta: `+ ${moneda(bono)} bonos (${ganados.map((b) => b.etiqueta).join(', ')})`,
+      } : null,
+      bajoCompuerta: conBonos && a.gate?.cumple === false,
+      umbral: a.gate ? numero(a.gate.umbral) : numero(umbralBono(data)),
+      detalle: (a.bonos ?? []).map((b) => detalleBono(a, b)),
+    };
+  });
 }
 
 /** The semaforo view: by cumplimiento, best first. */
@@ -217,16 +222,32 @@ export function tarjetasCerca(data) {
   });
 }
 
-const ganadores = (n) => `${n} ${n === 1 ? 'ganador' : 'ganadores'}`;
+const asesoresTexto = (n) => `${n} ${n === 1 ? 'asesor' : 'asesores'}`;
 
-/** The "Bonos por línea" card: every configured line with its target, bonus, winners and amount paid. */
-export function filasBonos(data) {
+/** Asesores that met an off line while past the gate: they would have earned it were it on. */
+const habriaGanado = (data, linea) => data.asesores.filter((a) => a.gate?.cumple && (a.bonos ?? []).some((b) => b.linea === linea && b.cumple)).length;
+
+/** The "Bonos por línea" mosaic: header figures and one tile per configured line (target, amount, winners, share of the total). */
+export function mosaicoBonos(data) {
   const resumen = new Map((data.resumen.por_linea ?? []).map((x) => [x.linea, x]));
-  return lineasBono(data).map((l) => {
-    const r = resumen.get(l.linea) ?? { ganadores: 0, monto: 0 };
-    return {
-      id: l.linea, etiqueta: l.etiqueta, activo: l.activo,
-      regla: `≥ ${numero(l.pct_meta)}% de su venta · ${moneda(l.bono)}`, resultado: `${ganadores(r.ganadores)} · ${moneda(r.monto)}`,
-    };
-  });
+  const lineas = lineasBono(data);
+  const montoDe = (l) => (l.activo ? resumen.get(l.linea)?.monto ?? 0 : 0);
+  const ganadoresDe = (l) => resumen.get(l.linea)?.ganadores ?? 0;
+  const pagado = lineas.reduce((t, l) => t + montoDe(l), 0);
+  const ganados = lineas.reduce((t, l) => t + (l.activo ? ganadoresDe(l) : 0), 0);
+  return {
+    pagado: moneda(pagado), ganados: `${ganados} ${ganados === 1 ? 'bono ganado' : 'bonos ganados'}`,
+    tiles: lineas.map((l) => {
+      const n = l.activo ? ganadoresDe(l) : habriaGanado(data, l.linea);
+      const monto = montoDe(l);
+      const parte = pagado > 0 ? (monto / pagado) * 100 : 0;
+      return {
+        id: l.linea, etiqueta: l.etiqueta, activo: l.activo, regla: `≥${numero(l.pct_meta)}% · ${moneda(l.bono)} c/u`, monto: moneda(monto),
+        quienes: l.activo ? asesoresTexto(n) : `lo habrían ganado ${n}`,
+        puntos: Math.min(n, MAX_PUNTOS), mas: n > MAX_PUNTOS ? `+${n - MAX_PUNTOS}` : '',
+        ancho: Number(parte.toFixed(1)),
+        parteTexto: l.activo ? `${Math.round(parte)}% del total pagado` : 'Apagado en Configuración · no suma al total',
+      };
+    }),
+  };
 }

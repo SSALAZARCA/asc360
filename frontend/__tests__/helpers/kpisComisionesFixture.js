@@ -16,7 +16,7 @@ export const LINEAS_BONO = [
 const bonos = (gate, pcts) => LINEAS_BONO.map((l, i) => {
   const cumple = pcts[i] * 100 >= l.pct_meta;
   const paga = gate && l.activo && cumple;
-  return { linea: l.linea, etiqueta: l.etiqueta, venta: pcts[i] * 1e8, pct_real: pcts[i], pct_meta: l.pct_meta, bono: l.bono, cumple, paga, activo: l.activo, bono_pagado: paga ? l.bono : 0 };
+  return { linea: l.linea, etiqueta: l.etiqueta, venta: pcts[i] * 1e8, pct_real: pcts[i], pct_meta: l.pct_meta, falta_venta: cumple ? 0 : 150000, bono: l.bono, cumple, paga, activo: l.activo, bono_pagado: paga ? l.bono : 0 };
 });
 
 const asesor = (cedula, nombre, tienda, presupuesto, vcump, vcom, tramo, tasa, comision, sig, pcts) => {
