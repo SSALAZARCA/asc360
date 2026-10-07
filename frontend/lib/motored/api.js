@@ -387,12 +387,14 @@ export async function anularEnlaceInforme(id) {
 
 // ---------------------------------------------------------------------------
 // Configuración -- the daily Lore message with each asesor's report link
-// (odd/motored-reporte-diario-asesor, T3b). ADMIN only. No response ever
-// carries a token, a URL or a cédula.
+// (odd/motored-reporte-diario-asesor, T3b, T3d). ADMIN only. No response
+// ever carries a token, a URL or a full cédula (the table shows the last 4
+// digits only).
 // ---------------------------------------------------------------------------
 
 /** Switch and hours, last send with its counts, eligible asesores now and
- * the names of the skipped ones. */
+ * `asesores`: one row per asesor with sales (`estado`, `ultimo_envio`,
+ * `puede_enviar`). */
 export async function getReporteAsesorEstado() {
   return motoredFetchJson('/reporte-asesor/estado');
 }
@@ -402,6 +404,17 @@ export async function getReporteAsesorEstado() {
  * by default the latest data date. */
 export async function reenviarReportesAsesores(body = {}) {
   return motoredFetchJson('/reporte-asesor/reenviar', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
+/** "Enviar ahora" of one asesor, synchronous: `{ estado, fecha_datos,
+ * detalle }`. `body.fecha_datos` (YYYY-MM-DD) is optional; by default the
+ * latest data date. Errors carry the backend's Spanish `detail` (422 says
+ * what is missing, 502 when Telegram fails). */
+export async function enviarReporteAsesor(usuarioId, body = {}) {
+  return motoredFetchJson(`/reporte-asesor/enviar/${encodeURIComponent(usuarioId)}`, {
     method: 'POST',
     body: JSON.stringify(body),
   });

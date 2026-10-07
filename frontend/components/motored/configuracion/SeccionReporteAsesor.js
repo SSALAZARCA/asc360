@@ -3,14 +3,17 @@
  * Avisos tab, "Informe diario de los asesores"
  * (odd/motored-reporte-diario-asesor, T3b): the business wording of the
  * three keys (CAMPOS_REPORTE) and the "Estado del envío" panel: the last
- * send with its counts, who would get the message now, who is skipped and
- * why, and "Reenviar reportes a todos los asesores" (asks for
- * confirmation with the number of asesores). The backend never returns a
- * token, a URL or a cédula, so this screen never shows them.
+ * send with its counts, who would get the message now, the per-asesor
+ * table with "Enviar ahora" (T3d, TablaEnvioAsesores), and "Reenviar
+ * reportes a todos los asesores" (asks for confirmation with the number of
+ * asesores). The data date chosen here applies to both sends. The backend
+ * never returns a token, a URL or a full cédula, so this screen never
+ * shows them.
  */
 import { useCallback, useEffect, useState } from 'react';
 import InfoTooltip from '../InfoTooltip';
-import { getReporteAsesorEstado, reenviarReportesAsesores } from '../../../lib/motored/api';
+import TablaEnvioAsesores from './TablaEnvioAsesores';
+import { enviarReporteAsesor, getReporteAsesorEstado, reenviarReportesAsesores } from '../../../lib/motored/api';
 import { cardStyle, columnaStyle, controlStyle, errorStyle, filaStyle, mutedStyle, touchStyle } from './styles';
 
 export const CLAVE_ACTIVO = 'reporte_asesor_envio_activo';
@@ -62,28 +65,10 @@ export function textoConteos({ enviados, fallidos, bloqueados }) {
   ].join(' · ');
 }
 
-function Lista({ titulo, ayuda, nombres }) {
-  if (!nombres || nombres.length === 0) return null;
-  return (
-    <p style={{ margin: 0, fontSize: '0.85rem' }}>
-      <strong>{`${titulo} (${nombres.length})`}</strong>
-      {ayuda && <> <InfoTooltip text={ayuda} /></>}
-      {`: ${nombres.join(', ')}`}
-    </p>
-  );
-}
-
-function Omitidos({ estado }) {
+function SinInforme({ estado }) {
+  if (!(estado.sin_presupuesto > 0) && !(estado.sin_cedula > 0)) return null;
   return (
     <div style={columnaStyle}>
-      <Lista titulo="Con ventas pero sin enlace del informe" nombres={estado.sin_enlace}
-        ayuda="Genere el enlace en Gestión de usuarios para que reciban el mensaje." />
-      <Lista titulo="Sin cédula aprobada" nombres={estado.sin_cedula_aprobada}
-        ayuda="Apruebe o corrija la cédula en Gestión de usuarios." />
-      <Lista titulo="Sin Telegram vinculado" nombres={estado.sin_telegram} />
-      <Lista titulo="Bloquearon a Lore" nombres={estado.bloqueados}
-        ayuda="Telegram rechazó el mensaje porque el asesor bloqueó el bot. No se reintenta ese día." />
-      <Lista titulo="Vendedores con ventas sin usuario en Motored" nombres={estado.sin_usuario} />
       {estado.sin_presupuesto > 0 && (
         <p style={mutedStyle}>{`${plural(estado.sin_presupuesto, 'asesor con ventas no tiene', 'asesores con ventas no tienen')} presupuesto: no tienen informe.`}</p>
       )}
@@ -131,8 +116,7 @@ function useEstado(cargar) {
   return { estado, error, recargar };
 }
 
-function Reenvio({ estado, reenviar, onEnviado }) {
-  const [fecha, setFecha] = useState('');
+function Reenvio({ estado, reenviar, onEnviado, fecha, setFecha }) {
   const [aviso, setAviso] = useState({ texto: '', error: '' });
   const [enviando, setEnviando] = useState(false);
   const n = estado.elegibles || 0;
@@ -175,8 +159,11 @@ function Reenvio({ estado, reenviar, onEnviado }) {
   );
 }
 
-export default function PanelEnvioReporte({ cargar = getReporteAsesorEstado, reenviar = reenviarReportesAsesores }) {
+export default function PanelEnvioReporte({
+  cargar = getReporteAsesorEstado, reenviar = reenviarReportesAsesores, enviarUno = enviarReporteAsesor,
+}) {
   const { estado, error, recargar } = useEstado(cargar);
+  const [fecha, setFecha] = useState('');
   return (
     <section style={cardStyle} aria-label="Estado del envío">
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
@@ -189,8 +176,12 @@ export default function PanelEnvioReporte({ cargar = getReporteAsesorEstado, ree
         <>
           {estado.falta_configuracion && <p style={errorStyle}>{estado.falta_configuracion}</p>}
           <Resumen estado={estado} />
-          <Omitidos estado={estado} />
-          <Reenvio estado={estado} reenviar={reenviar} onEnviado={recargar} />
+          <SinInforme estado={estado} />
+          <TablaEnvioAsesores
+            filas={estado.asesores} enviar={enviarUno} onEnviado={recargar}
+            faltaConfiguracion={estado.falta_configuracion} fecha={fecha}
+          />
+          <Reenvio estado={estado} reenviar={reenviar} onEnviado={recargar} fecha={fecha} setFecha={setFecha} />
         </>
       )}
     </section>

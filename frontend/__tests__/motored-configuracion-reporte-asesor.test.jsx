@@ -3,7 +3,9 @@
  * the three keys with tooltips, the "Estado del envío" panel from
  * GET /reporte-asesor/estado, and "Reenviar reportes a todos los asesores",
  * which asks for confirmation with the number of asesores before calling
- * POST /reporte-asesor/reenviar.
+ * POST /reporte-asesor/reenviar. T3d: the per-asesor table (estado label
+ * with a tooltip, último envío, search) and "Enviar ahora", which confirms
+ * and calls POST /reporte-asesor/enviar/{usuario_id}.
  */
 import React from 'react';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
@@ -11,9 +13,10 @@ import { render, screen, fireEvent, waitFor, within } from '@testing-library/rea
 jest.mock('../lib/motored/api', () => ({
   getReporteAsesorEstado: jest.fn(),
   reenviarReportesAsesores: jest.fn(),
+  enviarReporteAsesor: jest.fn(),
 }));
 
-import { getReporteAsesorEstado, reenviarReportesAsesores } from '../lib/motored/api';
+import { enviarReporteAsesor, getReporteAsesorEstado, reenviarReportesAsesores } from '../lib/motored/api';
 import SeccionPanel from '../components/motored/configuracion/SeccionPanel';
 
 const spec = (clave, tipo, valor) => ({
@@ -47,6 +50,28 @@ const ESTADO = {
   sin_usuario: ['PEREZ JUAN'],
   sin_presupuesto: 3,
   sin_cedula: 1,
+  asesores: [
+    {
+      cedula_mask: '****5123', nombre: 'Ana Pérez', tienda: 'Centro', usuario_id: 'u-ana', estado: 'listo',
+      ultimo_envio: { en: '2026-10-06T13:05:00+00:00', estado: 'enviado' }, puede_enviar: true,
+    },
+    {
+      cedula_mask: '****1001', nombre: 'PEREZ JUAN', tienda: 'Norte', usuario_id: null, estado: 'sin_usuario',
+      ultimo_envio: null, puede_enviar: false,
+    },
+    {
+      cedula_mask: '****2002', nombre: 'Dora Sin Enlace', tienda: 'Bogotá Sur', usuario_id: 'u-dora',
+      estado: 'sin_enlace', ultimo_envio: null, puede_enviar: false,
+    },
+    {
+      cedula_mask: '****3003', nombre: 'Eva Pendiente', tienda: 'Centro', usuario_id: 'u-eva',
+      estado: 'cedula_pendiente', ultimo_envio: null, puede_enviar: false,
+    },
+    {
+      cedula_mask: '****4004', nombre: 'Beto Bloqueado', tienda: 'Norte', usuario_id: 'u-beto', estado: 'bloqueado',
+      ultimo_envio: { en: '2026-10-05T12:00:00+00:00', estado: 'bloqueado' }, puede_enviar: false,
+    },
+  ],
 };
 
 function montar(claves = CLAVES) {
@@ -92,11 +117,8 @@ describe('Informe diario de los asesores', () => {
     expect(within(p).getByText(/05\/10\/2026/)).toBeInTheDocument();
     expect(within(p).getByText(/12 enviados · 1 fallido · 2 bloqueados/)).toBeInTheDocument();
     expect(within(p).getByText(/06\/10\/2026/)).toBeInTheDocument();
-    expect(within(p).getByText(/Dora Sin Enlace/)).toBeInTheDocument();
-    expect(within(p).getByText(/Eva Pendiente/)).toBeInTheDocument();
-    expect(within(p).getByText(/Beto Bloqueado, Cami Bloqueada/)).toBeInTheDocument();
-    expect(within(p).getByText(/PEREZ JUAN/)).toBeInTheDocument();
     expect(within(p).getByText(/3 asesores con ventas no tienen presupuesto/)).toBeInTheDocument();
+    expect(within(p).getByText(/1 vendedor con ventas no tiene cédula/)).toBeInTheDocument();
     expect(within(p).getAllByRole('note').length).toBeGreaterThanOrEqual(2);
   });
 
@@ -151,5 +173,106 @@ describe('Informe diario de los asesores', () => {
     montar([spec('aviso_hora_vispera', 'hora', '16:30')]);
     expect(getReporteAsesorEstado).not.toHaveBeenCalled();
     expect(screen.queryByRole('region', { name: 'Estado del envío' })).toBeNull();
+  });
+});
+
+describe('Tabla de envío por asesor', () => {
+  const tabla = async () => {
+    montar();
+    return screen.findByRole('table', { name: 'Envío por asesor' });
+  };
+  const filaDe = (t, nombre) => within(t).getByText(nombre).closest('tr');
+
+  it('renders one row per asesor with the Spanish estado and the last send', async () => {
+    const t = await tabla();
+    expect(within(t).getAllByRole('row')).toHaveLength(ESTADO.asesores.length + 1);
+    ['Asesor', 'Tienda', 'Estado', 'Último envío'].forEach((c) => (
+      expect(within(t).getByRole('columnheader', { name: c })).toBeInTheDocument()));
+    expect(within(filaDe(t, 'Ana Pérez')).getByText('Listo')).toBeInTheDocument();
+    expect(within(filaDe(t, 'Ana Pérez')).getByText('06/10 08:05 · Enviado')).toBeInTheDocument();
+    expect(within(filaDe(t, 'PEREZ JUAN')).getByText('Sin usuario en Lore')).toBeInTheDocument();
+    expect(within(filaDe(t, 'Dora Sin Enlace')).getByText('Sin enlace')).toBeInTheDocument();
+    expect(within(filaDe(t, 'Eva Pendiente')).getByText('Cédula pendiente')).toBeInTheDocument();
+    expect(within(filaDe(t, 'Beto Bloqueado')).getByText('Bloqueó a Lore')).toBeInTheDocument();
+    expect(within(filaDe(t, 'Beto Bloqueado')).getByText('05/10 07:00 · Bloqueado')).toBeInTheDocument();
+    expect(within(filaDe(t, 'Ana Pérez')).getByText('****5123')).toBeInTheDocument();
+    const ayudas = within(t).getAllByRole('note').map((n) => n.getAttribute('aria-label'));
+    expect(ayudas.some((a) => a.includes('Gestión de usuarios'))).toBe(true);
+    expect(ayudas.some((a) => a.includes('registrarse en Lore'))).toBe(true);
+  });
+
+  it('scrolls inside its own container', async () => {
+    const t = await tabla();
+    expect(t.parentElement.style.overflowX).toBe('auto');
+    expect(t.parentElement.style.maxWidth).toBe('100%');
+  });
+
+  it('filters by asesor or tienda, ignoring accents and case', async () => {
+    const t = await tabla();
+    const buscar = screen.getByLabelText('Buscar asesor o tienda');
+    fireEvent.change(buscar, { target: { value: 'perez' } });
+    expect(within(t).getAllByRole('row')).toHaveLength(3);
+    fireEvent.change(buscar, { target: { value: 'BOGOTA' } });
+    expect(within(t).getAllByRole('row')).toHaveLength(2);
+    expect(within(t).getByText('Dora Sin Enlace')).toBeInTheDocument();
+    fireEvent.change(buscar, { target: { value: 'nadie' } });
+    expect(screen.getByText('Ningún asesor coincide con la búsqueda.')).toBeInTheDocument();
+  });
+
+  it('disables "Enviar ahora" and says what is missing', async () => {
+    const t = await tabla();
+    const boton = within(t).getByRole('button', { name: 'Enviar ahora a Dora Sin Enlace' });
+    expect(boton).toBeDisabled();
+    expect(boton).toHaveAttribute('title', expect.stringContaining('genérelo en Gestión de usuarios'));
+    expect(within(t).getByRole('button', { name: 'Enviar ahora a Ana Pérez' })).not.toBeDisabled();
+  });
+
+  it('disables every send when a setting is missing', async () => {
+    getReporteAsesorEstado.mockResolvedValue({ ...ESTADO, falta_configuracion: 'Falta configurar LORE_BOT_TOKEN.' });
+    const t = await tabla();
+    const boton = within(t).getByRole('button', { name: 'Enviar ahora a Ana Pérez' });
+    expect(boton).toBeDisabled();
+    expect(boton).toHaveAttribute('title', 'Falta configurar LORE_BOT_TOKEN.');
+  });
+
+  it('confirms, calls the API, shows the result and reloads', async () => {
+    const confirmar = jest.spyOn(window, 'confirm').mockReturnValue(true);
+    enviarReporteAsesor.mockResolvedValue({ estado: 'enviado', detalle: 'Informe enviado a Ana Pérez por Lore.' });
+    const t = await tabla();
+    fireEvent.click(within(t).getByRole('button', { name: 'Enviar ahora a Ana Pérez' }));
+    expect(confirmar).toHaveBeenCalledWith('¿Enviar ahora el informe a Ana Pérez por Lore?');
+    await waitFor(() => expect(enviarReporteAsesor).toHaveBeenCalledWith('u-ana', {}));
+    expect(await within(t).findByRole('status')).toHaveTextContent('Informe enviado a Ana Pérez por Lore.');
+    await waitFor(() => expect(getReporteAsesorEstado).toHaveBeenCalledTimes(2));
+  });
+
+  it('sends the chosen data date', async () => {
+    jest.spyOn(window, 'confirm').mockReturnValue(true);
+    enviarReporteAsesor.mockResolvedValue({ estado: 'enviado', detalle: 'ok' });
+    const t = await tabla();
+    fireEvent.change(screen.getByLabelText('Fecha de los datos (opcional)'), { target: { value: '2026-10-02' } });
+    fireEvent.click(within(t).getByRole('button', { name: 'Enviar ahora a Ana Pérez' }));
+    await waitFor(() => expect(enviarReporteAsesor).toHaveBeenCalledWith('u-ana', { fecha_datos: '2026-10-02' }));
+  });
+
+  it('does nothing when the confirmation is cancelled', async () => {
+    jest.spyOn(window, 'confirm').mockReturnValue(false);
+    const t = await tabla();
+    fireEvent.click(within(t).getByRole('button', { name: 'Enviar ahora a Ana Pérez' }));
+    expect(enviarReporteAsesor).not.toHaveBeenCalled();
+  });
+
+  it('shows the API error in the row', async () => {
+    jest.spyOn(window, 'confirm').mockReturnValue(true);
+    enviarReporteAsesor.mockRejectedValue(new Error('Telegram no aceptó el mensaje.'));
+    const t = await tabla();
+    fireEvent.click(within(t).getByRole('button', { name: 'Enviar ahora a Ana Pérez' }));
+    expect(await within(t).findByRole('alert')).toHaveTextContent('Telegram no aceptó el mensaje.');
+  });
+
+  it('says so when there are no asesores with sales', async () => {
+    getReporteAsesorEstado.mockResolvedValue({ ...ESTADO, asesores: [] });
+    montar();
+    expect(await screen.findByText('No hay asesores con ventas para esa fecha.')).toBeInTheDocument();
   });
 });
