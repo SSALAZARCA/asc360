@@ -307,3 +307,22 @@ Pending user data, still open:
 - `Presupuesto asesores 2026_corregido.xlsx`;
 - the inventory with cost;
 - then the presupuestos/vendedores files with C.O.
+
+## Follow-up: KPI speed audit (2026-10-07)
+The user reported slow tabs; it turned out to be transient (many deploys and dirty marks), and the user then confirmed speed was back. A measured audit at 1M rows (summary ON vs OFF) found no raw `venta_detalle` scan with the summary in use.
+
+| Read | ON | OFF |
+|---|---|---|
+| ventas | 0.51 s | 12.3 s |
+| tiendas | 0.79 s | 10.7 s |
+| asesores/opciones | 0.93 s | — |
+| asesores/detalle (año corrido) | 1.28 s | — |
+| comisiones | 0.03 s | — |
+| inicio | 0.10 s | — |
+
+**Optimization backlog (not done; ask before doing):**
+1. The top-5 clients `row_number()` over `kpi_cliente_mes` (`kpi_resumen_lectura.py:283`, `tablero_asesores_consultas.py:440`) scans the whole table and spills to disk (~0.6 s). It runs twice per Asesores load (`tablero_de_filtro` in opciones and in detalle), and neither uses it. Skip it there, and later precompute it.
+2. The Asesores tab chains `opciones` → `detalle`, and both rebuild the tablero. Let `detalle` take an empty cédula meaning the top seller, or cache the tablero per request.
+3. Ventas computes repeated cubes (sucursal + asesor). Derive them from one cube.
+4. `usar_resumen` is queried for each `lectura.*` call, up to 14 times per request. Cache it per request.
+5. Pending user decision: stale-while-rebuilding, i.e. serve the last good summary while dirty instead of falling back to live, plus a debounce for bursts of line assignments.
