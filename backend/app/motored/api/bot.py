@@ -55,7 +55,9 @@ from app.motored.deps_bot import (
 from app.motored.models.sucursal import Sucursal
 from app.motored.models.usuario import MotoredRole, Usuario
 from app.motored.models.usuario_sucursal import UsuarioSucursal
-from app.motored.services import cedula_usuario, solicitudes, vinculacion
+from app.motored.services import (
+    cedula_usuario, reporte_asesor_link, solicitudes, vinculacion,
+)
 
 router = APIRouter(
     prefix="/bot",
@@ -306,6 +308,8 @@ async def vincular_admin(
             status_code=status.HTTP_409_CONFLICT, detail={"code": "TELEGRAM_YA_VINCULADO"}
         )
 
+    # A new Telegram makes the usuario's report link stale (T3a).
+    await reporte_asesor_link.revocar_por_telegram_nuevo(db, usuario)
     await db.commit()
     return {"id": str(usuario.id), "nombre": usuario.nombre, "role": _role_value(usuario)}
 

@@ -42,6 +42,7 @@ from app.motored.models.pedido_evento import PedidoEvento
 from app.motored.models.presupuesto import PresupuestoLinea, PresupuestoVersion
 from app.motored.models.proveedor import Proveedor
 from app.motored.models.referencia import Referencia
+from app.motored.models.reporte_asesor_link import ReporteAsesorLink
 from app.motored.models.retencion_ejecucion import RetencionEjecucion
 from app.motored.models.sucursal import Sucursal
 from app.motored.models.sucursal_alias import SucursalAlias
@@ -90,6 +91,7 @@ __all__ = [
     "PresupuestoVersion",
     "Proveedor",
     "Referencia",
+    "ReporteAsesorLink",
     "RetencionEjecucion",
     "Sucursal",
     "SucursalAlias",

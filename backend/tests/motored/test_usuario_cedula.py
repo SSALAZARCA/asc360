@@ -340,7 +340,8 @@ def test_reject_an_approved_cedula_returns_409():
 
 def test_admin_clears_an_approved_cedula_and_audits_it():
     usuario = _usuario(cedula="79845123", cedula_aprobada=True)
-    client, sesion = _cliente("ADMIN", [[usuario]])
+    # The second slot answers the report-link revocation lookup.
+    client, sesion = _cliente("ADMIN", [[usuario], []])
 
     response = client.delete(f"{URL}/{usuario.id}/cedula")
 

@@ -125,6 +125,13 @@ class Settings(BaseSettings):
     MOTORED_AVISOS_ANTIGUEDAD_ENABLED: bool = True
     MOTORED_AVISOS_POLL_SEGUNDOS: int = 60
 
+    # Motored — enlace personal del informe de cada asesor
+    # (odd/motored-reporte-diario-asesor, T3a). URL pública del frontend
+    # (ej: https://motored.dominio.com); Lore envía
+    # `<MOTORED_PUBLIC_URL>/motored/informe/<token>`. Vacío: no se puede
+    # generar ni enviar ningún enlace (el admin ve un error claro).
+    MOTORED_PUBLIC_URL: str = ""
+
     @property
     def allowed_origins_list(self) -> list:
         return [o.strip() for o in self.ALLOWED_ORIGINS.split(",") if o.strip()]

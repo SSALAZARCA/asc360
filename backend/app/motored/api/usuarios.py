@@ -29,6 +29,14 @@ vínculo con el maestro de Vendedores: `PUT|DELETE /usuarios/{id}/cedula` y
 `POST /usuarios/{id}/cedula/aprobar|rechazar` (ADMIN, auditados con la
 cédula enmascarada). Las reglas viven en `services/cedula_usuario.py`.
 
+odd/motored-reporte-diario-asesor (T3a) agrega el enlace personal del
+informe: `GET|POST|DELETE /usuarios/{id}/enlace-informe` (ADMIN). POST
+genera uno nuevo (anula el anterior) y Lore se lo envía al asesor; si el
+envío falla, todo se revierte. Ninguna respuesta, auditoría ni log lleva el
+token ni la URL. Desactivar al usuario, cambiar o quitar su cédula, o
+desvincular su Telegram anulan el enlace activo
+(`services/reporte_asesor_link.py::revocar_si_cambio`).
+
 odd/motored-salir-y-cambio-password agrega `POST /usuarios/{id}/password`
 (ADMIN fija una contraseña nueva a un usuario con acceso web) y exige un
 largo mínimo de contraseña también al crear usuarios.
@@ -42,6 +50,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.core.security import get_password_hash
 from app.motored.deps import MotoredUser, get_motored_db_or_503, require_motored_ready, require_roles
 from app.motored.models.usuario import MotoredRole, Usuario
@@ -50,8 +59,8 @@ from app.motored.schemas.usuario import (
     UsuarioCedulaUpdate, UsuarioCreate, UsuarioPasswordReset, UsuarioRead,
 )
 from app.motored.services import (
-    auditoria, cedula_usuario, login_bloqueo, login_eventos, solicitudes,
-    vinculacion,
+    auditoria, avisos_telegram, cedula_usuario, login_bloqueo, login_eventos,
+    reporte_asesor_link, solicitudes, vinculacion,
 )
 from app.motored.services.password_policy import aplicar_password, validar_password
 
@@ -251,7 +260,9 @@ async def deactivate_usuario(
     """Soft-delete ÚNICAMENTE (`activo = false`) -- jamás un DELETE SQL
     real, mismo patrón que el resto del módulo aplica a los maestros."""
     usuario = await _get_or_404(db, usuario_id)
+    antes = reporte_asesor_link.huella(usuario)
     usuario.activo = False
+    await reporte_asesor_link.revocar_si_cambio(db, usuario, antes)
     auditoria.audit_deactivate(db, "usuario", usuario.id, uuid.UUID(user.user_id))
     await db.commit()
     return _to_read(usuario)
@@ -339,6 +350,7 @@ async def _cambiar_cedula(db, usuario_id, user, cambio) -> dict:
     `cedula_usuario` error), audit the diff, commit."""
     usuario = await _get_or_404(db, usuario_id)
     antes = _estado_cedula(usuario)
+    huella = reporte_asesor_link.huella(usuario)
     try:
         await cambio(usuario)
     except (
@@ -346,6 +358,7 @@ async def _cambiar_cedula(db, usuario_id, user, cambio) -> dict:
         cedula_usuario.CedulaSinPendiente,
     ) as exc:
         raise _http_cedula(exc)
+    await reporte_asesor_link.revocar_si_cambio(db, usuario, huella)
     auditoria.diff_and_audit(
         db, "usuario", usuario.id, uuid.UUID(user.user_id),
         before=antes, after=_estado_cedula(usuario),
@@ -453,6 +466,130 @@ async def desvincular_telegram(
     (ADMIN o COMPRAS) -- deja de recibir notificaciones push, sin afectar su rol ni sus
     permisos existentes."""
     usuario = await _get_or_404(db, uuid.UUID(user.user_id))
+    antes = reporte_asesor_link.huella(usuario)
     usuario.telegram_id = None
+    await reporte_asesor_link.revocar_si_cambio(db, usuario, antes)
     await db.commit()
     return _to_read(usuario)
+
+
+# --- Enlace personal del informe (odd/motored-reporte-diario-asesor, T3a) --
+
+MSG_SIN_LORE = (
+    "Falta configurar LORE_BOT_TOKEN: no se puede enviar el enlace por Lore.")
+MSG_ENVIO_FALLIDO = (
+    "No se pudo enviar el enlace por Lore. El enlace anterior sigue igual.")
+MSG_CHOQUE_ENLACE = (
+    "Otro administrador generó un enlace para este usuario al mismo tiempo. "
+    "Recarga la pantalla e intenta de nuevo.")
+
+
+def _http(codigo: int, detalle: str) -> HTTPException:
+    return HTTPException(status_code=codigo, detail=detalle)
+
+
+def _exigir_configuracion_envio() -> None:
+    """Both settings are checked before any write."""
+    if not (settings.LORE_BOT_TOKEN or "").strip():
+        raise _http(status.HTTP_409_CONFLICT, MSG_SIN_LORE)
+    try:
+        reporte_asesor_link.base_publica()
+    except reporte_asesor_link.FaltaConfiguracion as exc:
+        raise _http(status.HTTP_409_CONFLICT, str(exc))
+
+
+def _estado_enlace_auditoria(link) -> dict:
+    """Audit snapshot: state and creation time, never the token."""
+    estado = reporte_asesor_link.estado(link)
+    return {
+        "enlace_informe": "activo" if estado["activo"] else "sin enlace",
+        "enlace_informe_creado_en": estado["creado_en"],
+    }
+
+
+async def _crear_enlace(db, usuario: Usuario, admin_id: uuid.UUID):
+    """Generate and flush the new link (a racing ADMIN hits the partial
+    unique index here, before anything is sent). Rolls back on error."""
+    try:
+        link = await reporte_asesor_link.generar_link(db, usuario, admin_id)
+        await db.flush()
+    except reporte_asesor_link.EnlaceNoPermitido as exc:
+        await db.rollback()
+        raise _http(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc))
+    except IntegrityError:
+        await db.rollback()
+        raise _http(status.HTTP_409_CONFLICT, MSG_CHOQUE_ENLACE)
+    return link
+
+
+async def _enviar_enlace(db, usuario: Usuario, link) -> None:
+    """Lore delivers the link; on failure everything rolls back so the old
+    link stays active. Neither the token nor the URL is logged."""
+    texto = reporte_asesor_link.texto_mensaje(
+        usuario.nombre, reporte_asesor_link.url_del_link(link.token))
+    enviado = await avisos_telegram.enviar_mensaje(
+        settings.LORE_BOT_TOKEN, usuario.telegram_id, texto)
+    if not enviado:
+        await db.rollback()
+        raise _http(status.HTTP_502_BAD_GATEWAY, MSG_ENVIO_FALLIDO)
+
+
+@router.get("/{usuario_id}/enlace-informe")
+async def estado_enlace_informe(
+    usuario_id: uuid.UUID,
+    db: AsyncSession = Depends(get_motored_db_or_503),
+    _user: MotoredUser = Depends(_require_admin),
+) -> dict:
+    """Whether the asesor has an active link, and its last access."""
+    usuario = await _get_or_404(db, usuario_id)
+    link = await reporte_asesor_link.link_activo(db, usuario.id)
+    return reporte_asesor_link.estado(link)
+
+
+@router.post("/{usuario_id}/enlace-informe")
+async def generar_enlace_informe(
+    usuario_id: uuid.UUID,
+    db: AsyncSession = Depends(get_motored_db_or_503),
+    user: MotoredUser = Depends(_require_admin),
+) -> dict:
+    """"Generar enlace nuevo": revoke the old link, create a new one and
+    send it by Lore. Committed only after Telegram accepted it."""
+    usuario = await _get_or_404(db, usuario_id)
+    _exigir_configuracion_envio()
+    anterior = await reporte_asesor_link.link_activo(db, usuario.id)
+    antes = _estado_enlace_auditoria(anterior)
+    admin_id = uuid.UUID(user.user_id)
+    link = await _crear_enlace(db, usuario, admin_id)
+    await _enviar_enlace(db, usuario, link)
+    auditoria.diff_and_audit(
+        db, "usuario", usuario.id, admin_id,
+        before=antes, after=_estado_enlace_auditoria(link),
+    )
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise _http(status.HTTP_409_CONFLICT, MSG_CHOQUE_ENLACE)
+    return reporte_asesor_link.estado(link)
+
+
+@router.delete("/{usuario_id}/enlace-informe")
+async def anular_enlace_informe(
+    usuario_id: uuid.UUID,
+    db: AsyncSession = Depends(get_motored_db_or_503),
+    user: MotoredUser = Depends(_require_admin),
+) -> dict:
+    """"Anular enlace": revoke the active link, if any."""
+    usuario = await _get_or_404(db, usuario_id)
+    link = await reporte_asesor_link.link_activo(db, usuario.id)
+    if link is None:
+        return reporte_asesor_link.estado(None)
+    await reporte_asesor_link.anular_link(
+        db, usuario.id, reporte_asesor_link.MOTIVO_ANULADO)
+    auditoria.diff_and_audit(
+        db, "usuario", usuario.id, uuid.UUID(user.user_id),
+        before={"enlace_informe": "activo"},
+        after={"enlace_informe": "anulado"},
+    )
+    await db.commit()
+    return reporte_asesor_link.estado(None)
