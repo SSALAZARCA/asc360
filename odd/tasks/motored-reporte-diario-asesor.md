@@ -75,3 +75,7 @@ Every day, once the VENTAS carga that includes the previous day is applied, Lore
 - 2026-10-07: owner decision (direct, "conmigo"): only the ADMIN sets the cédula, in Gestión de usuarios. It is validated against the active vendedor master and must be unique.
   - There is no self-entry in Lore and no approval flow.
   - This supersedes "Lore asks for the cédula at registration" and the H1 pending flow.
+- 2026-10-07 FINAL (owner, clarified directly): BOTH flows apply. This supersedes the previous entry.
+  - **New users:** Lore asks for the cédula. It stays PENDING until the ADMIN approves it.
+  - **Existing users:** the ADMIN sets it in Gestión de usuarios, and it is approved directly.
+  - Reports go only to approved links. The partial unique index applies only to approved cédulas.
