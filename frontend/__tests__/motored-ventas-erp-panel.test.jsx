@@ -1,8 +1,10 @@
 /**
  * Dry-run panel of a raw ERP VENTAS carga (VALIDADO, before Aplicar), shown
  * in the Resumen tab: the discard counters of `log`, the "Referencias sin
- * línea" table with per-row and bulk line assignment (ADMIN and COMPRAS
- * only), the Aplicar block while any ref has no line, and the compact lists
+ * línea" table where per-row and bulk picks stay pending until ONE bulk
+ * "Guardar asignaciones" PUT (ADMIN and COMPRAS only; the single-row PUT is
+ * never called), the Aplicar block while any ref has no line or a pick is
+ * unsaved, and the compact lists
  * of rows outside the parts lines and refs missing from the catalog.
  */
 import React from 'react';
@@ -137,7 +139,7 @@ describe('VENTAS dry-run panel -- Aplicar block', () => {
   });
 });
 
-describe('VENTAS dry-run panel -- per-row assignment', () => {
+describe('VENTAS dry-run panel -- line selects', () => {
   it('offers the opciones_linea of the payload in both selects, every option styled', async () => {
     await renderizar();
     await tabla();
@@ -161,71 +163,116 @@ describe('VENTAS dry-run panel -- per-row assignment', () => {
     expect(within(select).getByRole('option', { name: 'No es de repuestos (descartar)' })).toBeInTheDocument();
     expect(mockGetParametro).not.toHaveBeenCalled();
   });
+});
 
-  it('takes the opciones_linea of a PUT response', async () => {
+describe('VENTAS dry-run panel -- pending assignments', () => {
+  const elegir = (codigo, linea) => fireEvent.change(screen.getByLabelText(`Línea de ${codigo}`), { target: { value: linea } });
+  const guardar = () => screen.getByRole('button', { name: /^Guardar asignaciones/ });
+
+  it('records the per-row choices locally and sends no request', async () => {
+    await renderizar();
+    await tabla();
+    expect(guardar()).toHaveTextContent('Guardar asignaciones (0)');
+    expect(guardar()).toBeDisabled();
+    elegir('B-200', 'LLANTAS');
+    elegir('A-100', 'NO COMERCIAL');
+    expect(screen.getByLabelText('Línea de B-200')).toHaveValue('LLANTAS');
+    expect(guardar()).toHaveTextContent('Guardar asignaciones (2)');
+    expect(screen.getByText('2 asignaciones sin guardar')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Asignar línea a / })).not.toBeInTheDocument();
+    expect(mockAsignarVarias).not.toHaveBeenCalled();
+    expect(mockAsignarUna).not.toHaveBeenCalled();
+  });
+
+  it('un-picking a row drops its pending choice', async () => {
+    await renderizar();
+    await tabla();
+    elegir('B-200', 'LLANTAS');
+    elegir('B-200', '');
+    expect(guardar()).toHaveTextContent('Guardar asignaciones (0)');
+  });
+
+  it('sends every pending choice in ONE bulk PUT and replaces the table with the response', async () => {
     const nuevas = [{ valor: 'CASCOS', etiqueta: 'Cascos' }, OPCIONES[3]];
-    mockAsignarUna.mockResolvedValue(payload([REF_A], { opciones_linea: nuevas }));
+    mockAsignarVarias.mockResolvedValue(payload([REF_C], { opciones_linea: nuevas }));
     await renderizar();
     await tabla();
-    fireEvent.change(screen.getByLabelText('Línea de B-200'), { target: { value: 'GPS' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Asignar línea a B-200' }));
-    await waitFor(() => expect(within(screen.getByLabelText('Línea de A-100')).getAllByRole('option').map((o) => o.value))
-      .toEqual(['', 'CASCOS', 'NO COMERCIAL']));
-  });
-
-  it('assigns one line and replaces the table with the response', async () => {
-    mockAsignarUna.mockResolvedValue(payload([REF_A]));
-    await renderizar();
-    await tabla();
-    fireEvent.change(screen.getByLabelText('Línea de B-200'), { target: { value: 'LLANTAS' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Asignar línea a B-200' }));
+    elegir('A-100', 'NO COMERCIAL');
+    elegir('B-200', 'LLANTAS');
+    fireEvent.click(guardar());
     await waitFor(() => expect(filasDe(screen.getByRole('table', { name: 'Referencias sin línea' }))).toHaveLength(1));
-    expect(mockAsignarUna).toHaveBeenCalledWith('carga-1', 'r-b', 'LLANTAS');
+    expect(mockAsignarVarias).toHaveBeenCalledTimes(1);
+    expect(mockAsignarVarias).toHaveBeenCalledWith('carga-1', [
+      { referencia_id: 'r-b', linea_comercial: 'LLANTAS' },
+      { referencia_id: 'r-a', linea_comercial: 'NO COMERCIAL' },
+    ]);
+    expect(guardar()).toHaveTextContent('Guardar asignaciones (0)');
+    expect(within(screen.getByLabelText('Línea de C-300')).getAllByRole('option').map((o) => o.value))
+      .toEqual(['', 'CASCOS', 'NO COMERCIAL']);
     expect(screen.getByText('Hay 1 referencias sin línea: asígnelas antes de aplicar')).toBeInTheDocument();
+    expect(mockAsignarUna).not.toHaveBeenCalled();
   });
 
-  it('sends the NO COMERCIAL sentinel for the discard option', async () => {
-    mockAsignarUna.mockResolvedValue(payload([REF_A, REF_C]));
+  it('keeps the pending choices and shows the detail on a 409', async () => {
+    mockAsignarVarias.mockRejectedValue(conflicto(409, 'Una referencia ya no está en la lista.'));
     await renderizar();
     await tabla();
-    fireEvent.change(screen.getByLabelText('Línea de B-200'), { target: { value: 'NO COMERCIAL' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Asignar línea a B-200' }));
-    await waitFor(() => expect(mockAsignarUna).toHaveBeenCalledWith('carga-1', 'r-b', 'NO COMERCIAL'));
+    elegir('B-200', 'GPS');
+    elegir('C-300', 'REPUESTOS');
+    fireEvent.click(guardar());
+    expect(await screen.findByText('Una referencia ya no está en la lista.')).toBeInTheDocument();
+    await waitFor(() => expect(guardar()).toBeEnabled());
+    expect(guardar()).toHaveTextContent('Guardar asignaciones (2)');
+    expect(screen.getByLabelText('Línea de B-200')).toHaveValue('GPS');
+    expect(screen.getByLabelText('Línea de C-300')).toHaveValue('REPUESTOS');
   });
 
-  it('shows the 409 message inline and refreshes the table', async () => {
-    mockAsignarUna.mockRejectedValue(conflicto(409, 'La referencia ya tiene línea.'));
+  it('shows a Spanish message for a 422 and keeps the choices', async () => {
+    mockAsignarVarias.mockRejectedValue(conflicto(422, 'HTTP 422'));
     await renderizar();
     await tabla();
-    fireEvent.change(screen.getByLabelText('Línea de B-200'), { target: { value: 'GPS' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Asignar línea a B-200' }));
-    expect(await screen.findByText('La referencia ya tiene línea.')).toBeInTheDocument();
-    await waitFor(() => expect(mockGetSinLinea).toHaveBeenCalledTimes(2));
-  });
-
-  it('shows a Spanish message for a 422', async () => {
-    mockAsignarUna.mockRejectedValue(conflicto(422, 'HTTP 422'));
-    await renderizar();
-    await tabla();
-    fireEvent.change(screen.getByLabelText('Línea de B-200'), { target: { value: 'GPS' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Asignar línea a B-200' }));
+    elegir('B-200', 'GPS');
+    fireEvent.click(guardar());
     expect(await screen.findByText('La línea elegida no es válida. Elija otra de la lista.')).toBeInTheDocument();
+    expect(screen.getByLabelText('Línea de B-200')).toHaveValue('GPS');
+  });
+
+  it('blocks Aplicar while there are unsaved choices', async () => {
+    await renderizar();
+    await tabla();
+    elegir('B-200', 'GPS');
+    expect(screen.getByText('Guarde las asignaciones antes de aplicar')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Aplicar' })).toBeDisabled();
   });
 });
 
-describe('VENTAS dry-run panel -- bulk assignment', () => {
-  async function seleccionarTodasYAsignar(linea) {
+describe('VENTAS dry-run panel -- bulk selection', () => {
+  const usarEnSeleccionadas = (linea) => {
+    fireEvent.change(screen.getByLabelText('Línea para las seleccionadas'), { target: { value: linea } });
+    fireEvent.click(screen.getByRole('button', { name: 'Usar línea en seleccionadas' }));
+  };
+
+  it('fills the pending choices of the checked rows without a request', async () => {
+    await renderizar();
+    await tabla();
+    fireEvent.click(screen.getByLabelText('Seleccionar C-300'));
+    expect(screen.getByText('1 seleccionada')).toBeInTheDocument();
+    usarEnSeleccionadas('GPS');
+    expect(screen.getByLabelText('Línea de C-300')).toHaveValue('GPS');
+    expect(screen.getByLabelText('Línea de B-200')).toHaveValue('');
+    expect(screen.getByLabelText('Seleccionar C-300')).not.toBeChecked();
+    expect(mockAsignarVarias).not.toHaveBeenCalled();
+  });
+
+  it('selects all, fills every row and saves them in one bulk PUT', async () => {
+    mockAsignarVarias.mockResolvedValue(payload([]));
     await renderizar();
     await tabla();
     fireEvent.click(screen.getByLabelText('Seleccionar todas'));
-    fireEvent.change(screen.getByLabelText('Línea para las seleccionadas'), { target: { value: linea } });
-    fireEvent.click(screen.getByRole('button', { name: 'Asignar línea a seleccionadas' }));
-  }
-
-  it('sends one bulk PUT with every selected ref and replaces the table', async () => {
-    mockAsignarVarias.mockResolvedValue(payload([]));
-    await seleccionarTodasYAsignar('REPUESTOS');
+    usarEnSeleccionadas('REPUESTOS');
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar asignaciones (3)' }));
     await screen.findByText('Todas las referencias del archivo tienen línea.');
+    expect(mockAsignarVarias).toHaveBeenCalledTimes(1);
     expect(mockAsignarVarias).toHaveBeenCalledWith('carga-1', [
       { referencia_id: 'r-b', linea_comercial: 'REPUESTOS' },
       { referencia_id: 'r-c', linea_comercial: 'REPUESTOS' },
@@ -233,29 +280,7 @@ describe('VENTAS dry-run panel -- bulk assignment', () => {
     ]);
     expect(mockAsignarUna).not.toHaveBeenCalled();
   });
-
-  it('assigns only the checked rows', async () => {
-    mockAsignarVarias.mockResolvedValue(payload([REF_A, REF_B]));
-    await renderizar();
-    await tabla();
-    fireEvent.click(screen.getByLabelText('Seleccionar C-300'));
-    expect(screen.getByText('1 seleccionada')).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText('Línea para las seleccionadas'), { target: { value: 'GPS' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Asignar línea a seleccionadas' }));
-    await waitFor(() => expect(mockAsignarVarias).toHaveBeenCalledWith('carga-1', [
-      { referencia_id: 'r-c', linea_comercial: 'GPS' },
-    ]));
-  });
-
-  it('shows the error and keeps the selection when the bulk PUT fails', async () => {
-    mockAsignarVarias.mockRejectedValue(conflicto(409, 'Una referencia ya no está en la lista.'));
-    await seleccionarTodasYAsignar('GPS');
-    expect(await screen.findByText('Una referencia ya no está en la lista.')).toBeInTheDocument();
-    expect(screen.getByLabelText('Seleccionar B-200')).toBeChecked();
-    expect(screen.getByLabelText('Seleccionar todas')).toBeChecked();
-  });
 });
-
 describe('VENTAS dry-run panel -- gating', () => {
   it.each(['GERENCIA', 'CONSULTA'])('requests nothing and shows only the summary for %s', async (role) => {
     await renderizar({ role });
@@ -270,7 +295,8 @@ describe('VENTAS dry-run panel -- gating', () => {
   it('lets ADMIN review and assign too', async () => {
     await renderizar({ role: 'ADMIN' });
     await tabla();
-    expect(screen.getByRole('button', { name: 'Asignar línea a B-200' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Línea de B-200')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Guardar asignaciones (0)' })).toBeInTheDocument();
     expect(mockGetSinLinea).toHaveBeenCalledWith('carga-1');
     expect(mockVaciado).toHaveBeenCalledWith('carga-1');
   });

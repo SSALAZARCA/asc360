@@ -2,12 +2,13 @@
 /**
  * Dry run of a raw ERP VENTAS carga (VALIDADO, before Aplicar): what the
  * load discards (the counters of `log`), the refs without a commercial line
- * (they block Aplicar until each gets one), the rows outside the parts lines
- * and the refs missing from the catalog (they do not block). `estado` is the
- * `useReferenciasSinLinea` state the Resumen tab owns.
+ * (they block Aplicar until each gets one; the picked lines stay pending
+ * until "Guardar asignaciones" sends them in one bulk PUT), the rows outside
+ * the parts lines and the refs missing from the catalog (they do not
+ * block). `estado` is the `useReferenciasSinLinea` state the Resumen tab owns.
  */
 import TablaSinLinea from './TablaSinLinea';
-import { numeroLegible, resumenContadores, textoNoEncontradas } from './ventasErp';
+import { numeroLegible, resumenContadores, textoNoEncontradas, textoPendientes } from './ventasErp';
 
 const mutedStyle = { margin: 0, fontSize: '0.8rem', color: 'var(--motored-text-muted, #5a5a5a)' };
 const avisoStyle = {
@@ -51,17 +52,33 @@ function Listas({ datos }) {
   );
 }
 
+function GuardarAsignaciones({ cantidad, ocupado, guardar }) {
+  return (
+    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+      <button
+        type="button" className="motored-btn motored-btn-primary" style={{ minHeight: '44px' }}
+        disabled={ocupado || !cantidad} onClick={guardar}
+      >
+        {`${ocupado ? 'Guardando...' : 'Guardar asignaciones'} (${cantidad})`}
+      </button>
+      {cantidad > 0 && <span style={{ ...mutedStyle, fontWeight: 600 }}>{textoPendientes(cantidad)}</span>}
+    </div>
+  );
+}
+
 function SinLinea({ estado, puedeAsignar }) {
-  const { datos, aviso, ocupado, lineas, asignarUna, asignarVarias } = estado;
+  const { datos, aviso, ocupado, lineas, pendientes, cantidadPendientes, elegir, guardar } = estado;
+  const hay = datos.sin_linea.length > 0;
   return (
     <>
       <h3 style={tituloStyle}>Referencias sin línea</h3>
       {aviso && <p role="alert" style={errorStyle}>{aviso}</p>}
-      {datos.sin_linea.length
+      {hay && puedeAsignar && <GuardarAsignaciones cantidad={cantidadPendientes} ocupado={ocupado} guardar={guardar} />}
+      {hay
         ? (
           <TablaSinLinea
             filas={datos.sin_linea} puedeAsignar={puedeAsignar} lineas={lineas} ocupado={ocupado}
-            asignarUna={asignarUna} asignarVarias={asignarVarias}
+            pendientes={pendientes} elegir={elegir}
           />
         )
         : <p style={mutedStyle}>Todas las referencias del archivo tienen línea.</p>}

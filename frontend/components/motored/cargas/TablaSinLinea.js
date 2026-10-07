@@ -1,9 +1,10 @@
 'use client';
 /**
  * "Referencias sin línea" of a raw ERP VENTAS carga, sorted by valor. With
- * `puedeAsignar` (ADMIN, COMPRAS) each row has a checkbox, a line select and
- * "Asignar"; above the table, "Seleccionar todas" and one select + button
- * assign a line to every checked row in one bulk request. Other roles read
+ * `puedeAsignar` (ADMIN, COMPRAS) each row has a checkbox and a line select;
+ * above the table, "Seleccionar todas" and one select + button put a line on
+ * every checked row. Both only record a pending choice (`pendientes`,
+ * `elegir`): nothing is sent until "Guardar asignaciones". Other roles read
  * "Sin línea". Every <option> has an explicit colour (dark theme).
  */
 import { useState } from 'react';
@@ -24,7 +25,7 @@ function SelectLinea({ etiqueta, valor, lineas, onChange, disabled }) {
   );
 }
 
-function AsignacionMasiva({ cantidad, todas, lineas, ocupado, onTodas, onAsignar }) {
+function AsignacionMasiva({ cantidad, todas, lineas, ocupado, onTodas, onUsar }) {
   const [linea, setLinea] = useState('');
   return (
     <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
@@ -36,27 +37,22 @@ function AsignacionMasiva({ cantidad, todas, lineas, ocupado, onTodas, onAsignar
       <SelectLinea etiqueta="Línea para las seleccionadas" valor={linea} lineas={lineas} onChange={setLinea} disabled={ocupado} />
       <button
         type="button" className="motored-btn motored-btn-secondary" style={controlStyle}
-        disabled={ocupado || !cantidad || !linea} onClick={() => onAsignar(linea)}
+        disabled={ocupado || !cantidad || !linea} onClick={() => onUsar(linea)}
       >
-        {ocupado ? 'Asignando...' : 'Asignar línea a seleccionadas'}
+        Usar línea en seleccionadas
       </button>
     </div>
   );
 }
 
-function CeldaLinea({ referencia, lineas, ocupado, onAsignar }) {
-  const [linea, setLinea] = useState('');
+function CeldaLinea({ referencia, lineas, ocupado, pendientes, elegir }) {
+  const id = referencia.referencia_id;
   return (
     <td style={celdaStyle}>
-      <div style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap' }}>
-        <SelectLinea etiqueta={`Línea de ${referencia.codigo}`} valor={linea} lineas={lineas} onChange={setLinea} disabled={ocupado} />
-        <button
-          type="button" aria-label={`Asignar línea a ${referencia.codigo}`} className="motored-btn motored-btn-primary"
-          style={controlStyle} disabled={ocupado || !linea} onClick={() => onAsignar(referencia.referencia_id, linea)}
-        >
-          Asignar
-        </button>
-      </div>
+      <SelectLinea
+        etiqueta={`Línea de ${referencia.codigo}`} valor={pendientes[id] || ''} lineas={lineas}
+        onChange={(linea) => elegir([id], linea)} disabled={ocupado}
+      />
     </td>
   );
 }
@@ -106,21 +102,20 @@ function useSeleccion(filas) {
   return { seleccion, alternar, todas, marcarTodas: (si) => setMarcadas(si ? ids : []), limpiar: () => setMarcadas([]) };
 }
 
-export default function TablaSinLinea({ filas, puedeAsignar, lineas, ocupado, asignarUna, asignarVarias }) {
+export default function TablaSinLinea({ filas, puedeAsignar, lineas, ocupado, pendientes, elegir }) {
   const ordenadas = ordenarSinLinea(filas);
   const { seleccion, alternar, todas, marcarTodas, limpiar } = useSeleccion(ordenadas);
-  const asignarSeleccionadas = async (linea) => {
-    const elegidas = ordenadas.filter((f) => seleccion.includes(f.referencia_id));
-    const ok = await asignarVarias(elegidas.map((f) => ({ referencia_id: f.referencia_id, linea_comercial: linea })));
-    if (ok) limpiar();
+  const usarEnSeleccionadas = (linea) => {
+    elegir(seleccion, linea);
+    limpiar();
   };
-  const asignacion = { puedeAsignar, seleccion, alternar, lineas, ocupado, onAsignar: asignarUna };
+  const asignacion = { puedeAsignar, seleccion, alternar, lineas, ocupado, pendientes, elegir };
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
       {puedeAsignar && (
         <AsignacionMasiva
           cantidad={seleccion.length} todas={todas} lineas={lineas} ocupado={ocupado}
-          onTodas={marcarTodas} onAsignar={asignarSeleccionadas}
+          onTodas={marcarTodas} onUsar={usarEnSeleccionadas}
         />
       )}
       <div style={{ overflowX: 'auto', maxWidth: '100%' }}>

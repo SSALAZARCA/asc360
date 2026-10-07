@@ -10,7 +10,7 @@
 import { useEffect, useState } from 'react';
 import { getVaciadoPrevisto } from '../../../lib/motored/api';
 import useReferenciasSinLinea from './useReferenciasSinLinea';
-import { muestraSimulacionVentas, textoBloqueoAplicar } from './ventasErp';
+import { muestraSimulacionVentas, TEXTO_GUARDAR_ANTES, textoBloqueoAplicar } from './ventasErp';
 
 const MENSAJE_ENTIENDO = 'Marque «Entiendo» en el aviso de borrado para poder aplicar.';
 
@@ -26,8 +26,12 @@ function useVaciadoPrevisto(cargaId, activo) {
   return { ...estado, requiereConfirmar, cargando: !estado.error && estado.filas === null };
 }
 
-/** `{ bloqueado, mensaje }` of Aplicar: refs without a line first, then the purge acknowledgement. */
+/**
+ * `{ bloqueado, mensaje }` of Aplicar: unsaved line choices first, then refs
+ * without a line on the server, then the purge acknowledgement.
+ */
 function bloqueoAplicar({ sinLinea, vaciado, entendido }) {
+  if (sinLinea.cantidadPendientes > 0) return { bloqueado: true, mensaje: TEXTO_GUARDAR_ANTES };
   if (!sinLinea.error) {
     if (!sinLinea.datos) return { bloqueado: true, mensaje: '' };
     const n = sinLinea.datos.sin_linea.length;

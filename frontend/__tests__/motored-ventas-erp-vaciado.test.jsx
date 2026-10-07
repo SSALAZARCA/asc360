@@ -22,7 +22,6 @@ jest.mock('../lib/motored/api', () => ({
   aplicarCarga: (...args) => mockAplicar(...args),
   anularCarga: jest.fn(),
   getReferenciasSinLinea: (...args) => mockGetSinLinea(...args),
-  asignarLineaReferencia: jest.fn(),
   asignarLineasReferencias: jest.fn(),
   getParametroVigente: jest.fn(async () => ({ valor: [] })),
   getVaciadoPrevisto: (...args) => mockVaciado(...args),

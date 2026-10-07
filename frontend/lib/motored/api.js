@@ -439,19 +439,13 @@ export async function resolverErroresCarga(cargaId, acciones) {
 
 /**
  * Raw ERP VENTAS dry run (VALIDADO, before Aplicar). `GET` returns
- * `{ sin_linea, fuera_de_linea, no_encontradas }`, computed live; both PUTs
- * (ADMIN and COMPRAS, only refs of this list) answer with that same payload.
- * The bulk PUT is all-or-nothing.
+ * `{ sin_linea, fuera_de_linea, no_encontradas, opciones_linea }`, computed
+ * live; the bulk PUT (ADMIN and COMPRAS, only refs of this list) answers with
+ * that same payload and is all-or-nothing. The UI sends every assignment
+ * through it, never one ref at a time.
  */
 export async function getReferenciasSinLinea(cargaId) {
   return motoredFetchJson(`/cargas/${cargaId}/referencias-sin-linea`);
-}
-
-export async function asignarLineaReferencia(cargaId, referenciaId, lineaComercial) {
-  return motoredFetchJson(`/cargas/${cargaId}/referencias-sin-linea/${referenciaId}`, {
-    method: 'PUT',
-    body: JSON.stringify({ linea_comercial: lineaComercial }),
-  });
 }
 
 /** `asignaciones`: `[{ referencia_id, linea_comercial }]`. */

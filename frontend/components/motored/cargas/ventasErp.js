@@ -57,6 +57,11 @@ export function ordenarSinLinea(filas) {
 
 export const textoBloqueoAplicar = (n) => `Hay ${n} referencias sin línea: asígnelas antes de aplicar`;
 
+export const TEXTO_GUARDAR_ANTES = 'Guarde las asignaciones antes de aplicar';
+
+/** "1 asignación sin guardar" / "3 asignaciones sin guardar". */
+export const textoPendientes = (n) => cuenta(n, 'asignación sin guardar', 'asignaciones sin guardar');
+
 export function textoNoEncontradas(noEncontradas) {
   const filas = noEncontradas.reduce((total, r) => total + Number(r.filas || 0), 0);
   return `${numeroLegible(filas)} filas de ${noEncontradas.length} referencias que no están en el catálogo no se cargan; `
