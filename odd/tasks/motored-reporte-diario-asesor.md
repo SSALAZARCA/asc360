@@ -134,3 +134,9 @@ No PDF. Each asesor gets a personal link through Lore that opens the single-ases
   - It is revoked automatically when the usuario is deactivated or the cédula is changed or cleared.
   - The ADMIN can regenerate it.
   - The token table drops `mes` and `vence_en`; there is one active token per cédula.
+- 2026-10-07: owner approved the placement.
+  - **Gestión de usuarios, per asesor:**
+    - "Enlace del informe" state: active or not, plus the last access time.
+    - "Generar enlace nuevo": revokes the old link, creates a new one and sends it through Lore, after a confirmation.
+    - "Anular enlace": after a confirmation.
+  - **Configuración:** the daily-send on/off switch and "Reenviar a todos".
