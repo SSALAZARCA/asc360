@@ -147,6 +147,7 @@ async def construir_inicio(
     for every role."""
     ctx = Contexto.de(db, hoy)
     respuesta: Dict[str, Any] = {"hoy": ctx.hoy.isoformat()}
-    for nombre in CONSTRUCTORES:
-        respuesta[nombre] = await _figura(ctx, nombre)
+    with kpi_resumen_lectura.memo_de_peticion(db):  # the state of the summaries is read once, not per figure
+        for nombre in CONSTRUCTORES:
+            respuesta[nombre] = await _figura(ctx, nombre)
     return respuesta

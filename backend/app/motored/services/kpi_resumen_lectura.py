@@ -28,9 +28,10 @@ the callers use; the `_resumen` ones read the summary unconditionally.
 Costs come baked into the summary at the latest inventory cut, so the cost reads
 ignore the `fecha_corte` argument the live queries take (callers pass the latest cut).
 """
+import contextlib
 import datetime
 from decimal import Decimal
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Awaitable, Callable, Dict, Iterator, List, Optional, Tuple, TypeVar
 
 from sqlalchemy import Date, String, and_, case, cast, false, func, or_, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -46,9 +47,56 @@ from app.motored.services import kpi_resumen
 from app.motored.services import tablero_asesores as t
 from app.motored.services import tablero_asesores_consultas as q
 from app.motored.services import tablero_kpis_consultas as qk
+from app.motored.services.sucursal_grupo import principal_de
 from app.motored.services.tablero_asesores import (
     CLAVE_TOTAL, DIM_ASESOR, DIM_SUCURSAL, DIM_TOTAL, FilaClientes, FilaCubo, FilaFacturas, FilaPersona, Filtro,
 )
+
+
+T = TypeVar("T")
+
+# --- Per-request memo ---------------------------------------------------------------------------
+
+_MEMO = "motored_kpi_memo_de_peticion"
+_SIN_VALOR = object()
+
+
+@contextlib.contextmanager
+def memo_de_peticion(db: AsyncSession) -> Iterator[None]:
+    """Inside the block the values that cannot change during one request (the state of the summaries, the
+    store groups) are read once per session instead of once per read. The memo lives in `db.info`, so it
+    ends with the block; outside of it nothing is remembered, which is what the code that changes the
+    state in the middle of its own work (rebuilds, tests) needs."""
+    info = getattr(db, "info", None)
+    if not isinstance(info, dict) or _MEMO in info:
+        yield  # no session info to hold it, or an outer block already owns it
+        return
+    info[_MEMO] = {}
+    try:
+        yield
+    finally:
+        info.pop(_MEMO, None)
+
+
+async def recordado(db: AsyncSession, clave: str, obtener: Callable[[], Awaitable[T]]) -> T:
+    """`await obtener()`, remembered under `clave` while a `memo_de_peticion` block is open."""
+    info = getattr(db, "info", None)
+    memo = info.get(_MEMO) if isinstance(info, dict) else None
+    if memo is None:
+        return await obtener()
+    valor = memo.get(clave, _SIN_VALOR)
+    if valor is _SIN_VALOR:
+        valor = memo[clave] = await obtener()
+    return valor
+
+
+async def _estado(db: AsyncSession) -> Optional[kpi_resumen.Estado]:
+    return await recordado(db, "estado", lambda: kpi_resumen.estado(db))
+
+
+async def principales(db: AsyncSession) -> Dict[Any, Any]:
+    """`sucursal_grupo.principal_de`, once per request."""
+    return await recordado(db, "principales", lambda: principal_de(db))
 
 
 async def usar_resumen(db: AsyncSession) -> bool:
@@ -56,7 +104,7 @@ async def usar_resumen(db: AsyncSession) -> bool:
     switch is checked first, so with it off no query is made."""
     if not settings.MOTORED_KPI_RESUMEN_ENABLED:
         return False
-    estado = await kpi_resumen.estado(db)
+    estado = await _estado(db)
     return estado is not None and estado.ultima_reconstruccion_total is not None and not estado.sucio
 
 
@@ -66,7 +114,7 @@ async def frescura(db: AsyncSession) -> Dict[str, object]:
     update; None when the live queries answer, since live data is current by definition)."""
     if not settings.MOTORED_KPI_RESUMEN_ENABLED:
         return {"usando_resumen": False, "datos_actualizados_en": None}
-    estado = await kpi_resumen.estado(db)
+    estado = await _estado(db)
     if estado is None or estado.ultima_reconstruccion_total is None or estado.sucio:
         return {"usando_resumen": False, "datos_actualizados_en": None}
     cuando = estado.actualizado_en or estado.ultima_reconstruccion_total

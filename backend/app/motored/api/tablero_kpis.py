@@ -47,7 +47,7 @@ Respuestas (los importes son numeros, nunca texto; cada una repite `meses`,
   "ano corrido" va de enero al `ultimo_mes` de ese ano).
 """
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any, AsyncIterator, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -56,6 +56,7 @@ from app.motored.api.tablero_asesores import _error_422, _sucursales
 from app.motored.schemas.vendedor import limpiar_cedula
 from app.motored.deps import MotoredUser, get_motored_db_or_503, require_motored_ready, require_roles
 from app.motored.services import kpi_resumen
+from app.motored.services import kpi_resumen_lectura as lectura
 from app.motored.services import tablero_asesores_consultas as consultas
 from app.motored.services import tablero_comisiones_excel as comisiones_excel
 from app.motored.services import tablero_kpis as kpis
@@ -77,16 +78,19 @@ async def _filtro(
     sucursales: Optional[str] = Query(None, description="Ids de sucursal separados por coma; sin ellos, todas"),
     hmcl: str = Query(HMCL_INCLUIR, description="incluir, excluir o solo"),
     db: AsyncSession = Depends(get_motored_db_or_503),
-) -> Filtro:
-    if not meses or not meses.strip():
-        raise _error_422("Indique 'meses' (AAAA-MM separados por coma).")
-    if hmcl not in (HMCL_INCLUIR, HMCL_EXCLUIR, HMCL_SOLO):
-        raise _error_422("El parámetro 'hmcl' debe ser incluir, excluir o solo.")
-    ids: Optional[List[uuid.UUID]] = _sucursales(sucursales)
-    try:
-        return await consultas.cargar_filtro(db, [m.strip() for m in meses.split(",")], hmcl, ids)
-    except ValueError as exc:
-        raise _error_422(str(exc))
+) -> AsyncIterator[Filtro]:
+    # The request's reads share what cannot change meanwhile (the state of the summaries): see `memo_de_peticion`.
+    with lectura.memo_de_peticion(db):
+        if not meses or not meses.strip():
+            raise _error_422("Indique 'meses' (AAAA-MM separados por coma).")
+        if hmcl not in (HMCL_INCLUIR, HMCL_EXCLUIR, HMCL_SOLO):
+            raise _error_422("El parámetro 'hmcl' debe ser incluir, excluir o solo.")
+        ids: Optional[List[uuid.UUID]] = _sucursales(sucursales)
+        try:
+            filtro = await consultas.cargar_filtro(db, [m.strip() for m in meses.split(",")], hmcl, ids)
+        except ValueError as exc:
+            raise _error_422(str(exc))
+        yield filtro
 
 
 @router.get("/ventas")

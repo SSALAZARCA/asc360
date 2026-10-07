@@ -38,7 +38,6 @@ from app.motored.services import tablero_asesores as t
 from app.motored.services import tablero_asesores_consultas as q
 from app.motored.services import tablero_comisiones as c
 from app.motored.services import tablero_kpis_consultas as qk
-from app.motored.services.sucursal_grupo import principal_de
 from app.motored.services.tablero_asesores import DIM_ASESOR, DIM_SUCURSAL, DIM_TOTAL, HMCL_INCLUIR, Filtro
 
 
@@ -395,7 +394,7 @@ async def _presupuestos_del_filtro(db: AsyncSession, filtro: Filtro) -> Dict[Tup
     primero, ultimo = (datetime.date(int(m[:4]), int(m[5:]), 1) for m in (filtro.meses[0], filtro.meses[-1]))
     return presupuestos_del_rango(
         await pres.presupuesto_por_asesor(db, primero, ultimo), filtro.meses, filtro.sucursal_ids,
-        await principal_de(db))
+        await lectura.principales(db))
 
 
 async def cargar_cumplimiento(
@@ -647,7 +646,7 @@ async def calcular_opciones_asesores(db: AsyncSession, filtro: Filtro) -> Dict[s
     tablero, _ = await q.tablero_de_filtro(db, filtro)
     tiendas = None
     if filtro.sucursal_ids:
-        mapa = await principal_de(db)
+        mapa = await lectura.principales(db)
         tiendas = {str(mapa.get(i, i)) for i in filtro.sucursal_ids}
     maestro = {
         m.cedula: {"nombre": m.nombre, "tienda": m.tienda, "sucursal_id": m.sucursal_id}
@@ -716,7 +715,7 @@ async def calcular_kpis_comisiones(db: AsyncSession, filtro: Filtro) -> Dict[str
     primero = datetime.date(int(mes[:4]), int(mes[5:]), 1)
     presupuestos = presupuestos_del_rango(
         await pres.presupuesto_por_asesor(db, primero, primero), [mes], filtro.sucursal_ids,
-        await principal_de(db))
+        await lectura.principales(db))
     reglas, asesores, advertencias, _ = await liquidar_cubo_del_mes(db, filtro, mes, cubo, presupuestos)
     return {
         **_encabezado(filtro),

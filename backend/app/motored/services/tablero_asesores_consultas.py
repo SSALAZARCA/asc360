@@ -49,7 +49,6 @@ from app.motored.schemas.vendedor import limpiar_cedula
 from app.motored.services import parametros
 from app.motored.services import tablero_asesores as t
 from app.motored.services import tablero_comisiones as comisiones
-from app.motored.services.sucursal_grupo import principal_de
 from app.motored.services.tablero_asesores import (
     CLAVE_TOTAL, DIM_ASESOR, DIM_SUCURSAL, DIM_TOTAL, FilaClientes, FilaCubo, FilaFacturas, FilaPersona, Filtro,
     Reglas,
@@ -715,7 +714,10 @@ async def _principales(db: AsyncSession, sucursal_ids: Optional[Iterable[Any]]) 
     pedidas = list(sucursal_ids) if sucursal_ids else []
     if not pedidas:
         return sucursal_ids
-    mapa = await principal_de(db)
+    # Imported here: the summary reads import this module for the shared expressions.
+    from app.motored.services import kpi_resumen_lectura as lectura
+
+    mapa = await lectura.principales(db)
     ids = [i if isinstance(i, uuid.UUID) else uuid.UUID(str(i)) for i in pedidas]
     return [mapa.get(i, i) for i in ids]
 

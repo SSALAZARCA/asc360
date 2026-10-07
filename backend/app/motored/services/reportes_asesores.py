@@ -28,7 +28,6 @@ from app.motored.services import tablero_asesores as t
 from app.motored.services import tablero_asesores_consultas as q
 from app.motored.services import tablero_comisiones as c
 from app.motored.services import tablero_kpis as k
-from app.motored.services.sucursal_grupo import principal_de
 from app.motored.services.tablero_asesores import DIM_ASESOR, DIM_TOTAL, HMCL_INCLUIR, Filtro
 
 
@@ -167,7 +166,7 @@ async def _cumplimiento_y_liquidacion(db: AsyncSession, p: _Periodo, cubo_anio, 
     the year and the liquidation of the month."""
     presupuestos = k.presupuestos_del_rango(
         await pres.presupuesto_por_asesor(db, _primero(p.meses_anio[0]), _primero(p.mes)), p.meses_anio, None,
-        await principal_de(db))
+        await lectura.principales(db))
     sucursales = await q.consultar_sucursales(db, {str(x.sucursal_id) for x in presupuestos.values()})
     extra = {
         "sucursales": sucursales,
@@ -203,6 +202,11 @@ def _constructor_de_detalle(
 async def reportes_asesores(db: AsyncSession, fecha: datetime.date) -> Dict[str, Any]:
     """`{reportes, sin_presupuesto, sin_cedula}` of the month of `fecha` up to `fecha`, whole network,
     HMCL included, rules in force that month. See the module docstring and `armar_reportes`."""
+    with lectura.memo_de_peticion(db):  # the state of the summaries is read once, not once per read
+        return await _reportes_asesores(db, fecha)
+
+
+async def _reportes_asesores(db: AsyncSession, fecha: datetime.date) -> Dict[str, Any]:
     p = await _periodo(db, fecha)
     cubo_anio, tablero = await _tablero_del_mes(db, p)
     por_mes, sucursales, reglas, asesores, advertencias, sin_cedula = await _cumplimiento_y_liquidacion(
