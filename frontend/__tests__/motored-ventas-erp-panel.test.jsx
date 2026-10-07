@@ -38,7 +38,14 @@ const informe = (log = LOG) => ({
 const REF_A = { referencia_id: 'r-a', codigo: 'A-100', nombre: 'Filtro aire', filas: 3, unidades: 5, valor: '150000.00' };
 const REF_B = { referencia_id: 'r-b', codigo: 'B-200', nombre: 'Pastilla freno', filas: 4, unidades: 8, valor: '1250000' };
 const REF_C = { referencia_id: 'r-c', codigo: 'C-300', nombre: 'Guaya', filas: 9, unidades: 9, valor: '150000' };
+const OPCIONES = [
+  { valor: 'REPUESTOS', etiqueta: 'Repuestos' },
+  { valor: 'LLANTAS', etiqueta: 'Llantas' },
+  { valor: 'GPS', etiqueta: 'GPS' },
+  { valor: 'NO COMERCIAL', etiqueta: 'No es de repuestos (descartar)' },
+];
 const payload = (sinLinea = [REF_A, REF_B, REF_C], extra = {}) => ({
+  opciones_linea: OPCIONES,
   sin_linea: sinLinea,
   fuera_de_linea: [{ linea: 'MOTOS', filas: 40 }, { linea: 'SERVICIOS', filas: 16 }],
   no_encontradas: [{ codigo: 'ZZ-1', filas: 10 }, { codigo: 'ZZ-2', filas: 5 }],
@@ -67,7 +74,6 @@ beforeEach(() => {
   sessionStorage.clear();
   mockGetInforme.mockResolvedValue(informe());
   mockGetSinLinea.mockResolvedValue(payload());
-  mockGetParametro.mockResolvedValue({ clave: 'lineas_comerciales', valor: ['Repuestos', 'Llantas', 'GPS'] });
   mockVaciado.mockResolvedValue([]);
 });
 
@@ -130,22 +136,39 @@ describe('VENTAS dry-run panel -- Aplicar block', () => {
 });
 
 describe('VENTAS dry-run panel -- per-row assignment', () => {
-  it('offers the configured lines plus the discard option, every option styled', async () => {
+  it('offers the opciones_linea of the payload in both selects, every option styled', async () => {
+    await renderizar();
+    await tabla();
+    ['Línea de B-200', 'Línea para las seleccionadas'].forEach((etiqueta) => {
+      const opciones = within(screen.getByLabelText(etiqueta)).getAllByRole('option');
+      expect(opciones.map((o) => o.value)).toEqual(['', 'REPUESTOS', 'LLANTAS', 'GPS', 'NO COMERCIAL']);
+      expect(opciones.map((o) => o.textContent).slice(1)).toEqual(OPCIONES.map((o) => o.etiqueta));
+      opciones.forEach((o) => expect(o.getAttribute('style')).toMatch(/color/));
+    });
+    expect(mockGetParametro).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the seven default lines plus the discard option when opciones_linea is absent', async () => {
+    const { opciones_linea: _, ...sinOpciones } = payload();
+    mockGetSinLinea.mockResolvedValue(sinOpciones);
     await renderizar();
     await tabla();
     const select = screen.getByLabelText('Línea de B-200');
-    const opciones = within(select).getAllByRole('option');
-    expect(opciones.map((o) => o.value)).toEqual(['', 'REPUESTOS', 'LLANTAS', 'GPS', 'NO COMERCIAL']);
+    const valores = within(select).getAllByRole('option').map((o) => o.value);
+    expect(valores).toEqual(['', 'REPUESTOS', 'ACCESORIOS', 'LLANTAS', 'LUBRICANTES', 'BATERIAS', 'GPS', 'CASCOS', 'NO COMERCIAL']);
     expect(within(select).getByRole('option', { name: 'No es de repuestos (descartar)' })).toBeInTheDocument();
-    opciones.forEach((o) => expect(o.getAttribute('style')).toMatch(/color/));
+    expect(mockGetParametro).not.toHaveBeenCalled();
   });
 
-  it('falls back to the seven default lines when the config cannot be read', async () => {
-    mockGetParametro.mockRejectedValue(conflicto(404, 'Sin versión vigente'));
+  it('takes the opciones_linea of a PUT response', async () => {
+    const nuevas = [{ valor: 'CASCOS', etiqueta: 'Cascos' }, OPCIONES[3]];
+    mockAsignarUna.mockResolvedValue(payload([REF_A], { opciones_linea: nuevas }));
     await renderizar();
     await tabla();
-    const valores = within(screen.getByLabelText('Línea de B-200')).getAllByRole('option').map((o) => o.value);
-    expect(valores).toEqual(['', 'REPUESTOS', 'ACCESORIOS', 'LLANTAS', 'LUBRICANTES', 'BATERIAS', 'GPS', 'CASCOS', 'NO COMERCIAL']);
+    fireEvent.change(screen.getByLabelText('Línea de B-200'), { target: { value: 'GPS' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Asignar línea a B-200' }));
+    await waitFor(() => expect(within(screen.getByLabelText('Línea de A-100')).getAllByRole('option').map((o) => o.value))
+      .toEqual(['', 'CASCOS', 'NO COMERCIAL']));
   });
 
   it('assigns one line and replaces the table with the response', async () => {

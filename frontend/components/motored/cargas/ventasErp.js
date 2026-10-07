@@ -9,18 +9,21 @@ import { etiquetaLinea } from '../configuracion/etiquetas';
 export const LINEA_DESCARTAR = 'NO COMERCIAL';
 export const ETIQUETA_DESCARTAR = 'No es de repuestos (descartar)';
 
-/** Used when `lineas_comerciales` cannot be read. */
+/** Used only when the payload carries no `opciones_linea`. */
 export const LINEAS_POR_DEFECTO = ['REPUESTOS', 'ACCESORIOS', 'LLANTAS', 'LUBRICANTES', 'BATERIAS', 'GPS', 'CASCOS'];
 
 /** The dry run (and its endpoints) only exists for a VENTAS carga waiting for Aplicar. */
 export const muestraSimulacionVentas = (carga) => carga?.tipo === 'VENTAS' && carga?.estado === 'VALIDADO';
 
-/** Options of the line selects: `[{ valor, etiqueta }]`, configured lines first. */
-export function opcionesDeLinea(configuradas) {
-  const limpias = (configuradas || []).map((l) => String(l).trim().toUpperCase()).filter(Boolean);
-  const base = limpias.length ? [...new Set(limpias)] : LINEAS_POR_DEFECTO;
+/**
+ * Options of the line selects, `[{ valor, etiqueta }]`: the `opciones_linea`
+ * the server sends with the payload (vigente lines plus the discard option),
+ * or the seven default lines plus the discard option when it sends none.
+ */
+export function opcionesDeLinea(opcionesLinea) {
+  if (Array.isArray(opcionesLinea)) return opcionesLinea;
   return [
-    ...base.map((l) => ({ valor: l, etiqueta: etiquetaLinea(l) })),
+    ...LINEAS_POR_DEFECTO.map((l) => ({ valor: l, etiqueta: etiquetaLinea(l) })),
     { valor: LINEA_DESCARTAR, etiqueta: ETIQUETA_DESCARTAR },
   ];
 }

@@ -1,39 +1,20 @@
 'use client';
 /**
  * State of the raw ERP VENTAS dry run of one carga: the live
- * `referencias-sin-linea` payload, the line options (`lineas_comerciales`,
- * or the seven defaults when it cannot be read) and the per-row and bulk
+ * `referencias-sin-linea` payload, the line options it carries
+ * (`opciones_linea`, see `opcionesDeLinea`) and the per-row and bulk
  * assignments. Nothing is requested while `activo` is false.
  */
 import { useCallback, useEffect, useState } from 'react';
-import {
-  asignarLineaReferencia, asignarLineasReferencias, getParametroVigente, getReferenciasSinLinea,
-} from '../../../lib/motored/api';
+import { asignarLineaReferencia, asignarLineasReferencias, getReferenciasSinLinea } from '../../../lib/motored/api';
 import { mensajeAsignacion, opcionesDeLinea } from './ventasErp';
-
-async function leerLineas() {
-  try {
-    const { valor } = await getParametroVigente('lineas_comerciales');
-    return opcionesDeLinea(Array.isArray(valor) ? valor : []);
-  } catch {
-    return opcionesDeLinea([]);
-  }
-}
-
-function useLineas(activo) {
-  const [lineas, setLineas] = useState(() => opcionesDeLinea([]));
-  useEffect(() => {
-    if (activo) leerLineas().then(setLineas);
-  }, [activo]);
-  return lineas;
-}
 
 export default function useReferenciasSinLinea(cargaId, activo) {
   const [datos, setDatos] = useState(null);
   const [error, setError] = useState('');
   const [aviso, setAviso] = useState('');
   const [ocupado, setOcupado] = useState(false);
-  const lineas = useLineas(activo);
+  const lineas = opcionesDeLinea(datos?.opciones_linea);
 
   const recargar = useCallback(async () => {
     setError('');
