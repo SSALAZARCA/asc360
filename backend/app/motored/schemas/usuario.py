@@ -19,12 +19,22 @@ class UsuarioPasswordReset(BaseModel):
     password: str
 
 
+class UsuarioCedulaUpdate(BaseModel):
+    """Body de `PUT /usuarios/{id}/cedula`. Se limpia y valida en
+    `services/cedula_usuario.py` (no aquí) para que el 422 lleve el mensaje
+    en español del servicio."""
+
+    cedula: str
+
+
 class UsuarioCreate(BaseModel):
     nombre: str
     email: str
     password: str
     role: str
     sucursal_ids: List[uuid.UUID] = []
+    # Optional: when sent, validated like an ADMIN set and stored approved.
+    cedula: Optional[str] = None
 
 
 class UsuarioRead(BaseModel):
@@ -53,5 +63,11 @@ class UsuarioRead(BaseModel):
     telegram_vinculado: bool = False
     # Lock expiry (UTC, offset included) while the account is locked; `_to_read` sets it.
     bloqueado_hasta: Optional[datetime] = None
+    # Link to the vendedor master (odd/motored-reporte-diario-asesor, T1).
+    # `_to_read` coerces `cedula_aprobada` to a bool and sets
+    # `cedula_en_maestro` (None when there is no cédula).
+    cedula: Optional[str] = None
+    cedula_aprobada: Optional[bool] = False
+    cedula_en_maestro: Optional[bool] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None

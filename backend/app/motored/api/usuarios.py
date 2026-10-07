@@ -24,6 +24,11 @@ sdd/motored-ventas-perdidas-bot, Phase 4 "Approval service + Usuarios UI"
   sobre SU PROPIA fila (nunca la de otro usuario -- spec "ADMIN
   telegram-linking independent of role").
 
+odd/motored-reporte-diario-asesor (T1) agrega la cédula del usuario, su
+vínculo con el maestro de Vendedores: `PUT|DELETE /usuarios/{id}/cedula` y
+`POST /usuarios/{id}/cedula/aprobar|rechazar` (ADMIN, auditados con la
+cédula enmascarada). Las reglas viven en `services/cedula_usuario.py`.
+
 odd/motored-salir-y-cambio-password agrega `POST /usuarios/{id}/password`
 (ADMIN fija una contraseña nueva a un usuario con acceso web) y exige un
 largo mínimo de contraseña también al crear usuarios.
@@ -34,6 +39,7 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import get_password_hash
@@ -41,9 +47,12 @@ from app.motored.deps import MotoredUser, get_motored_db_or_503, require_motored
 from app.motored.models.usuario import MotoredRole, Usuario
 from app.motored.models.usuario_sucursal import UsuarioSucursal
 from app.motored.schemas.usuario import (
-    UsuarioCreate, UsuarioPasswordReset, UsuarioRead,
+    UsuarioCedulaUpdate, UsuarioCreate, UsuarioPasswordReset, UsuarioRead,
 )
-from app.motored.services import auditoria, login_bloqueo, login_eventos, solicitudes, vinculacion
+from app.motored.services import (
+    auditoria, cedula_usuario, login_bloqueo, login_eventos, solicitudes,
+    vinculacion,
+)
 from app.motored.services.password_policy import aplicar_password, validar_password
 
 router = APIRouter(
@@ -61,8 +70,10 @@ PAGE_SIZE_DEFAULT = 50
 PAGE_SIZE_MAX = 200
 
 
-def _to_read(usuario: Usuario) -> dict:
+def _to_read(usuario: Usuario, en_maestro: Optional[bool] = None) -> dict:
     payload = UsuarioRead.model_validate(usuario).model_dump(mode="json")
+    payload["cedula_aprobada"] = bool(usuario.cedula_aprobada)
+    payload["cedula_en_maestro"] = en_maestro if usuario.cedula else None
     # `telegram_vinculado` no tiene atributo homónimo en `Usuario` (design
     # D5: el `telegram_id` crudo nunca se expone) -- se deriva acá, después
     # de `model_validate`, en vez de vía `from_attributes`.
@@ -110,7 +121,10 @@ async def list_usuarios(
     if status_filtro is not None:
         stmt = stmt.where(Usuario.status == status_filtro, Usuario.activo.is_(True))
     result = await db.execute(stmt)
-    return [_to_read(u) for u in result.scalars().all()]
+    usuarios = result.scalars().all()
+    en_maestro = await cedula_usuario.cedulas_en_maestro(
+        db, (u.cedula for u in usuarios))
+    return [_to_read(u, u.cedula in en_maestro) for u in usuarios]
 
 
 @router.get("/ingresos")
@@ -167,13 +181,27 @@ async def create_usuario(
         role=role,
         activo=True,
     )
+    await _cedula_al_crear(db, usuario, payload.cedula)
     db.add(usuario)
     for sucursal_id in payload.sucursal_ids:
         db.add(UsuarioSucursal(id=uuid.uuid4(), usuario_id=usuario.id, sucursal_id=sucursal_id))
 
     auditoria.audit_create(db, "usuario", usuario.id, uuid.UUID(user.user_id))
-    await db.commit()
-    return _to_read(usuario)
+    await _commit_cedula(db)
+    return _to_read(usuario, en_maestro=bool(usuario.cedula))
+
+
+async def _cedula_al_crear(db, usuario: Usuario, cedula) -> None:
+    """An optional cédula on create is an ADMIN entry: approved directly."""
+    usuario.cedula_aprobada = False
+    if cedula is None or not str(cedula).strip():
+        return
+    try:
+        await cedula_usuario.fijar_por_admin(db, usuario, cedula)
+    except (
+        cedula_usuario.CedulaInvalida, cedula_usuario.CedulaDuplicada,
+    ) as exc:
+        raise _http_cedula(exc)
 
 
 @router.post("/{usuario_id}/password")
@@ -287,6 +315,107 @@ async def rechazar_usuario(
     user: MotoredUser = Depends(_require_admin),
 ) -> dict:
     return await _resolver_solicitud_endpoint(db, usuario_id, "rejected", user)
+
+
+def _estado_cedula(usuario: Usuario) -> dict:
+    """Audit snapshot: the cédula is personal data, only its last 4."""
+    return {
+        "cedula": cedula_usuario.enmascarar(usuario.cedula),
+        "cedula_aprobada": bool(usuario.cedula_aprobada),
+    }
+
+
+def _http_cedula(exc: Exception) -> HTTPException:
+    codigo = (
+        status.HTTP_422_UNPROCESSABLE_ENTITY
+        if isinstance(exc, cedula_usuario.CedulaInvalida)
+        else status.HTTP_409_CONFLICT
+    )
+    return HTTPException(status_code=codigo, detail=str(exc))
+
+
+async def _cambiar_cedula(db, usuario_id, user, cambio) -> dict:
+    """Shared by the 4 cédula endpoints: run `cambio(usuario)` (may raise a
+    `cedula_usuario` error), audit the diff, commit."""
+    usuario = await _get_or_404(db, usuario_id)
+    antes = _estado_cedula(usuario)
+    try:
+        await cambio(usuario)
+    except (
+        cedula_usuario.CedulaInvalida, cedula_usuario.CedulaDuplicada,
+        cedula_usuario.CedulaSinPendiente,
+    ) as exc:
+        raise _http_cedula(exc)
+    auditoria.diff_and_audit(
+        db, "usuario", usuario.id, uuid.UUID(user.user_id),
+        before=antes, after=_estado_cedula(usuario),
+    )
+    await _commit_cedula(db)
+    return _to_read(usuario, en_maestro=bool(usuario.cedula_aprobada))
+
+
+async def _commit_cedula(db) -> None:
+    """Commit; a racing approval of the same cédula hits the partial
+    unique index and becomes the same clean 409."""
+    try:
+        await db.commit()
+    except IntegrityError as exc:
+        await db.rollback()
+        if not cedula_usuario.es_choque_unico(exc):
+            raise
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=cedula_usuario.MSG_CHOQUE,
+        )
+
+
+@router.put("/{usuario_id}/cedula")
+async def fijar_cedula(
+    usuario_id: uuid.UUID,
+    payload: UsuarioCedulaUpdate,
+    db: AsyncSession = Depends(get_motored_db_or_503),
+    user: MotoredUser = Depends(_require_admin),
+) -> dict:
+    """ADMIN set/edit: validated and approved directly."""
+    async def cambio(usuario):
+        await cedula_usuario.fijar_por_admin(db, usuario, payload.cedula)
+    return await _cambiar_cedula(db, usuario_id, user, cambio)
+
+
+@router.post("/{usuario_id}/cedula/aprobar")
+async def aprobar_cedula(
+    usuario_id: uuid.UUID,
+    db: AsyncSession = Depends(get_motored_db_or_503),
+    user: MotoredUser = Depends(_require_admin),
+) -> dict:
+    """Approve the cédula an asesor typed in Lore."""
+    async def cambio(usuario):
+        await cedula_usuario.aprobar(db, usuario)
+    return await _cambiar_cedula(db, usuario_id, user, cambio)
+
+
+@router.post("/{usuario_id}/cedula/rechazar")
+async def rechazar_cedula(
+    usuario_id: uuid.UUID,
+    db: AsyncSession = Depends(get_motored_db_or_503),
+    user: MotoredUser = Depends(_require_admin),
+) -> dict:
+    """Reject a PENDING cédula: it is cleared."""
+    async def cambio(usuario):
+        cedula_usuario.rechazar(usuario)
+    return await _cambiar_cedula(db, usuario_id, user, cambio)
+
+
+@router.delete("/{usuario_id}/cedula")
+async def quitar_cedula(
+    usuario_id: uuid.UUID,
+    db: AsyncSession = Depends(get_motored_db_or_503),
+    user: MotoredUser = Depends(_require_admin),
+) -> dict:
+    """Clear the cédula, approved or pending."""
+    async def cambio(usuario):
+        cedula_usuario.quitar(usuario)
+    return await _cambiar_cedula(db, usuario_id, user, cambio)
 
 
 @router.post("/me/telegram/codigo")

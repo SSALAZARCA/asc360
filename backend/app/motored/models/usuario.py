@@ -68,6 +68,12 @@ class Usuario(MotoredBase):
             "uq_usuario_telegram_admin", "telegram_id",
             unique=True, postgresql_where=text("role = 'ADMIN'"),
         ),
+        # One APPROVED usuario per cédula; pending duplicates are allowed
+        # (migration c6d2f8a41b97).
+        Index(
+            "uq_usuario_cedula_aprobada", "cedula",
+            unique=True, postgresql_where=text("cedula_aprobada"),
+        ),
         CheckConstraint(
             "status IN ('pending', 'approved', 'rejected')", name="ck_usuario_status",
         ),
@@ -92,6 +98,15 @@ class Usuario(MotoredBase):
     resuelto_en = Column(DateTime(timezone=True), nullable=True)
     codigo_vinculacion_hash = Column(String(64), nullable=True)
     codigo_vinculacion_expira = Column(DateTime(timezone=True), nullable=True)
+
+    # Link to the vendedor master (services/cedula_usuario.py). A cédula typed
+    # in Lore stays pending until an ADMIN approves it; only an approved one
+    # is used to send the daily asesor report.
+    cedula = Column(String(20), nullable=True)
+    cedula_aprobada = Column(
+        Boolean, nullable=False, default=False,
+        server_default=text("false"),
+    )
 
     # Naive UTC. Sessions (JWTs) issued before this instant are rejected.
     password_changed_at = Column(DateTime, nullable=True)

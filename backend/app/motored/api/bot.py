@@ -30,9 +30,10 @@ separado en `router.py`) -- ver el docstring de ese módulo para el detalle
 completo. Puro reordenamiento de archivos, sin cambio de comportamiento."""
 from __future__ import annotations
 
+import logging
 import re
 import uuid
-from typing import List
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, field_validator
@@ -54,13 +55,15 @@ from app.motored.deps_bot import (
 from app.motored.models.sucursal import Sucursal
 from app.motored.models.usuario import MotoredRole, Usuario
 from app.motored.models.usuario_sucursal import UsuarioSucursal
-from app.motored.services import solicitudes, vinculacion
+from app.motored.services import cedula_usuario, solicitudes, vinculacion
 
 router = APIRouter(
     prefix="/bot",
     tags=["motored-bot"],
     dependencies=[Depends(require_motored_ready), Depends(require_lore_ready)],
 )
+
+logger = logging.getLogger(__name__)
 
 _PHONE_PATTERN = re.compile(r"^\d{7,15}$")
 
@@ -69,6 +72,9 @@ class RegistroBotRequest(BaseModel):
     nombre: str
     phone: str
     sucursal_id: uuid.UUID
+    # odd/motored-reporte-diario-asesor (T1): the bot always sends it now;
+    # optional only so a bot deployed before this change keeps working.
+    cedula: Optional[str] = None
 
     @field_validator("nombre")
     @classmethod
@@ -83,6 +89,13 @@ class RegistroBotRequest(BaseModel):
         if not _PHONE_PATTERN.fullmatch(value):
             raise ValueError("phone debe tener entre 7 y 15 dígitos")
         return value
+
+    @field_validator("cedula")
+    @classmethod
+    def _cedula_limpia(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        return cedula_usuario.normalizar_cedula(value)
 
 
 class VincularBotRequest(BaseModel):
@@ -115,6 +128,25 @@ def _resumen_asesor(actor: BotActor) -> dict:
         "activo": actor.activo,
         "sucursales": actor.sucursal_ids,
     }
+
+
+async def _anotar_cedula_pendiente(
+    db: AsyncSession, usuario: Usuario, cedula: Optional[str]
+) -> None:
+    """The cédula typed in Lore is stored PENDING (an ADMIN approves it in
+    Gestión de usuarios). One outside the vendedor master is NOT rejected:
+    it is stored and Gestión de usuarios flags it, and the response never
+    says whether it was found (privacy). The log carries no cédula."""
+    if cedula is None:
+        return
+    validada = await cedula_usuario.validar_cedula(
+        db, cedula, usuario.id, para_aprobar=False)
+    usuario.cedula = validada.cedula
+    if not validada.en_maestro:
+        logger.info(
+            "Registro Lore %s: cédula fuera del maestro de vendedores, "
+            "queda pendiente para el administrador", usuario.id,
+        )
 
 
 @router.get("/yo")
@@ -187,7 +219,9 @@ async def registrarse(
         status="pending",
         telegram_id=telegram_id,
         phone=payload.phone,
+        cedula_aprobada=False,
     )
+    await _anotar_cedula_pendiente(db, usuario, payload.cedula)
     db.add(usuario)
     db.add(UsuarioSucursal(id=uuid.uuid4(), usuario_id=usuario.id, sucursal_id=payload.sucursal_id))
     try:
