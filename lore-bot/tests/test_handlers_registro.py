@@ -8,6 +8,8 @@ mocked `Update`/`Context`.
 import logging
 from unittest.mock import AsyncMock, MagicMock
 
+import pytest
+
 from telegram.ext import ConversationHandler
 
 from lore.api import (
@@ -272,7 +274,7 @@ async def test_recibir_celular_seven_digits_accepted(monkeypatch):
 
     result = await registro.recibir_celular(update, context)
 
-    assert result == RegistroEstado.SUCURSAL
+    assert result == RegistroEstado.CEDULA
     assert context.user_data[registro._DRAFT_KEY]["phone"] == "1234567"
 
 
@@ -287,7 +289,7 @@ async def test_recibir_celular_fifteen_digits_accepted(monkeypatch):
 
     result = await registro.recibir_celular(update, context)
 
-    assert result == RegistroEstado.SUCURSAL
+    assert result == RegistroEstado.CEDULA
     assert context.user_data[registro._DRAFT_KEY]["phone"] == "123456789012345"
 
 
@@ -302,45 +304,100 @@ async def test_recibir_celular_sixteen_digits_rejected():
     assert "phone" not in context.user_data[registro._DRAFT_KEY]
 
 
-async def test_recibir_celular_valid_shows_sucursal_picker(monkeypatch):
+async def test_recibir_celular_valid_asks_for_the_cedula():
+    update = _make_update(text="3001234567")
+    context = _make_context(user_data={registro._DRAFT_KEY: {"nombre": "Ana"}})
+
+    result = await registro.recibir_celular(update, context)
+
+    assert result == RegistroEstado.CEDULA
+    assert context.user_data[registro._DRAFT_KEY]["phone"] == "3001234567"
+    texto = update.message.reply_text.call_args.args[0]
+    assert "Paso 3 de 4" in texto
+    assert "cédula" in texto
+
+
+# --- recibir_cedula (odd/motored-reporte-diario-asesor, T1) ---------------
+
+_DRAFT_CON_CELULAR = {"nombre": "Ana", "phone": "3001234567"}
+
+
+def _contexto_con_celular():
+    return _make_context(
+        user_data={registro._DRAFT_KEY: dict(_DRAFT_CON_CELULAR)})
+
+
+async def test_recibir_cedula_valid_stores_it_clean_and_shows_sucursales(
+    monkeypatch,
+):
     fake_client = FakeClient()
     fake_client.sucursales.return_value = [{"id": "s1", "nombre": "Bogotá"}]
     monkeypatch.setattr(registro, "_cliente", _fake_cliente(fake_client))
 
-    update = _make_update(text="3001234567")
-    context = _make_context(user_data={registro._DRAFT_KEY: {"nombre": "Ana"}})
+    update = _make_update(text=" 79.845.123 ")
+    context = _contexto_con_celular()
 
-    result = await registro.recibir_celular(update, context)
+    result = await registro.recibir_cedula(update, context)
 
     assert result == RegistroEstado.SUCURSAL
-    assert context.user_data[registro._DRAFT_KEY]["phone"] == "3001234567"
-    assert context.user_data[registro._DRAFT_KEY]["sucursales"] == {"s1": "Bogotá"}
-    _, kwargs = update.message.reply_text.call_args
-    assert kwargs["reply_markup"] is not None
+    draft = context.user_data[registro._DRAFT_KEY]
+    assert draft["cedula"] == "79845123"
+    assert draft["sucursales"] == {"s1": "Bogotá"}
+    llamada = update.message.reply_text.call_args
+    assert "Paso 4 de 4" in llamada.args[0]
+    assert llamada.kwargs["reply_markup"] is not None
 
 
-async def test_recibir_celular_empty_sucursales_ends_conversation(monkeypatch):
+@pytest.mark.parametrize("texto", ["abc", "79-845-123", "12", "1" * 21, ""])
+async def test_recibir_cedula_invalid_reprompts(texto):
+    update = _make_update(text=texto)
+    context = _contexto_con_celular()
+
+    result = await registro.recibir_cedula(update, context)
+
+    assert result == RegistroEstado.CEDULA
+    assert "cedula" not in context.user_data[registro._DRAFT_KEY]
+    assert "cédula" in update.message.reply_text.call_args.args[0]
+
+
+async def test_recibir_cedula_retry_after_an_invalid_one(monkeypatch):
+    fake_client = FakeClient()
+    fake_client.sucursales.return_value = [{"id": "s1", "nombre": "Bogotá"}]
+    monkeypatch.setattr(registro, "_cliente", _fake_cliente(fake_client))
+    context = _contexto_con_celular()
+
+    primero = await registro.recibir_cedula(
+        _make_update(text="CC79"), context)
+    segundo = await registro.recibir_cedula(
+        _make_update(text="79845123"), context)
+
+    assert primero == RegistroEstado.CEDULA
+    assert segundo == RegistroEstado.SUCURSAL
+    assert context.user_data[registro._DRAFT_KEY]["cedula"] == "79845123"
+
+
+async def test_recibir_cedula_empty_sucursales_ends_conversation(monkeypatch):
     fake_client = FakeClient()
     fake_client.sucursales.return_value = []
     monkeypatch.setattr(registro, "_cliente", _fake_cliente(fake_client))
 
-    update = _make_update(text="3001234567")
-    context = _make_context(user_data={registro._DRAFT_KEY: {"nombre": "Ana"}})
+    update = _make_update(text="79845123")
+    context = _contexto_con_celular()
 
-    result = await registro.recibir_celular(update, context)
+    result = await registro.recibir_cedula(update, context)
 
     assert result == ConversationHandler.END
 
 
-async def test_recibir_celular_backend_caido_ends_conversation(monkeypatch):
+async def test_recibir_cedula_backend_caido_ends_conversation(monkeypatch):
     fake_client = FakeClient()
     fake_client.sucursales.side_effect = BackendCaido("boom")
     monkeypatch.setattr(registro, "_cliente", _fake_cliente(fake_client))
 
-    update = _make_update(text="3001234567")
-    context = _make_context(user_data={registro._DRAFT_KEY: {"nombre": "Ana"}})
+    update = _make_update(text="79845123")
+    context = _contexto_con_celular()
 
-    result = await registro.recibir_celular(update, context)
+    result = await registro.recibir_cedula(update, context)
 
     assert result == ConversationHandler.END
 
@@ -369,6 +426,25 @@ async def test_recibir_sucursal_shows_confirmation_summary():
     resumen = update.callback_query.edit_message_text.call_args.args[0]
     assert "Bogotá" in resumen
     assert "Ana" in resumen
+
+
+async def test_recibir_sucursal_resumen_shows_the_cedula():
+    update = _make_update(callback_data="lore_sucursal:s1")
+    context = _make_context(
+        user_data={
+            registro._DRAFT_KEY: {
+                "nombre": "Ana",
+                "phone": "3001234567",
+                "cedula": "79845123",
+                "sucursales": {"s1": "Bogotá"},
+            }
+        }
+    )
+
+    await registro.recibir_sucursal(update, context)
+
+    resumen = update.callback_query.edit_message_text.call_args.args[0]
+    assert "Cédula: 79845123" in resumen
 
 
 async def test_recibir_sucursal_escapes_markdown_special_chars_in_nombre():
@@ -435,6 +511,7 @@ async def test_confirmar_success_sends_registro_and_notifies_admins(monkeypatch)
             registro._DRAFT_KEY: {
                 "nombre": "Ana",
                 "phone": "3001234567",
+                "cedula": "79845123",
                 "sucursal_id": "s1",
             }
         }
@@ -444,7 +521,11 @@ async def test_confirmar_success_sends_registro_and_notifies_admins(monkeypatch)
 
     assert result == ConversationHandler.END
     assert registro._DRAFT_KEY not in context.user_data
-    fake_client.registro.assert_awaited_once_with(nombre="Ana", phone="3001234567", sucursal_id="s1")
+    fake_client.registro.assert_awaited_once_with(
+        nombre="Ana", phone="3001234567", sucursal_id="s1", cedula="79845123"
+    )
+    confirmacion = update.callback_query.edit_message_text.call_args.args[0]
+    assert "Recibido, el administrador lo revisará" in confirmacion
     assert context.bot.send_message.await_count == 2
     sent_chat_ids = {call.kwargs["chat_id"] for call in context.bot.send_message.await_args_list}
     assert sent_chat_ids == {111, 222}
@@ -663,10 +744,9 @@ async def test_prompts_nombre_retry_and_celular_have_cancel_button(termina_en_ca
     assert termina_en_cancelar(valido.message.reply_text.call_args)
 
 
-async def test_prompts_celular_retry_and_sucursal_picker_have_cancel_button(monkeypatch, termina_en_cancelar):
-    fake_client = FakeClient()
-    fake_client.sucursales.return_value = [{"id": "s1", "nombre": "Bogotá"}]
-    monkeypatch.setattr(registro, "_cliente", _fake_cliente(fake_client))
+async def test_prompts_celular_retry_and_cedula_have_cancel_button(
+    termina_en_cancelar,
+):
     context = _make_context(user_data={registro._DRAFT_KEY: {"nombre": "Ana"}})
     invalido = _make_update(text="12")
     valido = _make_update(text="3001234567")
@@ -675,9 +755,27 @@ async def test_prompts_celular_retry_and_sucursal_picker_have_cancel_button(monk
     await registro.recibir_celular(valido, context)
 
     assert termina_en_cancelar(invalido.message.reply_text.call_args)
+    assert termina_en_cancelar(valido.message.reply_text.call_args)
+
+
+async def test_prompts_cedula_retry_and_sucursal_picker_have_cancel_button(
+    monkeypatch, termina_en_cancelar,
+):
+    fake_client = FakeClient()
+    fake_client.sucursales.return_value = [{"id": "s1", "nombre": "Bogotá"}]
+    monkeypatch.setattr(registro, "_cliente", _fake_cliente(fake_client))
+    context = _contexto_con_celular()
+    invalido = _make_update(text="abc")
+    valido = _make_update(text="79845123")
+
+    await registro.recibir_cedula(invalido, context)
+    await registro.recibir_cedula(valido, context)
+
+    assert termina_en_cancelar(invalido.message.reply_text.call_args)
     llamada = valido.message.reply_text.call_args
     assert termina_en_cancelar(llamada)
-    assert llamada.kwargs["reply_markup"].inline_keyboard[0][0].callback_data == "lore_sucursal:s1"
+    teclado = llamada.kwargs["reply_markup"].inline_keyboard
+    assert teclado[0][0].callback_data == "lore_sucursal:s1"
 
 
 async def test_resumen_confirm_step_has_exactly_one_cancel_control():

@@ -251,18 +251,27 @@ class BackendClient:
             raise BackendCaido("non-JSON response body")
         return body
 
-    async def registro(self, *, nombre: str, phone: str, sucursal_id: str) -> dict:
+    async def registro(
+        self,
+        *,
+        nombre: str,
+        phone: str,
+        sucursal_id: str,
+        cedula: str | None = None,
+    ) -> dict:
         """`POST /registro` — self-registration. 201 on success (with
         `usuario` + `admin_telegram_ids` to push the approval notification
         to). `_request` already maps 409 `YA_REGISTRADO` via the shared
         error-code map; a 404 `SUCURSAL_NO_ENCONTRADA` is NOT auto-mapped
         (`_request` only intercepts 401/403/409/5xx), so it is handled here,
-        the same way `yo()` handles its own 404."""
-        response = await self._request(
-            "POST",
-            "/registro",
-            json={"nombre": nombre, "phone": phone, "sucursal_id": sucursal_id},
-        )
+        the same way `yo()` handles its own 404. `cedula` (digits only) is
+        sent only when given; the backend stores it pending approval."""
+        payload = {
+            "nombre": nombre, "phone": phone, "sucursal_id": sucursal_id,
+        }
+        if cedula is not None:
+            payload["cedula"] = cedula
+        response = await self._request("POST", "/registro", json=payload)
         if response.status_code == 404:
             code = _error_code(response)
             if code == "SUCURSAL_NO_ENCONTRADA":

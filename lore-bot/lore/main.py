@@ -79,6 +79,12 @@ def _build_registro_conversation() -> ConversationHandler:
             RegistroEstado.CELULAR: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, registro_handlers.recibir_celular)
             ],
+            RegistroEstado.CEDULA: [
+                MessageHandler(
+                    filters.TEXT & ~filters.COMMAND,
+                    registro_handlers.recibir_cedula,
+                )
+            ],
             RegistroEstado.SUCURSAL: [
                 CallbackQueryHandler(registro_handlers.recibir_sucursal, pattern=r"^lore_sucursal:")
             ],

@@ -46,6 +46,10 @@ logger = logging.getLogger("lore.handlers.registro")
 _DRAFT_KEY = "lore_registro"
 _PHONE_MIN_DIGITS = 7
 _PHONE_MAX_DIGITS = 15
+# The backend cleans the cédula like the vendedor master (digits only, dots
+# and spaces removed) and stores at most 20 digits; 3 is a sanity floor.
+_CEDULA_MIN_DIGITS = 3
+_CEDULA_MAX_DIGITS = 20
 
 
 def _cliente(telegram_id: int) -> BackendClient:
@@ -183,7 +187,7 @@ async def _iniciar_registro(
 ) -> int:
     context.user_data[_DRAFT_KEY] = {}
     await (mensaje or update.message).reply_text(
-        intro + "Paso 1 de 3 → ¿Cuál es tu *nombre completo*?",
+        intro + "Paso 1 de 4 → ¿Cuál es tu *nombre completo*?",
         parse_mode="Markdown",
         reply_markup=teclado_solo_cancelar(),
     )
@@ -201,7 +205,7 @@ async def recibir_nombre(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     context.user_data[_DRAFT_KEY]["nombre"] = nombre
     await update.message.reply_text(
-        "Paso 2 de 3 → ¿Cuál es tu *celular*? (solo dígitos, ej: 3001234567)",
+        "Paso 2 de 4 → ¿Cuál es tu *celular*? (solo dígitos, ej: 3001234567)",
         parse_mode="Markdown",
         reply_markup=teclado_solo_cancelar(),
     )
@@ -218,7 +222,48 @@ async def recibir_celular(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return RegistroEstado.CELULAR
 
     context.user_data[_DRAFT_KEY]["phone"] = phone
+    await update.message.reply_text(
+        "Paso 3 de 4 → ¿Cuál es tu *cédula*? (solo números, ej: 1130123456)",
+        parse_mode="Markdown",
+        reply_markup=teclado_solo_cancelar(),
+    )
+    return RegistroEstado.CEDULA
 
+
+def _limpiar_cedula(texto: str | None) -> str | None:
+    """Digits only after removing dots and spaces, like the backend; None
+    when it is not a plausible cédula."""
+    cedula = (texto or "").strip().replace(".", "").replace(" ", "")
+    if not cedula.isascii() or not cedula.isdigit():
+        return None
+    if not (_CEDULA_MIN_DIGITS <= len(cedula) <= _CEDULA_MAX_DIGITS):
+        return None
+    return cedula
+
+
+async def recibir_cedula(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> int:
+    """Step 3 (odd/motored-reporte-diario-asesor, T1): the cédula links the
+    asesor to the vendedor master for the daily report. Only the format is
+    checked here; the backend stores it pending until an administrator
+    approves it, and Lore never says whether it was found in the master."""
+    cedula = _limpiar_cedula(update.message.text)
+    if cedula is None:
+        await update.message.reply_text(
+            "Esa cédula no parece válida. "
+            "Mandame solo los números, ej: 1130123456",
+            reply_markup=teclado_solo_cancelar(),
+        )
+        return RegistroEstado.CEDULA
+
+    context.user_data[_DRAFT_KEY]["cedula"] = cedula
+    return await _mostrar_sucursales(update, context)
+
+
+async def _mostrar_sucursales(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> int:
     telegram_id = update.effective_user.id
     async with _cliente(telegram_id) as client:
         try:
@@ -239,7 +284,7 @@ async def recibir_celular(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         for s in sucursales
     ]
     await update.message.reply_text(
-        "Paso 3 de 3 → ¿En qué *sucursal* trabajás?",
+        "Paso 4 de 4 → ¿En qué *sucursal* trabajás?",
         parse_mode="Markdown",
         reply_markup=con_cancelar(kb),
     )
@@ -273,6 +318,7 @@ async def recibir_sucursal(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         "📋 *Resumen de tu solicitud:*\n\n"
         f"👤 Nombre: {_escapar_markdown(draft.get('nombre', ''))}\n"
         f"📱 Celular: {draft.get('phone')}\n"
+        f"🪪 Cédula: {draft.get('cedula', 'N/D')}\n"
         f"🏢 Sucursal: {sucursal_nombre}\n\n"
         "¿Confirmás el envío?"
     )
@@ -318,6 +364,7 @@ async def confirmar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
                 nombre=draft.get("nombre", ""),
                 phone=draft.get("phone", ""),
                 sucursal_id=draft.get("sucursal_id", ""),
+                cedula=draft.get("cedula"),
             )
         except (YaRegistrado, SucursalNoEncontrada, TelegramEsAdmin) as exc:
             await query.edit_message_text(_MENSAJES_ERROR_TERMINAL[type(exc)])
@@ -329,7 +376,8 @@ async def confirmar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
     await query.edit_message_text(
         "✅ *¡Solicitud enviada!*\n\nQueda pendiente de aprobación por un administrador. "
-        "Te aviso por acá apenas la revisen.",
+        "Te aviso por acá apenas la revisen.\n\n"
+        "🪪 Cédula: Recibido, el administrador lo revisará.",
         parse_mode="Markdown",
     )
     await _notificar_admins(context, resultado)

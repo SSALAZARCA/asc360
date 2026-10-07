@@ -1,3 +1,5 @@
+import json
+
 import httpx
 import pytest
 
@@ -204,6 +206,39 @@ async def test_registro_sends_payload_and_returns_body_on_201():
     assert captured["path"] == "/registro"
     assert data["usuario"]["status"] == "pending"
     assert data["admin_telegram_ids"] == [111, 222]
+
+
+_REGISTRO_VACIO = {"usuario": {}, "admin_telegram_ids": []}
+
+
+async def test_registro_sends_the_cedula_when_given():
+    captured = {}
+
+    def handler(request):
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(201, json=_REGISTRO_VACIO)
+
+    async with _client(handler) as client:
+        await client.registro(
+            nombre="Ana", phone="3001234567", sucursal_id="s1",
+            cedula="79845123",
+        )
+
+    assert captured["body"]["cedula"] == "79845123"
+
+
+async def test_registro_omits_the_cedula_when_absent():
+    captured = {}
+
+    def handler(request):
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(201, json=_REGISTRO_VACIO)
+
+    async with _client(handler) as client:
+        await client.registro(
+            nombre="Ana", phone="3001234567", sucursal_id="s1")
+
+    assert "cedula" not in captured["body"]
 
 
 async def test_registro_raises_ya_registrado_on_409():

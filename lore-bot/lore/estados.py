@@ -19,6 +19,7 @@ class RegistroEstado(IntEnum):
 
     NOMBRE = auto()
     CELULAR = auto()
+    CEDULA = auto()
     SUCURSAL = auto()
     CONFIRMAR = auto()
 
