@@ -627,12 +627,13 @@ async def calcular_kpis_asesor_detalle(db: AsyncSession, filtro: Filtro, cedula:
     if clave is not None:
         clientes = await lectura.clientes_tecnired_de_asesor(db, filtro, clave)
         top = await lectura.top_tecnired_de_asesor(db, filtro, clave)
+    fecha_datos = await q.ultima_fecha_venta(db, filtro.meses[-1], filtro.sucursal_ids)
     resultado = detalle.construir_detalle(
         cedula, tablero, periodo, por_mes, await calcular_kpis_comisiones(db, filtro), clientes, top,
         None if maestro is None else {
             "nombre": maestro.nombre, "cargo": maestro.cargo, "tienda": maestro.tienda,
             "sucursal_id": maestro.sucursal_id},
-        {i: nombre for i, (nombre, _) in extra["sucursales"].items()})
+        {i: nombre for i, (nombre, _) in extra["sucursales"].items()}, fecha_datos)
     if resultado is None:
         return None
     return {**_encabezado(filtro), **await lectura.frescura(db), **resultado}

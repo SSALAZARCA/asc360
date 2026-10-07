@@ -346,6 +346,23 @@ async def meses_disponibles(db: AsyncSession) -> List[str]:
     return [m for (m,) in filas.all()]
 
 
+async def ultima_fecha_venta(db, mes: str, sucursal_ids=None) -> Optional[datetime.date]:
+    """Day of the latest loaded (not ANULADO) sale of `mes` ("YYYY-MM") in the chosen stores, None when
+    the month has none. The summaries keep months, not days, so the live and summary paths both ask
+    here and agree."""
+    inicio = datetime.date(int(mes[:4]), int(mes[5:]), 1)
+    fin = (inicio + datetime.timedelta(days=32)).replace(day=1)
+    consulta = (
+        select(func.max(VentaDetalle.fecha))
+        .select_from(VentaDetalle)
+        .join(CargaArchivo, CargaArchivo.id == VentaDetalle.carga_id)
+        .where(CargaArchivo.estado != "ANULADO", VentaDetalle.fecha >= inicio, VentaDetalle.fecha < fin)
+    )
+    if sucursal_ids:
+        consulta = consulta.where(donde_sucursales(VentaDetalle.sucursal_id, sucursal_ids))
+    return (await db.execute(consulta)).scalar()
+
+
 async def consultar_cubo(db, filtro: Filtro, fecha_corte, dimension: str = DIM_ASESOR) -> List[FilaCubo]:
     """Cubo con HMCL SIEMPRE incluido: el modo HMCL lo aplica el llamador en
     Python con `es_hmcl` (`tablero_asesores.filtrar_cubo_por_hmcl`). La clave

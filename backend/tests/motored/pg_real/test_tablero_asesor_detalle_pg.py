@@ -24,6 +24,7 @@ from app.motored.models.referencia import Referencia
 from app.motored.models.sucursal import Sucursal
 from app.motored.models.vendedor import Vendedor
 from app.motored.models.venta_detalle import VentaDetalle
+from app.motored.services import festivos_colombia as festivos
 from app.motored.services import kpi_resumen
 from app.motored.services import kpi_resumen_lectura as lectura
 from app.motored.services import tablero_asesores as t
@@ -49,10 +50,10 @@ class Mundo:
         self.sur = Sucursal(id=uuid.uuid4(), nombre=f"Sur {sfx}", sic=f"S-{sfx}", codigo_co=codigo_co_unico())
         db.add_all([prov, self.norte, self.sur])
         await db.flush()
-        ref = Referencia(
+        ref = self.ref = Referencia(
             id=uuid.uuid4(), codigo=f"R-{sfx}", proveedor_id=prov.id, unidad_empaque=1, precio_normal=D("1"),
             linea_comercial="REPUESTOS")
-        carga = CargaArchivo(
+        carga = self.carga = CargaArchivo(
             id=uuid.uuid4(), tipo="VENTAS", origen="EXCEL", estado="APLICADO", nombre_archivo="x.xlsx",
             hash_sha256="h" * 64, ruta_objeto="r", bytes=1)
         db.add_all([
@@ -124,6 +125,13 @@ async def test_the_detail_of_ana_matches_the_hand_computed_world(sesion):
     comision = r["comision"]
     assert (comision["tramo"], comision["comision"], comision["venta_base"]) == ("BASE", 7.0, 700.0)
     assert (comision["sig"]["tramo"], comision["sig"]["falta"], comision["sig"]["meta"]) == ("PRO", 20.0, 720.0)
+    assert comision["fecha_datos"] == "2097-03-05"
+    assert comision["dias_habiles_restantes"] == festivos.dias_habiles(
+        datetime.date(2097, 3, 6), datetime.date(2097, 3, 31))
+    assert (comision["falta_100"], comision["falta_compuerta"]) == (100.0, 60)
+    assert comision["siguiente_tramo"]["nombre"] == "PRO" and comision["venta_hmcl"] is None
+    assert [x["nombre"] for x in comision["tramos"]] == ["BASE", "PRO", "ELITE"]
+    assert all(set(x) == {"nombre", "desde_pct", "tasa_pct"} for x in comision["tramos"])
     tiles = {x["id"]: x for x in r["tiles"]}
     assert tiles["venta"]["valor"] == 2700.0 and tiles["venta"]["ref"] == pytest.approx(4900 / 3)
     assert tiles["ticket"]["valor"] == pytest.approx(675) and tiles["facturas"]["valor"] == 4
@@ -135,6 +143,25 @@ async def test_the_detail_of_ana_matches_the_hand_computed_world(sesion):
     assert r["comparacion"]["tienda"]["asesores"] == 2
     assert r["comparacion"]["venta_mes"]["tienda"] == pytest.approx(800)
     assert r["comparacion"]["cumplimiento_mes"]["tienda"] == pytest.approx((0.875 + 1.5) / 2)
+
+
+async def test_the_last_sale_date_follows_the_store_filter_and_the_last_month(sesion):
+    mundo = await Mundo().crear(sesion)
+    nom = f"Dora {mundo.sfx}"
+    sesion.add(VentaDetalle(
+        id=uuid.uuid4(), carga_id=mundo.carga.id, fecha=datetime.date(2097, 3, 20), anio=2097, mes=3,
+        sucursal_id=mundo.sur.id, referencia_id=mundo.ref.id, origen="MOSTRADOR", cantidad=D(1), vendedor=nom,
+        vendedor_norm=normalizar_vendedor(nom), valor_bruto=D(50), valor_descuentos=D(0),
+        cliente_factura="Taller X", nro_documento=f"D1-{mundo.sfx}"))
+    await sesion.flush()
+
+    todas = await _detalle(sesion, mundo, "ana")
+    solo_norte = await _detalle(sesion, mundo, "ana", sucursales=[mundo.norte.id])
+    solo_febrero = await _detalle(sesion, mundo, "ana", meses=["2097-01", "2097-02"])
+
+    assert todas["comision"]["fecha_datos"] == "2097-03-20"
+    assert solo_norte["comision"]["fecha_datos"] == "2097-03-05"
+    assert solo_febrero["comision"]["fecha_datos"] == "2097-02-05"
 
 
 async def test_an_asesor_of_the_master_without_sales_has_an_empty_detail_and_an_unknown_one_is_none(sesion):

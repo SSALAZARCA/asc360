@@ -22,9 +22,12 @@ Convenciones (las del tablero): dinero en pesos, todo `pct`/`red_pct` es una FRA
   incluido) en venta y cumplimiento, y pesa por facturas, venta con costo y venta en las
   razones (ticket, margen, % Tecnired).
 """
+import datetime
+from decimal import ROUND_CEILING, Decimal
 from typing import Any, Dict, Iterable, List, Optional
 
 from app.motored.schemas.vendedor import limpiar_cedula
+from app.motored.services import festivos_colombia as festivos
 from app.motored.services import tablero_asesores as t
 
 
@@ -95,11 +98,29 @@ def _tiles(fila: Optional[Dict[str, Any]], personas: List[Dict[str, Any]], total
     ]
 
 
-def _comision(comision: Optional[Dict[str, Any]], cedula: str) -> Optional[Dict[str, Any]]:
+def _entero_hacia_arriba(valor: float) -> int:
+    return int(Decimal(str(valor)).to_integral_value(rounding=ROUND_CEILING))
+
+
+def _comision(
+    comision: Optional[Dict[str, Any]], cedula: str, fecha_datos: Optional[datetime.date] = None,
+) -> Optional[Dict[str, Any]]:
+    """The liquidation of the asesor plus what the card explains: the date of the last loaded sale
+    (`fecha_datos`), the working days left in the month after it (Mon-Sat, no Colombian holidays),
+    the gaps to the budget and to the bonus gate, the next tier and the HMCL part of the sale."""
     fila = next((a for a in (comision or {}).get("asesores", ()) if a["cedula"] == cedula), None)
     if fila is None:
         return None
     sig = fila["sig"]
+    mes = comision["mes_liquidado"]
+    dias = None
+    if fecha_datos is not None:
+        fin = datetime.date(int(mes[:4]), int(mes[5:]), 1) + datetime.timedelta(days=32)
+        fin = fin.replace(day=1) - datetime.timedelta(days=1)
+        dias = festivos.dias_habiles(fecha_datos + datetime.timedelta(days=1), fin)
+    cumplida, presupuesto = fila["venta_cumplimiento"], fila["presupuesto"]
+    falta_100 = max(0.0, presupuesto - cumplida)
+    umbral = fila["gate"]["umbral"]
     return {
         "mes": comision["mes_liquidado"], "tramo": fila["tramo"], "tasa_pct": fila["tasa_pct"],
         "comision": fila["comision"], "venta_base": fila["venta_comision"],
@@ -111,6 +132,17 @@ def _comision(comision: Optional[Dict[str, Any]], cedula: str) -> Optional[Dict[
             "tramo": sig["nombre"], "desde_pct": sig["desde_pct"], "tasa_pct": sig["tasa_pct"],
             "falta": sig["falta"], "gana": sig["gana"], "meta": fila["presupuesto"] * sig["desde_pct"] / 100,
         },
+        "fecha_datos": None if fecha_datos is None else fecha_datos.isoformat(),
+        "dias_habiles_restantes": dias,
+        "falta_100": falta_100,
+        "venta_diaria_necesaria": _entero_hacia_arriba(falta_100 / dias) if dias and falta_100 > 0 else None,
+        "falta_compuerta": max(0, _entero_hacia_arriba(umbral * presupuesto / 100 - cumplida)),
+        "siguiente_tramo": None if sig is None else {
+            "nombre": sig["nombre"], "falta": sig["falta"], "comision_si_llega": fila["comision"] + sig["gana"]},
+        "tramos": [
+            {"nombre": x["nombre"], "desde_pct": x["desde_pct"], "tasa_pct": x["tasa_pct"]}
+            for x in comision.get("tramos", ())],
+        "venta_hmcl": abs(cumplida - fila["venta_comision"]) if cumplida != fila["venta_comision"] else None,
     }
 
 
@@ -242,6 +274,7 @@ def construir_detalle(
     tecnired_top: Iterable[Any],
     maestro: Optional[Dict[str, Any]],
     tiendas: Dict[str, str],
+    fecha_datos: Optional[datetime.date] = None,
 ) -> Optional[Dict[str, Any]]:
     """El detalle del asesor de `cedula` (limpia), o None si no aparece ni en el tablero, ni en los
     presupuestos del filtro ni en el maestro (`maestro`: `{nombre, cargo, tienda, sucursal_id}`).
@@ -270,7 +303,7 @@ def construir_detalle(
         "puestos": _puestos(fila, personas, con_pct, cedula),
         "cumplimiento_mes": _cumplimiento_mes(
             _fila_cumplimiento(del_mes, cedula), ultimo, red_mes, tablero["reglas"]["cumplimiento_base"]),
-        "comision": _comision(comision, cedula),
+        "comision": _comision(comision, cedula, fecha_datos),
         "tiles": _tiles(fila, personas, total),
         "tendencia": _tendencia(por_mes, meses, cedula),
         "lineas": _lineas(fila, total),

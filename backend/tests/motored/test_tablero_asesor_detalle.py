@@ -12,6 +12,7 @@ February, so her February point is null):
 Sales period total: Ana 1900, Beto 1200, Cami 1100 (network 4200).
 Tecnired: only Ana, 100 (February, ACCESORIOS). Cost: 70 % of Ana's sales, 80 % of Beto's, 90 % of Cami's.
 """
+import datetime
 import uuid
 from decimal import Decimal as D
 from types import SimpleNamespace
@@ -95,9 +96,14 @@ def _mundo(presupuestos=PRESUPUESTOS, cubo=CUBO):
     return tablero, cumplimiento, por_mes
 
 
-def _detalle(cedula="100", comision=COMISION, maestro=None, clientes=4, top=TOP, **mundo):
+def _detalle(cedula="100", comision=COMISION, maestro=None, clientes=4, top=TOP, fecha_datos=None, **mundo):
     tablero, cumplimiento, por_mes = _mundo(**mundo)
-    return d.construir_detalle(cedula, tablero, cumplimiento, por_mes, comision, clientes, top, maestro, TIENDAS)
+    return d.construir_detalle(
+        cedula, tablero, cumplimiento, por_mes, comision, clientes, top, maestro, TIENDAS, fecha_datos)
+
+
+def _con_fila(**cambios):
+    return {**COMISION, "asesores": [{**COMISION["asesores"][0], **cambios}]}
 
 
 # --- cumplimiento_por_mes ----------------------------------------------------------------------
@@ -183,7 +189,42 @@ def test_comision_reuses_the_liquidation_of_the_last_month():
         "cumplimiento_pct": 0.7, "gate": {"umbral": 95.0, "cumple": False}, "bono_total": 0, "total_a_pagar": 7.0,
         "bonos": COMISION["asesores"][0]["bonos"],
         "sig": {"tramo": "PRO", "desde_pct": 90.0, "tasa_pct": 1.5, "falta": 200.0, "gana": 3.5, "meta": 900.0},
+        "fecha_datos": None, "dias_habiles_restantes": None, "falta_100": 300.0, "venta_diaria_necesaria": None,
+        "falta_compuerta": 250, "siguiente_tramo": {"nombre": "PRO", "falta": 200.0, "comision_si_llega": 10.5},
+        "venta_hmcl": None,
+        "tramos": COMISION["tramos"],
     }
+
+
+def test_the_days_left_run_from_the_day_after_the_last_sale_to_month_end_without_sundays_and_holidays():
+    # Fri 2026-03-20: Sat 21, (Sun 22), (Mon 23 is a holiday), Tue 24 - Sat 28, (Sun 29), Mon 30, Tue 31
+    c = _detalle(fecha_datos=datetime.date(2026, 3, 20))["comision"]
+
+    assert c["fecha_datos"] == "2026-03-20" and c["dias_habiles_restantes"] == 8
+    assert c["venta_diaria_necesaria"] == 38  # ceil(300 / 8)
+
+
+def test_no_days_left_means_no_daily_sale_to_ask_for():
+    c = _detalle(fecha_datos=datetime.date(2026, 3, 31))["comision"]
+
+    assert c["dias_habiles_restantes"] == 0 and c["venta_diaria_necesaria"] is None and c["falta_100"] == 300.0
+
+
+def test_nothing_is_missing_for_the_budget_once_it_is_reached():
+    c = _detalle(comision=_con_fila(venta_cumplimiento=1200.0), fecha_datos=datetime.date(2026, 3, 20))["comision"]
+
+    assert c["falta_100"] == 0 and c["venta_diaria_necesaria"] is None
+
+
+def test_the_gate_gap_is_what_the_umbral_asks_over_the_budget_rounded_up():
+    assert _detalle(comision=_con_fila(presupuesto=1001))["comision"]["falta_compuerta"] == 251  # ceil(950.95) - 700
+    assert _detalle(comision=_con_fila(venta_cumplimiento=990.0))["comision"]["falta_compuerta"] == 0
+
+
+def test_hmcl_sales_are_the_difference_between_the_two_bases_only_when_they_differ():
+    c = _detalle(comision=_con_fila(venta_cumplimiento=900.0))["comision"]
+
+    assert c["venta_hmcl"] == 200.0
 
 
 def test_comision_is_null_when_the_asesor_is_not_liquidated():
