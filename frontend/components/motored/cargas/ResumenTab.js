@@ -120,7 +120,7 @@ function Conteos({ informe }) {
   );
 }
 
-function useAccionesCarga({ cargaId, reload, onChanged }) {
+function useAccionesCarga({ cargaId, reload, onChanged, confirmarVaciado }) {
   const [accionando, setAccionando] = useState(false);
   const [accionError, setAccionError] = useState('');
 
@@ -142,7 +142,9 @@ function useAccionesCarga({ cargaId, reload, onChanged }) {
   return {
     accionando,
     accionError,
-    handleAplicar: () => ejecutar(() => aplicarCarga(cargaId), 'No se pudo aplicar la carga'),
+    handleAplicar: () => ejecutar(
+      () => aplicarCarga(cargaId, { confirmarVaciado }), 'No se pudo aplicar la carga',
+    ),
     handleAnular: () => {
       if (!window.confirm(CONFIRMAR_ANULAR)) {
         return;
@@ -177,9 +179,6 @@ function AccionesCarga({ estado, accionando, bloqueo, onAplicar, onAnular }) {
 export default function ResumenTab({ carga, onChanged }) {
   const { informe, error, reload } = useInforme(carga.id, carga.estado);
   const [rol, setRol] = useState(null);
-  const { accionando, accionError, handleAplicar, handleAnular } = useAccionesCarga({
-    cargaId: carga.id, reload, onChanged,
-  });
 
   useEffect(() => {
     setRol(getRolActual());
@@ -187,6 +186,13 @@ export default function ResumenTab({ carga, onChanged }) {
 
   const puedeEscribir = rol === 'ADMIN' || rol === 'COMPRAS';
   const simulacion = useSimulacionVentas(carga, puedeEscribir);
+  // The server only deletes other tiendas' sales when told the user saw it.
+  const confirmarVaciado = Boolean(
+    simulacion.vaciado?.requiereConfirmar && simulacion.entendido,
+  );
+  const { accionando, accionError, handleAplicar, handleAnular } = useAccionesCarga({
+    cargaId: carga.id, reload, onChanged, confirmarVaciado,
+  });
 
   if (error) return <p style={{ color: 'var(--motored-danger, #c0392b)', fontSize: '0.8rem' }}>{error}</p>;
   if (!informe) return <p style={{ color: 'var(--motored-text-muted, #5a5a5a)', fontSize: '0.8rem' }}>Cargando informe...</p>;

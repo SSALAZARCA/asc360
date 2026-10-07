@@ -473,8 +473,13 @@ export async function getVaciadoPrevisto(cargaId) {
 // supera el timeout por defecto de 30 s.
 const APLICAR_TIMEOUT_MS = 10 * 60 * 1000;
 
-export async function aplicarCarga(cargaId) {
-  return motoredFetchJson(`/cargas/${cargaId}/aplicar`, { method: 'POST', timeout: APLICAR_TIMEOUT_MS });
+/**
+ * `confirmarVaciado`: the user acknowledged that this VENTAS load deletes
+ * other tiendas' sales for the month (the server refuses it otherwise).
+ */
+export async function aplicarCarga(cargaId, { confirmarVaciado = false } = {}) {
+  const qs = confirmarVaciado ? '?confirmar_vaciado=true' : '';
+  return motoredFetchJson(`/cargas/${cargaId}/aplicar${qs}`, { method: 'POST', timeout: APLICAR_TIMEOUT_MS });
 }
 
 export async function anularCarga(cargaId) {

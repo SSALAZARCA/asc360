@@ -130,8 +130,22 @@ describe('Resumen -- planned purge before Aplicar', () => {
     fireEvent.click(screen.getByLabelText('Entiendo que se borran esas ventas'));
     expect(aplicar).toBeEnabled();
     fireEvent.click(aplicar);
-    await waitFor(() => expect(mockAplicar).toHaveBeenCalledWith('carga-1'));
+    await waitFor(() => expect(mockAplicar).toHaveBeenCalledWith(
+      'carga-1', { confirmarVaciado: true },
+    ));
     expect(mockVaciado).toHaveBeenCalledWith('carga-1');
+  });
+
+  it('does not confirm a purge when nothing is deleted', async () => {
+    mockVaciado.mockResolvedValue([]);
+    mockAplicar.mockResolvedValue({});
+    await renderizar();
+    const aplicar = await screen.findByRole('button', { name: 'Aplicar' });
+    await waitFor(() => expect(aplicar).toBeEnabled());
+    fireEvent.click(aplicar);
+    await waitFor(() => expect(mockAplicar).toHaveBeenCalledWith(
+      'carga-1', { confirmarVaciado: false },
+    ));
   });
 
   it('shows nothing extra and keeps Aplicar enabled when nothing is deleted', async () => {

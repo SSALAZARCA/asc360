@@ -99,7 +99,7 @@ describe('ResumenTab -- aviso de filas con errores que no se cargaron', () => {
 
     fireEvent.click(await screen.findByText('Aplicar'));
 
-    await waitFor(() => expect(mockAplicar).toHaveBeenCalledWith('carga-1'));
+    await waitFor(() => expect(mockAplicar).toHaveBeenCalledWith('carga-1', { confirmarVaciado: false }));
     await waitFor(() => expect(mockGetInforme).toHaveBeenCalledTimes(2));
     expect(await screen.findByText(/^2 filas con errores no se cargaron\./)).toBeInTheDocument();
   });

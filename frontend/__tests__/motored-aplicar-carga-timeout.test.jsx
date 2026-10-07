@@ -35,3 +35,11 @@ it('still aborts the apply request eventually', () => {
 
   expect(signal.aborted).toBe(true);
 });
+
+it('asks the server to confirm the purge only when told to', () => {
+  aplicarCarga('carga-1', { confirmarVaciado: true });
+  aplicarCarga('carga-2');
+
+  expect(global.fetch.mock.calls[0][0]).toMatch(/\/cargas\/carga-1\/aplicar\?confirmar_vaciado=true$/);
+  expect(global.fetch.mock.calls[1][0]).toMatch(/\/cargas\/carga-2\/aplicar$/);
+});
