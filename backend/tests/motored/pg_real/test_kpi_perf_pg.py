@@ -46,14 +46,15 @@ CORTE = datetime.date(2097, 9, 28)
 _VENTAS = text("""
 INSERT INTO venta_detalle (id, carga_id, fecha, anio, mes, sucursal_id, referencia_id, origen, cantidad,
                            vendedor, vendedor_norm, valor_bruto, valor_descuentos, cliente_factura,
-                           nro_documento, created_at)
+                           nro_documento, created_at, costo)
 SELECT gen_random_uuid(), :carga, make_date(2097, m, 1 + (g % 27)), 2097, m, s.id, r.id,
        CASE WHEN g % 3 = 0 THEN 'MOSTRADOR' ELSE 'VENTA' END, 1 + (g % 5),
        'V' || s.rn || '-' || (g % 6), 'V' || s.rn || '-' || (g % 6),
        (1000 + (g * 37) % 90000)::numeric, (((g % 10) * (1000 + (g * 37) % 90000)) / 100)::numeric(16, 2),
        CASE WHEN g % 50 = 0 THEN '900723988' WHEN g % 70 = 0 THEN :tec
             ELSE '9' || lpad(((g * 31 + s.rn) % 4000)::text, 8, '0') END,
-       (s.rn * 1000000 + m * 100000 + g / 4)::text, now()
+       (s.rn * 1000000 + m * 100000 + g / 4)::text, now(),
+       CASE WHEN g % 2 = 0 THEN ((1 + (g % 5)) * 400)::numeric ELSE NULL END  -- half the lines carry a real cost
 FROM generate_series(1, 9) AS m
 CROSS JOIN (SELECT id, row_number() OVER (ORDER BY nombre) AS rn FROM sucursal WHERE nombre LIKE :prefijo) AS s
 CROSS JOIN generate_series(1, :n) AS g

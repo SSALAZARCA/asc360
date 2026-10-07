@@ -264,7 +264,6 @@ def _base(lineas: Tuple[str, ...], nits: Tuple[str, ...], claves: Optional[Seque
     cliente = q._expr_cliente_norm()
     corte = select(func.max(KpiCostoReferencia.fecha_corte)).scalar_subquery()
     unitario = KpiCostoReferencia.costo_unitario
-    costo = VentaDetalle.cantidad * unitario
     consulta = (
         select(
             cast(func.date_trunc("month", VentaDetalle.fecha), Date).label("anio_mes"),
@@ -280,9 +279,10 @@ def _base(lineas: Tuple[str, ...], nits: Tuple[str, ...], claves: Optional[Seque
             VentaDetalle.valor_descuentos.label("descuentos"),
             VentaDetalle.cantidad.label("cantidad"),
             VentaDetalle.nro_documento.label("nro_documento"),
-            unitario.is_not(None).label("con_costo"),
-            func.coalesce(costo, 0).label("costo"),
-            case((KpiCostoReferencia.fuente == FUENTE_MAESTRO, costo), else_=0).label("costo_estimado"),
+            q._expr_con_costo(VentaDetalle.costo, unitario).label("con_costo"),
+            q._expr_costo_fila(VentaDetalle.cantidad, VentaDetalle.costo, unitario).label("costo"),
+            q._expr_costo_estimado_fila(
+                VentaDetalle.cantidad, VentaDetalle.costo, unitario, KpiCostoReferencia.fuente).label("costo_estimado"),
         )
         .select_from(VentaDetalle)
         .join(CargaArchivo, CargaArchivo.id == VentaDetalle.carga_id)

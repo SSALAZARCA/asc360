@@ -122,15 +122,16 @@ def filtro_costo_venta(filtro: Filtro) -> Tuple[Filtro, int]:
 async def consultar_costo_venta(
     db: AsyncSession, filtro: Filtro, fecha_corte: Optional[datetime.date],
 ) -> Tuple[Dict[str, Decimal], int]:
-    """`({sucursal_id: costo de venta}, dias de la ventana)`: suma de cantidad x costo
-    unitario (el mismo costo por referencia del margen del tablero) de las ventas
-    de los ultimos 3 meses. Las referencias sin costo aportan 0."""
+    """`({sucursal_id: costo de venta}, dias de la ventana)`: suma del costo por linea (la
+    misma regla del margen del tablero, `q._expr_costo_fila`: el costo real del ERP si la
+    linea lo trae, si no cantidad x costo unitario de respaldo) de las ventas de los
+    ultimos 3 meses. Las lineas sin costo real ni respaldo aportan 0."""
     ventana, dias = filtro_costo_venta(filtro)
     costos = q._subconsulta_costos(fecha_corte)
     lineas = q._lineas_por_referencia(ventana.reglas)
     tienda = cast(q.principal_expr(VentaDetalle.sucursal_id), String)
     consulta = q._desde_ventas(
-        select(tienda, func.coalesce(func.sum(VentaDetalle.cantidad * costos.c.costo_unitario), 0)).group_by(tienda),
+        select(tienda, func.coalesce(func.sum(q._costo_de_venta(costos)), 0)).group_by(tienda),
         ventana, lineas, solo_lineas_reconocidas=False, costos=costos, con_vendedor=False, por_sucursal=True)
     return {s: Decimal(v) for s, v in (await db.execute(consulta)).all()}, dias
 

@@ -124,16 +124,17 @@ class Mundo:
         await db.flush()
         return self
 
-    async def linea(self, db, suc, ref, vend, cli, mes, dia, nro, cant, bruto, desc, origen, carga):
+    async def linea(self, db, suc, ref, vend, cli, mes, dia, nro, cant, bruto, desc, origen, carga, costo=None):
         fila = dict(
             suc=suc.id, ref=ref, vend=vend, cli=cli, fecha=datetime.date(2097, mes, dia), nro=nro, cant=D(cant),
-            bruto=D(bruto), desc=D(desc), origen=origen, carga=carga.id, anulada=carga is self.c_anulada)
+            bruto=D(bruto), desc=D(desc), origen=origen, carga=carga.id, anulada=carga is self.c_anulada,
+            costo=None if costo is None else D(costo))
         self.lineas.append(fila)
         db.add(VentaDetalle(
             id=uuid.uuid4(), carga_id=carga.id, fecha=fila["fecha"], anio=2097, mes=mes, sucursal_id=suc.id,
             referencia_id=self.refs[ref].id, origen=origen, cantidad=fila["cant"], vendedor=vend,
             vendedor_norm=vend, valor_bruto=fila["bruto"], valor_descuentos=fila["desc"],
-            cliente_factura=cli, nro_documento=f"{nro}-{self.s1.nombre}"))
+            cliente_factura=cli, nro_documento=f"{nro}-{self.s1.nombre}", costo=fila["costo"]))
 
     async def _inventario(self, db):
         def inv(carga, suc, ref, costo, exist, corte=CORTE, bodega="B1"):
@@ -176,12 +177,23 @@ class Mundo:
             cliente = normalizar_nit(f["cli"])
             nit = cliente if cliente in nits or cliente == self.tec else None
             costo, fuente = self.costos.get(f["ref"], (None, None))
-            llave = (mes, f["suc"], f["vend"], linea, nit, f["origen"].strip().upper() == "MOSTRADOR", costo is not None)
+            real = f["costo"] is not None and f["costo"] != 0
+            llave = (mes, f["suc"], f["vend"], linea, nit, f["origen"].strip().upper() == "MOSTRADOR",
+                     real or costo is not None)
             acc = venta.setdefault(llave, [D(0)] * 4 + [0, D(0), D(0)])
             neto = f["bruto"] - f["desc"]
-            total = f["cant"] * costo if costo is not None else D(0)
-            for i, v in enumerate((neto, f["bruto"], f["desc"], f["cant"], 1, total,
-                                   total if fuente == "maestro" else D(0))):
+            # The cost rule, written out (not through the SQL under test): a real cost keeps the
+            # sign of the quantity; otherwise quantity x unit fallback; quantity 0 keeps the cost.
+            if real and f["cant"] != 0:
+                total = abs(f["costo"]) * (1 if f["cant"] > 0 else -1)
+            elif real:
+                total = f["costo"]
+            elif f["cant"] != 0 and costo is not None:
+                total = f["cant"] * costo
+            else:
+                total = D(0)
+            estimado = total if (not real and fuente == "maestro") else D(0)
+            for i, v in enumerate((neto, f["bruto"], f["desc"], f["cant"], 1, total, estimado)):
                 acc[i] += v
             facturas[(mes, f["suc"], f["vend"], nit, f["nro"])].update([linea] if linea else [])
             if linea:

@@ -47,7 +47,7 @@ def test_alembic_single_head():
     guion = ScriptDirectory.from_config(
         Config(str(_RAIZ / "alembic_motored.ini")))
 
-    assert guion.get_heads() == ["d2b7a94e5c61"]  # venta_detalle.costo
+    assert guion.get_heads() == ["e5c9b3d8f024"]  # KPI summaries dirty (real cost)
 
 
 def test_m1_chains_onto_the_login_lockout_head():

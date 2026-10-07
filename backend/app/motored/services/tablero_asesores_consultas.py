@@ -233,10 +233,37 @@ def _subconsulta_costos(fecha_corte: Optional[datetime.date]):
     )
 
 
-def _expr_costo_estimado(costos):
-    """Parte del costo de una linea de venta tomada del maestro (`precio_normal`)."""
-    return func.coalesce(func.sum(case(
-        (costos.c.fuente == FUENTE_MAESTRO, VentaDetalle.cantidad * costos.c.costo_unitario), else_=0)), 0)
+def _con_costo_real(costo):
+    """The line carries a real ERP cost (`venta_detalle.costo` not NULL and not 0)."""
+    return and_(costo.is_not(None), costo != 0)
+
+
+def _expr_costo_fila(cantidad, costo, unitario):
+    """LA regla de costo por linea de venta (todo lector de margen/costo la usa, tambien el
+    resumen): con costo real y cantidad != 0, `signo(cantidad) x |costo|` (el signo lo manda
+    la cantidad); sin costo real, `cantidad x costo unitario` de respaldo (negativo en una
+    devolucion; 0 si la referencia no tiene respaldo); con cantidad 0, el costo tal cual o 0."""
+    por_cantidad = case((cantidad > 0, func.abs(costo)), else_=-func.abs(costo))
+    return func.coalesce(case(
+        (and_(_con_costo_real(costo), cantidad != 0), por_cantidad),
+        (_con_costo_real(costo), costo),
+        (cantidad != 0, cantidad * unitario),
+        else_=0), 0)
+
+
+def _expr_con_costo(costo, unitario):
+    """The line has a cost: the real one, or the unit fallback (else it stays out of the margin)."""
+    return or_(_con_costo_real(costo), unitario.is_not(None))
+
+
+def _expr_costo_estimado_fila(cantidad, costo, unitario, fuente):
+    """Parte del costo de una linea que no trae costo real y se valoro con `precio_normal`."""
+    return case((and_(~_con_costo_real(costo), fuente == FUENTE_MAESTRO), cantidad * unitario), else_=0)
+
+
+def _costo_de_venta(costos):
+    """`_expr_costo_fila` over `venta_detalle` and the live `costos` join."""
+    return _expr_costo_fila(VentaDetalle.cantidad, VentaDetalle.costo, costos.c.costo_unitario)
 
 
 def _valoracion_inventario():
@@ -334,7 +361,7 @@ async def consultar_cubo(db, filtro: Filtro, fecha_corte, dimension: str = DIM_A
         _expr_es_hmcl(cliente, reglas).label("es_hmcl"),
         cliente.in_(select(ClienteTecnired.nit)).label("es_tecnired"),
         _expr_es_mostrador().label("es_mostrador"),
-        costos.c.costo_unitario.is_not(None).label("con_costo"),
+        _expr_con_costo(VentaDetalle.costo, costos.c.costo_unitario).label("con_costo"),
     ]
     consulta = select(
         *columnas,
@@ -343,8 +370,9 @@ async def consultar_cubo(db, filtro: Filtro, fecha_corte, dimension: str = DIM_A
         func.sum(VentaDetalle.valor_descuentos),
         func.sum(VentaDetalle.cantidad),
         func.count(),
-        func.coalesce(func.sum(VentaDetalle.cantidad * costos.c.costo_unitario), 0),
-        _expr_costo_estimado(costos),
+        func.coalesce(func.sum(_costo_de_venta(costos)), 0),
+        func.coalesce(func.sum(_expr_costo_estimado_fila(
+            VentaDetalle.cantidad, VentaDetalle.costo, costos.c.costo_unitario, costos.c.fuente)), 0),
     ).group_by(*columnas)
     consulta = _desde_ventas(
         consulta, filtro, lineas, solo_lineas_reconocidas=False, costos=costos, aplicar_hmcl=False,
