@@ -141,3 +141,5 @@ No PDF. Each asesor gets a personal link through Lore that opens the single-ases
     - "Anular enlace": after a confirmation.
   - **Configuración:** the daily-send on/off switch and "Reenviar a todos".
 - **Next (2026-10-08):** T3a token table migration on top of c6d2f8a41b97, then ping 84 with the model name and head.
+- [x] T3a (e222999 backend + migration 86b1df9d3d5f, 8233293 UI; backend 6298 passed, pg_real 751 passed, jest 2255 passed). Needs `MOTORED_PUBLIC_URL` set in Coolify.
+- **Next:** T3b, the daily Lore send (ledger, readiness and deadline, Configuración switch OFF by default, "Reenviar a todos"); T3c, the `deps.py` allowlist once a7's endpoint is ready.
