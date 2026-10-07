@@ -30,6 +30,10 @@
  * odd/motored-reporte-diario-asesor (T1) adds a "Cédula" column to both
  * tables (`components/motored/usuarios/CedulaUsuario.js`): state, editor
  * and the ADMIN approve/reject/clear actions.
+ *
+ * T3a adds "Enlace del informe" to the usuarios table
+ * (`components/motored/usuarios/EnlaceInforme.js`): the asesor's personal
+ * report link, with "Generar enlace nuevo" and "Anular enlace".
  */
 import MotoredTableScroll from '../../../components/motored/MotoredTableScroll';
 import MotoredIconAction from '../../../components/motored/MotoredIconAction';
@@ -40,6 +44,9 @@ import RolesPermisosMatriz from '../../../components/motored/usuarios/RolesPermi
 import {
   CedulaCelda, CedulaHeader, useCedulaAcciones,
 } from '../../../components/motored/usuarios/CedulaUsuario';
+import {
+  EnlaceInformeCelda, EnlaceInformeHeader,
+} from '../../../components/motored/usuarios/EnlaceInforme';
 import UsuarioCreateForm from '../../../components/motored/UsuarioCreateForm';
 import CambiarPasswordForm from '../../../components/motored/CambiarPasswordForm';
 import {
@@ -85,6 +92,7 @@ function UsuariosTable({ usuarios, onDeactivate, onReactivate, ownUserId, onVinc
             <th style={{ padding: '0 12px 8px 0' }}>Email</th>
             <th style={{ padding: '0 12px 8px 0' }}>Rol</th>
             <th style={{ padding: '0 12px 8px 0' }}><CedulaHeader /></th>
+            <th style={{ padding: '0 12px 8px 0' }}><EnlaceInformeHeader /></th>
             <th style={{ padding: '0 12px 8px 0' }}>Estado</th>
             <th />
           </tr>
@@ -97,6 +105,9 @@ function UsuariosTable({ usuarios, onDeactivate, onReactivate, ownUserId, onVinc
               <td style={{ padding: '10px 12px 10px 0' }}>{u.role}</td>
               <td style={{ padding: '10px 12px 10px 0' }}>
                 <CedulaCelda usuario={u} acciones={cedulaAcciones} />
+              </td>
+              <td style={{ padding: '10px 12px 10px 0' }}>
+                <EnlaceInformeCelda usuario={u} />
               </td>
               <td style={{ padding: '10px 12px 10px 0', whiteSpace: 'nowrap' }}>
                 {u.activo ? 'Activo' : 'Inactivo'}

@@ -362,6 +362,29 @@ export async function quitarCedulaUsuario(id) {
   return motoredFetchJson(`/usuarios/${id}/cedula`, { method: 'DELETE' });
 }
 
+// ---------------------------------------------------------------------------
+// Usuarios -- the asesor's personal report link
+// (odd/motored-reporte-diario-asesor, T3a). ADMIN only. Every call returns
+// `{activo, creado_en, ultimo_acceso_en}`; never the token or the URL.
+// ---------------------------------------------------------------------------
+
+export async function obtenerEnlaceInforme(id) {
+  return motoredFetchJson(`/usuarios/${id}/enlace-informe`);
+}
+
+/** Cancels the previous link and Lore sends the new one to the asesor. */
+export async function generarEnlaceInforme(id) {
+  return motoredFetchJson(`/usuarios/${id}/enlace-informe`, {
+    method: 'POST',
+  });
+}
+
+export async function anularEnlaceInforme(id) {
+  return motoredFetchJson(`/usuarios/${id}/enlace-informe`, {
+    method: 'DELETE',
+  });
+}
+
 /** Genera un código de un solo uso (10 min) para vincular el Telegram
  * PROPIO del ADMIN o COMPRAS autenticado -- nunca el de otro usuario. */
 export async function generarCodigoTelegram() {
