@@ -604,13 +604,13 @@ def procesar_fila(
         _extraer(fila_raw, mapa_columnas, "Bodega"), bodegas_excluidas
     ):
         return MarcaFila.BODEGA_EXCLUIDA
-    if lineas_mod.es_tipo_excluido(
-            _tipo_erp(fila_raw, mapa_columnas), tipos_excluidos):
-        return lineas_mod.MarcaTipoExcluido.TIPO_EXCLUIDO
     comunes = dict(
         numero_fila=numero_fila, lote=lote, mapa_columnas=mapa_columnas,
         cache=cache, carga_id=carga_id, proveedor_id=proveedor_id,
         sucursal_por_co=sucursal_por_co)
+    if lineas_mod.es_tipo_excluido(
+            _tipo_erp(fila_raw, mapa_columnas), tipos_excluidos):
+        return _procesar_tipo_excluido(fila_raw, comunes, sucursal_por_co)
     referencia_id = resolver_referencia(
         cache, _texto(_extraer(fila_raw, mapa_columnas, "Referencia")))
     clase = lineas_mod.clase_de_fila(
@@ -626,6 +626,25 @@ def procesar_fila(
             fila_raw, mapa_columnas):
         _marcar_co_vacio(resultado[0])
     return resultado
+
+
+def _procesar_tipo_excluido(
+    fila_raw: Sequence[Any], comunes: Dict[str, Any],
+    sucursal_por_co: Optional[Dict[str, uuid.UUID]],
+) -> ResultadoFila:
+    """Un tipo de venta del ERP de la lista de excluidos nunca es demanda ni
+    error: va solo a `venta_detalle` (como las filas fuera de linea) cuando
+    su fecha, cantidad, campos de detalle, sucursal y referencia resuelven; si
+    algo no resuelve se omite en silencio. Siempre se cuenta aparte: sin fila
+    que stagear devuelve la marca `TIPO_EXCLUIDO`."""
+    fila = _procesar_fila_solo_detalle(fila_raw, **comunes)
+    if fila is None:
+        return lineas_mod.MarcaTipoExcluido.TIPO_EXCLUIDO
+    _marcar_clase(fila, lineas_mod.CLASE_TIPO_EXCLUIDO)
+    if sucursal_por_co is not None and not _extraer_co(
+            fila_raw, comunes["mapa_columnas"]):
+        _marcar_co_vacio(fila)
+    return fila, []
 
 
 def _marcar_clase(fila: Optional[CargaFilaStaging], clase: str) -> None:
@@ -959,8 +978,10 @@ async def aplicar_reemplazando_meses(
     dentro = [
         f for f in filas_staging
         if (f.payload["anio"], f.payload["mes"]) in meses_declarados]
+    # Los meses de las ventas del archivo: una fila solo-detalle no cuenta.
     meses = {(f.payload["anio"], f.payload["mes"]) for f in dentro
-             if f.sucursal_id is not None and f.referencia_id is not None}
+             if f.sucursal_id is not None and f.referencia_id is not None
+             and not es_solo_detalle(f)}
     purgadas = await purgar_meses_completos(session, meses)
     veredicto = await aplicar_con_periodo(
         session, filas_staging, periodo_desde, periodo_hasta, carga_id,

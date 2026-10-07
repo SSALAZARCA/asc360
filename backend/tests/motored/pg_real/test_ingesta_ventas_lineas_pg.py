@@ -291,8 +291,10 @@ async def test_asignadas_las_lineas_el_apply_carga_venta_mensual_y_detalle(
         (m.sin_linea.id, "MOSTRADOR"): Decimal("5"),
         (m.sin_linea_2.id, "MOSTRADOR"): Decimal("1"),
     }
-    # El detalle sigue a la venta: ni la moto ni los tipos excluidos entran.
-    assert detalle == {"OK-1", "OK-2", "SL-1", "SL-2", "SL-3"}
+    # El detalle guarda ademas la moto (otra linea) y los tipos excluidos del
+    # ERP, solo como detalle: ninguna de esas filas esta en venta_mensual.
+    assert detalle == {"OK-1", "OK-2", "SL-1", "SL-2", "SL-3", "MO-1",
+                       "EX-1", "EX-2", "EX-3"}
     assert len(espias["refrescar"]) == 1
     assert {k[0] for k in espias["refrescar"][0]} == {m.tienda.id}
     refs = {r.id: r.linea_comercial for r in (
@@ -314,7 +316,9 @@ async def test_no_comercial_saca_la_referencia_del_reparto_y_no_bloquea(
 
     mensual, detalle = await _tablas(sesion, m)
     assert set(k[0] for k in mensual) == {m.con_linea.id}
-    assert detalle == {"OK-1", "OK-2"}
+    # NO COMERCIAL queda solo en el detalle, como las demas filas fuera de linea.
+    assert detalle == {"OK-1", "OK-2", "SL-1", "SL-2", "SL-3", "MO-1",
+                       "EX-1", "EX-2", "EX-3"}
     assert m.sin_linea.linea_comercial == "NO COMERCIAL"
 
 
@@ -410,7 +414,7 @@ async def test_la_linea_se_evalua_contra_el_maestro_de_hoy_al_aplicar(
 
     mensual, detalle = await _tablas(sesion, m)
     assert mensual == {(m.de_motos.id, "MOSTRADOR"): Decimal("4")}
-    assert detalle == {"MO-1"}
+    assert detalle == {"MO-1", "OK-1"}  # OK-1 sale de la linea: solo detalle
 
 
 async def test_archivo_viejo_con_lineas_en_tipo_inventario_carga_como_antes(
@@ -692,7 +696,7 @@ async def test_tipos_inventario_incluidos_con_codigos_viejos_no_cambia_el_result
 
     mensual, detalle = await _tablas(sesion, m)
     assert mensual == {(m.con_linea.id, "MOSTRADOR"): Decimal("10")}
-    assert detalle == {"OK-1"}
+    assert detalle == {"OK-1", "MO-1"}  # la moto: solo detalle
 
 
 async def test_las_lineas_que_cuentan_son_las_lineas_comerciales_vigentes(
@@ -739,3 +743,88 @@ async def test_si_las_asignaciones_dejan_cero_filas_el_apply_responde_409(
         "de líneas comerciales.")
     assert await _tablas(sesion, m) == ({}, set())
     assert carga.estado == "VALIDADO"
+
+
+# --- non-commercial rows stay in the sales detail (V6) ----------------------
+
+
+async def test_filas_no_comerciales_quedan_solo_en_el_detalle(
+        sesion, monkeypatch, espias):
+    """IM19 / ST003 (denylist), una linea que no cuenta y NO COMERCIAL: estan
+    en `venta_detalle` marcadas solo-detalle (como desde f7fce06) y nunca en
+    `venta_mensual`, filas validas, histograma de periodo ni fecha maxima."""
+    m = await _mundo(sesion)
+    no_comercial = _ref(SimpleNamespace(id=m.con_linea.proveedor_id),
+                        "NO COMERCIAL", "No comercial")
+    sesion.add(no_comercial)
+    await sesion.flush()
+    solo_ok = await _dry_run(sesion, monkeypatch, [
+        _fila(m, m.con_linea, 10, "OK-1")])
+    filas = [
+        _fila(m, m.con_linea, 10, "OK-1"),
+        _fila(m, m.con_linea, 7, "IM-1", tipo="IM1901"),
+        _fila(m, m.con_linea, 8, "ST-1", tipo="ST003"),
+        _fila(m, m.de_motos, 4, "MO-1"),
+        _fila(m, no_comercial, 6, "NC-1"),
+        # algo no resuelve: se omite en silencio, sin carga_error
+        _fila(m, m.de_motos, "abc", "MALA-1"),
+        _fila(m, m.con_linea, 1, "IM-X", tipo="IM1902")[:7]
+        + ("NOEXISTE",) + _fila(m, m.con_linea, 1, "IM-X")[8:],
+    ]
+
+    carga = await _dry_run(sesion, monkeypatch, filas)
+
+    assert carga.estado == "VALIDADO"
+    assert carga.filas_validas == 1
+    assert carga.log["filas_tipo_excluido"] == 3  # IM-1, ST-1 y la de referencia desconocida
+    assert carga.log["filas_fuera_de_linea"] == 2
+    assert carga.log["filas_solo_detalle"] == 4
+    assert carga.log["filas_por_periodo"] == solo_ok.log["filas_por_periodo"]
+    assert carga.log["fecha_max_detectada"] == solo_ok.log["fecha_max_detectada"]
+    errores = (await sesion.execute(
+        select(CargaError).where(CargaError.carga_id == carga.id))).scalars().all()
+    assert errores == []
+
+    await _aplicar(sesion, carga)
+
+    mensual, detalle = await _tablas(sesion, m)
+    assert mensual == {(m.con_linea.id, "MOSTRADOR"): Decimal("10")}
+    assert detalle == {"OK-1", "IM-1", "ST-1", "MO-1", "NC-1"}
+
+
+async def test_un_tipo_excluido_de_una_referencia_sin_linea_no_bloquea_el_apply(
+        sesion, monkeypatch, espias):
+    m = await _mundo(sesion)
+    carga = await _dry_run(sesion, monkeypatch, [
+        _fila(m, m.con_linea, 10, "OK-1"),
+        _fila(m, m.sin_linea, 7, "IM-1", tipo="IM1901")])
+
+    informe = await _informe(sesion, carga)
+    await _aplicar(sesion, carga)
+
+    assert informe["sin_linea"] == []
+    mensual, detalle = await _tablas(sesion, m)
+    assert set(k[0] for k in mensual) == {m.con_linea.id}
+    assert detalle == {"OK-1", "IM-1"}
+
+
+async def test_el_costo_de_venta_incluye_las_filas_que_no_son_de_linea(
+        sesion, monkeypatch, espias):
+    """Los dias de inventario miden TODA la salida de mercancia: una fila de
+    otra linea o de un tipo excluido pesa en `consultar_costo_venta` como
+    antes (costo = precio normal de la referencia sin inventario)."""
+    from app.motored.services import tablero_asesores_consultas as qa
+    from app.motored.services import tablero_kpis_consultas as qk
+
+    m = await _mundo(sesion)
+    carga = await _dry_run(sesion, monkeypatch, [
+        _fila(m, m.con_linea, 10, "OK-1"),
+        _fila(m, m.de_motos, 4, "MO-1"),
+        _fila(m, m.con_linea, 7, "IM-1", tipo="IM1901")])
+    await _aplicar(sesion, carga)
+
+    filtro = await qa.cargar_filtro(sesion, ["2026-09"], "incluir", None)
+    costo, dias = await qk.consultar_costo_venta(
+        sesion, filtro, datetime.date(2026, 10, 5))
+
+    assert costo == {str(m.tienda.id): Decimal("2100")}  # (10 + 4 + 7) x 100

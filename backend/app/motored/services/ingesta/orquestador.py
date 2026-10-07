@@ -451,6 +451,8 @@ def _contar_clase_de_linea(
         estado.filas_fuera_de_linea += 1
     elif clase == lineas_mod.CLASE_SIN_LINEA:
         estado.filas_sin_linea += 1
+    elif clase == lineas_mod.CLASE_TIPO_EXCLUIDO:
+        estado.filas_tipo_excluido += 1
 
 
 def _procesar_filas_del_lote(
@@ -917,13 +919,17 @@ async def _aplicar_ventas(
         {f.referencia_id for f in filas_staging if f.referencia_id})
     sin_linea = {
         f.referencia_id for f in filas_staging
-        if lineas_mod.clase_de_fila(f.referencia_id, lineas, incluidas)
+        if lineas_mod.clase_de_staging(
+            f.payload, f.referencia_id, lineas, incluidas)
         == lineas_mod.CLASE_SIN_LINEA}
     if sin_linea:
         raise EstadoInvalidoParaAplicarError(
             lineas_mod.mensaje_sin_linea(len(sin_linea)))
     aplicables = lineas_mod.reclasificar(filas_staging, lineas, incluidas)
-    if filas_staging and not aplicables:
+    # "Consideradas": las que entran a venta_mensual o traen el error de su
+    # referencia desconocida; las solo-detalle no cuentan.
+    if filas_staging and all(
+            a.payload.get("solo_detalle") for a in aplicables):
         raise EstadoInvalidoParaAplicarError(lineas_mod.MENSAJE_NINGUNA_LINEA)
     aplicar = (ventas_mod.aplicar_reemplazando_meses
                if reemplaza_mes_completo(carga)

@@ -4,13 +4,17 @@ commercial line of the referencia master.
 
 Rules (owner decisions of 2026-10-06):
 - A row whose file "Tipo inventario" matches `ventas_tipos_excluidos` (ERP
-  codes, prefix or exact) is discarded and counted, never a carga_error.
+  codes, prefix or exact) is never demand and never a carga_error: it is
+  counted (`filas_tipo_excluido`) and, like a row of another line, kept only
+  in `venta_detalle` (payload `solo_detalle`, as since f7fce06) when its
+  referencia and sucursal resolve.
 - The line of a row is ONLY the CURRENT `referencia.linea_comercial`
   (trimmed, upper-cased, without accents, like the KPI summaries). A line in
   the `lineas_comerciales` IN FORCE (read like the KPI reads them, at the
   first day of the month of the carga's period) keeps the row; any other
-  non-empty line (e.g. "NO COMERCIAL") is `fuera_de_linea` (discarded,
-  counted); an empty line is `sin_linea` and blocks the apply until a user
+  non-empty line (e.g. "NO COMERCIAL") is `fuera_de_linea` (counted, and
+  kept only in `venta_detalle`; it never enters `venta_mensual`, the valid
+  rows, the period histogram or `fecha_max_detectada`); an empty line is `sin_linea` and blocks the apply until a user
   assigns one. `tipos_inventario_incluidos` is NOT used by VENTAS.
 - Empty-apply guard: if the file has rows that were considered (not
   excluded by bodega or by the type denylist) but none of them is kept (an
@@ -50,6 +54,7 @@ CLAVE_CLASE_LINEA = "linea_clase"
 CLASE_INCLUIDA = "incluida"
 CLASE_FUERA_DE_LINEA = "fuera_de_linea"
 CLASE_SIN_LINEA = "sin_linea"
+CLASE_TIPO_EXCLUIDO = "tipo_excluido"
 CLAVE_SOLO_DETALLE = "solo_detalle"
 
 MODO_PREFIJO = "prefijo"
@@ -61,7 +66,8 @@ ReglasExcluidas = Tuple[Tuple[str, str], ...]
 
 class MarcaTipoExcluido(Enum):
     """Resultado de `ventas.procesar_fila`: la fila es de un tipo de venta
-    del ERP que no es de repuestos y se descarta (se cuenta aparte)."""
+    del ERP que no es de repuestos y no se puede guardar ni en el detalle
+    (algo de la fila no resuelve): se omite y se cuenta aparte."""
 
     TIPO_EXCLUIDO = "tipo_excluido"
 
@@ -150,24 +156,38 @@ def clase_de_fila(
     return clasificar(lineas.get(referencia_id, ""), incluidas)
 
 
+def clase_de_staging(
+    payload: Mapping[str, Any], referencia_id: Optional[uuid.UUID],
+    lineas: Mapping[uuid.UUID, str], incluidas: FrozenSet[str],
+) -> Optional[str]:
+    """Clase VIVA de una fila staged. Una fila de tipo excluido lo es siempre
+    (la lista de lineas no la toca); el resto sigue al maestro de hoy."""
+    if payload.get(CLAVE_CLASE_LINEA) == CLASE_TIPO_EXCLUIDO:
+        return CLASE_TIPO_EXCLUIDO
+    return clase_de_fila(referencia_id, lineas, incluidas)
+
+
 def reclasificar(
     filas_staging: Sequence[CargaFilaStaging],
     lineas: Mapping[uuid.UUID, str], incluidas: FrozenSet[str],
 ) -> List[FilaAplicable]:
-    """Las filas que SÍ se aplican, evaluadas contra el maestro vigente.
-    Una fila con clase (staged por esta versión) y referencia resuelta se
-    queda sólo si su línea vigente está incluida; las demás clases se
-    descartan por completo. Una fila sin referencia resuelta, o staged por
-    una versión anterior (sin clase), pasa tal cual: `Aplicar` ya la ignora
-    o la trata como siempre."""
+    """Las filas que se aplican, evaluadas contra el maestro vigente. Una
+    fila con clase (staged por esta versión) y referencia resuelta entra a
+    `venta_mensual` y `venta_detalle` sólo si su línea vigente está en las
+    líneas comerciales; las demás (otra línea, tipo excluido) pasan como
+    `solo_detalle`: sólo `venta_detalle`, como siempre. Una fila sin
+    referencia resuelta, o staged por una versión anterior (sin clase),
+    pasa tal cual: `Aplicar` ya la ignora o la trata como siempre."""
     aplicables: List[FilaAplicable] = []
     for fila in filas_staging:
         payload = dict(fila.payload)
         if CLAVE_CLASE_LINEA in payload and fila.referencia_id is not None:
-            clase = clase_de_fila(fila.referencia_id, lineas, incluidas)
-            if clase != CLASE_INCLUIDA:
-                continue
-            payload.pop(CLAVE_SOLO_DETALLE, None)
+            clase = clase_de_staging(
+                payload, fila.referencia_id, lineas, incluidas)
+            if clase == CLASE_INCLUIDA:
+                payload.pop(CLAVE_SOLO_DETALLE, None)
+            else:
+                payload[CLAVE_SOLO_DETALLE] = True
             payload[CLAVE_CLASE_LINEA] = clase
         aplicables.append(FilaAplicable(
             fila.fila, fila.sucursal_id, fila.referencia_id, payload))
@@ -205,7 +225,8 @@ async def informe(
     sin: Dict[uuid.UUID, Dict[str, Any]] = {}
     fuera: Dict[str, int] = defaultdict(int)
     for fila in filas:
-        clase = clase_de_fila(fila.referencia_id, lineas, incluidas)
+        clase = clase_de_staging(
+            fila.payload, fila.referencia_id, lineas, incluidas)
         if clase == CLASE_FUERA_DE_LINEA:
             fuera[lineas[fila.referencia_id]] += 1
         elif clase == CLASE_SIN_LINEA:
@@ -299,8 +320,9 @@ Clave = Tuple[uuid.UUID, int, int]
 async def _claves_del_archivo(
     session, carga: Any, incluidas: FrozenSet[str]
 ) -> Set[Clave]:
-    """`(sucursal, anio, mes)` de las filas que se aplicarian contra el
-    maestro de hoy, dentro del periodo declarado."""
+    """`(sucursal, anio, mes)` de las ventas que se aplicarian a
+    `venta_mensual` contra el maestro de hoy, dentro del periodo declarado
+    (las filas solo-detalle no cuentan)."""
     filas = (await session.execute(
         select(
             CargaFilaStaging.fila, CargaFilaStaging.sucursal_id,
@@ -314,7 +336,8 @@ async def _claves_del_archivo(
     for f in reclasificar(filas, lineas, incluidas):
         mes = (f.payload["anio"], f.payload["mes"])
         if (mes in declarados and f.sucursal_id is not None
-                and f.referencia_id is not None):
+                and f.referencia_id is not None
+                and not f.payload.get(CLAVE_SOLO_DETALLE)):
             claves.add((f.sucursal_id, *mes))
     return claves
 

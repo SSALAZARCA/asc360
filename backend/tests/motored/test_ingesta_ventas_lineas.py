@@ -82,8 +82,22 @@ def _procesar(tipo, linea="REPUESTOS", reglas=REGLAS, ref="R1"):
         tipos_excluidos=reglas)
 
 
-def test_an_excluded_erp_type_is_discarded_with_a_marker_and_no_error():
-    assert _procesar("IM1901") is vl.MarcaTipoExcluido.TIPO_EXCLUIDO
+def test_an_excluded_erp_type_is_kept_only_for_the_detail_with_no_error():
+    staging, errores = _procesar("IM1901")
+
+    assert errores == []
+    assert staging.payload["solo_detalle"] is True
+    assert staging.payload[vl.CLAVE_CLASE_LINEA] == vl.CLASE_TIPO_EXCLUIDO
+    assert (staging.sucursal_id, staging.referencia_id) == (SUC, REF)
+    assert ventas.agregar_unidades([staging]) == {}
+    assert ventas.construir_filas_por_periodo([staging]) == {}
+
+
+@pytest.mark.parametrize("fila_mala", [
+    {"ref": "NOEXISTE"},
+])
+def test_an_excluded_erp_type_that_cannot_be_staged_is_skipped_and_counted(fila_mala):
+    assert _procesar("IM1901", **fila_mala) is vl.MarcaTipoExcluido.TIPO_EXCLUIDO
 
 
 def test_denylist_wins_even_if_the_referencia_is_unknown():
@@ -126,17 +140,29 @@ def _staged(clase, ref=REF, solo=False, **extra):
         sucursal_id=SUC, referencia_id=ref)
 
 
-def test_reclasificar_keeps_only_rows_whose_current_line_is_included():
+def test_reclasificar_sends_to_venta_mensual_only_rows_of_an_included_line():
     incluidas = frozenset({"REPUESTOS"})
     filas = [_staged(vl.CLASE_SIN_LINEA, solo=True)]
 
-    aplicables = vl.reclasificar(filas, {REF: "REPUESTOS"}, incluidas)
-    assert len(aplicables) == 1
-    assert "solo_detalle" not in aplicables[0].payload
+    (incluida,) = vl.reclasificar(filas, {REF: "REPUESTOS"}, incluidas)
+    assert "solo_detalle" not in incluida.payload
     assert "solo_detalle" in filas[0].payload  # the ORM row is not touched
 
-    assert vl.reclasificar(filas, {REF: "MOTOS"}, incluidas) == []
-    assert vl.reclasificar(filas, {}, incluidas) == []
+    # Another line (or none): the row stays, detail only.
+    for lineas in ({REF: "MOTOS"}, {}):
+        (solo,) = vl.reclasificar(filas, lineas, incluidas)
+        assert solo.payload["solo_detalle"] is True
+        assert ventas.agregar_unidades([solo]) == {}
+
+
+def test_a_row_of_an_excluded_erp_type_stays_detail_only_whatever_its_line():
+    fila = _staged(vl.CLASE_TIPO_EXCLUIDO, solo=True)
+
+    (solo,) = vl.reclasificar([fila], {REF: "REPUESTOS"}, frozenset({"REPUESTOS"}))
+
+    assert solo.payload["solo_detalle"] is True
+    assert vl.clase_de_staging(
+        fila.payload, REF, {}, frozenset({"REPUESTOS"})) == vl.CLASE_TIPO_EXCLUIDO
 
 
 def test_reclasificar_passes_unresolved_and_legacy_rows_through():
