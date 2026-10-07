@@ -79,3 +79,17 @@ Every day, once the VENTAS carga that includes the previous day is applied, Lore
   - **New users:** Lore asks for the cédula. It stays PENDING until the ADMIN approves it.
   - **Existing users:** the ADMIN sets it in Gestión de usuarios, and it is approved directly.
   - Reports go only to approved links. The partial unique index applies only to approved cédulas.
+- 2026-10-07: owner requirement, relayed by 84 and to be confirmed directly. The PDF replicates the KPI single-asesor view, one page per asesor:
+  - ficha;
+  - cumplimiento gauge;
+  - commission card ("Para ganar más bonos" / "Para llegar al 100%");
+  - tiles;
+  - tendencia;
+  - venta por línea;
+  - Tecnired;
+  - "Así se calcula tu comisión".
+
+  Peer comparisons stay out: no puestos, no "vs red", no comparison with the tienda, no other asesores' dots.
+  - T2 adds `reportes[cedula].detalle`, the same structure as `/kpis/asesores/detalle` minus the peer fields.
+  - Visual reference: `components/motored/kpis/asesores/AsesorDetalle.js` and the AsesoresUno canvas.
+  - T3 renders it server-side with WeasyPrint plus inline SVG charts (no JS), then encrypts it with AES-256.
