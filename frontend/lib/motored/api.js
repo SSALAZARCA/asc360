@@ -388,14 +388,18 @@ export async function listarCargas(filtros = {}) {
  * server-side. `periodoDesde`/`periodoHasta` son OPCIONALES (ADR-9), y el
  * caller (`UploadMovimientoModal`) solo los pide cuando `tipoDeclaraPeriodo
  * (tipo)` es `true`. Devuelve `{ carga_id, duplicado_de }` -- `202`, nunca
- * bloquea.
+ * bloquea. `reemplazaMesCompleto` (VENTAS only) is sent as the form field
+ * `reemplaza_mes_completo` only when the caller gives a boolean.
  */
-export async function subirCargaMovimiento(file, tipo, { periodoDesde, periodoHasta } = {}) {
+export async function subirCargaMovimiento(file, tipo, { periodoDesde, periodoHasta, reemplazaMesCompleto } = {}) {
   const formData = new FormData();
   formData.append('file', file);
   formData.append('tipo', tipo);
   if (periodoDesde) formData.append('periodo_desde', periodoDesde);
   if (periodoHasta) formData.append('periodo_hasta', periodoHasta);
+  if (typeof reemplazaMesCompleto === 'boolean') {
+    formData.append('reemplaza_mes_completo', String(reemplazaMesCompleto));
+  }
   return motoredFetchJson('/cargas', { method: 'POST', body: formData });
 }
 
@@ -456,6 +460,13 @@ export async function asignarLineasReferencias(cargaId, asignaciones) {
     method: 'PUT',
     body: JSON.stringify(asignaciones),
   });
+}
+
+/** `GET /cargas/{id}/vaciado-previsto` -- `[{ sucursal_id, nombre, mes,
+ * filas_actuales }]`: the tiendas whose sales of the month Aplicar deletes
+ * (empty unless the carga replaces the whole month). Computed live. */
+export async function getVaciadoPrevisto(cargaId) {
+  return motoredFetchJson(`/cargas/${cargaId}/vaciado-previsto`);
 }
 
 // Aplicar corre sincrono en el servidor: un mes real de VENTAS (~43k filas)

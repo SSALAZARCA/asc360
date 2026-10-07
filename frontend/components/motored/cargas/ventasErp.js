@@ -70,3 +70,20 @@ export function mensajeAsignacion(error) {
   if (error?.status === 409) return propio || MENSAJE_409;
   return propio || 'No se pudo asignar la línea. Intente de nuevo.';
 }
+
+const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+
+/** "2026-09" or "2026-09-01" -> "septiembre de 2026". */
+export function mesLegible(mes) {
+  const [anio, numero] = String(mes || '').split('-');
+  const nombre = MESES[Number(numero) - 1];
+  return nombre ? `${nombre} de ${anio}` : String(mes || '');
+}
+
+/** The warning of a full-month carga: which tiendas lose which month's sales. */
+export function textoVaciado(filas) {
+  const meses = [...new Set(filas.map((f) => mesLegible(f.mes)))].join(' y ');
+  const nombres = [...new Set(filas.map((f) => f.nombre))];
+  return `Se van a borrar las ventas de ${meses} de ${nombres.length} tiendas que no vienen en este archivo: `
+    + `${nombres.join(', ')}. Anular esta carga después NO las recupera.`;
+}

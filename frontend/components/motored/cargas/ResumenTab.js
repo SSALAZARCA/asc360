@@ -11,16 +11,18 @@
  * `app/motored/cargas/page.js` oculta "Subir carga".
  *
  * A raw ERP VENTAS carga in VALIDADO also shows its dry run
- * (`PanelVentasErp`); Aplicar stays disabled while any ref has no line.
+ * (`PanelVentasErp`) and, when it replaces the whole month, the tiendas
+ * whose sales Aplicar deletes (`AvisoVaciado`). Aplicar stays disabled while
+ * any ref has no line or that deletion is not acknowledged.
  */
 import { useEffect, useState, useCallback } from 'react';
 import { getInformeCarga, aplicarCarga, anularCarga } from '../../../lib/motored/api';
 import { getRolActual } from '../../../lib/motored/motoredFetch';
 import { mensajeConCodigo } from '../../../lib/motored/httpErrors';
 import InfoTooltip from '../InfoTooltip';
+import AvisoVaciado from './AvisoVaciado';
 import PanelVentasErp from './PanelVentasErp';
-import useReferenciasSinLinea from './useReferenciasSinLinea';
-import { muestraSimulacionVentas, textoBloqueoAplicar } from './ventasErp';
+import useSimulacionVentas from './useSimulacionVentas';
 
 const CONFIRMAR_ANULAR = '¿Anular esta carga? Se borran las filas en proceso (staging). '
   + 'Si ya está APLICADA y la usa el pedido cerrado o enviado de alguna tienda, el sistema no permitirá anularla.';
@@ -150,14 +152,6 @@ function useAccionesCarga({ cargaId, reload, onChanged }) {
   };
 }
 
-/** Why Aplicar is disabled by the VENTAS dry run: `{ bloqueado, mensaje }`. */
-function bloqueoDeSimulacion(activa, { datos, error }) {
-  if (!activa || error) return { bloqueado: false, mensaje: '' };
-  if (!datos) return { bloqueado: true, mensaje: '' };
-  const n = datos.sin_linea.length;
-  return { bloqueado: n > 0, mensaje: n > 0 ? textoBloqueoAplicar(n) : '' };
-}
-
 function AccionesCarga({ estado, accionando, bloqueo, onAplicar, onAnular }) {
   return (
     <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
@@ -186,8 +180,7 @@ export default function ResumenTab({ carga, onChanged }) {
   const { accionando, accionError, handleAplicar, handleAnular } = useAccionesCarga({
     cargaId: carga.id, reload, onChanged,
   });
-  const simulacion = muestraSimulacionVentas(carga);
-  const sinLinea = useReferenciasSinLinea(carga.id, simulacion);
+  const simulacion = useSimulacionVentas(carga);
 
   useEffect(() => {
     setRol(getRolActual());
@@ -213,13 +206,16 @@ export default function ResumenTab({ carga, onChanged }) {
 
       <PeriodoDetectado log={informe.log} />
       <VarianzaAviso variacion={informe.variacion_pct_vs_carga_anterior} />
-      {simulacion && <PanelVentasErp log={informe.log} estado={sinLinea} puedeAsignar={puedeEscribir} />}
+      {simulacion.activa && <PanelVentasErp log={informe.log} estado={simulacion.sinLinea} puedeAsignar={puedeEscribir} />}
+      {simulacion.activa && puedeEscribir && (
+        <AvisoVaciado vaciado={simulacion.vaciado} entendido={simulacion.entendido} onEntendido={simulacion.setEntendido} />
+      )}
 
       {accionError && <p role="alert" style={{ margin: 0, color: 'var(--motored-danger, #c0392b)', fontSize: '0.75rem' }}>{accionError}</p>}
 
       {puedeEscribir && (
         <AccionesCarga
-          estado={informe.estado} accionando={accionando} bloqueo={bloqueoDeSimulacion(simulacion, sinLinea)}
+          estado={informe.estado} accionando={accionando} bloqueo={simulacion.bloqueo}
           onAplicar={handleAplicar} onAnular={handleAnular}
         />
       )}

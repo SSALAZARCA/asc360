@@ -93,6 +93,22 @@ function CampoFechaDeCorte({ fecha, setFecha, disabled }) {
   );
 }
 
+/** Informational (never blocking) notice when the same file was already uploaded. */
+async function avisoDuplicado(duplicadoDe) {
+  try {
+    const previa = await getCarga(duplicadoDe);
+    return `Ya existe una carga idéntica del ${fechaBogota(previa.created_at)}. Igual podés continuar.`;
+  } catch {
+    return 'Ya existe una carga idéntica anterior. Igual podés continuar.';
+  }
+}
+
+/** Upload options: the declared period and, for VENTAS only, the full-month flag. */
+function opcionesDeSubida(tipo, { periodoDesde, periodoHasta, fechaDeCorte, reemplazaMes }) {
+  const opciones = { periodoDesde, periodoHasta: (!fechaDeCorte && periodoHasta) || periodoDesde };
+  return tipo === 'VENTAS' ? { ...opciones, reemplazaMesCompleto: reemplazaMes } : opciones;
+}
+
 function useSubirMovimiento(tipo, onUploaded) {
   const [file, setFile] = useState(null);
   const [periodoDesde, setPeriodoDesde] = useState('');
@@ -101,6 +117,7 @@ function useSubirMovimiento(tipo, onUploaded) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [completo, setCompleto] = useState(false);
+  const [reemplazaMes, setReemplazaMes] = useState(false);
 
   const necesitaPeriodo = tipoDeclaraPeriodo(tipo);
   const fechaDeCorte = tipoUsaFechaDeCorte(tipo);
@@ -125,20 +142,9 @@ function useSubirMovimiento(tipo, onUploaded) {
     setLoading(true);
     setError('');
     try {
-      const res = await subirCargaMovimiento(file, tipo, {
-        periodoDesde,
-        periodoHasta: (!fechaDeCorte && periodoHasta) || periodoDesde,
-      });
-      if (res.duplicado_de) {
-        try {
-          const previa = await getCarga(res.duplicado_de);
-          setDuplicadoInfo(
-            `Ya existe una carga idéntica del ${fechaBogota(previa.created_at)}. Igual podés continuar.`
-          );
-        } catch {
-          setDuplicadoInfo('Ya existe una carga idéntica anterior. Igual podés continuar.');
-        }
-      }
+      const opciones = opcionesDeSubida(tipo, { periodoDesde, periodoHasta, fechaDeCorte, reemplazaMes });
+      const res = await subirCargaMovimiento(file, tipo, opciones);
+      if (res.duplicado_de) setDuplicadoInfo(await avisoDuplicado(res.duplicado_de));
       setCompleto(true);
       onUploaded?.();
     } catch (err) {
@@ -151,6 +157,7 @@ function useSubirMovimiento(tipo, onUploaded) {
   return {
     file, setFile, periodoDesde, setPeriodoDesde, periodoHasta, setPeriodoHasta,
     necesitaPeriodo, fechaDeCorte, duplicadoInfo, loading, error, completo, handleSubir, handleDescargarPlantilla,
+    reemplazaMes, setReemplazaMes,
   };
 }
 
@@ -195,10 +202,26 @@ function ZonaArchivo({ file, setFile, label }) {
   );
 }
 
+function CampoReemplazaMes({ marcado, setMarcado }) {
+  return (
+    <label style={{ ...labelStyle, flexDirection: 'row', alignItems: 'flex-start', gap: '0.5rem', cursor: 'pointer' }}>
+      <input
+        type="checkbox" checked={marcado} style={{ width: '24px', height: '24px', margin: '10px 0', flexShrink: 0 }}
+        aria-label="Este archivo reemplaza el mes completo de toda la red"
+        onChange={(e) => setMarcado(e.target.checked)}
+      />
+      <span style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', paddingTop: '10px' }}>
+        <span style={{ fontWeight: 700, color: 'var(--motored-text, #1a1a18)' }}>Este archivo reemplaza el mes completo de toda la red</span>
+        <span>Borra las ventas de ese mes de las tiendas que no vienen en el archivo.</span>
+      </span>
+    </label>
+  );
+}
+
 function FormularioSubida({ estado, onSubir }) {
   const {
     file, setFile, periodoDesde, setPeriodoDesde, periodoHasta, setPeriodoHasta,
-    necesitaPeriodo, fechaDeCorte, loading, label,
+    necesitaPeriodo, fechaDeCorte, loading, label, tipo, reemplazaMes, setReemplazaMes,
   } = estado;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
@@ -213,6 +236,8 @@ function FormularioSubida({ estado, onSubir }) {
           periodoHasta={periodoHasta} setPeriodoHasta={setPeriodoHasta}
         />
       )}
+
+      {tipo === 'VENTAS' && <CampoReemplazaMes marcado={reemplazaMes} setMarcado={setReemplazaMes} />}
 
       <button type="button" className="motored-btn motored-btn-primary" onClick={onSubir} disabled={loading || !file}>
         {loading ? 'Subiendo...' : 'Subir archivo'}
@@ -247,7 +272,7 @@ export default function UploadMovimientoModal({ tipo, label, onClose, onUploaded
         {completo ? (
           <ConfirmacionCarga duplicadoInfo={duplicadoInfo} onClose={onClose} />
         ) : (
-          <FormularioSubida estado={{ ...estado, label }} onSubir={handleSubir} />
+          <FormularioSubida estado={{ ...estado, label, tipo }} onSubir={handleSubir} />
         )}
       </div>
     </div>

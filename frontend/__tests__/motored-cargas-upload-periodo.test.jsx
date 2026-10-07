@@ -110,7 +110,7 @@ describe('UploadMovimientoModal — declared tipo, one-step upload', () => {
     fireEvent.click(screen.getByText('Subir archivo'));
 
     await waitFor(() => expect(mockSubir).toHaveBeenCalledWith(
-      expect.any(File), 'VENTAS', { periodoDesde: '2026-09-01', periodoHasta: '2026-09-01' }
+      expect.any(File), 'VENTAS', { periodoDesde: '2026-09-01', periodoHasta: '2026-09-01', reemplazaMesCompleto: false }
     ));
   });
 
