@@ -7,9 +7,17 @@ Rules (owner decisions of 2026-10-06):
   codes, prefix or exact) is discarded and counted, never a carga_error.
 - The line of a row is ONLY the CURRENT `referencia.linea_comercial`
   (trimmed, upper-cased, without accents, like the KPI summaries). A line in
-  `tipos_inventario_incluidos` keeps the row; any other non-empty line is
-  `fuera_de_linea` (discarded, counted); an empty line is `sin_linea` and
-  blocks the apply until a user assigns one.
+  the `lineas_comerciales` IN FORCE (read like the KPI reads them, at the
+  first day of the month of the carga's period) keeps the row; any other
+  non-empty line (e.g. "NO COMERCIAL") is `fuera_de_linea` (discarded,
+  counted); an empty line is `sin_linea` and blocks the apply until a user
+  assigns one. `tipos_inventario_incluidos` is NOT used by VENTAS.
+- Empty-apply guard: if the file has rows that were considered (not
+  excluded by bodega or by the type denylist) but none of them is kept (an
+  included line, or an unknown referencia, which keeps its row error),
+  nothing is applied: the dry-run marks the carga CON_ERRORES and the apply
+  answers 409 (`MENSAJE_NINGUNA_LINEA`). Rows `sin_linea` are still pending,
+  so they count as not yet decided.
 - The class is stored in the staging payload at dry-run (for the counters)
   and re-evaluated against the live master at apply and in the report.
 """
@@ -33,9 +41,11 @@ from app.motored.models.carga_archivo import CargaArchivo
 from app.motored.models.referencia import Referencia
 from app.motored.models.sucursal import Sucursal
 from app.motored.models.venta_mensual import VentaMensual
+from app.motored.services import parametros, parametros_claves
 from app.motored.services.ingesta import errores as errores_mod
 from app.motored.services.ingesta import periodo as periodo_mod
 
+CLAVE_REEMPLAZA_MES = "reemplaza_mes_completo"
 CLAVE_CLASE_LINEA = "linea_clase"
 CLASE_INCLUIDA = "incluida"
 CLASE_FUERA_DE_LINEA = "fuera_de_linea"
@@ -263,22 +273,34 @@ async def _no_encontradas(
         for codigo, n in sorted(por_codigo.items()) if codigo not in existentes]
 
 
+MENSAJE_NINGUNA_LINEA = (
+    "Ninguna fila quedó en las líneas incluidas: revise la configuración "
+    "de líneas comerciales.")
+
+
+async def leer_lineas_comerciales(db, en_fecha) -> FrozenSet[str]:
+    """Las `lineas_comerciales` vigentes al dia 1 del mes de `en_fecha`
+    (normalizadas), leidas como las lee el KPI (`parametros.leer_valores`:
+    sin fila vigente o con una invalida rige el default del registro)."""
+    clave = "lineas_comerciales"
+    valores = await parametros.leer_valores(
+        db, en_fecha, {clave: list(parametros_claves.REGISTRO[clave].default)})
+    return normalizar_incluidas(valores[clave])
+
+
 def mensaje_sin_linea(cantidad: int) -> str:
     return (f"Hay {cantidad} referencias sin línea: "
             "asígnelas antes de aplicar.")
 
 
-async def vaciado_previsto(
+Clave = Tuple[uuid.UUID, int, int]
+
+
+async def _claves_del_archivo(
     session, carga: Any, incluidas: FrozenSet[str]
-) -> List[Dict[str, Any]]:
-    """VIVO: las tiendas con ventas en los meses del archivo que el archivo
-    NO trae para ese mes, y que un `reemplaza_mes_completo` borraria. Los
-    meses del archivo son los de las filas que se aplicarian (contra el
-    maestro de hoy) dentro del periodo declarado. `mes` sale 'YYYY-MM';
-    `filas_actuales` cuenta las filas de `venta_mensual` (las cargas
-    anuladas no cuentan). Vacio sin el flag o sin staging."""
-    if not (carga.log or {}).get("reemplaza_mes_completo"):
-        return []
+) -> Set[Clave]:
+    """`(sucursal, anio, mes)` de las filas que se aplicarian contra el
+    maestro de hoy, dentro del periodo declarado."""
     filas = (await session.execute(
         select(
             CargaFilaStaging.fila, CargaFilaStaging.sucursal_id,
@@ -288,16 +310,19 @@ async def vaciado_previsto(
         session, {f.referencia_id for f in filas if f.referencia_id})
     declarados = periodo_mod.meses_en_rango(
         carga.periodo_desde, carga.periodo_hasta)
-    en_archivo: Set[Tuple[uuid.UUID, int, int]] = set()
+    claves: Set[Clave] = set()
     for f in reclasificar(filas, lineas, incluidas):
-        clave = (f.payload["anio"], f.payload["mes"])
-        if (clave in declarados and f.sucursal_id is not None
+        mes = (f.payload["anio"], f.payload["mes"])
+        if (mes in declarados and f.sucursal_id is not None
                 and f.referencia_id is not None):
-            en_archivo.add((f.sucursal_id, *clave))
-    meses = sorted({(anio, mes) for _, anio, mes in en_archivo})
-    if not meses:
-        return []
-    actuales = (await session.execute(
+            claves.add((f.sucursal_id, *mes))
+    return claves
+
+
+async def _ventas_actuales(session, meses) -> List[Tuple[Any, ...]]:
+    """`(sucursal, anio, mes, filas)` de `venta_mensual` de esos meses; las
+    cargas anuladas no cuentan."""
+    return (await session.execute(
         select(VentaMensual.sucursal_id, VentaMensual.anio, VentaMensual.mes,
                func.count())
         .join(CargaArchivo, CargaArchivo.id == VentaMensual.carga_id)
@@ -305,10 +330,28 @@ async def vaciado_previsto(
                CargaArchivo.estado != "ANULADO")
         .group_by(VentaMensual.sucursal_id, VentaMensual.anio,
                   VentaMensual.mes))).all()
-    ausentes = [a for a in actuales if (a[0], a[1], a[2]) not in en_archivo]
+
+
+async def vaciado_previsto(
+    session, carga: Any, incluidas: FrozenSet[str]
+) -> List[Dict[str, Any]]:
+    """VIVO: las tiendas con ventas en los meses del archivo que el archivo
+    NO trae para ese mes, y que un `reemplaza_mes_completo` borraria. `mes`
+    sale 'YYYY-MM'; `filas_actuales` cuenta las filas de `venta_mensual`.
+    Vacio sin el flag o sin staging."""
+    if not (carga.log or {}).get(CLAVE_REEMPLAZA_MES):
+        return []
+    en_archivo = await _claves_del_archivo(session, carga, incluidas)
+    meses = sorted({(anio, mes) for _, anio, mes in en_archivo})
+    if not meses:
+        return []
+    ausentes = [
+        (sucursal, anio, mes, cantidad)
+        for sucursal, anio, mes, cantidad in await _ventas_actuales(session, meses)
+        if (sucursal, anio, mes) not in en_archivo]
     nombres = dict((await session.execute(
         select(Sucursal.id, Sucursal.nombre)
-        .where(Sucursal.id.in_({a[0] for a in ausentes})))).all()
+        .where(Sucursal.id.in_({fila[0] for fila in ausentes})))).all()
     ) if ausentes else {}
     lista = [
         {"sucursal_id": sucursal, "nombre": nombres.get(sucursal, ""),

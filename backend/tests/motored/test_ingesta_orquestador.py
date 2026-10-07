@@ -384,7 +384,7 @@ async def test_dry_run_ventas_periodo_mal_declarado_rechaza_archivo_completo(mon
     )
     monkeypatch.setattr(orquestador.storage, "descargar_archivo", lambda ruta: file_bytes)
     queue = _queue_cache_y_proveedor() + [
-        [],  # parametros.resolver_tipos_inventario_incluidos -> obtener_vigente (usa default)
+        [],  # lineas_comerciales -> obtener_vigente (usa default)
         [],  # bodegas_excluidas (sin fila -> default)
         *LECTURAS_LINEA,
         [],  # periodo_tolerancia_pct (sin fila -> entorno)
@@ -419,7 +419,7 @@ async def test_dry_run_ventas_periodo_correcto_queda_validado(monkeypatch):
         ]
     )
     monkeypatch.setattr(orquestador.storage, "descargar_archivo", lambda ruta: file_bytes)
-    # tipos_inventario_incluidos + bodegas_excluidas + periodo_tolerancia_pct,
+    # lineas_comerciales + bodegas_excluidas + periodo_tolerancia_pct,
     # los tres sin fila.
     queue = _queue_cache_y_proveedor() + [[], [], *LECTURAS_LINEA, []]
     session = FakeAsyncSession(execute_queue=queue)
@@ -598,7 +598,7 @@ async def test_dry_run_ventas_periodo_advertencia_emite_carga_error_por_fila_fue
         sucursal_id=SUCURSAL_ID, referencia_id=REFERENCIA_ID,
     )
     queue = _queue_cache_y_proveedor() + [
-        [],  # parametros.resolver_tipos_inventario_incluidos (sin fila vigente -> default)
+        [],  # lineas_comerciales (sin fila vigente -> default)
         [],  # bodegas_excluidas (sin fila -> default)
         *LECTURAS_LINEA,
         [],  # periodo_tolerancia_pct (sin fila -> entorno)
@@ -784,10 +784,9 @@ async def test_ejecutar_aplicar_ventas_uses_aplicar_con_periodo(monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-async def test_dry_run_ventas_registra_default_usado_en_carga_log(monkeypatch):
-    """Base case del gap: `tipos_inventario_incluidos` SIN fila vigente ->
-    el dry-run de VENTAS debe dejar constancia de qué clave defaulteó y con
-    qué valor, no solo procesar la fila con el default en silencio."""
+async def test_dry_run_ventas_ya_no_lee_tipos_inventario_incluidos(monkeypatch):
+    """VENTAS cuenta las `lineas_comerciales` vigentes: ya no resuelve (ni
+    reporta como default usado) `tipos_inventario_incluidos`."""
     carga = _carga("VENTAS", periodo_desde=date(2026, 9, 1), periodo_hasta=date(2026, 9, 30))
     serial_septiembre = 46280  # 2026-09-15
     file_bytes = _build_xlsx_bytes(
@@ -802,7 +801,7 @@ async def test_dry_run_ventas_registra_default_usado_en_carga_log(monkeypatch):
     )
     monkeypatch.setattr(orquestador.storage, "descargar_archivo", lambda ruta: file_bytes)
     queue = _queue_cache_y_proveedor() + [
-        [],  # parametros.resolver_tipos_inventario_incluidos -> SIN fila vigente
+        [],  # lineas_comerciales -> SIN fila vigente (default del registro)
         [],  # bodegas_excluidas -> default
         *LECTURAS_LINEA,
     ]
@@ -811,16 +810,13 @@ async def test_dry_run_ventas_registra_default_usado_en_carga_log(monkeypatch):
     await orquestador._dry_run(session, carga)
 
     assert carga.estado == "VALIDADO"
-    assert carga.log["parametros_default_usados"] == {
-        parametros.CLAVE_TIPOS_INVENTARIO_INCLUIDOS: parametros.DEFAULT_TIPOS_INVENTARIO_INCLUIDOS,
-    }
+    assert "parametros_default_usados" not in carga.log
+    assert carga.filas_validas == 1
 
 
-async def test_dry_run_ventas_no_registra_default_cuando_la_clave_esta_configurada(monkeypatch):
-    """Converse del caso anterior: con una fila `parametro_metodologia`
-    vigente para `tipos_inventario_incluidos`, `resolver()` nunca defaultea
-    -- `carga.log` no debe ganar la entrada de "default usado" para esa
-    clave."""
+async def test_dry_run_ventas_ignora_tipos_inventario_incluidos_configurado_con_codigos_viejos(monkeypatch):
+    """Regresión: con `tipos_inventario_incluidos` guardado con los CÓDIGOS
+    viejos del ERP, la fila se queda igual por la línea de su referencia."""
     carga = _carga("VENTAS", periodo_desde=date(2026, 9, 1), periodo_hasta=date(2026, 9, 30))
     serial_septiembre = 46280  # 2026-09-15
     file_bytes = _build_xlsx_bytes(
@@ -836,10 +832,11 @@ async def test_dry_run_ventas_no_registra_default_cuando_la_clave_esta_configura
     monkeypatch.setattr(orquestador.storage, "descargar_archivo", lambda ruta: file_bytes)
     fila_configurada = ParametroMetodologia(
         id=uuid.uuid4(), clave=parametros.CLAVE_TIPOS_INVENTARIO_INCLUIDOS,
-        valor=["REPUESTOS"], vigente_desde=date(2026, 1, 1),
+        valor=["0002 - REPUESTOS", "IRPTOSYACC", "IVNLUBGR"],
+        vigente_desde=date(2026, 1, 1),
     )
     queue = _queue_cache_y_proveedor() + [
-        [fila_configurada],  # parametros.resolver_tipos_inventario_incluidos -> CONFIGURADA
+        [fila_configurada],  # lineas_comerciales (la clave de tipos configurada no interviene)
         [],  # bodegas_excluidas
         *LECTURAS_LINEA,
     ]
@@ -848,6 +845,7 @@ async def test_dry_run_ventas_no_registra_default_cuando_la_clave_esta_configura
     await orquestador._dry_run(session, carga)
 
     assert carga.estado == "VALIDADO"
+    assert carga.filas_validas == 1
     assert "parametros_default_usados" not in carga.log
 
 
@@ -999,7 +997,7 @@ async def _dry_run_3pct(monkeypatch, filas_tolerancia):
     monkeypatch.setattr(
         orquestador.storage, "descargar_archivo", lambda ruta: contenido)
     queue = _queue_cache_y_proveedor() + [
-        [],  # tipos_inventario_incluidos -> default
+        [],  # lineas_comerciales -> default
         [],  # bodegas_excluidas -> default
         *LECTURAS_LINEA,
         filas_tolerancia,  # periodo_tolerancia_pct

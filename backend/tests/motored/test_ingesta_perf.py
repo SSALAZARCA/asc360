@@ -249,7 +249,7 @@ async def test_ventas_305901_rows_seed_es_cache_first_con_queries_latencia_y_mem
             cache=cache,
             carga_id=CARGA_ID,
             proveedor_id=PROVEEDOR_ID,
-            tipos_inventario_incluidos=["0002 - REPUESTOS"],
+            lineas_incluidas=["0002 - REPUESTOS"],
         )
         if fila_staging is not None:
             staged.append(fila_staging)

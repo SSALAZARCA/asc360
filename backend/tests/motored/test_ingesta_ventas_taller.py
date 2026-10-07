@@ -2,12 +2,13 @@
 VENTAS: TALLER sales and the rows kept out of `venta_mensual`.
 
 Owner decision: taller demand counts for the pedido. The line of a row comes
-from the referencia master (`linea_por_referencia`); the default of
-`tipos_inventario_incluidos` lists the 7 counted lines. A row whose master line
+from the referencia master (`linea_por_referencia`) and is matched against
+the `lineas_comerciales` in force (the 7 KPI lines by default). A row whose master line
 is outside the list is staged with `solo_detalle` (and its class) so the apply
 can re-evaluate it; `venta_mensual`, the detected period and
 `fecha_max_detectada` never see it.
 """
+import sys
 import uuid
 from datetime import date
 from decimal import Decimal
@@ -55,7 +56,7 @@ def _procesar(fila_raw, tipos=("REPUESTOS",), linea="REPUESTOS"):
     return ventas.procesar_fila(
         fila_raw, numero_fila=2, lote=1, mapa_columnas=_MAPA, cache=_cache(),
         carga_id=CARGA_ID, proveedor_id=PROVEEDOR_ID,
-        tipos_inventario_incluidos=list(tipos),
+        lineas_incluidas=list(tipos),
         linea_por_referencia={REFERENCIA_ID: linea},
     )
 
@@ -340,3 +341,61 @@ def test_lista_configurada_con_mayusculas_y_espacios_tambien_coincide():
     staging, _ = _procesar(_fila(), tipos=[" Gps "], linea="GPS")
 
     assert "solo_detalle" not in staging.payload
+
+
+# --- empty-apply guard ------------------------------------------------------
+
+
+def _error_de_archivo(sesion):
+    return [e.codigo_error for e in sesion.added_of_type(CargaError) if e.fila == 0]
+
+
+async def test_dry_run_con_todas_las_filas_fuera_de_linea_marca_la_carga(monkeypatch):
+    filas = [_fila(ref="REFM", nro_doc=f"M-{i}") for i in range(3)]
+
+    carga, sesion = await _dry_run(monkeypatch, filas)
+
+    assert carga.estado == "CON_ERRORES"
+    assert carga.filas_validas == 0
+    assert carga.log["filas_fuera_de_linea"] == 3
+    assert _error_de_archivo(sesion) == ["E-CARGA-051"]
+
+
+async def test_dry_run_con_solo_filas_sin_linea_espera_la_asignacion(monkeypatch):
+    monkeypatch.setattr(  # ninguna referencia tiene linea en el maestro
+        sys.modules[__name__], "_LINEAS_DOS", [])
+    carga, sesion = await _dry_run(monkeypatch, [_fila(nro_doc="S-1")])
+
+    assert carga.estado == "VALIDADO"
+    assert carga.log["filas_sin_linea"] == 1
+    assert _error_de_archivo(sesion) == []
+
+
+async def test_dry_run_con_filas_de_referencias_desconocidas_cuenta_como_consideradas(monkeypatch):
+    carga, _ = await _dry_run(monkeypatch, [_fila(ref="NOEXISTE", nro_doc="U-1")])
+
+    assert carga.estado == "VALIDADO"  # el error de fila ya existente, sin la marca nueva
+    assert carga.filas_validas == 1
+
+
+async def test_aplicar_sin_ninguna_fila_en_las_lineas_incluidas_responde_409_y_no_escribe():
+    carga = _carga("VENTAS", estado="VALIDADO",
+                   periodo_desde=date(2026, 9, 1), periodo_hasta=date(2026, 9, 30))
+    fuera = CargaFilaStaging(
+        carga_id=carga.id, fila=1, lote=1, sucursal_id=SUCURSAL_ID,
+        referencia_id=REFERENCIA_ID,
+        payload={"anio": 2026, "mes": 9, "dia": 15, "origen": "MOSTRADOR",
+                 "cantidad": "1", "solo_detalle": True,
+                 "linea_clase": "fuera_de_linea"})
+    # staging, lineas_comerciales, linea del maestro (MOTOS)
+    sesion = FakeAsyncSession(execute_queue=[
+        [fuera], [], [(REFERENCIA_ID, "MOTOS")]])
+
+    with pytest.raises(orquestador.EstadoInvalidoParaAplicarError) as error:
+        await orquestador.ejecutar_aplicar(sesion, carga)
+
+    assert str(error.value) == (
+        "Ninguna fila quedó en las líneas incluidas: revise la configuración "
+        "de líneas comerciales.")
+    assert carga.estado == "VALIDADO"
+    assert len(sesion.executed_statements) == 3  # solo lecturas

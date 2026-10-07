@@ -41,7 +41,7 @@ Deliberadamente FUERA de alcance de esta fase (ver tasks.md Fase 9):
   Fase 9.
 - Persistencia de `sucursal_alias` al resolver un error en la UI — Fase 9.
 
-`tipos_inventario_incluidos` y `proveedor_id` los recibe el caller como
+`lineas_incluidas` (desde V5; antes `tipos_inventario_incluidos`, que VENTAS ya no usa) y `proveedor_id` los recibe el caller como
 parámetros explícitos en vez de leerlos de `parametro_metodologia` o de una
 columna del archivo -- ambas resoluciones son de Fase 9 y no se
 re-implementan acá (ver apply-progress, sección "Deviations").
@@ -573,7 +573,7 @@ def procesar_fila(
     cache: CacheResolucion,
     carga_id: uuid.UUID,
     proveedor_id: uuid.UUID,
-    tipos_inventario_incluidos: Sequence[str],
+    lineas_incluidas: Sequence[str],
     bodegas_excluidas: FrozenSet[str] = frozenset(),
     sucursal_por_co: Optional[Dict[str, uuid.UUID]] = None,
     linea_por_referencia: Optional[Dict[uuid.UUID, str]] = None,
@@ -590,7 +590,7 @@ def procesar_fila(
 
     La línea sale SOLO del maestro (`linea_por_referencia`, línea normalizada
     por referencia; una referencia ausente no tiene línea) y se compara con
-    `tipos_inventario_incluidos` (las líneas que cuentan). Línea incluida:
+    `lineas_incluidas` (las `lineas_comerciales` vigentes). Línea incluida:
     entra a `venta_mensual` y `venta_detalle`. Otra línea, o sin línea: se
     stagea con `solo_detalle: True` y su clase (`ventas_lineas`) para que el
     informe y el apply la evalúen contra el maestro vigente, pero no entra
@@ -615,7 +615,7 @@ def procesar_fila(
         cache, _texto(_extraer(fila_raw, mapa_columnas, "Referencia")))
     clase = lineas_mod.clase_de_fila(
         referencia_id, linea_por_referencia or {},
-        lineas_mod.normalizar_incluidas(tipos_inventario_incluidos),
+        lineas_mod.normalizar_incluidas(lineas_incluidas),
     ) or lineas_mod.CLASE_INCLUIDA
     if clase == lineas_mod.CLASE_INCLUIDA:
         resultado = _procesar_fila_incluida(fila_raw, **comunes)

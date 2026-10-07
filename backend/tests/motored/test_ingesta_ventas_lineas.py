@@ -77,7 +77,7 @@ def _procesar(tipo, linea="REPUESTOS", reglas=REGLAS, ref="R1"):
             sucursal_por_texto={"CALI": SUC, "BA061": SUC},
             referencia_por_codigo={"R1": (REF, uuid.uuid4())}),
         carga_id=uuid.uuid4(), proveedor_id=uuid.uuid4(),
-        tipos_inventario_incluidos=["REPUESTOS"],
+        lineas_incluidas=["REPUESTOS"],
         linea_por_referencia={REF: linea} if linea else {},
         tipos_excluidos=reglas)
 

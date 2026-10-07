@@ -70,7 +70,7 @@ def _cola_dry_run():
         [],  # sucursal_alias
         [("REF1", PROVEEDOR_ID, REFERENCIA_ID)],
         [PROVEEDOR_ID],
-        [],  # tipos_inventario_incluidos -> default
+        [],  # lineas_comerciales -> default
         [],  # bodegas_excluidas -> default
         [],  # ventas_tipos_excluidos -> default
         [(REFERENCIA_ID, "REPUESTOS")],  # linea del maestro
@@ -94,7 +94,7 @@ def _procesar(fecha):
             referencia_por_codigo={"REF1": (REFERENCIA_ID, PROVEEDOR_ID)},
         ),
         carga_id=uuid.uuid4(), proveedor_id=PROVEEDOR_ID,
-        tipos_inventario_incluidos=["REPUESTOS"],
+        lineas_incluidas=["REPUESTOS"],
         linea_por_referencia={REFERENCIA_ID: "REPUESTOS"},
     )
 

@@ -54,7 +54,7 @@ def _procesar(fila, mapa=_MAPA_CON_CO, por_co=POR_CO, linea="REPUESTOS"):
     return ventas.procesar_fila(
         fila, numero_fila=2, lote=1, mapa_columnas=mapa, cache=_cache(),
         carga_id=CARGA_ID, proveedor_id=PROVEEDOR_ID,
-        tipos_inventario_incluidos=["REPUESTOS"],
+        lineas_incluidas=["REPUESTOS"],
         bodegas_excluidas=EXCLUIDAS, sucursal_por_co=por_co,
         linea_por_referencia={REFERENCIA_ID: linea})
 

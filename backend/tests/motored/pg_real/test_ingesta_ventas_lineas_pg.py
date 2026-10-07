@@ -490,7 +490,6 @@ async def test_los_consumidores_de_venta_mensual_ven_la_carga(
 # --- venta_mensual is rebuilt for the months in the file (V3) ---------------
 
 
-
 async def _segunda_tienda(db):
     tienda = Sucursal(id=uuid.uuid4(), codigo_co=codigo_co_unico(),
                       nombre=f"TIENDA OTRA {uuid.uuid4().hex[:6]}")
@@ -666,3 +665,77 @@ async def test_el_vaciado_previsto_lista_en_vivo_las_tiendas_ausentes(
 async def _bodega_de(db, tienda):
     return (await db.execute(
         select(Bodega).where(Bodega.sucursal_id == tienda.id))).scalars().first()
+
+
+# --- the line rule follows `lineas_comerciales`, not the old codes (V5) -----
+
+
+async def _guardar_parametro(db, clave, valor):
+    from app.motored.models.parametro_metodologia import ParametroMetodologia
+
+    db.add(ParametroMetodologia(
+        id=uuid.uuid4(), clave=clave, valor=valor, sucursal_id=None,
+        vigente_desde=datetime.date(2026, 1, 1)))
+    await db.flush()
+
+
+async def test_tipos_inventario_incluidos_con_codigos_viejos_no_cambia_el_resultado(
+        sesion, monkeypatch, espias):
+    m = await _mundo(sesion)
+    await _guardar_parametro(
+        sesion, "tipos_inventario_incluidos",
+        ["0002 - REPUESTOS", "IRPTOSYACC", "IVNLUBGR"])
+    carga = await _dry_run(sesion, monkeypatch, [
+        _fila(m, m.con_linea, 10, "OK-1"), _fila(m, m.de_motos, 4, "MO-1")])
+
+    await _aplicar(sesion, carga)
+
+    mensual, detalle = await _tablas(sesion, m)
+    assert mensual == {(m.con_linea.id, "MOSTRADOR"): Decimal("10")}
+    assert detalle == {"OK-1"}
+
+
+async def test_las_lineas_que_cuentan_son_las_lineas_comerciales_vigentes(
+        sesion, monkeypatch, espias):
+    m = await _mundo(sesion)
+    await _guardar_parametro(sesion, "lineas_comerciales", ["REPUESTOS", "MOTOS"])
+    carga = await _dry_run(sesion, monkeypatch, [
+        _fila(m, m.con_linea, 10, "OK-1"), _fila(m, m.de_motos, 4, "MO-1")])
+
+    await _aplicar(sesion, carga)
+
+    mensual, detalle = await _tablas(sesion, m)
+    assert {k[0] for k in mensual} == {m.con_linea.id, m.de_motos.id}
+    assert detalle == {"OK-1", "MO-1"}
+
+
+async def test_el_dry_run_marca_la_carga_si_ninguna_fila_queda_en_las_lineas(
+        sesion, monkeypatch, espias):
+    m = await _mundo(sesion)
+
+    carga = await _dry_run(sesion, monkeypatch, [_fila(m, m.de_motos, 4, "MO-1")])
+
+    assert carga.estado == "CON_ERRORES"
+    errores = (await sesion.execute(
+        select(CargaError).where(CargaError.carga_id == carga.id))).scalars().all()
+    assert [(e.fila, e.codigo_error) for e in errores] == [(0, "E-CARGA-051")]
+
+
+async def test_si_las_asignaciones_dejan_cero_filas_el_apply_responde_409(
+        sesion, monkeypatch, espias):
+    m = await _mundo(sesion)
+    carga = await _dry_run(sesion, monkeypatch, [
+        _fila(m, m.sin_linea, 3, "SL-1"), _fila(m, m.sin_linea_2, 2, "SL-2")])
+    assert carga.estado == "VALIDADO"  # esperan asignacion, no estan perdidas
+    await _asignar(sesion, m, carga, m.sin_linea, "NO COMERCIAL")
+    await _asignar(sesion, m, carga, m.sin_linea_2, "NO COMERCIAL")
+
+    with pytest.raises(HTTPException) as error:
+        await cargas_api.aplicar_carga(carga.id, db=sesion, user=_usuario(m))
+
+    assert error.value.status_code == 409
+    assert error.value.detail == (
+        "Ninguna fila quedó en las líneas incluidas: revise la configuración "
+        "de líneas comerciales.")
+    assert await _tablas(sesion, m) == ({}, set())
+    assert carga.estado == "VALIDADO"

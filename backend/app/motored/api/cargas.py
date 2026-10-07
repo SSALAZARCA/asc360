@@ -712,9 +712,8 @@ async def resolver_errores(
 
 
 async def _incluidas_de(db: AsyncSession, carga: CargaArchivo):
-    tipos, _ = await parametros.resolver_tipos_inventario_incluidos(
+    return await lineas_mod.leer_lineas_comerciales(
         db, carga.periodo_desde or date.today())
-    return lineas_mod.normalizar_incluidas(tipos)
 
 
 async def _payload_sin_linea(

@@ -88,7 +88,7 @@ def _procesar(fila_raw, **overrides):
         cache=_cache_resuelta(),
         carga_id=CARGA_ID,
         proveedor_id=PROVEEDOR_ID,
-        tipos_inventario_incluidos=["REPUESTOS"],
+        lineas_incluidas=["REPUESTOS"],
         linea_por_referencia={REFERENCIA_ID: "REPUESTOS"},
     )
     kwargs.update(overrides)
@@ -112,7 +112,7 @@ def test_linea_del_maestro_fuera_de_las_incluidas_no_entra_a_venta_mensual_ni_da
     `test_ingesta_ventas_lineas.py` para el detalle de esa ruta."""
     fila_staging, errores = _procesar(
         _fila(),
-        tipos_inventario_incluidos=["REPUESTOS"],
+        lineas_incluidas=["REPUESTOS"],
         linea_por_referencia={REFERENCIA_ID: "MOTOS"},
     )
 

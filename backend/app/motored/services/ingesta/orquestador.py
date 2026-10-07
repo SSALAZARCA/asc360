@@ -103,6 +103,7 @@ CODIGO_COLUMNA_OBLIGATORIA_FALTANTE = "E-CARGA-046"
 CODIGO_ENCABEZADO_NO_ENCONTRADO = "E-CARGA-047"
 CODIGO_ENCABEZADO_DUPLICADO = "E-CARGA-048"
 CODIGO_SIN_FILAS_VALIDAS = "E-CARGA-049"
+CODIGO_NINGUNA_LINEA_INCLUIDA = "E-CARGA-051"
 
 _COLUMNAS_POR_TIPO: Dict[str, Tuple[str, ...]] = {
     "VENTAS": ventas_mod.COLUMNAS_ESPERADAS,
@@ -204,11 +205,9 @@ def _con_parametros(modulo: Any, comunes: Dict[str, Any],
 
 
 async def _procesador_ventas(db, en_fecha, comunes) -> _Construido:
-    resolver = parametros.resolver_tipos_inventario_incluidos
-    tipos, fue_default = await resolver(db, en_fecha)
-    defaults = {}
-    if fue_default:
-        defaults[parametros.CLAVE_TIPOS_INVENTARIO_INCLUIDOS] = tipos
+    # Las lineas que cuentan son las `lineas_comerciales` vigentes (como las
+    # lee el KPI); `tipos_inventario_incluidos` ya no interviene en VENTAS.
+    lineas = await lineas_mod.leer_lineas_comerciales(db, en_fecha)
     bodegas_excluidas = await _leer_bodegas_excluidas(db)
     # El mapa C.O. se lee solo si el archivo trae la columna: sin ella la
     # resolución sigue siendo por bodega.
@@ -216,11 +215,11 @@ async def _procesador_ventas(db, en_fecha, comunes) -> _Construido:
     if ventas_mod.tiene_columna_co(comunes["mapa_columnas"]):
         sucursal_por_co = await resolucion_mod.leer_sucursal_por_co(db)
     return _con_parametros(
-        ventas_mod, comunes, tipos_inventario_incluidos=tipos,
+        ventas_mod, comunes, lineas_incluidas=lineas,
         bodegas_excluidas=bodegas_excluidas,
         sucursal_por_co=sucursal_por_co,
         tipos_excluidos=await _leer_tipos_excluidos(db),
-        linea_por_referencia=await lineas_mod.leer_lineas(db)), defaults
+        linea_por_referencia=await lineas_mod.leer_lineas(db)), {}
 
 
 async def _procesador_inventario(db, en_fecha, comunes) -> _Construido:
@@ -611,6 +610,42 @@ async def _registrar_progreso_lote(
     await session.commit()
 
 
+def _volcar_contadores(log: Dict[str, Any], estado: "_EstadoLoteDryRun") -> None:
+    """Los contadores del dry-run que el informe muestra; los que valen 0
+    no se escriben (salvo `filas_con_error`)."""
+    log["filas_con_error"] = estado.filas_con_error
+    for clave, cantidad in (
+        ("filas_solo_detalle", estado.filas_solo_detalle),
+        ("filas_bodega_excluida", estado.filas_bodega_excluida),
+        ("filas_co_vacio", estado.filas_co_vacio),
+        ("filas_tipo_excluido", estado.filas_tipo_excluido),
+        ("filas_fuera_de_linea", estado.filas_fuera_de_linea),
+        ("filas_sin_linea", estado.filas_sin_linea),
+    ):
+        if cantidad:
+            log[clave] = cantidad
+
+
+def _fijar_estado_final(
+    session: AsyncSession, carga: CargaArchivo, estado: "_EstadoLoteDryRun"
+) -> None:
+    """`VALIDADO` si hay filas validas o filas sin linea esperando que un
+    usuario las asigne; `CON_ERRORES` con un error de archivo completo si
+    todas las filas con datos quedaron fuera de las lineas incluidas, o si
+    no hay ninguna fila valida."""
+    if estado.filas_validas or estado.filas_sin_linea:
+        carga.estado = "VALIDADO"
+        return
+    carga.estado = "CON_ERRORES"
+    if estado.filas_fuera_de_linea:
+        codigo, mensaje = CODIGO_NINGUNA_LINEA_INCLUIDA, lineas_mod.MENSAJE_NINGUNA_LINEA
+    else:
+        codigo, mensaje = CODIGO_SIN_FILAS_VALIDAS, (
+            "El archivo no tiene ninguna fila válida para cargar. Revisá los errores "
+            "por fila (si los hay) o que el archivo tenga datos, y volvé a cargarlo.")
+    session.add(errores_mod.construir_error(carga.id, 0, None, None, codigo, mensaje))
+
+
 async def _cerrar_dry_run(
     session: AsyncSession, carga: CargaArchivo, estado: "_EstadoLoteDryRun"
 ) -> None:
@@ -630,20 +665,7 @@ async def _cerrar_dry_run(
         return
 
     log: Dict[str, Any] = dict(carga.log or {})
-    log["filas_con_error"] = estado.filas_con_error
-    if estado.filas_solo_detalle:
-        log["filas_solo_detalle"] = estado.filas_solo_detalle
-    if estado.filas_bodega_excluida:
-        log["filas_bodega_excluida"] = estado.filas_bodega_excluida
-    if estado.filas_co_vacio:
-        log["filas_co_vacio"] = estado.filas_co_vacio
-    for clave, cantidad in (
-        ("filas_tipo_excluido", estado.filas_tipo_excluido),
-        ("filas_fuera_de_linea", estado.filas_fuera_de_linea),
-        ("filas_sin_linea", estado.filas_sin_linea),
-    ):
-        if cantidad:
-            log[clave] = cantidad
+    _volcar_contadores(log, estado)
     if estado.parametros_default_usados:
         log["parametros_default_usados"] = dict(estado.parametros_default_usados)
     await _verificar_corte_backorder(session, carga, log)
@@ -652,15 +674,7 @@ async def _cerrar_dry_run(
     ):
         return
 
-    if estado.filas_validas == 0:
-        session.add(errores_mod.construir_error(
-            carga.id, 0, None, None, CODIGO_SIN_FILAS_VALIDAS,
-            "El archivo no tiene ninguna fila válida para cargar. Revisá los errores "
-            "por fila (si los hay) o que el archivo tenga datos, y volvé a cargarlo.",
-        ))
-        carga.estado = "CON_ERRORES"
-    else:
-        carga.estado = "VALIDADO"
+    _fijar_estado_final(session, carga, estado)
     carga.log = log
     await session.commit()
 
@@ -878,7 +892,7 @@ async def ejecutar_aplicar(session: AsyncSession, carga: CargaArchivo) -> None:
         raise
 
 
-CLAVE_REEMPLAZA_MES = "reemplaza_mes_completo"
+CLAVE_REEMPLAZA_MES = lineas_mod.CLAVE_REEMPLAZA_MES
 
 
 def reemplaza_mes_completo(carga: CargaArchivo) -> bool:
@@ -897,9 +911,7 @@ async def _aplicar_ventas(
     descartan. Un veredicto de período RECHAZO (las líneas asignadas pueden
     mover el histograma) tampoco aplica: la carga sigue VALIDADO."""
     en_fecha = carga.periodo_desde or date.today()
-    tipos, _ = await parametros.resolver_tipos_inventario_incluidos(
-        session, en_fecha)
-    incluidas = lineas_mod.normalizar_incluidas(tipos)
+    incluidas = await lineas_mod.leer_lineas_comerciales(session, en_fecha)
     lineas = await lineas_mod.leer_lineas(
         session,
         {f.referencia_id for f in filas_staging if f.referencia_id})
@@ -910,11 +922,14 @@ async def _aplicar_ventas(
     if sin_linea:
         raise EstadoInvalidoParaAplicarError(
             lineas_mod.mensaje_sin_linea(len(sin_linea)))
+    aplicables = lineas_mod.reclasificar(filas_staging, lineas, incluidas)
+    if filas_staging and not aplicables:
+        raise EstadoInvalidoParaAplicarError(lineas_mod.MENSAJE_NINGUNA_LINEA)
     aplicar = (ventas_mod.aplicar_reemplazando_meses
                if reemplaza_mes_completo(carga)
                else ventas_mod.aplicar_con_periodo)
     veredicto = await aplicar(
-        session, lineas_mod.reclasificar(filas_staging, lineas, incluidas),
+        session, aplicables,
         carga.periodo_desde, carga.periodo_hasta, carga.id,
         await _leer_tolerancia_periodo(session))
     if veredicto.tipo == periodo_mod.TipoVeredictoPeriodo.RECHAZO:
