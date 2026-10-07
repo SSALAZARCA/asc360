@@ -112,7 +112,13 @@ const sinDecimalInutil = (v) => decimales(v, Number.isInteger(v) ? 0 : 1);
 
 /** Missing sale of an unmet line in pesos: from 1 M on one decimal in millions (`$3,4 M`), below it whole pesos (`$850.000`). */
 const pesosFalta = (v) => (v >= 1e6 ? millones(v, 1) : moneda(v));
-const textoFalta = (b) => (b.falta_venta == null ? b.etiqueta : `${b.etiqueta} · le faltan ${pesosFalta(b.falta_venta)}`);
+/** Above the budget minimum but still short of the mix (her real sale grew past the budget): the gap in points. */
+const textoMezcla = (b) => `${b.etiqueta} · supera el mínimo; le faltan ${decimales(Math.max(0, b.pct_meta - b.pct_real * 100), 1)} pts`;
+const textoFalta = (b) => {
+  if (b.falta_venta == null) return b.etiqueta;
+  if (b.falta_venta === 0 && esNumero(b.pct_real) && esNumero(b.pct_meta)) return textoMezcla(b);
+  return `${b.etiqueta} · le faltan ${pesosFalta(b.falta_venta)}`;
+};
 
 /** Bonus status of her month: a notice when she is below the gate, and one entry per bonus line. Null for a payload without bonuses. */
 function bonosDe(c) {

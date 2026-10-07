@@ -90,6 +90,20 @@ describe('single-asesor view-model', () => {
     expect(bonos.lineas[0].texto).toBe('Lubricantes · le faltan $850.000');
   });
 
+  it('comision: a line above its budget minimum that still misses its mix says so instead of "$0"', () => {
+    const base = ASESOR_DETALLE.comision;
+    const data = {
+      ...ASESOR_DETALLE,
+      comision: {
+        ...base,
+        bonos: base.bonos.map((b) => (b.linea === 'LUBRICANTES' ? { ...b, cumple: false, falta_venta: 0, pct_real: 0.198, pct_meta: 21 } : b)),
+      },
+    };
+    const linea = comisionDe(data).bonos.lineas[0];
+    expect(linea.texto).toBe('Lubricantes · supera el mínimo; le faltan 1,2 pts');
+    expect(linea.estado).toBe('no-cumple');
+  });
+
   it('comision: below the gate it asks for the cumplimiento and still shows what is missing per line', () => {
     const c = comisionDe(clonar({ comision: { ...ASESOR_DETALLE.comision, cumplimiento_pct: 0.8, gate: { umbral: 95, cumple: false }, bono_total: 0, total_a_pagar: 910000 } }));
     expect(c.valor).toBe('$910.000');
