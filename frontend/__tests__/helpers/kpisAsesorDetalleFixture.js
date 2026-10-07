@@ -33,10 +33,16 @@ export const ASESOR_DETALLE = {
     promedio_red: 394000, cumplimiento_pct: 1.014, gate: { umbral: 95, cumple: true }, bono_total: 30000, total_a_pagar: 940000,
     bonos: [
       { linea: 'LUBRICANTES', etiqueta: 'Lubricantes', venta: 11 * M, pct_real: 0.183, pct_meta: 21, falta_venta: 3.4 * M, bono: 35000, cumple: false, paga: false, activo: true, bono_pagado: 0 },
+      { linea: 'LLANTAS', etiqueta: 'Llantas', venta: 1.2 * M, pct_real: 0.02, pct_meta: 4, falta_venta: 850000, bono: 25000, cumple: false, paga: false, activo: true, bono_pagado: 0 },
       { linea: 'CASCOS', etiqueta: 'Cascos', venta: 4.3 * M, pct_real: 0.0712, pct_meta: 6, bono: 30000, cumple: true, paga: true, activo: true, bono_pagado: 30000 },
       { linea: 'TECNIRED', etiqueta: 'Tecnired (clientes)', venta: 1.2 * M, pct_real: 0.02, pct_meta: 6, bono: 25000, cumple: false, paga: false, activo: false, bono_pagado: 0 },
     ],
     sig: { tramo: 'ELITE', desde_pct: 105, tasa_pct: 1.8, falta: 2.2 * M, gana: 224000, meta: 63 * M },
+    fecha_datos: '2026-07-18', dias_habiles_restantes: 11, falta_100: 0, venta_diaria_necesaria: null, falta_compuerta: 0,
+    siguiente_tramo: { nombre: 'ELITE', falta: 2.2 * M, comision_si_llega: 1134000 }, venta_hmcl: 0.14 * M,
+    tramos: [
+      { nombre: 'BASE', desde_pct: 0, tasa_pct: 1 }, { nombre: 'PRO', desde_pct: 90, tasa_pct: 1.5 }, { nombre: 'ELITE', desde_pct: 105, tasa_pct: 1.8 },
+    ],
   },
   tiles: [
     tile('venta', 421.2 * M, 209.2 * M, 'asesores', 'pct', 1.01),

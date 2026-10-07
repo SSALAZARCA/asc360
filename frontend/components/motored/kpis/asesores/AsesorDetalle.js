@@ -2,6 +2,7 @@ import { Chip } from '../charts';
 import { COLOR } from '../tokens';
 import { EtiquetaConTip } from '../ventas/CumplimientoTop';
 import { NUM, ROTULO, TARJETA } from '../ventas/estilos';
+import DetalleComision from './DetalleComision';
 import DetalleComparacion from './DetalleComparacion';
 import DetalleMeta from './DetalleMeta';
 import DetalleTendencia from './DetalleTendencia';
@@ -53,7 +54,7 @@ function Tiles({ data }) {
   );
 }
 
-/** "Un asesor" view of the Asesores tab: ficha, goal gauge and commission, six figures, trend, lines, peers, store and Tecnired. */
+/** "Un asesor" view of the Asesores tab: ficha, goal gauge and commission, six figures, trend, lines, peers, store, Tecnired and how the commission is calculated. */
 export default function AsesorDetalle({ data }) {
   return (
     <section aria-label="Detalle del asesor" style={{ display: 'flex', flexDirection: 'column', gap: 18, minWidth: 0 }}>
@@ -62,6 +63,7 @@ export default function AsesorDetalle({ data }) {
       <Tiles data={data} />
       <DetalleTendencia data={data} />
       <DetalleComparacion data={data} />
+      <DetalleComision data={data} />
     </section>
   );
 }

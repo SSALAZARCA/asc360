@@ -6,7 +6,7 @@ import { nombreLinea } from '../ventas/datos';
 
 const esNumero = (v) => typeof v === 'number' && Number.isFinite(v);
 const MESES_LARGOS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
-const mesLargo = (mes) => MESES_LARGOS[Number(mes.slice(5, 7)) - 1];
+export const mesLargo = (mes) => MESES_LARGOS[Number(mes.slice(5, 7)) - 1];
 const TRAMOS_DEFECTO = [{ nombre: 'BASE', desde_pct: 0 }, { nombre: 'PRO', desde_pct: 90 }, { nombre: 'ELITE', desde_pct: 105 }];
 const COLOR_TRAMO = { ELITE: COLOR.good, PRO: COLOR.info, BASE: COLOR.gray400 };
 const SOFT_TRAMO = { ELITE: COLOR.goodSoft, PRO: COLOR.infoSoft };
@@ -87,82 +87,38 @@ const sobreArco = (v, r) => {
   return [100 + r * Math.cos(a), 104 - r * Math.sin(a)];
 };
 
-/** Gauge of her month (arc to 120 %, cuts of the tiers); null without budget for the month. */
+const lugar = (v, r) => sobreArco(v, r).map((n) => n.toFixed(1));
+const enPorcentaje = ([x, y]) => [`${((x / 200) * 100).toFixed(1)}%`, `${((y / 128) * 100).toFixed(1)}%`];
+
+/** One cut of the gauge: the tick, its label (outside the arc, or inside for the 100 % goal) and its tooltip. */
+function corteDe(valor, { nombre, tasa, color, meta }) {
+  const [x1, y1] = lugar(valor, meta ? 62 : 68);
+  const [x2, y2] = lugar(valor, meta ? 96 : 92);
+  const [lx, ly] = enPorcentaje(sobreArco(valor, meta ? 56 : 100));
+  const desde = decimales(valor, Number.isInteger(valor) ? 0 : 1);
+  return {
+    x1, y1, x2, y2, lx, ly, color, meta: Boolean(meta), lado: meta ? 'dentro' : 'fuera',
+    label: meta ? `${desde}% · Meta` : `${desde}% · ${nombre}`,
+    tip: meta ? 'Tu meta: el 100% de tu presupuesto' : `Desde ${desde}% de tu meta: tramo ${nombre}${tasa == null ? '' : ` (${decimales(tasa, 1)}%)`}`,
+  };
+}
+
+/** Gauge of her month (arc to 120 %, cuts of the tiers and the 100 % goal); null without budget for the month. */
 export function gaugeDe(data) {
   const m = data.cumplimiento_mes;
   if (!m.presupuesto || !esNumero(m.pct)) return null;
   const tramos = tramosDe(data);
+  const tasas = new Map((data.comision?.tramos ?? []).map((t) => [t.nombre, t.tasa_pct]));
   const tramo = tramoActual(data);
-  const cortes = tramos.filter((t) => t.desde_pct > 0).map((t) => {
-    const [x1, y1] = sobreArco(t.desde_pct, 68);
-    const [x2, y2] = sobreArco(t.desde_pct, 92);
-    const [tx, ty] = sobreArco(t.desde_pct, 104);
-    return { x1: x1.toFixed(1), y1: y1.toFixed(1), x2: x2.toFixed(1), y2: y2.toFixed(1), tx: tx.toFixed(1), ty: (ty + 3).toFixed(1), label: String(t.desde_pct) };
-  });
+  const cortes = [
+    ...tramos.filter((t) => t.desde_pct > 0).map((t) => [t.desde_pct, { nombre: t.nombre, tasa: tasas.get(t.nombre), color: colorDeTramo(t.nombre, tramos) }]),
+    [100, { meta: true, color: COLOR.ink }],
+  ].sort((a, b) => a[0] - b[0]).map(([valor, opciones]) => corteDe(valor, opciones));
   const texto = pct(m.pct);
   const pie = [`${millones(m.venta, 1)} de ${millones(m.presupuesto, 1)}`, esNumero(m.red_pct) ? `red ${pct(m.red_pct)}` : null].filter(Boolean).join(' · ');
   return {
     texto, pie, cortes, color: tramo ? colorDeTramo(tramo, tramos) : COLOR.info, titulo: `Cumplimiento de su meta · ${mesDe(data)}`,
     arco: `${((Math.min(m.pct * 100, GAUGE_MAX) / GAUGE_MAX) * GAUGE_L).toFixed(1)} ${GAUGE_L.toFixed(1)}`, aria: `Cumplimiento ${texto} de su meta`,
-  };
-}
-
-const TIP_APAGADO = 'Bono apagado en Configuración';
-const sinDecimalInutil = (v) => decimales(v, Number.isInteger(v) ? 0 : 1);
-
-/** Missing sale of an unmet line in pesos: from 1 M on one decimal in millions (`$3,4 M`), below it whole pesos (`$850.000`). */
-const pesosFalta = (v) => (v >= 1e6 ? millones(v, 1) : moneda(v));
-/** Above the budget minimum but still short of the mix (her real sale grew past the budget): the gap in points. */
-const textoMezcla = (b) => `${b.etiqueta} · supera el mínimo; le faltan ${decimales(Math.max(0, b.pct_meta - b.pct_real * 100), 1)} pts`;
-const textoFalta = (b) => {
-  if (b.falta_venta == null) return b.etiqueta;
-  if (b.falta_venta === 0 && esNumero(b.pct_real) && esNumero(b.pct_meta)) return textoMezcla(b);
-  return `${b.etiqueta} · le faltan ${pesosFalta(b.falta_venta)}`;
-};
-
-/** Bonus status of her month: a notice when she is below the gate, and one entry per bonus line. Null for a payload without bonuses. */
-function bonosDe(c) {
-  if (!c.gate || !c.bonos) return null;
-  const { cumple: pasa, umbral } = c.gate;
-  const lineas = c.bonos.map((b) => {
-    const base = { linea: b.linea };
-    if (!b.activo) return { ...base, texto: `${b.etiqueta} · apagado`, estado: 'apagado', tip: TIP_APAGADO };
-    if (b.cumple && pasa) return { ...base, texto: `${b.etiqueta} · +${moneda(b.bono_pagado)}`, estado: 'cumple', tip: `Gana ${moneda(b.bono_pagado)}` };
-    if (b.cumple) {
-      return { ...base, texto: b.etiqueta, estado: 'sin-compuerta', tip: `Cumple la línea, pero no llega al ${sinDecimalInutil(umbral)}% de cumplimiento: no se paga` };
-    }
-    const meta = `Venta mínima de la línea según su presupuesto (presupuesto × ${sinDecimalInutil(umbral)}% × meta). El bono se gana si la línea llega a la meta % de su venta real.`;
-    return { ...base, texto: textoFalta(b), estado: 'no-cumple', tip: meta };
-  });
-  return {
-    aviso: pasa ? null : `Necesita ≥${sinDecimalInutil(umbral)}% de cumplimiento para activar bonos (hoy ${pct(c.cumplimiento_pct)})`,
-    lineas,
-  };
-}
-
-/** Commission card: amount, tier chip, the gap to the next tier and the network average; null if not liquidated. */
-export function comisionDe(data) {
-  const c = data.comision;
-  if (!c) return null;
-  const tramos = tramosDe(data);
-  const promedio = `Promedio de comisión de la red: ${moneda(c.promedio_red)}.`;
-  const base = c.base_pago === 'sin_hmcl' ? 'sin HMCL' : 'con HMCL';
-  const sig = c.sig;
-  const avance = sig && sig.meta > 0 ? Math.min(Math.max(data.cumplimiento_mes.venta / sig.meta, 0), 1) : 0;
-  const bonos = bonosDe(c);
-  const total = c.total_a_pagar ?? c.comision;
-  return {
-    titulo: `Comisión estimada · ${mesLargo(c.mes)}`, valor: moneda(total), bonos,
-    desglose: bonos ? `Comisión ${moneda(c.comision)} + bonos ${moneda(c.bono_total)} = ${moneda(total)}` : null,
-    chip: { texto: `${c.tramo ?? 'Sin tramo'} ${decimales(c.tasa_pct, 1)}%`, color: colorDeTramo(c.tramo, tramos) },
-    base: `${millones(c.venta_base, 1)} ${base} × ${decimales(c.tasa_pct, 1)}%`,
-    siguiente: sig ? {
-      titulo: `Le faltan ${millones(sig.falta, 1)} para ${sig.tramo}`, meta: `meta ${sig.tramo} ${millones(sig.meta, 1)}`,
-      avance: Number((avance * 100).toFixed(1)), color: colorDeTramo(c.tramo, tramos), colorMeta: colorDeTramo(sig.tramo, tramos),
-    } : null,
-    nota: sig
-      ? `En ${sig.tramo} (${decimales(sig.tasa_pct, 1)}%) ganaría ≈ ${moneda(c.comision + sig.gana)}. ${promedio}`
-      : `Está en el tramo más alto. ${promedio}`,
   };
 }
 
