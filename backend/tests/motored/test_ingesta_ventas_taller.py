@@ -183,19 +183,19 @@ async def test_aplicar_con_periodo_no_rechaza_por_filas_solo_detalle_de_otro_mes
     # Declarado septiembre; el unico dato de venta_mensual es de septiembre.
     # Cien filas excluidas de agosto no pueden volcar el veredicto a RECHAZO.
     filas = [_staging()] + [_staging(mes=8, solo_detalle=True, fila=i + 2) for i in range(100)]
-    session = FakeAsyncSession(execute_queue=[[], [], []])
+    session = FakeAsyncSession(execute_queue=[[], [], [], []])
 
     veredicto = await ventas.aplicar_con_periodo(
         session, filas, date(2026, 9, 1), date(2026, 9, 30), CARGA_ID)
 
     assert veredicto.tipo == periodo_mod.TipoVeredictoPeriodo.ACEPTADO
     tablas = [s.table.name for s in session.executed_statements]
-    assert tablas[0] == "venta_mensual"
+    assert tablas[:2] == ["venta_mensual", "venta_mensual"]  # purga, upsert
 
 
 async def test_aplicar_con_periodo_escribe_detalle_de_las_filas_solo_detalle_del_periodo():
     filas = [_staging(), _staging(solo_detalle=True, fila=2)]
-    session = FakeAsyncSession(execute_queue=[[], [], []])
+    session = FakeAsyncSession(execute_queue=[[], [], [], []])
 
     await ventas.aplicar_con_periodo(
         session, filas, date(2026, 9, 1), date(2026, 9, 30), CARGA_ID)

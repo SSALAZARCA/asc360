@@ -485,3 +485,104 @@ async def test_los_consumidores_de_venta_mensual_ven_la_carga(
     assert len(vistas) == 1
     assert vigencia._meses_sin_cubrir(
         vistas, [datetime.date(2026, 9, 1)]) == []
+
+
+# --- venta_mensual is rebuilt for the months in the file (V3) ---------------
+
+SERIAL_2026_08_15 = 46249
+
+
+async def _segunda_tienda(db):
+    tienda = Sucursal(id=uuid.uuid4(), codigo_co=codigo_co_unico(),
+                      nombre=f"TIENDA OTRA {uuid.uuid4().hex[:6]}")
+    db.add(tienda)
+    await db.flush()
+    bodega = Bodega(id=uuid.uuid4(), codigo=f"BY{uuid.uuid4().hex[:5]}",
+                    sucursal_id=tienda.id)
+    db.add(bodega)
+    await db.flush()
+    return tienda, bodega
+
+
+def _fila_en(bodega, ref, cantidad, doc, serial=SERIAL_2026_09_15):
+    return ("Aprobada", "MOSTRADOR", serial, cantidad, "REPUE",
+            "SIN NOMBRE", bodega.codigo, ref.codigo, "Ana Pérez",
+            1000, 0, "Taller", doc)
+
+
+async def _mensual_de(db, tienda):
+    return {
+        (m.referencia_id, m.anio, m.mes, m.origen): m.unidades
+        for m in (await db.execute(
+            select(VentaMensual).where(
+                VentaMensual.sucursal_id == tienda.id))).scalars()}
+
+
+async def test_el_apply_reconstruye_venta_mensual_de_los_meses_del_archivo(
+        sesion, monkeypatch, espias):
+    m = await _mundo(sesion)
+    otra, bodega_otra = await _segunda_tienda(sesion)
+    otro = _ref(SimpleNamespace(id=m.con_linea.proveedor_id), "GPS", "Otro")
+    sesion.add(otro)
+    await sesion.flush()
+    carga_a = await _dry_run(sesion, monkeypatch, [
+        _fila(m, m.con_linea, 10, "A-1"),
+        _fila(m, otro, 7, "A-2"),
+        _fila_en(bodega_otra, m.con_linea, 3, "A-3")])
+    await _aplicar(sesion, carga_a)
+    # Un agosto de la misma tienda, de la misma carga, que B no toca.
+    sesion.add(VentaMensual(
+        id=uuid.uuid4(), sucursal_id=m.tienda.id, referencia_id=otro.id,
+        anio=2026, mes=8, origen="MOSTRADOR", unidades=Decimal("99"),
+        carga_id=carga_a.id))
+    await sesion.flush()
+
+    carga_b = await _dry_run(sesion, monkeypatch, [_fila(m, m.con_linea, 4, "B-1")])
+    await _aplicar(sesion, carga_b)
+
+    # La referencia que solo traia A ya no suma en septiembre (fantasma).
+    assert await _mensual_de(sesion, m.tienda) == {
+        (m.con_linea.id, 2026, 9, "MOSTRADOR"): Decimal("4"),
+        (otro.id, 2026, 8, "MOSTRADOR"): Decimal("99"),
+    }
+    # Otra tienda: intacta.
+    assert await _mensual_de(sesion, otra) == {
+        (m.con_linea.id, 2026, 9, "MOSTRADOR"): Decimal("3")}
+
+
+async def test_reaplicar_el_mismo_contenido_es_idempotente(
+        sesion, monkeypatch, espias):
+    m = await _mundo(sesion)
+    filas = [_fila(m, m.con_linea, 10, "A-1"), _fila(m, m.con_linea, 2, "A-2")]
+    primera = await _dry_run(sesion, monkeypatch, filas)
+    await _aplicar(sesion, primera)
+    antes = await _mensual_de(sesion, m.tienda)
+
+    segunda = await _dry_run(sesion, monkeypatch, filas)
+    await _aplicar(sesion, segunda)
+
+    assert await _mensual_de(sesion, m.tienda) == antes
+    assert antes == {(m.con_linea.id, 2026, 9, "MOSTRADOR"): Decimal("12")}
+
+
+async def test_tras_la_purga_las_filas_de_la_tienda_y_mes_son_de_la_carga_vigente(
+        sesion, monkeypatch, espias):
+    """`anular_carga` no borra `venta_mensual`: los lectores unen con
+    `carga_archivo` y excluyen las ANULADAS; tras la purga, las filas de la
+    tienda y el mes pertenecen todas a la carga vigente."""
+    m = await _mundo(sesion)
+    otro = _ref(SimpleNamespace(id=m.con_linea.proveedor_id), "GPS", "Otro")
+    sesion.add(otro)
+    await sesion.flush()
+    carga_a = await _dry_run(sesion, monkeypatch, [
+        _fila(m, m.con_linea, 10, "A-1"), _fila(m, otro, 7, "A-2")])
+    await _aplicar(sesion, carga_a)
+    carga_b = await _dry_run(sesion, monkeypatch, [_fila(m, m.con_linea, 4, "B-1")])
+    await _aplicar(sesion, carga_b)
+
+    duenos = {
+        row.carga_id for row in (await sesion.execute(
+            select(VentaMensual).where(
+                VentaMensual.sucursal_id == m.tienda.id))).scalars()}
+
+    assert duenos == {carga_b.id}

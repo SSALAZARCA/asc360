@@ -136,6 +136,7 @@ _LARGO_MAX_NRO_DOCUMENTO = 50
 # Numeric(16, 2): 14 digitos enteros.
 VALOR_MAX_ABS = Decimal(10) ** 14
 TAMANO_LOTE_DETALLE = 1000
+TAMANO_LOTE_PURGA = 1000
 
 # Marca del payload de las filas que solo alimentan `venta_detalle`.
 CLAVE_SOLO_DETALLE = "solo_detalle"
@@ -711,6 +712,30 @@ def construir_statement_upsert(totales: Dict[ClaveVentaMensual, Decimal], carga_
     )
 
 
+def claves_mensuales(
+    totales: Dict[ClaveVentaMensual, Decimal]
+) -> set:
+    """`(sucursal_id, anio, mes)` de cada total: las claves que esta carga
+    reescribe en `venta_mensual`, igual que `venta_detalle` las suyas."""
+    return {(sucursal, anio, mes) for sucursal, _, anio, mes, _ in totales}
+
+
+async def purgar_mensual(session, claves) -> None:
+    """Borra de `venta_mensual` TODO lo que hay para esas `(sucursal, anio,
+    mes)`, de cualquier carga, antes del upsert y en la misma transaccion
+    (sin `commit()`). Sin esto, una referencia u origen que una carga
+    anterior tenia en esa tienda y mes y la nueva ya no trae quedaba como
+    fantasma sumando demanda. `anular_carga` no borra `venta_mensual`: la
+    oculta por el estado de la carga (los lectores unen con `carga_archivo`),
+    asi que anular no deja nada que limpiar; tampoco restituye lo purgado."""
+    claves = list(claves)
+    for inicio in range(0, len(claves), TAMANO_LOTE_PURGA):
+        await session.execute(
+            delete(VentaMensual).where(
+                tuple_(VentaMensual.sucursal_id, VentaMensual.anio,
+                       VentaMensual.mes).in_(claves[inicio:inicio + TAMANO_LOTE_PURGA])))
+
+
 async def aplicar(session, totales: Dict[ClaveVentaMensual, Decimal], carga_id: uuid.UUID) -> None:
     """Ejecuta el upsert como sentencias set-based por lotes (ADR-2b; limite de
     parametros de PostgreSQL) -- nunca fila por fila. No hace `commit()`: eso es responsabilidad del caller
@@ -883,6 +908,7 @@ async def aplicar_con_periodo(
         if (fila.payload["anio"], fila.payload["mes"]) in meses_declarados
     ]
     totales = agregar_unidades(filas_dentro_de_periodo)
+    await purgar_mensual(session, claves_mensuales(totales))
     await aplicar(session, totales, carga_id)
     await aplicar_detalle(session, filas_dentro_de_periodo, carga_id)
     return veredicto

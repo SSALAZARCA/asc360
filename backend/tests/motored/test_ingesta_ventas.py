@@ -494,14 +494,16 @@ async def test_aplicar_con_periodo_no_ejecuta_nada_cuando_el_veredicto_es_rechaz
 
 async def test_aplicar_con_periodo_aplica_cuando_el_veredicto_no_es_rechazo():
     filas = [_fila_staging(SUCURSAL_ID, REFERENCIA_ID, 2026, 9, "MOSTRADOR", 10)]
-    session = FakeAsyncSession(execute_queue=[[]])
+    session = FakeAsyncSession(execute_queue=[[], []])
 
     veredicto = await ventas.aplicar_con_periodo(
         session, filas, date(2026, 9, 1), date(2026, 9, 30), CARGA_ID, tolerancia_pct=0.5
     )
 
     assert veredicto.tipo == periodo.TipoVeredictoPeriodo.ACEPTADO
-    assert len(session.executed_statements) == 1
+    # purga de las claves del archivo + upsert
+    assert [(s.table.name, s.is_delete) for s in session.executed_statements] == [
+        ("venta_mensual", True), ("venta_mensual", False)]
 
 
 async def test_aplicar_con_periodo_excluye_filas_fuera_de_periodo_en_advertencia():
@@ -515,15 +517,15 @@ async def test_aplicar_con_periodo_excluye_filas_fuera_de_periodo_en_advertencia
         _fila_staging(SUCURSAL_ID, REFERENCIA_ID, 2026, 9, "MOSTRADOR", 5, fila=1),
         _fila_staging(SUCURSAL_ID, REFERENCIA_ID, 2026, 8, "MOSTRADOR", 999, fila=2),
     ]
-    session = FakeAsyncSession(execute_queue=[[]])
+    session = FakeAsyncSession(execute_queue=[[], []])
 
     veredicto = await ventas.aplicar_con_periodo(
         session, filas, date(2026, 9, 1), date(2026, 9, 30), CARGA_ID, tolerancia_pct=50.0
     )
 
     assert veredicto.tipo == periodo.TipoVeredictoPeriodo.ADVERTENCIA
-    assert len(session.executed_statements) == 1
-    valores_aplicados = session.executed_statements[0].compile().construct_params()
+    assert len(session.executed_statements) == 2
+    valores_aplicados = session.executed_statements[1].compile().construct_params()
     assert Decimal("5") in valores_aplicados.values()
     assert Decimal("999") not in valores_aplicados.values()
 
@@ -552,7 +554,7 @@ async def test_5_4_regresion_bug_historico_mes_shifteado_deja_agosto_previo_inta
         for n in range(1, 4)
     ]
 
-    session = FakeAsyncSession(execute_queue=[[]])  # UNA sola respuesta esperada: la de agosto.
+    session = FakeAsyncSession(execute_queue=[[], []])  # purga + upsert: solo los de agosto.
 
     veredicto_agosto = await ventas.aplicar_con_periodo(
         session,
@@ -563,8 +565,8 @@ async def test_5_4_regresion_bug_historico_mes_shifteado_deja_agosto_previo_inta
         tolerancia_pct=0.5,
     )
     assert veredicto_agosto.tipo == periodo.TipoVeredictoPeriodo.ACEPTADO
-    assert len(session.executed_statements) == 1
-    statement_agosto = session.executed_statements[0]
+    assert len(session.executed_statements) == 2
+    sentencias_agosto = list(session.executed_statements)
 
     veredicto_septiembre = await ventas.aplicar_con_periodo(
         session,
@@ -578,7 +580,7 @@ async def test_5_4_regresion_bug_historico_mes_shifteado_deja_agosto_previo_inta
     assert veredicto_septiembre.tipo == periodo.TipoVeredictoPeriodo.RECHAZO
     assert veredicto_septiembre.codigo_error == periodo.CODIGO_PERIODO_NO_COINCIDE
     # Cero sentencias NUEVAS -- la única que existe sigue siendo la de agosto.
-    assert session.executed_statements == [statement_agosto]
+    assert session.executed_statements == sentencias_agosto
 
 
 async def test_aplicar_parte_el_upsert_en_varias_sentencias_sin_perder_filas():
