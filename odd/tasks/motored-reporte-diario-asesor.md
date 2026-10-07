@@ -68,3 +68,7 @@ Every day, once the VENTAS carga that includes the previous day is applied, Lore
   - It asks for confirmation and shows how many asesores will receive the report.
   - It bypasses the "one per day" ledger, and records each resend in the ledger with the user and time.
   - This is part of T3.
+- 2026-10-07: T2 contract agreed with 84.
+  - `reportes_asesores(db, fecha)` returns `{reportes: {cedula: {cedula, nombre, tienda, mes, fecha_datos, venta_cumplimiento, venta_comision, presupuesto, cumplimiento_pct, tramo, comision, bono_total, total_a_pagar, siguiente_tramo, compuerta, falta_100, dias_habiles_restantes, venta_diaria_necesaria, bonos[], tramos[]}}, sin_presupuesto: [{cedula, nombre, venta}], sin_cedula: [{vendedor, venta}]}`.
+  - Money is in whole pesos and percentages are fractions.
+  - Readiness: an APLICADO VENTAS carga with `periodo_hasta ≥ yesterday` and the KPI summary not dirty; otherwise wait until the deadline (default 10:00).
