@@ -12,6 +12,7 @@ jest.mock('../lib/motored/api', () => ({
   resolverErroresCarga: (...args) => mockResolver(...args),
   descargarErroresCargaCsv: jest.fn(),
   listMaestros: jest.fn().mockResolvedValue([]),
+  getLineasComercialesCarga: jest.fn().mockResolvedValue([{ valor: 'Repuestos', etiqueta: 'Repuestos' }]),
 }));
 
 import ErroresTab from '../components/motored/cargas/ErroresTab';
@@ -28,19 +29,27 @@ beforeEach(() => {
   mockResolver.mockReset();
 });
 
-async function fila() {
-  render(<ErroresTab carga={{ id: 'c1' }} />);
+async function fila(estado = 'VALIDADO') {
+  render(<ErroresTab carga={{ id: 'c1', estado }} />);
   return screen.findByTestId('error-row');
 }
 
-it('says the referencia was created and that the row loads next time', async () => {
+async function crearReferencia(row) {
+  fireEvent.click(within(row).getByRole('button', { name: 'Crear referencia' }));
+  const dialogo = await screen.findByRole('dialog');
+  await within(dialogo).findByRole('option', { name: 'Repuestos' });
+  fireEvent.change(within(dialogo).getByLabelText(/Línea comercial/), { target: { value: 'Repuestos' } });
+  fireEvent.click(within(dialogo).getByRole('button', { name: 'Crear referencia' }));
+}
+
+it('says the referencia was created and to revalidate to include the rows', async () => {
   mockResolver.mockResolvedValue({ acciones_aplicadas: 1, acciones_ignoradas: 0 });
   const row = await fila();
 
-  fireEvent.click(within(row).getByRole('button', { name: 'Crear como OTROS' }));
+  await crearReferencia(row);
 
   expect(await screen.findByRole('status')).toHaveTextContent(
-    /Referencia 90605-200000S creada.*próxima carga/
+    /Referencia 90605-200000S creada \(línea Repuestos\)\. Use 'Volver a validar'/
   );
   expect(within(screen.getByTestId('error-row')).getByText('Resuelta')).toBeInTheDocument();
 });
@@ -49,9 +58,18 @@ it('says when the referencia already existed', async () => {
   mockResolver.mockResolvedValue({ acciones_aplicadas: 0, acciones_ignoradas: 1 });
   const row = await fila();
 
-  fireEvent.click(within(row).getByRole('button', { name: 'Crear como OTROS' }));
+  await crearReferencia(row);
 
   expect(await screen.findByRole('status')).toHaveTextContent(/ya existía/);
+});
+
+it('still says the next carga when the carga can no longer be revalidated', async () => {
+  mockResolver.mockResolvedValue({ acciones_aplicadas: 1, acciones_ignoradas: 0 });
+  const row = await fila('APLICADO');
+
+  await crearReferencia(row);
+
+  expect(await screen.findByRole('status')).toHaveTextContent(/próxima carga/);
 });
 
 it('confirms an ignored row', async () => {

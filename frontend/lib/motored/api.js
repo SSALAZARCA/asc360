@@ -524,6 +524,19 @@ export async function resolverErroresCarga(cargaId, acciones) {
   });
 }
 
+/** GET /cargas/{id}/lineas-comerciales -> configured lines `[{ valor, etiqueta }]`. */
+export async function getLineasComercialesCarga(cargaId) {
+  return motoredFetchJson(`/cargas/${cargaId}/lineas-comerciales`);
+}
+
+/**
+ * POST /cargas/{id}/revalidar: processes the stored file again for the same
+ * carga (VALIDADO or CON_ERRORES only). Returns the carga, now PENDIENTE.
+ */
+export async function revalidarCarga(cargaId) {
+  return motoredFetchJson(`/cargas/${cargaId}/revalidar`, { method: 'POST' });
+}
+
 /**
  * Raw ERP VENTAS dry run (VALIDADO, before Aplicar). `GET` returns
  * `{ sin_linea, fuera_de_linea, no_encontradas, opciones_linea }`, computed

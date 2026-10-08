@@ -14,6 +14,10 @@
  * (`PanelVentasErp`) and, when it replaces the whole month, the tiendas
  * whose sales Aplicar deletes (`AvisoVaciado`). Aplicar stays disabled while
  * any ref has no line or that deletion is not acknowledged.
+ *
+ * Writers also get "Volver a validar" (`BotonRevalidar`) while the carga is
+ * VALIDADO or CON_ERRORES: the corrections made in Errores reach this same
+ * carga without uploading the file again.
  */
 import { useEffect, useState, useCallback } from 'react';
 import { getInformeCarga, aplicarCarga, anularCarga } from '../../../lib/motored/api';
@@ -21,6 +25,7 @@ import { getRolActual } from '../../../lib/motored/motoredFetch';
 import { mensajeConCodigo } from '../../../lib/motored/httpErrors';
 import InfoTooltip from '../InfoTooltip';
 import AvisoVaciado from './AvisoVaciado';
+import BotonRevalidar from './BotonRevalidar';
 import PanelVentasErp from './PanelVentasErp';
 import useSimulacionVentas from './useSimulacionVentas';
 
@@ -115,6 +120,19 @@ function FilasNoRepuestosAviso({ informe }) {
   );
 }
 
+/** Rows the user chose to ignore in Errores, left out again by "Volver a
+ * validar" (`log.filas_ignoradas`). Informative only. */
+function FilasIgnoradasAviso({ informe }) {
+  const cantidad = informe.log?.filas_ignoradas;
+  if (!cantidad) return null;
+  const sujeto = cantidad === 1 ? '1 fila ignorada por usted no se carga' : `${cantidad} filas ignoradas por usted no se cargan`;
+  return (
+    <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--motored-text-muted, #5a5a5a)' }}>
+      {`${sujeto} (las marcó «Ignorar» en Errores).`}
+    </p>
+  );
+}
+
 function Conteo({ etiqueta, valor, color }) {
   return (
     <div>
@@ -168,9 +186,10 @@ function useAccionesCarga({ cargaId, reload, onChanged, confirmarVaciado }) {
   };
 }
 
-function AccionesCarga({ estado, accionando, bloqueo, onAplicar, onAnular }) {
+function AccionesCarga({ carga, estado, accionando, bloqueo, onAplicar, onAnular, onChanged, onRevalidado }) {
   return (
     <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
+      <BotonRevalidar carga={carga} onChanged={onChanged} onTerminado={onRevalidado} />
       <button
         type="button" className="motored-btn motored-btn-primary"
         onClick={onAplicar} disabled={accionando || estado !== 'VALIDADO' || bloqueo.bloqueado}
@@ -216,6 +235,7 @@ export default function ResumenTab({ carga, onChanged }) {
       <Conteos informe={informe} />
       <FilasNoCargadasAviso informe={informe} />
       <FilasNoRepuestosAviso informe={informe} />
+      <FilasIgnoradasAviso informe={informe} />
 
       <div style={{ fontSize: '0.8rem' }}>
         <span>
@@ -236,8 +256,9 @@ export default function ResumenTab({ carga, onChanged }) {
 
       {puedeEscribir && (
         <AccionesCarga
-          estado={informe.estado} accionando={accionando} bloqueo={simulacion.bloqueo}
+          carga={carga} estado={informe.estado} accionando={accionando} bloqueo={simulacion.bloqueo}
           onAplicar={handleAplicar} onAnular={handleAnular}
+          onChanged={onChanged} onRevalidado={reload}
         />
       )}
     </div>

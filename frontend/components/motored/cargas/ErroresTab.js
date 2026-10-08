@@ -4,7 +4,8 @@
  *
  * Grilla de errores + CSV + acciones de resolución (sdd/motored-pedidos-
  * ingesta, Phase 10, task 10.2; spec "Error-resolution actions" -- mapear a
- * sucursal existente, crear referencia bajo `OTROS`, o ignorar; y
+ * sucursal existente, crear referencia (línea + proveedor, ver
+ * `CrearReferenciaForm`), o ignorar; y
  * "carga_error model and CSV export" -- descarga vía
  * `descargarErroresCargaCsv`, que ya neutraliza `=+-@` server-side).
  *
@@ -17,17 +18,22 @@
  * alias` o crean la `referencia`), así que tras cada una se recarga la
  * lista de errores -- una fila resuelta no debería seguir apareciendo como
  * pendiente de acción (aunque el registro histórico del error en sí no se
- * borra, ver `resolver_errores`).
+ * borra, ver `resolver_errores`). While the carga is VALIDADO or
+ * CON_ERRORES the fixes reach this carga through "Volver a validar"
+ * (`BotonRevalidar`, Resumen tab); a new validation reloads this list and
+ * forgets the rows marked resolved.
  */
 import MotoredTableScroll from '../MotoredTableScroll';
 import MotoredIconAction from '../MotoredIconAction';
 import { useEffect, useState, useCallback } from 'react';
 import { getErroresCarga, resolverErroresCarga, descargarErroresCargaCsv, listMaestros } from '../../../lib/motored/api';
 import { getRolActual } from '../../../lib/motored/motoredFetch';
+import CrearReferenciaForm from './CrearReferenciaForm';
+import { ESTADOS_REVALIDABLES } from './BotonRevalidar';
 
 const PAGE_SIZE = 50;
 
-function useErrores(cargaId) {
+function useErrores(cargaId, estadoCarga) {
   const [errores, setErrores] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -43,7 +49,8 @@ function useErrores(cargaId) {
     } finally {
       setLoading(false);
     }
-  }, [cargaId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cargaId, estadoCarga]);
 
   useEffect(() => {
     load();
@@ -61,23 +68,33 @@ function usePagina(total) {
   return { pagina, setPagina, totalPaginas };
 }
 
+const USE_REVALIDAR = "Use 'Volver a validar' para incluir estas filas.";
+
 /** What the user sees after a resolve action, from the action and the
- * server's count (`acciones_aplicadas` is 0 when nothing changed). */
-export function mensajeDeAccion(accion, resultado) {
+ * server's count (`acciones_aplicadas` is 0 when nothing changed). With
+ * `revalidable` the fixes reach this carga through "Volver a validar";
+ * otherwise (already applied) only the next carga sees them. */
+export function mensajeDeAccion(accion, resultado, revalidable = false) {
   const aplicada = (resultado?.acciones_aplicadas || 0) > 0;
   const valor = accion.valor || '';
   if (accion.accion === 'crear_referencia') {
-    return aplicada
-      ? `Referencia ${valor} creada en el catálogo (proveedor OTROS). Esta fila no entra en esta carga: entra en la próxima carga.`
-      : `La referencia ${valor} ya existía en el catálogo: no se creó otra. Esta fila entra en la próxima carga.`;
+    const linea = accion.linea_comercial ? ` (línea ${accion.linea_comercial})` : '';
+    if (!aplicada) {
+      return `La referencia ${valor} ya existía en el catálogo: no se creó otra. `
+        + (revalidable ? USE_REVALIDAR : 'Esta fila entra en la próxima carga.');
+    }
+    return revalidable
+      ? `Referencia ${valor} creada${linea}. ${USE_REVALIDAR}`
+      : `Referencia ${valor} creada${linea}. Esta fila no entra en esta carga: entra en la próxima carga.`;
   }
   if (accion.accion === 'mapear_sucursal') {
-    return `"${valor}" quedó asociado a la tienda elegida. Se reconoce desde la próxima carga.`;
+    return `"${valor}" quedó asociado a la tienda elegida. `
+      + (revalidable ? USE_REVALIDAR : 'Se reconoce desde la próxima carga.');
   }
   return `Fila ignorada: no se carga.`;
 }
 
-function AccionFila({ error: err, puedeEscribir, sucursales, onAccion, resuelta }) {
+function AccionFila({ error: err, puedeEscribir, sucursales, onAccion, onCrearReferencia, resuelta }) {
   const [sucursalId, setSucursalId] = useState('');
 
   if (!puedeEscribir) return null;
@@ -111,8 +128,8 @@ function AccionFila({ error: err, puedeEscribir, sucursales, onAccion, resuelta 
     return (
       <div style={{ display: 'flex', gap: '0.4rem' }}>
         <MotoredIconAction
-          action="Crear como OTROS"
-          onClick={() => onAccion({ codigo_error: err.codigo_error, valor: err.valor, accion: 'crear_referencia' })}
+          action="Crear como OTROS" label="Crear referencia"
+          onClick={() => onCrearReferencia(err)}
         />
         <MotoredIconAction
           action="Ignorar"
@@ -130,7 +147,7 @@ function AccionFila({ error: err, puedeEscribir, sucursales, onAccion, resuelta 
   );
 }
 
-function ErroresGrid({ pageRows, puedeEscribir, sucursales, onAccion, resueltas }) {
+function ErroresGrid({ pageRows, puedeEscribir, sucursales, onAccion, onCrearReferencia, resueltas }) {
   return (
     <MotoredTableScroll>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }} data-testid="errores-grid">
@@ -156,7 +173,8 @@ function ErroresGrid({ pageRows, puedeEscribir, sucursales, onAccion, resueltas 
                 <td style={{ padding: '10px 0' }}>
                   <AccionFila
                     error={err} puedeEscribir={puedeEscribir} sucursales={sucursales}
-                    onAccion={onAccion} resuelta={resueltas.has(`${err.codigo_error}|${err.valor}`)}
+                    onAccion={onAccion} onCrearReferencia={onCrearReferencia}
+                    resuelta={resueltas.has(`${err.codigo_error}|${err.valor}`)}
                   />
                 </td>
               )}
@@ -183,8 +201,16 @@ function Paginacion({ pagina, setPagina, totalPaginas }) {
   );
 }
 
+/** Rows of this carga with the same error code and value: the whole list
+ * is loaded (the grid paginates on the client), so the count is exact. */
+function contarMismoCodigo(errores, err) {
+  return errores.filter(
+    (e) => e.codigo_error === err.codigo_error && e.valor === err.valor,
+  ).length;
+}
+
 export default function ErroresTab({ carga }) {
-  const { errores, loading, error, reload } = useErrores(carga.id);
+  const { errores, loading, error, reload } = useErrores(carga.id, carga.estado);
   const [rol, setRol] = useState(null);
   const [sucursales, setSucursales] = useState([]);
   const [accionError, setAccionError] = useState('');
@@ -193,7 +219,14 @@ export default function ErroresTab({ carga }) {
   // (they document the original file), so the screen marks them instead.
   const [resueltas, setResueltas] = useState(() => new Set());
   const [csvError, setCsvError] = useState('');
+  const [creando, setCreando] = useState(null);
   const { pagina, setPagina, totalPaginas } = usePagina(errores.length);
+  const revalidable = ESTADOS_REVALIDABLES.has(carga.estado);
+
+  // A new validation rebuilt the errors: nothing on screen is resolved yet.
+  useEffect(() => {
+    setResueltas(new Set());
+  }, [carga.estado]);
 
   useEffect(() => {
     setRol(getRolActual());
@@ -207,7 +240,7 @@ export default function ErroresTab({ carga }) {
     setAccionMensaje('');
     try {
       const resultado = await resolverErroresCarga(carga.id, [accion]);
-      setAccionMensaje(mensajeDeAccion(accion, resultado));
+      setAccionMensaje(mensajeDeAccion(accion, resultado, revalidable));
       setResueltas((prev) => new Set(prev).add(`${accion.codigo_error}|${accion.valor}`));
       await reload();
     } catch (err) {
@@ -253,10 +286,19 @@ export default function ErroresTab({ carga }) {
         <>
           <ErroresGrid
             pageRows={pageRows} puedeEscribir={puedeEscribir} sucursales={sucursales}
-            onAccion={handleAccion} resueltas={resueltas}
+            onAccion={handleAccion} onCrearReferencia={setCreando} resueltas={resueltas}
           />
           <Paginacion pagina={pagina} setPagina={setPagina} totalPaginas={totalPaginas} />
         </>
+      )}
+
+      {creando && (
+        <CrearReferenciaForm
+          cargaId={carga.id} error={creando}
+          filasAfectadas={contarMismoCodigo(errores, creando)}
+          onCancelar={() => setCreando(null)}
+          onCrear={async (accion) => { setCreando(null); await handleAccion(accion); }}
+        />
       )}
     </div>
   );
