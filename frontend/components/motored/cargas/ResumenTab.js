@@ -101,6 +101,20 @@ function FilasNoCargadasAviso({ informe }) {
   );
 }
 
+/** Ingresos de facturas skips, without an error, every row whose reference
+ * is not a parts invoice (`log.filas_no_repuestos`): motorcycles, returns and
+ * other documents. Informative only, so it is not an alert. */
+function FilasNoRepuestosAviso({ informe }) {
+  const cantidad = informe.log?.filas_no_repuestos;
+  if (!cantidad) return null;
+  const sujeto = cantidad === 1 ? '1 fila se ignoró' : `${cantidad} filas se ignoraron`;
+  return (
+    <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--motored-text-muted, #5a5a5a)' }}>
+      {`${sujeto} porque no son facturas de repuestos (motos, devoluciones u otros documentos).`}
+    </p>
+  );
+}
+
 function Conteo({ etiqueta, valor, color }) {
   return (
     <div>
@@ -201,6 +215,7 @@ export default function ResumenTab({ carga, onChanged }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
       <Conteos informe={informe} />
       <FilasNoCargadasAviso informe={informe} />
+      <FilasNoRepuestosAviso informe={informe} />
 
       <div style={{ fontSize: '0.8rem' }}>
         <span>

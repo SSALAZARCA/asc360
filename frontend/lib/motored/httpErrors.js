@@ -20,6 +20,11 @@ export function httpErrorMessage(status, body, fallback) {
   if (detail && typeof detail === 'object' && typeof detail.message === 'string' && detail.message) {
     return detail.message;
   }
+  // Structured rejections that carry their own Spanish text (e.g. the
+  // wrong-tab upload: `detail: { tipo_declarado, ..., mensaje }`).
+  if (detail && typeof detail === 'object' && typeof detail.mensaje === 'string' && detail.mensaje) {
+    return detail.mensaje;
+  }
   return fallback;
 }
 

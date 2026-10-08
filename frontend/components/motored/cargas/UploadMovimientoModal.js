@@ -109,6 +109,15 @@ function opcionesDeSubida(tipo, { periodoDesde, periodoHasta, fechaDeCorte, reem
   return tipo === 'VENTAS' ? { ...opciones, reemplazaMesCompleto: reemplazaMes } : opciones;
 }
 
+/** The server's Spanish message for a failed upload; a bare "HTTP 400"
+ * (no usable detail) becomes a plain Spanish sentence with the status. */
+function mensajeDeSubida(err) {
+  const mensaje = err?.message || '';
+  if (mensaje && !/^HTTP \d+$/.test(mensaje)) return mensaje;
+  const codigo = err?.status ? ` (error ${err.status})` : '';
+  return `No se pudo subir el archivo${codigo}. Revise que sea el archivo de esta pestaña e intente de nuevo.`;
+}
+
 function useSubirMovimiento(tipo, onUploaded) {
   const [file, setFile] = useState(null);
   const [periodoDesde, setPeriodoDesde] = useState('');
@@ -148,7 +157,7 @@ function useSubirMovimiento(tipo, onUploaded) {
       setCompleto(true);
       onUploaded?.();
     } catch (err) {
-      setError(err.message || 'No se pudo subir el archivo');
+      setError(mensajeDeSubida(err));
     } finally {
       setLoading(false);
     }

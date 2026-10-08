@@ -104,3 +104,23 @@ describe('ResumenTab -- aviso de filas con errores que no se cargaron', () => {
     expect(await screen.findByText(/^2 filas con errores no se cargaron\./)).toBeInTheDocument();
   });
 });
+
+describe('ResumenTab -- rows skipped because they are not parts invoices', () => {
+  it('states how many rows were ignored, without an error alert', async () => {
+    mockGetInforme.mockResolvedValue(informe({ filas_rechazadas: 0, log: { filas_no_repuestos: 269 } }));
+    render(<ResumenTab carga={{ id: 'carga-1', estado: 'VALIDADO' }} />);
+
+    expect(await screen.findByText(
+      '269 filas se ignoraron porque no son facturas de repuestos (motos, devoluciones u otros documentos).'
+    )).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('says nothing when no row was ignored', async () => {
+    mockGetInforme.mockResolvedValue(informe({ filas_rechazadas: 0, log: {} }));
+    render(<ResumenTab carga={{ id: 'carga-1', estado: 'VALIDADO' }} />);
+
+    await screen.findByText('Filas leídas');
+    expect(screen.queryByText(/se ignoraron porque no son facturas/)).not.toBeInTheDocument();
+  });
+});
