@@ -21,12 +21,18 @@ Usa `texto.normalizar_encabezado(..., quitar_separadores=True)` (ADR-7) --
 el mismo modo que Fase 2 necesita para encabezados de movimiento como
 "Dct.referencia", y que ya incluye el trim requerido por spec ("Space-padded
 branch name still matches" aplica al mismo criterio de comparación).
+
+`ALIAS_COLUMNAS` lists other header names accepted for an expected column
+(owner decision, 2026-10-08: the ERP export of "Ingresos de facturas" says
+"Docto. referencia" where the template says "Dct.referencia"). The alias
+only counts for a type that expects the canonical column, and the
+canonical name wins when a header carries both.
 """
 from __future__ import annotations
 
 import math
 from datetime import date, datetime, timedelta
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 
 from app.motored.services.texto import normalizar_encabezado
 
@@ -36,6 +42,11 @@ _EPOCA_EXCEL = date(1899, 12, 30)
 
 _ANIO_MINIMO_PLAUSIBLE = 2015
 _ANIO_MAXIMO_PLAUSIBLE = 2100
+
+# Canonical expected column -> other header names that mean the same.
+ALIAS_COLUMNAS: Dict[str, Tuple[str, ...]] = {
+    "Dct.referencia": ("Docto. referencia",),
+}
 
 
 class EncabezadoNoEncontradoError(Exception):
@@ -52,7 +63,8 @@ class EncabezadoDuplicadoError(Exception):
     def __init__(self, columnas: Sequence[str]):
         self.columnas = list(columnas)
         super().__init__(
-            f"El encabezado tiene columnas duplicadas: {', '.join(self.columnas)}. "
+            "El encabezado tiene columnas duplicadas: "
+            f"{', '.join(self.columnas)}. "
             "Dejá una sola columna de cada una y volvé a cargar el archivo."
         )
 
@@ -61,6 +73,38 @@ class FechaExcelImplausibleError(Exception):
     """El serial convierte a un año fuera de 2015-2100 -- spec 'Implausible
     converted date is an error': nunca se acepta en silencio, la fila se
     rechaza (`carga_error`, no una excepción no manejada hasta el caller)."""
+
+
+def _normalizar(valor: Any) -> str:
+    return normalizar_encabezado(valor, quitar_separadores=True)
+
+
+def formas_aceptadas(columna: str) -> Set[str]:
+    """Normalized header forms accepted for the expected `columna`: its own
+    name plus its `ALIAS_COLUMNAS` entries."""
+    nombres = (columna, *ALIAS_COLUMNAS.get(columna, ()))
+    return {_normalizar(nombre) for nombre in nombres}
+
+
+def columnas_presentes(
+    fila: Sequence[Any], columnas_esperadas: Sequence[str]
+) -> List[str]:
+    """Expected columns (canonical names, in their declared order) found in
+    `fila` under their own name or an alias."""
+    normalizados_fila = {_normalizar(v) for v in fila}
+    return [
+        c for c in columnas_esperadas
+        if formas_aceptadas(c) & normalizados_fila
+    ]
+
+
+def _indices_por_forma(
+    fila_encabezado: Sequence[Any],
+) -> Dict[str, List[int]]:
+    indices: Dict[str, List[int]] = {}
+    for idx, valor in enumerate(fila_encabezado):
+        indices.setdefault(_normalizar(valor), []).append(idx)
+    return indices
 
 
 def construir_mapa_columnas(
@@ -73,32 +117,33 @@ def construir_mapa_columnas(
     internamente (`"cantidadinv"`) -- el caller siempre indexa por el
     nombre canónico que declaró, nunca por su forma comprimida. Columnas
     del archivo que no matchean ninguna esperada se ignoran. Una columna
-    ESPERADA repetida en el encabezado lanza `EncabezadoDuplicadoError`;
-    duplicados de columnas no esperadas se ignoran."""
-    nombre_original_por_normalizado = {
-        normalizar_encabezado(c, quitar_separadores=True): c for c in columnas_esperadas
-    }
+    esperada sin su nombre propio se busca por sus `ALIAS_COLUMNAS`. Una
+    columna ESPERADA repetida en el encabezado (bajo el mismo nombre)
+    lanza `EncabezadoDuplicadoError`; duplicados de columnas no esperadas
+    se ignoran."""
+    indices = _indices_por_forma(fila_encabezado)
     mapa: Dict[str, int] = {}
     duplicadas: List[str] = []
-    for idx, valor in enumerate(fila_encabezado):
-        clave_normalizada = normalizar_encabezado(valor, quitar_separadores=True)
-        nombre_original = nombre_original_por_normalizado.get(clave_normalizada)
-        if nombre_original is None:
-            continue
-        if nombre_original in mapa:
-            if nombre_original not in duplicadas:
-                duplicadas.append(nombre_original)
-        else:
-            mapa[nombre_original] = idx
+    for columna in columnas_esperadas:
+        nombres = (columna, *ALIAS_COLUMNAS.get(columna, ()))
+        for nombre in nombres:
+            encontrados = indices.get(_normalizar(nombre), [])
+            if not encontrados:
+                continue
+            mapa[columna] = encontrados[0]
+            if len(encontrados) > 1 and columna not in duplicadas:
+                duplicadas.append(columna)
+            break
     if duplicadas:
         raise EncabezadoDuplicadoError(duplicadas)
     return mapa
 
 
-def _ratio_de_match(fila: Sequence[Any], normalizados_esperados: set) -> float:
-    normalizados_fila = {normalizar_encabezado(v, quitar_separadores=True) for v in fila}
-    coincidencias = len(normalizados_esperados & normalizados_fila)
-    return coincidencias / len(normalizados_esperados)
+def _ratio_de_match(
+    fila: Sequence[Any], columnas_esperadas: Sequence[str]
+) -> float:
+    presentes = columnas_presentes(fila, columnas_esperadas)
+    return len(presentes) / len(columnas_esperadas)
 
 
 def mejor_ratio_de_encabezado(
@@ -108,30 +153,31 @@ def mejor_ratio_de_encabezado(
     hay filas o columnas). Sirve para comparar QUÉ tan bien encaja cada hoja
     de un libro con un tipo: una hoja de VENTAS trae 3 de las 4 columnas de
     INVENTARIO (75%), pero solo la hoja de inventario las trae todas."""
-    normalizados_esperados = {
-        normalizar_encabezado(c, quitar_separadores=True) for c in columnas_esperadas
-    }
-    if not normalizados_esperados:
+    if not columnas_esperadas:
         return 0.0
-    return max((_ratio_de_match(fila, normalizados_esperados) for fila in filas), default=0.0)
+    return max(
+        (_ratio_de_match(fila, columnas_esperadas) for fila in filas),
+        default=0.0,
+    )
 
 
 def encontrar_fila_encabezado(
-    filas: Sequence[Sequence[Any]], columnas_esperadas: Sequence[str], umbral: float = 0.6
+    filas: Sequence[Sequence[Any]],
+    columnas_esperadas: Sequence[str],
+    umbral: float = 0.6,
 ) -> int:
     """Escanea `filas` en orden y retorna el índice (0-based) de la PRIMERA
     fila cuyo ratio de columnas esperadas presentes es >= `umbral` (default
     60%, spec). Filas de título/vacías antes del encabezado real quedan
     naturalmente por debajo del umbral y se saltean. Lanza
     `EncabezadoNoEncontradoError` si ninguna fila alcanza el umbral."""
-    normalizados_esperados = {
-        normalizar_encabezado(c, quitar_separadores=True) for c in columnas_esperadas
-    }
-    if not normalizados_esperados:
-        raise EncabezadoNoEncontradoError("No hay columnas esperadas para buscar un encabezado.")
+    if not columnas_esperadas:
+        raise EncabezadoNoEncontradoError(
+            "No hay columnas esperadas para buscar un encabezado."
+        )
 
     for idx, fila in enumerate(filas):
-        if _ratio_de_match(fila, normalizados_esperados) >= umbral:
+        if _ratio_de_match(fila, columnas_esperadas) >= umbral:
             return idx
 
     raise EncabezadoNoEncontradoError(
@@ -172,7 +218,8 @@ def convertir_fecha_excel(valor_serial: float) -> date:
     fecha = _EPOCA_EXCEL + timedelta(days=dias)
     if not anio_es_plausible(fecha.year):
         raise FechaExcelImplausibleError(
-            f"Fecha implausible: el serial {valor_serial} convierte a {fecha.isoformat()}, "
-            f"fuera del rango {_ANIO_MINIMO_PLAUSIBLE}-{_ANIO_MAXIMO_PLAUSIBLE}."
+            f"Fecha implausible: el serial {valor_serial} convierte a "
+            f"{fecha.isoformat()}, fuera del rango "
+            f"{_ANIO_MINIMO_PLAUSIBLE}-{_ANIO_MAXIMO_PLAUSIBLE}."
         )
     return fecha

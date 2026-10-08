@@ -25,8 +25,9 @@ file has no unit-quantity column, only a monetary net value).
 `Dct.referencia` real values include documents that do NOT match the H3
 regex at all (`CH-70752`, 474 of 1 395 non-blank rows) and prefixes other
 than `RH` (`FE15892`) -- both are per-row-tolerant concerns for THIS
-module (a row that cannot be decomposed into `(prefijo, numero)` cannot be
-staged at all), while the cruce itself (`transito.py`) naturally ignores
+module (a row that cannot be decomposed into `(prefijo, numero)` is
+skipped and counted, never a row error -- owner decision 2026-10-08),
+while the cruce itself (`transito.py`) naturally ignores
 non-`RH`-keyed rows without any extra filter (a `('RH', N)` factura key
 never collides with `('FE', N)`/unparseable rows).
 """
@@ -113,12 +114,12 @@ def test_documento_ausente_se_descarta_en_silencio_como_fila_de_relleno():
     assert errores == []
 
 
-def test_documento_con_formato_invalido_emite_error_tipado():
-    fila_staging, errores = _procesar(_fila(dct_referencia="CH-70752"))
+def test_documento_con_formato_invalido_se_descarta_sin_error():
+    # Owner decision 2026-10-08: a non-parts reference (`CH-70752`, a
+    # motorcycle purchase) is skipped and counted, never a row error.
+    resultado = _procesar(_fila(dct_referencia="CH-70752"))
 
-    assert fila_staging is None
-    assert len(errores) == 1
-    assert errores[0].codigo_error == ingresos.CODIGO_DOCUMENTO_RH_INVALIDO
+    assert resultado is ingresos.MarcaIngreso.NO_ES_REPUESTO
 
 
 def test_documento_con_prefijo_distinto_de_rh_igual_se_stagea():

@@ -43,15 +43,23 @@ usa para `ingreso_parcial_sospechoso` -- el modelo lo tiene con ese nombre
 (no `cantidad`) desde la misma migración, porque este archivo no trae
 ninguna columna de cantidad de unidades en absoluto.
 
-`Dct.referencia` real trae formatos que NO matchean el regex H3
-(`CH-70752`, 474 de 1 395 filas no-blanco) y prefijos distintos de `RH`
-(`FE15892`, `RH` con 920 filas). Un documento que no matchea es un error
-de fila tipado (`DOCUMENTO_RH_INVALIDO`) -- no se puede staged sin
-`(prefijo_rh, numero_rh)`, la clave natural de la tabla. Un documento con
-prefijo distinto de `RH` SÍ se stagea igual (H3 solo exige el FORMATO
-`^([A-Z]{2})(\\d+)$`, no que el prefijo sea literalmente `RH`) -- es
-`transito.py`, no este módulo, quien nunca lo cruza contra una factura
-(una clave `('FE', N)` jamás colisiona con una `('RH', N)`).
+Referencias que no son facturas de repuestos (decisión del owner,
+2026-10-08, reemplaza la de error de fila): el export real del ERP trae en
+`Dct.referencia` (encabezado "Docto. referencia", aceptado como alias en
+`columnas.ALIAS_COLUMNAS`) compras de motos (`CH-74745`) y otros documentos
+(`OH 1234`, `NRH1234`, `FCI12345`) junto a las facturas HMCL de repuestos
+(`RH123456`). Una referencia que, tras `strip()` + `upper()`, no matchea
+`^[A-Z]{2}\\d+$` se descarta EN SILENCIO -- sin `carga_error`, igual que una
+fila `Anulado` -- y `procesar_fila` devuelve `MarcaIngreso.NO_ES_REPUESTO`
+para que el orquestador la cuente en `carga.log["filas_no_repuestos"]`.
+Antes era un error de fila `DOCUMENTO_RH_INVALIDO`, que llenaba el informe
+con cientos de errores de filas que nunca debían cargarse. Un documento
+con prefijo distinto de `RH` pero de formato válido (`FE15892`) SÍ se
+stagea igual -- es `transito.py`, no este módulo, quien nunca lo cruza
+contra una factura (una clave `('FE', N)` jamás colisiona con `('RH', N)`).
+
+`Estado` se compara sin distinguir mayúsculas ni espacios (`ANULADO`,
+` anulado `).
 
 Deliberadamente FUERA de alcance de esta fase (ver tasks.md Fase 9):
 - Wiring a `JobRunner`/supervisor y a la API — Fase 9.
@@ -59,10 +67,11 @@ Deliberadamente FUERA de alcance de esta fase (ver tasks.md Fase 9):
 """
 from __future__ import annotations
 
+import enum
 import uuid
 from datetime import date
 from decimal import Decimal
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
@@ -84,14 +93,27 @@ COLUMNAS_ESPERADAS: Tuple[str, ...] = (
 
 CODIGO_FECHA_INVALIDA = "FECHA_INVALIDA"
 CODIGO_VALOR_NETO_INVALIDO = "VALOR_NETO_INVALIDO"
+# No longer emitted (owner decision 2026-10-08): kept so historical
+# `carga_error` rows keep a known code.
 CODIGO_DOCUMENTO_RH_INVALIDO = "DOCUMENTO_RH_INVALIDO"
 
 ESTADO_ANULADO = "Anulado"
 
+
+class MarcaIngreso(enum.Enum):
+    """A row skipped silently that the orchestrator counts."""
+
+    NO_ES_REPUESTO = "no_es_repuesto"
+
+
 _CLAVE_UPSERT = ("prefijo_rh", "numero_rh")
 
+ResultadoFila = Tuple[Optional[CargaFilaStaging], List[CargaError]]
 
-def _extraer(fila_raw: Sequence[Any], mapa: Dict[str, int], nombre: str) -> Any:
+
+def _extraer(
+    fila_raw: Sequence[Any], mapa: Dict[str, int], nombre: str
+) -> Any:
     idx = mapa.get(nombre)
     if idx is None or idx >= len(fila_raw):
         return None
@@ -106,7 +128,10 @@ def _texto(valor: Any) -> Optional[str]:
 
 
 def _resolver_fecha_o_error(
-    fila_raw: Sequence[Any], mapa_columnas: Dict[str, int], carga_id: uuid.UUID, numero_fila: int
+    fila_raw: Sequence[Any],
+    mapa_columnas: Dict[str, int],
+    carga_id: uuid.UUID,
+    numero_fila: int,
 ) -> Tuple[Optional[date], Optional[CargaError]]:
     """`Fecha` no interpretable -- mismo contrato que `facturas.
     _resolver_fecha_o_error`."""
@@ -115,33 +140,55 @@ def _resolver_fecha_o_error(
     if fecha is not None:
         return fecha, None
     error = errores_mod.construir_error(
-        carga_id, numero_fila, "Fecha", _texto(valor_fecha), CODIGO_FECHA_INVALIDA,
+        carga_id, numero_fila, "Fecha", _texto(valor_fecha),
+        CODIGO_FECHA_INVALIDA,
         "La fecha de la fila no se pudo interpretar.",
     )
     return None, error
 
 
 def _resolver_valor_neto_o_error(
-    fila_raw: Sequence[Any], mapa_columnas: Dict[str, int], carga_id: uuid.UUID, numero_fila: int
+    fila_raw: Sequence[Any],
+    mapa_columnas: Dict[str, int],
+    carga_id: uuid.UUID,
+    numero_fila: int,
 ) -> Tuple[Optional[Decimal], Optional[CargaError]]:
     """`Valornetolocal` vacío, con error de Excel o no numérico -- mismo
     contrato que `facturas._resolver_decimal_o_error`: `carga_error`, nunca
     un cero silencioso (decisión del owner, 2026-09-29)."""
     return numeros_mod.resolver_decimal_o_error(
-        _extraer(fila_raw, mapa_columnas, "Valornetolocal"), "Valornetolocal", carga_id,
+        _extraer(fila_raw, mapa_columnas, "Valornetolocal"),
+        "Valornetolocal", carga_id,
         numero_fila, CODIGO_VALOR_NETO_INVALIDO,
         "El valor neto de la fila no se pudo interpretar como un número.",
     )
 
 
-def _pasa_filtro_estado(fila_raw: Sequence[Any], mapa_columnas: Dict[str, int]) -> bool:
-    """`Estado == 'Anulado'` se descarta -- decisión del owner (2026-09-22):
-    un ingreso anulado NUNCA cuenta como "recibido" en el cruce de
-    tránsito (ver docstring del módulo). Filtro de negocio, no una fila
-    inválida: nunca genera `carga_error` (mismo contrato que
-    `ventas._pasa_filtros_negocio`/`backorder._pasa_filtro_estado`)."""
+def _pasa_filtro_estado(
+    fila_raw: Sequence[Any], mapa_columnas: Dict[str, int]
+) -> bool:
+    """`Estado == 'Anulado'` (sin distinguir mayúsculas, 2026-10-08) se
+    descarta -- decisión del owner (2026-09-22): un ingreso anulado NUNCA
+    cuenta como "recibido" en el cruce de tránsito (ver docstring del
+    módulo). Filtro de negocio, no una fila inválida: nunca genera
+    `carga_error` (mismo contrato que `ventas._pasa_filtros_negocio`/
+    `backorder._pasa_filtro_estado`)."""
     estado = _texto(_extraer(fila_raw, mapa_columnas, "Estado"))
-    return estado != ESTADO_ANULADO
+    return (estado or "").casefold() != ESTADO_ANULADO.casefold()
+
+
+def _fila_staging(
+    carga_id: uuid.UUID, numero_fila: int, lote: int, payload: dict
+) -> CargaFilaStaging:
+    """Staging row with no sucursal/referencia (see module docstring)."""
+    return CargaFilaStaging(
+        carga_id=carga_id,
+        fila=numero_fila,
+        lote=lote,
+        payload=payload,
+        sucursal_id=None,
+        referencia_id=None,
+    )
 
 
 def procesar_fila(
@@ -151,10 +198,12 @@ def procesar_fila(
     lote: int,
     mapa_columnas: Dict[str, int],
     carga_id: uuid.UUID,
-) -> Tuple[Optional[CargaFilaStaging], List[CargaError]]:
+) -> Union[ResultadoFila, MarcaIngreso]:
     """Procesa UNA fila cruda de INGRESOS_FACTURAS. Retorna `(fila_staging,
-    errores)`. Nunca recibe `cache`/`proveedor_id` -- este tipo no resuelve
-    sucursal ni referencia (ver docstring del módulo)."""
+    errores)`, o `MarcaIngreso.NO_ES_REPUESTO` para una referencia que no
+    es una factura de repuestos (ver docstring del módulo). Nunca recibe
+    `cache`/`proveedor_id` -- este tipo no resuelve sucursal ni referencia
+    (ver docstring del módulo)."""
     if not _pasa_filtro_estado(fila_raw, mapa_columnas):
         return None, []
 
@@ -166,11 +215,7 @@ def procesar_fila(
 
     documento = transito_mod.extraer_prefijo_numero_rh(documento_raw)
     if documento is None:
-        error = errores_mod.construir_error(
-            carga_id, numero_fila, "Dct.referencia", documento_raw, CODIGO_DOCUMENTO_RH_INVALIDO,
-            "El número de documento no tiene el formato esperado (dos letras + dígitos).",
-        )
-        return None, [error]
+        return MarcaIngreso.NO_ES_REPUESTO
     prefijo_rh, numero_rh = documento
 
     fecha_ingreso, error_fecha = _resolver_fecha_o_error(
@@ -191,15 +236,7 @@ def procesar_fila(
         "fecha_ingreso": fecha_ingreso.isoformat(),
         "valor_neto": str(valor_neto),
     }
-    fila_staging = CargaFilaStaging(
-        carga_id=carga_id,
-        fila=numero_fila,
-        lote=lote,
-        payload=payload,
-        sucursal_id=None,
-        referencia_id=None,
-    )
-    return fila_staging, []
+    return _fila_staging(carga_id, numero_fila, lote, payload), []
 
 
 ClaveIngresoDocumento = Tuple[str, int]
@@ -217,10 +254,16 @@ def agregar_documentos(
     totales: Dict[ClaveIngresoDocumento, dict] = {}
     for fila in filas_staging:
         payload = fila.payload
-        clave: ClaveIngresoDocumento = (payload["prefijo_rh"], payload["numero_rh"])
-        acumulado = totales.setdefault(clave, {"valor_neto": Decimal("0"), "fecha_ingreso": None})
+        clave: ClaveIngresoDocumento = (
+            payload["prefijo_rh"], payload["numero_rh"]
+        )
+        acumulado = totales.setdefault(
+            clave, {"valor_neto": Decimal("0"), "fecha_ingreso": None}
+        )
         acumulado["valor_neto"] += Decimal(payload["valor_neto"])
-        acumulado["fecha_ingreso"] = date.fromisoformat(payload["fecha_ingreso"])
+        acumulado["fecha_ingreso"] = date.fromisoformat(
+            payload["fecha_ingreso"]
+        )
     return totales
 
 
@@ -260,7 +303,9 @@ def construir_statement_upsert(
 
 
 async def aplicar(
-    session, consolidado: Dict[ClaveIngresoDocumento, dict], carga_id: uuid.UUID
+    session,
+    consolidado: Dict[ClaveIngresoDocumento, dict],
+    carga_id: uuid.UUID,
 ) -> None:
     """Ejecuta el upsert como sentencias set-based por lotes (ADR-2b; limite de
     parametros de PostgreSQL) -- nunca fila por fila. No hace `commit()`:

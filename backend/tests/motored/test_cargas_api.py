@@ -704,6 +704,8 @@ def test_post_cargas_tipo_mismatch_is_400_naming_missing_columns(monkeypatch):
     assert body["tipo_declarado"] == "VENTAS"
     assert body["sin_coincidencia"] is False
     assert len(body["columnas_faltantes"]) > 0
+    assert body["mensaje"].startswith("Este archivo no parece de Ventas:")
+    assert all(c in body["mensaje"] for c in body["columnas_faltantes"])
     assert called["subida"] is False
 
 
@@ -721,6 +723,7 @@ def test_post_cargas_sin_ninguna_coincidencia_is_400_distinguishable_from_mismat
     assert body["tipo_declarado"] == "INVENTARIO"
     assert body["sin_coincidencia"] is True
     assert body["columnas_faltantes"] == []
+    assert body["mensaje"].startswith("Este archivo no parece de Inventario:")
 
 
 def test_post_cargas_success_matches_declared_type_response_shape(monkeypatch):

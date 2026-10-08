@@ -36,6 +36,7 @@ lo tanto viven ACÁ:
 from __future__ import annotations
 
 import asyncio
+import enum
 import logging
 import uuid
 from datetime import date, datetime, timezone
@@ -352,6 +353,9 @@ class _EstadoLoteDryRun:
         self.filas_tipo_excluido = 0
         self.filas_fuera_de_linea = 0
         self.filas_sin_linea = 0
+        # INGRESOS_FACTURAS rows whose reference is not a parts invoice
+        # (`ingresos.MarcaIngreso.NO_ES_REPUESTO`): skipped, no error.
+        self.filas_no_repuestos = 0
         # VENTAS rows that really enter venta_mensual: an included line with a
         # resolved referencia (an unknown code is not "kept").
         self.filas_conservadas = 0
@@ -461,6 +465,24 @@ def _contar_clase_de_linea(
         estado.filas_tipo_excluido += 1
 
 
+# Silent-skip markers a transform may return instead of `(fila, errores)`,
+# and the `_EstadoLoteDryRun` counter each one feeds.
+_CONTADOR_POR_MARCA = {
+    resolucion_mod.MarcaFila.BODEGA_EXCLUIDA: "filas_bodega_excluida",
+    lineas_mod.MarcaTipoExcluido.TIPO_EXCLUIDO: "filas_tipo_excluido",
+    ingresos_mod.MarcaIngreso.NO_ES_REPUESTO: "filas_no_repuestos",
+}
+
+
+def _contar_marca(estado: "_EstadoLoteDryRun", resultado: Any) -> bool:
+    """Counts `resultado` when it is a silent-skip marker; `True` if so."""
+    if not isinstance(resultado, enum.Enum):
+        return False
+    contador = _CONTADOR_POR_MARCA[resultado]
+    setattr(estado, contador, getattr(estado, contador) + 1)
+    return True
+
+
 def _procesar_filas_del_lote(
     estado: _EstadoLoteDryRun,
     datos_del_lote: Sequence[Sequence[Any]],
@@ -478,11 +500,7 @@ def _procesar_filas_del_lote(
         resultado = estado.procesar_fila(
             fila_raw, estado.numero_fila_absoluto, numero_lote
         )
-        if resultado is resolucion_mod.MarcaFila.BODEGA_EXCLUIDA:
-            estado.filas_bodega_excluida += 1
-            continue
-        if resultado is lineas_mod.MarcaTipoExcluido.TIPO_EXCLUIDO:
-            estado.filas_tipo_excluido += 1
+        if _contar_marca(estado, resultado):
             continue
         fila_staging, errores_fila = resultado
         for error in errores_fila:
@@ -635,6 +653,7 @@ def _volcar_contadores(log: Dict[str, Any], estado: "_EstadoLoteDryRun") -> None
         ("filas_tipo_excluido", estado.filas_tipo_excluido),
         ("filas_fuera_de_linea", estado.filas_fuera_de_linea),
         ("filas_sin_linea", estado.filas_sin_linea),
+        ("filas_no_repuestos", estado.filas_no_repuestos),
     ):
         if cantidad:
             log[clave] = cantidad

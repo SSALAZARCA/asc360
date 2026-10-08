@@ -31,13 +31,15 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 import openpyxl
 
 from app.motored.services.ingesta import backorder as backorder_mod
+from app.motored.services.ingesta import columnas as columnas_mod
 from app.motored.services.ingesta import demanda_perdida as demanda_perdida_mod
 from app.motored.services.ingesta import facturas as facturas_mod
 from app.motored.services.ingesta import ingresos as ingresos_mod
 from app.motored.services.ingesta import inventario as inventario_mod
 from app.motored.services.ingesta import ventas as ventas_mod
-from app.motored.services.ingesta.lector import LecturaMovimientoError, elegir_hoja
-from app.motored.services.texto import normalizar_encabezado
+from app.motored.services.ingesta.lector import (
+    LecturaMovimientoError, elegir_hoja,
+)
 
 _FIRMAS_POR_TIPO: Dict[str, Tuple[str, ...]] = {
     "VENTAS": ventas_mod.COLUMNAS_ESPERADAS,
@@ -53,6 +55,17 @@ _FIRMAS_POR_TIPO: Dict[str, Tuple[str, ...]] = {
 COLUMNAS_OPCIONALES_POR_TIPO: Dict[str, Tuple[str, ...]] = {
     "VENTAS": ventas_mod.COLUMNAS_OPCIONALES,
     "BACKORDER": backorder_mod.COLUMNAS_OPCIONALES,
+}
+
+# Tab names exactly as the UI shows them (`frontend/components/motored/
+# cargas/tiposCarga.js`), for the wrong-tab message.
+ETIQUETAS_TIPO: Dict[str, str] = {
+    "VENTAS": "Ventas",
+    "INVENTARIO": "Inventario",
+    "BACKORDER": "Backorder",
+    "DEMANDA_PERDIDA": "Demanda perdida",
+    "FACTURAS_PEDIDOS": "Facturas de pedidos",
+    "INGRESOS_FACTURAS": "Ingresos de facturas",
 }
 
 UMBRAL_DETECCION = 0.6
@@ -74,24 +87,51 @@ class TipoNoCoincideError(Exception):
       `columnas_faltantes` nombra, de la fila con mejor ratio, qué columnas
       esperadas del tipo declarado NO aparecieron."""
 
-    def __init__(self, tipo_declarado: str, sin_coincidencia: bool, columnas_faltantes: Sequence[str]):
+    def __init__(
+        self,
+        tipo_declarado: str,
+        sin_coincidencia: bool,
+        columnas_faltantes: Sequence[str],
+    ):
         self.tipo_declarado = tipo_declarado
         self.sin_coincidencia = sin_coincidencia
         self.columnas_faltantes = list(columnas_faltantes)
         if sin_coincidencia:
             mensaje = (
-                f"El archivo no se parece a ningún tipo de movimiento conocido "
-                f"(se declaró {tipo_declarado})."
+                "El archivo no se parece a ningún tipo de movimiento "
+                f"conocido (se declaró {tipo_declarado})."
             )
         else:
             mensaje = (
-                f"El archivo no coincide con el tipo declarado ({tipo_declarado}). "
-                f"Faltan columnas: {', '.join(self.columnas_faltantes)}."
+                "El archivo no coincide con el tipo declarado "
+                f"({tipo_declarado}). Faltan columnas: "
+                f"{', '.join(self.columnas_faltantes)}."
             )
         super().__init__(mensaje)
 
+    def mensaje_para_usuario(self) -> str:
+        """Spanish message for the uploader: names the tab (as the UI
+        labels it) and what the file lacks, and suggests another tab."""
+        pestana = ETIQUETAS_TIPO.get(
+            self.tipo_declarado, self.tipo_declarado
+        )
+        if self.sin_coincidencia:
+            esperadas = ", ".join(_FIRMAS_POR_TIPO.get(
+                self.tipo_declarado, ()
+            ))
+            falta = f"no tiene ninguna de sus columnas ({esperadas})"
+        else:
+            faltantes = ", ".join(self.columnas_faltantes)
+            falta = f"le faltan las columnas {faltantes}"
+        return (
+            f"Este archivo no parece de {pestana}: {falta}. "
+            "¿Lo quiso subir en otra pestaña?"
+        )
 
-def verificar_tipo(tipo_declarado: str, filas_muestra: Sequence[Sequence[Any]]) -> None:
+
+def verificar_tipo(
+    tipo_declarado: str, filas_muestra: Sequence[Sequence[Any]]
+) -> None:
     """Levanta `TipoNoCoincideError` si `filas_muestra` no verifica contra
     `tipo_declarado`; no retorna nada si sí verifica. Escanea a lo sumo las
     primeras `_FILAS_MAXIMAS_ESCANEADAS` filas (idéntico bound al `detectar_
@@ -104,30 +144,27 @@ def verificar_tipo(tipo_declarado: str, filas_muestra: Sequence[Sequence[Any]]) 
     llamar acá; un valor fuera de esas 6 claves es un error de programación
     (`KeyError`), no un caso de negocio que este módulo deba manejar."""
     columnas_esperadas = _FIRMAS_POR_TIPO[tipo_declarado]
-    normalizados_esperados: Dict[str, str] = {
-        normalizar_encabezado(c, quitar_separadores=True): c for c in columnas_esperadas
-    }
 
     mejor_ratio = 0.0
     mejor_faltantes: List[str] = list(columnas_esperadas)
     for fila in filas_muestra[:_FILAS_MAXIMAS_ESCANEADAS]:
-        normalizados_fila = {normalizar_encabezado(v, quitar_separadores=True) for v in fila}
-        coincidencias = set(normalizados_esperados) & normalizados_fila
-        ratio = len(coincidencias) / len(normalizados_esperados)
+        presentes = columnas_mod.columnas_presentes(fila, columnas_esperadas)
+        ratio = len(presentes) / len(columnas_esperadas)
         if ratio > mejor_ratio:
             mejor_ratio = ratio
             mejor_faltantes = [
-                original
-                for normalizado, original in normalizados_esperados.items()
-                if normalizado not in coincidencias
+                c for c in columnas_esperadas if c not in presentes
             ]
         if mejor_ratio >= UMBRAL_DETECCION:
             return
 
     if mejor_ratio == 0.0:
-        raise TipoNoCoincideError(tipo_declarado, sin_coincidencia=True, columnas_faltantes=[])
+        raise TipoNoCoincideError(
+            tipo_declarado, sin_coincidencia=True, columnas_faltantes=[]
+        )
     raise TipoNoCoincideError(
-        tipo_declarado, sin_coincidencia=False, columnas_faltantes=mejor_faltantes
+        tipo_declarado, sin_coincidencia=False,
+        columnas_faltantes=mejor_faltantes,
     )
 
 
@@ -153,7 +190,9 @@ def extraer_filas_muestra(
     barata. Nunca deja escapar una excepción cruda de `openpyxl` -- mismo
     contrato que `lector._abrir_workbook`."""
     try:
-        workbook = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True, read_only=True)
+        workbook = openpyxl.load_workbook(
+            io.BytesIO(file_bytes), data_only=True, read_only=True
+        )
         try:
             filas = []
             hoja = elegir_hoja(workbook, columnas_esperadas)
@@ -164,7 +203,8 @@ def extraer_filas_muestra(
             return filas
         finally:
             workbook.close()
-    except Exception as exc:  # cualquier fallo de openpyxl -> excepción de dominio
+    except Exception as exc:
+        # Cualquier fallo de openpyxl -> excepción de dominio.
         raise LecturaMovimientoError(
             "No se pudo leer el archivo. Verificá que sea un .xlsx válido."
         ) from exc

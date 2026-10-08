@@ -231,7 +231,8 @@ def _verificar_tipo_o_400(tipo: str, file_bytes: bytes) -> None:
     archivo genuinamente ilegible por `openpyxl` sigue siendo `400`; un
     archivo legible que no verifica contra `tipo` también, con el detalle
     estructurado que la spec exige ("names the declared type and the
-    specific missing expected columns")."""
+    specific missing expected columns"). `mensaje` is the same rejection
+    in plain Spanish (tab name as the UI shows it), for the upload modal."""
     try:
         filas_muestra = deteccion_mod.extraer_filas_muestra(
             file_bytes, columnas_esperadas=deteccion_mod.columnas_esperadas_de(tipo)
@@ -247,6 +248,7 @@ def _verificar_tipo_o_400(tipo: str, file_bytes: bytes) -> None:
                 "tipo_declarado": exc.tipo_declarado,
                 "sin_coincidencia": exc.sin_coincidencia,
                 "columnas_faltantes": exc.columnas_faltantes,
+                "mensaje": exc.mensaje_para_usuario(),
             },
         )
 
