@@ -89,8 +89,13 @@ from app.motored.deps import (
 from app.motored.models.carga_archivo import CargaArchivo
 from app.motored.models.carga_error import CargaError
 from app.motored.models.carga_fila_staging import CargaFilaStaging
+from app.motored.models.proveedor import Proveedor
 from app.motored.models.referencia import Referencia
 from app.motored.models.sucursal_alias import SucursalAlias
+from app.motored.schemas.carga_resolucion import (
+    LineaComercialOpcion,
+    ResolverAccionesRequest,
+)
 from app.motored.schemas.referencia import ReferenciaUpdate
 from app.motored.schemas.ingesta import (
     AsignacionLineaItem,
@@ -101,7 +106,6 @@ from app.motored.schemas.ingesta import (
     CargaErrorRead,
     CargaInformeResponse,
     DeclaracionSinDatosRequest,
-    ResolverErroresRequest,
     ReferenciasSinLineaResponse,
     ResolverErroresResultado,
     VaciadoPrevistoRead,
@@ -120,6 +124,7 @@ from app.motored.services.ingesta import orquestador
 from app.motored.services.ingesta import periodo as periodo_mod
 from app.motored.services.ingesta import plantillas as plantillas_mod
 from app.motored.services.ingesta import resolucion as resolucion_mod
+from app.motored.services.ingesta import revalidar as revalidar_mod
 from app.motored.services.ingesta import sin_datos as sin_datos_mod
 from app.motored.services.ingesta import ventas_lineas as lineas_mod
 from app.motored.services.trabajos.runner import JobRunner, SupervisorRunner
@@ -676,54 +681,161 @@ async def _aplicar_mapeo_sucursal(db: AsyncSession, accion) -> bool:
     return True
 
 
-async def _aplicar_creacion_referencia(db: AsyncSession, accion) -> bool:
-    """Crea la referencia bajo el proveedor `OTROS` (`unidad_empaque=1`) --
-    retorna `False` (ignorada) si falta `valor` o si ya existe."""
+def _error_422(detalle: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=detalle)
+
+
+async def _proveedor_para_referencia(
+    db: AsyncSession, proveedor_id: Optional[uuid.UUID]
+) -> uuid.UUID:
+    """The chosen proveedor, which must exist and be active; without one,
+    the principal proveedor (HMCL), never `OTROS`."""
+    if proveedor_id is None:
+        result = await db.execute(
+            select(Proveedor).where(Proveedor.es_principal.is_(True)))
+        principales = result.scalars().all()
+        if len(principales) != 1:
+            raise _error_422(
+                "No hay un único proveedor principal configurado: elija "
+                "el proveedor de la referencia.")
+        return principales[0].id
+    result = await db.execute(
+        select(Proveedor).where(Proveedor.id == proveedor_id))
+    proveedor = result.scalars().first()
+    if proveedor is None or not proveedor.activa:
+        raise _error_422("El proveedor elegido no existe o está inactivo.")
+    return proveedor.id
+
+
+async def _linea_para_referencia(
+    db: AsyncSession, carga: Optional[CargaArchivo], linea: Optional[str]
+) -> Optional[str]:
+    """The configured `lineas_comerciales` text for `linea` (compared
+    normalized, like the rest of the line code). No línea stays `None`: an
+    older client still creates the referencia, and a VENTAS carga then asks
+    for its line before applying (`referencias-sin-linea`)."""
+    if not (linea or "").strip():
+        return None
+    permitidas = await _lineas_permitidas(db, carga)
+    norm = lineas_mod.normalizar_linea(linea)
+    if norm == lineas_mod.LINEA_NO_COMERCIAL or norm not in permitidas:
+        raise _error_422(
+            f"La línea '{linea.strip()}' no es una línea comercial "
+            "configurada.")
+    return permitidas[norm]
+
+
+async def _aplicar_creacion_referencia(
+    db: AsyncSession, accion, carga: Optional[CargaArchivo] = None,
+) -> bool:
+    """Crea la referencia (`unidad_empaque=1`) con la línea y el proveedor
+    elegidos -- validados antes de escribir. Retorna `False` (ignorada) si
+    falta `valor` o si el código ya existe bajo cualquier proveedor."""
     codigo = (accion.valor or "").strip()
     if not codigo:
         return False
-    proveedor_otros = await maestros_mod.get_proveedor_by_codigo(db, "OTROS")
-    if proveedor_otros is None:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="No existe el proveedor 'OTROS' -- no se puede crear la referencia.",
-        )
-    # Por CODIGO (único): si ya existe bajo cualquier proveedor no se duplica.
+    proveedor_id = await _proveedor_para_referencia(
+        db, getattr(accion, "proveedor_id", None))
+    linea = await _linea_para_referencia(
+        db, carga, getattr(accion, "linea_comercial", None))
     if await maestros_mod.get_referencia_by_codigo(db, codigo) is not None:
         return False
-    db.add(Referencia(codigo=codigo, proveedor_id=proveedor_otros.id, unidad_empaque=1))
+    db.add(Referencia(codigo=codigo, proveedor_id=proveedor_id,
+                      unidad_empaque=1, linea_comercial=linea))
     return True
 
 
-@router.post("/{carga_id}/resolver", response_model=ResolverErroresResultado)
+def _registrar_ignorado(carga: CargaArchivo, accion) -> bool:
+    try:
+        revalidar_mod.registrar_ignorado(
+            carga, accion.codigo_error, accion.valor)
+    except revalidar_mod.IgnorarNoPermitidoError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+    return False
+
+
+async def _aplicar_accion(
+    db: AsyncSession, carga: CargaArchivo, accion
+) -> bool:
+    if accion.accion == "mapear_sucursal":
+        return await _aplicar_mapeo_sucursal(db, accion)
+    if accion.accion == "crear_referencia":
+        return await _aplicar_creacion_referencia(db, accion, carga)
+    if accion.accion == "ignorar":
+        return _registrar_ignorado(carga, accion)
+    raise _error_422(f"Acción desconocida: {accion.accion!r}")
+
+
+@router.post(
+    "/{carga_id}/resolver", response_model=ResolverErroresResultado)
 async def resolver_errores(
     carga_id: uuid.UUID,
-    payload: ResolverErroresRequest,
+    payload: ResolverAccionesRequest,
     db: AsyncSession = Depends(get_motored_db_or_503),
     user: MotoredUser = Depends(_require_write),
 ):
     """Spec "Error-resolution actions": mapear sucursal, crear referencia
-    bajo `OTROS`, o ignorar -- una acción por `CargaError` (ver los
-    helpers `_aplicar_mapeo_sucursal`/`_aplicar_creacion_referencia`)."""
-    await _carga_or_404(db, carga_id)
+    (con línea y proveedor), o ignorar -- una acción por `CargaError`. Un
+    "ignorar" queda en `carga.log` para que "Volver a validar" lo respete
+    (`services.ingesta.revalidar`)."""
+    carga = await _carga_bloqueada(db, carga_id)
     aplicadas = 0
     ignoradas = 0
     for accion in payload.acciones:
-        if accion.accion == "mapear_sucursal":
-            aplicada = await _aplicar_mapeo_sucursal(db, accion)
-        elif accion.accion == "crear_referencia":
-            aplicada = await _aplicar_creacion_referencia(db, accion)
-        elif accion.accion == "ignorar":
-            aplicada = False
-        else:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"Acción desconocida: {accion.accion!r}",
-            )
+        aplicada = await _aplicar_accion(db, carga, accion)
         aplicadas += int(aplicada)
         ignoradas += int(not aplicada)
     await db.commit()
-    return ResolverErroresResultado(acciones_aplicadas=aplicadas, acciones_ignoradas=ignoradas)
+    return ResolverErroresResultado(
+        acciones_aplicadas=aplicadas, acciones_ignoradas=ignoradas)
+
+
+@router.get(
+    "/{carga_id}/lineas-comerciales",
+    response_model=List[LineaComercialOpcion])
+async def listar_lineas_comerciales_carga(
+    carga_id: uuid.UUID,
+    db: AsyncSession = Depends(get_motored_db_or_503),
+    user: MotoredUser = Depends(_require_write),
+):
+    """The configured `lineas_comerciales` (at the carga's period) a new
+    referencia can take: the options of "Crear referencia"."""
+    carga = await _carga_or_404(db, carga_id)
+    permitidas = await _lineas_permitidas(db, carga)
+    return [
+        LineaComercialOpcion(
+            valor=texto, etiqueta=tablero_comisiones.etiqueta_de(norm))
+        for norm, texto in permitidas.items()
+        if norm != lineas_mod.LINEA_NO_COMERCIAL
+    ]
+
+
+@router.post(
+    "/{carga_id}/revalidar", status_code=status.HTTP_202_ACCEPTED,
+    response_model=CargaArchivoRead)
+async def revalidar_carga(
+    carga_id: uuid.UUID,
+    db: AsyncSession = Depends(get_motored_db_or_503),
+    user: MotoredUser = Depends(_require_write),
+    job_runner: JobRunner = Depends(get_job_runner),
+):
+    """"Volver a validar": processes the stored file again for the same
+    carga (`services.ingesta.revalidar`). The row lock plus the state check
+    let only one of two clicks, or of a revalidate and an Aplicar, win: the
+    loser sees `PENDIENTE` (409 here, and Aplicar refuses it too)."""
+    carga = await _carga_bloqueada(db, carga_id)
+    try:
+        await revalidar_mod.preparar_revalidacion(
+            db, carga, uuid.UUID(user.user_id))
+    except revalidar_mod.RevalidacionNoPermitidaError as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+    await db.commit()
+    await _despachar_si_completa(carga, job_runner)
+    return CargaArchivoRead.model_validate(carga)
 
 
 async def _incluidas_de(db: AsyncSession, carga: CargaArchivo):

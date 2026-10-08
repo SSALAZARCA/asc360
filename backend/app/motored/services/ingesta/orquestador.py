@@ -71,6 +71,7 @@ from app.motored.services.ingesta import lector as lector_mod
 from app.motored.services.ingesta import maestros_adapter
 from app.motored.services.ingesta import periodo as periodo_mod
 from app.motored.services.ingesta import resolucion as resolucion_mod
+from app.motored.services.ingesta import revalidar as revalidar_mod
 from app.motored.services.ingesta import transito as transito_mod
 from app.motored.services.ingesta import ventas as ventas_mod
 from app.motored.services.ingesta import ventas_lineas as lineas_mod
@@ -356,6 +357,10 @@ class _EstadoLoteDryRun:
         # INGRESOS_FACTURAS rows whose reference is not a parts invoice
         # (`ingresos.MarcaIngreso.NO_ES_REPUESTO`): skipped, no error.
         self.filas_no_repuestos = 0
+        # Rows the user chose to ignore ("Ignorar" in Errores, kept in
+        # `carga.log["ignorados"]`): skipped on a revalidation, no error.
+        self.ignoradas: FrozenSet[revalidar_mod.ClaveIgnorada] = frozenset()
+        self.filas_ignoradas = 0
         # VENTAS rows that really enter venta_mensual: an included line with a
         # resolved referencia (an unknown code is not "kept").
         self.filas_conservadas = 0
@@ -483,6 +488,17 @@ def _contar_marca(estado: "_EstadoLoteDryRun", resultado: Any) -> bool:
     return True
 
 
+def _es_descarte(estado: "_EstadoLoteDryRun", resultado: Any) -> bool:
+    """A silent-skip marker, or a row with an error the user ignored
+    (counted in `filas_ignoradas`, no staging and no error); `True` if so."""
+    if _contar_marca(estado, resultado):
+        return True
+    if not revalidar_mod.es_ignorada(estado.ignoradas, resultado[1]):
+        return False
+    estado.filas_ignoradas += 1
+    return True
+
+
 def _procesar_filas_del_lote(
     estado: _EstadoLoteDryRun,
     datos_del_lote: Sequence[Sequence[Any]],
@@ -500,7 +516,7 @@ def _procesar_filas_del_lote(
         resultado = estado.procesar_fila(
             fila_raw, estado.numero_fila_absoluto, numero_lote
         )
-        if _contar_marca(estado, resultado):
+        if _es_descarte(estado, resultado):
             continue
         fila_staging, errores_fila = resultado
         for error in errores_fila:
@@ -654,6 +670,7 @@ def _volcar_contadores(log: Dict[str, Any], estado: "_EstadoLoteDryRun") -> None
         ("filas_fuera_de_linea", estado.filas_fuera_de_linea),
         ("filas_sin_linea", estado.filas_sin_linea),
         ("filas_no_repuestos", estado.filas_no_repuestos),
+        ("filas_ignoradas", estado.filas_ignoradas),
     ):
         if cantidad:
             log[clave] = cantidad
@@ -741,6 +758,7 @@ async def _dry_run(session: AsyncSession, carga: CargaArchivo) -> None:
     en_fecha = carga.periodo_desde or date.today()
 
     estado = _EstadoLoteDryRun()
+    estado.ignoradas = revalidar_mod.claves_ignoradas(carga)
     numero_lote = 0
 
     async for lote in lector_mod.leer_lotes(file_bytes, columnas_esperadas=columnas_esperadas):
