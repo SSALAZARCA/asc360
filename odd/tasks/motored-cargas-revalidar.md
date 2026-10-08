@@ -18,8 +18,12 @@ While a carga is VALIDADO (not applied), the owner fixes errors in the Errores t
 - **Example:** 25 rows of `BTX4L/BTZ5S-BS` in Facturas de pedidos. Create the referencia once, then revalidate, and all 25 enter.
 
 ## Tasks
-- [ ] R1: the create-referencia form (línea + proveedor), plus backend support for both fields on the resolver action.
-- [ ] R2: "Volver a validar". The backend reprocesses from the stored file and persists ignores across reprocessing. The frontend gets the button, a Procesando state and a refreshed informe.
+- [x] R1 (4fb32a0, 1b219bd): the create-referencia form (línea + proveedor), plus backend support for both fields on the resolver action.
+- [x] R2 (4fb32a0, 1b219bd; backend 6537 passed, pg_real 796 passed, jest 2303 passed): "Volver a validar". The backend reprocesses from the stored file and persists ignores across reprocessing. The frontend gets the button, a Procesando state and a refreshed informe.
 
 ## Sequencing
 This starts after the ingresos-upload fix lands, because both touch `api/cargas.py` and the ingesta orchestrator.
+
+## Follow-ups (not done)
+- Anular does not lock the carga or refuse PENDIENTE/PROCESANDO, so a validation still running can bring an annulled carga back to VALIDADO. This existed before; revalidation makes it slightly more likely.
+- "Volver a validar" lives only in Resumen. Showing it in Errores needs `CargaDetalle.js` to pass `onChanged={reload}` to `ErroresTab`.
