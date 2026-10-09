@@ -122,11 +122,11 @@ Each is about 400 changed lines or less, with one work-unit commit, tests alongs
 - [x] WU7 (cfc65c6). Pending for WU9: release a disconnected pair's reconteos. Pending for WU12: a leader notice when the code auto-rotated
 - [x] WU8 (ec9e753; backend 6957 passed, pg_real 900 passed). Unknown codes are not stored unless forzar_desconocido; no per-IP limit on lecturas (a store shares one IP). Follow-up: functional index on upper(btrim(referencia.codigo)) needs a migration
 - [x] WU9 (ac2bcf8 rebased; backend 7182 passed after rebase, pg_real 911 passed). Thresholds inclusive (>=, matches the approved panel "desde"); reconteo origen UMBRAL/LIDER; only the current assignee's round-2 readings count; `cantidad_final(ronda1, estado_reconteo, ronda2)` for WU10. Alembic head is now f6b2d8a35c71 (another session added 2 migrations on top of d58b2c9e4a17)
-- [x] WU1 (0339642 backend + migration b4f9c2e6a813, d0ba5c2 frontend; backend 6719 passed, pg_real 814 passed, jest 2457 passed; route: delegated writer)0
-- [x] WU1 (0339642 backend + migration b4f9c2e6a813, d0ba5c2 frontend; backend 6719 passed, pg_real 814 passed, jest 2457 passed; route: delegated writer)1
-- [x] WU1 (0339642 backend + migration b4f9c2e6a813, d0ba5c2 frontend; backend 6719 passed, pg_real 814 passed, jest 2457 passed; route: delegated writer)2
-- [x] WU1 (0339642 backend + migration b4f9c2e6a813, d0ba5c2 frontend; backend 6719 passed, pg_real 814 passed, jest 2457 passed; route: delegated writer)3
-- [x] WU1 (0339642 backend + migration b4f9c2e6a813, d0ba5c2 frontend; backend 6719 passed, pg_real 814 passed, jest 2457 passed; route: delegated writer)4
+- [x] WU10 (dfe6ab7; backend 7229 passed, pg_real 926 passed). Principal bodega = bodega.codigo = sucursal.bodega_principal (409 SIN_BODEGA_PRINCIPAL otherwise); KPI universe excludes 0-vs-0; unknown codes only in the "Sin costo" sheet; avance.xlsx also built
+- [ ] WU11
+- [ ] WU12
+- [ ] WU13
+- [ ] WU14
 
 ### Visibility while building
 Until WU12 lands, the sidebar group "Inventarios" shows only to ADMIN, so nothing half-built is exposed.
