@@ -2,13 +2,15 @@
  * What this device counted, kept on the client so the screen answers at
  * once, even offline.
  *
- * - `base`: the server's per-code summary of the current location (round 1)
- *   at the last seed (load or location change).
- * - `registro`: readings known to this screen. `origen: 'servidor'` ones
- *   came from `recientes` and are already inside `base`; `origen: 'local'`
- *   ones were made here since the seed and are not.
+ * - `base`: the server's per-code summary of ONE location (round 1) at its
+ *   last seed; the screen keeps one per location it saw (`bases`).
+ * - `registro`: readings known to this screen, each with the location it
+ *   was stamped with. `origen: 'servidor'` ones came from `recientes` and
+ *   are already inside that location's base; `origen: 'local'` ones were
+ *   made here since that location's seed and are not.
  *
- * Shown quantity = base + live local readings - voided server readings.
+ * Shown quantity = base + live local readings - voided server readings, all
+ * of the same location.
  * Nothing here is an expected quantity: the count stays blind.
  */
 
@@ -21,6 +23,30 @@ export const PREFIJO_UBICACION = 'UBI-';
 
 export function esEtiquetaUbicacion(codigo) {
   return normalizar(codigo).replace(/\s+/g, '').startsWith(PREFIJO_UBICACION);
+}
+
+const LARGO_UBICACION = 30;
+
+/**
+ * A location as the server stores it (`ubicaciones.codigo_ubicacion`):
+ * without the `UBI-` prefix, upper case, inner spaces collapsed. '' when
+ * it ends up empty or longer than 30.
+ */
+export function codigoUbicacion(texto) {
+  let codigo = (texto || '').split(/\s+/).filter(Boolean).join(' ').toUpperCase();
+  if (codigo.startsWith(PREFIJO_UBICACION)) codigo = codigo.slice(PREFIJO_UBICACION.length).trim();
+  return codigo.length > LARGO_UBICACION ? '' : codigo;
+}
+
+/**
+ * A new seed of one location: its server readings plus what is still
+ * queued, keeping what the screen knows of the other locations.
+ */
+export function resembrar(registro, recientes, items, ubicacionCodigo) {
+  const encolados = new Set(items.filter((i) => i.op === 'lectura').map((i) => i.id));
+  const otras = registro.filter((r) => r.ubicacion !== ubicacionCodigo && !encolados.has(r.id));
+  const desdeServidor = recientes ? registroDesde(recientes.lecturas, ubicacionCodigo) : [];
+  return sumarCola([...otras, ...desdeServidor], items, ubicacionCodigo);
 }
 
 /** `{codigo: {codigo, descripcion, cantidad}}` from `resumen_ubicacion`. */

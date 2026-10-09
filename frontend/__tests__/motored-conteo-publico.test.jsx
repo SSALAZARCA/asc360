@@ -206,7 +206,7 @@ describe('counting on a laptop', () => {
     montar();
     await escanear(user, 'UBI-B7');
     await waitFor(() => expect(s.llamadas.find((l) => l.metodo === 'PUT')).toBeTruthy());
-    expect(s.llamadas.find((l) => l.metodo === 'PUT').body).toEqual({ codigo: 'UBI-B7' });
+    expect(s.llamadas.find((l) => l.metodo === 'PUT').body).toEqual({ codigo: 'B7' });
     expect(await screen.findByText('B7', { selector: '[data-ubicacion-actual]' })).toBeInTheDocument();
     expect(s.envios()).toHaveLength(0);
   });
@@ -305,6 +305,104 @@ describe('offline queue', () => {
     montar();
     await escanear(user, '90305-KVN-900S');
     expect(await screen.findByText(/La ronda de conteo ya terminó/)).toBeInTheDocument();
+  });
+});
+
+describe('changing location offline', () => {
+  /** POST /lecturas and PUT /ubicacion fail while `red.caida`. */
+  function servidorConCorte() {
+    const red = { caida: false };
+    const s = crearServidor();
+    const { 'POST /lecturas': enviar, 'PUT /ubicacion': fijar } = s.manejadores;
+    s.manejadores['POST /lecturas'] = (body) => (red.caida
+      ? Promise.reject(new TypeError('Failed to fetch')) : enviar(body));
+    s.manejadores['PUT /ubicacion'] = (body) => (red.caida
+      ? Promise.reject(new TypeError('Failed to fetch')) : fijar(body));
+    s.manejadores['GET /lecturas/recientes'] = () => {
+      const aqui = s.lecturas.filter((l) => l.ubicacion_codigo === s.ubicacion.codigo);
+      const resumen = {};
+      aqui.forEach((l) => {
+        resumen[l.codigo_leido] = resumen[l.codigo_leido] || { codigo: l.codigo_leido, descripcion: '', cantidad: 0, lecturas: 0 };
+        resumen[l.codigo_leido].cantidad += l.cantidad;
+        resumen[l.codigo_leido].lecturas += 1;
+      });
+      return respuesta(200, {
+        ubicacion_actual: s.ubicacion, resumen_ubicacion: Object.values(resumen),
+        lecturas: aqui.map((l) => ({
+          id: l.id, codigo: l.codigo_leido, descripcion: '', cantidad: l.cantidad, metodo: l.metodo,
+          ubicacion: { codigo: l.ubicacion_codigo, nombre: l.ubicacion_codigo }, leida_en: l.leida_en, anulada_en: null,
+        })),
+      });
+    };
+    return { s, red };
+  }
+
+  async function listo(s) {
+    await screen.findByText('ESTANTE A3', { selector: '[data-ubicacion-actual]' });
+    await waitFor(() => expect(s.llamadas.some((l) => l.ruta === '/catalogo')).toBe(true));
+  }
+
+  function lista(nombre) {
+    return within(screen.getByRole('list', { name: `Contado en ${nombre}` }));
+  }
+
+  it('moves shelves without internet and sends each reading with its own location', async () => {
+    const { s, red } = servidorConCorte();
+    sesionGuardada();
+    montar();
+    await listo(s);
+    red.caida = true;
+
+    await escanear(user, 'UBI-B7');
+    expect(await screen.findByText('B7', { selector: '[data-ubicacion-actual]' })).toBeInTheDocument();
+    await escanear(user, '90305-KVN-900S');
+    await escanear(user, 'ubi-c1');
+    expect(await screen.findByText('C1', { selector: '[data-ubicacion-actual]' })).toBeInTheDocument();
+    await escanear(user, '17210-K0R-V00');
+
+    expect(screen.queryByText(/Espere a tener conexión/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/no se pudo cambiar la ubicación/)).not.toBeInTheDocument();
+    expect(await screen.findByText(/2 lecturas pendientes de enviar/)).toBeInTheDocument();
+    expect(s.lecturas).toHaveLength(0);
+
+    red.caida = false;
+    act(() => {
+      window.dispatchEvent(new Event('online'));
+    });
+    await waitFor(() => expect(s.lecturas).toHaveLength(2), { timeout: 3000 });
+    expect(s.lecturas.map((l) => [l.codigo_leido, l.ubicacion_codigo])).toEqual([
+      ['90305-KVN-900S', 'B7'], ['17210-K0R-V00', 'C1'],
+    ]);
+    await waitFor(() => expect(s.ubicacion.codigo).toBe('C1'));
+    const ultimoEnvio = s.llamadas.map((l) => l.ruta).lastIndexOf('/lecturas');
+    const ultimoPut = s.llamadas.map((l) => l.metodo).lastIndexOf('PUT');
+    expect(ultimoPut).toBeGreaterThan(ultimoEnvio);
+    expect(lista('C1').getAllByRole('listitem')).toHaveLength(1);
+    expect(lista('C1').getByText('17210-K0R-V00')).toBeInTheDocument();
+    expect(lista('C1').getByText('1')).toBeInTheDocument();
+  });
+
+  it('lists what was counted per stamped location', async () => {
+    const { s, red } = servidorConCorte();
+    sesionGuardada();
+    montar();
+    await listo(s);
+    red.caida = true;
+
+    await escanear(user, '90305-KVN-900S');
+    await escanear(user, 'UBI-B7');
+    await screen.findByText('B7', { selector: '[data-ubicacion-actual]' });
+    await escanear(user, '17210-K0R-V00');
+    await escanear(user, '17210-K0R-V00');
+
+    expect(lista('B7').getAllByRole('listitem')).toHaveLength(1);
+    expect(lista('B7').getByText('2')).toBeInTheDocument();
+    expect(lista('B7').queryByText('TUERCA BRIDA (14MM)')).not.toBeInTheDocument();
+
+    await escanear(user, 'UBI-A3');
+    await screen.findByText('ESTANTE A3', { selector: '[data-ubicacion-actual]' });
+    expect(lista('ESTANTE A3').getAllByRole('listitem')).toHaveLength(1);
+    expect(lista('ESTANTE A3').getByText('TUERCA BRIDA (14MM)')).toBeInTheDocument();
   });
 });
 

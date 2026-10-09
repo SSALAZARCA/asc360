@@ -16,7 +16,11 @@
  *
  * Queue items:
  * - `{op: 'lectura', id, codigo_leido, cantidad, leida_en, metodo,
- *    forzar_desconocido, reconteo_id, ubicacion, descripcion}`;
+ *    forzar_desconocido, reconteo_id, ubicacion_codigo, ubicacion,
+ *    descripcion}`. `ubicacion_codigo` (WU13b) is the location in effect
+ *    when it was scanned and IS sent: the server files the reading there,
+ *    so a pair can move shelves offline. Readings queued before WU13b lack
+ *    it and go to the session's current location;
  * - `{op: 'anular', id, codigo, cantidad, ubicacion}`: voids a reading the
  *   server already has (edits are void + new reading; the API refuses
  *   quantities <= 0).
@@ -90,6 +94,7 @@ export function aPayload(item) {
   };
   if (item.forzar_desconocido) payload.forzar_desconocido = true;
   if (item.reconteo_id) payload.reconteo_id = item.reconteo_id;
+  if (item.ubicacion_codigo) payload.ubicacion_codigo = item.ubicacion_codigo;
   return payload;
 }
 

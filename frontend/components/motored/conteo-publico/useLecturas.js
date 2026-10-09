@@ -1,31 +1,40 @@
 /**
  * Readings of the pair: a scan is checked (location first, `UBI-` labels,
  * reconteo task, catalogue), queued with a client id, shown and beeped at
- * once. Quantity edits are voids plus new readings (the API refuses
+ * once. Each reading is stamped with the location in effect at scan time
+ * (WU13b), so "Contado en <ubicación>" stays right after moving shelves
+ * offline. Quantity edits are voids plus new readings (the API refuses
  * quantities <= 0). See `registro.js` for how the shown totals are kept.
  */
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { nuevoId } from '../../../lib/motored/conteoCola';
 import {
-  baseDesde, candidatosAnular, esEtiquetaUbicacion, normalizar, planReduccion, registroDesde,
-  resumenUbicacion, sumarCola, totalDe,
+  baseDesde, candidatosAnular, esEtiquetaUbicacion, normalizar, planReduccion, resembrar,
+  resumenUbicacion, totalDe,
 } from './registro';
 import { pitar, vibrar } from './sonidos';
 import { TEXTOS, textoMotivo } from './textos';
 
 export default function useLecturas({ cola, buscar, ubicacion, estado, tarea, onEtiquetaUbicacion }) {
-  const [base, setBase] = useState({});
+  const [bases, setBases] = useState({});
   const [registro, setRegistro] = useState([]);
   const [ultima, setUltima] = useState(null);
   const [aviso, setAviso] = useState(null);
   const [rechazos, setRechazos] = useState([]);
   const ubic = ubicacion ? ubicacion.codigo : null;
+  const base = (ubic && bases[ubic]) || {};
 
-  const sembrar = useCallback((recientes, items, ubicacionCodigo) => {
-    setBase(baseDesde(recientes ? recientes.resumen_ubicacion : []));
-    const desdeServidor = recientes ? registroDesde(recientes.lecturas, ubicacionCodigo) : [];
-    setRegistro(sumarCola(desdeServidor, items, ubicacionCodigo));
+  useEffect(() => {
     setUltima(null);
+  }, [ubic]);
+
+  /** Seeds one location from `recientes` (null offline) plus the queue. */
+  const sembrar = useCallback((recientes, items, ubicacionCodigo) => {
+    if (ubicacionCodigo) {
+      const nueva = baseDesde(recientes ? recientes.resumen_ubicacion : []);
+      setBases((b) => ({ ...b, [ubicacionCodigo]: nueva }));
+    }
+    setRegistro((r) => resembrar(r, recientes, items, ubicacionCodigo));
   }, []);
 
   const error = useCallback((nuevoAviso) => {
@@ -36,7 +45,8 @@ export default function useLecturas({ cola, buscar, ubicacion, estado, tarea, on
   const agregar = useCallback((codigo, cantidad, metodo, { reconteoId = null, forzar = false, descripcion = '' } = {}) => {
     const item = {
       op: 'lectura', id: nuevoId(), codigo_leido: codigo, cantidad, leida_en: new Date().toISOString(),
-      metodo, forzar_desconocido: forzar, reconteo_id: reconteoId, ubicacion: ubic, descripcion,
+      metodo, forzar_desconocido: forzar, reconteo_id: reconteoId, ubicacion_codigo: ubic, ubicacion: ubic,
+      descripcion,
     };
     cola.encolar(item);
     setRegistro((r) => [...r, {

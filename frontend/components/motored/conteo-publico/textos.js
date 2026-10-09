@@ -13,7 +13,7 @@ export const TEXTOS = {
   rondaTerminada: 'La ronda de conteo terminó. Solo se cuentan los reconteos asignados: elija uno en "Reconteos asignados".',
   ayudaEscaner: 'Cada lectura suma 1. Escanee una ubicación para cambiar de estante.',
   notaCiega: 'Conteo a ciegas: no se muestra cuánto dice el sistema. Toque una fila para corregir la cantidad.',
-  pendientesCambio: 'Hay lecturas sin enviar. Espere a tener conexión para cambiar de ubicación.',
+  ubicacionInvalida: 'Escriba o escanee un código de ubicación de 1 a 30 caracteres.',
   pendientesSalir: 'Hay lecturas sin enviar. Espere a tener conexión antes de salir.',
   pendientesTerminar: 'Hay lecturas sin enviar. Espere a tener conexión para terminar el reconteo.',
   sinCamara:
@@ -27,6 +27,9 @@ const MOTIVOS = {
   CODIGO_INVALIDO: 'Código inválido',
   CANTIDAD_INVALIDA: 'Cantidad inválida',
   ES_UBICACION: 'Es una etiqueta de ubicación',
+  UBICACION_INACTIVA: 'La ubicación está desactivada',
+  UBICACION_INVALIDA: 'Código de ubicación inválido',
+  UBICACION_CHOCA_REFERENCIA: 'El código de ubicación se confunde con una referencia',
   LECTURA_NO_ENCONTRADA: 'No se pudo corregir: la lectura no existe',
 };
 

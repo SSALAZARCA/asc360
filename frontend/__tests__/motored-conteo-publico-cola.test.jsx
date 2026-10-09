@@ -35,6 +35,14 @@ describe('conteoCola', () => {
     });
   });
 
+  it('sends the location stamped at scan time, and nothing for an old unstamped reading', () => {
+    expect(aPayload({ ...lectura(1), ubicacion_codigo: 'B7' })).toEqual({
+      id: 'id-1', codigo_leido: 'C1', cantidad: 1, leida_en: '2026-10-09T10:00:00Z', metodo: 'ESCANER',
+      ubicacion_codigo: 'B7',
+    });
+    expect(aPayload(lectura(1))).not.toHaveProperty('ubicacion_codigo');
+  });
+
   it('removes accepted, duplicated, unknown and rejected ids and keeps the rest', () => {
     const items = [lectura(1), lectura(2), lectura(3), lectura(4), lectura(5)];
     const enviados = items.slice(0, 4);
