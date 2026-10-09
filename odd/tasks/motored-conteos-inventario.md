@@ -46,7 +46,7 @@ A new menu module for running total store counts and scheduled selective (cyclic
 4. ERP adjustment list and accuracy history.
 
 ## Open questions
-- What money value prices the differences (cost or sale price, and from which source).
+- RESOLVED 2026-10-08: differences are valued at the inventory file's "Costo prom. uni." per referencia and bodega, frozen in the snapshot. Thresholds and selective rules live in Configuración, new tab "Conteos de inventario".
 - The selective count rules (frequency, list size, ABC criteria).
 - Reconteo by a different pair: required or only suggested.
 - The ERP adjustment file format.
