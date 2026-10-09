@@ -55,3 +55,4 @@ A new menu module for running total store counts and scheduled selective (cyclic
   - **Counted at store opening, store OPEN,** against that morning's inventory. A selective difference is confirmed only if it repeats in a next-day reconteo.
 - RESOLVED 2026-10-08: a total-count reconteo MUST be done by a different pair; the first pair never sees it. With only one pair in the store, the leader can authorize that same pair.
 - RESOLVED 2026-10-08: no ERP import template yet. Closing generates a downloadable Excel (referencia, bodega, system qty, counted qty, difference, unit cost, difference value, locations). The owner will send the ERP format later if it must change.
+- 2026-10-08: the owner approved the screen prototypes (artifact https://claude.ai/artifact/Eq1mconFxKgnLzhkENW89G): leader panel, start count, laptop count, pair join, phone count, Telegram mini app. Technical design: odd/design/motored-conteos-inventario.md.
