@@ -62,3 +62,7 @@ A new menu module for running total store counts and scheduled selective (cyclic
   - Associated stores (`principal_id`) are not merged into a count.
   - This supersedes the design's per-bodega location tagging (open question 2).
 - 2026-10-08: default thresholds are reconteo above $100.000 and critical above $500.000, both editable in Configuración.
+- 2026-10-08 leaders: each conteo has ONE assigned LIDER_INVENTARIOS, which can differ per store and per count.
+  - Only ADMIN schedules counts and assigns the leader.
+  - Only the assigned leader can start, watch, request reconteos and close that count; other leaders neither see nor touch it.
+  - ADMIN sees and manages all counts; GERENCIA sees all, read-only.
