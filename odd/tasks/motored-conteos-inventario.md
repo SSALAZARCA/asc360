@@ -66,3 +66,96 @@ A new menu module for running total store counts and scheduled selective (cyclic
   - Only ADMIN schedules counts and assigns the leader.
   - Only the assigned leader can start, watch, request reconteos and close that count; other leaders neither see nor touch it.
   - ADMIN sees and manages all counts; GERENCIA sees all, read-only.
+
+---
+
+## STAGE 1 BUILD PLAN (ready to start 2026-10-09)
+
+**Status:** the definition is closed and the prototypes are approved. Building has NOT started. Stage 1 = the total count.
+
+### Sources of truth, in priority order
+1. **This file:** the owner decisions above.
+2. **The technical design,** `odd/design/motored-conteos-inventario.md`: data model §4, state machines §5, API §6, counting rules §7, security §8, performance §9, frontend §10, files §11, delivery §12, tests §13.
+3. **The approved prototypes:** https://claude.ai/artifact/Eq1mconFxKgnLzhkENW89G. Build the screens to match them, and diff the final JSX against them before closing UI tasks.
+
+### Owner decisions that OVERRIDE the design doc
+Apply these when building.
+- **Count per STORE, not per bodega** (design §4.3/§4.10/§7/WU10):
+  - the snapshot = the sum of the store's own bodegas per referencia;
+  - `ubicacion_inventario` has NO bodega column;
+  - at close, each referencia's whole difference is attributed to the store's PRINCIPAL bodega (multi-bodega attribution in WU10 = "everything to principal");
+  - keep the per-bodega system quantities in the snapshot only for the Excel's informative columns.
+- **Default thresholds:** reconteo $100.000 (the design used a $50.000 placeholder) and critical $500.000.
+- **Leader assignment** (design §6.1/WU6):
+  - `conteo.lider_id` (FK usuario, required for TOTAL);
+  - only ADMIN creates or schedules a conteo and assigns its leader;
+  - LIDER_INVENTARIOS sees and acts ONLY on conteos where `lider_id` = self (404 on others, never 403, so ids don't leak);
+  - ADMIN does everything on all conteos; GERENCIA reads all conteos and writes nothing.
+- **Role identifier:** `LIDER_INVENTARIOS` (UI label "Líder de inventarios").
+
+### Work units
+Each is about 400 changed lines or less, with one work-unit commit, tests alongside, and conventional commits.
+
+| ID | What | Depends on |
+|---|---|---|
+| WU1 | Role `LIDER_INVENTARIOS`: enum migration on top of the current head (check it; it was `d7a3c5e91f20`), `MotoredRole`, `deps.py` allowlist (leader: auth + `/api/motored/conteos`; GERENCIA gets `/api/motored/conteos` read-only via method checks), frontend wiring (`session.js`, `motored-layout.js` VALID_ROLES and redirect, `MotoredSidebar.js` new group "Inventarios" → "Conteos", `permisosPorRol.js`, user form, `useTableroGate` untouched). Follows exactly the pattern of 9b209f8/b7258b7 (COORDINADOR_REPUESTOS). | none |
+| WU2 | Migration plus models `conteo` (with `lider_id`), `conteo_snapshot_linea` (per sucursal+referencia, bodega quantities informative), `ubicacion_inventario` (per sucursal, no bodega). | WU1 |
+| WU3 | Migration plus models `conteo_sesion`, `conteo_integrante` (cédula stored, never echoed), `conteo_lectura` (client UUID, idempotent), `conteo_reconteo`, `conteo_acceso_intento`, `conteo_resultado`. | WU2 |
+| WU4 | Configuración tab "Conteos de inventario": keys for the reconteo amount (100000), critical amount (500000) and stale inventory hours. Validation: reconteo < critical. Tooltips. | none |
+| WU5 | `services/conteos/snapshot.py`: schedule; Iniciar = ONE SQL statement that resolves the store's latest non-ANULADO INVENTARIO carga and copies its rows; the cost fallback (other bodega → median → precio_normal → SIN_COSTO flag); the staleness warning; annul. `acceso.py`: slug plus 6-digit code (hash only). | WU2, WU4 |
+| WU6 | Leader API part 1: list / create (ADMIN) / reschedule / detail / iniciar / qr.png / rotate code, with leader scoping (own conteos only). Router wiring. | WU5 |
+| WU7 | Pair access, public: unirse (code + 2 names + 2 cédulas), attempt counters (5 → 15 min lock; 30/hour → auto-rotate), session dependency, sesion, salir. Leader: list sessions, disconnect. | WU3, WU6 |
+| WU8 | Readings: catálogo (ETag), ubicaciones, set location, POST lecturas (batch ≤100, idempotent), void, recent. **Blind guard:** a test fails if any pair response carries expected qty, cost or difference. | WU7 |
+| WU9 | Reconteo: end round, differences valued at the frozen cost, threshold candidates, manual add, assignment to a DIFFERENT pair (disjoint cédula sets), leader override only with no other eligible pair (reason stored), auto-assign, pair tasks. | WU8 |
+| WU10 | Close: guards, force close, `conteo_resultado` (final qty rule, everything to the principal bodega, cost fallback), accuracy KPI (count % and money), adjustment Excel download (referencia, bodega principal, system qty, counted qty, difference, unit cost, value, locations). | WU9 |
+| WU11 | Leader UI 1: list, schedule (ADMIN picks store + leader + date), start with the staleness warning, access card (QR, link, code, print QR). Matches the prototype "Iniciar". | WU6 |
+| WU12 | Leader UI 2: live panel (polling every 5 s visible / 30 s hidden, version short-circuit), pairs + disconnect, reconteo control, close dialog. Matches the prototype "Main". | WU9, WU10, WU11 |
+| WU13 | Pair UI 1: public route, join screen, session persistence, location bar, USB scanner input (keyboard bursts + Enter), manual entry, offline queue + retry, sounds. Matches "IngresoPareja" and "ConteoPortatil". | WU8 |
+| WU14 | Pair UI 2: mobile layout, camera scanning (dynamic import), reconteo tasks tab. Matches "ConteoCelular". Manual check on Android + iPhone, plus tablet screenshots. | WU13 |
+
+- [ ] WU1
+- [ ] WU2
+- [ ] WU3
+- [ ] WU4
+- [ ] WU5
+- [ ] WU6
+- [ ] WU7
+- [ ] WU8
+- [ ] WU9
+- [ ] WU10
+- [ ] WU11
+- [ ] WU12
+- [ ] WU13
+- [ ] WU14
+
+### Visibility while building
+Until WU12 lands, the sidebar group "Inventarios" shows only to ADMIN, so nothing half-built is exposed.
+
+### Checks per work unit
+Run them in the foreground and read the result line before committing; never chain tests with commit or push.
+- Backend: `cd backend && env -u MOTORED_DATABASE_URL -u MOTORED_TEST_PG_URL .venv/bin/python -m pytest tests/motored -q -p no:warnings`. Must show 0 failed.
+- pg_real on a throwaway PG18 (127.0.0.1, `unix_socket_directories=''`, own port and data dir): alembic_motored `upgrade head`, plus `downgrade -1` / `upgrade head` when there is a migration, then the full `-m pg_real`. Must show 0 failed. Clean up afterwards.
+- Frontend: `cd frontend && npx jest`, full. The Tests line must show 0 failed.
+- gga reviews WHOLE files: Python lines ≤79, functions ≤50, exactly 2 blank lines after classes and top-level defs, explicit style on every `<option>`.
+
+### Coordination
+- Session `fe` (KPI): ping before any migration so the alembic heads chain cleanly.
+- Session `43` (manuals/audit).
+
+### Routing
+- Delegate WU1, WU2 + WU3, and each UI unit to one bounded writer with an explicit allowed-edit-surface list.
+- The parent spot-checks, commits and pushes.
+
+### Later stages (not started)
+- Stage 2: polish the live panel (most of it lands in WU12).
+- Stage 3: selective counts plus the Lore Mini App. Pending owner details:
+  - overflow when the always-included items exceed the list (proposal: fill the list and carry the rest over);
+  - meaning of "repeats" (proposal: a difference with the same sign the next day);
+  - the ABC sales window (proposal: 6 months).
+- Stage 4: accuracy history.
+
+### Resume steps
+1. `mem_search` "odd/motored-conteos-inventario".
+2. Read this file and the design doc.
+3. Check the alembic head.
+4. Start WU1.
