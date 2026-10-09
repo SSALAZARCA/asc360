@@ -19,6 +19,7 @@ function Cabecera() {
 
 export default function InformeContainer({ token }) {
   const [data, setData] = useState(null);
+  const [cedulaUsada, setCedulaUsada] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -27,6 +28,7 @@ export default function InformeContainer({ token }) {
     setError('');
     try {
       setData(await verInforme(token, cedula));
+      setCedulaUsada(cedula);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -38,7 +40,7 @@ export default function InformeContainer({ token }) {
     <div style={{ minHeight: '100vh' }}>
       <Cabecera />
       <main style={{ padding: '24px 16px', maxWidth: 1100, margin: '0 auto' }}>
-        {data ? <AsesorDetalle data={data} /> : <CedulaForm onSubmit={consultar} loading={loading} serverError={error} />}
+        {data ? <AsesorDetalle data={data} enlace={{ token, cedula: cedulaUsada }} /> : <CedulaForm onSubmit={consultar} loading={loading} serverError={error} />}
       </main>
     </div>
   );

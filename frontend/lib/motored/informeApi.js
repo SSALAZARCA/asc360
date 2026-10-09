@@ -8,6 +8,8 @@ import { getMotoredApiUrl } from './motoredFetch';
 export const INFORME_INVALIDO = 'Enlace o cédula no válidos.';
 export const INFORME_DEMASIADOS_INTENTOS = 'Demasiados intentos. Intenta de nuevo en unos minutos.';
 export const INFORME_ERROR = 'No pudimos cargar tu informe. Intenta de nuevo.';
+export const PENDIENTE_YA_NO = 'Esta factura ya no está pendiente.';
+export const PENDIENTE_ERROR = 'No pudimos guardar tu respuesta. Intenta de nuevo.';
 
 /** The asesor detail for this link, or an Error whose message is ready to show. */
 export async function verInforme(token, cedula) {
@@ -30,5 +32,31 @@ export async function verInforme(token, cedula) {
     return body && body.detalle ? body.detalle : body;
   } catch {
     throw new Error(INFORME_ERROR);
+  }
+}
+
+/**
+ * The asesor answers "LLEGO" / "NO_HA_LLEGADO" for a pending invoice of her store (same link + cédula as the
+ * report; nothing is stored). Resolves the updated invoice, or an Error whose message is ready to show.
+ */
+export async function confirmarPendiente(token, cedula, factura, estado) {
+  let res;
+  try {
+    res = await fetch(`${getMotoredApiUrl()}/publico/informe/${encodeURIComponent(token)}/pendientes`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cedula, factura, estado }),
+    });
+  } catch {
+    throw new Error(PENDIENTE_ERROR);
+  }
+  if (res.status === 401) throw new Error(INFORME_INVALIDO);
+  if (res.status === 429) throw new Error(INFORME_DEMASIADOS_INTENTOS);
+  if (res.status === 409) throw new Error(PENDIENTE_YA_NO);
+  if (!res.ok) throw new Error(PENDIENTE_ERROR);
+  try {
+    return await res.json();
+  } catch {
+    throw new Error(PENDIENTE_ERROR);
   }
 }

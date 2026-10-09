@@ -30,6 +30,9 @@ export const getIngresosHistorial = (factura, sucursal) => (
   motoredFetchJson(`${BASE}/historial${consulta({ factura, sucursal })}`)
 );
 
+/** The asesor card block of one store: `{ verificable_desde, items, resumen }` (403 for a role that cannot read it). */
+export const getIngresosAsesor = (sucursal) => motoredFetchJson(`${BASE}/asesor${consulta({ sucursal })}`);
+
 /** Only COORDINADOR_REPUESTOS: `{ factura, sucursal_id, estado: 'LLEGO' | 'NO_HA_LLEGADO' }`; resolves the updated item. */
 export const confirmarIngreso = (cuerpo) => (
   motoredFetchJson(`${BASE}/confirmar`, { method: 'POST', body: JSON.stringify(cuerpo) })
