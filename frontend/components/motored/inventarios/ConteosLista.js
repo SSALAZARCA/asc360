@@ -1,8 +1,8 @@
 'use client';
-/** Presentational table of the conteos list (WU11): store, date, leader, estado and follow-up. */
+/** Presentational table of the conteos list (WU11/WU12b): store, date, leader, estado and follow-up with the progress of open conteos. */
 import MotoredTableScroll from '../MotoredTableScroll';
 import { fechaBogota, fechaHoraBogota } from '../../../lib/motored/fechas';
-import { ESTADOS_ABIERTOS, ESTADOS_CONTEO } from './conteosFormato';
+import { ESTADOS_ABIERTOS, ESTADOS_CONTEO, formatEntero, porcentajeAvance } from './conteosFormato';
 import EstadoConteoBadge from './EstadoConteoBadge';
 import { cardStyle, labelStyle, mutedStyle, optionStyle, selectStyle, tdStyle, thStyle } from './estilos';
 
@@ -13,6 +13,12 @@ function seguimiento(conteo) {
   if (conteo.anulado_en) return `Anulado ${fechaHoraBogota(conteo.anulado_en)}`;
   if (conteo.iniciado_en) return `Iniciado ${fechaHoraBogota(conteo.iniciado_en)}`;
   return 'Sin iniciar';
+}
+
+function Avance({ progreso }) {
+  const pct = porcentajeAvance(progreso);
+  if (pct == null) return null;
+  return <div>{`Avance ${pct} % (${formatEntero(progreso.refs_contadas)} de ${formatEntero(progreso.refs_universo)})`}</div>;
 }
 
 function Acciones({ conteo, administra, onAbrir, onReprogramar, onAnular }) {
@@ -67,7 +73,10 @@ export default function ConteosLista({ conteos, cargando, estado, onEstado, admi
                   <td style={tdStyle}>{fechaBogota(c.fecha_programada)}</td>
                   <td style={tdStyle}>{c.lider?.nombre ?? '—'}</td>
                   <td style={tdStyle}><EstadoConteoBadge estado={c.estado} /></td>
-                  <td style={{ ...tdStyle, ...mutedStyle, fontSize: '0.8rem' }}>{seguimiento(c)}</td>
+                  <td style={{ ...tdStyle, ...mutedStyle, fontSize: '0.8rem' }}>
+                    <div>{seguimiento(c)}</div>
+                    <Avance progreso={c.progreso} />
+                  </td>
                   <td style={tdStyle}><Acciones conteo={c} administra={administra} {...acciones} /></td>
                 </tr>
               ))}

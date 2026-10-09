@@ -2,8 +2,8 @@
 /**
  * Live panel of an open conteo (prototype "Main", WU12): header, KPIs, the
  * differences table, and on the side the pairs, the pairs' access and the
- * close card. Refreshes every 15 s visible / 60 s hidden plus "Actualizar
- * ahora". GERENCIA reads everything with no action buttons.
+ * close card. Polls `/panel` every 15 s visible / 60 s hidden (the tables
+ * reload only when its version moved) plus "Actualizar ahora". GERENCIA reads everything with no action buttons.
  */
 import { useState } from 'react';
 import DialogoPedido from '../pedidos/DialogoPedido';
@@ -57,7 +57,7 @@ export default function PanelVivo({ conteo, permisos, acceso, onVerAcceso, onCam
   return (
     <section style={paginaStyle}>
       <PanelEncabezado conteo={conteo} actualizado={panel.actualizado} onActualizar={panel.cargar} />
-      <PanelKpis conteo={conteo} diferencias={panel.diferencias} sesiones={panel.sesiones} />
+      <PanelKpis conteo={conteo} vivo={panel.vivo} diferencias={panel.diferencias} sesiones={panel.sesiones} />
       <Aviso aviso={panel.aviso} />
       <div style={filaFlexStyle}>
         <DiferenciasTabla

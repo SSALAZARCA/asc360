@@ -77,10 +77,17 @@ export function haceCuanto(instante, ahora = Date.now()) {
 /** A connected pair silent for longer than this may hold readings it has not sent (owner rule, WU12). */
 export const MINUTOS_SIN_ACTIVIDAD = 2;
 
-/** Whole minutes since the pair's last activity, or null when it is active (or not connected). */
+/** The pair's latest sign of life: its last reading or its last request, whichever is newer. */
+export function ultimaSenal(sesion) {
+  const marcas = [sesion.ultima_lectura_en, sesion.ultima_actividad_en].filter(Boolean);
+  if (marcas.length === 0) return sesion.conectada_en || null;
+  return marcas.reduce((a, b) => (new Date(a) >= new Date(b) ? a : b));
+}
+
+/** Whole minutes since the pair's last reading or activity, or null when it is active (or not connected). */
 export function minutosSinActividad(sesion, ahora = Date.now()) {
   if (sesion.estado !== 'CONECTADA') return null;
-  const desde = sesion.ultima_actividad_en || sesion.conectada_en;
+  const desde = ultimaSenal(sesion);
   if (!desde) return null;
   const minutos = (ahora - new Date(desde).getTime()) / 60000;
   return minutos > MINUTOS_SIN_ACTIVIDAD ? Math.floor(minutos) : null;
@@ -96,4 +103,20 @@ export function parejasSinActividad(sesiones, ahora = Date.now()) {
 /** The pair label without its members: "Pareja 3 · Sofía L. y Diego M." -> "Pareja 3". */
 export function parejaCorta(etiqueta) {
   return (etiqueta || '').split(' · ')[0];
+}
+
+/** Counted referencias as a rounded whole percentage of the universe; 100 only when all are counted (null without a universe). */
+export function porcentajeAvance(progreso) {
+  if (!progreso || !progreso.refs_universo) return null;
+  const pct = Math.round((100 * progreso.refs_contadas) / progreso.refs_universo);
+  return pct === 100 && progreso.refs_contadas < progreso.refs_universo ? 99 : pct;
+}
+
+/** The pairs of `/sesiones` with the panel's readings count and last reading (matched by `sesion_id`). */
+export function unirParejas(sesiones, parejas) {
+  const porId = new Map((parejas || []).map((p) => [p.sesion_id, p]));
+  return sesiones.map((s) => {
+    const p = porId.get(s.id);
+    return p ? { ...s, lecturas: p.lecturas, ultima_lectura_en: p.ultima_lectura_en } : s;
+  });
 }

@@ -59,6 +59,11 @@ beforeEach(() => {
   jest.resetAllMocks();
   api.obtenerConteo.mockResolvedValue(detalle('EN_RECONTEO'));
   api.obtenerDiferencias.mockResolvedValue(DIFERENCIAS);
+  api.obtenerPanel.mockResolvedValue({
+    version: 1, sin_cambios: false, estado: 'EN_RECONTEO', parejas: [], exactitud_parcial: null,
+    progreso: { refs_universo: 0, refs_contadas: 0, lecturas_total: 0, ultima_lectura_en: null },
+    diferencias_resumen: { criticas: 0, en_reconteo: 0, total: 0 },
+  });
   api.listarSesiones.mockResolvedValue([]);
   api.listarConteos.mockResolvedValue([]);
   api.obtenerResultado.mockResolvedValue(RESULTADO);

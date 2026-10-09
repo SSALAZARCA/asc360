@@ -3,8 +3,9 @@
  * Live panel polling (odd/motored-conteos-inventario, WU12; owner change of
  * 2026-10-09): every 15 s while the tab is visible, every 60 s when hidden
  * (`document.visibilityState`), an immediate refresh when the tab comes
- * back, and nothing while `activo` is false (a closed conteo). The design's
- * version short-circuit (§9.4) has no endpoint yet, so each tick reloads.
+ * back, and nothing while `activo` is false (a closed conteo). Each tick
+ * runs `cargar`, which sends the last panel version (ADR-8): an unchanged
+ * conteo costs one cheap request.
  */
 import { useEffect, useRef } from 'react';
 

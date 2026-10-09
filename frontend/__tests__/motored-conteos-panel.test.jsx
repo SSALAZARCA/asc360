@@ -1,6 +1,8 @@
 /**
- * Live panel (odd/motored-conteos-inventario, WU12): polling 15 s visible /
- * 60 s hidden (owner change) that stops on CERRADO, the KPIs, the differences filters, the
+ * Live panel (odd/motored-conteos-inventario, WU12/WU12b): polling 15 s
+ * visible / 60 s hidden (owner change) that stops on CERRADO and sends the
+ * last panel version (the differences reload only when it moved), the KPIs
+ * with the real progress, the differences filters, the
  * reconteo request / assign / same-pair override, the pairs, the end of the
  * first round, and GERENCIA read-only.
  */
@@ -46,6 +48,27 @@ const SESIONES = [
     integrantes: ['Sofía', 'Diego'], ubicacion_actual: null, ultima_actividad_en: new Date().toISOString() },
 ];
 
+const pareja = (id, numero, lecturas, extra = {}) => ({
+  sesion_id: id, numero, etiqueta: `Pareja ${numero}`, ubicacion_actual: null, lecturas,
+  ultima_lectura_en: null, ultima_actividad_en: null, estado: 'CONECTADA', ...extra,
+});
+const vivo = (estado, version = 7, extra = {}) => ({
+  version, sin_cambios: false, estado,
+  progreso: { refs_universo: 1284, refs_contadas: 796, lecturas_total: 2310, ultima_lectura_en: new Date().toISOString() },
+  exactitud_parcial: {
+    refs_evaluadas: 800, refs_exactas: 749, exactitud_pct: '93.63', valor_diferencia_neta: '-2140000', valor_diferencia_abs: '3100000',
+  },
+  parejas: [pareja('s1', 1, 241), pareja('s3', 3, 198)],
+  diferencias_resumen: { criticas: 2, en_reconteo: 2, total: 4 },
+  ...extra,
+});
+/** The server's short-circuit: the same version answers `sin_cambios`. */
+function panelConVersion(respuesta) {
+  return (id, version) => Promise.resolve(
+    version === respuesta.version ? { version, sin_cambios: true } : respuesta,
+  );
+}
+
 function login(role) {
   sessionStorage.setItem('motored_user', JSON.stringify({ nombre: 'U', role }));
   sessionStorage.setItem('motored_token', 'tok');
@@ -69,6 +92,7 @@ beforeEach(() => {
   setVisibility('visible');
   api.obtenerConteo.mockResolvedValue(detalle('EN_RECONTEO'));
   api.obtenerDiferencias.mockResolvedValue(diferencias('EN_RECONTEO'));
+  api.obtenerPanel.mockImplementation(panelConVersion(vivo('EN_RECONTEO')));
   api.listarSesiones.mockResolvedValue(SESIONES);
   api.listarConteos.mockResolvedValue([]);
   api.listarUbicaciones.mockResolvedValue([]);
@@ -79,7 +103,7 @@ afterEach(() => {
 });
 
 describe('Polling', () => {
-  it('refreshes every 15 s while visible, every 60 s when hidden, and stops on CERRADO', async () => {
+  it('polls the panel every 15 s while visible, every 60 s when hidden, and stops on CERRADO', async () => {
     expect(INTERVALO_VISIBLE_MS).toBe(15000);
     expect(INTERVALO_OCULTO_MS).toBe(60000);
     jest.useFakeTimers();
@@ -87,29 +111,52 @@ describe('Polling', () => {
     api.obtenerResultado.mockResolvedValue({ kpi: { refs_universo: 0, refs_exactas: 0, valor_sistema: '0', valor_diferencia_neta: '0', valor_diferencia_abs: '0' }, items: [], total: 0 });
     render(<ConteoDetalleContainer conteoId="c1" />);
     await screen.findByText('42601-ACL');
-    expect(api.obtenerDiferencias).toHaveBeenCalledTimes(1);
+    expect(api.obtenerPanel).toHaveBeenCalledTimes(1);
 
     await act(async () => { jest.advanceTimersByTime(14000); });
-    expect(api.obtenerDiferencias).toHaveBeenCalledTimes(1);
+    expect(api.obtenerPanel).toHaveBeenCalledTimes(1);
     await act(async () => { jest.advanceTimersByTime(1000); });
-    expect(api.obtenerDiferencias).toHaveBeenCalledTimes(2);
+    expect(api.obtenerPanel).toHaveBeenCalledTimes(2);
 
     act(() => setVisibility('hidden'));
     await act(async () => { jest.advanceTimersByTime(15000); });
-    expect(api.obtenerDiferencias).toHaveBeenCalledTimes(2);
+    expect(api.obtenerPanel).toHaveBeenCalledTimes(2);
     await act(async () => { jest.advanceTimersByTime(45000); });
-    expect(api.obtenerDiferencias).toHaveBeenCalledTimes(3);
+    expect(api.obtenerPanel).toHaveBeenCalledTimes(3);
 
     act(() => setVisibility('visible'));
-    await waitFor(() => expect(api.obtenerDiferencias).toHaveBeenCalledTimes(4));
+    await waitFor(() => expect(api.obtenerPanel).toHaveBeenCalledTimes(4));
 
-    api.obtenerDiferencias.mockResolvedValue(diferencias('CERRADO'));
+    api.obtenerPanel.mockImplementation(panelConVersion(vivo('CERRADO', 9)));
     api.obtenerConteo.mockResolvedValue(detalle('CERRADO'));
     await act(async () => { jest.advanceTimersByTime(15000); });
     await screen.findByRole('heading', { name: /Resultado del conteo/ });
-    const llamadas = api.obtenerDiferencias.mock.calls.length;
+    const llamadas = api.obtenerPanel.mock.calls.length;
     await act(async () => { jest.advanceTimersByTime(120000); });
-    expect(api.obtenerDiferencias).toHaveBeenCalledTimes(llamadas);
+    expect(api.obtenerPanel).toHaveBeenCalledTimes(llamadas);
+  });
+
+  it('sends the last version and refetches the differences only when it moved', async () => {
+    jest.useFakeTimers();
+    login('LIDER_INVENTARIOS');
+    render(<ConteoDetalleContainer conteoId="c1" />);
+    await screen.findByText('42601-ACL');
+    expect(api.obtenerDiferencias).toHaveBeenCalledTimes(1);
+    expect(api.listarSesiones).toHaveBeenCalledTimes(1);
+
+    await act(async () => { jest.advanceTimersByTime(INTERVALO_VISIBLE_MS); });
+    expect(api.obtenerPanel).toHaveBeenLastCalledWith('c1', 7);
+    expect(api.obtenerDiferencias).toHaveBeenCalledTimes(1);
+    expect(api.listarSesiones).toHaveBeenCalledTimes(1);
+
+    api.obtenerPanel.mockImplementation(panelConVersion(vivo('EN_RECONTEO', 8)));
+    await act(async () => { jest.advanceTimersByTime(INTERVALO_VISIBLE_MS); });
+    await waitFor(() => expect(api.obtenerDiferencias).toHaveBeenCalledTimes(2));
+    expect(api.listarSesiones).toHaveBeenCalledTimes(2);
+
+    await act(async () => { jest.advanceTimersByTime(INTERVALO_VISIBLE_MS); });
+    expect(api.obtenerPanel).toHaveBeenLastCalledWith('c1', 8);
+    expect(api.obtenerDiferencias).toHaveBeenCalledTimes(2);
   });
 
   it('refreshes by hand', async () => {
@@ -120,6 +167,7 @@ describe('Polling', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Actualizar ahora' }));
 
     await waitFor(() => expect(api.obtenerDiferencias).toHaveBeenCalledTimes(2));
+    expect(api.obtenerPanel).toHaveBeenLastCalledWith('c1', undefined);
   });
 });
 
@@ -134,6 +182,42 @@ describe('KPIs and differences', () => {
     expect(screen.getByRole('button', { name: 'En reconteo (2)' })).toBeInTheDocument();
     expect(screen.getByText('1 asignadas · 0 recontadas')).toBeInTheDocument();
     expect(screen.getByText('2 conectadas')).toBeInTheDocument();
+  });
+
+  it('shows the real progress, the partial accuracy and the last reading', async () => {
+    login('LIDER_INVENTARIOS');
+    render(<ConteoDetalleContainer conteoId="c1" />);
+    await screen.findByText('42601-ACL');
+
+    expect(screen.getByText('796 / 1.284')).toBeInTheDocument();
+    expect(screen.getByRole('progressbar', { name: 'Avance del conteo' })).toHaveAttribute('aria-valuenow', '62');
+    expect(screen.getByText('referencias contadas')).toBeInTheDocument();
+    expect(screen.getByText('93,6 %')).toBeInTheDocument();
+    expect(screen.getByText('Diferencia neta parcial: −$2.140.000')).toBeInTheDocument();
+    expect(screen.getByText(/^última lectura hace \d+ s$/)).toBeInTheDocument();
+  });
+
+  it('shows dashes until something is counted', async () => {
+    login('LIDER_INVENTARIOS');
+    api.obtenerPanel.mockImplementation(panelConVersion(vivo('EN_CONTEO', 7, {
+      progreso: { refs_universo: 1284, refs_contadas: 0, lecturas_total: 0, ultima_lectura_en: null },
+      exactitud_parcial: null,
+    })));
+    render(<ConteoDetalleContainer conteoId="c1" />);
+    await screen.findByText('42601-ACL');
+
+    expect(screen.getByText('0 / 1.284')).toBeInTheDocument();
+    expect(screen.getByText('Sin referencias contadas todavía')).toBeInTheDocument();
+    expect(screen.getByText('sin lecturas todavía')).toBeInTheDocument();
+  });
+
+  it('shows the readings of each pair', async () => {
+    login('LIDER_INVENTARIOS');
+    render(<ConteoDetalleContainer conteoId="c1" />);
+    await screen.findByText('42601-ACL');
+
+    expect(screen.getByText(/^Estante A3 · 241 lecturas · hace/)).toBeInTheDocument();
+    expect(screen.getByText(/^Sin ubicación · 198 lecturas · hace/)).toBeInTheDocument();
   });
 
   it('filters critical rows and rows in reconteo', async () => {
@@ -303,6 +387,18 @@ describe('Idle pairs (owner rule)', () => {
     const tarjeta = screen.getByText('Pareja 3 · A. y B.').parentElement.parentElement;
     expect(tarjeta).toHaveAttribute('data-inactiva', 'si');
     expect(tarjeta.style.background).toBe('var(--motored-warning-bg, #fef3e2)');
+  });
+
+  it('counts a recent reading as activity', async () => {
+    login('LIDER_INVENTARIOS');
+    api.listarSesiones.mockResolvedValue([sesion(3, 5)]);
+    api.obtenerPanel.mockImplementation(panelConVersion(vivo('EN_RECONTEO', 7, {
+      parejas: [pareja('s3', 3, 12, { ultima_lectura_en: haceMin(0.5) })],
+    })));
+    render(<ConteoDetalleContainer conteoId="c1" />);
+    await screen.findByText('42601-ACL');
+
+    expect(screen.queryByText(/^Sin actividad hace/)).not.toBeInTheDocument();
   });
 
   it('flags a pair once it crosses the threshold', async () => {

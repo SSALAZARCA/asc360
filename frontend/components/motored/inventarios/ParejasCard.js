@@ -1,11 +1,12 @@
 /**
- * "Parejas" (WU12): each pair with its current location, its reconteo
- * tasks (from the differences) and its last activity, and "Desconectar".
- * For the leader, a connected pair silent for more than
- * MINUTOS_SIN_ACTIVIDAD shows in yellow ("Sin actividad hace N min"): it
- * may hold readings it has not sent. Readings per pair are not in the API.
+ * "Parejas" (WU12/WU12b): each pair with its current location, its live
+ * readings (from `/panel`), its reconteo tasks (from the differences) and
+ * its last sign of life (reading or request), and "Desconectar". For the
+ * leader, a connected pair silent for more than MINUTOS_SIN_ACTIVIDAD
+ * shows in yellow ("Sin actividad hace N min"): it may hold readings it
+ * has not sent.
  */
-import { haceCuanto, minutosSinActividad } from './conteosFormato';
+import { formatEntero, haceCuanto, minutosSinActividad, ultimaSenal } from './conteosFormato';
 import { cardStyle, h2Style, mutedStyle } from './estilos';
 
 function tareas(sesionId, items) {
@@ -21,8 +22,9 @@ function Pareja({ sesion, items, opera, ahora, onDesconectar }) {
   const reconteos = tareas(sesion.id, items);
   const detalle = [
     sesion.ubicacion_actual?.nombre ?? 'Sin ubicación',
-    conectada ? haceCuanto(sesion.ultima_actividad_en, ahora) : 'Desconectada',
-  ].join(' · ');
+    sesion.lecturas == null ? null : `${formatEntero(sesion.lecturas)} lecturas`,
+    conectada ? haceCuanto(ultimaSenal(sesion), ahora) : 'Desconectada',
+  ].filter(Boolean).join(' · ');
   return (
     <div
       data-inactiva={inactiva != null ? 'si' : undefined}

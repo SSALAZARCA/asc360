@@ -1,13 +1,16 @@
 /**
- * The five KPI cards of the live panel (WU12), built only from what the API
- * gives: the snapshot size (no counted-referencias figure yet), the
- * critical and reconteo counts, the partial net difference, and the pairs.
- * Accuracy is computed at close, so the live card shows "—".
+ * The five KPI cards of the live panel (prototype "Main", WU12/WU12b): the
+ * real progress (counted / universe referencias, with its bar), the
+ * critical and reconteo counts, the partial accuracy over what is counted
+ * so far with its net difference, and the active pairs with the last
+ * reading. `vivo` is the `/panel` answer; `diferencias` the full table.
  */
 import InfoTooltip from '../InfoTooltip';
-import { formatEntero, formatPesos, formatPesosConSigno, haceCuanto } from './conteosFormato';
+import {
+  formatEntero, formatPesos, formatPesosConSigno, formatPorcentaje, haceCuanto, porcentajeAvance,
+} from './conteosFormato';
 import { kpiValorStyle, mutedStyle } from './estilos';
-import { AYUDA_CRITICA, AYUDA_EXACTITUD, AYUDA_RECONTEO } from './ayudas';
+import { AYUDA_AVANCE, AYUDA_CRITICA, AYUDA_EXACTITUD, AYUDA_RECONTEO } from './ayudas';
 
 const tarjeta = (alerta) => ({
   background: alerta ? 'var(--motored-danger-bg, #fdecea)' : 'var(--motored-surface, #ffffff)',
@@ -16,14 +19,26 @@ const tarjeta = (alerta) => ({
   color: alerta ? 'var(--motored-danger, #c0392b)' : undefined,
 });
 
-function Kpi({ titulo, ayuda, valor, detalle, alerta = false }) {
+function Kpi({ titulo, ayuda, valor, detalle, alerta = false, children }) {
   return (
     <div style={tarjeta(alerta)}>
       <div style={{ fontSize: '0.8rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
         {titulo}{ayuda && <InfoTooltip text={ayuda} />}
       </div>
       <div style={kpiValorStyle}>{valor}</div>
+      {children}
       <div style={{ ...mutedStyle, color: alerta ? 'inherit' : mutedStyle.color }}>{detalle}</div>
+    </div>
+  );
+}
+
+function Barra({ pct }) {
+  return (
+    <div
+      role="progressbar" aria-label="Avance del conteo" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct ?? 0}
+      style={{ height: '8px', borderRadius: '999px', background: 'var(--motored-surface-alt, #f4f4f5)', overflow: 'hidden' }}
+    >
+      <div style={{ width: `${pct ?? 0}%`, height: '100%', background: 'var(--motored-brand, #e20714)' }} />
     </div>
   );
 }
@@ -35,31 +50,38 @@ function resumenReconteos(items) {
   return `${asignadas} asignadas · ${recontadas} recontadas`;
 }
 
-function netaParcial(items) {
-  return items.reduce((suma, f) => (f.valor == null ? suma : suma + Number(f.valor)), 0);
+function avanceTexto(progreso) {
+  if (!progreso) return '—';
+  return `${formatEntero(progreso.refs_contadas)} / ${formatEntero(progreso.refs_universo)}`;
 }
 
-function ultimaActividad(sesiones) {
-  const marcas = sesiones.map((s) => s.ultima_actividad_en).filter(Boolean).sort();
-  return marcas.length ? `última actividad ${haceCuanto(marcas[marcas.length - 1])}` : 'sin actividad todavía';
+function ultimaLectura(progreso) {
+  const ultima = progreso?.ultima_lectura_en;
+  return ultima ? `última lectura ${haceCuanto(ultima)}` : 'sin lecturas todavía';
 }
 
-export default function PanelKpis({ conteo, diferencias, sesiones }) {
+export default function PanelKpis({ conteo, vivo, diferencias, sesiones }) {
   const items = diferencias?.items ?? [];
+  const resumen = vivo?.diferencias_resumen ?? diferencias;
+  const exactitud = vivo?.exactitud_parcial;
   const conectadas = sesiones.filter((s) => s.estado === 'CONECTADA').length;
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '0.75rem' }}>
-      <Kpi titulo="Avance" valor={formatEntero(conteo.snapshot?.lineas)} detalle="referencias en la foto del inventario" />
+      <Kpi titulo="Avance" ayuda={AYUDA_AVANCE} valor={avanceTexto(vivo?.progreso)} detalle="referencias contadas">
+        <Barra pct={porcentajeAvance(vivo?.progreso)} />
+      </Kpi>
       <Kpi
-        titulo="Diferencias críticas" ayuda={AYUDA_CRITICA} alerta={(diferencias?.criticas ?? 0) > 0}
-        valor={formatEntero(diferencias?.criticas)} detalle={`desde ${formatPesos(conteo.umbrales?.critico)} cada una`}
+        titulo="Diferencias críticas" ayuda={AYUDA_CRITICA} alerta={(resumen?.criticas ?? 0) > 0}
+        valor={formatEntero(resumen?.criticas)} detalle={`desde ${formatPesos(conteo.umbrales?.critico)} cada una`}
       />
-      <Kpi titulo="En reconteo" ayuda={AYUDA_RECONTEO} valor={formatEntero(diferencias?.en_reconteo)} detalle={resumenReconteos(items)} />
+      <Kpi titulo="En reconteo" ayuda={AYUDA_RECONTEO} valor={formatEntero(resumen?.en_reconteo)} detalle={resumenReconteos(items)} />
       <Kpi
-        titulo="Exactitud parcial" ayuda={AYUDA_EXACTITUD} valor="—"
-        detalle={`Diferencia neta${diferencias?.parcial ? ' parcial' : ''}: ${formatPesosConSigno(netaParcial(items))}`}
+        titulo="Exactitud parcial" ayuda={AYUDA_EXACTITUD} valor={formatPorcentaje(exactitud?.exactitud_pct)}
+        detalle={exactitud
+          ? `Diferencia neta parcial: ${formatPesosConSigno(exactitud.valor_diferencia_neta)}`
+          : 'Sin referencias contadas todavía'}
       />
-      <Kpi titulo="Parejas activas" valor={formatEntero(conectadas)} detalle={ultimaActividad(sesiones)} />
+      <Kpi titulo="Parejas activas" valor={formatEntero(conectadas)} detalle={ultimaLectura(vivo?.progreso)} />
     </div>
   );
 }

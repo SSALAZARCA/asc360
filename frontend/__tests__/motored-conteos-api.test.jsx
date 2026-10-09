@@ -7,7 +7,7 @@
  */
 import {
   asignarReconteo, cerrarConteo, descargarAjustes, iniciarConteo, listarConteos,
-  obtenerDiferencias, obtenerQrObjectUrl, programarConteo,
+  obtenerDiferencias, obtenerPanel, obtenerQrObjectUrl, programarConteo,
 } from '../lib/motored/conteosApi';
 
 const BASE = 'http://localhost:8000/api/motored';
@@ -35,6 +35,14 @@ describe('conteosApi', () => {
     fetch.mockResolvedValue(respuesta(200, []));
     await listarConteos({ estado: 'EN_CONTEO' });
     expect(fetch.mock.calls[0][0]).toBe(`${BASE}/conteos?estado=EN_CONTEO`);
+  });
+
+  it('asks the panel with the last version, or without one', async () => {
+    fetch.mockResolvedValue(respuesta(200, { version: 42, sin_cambios: true }));
+    expect(await obtenerPanel('c1', 42)).toEqual({ version: 42, sin_cambios: true });
+    await obtenerPanel('c1');
+    expect(fetch.mock.calls[0][0]).toBe(`${BASE}/conteos/c1/panel?version=42`);
+    expect(fetch.mock.calls[1][0]).toBe(`${BASE}/conteos/c1/panel`);
   });
 
   it('lists everything without a filter', async () => {

@@ -1,15 +1,20 @@
 'use client';
 /**
- * Data and actions of the live panel (WU12). One tick reads the
- * differences (always `todas`: the KPIs need every row; the filter buttons
- * work on that list) and the pairs. A new estado in the answer (round
- * ended, closed elsewhere) asks the container to reload the conteo.
+ * Data and actions of the live panel (WU12/WU12b). Every poll asks
+ * `/panel` with the last version: `sin_cambios` only refreshes the clock
+ * (and the idle-pair minutes); a new version brings the progress, partial
+ * accuracy and per-pair readings, and only then are the differences
+ * (always `todas`: the filter buttons work on that list) and the pairs
+ * reloaded. "Actualizar ahora" and every write force a full reload. A new
+ * estado (round ended, closed elsewhere) asks the container to reload.
  */
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as api from '../../../lib/motored/conteosApi';
+import { unirParejas } from './conteosFormato';
 import usePollingConteo from './usePollingConteo';
 
 export default function usePanel(conteo, onCambioEstado) {
+  const [vivo, setVivo] = useState(null);
   const [diferencias, setDiferencias] = useState(null);
   const [sesiones, setSesiones] = useState([]);
   const [actualizado, setActualizado] = useState(null);
@@ -17,22 +22,32 @@ export default function usePanel(conteo, onCambioEstado) {
   const [ocupado, setOcupado] = useState(false);
   const estadoRef = useRef(conteo.estado);
   estadoRef.current = conteo.estado;
+  // The version of the data on screen; set only after a full reload succeeded.
+  const versionRef = useRef(undefined);
   const id = conteo.id;
 
-  const cargar = useCallback(async () => {
+  const leer = useCallback(async (forzar) => {
     try {
-      const [dif, ses] = await Promise.all([api.obtenerDiferencias(id, 'todas'), api.listarSesiones(id)]);
-      setDiferencias(dif);
-      setSesiones(ses);
+      const panel = await api.obtenerPanel(id, forzar ? undefined : versionRef.current);
+      if (!panel.sin_cambios) {
+        const [dif, ses] = await Promise.all([api.obtenerDiferencias(id, 'todas'), api.listarSesiones(id)]);
+        setVivo(panel);
+        setDiferencias(dif);
+        setSesiones(ses);
+        versionRef.current = panel.version;
+        if (panel.estado && panel.estado !== estadoRef.current) onCambioEstado();
+      }
       setActualizado(Date.now());
-      if (dif.estado && dif.estado !== estadoRef.current) onCambioEstado();
     } catch (err) {
       setAviso({ tipo: 'error', texto: err.message || 'No se pudo actualizar el panel.' });
     }
   }, [id, onCambioEstado]);
+  const cargar = useCallback(() => leer(true), [leer]);
+  const sondear = useCallback(() => leer(false), [leer]);
 
   useEffect(() => { cargar(); }, [cargar]);
-  usePollingConteo(cargar, true);
+  usePollingConteo(sondear, true);
+  const parejas = useMemo(() => unirParejas(sesiones, vivo?.parejas), [sesiones, vivo]);
 
   /** Runs a write, shows its error, reloads; returns the answer (undefined on error). */
   const ejecutar = async (accion, { info, cambiaEstado = false } = {}) => {
@@ -66,5 +81,5 @@ export default function usePanel(conteo, onCambioEstado) {
     descargarAvance: () => ejecutar(() => api.descargarAvance(id)),
   };
 
-  return { diferencias, sesiones, actualizado, aviso, ocupado, cargar, acciones };
+  return { vivo, diferencias, sesiones: parejas, actualizado, aviso, ocupado, cargar, acciones };
 }

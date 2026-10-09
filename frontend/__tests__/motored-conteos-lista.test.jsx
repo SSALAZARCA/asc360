@@ -23,7 +23,7 @@ const CONTEOS = [
   {
     id: 'c2', tipo: 'TOTAL', estado: 'EN_CONTEO', origen: 'MANUAL', fecha_programada: '2026-10-09',
     sucursal: { id: 's2', nombre: 'Cali Sur' }, lider: { id: 'l1', nombre: 'Laura Líder' },
-    iniciado_en: '2026-10-09T12:58:00Z',
+    iniciado_en: '2026-10-09T12:58:00Z', progreso: { refs_universo: 1284, refs_contadas: 796 },
   },
 ];
 const SUCURSALES = [
@@ -44,6 +44,16 @@ beforeEach(() => {
   api.listarConteos.mockResolvedValue(CONTEOS);
   api.listarSucursalesConteo.mockResolvedValue(SUCURSALES);
   api.listarLideres.mockResolvedValue(LIDERES);
+});
+
+describe('Progress in the list', () => {
+  it('shows how much of an open conteo is counted', async () => {
+    login('LIDER_INVENTARIOS');
+    render(<ConteosContainer />);
+
+    expect(await screen.findByText(/Avance 62 % \(796 de 1\.284\)/)).toBeInTheDocument();
+    expect(screen.getAllByText(/^Avance/)).toHaveLength(1);
+  });
 });
 
 describe('Conteos list per role', () => {

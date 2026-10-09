@@ -2,7 +2,7 @@
  * frontend/lib/motored/conteosApi.js
  *
  * Client of the inventory counts leader API (odd/motored-conteos-inventario,
- * WU11/WU12), `backend/app/motored/api/conteos.py`, prefix
+ * WU11/WU12/WU12b), `backend/app/motored/api/conteos.py`, prefix
  * `/api/motored/conteos`. Kept apart from `./api.js` so that file does not
  * keep growing. Failures throw `codedError`s: the backend `mensaje`, its
  * `code` and the extra facts of the 409s in `error.datos`.
@@ -59,6 +59,8 @@ export const editarUbicacion = (id, ubicacionId, payload) =>
 // --- reconteo ---------------------------------------------------------------
 
 export const terminarRonda = (id) => enviar(`${BASE}/${id}/terminar-ronda`);
+/** The live panel (WU12b). With the last `version` still current the answer is `{ version, sin_cambios: true }`. */
+export const obtenerPanel = (id, version) => motoredFetchJson(`${BASE}/${id}/panel${consulta({ version })}`);
 export const obtenerDiferencias = (id, filtro = 'todas') =>
   motoredFetchJson(`${BASE}/${id}/diferencias${consulta({ filtro })}`);
 export const pedirReconteo = (id, codigo) => enviar(`${BASE}/${id}/reconteos`, { codigo });
