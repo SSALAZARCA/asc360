@@ -116,8 +116,8 @@ Each is about 400 changed lines or less, with one work-unit commit, tests alongs
 - [x] WU1 (0339642 backend + migration b4f9c2e6a813, d0ba5c2 frontend; backend 6719 passed, pg_real 814 passed, jest 2457 passed; route: delegated writer)
 - [x] WU2 (e252dc4, migration c3e7a1f50d24)
 - [x] WU3 (e252dc4, migration d58b2c9e4a17 = head; backend 6735 passed, pg_real 855 passed; route: delegated writer; SIN_COSTO valor_diferencia left nullable, decide in WU10)
-- [ ] WU4
-- [ ] WU5
+- [x] WU4 (32866b4; backend 6808 passed, jest 2465 passed)
+- [x] WU5 (4c0545c; pg_real 878 passed; slug is 96 bits, String(16), accepted with the 6-digit code and rate limits)
 - [ ] WU6
 - [ ] WU7
 - [ ] WU8
