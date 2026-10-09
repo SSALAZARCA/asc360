@@ -803,3 +803,14 @@ async def calcular_kpis_inventario(db: AsyncSession, filtro: Filtro) -> Dict[str
     from app.motored.services import tablero_kpis_inventario as inventario  # lazy: that module imports this one
 
     return {**_encabezado(filtro), **await lectura.frescura(db), **await inventario.calcular(db, filtro)}
+
+
+async def calcular_kpis_inventario_completo(
+    db: AsyncSession, filtro: Filtro,
+) -> Tuple[Dict[str, Any], List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """`(respuesta de la pestana, TODOS los pares sin movimiento, TODAS las agotadas con demanda)` para el Excel."""
+    from app.motored.services import tablero_kpis_inventario as inventario  # lazy: that module imports this one
+
+    resultado = await inventario.calcular_inventario(db, filtro, completo=True)
+    datos = {**_encabezado(filtro), **await lectura.frescura(db), **resultado.datos}
+    return datos, resultado.sin_movimiento, resultado.agotadas

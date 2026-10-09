@@ -147,7 +147,8 @@ def test_the_options_endpoint_returns_the_filter_data(_motored_ready, llamadas):
 def test_kpis_routes_are_the_documented_paths():
     rutas = sorted(p for p in app.openapi()["paths"] if p.startswith(BASE))
     assert rutas == sorted(f"{BASE}/{n}" for n in PESTANAS + [
-        "opciones", "estado", "recalcular", "comisiones/excel", "asesores/detalle", "asesores/opciones"])
+        "opciones", "estado", "recalcular", "comisiones/excel", "asesores/detalle", "asesores/opciones",
+        "inventario", "inventario/excel"])
 
 
 # --- Single-asesor detail and the asesor options ---------------------------------------------------

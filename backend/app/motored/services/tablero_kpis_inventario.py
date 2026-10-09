@@ -387,7 +387,7 @@ def analizar(e: Entradas) -> Resultado:
     agotadas = [
         {"referencia_id": x.referencia_id, "sucursal_id": x.tienda, "tienda": e.nombres_tienda.get(x.tienda, ""),
          "vendidas": _unidades(x.vendidas), "perdidas": _unidades(x.perdidas), "demanda": _unidades(x.demanda),
-         "transito": _unidades(x.transito)}
+         "transito": _unidades(x.transito), "cobertura": cobertura(x.transito, x.demanda)}
         for x in sorted(agotadas_ev, key=lambda x: (-x.demanda, x.tienda, str(x.referencia_id)))]
     datos = {
         "corte": e.corte.isoformat(),

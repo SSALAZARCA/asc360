@@ -217,6 +217,7 @@ def test_availability_counts_the_pairs_with_demand_that_have_stock():
     assert (agotadas["total"], agotadas["en_transito"], agotadas["sin_pedir"]) == (2, 1, 1)
     assert [(a["sucursal_id"], a["vendidas"], a["perdidas"], a["demanda"], a["transito"]) for a in resultado.agotadas] == [
         (S1, 20, 6, 26, 60), (S2, 3, 0, 3, 0)]
+    assert [a["cobertura"] for a in resultado.agotadas] == [1.0, 0.0]  # 60 of 26 is capped at all covered
 
 
 def test_the_trend_has_one_point_per_corte_month_with_its_own_days():

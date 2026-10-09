@@ -243,6 +243,7 @@ async def test_the_stockouts_with_demand_show_sold_lost_and_the_transit_that_cov
     assert [(a["referencia"][:2], a["nombre"], a["vendidas"], a["perdidas"], a["demanda"], a["transito"]) for a in ag["items"]] == [
         ("R6", "Nombre R6", 20, 6, 26, 70), ("R2", "Nombre R2", 7, 3, 10, 0)]
     assert ag["items"][0]["sucursal_id"] == str(w.s["S1"].id)
+    assert [a["cobertura"] for a in ag["items"]] == [1.0, 0.0]
 
 
 async def test_a_store_filter_limits_everything_to_that_store(sesion):
@@ -345,3 +346,64 @@ async def test_one_request_runs_a_bounded_number_of_queries_whatever_the_number_
         event.remove(motor, "before_cursor_execute", escuchar)
 
     assert len(conteo) <= 24, f"{len(conteo)} queries"
+
+
+# --- end to end through the app -------------------------------------------------------------------
+
+
+@pytest.fixture
+async def http(sesion, monkeypatch):
+    import httpx
+    from app.config import settings
+    from app.main import app
+    from app.motored.deps import get_current_motored_user, get_motored_db
+    from app.motored.services.auth import MotoredUser
+
+    monkeypatch.setattr(settings, "MOTORED_ENABLED", True)
+    monkeypatch.setattr(settings, "MOTORED_SECRET_KEY", "kpis-inv-api-pg")
+
+    async def db():
+        yield sesion
+
+    async def usuario():
+        return MotoredUser(user_id="00000000-0000-0000-0000-000000000001", role="GERENCIA")
+
+    app.dependency_overrides[get_motored_db] = db
+    app.dependency_overrides[get_current_motored_user] = usuario
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://motored") as cliente:
+        yield cliente
+    app.dependency_overrides.clear()
+
+
+BASE = "/api/motored/tablero-asesores/kpis/inventario"
+
+
+async def test_the_inventario_endpoint_returns_the_json_of_the_tab(http, sesion):
+    w = await _mundo(sesion)
+    tiendas = ",".join(str(w.s[n].id) for n in ("S1", "S2", "S4"))
+
+    r = await http.get(BASE, params={"meses": "2096-10", "sucursales": tiendas})
+
+    assert r.status_code == 200, r.text
+    cuerpo = r.json()
+    assert cuerpo["corte"] == "2096-10-07" and cuerpo["tarjetas"]["valor"] == 7780.0
+    assert isinstance(cuerpo["tarjetas"]["dias"], float) and len(cuerpo["tendencia"]) == 3
+    assert cuerpo["agotadas"]["items"][0]["referencia"].startswith("R6")
+
+
+async def test_the_excel_endpoint_lists_all_idle_pairs_not_only_the_top(http, sesion):
+    import io
+    from openpyxl import load_workbook
+    w = await _mundo(sesion)
+    tiendas = ",".join(str(w.s[n].id) for n in ("S1", "S2", "S4"))
+
+    r = await http.get(f"{BASE}/excel", params={"meses": "2096-10", "sucursales": tiendas})
+
+    assert r.status_code == 200, r.text
+    assert 'filename="inventario_2096-10-07.xlsx"' in r.headers["content-disposition"]
+    libro = load_workbook(io.BytesIO(r.content))
+    filas = [[c.value for c in f] for f in libro["Sin movimiento"].iter_rows()]
+    referencias = [f[0][:2] for f in filas if f[0] and f[0][:1] == "R" and f[0][1:2].isdigit()]
+    assert referencias == ["R3", "R2", "R5", "R7"]
+    nombres = {f[0] for f in [[c.value for c in f] for f in libro["Tiendas"].iter_rows()]}
+    assert {"Tiendas", "Tienda"} <= nombres

@@ -34,6 +34,12 @@ Respuestas (los importes son numeros, nunca texto; cada una repite `meses`,
 - `GET /kpis/comisiones/excel`: el mismo calculo en un .xlsx (`comisiones_AAAA-MM.xlsx`): hoja
   "Comisiones" (encabezado con mes, tiendas y reglas, una fila por asesor con su cedula como TEXTO,
   totales) y hoja "Sin presupuesto".
+- `GET /kpis/inventario`: la pestana Inventario al ultimo corte valorizado en o antes del fin del ULTIMO mes
+  de `meses` (`corte`, `costo_desde`/`costo_hasta`, `tarjetas`, `cortes_color`, `tendencia` de los meses con
+  corte, `antiguedad` {historial_desde, bandas}, `lineas`, `tiendas`, `sin_movimiento_top` y `agotadas`
+  {total, en_transito, sin_pedir, items}). El selector `hmcl` no cambia el inventario ni el costo de venta.
+- `GET /kpis/inventario/excel`: el mismo calculo en un .xlsx (`inventario_AAAA-MM-DD.xlsx`): hojas "Tiendas",
+  "Líneas", "Sin movimiento" y "Agotadas" (las dos ultimas con TODOS los pares, no solo el top).
 - `GET /kpis/estado` (ADMIN, COMPRAS, GERENCIA): `actualizado_en`, `sucio`,
   `reconstruyendo`, `ultima_reconstruccion_total` y `usando_resumen` de las
   tablas resumen (ver `services/trabajos/supervisor_kpis`).
@@ -59,6 +65,7 @@ from app.motored.services import kpi_resumen
 from app.motored.services import kpi_resumen_lectura as lectura
 from app.motored.services import tablero_asesores_consultas as consultas
 from app.motored.services import tablero_comisiones_excel as comisiones_excel
+from app.motored.services import tablero_inventario_excel as inventario_excel
 from app.motored.services import tablero_kpis as kpis
 from app.motored.services.tablero_asesores import HMCL_EXCLUIR, HMCL_INCLUIR, HMCL_SOLO, Filtro
 
@@ -155,6 +162,27 @@ async def kpis_comisiones_excel(
         content=comisiones_excel.construir_libro(datos, nombres),
         media_type=comisiones_excel.XLSX,
         headers={"Content-Disposition": f'attachment; filename="{comisiones_excel.nombre_de_archivo(datos)}"'},
+    )
+
+
+@router.get("/inventario")
+async def kpis_inventario(
+    filtro: Filtro = Depends(_filtro), db: AsyncSession = Depends(get_motored_db_or_503),
+) -> Dict[str, Any]:
+    return await kpis.calcular_kpis_inventario(db, filtro)
+
+
+@router.get("/inventario/excel")
+async def kpis_inventario_excel(
+    filtro: Filtro = Depends(_filtro), db: AsyncSession = Depends(get_motored_db_or_503),
+) -> Response:
+    datos, sin_movimiento, agotadas = await kpis.calcular_kpis_inventario_completo(db, filtro)
+    tiendas = await consultas.consultar_sucursales(db, datos["sucursales"])
+    nombres = sorted(nombre for nombre, _ in tiendas.values())
+    return Response(
+        content=inventario_excel.construir_libro(datos, sin_movimiento, agotadas, nombres),
+        media_type=inventario_excel.XLSX,
+        headers={"Content-Disposition": f'attachment; filename="{inventario_excel.nombre_de_archivo(datos)}"'},
     )
 
 
