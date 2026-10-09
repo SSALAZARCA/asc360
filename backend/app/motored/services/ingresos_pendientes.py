@@ -13,6 +13,14 @@ One item per document and PRINCIPAL store (associated stores roll up). The
 document date is the earliest line date. The asesores of the store confirm
 "LLEGO" / "NO_HA_LLEGADO" (one shared state, with history).
 
+Who enters the invoice into the ERP (odd/tasks/motored-ingresos-responsable-
+plantilla.md): the store's asesor when it has at most `umbral` references
+(Configuración, default 10, inclusive), the administrative analyst above
+that. `num_referencias` counts the distinct references whose net quantity is
+positive (the lines the ERP template carries), per the same grouping as the
+rows (principal store). `puede_descargar_plantilla` is true for analyst
+invoices confirmed "LLEGO".
+
 `calcular_pendientes`, `resumen` and `por_tienda` are pure; the rest reads
 and writes the database.
 """
@@ -36,7 +44,8 @@ from app.motored.models.factura_proveedor_linea import FacturaProveedorLinea
 from app.motored.models.ingreso_factura import IngresoFactura
 from app.motored.models.sucursal import Sucursal
 from app.motored.models.vendedor import Vendedor
-from app.motored.services import sucursal_grupo
+from app.motored.services import parametros, sucursal_grupo
+from app.motored.services.parametros_claves import CLAVE_INGRESO_UMBRAL_ASESOR
 from app.motored.services.reloj import hoy_bogota
 
 SIN_CONFIRMAR = "SIN_CONFIRMAR"
@@ -44,6 +53,10 @@ LLEGO = "LLEGO"
 NO_HA_LLEGADO = "NO_HA_LLEGADO"
 ESTADOS_CONFIRMABLES = (LLEGO, NO_HA_LLEGADO)
 CANALES = ("web", "link")
+RESPONSABLE_ASESOR = "ASESOR"
+RESPONSABLE_ANALISTA = "ANALISTA"
+CLAVE_UMBRAL = CLAVE_INGRESO_UMBRAL_ASESOR
+UMBRAL_ASESOR_DEFECTO = 10
 
 MSG_FACTURA = "La factura no es válida."
 MSG_ESTADO = "El estado debe ser «Llegó» o «No ha llegado»."
@@ -86,10 +99,12 @@ def calcular_pendientes(
     lineas: Iterable[Any], ingresos: Set[Clave], verificable_desde: Optional[date],
     hoy: date, principal: Dict[uuid.UUID, uuid.UUID],
     nombres: Dict[uuid.UUID, str], confirmaciones: Dict[Tuple[str, int, uuid.UUID], Any],
+    umbral: int = UMBRAL_ASESOR_DEFECTO,
 ) -> List[Dict[str, Any]]:
     """The pending documents, oldest first. `lineas` rows expose
     prefijo_rh, numero_rh, sucursal_id, fecha_factura, cantidad, valor_total
-    (they may already be partial sums)."""
+    (they may already be partial sums) and, optionally, `referencias`: the
+    ids of their lines with positive net quantity."""
     if verificable_desde is None:
         return []
     docs: Dict[Tuple[str, int, uuid.UUID], Dict[str, Any]] = {}
@@ -102,8 +117,10 @@ def calcular_pendientes(
         if doc is None:
             docs[clave] = {
                 "fecha": linea.fecha_factura, "unidades": Decimal(linea.cantidad),
-                "valor": Decimal(linea.valor_total)}
+                "valor": Decimal(linea.valor_total),
+                "referencias": set(getattr(linea, "referencias", None) or ())}
             continue
+        doc["referencias"].update(getattr(linea, "referencias", None) or ())
         doc["fecha"] = min(doc["fecha"], linea.fecha_factura)
         doc["unidades"] += Decimal(linea.cantidad)
         doc["valor"] += Decimal(linea.valor_total)
@@ -113,13 +130,20 @@ def calcular_pendientes(
         if doc["fecha"] < verificable_desde or doc["unidades"] <= 0:
             continue
         conf = confirmaciones.get((prefijo, numero, tienda))
+        estado = conf.estado if conf is not None else SIN_CONFIRMAR
+        num_referencias = len(doc["referencias"])
+        responsable = (RESPONSABLE_ASESOR if num_referencias <= umbral
+                       else RESPONSABLE_ANALISTA)
         items.append({
             "prefijo_rh": prefijo, "numero_rh": numero,
             "factura": nombre_factura(prefijo, numero),
             "sucursal_id": tienda, "tienda": nombres.get(tienda, ""),
             "fecha": doc["fecha"], "dias": (hoy - doc["fecha"]).days,
             "unidades": float(doc["unidades"]), "valor": float(doc["valor"]),
-            "estado": conf.estado if conf is not None else SIN_CONFIRMAR,
+            "num_referencias": num_referencias, "responsable": responsable,
+            "puede_descargar_plantilla": (
+                responsable == RESPONSABLE_ANALISTA and estado == LLEGO),
+            "estado": estado,
             "confirmado_por": conf.actualizado_por_nombre if conf is not None else None,
             "confirmado_en": conf.actualizado_en if conf is not None else None,
         })
@@ -181,7 +205,9 @@ async def _lineas_desde(db: AsyncSession, desde: date) -> List[Any]:
             FacturaProveedorLinea.sucursal_id,
             func.min(FacturaProveedorLinea.fecha_factura).label("fecha_factura"),
             func.sum(FacturaProveedorLinea.cantidad).label("cantidad"),
-            func.sum(FacturaProveedorLinea.valor_total).label("valor_total"))
+            func.sum(FacturaProveedorLinea.valor_total).label("valor_total"),
+            func.array_agg(FacturaProveedorLinea.referencia_id).filter(
+                FacturaProveedorLinea.cantidad > 0).label("referencias"))
         .join(CargaArchivo, CargaArchivo.id == FacturaProveedorLinea.carga_id)
         .where(_carga_viva())
         .group_by(
@@ -195,6 +221,13 @@ async def _confirmaciones(db: AsyncSession) -> Dict[Tuple[str, int, uuid.UUID], 
     return {(f.prefijo_rh, f.numero_rh, f.sucursal_id): f for f in filas}
 
 
+async def umbral_asesor(db: AsyncSession, hoy: date) -> int:
+    """Max references the store's asesor enters (Configuración)."""
+    valores = await parametros.leer_valores(
+        db, hoy, {CLAVE_UMBRAL: UMBRAL_ASESOR_DEFECTO})
+    return valores[CLAVE_UMBRAL]
+
+
 async def pendientes(
     db: AsyncSession, sucursal_ids: Optional[Iterable[uuid.UUID]] = None,
     hoy: Optional[date] = None,
@@ -205,9 +238,11 @@ async def pendientes(
     principal = await sucursal_grupo.principal_de(db)
     nombres = {sid: nombre for sid, nombre in (
         await db.execute(select(Sucursal.id, Sucursal.nombre))).all()}
+    hoy = hoy or hoy_bogota()
     items = calcular_pendientes(
         await _lineas_desde(db, desde), await _ingresos_vivos(db), desde,
-        hoy or hoy_bogota(), principal, nombres, await _confirmaciones(db))
+        hoy, principal, nombres, await _confirmaciones(db),
+        await umbral_asesor(db, hoy))
     if sucursal_ids is not None:
         permitidas = {principal.get(s, s) for s in sucursal_ids}
         items = [i for i in items if i["sucursal_id"] in permitidas]

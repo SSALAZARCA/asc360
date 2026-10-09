@@ -696,9 +696,8 @@ def _claves_ingresos() -> list:
             clave, default, 1, maximo, GRUPO_OPERACION, seccion="ingresos")
 
     def descuento(clave, default):
-        espec = _decimal(clave, default, 100, grupo=GRUPO_OPERACION,
-                         seccion="ingresos")
-        return espec
+        return _decimal(clave, default, 100, grupo=GRUPO_OPERACION,
+                        seccion="ingresos")
 
     return [
         _entera(

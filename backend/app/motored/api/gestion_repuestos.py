@@ -2,7 +2,10 @@
 Motored: `/api/motored/gestion-repuestos/ingresos-facturas`, the invoices
 still waiting for an ingreso (odd/tasks/motored-ingresos-pendientes.md, P1).
 
-Panel reads (ADMIN, COMPRAS, GERENCIA, COORDINADOR_REPUESTOS):
+Panel reads (ADMIN, COMPRAS, GERENCIA, COORDINADOR_REPUESTOS,
+ANALISTA_ADMINISTRATIVO). Every item also carries `num_referencias`,
+`responsable` ("ASESOR" up to the Configuración threshold, else "ANALISTA")
+and `puede_descargar_plantilla` (analyst invoice confirmed "LLEGO"):
 - `GET /`: `{verificable_desde, resumen}` (pendientes, llegaron_sin_ingresar,
   sin_confirmar, aun_no_llegan, mas_antigua, valor_pendiente).
 - `GET /por-tienda`: `{verificable_desde, tiendas}`, one row per principal
@@ -16,13 +19,19 @@ Panel reads (ADMIN, COMPRAS, GERENCIA, COORDINADOR_REPUESTOS):
 verified: every list is empty).
 
 `POST /confirmar` `{factura, sucursal_id, estado}`: "LLEGO" | "NO_HA_LLEGADO".
-ADMIN and COORDINADOR_REPUESTOS (COMPRAS and GERENCIA only read; asesores
-confirm through the public link). 409 when the invoice is no longer pending.
+ADMIN, COORDINADOR_REPUESTOS and ANALISTA_ADMINISTRATIVO (COMPRAS and
+GERENCIA only read; asesores confirm through the public link). 409 when the
+invoice is no longer pending.
+
+`GET /plantilla?factura=&sucursal=` (ADMIN, ANALISTA_ADMINISTRATIVO): the ERP
+"Entradas x Compra" .xlsx of an analyst invoice confirmed "LLEGO". 404 not
+pending, 409 asesor invoice / not arrived / store without bodega principal.
 """
 import uuid
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -36,14 +45,16 @@ from app.motored.deps import (
 )
 from app.motored.models.usuario import Usuario
 from app.motored.services import ingresos_pendientes as ingresos
+from app.motored.services import ingresos_plantilla as plantilla
+from app.motored.services.reloj import hoy_bogota
 from app.motored.services import sucursal_grupo
 
-# TODO(pedidos): COORDINADOR_REPUESTOS is created by the pedidos session; the
-# role compares as a plain string, so listing it here is harmless meanwhile.
-# Path confinement for GERENCIA / COORDINADOR_REPUESTOS lives in `deps.py`.
+# Path confinement for GERENCIA / COORDINADOR_REPUESTOS /
+# ANALISTA_ADMINISTRATIVO lives in `deps.py`.
 ROLES_PANEL = ("ADMIN", "COMPRAS", "GERENCIA", "COORDINADOR_REPUESTOS",
                "ANALISTA_ADMINISTRATIVO")
 ROLES_CONFIRMA = ("ADMIN", "COORDINADOR_REPUESTOS", "ANALISTA_ADMINISTRATIVO")
+ROLES_PLANTILLA = ("ADMIN", "ANALISTA_ADMINISTRATIVO")
 MSG_ESTADO_FILTRO = "El estado del filtro no es válido."
 MSG_RANGO_DIAS = "El mínimo de días no puede superar al máximo."
 
@@ -146,3 +157,22 @@ async def confirmar(
             db, cuerpo.factura, cuerpo.sucursal_id, cuerpo.estado, actor, "web")
     except ingresos.PendienteError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+
+
+@router.get("/plantilla", dependencies=[Depends(require_roles(*ROLES_PLANTILLA))])
+async def descargar_plantilla(
+    factura: str = Query(...), sucursal: uuid.UUID = Query(...),
+    db: AsyncSession = Depends(get_motored_db_or_503),
+) -> Response:
+    clave = ingresos.parsear_factura(factura)
+    if clave is None:
+        raise HTTPException(status_code=422, detail=ingresos.MSG_FACTURA)
+    try:
+        datos = await plantilla.preparar(db, clave, sucursal, hoy_bogota())
+    except plantilla.PlantillaError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+    return Response(
+        content=plantilla.construir_libro(datos), media_type=plantilla.XLSX,
+        headers={"Content-Disposition": (
+            f'attachment; filename="Entrada_compra_{datos.prefijo_rh}'
+            f'{datos.numero_rh}.xlsx"')})
