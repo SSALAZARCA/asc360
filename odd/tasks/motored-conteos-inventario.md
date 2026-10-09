@@ -159,3 +159,4 @@ Run them in the foreground and read the result line before committing; never cha
 2. Read this file and the design doc.
 3. Check the alembic head.
 4. Start WU1.
+- 2026-10-09 owner: the leader panel polls every 15 s visible / 60 s hidden, stops when CERRADO, and has an "Actualizar ahora" button. This supersedes the design's 5 s / 30 s.
