@@ -26,11 +26,44 @@ import MotoredTopBar from '../../components/motored/MotoredTopBar';
 import useDrawerMenu from '../../components/motored/useDrawerMenu';
 import { MOTORED_USER_KEY, MOTORED_TOKEN_KEY } from '../../lib/motored/motoredFetch';
 import {
-  INICIO_PATH, MI_CUENTA_PATH, ROLE_GERENCIA, homePathFor, rolSinAcceso,
+  COORDINADOR_REPUESTOS, INICIO_PATH, MI_CUENTA_PATH, ROLE_GERENCIA, homePathFor,
+  isCoordinadorRepuestosPath, rolSinAcceso,
 } from '../../lib/motored/session';
 import { ROLE_SERVICIO_CLIENTE, isServicioClientePath } from '../../lib/motored/servicioCliente';
 
-export const VALID_ROLES = ['ADMIN', 'COMPRAS', 'SUCURSAL', 'CONSULTA', ROLE_SERVICIO_CLIENTE, ROLE_GERENCIA];
+export const VALID_ROLES = [
+  'ADMIN', 'COMPRAS', 'SUCURSAL', 'CONSULTA', ROLE_SERVICIO_CLIENTE, ROLE_GERENCIA, COORDINADOR_REPUESTOS,
+];
+
+/** The stored session user, or null when it is missing, unreadable or has
+ * an unknown role. */
+function leerUsuario(stored) {
+  try {
+    const u = JSON.parse(stored);
+    return VALID_ROLES.includes(u?.role) ? u : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Where a signed-in user must go instead of `pathname`, or null to stay.
+ * These are UX guards; the backend answers 403 everywhere else. */
+function redireccionPara(u, pathname) {
+  // SERVICIO_CLIENTE only works inside the survey module and Inicio.
+  const scPermitido = isServicioClientePath(pathname) || pathname === INICIO_PATH;
+  if (u.role === ROLE_SERVICIO_CLIENTE && !scPermitido) return homePathFor(u.role);
+  // COORDINADOR_REPUESTOS only works inside the KPI's, "Gestión repuestos"
+  // and its account page.
+  if (u.role === COORDINADOR_REPUESTOS && !isCoordinadorRepuestosPath(pathname)) {
+    return homePathFor(u.role);
+  }
+  // Pending password change, or a role with no screens yet (SUCURSAL/
+  // CONSULTA, owner decision 2026-10-05): the account page is the only place.
+  if ((u.must_change_password || rolSinAcceso(u.role)) && pathname !== MI_CUENTA_PATH) {
+    return MI_CUENTA_PATH;
+  }
+  return null;
+}
 
 export default function MotoredLayout({ children }) {
   const router = useRouter();
@@ -54,37 +87,18 @@ export default function MotoredLayout({ children }) {
         return;
       }
 
-      let u;
-      try {
-        u = JSON.parse(stored);
-      } catch {
+      const u = leerUsuario(stored);
+      if (!u) {
         sessionStorage.removeItem(MOTORED_USER_KEY);
         sessionStorage.removeItem(MOTORED_TOKEN_KEY);
         r.push('/motored/login');
         return;
       }
 
-      if (!VALID_ROLES.includes(u?.role)) {
-        sessionStorage.removeItem(MOTORED_USER_KEY);
-        sessionStorage.removeItem(MOTORED_TOKEN_KEY);
-        r.push('/motored/login');
-        return;
-      }
-
-      // SERVICIO_CLIENTE only works inside the survey module and Inicio (UX
-      // guard; the backend answers 403 everywhere else). Never mount the
-      // other pages: send it home instead.
-      const scPermitido = isServicioClientePath(pathname) || pathname === INICIO_PATH;
-      if (u.role === ROLE_SERVICIO_CLIENTE && !scPermitido) {
-        r.push(homePathFor(u.role));
-        return;
-      }
-
-      // Pending password change, or a role with no screens yet (SUCURSAL/
-      // CONSULTA, owner decision 2026-10-05): the account page is the only
-      // place to be. The backend answers 403 everywhere else.
-      if ((u.must_change_password || rolSinAcceso(u.role)) && pathname !== MI_CUENTA_PATH) {
-        r.push(MI_CUENTA_PATH);
+      // Never mount a page the role cannot use: send it elsewhere instead.
+      const destino = redireccionPara(u, pathname);
+      if (destino) {
+        r.push(destino);
         return;
       }
 

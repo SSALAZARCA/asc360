@@ -1,6 +1,6 @@
 /**
- * Motored sidebar grouping: Inicio, KPI's, then the Pedidos, Encuestas
- * satisfacción and Configuración groups, then "Cambiar mi contraseña". Grouping must not
+ * Motored sidebar grouping: Inicio, KPI's, then the Pedidos, Gestión repuestos,
+ * Encuestas satisfacción and Configuración groups, then "Cambiar mi contraseña". Grouping must not
  * change which pages each role reaches.
  */
 import React from 'react';
@@ -21,9 +21,10 @@ const ADMIN = { nombre: 'U', role: 'ADMIN' };
 // ASESOR_MOSTRADOR has no web access (owner decision 2026-10-05).
 const PAGES_BEFORE = {
   ADMIN: ['inicio', 'pedidos', 'tablero-asesores', 'maestros', 'usuarios-gestion', 'ingresos', 'ventas-perdidas',
-    'encuesta-satisfaccion', 'detractores', 'mi-cuenta', 'configuracion'],
-  COMPRAS: ['inicio', 'pedidos', 'tablero-asesores', 'maestros', 'mi-cuenta'],
-  GERENCIA: ['inicio', 'tablero-asesores', 'maestros', 'mi-cuenta'],
+    'ingresos-facturas', 'encuesta-satisfaccion', 'detractores', 'mi-cuenta', 'configuracion'],
+  COMPRAS: ['inicio', 'pedidos', 'tablero-asesores', 'maestros', 'ingresos-facturas', 'mi-cuenta'],
+  GERENCIA: ['inicio', 'tablero-asesores', 'maestros', 'ingresos-facturas', 'mi-cuenta'],
+  COORDINADOR_REPUESTOS: ['tablero-asesores', 'ingresos-facturas', 'mi-cuenta'],
   SUCURSAL: ['mi-cuenta'],
   CONSULTA: ['mi-cuenta'],
   SERVICIO_CLIENTE: ['inicio', 'encuesta-satisfaccion', 'detractores', 'mi-cuenta'],
@@ -31,9 +32,10 @@ const PAGES_BEFORE = {
 };
 
 const TOP_LEVEL = {
-  ADMIN: ['Inicio', "KPI's", 'Pedidos', 'Encuestas satisfacción', 'Configuración', 'Cambiar mi contraseña'],
-  COMPRAS: ['Inicio', "KPI's", 'Pedidos', 'Cambiar mi contraseña'],
-  GERENCIA: ['Inicio', "KPI's", 'Pedidos', 'Cambiar mi contraseña'],
+  ADMIN: ['Inicio', "KPI's", 'Pedidos', 'Gestión repuestos', 'Encuestas satisfacción', 'Configuración', 'Cambiar mi contraseña'],
+  COMPRAS: ['Inicio', "KPI's", 'Pedidos', 'Gestión repuestos', 'Cambiar mi contraseña'],
+  GERENCIA: ['Inicio', "KPI's", 'Pedidos', 'Gestión repuestos', 'Cambiar mi contraseña'],
+  COORDINADOR_REPUESTOS: ["KPI's", 'Gestión repuestos', 'Cambiar mi contraseña'],
   SUCURSAL: ['Cambiar mi contraseña'],
   CONSULTA: ['Cambiar mi contraseña'],
   SERVICIO_CLIENTE: ['Inicio', 'Encuestas satisfacción', 'Cambiar mi contraseña'],
@@ -42,6 +44,7 @@ const TOP_LEVEL = {
 
 const GROUPS = [
   ['Pedidos', ['Registro de pedidos', 'Maestros', 'Ventas perdidas'], ['/motored/pedidos', '/motored/maestros', '/motored/ventas-perdidas']],
+  ['Gestión repuestos', ['Ingresos facturas'], ['/motored/gestion-repuestos/ingresos-facturas']],
   ['Encuestas satisfacción', ['Cargue de encuestas', 'Gestión de detractores'], ['/motored/encuesta-satisfaccion', '/motored/detractores']],
   ['Configuración', ['Configuración parámetros', 'Gestión de usuarios', 'Registro de ingresos'], ['/motored/configuracion', '/motored/usuarios', '/motored/ingresos']],
 ];
@@ -66,6 +69,7 @@ describe('MotoredSidebar groups - order and labels', () => {
     expect(navLabels()).toEqual([
       'Inicio', "KPI's",
       'Pedidos', 'Registro de pedidos', 'Maestros', 'Ventas perdidas',
+      'Gestión repuestos', 'Ingresos facturas',
       'Encuestas satisfacción', 'Cargue de encuestas', 'Gestión de detractores',
       'Configuración', 'Configuración parámetros', 'Gestión de usuarios', 'Registro de ingresos',
       'Cambiar mi contraseña',
@@ -97,7 +101,7 @@ describe('MotoredSidebar groups - per-role visibility', () => {
   it('shows GERENCIA only Maestros inside Pedidos', () => {
     render(<MotoredSidebar user={{ nombre: 'U', role: 'GERENCIA' }} />);
     fireEvent.click(screen.getByRole('button', { name: 'Pedidos' }));
-    expect(navLabels()).toEqual(['Inicio', "KPI's", 'Pedidos', 'Maestros', 'Cambiar mi contraseña']);
+    expect(navLabels()).toEqual(['Inicio', "KPI's", 'Pedidos', 'Maestros', 'Gestión repuestos', 'Cambiar mi contraseña']);
   });
 
   it.each(['ADMIN', 'COMPRAS', 'GERENCIA', 'SERVICIO_CLIENTE'])('puts Inicio first for %s and navigates home', (role) => {

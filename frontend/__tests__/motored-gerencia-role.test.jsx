@@ -70,10 +70,10 @@ describe('GERENCIA sidebar', () => {
     render(<MotoredSidebar user={{ nombre: 'G', role: 'GERENCIA' }} />);
     const labels = screen.getAllByRole('button').map((b) => b.textContent.trim());
 
-    expect(labels).toEqual(['Inicio', "KPI's", 'Pedidos', 'Cambiar mi contraseña', 'Salir']);
+    expect(labels).toEqual(['Inicio', "KPI's", 'Pedidos', 'Gestión repuestos', 'Cambiar mi contraseña', 'Salir']);
     fireEvent.click(screen.getByRole('button', { name: 'Pedidos' }));
     const opened = screen.getAllByRole('button').map((b) => b.textContent.trim());
-    expect(opened).toEqual(['Inicio', "KPI's", 'Pedidos', 'Maestros', 'Cambiar mi contraseña', 'Salir']);
+    expect(opened).toEqual(['Inicio', "KPI's", 'Pedidos', 'Maestros', 'Gestión repuestos', 'Cambiar mi contraseña', 'Salir']);
   });
 
   it.each(['SUCURSAL', 'CONSULTA', 'ASESOR_MOSTRADOR'])('hides Maestros from %s', (role) => {

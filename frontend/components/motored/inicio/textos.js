@@ -8,6 +8,7 @@ export const ROL_NOMBRE = {
   COMPRAS: 'Compras',
   GERENCIA: 'Gerencia',
   SERVICIO_CLIENTE: 'Servicio al cliente',
+  COORDINADOR_REPUESTOS: 'Coordinador de repuestos',
 };
 
 /** The same line under the greeting for every role. */

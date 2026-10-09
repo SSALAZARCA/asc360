@@ -41,9 +41,10 @@ import Image from 'next/image';
 import {
   LogOut, Warehouse, TrendingDown, ClipboardCheck, MessageSquareWarning, KeyRound, History,
   UserCog, ChevronDown, ChevronRight, ShoppingCart, BarChart3, Settings, SlidersHorizontal, House,
+  Boxes, Receipt,
 } from 'lucide-react';
 import { MOTORED_TOKEN_KEY, MOTORED_USER_KEY } from '../../lib/motored/motoredFetch';
-import { rolSinAcceso } from '../../lib/motored/session';
+import { COORDINADOR_REPUESTOS, GESTION_REPUESTOS_ROLES, rolSinAcceso } from '../../lib/motored/session';
 
 // A group (`children`) is a collapsible header that always starts folded; a
 // click opens or closes it. While folded on one of its pages, the header is
@@ -51,14 +52,14 @@ import { rolSinAcceso } from '../../lib/motored/session';
 // group shows when at least one of its children is visible to the user.
 // `excludeRoles` (optional) hides an item from those roles only; `roles`
 // (optional) restricts an item to those roles; `adminOnly` and items without
-// either keep their original behaviour. SERVICIO_CLIENTE only ever sees items
-// that list it in `roles`. SUCURSAL and CONSULTA have no screens yet (owner
+// either keep their original behaviour. SERVICIO_CLIENTE and
+// COORDINADOR_REPUESTOS only ever see items that list them in `roles`. SUCURSAL and CONSULTA have no screens yet (owner
 // decision 2026-10-05): they only ever see "Cambiar mi contraseña".
 // "Inicio" (the welcome page, `/motored/inicio`) is the home of every role
 // with screens and always comes first.
 const ALL_ITEMS = [
   { id: 'inicio', name: 'Inicio', icon: House, path: '/motored/inicio', roles: ['ADMIN', 'COMPRAS', 'GERENCIA', 'SERVICIO_CLIENTE'] },
-  { id: 'tablero-asesores', name: "KPI's", icon: BarChart3, path: '/motored/tablero-asesores', roles: ['ADMIN', 'COMPRAS', 'GERENCIA'] },
+  { id: 'tablero-asesores', name: "KPI's", icon: BarChart3, path: '/motored/tablero-asesores', roles: ['ADMIN', 'COMPRAS', 'GERENCIA', COORDINADOR_REPUESTOS] },
   {
     id: 'grupo-pedidos', name: 'Pedidos', icon: ShoppingCart,
     children: [
@@ -66,6 +67,12 @@ const ALL_ITEMS = [
       { id: 'pedidos', name: 'Registro de pedidos', icon: ShoppingCart, path: '/motored/pedidos', roles: ['ADMIN', 'COMPRAS'] },
       { id: 'maestros', name: 'Maestros', icon: Warehouse, path: '/motored/maestros', roles: ['ADMIN', 'COMPRAS', 'GERENCIA'] },
       { id: 'ventas-perdidas', name: 'Ventas perdidas', icon: TrendingDown, path: '/motored/ventas-perdidas', adminOnly: true },
+    ],
+  },
+  {
+    id: 'grupo-gestion-repuestos', name: 'Gestión repuestos', icon: Boxes,
+    children: [
+      { id: 'ingresos-facturas', name: 'Ingresos facturas', icon: Receipt, path: '/motored/gestion-repuestos/ingresos-facturas', roles: GESTION_REPUESTOS_ROLES },
     ],
   },
   {
@@ -84,7 +91,7 @@ const ALL_ITEMS = [
       { id: 'ingresos', name: 'Registro de ingresos', icon: History, path: '/motored/ingresos', adminOnly: true },
     ],
   },
-  { id: 'mi-cuenta', name: 'Cambiar mi contraseña', icon: KeyRound, path: '/motored/mi-cuenta', roles: ['ADMIN', 'COMPRAS', 'SUCURSAL', 'CONSULTA', 'SERVICIO_CLIENTE', 'GERENCIA'] },
+  { id: 'mi-cuenta', name: 'Cambiar mi contraseña', icon: KeyRound, path: '/motored/mi-cuenta', roles: ['ADMIN', 'COMPRAS', 'SUCURSAL', 'CONSULTA', 'SERVICIO_CLIENTE', 'GERENCIA', COORDINADOR_REPUESTOS] },
 ];
 
 const asideStyle = {
@@ -158,7 +165,7 @@ function isPageVisible(item, user) {
   if (user?.must_change_password || rolSinAcceso(user?.role)) return item.id === 'mi-cuenta';
   if (item.excludeRoles?.includes(user?.role)) return false;
   if (item.roles) return item.roles.includes(user?.role);
-  if (user?.role === 'SERVICIO_CLIENTE') return false;
+  if (['SERVICIO_CLIENTE', COORDINADOR_REPUESTOS].includes(user?.role)) return false;
   return !item.adminOnly || user?.role === 'ADMIN';
 }
 

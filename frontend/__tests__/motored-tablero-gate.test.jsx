@@ -32,11 +32,11 @@ beforeEach(() => {
 });
 
 describe('useTableroGate', () => {
-  it('permite ADMIN, COMPRAS y GERENCIA y nada más', () => {
-    expect(TABLERO_ROLES).toEqual(['ADMIN', 'COMPRAS', 'GERENCIA']);
+  it('permite ADMIN, COMPRAS, GERENCIA y COORDINADOR_REPUESTOS y nada más', () => {
+    expect(TABLERO_ROLES).toEqual(['ADMIN', 'COMPRAS', 'GERENCIA', 'COORDINADOR_REPUESTOS']);
   });
 
-  it.each(['ADMIN', 'COMPRAS', 'GERENCIA'])('deja pasar a %s', async (role) => {
+  it.each(['ADMIN', 'COMPRAS', 'GERENCIA', 'COORDINADOR_REPUESTOS'])('deja pasar a %s', async (role) => {
     setSession(role);
     const { result } = renderHook(() => useTableroGate());
     await waitFor(() => expect(result.current).toBe(true));
