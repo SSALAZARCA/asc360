@@ -1,7 +1,7 @@
 'use client';
 /**
- * "Ubicaciones de la tienda" (WU11): the leader prepares the bins before or
- * while counting. The code never changes (its label may be printed); the
+ * "Ubicaciones (opcional)" (WU11): pairs create locations while counting;
+ * the leader may also prepare the bins before or while counting. The code never changes (its label may be printed); the
  * name can be renamed and a location deactivated. GERENCIA only reads.
  */
 import { useState } from 'react';
@@ -71,14 +71,35 @@ function Fila({ ubicacion, opera, ubicaciones }) {
   );
 }
 
+/** Owner decision 2026-10-09: preparing locations is optional (pairs create
+ * them while counting), so the panel starts collapsed. */
 export default function UbicacionesPanel({ permisos, ubicaciones }) {
   const { opera } = permisos;
+  const [abierto, setAbierto] = useState(false);
+  const total = ubicaciones.lista.length;
   return (
     <section style={cardStyle}>
-      <h2 style={h2Style}>Ubicaciones de la tienda</h2>
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem' }}>
+        <h2 style={h2Style}>Ubicaciones (opcional)</h2>
+        <button
+          type="button" className="motored-btn motored-btn-tertiary" aria-expanded={abierto}
+          onClick={() => setAbierto((v) => !v)}
+        >
+          {abierto ? 'Ocultar ubicaciones' : `Mostrar ubicaciones (${total})`}
+        </button>
+      </div>
       <p style={{ ...mutedStyle, margin: 0 }}>
-        Cada pareja elige su ubicación antes de contar. Una referencia puede estar en varias; se suman contra el sistema.
+        Las crean las parejas al contar: antes de escanear escriben dónde están y, si la ubicación no existe, se crea sola.
+        Aquí solo puede prepararlas, renombrarlas o desactivarlas si lo necesita.
       </p>
+      {abierto && <ListaUbicaciones opera={opera} ubicaciones={ubicaciones} />}
+    </section>
+  );
+}
+
+function ListaUbicaciones({ opera, ubicaciones }) {
+  return (
+    <>
       {opera && <NuevaUbicacion ubicaciones={ubicaciones} />}
       {ubicaciones.error && <p role="alert" style={errorStyle}>{ubicaciones.error}</p>}
       {ubicaciones.lista.length === 0 ? (
@@ -98,6 +119,6 @@ export default function UbicacionesPanel({ permisos, ubicaciones }) {
           </table>
         </MotoredTableScroll>
       )}
-    </section>
+    </>
   );
 }

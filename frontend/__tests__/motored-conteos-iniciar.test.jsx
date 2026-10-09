@@ -168,12 +168,28 @@ describe('Pair access', () => {
 });
 
 describe('Locations', () => {
+  it('is optional and collapsed by default: pairs create locations while counting', async () => {
+    login('LIDER_INVENTARIOS');
+    render(<ConteoDetalleContainer conteoId="c1" />);
+    const seccion = (await screen.findByRole('heading', { name: 'Ubicaciones (opcional)' })).closest('section');
+
+    expect(within(seccion).getByText(/las crean las parejas al contar/i)).toBeInTheDocument();
+    expect(within(seccion).queryByRole('button', { name: 'Agregar' })).not.toBeInTheDocument();
+    const mostrar = within(seccion).getByRole('button', { name: /Mostrar ubicaciones/ });
+    expect(mostrar).toHaveAttribute('aria-expanded', 'false');
+
+    fireEvent.click(mostrar);
+    expect(within(seccion).getByRole('button', { name: /Ocultar ubicaciones/ })).toHaveAttribute('aria-expanded', 'true');
+    expect(within(seccion).getByRole('button', { name: 'Agregar' })).toBeInTheDocument();
+  });
+
   it('adds, renames and deactivates a location', async () => {
     login('LIDER_INVENTARIOS');
     api.crearUbicacion.mockResolvedValue({});
     api.editarUbicacion.mockResolvedValue({});
     render(<ConteoDetalleContainer conteoId="c1" />);
-    const seccion = (await screen.findByRole('heading', { name: 'Ubicaciones de la tienda' })).closest('section');
+    const seccion = (await screen.findByRole('heading', { name: 'Ubicaciones (opcional)' })).closest('section');
+    fireEvent.click(within(seccion).getByRole('button', { name: /Mostrar ubicaciones/ }));
     await within(seccion).findByText('Estante A3');
 
     fireEvent.change(within(seccion).getByLabelText('Código'), { target: { value: 'C2' } });
@@ -193,7 +209,8 @@ describe('Locations', () => {
   it('GERENCIA only reads the locations', async () => {
     login('GERENCIA');
     render(<ConteoDetalleContainer conteoId="c1" />);
-    const seccion = (await screen.findByRole('heading', { name: 'Ubicaciones de la tienda' })).closest('section');
+    const seccion = (await screen.findByRole('heading', { name: 'Ubicaciones (opcional)' })).closest('section');
+    fireEvent.click(within(seccion).getByRole('button', { name: /Mostrar ubicaciones/ }));
     await within(seccion).findByText('Estante A3');
 
     expect(within(seccion).queryByRole('button', { name: 'Agregar' })).not.toBeInTheDocument();
