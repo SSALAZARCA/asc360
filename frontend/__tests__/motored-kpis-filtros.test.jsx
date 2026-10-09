@@ -121,6 +121,35 @@ describe('KpiHeader', () => {
     expect(onChange).toHaveBeenLastCalledWith({ sucursales: [] });
   });
 
+  it('clears the store search when the popover is opened again', () => {
+    montar();
+    const abrir = () => fireEvent.click(screen.getByRole('button', { name: /Toda la red/ }));
+    abrir();
+    fireEvent.change(screen.getByLabelText('Buscar tienda'), { target: { value: 'zzz' } });
+    expect(screen.getByText('Ninguna tienda coincide.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Listo' }));
+    abrir();
+    expect(screen.getByLabelText('Buscar tienda')).toHaveValue('');
+    expect(screen.getAllByRole('checkbox')).toHaveLength(3);
+  });
+
+  it('opens the popover toward the right when aligning it to the right would cut it off on the left', () => {
+    const original = Element.prototype.getBoundingClientRect;
+    Element.prototype.getBoundingClientRect = function rect() {
+      if (this.tagName === 'HEADER') return { left: 300, right: 1500, top: 0, bottom: 0, width: 1200, height: 0 };
+      return { left: 320, right: 470, top: 0, bottom: 0, width: 150, height: 0 };
+    };
+    try {
+      montar();
+      fireEvent.click(screen.getByRole('button', { name: /Toda la red/ }));
+      const dialog = screen.getByRole('dialog', { name: 'Elegir puntos de venta' });
+      expect(dialog.style.left).toBe('0px');
+      expect(dialog.style.right).toBe('');
+    } finally {
+      Element.prototype.getBoundingClientRect = original;
+    }
+  });
+
   it('picks the HMCL mode with radios', () => {
     const { onChange } = montar();
     fireEvent.click(screen.getByRole('button', { name: /Incluir HMCL/ }));

@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { COLOR } from '../tokens';
 import { etiquetaTiendas, resumenTiendas } from '../periodo';
 import FilterPopover from './FilterPopover';
@@ -32,6 +32,8 @@ function Casilla({ tienda, activa, onPick }) {
 
 export default function TiendasFilter({ opciones, filtros, onChange, abierto, onToggle, onClose }) {
   const [busqueda, setBusqueda] = useState('');
+  // Each opening starts with an empty search, so a search typed earlier never hides the list.
+  useEffect(() => { if (abierto) setBusqueda(''); }, [abierto]);
   const { tiendas } = opciones;
   const elegidas = filtros.sucursales;
   const visibles = tiendas.filter((t) => normalizar(t.nombre).includes(normalizar(busqueda)));

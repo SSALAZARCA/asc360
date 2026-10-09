@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { COLOR } from '../tokens';
 import { etiquetaTiendas } from '../periodo';
 import FilterPopover from './FilterPopover';
@@ -27,6 +27,8 @@ function Opcion({ asesor, activo, onPick }) {
 /** Header filter "Asesor": a required single-select (searchable, "Nombre · Tienda") that follows the filters; it always has one chosen. */
 export default function AsesorFilter({ lista, elegido, opciones, filtros, onElegir, abierto, onToggle, onClose }) {
   const [busqueda, setBusqueda] = useState('');
+  // Each opening starts with an empty search, so a search typed earlier never hides the list.
+  useEffect(() => { if (abierto) setBusqueda(''); }, [abierto]);
   const asesores = lista ?? [];
   const actual = asesores.find((a) => a.cedula === elegido);
   const buscado = normalizar(busqueda);
