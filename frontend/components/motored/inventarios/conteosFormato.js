@@ -19,10 +19,15 @@ export function labelEstado(estado) {
   return ESTADOS_CONTEO.find((e) => e.value === estado)?.label ?? estado;
 }
 
-/** Readable name of each leader role (the schedule dialog's leader select). */
+/**
+ * Readable name of each role that may be assigned as leader (the schedule
+ * dialog's leader select). ADMIN may be assigned but is not scoped: it is
+ * deliberately absent from ROLES_LIDER_CONTEO / esLiderDeConteo.
+ */
 export const NOMBRE_ROL_LIDER = {
   LIDER_INVENTARIOS: 'Líder de inventarios',
   COORDINADOR_REPUESTOS: 'Coordinador de repuestos',
+  ADMIN: 'Administrador',
 };
 
 /** Whether a role leads counts: LIDER_INVENTARIOS or COORDINADOR_REPUESTOS. */

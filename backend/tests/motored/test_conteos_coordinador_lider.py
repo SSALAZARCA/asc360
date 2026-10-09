@@ -104,8 +104,7 @@ async def test_a_coordinator_can_be_scheduled_as_leader():
     assert conteo.lider_id == lider.id
 
 
-@pytest.mark.parametrize("rol", [
-    MotoredRole.COMPRAS, MotoredRole.GERENCIA, MotoredRole.ADMIN])
+@pytest.mark.parametrize("rol", [MotoredRole.COMPRAS, MotoredRole.GERENCIA])
 async def test_a_non_leader_role_still_cannot_lead(rol):
     db = FakeAsyncSession(get_queue=[_tienda(), _usuario(rol)])
 
@@ -130,6 +129,15 @@ def test_both_roles_lead_and_others_do_not():
         assert consultas.es_lider(MotoredUser(user_id="x", role=rol))
     for rol in ("ADMIN", "GERENCIA", "COMPRAS"):
         assert not consultas.es_lider(MotoredUser(user_id="x", role=rol))
+
+
+def test_admin_is_assignable_but_not_scoped():
+    assert set(snapshot.ROLES_ASIGNABLES_LIDER) == {
+        MotoredRole.LIDER_INVENTARIOS, MotoredRole.COORDINADOR_REPUESTOS,
+        MotoredRole.ADMIN}
+    assert MotoredRole.ADMIN not in snapshot.ROLES_LIDER_CONTEO
+    admin = MotoredUser(user_id=str(uuid.uuid4()), role="ADMIN")
+    assert consultas.ve_lider(admin, uuid.uuid4())
 
 
 # --- HTTP: scoping -----------------------------------------------------------
@@ -248,3 +256,98 @@ def test_the_leaders_list_carries_both_roles(monkeypatch):
     assert r.status_code == 200, r.text
     assert [(x["nombre"], x["rol"]) for x in r.json()] == [
         ("Ana", "COORDINADOR_REPUESTOS"), ("Lina", "LIDER_INVENTARIOS")]
+
+
+async def test_the_leaders_query_includes_admin_but_no_other_role():
+    db = FakeAsyncSession(execute_queue=[[]])
+
+    await consultas.lideres_activos(db)
+
+    sql = str(db.executed_statements[0].compile(
+        compile_kwargs={"literal_binds": True}))
+    for rol in ("LIDER_INVENTARIOS", "COORDINADOR_REPUESTOS", "ADMIN"):
+        assert f"'{rol}'" in sql
+    for rol in ("GERENCIA", "COMPRAS"):
+        assert f"'{rol}'" not in sql
+
+
+# --- ADMIN as leader (owner decision 2026-10-09) -----------------------------
+
+
+async def test_an_admin_can_be_scheduled_as_leader():
+    lider = _usuario(MotoredRole.ADMIN)
+    db = FakeAsyncSession(get_queue=[_tienda(), lider])
+
+    conteo = await snapshot.programar_conteo(
+        db, uuid.uuid4(), lider.id, AHORA.date(), uuid.uuid4())
+
+    assert conteo.lider_id == lider.id
+
+
+async def test_an_admin_can_be_reassigned_as_leader(monkeypatch):
+    conteo = _conteo(estado="PROGRAMADO")
+    lider = _usuario(MotoredRole.ADMIN)
+    db = FakeAsyncSession(get_queue=[lider])
+    monkeypatch.setattr(snapshot.acceso, "bloquear_conteo",
+                        AsyncMock(return_value=conteo))
+
+    await snapshot.reprogramar_conteo(
+        db, conteo.id, AHORA.date(), lider.id)
+
+    assert conteo.lider_id == lider.id
+
+
+def test_the_leaders_list_carries_an_admin(monkeypatch):
+    fila = consultas.OpcionLider(uuid.uuid4(), "Adri", None, "ADMIN")
+    monkeypatch.setattr(
+        consultas, "lideres_activos", AsyncMock(return_value=[fila]))
+    override_motored_user(MotoredUser(user_id=str(uuid.uuid4()),
+                                      role="ADMIN"))
+    override_motored_db(FakeAsyncSession(execute_queue=[[]]))
+
+    r = TestClient(app).get(BASE + "/lideres")
+
+    assert r.status_code == 200, r.text
+    assert [(x["nombre"], x["rol"]) for x in r.json()] == [
+        ("Adri", "ADMIN")]
+
+
+def _como_otro_admin(metodo, ruta, conteo, json=None):
+    override_motored_user(
+        MotoredUser(user_id=str(uuid.uuid4()), role="ADMIN"))
+    db = FakeAsyncSession(execute_queue=[[]], get_queue=[conteo])
+    override_motored_db(db)
+    return TestClient(app).request(metodo, BASE + ruta, json=json), db
+
+
+def test_another_admin_sees_an_admin_led_conteo(datos):
+    conteo = _conteo(lider_id=uuid.uuid4())
+
+    r, _ = _como_otro_admin("GET", f"/{conteo.id}", conteo)
+
+    assert r.status_code == 200, r.text
+
+
+def test_another_admin_closes_an_admin_led_conteo(monkeypatch):
+    conteo = _conteo(estado="EN_RECONTEO", lider_id=uuid.uuid4())
+    kpi = cierre.calcular_kpi([])
+    monkeypatch.setattr(cierre, "cerrar", AsyncMock(
+        return_value=cierre.Cierre(conteo, kpi, 0)))
+
+    r, db = _como_otro_admin("POST", f"/{conteo.id}/cerrar", conteo, {})
+
+    assert r.status_code == 200, r.text
+    assert db.committed
+
+
+def test_a_leader_is_still_scoped_away_from_an_admin_led_conteo(datos):
+    conteo = _conteo(lider_id=uuid.uuid4())
+    for rol in ("LIDER_INVENTARIOS", ROL):
+        override_motored_user(
+            MotoredUser(user_id=str(uuid.uuid4()), role=rol))
+        override_motored_db(
+            FakeAsyncSession(execute_queue=[[]], get_queue=[conteo]))
+
+        r = TestClient(app).get(f"{BASE}/{conteo.id}")
+
+        assert r.status_code == 404, (rol, r.text)

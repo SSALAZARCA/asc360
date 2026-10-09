@@ -50,6 +50,7 @@ beforeEach(() => {
   api.listarLideres.mockResolvedValue([
     { id: 'l1', nombre: 'Laura Líder', email: null, rol: 'LIDER_INVENTARIOS' },
     { id: 'k1', nombre: 'Carla Coordinadora', email: null, rol: 'COORDINADOR_REPUESTOS' },
+    { id: 'a1', nombre: 'Adriana Admin', email: null, rol: 'ADMIN' },
   ]);
 });
 
@@ -103,7 +104,7 @@ describe('the coordinator reaches Conteos', () => {
 });
 
 describe('the schedule dialog', () => {
-  it('lists both leader roles with a styled option each', async () => {
+  it('lists every assignable leader role, ADMIN included, with a styled option each', async () => {
     login('ADMIN');
     render(<ConteosContainer />);
     fireEvent.click(await screen.findByRole('button', { name: 'Programar conteo' }));
@@ -114,6 +115,8 @@ describe('the schedule dialog', () => {
       .toHaveValue('l1');
     expect(within(select).getByRole('option', { name: 'Carla Coordinadora · Coordinador de repuestos' }))
       .toHaveValue('k1');
+    expect(within(select).getByRole('option', { name: 'Adriana Admin · Administrador' }))
+      .toHaveValue('a1');
     within(select).getAllByRole('option').forEach((opcion) => expect(opcion.style.color).not.toBe(''));
   });
 });

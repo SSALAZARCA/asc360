@@ -51,8 +51,13 @@ from app.motored.services.reloj import BOGOTA_OFFSET, hoy_bogota
 
 # Roles that may lead a count. Owner decision 2026-10-09: the parts
 # coordinator leads too, with exactly the LIDER_INVENTARIOS powers.
+# These are the SCOPED leader roles: they see only the conteos they lead.
 ROLES_LIDER_CONTEO = (
     MotoredRole.LIDER_INVENTARIOS, MotoredRole.COORDINADOR_REPUESTOS)
+# Roles that may be ASSIGNED as a conteo's `lider_id` (owner decision
+# 2026-10-09: an ADMIN may lead too). ADMIN stays unscoped: it keeps
+# seeing and managing every conteo, so it is NOT in ROLES_LIDER_CONTEO.
+ROLES_ASIGNABLES_LIDER = ROLES_LIDER_CONTEO + (MotoredRole.ADMIN,)
 
 # Which estados each action may start from (design §5.1).
 TRANSICIONES = {
@@ -269,7 +274,7 @@ async def _validar_sucursal(db: AsyncSession, sucursal_id) -> None:
 async def _validar_lider(db: AsyncSession, lider_id) -> None:
     lider = await db.get(Usuario, lider_id)
     if (lider is None or not lider.activo
-            or lider.role not in ROLES_LIDER_CONTEO):
+            or lider.role not in ROLES_ASIGNABLES_LIDER):
         raise errores.LiderInvalido()
 
 
@@ -277,8 +282,9 @@ async def programar_conteo(
         db: AsyncSession, sucursal_id: uuid.UUID, lider_id: uuid.UUID,
         fecha_programada: date, creado_por: uuid.UUID) -> Conteo:
     """A new TOTAL conteo in PROGRAMADO for an active store, assigned to
-    an active leader (`ROLES_LIDER_CONTEO`). Several may be scheduled for
-    one store; only one can be running (checked at Iniciar)."""
+    an active leader (`ROLES_ASIGNABLES_LIDER`). Several may be
+    scheduled for one store; only one can be running (checked at
+    Iniciar)."""
     await _validar_sucursal(db, sucursal_id)
     await _validar_lider(db, lider_id)
     conteo = Conteo(

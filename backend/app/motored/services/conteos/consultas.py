@@ -159,10 +159,11 @@ async def datos_conteo(db: AsyncSession, conteo: Conteo) -> DatosConteo:
 
 
 async def lideres_activos(db: AsyncSession) -> List[OpcionLider]:
-    """Active, approved users of a leader role (the schedule form)."""
+    """Active, approved users of an assignable leader role, ADMIN
+    included (the schedule form)."""
     filas = (await db.execute(
         select(Usuario.id, Usuario.nombre, Usuario.email, Usuario.role)
-        .where(Usuario.role.in_(snapshot.ROLES_LIDER_CONTEO),
+        .where(Usuario.role.in_(snapshot.ROLES_ASIGNABLES_LIDER),
                Usuario.activo.is_(True), Usuario.status == "approved")
         .order_by(Usuario.nombre))).all()
     return [OpcionLider(f[0], f[1], f[2], _valor_rol(f[3])) for f in filas]
