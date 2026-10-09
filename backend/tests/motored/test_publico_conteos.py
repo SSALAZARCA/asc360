@@ -368,7 +368,8 @@ def test_activity_is_touched_at_most_every_20_seconds(monkeypatch):
 
 # --- blind guard -------------------------------------------------------------
 
-PROHIBIDOS = ("existencia", "costo", "diferencia", "valor")
+PROHIBIDOS = (
+    "existencia", "costo", "diferencia", "valor", "sistema")
 
 
 def _campos(esquema, componentes, vistos):
@@ -394,13 +395,14 @@ def test_no_public_response_carries_expected_quantities_or_money():
     componentes = documento["components"]["schemas"]
     rutas = {p: v for p, v in documento["paths"].items()
              if p.startswith(BASE)}
-    assert len(rutas) >= 3
+    assert len(rutas) >= 9
     campos = set()
     for operaciones in rutas.values():
         for operacion in operaciones.values():
             campos.update(_campos(
                 operacion.get("responses", {}), componentes, set()))
-    assert {"etiqueta", "integrantes"} <= campos
+    assert {"etiqueta", "integrantes", "aceptadas", "desconocidos",
+            "referencias", "resumen_ubicacion", "creada"} <= campos
     prohibidos = {c for c in campos
                   if any(p in c.lower() for p in PROHIBIDOS)}
     assert prohibidos == set()

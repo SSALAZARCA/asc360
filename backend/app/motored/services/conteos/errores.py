@@ -115,3 +115,51 @@ class SesionInactiva(ErrorConteo):
     MENSAJE = (
         "Su sesión de conteo terminó. Vuelva a ingresar con el código del "
         "conteo.")
+
+
+# --- locations and readings (WU8) --------------------------------------------
+
+
+class UbicacionInvalida(ErrorConteo):
+    codigo = "UBICACION_INVALIDA"
+    MENSAJE = (
+        "Escriba o escanee un código de ubicación de 1 a 30 caracteres.")
+
+
+class UbicacionInactiva(ErrorConteo):
+    codigo = "UBICACION_INACTIVA"
+    MENSAJE = (
+        "Esa ubicación está desactivada. Pídale al líder que la active o "
+        "use otra.")
+
+
+class UbicacionDuplicada(ErrorConteo):
+    codigo = "UBICACION_DUPLICADA"
+    MENSAJE = "Ya existe una ubicación con ese código en esta tienda."
+
+
+class UbicacionChocaReferencia(ErrorConteo):
+    codigo = "UBICACION_CHOCA_REFERENCIA"
+    MENSAJE = (
+        "Ese código de ubicación se confunde con el código de una "
+        "referencia. Use otro.")
+
+
+class UbicacionNoEncontrada(ErrorConteo):
+    codigo = "UBICACION_NO_ENCONTRADA"
+    MENSAJE = "La ubicación no existe en esta tienda."
+
+
+class SinUbicacion(ErrorConteo):
+    codigo = "SIN_UBICACION"
+    MENSAJE = "Primero indique la ubicación."
+
+
+class LecturaNoEncontrada(ErrorConteo):
+    codigo = "LECTURA_NO_ENCONTRADA"
+    MENSAJE = "La lectura no existe o no es de esta pareja."
+
+
+class RondaCerrada(ErrorConteo):
+    codigo = "RONDA_CERRADA"
+    MENSAJE = "La ronda de conteo de esa lectura ya terminó."

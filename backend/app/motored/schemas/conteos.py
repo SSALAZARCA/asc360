@@ -1,27 +1,30 @@
 """
 Inventory counts -- request and response shapes of the leader API and the
-public pair API (odd/motored-conteos-inventario, WU6/WU7; design §6.1,
-§6.2, §8.3).
+public pair API (odd/motored-conteos-inventario, WU6/WU7/WU8; design
+§6.1, §6.2, §7, §8.3).
 
 - No shape carries `codigo_hash`. The plain 6-digit code appears only in
   `IniciarSalida` and `CodigoSalida`, the two moments it exists.
 - No shape carries a cédula: members are names only (Ley 1581).
-- The public shapes (`UnirseSalida`, `SesionPareja`) carry no expected
-  quantity, cost or difference: the count is blind.
+- The public shapes carry no expected quantity, cost or difference: the
+  count is blind (a test walks their OpenAPI schemas).
 """
 import uuid
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from decimal import Decimal
-from typing import List, Literal, Optional
+from typing import Dict, List, Literal, Optional, Tuple
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.motored.models.conteo import ESTADOS, TIPOS
+from app.motored.models.conteo_lectura import METODOS
 from app.motored.schemas.vendedor import limpiar_cedula
 
 EstadoConteo = Literal[ESTADOS]
 TipoConteo = Literal[TIPOS]
 LARGO_CEDULA = (4, 20)
+MAX_LECTURAS_LOTE = 100
+LARGO_NOMBRE_UBICACION = 60
 
 
 # --- leader API: requests ----------------------------------------------------
@@ -206,3 +209,154 @@ class SesionPareja(BaseModel):
     sucursal: str
     estado_conteo: str
     ubicacion_actual: Optional[UbicacionSalida] = None
+
+
+# --- locations (leader and pair) ---------------------------------------------
+
+
+def _nombre_ubicacion(valor: Optional[str]) -> Optional[str]:
+    if valor is None:
+        return None
+    limpio = " ".join(valor.split())
+    if not limpio:
+        raise ValueError("nombre vacío")
+    return limpio
+
+
+class UbicacionPareja(BaseModel):
+    id: uuid.UUID
+    codigo: str
+    nombre: str
+
+
+class UbicacionLider(UbicacionPareja):
+    activa: bool
+    origen: str
+    created_at: Optional[datetime] = None
+
+
+class UbicacionCrear(BaseModel):
+    """`codigo` may carry the label prefix `UBI-`; it is normalized."""
+
+    codigo: str = Field(max_length=40)
+    nombre: Optional[str] = Field(
+        default=None, max_length=LARGO_NOMBRE_UBICACION)
+
+    limpiar_nombre = field_validator("nombre")(_nombre_ubicacion)
+
+
+class UbicacionEditar(BaseModel):
+    nombre: Optional[str] = Field(
+        default=None, max_length=LARGO_NOMBRE_UBICACION)
+    activa: Optional[bool] = None
+
+    limpiar_nombre = field_validator("nombre")(_nombre_ubicacion)
+
+    @model_validator(mode="after")
+    def _algo(self) -> "UbicacionEditar":
+        if self.nombre is None and self.activa is None:
+            raise ValueError("nada que cambiar")
+        return self
+
+
+class UbicacionFijar(BaseModel):
+    """A typed code or a scanned `UBI-…` label; `nombre` names it when
+    the store does not have it yet."""
+
+    codigo: str = Field(max_length=40)
+    nombre: Optional[str] = Field(
+        default=None, max_length=LARGO_NOMBRE_UBICACION)
+
+
+class UbicacionFijada(BaseModel):
+    ubicacion: UbicacionPareja
+    creada: bool
+
+
+# --- readings (pair) ---------------------------------------------------------
+
+
+class CatalogoSalida(BaseModel):
+    """`referencias` is `[[code, name], ...]` (ADR-6)."""
+
+    version: str
+    referencias: List[Tuple[str, str]]
+
+
+class LecturaEntrada(BaseModel):
+    id: uuid.UUID
+    codigo_leido: str = Field(max_length=120)
+    cantidad: Decimal = Decimal("1")
+    leida_en: datetime
+    metodo: Literal[METODOS]
+    forzar_desconocido: bool = False
+
+    @field_validator("leida_en")
+    @classmethod
+    def _con_zona(cls, valor: datetime) -> datetime:
+        if valor.tzinfo is None:
+            return valor.replace(tzinfo=timezone.utc)
+        return valor
+
+
+class LecturasEntrada(BaseModel):
+    lecturas: List[LecturaEntrada] = Field(
+        min_length=1, max_length=MAX_LECTURAS_LOTE)
+
+
+class CodigoDesconocido(BaseModel):
+    id: uuid.UUID
+    codigo: str
+
+
+class LecturaRechazada(BaseModel):
+    id: uuid.UUID
+    motivo: str
+
+
+class LecturasSalida(BaseModel):
+    """`aceptadas` were stored now; `duplicadas` were already stored (a
+    resend). `desconocidos` were NOT stored: resend them with
+    `forzar_desconocido` to keep them. `referencias`: code -> name."""
+
+    aceptadas: List[uuid.UUID]
+    duplicadas: List[uuid.UUID]
+    desconocidos: List[CodigoDesconocido]
+    rechazadas: List[LecturaRechazada]
+    referencias: Dict[str, str]
+
+
+class AnulacionSalida(BaseModel):
+    id: uuid.UUID
+    anulada_en: datetime
+
+
+class UbicacionCorta(BaseModel):
+    codigo: str
+    nombre: str
+
+
+class LecturaPareja(BaseModel):
+    id: uuid.UUID
+    codigo: str
+    descripcion: Optional[str] = None
+    cantidad: Decimal
+    metodo: str
+    ubicacion: UbicacionCorta
+    leida_en: datetime
+    anulada_en: Optional[datetime] = None
+
+
+class ResumenUbicacion(BaseModel):
+    """What THIS session counted of one code in its current location."""
+
+    codigo: str
+    descripcion: Optional[str] = None
+    cantidad: Decimal
+    lecturas: int
+
+
+class RecientesSalida(BaseModel):
+    ubicacion_actual: Optional[UbicacionPareja] = None
+    lecturas: List[LecturaPareja]
+    resumen_ubicacion: List[ResumenUbicacion]

@@ -1,6 +1,6 @@
 """
 Motored -- inventory counts, leader API (odd/motored-conteos-inventario,
-WU6/WU7; design §6.1, §5.1, §5.3).
+WU6/WU7/WU8; design §6.1, §5.1, §5.3, §4.3).
 
 Prefix `/api/motored/conteos`. The path rules already confine
 LIDER_INVENTARIOS and GERENCIA to it; each endpoint then picks its roles:
@@ -8,8 +8,9 @@ LIDER_INVENTARIOS and GERENCIA to it; each endpoint then picks its roles:
 - reads: ADMIN, LIDER_INVENTARIOS, GERENCIA;
 - schedule, reschedule or change the leader, annul, the leaders list:
   ADMIN only (owner decision);
-- iniciar, rotate the code, the QR, disconnect a pair: ADMIN or the
-  assigned leader. GERENCIA gets 403 on every write.
+- iniciar, rotate the code, the QR, disconnect a pair, create / rename /
+  deactivate the store's locations: ADMIN or the assigned leader.
+  GERENCIA gets 403 on every write.
 
 Scoping: a leader only sees its own conteos (`lider_id`); another's
 answers 404, never 403, so ids do not leak (`consultas.conteo_visible`).
@@ -33,28 +34,37 @@ from app.motored.models.conteo import ESTADOS_ABIERTOS, Conteo
 from app.motored.schemas import conteos as esquemas
 from app.motored.services.auth import MotoredUser
 from app.motored.services.conteos import (
-    acceso, consultas, errores, sesiones, snapshot,
+    acceso, consultas, errores, sesiones, snapshot, ubicaciones,
 )
 
 ADMIN = "ADMIN"
 LECTORES = (ADMIN, "LIDER_INVENTARIOS", "GERENCIA")
 OPERADORES = (ADMIN, "LIDER_INVENTARIOS")
 PREFIJO_API = "/api/motored/conteos"
+ESTADOS_EDITABLES = ("PROGRAMADO",) + ESTADOS_ABIERTOS
 SIN_CACHE = {"Cache-Control": "no-store"}
 
 _ESTADO_HTTP = {
     errores.ConteoNoEncontrado: 404,
     errores.SesionNoEncontrada: 404,
+    errores.UbicacionNoEncontrada: 404,
+    errores.LecturaNoEncontrada: 404,
     errores.SucursalInvalida: 422,
     errores.LiderInvalido: 422,
     errores.MotivoRequerido: 422,
     errores.DatosIngresoInvalidos: 422,
+    errores.UbicacionInvalida: 422,
+    errores.UbicacionChocaReferencia: 422,
     errores.EstadoInvalido: 409,
     errores.ConteoTotalAbierto: 409,
     errores.SinInventario: 409,
     errores.InventarioAntiguo: 409,
     errores.UmbralesInvalidos: 409,
     errores.EnlaceSinConfigurar: 409,
+    errores.UbicacionInactiva: 409,
+    errores.UbicacionDuplicada: 409,
+    errores.SinUbicacion: 409,
+    errores.RondaCerrada: 409,
     errores.AccesoInvalido: 401,
     errores.SesionInactiva: 401,
     errores.DemasiadosIntentos: 429,
@@ -360,3 +370,89 @@ async def desconectar_sesion(
         raise error_http(error) from error
     await db.commit()
     return _sesion_lider(fila)
+
+
+# --- the store's locations (WU8) ---------------------------------------------
+
+
+def _ubicacion_lider(ubicacion) -> esquemas.UbicacionLider:
+    return esquemas.UbicacionLider(
+        id=ubicacion.id, codigo=ubicacion.codigo, nombre=ubicacion.nombre,
+        activa=ubicacion.activa, origen=ubicacion.origen,
+        created_at=ubicacion.created_at)
+
+
+async def _conteo_editable(
+        db: AsyncSession, conteo_id: uuid.UUID,
+        usuario: MotoredUser) -> Conteo:
+    """A visible conteo that is not finished (locations are prepared
+    before and fixed during a count)."""
+    conteo = await consultas.conteo_visible(db, conteo_id, usuario)
+    if conteo.estado not in ESTADOS_EDITABLES:
+        raise errores.EstadoInvalido(
+            "Las ubicaciones solo se editan desde un conteo programado o "
+            "en curso.", estado=conteo.estado)
+    return conteo
+
+
+@router.get(
+    "/{conteo_id}/ubicaciones",
+    response_model=List[esquemas.UbicacionLider])
+async def listar_ubicaciones(
+    conteo_id: uuid.UUID,
+    usuario: MotoredUser = Depends(lector),
+    db: AsyncSession = Depends(get_motored_db_or_503),
+):
+    """Every location of the conteo's store, inactive ones included;
+    `origen` 'PAREJA' marks one a pair created during a count."""
+    try:
+        conteo = await consultas.conteo_visible(db, conteo_id, usuario)
+    except errores.ErrorConteo as error:
+        raise error_http(error) from error
+    filas = await ubicaciones.listar(
+        db, conteo.sucursal_id, solo_activas=False)
+    return [_ubicacion_lider(u) for u in filas]
+
+
+@router.post(
+    "/{conteo_id}/ubicaciones", response_model=esquemas.UbicacionLider,
+    status_code=201)
+async def crear_ubicacion(
+    conteo_id: uuid.UUID,
+    cuerpo: esquemas.UbicacionCrear,
+    usuario: MotoredUser = Depends(operador),
+    db: AsyncSession = Depends(get_motored_db_or_503),
+):
+    """Body `{codigo, nombre?}`; `codigo` may carry the `UBI-` prefix."""
+    try:
+        conteo = await _conteo_editable(db, conteo_id, usuario)
+        ubicacion = await ubicaciones.crear(
+            db, conteo.sucursal_id, cuerpo.codigo, cuerpo.nombre,
+            _uuid(usuario))
+    except errores.ErrorConteo as error:
+        raise error_http(error) from error
+    await db.commit()
+    return _ubicacion_lider(ubicacion)
+
+
+@router.patch(
+    "/{conteo_id}/ubicaciones/{ubicacion_id}",
+    response_model=esquemas.UbicacionLider)
+async def editar_ubicacion(
+    conteo_id: uuid.UUID,
+    ubicacion_id: uuid.UUID,
+    cuerpo: esquemas.UbicacionEditar,
+    usuario: MotoredUser = Depends(operador),
+    db: AsyncSession = Depends(get_motored_db_or_503),
+):
+    """Body `{nombre?, activa?}`: rename and/or (de)activate. The code
+    never changes (its label may be printed)."""
+    try:
+        conteo = await _conteo_editable(db, conteo_id, usuario)
+        ubicacion = await ubicaciones.editar(
+            db, conteo.sucursal_id, ubicacion_id, cuerpo.nombre,
+            cuerpo.activa)
+    except errores.ErrorConteo as error:
+        raise error_http(error) from error
+    await db.commit()
+    return _ubicacion_lider(ubicacion)

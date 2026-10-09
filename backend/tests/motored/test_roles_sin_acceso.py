@@ -63,6 +63,13 @@ PUBLIC_ROUTES = {
     ("POST", "/api/motored/publico/conteos/{slug}/unirse"),
     ("GET", "/api/motored/publico/conteos/{slug}/sesion"),
     ("POST", "/api/motored/publico/conteos/{slug}/salir"),
+    ("GET", "/api/motored/publico/conteos/{slug}/catalogo"),
+    ("GET", "/api/motored/publico/conteos/{slug}/ubicaciones"),
+    ("PUT", "/api/motored/publico/conteos/{slug}/ubicacion"),
+    ("POST", "/api/motored/publico/conteos/{slug}/lecturas"),
+    ("POST",
+     "/api/motored/publico/conteos/{slug}/lecturas/{lectura_id}/anular"),
+    ("GET", "/api/motored/publico/conteos/{slug}/lecturas/recientes"),
 }
 
 # One representative read per router.
