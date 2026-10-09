@@ -138,14 +138,13 @@ describe('create-user form', () => {
 });
 
 describe('Ingresos facturas page', () => {
-  it.each(CUATRO_ROLES)('renders the placeholder for %s', async (role) => {
+  it.each(CUATRO_ROLES)('renders the panel for %s', async (role) => {
     mockPathname = INGRESOS_FACTURAS_PATH;
     login(role);
 
     render(<IngresosFacturasPage />);
 
     expect(await screen.findByRole('heading', { name: 'Ingresos facturas' })).toBeInTheDocument();
-    expect(screen.getByText('Aquí verá las facturas de pedidos pendientes por ingresar.')).toBeInTheDocument();
     expect(pushMock).not.toHaveBeenCalled();
   });
 

@@ -10,12 +10,12 @@ import { useEffect, useState } from 'react';
 import { getIngresosAsesor, confirmarIngreso } from '../../../../lib/motored/gestionRepuestosApi';
 import { confirmarPendiente } from '../../../../lib/motored/informeApi';
 import { getRolActual } from '../../../../lib/motored/motoredFetch';
+import { COORDINADOR_REPUESTOS } from '../../../../lib/motored/session';
 import { fechaBogota } from '../../../../lib/motored/fechas';
 import { COLOR } from '../tokens';
 import { NUM, ROTULO, TARJETA } from '../ventas/estilos';
 import { LLEGO, NO_HA_LLEGADO, llegaron, lineaDe, quienDe } from './pendientes';
 
-const ROL_CONFIRMA = 'COORDINADOR_REPUESTOS';
 const clave = (i) => `${i.factura}|${i.sucursal_id}`;
 const PILDORA = { fontFamily: 'inherit', fontSize: 11.5, fontWeight: 700, height: 26, padding: '0 10px', borderRadius: 999, cursor: 'pointer', whiteSpace: 'nowrap' };
 
@@ -66,7 +66,7 @@ export default function PendientesIngreso({ data, enlace }) {
   const sucursal = data?.asesor?.sucursal_id;
   const [bloque, setBloque] = useState(enlace ? data?.pendientes_ingreso || null : null);
   const [error, setError] = useState('');
-  const puedeConfirmar = enlace ? true : getRolActual() === ROL_CONFIRMA;
+  const puedeConfirmar = enlace ? true : getRolActual() === COORDINADOR_REPUESTOS;
 
   useEffect(() => {
     if (enlace || !sucursal) return undefined;
