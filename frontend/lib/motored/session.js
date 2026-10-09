@@ -19,6 +19,7 @@ export const KPIS_PATH = '/motored/tablero-asesores';
 /** "Gestión repuestos" section: pages and the roles that may open them. */
 export const GESTION_REPUESTOS_PATH = '/motored/gestion-repuestos';
 export const INGRESOS_FACTURAS_PATH = '/motored/gestion-repuestos/ingresos-facturas';
+export const TRASLADOS_PATH = '/motored/gestion-repuestos/traslados';
 
 /** Administrative analyst: the "Gestión repuestos" section only (no KPI's). */
 export const ANALISTA_ADMINISTRATIVO = 'ANALISTA_ADMINISTRATIVO';

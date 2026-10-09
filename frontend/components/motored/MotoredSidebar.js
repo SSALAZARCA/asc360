@@ -41,11 +41,11 @@ import Image from 'next/image';
 import {
   LogOut, Warehouse, TrendingDown, ClipboardCheck, MessageSquareWarning, KeyRound, History,
   UserCog, ChevronDown, ChevronRight, ShoppingCart, BarChart3, Settings, SlidersHorizontal, House,
-  Boxes, Receipt, ClipboardList,
+  Boxes, Receipt, ClipboardList, ArrowLeftRight,
 } from 'lucide-react';
 import { MOTORED_TOKEN_KEY, MOTORED_USER_KEY } from '../../lib/motored/motoredFetch';
 import {
-  CONTEOS_PATH, CONTEOS_ROLES_VISIBLES, COORDINADOR_REPUESTOS, ANALISTA_ADMINISTRATIVO, GESTION_REPUESTOS_ROLES, LIDER_INVENTARIOS, rolSinAcceso,
+  CONTEOS_PATH, CONTEOS_ROLES_VISIBLES, TRASLADOS_PATH, COORDINADOR_REPUESTOS, ANALISTA_ADMINISTRATIVO, GESTION_REPUESTOS_ROLES, LIDER_INVENTARIOS, rolSinAcceso,
 } from '../../lib/motored/session';
 
 // A group (`children`) is a collapsible header that always starts folded; a
@@ -75,6 +75,7 @@ const ALL_ITEMS = [
     id: 'grupo-gestion-repuestos', name: 'Gestión repuestos', icon: Boxes,
     children: [
       { id: 'ingresos-facturas', name: 'Ingresos facturas', icon: Receipt, path: '/motored/gestion-repuestos/ingresos-facturas', roles: GESTION_REPUESTOS_ROLES },
+      { id: 'traslados', name: 'Traslados', icon: ArrowLeftRight, path: TRASLADOS_PATH, roles: GESTION_REPUESTOS_ROLES },
     ],
   },
   {

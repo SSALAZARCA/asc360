@@ -46,6 +46,7 @@ export const PANTALLAS = [
   { id: 'presupuestos', nombre: 'Maestros: Presupuestos', nota: 'Presupuesto mensual por asesor.', visible: (rol) => enMaestros({ roles: PRESUPUESTOS_ROLES }, rol) },
   { id: 'tablero-asesores', nombre: "KPI's", sidebarId: 'tablero-asesores', nota: '', visible: (rol) => TABLERO_ROLES.includes(rol) },
   { id: 'ingresos-facturas', nombre: 'Gestión repuestos: Ingresos facturas', sidebarId: 'ingresos-facturas', nota: 'ADMIN, COMPRAS y GERENCIA solo consultan; confirman el coordinador de repuestos y el analista administrativo (que además descarga la plantilla del ERP).', visible: (rol) => GESTION_REPUESTOS_ROLES.includes(rol) },
+  { id: 'traslados', nombre: 'Gestión repuestos: Traslados', sidebarId: 'traslados', nota: 'ADMIN, COMPRAS y GERENCIA solo consultan; confirman el coordinador de repuestos y el analista administrativo.', visible: (rol) => GESTION_REPUESTOS_ROLES.includes(rol) },
   { id: 'conteos', nombre: 'Inventarios: Conteos', sidebarId: 'conteos', nota: 'En construcción: por ahora solo ADMIN la ve en el menú. El líder de inventarios y el coordinador de repuestos dirigen los conteos que les asignan.', visible: (rol) => enSidebar('conteos', rol) },
   { id: 'pedidos', nombre: 'Pedidos y corridas', sidebarId: 'pedidos', nota: '', visible: (rol) => PEDIDOS_ROLES.includes(rol) },
   { id: 'topes', nombre: 'Topes de pedido', nota: 'Dentro de Pedidos.', visible: (rol) => PEDIDOS_ROLES.includes(rol) },

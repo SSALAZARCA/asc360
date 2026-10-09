@@ -108,7 +108,7 @@ describe('sidebar', () => {
     expect(sidebarLabels()).toEqual(["KPI's", 'Gestión repuestos', 'Cambiar mi contraseña', 'Salir']);
     fireEvent.click(screen.getByRole('button', { name: 'Gestión repuestos' }));
     expect(sidebarLabels()).toEqual([
-      "KPI's", 'Gestión repuestos', 'Ingresos facturas', 'Cambiar mi contraseña', 'Salir',
+      "KPI's", 'Gestión repuestos', 'Ingresos facturas', 'Traslados', 'Cambiar mi contraseña', 'Salir',
     ]);
   });
 

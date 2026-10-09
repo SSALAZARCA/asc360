@@ -47,3 +47,26 @@ export const descargarPlantillaIngreso = (factura, sucursal) => descargarArchivo
   `${BASE}/plantilla${consulta({ factura, sucursal })}`,
   `Entrada_compra_${String(factura).replace(/\s+/g, '')}.xlsx`,
 );
+
+const BASE_TRASLADOS = '/gestion-repuestos/traslados';
+
+/**
+ * Pending transfers: `{ ultima_carga, items }`, oldest first; filters `{ sucursal, estado, min_dias, max_dias }`.
+ * An item is `{ documento, bodega_salida, sale, sucursal_id, llega, tienda, fecha, dias, refs, unidades, num_lineas,
+ * lineas: [{ referencia, descripcion, cantidad }], estado: 'SIN_CONFIRMAR' | 'RECIBIDO' | 'NO_HA_LLEGADO', aviso_erp,
+ * confirmado_por, confirmado_en }`; `sucursal_id` is the RECEIVING store.
+ */
+export const getTrasladosDetalle = (filtros) => motoredFetchJson(`${BASE_TRASLADOS}/detalle${consulta(filtros)}`);
+
+/** `{ historial: [{ estado, por, canal, en }] }`, newest first. A transfer is identified by (documento, bodega_salida). */
+export const getTrasladosHistorial = (documento, bodegaSalida) => (
+  motoredFetchJson(`${BASE_TRASLADOS}/historial${consulta({ documento, bodega_salida: bodegaSalida })}`)
+);
+
+/** The asesor card block of one receiving store: `{ ultima_carga, items, resumen }` (403 for a role that cannot read it). */
+export const getTrasladosAsesor = (sucursal) => motoredFetchJson(`${BASE_TRASLADOS}/asesor${consulta({ sucursal })}`);
+
+/** ADMIN, COORDINADOR_REPUESTOS and ANALISTA_ADMINISTRATIVO: `{ documento, bodega_salida, estado: 'RECIBIDO' | 'NO_HA_LLEGADO' }`; resolves the updated item. */
+export const confirmarTraslado = (cuerpo) => (
+  motoredFetchJson(`${BASE_TRASLADOS}/confirmar`, { method: 'POST', body: JSON.stringify(cuerpo) })
+);

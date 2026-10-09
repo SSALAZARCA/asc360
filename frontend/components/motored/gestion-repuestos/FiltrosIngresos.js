@@ -26,19 +26,22 @@ function Segmentos({ nombre, opciones, valor, onElegir }) {
   );
 }
 
-/** Tienda select, Estado and Antigüedad pills, and the "Filtros activos" line with its Limpiar button. */
-export default function FiltrosIngresos({ filtros, tiendas, onCambiar, onLimpiar }) {
+/**
+ * Tienda select, Estado and Antigüedad pills, and the "Filtros activos" line with its Limpiar button. The transfers
+ * screen reuses it with its own `estados` and `etiquetaTienda`.
+ */
+export default function FiltrosIngresos({ filtros, tiendas, onCambiar, onLimpiar, estados = ESTADOS_FILTRO, etiquetaTienda = 'Tienda' }) {
   const nombreTienda = tiendas.find((t) => t.sucursal_id === filtros.sucursal)?.tienda;
   const activos = [
     filtros.sucursal && (nombreTienda || 'Tienda'),
-    filtros.estado && ESTADOS_FILTRO.find(([v]) => v === filtros.estado)?.[1],
+    filtros.estado && estados.find(([v]) => v === filtros.estado)?.[1],
     filtros.edad !== SIN_EDAD && EDADES.find(([v]) => v === filtros.edad)?.[1],
   ].filter(Boolean);
   return (
     <>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '14px 22px', alignItems: 'flex-end' }}>
         <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '12px', fontWeight: 500 }}>
-          Tienda
+          {etiquetaTienda}
           <select style={select} value={filtros.sucursal} onChange={(e) => onCambiar('sucursal')(e.target.value)}>
             <option style={opcion} value="">Todas las tiendas</option>
             {tiendas.map((t) => (
@@ -46,7 +49,7 @@ export default function FiltrosIngresos({ filtros, tiendas, onCambiar, onLimpiar
             ))}
           </select>
         </label>
-        <Segmentos nombre="Estado" opciones={ESTADOS_FILTRO} valor={filtros.estado} onElegir={onCambiar('estado')} />
+        <Segmentos nombre="Estado" opciones={estados} valor={filtros.estado} onElegir={onCambiar('estado')} />
         <Segmentos nombre="Antigüedad" opciones={EDADES} valor={filtros.edad} onElegir={onCambiar('edad')} />
       </div>
       {activos.length > 0 && (

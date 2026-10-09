@@ -56,7 +56,7 @@ describe('ANALISTA_ADMINISTRATIVO', () => {
   it('sees only Gestión repuestos and the account page in the menu', () => {
     const items = menuItemsFor({ role: ANALISTA_ADMINISTRATIVO });
     expect(items.map((i) => i.name)).toEqual(['Gestión repuestos', 'Cambiar mi contraseña']);
-    expect(items[0].children.map((c) => c.id)).toEqual(['ingresos-facturas']);
+    expect(items[0].children.map((c) => c.id)).toEqual(['ingresos-facturas', 'traslados']);
   });
 
   it('may confirm Llegó / No ha llegado', () => {

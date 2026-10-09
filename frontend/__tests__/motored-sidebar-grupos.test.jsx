@@ -21,10 +21,10 @@ const ADMIN = { nombre: 'U', role: 'ADMIN' };
 // ASESOR_MOSTRADOR has no web access (owner decision 2026-10-05).
 const PAGES_BEFORE = {
   ADMIN: ['inicio', 'pedidos', 'tablero-asesores', 'maestros', 'usuarios-gestion', 'ingresos', 'ventas-perdidas',
-    'ingresos-facturas', 'conteos', 'encuesta-satisfaccion', 'detractores', 'mi-cuenta', 'configuracion'],
-  COMPRAS: ['inicio', 'pedidos', 'tablero-asesores', 'maestros', 'ingresos-facturas', 'mi-cuenta'],
-  GERENCIA: ['inicio', 'tablero-asesores', 'maestros', 'ingresos-facturas', 'mi-cuenta'],
-  COORDINADOR_REPUESTOS: ['tablero-asesores', 'ingresos-facturas', 'mi-cuenta'],
+    'ingresos-facturas', 'traslados', 'conteos', 'encuesta-satisfaccion', 'detractores', 'mi-cuenta', 'configuracion'],
+  COMPRAS: ['inicio', 'pedidos', 'tablero-asesores', 'maestros', 'ingresos-facturas', 'traslados', 'mi-cuenta'],
+  GERENCIA: ['inicio', 'tablero-asesores', 'maestros', 'ingresos-facturas', 'traslados', 'mi-cuenta'],
+  COORDINADOR_REPUESTOS: ['tablero-asesores', 'ingresos-facturas', 'traslados', 'mi-cuenta'],
   LIDER_INVENTARIOS: ['mi-cuenta'],
   SUCURSAL: ['mi-cuenta'],
   CONSULTA: ['mi-cuenta'],
@@ -46,7 +46,7 @@ const TOP_LEVEL = {
 
 const GROUPS = [
   ['Pedidos', ['Registro de pedidos', 'Maestros', 'Ventas perdidas'], ['/motored/pedidos', '/motored/maestros', '/motored/ventas-perdidas']],
-  ['Gestión repuestos', ['Ingresos facturas'], ['/motored/gestion-repuestos/ingresos-facturas']],
+  ['Gestión repuestos', ['Ingresos facturas', 'Traslados'], ['/motored/gestion-repuestos/ingresos-facturas', '/motored/gestion-repuestos/traslados']],
   ['Inventarios', ['Conteos'], ['/motored/inventarios/conteos']],
   ['Encuestas satisfacción', ['Cargue de encuestas', 'Gestión de detractores'], ['/motored/encuesta-satisfaccion', '/motored/detractores']],
   ['Configuración', ['Configuración parámetros', 'Gestión de usuarios', 'Registro de ingresos'], ['/motored/configuracion', '/motored/usuarios', '/motored/ingresos']],
@@ -72,7 +72,7 @@ describe('MotoredSidebar groups - order and labels', () => {
     expect(navLabels()).toEqual([
       'Inicio', "KPI's",
       'Pedidos', 'Registro de pedidos', 'Maestros', 'Ventas perdidas',
-      'Gestión repuestos', 'Ingresos facturas',
+      'Gestión repuestos', 'Ingresos facturas', 'Traslados',
       'Inventarios', 'Conteos',
       'Encuestas satisfacción', 'Cargue de encuestas', 'Gestión de detractores',
       'Configuración', 'Configuración parámetros', 'Gestión de usuarios', 'Registro de ingresos',
