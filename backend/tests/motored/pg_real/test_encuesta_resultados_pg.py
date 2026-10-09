@@ -3,17 +3,22 @@ Motored satisfaction survey: result queries against a real Postgres (opt-in,
 `MOTORED_TEST_PG_URL`, database migrated to head). The fake session cannot
 check the outer join or the Bogota-day boundaries of the date range.
 """
+import io
 import os
 import uuid
 from datetime import date, datetime
 
+import openpyxl
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
+from app.motored.models.caso_detractor import CasoDetractor
+from app.motored.models.caso_detractor_accion import CasoDetractorAccion
 from app.motored.models.encuesta_carga import EncuestaCarga
 from app.motored.models.encuesta_registro import EncuestaRegistro
 from app.motored.models.encuesta_respuesta import EncuestaRespuesta
 from app.motored.models.usuario import MotoredRole, Usuario
+from app.motored.services import encuesta_excel
 from app.motored.services import encuesta_resultados as servicio
 
 URL = os.environ.get("MOTORED_TEST_PG_URL")
@@ -91,3 +96,49 @@ async def test_range_by_response_date_only_returns_answered(sesion):
     )
     filas = await servicio.filas_de_rango(sesion, date(2032, 2, 1), date(2032, 2, 29), "respuesta")
     assert {r.nombre for r in filas} == {"Resp"}
+
+
+async def test_excel_links_survey_detractor_case_and_actions(sesion):
+    carga = await _carga(
+        sesion, datetime(2033, 4, 10, 12), ["Ana", "Beto", "Sin"],
+        {"Ana": (5, datetime(2033, 4, 11, 12)), "Beto": (2, datetime(2033, 4, 12, 15, 0))},
+    )
+    filas = await servicio.filas_de_carga(sesion, carga.id)
+    beto = next(r for r in filas if r.nombre == "Beto")
+    gestor = Usuario(
+        id=uuid.uuid4(), nombre="Gestora Pg", role=MotoredRole.ADMIN, activo=True,
+        email=f"g{uuid.uuid4().int % 10**8}@test.co", hashed_password="x",
+    )
+    sesion.add(gestor)
+    await sesion.flush()
+    caso = CasoDetractor(id=uuid.uuid4(), respuesta_id=beto.respuesta_id, asignado_a=gestor.id,
+                         estado="EN_GESTION", created_at=datetime(2033, 4, 12, 15, 0))
+    sesion.add(caso)
+    await sesion.flush()
+    sesion.add(CasoDetractorAccion(caso_id=caso.id, usuario_id=None, tipo="APERTURA",
+                                   descripcion="Caso abierto", created_at=datetime(2033, 4, 12, 15, 0)))
+    sesion.add(CasoDetractorAccion(caso_id=caso.id, usuario_id=gestor.id, tipo="LLAMADA",
+                                   descripcion="Cliente contesta", created_at=datetime(2033, 4, 13, 14, 0)))
+    await sesion.commit()
+
+    casos, acciones = await servicio.casos_y_acciones(sesion, filas)
+    assert [c.respuesta_id for c in casos] == [beto.respuesta_id]
+    assert [a.tipo for a in acciones] == ["APERTURA", "LLAMADA"]
+
+    libro = openpyxl.load_workbook(io.BytesIO(encuesta_excel.construir_por_carga(filas, casos, acciones)))
+    assert libro.sheetnames == ["Encuestas"]
+    valores = [[c.value for c in r] for r in libro.active.iter_rows()]
+    cab = valores[0]
+    por_cliente = {r[cab.index("Cliente")]: dict(zip(cab, r)) for r in valores[1:]}
+    fila = por_cliente["Beto"]
+    assert fila["ID encuesta"] == str(beto.registro_id)
+    assert fila["ID caso"] == str(caso.id) and fila["N.º caso"] == casos[0].numero
+    assert fila["Responsable"] == "Gestora Pg" and fila["Estado del caso"] == "EN_GESTION"
+    assert fila["P1. Satisfacción general (1-5)"] == 2 and fila["Categoría"] == "Detractor"
+    assert fila["N.º acciones"] == 2
+    assert fila["Última acción (usuario)"] == "Gestora Pg"
+    assert fila["Historial de gestión"].split("\n") == [
+        "12/04/2033 10:00 · Sistema · APERTURA: Caso abierto",
+        "13/04/2033 09:00 · Gestora Pg · LLAMADA: Cliente contesta",
+    ]
+    assert por_cliente["Ana"]["ID caso"] is None and por_cliente["Sin"]["Estado"] == "Sin responder"

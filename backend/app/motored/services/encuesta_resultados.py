@@ -15,8 +15,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.motored.models.encuesta_carga import EncuestaCarga
+from app.motored.models.caso_detractor import CasoDetractor
+from app.motored.models.caso_detractor_accion import CasoDetractorAccion
 from app.motored.models.encuesta_registro import EncuestaRegistro
 from app.motored.models.encuesta_respuesta import EncuestaRespuesta
+from app.motored.models.usuario import Usuario
 from app.motored.services.encuesta_publica import DETRACTOR_MAX_SCORE
 from app.motored.services.fechas_utc import a_utc_iso
 from app.motored.services.reloj import BOGOTA_OFFSET
@@ -70,12 +73,24 @@ def _seleccion():
         select(
             EncuestaCarga.nombre_archivo,
             EncuestaCarga.created_at.label("carga_created_at"),
+            EncuestaRegistro.id.label("registro_id"),
+            EncuestaRespuesta.id.label("respuesta_id"),
             EncuestaRegistro.nombre,
             EncuestaRegistro.cedula,
             EncuestaRegistro.celular,
             EncuestaRegistro.centro_servicio,
+            EncuestaRegistro.placa,
+            EncuestaRegistro.linea,
+            EncuestaRegistro.sic,
             EncuestaRespuesta.satisfaccion_general,
+            EncuestaRespuesta.p_explicacion_tecnica,
+            EncuestaRespuesta.p_confianza_reparacion,
+            EncuestaRespuesta.p_servicio_taller,
+            EncuestaRespuesta.p_calidad_mecanicos,
+            EncuestaRespuesta.p_claridad_cobros,
+            EncuestaRespuesta.p_originalidad_repuestos,
             EncuestaRespuesta.observaciones,
+            EncuestaRespuesta.autoriza_datos,
             EncuestaRespuesta.created_at.label("respuesta_created_at"),
         )
         .select_from(EncuestaCarga)
@@ -98,3 +113,45 @@ async def filas_de_rango(db: AsyncSession, desde: date, hasta: date, por: str) -
         .order_by(EncuestaCarga.created_at, EncuestaRegistro.nombre)
     )
     return list((await db.execute(stmt)).all())
+
+
+async def casos_y_acciones(db: AsyncSession, rows: List[Any]) -> Tuple[List[Any], List[Any]]:
+    """Detractor cases (with the assignee's name) and their action log for the
+    answered surveys in `rows`, actions oldest first."""
+    respuestas = [r.respuesta_id for r in rows if r.respuesta_id is not None]
+    if not respuestas:
+        return [], []
+    stmt = (
+        select(
+            CasoDetractor.id.label("caso_id"),
+            CasoDetractor.numero,
+            CasoDetractor.respuesta_id,
+            CasoDetractor.estado,
+            CasoDetractor.resultado,
+            Usuario.nombre.label("asignado_nombre"),
+            CasoDetractor.created_at,
+            CasoDetractor.updated_at,
+            CasoDetractor.cerrado_at,
+        )
+        .outerjoin(Usuario, Usuario.id == CasoDetractor.asignado_a)
+        .where(CasoDetractor.respuesta_id.in_(respuestas))
+    )
+    casos = list((await db.execute(stmt)).all())
+    if not casos:
+        return [], []
+    stmt = (
+        select(
+            CasoDetractorAccion.id.label("accion_id"),
+            CasoDetractorAccion.caso_id,
+            Usuario.nombre.label("usuario_nombre"),
+            CasoDetractorAccion.tipo,
+            CasoDetractorAccion.descripcion,
+            CasoDetractorAccion.estado_anterior,
+            CasoDetractorAccion.estado_nuevo,
+            CasoDetractorAccion.created_at,
+        )
+        .outerjoin(Usuario, Usuario.id == CasoDetractorAccion.usuario_id)
+        .where(CasoDetractorAccion.caso_id.in_([c.caso_id for c in casos]))
+        .order_by(CasoDetractorAccion.created_at, CasoDetractorAccion.id)
+    )
+    return casos, list((await db.execute(stmt)).all())

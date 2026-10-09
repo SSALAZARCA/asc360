@@ -201,7 +201,10 @@ async def excel_por_rango(
     if (hasta - desde).days + 1 > MAX_RANGO_DIAS:
         raise HTTPException(status_code=422, detail=f"El rango no puede superar {MAX_RANGO_DIAS} días")
     rows = await encuesta_resultados.filas_de_rango(db, desde, hasta, por)
-    content = encuesta_excel.construir_por_rango(rows, desde, hasta, por, datetime.now(timezone.utc))
+    casos, acciones = await encuesta_resultados.casos_y_acciones(db, rows)
+    content = encuesta_excel.construir_por_rango(
+        rows, casos, acciones, desde, hasta, por, datetime.now(timezone.utc)
+    )
     return _xlsx(content, encuesta_excel.nombre_por_rango(desde, hasta, por))
 
 
@@ -227,4 +230,5 @@ async def excel_de_carga(
     rows = await encuesta_resultados.filas_de_carga(db, carga_id)
     if not rows:
         raise HTTPException(status_code=404, detail="Carga no encontrada")
-    return _xlsx(encuesta_excel.construir_por_carga(rows), encuesta_excel.nombre_por_carga(rows))
+    casos, acciones = await encuesta_resultados.casos_y_acciones(db, rows)
+    return _xlsx(encuesta_excel.construir_por_carga(rows, casos, acciones), encuesta_excel.nombre_por_carga(rows))
