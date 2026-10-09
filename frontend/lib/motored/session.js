@@ -27,6 +27,27 @@ export function isCoordinadorRepuestosPath(pathname) {
   return COORDINADOR_REPUESTOS_PATHS.some((p) => pathname === p || pathname?.startsWith(`${p}/`));
 }
 
+/** Inventory-count leader: the "Conteos de inventario" module only. */
+export const LIDER_INVENTARIOS = 'LIDER_INVENTARIOS';
+
+/** "Inventarios" section: its pages and the roles that may open Conteos. */
+export const INVENTARIOS_PATH = '/motored/inventarios';
+export const CONTEOS_PATH = '/motored/inventarios/conteos';
+export const CONTEOS_ROLES = ['ADMIN', LIDER_INVENTARIOS, ROLE_GERENCIA];
+
+// Owner rule: while stage 1 is being built, the sidebar group "Inventarios"
+// shows to ADMIN only, so nothing half-built is exposed. It widens to
+// CONTEOS_ROLES (ADMIN, LIDER_INVENTARIOS and GERENCIA) when WU12 lands.
+export const CONTEOS_ROLES_VISIBLES = ['ADMIN'];
+
+// Pages a LIDER_INVENTARIOS may open (UX only; the backend allow-list
+// `deps.LIDER_INVENTARIOS_ALLOWED_PREFIXES` is the real enforcement).
+const LIDER_INVENTARIOS_PATHS = [INVENTARIOS_PATH, MI_CUENTA_PATH];
+
+export function isLiderInventariosPath(pathname) {
+  return LIDER_INVENTARIOS_PATHS.some((p) => pathname === p || pathname?.startsWith(`${p}/`));
+}
+
 /** Welcome page: the home of every role with screens. */
 export const INICIO_PATH = '/motored/inicio';
 
@@ -44,11 +65,13 @@ export function rolSinAcceso(role) {
 
 /** Home page of a role (where it lands after login, after the forced change
  * and when a page gate turns it away): the account page for a role without
- * screens, KPI's for COORDINADOR_REPUESTOS, Inicio for everyone else (ADMIN,
+ * screens, KPI's for COORDINADOR_REPUESTOS, Conteos for LIDER_INVENTARIOS,
+ * Inicio for everyone else (ADMIN,
  * COMPRAS, GERENCIA and SERVICIO_CLIENTE; a missing or unknown role is then
  * sent to login by the layout). */
 export function homePathFor(role) {
   if (rolSinAcceso(role)) return MI_CUENTA_PATH;
+  if (role === LIDER_INVENTARIOS) return CONTEOS_PATH;
   return role === COORDINADOR_REPUESTOS ? KPIS_PATH : INICIO_PATH;
 }
 

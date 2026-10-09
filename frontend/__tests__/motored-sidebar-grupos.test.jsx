@@ -1,6 +1,6 @@
 /**
  * Motored sidebar grouping: Inicio, KPI's, then the Pedidos, Gestión repuestos,
- * Encuestas satisfacción and Configuración groups, then "Cambiar mi contraseña". Grouping must not
+ * Inventarios (ADMIN only while stage 1 is being built), Encuestas satisfacción and Configuración groups, then "Cambiar mi contraseña". Grouping must not
  * change which pages each role reaches.
  */
 import React from 'react';
@@ -21,10 +21,11 @@ const ADMIN = { nombre: 'U', role: 'ADMIN' };
 // ASESOR_MOSTRADOR has no web access (owner decision 2026-10-05).
 const PAGES_BEFORE = {
   ADMIN: ['inicio', 'pedidos', 'tablero-asesores', 'maestros', 'usuarios-gestion', 'ingresos', 'ventas-perdidas',
-    'ingresos-facturas', 'encuesta-satisfaccion', 'detractores', 'mi-cuenta', 'configuracion'],
+    'ingresos-facturas', 'conteos', 'encuesta-satisfaccion', 'detractores', 'mi-cuenta', 'configuracion'],
   COMPRAS: ['inicio', 'pedidos', 'tablero-asesores', 'maestros', 'ingresos-facturas', 'mi-cuenta'],
   GERENCIA: ['inicio', 'tablero-asesores', 'maestros', 'ingresos-facturas', 'mi-cuenta'],
   COORDINADOR_REPUESTOS: ['tablero-asesores', 'ingresos-facturas', 'mi-cuenta'],
+  LIDER_INVENTARIOS: ['mi-cuenta'],
   SUCURSAL: ['mi-cuenta'],
   CONSULTA: ['mi-cuenta'],
   SERVICIO_CLIENTE: ['inicio', 'encuesta-satisfaccion', 'detractores', 'mi-cuenta'],
@@ -32,10 +33,11 @@ const PAGES_BEFORE = {
 };
 
 const TOP_LEVEL = {
-  ADMIN: ['Inicio', "KPI's", 'Pedidos', 'Gestión repuestos', 'Encuestas satisfacción', 'Configuración', 'Cambiar mi contraseña'],
+  ADMIN: ['Inicio', "KPI's", 'Pedidos', 'Gestión repuestos', 'Inventarios', 'Encuestas satisfacción', 'Configuración', 'Cambiar mi contraseña'],
   COMPRAS: ['Inicio', "KPI's", 'Pedidos', 'Gestión repuestos', 'Cambiar mi contraseña'],
   GERENCIA: ['Inicio', "KPI's", 'Pedidos', 'Gestión repuestos', 'Cambiar mi contraseña'],
   COORDINADOR_REPUESTOS: ["KPI's", 'Gestión repuestos', 'Cambiar mi contraseña'],
+  LIDER_INVENTARIOS: ['Cambiar mi contraseña'],
   SUCURSAL: ['Cambiar mi contraseña'],
   CONSULTA: ['Cambiar mi contraseña'],
   SERVICIO_CLIENTE: ['Inicio', 'Encuestas satisfacción', 'Cambiar mi contraseña'],
@@ -45,6 +47,7 @@ const TOP_LEVEL = {
 const GROUPS = [
   ['Pedidos', ['Registro de pedidos', 'Maestros', 'Ventas perdidas'], ['/motored/pedidos', '/motored/maestros', '/motored/ventas-perdidas']],
   ['Gestión repuestos', ['Ingresos facturas'], ['/motored/gestion-repuestos/ingresos-facturas']],
+  ['Inventarios', ['Conteos'], ['/motored/inventarios/conteos']],
   ['Encuestas satisfacción', ['Cargue de encuestas', 'Gestión de detractores'], ['/motored/encuesta-satisfaccion', '/motored/detractores']],
   ['Configuración', ['Configuración parámetros', 'Gestión de usuarios', 'Registro de ingresos'], ['/motored/configuracion', '/motored/usuarios', '/motored/ingresos']],
 ];
@@ -70,6 +73,7 @@ describe('MotoredSidebar groups - order and labels', () => {
       'Inicio', "KPI's",
       'Pedidos', 'Registro de pedidos', 'Maestros', 'Ventas perdidas',
       'Gestión repuestos', 'Ingresos facturas',
+      'Inventarios', 'Conteos',
       'Encuestas satisfacción', 'Cargue de encuestas', 'Gestión de detractores',
       'Configuración', 'Configuración parámetros', 'Gestión de usuarios', 'Registro de ingresos',
       'Cambiar mi contraseña',

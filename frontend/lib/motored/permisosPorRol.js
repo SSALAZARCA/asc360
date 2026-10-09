@@ -26,6 +26,7 @@ export const ROLES = [
   { id: 'CONSULTA', ayuda: 'Sin pantallas habilitadas por ahora: solo cambia su contraseña.' },
   { id: 'SERVICIO_CLIENTE', ayuda: 'Atiende la encuesta de satisfacción y los detractores.' },
   { id: 'COORDINADOR_REPUESTOS', ayuda: "Ve los KPI's y confirma los ingresos de facturas de pedidos." },
+  { id: 'LIDER_INVENTARIOS', ayuda: 'Dirige los conteos de inventario que le asignan.' },
 ];
 
 // Backend-only rule: `_require_telegram_propio` in api/usuarios.py.
@@ -44,6 +45,7 @@ export const PANTALLAS = [
   { id: 'presupuestos', nombre: 'Maestros: Presupuestos', nota: 'Presupuesto mensual por asesor.', visible: (rol) => enMaestros({ roles: PRESUPUESTOS_ROLES }, rol) },
   { id: 'tablero-asesores', nombre: "KPI's", sidebarId: 'tablero-asesores', nota: '', visible: (rol) => TABLERO_ROLES.includes(rol) },
   { id: 'ingresos-facturas', nombre: 'Gestión repuestos: Ingresos facturas', sidebarId: 'ingresos-facturas', nota: 'ADMIN, COMPRAS y GERENCIA solo consultan; confirma el coordinador de repuestos.', visible: (rol) => GESTION_REPUESTOS_ROLES.includes(rol) },
+  { id: 'conteos', nombre: 'Inventarios: Conteos', sidebarId: 'conteos', nota: 'En construcción: por ahora solo ADMIN la ve en el menú.', visible: (rol) => enSidebar('conteos', rol) },
   { id: 'pedidos', nombre: 'Pedidos y corridas', sidebarId: 'pedidos', nota: '', visible: (rol) => PEDIDOS_ROLES.includes(rol) },
   { id: 'topes', nombre: 'Topes de pedido', nota: 'Dentro de Pedidos.', visible: (rol) => PEDIDOS_ROLES.includes(rol) },
   { id: 'ventas-perdidas', nombre: 'Ventas perdidas', sidebarId: 'ventas-perdidas', nota: '', visible: (rol) => enSidebar('ventas-perdidas', rol) },

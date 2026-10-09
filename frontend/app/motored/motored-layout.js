@@ -10,9 +10,8 @@
  * it reads `motored_user`, never `um_user`, and redirects to
  * `/motored/login`, never `/login`.
  *
- * "Wrong role" here means a role string outside the 6 valid Motored roles
- * (ADMIN|COMPRAS|SUCURSAL|CONSULTA|SERVICIO_CLIENTE|GERENCIA) -- e.g. a corrupted/forged session
- * value. All 6 real roles get past this gate (SERVICIO_CLIENTE is then kept
+ * "Wrong role" here means a role string outside `VALID_ROLES` -- e.g. a
+ * corrupted/forged session value. Every real web role gets past this gate (SERVICIO_CLIENTE is then kept
  * inside its survey pages and Inicio by the allow-list redirect); per-screen role restriction
  * (like `/motored/usuarios` being ADMIN-only) is enforced by the page
  * itself, same division of responsibility as asc360's `admin-layout.js`
@@ -26,13 +25,14 @@ import MotoredTopBar from '../../components/motored/MotoredTopBar';
 import useDrawerMenu from '../../components/motored/useDrawerMenu';
 import { MOTORED_USER_KEY, MOTORED_TOKEN_KEY } from '../../lib/motored/motoredFetch';
 import {
-  COORDINADOR_REPUESTOS, INICIO_PATH, MI_CUENTA_PATH, ROLE_GERENCIA, homePathFor,
-  isCoordinadorRepuestosPath, rolSinAcceso,
+  COORDINADOR_REPUESTOS, INICIO_PATH, LIDER_INVENTARIOS, MI_CUENTA_PATH, ROLE_GERENCIA, homePathFor,
+  isCoordinadorRepuestosPath, isLiderInventariosPath, rolSinAcceso,
 } from '../../lib/motored/session';
 import { ROLE_SERVICIO_CLIENTE, isServicioClientePath } from '../../lib/motored/servicioCliente';
 
 export const VALID_ROLES = [
   'ADMIN', 'COMPRAS', 'SUCURSAL', 'CONSULTA', ROLE_SERVICIO_CLIENTE, ROLE_GERENCIA, COORDINADOR_REPUESTOS,
+  LIDER_INVENTARIOS,
 ];
 
 /** The stored session user, or null when it is missing, unreadable or has
@@ -57,6 +57,8 @@ function redireccionPara(u, pathname) {
   if (u.role === COORDINADOR_REPUESTOS && !isCoordinadorRepuestosPath(pathname)) {
     return homePathFor(u.role);
   }
+  // LIDER_INVENTARIOS only works inside "Inventarios" and its account page.
+  if (u.role === LIDER_INVENTARIOS && !isLiderInventariosPath(pathname)) return homePathFor(u.role);
   // Pending password change, or a role with no screens yet (SUCURSAL/
   // CONSULTA, owner decision 2026-10-05): the account page is the only place.
   if ((u.must_change_password || rolSinAcceso(u.role)) && pathname !== MI_CUENTA_PATH) {
