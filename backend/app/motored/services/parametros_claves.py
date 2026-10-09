@@ -51,8 +51,15 @@ BODEGAS_EXCLUIDAS_DEFAULT = ("99999", "PYM01", "PAF01")
 # Pestañas de la pantalla de Configuración, en orden.
 SECCIONES = (
     "pedido", "avisos", "cargas", "limpieza", "indicadores", "comisiones",
-    "topes",
+    "conteos", "topes",
 )
+
+# Conteos de inventario (odd/motored-conteos-inventario, WU4): montos en
+# pesos que piden reconteo o marcan una diferencia crítica, y la edad
+# máxima del inventario de Maestros al iniciar un conteo.
+CLAVE_CONTEO_UMBRAL_RECONTEO = "conteo_umbral_reconteo_pesos"
+CLAVE_CONTEO_UMBRAL_CRITICO = "conteo_umbral_critico_pesos"
+CLAVE_CONTEO_VIGENCIA_HORAS = "conteo_inventario_vigencia_horas"
 _SECCION_POR_GRUPO = {
     GRUPO_MOTOR: "pedido", GRUPO_INGESTA: "cargas", GRUPO_PEDIDO: "topes",
 }
@@ -544,8 +551,9 @@ def _claves_indicadores() -> list:
 
 
 def _claves_comisiones() -> list:
-    """T7: reglas de comisión; la pestaña Comisiones de KPI's las lee (tramos,
-    bases, cargos y bonos por línea) para liquidar cada mes con las vigentes."""
+    """T7: reglas de comisión; la pestaña Comisiones de KPI's las lee
+    (tramos, bases, cargos y bonos por línea) para liquidar cada mes con
+    las vigentes."""
     return [
         tramos_ordenados(
             "comision_tramos",
@@ -627,6 +635,47 @@ def _claves_limpieza() -> list:
     ]
 
 
+_MAXIMO_PESOS_CONTEO = 10_000_000_000
+_MAXIMO_HORAS_VIGENCIA = 720
+
+
+def _claves_conteos() -> list:
+    """WU4: los montos se congelan en cada conteo al iniciarlo (ADR-9);
+    que el de reconteo sea menor que el crítico lo revisa
+    `validar_relaciones`, porque un validador ve una sola clave."""
+    def pesos(clave, default):
+        return _entera(
+            clave, default, 1, _MAXIMO_PESOS_CONTEO, GRUPO_OPERACION,
+            seccion="conteos", explicacion="pesos, sin decimales")
+
+    return [
+        pesos(CLAVE_CONTEO_UMBRAL_RECONTEO, 100000),
+        pesos(CLAVE_CONTEO_UMBRAL_CRITICO, 500000),
+        _entera(
+            CLAVE_CONTEO_VIGENCIA_HORAS, 6, 1, _MAXIMO_HORAS_VIGENCIA,
+            GRUPO_OPERACION, seccion="conteos", explicacion="horas"),
+    ]
+
+
+def _claves_antiguedad_y_tope() -> list:
+    """Antigüedad máxima por tipo de dato (motor) y el tope de
+    presupuesto (F4, B5a), fuera del motor."""
+    return [
+        _entera(clave, 7, 1, _DIAS_ANTIGUEDAD_MAX)
+        for clave in CLAVES_ANTIGUEDAD.values()
+    ] + [
+        _booleana(CLAVE_MODO_TOPE, False, GRUPO_PEDIDO),
+        _tope_por_tienda(CLAVE_TOPE_PEDIDO),
+    ]
+
+
+def _claves_operacion() -> list:
+    """Las pestañas de Configuración que no son del motor."""
+    return (
+        _claves_indicadores() + _claves_comisiones() + _claves_avisos()
+        + _claves_limpieza() + _claves_conteos())
+
+
 def _construir_registro() -> Mapping[str, EspecClave]:
     especs = [
         # Claves de la ingesta F2 (ya en uso en producción).
@@ -668,17 +717,7 @@ def _construir_registro() -> Mapping[str, EspecClave]:
         _decimal("tolerancia_sobrestock", "0.25"),
         _entera("meses_inventario_muerto", 6, 1, 6),
     ]
-    especs += [
-        _entera(clave, 7, 1, _DIAS_ANTIGUEDAD_MAX)
-        for clave in CLAVES_ANTIGUEDAD.values()
-    ]
-    # F4 (B5a): tope de presupuesto, fuera del motor.
-    especs += [
-        _booleana(CLAVE_MODO_TOPE, False, GRUPO_PEDIDO),
-        _tope_por_tienda(CLAVE_TOPE_PEDIDO),
-    ]
-    especs += _claves_indicadores() + _claves_comisiones()
-    especs += _claves_avisos() + _claves_limpieza()
+    especs += _claves_antiguedad_y_tope() + _claves_operacion()
     return {e.clave: e for e in especs}
 
 
@@ -753,6 +792,47 @@ def validar_escritura(clave: str, valor: Any, sucursal_id: Any = None) -> None:
     espec = _espec_o_error(clave)
     _validar_ambito(espec, sucursal_id)
     validar_espec(espec, valor)
+
+
+def validar_umbrales_conteo(reconteo: Any, critico: Any) -> None:
+    """E-PARAM-002 si el monto de reconteo no es menor que el crítico."""
+    menor, mayor = _numero(reconteo), _numero(critico)
+    if menor is not None and mayor is not None and menor < mayor:
+        return
+    raise ErrorParametro(
+        codigos.E_PARAM_VALOR_INVALIDO,
+        "El monto que pide reconteo ($ "
+        f"{reconteo}) debe ser menor que el monto de diferencia crítica "
+        f"($ {critico}).")
+
+
+# Pares (menor, mayor) de claves que deben guardar ese orden entre sí.
+RELACIONES_MENOR = (
+    (CLAVE_CONTEO_UMBRAL_RECONTEO, CLAVE_CONTEO_UMBRAL_CRITICO),
+)
+
+
+def claves_relacionadas(clave: str) -> Tuple[str, ...]:
+    """Las otras claves con las que `clave` debe guardar un orden."""
+    return tuple(
+        mayor if clave == menor else menor
+        for menor, mayor in RELACIONES_MENOR if clave in (menor, mayor))
+
+
+def validar_relaciones(
+        clave: str, valor: Any, vigentes: Mapping[str, Any]) -> None:
+    """Revisa `valor` de `clave` contra la otra clave de cada par de
+    `RELACIONES_MENOR`. `vigentes` trae el valor efectivo de las otras
+    claves; la que falta toma su default del registro."""
+    for menor, mayor in RELACIONES_MENOR:
+        if clave not in (menor, mayor):
+            continue
+        otra = mayor if clave == menor else menor
+        actual = vigentes.get(otra, REGISTRO[otra].default)
+        if clave == menor:
+            validar_umbrales_conteo(valor, actual)
+        else:
+            validar_umbrales_conteo(actual, valor)
 
 
 def es_snapshotted(clave: str) -> bool:

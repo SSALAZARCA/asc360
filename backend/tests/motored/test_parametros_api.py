@@ -245,3 +245,66 @@ def test_only_admin_writes_the_budget_keys_with_the_generic_endpoint(rol):
 
     assert respuesta.status_code == 403
     assert db.added == [] and db.committed is False
+
+
+# --- WU4 conteos: reconteo amount < critical amount -------------------------
+
+RECONTEO = "conteo_umbral_reconteo_pesos"
+CRITICO = "conteo_umbral_critico_pesos"
+
+
+def _vigentes(monkeypatch, valores):
+    llamadas = []
+
+    async def falso(_db, fecha, respaldos):
+        llamadas.append((fecha, dict(respaldos)))
+        return {c: valores.get(c, d) for c, d in respaldos.items()}
+
+    monkeypatch.setattr(parametros_api, "leer_valores", falso)
+    return llamadas
+
+
+def test_a_reconteo_amount_not_below_critical_is_a_spanish_422(monkeypatch):
+    llamadas = _vigentes(monkeypatch, {CRITICO: 500000})
+    client, db = _cliente()
+
+    respuesta = client.post(URL, json=_cuerpo(RECONTEO, 500000))
+
+    assert respuesta.status_code == 422
+    detalle = respuesta.json()["detail"]
+    assert detalle["code"] == "E-PARAM-002"
+    assert "debe ser menor que el monto de diferencia" in detalle["message"]
+    assert llamadas == [(datetime.date(2026, 10, 1), {CRITICO: 500000})]
+    assert db.added == [] and db.committed is False
+
+
+def test_a_critical_amount_not_above_reconteo_is_a_422(monkeypatch):
+    _vigentes(monkeypatch, {RECONTEO: 300000})
+    client, db = _cliente()
+
+    respuesta = client.post(URL, json=_cuerpo(CRITICO, 200000))
+
+    assert respuesta.status_code == 422
+    assert respuesta.json()["detail"]["code"] == "E-PARAM-002"
+    assert db.added == []
+
+
+def test_a_reconteo_amount_below_critical_is_created(monkeypatch):
+    _vigentes(monkeypatch, {CRITICO: 500000})
+    client, db = _cliente()
+
+    respuesta = client.post(URL, json=_cuerpo(RECONTEO, 150000))
+
+    assert respuesta.status_code == 201, respuesta.text
+    assert db.added[0].valor == 150000 and db.committed is True
+
+
+def test_keys_without_a_relation_do_not_read_other_values(monkeypatch):
+    llamadas = _vigentes(monkeypatch, {})
+    client, _db = _cliente()
+
+    respuesta = client.post(
+        URL, json=_cuerpo("conteo_inventario_vigencia_horas", 12))
+
+    assert respuesta.status_code == 201, respuesta.text
+    assert llamadas == []

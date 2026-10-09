@@ -1,5 +1,5 @@
 /**
- * /motored/configuracion: ADMIN-only page with the seven section tabs.
+ * /motored/configuracion: ADMIN-only page with the eight section tabs.
  * Every section but Topes renders its own notice (Topes links to its own screen).
  */
 import React from 'react';
@@ -20,10 +20,10 @@ jest.mock('../components/motored/MotoredSidebar', () => {
 import useConfiguracionGate, { CONFIGURACION_ROLES } from '../components/motored/configuracion/useConfiguracionGate';
 import ConfiguracionPage from '../app/motored/configuracion/page';
 
-const SECCIONES = ['pedido', 'avisos', 'cargas', 'limpieza', 'indicadores', 'comisiones', 'topes']
+const SECCIONES = ['pedido', 'avisos', 'cargas', 'limpieza', 'indicadores', 'comisiones', 'conteos', 'topes']
   .map((seccion) => ({ seccion, grupos: [] }));
 const CONFIG = { secciones: SECCIONES };
-const ETIQUETAS = ['Pedido', 'Avisos', 'Cargas', 'Limpieza', 'Indicadores', 'Comisiones', 'Topes'];
+const ETIQUETAS = ['Pedido', 'Avisos', 'Cargas', 'Limpieza', 'Indicadores', 'Comisiones', 'Conteos de inventario', 'Topes'];
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -65,7 +65,7 @@ describe('ConfiguracionPage', () => {
     expect(screen.queryByRole('heading', { name: 'Configuración' })).not.toBeInTheDocument();
   });
 
-  it('shows the seven tabs in order with Pedido selected', async () => {
+  it('shows the eight tabs in order with Pedido selected', async () => {
     setSession('ADMIN');
     installFetch({ 'GET /parametros/configuracion': jsonRes(CONFIG) });
     render(<ConfiguracionPage />);

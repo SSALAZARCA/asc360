@@ -38,6 +38,7 @@ from app.motored.services import parametros_claves, parametros_topes
 from app.motored.services.corridas import codigos
 from app.motored.services.parametros import (
     leer_configuracion,
+    leer_valores,
     listar_historial,
     obtener_vigente,
     registrar_cambio,
@@ -64,6 +65,23 @@ def _rechazo_422(codigo: str, mensaje: str) -> HTTPException:
     )
 
 
+async def _validar_relaciones(
+        db: AsyncSession, payload, vigente_desde: date) -> None:
+    """422 E-PARAM-002 si el valor rompe el orden con otra clave (el monto
+    de reconteo debe ser menor que el crítico), contra el valor de la otra
+    clave que rige en `vigente_desde`."""
+    otras = parametros_claves.claves_relacionadas(payload.clave)
+    if not otras:
+        return
+    vigentes = await leer_valores(db, vigente_desde, {
+        c: parametros_claves.REGISTRO[c].default for c in otras})
+    try:
+        parametros_claves.validar_relaciones(
+            payload.clave, payload.valor, vigentes)
+    except parametros_claves.ErrorParametro as error:
+        raise _rechazo_422(error.codigo, error.mensaje) from error
+
+
 async def _validar_escritura(db: AsyncSession, payload) -> date:
     """422 codificado si la clave, el valor, la vigencia o la sucursal no
     son válidos. Devuelve el día 1 del mes desde el que rige la versión."""
@@ -74,6 +92,7 @@ async def _validar_escritura(db: AsyncSession, payload) -> date:
             payload.clave, payload.vigente_desde, hoy_bogota())
     except parametros_claves.ErrorParametro as error:
         raise _rechazo_422(error.codigo, error.mensaje) from error
+    await _validar_relaciones(db, payload, vigente_desde)
     if payload.sucursal_id is None:
         return vigente_desde
     if await db.get(Sucursal, payload.sucursal_id) is None:

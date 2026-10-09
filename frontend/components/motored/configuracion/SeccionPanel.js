@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import SeccionAvisos from './SeccionAvisos';
 import SeccionCargas from './SeccionCargas';
 import SeccionComisiones from './SeccionComisiones';
+import SeccionConteos from './SeccionConteos';
 import SeccionIndicadores from './SeccionIndicadores';
 import SeccionLimpieza from './SeccionLimpieza';
 import SeccionPedido from './SeccionPedido';
@@ -32,6 +33,7 @@ const PANELES = {
   limpieza: SeccionLimpieza,
   indicadores: SeccionIndicadores,
   comisiones: SeccionComisiones,
+  conteos: SeccionConteos,
 };
 
 export default function SeccionPanel({ seccion, data = null, recargar, onGuardar }) {
