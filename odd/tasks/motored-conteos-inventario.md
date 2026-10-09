@@ -54,4 +54,4 @@ A new menu module for running total store counts and scheduled selective (cyclic
   - **Counted by the store's asesores (Lore users)** in a Telegram Mini App opened from a Lore message button. Telegram identifies the asesor; a shared Telegram asks for the cédula. It can be resumed, and differences go to the leader panel.
   - **Counted at store opening, store OPEN,** against that morning's inventory. A selective difference is confirmed only if it repeats in a next-day reconteo.
 - RESOLVED 2026-10-08: a total-count reconteo MUST be done by a different pair; the first pair never sees it. With only one pair in the store, the leader can authorize that same pair.
-- The ERP adjustment file format.
+- RESOLVED 2026-10-08: no ERP import template yet. Closing generates a downloadable Excel (referencia, bodega, system qty, counted qty, difference, unit cost, difference value, locations). The owner will send the ERP format later if it must change.
