@@ -171,3 +171,4 @@ Run them in the foreground and read the result line before committing; never cha
   - It keeps KPI's and Gestión repuestos. Single role per user stays.
   - When the sidebar visibility widens, include COORDINADOR_REPUESTOS.
 - [x] 2026-10-09: the coordinador can lead counts (912f57d backend, a1406cb UI; backend 7280 passed, pg_real subset 55 passed, jest 2605 passed).
+- [x] 2026-10-09 owner: ADMIN users are assignable as count leaders (ROLES_ASIGNABLES_LIDER), while ADMIN stays unscoped.
