@@ -13,8 +13,35 @@ In Encuesta satisfacción → Cargue de encuestas, let the user see how each sur
 - The detractor follow-up keeps using the response date (unchanged).
 
 ## Tasks
-- [ ] **E1 Backend:** a per-carga detail endpoint, an Excel per carga, and an Excel by send-date range (openpyxl, following the existing Motored Excel export patterns; dates in Bogotá; cédula/phone as text). Tests.
-- [ ] **E2 Frontend:** the expandable detail, filters and both download buttons in `encuesta-admin` (`CargasRealizadas`). Jest.
+- [x] **E1 Backend:** a per-carga detail endpoint, an Excel per carga, and an Excel by send-date range (openpyxl, following the existing Motored Excel export patterns; dates in Bogotá; cédula/phone as text). Tests.
+- [x] **E2 Frontend:** the expandable detail, filters and both download buttons in `encuesta-admin` (`CargasRealizadas`). Jest.
+
+## Progress
+**Done (2026-10-08).** Commits: E1 16b57af, E2 8a98aff, pushed.
+
+**Endpoints**
+- `GET /encuesta/cargas/{id}/detalle?filtro=`
+- `GET /encuesta/cargas/{id}/excel`
+- `GET /encuesta/cargas/resultados/excel?desde&hasta&por=envio|respuesta`. The user changed the range so it can filter by either date; it defaults to envío.
+
+**Deviations, real data model**
+- The score is 1–5, not 0–10.
+- Categoría is the existing rule only: DETRACTOR (≤3) vs SATISFECHO. There is no promotor/pasivo split.
+- Estado is RESPONDIDA / SIN_RESPONDER. Send status isn't tracked.
+- The send date is the carga `created_at` in Bogotá.
+- A cédula column was added.
+
+**Checks**
+- unit 6671, green;
+- pg_real 12, green;
+- jest 2413, green;
+- webpack 200.
+
+**Native review:** approved together with d563464 (the semáforo age bands in the ingresos panel). Advisories:
+- `encuesta_excel.py:69-73`;
+- `DetalleCarga.js:74`;
+- `encuesta_resultados.py:89`;
+- the tooltip by the download button always says "fecha de envío".
 
 ## Next step
-E1 + E2 by one delegated writer.
+The user checks. Open product question: a promotor/pasivo/detractor split on the 1–5 scale.
