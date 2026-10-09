@@ -6,7 +6,7 @@ import DetalleComision from './DetalleComision';
 import DetalleComparacion from './DetalleComparacion';
 import DetalleMeta from './DetalleMeta';
 import DetalleTendencia from './DetalleTendencia';
-import PendientesIngreso from './PendientesIngreso';
+import PendientesAsesor from './PendientesAsesor';
 import { fichaDe, tilesDe } from './detalle';
 
 function Ficha({ data }) {
@@ -55,13 +55,13 @@ function Tiles({ data }) {
   );
 }
 
-/** "Un asesor" view of the Asesores tab (`enlace` = `{ token, cedula }` on the public link, which also answers the pending invoices): ficha, goal gauge and commission, six figures, trend, lines, peers, store, Tecnired and how the commission is calculated. */
+/** "Un asesor" view of the Asesores tab (`enlace` = `{ token, cedula }` on the public link, which also answers the pending invoices and transfers): ficha, goal gauge and commission, six figures, trend, lines, peers, store, Tecnired and how the commission is calculated. */
 export default function AsesorDetalle({ data, enlace }) {
   return (
     <section aria-label="Detalle del asesor" style={{ display: 'flex', flexDirection: 'column', gap: 18, minWidth: 0 }}>
       <Ficha data={data} />
       <DetalleMeta data={data} />
-      <PendientesIngreso data={data} enlace={enlace} />
+      <PendientesAsesor data={data} enlace={enlace} />
       <Tiles data={data} />
       <DetalleTendencia data={data} />
       <DetalleComparacion data={data} />

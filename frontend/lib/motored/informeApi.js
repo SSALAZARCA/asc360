@@ -60,3 +60,37 @@ export async function confirmarPendiente(token, cedula, factura, estado) {
     throw new Error(PENDIENTE_ERROR);
   }
 }
+
+export const TRASLADO_YA_NO = 'Este traslado ya no está pendiente.';
+export const TRASLADOS_ERROR = 'No se pudieron cargar los traslados.';
+
+/** POST of the transfers on the public link (same link + cédula as the report); resolves the JSON or an Error with a ready message. */
+async function postTraslados(token, ruta, cuerpo, mensajeError) {
+  let res;
+  try {
+    res = await fetch(`${getMotoredApiUrl()}/publico/informe/${encodeURIComponent(token)}/${ruta}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(cuerpo),
+    });
+  } catch {
+    throw new Error(mensajeError);
+  }
+  if (res.status === 401) throw new Error(INFORME_INVALIDO);
+  if (res.status === 429) throw new Error(INFORME_DEMASIADOS_INTENTOS);
+  if (res.status === 409) throw new Error(TRASLADO_YA_NO);
+  if (!res.ok) throw new Error(mensajeError);
+  try {
+    return await res.json();
+  } catch {
+    throw new Error(mensajeError);
+  }
+}
+
+/** The pending transfers of the asesor's store: `{ ultima_carga, items, resumen }`. */
+export const verTraslados = (token, cedula) => postTraslados(token, 'traslados', { cedula }, TRASLADOS_ERROR);
+
+/** The asesor answers "RECIBIDO" / "NO_HA_LLEGADO" for a transfer of her store; resolves the updated transfer. */
+export const confirmarTrasladoPublico = (token, cedula, item, estado) => postTraslados(
+  token, 'traslados/confirmar', { cedula, documento: item.documento, bodega_salida: item.bodega_salida, estado }, PENDIENTE_ERROR,
+);

@@ -5,6 +5,9 @@ import InformeContainer from '../components/motored/informe/InformeContainer';
 import { cuandoDe, valorCorto } from '../components/motored/kpis/asesores/pendientes';
 import { ASESOR_DETALLE } from './helpers/kpisAsesorDetalleFixture';
 
+// The traslados card has its own test file (motored-kpis-asesor-traslados); here it must not add fetch calls.
+jest.mock('../components/motored/kpis/asesores/PendientesTraslados', () => () => null);
+
 jest.mock('next/navigation', () => ({
   useRouter: () => ({ push: jest.fn(), replace: jest.fn() }),
   usePathname: () => '/motored/informe/tok123',

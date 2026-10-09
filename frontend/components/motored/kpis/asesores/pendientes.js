@@ -55,3 +55,16 @@ export function quienDe(item, ahora) {
 }
 
 export const llegaron = (items) => items.filter((i) => i.estado === LLEGO).length;
+
+export const RECIBIDO = 'RECIBIDO';
+
+/** The transfer line split around its days segment (colored by the card): `79-00000082 · 02/09 · ` + `37 días` + ` · 2 und`. */
+export function partesTraslado(item) {
+  return {
+    antes: `${item.documento} · ${fechaBogota(item.fecha).slice(0, 5)} · `,
+    dias: `${item.dias} ${item.dias === 1 ? 'día' : 'días'}`,
+    despues: ` · ${item.unidades} und`,
+  };
+}
+
+export const recibidos = (items) => items.filter((i) => i.estado === RECIBIDO).length;
