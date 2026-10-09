@@ -4,6 +4,7 @@
  * read the `ok` field instead of catching.
  */
 import { motoredFetch, motoredFetchJson } from './motoredFetch';
+import { descargarArchivo } from './descargas';
 
 const BASE = '/encuesta/cargas';
 
@@ -35,4 +36,19 @@ export function guardarCargaEncuesta(file) {
 
 export function listCargasEncuesta() {
   return motoredFetchJson(BASE);
+}
+
+/** Rows of one carga; `filtro`: todas | respondidas | sin_responder | detractores. */
+export function getDetalleCargaEncuesta(cargaId, filtro = 'todas') {
+  return motoredFetchJson(`${BASE}/${cargaId}/detalle?filtro=${encodeURIComponent(filtro)}`);
+}
+
+export function descargarExcelCargaEncuesta(cargaId, nombreArchivo = 'carga') {
+  return descargarArchivo(`${BASE}/${cargaId}/excel`, `encuesta_${nombreArchivo.replace(/\.xlsx?$/i, '')}.xlsx`);
+}
+
+/** Excel of every survey whose send (`envio`) or response (`respuesta`) date falls in desde..hasta. */
+export function descargarResultadosEncuesta({ desde, hasta, por = 'envio' }) {
+  const query = new URLSearchParams({ desde, hasta, por }).toString();
+  return descargarArchivo(`${BASE}/resultados/excel?${query}`, `encuestas_${por}_${desde}_${hasta}.xlsx`);
 }
