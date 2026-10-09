@@ -16,6 +16,7 @@ export const getOpciones = () => motoredFetchJson(`${BASE}/opciones`);
 export const getVentas = (filtros) => motoredFetchJson(rutaKpis('ventas', filtros));
 export const getTiendas = (filtros) => motoredFetchJson(rutaKpis('tiendas', filtros));
 export const getComisiones = (filtros) => motoredFetchJson(rutaKpis('comisiones', filtros));
+export const getInventario = (filtros) => motoredFetchJson(rutaKpis('inventario', filtros));
 /** The single-asesor view: the same filters plus the `cedula` (the 404 "Asesor no encontrado" carries `status`). */
 export const getAsesorDetalle = (filtros, cedula) =>
   motoredFetchJson(`${rutaKpis('asesores/detalle', filtros)}&cedula=${encodeURIComponent(cedula)}`);
@@ -23,6 +24,8 @@ export const getAsesorDetalle = (filtros, cedula) =>
 export const getAsesoresOpciones = (filtros) => motoredFetchJson(rutaKpis('asesores/opciones', filtros));
 /** Downloads the xlsx of the settled month `mes` (AAAA-MM) with the same filters as the tab. */
 export const descargarComisionesExcel = (filtros, mes) => descargarArchivo(rutaKpis('comisiones/excel', filtros), `comisiones_${mes}.xlsx`);
+/** Downloads the xlsx of the inventory valued at `corte` (AAAA-MM-DD) with the same filters as the tab. */
+export const descargarInventarioExcel = (filtros, corte) => descargarArchivo(rutaKpis('inventario/excel', filtros), `inventario_${corte}.xlsx`);
 
 export const getEstado = () => motoredFetchJson(`${BASE}/estado`);
 /** ADMIN only: asks for a full rebuild of the summaries. A 409 carries the "busy" message. */

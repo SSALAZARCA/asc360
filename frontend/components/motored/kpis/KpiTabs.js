@@ -7,6 +7,7 @@ export const TABS = [
   { id: 'tiendas', label: 'Tiendas' },
   { id: 'asesores', label: 'Asesores' },
   { id: 'comisiones', label: 'Comisiones' },
+  { id: 'inventario', label: 'Inventario' },
 ];
 
 const estilo = (activa) => ({

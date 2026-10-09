@@ -2,7 +2,7 @@
 /** "KPI's": header filters + tabs. ADMIN, COMPRAS and GERENCIA only (`useTableroGate`). */
 import { useCallback, useMemo, useState } from 'react';
 import useTableroGate from '../tablero-asesores/useTableroGate';
-import { getAsesorDetalle, getComisiones, getTiendas, getVentas } from '../../../lib/motored/kpisApi';
+import { getAsesorDetalle, getComisiones, getInventario, getTiendas, getVentas } from '../../../lib/motored/kpisApi';
 import KpiFrescura from './KpiFrescura';
 import KpiHeader from './KpiHeader';
 import KpiTabs from './KpiTabs';
@@ -12,15 +12,16 @@ import useAsesorOpciones from './useAsesorOpciones';
 import useKpis from './useKpis';
 import AsesorDetalle from './asesores/AsesorDetalle';
 import ComisionesTab from './comisiones/ComisionesTab';
+import InventarioTab from './inventario/InventarioTab';
 import TiendasTab from './tiendas/TiendasTab';
 import VentasTab from './ventas/VentasTab';
 
 const FETCHERS = {
-  ventas: getVentas, tiendas: getTiendas, comisiones: getComisiones,
+  ventas: getVentas, tiendas: getTiendas, comisiones: getComisiones, inventario: getInventario,
   asesor: (filtros) => getAsesorDetalle(filtros, filtros.asesor),
 };
 // The Asesores tab is ALWAYS the single-asesor view (`asesor`): there is no "everyone" view.
-const TABS = { ventas: VentasTab, tiendas: TiendasTab, asesor: AsesorDetalle, comisiones: ComisionesTab };
+const TABS = { ventas: VentasTab, tiendas: TiendasTab, asesor: AsesorDetalle, comisiones: ComisionesTab, inventario: InventarioTab };
 const SOMBRA = { background: COLOR.track, borderRadius: 14, height: 120 };
 
 function Esqueleto() {
@@ -45,11 +46,11 @@ function ErrorAsesores({ reintentar }) {
   );
 }
 
-function Pestana({ vista, kpis, filtros }) {
+function Pestana({ vista, kpis, filtros, onChange }) {
   if (kpis.error) return <Mensaje error>{kpis.error}</Mensaje>;
   if (!kpis.data) return <Esqueleto />;
   const Tab = TABS[vista];
-  return <Tab data={kpis.data} filtros={filtros} />;
+  return <Tab data={kpis.data} filtros={filtros} onChange={onChange} />;
 }
 
 /** The asesor of the single view: the chosen one while she is among those who sold, else the best seller (first of the list). */
@@ -79,7 +80,7 @@ export default function KpisContent() {
       {sinVentas && <Mensaje>Todavía no hay ventas cargadas.</Mensaje>}
       {!sinVentas && sinAsesores && <Mensaje>No hay asesores con venta en los filtros elegidos.</Mensaje>}
       {opciones && enAsesores && falloAsesores && <ErrorAsesores reintentar={reintentar} />}
-      {!sinVentas && !sinAsesores && !(enAsesores && falloAsesores) && opciones && <Pestana vista={vista} kpis={kpis} filtros={filtros} />}
+      {!sinVentas && !sinAsesores && !(enAsesores && falloAsesores) && opciones && <Pestana vista={vista} kpis={kpis} filtros={filtros} onChange={cambiar} />}
     </div>
   );
 }

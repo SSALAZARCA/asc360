@@ -4,6 +4,7 @@ import { OPCIONES, VENTAS } from './helpers/kpisVentasFixture';
 import { TIENDAS } from './helpers/kpisTiendasFixture';
 import { ASESOR_DETALLE, OPCIONES_ASESORES } from './helpers/kpisAsesorDetalleFixture';
 import { COMISIONES } from './helpers/kpisComisionesFixture';
+import { INVENTARIO } from './helpers/kpisInventarioFixture';
 
 const pushMock = jest.fn();
 jest.mock('next/navigation', () => ({
@@ -22,6 +23,7 @@ const RUTAS = () => ({
   'GET /tablero-asesores/kpis/ventas': jsonRes(VENTAS),
   'GET /tablero-asesores/kpis/tiendas': jsonRes(TIENDAS),
   'GET /tablero-asesores/kpis/comisiones': jsonRes(COMISIONES),
+  'GET /tablero-asesores/kpis/inventario': jsonRes(INVENTARIO),
   'GET /tablero-asesores/kpis/asesores/opciones': jsonRes(OPCIONES_ASESORES),
   'GET /tablero-asesores/kpis/asesores/detalle': jsonRes(ASESOR_DETALLE),
 });
@@ -39,7 +41,7 @@ describe("KPI's shell", () => {
     render(<KpisPage />);
     expect(await screen.findByRole('heading', { name: "KPI's" })).toBeInTheDocument();
     const tabs = screen.getAllByRole('tab').map((t) => t.textContent);
-    expect(tabs).toEqual(['Ventas', 'Tiendas', 'Asesores', 'Comisiones']);
+    expect(tabs).toEqual(['Ventas', 'Tiendas', 'Asesores', 'Comisiones', 'Inventario']);
     expect(screen.getByRole('tab', { name: 'Ventas' })).toHaveAttribute('aria-selected', 'true');
     await waitFor(() => expect(llamadasA(calls, '/tablero-asesores/kpis/ventas')).toHaveLength(1));
     const consulta = llamadasA(calls, '/tablero-asesores/kpis/ventas')[0].query;
@@ -77,6 +79,19 @@ describe("KPI's shell", () => {
     expect(llamadasA(calls, '/tablero-asesores/kpis/asesores')).toHaveLength(0);
     fireEvent.click(screen.getByRole('tab', { name: 'Ventas' }));
     expect(llamadasA(calls, '/tablero-asesores/kpis/ventas')).toHaveLength(1);
+  });
+
+  it('loads Inventario and a store click refetches it narrowed to that store', async () => {
+    setSession('GERENCIA');
+    const calls = installFetch(RUTAS());
+    render(<KpisPage />);
+    await screen.findByRole('tab', { name: 'Inventario' });
+    fireEvent.click(screen.getByRole('tab', { name: 'Inventario' }));
+    expect(await screen.findByRole('region', { name: 'Inventario' })).toBeInTheDocument();
+    expect(llamadasA(calls, '/tablero-asesores/kpis/inventario')).toHaveLength(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Medellín La 33' }));
+    await waitFor(() => expect(llamadasA(calls, '/tablero-asesores/kpis/inventario')).toHaveLength(2));
+    expect(llamadasA(calls, '/tablero-asesores/kpis/inventario')[1].query.get('sucursales')).toBe('t2');
   });
 
   it('loads Comisiones with the same filters when its tab is opened', async () => {

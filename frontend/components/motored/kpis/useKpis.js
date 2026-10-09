@@ -9,7 +9,7 @@ import * as kpisApi from '../../../lib/motored/kpisApi';
 const MENSAJE_ERROR = "No pudimos cargar los KPI's. Intentá de nuevo en unos segundos.";
 export const MENSAJE_NO_ENCONTRADO = 'No encontramos a este asesor con los filtros elegidos.';
 const API = {
-  ventas: kpisApi.getVentas, tiendas: kpisApi.getTiendas, comisiones: kpisApi.getComisiones,
+  ventas: kpisApi.getVentas, tiendas: kpisApi.getTiendas, comisiones: kpisApi.getComisiones, inventario: kpisApi.getInventario,
   asesor: (filtros) => kpisApi.getAsesorDetalle(filtros, filtros.asesor),
 };
 
