@@ -45,7 +45,7 @@ def test_default_rules_match_the_registry_defaults():
     assert [(x.nombre, x.desde_pct, x.tasa_pct) for x in REGLAS.tramos] == [
         ("BASE", 0, D("1.0")), ("PRO", 90, D("1.5")), ("ELITE", 105, D("1.8"))]
     assert (REGLAS.base_pago, REGLAS.cumplimiento_base) == ("sin_hmcl", "con_hmcl")
-    assert REGLAS.cargos == {"ASESOR DE REPUESTOS", "ASESOR DE REPUESTOS SUPERNUMERARIO"}
+    assert REGLAS.cargos == {"ASESOR DE REPUESTOS", "ASESOR DE REPUESTOS SUPERNUMERARIO", "CAJERO POSVENTA"}
 
 
 def test_rules_sort_the_tiers_and_normalize_the_cargos():
@@ -206,3 +206,9 @@ def test_sales_accumulate_both_bases_per_cedula_and_month():
     assert ventas[("100", "2097-01")] == (D(1500), D(1000)) and ventas[("100", "2097-02")] == (D(300), D(300))
     assert ventas[("1200", "2097-01")] == (D(40), D(40)) and claves["100"] == "P:100"
     assert sin_cedula == {"2097-01": {"P:abc": D(9)}}
+
+
+def test_cajero_posventa_is_rated_and_shown_as_a_person_by_default():
+    from app.motored.services import tablero_asesores as t
+    assert c._cargo_permitido(["CAJERO POSVENTA"], REGLAS) is True
+    assert t.grupo_de_cargo("CAJERO POSVENTA") == t.TIPO_PERSONA

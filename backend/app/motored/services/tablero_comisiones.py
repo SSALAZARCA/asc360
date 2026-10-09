@@ -31,7 +31,7 @@ TRAMOS_POR_DEFECTO = (
     {"nombre": "PRO", "desde_pct": 90, "tasa_pct": 1.5},
     {"nombre": "ELITE", "desde_pct": 105, "tasa_pct": 1.8},
 )
-CARGOS_POR_DEFECTO = ("ASESOR DE REPUESTOS", "ASESOR DE REPUESTOS SUPERNUMERARIO")
+CARGOS_POR_DEFECTO = ("ASESOR DE REPUESTOS", "ASESOR DE REPUESTOS SUPERNUMERARIO", "CAJERO POSVENTA")
 BASE_PAGO_POR_DEFECTO = t.CUMPLIMIENTO_SIN_HMCL
 # An asesor is "near" the next tier when the gap is at most this many points of cumplimiento.
 MARGEN_CERCA_PTS = 15

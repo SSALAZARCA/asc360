@@ -63,7 +63,7 @@ def test_commission_defaults_are_the_agreed_ones():
     assert pc.REGISTRO["comision_base_pago"].default == "sin_hmcl"
     assert pc.REGISTRO["cumplimiento_base"].default == "con_hmcl"
     assert pc.REGISTRO["comision_cargos_asesor"].default == [
-        "ASESOR DE REPUESTOS", "ASESOR DE REPUESTOS SUPERNUMERARIO"]
+        "ASESOR DE REPUESTOS", "ASESOR DE REPUESTOS SUPERNUMERARIO", "CAJERO POSVENTA"]
     assert pc.REGISTRO["kpi_semaforo_cortes"].default == {
         "verde_desde": 90, "ambar_desde": 70}
 

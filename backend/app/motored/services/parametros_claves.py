@@ -562,6 +562,7 @@ def _claves_indicadores() -> list:
             "grupo_por_cargo",
             {"ASESOR DE REPUESTOS": "PERSONA",
              "ASESOR DE REPUESTOS SUPERNUMERARIO": "PERSONA",
+             "CAJERO POSVENTA": "PERSONA",
              "ASESOR COMERCIAL DE SERVICIO POSVENTA": "COMERCIALES"},
             _GRUPOS_CARGO, seccion="indicadores", normalizado=True),
         lista_de_texto(
@@ -593,7 +594,7 @@ def _claves_comisiones() -> list:
                 GRUPO_OPERACION, "comisiones"),
         lista_de_texto(
             "comision_cargos_asesor",
-            ["ASESOR DE REPUESTOS", "ASESOR DE REPUESTOS SUPERNUMERARIO"],
+            ["ASESOR DE REPUESTOS", "ASESOR DE REPUESTOS SUPERNUMERARIO", "CAJERO POSVENTA"],
             seccion="comisiones"),
         bonos_por_linea(
             "comision_lineas", _BONOS_POR_DEFECTO, seccion="comisiones"),
