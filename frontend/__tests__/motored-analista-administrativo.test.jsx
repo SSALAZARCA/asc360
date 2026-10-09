@@ -19,7 +19,7 @@ import MotoredLayout, { VALID_ROLES } from '../app/motored/motored-layout';
 import UsuarioCreateForm from '../components/motored/UsuarioCreateForm';
 import { menuItemsFor } from '../components/motored/MotoredSidebar';
 import { TABLERO_ROLES } from '../components/motored/tablero-asesores/useTableroGate';
-import { puedeConfirmarRol } from '../components/motored/kpis/asesores/pendientes';
+import { puedeConfirmarRol, puedeDescargarPlantillaRol } from '../components/motored/kpis/asesores/pendientes';
 import { ROL_NOMBRE } from '../components/motored/inicio/textos';
 import {
   ANALISTA_ADMINISTRATIVO, GESTION_REPUESTOS_ROLES, homePathFor, landingPathFor,
@@ -88,5 +88,19 @@ describe('ANALISTA_ADMINISTRATIVO', () => {
     const opcion = screen.getByRole('option', { name: 'Analista administrativo' });
     expect(opcion).toHaveValue('ANALISTA_ADMINISTRATIVO');
     expect(opcion.style.color).not.toBe('');
+  });
+});
+
+describe('puedeDescargarPlantillaRol', () => {
+  it.each([
+    ['ADMIN', true],
+    [ANALISTA_ADMINISTRATIVO, true],
+    ['COORDINADOR_REPUESTOS', false],
+    ['COMPRAS', false],
+    ['GERENCIA', false],
+    ['ASESOR_MOSTRADOR', false],
+    [undefined, false],
+  ])('role %s may download the ERP template: %s', (role, esperado) => {
+    expect(puedeDescargarPlantillaRol(role)).toBe(esperado);
   });
 });
