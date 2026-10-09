@@ -20,7 +20,7 @@ Build the approved Inventario tab of KPI's with real data: six KPI cards, month-
 
 ## Tasks
 - [x] T1 Backend: Configuración keys; `calcular_kpis_inventario` (cards, trend, age bands, by line, by store, top idle, stockouts with demand/transit); `GET /tablero-asesores/kpis/inventario` + Excel; tests (unit + pg_real).
-- [ ] T2 Frontend: Inventario tab exactly as the approved board (tablet + phone), store click filters the tab, Excel button; jest tests.
+- [x] T2 Frontend: Inventario tab exactly as the approved board (tablet + phone), store click filters the tab, Excel button; jest tests.
 
 ## Route
 Delegated direct (multi-file per task).
@@ -30,4 +30,5 @@ Delegated direct (multi-file per task).
 - T1 done (2026-10-09, delegated writer). Commits: `6120083` Configuración keys (`kpi_inventario_dias_meta` 60, `kpi_inventario_dias_cortes` {verde_hasta 60, ambar_hasta 90}, `kpi_inventario_sin_movimiento_dias` 180); `002c053` queries + payload (`tablero_kpis_inventario.py`, `tablero_kpis_inventario_consultas.py`); `e6430cb` endpoints `GET /tablero-asesores/kpis/inventario` and `/inventario/excel` (`tablero_inventario_excel.py`).
 - Evidence: `pytest tests/motored` 7366 passed; pg_real (Postgres 18) `-k tablero_kpis` 48 passed + inventory file 17 passed; `compileall` OK (Python 3.11). One request = 22 queries (bounded, asserted <= 24 in pg_real).
 - Choices: trend = a point only for months with a corte inside the month (latest of that month); card/lines/trend days use the cost of the stores that have inventory at that corte (same rule as the Tiendas tab); `pct` values are fractions; never-sold pairs age from the first DAY of the first sales-history month; HMCL mode does not alter inventory or cost of sales.
-
+- T2 done (2026-10-09, delegated writer). Commit `c1c0702`: tab in `components/motored/kpis/inventario/` (InventarioTab container + Tarjetas, Tendencia, Antiguedad, PorLinea, PorTienda, SinMovimiento, AgotadasConDemanda, datos.js, estilos.js), plumbing in KpiTabs/KpisContent/useKpis/kpisApi (`getInventario`, `descargarInventarioExcel`); store click uses `onChange({sucursales:[id]})` (KpisContent now passes `onChange` to every tab).
+- Evidence: `npx jest --silent` 226 suites / 2615 tests passed; `next dev --webpack` compiles `/motored/tablero-asesores` (200).
