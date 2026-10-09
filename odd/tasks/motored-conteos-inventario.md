@@ -160,3 +160,5 @@ Run them in the foreground and read the result line before committing; never cha
 3. Check the alembic head.
 4. Start WU1.
 - 2026-10-09 owner: the leader panel polls every 15 s visible / 60 s hidden, stops when CERRADO, and has an "Actualizar ahora" button. This supersedes the design's 5 s / 30 s.
+- 2026-10-09 owner: the leader panel marks in YELLOW any pair with no activity for over 2 minutes ("Sin actividad hace N min"). Closing warns, listing those pairs, because they may hold unsent offline readings; the leader can still close. Pairs never see it.
+- Offline behaviour (WU13): readings are queued on the device and shown at once; the catalogue is cached; a "Sin conexión · N pendientes" banner shows; sync is automatic and idempotent; a warning shows before closing the tab with pending readings.
