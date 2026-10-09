@@ -42,6 +42,7 @@ NUEVA = "clave-nueva-456"
 # Routes that never use the web JWT: login, the bot-secret API (Lore/Sonia)
 # and the public survey. Any other route MUST depend on the guard.
 PUBLIC_ROUTES = {
+    ("POST", "/api/motored/publico/informe/{token}/pendientes"),
     ("POST", "/api/motored/auth/login"),
     ("GET", "/api/motored/bot/yo"),
     ("GET", "/api/motored/bot/sucursales"),

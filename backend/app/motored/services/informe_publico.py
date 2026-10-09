@@ -12,7 +12,7 @@ session rolls back on an exception, which would erase it).
 The cédula is never echoed and the token is never logged.
 """
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.motored.models.reporte_asesor_link import ReporteAsesorLink
 from app.motored.models.usuario import Usuario
 from app.motored.schemas.vendedor import limpiar_cedula
+from app.motored.services import ingresos_pendientes as ingresos
 from app.motored.services import kpi_resumen_lectura as lectura
 from app.motored.services import tablero_asesores_consultas as consultas
 from app.motored.services import tablero_kpis as kpis
@@ -74,13 +75,22 @@ async def detalle_del_anio(db: AsyncSession, cedula: str) -> Optional[Dict[str, 
     anio, mes = ultimo[:4], int(ultimo[5:])
     del_anio = [f"{anio}-{m:02d}" for m in range(1, mes + 1)]
     filtro = await consultas.cargar_filtro(db, del_anio, HMCL_INCLUIR, None)
-    return await kpis.calcular_kpis_asesor_detalle(db, filtro, cedula)
+    resultado = await kpis.calcular_kpis_asesor_detalle(db, filtro, cedula)
+    if resultado is None:
+        return None
+    # The invoices of her store still waiting for an ingreso (confirmable
+    # from the link through `confirmar_pendiente`).
+    tiendas = await ingresos.tiendas_de_asesor(db, None, cedula)
+    resultado["pendientes_ingreso"] = await ingresos.para_asesor(db, tiendas)
+    return resultado
 
 
-async def abrir_informe(
-    db: AsyncSession, token: str, cedula: Any, ahora: Optional[datetime] = None,
-) -> Dict[str, Any]:
-    ahora = ahora or datetime.now(timezone.utc)
+async def _identificar(
+    db: AsyncSession, token: str, cedula: Any, ahora: datetime,
+) -> Tuple[ReporteAsesorLink, Usuario]:
+    """Token + cédula + lock validation shared by every public endpoint.
+    Wrong cédulas are counted and COMMITTED before the 401; on success the
+    counters reset and the row lock is released (commit)."""
     stmt = (
         select(ReporteAsesorLink, Usuario)
         .join(Usuario, Usuario.id == ReporteAsesorLink.usuario_id)
@@ -106,9 +116,37 @@ async def abrir_informe(
     link.intentos_fallidos = 0
     link.bloqueado_hasta = None
     link.ultimo_acceso_en = ahora
-    await db.commit()  # also releases the row lock before the heavy read
+    await db.commit()  # also releases the row lock before the heavy work
+    return link, usuario
 
+
+async def abrir_informe(
+    db: AsyncSession, token: str, cedula: Any, ahora: Optional[datetime] = None,
+) -> Dict[str, Any]:
+    ahora = ahora or datetime.now(timezone.utc)
+    link, usuario = await _identificar(db, token, cedula, ahora)
     resultado = await detalle_del_anio(db, link.cedula)
     if resultado is None:
         raise InformeError(404, MSG_SIN_DATOS)
     return resultado
+
+
+async def confirmar_pendiente(
+    db: AsyncSession, token: str, cedula: Any, factura: Any, estado: Any,
+    ahora: Optional[datetime] = None,
+) -> Dict[str, Any]:
+    """Public confirm of one pending invoice ("Llegó" / "No ha llegado"):
+    same token + cédula + lock rules as `abrir_informe`; the store is the
+    asesor's own, the actor is the asesor, the channel is 'link'."""
+    ahora = ahora or datetime.now(timezone.utc)
+    link, usuario = await _identificar(db, token, cedula, ahora)
+    tiendas = await ingresos.tiendas_de_asesor(db, usuario.id, link.cedula)
+    if not tiendas:
+        raise InformeError(404, ingresos.MSG_SIN_TIENDA)
+    actor = ingresos.Actor(
+        nombre=usuario.nombre, usuario_id=usuario.id, cedula=link.cedula)
+    try:
+        return await ingresos.confirmar_en_tiendas(
+            db, factura, tiendas, estado, actor, "link")
+    except ingresos.PendienteError as exc:
+        raise InformeError(exc.status_code, exc.detail)

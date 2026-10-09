@@ -37,6 +37,10 @@ from app.motored.models.kpi_resumen import (
     KpiClienteMes, KpiCostoReferencia, KpiFacturaFirma, KpiInventarioCorte, KpiResumenEstado, KpiVentaMes,
 )
 from app.motored.models.login_evento import LoginEvento
+from app.motored.models.factura_confirmacion_ingreso import (
+    FacturaConfirmacionIngreso,
+    FacturaConfirmacionIngresoHistorial,
+)
 from app.motored.models.parametro_metodologia import ParametroMetodologia
 from app.motored.models.pedido_evento import PedidoEvento
 from app.motored.models.presupuesto import PresupuestoLinea, PresupuestoVersion
@@ -87,6 +91,8 @@ __all__ = [
     "KpiVentaMes",
     "LoginEvento",
     "ParametroMetodologia",
+    "FacturaConfirmacionIngreso",
+    "FacturaConfirmacionIngresoHistorial",
     "PedidoEvento",
     "PresupuestoLinea",
     "PresupuestoVersion",

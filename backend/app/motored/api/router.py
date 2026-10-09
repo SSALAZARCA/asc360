@@ -33,6 +33,7 @@ from app.motored.api import (
     detractores,
     encuesta_cargas,
     encuesta_publica,
+    gestion_repuestos,
     inicio,
     maestros,
     parametros,
@@ -129,3 +130,5 @@ router.include_router(presupuestos.router)
 router.include_router(inicio.router)
 # Daily asesor report (ADMIN): `/reporte-asesor` is its own prefix.
 router.include_router(reporte_asesor.router)
+# Pending invoice ingresos (Gestión repuestos): `/gestion-repuestos/ingresos-facturas`.
+router.include_router(gestion_repuestos.router)

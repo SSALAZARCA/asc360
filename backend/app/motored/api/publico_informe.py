@@ -66,3 +66,25 @@ async def abrir_informe(
         return await servicio.abrir_informe(db, token, cedula)
     except servicio.InformeError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+
+
+@router.post("/{token}/pendientes")
+async def confirmar_pendiente(
+    token: str, request: Request,
+    db: AsyncSession = Depends(get_motored_db_or_503),
+) -> Any:
+    """The asesor confirms "Llegó" / "No ha llegado" for an invoice of her
+    store: `{cedula, factura, estado}`, same token + cédula + lock as the
+    report. Answers the updated item."""
+    try:
+        cuerpo = await request.json()
+    except ValueError:
+        cuerpo = None
+    if not isinstance(cuerpo, dict):
+        cuerpo = {}
+    try:
+        return await servicio.confirmar_pendiente(
+            db, token, cuerpo.get("cedula"), cuerpo.get("factura"),
+            cuerpo.get("estado"))
+    except servicio.InformeError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail)

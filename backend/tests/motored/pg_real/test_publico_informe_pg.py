@@ -148,7 +148,12 @@ async def test_after_the_lock_expires_the_right_cedula_gets_the_detail(
         filtro = await q.cargar_filtro(db, MESES, "incluir", None)
         esperado = await k.calcular_kpis_asesor_detalle(
             db, filtro, escenario.cedula)
-    assert r.json() == json.loads(json.dumps(jsonable_encoder(esperado)))
+    cuerpo = r.json()
+    # The link also carries the invoices of her store still waiting for an
+    # ingreso (none loaded in this world).
+    pendientes = cuerpo.pop("pendientes_ingreso")
+    assert pendientes["items"] == [] and pendientes["resumen"]["pendientes"] == 0
+    assert cuerpo == json.loads(json.dumps(jsonable_encoder(esperado)))
     assert r.headers["x-robots-tag"] == "noindex, nofollow"
     link = await _link(escenario)
     assert (link.intentos_fallidos, link.bloqueado_hasta) == (0, None)
