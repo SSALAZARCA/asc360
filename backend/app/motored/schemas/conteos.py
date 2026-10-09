@@ -304,6 +304,13 @@ class LecturaEntrada(BaseModel):
     metodo: Literal[METODOS]
     forzar_desconocido: bool = False
     reconteo_id: Optional[uuid.UUID] = None
+    # WU13b: the location in effect when it was scanned (`UBI-` accepted)
+    ubicacion_codigo: Optional[str] = Field(default=None, max_length=40)
+
+    @field_validator("ubicacion_codigo")
+    @classmethod
+    def _sin_blanco(cls, valor: Optional[str]) -> Optional[str]:
+        return valor if valor and valor.strip() else None
 
     @field_validator("leida_en")
     @classmethod

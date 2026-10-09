@@ -261,12 +261,15 @@ async def registrar_lecturas(
     db: AsyncSession = Depends(get_motored_db_or_503),
 ) -> Any:
     """A batch of up to 100 readings, idempotent by the client `id`.
-    With `reconteo_id` a reading is round 2 of that reconteo."""
+    With `reconteo_id` a reading is round 2 of that reconteo; with
+    `ubicacion_codigo` it goes to that location instead of the session's
+    current one (created as 'PAREJA' when missing)."""
     items = [lecturas.Entrada(
         id=i.id, codigo_leido=i.codigo_leido, cantidad=i.cantidad,
         leida_en=i.leida_en, metodo=i.metodo,
         forzar_desconocido=i.forzar_desconocido,
-        reconteo_id=i.reconteo_id) for i in cuerpo.lecturas]
+        reconteo_id=i.reconteo_id,
+        ubicacion_codigo=i.ubicacion_codigo) for i in cuerpo.lecturas]
     try:
         resultado = await lecturas.registrar(
             db, pareja.sesion, pareja.conteo, items)

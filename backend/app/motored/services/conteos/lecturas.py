@@ -8,8 +8,16 @@ id`: a resend after a network failure stores nothing twice, and the
 answer tells which ids are new and which were already stored.
 
 Rules (design §7):
-- every reading takes the session's CURRENT location; with none set the
-  whole batch is SinUbicacion (409);
+- a reading goes to its own `ubicacion_codigo` when it carries one
+  (WU13b: the location in effect when it was scanned, so a pair can move
+  shelves offline; `UBI-` accepted). A code the store lacks is created as
+  'PAREJA' like `PUT /ubicacion`; an inactive one refuses that reading
+  (UBICACION_INACTIVA), the rest of the batch goes on. All the batch's
+  codes are resolved set-based (`ubicaciones.ubicar`);
+- a reading without one takes the session's CURRENT location; with none
+  set the whole batch is SinUbicacion (409), as for older clients;
+- the session's current location follows the newest reading stored by
+  the batch, so the leader panel is right after an offline move;
 - codes are normalized `strip().upper()` and matched against ALL
   referencias (inactive included) by `upper(btrim(codigo))`. The exact
   stored code is tried first (unique index); only the misses pay the
@@ -75,6 +83,7 @@ class Entrada(NamedTuple):
     metodo: str
     forzar_desconocido: bool = False
     reconteo_id: Optional[uuid.UUID] = None
+    ubicacion_codigo: Optional[str] = None
 
 
 class Lote(NamedTuple):
@@ -202,6 +211,63 @@ def clasificar(items: Sequence[Entrada], resueltas: Resueltas) -> Lote:
     return lote
 
 
+def _codigos_de_lugar(
+        aptas: Sequence[Entrada], filas: List[dict]
+) -> Tuple[Dict[uuid.UUID, str], List[Rechazo]]:
+    """id -> normalized location code of the rows that carry one, plus
+    the rows whose code is not a valid location code."""
+    pedidos: Dict[uuid.UUID, Optional[str]] = {}
+    for entrada in aptas:
+        pedidos.setdefault(entrada.id, entrada.ubicacion_codigo)
+    codigos, rechazadas = {}, []
+    for fila in filas:
+        crudo = pedidos.get(fila["id"])
+        if crudo is None:
+            continue
+        try:
+            codigos[fila["id"]] = ubicaciones.codigo_ubicacion(crudo)
+        except errores.UbicacionInvalida as error:
+            rechazadas.append((fila["id"], error.codigo))
+    return codigos, rechazadas
+
+
+def asignar_lugar(
+        filas: List[dict], codigos: Dict[uuid.UUID, str],
+        lugares: Dict[str, ubicaciones.Lugar],
+        actual: Optional[uuid.UUID],
+        invalidas: List[Rechazo]) -> Tuple[List[dict], List[Rechazo]]:
+    """Each row with its `ubicacion_id`: its own code's location, else
+    the session's `actual`. Rows refused for their location are left
+    out and reported."""
+    malas = dict(invalidas)
+    ubicadas, rechazadas = [], []
+    for fila in filas:
+        ident = fila["id"]
+        if ident in malas:
+            rechazadas.append((ident, malas[ident]))
+            continue
+        lugar_id, motivo = actual, None
+        if ident in codigos:
+            lugar = lugares.get(codigos[ident])
+            lugar_id = None if lugar is None else lugar.ubicacion_id
+            motivo = (lugar.motivo if lugar is not None
+                      else errores.UbicacionInactiva.codigo)
+        if lugar_id is None:
+            rechazadas.append((ident, motivo))
+            continue
+        ubicadas.append(dict(fila, ubicacion_id=lugar_id))
+    return ubicadas, rechazadas
+
+
+def mas_reciente(
+        filas: List[dict], nuevas: Set[uuid.UUID]) -> Optional[uuid.UUID]:
+    """The location of the newest row actually stored now, if any."""
+    guardadas = [f for f in filas if f["id"] in nuevas]
+    if not guardadas:
+        return None
+    return max(guardadas, key=lambda f: f["leida_en"])["ubicacion_id"]
+
+
 # --- code lookup ------------------------------------------------------------
 
 
@@ -239,12 +305,12 @@ async def resolver(db: AsyncSession, codigos: Set[str]) -> Resueltas:
 async def _insertar(
         db: AsyncSession, sesion: ConteoSesion,
         filas: List[dict]) -> Set[uuid.UUID]:
-    """One set-based INSERT; returns the ids that were new."""
+    """One set-based INSERT of located rows; returns the ids that were
+    new."""
     if not filas:
         return set()
     valores = [
         dict(fila, conteo_id=sesion.conteo_id, sesion_id=sesion.id,
-             ubicacion_id=sesion.ubicacion_actual_id,
              ronda=(RONDA_CONTEO if fila["reconteo_id"] is None
                     else RONDA_RECONTEO))
         for fila in filas]
@@ -281,11 +347,26 @@ async def _propios(
             for f in filas}
 
 
+async def _ubicar(
+        db: AsyncSession, sesion: ConteoSesion, conteo: Conteo,
+        aptas: Sequence[Entrada],
+        filas: List[dict]) -> Tuple[List[dict], List[Rechazo]]:
+    """The rows with their location (see module), resolving every
+    distinct code of the batch at once."""
+    codigos, invalidas = _codigos_de_lugar(aptas, filas)
+    lugares = await ubicaciones.ubicar(
+        db, conteo.sucursal_id, set(codigos.values()))
+    return asignar_lugar(
+        filas, codigos, lugares, sesion.ubicacion_actual_id, invalidas)
+
+
 async def registrar(
         db: AsyncSession, sesion: ConteoSesion, conteo: Conteo,
         items: Sequence[Entrada]) -> Resultado:
-    """Stores a batch at the session's current location (see module)."""
-    if sesion.ubicacion_actual_id is None:
+    """Stores a batch, each reading at its own location or the
+    session's current one (see module)."""
+    if (sesion.ubicacion_actual_id is None
+            and any(i.ubicacion_codigo is None for i in items)):
         raise errores.SinUbicacion()
     estado = await _estado_vigente(db, conteo.id)
     propios = await _propios(db, sesion, [i.reconteo_id for i in items])
@@ -294,13 +375,17 @@ async def registrar(
         return Resultado([], [], [], fuera, {})
     resueltas = await resolver(db, codigos_a_resolver(aptas))
     lote = clasificar(aptas, resueltas)
-    nuevas = await _insertar(db, sesion, lote.filas)
-    ids = [f["id"] for f in lote.filas]
+    filas, sin_lugar = await _ubicar(db, sesion, conteo, aptas, lote.filas)
+    nuevas = await _insertar(db, sesion, filas)
+    ultima = mas_reciente(filas, nuevas)
+    if ultima is not None:
+        sesion.ubicacion_actual_id = ultima
+    ids = [f["id"] for f in filas]
     return Resultado(
         aceptadas=[i for i in ids if i in nuevas],
         duplicadas=[i for i in ids if i not in nuevas] + lote.repetidas,
         desconocidos=lote.desconocidos,
-        rechazadas=fuera + lote.rechazadas,
+        rechazadas=fuera + lote.rechazadas + sin_lugar,
         referencias={c: (r[1] or "") for c, r in resueltas.items()})
 
 

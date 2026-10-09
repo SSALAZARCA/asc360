@@ -12,10 +12,13 @@ A leader prepares locations ahead (`origen` 'LIDER'); a pair that sets a
 code the store does not have creates it on the spot (`origen` 'PAREJA'),
 which the leader sees in its list. Creating a location whose label would
 equal a referencia code is refused, so the scanner never mistakes one for
-the other. Nothing here commits: the API owns the transaction.
+the other. A reading may also carry its own location code (WU13b, a pair
+that moved shelves offline): `ubicar` resolves a batch's codes in one
+SELECT and creates the missing ones the same way, set-based. Nothing here
+commits: the API owns the transaction.
 """
 import uuid
-from typing import List, NamedTuple, Optional
+from typing import Dict, List, NamedTuple, Optional, Set
 
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
@@ -37,6 +40,14 @@ class Fijada(NamedTuple):
 
     ubicacion: UbicacionInventario
     creada: bool
+
+
+class Lugar(NamedTuple):
+    """Where a reading with this code goes: `ubicacion_id`, or why not
+    (`motivo`, a per-reading refusal)."""
+
+    ubicacion_id: Optional[uuid.UUID]
+    motivo: Optional[str] = None
 
 
 # --- pure rules -------------------------------------------------------------
@@ -94,6 +105,33 @@ async def _por_codigo(
             UbicacionInventario.codigo == codigo))).scalars().first()
 
 
+async def _por_codigos(
+        db: AsyncSession, sucursal_id: uuid.UUID,
+        codigos: Set[str]) -> Dict[str, Lugar]:
+    """code -> Lugar of the store's locations among `codigos`; an
+    inactive one is refused as UBICACION_INACTIVA."""
+    filas = (await db.execute(
+        select(UbicacionInventario.id, UbicacionInventario.codigo,
+               UbicacionInventario.activa)
+        .where(UbicacionInventario.sucursal_id == sucursal_id,
+               UbicacionInventario.codigo.in_(sorted(codigos))))).all()
+    return {
+        codigo: (Lugar(ident) if activa
+                 else Lugar(None, errores.UbicacionInactiva.codigo))
+        for ident, codigo, activa in filas}
+
+
+async def _chocan_con_referencias(
+        db: AsyncSession, codigos: Set[str]) -> Set[str]:
+    """The codes whose label equals a referencia code."""
+    etiquetas = {PREFIJO_ETIQUETA + c: c for c in codigos}
+    halladas = (await db.execute(
+        select(func.upper(func.btrim(Referencia.codigo)))
+        .where(func.upper(func.btrim(Referencia.codigo))
+               .in_(sorted(etiquetas))))).scalars().all()
+    return {etiquetas[e] for e in halladas if e in etiquetas}
+
+
 async def _choca_con_referencia(db: AsyncSession, codigo: str) -> bool:
     etiqueta = PREFIJO_ETIQUETA + codigo
     hallada = (await db.execute(
@@ -126,6 +164,52 @@ async def _insertar(
     return UbicacionInventario(
         id=creada, sucursal_id=sucursal_id, codigo=codigo, nombre=nombre,
         activa=True, origen=origen, created_by=usuario_id)
+
+
+async def _insertar_de_pareja(
+        db: AsyncSession, sucursal_id: uuid.UUID,
+        codigos: Set[str]) -> Dict[str, Lugar]:
+    """One INSERT ... ON CONFLICT DO NOTHING for `codigos` ('PAREJA',
+    named after the code), in code order so two batches lock alike.
+    Returns the ones THIS statement created."""
+    valores = [
+        dict(id=uuid.uuid4(), sucursal_id=sucursal_id, codigo=codigo,
+             nombre=nombre_ubicacion(None, codigo), activa=True,
+             origen="PAREJA", created_by=None)
+        for codigo in sorted(codigos)]
+    filas = (await db.execute(
+        insert(UbicacionInventario).values(valores)
+        .on_conflict_do_nothing(
+            index_elements=["sucursal_id", "codigo"])
+        .returning(UbicacionInventario.id,
+                   UbicacionInventario.codigo))).all()
+    return {codigo: Lugar(ident) for ident, codigo in filas}
+
+
+async def ubicar(
+        db: AsyncSession, sucursal_id: uuid.UUID,
+        codigos: Set[str]) -> Dict[str, Lugar]:
+    """normalized code -> Lugar for a batch of readings. Like `fijar`, a
+    code the store lacks is created as 'PAREJA' (unless its label is a
+    referencia code); a code another batch created at the same moment is
+    read back. One SELECT when every code exists."""
+    if not codigos:
+        return {}
+    lugares = await _por_codigos(db, sucursal_id, codigos)
+    faltan = codigos - set(lugares)
+    if not faltan:
+        return lugares
+    chocan = await _chocan_con_referencias(db, faltan)
+    for codigo in chocan:
+        lugares[codigo] = Lugar(
+            None, errores.UbicacionChocaReferencia.codigo)
+    nuevas = faltan - chocan
+    if nuevas:
+        lugares.update(await _insertar_de_pareja(db, sucursal_id, nuevas))
+    entre_tanto = nuevas - set(lugares)
+    if entre_tanto:
+        lugares.update(await _por_codigos(db, sucursal_id, entre_tanto))
+    return lugares
 
 
 async def crear(
