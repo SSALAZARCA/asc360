@@ -201,3 +201,11 @@ describe('Inventario tab: Excel', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('No pudimos descargar el Excel');
   });
 });
+
+describe('Inventario trend without month points', () => {
+  it('still renders the tab when there is a corte but no trend point', () => {
+    render(<InventarioTab data={{ ...INVENTARIO, tendencia: [] }} filtros={{}} onChange={() => {}} />);
+    expect(screen.getByText('Todavía no hay cierres de mes con costo para graficar.')).toBeInTheDocument();
+    expect(screen.queryAllByTestId('barra-mes')).toHaveLength(0);
+  });
+});

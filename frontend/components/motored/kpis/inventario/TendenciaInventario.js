@@ -30,12 +30,24 @@ export default function TendenciaInventario({ data }) {
   const n = barras.length;
   // With few months the columns keep a sensible width instead of stretching one bar across the card.
   const rejilla = { display: 'grid', gridTemplateColumns: `repeat(${n}, minmax(0, 1fr))`, gap: 8, maxWidth: n < MESES_MAX ? n * ANCHO_COLUMNA : undefined };
+  const encabezado = (
+    <div>
+      <h2 style={TITULO}>Valor del inventario por mes</h2>
+      <p style={SUBTITULO}>A costo, al cierre de cada mes · debajo, los días de inventario de ese mes</p>
+    </div>
+  );
+  // The selected corte can fall outside every month that has a point, so an empty trend is possible.
+  if (n === 0) {
+    return (
+      <section aria-label="Valor del inventario por mes" style={{ ...TARJETA, ...TARJETA_COLUMNA }}>
+        {encabezado}
+        <p style={{ margin: 0, fontSize: 13, color: COLOR.muted }}>Todavía no hay cierres de mes con costo para graficar.</p>
+      </section>
+    );
+  }
   return (
     <section aria-label="Valor del inventario por mes" style={{ ...TARJETA, ...TARJETA_COLUMNA }}>
-      <div>
-        <h2 style={TITULO}>Valor del inventario por mes</h2>
-        <p style={SUBTITULO}>A costo, al cierre de cada mes · debajo, los días de inventario de ese mes</p>
-      </div>
+      {encabezado}
       <div
         role="img" aria-label={`Valor del inventario de ${barras[0].mes} a ${barras[n - 1].mes}`}
         style={{ ...rejilla, alignItems: 'end', height: 220, borderBottom: `1px solid ${COLOR.track}` }}
