@@ -22,7 +22,7 @@ export const getIngresosResumen = () => motoredFetchJson(BASE);
 /** `{ verificable_desde, tiendas: [{ sucursal_id, tienda, ...resumen }] }`. */
 export const getIngresosPorTienda = () => motoredFetchJson(`${BASE}/por-tienda`);
 
-/** `{ verificable_desde, items }`, oldest first; filters `{ sucursal, estado, min_dias }`. */
+/** `{ verificable_desde, items }`, oldest first; filters `{ sucursal, estado, min_dias, max_dias }` (both limits inclusive). */
 export const getIngresosDetalle = (filtros) => motoredFetchJson(`${BASE}/detalle${consulta(filtros)}`);
 
 /** `{ historial: [{ estado, por, canal, en }] }`, newest first. */

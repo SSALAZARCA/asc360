@@ -103,12 +103,34 @@ test('the state and age filters query the detalle', async () => {
   await userEvent.click(screen.getByRole('button', { name: 'Ya llegó sin ingresar' }));
   await waitFor(() => expect(mockDetalle).toHaveBeenLastCalledWith(
     expect.objectContaining({ estado: 'LLEGO' })));
-  await userEvent.click(screen.getByRole('button', { name: '> 15 días' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Más de 15 días' }));
   await waitFor(() => expect(mockDetalle).toHaveBeenLastCalledWith(
-    expect.objectContaining({ estado: 'LLEGO', min_dias: 16 })));
-  await userEvent.click(screen.getByRole('button', { name: '> 7 días' }));
+    expect.objectContaining({ estado: 'LLEGO', min_dias: 16, max_dias: undefined })));
+});
+
+test.each([
+  ['Hasta 7 días', 0, 7],
+  ['8 a 15 días', 8, 15],
+  ['Más de 15 días', 16, undefined],
+  ['Todas', undefined, undefined],
+])('the "%s" age pill asks for %s-%s days', async (nombre, min, max) => {
+  await abrir();
+  const grupo = screen.getByRole('group', { name: 'Antigüedad' });
+  await userEvent.click(within(grupo).getByRole('button', { name: 'Más de 15 días' }));
+  await userEvent.click(within(grupo).getByRole('button', { name: nombre }));
   await waitFor(() => expect(mockDetalle).toHaveBeenLastCalledWith(
-    expect.objectContaining({ min_dias: 8 })));
+    expect.objectContaining({ min_dias: min, max_dias: max })));
+  expect(within(grupo).getByRole('button', { name: nombre })).toHaveAttribute('aria-pressed', 'true');
+});
+
+test('the age pills carry the semáforo dot of their band', async () => {
+  await abrir();
+  const grupo = screen.getByRole('group', { name: 'Antigüedad' });
+  const nivel = (nombre) => within(grupo).getByRole('button', { name: nombre }).querySelector('[data-nivel]')?.dataset.nivel;
+  expect(nivel('Todas')).toBeUndefined();
+  expect(nivel('Hasta 7 días')).toBe('normal');
+  expect(nivel('8 a 15 días')).toBe('atencion');
+  expect(nivel('Más de 15 días')).toBe('critico');
 });
 
 test('the detalle shows the state chip, last change and the count', async () => {

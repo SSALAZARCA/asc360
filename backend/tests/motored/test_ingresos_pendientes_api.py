@@ -117,6 +117,34 @@ def test_detalle_filters(servicio):
     assert _get("/detalle", estado="X").status_code == 422
 
 
+@pytest.mark.parametrize("minimo,maximo,esperado", [
+    (None, 7, [0, 7]),
+    (0, 7, [0, 7]),
+    (8, 15, [8, 15]),
+    (16, None, [16, 40]),
+    (7, 8, [7, 8]),
+    (15, 16, [15, 16]),
+])
+def test_detalle_age_bands_are_inclusive_and_do_not_overlap(servicio, monkeypatch, minimo, maximo, esperado):
+    _como("ADMIN")
+    edades = [0, 7, 8, 15, 16, 40]
+
+    async def pendientes(db, sucursal_ids=None, hoy=None):
+        return [_item(n, "SIN_CONFIRMAR", d) for n, d in enumerate(edades, start=1)]
+
+    monkeypatch.setattr(ip, "pendientes", pendientes)
+    params = {k: v for k, v in (("min_dias", minimo), ("max_dias", maximo)) if v is not None}
+    dias = [i["dias"] for i in _get("/detalle", **params).json()["items"]]
+    assert dias == esperado
+
+
+def test_detalle_min_above_max_is_a_422(servicio):
+    _como("ADMIN")
+    assert _get("/detalle", min_dias=9, max_dias=8).status_code == 422
+    assert _get("/detalle", min_dias=8, max_dias=8).status_code == 200
+    assert _get("/detalle", max_dias=-1).status_code == 422
+
+
 def test_nothing_verifiable_gives_empty_lists_and_a_null_flag(servicio, monkeypatch):
     monkeypatch.setattr(ip, "verificable_desde", AsyncMock(return_value=None))
     _como("ADMIN")

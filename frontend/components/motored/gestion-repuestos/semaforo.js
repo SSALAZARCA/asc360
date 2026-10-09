@@ -20,6 +20,17 @@ export const PALETA = {
   [CRITICO]: { color: COLOR.bad, soft: COLOR.badSoft, ink: COLOR.badInk, texto: 'Crítico' },
 };
 
+/**
+ * Non-overlapping age bands of the "Antigüedad" filter, derived from the thresholds above so they always match
+ * the traffic light. `[min_dias, max_dias, texto, nivel]`, both limits inclusive on the API (null = open).
+ */
+export const BANDAS_EDAD = [
+  [null, null, 'Todas', null],
+  [0, DIAS_NORMAL, `Hasta ${DIAS_NORMAL} días`, NORMAL],
+  [DIAS_NORMAL + 1, DIAS_ATENCION, `${DIAS_NORMAL + 1} a ${DIAS_ATENCION} días`, ATENCION],
+  [DIAS_ATENCION + 1, null, `Más de ${DIAS_ATENCION} días`, CRITICO],
+];
+
 /** Level by days since the invoice; null when there is no usable number. */
 export function nivelPorDias(dias) {
   const n = dias == null || dias === '' ? NaN : Number(dias);

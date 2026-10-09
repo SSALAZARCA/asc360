@@ -7,7 +7,7 @@ Panel reads (ADMIN, COMPRAS, GERENCIA, COORDINADOR_REPUESTOS):
   sin_confirmar, aun_no_llegan, mas_antigua, valor_pendiente).
 - `GET /por-tienda`: `{verificable_desde, tiendas}`, one row per principal
   store, most pending first.
-- `GET /detalle?sucursal=&estado=&min_dias=`: `{verificable_desde, items}`,
+- `GET /detalle?sucursal=&estado=&min_dias=&max_dias=`: `{verificable_desde, items}`,
   oldest first.
 - `GET /historial?factura=&sucursal=`: who changed the confirmation, when.
 - `GET /asesor?sucursal=`: the `pendientes_ingreso` block of one store, for
@@ -44,6 +44,7 @@ from app.motored.services import sucursal_grupo
 ROLES_PANEL = ("ADMIN", "COMPRAS", "GERENCIA", "COORDINADOR_REPUESTOS")
 ROLES_CONFIRMA = ("ADMIN", "COORDINADOR_REPUESTOS")
 MSG_ESTADO_FILTRO = "El estado del filtro no es válido."
+MSG_RANGO_DIAS = "El mínimo de días no puede superar al máximo."
 
 router = APIRouter(
     prefix="/gestion-repuestos/ingresos-facturas",
@@ -85,17 +86,22 @@ async def leer_detalle(
     sucursal: Optional[uuid.UUID] = Query(None),
     estado: Optional[str] = Query(None),
     min_dias: Optional[int] = Query(None, ge=0),
+    max_dias: Optional[int] = Query(None, ge=0),
     db: AsyncSession = Depends(get_motored_db_or_503),
 ) -> Dict[str, Any]:
     if estado is not None and estado not in (
             ingresos.SIN_CONFIRMAR, *ingresos.ESTADOS_CONFIRMABLES):
         raise HTTPException(status_code=422, detail=MSG_ESTADO_FILTRO)
+    if min_dias is not None and max_dias is not None and min_dias > max_dias:
+        raise HTTPException(status_code=422, detail=MSG_RANGO_DIAS)
     desde = await ingresos.verificable_desde(db)
     items = await _items(db, sucursal) if desde else []
     if estado is not None:
         items = [i for i in items if i["estado"] == estado]
     if min_dias is not None:
         items = [i for i in items if i["dias"] >= min_dias]
+    if max_dias is not None:
+        items = [i for i in items if i["dias"] <= max_dias]
     return {"verificable_desde": desde, "items": items}
 
 

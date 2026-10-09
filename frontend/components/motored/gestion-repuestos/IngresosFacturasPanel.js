@@ -16,13 +16,15 @@ import IngresosKpis from './IngresosKpis';
 import IngresosPorTienda, { ordenarTiendas } from './IngresosPorTienda';
 import IngresosDetalle from './IngresosDetalle';
 import { select, opcion, segmento } from './ingresosEstilos';
-import { LeyendaSemaforo } from './SemaforoUi';
+import { LeyendaSemaforo, PuntoNivel } from './SemaforoUi';
+import { BANDAS_EDAD } from './semaforo';
 
 const ESTADOS_FILTRO = [
   [null, 'Todas'], ['LLEGO', 'Ya llegó sin ingresar'], ['SIN_CONFIRMAR', 'Sin confirmar'], ['NO_HA_LLEGADO', 'Aún no llega'],
 ];
-// `min_dias` is inclusive on the API, so "> 7 días" asks for at least 8.
-const EDADES = [[null, 'Todas'], [8, '> 7 días'], [16, '> 15 días']];
+// Age bands come from the semáforo thresholds; the API limits are inclusive on both ends.
+const EDADES = BANDAS_EDAD.map(([min, max, texto, nivel]) => [{ min, max }, texto, nivel]);
+const SIN_EDAD = EDADES[0][0];
 const MSG_DETALLE = 'No se pudo cargar el detalle de facturas.';
 
 function Segmentos({ nombre, opciones, valor, onElegir }) {
@@ -30,8 +32,10 @@ function Segmentos({ nombre, opciones, valor, onElegir }) {
     <div role="group" aria-label={nombre} style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '12px', fontWeight: 500 }}>
       {nombre}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-        {opciones.map(([v, texto]) => (
-          <button key={texto} type="button" aria-pressed={valor === v} style={segmento(valor === v)} onClick={() => onElegir(v)}>{texto}</button>
+        {opciones.map(([v, texto, nivel]) => (
+          <button key={texto} type="button" aria-pressed={valor === v} style={segmento(valor === v)} onClick={() => onElegir(v)}>
+            {nivel && <PuntoNivel nivel={nivel} />}{texto}
+          </button>
         ))}
       </div>
     </div>
@@ -41,7 +45,7 @@ function Segmentos({ nombre, opciones, valor, onElegir }) {
 export default function IngresosFacturasPanel({ puedeConfirmar = false }) {
   const [base, setBase] = useState(null); // { desde, resumen, tiendas }
   const [items, setItems] = useState([]);
-  const [filtros, setFiltros] = useState({ sucursal: '', estado: null, min_dias: null });
+  const [filtros, setFiltros] = useState({ sucursal: '', estado: null, edad: SIN_EDAD });
   const [cargando, setCargando] = useState(true);
   const [ocupada, setOcupada] = useState(false);
   const [error, setError] = useState(null);
@@ -62,7 +66,7 @@ export default function IngresosFacturasPanel({ puedeConfirmar = false }) {
     const n = ++pedido.current;
     setCargando(true);
     getIngresosDetalle({
-      sucursal: filtros.sucursal || undefined, estado: filtros.estado || undefined, min_dias: filtros.min_dias ?? undefined,
+      sucursal: filtros.sucursal || undefined, estado: filtros.estado || undefined, min_dias: filtros.edad.min ?? undefined, max_dias: filtros.edad.max ?? undefined,
     })
       .then((r) => {
         if (n !== pedido.current) return;
@@ -117,7 +121,7 @@ export default function IngresosFacturasPanel({ puedeConfirmar = false }) {
               </select>
             </label>
             <Segmentos nombre="Estado" opciones={ESTADOS_FILTRO} valor={filtros.estado} onElegir={poner('estado')} />
-            <Segmentos nombre="Antigüedad" opciones={EDADES} valor={filtros.min_dias} onElegir={poner('min_dias')} />
+            <Segmentos nombre="Antigüedad" opciones={EDADES} valor={filtros.edad} onElegir={poner('edad')} />
           </div>
         )}
         {!sinDatos && <LeyendaSemaforo />}
