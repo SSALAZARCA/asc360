@@ -120,7 +120,7 @@ Each is about 400 changed lines or less, with one work-unit commit, tests alongs
 - [x] WU5 (4c0545c; pg_real 878 passed; slug is 96 bits, String(16), accepted with the 6-digit code and rate limits)
 - [x] WU6 (cfc65c6; backend 6887 passed, pg_real 888 passed). Public URL <MOTORED_PUBLIC_URL>/motored/c/<slug>; lock = 429; no consent checkbox (notice only, per prototype)
 - [x] WU7 (cfc65c6). Pending for WU9: release a disconnected pair's reconteos. Pending for WU12: a leader notice when the code auto-rotated
-- [ ] WU8
+- [x] WU8 (ec9e753; backend 6957 passed, pg_real 900 passed). Unknown codes are not stored unless forzar_desconocido; no per-IP limit on lecturas (a store shares one IP). Follow-up: functional index on upper(btrim(referencia.codigo)) needs a migration
 - [ ] WU9
 - [x] WU1 (0339642 backend + migration b4f9c2e6a813, d0ba5c2 frontend; backend 6719 passed, pg_real 814 passed, jest 2457 passed; route: delegated writer)0
 - [x] WU1 (0339642 backend + migration b4f9c2e6a813, d0ba5c2 frontend; backend 6719 passed, pg_real 814 passed, jest 2457 passed; route: delegated writer)1
