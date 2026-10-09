@@ -76,6 +76,22 @@ GERENCIA_ALLOWED_PREFIXES = (
     "/api/motored/inicio",
 )
 
+# "Gestión repuestos" section (pending invoice intakes). ADMIN and COMPRAS
+# are not path-confined; GERENCIA and COORDINADOR_REPUESTOS get the prefix
+# below. Which of them may confirm is enforced per endpoint, not here.
+GESTION_REPUESTOS_PREFIX = "/api/motored/gestion-repuestos"
+
+# Parts coordinator (`COORDINADOR_REPUESTOS`): an allow-list, so every new
+# endpoint is denied by default. It reads the KPI's only (never the advisor
+# dashboard root, budgets or Inicio) and works the "Gestión repuestos"
+# section.
+COORDINADOR_REPUESTOS_ROLE = "COORDINADOR_REPUESTOS"
+COORDINADOR_REPUESTOS_ALLOWED_PREFIXES = (
+    "/api/motored/auth",
+    "/api/motored/tablero-asesores/kpis",
+    GESTION_REPUESTOS_PREFIX,
+)
+
 # Owner decision 2026-10-05: `SUCURSAL` and `CONSULTA` have no screens yet.
 # They may only log in and change their own password (`/auth`); every other
 # guarded endpoint answers 403 with this detail. Their scoping code
@@ -96,7 +112,10 @@ PASSWORD_CHANGE_PATH = "/api/motored/auth/password"
 _CONFINED_ROLE_PREFIXES = {
     SERVICIO_CLIENTE_ROLE: (SERVICIO_CLIENTE_ALLOWED_PREFIXES,
                             _CONFINED_DETAIL),
-    GERENCIA_ROLE: (GERENCIA_ALLOWED_PREFIXES, _CONFINED_DETAIL),
+    GERENCIA_ROLE: (GERENCIA_ALLOWED_PREFIXES + (GESTION_REPUESTOS_PREFIX,),
+                    _CONFINED_DETAIL),
+    COORDINADOR_REPUESTOS_ROLE: (COORDINADOR_REPUESTOS_ALLOWED_PREFIXES,
+                                 _CONFINED_DETAIL),
     **{
         rol: (ROLES_SIN_ACCESO_ALLOWED_PREFIXES, ROL_SIN_PANTALLAS_DETAIL)
         for rol in ROLES_SIN_ACCESO

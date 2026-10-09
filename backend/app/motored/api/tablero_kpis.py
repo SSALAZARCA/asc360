@@ -68,7 +68,8 @@ router = APIRouter(
     dependencies=[Depends(require_motored_ready)],
 )
 
-_require_rol = require_roles("ADMIN", "COMPRAS", "GERENCIA")
+_require_rol = require_roles(
+    "ADMIN", "COMPRAS", "GERENCIA", "COORDINADOR_REPUESTOS")
 _require_admin = require_roles("ADMIN")
 
 

@@ -53,6 +53,9 @@ class MotoredRole(enum.Enum):
     # Management: web role confined to budgets and the advisor dashboard (see
     # `deps.GERENCIA_ALLOWED_PREFIXES`).
     GERENCIA = "GERENCIA"
+    # Parts coordinator: web role confined to the KPI's and the "Gestión
+    # repuestos" section (see `deps.COORDINADOR_REPUESTOS_ALLOWED_PREFIXES`).
+    COORDINADOR_REPUESTOS = "COORDINADOR_REPUESTOS"
 
 
 class Usuario(MotoredBase):
