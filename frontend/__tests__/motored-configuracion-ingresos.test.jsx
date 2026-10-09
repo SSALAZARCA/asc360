@@ -24,6 +24,7 @@ const INGRESOS = [
   spec('ingreso_plantilla_comprador', 'entero', 1151943311),
   spec('ingreso_plantilla_descuento_item', 'decimal', '0'),
   spec('ingreso_plantilla_unidad_negocio', 'texto', '003'),
+  spec('ingreso_tipos_pedido_excluidos', 'lista', ['GARANTIA25']),
 ];
 
 function montar() {
@@ -44,13 +45,14 @@ describe('Ingresos tab', () => {
     expect(SECCIONES.find((s) => s.id === 'ingresos')?.label).toBe('Ingresos de facturas');
   });
 
-  it('shows the eight settings with business wording and a tooltip each', () => {
+  it('shows the nine settings with business wording and a tooltip each', () => {
     montar();
     [
       'Máximo de referencias que ingresa el asesor', 'Tipo de documento (ERP)', 'Descuento global %',
       'NIT proveedor', 'Sucursal del proveedor', 'Comprador (cédula)', 'Descuento por ítem %', 'Unidad de negocio',
+      'Tipos de pedido que no se ingresan',
     ].forEach((n) => expect(screen.getByText(n)).toBeInTheDocument());
-    expect(screen.getAllByRole('note')).toHaveLength(8);
+    expect(screen.getAllByRole('note')).toHaveLength(9);
   });
 
   it('shows a texto value with its leading zeros as a text input', () => {
@@ -86,5 +88,25 @@ describe('Ingresos tab', () => {
     fireEvent.click(within(c).getByRole('button', { name: 'Guardar' }));
     await waitFor(() => expect(onGuardar).toHaveBeenCalled());
     expect(onGuardar.mock.calls[0][0]).toMatchObject({ clave: 'ingreso_umbral_referencias_asesor', valor: 12 });
+  });
+
+  it('explains which order types are left out of the ingreso process', () => {
+    montar();
+    expect(campo('Tipos de pedido que no se ingresan')).toHaveTextContent(
+      /Facturas con estos tipos de pedido \(ej: GARANTIA25\) no aparecen en Ingresos facturas ni en el aviso del asesor; siguen contando como tránsito\./,
+    );
+  });
+
+  it('edits the excluded order types as an upper-case list', async () => {
+    const { onGuardar } = montar();
+    const c = campo('Tipos de pedido que no se ingresan');
+    expect(within(c).getByText('GARANTIA25')).toBeInTheDocument();
+    fireEvent.change(within(c).getByRole('textbox'), { target: { value: 'otro25' } });
+    fireEvent.keyDown(within(c).getByRole('textbox'), { key: 'Enter' });
+    fireEvent.click(within(c).getByRole('button', { name: 'Guardar' }));
+    await waitFor(() => expect(onGuardar).toHaveBeenCalled());
+    expect(onGuardar.mock.calls[0][0]).toMatchObject({
+      clave: 'ingreso_tipos_pedido_excluidos', valor: ['GARANTIA25', 'OTRO25'],
+    });
   });
 });

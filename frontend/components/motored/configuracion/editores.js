@@ -25,6 +25,7 @@ export const EDITORES = {
   estados_backorder_vigentes: deLista({ mayusculas: true }),
   bodegas_excluidas: deLista({ mayusculas: true, unicos: true }),
   comision_cargos_asesor: deLista({ mayusculas: true }),
+  ingreso_tipos_pedido_excluidos: deLista({ mayusculas: true, unicos: true }),
   grupo_por_cargo: { Control: EditorMapaCargos },
   kpi_semaforo_cortes: { Control: EditorSemaforo, validar: validarSemaforo },
   comision_tramos: { Control: EditorTramos, validar: validarTramos },

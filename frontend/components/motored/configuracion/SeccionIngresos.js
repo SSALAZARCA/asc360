@@ -50,6 +50,11 @@ const CAMPOS = [
     etiqueta: 'Unidad de negocio',
     ayuda: 'Código de la unidad de negocio de cada línea del ERP. Conserva los ceros a la izquierda, por ejemplo 003.',
   },
+  {
+    clave: 'ingreso_tipos_pedido_excluidos',
+    etiqueta: 'Tipos de pedido que no se ingresan',
+    ayuda: 'Facturas con estos tipos de pedido (ej: GARANTIA25) no aparecen en Ingresos facturas ni en el aviso del asesor; siguen contando como tránsito.',
+  },
 ];
 
 export default function SeccionIngresos(props) {
