@@ -17,6 +17,13 @@ from app.motored.models.caso_detractor import CasoDetractor
 from app.motored.models.cliente_tecnired import ClienteTecnired
 from app.motored.models.caso_detractor_accion import CasoDetractorAccion
 from app.motored.models.carga_fila_staging import CargaFilaStaging
+from app.motored.models.conteo import Conteo
+from app.motored.models.conteo_acceso_intento import ConteoAccesoIntento
+from app.motored.models.conteo_lectura import ConteoLectura
+from app.motored.models.conteo_reconteo import ConteoReconteo
+from app.motored.models.conteo_resultado import ConteoResultado
+from app.motored.models.conteo_sesion import ConteoIntegrante, ConteoSesion
+from app.motored.models.conteo_snapshot_linea import ConteoSnapshotLinea
 from app.motored.models.corrida import Corrida
 from app.motored.models.corrida_carga import CorridaCarga
 from app.motored.models.corrida_envio import CorridaEnvio
@@ -34,7 +41,8 @@ from app.motored.models.ingreso_factura import IngresoFactura
 from app.motored.models.inventario_detalle import InventarioDetalle
 from app.motored.models.inventario_snapshot import InventarioSnapshot
 from app.motored.models.kpi_resumen import (
-    KpiClienteMes, KpiCostoReferencia, KpiFacturaFirma, KpiInventarioCorte, KpiResumenEstado, KpiVentaMes,
+    KpiClienteMes, KpiCostoReferencia, KpiFacturaFirma, KpiInventarioCorte,
+    KpiResumenEstado, KpiVentaMes,
 )
 from app.motored.models.login_evento import LoginEvento
 from app.motored.models.factura_confirmacion_ingreso import (
@@ -51,6 +59,7 @@ from app.motored.models.reporte_asesor_link import ReporteAsesorLink
 from app.motored.models.retencion_ejecucion import RetencionEjecucion
 from app.motored.models.sucursal import Sucursal
 from app.motored.models.sucursal_alias import SucursalAlias
+from app.motored.models.ubicacion_inventario import UbicacionInventario
 from app.motored.models.usuario import MotoredRole, Usuario
 from app.motored.models.usuario_sucursal import UsuarioSucursal
 from app.motored.models.vendedor import Vendedor
@@ -67,6 +76,14 @@ __all__ = [
     "ClienteTecnired",
     "CasoDetractorAccion",
     "CargaFilaStaging",
+    "Conteo",
+    "ConteoAccesoIntento",
+    "ConteoIntegrante",
+    "ConteoLectura",
+    "ConteoReconteo",
+    "ConteoResultado",
+    "ConteoSesion",
+    "ConteoSnapshotLinea",
     "Corrida",
     "CorridaCarga",
     "CorridaEnvio",
@@ -103,6 +120,7 @@ __all__ = [
     "RetencionEjecucion",
     "Sucursal",
     "SucursalAlias",
+    "UbicacionInventario",
     "MotoredRole",
     "Usuario",
     "UsuarioSucursal",

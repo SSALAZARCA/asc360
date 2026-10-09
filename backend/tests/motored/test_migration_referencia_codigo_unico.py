@@ -18,11 +18,14 @@ from alembic.config import Config
 from alembic.script import ScriptDirectory
 
 _RAIZ = Path(__file__).resolve().parents[2]
-_ARCHIVO = _RAIZ / "alembic_motored" / "versions" / "f3a8d1c5b704_referencia_codigo_unico.py"
+_ARCHIVO = (
+    _RAIZ / "alembic_motored" / "versions"
+    / "f3a8d1c5b704_referencia_codigo_unico.py")
 
 
 def _cargar():
-    spec = importlib.util.spec_from_file_location("referencia_codigo_unico", _ARCHIVO)
+    spec = importlib.util.spec_from_file_location(
+        "referencia_codigo_unico", _ARCHIVO)
     modulo = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(modulo)
     return modulo
@@ -31,7 +34,8 @@ def _cargar():
 def _correr(direccion, duplicados=()):
     modulo = _cargar()
     with patch.object(modulo, "op") as op_mock:
-        op_mock.get_bind.return_value.execute.return_value.all.return_value = list(duplicados)
+        resultado = op_mock.get_bind.return_value.execute.return_value
+        resultado.all.return_value = list(duplicados)
         getattr(modulo, direccion)()
     return op_mock
 
@@ -41,9 +45,10 @@ def _sql(op_mock):
 
 
 def test_encadena_sobre_vendedor_y_la_cabeza_es_la_del_aviso():
-    guion = ScriptDirectory.from_config(Config(str(_RAIZ / "alembic_motored.ini")))
+    guion = ScriptDirectory.from_config(
+        Config(str(_RAIZ / "alembic_motored.ini")))
 
-    assert guion.get_heads() == ["b4f9c2e6a813"]
+    assert guion.get_heads() == ["d58b2c9e4a17"]
     assert _cargar().down_revision == "e8c2a5f17b93"
 
 
@@ -62,24 +67,30 @@ def test_la_guarda_corre_antes_de_tocar_nada():
     orden = []
     with patch.object(modulo, "op") as op_mock:
         op_mock.get_bind.return_value.execute.side_effect = (
-            lambda *a, **k: orden.append("guarda") or MagicMock(all=lambda: []))
+            lambda *a, **k: (
+                orden.append("guarda") or MagicMock(all=lambda: [])))
         op_mock.execute.side_effect = lambda *a, **k: orden.append("update")
-        op_mock.drop_constraint.side_effect = lambda *a, **k: orden.append("drop")
+        op_mock.drop_constraint.side_effect = (
+            lambda *a, **k: orden.append("drop"))
         modulo.upgrade()
 
-    assert orden[0] == "guarda" and orden.index("guarda") < orden.index("update") < orden.index("drop")
+    assert orden[0] == "guarda"
+    assert (
+        orden.index("guarda") < orden.index("update")
+        < orden.index("drop"))
 
 
 def test_la_guarda_aborta_listando_los_codigos_duplicados():
     modulo = _cargar()
     with patch.object(modulo, "op") as op_mock:
-        op_mock.get_bind.return_value.execute.return_value.all.return_value = [
-            ("ABC-1", 2), ("XYZ-9", 3)]
+        resultado = op_mock.get_bind.return_value.execute.return_value
+        resultado.all.return_value = [("ABC-1", 2), ("XYZ-9", 3)]
         with pytest.raises(RuntimeError) as exc:
             modulo.upgrade()
 
     assert "ABC-1" in str(exc.value) and "XYZ-9" in str(exc.value)
-    assert not op_mock.drop_constraint.called and not op_mock.create_unique_constraint.called
+    assert not op_mock.drop_constraint.called
+    assert not op_mock.create_unique_constraint.called
     assert not op_mock.execute.called
 
 
@@ -87,11 +98,13 @@ def test_la_guarda_lista_a_lo_sumo_50_codigos():
     duplicados = [(f"COD-{i:03d}", 2) for i in range(51)]
     modulo = _cargar()
     with patch.object(modulo, "op") as op_mock:
-        op_mock.get_bind.return_value.execute.return_value.all.return_value = duplicados
+        resultado = op_mock.get_bind.return_value.execute.return_value
+        resultado.all.return_value = duplicados
         with pytest.raises(RuntimeError) as exc:
             modulo.upgrade()
 
-    assert "COD-049" in str(exc.value) and "COD-050" not in str(exc.value)
+    assert "COD-049" in str(exc.value)
+    assert "COD-050" not in str(exc.value)
 
 
 def test_downgrade_restaura_el_unico_compuesto():
@@ -100,4 +113,5 @@ def test_downgrade_restaura_el_unico_compuesto():
     op_mock.drop_constraint.assert_called_once_with(
         "uq_referencia_codigo", "referencia", type_="unique")
     op_mock.create_unique_constraint.assert_called_once_with(
-        "uq_referencia_codigo_proveedor", "referencia", ["codigo", "proveedor_id"])
+        "uq_referencia_codigo_proveedor", "referencia",
+        ["codigo", "proveedor_id"])
