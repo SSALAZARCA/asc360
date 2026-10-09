@@ -96,7 +96,7 @@ async def mundo(fabrica):
 
         base = 900000000 + int(sfx, 16) % 1000000 * 10
         n = {"grande": base, "chica": base + 1, "limite": base + 2,
-             "sin_bodega": base + 3}
+             "sin_bodega": base + 3, "compensada": base + 4}
         # 12 references: 11 with quantity, one credited to zero, plus one
         # reference loaded on the associated store too (counted once).
         for i, ref in enumerate(refs[:10]):
@@ -109,6 +109,12 @@ async def mundo(fabrica):
             linea(n["chica"], ref, 1, 5, cali, unitario=5)
         for ref in refs[:10]:
             linea(n["limite"], ref, 1, 5, cali, unitario=5)
+        # 10 real references plus one booked at cali and fully credited at the
+        # associated store: the ERP template drops it, so it must not count.
+        for ref in refs[:10]:
+            linea(n["compensada"], ref, 1, 5, cali, unitario=5)
+        linea(n["compensada"], refs[10], 2, 10, cali, unitario=5)
+        linea(n["compensada"], refs[10], -2, -10, sur, unitario=5)
         for ref in refs[:11]:
             linea(n["sin_bodega"], ref, 1, 5, sin_bodega, unitario=5)
         db.add(IngresoFactura(
@@ -147,6 +153,8 @@ async def test_responsable_and_reference_count_on_real_data(mundo):
     assert items[n["limite"]]["num_referencias"] == 10
     assert items[n["limite"]]["responsable"] == "ASESOR"  # inclusive
     assert items[n["sin_bodega"]]["responsable"] == "ANALISTA"
+    assert items[n["compensada"]]["num_referencias"] == 10
+    assert items[n["compensada"]]["responsable"] == "ASESOR"
     assert items[n["grande"]]["puede_descargar_plantilla"] is False
 
 

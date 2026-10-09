@@ -16,9 +16,9 @@ document date is the earliest line date. The asesores of the store confirm
 Who enters the invoice into the ERP (odd/tasks/motored-ingresos-responsable-
 plantilla.md): the store's asesor when it has at most `umbral` references
 (Configuración, default 10, inclusive), the administrative analyst above
-that. `num_referencias` counts the distinct references whose net quantity is
-positive (the lines the ERP template carries), per the same grouping as the
-rows (principal store). `puede_descargar_plantilla` is true for analyst
+that. `num_referencias` counts the distinct references whose quantity, summed
+across the whole principal group (associated stores rolled up), is positive:
+the exact rule of the ERP template lines. `puede_descargar_plantilla` is true for analyst
 invoices confirmed "LLEGO".
 
 `calcular_pendientes`, `resumen` and `por_tienda` are pure; the rest reads
@@ -95,6 +95,16 @@ def nombre_factura(prefijo: str, numero: int) -> str:
     return f"{prefijo} {numero}"
 
 
+def _sumar_referencias(neto: Dict[Any, Decimal], linea: Any) -> None:
+    """Adds the row's per-reference quantities to the document's net map."""
+    ids = getattr(linea, "referencias", None) or ()
+    cantidades = getattr(linea, "cantidades", None)
+    if cantidades is None:
+        cantidades = [1] * len(ids)
+    for ref, cantidad in zip(ids, cantidades):
+        neto[ref] = neto.get(ref, Decimal(0)) + Decimal(cantidad)
+
+
 def calcular_pendientes(
     lineas: Iterable[Any], ingresos: Set[Clave], verificable_desde: Optional[date],
     hoy: date, principal: Dict[uuid.UUID, uuid.UUID],
@@ -103,8 +113,9 @@ def calcular_pendientes(
 ) -> List[Dict[str, Any]]:
     """The pending documents, oldest first. `lineas` rows expose
     prefijo_rh, numero_rh, sucursal_id, fecha_factura, cantidad, valor_total
-    (they may already be partial sums) and, optionally, `referencias`: the
-    ids of their lines with positive net quantity."""
+    (they may already be partial sums) and, optionally, `referencias` (line
+    reference ids) with the parallel `cantidades`; without `cantidades` each
+    id counts as one positive unit."""
     if verificable_desde is None:
         return []
     docs: Dict[Tuple[str, int, uuid.UUID], Dict[str, Any]] = {}
@@ -118,12 +129,13 @@ def calcular_pendientes(
             docs[clave] = {
                 "fecha": linea.fecha_factura, "unidades": Decimal(linea.cantidad),
                 "valor": Decimal(linea.valor_total),
-                "referencias": set(getattr(linea, "referencias", None) or ())}
-            continue
-        doc["referencias"].update(getattr(linea, "referencias", None) or ())
-        doc["fecha"] = min(doc["fecha"], linea.fecha_factura)
-        doc["unidades"] += Decimal(linea.cantidad)
-        doc["valor"] += Decimal(linea.valor_total)
+                "referencias": {}}
+            doc = docs[clave]
+        else:
+            doc["fecha"] = min(doc["fecha"], linea.fecha_factura)
+            doc["unidades"] += Decimal(linea.cantidad)
+            doc["valor"] += Decimal(linea.valor_total)
+        _sumar_referencias(doc["referencias"], linea)
 
     items = []
     for (prefijo, numero, tienda), doc in docs.items():
@@ -131,7 +143,7 @@ def calcular_pendientes(
             continue
         conf = confirmaciones.get((prefijo, numero, tienda))
         estado = conf.estado if conf is not None else SIN_CONFIRMAR
-        num_referencias = len(doc["referencias"])
+        num_referencias = sum(1 for q in doc["referencias"].values() if q > 0)
         responsable = (RESPONSABLE_ASESOR if num_referencias <= umbral
                        else RESPONSABLE_ANALISTA)
         items.append({
@@ -206,8 +218,9 @@ async def _lineas_desde(db: AsyncSession, desde: date) -> List[Any]:
             func.min(FacturaProveedorLinea.fecha_factura).label("fecha_factura"),
             func.sum(FacturaProveedorLinea.cantidad).label("cantidad"),
             func.sum(FacturaProveedorLinea.valor_total).label("valor_total"),
-            func.array_agg(FacturaProveedorLinea.referencia_id).filter(
-                FacturaProveedorLinea.cantidad > 0).label("referencias"))
+            func.array_agg(FacturaProveedorLinea.referencia_id).label(
+                "referencias"),
+            func.array_agg(FacturaProveedorLinea.cantidad).label("cantidades"))
         .join(CargaArchivo, CargaArchivo.id == FacturaProveedorLinea.carga_id)
         .where(_carga_viva())
         .group_by(

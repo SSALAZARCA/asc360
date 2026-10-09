@@ -66,6 +66,32 @@ def test_associated_stores_roll_up_without_double_counting_a_reference():
     assert item["num_referencias"] == 3
 
 
+def test_an_offsetting_negative_row_at_an_associated_store_does_not_count():
+    # Same netting as the ERP template: quantity summed per reference across
+    # the whole principal group, kept only when the sum is positive.
+    anulada, vigente = uuid.uuid4(), uuid.uuid4()
+    positiva = _linea(7, [anulada, vigente], suc=TIENDA)
+    positiva.cantidades = [D(5), D(2)]
+    negativa = _linea(7, [anulada], suc=ASOCIADA)
+    negativa.cantidades = [D(-5)]
+
+    [item] = _calc([positiva, negativa])
+
+    assert item["num_referencias"] == 1
+
+
+def test_a_partial_offset_still_counts_the_reference():
+    ref = uuid.uuid4()
+    positiva = _linea(7, [ref], suc=TIENDA)
+    positiva.cantidades = [D(5)]
+    parcial = _linea(7, [ref], suc=ASOCIADA)
+    parcial.cantidades = [D(-2)]
+
+    [item] = _calc([positiva, parcial])
+
+    assert item["num_referencias"] == 1
+
+
 def test_rows_without_reference_data_count_zero_and_stay_with_the_asesor():
     sin_dato = SimpleNamespace(
         prefijo_rh="RH", numero_rh=9, sucursal_id=TIENDA,
