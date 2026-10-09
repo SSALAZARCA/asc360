@@ -548,6 +548,9 @@ _GRUPOS_CARGO = ("PERSONA", "COMERCIALES", "OTROS")
 _BASES_HMCL = ("sin_hmcl", "con_hmcl")
 
 
+_MAXIMO_DIAS_INVENTARIO_KPI = 3650
+
+
 def _claves_indicadores() -> list:
     """T6: lo que el tablero de asesores lee hoy como constantes. Los
     valores por defecto son los de `tablero_asesores`. `lineas_comerciales`
@@ -574,6 +577,20 @@ def _claves_indicadores() -> list:
             ("verde_desde", "ambar_desde"),
             menores=(("ambar_desde", "verde_desde"),),
             seccion="indicadores", maximo=200),
+        _entera(
+            "kpi_inventario_dias_meta", 60, 1, _MAXIMO_DIAS_INVENTARIO_KPI,
+            GRUPO_OPERACION, seccion="indicadores",
+            explicacion="días de inventario objetivo"),
+        objeto_numerico(
+            "kpi_inventario_dias_cortes", {"verde_hasta": 60, "ambar_hasta": 90},
+            ("verde_hasta", "ambar_hasta"),
+            menores=(("verde_hasta", "ambar_hasta"),),
+            seccion="indicadores", maximo=_MAXIMO_DIAS_INVENTARIO_KPI),
+        _entera(
+            "kpi_inventario_sin_movimiento_dias", 180, 1,
+            _MAXIMO_DIAS_INVENTARIO_KPI, GRUPO_OPERACION,
+            seccion="indicadores",
+            explicacion="días sin venta para contar como sin movimiento"),
     ]
 
 
