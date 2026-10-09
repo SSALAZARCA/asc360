@@ -128,7 +128,7 @@ Each is about 400 changed lines or less, with one work-unit commit, tests alongs
 - [x] WU12b (24c4557 backend, 32cff10 UI; backend 7245 passed, pg_real 934 passed, jest 2564 passed). GET /conteos/{id}/panel?version=: a version hash plus sin_cambios short-circuit, progress, partial accuracy, readings per pair; the list carries progreso
 - [x] WU13 (d0014b3; jest 2590 passed). Public /motored/c/<slug>; queue in localStorage; corrections = void + new reading
 - [x] WU14 (d0014b3). Camera via native BarcodeDetector (Android); hidden on iPhone, so manual entry or a BT scanner
-- [ ] WU13b: per-reading location. Today the server files a reading under the session's location at RECEIPT, so offline pairs cannot change location. Fix: each reading carries its own ubicacion (code), and the server uses it (creating it if needed), falling back to the session location; the client stamps the location at scan time and allows changing location offline.
+- [x] WU13b (8748441 backend, 89d866e UI; backend 7259 passed, pg_real 937 passed, jest 2593 passed). Each reading carries ubicacion_codigo (created if new); location can change offline; the session location follows the newest reading
 - [ ] Manual device checks: Android camera, iPhone manual/BT, real USB scanner, tablet screenshots, real offline test.
 - [ ] Widen CONTEOS_ROLES_VISIBLES to ADMIN, LIDER_INVENTARIOS and GERENCIA after WU13b and an owner test.
 
