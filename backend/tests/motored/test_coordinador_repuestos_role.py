@@ -186,7 +186,8 @@ def _calls(dependant) -> set:
 
 
 def _guarded_routes_outside_allow_list():
-    allowed = (PREFIX + "/auth/", KPIS + "/", KPIS + "?")
+    allowed = (PREFIX + "/auth/", KPIS + "/", KPIS + "?",
+               PREFIX + "/gestion-repuestos/")
     for ctx in iter_route_contexts(app.routes):
         path = ctx.path or ""
         if not path.startswith(PREFIX + "/") or path.startswith(allowed):
