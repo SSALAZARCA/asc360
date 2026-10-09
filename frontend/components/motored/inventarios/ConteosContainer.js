@@ -3,8 +3,9 @@
  * "Inventarios > Conteos" (odd/motored-conteos-inventario, WU11): the list
  * of conteos with an estado filter. ADMIN schedules, reschedules (date and
  * leader) and annuls; the leader opens its own conteos (the backend already
- * filters them); GERENCIA reads. Gate: ADMIN, LIDER_INVENTARIOS and
- * GERENCIA only; any other role is sent to its home (UX only).
+ * filters them); GERENCIA reads. A leader is LIDER_INVENTARIOS or
+ * COORDINADOR_REPUESTOS. Gate: `CONTEOS_ROLES` only; any other role is sent
+ * to its home (UX only).
  */
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';

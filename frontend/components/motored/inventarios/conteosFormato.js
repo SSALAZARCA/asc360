@@ -4,6 +4,7 @@
  * enforces every role rule.
  */
 import { getRolActual } from '../../../lib/motored/motoredFetch';
+import { ROLES_LIDER_CONTEO } from '../../../lib/motored/session';
 
 export const ESTADOS_CONTEO = [
   { value: 'PROGRAMADO', label: 'Programado' },
@@ -18,12 +19,23 @@ export function labelEstado(estado) {
   return ESTADOS_CONTEO.find((e) => e.value === estado)?.label ?? estado;
 }
 
-/** What the signed-in role may do: ADMIN everything, the leader operates, GERENCIA reads. */
+/** Readable name of each leader role (the schedule dialog's leader select). */
+export const NOMBRE_ROL_LIDER = {
+  LIDER_INVENTARIOS: 'Líder de inventarios',
+  COORDINADOR_REPUESTOS: 'Coordinador de repuestos',
+};
+
+/** Whether a role leads counts: LIDER_INVENTARIOS or COORDINADOR_REPUESTOS. */
+export function esLiderDeConteo(rol) {
+  return ROLES_LIDER_CONTEO.includes(rol);
+}
+
+/** What the signed-in role may do: ADMIN everything, a leader operates, GERENCIA reads. */
 export function permisosConteo(role = getRolActual()) {
   return {
     role,
     administra: role === 'ADMIN',
-    opera: role === 'ADMIN' || role === 'LIDER_INVENTARIOS',
+    opera: role === 'ADMIN' || esLiderDeConteo(role),
   };
 }
 

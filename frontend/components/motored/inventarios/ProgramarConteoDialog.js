@@ -11,6 +11,7 @@ import {
 } from '../../../lib/motored/conteosApi';
 import InventarioTienda from './InventarioTienda';
 import { labelStyle, optionStyle, selectStyle } from './estilos';
+import { NOMBRE_ROL_LIDER } from './conteosFormato';
 
 function useOpciones(reprogramando) {
   const [sucursales, setSucursales] = useState([]);
@@ -24,6 +25,12 @@ function useOpciones(reprogramando) {
     return () => { vivo = false; };
   }, [reprogramando]);
   return { sucursales, lideres, error };
+}
+
+/** "Nombre · Rol", so ADMIN tells a leader from a parts coordinator. */
+function etiquetaLider(lider) {
+  const rol = NOMBRE_ROL_LIDER[lider.rol];
+  return rol ? `${lider.nombre} · ${rol}` : lider.nombre;
 }
 
 function Campo({ etiqueta, children }) {
@@ -73,10 +80,10 @@ export default function ProgramarConteoDialog({ conteo, onCancel, onListo }) {
         </Campo>
       )}
       {sucursal && <InventarioTienda sucursal={sucursal} />}
-      <Campo etiqueta="Líder de inventarios">
+      <Campo etiqueta="Líder del conteo">
         <select value={liderId} onChange={(e) => setLiderId(e.target.value)} style={selectStyle}>
           <option value="" style={optionStyle}>Elija un líder</option>
-          {opciones.lideres.map((l) => <option key={l.id} value={l.id} style={optionStyle}>{l.nombre}</option>)}
+          {opciones.lideres.map((l) => <option key={l.id} value={l.id} style={optionStyle}>{etiquetaLider(l)}</option>)}
         </select>
       </Campo>
       <Campo etiqueta="Fecha">

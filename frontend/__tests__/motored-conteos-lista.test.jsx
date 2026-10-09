@@ -119,7 +119,7 @@ describe('Programar conteo', () => {
     const dialogo = await screen.findByRole('dialog');
     await within(dialogo).findByRole('option', { name: 'Laura Líder' });
     fireEvent.change(within(dialogo).getByLabelText('Tienda'), { target: { value: 's1' } });
-    fireEvent.change(within(dialogo).getByLabelText('Líder de inventarios'), { target: { value: 'l1' } });
+    fireEvent.change(within(dialogo).getByLabelText('Líder del conteo'), { target: { value: 'l1' } });
     fireEvent.change(within(dialogo).getByLabelText('Fecha'), { target: { value: '2026-10-12' } });
     fireEvent.click(within(dialogo).getByRole('button', { name: 'Programar' }));
 
@@ -161,7 +161,7 @@ describe('Programar conteo', () => {
     const dialogo = await screen.findByRole('dialog');
     await within(dialogo).findByRole('option', { name: 'Laura Líder' });
     fireEvent.change(within(dialogo).getByLabelText('Tienda'), { target: { value: 's1' } });
-    fireEvent.change(within(dialogo).getByLabelText('Líder de inventarios'), { target: { value: 'l1' } });
+    fireEvent.change(within(dialogo).getByLabelText('Líder del conteo'), { target: { value: 'l1' } });
     fireEvent.change(within(dialogo).getByLabelText('Fecha'), { target: { value: '2026-10-12' } });
     fireEvent.click(within(dialogo).getByRole('button', { name: 'Programar' }));
 

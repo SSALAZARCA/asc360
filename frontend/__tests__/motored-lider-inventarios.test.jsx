@@ -3,7 +3,8 @@
  * session role, lands on Conteos, is kept inside its pages, is offered when
  * creating users and has a readable name. While stage 1 is being built the
  * sidebar group "Inventarios" shows to ADMIN only. The list page
- * renders for ADMIN, LIDER_INVENTARIOS and GERENCIA; any other role goes
+ * renders for ADMIN, the leaders (LIDER_INVENTARIOS and, owner decision
+ * 2026-10-09, COORDINADOR_REPUESTOS) and GERENCIA; any other role goes
  * home. UX only: the backend is the real enforcement.
  */
 import React from 'react';
@@ -34,7 +35,7 @@ import {
 import { tienePermiso } from '../lib/motored/permisosPorRol';
 import { ROL_NOMBRE } from '../components/motored/inicio/textos';
 
-const ROLES_CONTEOS = ['ADMIN', 'LIDER_INVENTARIOS', 'GERENCIA'];
+const ROLES_CONTEOS = ['ADMIN', 'LIDER_INVENTARIOS', 'COORDINADOR_REPUESTOS', 'GERENCIA'];
 const OTROS_ROLES = ['COMPRAS', 'SERVICIO_CLIENTE', 'COORDINADOR_REPUESTOS', 'SUCURSAL', 'CONSULTA'];
 
 function login(role, extra = {}) {
@@ -154,7 +155,7 @@ describe('create-user form', () => {
 });
 
 describe('Conteos list page', () => {
-  it('is gated to ADMIN, LIDER_INVENTARIOS and GERENCIA', () => {
+  it('is gated to ADMIN, both leader roles and GERENCIA', () => {
     expect(CONTEOS_ROLES).toEqual(ROLES_CONTEOS);
   });
 
@@ -168,7 +169,7 @@ describe('Conteos list page', () => {
     expect(pushMock).not.toHaveBeenCalled();
   });
 
-  it.each(['COMPRAS', 'SERVICIO_CLIENTE', 'COORDINADOR_REPUESTOS'])(
+  it.each(['COMPRAS', 'SERVICIO_CLIENTE', 'ANALISTA_ADMINISTRATIVO'])(
     'sends %s to its home and never renders the page',
     async (role) => {
       login(role);

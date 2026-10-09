@@ -9,7 +9,8 @@ export const PASSWORD_CHANGE_REQUIRED_CODE = 'PASSWORD_CHANGE_REQUIRED';
 
 export const ROLE_GERENCIA = 'GERENCIA';
 
-/** Parts coordinator: KPI's plus the "Gestión repuestos" section only. */
+/** Parts coordinator: KPI's, the "Gestión repuestos" section and, as a count
+ * leader (owner decision 2026-10-09), the "Inventarios" pages. */
 export const COORDINADOR_REPUESTOS = 'COORDINADOR_REPUESTOS';
 
 /** KPI's page: the home of COORDINADOR_REPUESTOS. */
@@ -31,9 +32,14 @@ export function isAnalistaAdministrativoPath(pathname) {
   return ANALISTA_ADMINISTRATIVO_PATHS.some((p) => pathname === p || pathname?.startsWith(`${p}/`));
 }
 
-// Pages a COORDINADOR_REPUESTOS may open (UX only; the backend allow-list
-// `deps.COORDINADOR_REPUESTOS_ALLOWED_PREFIXES` is the real enforcement).
-const COORDINADOR_REPUESTOS_PATHS = [KPIS_PATH, GESTION_REPUESTOS_PATH, MI_CUENTA_PATH];
+/** "Inventarios" section: its pages and the roles that may open Conteos. */
+export const INVENTARIOS_PATH = '/motored/inventarios';
+export const CONTEOS_PATH = '/motored/inventarios/conteos';
+
+// Pages a COORDINADOR_REPUESTOS may open (UX only; the backend confinement
+// `deps._CONFINED_ROLE_PREFIXES` is the real enforcement). It also leads
+// inventory counts, so it opens the "Inventarios" pages.
+const COORDINADOR_REPUESTOS_PATHS = [KPIS_PATH, GESTION_REPUESTOS_PATH, INVENTARIOS_PATH, MI_CUENTA_PATH];
 
 export function isCoordinadorRepuestosPath(pathname) {
   return COORDINADOR_REPUESTOS_PATHS.some((p) => pathname === p || pathname?.startsWith(`${p}/`));
@@ -42,14 +48,16 @@ export function isCoordinadorRepuestosPath(pathname) {
 /** Inventory-count leader: the "Conteos de inventario" module only. */
 export const LIDER_INVENTARIOS = 'LIDER_INVENTARIOS';
 
-/** "Inventarios" section: its pages and the roles that may open Conteos. */
-export const INVENTARIOS_PATH = '/motored/inventarios';
-export const CONTEOS_PATH = '/motored/inventarios/conteos';
-export const CONTEOS_ROLES = ['ADMIN', LIDER_INVENTARIOS, ROLE_GERENCIA];
+/** Roles that lead a count (owner decision 2026-10-09: the parts coordinator
+ * leads too, with exactly the LIDER_INVENTARIOS powers). */
+export const ROLES_LIDER_CONTEO = [LIDER_INVENTARIOS, COORDINADOR_REPUESTOS];
+
+export const CONTEOS_ROLES = ['ADMIN', ...ROLES_LIDER_CONTEO, ROLE_GERENCIA];
 
 // Owner rule: while stage 1 is being built, the sidebar group "Inventarios"
 // shows to ADMIN only, so nothing half-built is exposed. It widens to
-// CONTEOS_ROLES (ADMIN, LIDER_INVENTARIOS and GERENCIA) when WU12 lands.
+// CONTEOS_ROLES (ADMIN, LIDER_INVENTARIOS, COORDINADOR_REPUESTOS and GERENCIA)
+// when the owner finishes testing; COORDINADOR_REPUESTOS joins it then.
 export const CONTEOS_ROLES_VISIBLES = ['ADMIN'];
 
 // Pages a LIDER_INVENTARIOS may open (UX only; the backend allow-list
