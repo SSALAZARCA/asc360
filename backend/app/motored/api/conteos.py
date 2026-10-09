@@ -1,6 +1,6 @@
 """
 Motored -- inventory counts, leader API (odd/motored-conteos-inventario,
-WU6/WU7/WU8/WU9; design §6.1, §5.1, §5.2, §5.3, §4.3).
+WU6/WU7/WU8/WU9/WU10; design §6.1, §5.1, §5.2, §5.3, §4.3).
 
 Prefix `/api/motored/conteos`. The path rules already confine
 LIDER_INVENTARIOS and GERENCIA to it; each endpoint then picks its roles:
@@ -10,8 +10,9 @@ LIDER_INVENTARIOS and GERENCIA to it; each endpoint then picks its roles:
   ADMIN only (owner decision);
 - iniciar, rotate the code, the QR, disconnect a pair, create / rename /
   deactivate the store's locations, end round 1, add / assign /
-  auto-assign / cancel reconteos: ADMIN or the assigned leader.
-  GERENCIA gets 403 on every write (it reads the differences).
+  auto-assign / cancel reconteos, close: ADMIN or the assigned leader.
+  GERENCIA gets 403 on every write (it reads the differences, the
+  result and the Excel downloads).
 
 Scoping: a leader only sees its own conteos (`lider_id`); another's
 answers 404, never 403, so ids do not leak (`consultas.conteo_visible`).
@@ -35,9 +36,13 @@ from app.motored.models.conteo import ESTADOS_ABIERTOS, Conteo
 from app.motored.schemas import conteos as esquemas
 from app.motored.services.auth import MotoredUser
 from app.motored.services.conteos import (
-    acceso, consultas, diferencias, errores, reconteos, sesiones, snapshot,
-    ubicaciones,
+    acceso, cierre, consultas, diferencias, errores, excel_ajustes,
+    reconteos, sesiones, snapshot, ubicaciones,
 )
+from app.motored.services.corridas.exportacion_hmcl import (
+    content_disposition,
+)
+from app.motored.services.reloj import hoy_bogota
 
 ADMIN = "ADMIN"
 LECTORES = (ADMIN, "LIDER_INVENTARIOS", "GERENCIA")
@@ -73,6 +78,8 @@ _ESTADO_HTTP = {
     errores.UbicacionDuplicada: 409,
     errores.SinUbicacion: 409,
     errores.RondaCerrada: 409,
+    errores.ReconteosAbiertos: 409,
+    errores.SinBodegaPrincipal: 409,
     errores.AccesoInvalido: 401,
     errores.SesionInactiva: 401,
     errores.DemasiadosIntentos: 429,
@@ -633,3 +640,118 @@ async def cancelar_reconteo(
         raise error_http(error) from error
     await db.commit()
     return esquemas.ReconteoLider.model_validate(reconteo)
+
+
+# --- close and the adjustment list (WU10) ------------------------------------
+
+
+@router.post("/{conteo_id}/cerrar", response_model=esquemas.CerrarSalida)
+async def cerrar(
+    conteo_id: uuid.UUID,
+    cuerpo: Optional[esquemas.CerrarEntrada] = None,
+    usuario: MotoredUser = Depends(operador),
+    db: AsyncSession = Depends(get_motored_db_or_503),
+):
+    """EN_RECONTEO -> CERRADO. Open reconteos are a 409 with their
+    counts unless `forzar` with a `motivo` (they are cancelled)."""
+    cuerpo = cuerpo or esquemas.CerrarEntrada()
+    try:
+        await consultas.conteo_visible(db, conteo_id, usuario)
+        hecho = await cierre.cerrar(
+            db, conteo_id, _uuid(usuario), forzar=cuerpo.forzar,
+            motivo=cuerpo.motivo, ahora=_ahora())
+    except errores.ErrorConteo as error:
+        raise error_http(error) from error
+    await db.commit()
+    return esquemas.CerrarSalida(
+        estado=hecho.conteo.estado, cerrado_en=hecho.conteo.cerrado_en,
+        reconteos_cancelados=hecho.reconteos_cancelados,
+        motivo_cierre_forzado=hecho.conteo.motivo_cierre_forzado,
+        kpi=esquemas.KpiSalida(**hecho.kpi._asdict()))
+
+
+async def _conteo_en(
+        db: AsyncSession, conteo_id: uuid.UUID, usuario: MotoredUser,
+        estados, mensaje: str) -> Conteo:
+    conteo = await consultas.conteo_visible(db, conteo_id, usuario)
+    if conteo.estado not in estados:
+        raise errores.EstadoInvalido(mensaje, estado=conteo.estado)
+    return conteo
+
+
+async def _cerrado(
+        db: AsyncSession, conteo_id: uuid.UUID,
+        usuario: MotoredUser) -> Conteo:
+    return await _conteo_en(
+        db, conteo_id, usuario, ("CERRADO",),
+        "El resultado y los ajustes existen cuando el conteo está "
+        "cerrado.")
+
+
+@router.get(
+    "/{conteo_id}/resultado", response_model=esquemas.ResultadoSalida)
+async def ver_resultado(
+    conteo_id: uuid.UUID,
+    usuario: MotoredUser = Depends(lector),
+    db: AsyncSession = Depends(get_motored_db_or_503),
+):
+    """The KPI and every result line (no pagination: one line per
+    referencia of a store), largest |valor| first."""
+    try:
+        conteo = await _cerrado(db, conteo_id, usuario)
+    except errores.ErrorConteo as error:
+        raise error_http(error) from error
+    lineas = await cierre.resultado(db, conteo)
+    datos = await cierre.encabezado(db, conteo, lineas)
+    return esquemas.ResultadoSalida(
+        conteo_id=conteo.id, estado=conteo.estado,
+        cerrado_en=conteo.cerrado_en,
+        motivo_cierre_forzado=datos.motivo_cierre_forzado,
+        bodega=datos.bodega, kpi=esquemas.KpiSalida(**datos.kpi._asdict()),
+        total=len(lineas),
+        items=[esquemas.LineaResultado(**f._asdict()) for f in lineas])
+
+
+def _excel(contenido: bytes, nombre: str) -> Response:
+    return Response(
+        contenido, media_type=excel_ajustes.XLSX, headers={
+            "Content-Disposition": content_disposition(nombre),
+            **SIN_CACHE})
+
+
+@router.get("/{conteo_id}/ajustes.xlsx", response_class=Response)
+async def descargar_ajustes(
+    conteo_id: uuid.UUID,
+    usuario: MotoredUser = Depends(lector),
+    db: AsyncSession = Depends(get_motored_db_or_503),
+):
+    """The ERP adjustment list of a closed conteo."""
+    try:
+        conteo = await _cerrado(db, conteo_id, usuario)
+    except errores.ErrorConteo as error:
+        raise error_http(error) from error
+    lineas = await cierre.resultado(db, conteo)
+    datos = await cierre.encabezado(db, conteo, lineas)
+    nombre = excel_ajustes.nombre_archivo(
+        "ajustes", datos.codigo_co, hoy_bogota(datos.cerrado_en))
+    return _excel(excel_ajustes.libro(datos, lineas), nombre)
+
+
+@router.get("/{conteo_id}/avance.xlsx", response_class=Response)
+async def descargar_avance(
+    conteo_id: uuid.UUID,
+    usuario: MotoredUser = Depends(lector),
+    db: AsyncSession = Depends(get_motored_db_or_503),
+):
+    """The same layout from the live differences of an open conteo."""
+    try:
+        conteo = await _conteo_en(
+            db, conteo_id, usuario, ESTADOS_ABIERTOS,
+            "El avance solo se descarga con el conteo en curso.")
+    except errores.ErrorConteo as error:
+        raise error_http(error) from error
+    lineas = await cierre.avance(db, conteo)
+    datos = await cierre.encabezado(db, conteo, lineas)
+    nombre = excel_ajustes.nombre_archivo(
+        "avance", datos.codigo_co, hoy_bogota(_ahora()))
+    return _excel(excel_ajustes.libro(datos, lineas), nombre)

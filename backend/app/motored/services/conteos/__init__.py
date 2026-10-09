@@ -9,5 +9,7 @@ Motored physical inventory counts (odd/motored-conteos-inventario).
   pairs' readings and the referencia master they download;
 - `diferencias`, `reconteos`: the leader-only differences (one aggregate,
   the final-quantity rule) and the reconteo round;
+- `cierre`, `excel_ajustes`: the close (result lines, accuracy KPI) and
+  the ERP adjustment Excel;
 - `errores`: the domain errors the API maps to HTTP.
 """

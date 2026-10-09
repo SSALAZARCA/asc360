@@ -203,3 +203,21 @@ class HayParejaElegible(ErrorConteo):
     MENSAJE = (
         "Hay otra pareja conectada que puede hacer este reconteo. Solo se "
         "autoriza a la misma pareja cuando no hay ninguna otra.")
+
+
+# --- close (WU10) ------------------------------------------------------------
+
+
+class ReconteosAbiertos(ErrorConteo):
+    codigo = "RECONTEOS_ABIERTOS"
+    MENSAJE = (
+        "Todavía hay reconteos sin terminar. Espere a que terminen, "
+        "cancélelos o cierre de forma forzada con un motivo.")
+
+
+class SinBodegaPrincipal(ErrorConteo):
+    codigo = "SIN_BODEGA_PRINCIPAL"
+    MENSAJE = (
+        "La tienda no tiene una bodega principal registrada, así que no "
+        "hay a qué bodega asignar los ajustes. Configúrela en Maestros > "
+        "Sucursales antes de cerrar.")

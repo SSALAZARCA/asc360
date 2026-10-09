@@ -472,3 +472,67 @@ class ReconteoTerminado(BaseModel):
     id: uuid.UUID
     estado: str
     terminado_en: Optional[datetime] = None
+
+
+# --- close (WU10) ------------------------------------------------------------
+
+
+class CerrarEntrada(BaseModel):
+    """`forzar` cancels the open reconteos and needs `motivo`."""
+
+    forzar: bool = False
+    motivo: Optional[str] = Field(default=None, max_length=2000)
+
+
+class KpiSalida(BaseModel):
+    """Accuracy KPI (design §7.9). `exactitud_pct` is null for an empty
+    count; the money totals leave SIN_COSTO lines out."""
+
+    refs_universo: int
+    refs_exactas: int
+    exactitud_pct: Optional[Decimal] = None
+    valor_sistema: Decimal
+    valor_diferencia_neta: Decimal
+    valor_diferencia_abs: Decimal
+
+
+class CerrarSalida(BaseModel):
+    estado: str
+    cerrado_en: Optional[datetime] = None
+    reconteos_cancelados: int
+    motivo_cierre_forzado: Optional[str] = None
+    kpi: KpiSalida
+
+
+class LineaResultado(BaseModel):
+    """One code of the result. `bodega` is the principal bodega's code
+    (the whole difference goes there); `valor` is null when SIN_COSTO;
+    `confirmada` is null without a finished reconteo."""
+
+    referencia_id: Optional[uuid.UUID] = None
+    codigo: str
+    descripcion: Optional[str] = None
+    bodega: Optional[str] = None
+    sistema: Decimal
+    contado: Decimal
+    diferencia: Decimal
+    costo_unitario: Optional[Decimal] = None
+    costo_fuente: str
+    valor: Optional[Decimal] = None
+    ubicaciones: List[str]
+    con_reconteo: bool
+    critico: bool
+    confirmada: Optional[bool] = None
+
+
+class ResultadoSalida(BaseModel):
+    """Every line (no pagination), largest |valor| first."""
+
+    conteo_id: uuid.UUID
+    estado: str
+    cerrado_en: Optional[datetime] = None
+    motivo_cierre_forzado: Optional[str] = None
+    bodega: Optional[str] = None
+    kpi: KpiSalida
+    total: int
+    items: List[LineaResultado]
