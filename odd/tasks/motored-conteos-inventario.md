@@ -114,8 +114,8 @@ Each is about 400 changed lines or less, with one work-unit commit, tests alongs
 | WU14 | Pair UI 2: mobile layout, camera scanning (dynamic import), reconteo tasks tab. Matches "ConteoCelular". Manual check on Android + iPhone, plus tablet screenshots. | WU13 |
 
 - [x] WU1 (0339642 backend + migration b4f9c2e6a813, d0ba5c2 frontend; backend 6719 passed, pg_real 814 passed, jest 2457 passed; route: delegated writer)
-- [ ] WU2
-- [ ] WU3
+- [x] WU2 (e252dc4, migration c3e7a1f50d24)
+- [x] WU3 (e252dc4, migration d58b2c9e4a17 = head; backend 6735 passed, pg_real 855 passed; route: delegated writer; SIN_COSTO valor_diferencia left nullable, decide in WU10)
 - [ ] WU4
 - [ ] WU5
 - [ ] WU6
