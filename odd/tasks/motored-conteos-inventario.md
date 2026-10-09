@@ -61,3 +61,4 @@ A new menu module for running total store counts and scheduled selective (cyclic
   - The ERP adjustment Excel assigns each referencia's whole difference to that SAME store's principal bodega.
   - Associated stores (`principal_id`) are not merged into a count.
   - This supersedes the design's per-bodega location tagging (open question 2).
+- 2026-10-08: default thresholds are reconteo above $100.000 and critical above $500.000, both editable in Configuración.
