@@ -47,6 +47,11 @@ A new menu module for running total store counts and scheduled selective (cyclic
 
 ## Open questions
 - RESOLVED 2026-10-08: differences are valued at the inventory file's "Costo prom. uni." per referencia and bodega, frozen in the snapshot. Thresholds and selective rules live in Configuración, new tab "Conteos de inventario".
-- The selective count rules (frequency, list size, ABC criteria).
+- RESOLVED 2026-10-08 selective counts:
+  - **ABC by sales money per store.** Thresholds (default 80/15/5) and frequencies (default A monthly, B quarterly, C semiannual) are configurable.
+  - **Always included:** referencias with a difference in the last count, negative system stock, and selling with zero stock.
+  - **Weekly list per store,** size configurable (default 40), auto-generated.
+  - **Counted by the store's asesores (Lore users)** in a Telegram Mini App opened from a Lore message button. Telegram identifies the asesor; a shared Telegram asks for the cédula. It can be resumed, and differences go to the leader panel.
+  - **Counted at store opening, store OPEN,** against that morning's inventory. A selective difference is confirmed only if it repeats in a next-day reconteo.
 - Reconteo by a different pair: required or only suggested.
 - The ERP adjustment file format.
