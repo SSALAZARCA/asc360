@@ -1,6 +1,8 @@
 'use client';
 import { formatCOP } from '../../../lib/motored/formatCOP';
-import { tarjeta, tituloSeccion, subtitulo, tabla, th, td, AMBAR } from './ingresosEstilos';
+import { tarjeta, tituloSeccion, subtitulo, tabla, th, td } from './ingresosEstilos';
+import { PALETA, CRITICO, nivelPorDias, nivelTienda } from './semaforo';
+import { PildoraNivel, PuntoNivel } from './SemaforoUi';
 
 /** Most "llegaron sin ingresar" first, then most pending. */
 export function ordenarTiendas(tiendas) {
@@ -22,7 +24,7 @@ export default function IngresosPorTienda({ tiendas, onElegir }) {
             <tr>
               <th scope="col" style={th(true)}>Tienda</th>
               <th scope="col" style={th()}>Pendientes</th>
-              <th scope="col" style={{ ...th(), color: AMBAR }}>Llegaron sin ingresar</th>
+              <th scope="col" style={{ ...th(), color: PALETA[CRITICO].ink }}>Llegaron sin ingresar</th>
               <th scope="col" style={th()}>Sin confirmar</th>
               <th scope="col" style={th()}>Aún no llega</th>
               <th scope="col" style={th()} title="Días desde la fecha de la factura más antigua pendiente">Más antigua (días)</th>
@@ -36,12 +38,12 @@ export default function IngresosPorTienda({ tiendas, onElegir }) {
                 tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter') onElegir(t.sucursal_id); }}
                 title={`Ver el detalle de ${t.tienda}`}
               >
-                <td style={{ ...td(true), fontWeight: 700 }}>{t.tienda}</td>
+                <td style={{ ...td(true), fontWeight: 700 }}><PuntoNivel nivel={nivelTienda(t)} />{t.tienda}</td>
                 <td style={td()}>{t.pendientes}</td>
-                <td style={{ ...td(), fontWeight: 700, color: AMBAR }}>{t.llegaron_sin_ingresar}</td>
+                <td style={t.llegaron_sin_ingresar > 0 ? { ...td(), fontWeight: 700, color: PALETA[CRITICO].ink } : td()}>{t.llegaron_sin_ingresar}</td>
                 <td style={td()}>{t.sin_confirmar}</td>
                 <td style={td()}>{t.aun_no_llegan}</td>
-                <td style={td()}>{t.mas_antigua ?? '—'}</td>
+                <td style={td()}><PildoraNivel nivel={nivelPorDias(t.mas_antigua)}>{t.mas_antigua ?? '—'}</PildoraNivel></td>
                 <td style={td()}>{formatCOP(t.valor_pendiente)}</td>
               </tr>
             ))}

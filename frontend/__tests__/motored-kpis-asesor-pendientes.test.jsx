@@ -19,6 +19,8 @@ const bloque = (items, desde = '2026-09-24') => ({
   resumen: { pendientes: items.length, llegaron_sin_ingresar: items.filter((i) => i.estado === 'LLEGO').length },
 });
 const respuesta = (status, body = {}) => ({ ok: status >= 200 && status < 300, status, json: async () => body });
+// The days segment is its own colored span, so match the whole line by its text content.
+const linea = (texto) => (_, el) => el.tagName === 'SPAN' && el.textContent === texto;
 const tarjeta = () => screen.findByRole('region', { name: 'Pedidos por ingresar' });
 
 const conBloque = (b) => ({ ...ASESOR_DETALLE, pendientes_ingreso: b });
@@ -37,8 +39,8 @@ describe('pending invoices card on the public link', () => {
     const card = await tarjeta();
     expect(within(card).getByText(/2 facturas pendientes/)).toBeInTheDocument();
     expect(within(card).getByText('1 llegaron sin ingresar')).toBeInTheDocument();
-    expect(within(card).getByText('RH 482915 · 28/09 · 12 días · $1,2 M')).toBeInTheDocument();
-    expect(within(card).getByText('RH 478301 · 07/10 · 1 día · $642 mil')).toBeInTheDocument();
+    expect(within(card).getByText(linea('RH 482915 · 28/09 · 12 días · $1,2 M'))).toBeInTheDocument();
+    expect(within(card).getByText(linea('RH 478301 · 07/10 · 1 día · $642 mil'))).toBeInTheDocument();
     expect(within(card).getByText(/Juan Pérez · 30\/09 09:15/)).toBeInTheDocument();
     expect(within(card).getByText(/Verificable desde 24\/09 · sale sola al ingresarse/)).toBeInTheDocument();
     expect(within(card).getByRole('button', { name: 'Más información' })).toBeInTheDocument();
@@ -136,7 +138,7 @@ describe('pending invoices card in the staff asesor view', () => {
     global.fetch.mockResolvedValue(respuesta(200, bloque([item(482915)])));
     staff();
     const card = await tarjeta();
-    expect(within(card).getByText('RH 482915 · 28/09 · 12 días · $1,2 M')).toBeInTheDocument();
+    expect(within(card).getByText(linea('RH 482915 · 28/09 · 12 días · $1,2 M'))).toBeInTheDocument();
     expect(llamadas()[0].url).toMatch(/\/gestion-repuestos\/ingresos-facturas\/asesor\?sucursal=s-pop$/);
   });
 

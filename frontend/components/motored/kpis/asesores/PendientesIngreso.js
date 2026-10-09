@@ -13,7 +13,8 @@ import { getRolActual } from '../../../../lib/motored/motoredFetch';
 import { fechaBogota } from '../../../../lib/motored/fechas';
 import { COLOR } from '../tokens';
 import { NUM, ROTULO, TARJETA } from '../ventas/estilos';
-import { LLEGO, NO_HA_LLEGADO, llegaron, puedeConfirmarRol, lineaDe, quienDe } from './pendientes';
+import { LLEGO, NO_HA_LLEGADO, llegaron, puedeConfirmarRol, partesDe, quienDe } from './pendientes';
+import { PALETA, nivelPorDias } from '../../gestion-repuestos/semaforo';
 
 const clave = (i) => `${i.factura}|${i.sucursal_id}`;
 const PILDORA = { fontFamily: 'inherit', fontSize: 11.5, fontWeight: 700, height: 26, padding: '0 10px', borderRadius: 999, cursor: 'pointer', whiteSpace: 'nowrap' };
@@ -30,11 +31,13 @@ function Pildora({ texto, color, activo, ocupada, onClick }) {
 }
 
 function Fila({ item, puedeConfirmar, onElegir }) {
+  const { antes, dias, despues } = partesDe(item);
+  const nivel = nivelPorDias(item.dias);
   const quien = item.guardando ? 'Guardando…' : quienDe(item);
   return (
     <li style={{ padding: '8px 0', borderBottom: `1px solid ${COLOR.wash}` }}>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 12px', alignItems: 'center', justifyContent: 'space-between' }}>
-        <span style={{ ...NUM, fontSize: 13, color: COLOR.ink, whiteSpace: 'nowrap' }}>{lineaDe(item)}</span>
+        <span style={{ ...NUM, fontSize: 13, color: COLOR.ink, whiteSpace: 'nowrap' }}>{antes}<span data-nivel={nivel || undefined} style={nivel ? { color: PALETA[nivel].ink, fontWeight: 700 } : undefined}>{dias}</span>{despues}</span>
         {puedeConfirmar && (
           <span style={{ display: 'flex', gap: 6 }}>
             <Pildora texto="Llegó" color={COLOR.good} activo={item.estado === LLEGO} ocupada={item.guardando} onClick={() => onElegir(item, LLEGO)} />

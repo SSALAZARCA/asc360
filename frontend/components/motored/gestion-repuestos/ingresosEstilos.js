@@ -1,5 +1,4 @@
-// Shared look of the "Ingresos facturas" panel (amber = needs action now).
-export const AMBAR = '#8A3F06';
+// Shared look of the "Ingresos facturas" panel (urgency colors live in semaforo.js).
 
 export const tarjeta = {
   background: 'var(--motored-surface, #ffffff)',

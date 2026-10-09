@@ -4,8 +4,10 @@ import { formatCOP } from '../../../lib/motored/formatCOP';
 import { fechaBogota, fechaHoraBogota } from '../../../lib/motored/fechas';
 import { getIngresosHistorial } from '../../../lib/motored/gestionRepuestosApi';
 import {
-  tarjeta, tituloSeccion, subtitulo, tabla, th, td, botonLink, ESTADOS, AMBAR,
+  tarjeta, tituloSeccion, subtitulo, tabla, th, td, botonLink, ESTADOS,
 } from './ingresosEstilos';
+import { PALETA, nivelEstado, nivelPorDias } from './semaforo';
+import { PildoraNivel } from './SemaforoUi';
 
 const LABEL_ESTADO = { LLEGO: 'Ya llegó', NO_HA_LLEGADO: 'Aún no llega' };
 
@@ -49,6 +51,8 @@ function Historial({ item }) {
 
 function Fila({ item, abierta, onAbrir, puedeConfirmar, ocupada, onConfirmar }) {
   const estado = ESTADOS[item.estado] || ESTADOS.SIN_CONFIRMAR;
+  const nivel = nivelEstado(item.estado, item.dias);
+  const chip = nivel ? { background: PALETA[nivel].soft, color: PALETA[nivel].ink, border: `1px solid ${PALETA[nivel].color}` } : estado.estilo;
   const columnas = puedeConfirmar ? 10 : 9;
   return (
     <Fragment>
@@ -56,11 +60,11 @@ function Fila({ item, abierta, onAbrir, puedeConfirmar, ocupada, onConfirmar }) 
         <td style={{ ...td(true), fontWeight: 700 }}>{item.factura}</td>
         <td style={td(true)}>{item.tienda}</td>
         <td style={td()}>{fechaBogota(item.fecha)}</td>
-        <td style={item.dias > 15 ? { ...td(), fontWeight: 700, color: AMBAR } : td()}>{item.dias}</td>
+        <td style={td()}><PildoraNivel nivel={nivelPorDias(item.dias)}>{item.dias}</PildoraNivel></td>
         <td style={td()}>{item.unidades}</td>
         <td style={td()}>{formatCOP(item.valor)}</td>
         <td style={td(true)}>
-          <span style={{ display: 'inline-block', fontSize: '12px', fontWeight: 700, borderRadius: 999, padding: '2px 10px', whiteSpace: 'nowrap', ...estado.estilo }}>
+          <span data-nivel={nivel || undefined} style={{ display: 'inline-block', fontSize: '12px', fontWeight: 700, borderRadius: 999, padding: '2px 10px', whiteSpace: 'nowrap', ...chip }}>
             {estado.texto}
           </span>
         </td>

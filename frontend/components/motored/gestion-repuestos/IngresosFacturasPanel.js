@@ -16,6 +16,7 @@ import IngresosKpis from './IngresosKpis';
 import IngresosPorTienda, { ordenarTiendas } from './IngresosPorTienda';
 import IngresosDetalle from './IngresosDetalle';
 import { select, opcion, segmento } from './ingresosEstilos';
+import { LeyendaSemaforo } from './SemaforoUi';
 
 const ESTADOS_FILTRO = [
   [null, 'Todas'], ['LLEGO', 'Ya llegó sin ingresar'], ['SIN_CONFIRMAR', 'Sin confirmar'], ['NO_HA_LLEGADO', 'Aún no llega'],
@@ -119,6 +120,7 @@ export default function IngresosFacturasPanel({ puedeConfirmar = false }) {
             <Segmentos nombre="Antigüedad" opciones={EDADES} valor={filtros.min_dias} onElegir={poner('min_dias')} />
           </div>
         )}
+        {!sinDatos && <LeyendaSemaforo />}
       </header>
 
       {error && <p role="alert" style={{ margin: 0, fontSize: '13px', color: 'var(--motored-danger, #c0392b)' }}>{error}</p>}

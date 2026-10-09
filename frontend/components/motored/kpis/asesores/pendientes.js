@@ -17,10 +17,19 @@ export function valorCorto(valor) {
   return Math.abs(n) >= 1e6 ? `$${decimales(n / 1e6, 1)} M` : `$${miles(n / 1000)} mil`;
 }
 
+/** The line split around its days segment, so the card can color it: `RH 482915 · 28/09 · ` + `12 días` + ` · $1,2 M`. */
+export function partesDe(item) {
+  return {
+    antes: `${item.factura} · ${fechaBogota(item.fecha).slice(0, 5)} · `,
+    dias: `${item.dias} ${item.dias === 1 ? 'día' : 'días'}`,
+    despues: ` · ${valorCorto(item.valor)}`,
+  };
+}
+
 /** `RH 482915 · 28/09 · 12 días · $1,2 M`. */
 export function lineaDe(item) {
-  const dias = `${item.dias} ${item.dias === 1 ? 'día' : 'días'}`;
-  return [item.factura, fechaBogota(item.fecha).slice(0, 5), dias, valorCorto(item.valor)].join(' · ');
+  const { antes, dias, despues } = partesDe(item);
+  return `${antes}${dias}${despues}`;
 }
 
 /** `hoy 9:15`, `ayer 17:40`, otherwise `30/09 09:15`. */
