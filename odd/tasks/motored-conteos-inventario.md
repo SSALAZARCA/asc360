@@ -113,7 +113,7 @@ Each is about 400 changed lines or less, with one work-unit commit, tests alongs
 | WU13 | Pair UI 1: public route, join screen, session persistence, location bar, USB scanner input (keyboard bursts + Enter), manual entry, offline queue + retry, sounds. Matches "IngresoPareja" and "ConteoPortatil". | WU8 |
 | WU14 | Pair UI 2: mobile layout, camera scanning (dynamic import), reconteo tasks tab. Matches "ConteoCelular". Manual check on Android + iPhone, plus tablet screenshots. | WU13 |
 
-- [ ] WU1
+- [x] WU1 (0339642 backend + migration b4f9c2e6a813, d0ba5c2 frontend; backend 6719 passed, pg_real 814 passed, jest 2457 passed; route: delegated writer)
 - [ ] WU2
 - [ ] WU3
 - [ ] WU4
@@ -122,11 +122,11 @@ Each is about 400 changed lines or less, with one work-unit commit, tests alongs
 - [ ] WU7
 - [ ] WU8
 - [ ] WU9
-- [ ] WU10
-- [ ] WU11
-- [ ] WU12
-- [ ] WU13
-- [ ] WU14
+- [x] WU1 (0339642 backend + migration b4f9c2e6a813, d0ba5c2 frontend; backend 6719 passed, pg_real 814 passed, jest 2457 passed; route: delegated writer)0
+- [x] WU1 (0339642 backend + migration b4f9c2e6a813, d0ba5c2 frontend; backend 6719 passed, pg_real 814 passed, jest 2457 passed; route: delegated writer)1
+- [x] WU1 (0339642 backend + migration b4f9c2e6a813, d0ba5c2 frontend; backend 6719 passed, pg_real 814 passed, jest 2457 passed; route: delegated writer)2
+- [x] WU1 (0339642 backend + migration b4f9c2e6a813, d0ba5c2 frontend; backend 6719 passed, pg_real 814 passed, jest 2457 passed; route: delegated writer)3
+- [x] WU1 (0339642 backend + migration b4f9c2e6a813, d0ba5c2 frontend; backend 6719 passed, pg_real 814 passed, jest 2457 passed; route: delegated writer)4
 
 ### Visibility while building
 Until WU12 lands, the sidebar group "Inventarios" shows only to ADMIN, so nothing half-built is exposed.
