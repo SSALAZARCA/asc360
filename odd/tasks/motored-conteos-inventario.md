@@ -125,7 +125,7 @@ Each is about 400 changed lines or less, with one work-unit commit, tests alongs
 - [x] WU10 (dfe6ab7; backend 7229 passed, pg_real 926 passed). Principal bodega = bodega.codigo = sucursal.bodega_principal (409 SIN_BODEGA_PRINCIPAL otherwise); KPI universe excludes 0-vs-0; unknown codes only in the "Sin costo" sheet; avance.xlsx also built
 - [x] WU11 (3663aee; jest 2557 passed; no barcode labels: they print UBI-<code> as text, since that needs a library)
 - [x] WU12 (3663aee; polling 15/60 s plus the idle-pair yellow mark and close warning)
-- [ ] WU12b: a backend `/panel` endpoint (progress = referencias counted / snapshot universe, live accuracy, readings and last reading per pair and per conteo, a version short-circuit) plus wiring it into the panel. The gaps came from the WU12 report.
+- [x] WU12b (24c4557 backend, 32cff10 UI; backend 7245 passed, pg_real 934 passed, jest 2564 passed). GET /conteos/{id}/panel?version=: a version hash plus sin_cambios short-circuit, progress, partial accuracy, readings per pair; the list carries progreso
 - [ ] WU13
 - [ ] WU14
 
