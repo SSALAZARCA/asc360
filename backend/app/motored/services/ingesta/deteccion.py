@@ -36,6 +36,7 @@ from app.motored.services.ingesta import demanda_perdida as demanda_perdida_mod
 from app.motored.services.ingesta import facturas as facturas_mod
 from app.motored.services.ingesta import ingresos as ingresos_mod
 from app.motored.services.ingesta import inventario as inventario_mod
+from app.motored.services.ingesta import traslados as traslados_mod
 from app.motored.services.ingesta import ventas as ventas_mod
 from app.motored.services.ingesta.lector import (
     LecturaMovimientoError, elegir_hoja,
@@ -48,6 +49,7 @@ _FIRMAS_POR_TIPO: Dict[str, Tuple[str, ...]] = {
     "FACTURAS_PEDIDOS": facturas_mod.COLUMNAS_ESPERADAS,
     "INGRESOS_FACTURAS": ingresos_mod.COLUMNAS_ESPERADAS,
     "DEMANDA_PERDIDA": demanda_perdida_mod.COLUMNAS_ESPERADAS,
+    "TRASLADOS": traslados_mod.COLUMNAS_ESPERADAS,
 }
 
 # Columnas que un tipo puede traer pero no exige (`orquestador` no aborta si
@@ -56,6 +58,7 @@ COLUMNAS_OPCIONALES_POR_TIPO: Dict[str, Tuple[str, ...]] = {
     "VENTAS": ventas_mod.COLUMNAS_OPCIONALES,
     "BACKORDER": backorder_mod.COLUMNAS_OPCIONALES,
     "FACTURAS_PEDIDOS": facturas_mod.COLUMNAS_OPCIONALES,
+    "TRASLADOS": traslados_mod.COLUMNAS_OPCIONALES,
 }
 
 # Tab names exactly as the UI shows them (`frontend/components/motored/
@@ -67,6 +70,7 @@ ETIQUETAS_TIPO: Dict[str, str] = {
     "DEMANDA_PERDIDA": "Demanda perdida",
     "FACTURAS_PEDIDOS": "Facturas de pedidos",
     "INGRESOS_FACTURAS": "Ingresos de facturas",
+    "TRASLADOS": "Traslados",
 }
 
 UMBRAL_DETECCION = 0.6

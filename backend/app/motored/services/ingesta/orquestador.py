@@ -73,6 +73,7 @@ from app.motored.services.ingesta import periodo as periodo_mod
 from app.motored.services.ingesta import resolucion as resolucion_mod
 from app.motored.services.ingesta import revalidar as revalidar_mod
 from app.motored.services.ingesta import transito as transito_mod
+from app.motored.services.ingesta import traslados as traslados_mod
 from app.motored.services.ingesta import ventas as ventas_mod
 from app.motored.services.ingesta import ventas_lineas as lineas_mod
 from app.motored.services.trabajos import jobs
@@ -93,6 +94,7 @@ TIPOS_MOVIMIENTO: Tuple[str, ...] = (
     "FACTURAS_PEDIDOS",
     "INGRESOS_FACTURAS",
     "DEMANDA_PERDIDA",
+    "TRASLADOS",
 )
 
 TIPOS_MAESTRO: Tuple[str, ...] = ("MAESTRO_REFERENCIAS", "MAESTRO_BODEGAS")
@@ -114,6 +116,7 @@ _COLUMNAS_POR_TIPO: Dict[str, Tuple[str, ...]] = {
     "FACTURAS_PEDIDOS": facturas_mod.COLUMNAS_ESPERADAS,
     "INGRESOS_FACTURAS": ingresos_mod.COLUMNAS_ESPERADAS,
     "DEMANDA_PERDIDA": demanda_perdida_mod.COLUMNAS_ESPERADAS,
+    "TRASLADOS": traslados_mod.COLUMNAS_ESPERADAS,
 }
 
 
@@ -265,6 +268,7 @@ _CONSTRUCTORES_PROCESADOR = {
     "DEMANDA_PERDIDA": _procesador_simple(demanda_perdida_mod),
     "FACTURAS_PEDIDOS": _procesador_simple(facturas_mod),
     "INGRESOS_FACTURAS": _procesador_ingresos,
+    "TRASLADOS": _procesador_simple(traslados_mod),
 }
 
 
@@ -1034,6 +1038,9 @@ async def _aplicar_carga(session: AsyncSession, carga: CargaArchivo) -> None:
         consolidado = ingresos_mod.agregar_documentos(filas_staging)
         await ingresos_mod.aplicar(session, consolidado, carga.id)
         await _recalcular_transito_y_registrar_defaults(session, carga)
+    elif tipo == "TRASLADOS":
+        await traslados_mod.aplicar(
+            session, traslados_mod.construir_lineas(filas_staging, carga.id))
     else:
         raise ValueError(f"Tipo no soportado por aplicar: {tipo!r}")
 
