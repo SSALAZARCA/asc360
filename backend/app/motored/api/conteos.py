@@ -1,0 +1,362 @@
+"""
+Motored -- inventory counts, leader API (odd/motored-conteos-inventario,
+WU6/WU7; design §6.1, §5.1, §5.3).
+
+Prefix `/api/motored/conteos`. The path rules already confine
+LIDER_INVENTARIOS and GERENCIA to it; each endpoint then picks its roles:
+
+- reads: ADMIN, LIDER_INVENTARIOS, GERENCIA;
+- schedule, reschedule or change the leader, annul, the leaders list:
+  ADMIN only (owner decision);
+- iniciar, rotate the code, the QR, disconnect a pair: ADMIN or the
+  assigned leader. GERENCIA gets 403 on every write.
+
+Scoping: a leader only sees its own conteos (`lider_id`); another's
+answers 404, never 403, so ids do not leak (`consultas.conteo_visible`).
+
+Domain errors (`ErrorConteo`) become `{"detail": {"code", "mensaje",
+...datos}}` with the status from `_ESTADO_HTTP`. No response carries
+`codigo_hash` or a cédula; the plain code is returned only by iniciar and
+rotar, the two moments it exists.
+"""
+import uuid
+from datetime import datetime, timezone
+from typing import List, Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.motored.deps import (
+    get_motored_db_or_503, require_motored_ready, require_roles,
+)
+from app.motored.models.conteo import ESTADOS_ABIERTOS, Conteo
+from app.motored.schemas import conteos as esquemas
+from app.motored.services.auth import MotoredUser
+from app.motored.services.conteos import (
+    acceso, consultas, errores, sesiones, snapshot,
+)
+
+ADMIN = "ADMIN"
+LECTORES = (ADMIN, "LIDER_INVENTARIOS", "GERENCIA")
+OPERADORES = (ADMIN, "LIDER_INVENTARIOS")
+PREFIJO_API = "/api/motored/conteos"
+SIN_CACHE = {"Cache-Control": "no-store"}
+
+_ESTADO_HTTP = {
+    errores.ConteoNoEncontrado: 404,
+    errores.SesionNoEncontrada: 404,
+    errores.SucursalInvalida: 422,
+    errores.LiderInvalido: 422,
+    errores.MotivoRequerido: 422,
+    errores.DatosIngresoInvalidos: 422,
+    errores.EstadoInvalido: 409,
+    errores.ConteoTotalAbierto: 409,
+    errores.SinInventario: 409,
+    errores.InventarioAntiguo: 409,
+    errores.UmbralesInvalidos: 409,
+    errores.EnlaceSinConfigurar: 409,
+    errores.AccesoInvalido: 401,
+    errores.SesionInactiva: 401,
+    errores.DemasiadosIntentos: 429,
+}
+
+router = APIRouter(
+    prefix="/conteos",
+    tags=["motored-conteos"],
+    dependencies=[Depends(require_motored_ready)],
+)
+
+lector = require_roles(*LECTORES)
+operador = require_roles(*OPERADORES)
+solo_admin = require_roles(ADMIN)
+
+
+def error_http(error: errores.ErrorConteo) -> HTTPException:
+    """The HTTP form of a domain error (shared with the public API)."""
+    estado = next(
+        (_ESTADO_HTTP[c] for c in type(error).__mro__ if c in _ESTADO_HTTP),
+        400)
+    detalle = {"code": error.codigo, "mensaje": error.mensaje}
+    detalle.update(error.datos)
+    return HTTPException(status_code=estado, detail=detalle)
+
+
+def _uuid(usuario: MotoredUser) -> uuid.UUID:
+    return uuid.UUID(str(usuario.user_id))
+
+
+def _acceso(conteo: Conteo) -> Optional[esquemas.AccesoSalida]:
+    if conteo.estado not in ESTADOS_ABIERTOS or not conteo.enlace_slug:
+        return None
+    try:
+        url = acceso.url_publica(conteo.enlace_slug)
+    except errores.EnlaceSinConfigurar:
+        url = None
+    return esquemas.AccesoSalida(
+        slug=conteo.enlace_slug, url=url,
+        qr_url=f"{PREFIJO_API}/{conteo.id}/qr.png",
+        codigo_rotado_en=conteo.codigo_rotado_en)
+
+
+def _resumen(conteo: Conteo, sucursal: str, lider: Optional[str]) -> dict:
+    return dict(
+        id=conteo.id, tipo=conteo.tipo, estado=conteo.estado,
+        origen=conteo.origen, fecha_programada=conteo.fecha_programada,
+        sucursal=esquemas.Nombrado(id=conteo.sucursal_id, nombre=sucursal),
+        lider=(None if conteo.lider_id is None else esquemas.Nombrado(
+            id=conteo.lider_id, nombre=lider or "")),
+        iniciado_en=conteo.iniciado_en, cerrado_en=conteo.cerrado_en,
+        anulado_en=conteo.anulado_en,
+        motivo_anulacion=conteo.motivo_anulacion,
+        created_at=conteo.created_at)
+
+
+def _snapshot(conteo: Conteo, resumen) -> Optional[esquemas.SnapshotSalida]:
+    if resumen is None:
+        return None
+    return esquemas.SnapshotSalida(
+        carga_id=conteo.snapshot_carga_id,
+        nombre_archivo=resumen.nombre_archivo,
+        fecha_corte=conteo.snapshot_fecha_corte,
+        aplicado_en=conteo.snapshot_aplicado_en,
+        tomado_en=conteo.snapshot_tomado_en, lineas=resumen.lineas,
+        valor_sistema=resumen.valor_sistema, sin_costo=resumen.sin_costo,
+        advertencias=conteo.snapshot_advertencias)
+
+
+async def _detalle(
+        db: AsyncSession, conteo: Conteo,
+        usuario: MotoredUser) -> esquemas.ConteoDetalle:
+    """The full view. GERENCIA (read-only) never gets the access link."""
+    datos = await consultas.datos_conteo(db, conteo)
+    return esquemas.ConteoDetalle(
+        **_resumen(conteo, datos.sucursal, datos.lider),
+        snapshot=_snapshot(conteo, datos.snapshot),
+        umbrales=esquemas.UmbralesSalida(
+            reconteo=conteo.umbral_reconteo_pesos,
+            critico=conteo.umbral_critico_pesos),
+        acceso=_acceso(conteo) if usuario.role in OPERADORES else None)
+
+
+def _sesion_lider(fila: sesiones.FilaSesion) -> esquemas.SesionLider:
+    nombres = [p.nombre for p in fila.integrantes]
+    ubicacion = fila.ubicacion
+    sesion = fila.sesion
+    return esquemas.SesionLider(
+        id=sesion.id, numero=fila.numero,
+        etiqueta=sesiones.etiqueta(fila.numero, nombres),
+        estado=sesion.estado, dispositivo=sesion.dispositivo,
+        integrantes=nombres,
+        ubicacion_actual=(None if ubicacion is None else
+                          esquemas.UbicacionSalida(
+                              id=ubicacion.id, nombre=ubicacion.nombre)),
+        conectada_en=sesion.conectada_en,
+        ultima_actividad_en=sesion.ultima_actividad_en,
+        desconectada_en=sesion.desconectada_en)
+
+
+# --- lists (static paths first: they would match `/{conteo_id}`) ------------
+
+
+@router.get("", response_model=List[esquemas.ConteoResumen])
+async def listar_conteos(
+    estado: Optional[esquemas.EstadoConteo] = Query(default=None),
+    sucursal_id: Optional[uuid.UUID] = Query(default=None),
+    tipo: Optional[esquemas.TipoConteo] = Query(default=None),
+    usuario: MotoredUser = Depends(lector),
+    db: AsyncSession = Depends(get_motored_db_or_503),
+):
+    lider_id = _uuid(usuario) if consultas.es_lider(usuario) else None
+    filas = await consultas.listar(
+        db, estado=estado, sucursal_id=sucursal_id, tipo=tipo,
+        lider_id=lider_id)
+    return [esquemas.ConteoResumen(**_resumen(c, s, lid))
+            for c, s, lid in filas]
+
+
+@router.get("/lideres", response_model=List[esquemas.LiderOpcion])
+async def listar_lideres(
+    usuario: MotoredUser = Depends(solo_admin),
+    db: AsyncSession = Depends(get_motored_db_or_503),
+):
+    filas = await consultas.lideres_activos(db)
+    return [esquemas.LiderOpcion(id=f.id, nombre=f.nombre, email=f.email)
+            for f in filas]
+
+
+@router.get("/sucursales", response_model=List[esquemas.SucursalOpcion])
+async def listar_sucursales(
+    usuario: MotoredUser = Depends(lector),
+    db: AsyncSession = Depends(get_motored_db_or_503),
+):
+    return await consultas.sucursales(db)
+
+
+# --- schedule (ADMIN) --------------------------------------------------------
+
+
+@router.post("", response_model=esquemas.ConteoDetalle, status_code=201)
+async def programar(
+    cuerpo: esquemas.ProgramarEntrada,
+    usuario: MotoredUser = Depends(solo_admin),
+    db: AsyncSession = Depends(get_motored_db_or_503),
+):
+    try:
+        conteo = await snapshot.programar_conteo(
+            db, cuerpo.sucursal_id, cuerpo.lider_id,
+            cuerpo.fecha_programada, _uuid(usuario))
+        salida = await _detalle(db, conteo, usuario)
+    except errores.ErrorConteo as error:
+        raise error_http(error) from error
+    await db.commit()
+    return salida
+
+
+@router.patch("/{conteo_id}", response_model=esquemas.ConteoDetalle)
+async def reprogramar(
+    conteo_id: uuid.UUID,
+    cuerpo: esquemas.ReprogramarEntrada,
+    usuario: MotoredUser = Depends(solo_admin),
+    db: AsyncSession = Depends(get_motored_db_or_503),
+):
+    try:
+        conteo = await snapshot.reprogramar_conteo(
+            db, conteo_id, cuerpo.fecha_programada, cuerpo.lider_id)
+        salida = await _detalle(db, conteo, usuario)
+    except errores.ErrorConteo as error:
+        raise error_http(error) from error
+    await db.commit()
+    return salida
+
+
+@router.post("/{conteo_id}/anular", response_model=esquemas.ConteoDetalle)
+async def anular(
+    conteo_id: uuid.UUID,
+    cuerpo: esquemas.AnularEntrada,
+    usuario: MotoredUser = Depends(solo_admin),
+    db: AsyncSession = Depends(get_motored_db_or_503),
+):
+    try:
+        conteo = await snapshot.anular_conteo(
+            db, conteo_id, _uuid(usuario), cuerpo.motivo)
+        salida = await _detalle(db, conteo, usuario)
+    except errores.ErrorConteo as error:
+        raise error_http(error) from error
+    await db.commit()
+    return salida
+
+
+# --- one conteo --------------------------------------------------------------
+
+
+@router.get("/{conteo_id}", response_model=esquemas.ConteoDetalle)
+async def detalle(
+    conteo_id: uuid.UUID,
+    usuario: MotoredUser = Depends(lector),
+    db: AsyncSession = Depends(get_motored_db_or_503),
+):
+    try:
+        conteo = await consultas.conteo_visible(db, conteo_id, usuario)
+        return await _detalle(db, conteo, usuario)
+    except errores.ErrorConteo as error:
+        raise error_http(error) from error
+
+
+@router.post("/{conteo_id}/iniciar", response_model=esquemas.IniciarSalida)
+async def iniciar(
+    conteo_id: uuid.UUID,
+    cuerpo: Optional[esquemas.IniciarEntrada] = None,
+    usuario: MotoredUser = Depends(operador),
+    db: AsyncSession = Depends(get_motored_db_or_503),
+):
+    """PROGRAMADO -> EN_CONTEO. The only answer with the plain code; a
+    stale inventory is a 409 with its facts until confirmed."""
+    confirmar = bool(cuerpo and cuerpo.confirmar_antiguedad)
+    try:
+        await consultas.conteo_visible(db, conteo_id, usuario)
+        inicio = await snapshot.iniciar_conteo(
+            db, conteo_id, _uuid(usuario),
+            confirmar_inventario_viejo=confirmar)
+        conteo = await _detalle(db, inicio.conteo, usuario)
+    except errores.ErrorConteo as error:
+        raise error_http(error) from error
+    await db.commit()
+    return esquemas.IniciarSalida(
+        conteo=conteo, codigo=inicio.codigo,
+        advertencia=inicio.advertencia)
+
+
+@router.post(
+    "/{conteo_id}/codigo/rotar", response_model=esquemas.CodigoSalida)
+async def rotar_codigo(
+    conteo_id: uuid.UUID,
+    usuario: MotoredUser = Depends(operador),
+    db: AsyncSession = Depends(get_motored_db_or_503),
+):
+    """A new code; the old one stops working, connected pairs keep
+    counting. The only answer with the new plain code."""
+    ahora = datetime.now(timezone.utc)
+    try:
+        await consultas.conteo_visible(db, conteo_id, usuario)
+        codigo = await acceso.rotar_codigo(db, conteo_id, ahora)
+    except errores.ErrorConteo as error:
+        raise error_http(error) from error
+    await db.commit()
+    return esquemas.CodigoSalida(codigo=codigo, rotado_en=ahora)
+
+
+@router.get("/{conteo_id}/qr.png", response_class=Response)
+async def qr(
+    conteo_id: uuid.UUID,
+    usuario: MotoredUser = Depends(operador),
+    db: AsyncSession = Depends(get_motored_db_or_503),
+):
+    """The QR of the pairs' join URL (the code is never inside)."""
+    try:
+        conteo = await consultas.conteo_visible(db, conteo_id, usuario)
+        if conteo.estado not in ESTADOS_ABIERTOS or not conteo.enlace_slug:
+            raise errores.EstadoInvalido(
+                "El QR solo existe mientras el conteo está en curso.",
+                estado=conteo.estado)
+        url = acceso.url_publica(conteo.enlace_slug)
+    except errores.ErrorConteo as error:
+        raise error_http(error) from error
+    return Response(
+        acceso.qr_png(url), media_type="image/png", headers=SIN_CACHE)
+
+
+# --- pair sessions -----------------------------------------------------------
+
+
+@router.get(
+    "/{conteo_id}/sesiones", response_model=List[esquemas.SesionLider])
+async def listar_sesiones(
+    conteo_id: uuid.UUID,
+    usuario: MotoredUser = Depends(lector),
+    db: AsyncSession = Depends(get_motored_db_or_503),
+):
+    try:
+        conteo = await consultas.conteo_visible(db, conteo_id, usuario)
+    except errores.ErrorConteo as error:
+        raise error_http(error) from error
+    return [_sesion_lider(f) for f in await sesiones.listar(db, conteo.id)]
+
+
+@router.post(
+    "/{conteo_id}/sesiones/{sesion_id}/desconectar",
+    response_model=esquemas.SesionLider)
+async def desconectar_sesion(
+    conteo_id: uuid.UUID,
+    sesion_id: uuid.UUID,
+    usuario: MotoredUser = Depends(operador),
+    db: AsyncSession = Depends(get_motored_db_or_503),
+):
+    """The leader cuts a pair; its readings are kept."""
+    try:
+        conteo = await consultas.conteo_visible(db, conteo_id, usuario)
+        fila = await sesiones.desconectar(
+            db, conteo.id, sesion_id, _uuid(usuario))
+    except errores.ErrorConteo as error:
+        raise error_http(error) from error
+    await db.commit()
+    return _sesion_lider(fila)

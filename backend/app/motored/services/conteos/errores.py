@@ -74,3 +74,44 @@ class UmbralesInvalidos(ErrorConteo):
 class MotivoRequerido(ErrorConteo):
     codigo = "MOTIVO_REQUERIDO"
     MENSAJE = "Escriba el motivo de la anulación."
+
+
+class EnlaceSinConfigurar(ErrorConteo):
+    codigo = "ENLACE_SIN_CONFIGURAR"
+    MENSAJE = (
+        "Falta configurar MOTORED_PUBLIC_URL: no se puede armar el enlace "
+        "ni el QR del conteo.")
+
+
+class SesionNoEncontrada(ErrorConteo):
+    codigo = "SESION_NO_ENCONTRADA"
+    MENSAJE = "La pareja no existe en este conteo."
+
+
+# --- pair access (public routes) ---------------------------------------------
+# One generic message for every failed join (wrong link, wrong code, count
+# not running): nothing tells a guesser which part was wrong (design §8.2).
+
+
+class AccesoInvalido(ErrorConteo):
+    codigo = "ACCESO_INVALIDO"
+    MENSAJE = "Código o enlace no válidos."
+
+
+class DemasiadosIntentos(ErrorConteo):
+    codigo = "DEMASIADOS_INTENTOS"
+    MENSAJE = "Demasiados intentos. Espere unos minutos e intente de nuevo."
+
+
+class DatosIngresoInvalidos(ErrorConteo):
+    codigo = "DATOS_INGRESO_INVALIDOS"
+    MENSAJE = (
+        "Revise los datos: escriba el código y el nombre y la cédula (solo "
+        "números) de 2 o 3 personas distintas.")
+
+
+class SesionInactiva(ErrorConteo):
+    codigo = "SESION_INACTIVA"
+    MENSAJE = (
+        "Su sesión de conteo terminó. Vuelva a ingresar con el código del "
+        "conteo.")

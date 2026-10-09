@@ -26,6 +26,7 @@ from app.motored.api import (
     cargas,
     carga,
     clientes_tecnired,
+    conteos,
     corridas,
     corridas_pedido,
     corridas_vistas,
@@ -38,6 +39,7 @@ from app.motored.api import (
     maestros,
     parametros,
     presupuestos,
+    publico_conteos,
     publico_informe,
     referencias_busqueda,
     reporte_asesor,
@@ -48,19 +50,25 @@ from app.motored.api import (
     vendedores,
 )
 
-MENSAJE_RESUMEN_OCUPADO = "Los indicadores se están recalculando; intente de nuevo en unos minutos."
+MENSAJE_RESUMEN_OCUPADO = (
+    "Los indicadores se están recalculando; intente de nuevo en unos "
+    "minutos.")
 
 
 async def _traducir_resumen_ocupado():
-    """A write that needs the KPI summaries' advisory lock (carga apply/annul, Configuracion,
-    referencias, Tecnired, recalcular) gives up after `MOTORED_KPI_RESUMEN_LOCK_TIMEOUT_SEGUNDOS`
-    while a full rebuild runs. That is a retryable conflict, never a 500. FastAPI has no
-    per-router exception handlers, so this router-level dependency (it sees the endpoint's
-    exceptions) maps it to one 409 for EVERY Motored endpoint."""
+    """A write that needs the KPI summaries' advisory lock (carga
+    apply/annul, Configuracion, referencias, Tecnired, recalcular) gives up
+    after `MOTORED_KPI_RESUMEN_LOCK_TIMEOUT_SEGUNDOS` while a full rebuild
+    runs. That is a retryable conflict, never a 500. FastAPI has no
+    per-router exception handlers, so this router-level dependency (it
+    sees the endpoint's exceptions) maps it to one 409 for EVERY Motored
+    endpoint."""
     try:
         yield
     except ResumenOcupadoError:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=MENSAJE_RESUMEN_OCUPADO)
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=MENSAJE_RESUMEN_OCUPADO)
 
 
 router = APIRouter(dependencies=[Depends(_traducir_resumen_ocupado)])
@@ -72,13 +80,16 @@ router.include_router(salud.router)  # antes de maestros -- ver nota arriba
 router.include_router(referencias_busqueda.router)
 router.include_router(maestros.router)
 router.include_router(carga.router)
-# T2 tablero-asesores: `/clientes-tecnired` es un prefijo propio, sin superposicion.
+# T2 tablero-asesores: `/clientes-tecnired` es un prefijo propio, sin
+# superposicion.
 router.include_router(clientes_tecnired.router)
 # T3 tablero-asesores: `/vendedores` es un prefijo propio, sin superposicion.
 router.include_router(vendedores.router)
-# T4 tablero-asesores: `/tablero-asesores` es un prefijo propio, solo ADMIN|COMPRAS.
+# T4 tablero-asesores: `/tablero-asesores` es un prefijo propio, solo
+# ADMIN|COMPRAS.
 router.include_router(tablero_asesores.router)
-# KPI's (motored-kpis, B6): cuelga de `/tablero-asesores/kpis`, dentro del prefijo de GERENCIA.
+# KPI's (motored-kpis, B6): cuelga de `/tablero-asesores/kpis`, dentro del
+# prefijo de GERENCIA.
 router.include_router(tablero_kpis.router)
 router.include_router(usuarios.router)
 router.include_router(parametros.router)
@@ -130,5 +141,12 @@ router.include_router(presupuestos.router)
 router.include_router(inicio.router)
 # Daily asesor report (ADMIN): `/reporte-asesor` is its own prefix.
 router.include_router(reporte_asesor.router)
-# Pending invoice ingresos (Gestión repuestos): `/gestion-repuestos/ingresos-facturas`.
+# Pending invoice ingresos (Gestión repuestos):
+# `/gestion-repuestos/ingresos-facturas`.
 router.include_router(gestion_repuestos.router)
+# Inventory counts (odd/motored-conteos-inventario): the leader API under
+# `/conteos` (ADMIN, LIDER_INVENTARIOS, GERENCIA read-only) and the PUBLIC
+# pair access under `/publico/conteos` (no user account). Own prefixes, no
+# path overlap.
+router.include_router(conteos.router)
+router.include_router(publico_conteos.router)

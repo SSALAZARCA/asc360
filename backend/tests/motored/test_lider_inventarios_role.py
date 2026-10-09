@@ -8,8 +8,9 @@ inventory counts prefix (`/conteos`). Every other guarded route answers
 403, so a new endpoint is denied by default. GERENCIA also gets the
 `/conteos` prefix; which methods it may call is enforced per endpoint.
 
-The `/conteos` prefix is a rule only (no endpoint yet): throwaway probe
-routes on the real dependency stand in for it.
+Throwaway probe routes on the real dependency test the `/conteos` prefix
+rule itself. Their paths sit deeper than any real `/conteos` route (WU6:
+`/conteos/{conteo_id}` would otherwise shadow them).
 """
 import importlib.util
 import re
@@ -43,6 +44,7 @@ from tests.motored.conftest import (
 ROLE = "LIDER_INVENTARIOS"
 PREFIX = "/api/motored"
 CONTEOS = PREFIX + "/conteos"
+PROBE = "/__probe__/a/b/c"
 SECRET = "lider-inventarios-test-secret"
 
 _VERSIONS_DIR = (
@@ -162,7 +164,9 @@ def _guarded_routes_outside_allow_list():
     allowed = (PREFIX + "/auth/", CONTEOS + "/")
     for ctx in iter_route_contexts(app.routes):
         path = ctx.path or ""
-        if not path.startswith(PREFIX + "/") or path.startswith(allowed):
+        if not path.startswith(PREFIX + "/") or path == CONTEOS:
+            continue
+        if path.startswith(allowed):
             continue
         if get_current_motored_user in _calls(ctx.original_route.dependant):
             for method in sorted(ctx.methods):
@@ -184,13 +188,13 @@ def test_every_other_guarded_route_is_denied_by_default():
 def probe_routes():
     router = APIRouter()
 
-    @router.get(CONTEOS + "/__probe__")
+    @router.get(CONTEOS + PROBE)
     async def _allowed(
         user: MotoredUser = Depends(get_current_motored_user),
     ):
         return {"role": user.role}
 
-    @router.get(CONTEOS + "-otra/__probe__")
+    @router.get(CONTEOS + "-otra" + PROBE)
     async def _lookalike(
         user: MotoredUser = Depends(get_current_motored_user),
     ):
@@ -209,7 +213,7 @@ def probe_routes():
 @pytest.mark.parametrize("role", ["ADMIN", "GERENCIA", ROLE])
 def test_conteos_prefix_lets_admin_gerencia_and_the_leader_through(
         probe_routes, role):
-    response = _request(role, CONTEOS + "/__probe__")
+    response = _request(role, CONTEOS + PROBE)
 
     assert response.status_code == 200, response.text
     assert response.json() == {"role": role}
@@ -219,17 +223,17 @@ def test_conteos_prefix_lets_admin_gerencia_and_the_leader_through(
     "role", ["SERVICIO_CLIENTE", "COORDINADOR_REPUESTOS", "SUCURSAL",
              "CONSULTA"])
 def test_conteos_prefix_denies_the_confined_roles(probe_routes, role):
-    assert _request(role, CONTEOS + "/__probe__").status_code == 403
+    assert _request(role, CONTEOS + PROBE).status_code == 403
 
 
 def test_conteos_prefix_match_respects_segment_boundaries(probe_routes):
-    response = _request(ROLE, CONTEOS + "-otra/__probe__")
+    response = _request(ROLE, CONTEOS + "-otra" + PROBE)
 
     assert response.status_code == 403
 
 
 def test_gerencia_reaches_an_unrouted_conteos_path_without_a_403():
-    response = _request("GERENCIA", CONTEOS + "/no-existe")
+    response = _request("GERENCIA", CONTEOS + "/no-existe/a/b/c")
 
     assert response.status_code in (404, 405), response.text
 

@@ -11,15 +11,20 @@ Inventory counts -- the secrets that let a pair join a count
   the check uses `hmac.compare_digest`.
 - Rotating the code never touches connected pairs: their device sessions
   have their own tokens.
+- The public join URL is `<MOTORED_PUBLIC_URL>/motored/c/<slug>` (design
+  §10.2); `qr_png` draws it server-side with `qrcode` (the code is never
+  inside the QR).
 """
 import hashlib
 import hmac
+import io
 import re
 import secrets
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
+import qrcode
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -32,6 +37,7 @@ BITS_SLUG = BYTES_SLUG * 8
 LARGO_SLUG = 16
 DIGITOS_CODIGO = 6
 _CODIGO = re.compile(r"[0-9]{6}")
+RUTA_PAREJA = "/motored/c/"
 
 
 def nuevo_slug() -> str:
@@ -95,3 +101,21 @@ async def rotar_codigo(
     codigo = asignar_codigo(conteo, ahora or datetime.now(timezone.utc))
     await db.flush()
     return codigo
+
+
+def url_publica(slug: str) -> str:
+    """The pair's join URL; EnlaceSinConfigurar without a public base."""
+    base = (settings.MOTORED_PUBLIC_URL or "").strip().rstrip("/")
+    if not base:
+        raise errores.EnlaceSinConfigurar()
+    return f"{base}{RUTA_PAREJA}{slug}"
+
+
+def qr_png(texto: str) -> bytes:
+    """A PNG QR code of `texto`."""
+    qr = qrcode.QRCode(box_size=10, border=2)
+    qr.add_data(texto)
+    qr.make(fit=True)
+    salida = io.BytesIO()
+    qr.make_image().save(salida)
+    return salida.getvalue()

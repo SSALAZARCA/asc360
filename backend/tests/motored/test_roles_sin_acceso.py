@@ -59,6 +59,10 @@ PUBLIC_ROUTES = {
     ("POST", "/api/motored/encuesta/publico/identificar"),
     ("POST", "/api/motored/encuesta/publico/respuestas"),
     ("POST", "/api/motored/publico/informe/{token}"),
+    # Inventory-count pairs (no user account): their own device token.
+    ("POST", "/api/motored/publico/conteos/{slug}/unirse"),
+    ("GET", "/api/motored/publico/conteos/{slug}/sesion"),
+    ("POST", "/api/motored/publico/conteos/{slug}/salir"),
 }
 
 # One representative read per router.
