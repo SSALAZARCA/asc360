@@ -232,8 +232,10 @@ async def test_dry_run_counts_non_parts_rows_and_stages_rh(monkeypatch):
         orquestador.storage, "descargar_archivo", lambda ruta: archivo
     )
     carga = _carga()
+    # The last read is the C.O. -> sucursal map: the ERP header brings
+    # the optional C.O. column.
     session = FakeAsyncSession(
-        execute_queue=[[], [], [], [], [uuid.uuid4()]]
+        execute_queue=[[], [], [], [], [uuid.uuid4()], []]
     )
 
     await orquestador._dry_run(session, carga)

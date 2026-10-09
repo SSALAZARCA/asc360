@@ -122,6 +122,7 @@ _COLUMNAS_POR_TIPO: Dict[str, Tuple[str, ...]] = {
 # de VENTAS no deben aparecer como 4 columnas en la plantilla.
 _ALIAS_OPCIONALES_POR_TIPO: Dict[str, Tuple[str, ...]] = {
     "VENTAS": ventas_mod.ALIAS_COLUMNA_CO,
+    "INGRESOS_FACTURAS": ingresos_mod.ALIAS_COLUMNA_CO,
 }
 
 
@@ -247,9 +248,14 @@ def _procesador_simple(modulo: Any):
 
 
 async def _procesador_ingresos(db, en_fecha, comunes) -> _Construido:
-    # INGRESOS_FACTURAS no resuelve sucursal ni referencia.
+    # INGRESOS_FACTURAS no resuelve referencia; la sucursal sale solo del
+    # C.O. opcional, y el mapa se lee solo si el archivo trae la columna.
     propios = {k: comunes[k] for k in ("mapa_columnas", "carga_id")}
-    return _con_parametros(ingresos_mod, propios), {}
+    sucursal_por_co = None
+    if ingresos_mod.tiene_columna_co(comunes["mapa_columnas"]):
+        sucursal_por_co = await resolucion_mod.leer_sucursal_por_co(db)
+    return _con_parametros(
+        ingresos_mod, propios, sucursal_por_co=sucursal_por_co), {}
 
 
 _CONSTRUCTORES_PROCESADOR = {

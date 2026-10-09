@@ -61,6 +61,13 @@ contra una factura (una clave `('FE', N)` jamás colisiona con `('RH', N)`).
 `Estado` se compara sin distinguir mayúsculas ni espacios (`ANULADO`,
 ` anulado `).
 
+Optional "C.O." column (owner decision 2026-10-08): when the file brings
+it, the row's C.O. is matched against `sucursal.codigo_co` (normalized,
+case-insensitive, same aliases as VENTAS) and fills `sucursal_id`. An
+unknown or empty C.O. leaves it NULL with NO row error, and a file
+without the column loads exactly as before. The cruce still matches only
+by `(prefijo_rh, numero_rh)`.
+
 Deliberadamente FUERA de alcance de esta fase (ver tasks.md Fase 9):
 - Wiring a `JobRunner`/supervisor y a la API — Fase 9.
 - El cruce de tránsito en sí — eso es `transito.py`.
@@ -83,6 +90,8 @@ from app.motored.services.ingesta import errores as errores_mod
 from app.motored.services.ingesta import numeros as numeros_mod
 from app.motored.services.ingesta import transito as transito_mod
 from app.motored.services.ingesta.lotes import partir
+from app.motored.services.ingesta.resolucion import normalizar_codigo_co
+from app.motored.services.ingesta.ventas import ALIAS_COLUMNA_CO
 
 # Nombres CANÓNICOS (no normalizados) tal como los espera `columnas.
 # construir_mapa_columnas` -- verificados contra el workbook real de
@@ -98,6 +107,9 @@ CODIGO_VALOR_NETO_INVALIDO = "VALOR_NETO_INVALIDO"
 CODIGO_DOCUMENTO_RH_INVALIDO = "DOCUMENTO_RH_INVALIDO"
 
 ESTADO_ANULADO = "Anulado"
+
+# Payload key of the resolved store (only when its C.O. matched).
+CLAVE_SUCURSAL = "sucursal_id"
 
 
 class MarcaIngreso(enum.Enum):
@@ -177,16 +189,40 @@ def _pasa_filtro_estado(
     return (estado or "").casefold() != ESTADO_ANULADO.casefold()
 
 
+def tiene_columna_co(mapa_columnas: Dict[str, int]) -> bool:
+    """True when the header brings the C.O. column (any alias)."""
+    return any(alias in mapa_columnas for alias in ALIAS_COLUMNA_CO)
+
+
+def _resolver_sucursal_co(
+    fila_raw: Sequence[Any],
+    mapa_columnas: Dict[str, int],
+    sucursal_por_co: Optional[Dict[str, uuid.UUID]],
+) -> Optional[uuid.UUID]:
+    """Store of the row's C.O.; `None` without the column, with an empty
+    cell or with an unknown code (never a row error)."""
+    if not sucursal_por_co:
+        return None
+    for alias in ALIAS_COLUMNA_CO:
+        if alias in mapa_columnas:
+            codigo = normalizar_codigo_co(
+                _extraer(fila_raw, mapa_columnas, alias))
+            return sucursal_por_co.get(codigo) if codigo else None
+    return None
+
+
 def _fila_staging(
-    carga_id: uuid.UUID, numero_fila: int, lote: int, payload: dict
+    carga_id: uuid.UUID, numero_fila: int, lote: int, payload: dict,
+    sucursal_id: Optional[uuid.UUID] = None,
 ) -> CargaFilaStaging:
-    """Staging row with no sucursal/referencia (see module docstring)."""
+    """Staging row with no referencia (see module docstring); the store
+    only when the C.O. column resolved one."""
     return CargaFilaStaging(
         carga_id=carga_id,
         fila=numero_fila,
         lote=lote,
         payload=payload,
-        sucursal_id=None,
+        sucursal_id=sucursal_id,
         referencia_id=None,
     )
 
@@ -198,12 +234,11 @@ def procesar_fila(
     lote: int,
     mapa_columnas: Dict[str, int],
     carga_id: uuid.UUID,
+    sucursal_por_co: Optional[Dict[str, uuid.UUID]] = None,
 ) -> Union[ResultadoFila, MarcaIngreso]:
-    """Procesa UNA fila cruda de INGRESOS_FACTURAS. Retorna `(fila_staging,
-    errores)`, o `MarcaIngreso.NO_ES_REPUESTO` para una referencia que no
-    es una factura de repuestos (ver docstring del módulo). Nunca recibe
-    `cache`/`proveedor_id` -- este tipo no resuelve sucursal ni referencia
-    (ver docstring del módulo)."""
+    """Procesa UNA fila cruda de INGRESOS_FACTURAS: `(fila_staging,
+    errores)`, o `MarcaIngreso.NO_ES_REPUESTO` (ver docstring del módulo).
+    La sucursal sale solo del C.O. opcional (`sucursal_por_co`)."""
     if not _pasa_filtro_estado(fila_raw, mapa_columnas):
         return None, []
 
@@ -236,7 +271,12 @@ def procesar_fila(
         "fecha_ingreso": fecha_ingreso.isoformat(),
         "valor_neto": str(valor_neto),
     }
-    return _fila_staging(carga_id, numero_fila, lote, payload), []
+    sucursal_id = _resolver_sucursal_co(
+        fila_raw, mapa_columnas, sucursal_por_co)
+    if sucursal_id is not None:
+        payload[CLAVE_SUCURSAL] = str(sucursal_id)
+    fila = _fila_staging(carga_id, numero_fila, lote, payload, sucursal_id)
+    return fila, []
 
 
 ClaveIngresoDocumento = Tuple[str, int]
@@ -250,7 +290,7 @@ def agregar_documentos(
     una fila por documento en el archivo real, pero la robustez de sumar
     en vez de pisar es gratis y consistente con el resto de Fase 2.
     `fecha_ingreso` se conserva de la última fila procesada para esa
-    clave."""
+    clave; `sucursal_id`, de la última fila que resolvió una."""
     totales: Dict[ClaveIngresoDocumento, dict] = {}
     for fila in filas_staging:
         payload = fila.payload
@@ -258,12 +298,16 @@ def agregar_documentos(
             payload["prefijo_rh"], payload["numero_rh"]
         )
         acumulado = totales.setdefault(
-            clave, {"valor_neto": Decimal("0"), "fecha_ingreso": None}
+            clave,
+            {"valor_neto": Decimal("0"), "fecha_ingreso": None,
+             "sucursal_id": None},
         )
         acumulado["valor_neto"] += Decimal(payload["valor_neto"])
         acumulado["fecha_ingreso"] = date.fromisoformat(
             payload["fecha_ingreso"]
         )
+        if payload.get(CLAVE_SUCURSAL):
+            acumulado["sucursal_id"] = uuid.UUID(payload[CLAVE_SUCURSAL])
     return totales
 
 
@@ -272,9 +316,9 @@ def construir_statement_upsert(
 ):
     """`INSERT ... ON CONFLICT DO UPDATE SET valor_neto = EXCLUDED.
     valor_neto` -- NUNCA sumando contra lo ya persistido (REPLACE-not-sum,
-    mismo patrón que el resto de Fase 2). `sucursal_id`/`referencia_id`
-    siempre `NULL` (ver docstring del módulo). Retorna `None` si no hay
-    nada que aplicar."""
+    mismo patrón que el resto de Fase 2). `referencia_id` siempre `NULL`;
+    `sucursal_id` es la del C.O. (o `NULL`) y también se reemplaza en el
+    conflicto. Retorna `None` si no hay nada que aplicar."""
     if not consolidado:
         return None
 
@@ -284,7 +328,7 @@ def construir_statement_upsert(
             "prefijo_rh": prefijo_rh,
             "numero_rh": numero_rh,
             "fecha_ingreso": datos["fecha_ingreso"],
-            "sucursal_id": None,
+            "sucursal_id": datos.get("sucursal_id"),
             "referencia_id": None,
             "valor_neto": datos["valor_neto"],
             "carga_id": carga_id,
@@ -297,6 +341,7 @@ def construir_statement_upsert(
         set_={
             "fecha_ingreso": stmt.excluded.fecha_ingreso,
             "valor_neto": stmt.excluded.valor_neto,
+            "sucursal_id": stmt.excluded.sucursal_id,
             "carga_id": stmt.excluded.carga_id,
         },
     )
