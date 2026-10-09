@@ -199,7 +199,8 @@ def normalizar_tipos_excluidos(valor: Any) -> Tuple[str, ...]:
     if (not isinstance(valor, (list, tuple)) or not valor
             or not all(isinstance(x, str) and x.strip() for x in valor)):
         return TIPOS_EXCLUIDOS_DEFECTO
-    return tuple(x.strip().upper() for x in valor)
+    # Cut like the stored `tipo_pedido` (String(30)).
+    return tuple(x.strip().upper()[:30] for x in valor)
 
 
 def condicion_tipo_incluido(tipos: Iterable[str]):

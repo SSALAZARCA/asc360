@@ -149,3 +149,8 @@ def test_the_lines_query_drops_the_excluded_types_but_keeps_null():
 
 def test_the_lines_query_never_filters_by_client_nit():
     assert "cliente_nit" not in _sql(("GARANTIA25",))
+
+
+def test_configured_types_are_cut_like_the_stored_ones():
+    largo = "X" * 40
+    assert ip.normalizar_tipos_excluidos([largo]) == ("X" * 30,)

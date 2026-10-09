@@ -137,3 +137,10 @@ def test_the_api_refuses_an_invalid_threshold(_api):
     assert respuesta.status_code == 422
     assert respuesta.json()["detail"]["code"] == "E-PARAM-002"
     assert db.added == []
+
+
+@pytest.mark.parametrize("valor", [[], [""], ["  "], "GARANTIA25", None, [1]])
+def test_the_excluded_types_list_cannot_be_saved_empty_or_malformed(valor):
+    with pytest.raises(pc.ErrorParametro) as error:
+        pc.validar_escritura("ingreso_tipos_pedido_excluidos", valor)
+    assert error.value.codigo == codigos.E_PARAM_VALOR_INVALIDO

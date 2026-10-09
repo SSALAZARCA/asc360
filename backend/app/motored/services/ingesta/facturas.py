@@ -187,7 +187,7 @@ def _resolver_cliente_nit(
     if isinstance(crudo, float) and crudo.is_integer():
         crudo = int(crudo)
     texto = str(crudo).strip().split("-")[0]
-    texto = re.sub(r"\.0+$", "", texto)
+    texto = re.sub(r"^(\d+)\.0{1,2}$", r"\1", texto)
     digitos = re.sub(r"\D", "", texto)
     return digitos[:20] or None
 

@@ -504,6 +504,9 @@ def test_nit_y_tipo_se_guardan_en_el_payload():
     (" 900 883 086 ", "900883086"),
     ("900.723.988", "900723988"),
     ("900723988-1", "900723988"),
+    ("900723988.0", "900723988"),
+    ("900.723.000", "900723000"),
+    ("900.000.000", "900000000"),
 ])
 def test_el_nit_se_normaliza_a_digitos(crudo, esperado):
     fila_staging, _ = _procesar(
