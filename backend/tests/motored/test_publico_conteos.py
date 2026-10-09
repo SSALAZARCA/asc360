@@ -339,15 +339,18 @@ def test_rotating_the_code_keeps_connected_pairs_counting(describir):
     assert r.status_code == 200, r.text
 
 
-def test_salir_disconnects_the_device():
+def test_salir_disconnects_the_device_and_releases_its_reconteos():
     sesion, conteo = _pareja()
 
-    r, db = _con_token("POST", "/salir", [[(sesion, conteo, "Q")]])
+    r, db = _con_token("POST", "/salir", [[(sesion, conteo, "Q")], []])
 
     assert r.status_code == 204, r.text
     assert sesion.estado == "DESCONECTADA"
     assert sesion.desconectada_en is not None
     assert sesion.desconectada_por is None
+    liberar = str(db.executed_statements[-1])
+    assert liberar.startswith("UPDATE conteo_reconteo")
+    assert "conteo_reconteo.sesion_id" in liberar
     assert db.committed
     _cabeceras(r)
 
@@ -395,14 +398,15 @@ def test_no_public_response_carries_expected_quantities_or_money():
     componentes = documento["components"]["schemas"]
     rutas = {p: v for p, v in documento["paths"].items()
              if p.startswith(BASE)}
-    assert len(rutas) >= 9
+    assert len(rutas) >= 11
     campos = set()
     for operaciones in rutas.values():
         for operacion in operaciones.values():
             campos.update(_campos(
                 operacion.get("responses", {}), componentes, set()))
     assert {"etiqueta", "integrantes", "aceptadas", "desconocidos",
-            "referencias", "resumen_ubicacion", "creada"} <= campos
+            "referencias", "resumen_ubicacion", "creada", "ubicaciones",
+            "terminado_en"} <= campos
     prohibidos = {c for c in campos
                   if any(p in c.lower() for p in PROHIBIDOS)}
     assert prohibidos == set()

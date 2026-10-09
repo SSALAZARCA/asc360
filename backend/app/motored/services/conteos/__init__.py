@@ -7,5 +7,7 @@ Motored physical inventory counts (odd/motored-conteos-inventario).
 - `sesiones`: pair device sessions; `consultas`: the leader's reads;
 - `ubicaciones`, `lecturas`, `catalogo`: the store's locations, the
   pairs' readings and the referencia master they download;
+- `diferencias`, `reconteos`: the leader-only differences (one aggregate,
+  the final-quantity rule) and the reconteo round;
 - `errores`: the domain errors the API maps to HTTP.
 """

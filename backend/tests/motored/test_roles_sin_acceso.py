@@ -70,6 +70,9 @@ PUBLIC_ROUTES = {
     ("POST",
      "/api/motored/publico/conteos/{slug}/lecturas/{lectura_id}/anular"),
     ("GET", "/api/motored/publico/conteos/{slug}/lecturas/recientes"),
+    ("GET", "/api/motored/publico/conteos/{slug}/reconteos"),
+    ("POST",
+     "/api/motored/publico/conteos/{slug}/reconteos/{reconteo_id}/terminar"),
 }
 
 # One representative read per router.

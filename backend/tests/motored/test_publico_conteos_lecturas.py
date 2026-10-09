@@ -338,7 +338,7 @@ def test_a_batch_is_one_insert_and_unknowns_are_not_stored():
     minuscula = _item("r-1", cantidad="3")
     desconocida = _item("ZZZ")
     previa = _item("ABC-1")
-    filas = [[(REF_A, "ABC-1", "Pastilla")],
+    filas = [["EN_CONTEO"], [(REF_A, "ABC-1", "Pastilla")],
              [(REF_B, "r-1", "Filtro")],
              [uuid.UUID(conocida["id"]), uuid.UUID(minuscula["id"])]]
 
@@ -364,7 +364,8 @@ def test_a_forced_unknown_code_is_stored_without_referencia():
     forzada = _item("zzz", forzar_desconocido=True)
 
     r, db = _llamar(
-        "POST", "/lecturas", [[], [], [uuid.UUID(forzada["id"])]],
+        "POST", "/lecturas",
+        [["EN_CONTEO"], [], [], [uuid.UUID(forzada["id"])]],
         pareja, json={"lecturas": [forzada]})
 
     assert r.status_code == 200, r.text
@@ -377,7 +378,7 @@ def test_a_batch_with_nothing_storable_runs_no_insert():
     pareja = _pareja(ubicacion=_ubicacion())
 
     r, db = _llamar(
-        "POST", "/lecturas", [[], []], pareja,
+        "POST", "/lecturas", [["EN_CONTEO"], [], []], pareja,
         json={"lecturas": [_item("ZZZ"), _item("UBI-A3"),
                            _item("ABC-1", cantidad="0")]})
 
@@ -391,7 +392,7 @@ def test_readings_after_round_one_closed_are_refused():
     pareja = _pareja("EN_RECONTEO", ubicacion=_ubicacion())
     item = _item()
 
-    r, db = _llamar("POST", "/lecturas", [], pareja,
+    r, db = _llamar("POST", "/lecturas", [["EN_RECONTEO"]], pareja,
                     json={"lecturas": [item]})
 
     assert r.status_code == 200, r.text

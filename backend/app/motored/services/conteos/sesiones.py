@@ -15,6 +15,11 @@ codes are counted twice, both under the conteo row lock:
 The counters are COMMITTED before AccesoInvalido is raised: the request
 session rolls back on an exception, which would erase them.
 
+Disconnecting a session (the leader, or the device leaving by itself)
+sends its ASIGNADO reconteos back to PENDIENTE (design §5.2, WU9): the
+round-2 readings it took stay stored but no longer count, since only the
+current assignee's readings make a reconteo's quantity.
+
 A device session token is `secrets.token_urlsafe(32)`; only its sha256 is
 stored. Cédulas are stored for traceability and the different-pair rule,
 and never returned (Ley 1581). Apart from that failure commit, nothing
@@ -27,11 +32,12 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import List, NamedTuple, Optional, Sequence, Tuple
 
-from sqlalchemy import func, select, tuple_
+from sqlalchemy import func, select, tuple_, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.motored.models.conteo import ESTADOS_ABIERTOS, Conteo
 from app.motored.models.conteo_acceso_intento import ConteoAccesoIntento
+from app.motored.models.conteo_reconteo import ConteoReconteo
 from app.motored.models.conteo_sesion import ConteoIntegrante, ConteoSesion
 from app.motored.models.sucursal import Sucursal
 from app.motored.models.ubicacion_inventario import UbicacionInventario
@@ -270,11 +276,29 @@ def tocar_actividad(sesion: ConteoSesion, ahora: datetime) -> bool:
     return True
 
 
-def salir(sesion: ConteoSesion, ahora: datetime) -> None:
-    """The device leaves by itself: DESCONECTADA, readings kept."""
+async def liberar_reconteos(
+        db: AsyncSession, sesion_id: uuid.UUID) -> None:
+    """The session's ASIGNADO reconteos go back to PENDIENTE, with no
+    assignee and no same-pair override (that was for this session)."""
+    await db.execute(
+        update(ConteoReconteo)
+        .where(ConteoReconteo.sesion_id == sesion_id,
+               ConteoReconteo.estado == "ASIGNADO")
+        .values(estado="PENDIENTE", sesion_id=None, asignado_por=None,
+                asignado_en=None, misma_pareja_autorizada=False,
+                motivo_autorizacion=None)
+        .execution_options(synchronize_session=False))
+
+
+async def salir(
+        db: AsyncSession, sesion: ConteoSesion, ahora: datetime) -> None:
+    """The device leaves by itself: DESCONECTADA, readings kept, its
+    reconteos released."""
     sesion.estado = "DESCONECTADA"
     sesion.desconectada_en = ahora
     sesion.desconectada_por = None
+    await db.flush()
+    await liberar_reconteos(db, sesion.id)
 
 
 async def _integrantes(
@@ -331,8 +355,9 @@ async def desconectar(
         db: AsyncSession, conteo_id: uuid.UUID, sesion_id: uuid.UUID,
         usuario_id: uuid.UUID, ahora: Optional[datetime] = None,
 ) -> FilaSesion:
-    """The leader cuts a CONECTADA session (its readings are kept). An
-    already disconnected or closed one is returned as it is."""
+    """The leader cuts a CONECTADA session (its readings are kept, its
+    reconteos released). An already disconnected or closed one is
+    returned as it is."""
     ahora = ahora or datetime.now(timezone.utc)
     sesion = (await db.execute(
         select(ConteoSesion).where(
@@ -347,4 +372,5 @@ async def desconectar(
         sesion.desconectada_en = ahora
         sesion.desconectada_por = usuario_id
         await db.flush()
+        await liberar_reconteos(db, sesion.id)
     return await describir(db, sesion)

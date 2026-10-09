@@ -1,20 +1,23 @@
 """
 Inventory counts -- request and response shapes of the leader API and the
-public pair API (odd/motored-conteos-inventario, WU6/WU7/WU8; design
-§6.1, §6.2, §7, §8.3).
+public pair API (odd/motored-conteos-inventario, WU6/WU7/WU8/WU9;
+design §6.1, §6.2, §7, §8.3).
 
 - No shape carries `codigo_hash`. The plain 6-digit code appears only in
   `IniciarSalida` and `CodigoSalida`, the two moments it exists.
 - No shape carries a cédula: members are names only (Ley 1581).
 - The public shapes carry no expected quantity, cost or difference: the
-  count is blind (a test walks their OpenAPI schemas).
+  count is blind (a test walks their OpenAPI schemas). The differences
+  and the reconteo values are leader-only shapes.
 """
 import uuid
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Dict, List, Literal, Optional, Tuple
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel, ConfigDict, Field, field_validator, model_validator,
+)
 
 from app.motored.models.conteo import ESTADOS, TIPOS
 from app.motored.models.conteo_lectura import METODOS
@@ -22,6 +25,7 @@ from app.motored.schemas.vendedor import limpiar_cedula
 
 EstadoConteo = Literal[ESTADOS]
 TipoConteo = Literal[TIPOS]
+FiltroDiferencias = Literal["todas", "criticas", "reconteo"]
 LARGO_CEDULA = (4, 20)
 MAX_LECTURAS_LOTE = 100
 LARGO_NOMBRE_UBICACION = 60
@@ -290,6 +294,7 @@ class LecturaEntrada(BaseModel):
     leida_en: datetime
     metodo: Literal[METODOS]
     forzar_desconocido: bool = False
+    reconteo_id: Optional[uuid.UUID] = None
 
     @field_validator("leida_en")
     @classmethod
@@ -360,3 +365,110 @@ class RecientesSalida(BaseModel):
     ubicacion_actual: Optional[UbicacionPareja] = None
     lecturas: List[LecturaPareja]
     resumen_ubicacion: List[ResumenUbicacion]
+
+
+# --- reconteo: leader (WU9) --------------------------------------------------
+
+
+class ReconteoManualEntrada(BaseModel):
+    codigo: str = Field(min_length=1, max_length=120)
+
+
+class AsignarEntrada(BaseModel):
+    sesion_id: uuid.UUID
+    autorizar_misma_pareja: bool = False
+    motivo: Optional[str] = Field(default=None, max_length=2000)
+
+
+class FinRondaSalida(BaseModel):
+    estado: str
+    ronda_terminada_en: Optional[datetime] = None
+    diferencias: int
+    reconteos_creados: int
+
+
+class SesionCorta(BaseModel):
+    id: uuid.UUID
+    etiqueta: str
+
+
+class ReconteoEnDiferencia(BaseModel):
+    id: uuid.UUID
+    estado: str
+    origen: str
+    sesion: Optional[SesionCorta] = None
+    misma_pareja_autorizada: bool = False
+
+
+class DiferenciaSalida(BaseModel):
+    """One code (leader-only). `contado` is the final quantity: the
+    finished reconteo's, else round 1's."""
+
+    referencia_id: Optional[uuid.UUID] = None
+    codigo: str
+    descripcion: Optional[str] = None
+    ubicaciones: List[str]
+    sistema: Decimal
+    contado_ronda1: Decimal
+    contado: Decimal
+    diferencia: Decimal
+    costo_unitario: Optional[Decimal] = None
+    sin_costo: bool
+    valor: Optional[Decimal] = None
+    critico: bool
+    reconteo: Optional[ReconteoEnDiferencia] = None
+
+
+class DiferenciasSalida(BaseModel):
+    """`parcial` while round 1 is open; the counts cover every
+    difference, `items` only the filtered ones."""
+
+    estado: str
+    parcial: bool
+    umbrales: UmbralesSalida
+    total: int
+    criticas: int
+    en_reconteo: int
+    items: List[DiferenciaSalida]
+
+
+class ReconteoLider(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    codigo: str
+    referencia_id: Optional[uuid.UUID] = None
+    estado: str
+    origen: str
+    diferencia_ronda1: Optional[Decimal] = None
+    valor_ronda1: Optional[Decimal] = None
+    sesion_id: Optional[uuid.UUID] = None
+    misma_pareja_autorizada: bool = False
+    motivo_autorizacion: Optional[str] = None
+    asignado_en: Optional[datetime] = None
+    terminado_en: Optional[datetime] = None
+    cancelado_en: Optional[datetime] = None
+
+
+class RepartoSalida(BaseModel):
+    asignados: List[ReconteoLider]
+    sin_pareja: List[ReconteoLider]
+
+
+# --- reconteo: pair (WU9, blind) ---------------------------------------------
+
+
+class ReconteoTarea(BaseModel):
+    """Where round 1 found the code; never a quantity."""
+
+    id: uuid.UUID
+    codigo: str
+    descripcion: Optional[str] = None
+    ubicaciones: List[str]
+    estado: str
+
+
+class ReconteoTerminado(BaseModel):
+    id: uuid.UUID
+    estado: str
+    terminado_en: Optional[datetime] = None

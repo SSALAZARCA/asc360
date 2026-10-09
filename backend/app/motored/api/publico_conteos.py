@@ -1,8 +1,9 @@
 """
 Motored -- inventory counts, public pair access (odd/motored-conteos-
-inventario, WU7/WU8; design §6.2, §5.3, §7, §8.1-§8.3, §8.6).
+inventario, WU7/WU8/WU9; design §6.2, §5.2, §5.3, §7, §8.1-§8.3, §8.6).
 
-Prefix `/api/motored/publico/conteos` (WU7 access, WU8 readings).
+Prefix `/api/motored/publico/conteos` (WU7 access, WU8 readings, WU9
+reconteo tasks).
 PUBLIC: no `get_current_motored_user` (pairs have no user account), so
 the role/path confinement does not apply;
 each route authenticates by itself:
@@ -20,6 +21,12 @@ Readings (WU8, `services/conteos/lecturas.py`): the referencia catalogue
 (a scanned `UBI-…` label or a typed code; an unknown code is created as
 'PAREJA'), idempotent batches of up to 100 readings, voiding one's own
 reading and the recent readings with a per-location summary.
+
+Reconteo (WU9, `services/conteos/reconteos.py`): the session's assigned
+tasks (code, name and the round-1 locations), round-2 readings through
+the same `/lecturas` with `reconteo_id` (only this session's ASIGNADO
+reconteo, only its code) and marking a task done. Leaving (`/salir`)
+sends the session's unfinished reconteos back to the leader.
 
 Every response, errors included, is `no-store` and `noindex`
 (`RutaPublica`). The join body is read by hand so a validation error never
@@ -44,7 +51,7 @@ from app.motored.api.conteos import error_http
 from app.motored.deps import get_motored_db_or_503, require_motored_ready
 from app.motored.schemas import conteos as esquemas
 from app.motored.services.conteos import (
-    catalogo, errores, lecturas, sesiones, ubicaciones,
+    catalogo, errores, lecturas, reconteos, sesiones, ubicaciones,
 )
 
 UNIRSE_LIMITE = "10/minute"
@@ -175,8 +182,9 @@ async def salir(
     pareja: sesiones.Pareja = Depends(sesion_de_pareja),
     db: AsyncSession = Depends(get_motored_db_or_503),
 ) -> Response:
-    """The device leaves (DESCONECTADA); its readings are kept."""
-    sesiones.salir(pareja.sesion, _ahora())
+    """The device leaves (DESCONECTADA); its readings are kept and its
+    unfinished reconteos go back to the leader."""
+    await sesiones.salir(db, pareja.sesion, _ahora())
     await db.commit()
     return Response(status_code=204)
 
@@ -252,11 +260,13 @@ async def registrar_lecturas(
     pareja: sesiones.Pareja = Depends(sesion_de_pareja),
     db: AsyncSession = Depends(get_motored_db_or_503),
 ) -> Any:
-    """A batch of up to 100 readings, idempotent by the client `id`."""
+    """A batch of up to 100 readings, idempotent by the client `id`.
+    With `reconteo_id` a reading is round 2 of that reconteo."""
     items = [lecturas.Entrada(
         id=i.id, codigo_leido=i.codigo_leido, cantidad=i.cantidad,
         leida_en=i.leida_en, metodo=i.metodo,
-        forzar_desconocido=i.forzar_desconocido) for i in cuerpo.lecturas]
+        forzar_desconocido=i.forzar_desconocido,
+        reconteo_id=i.reconteo_id) for i in cuerpo.lecturas]
     try:
         resultado = await lecturas.registrar(
             db, pareja.sesion, pareja.conteo, items)
@@ -322,3 +332,38 @@ async def lecturas_recientes(
                 codigo=f[0], descripcion=f[1], cantidad=f[2],
                 lecturas=f[3])
             for f in vista.resumen])
+
+
+# --- reconteo tasks (WU9) ----------------------------------------------------
+
+
+@router.get(
+    "/{slug}/reconteos", response_model=list[esquemas.ReconteoTarea])
+async def ver_reconteos(
+    pareja: sesiones.Pareja = Depends(sesion_de_pareja),
+    db: AsyncSession = Depends(get_motored_db_or_503),
+) -> Any:
+    """This session's reconteo tasks (ASIGNADO first, then TERMINADO):
+    code, name and where round 1 found it. Never a quantity."""
+    filas = await reconteos.tareas(db, pareja.sesion)
+    return [esquemas.ReconteoTarea(**f._asdict()) for f in filas]
+
+
+@router.post(
+    "/{slug}/reconteos/{reconteo_id}/terminar",
+    response_model=esquemas.ReconteoTerminado)
+async def terminar_reconteo(
+    reconteo_id: uuid.UUID,
+    pareja: sesiones.Pareja = Depends(sesion_de_pareja),
+    db: AsyncSession = Depends(get_motored_db_or_503),
+) -> Any:
+    """Marks this session's task done. With no readings it was found 0."""
+    try:
+        reconteo = await reconteos.terminar(
+            db, pareja.sesion, reconteo_id, _ahora())
+    except errores.ErrorConteo as error:
+        raise error_http(error) from error
+    await db.commit()
+    return esquemas.ReconteoTerminado(
+        id=reconteo.id, estado=reconteo.estado,
+        terminado_en=reconteo.terminado_en)

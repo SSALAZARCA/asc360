@@ -163,3 +163,43 @@ class LecturaNoEncontrada(ErrorConteo):
 class RondaCerrada(ErrorConteo):
     codigo = "RONDA_CERRADA"
     MENSAJE = "La ronda de conteo de esa lectura ya terminó."
+
+
+# --- reconteo (WU9) ----------------------------------------------------------
+
+
+class ReconteoNoEncontrado(ErrorConteo):
+    codigo = "RECONTEO_NO_ENCONTRADO"
+    MENSAJE = "El reconteo no existe o no está asignado a esta pareja."
+
+
+class ReconteoDuplicado(ErrorConteo):
+    codigo = "RECONTEO_DUPLICADO"
+    MENSAJE = "Esa referencia ya tiene un reconteo activo en este conteo."
+
+
+class CodigoDesconocido(ErrorConteo):
+    codigo = "CODIGO_DESCONOCIDO"
+    MENSAJE = (
+        "Ese código no existe en el maestro de referencias ni se leyó en "
+        "el conteo.")
+
+
+class SesionNoDisponible(ErrorConteo):
+    codigo = "SESION_NO_DISPONIBLE"
+    MENSAJE = (
+        "Esa pareja ya no está conectada. Elija una pareja conectada.")
+
+
+class MismaPareja(ErrorConteo):
+    codigo = "MISMA_PAREJA"
+    MENSAJE = (
+        "Esa pareja comparte una persona con quien contó esta referencia "
+        "en la primera ronda. Asigne otra pareja.")
+
+
+class HayParejaElegible(ErrorConteo):
+    codigo = "HAY_PAREJA_ELEGIBLE"
+    MENSAJE = (
+        "Hay otra pareja conectada que puede hacer este reconteo. Solo se "
+        "autoriza a la misma pareja cuando no hay ninguna otra.")

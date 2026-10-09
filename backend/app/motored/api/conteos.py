@@ -1,6 +1,6 @@
 """
 Motored -- inventory counts, leader API (odd/motored-conteos-inventario,
-WU6/WU7/WU8; design §6.1, §5.1, §5.3, §4.3).
+WU6/WU7/WU8/WU9; design §6.1, §5.1, §5.2, §5.3, §4.3).
 
 Prefix `/api/motored/conteos`. The path rules already confine
 LIDER_INVENTARIOS and GERENCIA to it; each endpoint then picks its roles:
@@ -9,8 +9,9 @@ LIDER_INVENTARIOS and GERENCIA to it; each endpoint then picks its roles:
 - schedule, reschedule or change the leader, annul, the leaders list:
   ADMIN only (owner decision);
 - iniciar, rotate the code, the QR, disconnect a pair, create / rename /
-  deactivate the store's locations: ADMIN or the assigned leader.
-  GERENCIA gets 403 on every write.
+  deactivate the store's locations, end round 1, add / assign /
+  auto-assign / cancel reconteos: ADMIN or the assigned leader.
+  GERENCIA gets 403 on every write (it reads the differences).
 
 Scoping: a leader only sees its own conteos (`lider_id`); another's
 answers 404, never 403, so ids do not leak (`consultas.conteo_visible`).
@@ -22,7 +23,7 @@ rotar, the two moments it exists.
 """
 import uuid
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -34,7 +35,8 @@ from app.motored.models.conteo import ESTADOS_ABIERTOS, Conteo
 from app.motored.schemas import conteos as esquemas
 from app.motored.services.auth import MotoredUser
 from app.motored.services.conteos import (
-    acceso, consultas, errores, sesiones, snapshot, ubicaciones,
+    acceso, consultas, diferencias, errores, reconteos, sesiones, snapshot,
+    ubicaciones,
 )
 
 ADMIN = "ADMIN"
@@ -49,6 +51,12 @@ _ESTADO_HTTP = {
     errores.SesionNoEncontrada: 404,
     errores.UbicacionNoEncontrada: 404,
     errores.LecturaNoEncontrada: 404,
+    errores.ReconteoNoEncontrado: 404,
+    errores.CodigoDesconocido: 422,
+    errores.ReconteoDuplicado: 409,
+    errores.SesionNoDisponible: 409,
+    errores.MismaPareja: 409,
+    errores.HayParejaElegible: 409,
     errores.SucursalInvalida: 422,
     errores.LiderInvalido: 422,
     errores.MotivoRequerido: 422,
@@ -456,3 +464,172 @@ async def editar_ubicacion(
         raise error_http(error) from error
     await db.commit()
     return _ubicacion_lider(ubicacion)
+
+
+# --- reconteo (WU9) ----------------------------------------------------------
+
+
+def _ahora() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+async def _etiquetas(
+        db: AsyncSession, conteo_id: uuid.UUID) -> Dict[uuid.UUID, str]:
+    """session id -> 'Pareja N · Ana R. y Luis G.'."""
+    return {
+        f.sesion.id: sesiones.etiqueta(
+            f.numero, [p.nombre for p in f.integrantes])
+        for f in await sesiones.listar(db, conteo_id)}
+
+
+def _en_diferencia(
+        vista, etiquetas) -> Optional[esquemas.ReconteoEnDiferencia]:
+    if vista is None:
+        return None
+    sesion = None
+    if vista.sesion_id is not None:
+        sesion = esquemas.SesionCorta(
+            id=vista.sesion_id, etiqueta=etiquetas.get(vista.sesion_id, ""))
+    return esquemas.ReconteoEnDiferencia(
+        id=vista.id, estado=vista.estado, origen=vista.origen,
+        sesion=sesion,
+        misma_pareja_autorizada=vista.misma_pareja_autorizada)
+
+
+def _diferencia(fila, etiquetas) -> esquemas.DiferenciaSalida:
+    datos = fila._asdict()
+    datos["reconteo"] = _en_diferencia(fila.reconteo, etiquetas)
+    return esquemas.DiferenciaSalida(**datos)
+
+
+@router.get(
+    "/{conteo_id}/diferencias", response_model=esquemas.DiferenciasSalida)
+async def ver_diferencias(
+    conteo_id: uuid.UUID,
+    filtro: esquemas.FiltroDiferencias = Query(default="todas"),
+    usuario: MotoredUser = Depends(lector),
+    db: AsyncSession = Depends(get_motored_db_or_503),
+):
+    """Leader-only: system vs counted per code, valued at the frozen
+    cost, largest |value| first. `parcial` while round 1 is open."""
+    try:
+        conteo = await consultas.conteo_visible(db, conteo_id, usuario)
+    except errores.ErrorConteo as error:
+        raise error_http(error) from error
+    lista = await diferencias.listar(db, conteo)
+    etiquetas = await _etiquetas(db, conteo.id)
+    return esquemas.DiferenciasSalida(
+        estado=conteo.estado, parcial=conteo.estado == "EN_CONTEO",
+        umbrales=esquemas.UmbralesSalida(
+            reconteo=conteo.umbral_reconteo_pesos,
+            critico=conteo.umbral_critico_pesos),
+        total=len(lista), criticas=sum(1 for f in lista if f.critico),
+        en_reconteo=sum(1 for f in lista if f.reconteo is not None),
+        items=[_diferencia(f, etiquetas)
+               for f in diferencias.filtrar(lista, filtro)])
+
+
+@router.post(
+    "/{conteo_id}/terminar-ronda", response_model=esquemas.FinRondaSalida)
+async def terminar_ronda(
+    conteo_id: uuid.UUID,
+    usuario: MotoredUser = Depends(operador),
+    db: AsyncSession = Depends(get_motored_db_or_503),
+):
+    """EN_CONTEO -> EN_RECONTEO; creates the threshold reconteos."""
+    try:
+        await consultas.conteo_visible(db, conteo_id, usuario)
+        fin = await reconteos.terminar_ronda(db, conteo_id, _ahora())
+    except errores.ErrorConteo as error:
+        raise error_http(error) from error
+    await db.commit()
+    return esquemas.FinRondaSalida(
+        estado=fin.conteo.estado,
+        ronda_terminada_en=fin.conteo.ronda_terminada_en,
+        diferencias=fin.diferencias, reconteos_creados=fin.reconteos)
+
+
+@router.post(
+    "/{conteo_id}/reconteos", response_model=esquemas.ReconteoLider,
+    status_code=201)
+async def crear_reconteo(
+    conteo_id: uuid.UUID,
+    cuerpo: esquemas.ReconteoManualEntrada,
+    usuario: MotoredUser = Depends(operador),
+    db: AsyncSession = Depends(get_motored_db_or_503),
+):
+    """Body `{codigo}`: a manual reconteo, under the amount or not."""
+    try:
+        await consultas.conteo_visible(db, conteo_id, usuario)
+        reconteo = await reconteos.crear_manual(db, conteo_id, cuerpo.codigo)
+    except errores.ErrorConteo as error:
+        raise error_http(error) from error
+    await db.commit()
+    return esquemas.ReconteoLider.model_validate(reconteo)
+
+
+@router.post(
+    "/{conteo_id}/reconteos/auto-asignar",
+    response_model=esquemas.RepartoSalida)
+async def auto_asignar(
+    conteo_id: uuid.UUID,
+    usuario: MotoredUser = Depends(operador),
+    db: AsyncSession = Depends(get_motored_db_or_503),
+):
+    """Spreads the PENDIENTE reconteos over the eligible connected
+    pairs; `sin_pareja` are the ones no eligible pair could take."""
+    try:
+        conteo = await consultas.conteo_visible(db, conteo_id, usuario)
+        resultado = await reconteos.auto_asignar(
+            db, conteo, _uuid(usuario), _ahora())
+    except errores.ErrorConteo as error:
+        raise error_http(error) from error
+    await db.commit()
+    validar = esquemas.ReconteoLider.model_validate
+    return esquemas.RepartoSalida(
+        asignados=[validar(r) for r in resultado.asignados],
+        sin_pareja=[validar(r) for r in resultado.sin_pareja])
+
+
+@router.post(
+    "/{conteo_id}/reconteos/{reconteo_id}/asignar",
+    response_model=esquemas.ReconteoLider)
+async def asignar_reconteo(
+    conteo_id: uuid.UUID,
+    reconteo_id: uuid.UUID,
+    cuerpo: esquemas.AsignarEntrada,
+    usuario: MotoredUser = Depends(operador),
+    db: AsyncSession = Depends(get_motored_db_or_503),
+):
+    """Body `{sesion_id, autorizar_misma_pareja?, motivo?}`: a different
+    pair (disjoint cédulas), or the same one with a reason when no other
+    eligible pair is connected."""
+    try:
+        conteo = await consultas.conteo_visible(db, conteo_id, usuario)
+        reconteo = await reconteos.asignar(
+            db, conteo, reconteo_id, cuerpo.sesion_id, _uuid(usuario),
+            autorizar=cuerpo.autorizar_misma_pareja, motivo=cuerpo.motivo,
+            ahora=_ahora())
+    except errores.ErrorConteo as error:
+        raise error_http(error) from error
+    await db.commit()
+    return esquemas.ReconteoLider.model_validate(reconteo)
+
+
+@router.post(
+    "/{conteo_id}/reconteos/{reconteo_id}/cancelar",
+    response_model=esquemas.ReconteoLider)
+async def cancelar_reconteo(
+    conteo_id: uuid.UUID,
+    reconteo_id: uuid.UUID,
+    usuario: MotoredUser = Depends(operador),
+    db: AsyncSession = Depends(get_motored_db_or_503),
+):
+    try:
+        conteo = await consultas.conteo_visible(db, conteo_id, usuario)
+        reconteo = await reconteos.cancelar(
+            db, conteo, reconteo_id, _ahora())
+    except errores.ErrorConteo as error:
+        raise error_http(error) from error
+    await db.commit()
+    return esquemas.ReconteoLider.model_validate(reconteo)

@@ -20,8 +20,15 @@ Rules (design §7):
 - a `UBI-…` code that is not a referencia is a location label, refused
   as ES_UBICACION (the device must set it as the location);
 - quantities follow the model CHECK (> 0, <= 99999, 2 decimals);
-- this unit only writes round 1, while the conteo is EN_CONTEO; the
-  `ronda` / `reconteo_id` columns are filled for round 2 by WU9.
+- round 1 (no `reconteo_id`) only while the conteo is EN_CONTEO;
+- round 2 (WU9, with `reconteo_id`) only while it is EN_RECONTEO, for a
+  reconteo ASIGNADO to THIS session, and only for that reconteo's code
+  (RECONTEO_NO_ASIGNADO / RECONTEO_OTRO_CODIGO otherwise). A reconteo of
+  a code that is not in the master takes it without `forzar_desconocido`.
+
+The conteo row is read `FOR SHARE` first, so a batch in flight and the
+leader's "terminar ronda" (`FOR UPDATE`) never overlap: a batch either
+lands before the differences are computed or sees the round closed.
 
 Nothing here commits: the API owns the transaction. Nothing returned
 carries an expected quantity, a cost or a difference (blind count).
@@ -39,17 +46,23 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.motored.models.conteo import Conteo
 from app.motored.models.conteo_lectura import CANTIDAD_MAXIMA, ConteoLectura
+from app.motored.models.conteo_reconteo import ConteoReconteo
 from app.motored.models.conteo_sesion import ConteoSesion
 from app.motored.models.referencia import Referencia
 from app.motored.models.ubicacion_inventario import UbicacionInventario
 from app.motored.services.conteos import errores, ubicaciones
 
 RONDA_CONTEO = 1
+RONDA_RECONTEO = 2
 ESTADO_RONDA_CONTEO = "EN_CONTEO"
+ESTADO_RONDA_RECONTEO = "EN_RECONTEO"
 LARGO_CODIGO = 100
 CENTAVO = Decimal("0.01")
 
 Resueltas = Dict[str, Tuple[uuid.UUID, Optional[str]]]
+# reconteo id -> (its normalized code, whether it has a referencia)
+Propios = Dict[uuid.UUID, Tuple[str, bool]]
+Rechazo = Tuple[uuid.UUID, str]
 
 
 class Entrada(NamedTuple):
@@ -61,6 +74,7 @@ class Entrada(NamedTuple):
     leida_en: datetime
     metodo: str
     forzar_desconocido: bool = False
+    reconteo_id: Optional[uuid.UUID] = None
 
 
 class Lote(NamedTuple):
@@ -123,7 +137,43 @@ def _fila(entrada: Entrada, codigo: str, referencia_id) -> dict:
     return dict(
         id=entrada.id, codigo_leido=codigo, referencia_id=referencia_id,
         cantidad=entrada.cantidad, metodo=entrada.metodo,
-        leida_en=entrada.leida_en)
+        leida_en=entrada.leida_en, reconteo_id=entrada.reconteo_id)
+
+
+def _ronda_dos(entrada: Entrada, estado: str,
+               propios: Propios) -> Tuple[Optional[Entrada], str]:
+    """A round-2 reading checked against this session's reconteos."""
+    propio = propios.get(entrada.reconteo_id)
+    if estado != ESTADO_RONDA_RECONTEO or propio is None:
+        return None, "RECONTEO_NO_ASIGNADO"
+    codigo, con_referencia = propio
+    if normalizar_codigo(entrada.codigo_leido) != codigo:
+        return None, "RECONTEO_OTRO_CODIGO"
+    if not con_referencia:
+        entrada = entrada._replace(forzar_desconocido=True)
+    return entrada, ""
+
+
+def por_ronda(
+        items: Sequence[Entrada], estado: str,
+        propios: Propios) -> Tuple[List[Entrada], List[Rechazo]]:
+    """Splits a batch into readings its round accepts and refusals.
+    `estado` is the conteo's, `propios` this session's ASIGNADO
+    reconteos."""
+    aptas, rechazadas = [], []
+    for entrada in items:
+        if entrada.reconteo_id is None:
+            if estado == ESTADO_RONDA_CONTEO:
+                aptas.append(entrada)
+            else:
+                rechazadas.append((entrada.id, "RONDA_CERRADA"))
+            continue
+        apta, motivo = _ronda_dos(entrada, estado, propios)
+        if apta is None:
+            rechazadas.append((entrada.id, motivo))
+        else:
+            aptas.append(apta)
+    return aptas, rechazadas
 
 
 def clasificar(items: Sequence[Entrada], resueltas: Resueltas) -> Lote:
@@ -195,7 +245,8 @@ async def _insertar(
     valores = [
         dict(fila, conteo_id=sesion.conteo_id, sesion_id=sesion.id,
              ubicacion_id=sesion.ubicacion_actual_id,
-             ronda=RONDA_CONTEO, reconteo_id=None)
+             ronda=(RONDA_CONTEO if fila["reconteo_id"] is None
+                    else RONDA_RECONTEO))
         for fila in filas]
     nuevas = (await db.execute(
         insert(ConteoLectura).values(valores)
@@ -204,31 +255,72 @@ async def _insertar(
     return set(nuevas)
 
 
+async def _estado_vigente(db: AsyncSession, conteo_id: uuid.UUID) -> str:
+    """The conteo's estado, read FOR SHARE (see module)."""
+    return (await db.execute(
+        select(Conteo.estado).where(Conteo.id == conteo_id)
+        .with_for_update(read=True))).scalars().first()
+
+
+async def _propios(
+        db: AsyncSession, sesion: ConteoSesion,
+        nombrados: Iterable[Optional[uuid.UUID]]) -> Propios:
+    """This session's ASIGNADO reconteos among `nombrados`."""
+    ids = sorted({i for i in nombrados if i is not None}, key=str)
+    if not ids:
+        return {}
+    filas = (await db.execute(
+        select(ConteoReconteo.id, ConteoReconteo.codigo,
+               ConteoReconteo.referencia_id)
+        .where(ConteoReconteo.id.in_(ids),
+               ConteoReconteo.conteo_id == sesion.conteo_id,
+               ConteoReconteo.sesion_id == sesion.id,
+               ConteoReconteo.estado == "ASIGNADO")
+        .with_for_update(read=True))).all()
+    return {f[0]: (normalizar_codigo(f[1]), f[2] is not None)
+            for f in filas}
+
+
 async def registrar(
         db: AsyncSession, sesion: ConteoSesion, conteo: Conteo,
         items: Sequence[Entrada]) -> Resultado:
     """Stores a batch at the session's current location (see module)."""
     if sesion.ubicacion_actual_id is None:
         raise errores.SinUbicacion()
-    if conteo.estado != ESTADO_RONDA_CONTEO:
-        cerradas = [(i.id, "RONDA_CERRADA") for i in items]
-        return Resultado([], [], [], cerradas, {})
-    resueltas = await resolver(db, codigos_a_resolver(items))
-    lote = clasificar(items, resueltas)
+    estado = await _estado_vigente(db, conteo.id)
+    propios = await _propios(db, sesion, [i.reconteo_id for i in items])
+    aptas, fuera = por_ronda(items, estado, propios)
+    if not aptas:
+        return Resultado([], [], [], fuera, {})
+    resueltas = await resolver(db, codigos_a_resolver(aptas))
+    lote = clasificar(aptas, resueltas)
     nuevas = await _insertar(db, sesion, lote.filas)
     ids = [f["id"] for f in lote.filas]
     return Resultado(
         aceptadas=[i for i in ids if i in nuevas],
         duplicadas=[i for i in ids if i not in nuevas] + lote.repetidas,
-        desconocidos=lote.desconocidos, rechazadas=lote.rechazadas,
+        desconocidos=lote.desconocidos,
+        rechazadas=fuera + lote.rechazadas,
         referencias={c: (r[1] or "") for c, r in resueltas.items()})
+
+
+async def _anulable(
+        db: AsyncSession, sesion: ConteoSesion, conteo: Conteo,
+        lectura: ConteoLectura) -> bool:
+    """Round 1 while counting; round 2 while its reconteo is still
+    ASIGNADO to this session."""
+    if lectura.ronda == RONDA_CONTEO:
+        return conteo.estado == ESTADO_RONDA_CONTEO
+    if conteo.estado != ESTADO_RONDA_RECONTEO:
+        return False
+    return bool(await _propios(db, sesion, [lectura.reconteo_id]))
 
 
 async def anular(
         db: AsyncSession, sesion: ConteoSesion, conteo: Conteo,
         lectura_id: uuid.UUID, ahora: datetime) -> ConteoLectura:
-    """Voids one of the session's own readings while its round is open.
-    Voiding twice keeps the first time (a retry is harmless)."""
+    """Voids one of the session's own readings while its round is open
+    (`_anulable`). Voiding twice keeps the first time."""
     lectura = (await db.execute(
         select(ConteoLectura).where(
             ConteoLectura.id == lectura_id,
@@ -237,8 +329,7 @@ async def anular(
         .execution_options(populate_existing=True))).scalars().first()
     if lectura is None:
         raise errores.LecturaNoEncontrada()
-    if (lectura.ronda != RONDA_CONTEO
-            or conteo.estado != ESTADO_RONDA_CONTEO):
+    if not await _anulable(db, sesion, conteo, lectura):
         raise errores.RondaCerrada()
     if lectura.anulada_en is None:
         lectura.anulada_en = ahora
