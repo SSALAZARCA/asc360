@@ -3,7 +3,9 @@ Inventory counts -- the leader API's reads and its scoping
 (odd/motored-conteos-inventario, WU6; design §6.1).
 
 Owner decision on scoping: ADMIN and GERENCIA see every conteo; a
-LIDER_INVENTARIOS sees ONLY the conteos assigned to it (`lider_id`).
+leader (LIDER_INVENTARIOS or, owner decision 2026-10-09,
+COORDINADOR_REPUESTOS; `snapshot.ROLES_LIDER_CONTEO`) sees ONLY the
+conteos assigned to it (`lider_id`).
 Another leader's conteo is "not found" (404 at the API, never 403), so
 ids never leak; the list filters them out in SQL.
 """
@@ -20,7 +22,7 @@ from app.motored.models.carga_archivo import CargaArchivo
 from app.motored.models.conteo import Conteo
 from app.motored.models.conteo_snapshot_linea import ConteoSnapshotLinea
 from app.motored.models.sucursal import Sucursal
-from app.motored.models.usuario import MotoredRole, Usuario
+from app.motored.models.usuario import Usuario
 from app.motored.services.auth import MotoredUser
 from app.motored.services.conteos import errores, snapshot
 from app.motored.services.reloj import hoy_bogota
@@ -64,10 +66,15 @@ class OpcionLider(NamedTuple):
     id: uuid.UUID
     nombre: str
     email: Optional[str]
+    rol: str
+
+
+# Role values of a count leader, as `MotoredUser.role` carries them.
+ROLES_LIDER = tuple(r.value for r in snapshot.ROLES_LIDER_CONTEO)
 
 
 def es_lider(usuario: MotoredUser) -> bool:
-    return usuario.role == MotoredRole.LIDER_INVENTARIOS.value
+    return usuario.role in ROLES_LIDER
 
 
 def ve_lider(
@@ -152,13 +159,17 @@ async def datos_conteo(db: AsyncSession, conteo: Conteo) -> DatosConteo:
 
 
 async def lideres_activos(db: AsyncSession) -> List[OpcionLider]:
-    """Active, approved LIDER_INVENTARIOS users (the schedule form)."""
+    """Active, approved users of a leader role (the schedule form)."""
     filas = (await db.execute(
-        select(Usuario.id, Usuario.nombre, Usuario.email)
-        .where(Usuario.role == MotoredRole.LIDER_INVENTARIOS,
+        select(Usuario.id, Usuario.nombre, Usuario.email, Usuario.role)
+        .where(Usuario.role.in_(snapshot.ROLES_LIDER_CONTEO),
                Usuario.activo.is_(True), Usuario.status == "approved")
         .order_by(Usuario.nombre))).all()
-    return [OpcionLider(f[0], f[1], f[2]) for f in filas]
+    return [OpcionLider(f[0], f[1], f[2], _valor_rol(f[3])) for f in filas]
+
+
+def _valor_rol(rol) -> str:
+    return getattr(rol, "value", rol)
 
 
 async def _vigencia_horas(db: AsyncSession, ahora: datetime):

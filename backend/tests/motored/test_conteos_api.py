@@ -416,7 +416,8 @@ def test_without_a_public_url_the_qr_is_a_409(monkeypatch):
 
 
 def test_admin_lists_the_active_leaders(monkeypatch):
-    fila = consultas.OpcionLider(LIDER_ID, "Lina", "l@x.com")
+    fila = consultas.OpcionLider(
+        LIDER_ID, "Lina", "l@x.com", "LIDER_INVENTARIOS")
     monkeypatch.setattr(
         consultas, "lideres_activos", AsyncMock(return_value=[fila]))
 
@@ -424,7 +425,8 @@ def test_admin_lists_the_active_leaders(monkeypatch):
 
     assert r.status_code == 200, r.text
     assert r.json() == [
-        {"id": str(LIDER_ID), "nombre": "Lina", "email": "l@x.com"}]
+        {"id": str(LIDER_ID), "nombre": "Lina", "email": "l@x.com",
+         "rol": "LIDER_INVENTARIOS"}]
 
 
 def test_admin_lists_the_stores_with_their_latest_inventory(monkeypatch):

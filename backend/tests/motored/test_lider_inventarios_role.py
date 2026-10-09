@@ -210,8 +210,9 @@ def probe_routes():
             app.routes.remove(route)
 
 
-@pytest.mark.parametrize("role", ["ADMIN", "GERENCIA", ROLE])
-def test_conteos_prefix_lets_admin_gerencia_and_the_leader_through(
+@pytest.mark.parametrize(
+    "role", ["ADMIN", "GERENCIA", ROLE, "COORDINADOR_REPUESTOS"])
+def test_conteos_prefix_lets_admin_gerencia_and_the_leaders_through(
         probe_routes, role):
     response = _request(role, CONTEOS + PROBE)
 
@@ -220,14 +221,16 @@ def test_conteos_prefix_lets_admin_gerencia_and_the_leader_through(
 
 
 @pytest.mark.parametrize(
-    "role", ["SERVICIO_CLIENTE", "COORDINADOR_REPUESTOS", "SUCURSAL",
+    "role", ["SERVICIO_CLIENTE", "ANALISTA_ADMINISTRATIVO", "SUCURSAL",
              "CONSULTA"])
 def test_conteos_prefix_denies_the_confined_roles(probe_routes, role):
     assert _request(role, CONTEOS + PROBE).status_code == 403
 
 
-def test_conteos_prefix_match_respects_segment_boundaries(probe_routes):
-    response = _request(ROLE, CONTEOS + "-otra" + PROBE)
+@pytest.mark.parametrize("role", [ROLE, "COORDINADOR_REPUESTOS"])
+def test_conteos_prefix_match_respects_segment_boundaries(
+        probe_routes, role):
+    response = _request(role, CONTEOS + "-otra" + PROBE)
 
     assert response.status_code == 403
 

@@ -26,7 +26,9 @@ from app.motored.models.proveedor import Proveedor
 from app.motored.models.referencia import Referencia
 from app.motored.models.sucursal import Sucursal
 from app.motored.models.usuario import MotoredRole, Usuario
-from app.motored.services.conteos import acceso, errores, snapshot
+from app.motored.services.conteos import (
+    acceso, consultas, errores, snapshot,
+)
 from tests.motored.pg_real.codigos_co import codigo_co_unico
 
 URL = os.environ.get("MOTORED_TEST_PG_URL")
@@ -187,6 +189,28 @@ async def test_the_leader_must_be_an_active_lider_inventarios(
     with pytest.raises(errores.LiderInvalido):
         await snapshot.programar_conteo(
             mundo.db, tienda.id, uuid.uuid4(), HOY, mundo.admin.id)
+
+
+async def test_a_coordinator_led_conteo_is_scheduled_and_started(mundo):
+    """Owner decision 2026-10-09: COORDINADOR_REPUESTOS leads counts."""
+    tienda = await mundo.tienda()
+    referencia = await mundo.referencia()
+    await mundo.carga(HOY, [(tienda, referencia, "B01", 4, 10)])
+    coordinador = await mundo.usuario(MotoredRole.COORDINADOR_REPUESTOS)
+
+    conteo = await snapshot.programar_conteo(
+        mundo.db, tienda.id, coordinador.id, HOY, mundo.admin.id)
+    inicio = await snapshot.iniciar_conteo(
+        mundo.db, conteo.id, coordinador.id, ahora=AHORA)
+
+    assert (conteo.lider_id, inicio.conteo.estado) == (
+        coordinador.id, "EN_CONTEO")
+    assert list(await _lineas(mundo.db, conteo)) == [referencia.id]
+    opciones = {o.id: o.rol for o in await consultas.lideres_activos(
+        mundo.db)}
+    assert opciones[coordinador.id] == "COORDINADOR_REPUESTOS"
+    assert opciones[mundo.lider.id] == "LIDER_INVENTARIOS"
+    assert mundo.admin.id not in opciones
 
 
 async def test_the_store_must_exist_and_be_active(mundo):

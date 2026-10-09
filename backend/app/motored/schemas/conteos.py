@@ -130,6 +130,7 @@ class LiderOpcion(BaseModel):
     id: uuid.UUID
     nombre: str
     email: Optional[str] = None
+    rol: str
 
 
 class InventarioSalida(BaseModel):

@@ -4,9 +4,10 @@ The COORDINADOR_REPUESTOS role (feature motored-coordinador-repuestos, C1/C2).
 Covers the enum value, its Alembic revision (static, mocked `op`), the
 usuarios API accepting the role, and the server-side confinement enforced
 inside `get_current_motored_user`: the role reaches only auth, the KPI's
-(`/tablero-asesores/kpis`, read-only) and the "Gestión repuestos" prefix
-(`/gestion-repuestos`). Every other guarded route answers 403, so a new
-endpoint is denied by default.
+(`/tablero-asesores/kpis`, read-only), the "Gestión repuestos" prefix
+(`/gestion-repuestos`) and, as a count leader (owner decision
+2026-10-09), the inventory counts prefix (`/conteos`). Every other
+guarded route answers 403, so a new endpoint is denied by default.
 
 The "Gestión repuestos" prefix is a rule only (no endpoint yet): throwaway
 probe routes on the real dependency stand in for it.
@@ -27,8 +28,10 @@ from app.main import app
 from app.motored.auth import create_motored_token
 from app.motored.deps import (
     COORDINADOR_REPUESTOS_ALLOWED_PREFIXES,
+    CONTEOS_PREFIX,
     COORDINADOR_REPUESTOS_ROLE,
     GESTION_REPUESTOS_PREFIX,
+    _CONFINED_ROLE_PREFIXES,
     get_current_motored_user,
     get_motored_user_lookup,
 )
@@ -44,6 +47,7 @@ ROLE = "COORDINADOR_REPUESTOS"
 PREFIX = "/api/motored"
 KPIS = PREFIX + "/tablero-asesores/kpis"
 GESTION = PREFIX + "/gestion-repuestos"
+CONTEOS = PREFIX + "/conteos"
 SECRET = "coordinador-test-secret"
 
 _VERSIONS_DIR = (
@@ -187,10 +191,11 @@ def _calls(dependant) -> set:
 
 def _guarded_routes_outside_allow_list():
     allowed = (PREFIX + "/auth/", KPIS + "/", KPIS + "?",
-               PREFIX + "/gestion-repuestos/")
+               PREFIX + "/gestion-repuestos/", CONTEOS + "/")
     for ctx in iter_route_contexts(app.routes):
         path = ctx.path or ""
-        if not path.startswith(PREFIX + "/") or path.startswith(allowed):
+        if (not path.startswith(PREFIX + "/") or path == CONTEOS
+                or path.startswith(allowed)):
             continue
         if get_current_motored_user in _calls(ctx.original_route.dependant):
             for method in sorted(ctx.methods):
@@ -255,6 +260,17 @@ def test_gestion_prefix_match_respects_segment_boundaries(probe_routes):
     response = _request(ROLE, GESTION + "-otra/__probe__")
 
     assert response.status_code == 403
+
+
+def test_role_reaches_the_counts_prefix_as_a_count_leader():
+    """Owner decision 2026-10-09: the coordinator also leads counts. The
+    prefix sits in its confined entry, not in the pinned allow-list."""
+    assert CONTEOS_PREFIX == CONTEOS
+    prefixes, _ = _CONFINED_ROLE_PREFIXES[ROLE]
+    assert set(prefixes) == {PREFIX + "/auth", KPIS, GESTION, CONTEOS}
+    response = _request(ROLE, CONTEOS + "/no-existe/a/b/c")
+
+    assert response.status_code in (404, 405), response.text
 
 
 def test_auth_prefix_stays_reachable_for_password_change():

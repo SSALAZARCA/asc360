@@ -35,7 +35,7 @@ class LiderInvalido(ErrorConteo):
     codigo = "LIDER_INVALIDO"
     MENSAJE = (
         "El líder asignado debe ser un usuario activo con el rol "
-        "Líder de inventarios.")
+        "Líder de inventarios o Coordinador de repuestos.")
 
 
 class EstadoInvalido(ErrorConteo):

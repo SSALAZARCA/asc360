@@ -102,8 +102,9 @@ ANALISTA_ADMINISTRATIVO_ALLOWED_PREFIXES = (
 )
 
 # Inventory counts ("Conteos de inventario"). ADMIN is not path-confined;
-# GERENCIA and LIDER_INVENTARIOS get the prefix below. GERENCIA only reads
-# and a leader only reaches its own counts: enforced per endpoint, not here.
+# GERENCIA, LIDER_INVENTARIOS and COORDINADOR_REPUESTOS (it also leads
+# counts) get the prefix below. GERENCIA only reads and a leader only
+# reaches its own counts: enforced per endpoint, not here.
 CONTEOS_PREFIX = "/api/motored/conteos"
 
 # Inventory-count leader (`LIDER_INVENTARIOS`): an allow-list, so every new
@@ -137,7 +138,9 @@ _CONFINED_ROLE_PREFIXES = {
     GERENCIA_ROLE: (GERENCIA_ALLOWED_PREFIXES
                     + (GESTION_REPUESTOS_PREFIX, CONTEOS_PREFIX),
                     _CONFINED_DETAIL),
-    COORDINADOR_REPUESTOS_ROLE: (COORDINADOR_REPUESTOS_ALLOWED_PREFIXES,
+    # Owner decision 2026-10-09: the coordinator also leads counts.
+    COORDINADOR_REPUESTOS_ROLE: (COORDINADOR_REPUESTOS_ALLOWED_PREFIXES
+                                 + (CONTEOS_PREFIX,),
                                  _CONFINED_DETAIL),
     ANALISTA_ADMINISTRATIVO_ROLE: (ANALISTA_ADMINISTRATIVO_ALLOWED_PREFIXES,
                                    _CONFINED_DETAIL),

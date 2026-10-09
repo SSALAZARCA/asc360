@@ -2,10 +2,12 @@
 Motored -- inventory counts, leader API (odd/motored-conteos-inventario,
 WU6/WU7/WU8/WU9/WU10; design §6.1, §5.1, §5.2, §5.3, §4.3).
 
-Prefix `/api/motored/conteos`. The path rules already confine
-LIDER_INVENTARIOS and GERENCIA to it; each endpoint then picks its roles:
+Prefix `/api/motored/conteos`. The path rules already let LIDER_INVENTARIOS,
+COORDINADOR_REPUESTOS and GERENCIA reach it; each endpoint then picks its
+roles. A leader is LIDER_INVENTARIOS or COORDINADOR_REPUESTOS (owner
+decision 2026-10-09; `snapshot.ROLES_LIDER_CONTEO`):
 
-- reads: ADMIN, LIDER_INVENTARIOS, GERENCIA;
+- reads: ADMIN, the leaders, GERENCIA;
 - schedule, reschedule or change the leader, annul, the leaders list:
   ADMIN only (owner decision);
 - iniciar, rotate the code, the QR, disconnect a pair, create / rename /
@@ -45,8 +47,8 @@ from app.motored.services.corridas.exportacion_hmcl import (
 from app.motored.services.reloj import hoy_bogota
 
 ADMIN = "ADMIN"
-LECTORES = (ADMIN, "LIDER_INVENTARIOS", "GERENCIA")
-OPERADORES = (ADMIN, "LIDER_INVENTARIOS")
+LECTORES = (ADMIN, "GERENCIA") + consultas.ROLES_LIDER
+OPERADORES = (ADMIN,) + consultas.ROLES_LIDER
 PREFIJO_API = "/api/motored/conteos"
 ESTADOS_EDITABLES = ("PROGRAMADO",) + ESTADOS_ABIERTOS
 SIN_CACHE = {"Cache-Control": "no-store"}
@@ -216,8 +218,8 @@ async def listar_lideres(
     db: AsyncSession = Depends(get_motored_db_or_503),
 ):
     filas = await consultas.lideres_activos(db)
-    return [esquemas.LiderOpcion(id=f.id, nombre=f.nombre, email=f.email)
-            for f in filas]
+    return [esquemas.LiderOpcion(
+        id=f.id, nombre=f.nombre, email=f.email, rol=f.rol) for f in filas]
 
 
 @router.get("/sucursales", response_model=List[esquemas.SucursalOpcion])
