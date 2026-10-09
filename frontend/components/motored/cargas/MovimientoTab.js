@@ -28,7 +28,7 @@ import UploadMovimientoModal from './UploadMovimientoModal';
 import CargasHistoryTable from './CargasHistoryTable';
 import CoberturaBotIndicator from './CoberturaBotIndicator';
 import DeclararSinDatosModal from './DeclararSinDatosModal';
-import { textoSinDatos } from './tiposCarga';
+import { ayudaTipo, textoSinDatos } from './tiposCarga';
 import { getRolActual } from '../../../lib/motored/motoredFetch';
 
 export default function MovimientoTab({ tipo, label }) {
@@ -63,6 +63,8 @@ export default function MovimientoTab({ tipo, label }) {
           </div>
         )}
       </div>
+
+      {ayudaTipo(tipo) && <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--motored-text-muted, #595954)' }}>{ayudaTipo(tipo)}</p>}
 
       {tipo === 'DEMANDA_PERDIDA' && <CoberturaBotIndicator />}
 

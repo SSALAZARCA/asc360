@@ -53,6 +53,7 @@ const TABS = [
   { id: 'demanda_perdida', label: 'Demanda perdida', group: 'Movimientos', render: () => <MovimientoTab tipo="DEMANDA_PERDIDA" label="Demanda perdida" /> },
   { id: 'facturas_pedidos', label: 'Facturas de pedidos', group: 'Movimientos', render: () => <MovimientoTab tipo="FACTURAS_PEDIDOS" label="Facturas de pedidos" /> },
   { id: 'ingresos_facturas', label: 'Ingresos de facturas', group: 'Movimientos', render: () => <MovimientoTab tipo="INGRESOS_FACTURAS" label="Ingresos de facturas" /> },
+  { id: 'traslados', label: 'Traslados', group: 'Movimientos', render: () => <MovimientoTab tipo="TRASLADOS" label="Traslados" /> },
   { id: 'presupuestos', label: 'Presupuestos', group: 'Comercial', roles: PRESUPUESTOS_ROLES, render: () => <PresupuestosTab /> },
 ];
 

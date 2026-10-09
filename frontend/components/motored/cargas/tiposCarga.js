@@ -27,6 +27,10 @@ export const TIPOS_CARGA = [
   { value: 'DEMANDA_PERDIDA', label: 'Demanda perdida', declaraPeriodo: true, periodoLabel: 'fecha' },
   { value: 'FACTURAS_PEDIDOS', label: 'Facturas de pedidos', declaraPeriodo: false, sinDatos: 'facturas' },
   { value: 'INGRESOS_FACTURAS', label: 'Ingresos de facturas', declaraPeriodo: false, sinDatos: 'ingresos' },
+  {
+    value: 'TRASLADOS', label: 'Traslados', declaraPeriodo: false,
+    ayuda: 'Traslados entre puntos que siguen vivos en el ERP (archivo Traslados_dd.xlsx). Cada carga reemplaza la foto anterior.',
+  },
 ];
 
 export const ESTADOS_CARGA = [
@@ -53,6 +57,11 @@ export function tipoUsaFechaDeCorte(tipo) {
  * `backend/app/motored/services/ingesta/sin_datos.py`. */
 export function textoSinDatos(tipo) {
   return TIPOS_CARGA.find((t) => t.value === tipo)?.sinDatos || null;
+}
+
+/** Short help of a tipo (what the file is and how a new load behaves), or `null` when it has none. */
+export function ayudaTipo(tipo) {
+  return TIPOS_CARGA.find((t) => t.value === tipo)?.ayuda || null;
 }
 
 const ESTADO_COLOR = {

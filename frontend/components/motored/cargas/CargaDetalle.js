@@ -34,6 +34,7 @@ const TAB_POR_TIPO = {
   DEMANDA_PERDIDA: 'demanda_perdida',
   FACTURAS_PEDIDOS: 'facturas_pedidos',
   INGRESOS_FACTURAS: 'ingresos_facturas',
+  TRASLADOS: 'traslados',
 };
 
 function BotonVolver({ carga }) {
