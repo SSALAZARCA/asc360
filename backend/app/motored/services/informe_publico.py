@@ -24,6 +24,7 @@ from app.motored.services import ingresos_pendientes as ingresos
 from app.motored.services import kpi_resumen_lectura as lectura
 from app.motored.services import tablero_asesores_consultas as consultas
 from app.motored.services import tablero_kpis as kpis
+from app.motored.services import traslados_pendientes as traslados
 from app.motored.services.tablero_asesores import HMCL_INCLUIR
 
 MAX_INTENTOS = 5
@@ -149,4 +150,46 @@ async def confirmar_pendiente(
         return await ingresos.confirmar_en_tiendas(
             db, factura, tiendas, estado, actor, "link")
     except ingresos.PendienteError as exc:
+        raise InformeError(exc.status_code, exc.detail)
+
+
+async def _tiendas_del_enlace(
+    db: AsyncSession, token: str, cedula: Any, ahora: Optional[datetime],
+) -> Tuple[Usuario, ReporteAsesorLink, list]:
+    """Identifies the link (token + cédula + lock) and returns the asesor's
+    principal stores; 404 when she has none."""
+    link, usuario = await _identificar(
+        db, token, cedula, ahora or datetime.now(timezone.utc))
+    tiendas = await ingresos.tiendas_de_asesor(db, usuario.id, link.cedula)
+    if not tiendas:
+        raise InformeError(404, ingresos.MSG_SIN_TIENDA)
+    return usuario, link, tiendas
+
+
+async def traslados_del_asesor(
+    db: AsyncSession, token: str, cedula: Any,
+    ahora: Optional[datetime] = None,
+) -> Dict[str, Any]:
+    """Public list of the transfers her store(s) must receive (same token +
+    cédula + lock rules as `abrir_informe`)."""
+    _, _, tiendas = await _tiendas_del_enlace(db, token, cedula, ahora)
+    return await traslados.para_asesor(db, tiendas)
+
+
+async def confirmar_traslado(
+    db: AsyncSession, token: str, cedula: Any, documento: Any,
+    bodega_salida: Any, estado: Any, ahora: Optional[datetime] = None,
+) -> Dict[str, Any]:
+    """Public confirm of one transfer ("Recibido" / "No ha llegado"): only a
+    transfer received by the asesor's own store(s) (404 otherwise); the actor
+    is the asesor, the channel is 'link'."""
+    usuario, link, tiendas = await _tiendas_del_enlace(
+        db, token, cedula, ahora)
+    actor = ingresos.Actor(
+        nombre=usuario.nombre, usuario_id=usuario.id, cedula=link.cedula)
+    try:
+        return await traslados.confirmar(
+            db, documento, bodega_salida, estado, actor, "link",
+            tiendas=tiendas)
+    except traslados.PendienteError as exc:
         raise InformeError(exc.status_code, exc.detail)

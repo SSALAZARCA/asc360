@@ -43,6 +43,8 @@ NUEVA = "clave-nueva-456"
 # and the public survey. Any other route MUST depend on the guard.
 PUBLIC_ROUTES = {
     ("POST", "/api/motored/publico/informe/{token}/pendientes"),
+    ("POST", "/api/motored/publico/informe/{token}/traslados"),
+    ("POST", "/api/motored/publico/informe/{token}/traslados/confirmar"),
     ("POST", "/api/motored/auth/login"),
     ("GET", "/api/motored/bot/yo"),
     ("GET", "/api/motored/bot/sucursales"),

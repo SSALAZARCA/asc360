@@ -10,6 +10,10 @@ Every response, success or error (503 included), carries `Cache-Control:
 no-store` and `X-Robots-Tag: noindex, nofollow`: `_RutaPublica` wraps the
 handler so it holds for errors raised by dependencies too. The body is read
 by hand, so a malformed one is just a wrong cédula, never a 422.
+
+`POST /{token}/traslados` and `POST /{token}/traslados/confirmar` give the
+asesor the transfers her store must receive and let her confirm them
+(odd/tasks/motored-traslados-pendientes.md, T2).
 """
 from typing import Any, Callable
 
@@ -86,5 +90,45 @@ async def confirmar_pendiente(
         return await servicio.confirmar_pendiente(
             db, token, cuerpo.get("cedula"), cuerpo.get("factura"),
             cuerpo.get("estado"))
+    except servicio.InformeError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+
+
+async def _cuerpo(request: Request) -> dict:
+    try:
+        cuerpo = await request.json()
+    except ValueError:
+        return {}
+    return cuerpo if isinstance(cuerpo, dict) else {}
+
+
+@router.post("/{token}/traslados")
+async def listar_traslados(
+    token: str, request: Request,
+    db: AsyncSession = Depends(get_motored_db_or_503),
+) -> Any:
+    """The transfers her store(s) must receive: `{cedula}`, same token +
+    cédula + lock as the report. Answers `{ultima_carga, items, resumen}`."""
+    cuerpo = await _cuerpo(request)
+    try:
+        return await servicio.traslados_del_asesor(
+            db, token, cuerpo.get("cedula"))
+    except servicio.InformeError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+
+
+@router.post("/{token}/traslados/confirmar")
+async def confirmar_traslado(
+    token: str, request: Request,
+    db: AsyncSession = Depends(get_motored_db_or_503),
+) -> Any:
+    """The asesor confirms "Recibido" / "No ha llegado" for a transfer her
+    store receives: `{cedula, documento, bodega_salida, estado}`. Answers the
+    updated item."""
+    cuerpo = await _cuerpo(request)
+    try:
+        return await servicio.confirmar_traslado(
+            db, token, cuerpo.get("cedula"), cuerpo.get("documento"),
+            cuerpo.get("bodega_salida"), cuerpo.get("estado"))
     except servicio.InformeError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail)
