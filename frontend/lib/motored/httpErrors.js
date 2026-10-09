@@ -40,6 +40,9 @@ export function codedError(status, body, fallback) {
   if (detail && typeof detail === 'object' && !Array.isArray(detail)) {
     if (detail.code !== undefined) error.code = detail.code;
     if (detail.detalle !== undefined) error.detalle = detail.detalle;
+    // Domain errors that spread their facts beside `code` and `mensaje`
+    // (e.g. the inventory counts' 409s: carga age, open reconteos).
+    error.datos = detail;
   }
   return error;
 }

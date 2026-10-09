@@ -1,8 +1,8 @@
 /**
- * LIDER_INVENTARIOS role and the "Conteos de inventario" placeholder: valid
+ * LIDER_INVENTARIOS role and the "Conteos de inventario" page: valid
  * session role, lands on Conteos, is kept inside its pages, is offered when
  * creating users and has a readable name. While stage 1 is being built the
- * sidebar group "Inventarios" shows to ADMIN only. The placeholder page
+ * sidebar group "Inventarios" shows to ADMIN only. The list page
  * renders for ADMIN, LIDER_INVENTARIOS and GERENCIA; any other role goes
  * home. UX only: the backend is the real enforcement.
  */
@@ -15,6 +15,12 @@ let mockPathname = '/motored/inventarios/conteos';
 jest.mock('next/navigation', () => ({
   useRouter: () => ({ push: pushMock }),
   usePathname: () => mockPathname,
+}));
+// The list page asks for the conteos; an empty list is enough here.
+jest.mock('../lib/motored/conteosApi', () => ({
+  listarConteos: jest.fn(() => Promise.resolve([])),
+  listarSucursalesConteo: jest.fn(() => Promise.resolve([])),
+  listarLideres: jest.fn(() => Promise.resolve([])),
 }));
 
 import MotoredLayout, { VALID_ROLES } from '../app/motored/motored-layout';
@@ -147,18 +153,18 @@ describe('create-user form', () => {
   });
 });
 
-describe('Conteos placeholder page', () => {
+describe('Conteos list page', () => {
   it('is gated to ADMIN, LIDER_INVENTARIOS and GERENCIA', () => {
     expect(CONTEOS_ROLES).toEqual(ROLES_CONTEOS);
   });
 
-  it.each(ROLES_CONTEOS)('renders the placeholder for %s', async (role) => {
+  it.each(ROLES_CONTEOS)('renders the list for %s', async (role) => {
     login(role);
 
     render(<ConteosPage />);
 
     expect(await screen.findByRole('heading', { name: 'Conteos de inventario' })).toBeInTheDocument();
-    expect(screen.getByText('Módulo en construcción.')).toBeInTheDocument();
+    expect(await screen.findByText('No hay conteos para mostrar.')).toBeInTheDocument();
     expect(pushMock).not.toHaveBeenCalled();
   });
 
