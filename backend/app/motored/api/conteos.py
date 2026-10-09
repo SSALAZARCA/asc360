@@ -24,7 +24,7 @@ rotar, the two moments it exists.
 """
 import uuid
 from datetime import datetime, timezone
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -36,7 +36,7 @@ from app.motored.models.conteo import ESTADOS_ABIERTOS, Conteo
 from app.motored.schemas import conteos as esquemas
 from app.motored.services.auth import MotoredUser
 from app.motored.services.conteos import (
-    acceso, cierre, consultas, diferencias, errores, excel_ajustes,
+    acceso, cierre, consultas, diferencias, errores, excel_ajustes, panel,
     reconteos, sesiones, snapshot, ubicaciones,
 )
 from app.motored.services.corridas.exportacion_hmcl import (
@@ -195,8 +195,19 @@ async def listar_conteos(
     filas = await consultas.listar(
         db, estado=estado, sucursal_id=sucursal_id, tipo=tipo,
         lider_id=lider_id)
-    return [esquemas.ConteoResumen(**_resumen(c, s, lid))
-            for c, s, lid in filas]
+    avances = await panel.progreso(
+        db, [c.id for c, _, _ in filas if c.estado in ESTADOS_ABIERTOS])
+    return [esquemas.ConteoResumen(
+        **_resumen(c, s, lid), progreso=_progreso(avances, c))
+        for c, s, lid in filas]
+
+
+def _progreso(avances, conteo: Conteo) -> Optional[esquemas.ProgresoConteo]:
+    """Open conteos only; one with no snapshot line shows 0 of 0."""
+    if conteo.estado not in ESTADOS_ABIERTOS:
+        return None
+    avance = avances.get(conteo.id, panel.Progreso(0, 0))
+    return esquemas.ProgresoConteo(**avance._asdict())
 
 
 @router.get("/lideres", response_model=List[esquemas.LiderOpcion])
@@ -534,6 +545,32 @@ async def ver_diferencias(
         en_reconteo=sum(1 for f in lista if f.reconteo is not None),
         items=[_diferencia(f, etiquetas)
                for f in diferencias.filtrar(lista, filtro)])
+
+
+@router.get(
+    "/{conteo_id}/panel",
+    response_model=Union[esquemas.PanelSinCambios, esquemas.PanelSalida])
+async def ver_panel(
+    conteo_id: uuid.UUID,
+    version: Optional[int] = Query(default=None),
+    usuario: MotoredUser = Depends(lector),
+    db: AsyncSession = Depends(get_motored_db_or_503),
+):
+    """The live panel (ADR-8). With the client's last `version` still
+    current, the answer is `{version, sin_cambios: true}` from ONE
+    query; otherwise the progress, partial accuracy, pairs and the
+    differences summary."""
+    try:
+        huella = await panel.huella(db, conteo_id)
+        if huella is None or not consultas.ve_lider(
+                usuario, huella.lider_id):
+            raise errores.ConteoNoEncontrado()
+        if version == huella.version:
+            return esquemas.PanelSinCambios(version=version)
+        conteo = await consultas.conteo_visible(db, conteo_id, usuario)
+    except errores.ErrorConteo as error:
+        raise error_http(error) from error
+    return await panel.armar(db, conteo, huella.version)
 
 
 @router.post(

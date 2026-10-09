@@ -26,7 +26,7 @@ from app.motored.models.conteo import Conteo
 from app.motored.models.conteo_sesion import ConteoIntegrante, ConteoSesion
 from app.motored.services.auth import MotoredUser
 from app.motored.services.conteos import (
-    acceso, consultas, errores, sesiones, snapshot,
+    acceso, consultas, errores, panel, sesiones, snapshot,
 )
 from tests.motored.conftest import (
     FakeAsyncSession, override_motored_db, override_motored_user,
@@ -193,18 +193,38 @@ def test_the_list_is_scoped_to_the_leader(monkeypatch, rol, lider):
     conteo = _conteo()
     listar = AsyncMock(return_value=[(conteo, "Quilichao", "Lina")])
     monkeypatch.setattr(consultas, "listar", listar)
+    progreso = AsyncMock(
+        return_value={conteo.id: panel.Progreso(4210, 1300)})
+    monkeypatch.setattr(panel, "progreso", progreso)
 
     r, _ = _llamar(
         rol, "GET", f"?estado=EN_CONTEO&sucursal_id={conteo.sucursal_id}")
 
     assert r.status_code == 200, r.text
     assert [c["id"] for c in r.json()] == [str(conteo.id)]
+    assert r.json()[0]["progreso"] == {
+        "refs_universo": 4210, "refs_contadas": 1300}
+    assert progreso.await_args.args[1] == [conteo.id]
     filtros = listar.await_args.kwargs
     assert filtros["estado"] == "EN_CONTEO"
     assert filtros["sucursal_id"] == conteo.sucursal_id
     assert (None if filtros["lider_id"] is None
             else str(filtros["lider_id"])) == lider
     assert HASH not in r.text
+
+
+def test_closed_conteos_in_the_list_carry_no_progress(monkeypatch):
+    conteo = _conteo(estado="CERRADO")
+    monkeypatch.setattr(consultas, "listar", AsyncMock(
+        return_value=[(conteo, "Quilichao", "Lina")]))
+    progreso = AsyncMock(return_value={})
+    monkeypatch.setattr(panel, "progreso", progreso)
+
+    r, _ = _llamar("ADMIN", "GET", "")
+
+    assert r.status_code == 200, r.text
+    assert r.json()[0]["progreso"] is None
+    assert progreso.await_args.args[1] == []
 
 
 def test_an_unknown_estado_filter_is_a_422():

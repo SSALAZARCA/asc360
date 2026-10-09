@@ -70,11 +70,16 @@ def es_lider(usuario: MotoredUser) -> bool:
     return usuario.role == MotoredRole.LIDER_INVENTARIOS.value
 
 
-def ve_conteo(usuario: MotoredUser, conteo: Conteo) -> bool:
-    """ADMIN and GERENCIA see all; a leader only its own."""
+def ve_lider(
+        usuario: MotoredUser, lider_id: Optional[uuid.UUID]) -> bool:
+    """ADMIN and GERENCIA see all; a leader only the conteos it leads."""
     if not es_lider(usuario):
         return True
-    return str(conteo.lider_id) == str(usuario.user_id)
+    return str(lider_id) == str(usuario.user_id)
+
+
+def ve_conteo(usuario: MotoredUser, conteo: Conteo) -> bool:
+    return ve_lider(usuario, conteo.lider_id)
 
 
 async def conteo_visible(

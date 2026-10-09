@@ -85,6 +85,14 @@ class AccesoSalida(BaseModel):
     codigo_rotado_en: Optional[datetime] = None
 
 
+class ProgresoConteo(BaseModel):
+    """Snapshot referencias (existencia != 0) and how many of them have
+    a live round-1 reading. Only open conteos carry it in the list."""
+
+    refs_universo: int
+    refs_contadas: int
+
+
 class ConteoResumen(BaseModel):
     id: uuid.UUID
     tipo: str
@@ -98,6 +106,7 @@ class ConteoResumen(BaseModel):
     anulado_en: Optional[datetime] = None
     motivo_anulacion: Optional[str] = None
     created_at: Optional[datetime] = None
+    progreso: Optional[ProgresoConteo] = None
 
 
 class ConteoDetalle(ConteoResumen):
@@ -536,3 +545,58 @@ class ResultadoSalida(BaseModel):
     kpi: KpiSalida
     total: int
     items: List[LineaResultado]
+
+
+# --- leader API: the live panel (WU12b) --------------------------------------
+
+
+class PanelSinCambios(BaseModel):
+    """The version the client sent is still current."""
+
+    version: int
+    sin_cambios: Literal[True] = True
+
+
+class ProgresoPanel(ProgresoConteo):
+    lecturas_total: int
+    ultima_lectura_en: Optional[datetime] = None
+
+
+class ExactitudParcial(BaseModel):
+    """The close KPI's formula over the codes counted so far
+    (`refs_evaluadas`); the money totals leave unvalued codes out."""
+
+    refs_evaluadas: int
+    refs_exactas: int
+    exactitud_pct: Optional[Decimal] = None
+    valor_diferencia_neta: Decimal
+    valor_diferencia_abs: Decimal
+
+
+class ParejaPanel(BaseModel):
+    sesion_id: uuid.UUID
+    numero: int
+    etiqueta: str
+    ubicacion_actual: Optional[UbicacionSalida] = None
+    lecturas: int
+    ultima_lectura_en: Optional[datetime] = None
+    ultima_actividad_en: Optional[datetime] = None
+    estado: str
+
+
+class ResumenDiferencias(BaseModel):
+    criticas: int
+    en_reconteo: int
+    total: int
+
+
+class PanelSalida(BaseModel):
+    """The full panel: the version moved (or none was sent)."""
+
+    version: int
+    sin_cambios: Literal[False] = False
+    estado: str
+    progreso: ProgresoPanel
+    exactitud_parcial: Optional[ExactitudParcial] = None
+    parejas: List[ParejaPanel]
+    diferencias_resumen: ResumenDiferencias

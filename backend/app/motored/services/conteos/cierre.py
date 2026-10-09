@@ -286,6 +286,14 @@ async def _costos_fuera(
 async def _lineas(db: AsyncSession, conteo: Conteo) -> List[Linea]:
     """Every code of the conteo as a result line, live."""
     crudas = await diferencias.filas(db, conteo.id, solo_diferencias=False)
+    return await lineas_de(db, conteo, crudas)
+
+
+async def lineas_de(
+        db: AsyncSession, conteo: Conteo,
+        crudas: Sequence[diferencias.FilaCruda]) -> List[Linea]:
+    """Raw aggregate rows as result lines; codes outside the snapshot
+    take the fallback cost (one query, only when there are any)."""
     fuera = [c.referencia_id for c in crudas
              if c.costo_fuente is None and c.referencia_id is not None]
     costos = await _costos_fuera(db, conteo, fuera)
