@@ -19,12 +19,12 @@ const CAMPOS = [
   {
     clave: RECONTEO,
     etiqueta: 'Diferencia que pide reconteo',
-    ayuda: 'Al terminar la primera ronda, toda referencia cuya diferencia valorizada (unidades de diferencia por el costo unitario) supere este monto en pesos pasa a reconteo, hecho por otra pareja. Debe ser menor que la diferencia crítica.',
+    ayuda: 'Al terminar la primera ronda, toda referencia cuya diferencia valorizada (unidades de diferencia por el costo unitario) llegue a este monto en pesos (el monto exacto también cuenta) pasa a reconteo, hecho por otra pareja. Debe ser menor que la diferencia crítica.',
   },
   {
     clave: CRITICO,
     etiqueta: 'Diferencia crítica',
-    ayuda: 'Una referencia cuya diferencia valorizada supere este monto en pesos aparece en rojo y arriba en el panel del conteo, en vivo. Debe ser mayor que la diferencia que pide reconteo.',
+    ayuda: 'Una referencia cuya diferencia valorizada llegue a este monto en pesos (el monto exacto también cuenta) aparece en rojo y arriba en el panel del conteo, en vivo. Debe ser mayor que la diferencia que pide reconteo.',
   },
   {
     clave: 'conteo_inventario_vigencia_horas',

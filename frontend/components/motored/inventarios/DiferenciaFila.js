@@ -16,13 +16,21 @@ const PILDORAS = {
   neutra: ['var(--motored-surface-alt, #f4f4f5)', 'var(--motored-text, #1a1a18)'],
 };
 
+/** Same rule as the closed result's `confirmada`: the reconteo kept the sign
+ * of the round-1 difference. A zero or a flipped sign is a correction. */
+function reconteoConfirma(fila) {
+  const ronda1 = Math.sign(Number(fila.contado_ronda1) - Number(fila.sistema));
+  const final = Math.sign(Number(fila.diferencia));
+  return final !== 0 && final === ronda1;
+}
+
 /** [texto, tono] of the state pill. */
 export function estadoDiferencia(fila, umbrales) {
   const r = fila.reconteo;
   if (r?.estado === 'ASIGNADO') return [`Recontando · ${parejaCorta(r.sesion?.etiqueta)}`, 'recontando'];
   if (r?.estado === 'PENDIENTE') return ['Reconteo sin asignar', 'recontando'];
   if (r?.estado === 'TERMINADO') {
-    return Number(fila.diferencia) === 0 ? ['Corregida en reconteo', 'lista'] : ['Confirmada en reconteo', 'lista'];
+    return reconteoConfirma(fila) ? ['Confirmada en reconteo', 'lista'] : ['Corregida en reconteo', 'lista'];
   }
   if (fila.critico) return ['Crítica', 'critica'];
   if (fila.sin_costo) return ['Sin costo', 'neutra'];
