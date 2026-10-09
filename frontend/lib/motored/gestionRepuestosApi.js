@@ -4,6 +4,7 @@
  * Invoices are named `RH 482915`; the stores are principal store ids.
  */
 import { motoredFetchJson } from './motoredFetch';
+import { descargarArchivo } from './descargas';
 
 const BASE = '/gestion-repuestos/ingresos-facturas';
 
@@ -33,7 +34,16 @@ export const getIngresosHistorial = (factura, sucursal) => (
 /** The asesor card block of one store: `{ verificable_desde, items, resumen }` (403 for a role that cannot read it). */
 export const getIngresosAsesor = (sucursal) => motoredFetchJson(`${BASE}/asesor${consulta({ sucursal })}`);
 
-/** Only COORDINADOR_REPUESTOS: `{ factura, sucursal_id, estado: 'LLEGO' | 'NO_HA_LLEGADO' }`; resolves the updated item. */
+/** ADMIN, COORDINADOR_REPUESTOS and ANALISTA_ADMINISTRATIVO: `{ factura, sucursal_id, estado: 'LLEGO' | 'NO_HA_LLEGADO' }`; resolves the updated item. */
 export const confirmarIngreso = (cuerpo) => (
   motoredFetchJson(`${BASE}/confirmar`, { method: 'POST', body: JSON.stringify(cuerpo) })
+);
+
+/**
+ * ADMIN and ANALISTA_ADMINISTRATIVO: downloads the ERP "Entradas x Compra" Excel of an analista
+ * invoice already confirmed "LLEGO". Rejects with the backend's Spanish `detail` (404/409/422).
+ */
+export const descargarPlantillaIngreso = (factura, sucursal) => descargarArchivo(
+  `${BASE}/plantilla${consulta({ factura, sucursal })}`,
+  `Entrada_compra_${String(factura).replace(/\s+/g, '')}.xlsx`,
 );

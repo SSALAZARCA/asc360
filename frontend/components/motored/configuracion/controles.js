@@ -28,6 +28,15 @@ function Numero({ id, etiqueta, borrador, onChange, modo }) {
   );
 }
 
+function Texto({ id, etiqueta, borrador, onChange }) {
+  return (
+    <input
+      id={id} type="text" aria-label={etiqueta} value={borrador ?? ''}
+      style={{ ...controlStyle, maxWidth: '12rem' }} onChange={(e) => onChange(e.target.value)}
+    />
+  );
+}
+
 function Opciones({ opciones }) {
   return opciones.map((o) => <option key={o} value={o} style={optionStyle}>{etiquetaDe(o)}</option>);
 }
@@ -144,7 +153,7 @@ function Tramos({ borrador, onChange }) {
 }
 
 /** Types whose control is one field (the visible label points at it). */
-export const TIPOS_SIMPLES = ['bool', 'entero', 'decimal', 'opcion', 'lista', 'lista_digitos', 'hora'];
+export const TIPOS_SIMPLES = ['bool', 'entero', 'decimal', 'opcion', 'lista', 'lista_digitos', 'hora', 'texto'];
 
 /** True when the visible label can point at one field of the control. */
 export const esControlSimple = (spec) => TIPOS_SIMPLES.includes(spec.tipo) && !editorDe(spec);
@@ -166,6 +175,7 @@ export default function ControlValor({ spec, etiqueta, id, borrador, onChange })
     case 'entero': return <Numero {...comun} modo="numeric" />;
     case 'decimal': return <Numero {...comun} modo="decimal" />;
     case 'opcion': return <Seleccion {...comun} />;
+    case 'texto': return <Texto {...comun} />;
     case 'hora': return <Hora {...comun} />;
     case 'lista_opciones': return <ListaOpciones {...comun} />;
     case 'lista':

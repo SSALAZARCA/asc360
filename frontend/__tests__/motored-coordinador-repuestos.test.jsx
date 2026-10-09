@@ -3,7 +3,7 @@
  * session role, lands on KPI's, sees KPI's plus Gestión repuestos only, is
  * offered when creating users, and is kept inside its pages. The
  * "Ingresos facturas" placeholder renders for ADMIN, COMPRAS, GERENCIA and
- * COORDINADOR_REPUESTOS only. UX only: the backend is the real enforcement.
+ * COORDINADOR_REPUESTOS and ANALISTA_ADMINISTRATIVO only. UX only: the backend is the real enforcement.
  */
 import React from 'react';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
@@ -28,7 +28,7 @@ import { tienePermiso } from '../lib/motored/permisosPorRol';
 import { ROL_NOMBRE } from '../components/motored/inicio/textos';
 
 const INGRESOS_FACTURAS_PATH = '/motored/gestion-repuestos/ingresos-facturas';
-const CUATRO_ROLES = ['ADMIN', 'COMPRAS', 'GERENCIA', 'COORDINADOR_REPUESTOS'];
+const ROLES_GESTION_REPUESTOS = ['ADMIN', 'COMPRAS', 'GERENCIA', 'COORDINADOR_REPUESTOS', 'ANALISTA_ADMINISTRATIVO'];
 const OTROS_ROLES = ['SERVICIO_CLIENTE', 'SUCURSAL', 'CONSULTA'];
 
 function login(role, extra = {}) {
@@ -112,7 +112,7 @@ describe('sidebar', () => {
     ]);
   });
 
-  it.each(CUATRO_ROLES)('shows Gestión repuestos > Ingresos facturas to %s', (role) => {
+  it.each(ROLES_GESTION_REPUESTOS)('shows Gestión repuestos > Ingresos facturas to %s', (role) => {
     render(<MotoredSidebar user={{ nombre: 'U', role }} />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Gestión repuestos' }));
@@ -138,7 +138,7 @@ describe('create-user form', () => {
 });
 
 describe('Ingresos facturas page', () => {
-  it.each(CUATRO_ROLES)('renders the panel for %s', async (role) => {
+  it.each(ROLES_GESTION_REPUESTOS)('renders the panel for %s', async (role) => {
     mockPathname = INGRESOS_FACTURAS_PATH;
     login(role);
 
@@ -160,9 +160,9 @@ describe('Ingresos facturas page', () => {
   });
 
   it('matches the permission matrix', () => {
-    expect(GESTION_REPUESTOS_ROLES).toEqual(CUATRO_ROLES);
-    [...CUATRO_ROLES, ...OTROS_ROLES].forEach((rol) => {
-      expect(tienePermiso('ingresos-facturas', rol)).toBe(CUATRO_ROLES.includes(rol));
+    expect(GESTION_REPUESTOS_ROLES).toEqual(ROLES_GESTION_REPUESTOS);
+    [...ROLES_GESTION_REPUESTOS, ...OTROS_ROLES].forEach((rol) => {
+      expect(tienePermiso('ingresos-facturas', rol)).toBe(ROLES_GESTION_REPUESTOS.includes(rol));
     });
   });
 });

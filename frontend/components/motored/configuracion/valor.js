@@ -30,6 +30,13 @@ function decimal(borrador) {
   return { valor: numero };
 }
 
+/** A code kept as typed (leading zeros included), never empty. */
+function texto(borrador) {
+  const limpio = textoDe(borrador).trim();
+  if (!limpio) return { error: 'Escriba el código.' };
+  return { valor: limpio };
+}
+
 function objeto(spec, borrador) {
   const valor = {};
   for (const campo of spec.campos) {
@@ -111,6 +118,7 @@ export function desdeBorrador(spec, borrador) {
   switch (spec.tipo) {
     case 'entero': return entero(borrador);
     case 'decimal': return decimal(borrador);
+    case 'texto': return texto(borrador);
     case 'lista':
     case 'lista_digitos': return { valor: unaLinea(borrador) };
     case 'k_fms':
@@ -126,7 +134,8 @@ export function aBorrador(spec, valor) {
   if (esTiposExcluidos(spec)) return tiposABorrador(valor);
   switch (spec.tipo) {
     case 'entero':
-    case 'decimal': return textoDe(valor);
+    case 'decimal':
+    case 'texto': return textoDe(valor);
     case 'lista':
     case 'lista_digitos': return (valor || []).join('\n');
     case 'k_fms':

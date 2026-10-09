@@ -3,7 +3,7 @@
  * "Pedidos por ingresar · tu tienda": the HMCL invoices of the asesor's store still waiting for an ingreso, each
  * answered "Llegó" / "No ha llegado". Two sources, same card:
  * - the public link (`enlace` = token + cédula): the block comes in the report payload and the buttons use the link;
- * - the staff view: the block is read for the asesor's sucursal and only ADMIN and COORDINADOR_REPUESTOS get the buttons.
+ * - the staff view: the block is read for the asesor's sucursal and only the roles `puedeConfirmarRol` accepts (ADMIN, COORDINADOR_REPUESTOS, ANALISTA_ADMINISTRATIVO) get the buttons.
  * Nothing verifiable (no ingreso loaded, or the role cannot read it) hides the card.
  */
 import { useEffect, useState } from 'react';
@@ -30,6 +30,19 @@ function Pildora({ texto, color, activo, ocupada, onClick }) {
   );
 }
 
+/** Who must enter the invoice: a prominent notice for the asesor once it arrived, a muted note when the analyst does. */
+function Aviso({ item }) {
+  if (item.responsable === 'ANALISTA') {
+    return <p style={{ margin: '3px 0 0', fontSize: 11, color: COLOR.soft }}>La ingresa el analista administrativo</p>;
+  }
+  if (item.responsable !== 'ASESOR' || item.estado !== LLEGO) return null;
+  return (
+    <p style={{ margin: '4px 0 0', display: 'inline-block', fontSize: 12, fontWeight: 700, color: PALETA.atencion.ink, background: PALETA.atencion.soft, border: `1px solid ${PALETA.atencion.color}`, borderRadius: 6, padding: '2px 8px' }}>
+      Ingrésala al sistema
+    </p>
+  );
+}
+
 function Fila({ item, puedeConfirmar, onElegir }) {
   const { antes, dias, despues } = partesDe(item);
   const nivel = nivelPorDias(item.dias);
@@ -45,6 +58,7 @@ function Fila({ item, puedeConfirmar, onElegir }) {
           </span>
         )}
       </div>
+      <Aviso item={item} />
       {quien && <p style={{ margin: '3px 0 0', fontSize: 11, color: COLOR.soft }}>{quien}</p>}
     </li>
   );

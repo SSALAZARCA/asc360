@@ -5,6 +5,7 @@ import SeccionAvisos from './SeccionAvisos';
 import SeccionCargas from './SeccionCargas';
 import SeccionComisiones from './SeccionComisiones';
 import SeccionConteos from './SeccionConteos';
+import SeccionIngresos from './SeccionIngresos';
 import SeccionIndicadores from './SeccionIndicadores';
 import SeccionLimpieza from './SeccionLimpieza';
 import SeccionPedido from './SeccionPedido';
@@ -34,6 +35,7 @@ const PANELES = {
   indicadores: SeccionIndicadores,
   comisiones: SeccionComisiones,
   conteos: SeccionConteos,
+  ingresos: SeccionIngresos,
 };
 
 export default function SeccionPanel({ seccion, data = null, recargar, onGuardar }) {

@@ -6,6 +6,7 @@ export const SECCIONES = [
   { id: 'limpieza', label: 'Limpieza' },
   { id: 'indicadores', label: 'Indicadores' },
   { id: 'comisiones', label: 'Comisiones' },
+  { id: 'ingresos', label: 'Ingresos de facturas' },
   { id: 'conteos', label: 'Conteos de inventario' },
   { id: 'topes', label: 'Topes' },
 ];

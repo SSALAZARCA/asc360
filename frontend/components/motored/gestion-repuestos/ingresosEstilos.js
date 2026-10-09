@@ -40,3 +40,9 @@ export const ESTADOS = {
   SIN_CONFIRMAR: { texto: 'Sin confirmar', estilo: { background: '#f2f2f0', color: '#3d3d3a', border: '1px solid #c9c9c6' }, punto: '#6e6e68' },
   NO_HA_LLEGADO: { texto: 'Aún no llega', estilo: { background: '#f3eafb', color: '#5a1f8c', border: '1px solid #c9b2e6' }, punto: '#b45309' },
 };
+
+/** Who enters the invoice into the ERP: the store's asesor or the administrative analyst. */
+export const RESPONSABLES = {
+  ASESOR: { texto: 'Asesor', estilo: { background: '#eef4fb', color: '#1d3f6b', border: '1px solid #9db8d9' } },
+  ANALISTA: { texto: 'Analista', estilo: { background: '#f3eafb', color: '#4a1a75', border: '1px solid #c9b2e6' } },
+};

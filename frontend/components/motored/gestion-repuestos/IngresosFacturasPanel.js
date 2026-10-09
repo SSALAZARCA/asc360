@@ -4,8 +4,9 @@
  * ingreso. KPIs, a per-store table and a per-invoice detail with filters and
  * history. The Tienda / Estado / Antigüedad filters apply to every section:
  * the whole pending list is loaded once and filtered in memory.
- * `puedeConfirmar` (COORDINADOR_REPUESTOS only) adds the "Llegó" / "No ha llegado"
- * buttons; every other role reads. The page that mounts it decides it from the role.
+ * `puedeConfirmar` (ADMIN, COORDINADOR_REPUESTOS and ANALISTA_ADMINISTRATIVO) adds the
+ * "Llegó" / "No ha llegado" buttons and `puedeDescargar` (ADMIN and
+ * ANALISTA_ADMINISTRATIVO) the "Descargar plantilla" link; every other role reads. The page that mounts it decides it from the role.
  */
 import { useMemo, useRef, useState } from 'react';
 import { fechaBogota } from '../../../lib/motored/fechas';
@@ -17,7 +18,7 @@ import useIngresosPendientes from './useIngresosPendientes';
 import { agruparPorTienda, filtrarItems, resumir, tiendasDe } from './ingresosDerivados';
 import { LeyendaSemaforo } from './SemaforoUi';
 
-export default function IngresosFacturasPanel({ puedeConfirmar = false }) {
+export default function IngresosFacturasPanel({ puedeConfirmar = false, puedeDescargar = false }) {
   const { desde, items, error, ocupada, confirmar } = useIngresosPendientes();
   const [filtros, setFiltros] = useState(FILTROS_VACIOS);
   const detalleRef = useRef(null);
@@ -67,7 +68,7 @@ export default function IngresosFacturasPanel({ puedeConfirmar = false }) {
           <div ref={detalleRef}>
             <IngresosDetalle
               items={visibles} total={items.length} cargando={false}
-              puedeConfirmar={puedeConfirmar} ocupada={ocupada} onConfirmar={confirmar}
+              puedeConfirmar={puedeConfirmar} puedeDescargar={puedeDescargar} ocupada={ocupada} onConfirmar={confirmar}
             />
           </div>
           <p style={{ margin: 0, fontSize: '12.5px' }}>Las facturas salen del seguimiento cuando aparecen en Ingresos de facturas.</p>

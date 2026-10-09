@@ -25,14 +25,14 @@ import MotoredTopBar from '../../components/motored/MotoredTopBar';
 import useDrawerMenu from '../../components/motored/useDrawerMenu';
 import { MOTORED_USER_KEY, MOTORED_TOKEN_KEY } from '../../lib/motored/motoredFetch';
 import {
-  COORDINADOR_REPUESTOS, INICIO_PATH, LIDER_INVENTARIOS, MI_CUENTA_PATH, ROLE_GERENCIA, homePathFor,
-  isCoordinadorRepuestosPath, isLiderInventariosPath, rolSinAcceso,
+  ANALISTA_ADMINISTRATIVO, COORDINADOR_REPUESTOS, INICIO_PATH, LIDER_INVENTARIOS, MI_CUENTA_PATH, ROLE_GERENCIA, homePathFor,
+  isAnalistaAdministrativoPath, isCoordinadorRepuestosPath, isLiderInventariosPath, rolSinAcceso,
 } from '../../lib/motored/session';
 import { ROLE_SERVICIO_CLIENTE, isServicioClientePath } from '../../lib/motored/servicioCliente';
 
 export const VALID_ROLES = [
   'ADMIN', 'COMPRAS', 'SUCURSAL', 'CONSULTA', ROLE_SERVICIO_CLIENTE, ROLE_GERENCIA, COORDINADOR_REPUESTOS,
-  LIDER_INVENTARIOS,
+  LIDER_INVENTARIOS, ANALISTA_ADMINISTRATIVO,
 ];
 
 /** The stored session user, or null when it is missing, unreadable or has
@@ -59,6 +59,10 @@ function redireccionPara(u, pathname) {
   }
   // LIDER_INVENTARIOS only works inside "Inventarios" and its account page.
   if (u.role === LIDER_INVENTARIOS && !isLiderInventariosPath(pathname)) return homePathFor(u.role);
+  // ANALISTA_ADMINISTRATIVO only works inside "Gestión repuestos" and its account page.
+  if (u.role === ANALISTA_ADMINISTRATIVO && !isAnalistaAdministrativoPath(pathname)) {
+    return homePathFor(u.role);
+  }
   // Pending password change, or a role with no screens yet (SUCURSAL/
   // CONSULTA, owner decision 2026-10-05): the account page is the only place.
   if ((u.must_change_password || rolSinAcceso(u.role)) && pathname !== MI_CUENTA_PATH) {

@@ -45,7 +45,7 @@ import {
 } from 'lucide-react';
 import { MOTORED_TOKEN_KEY, MOTORED_USER_KEY } from '../../lib/motored/motoredFetch';
 import {
-  CONTEOS_PATH, CONTEOS_ROLES_VISIBLES, COORDINADOR_REPUESTOS, GESTION_REPUESTOS_ROLES, LIDER_INVENTARIOS, rolSinAcceso,
+  CONTEOS_PATH, CONTEOS_ROLES_VISIBLES, COORDINADOR_REPUESTOS, ANALISTA_ADMINISTRATIVO, GESTION_REPUESTOS_ROLES, LIDER_INVENTARIOS, rolSinAcceso,
 } from '../../lib/motored/session';
 
 // A group (`children`) is a collapsible header that always starts folded; a
@@ -55,7 +55,7 @@ import {
 // `excludeRoles` (optional) hides an item from those roles only; `roles`
 // (optional) restricts an item to those roles; `adminOnly` and items without
 // either keep their original behaviour. SERVICIO_CLIENTE,
-// COORDINADOR_REPUESTOS and LIDER_INVENTARIOS only ever see items that list them in `roles`. SUCURSAL and CONSULTA have no screens yet (owner
+// COORDINADOR_REPUESTOS, LIDER_INVENTARIOS and ANALISTA_ADMINISTRATIVO only ever see items that list them in `roles`. SUCURSAL and CONSULTA have no screens yet (owner
 // decision 2026-10-05): they only ever see "Cambiar mi contraseña".
 // "Inicio" (the welcome page, `/motored/inicio`) is the home of every role
 // with screens and always comes first.
@@ -100,7 +100,7 @@ const ALL_ITEMS = [
       { id: 'ingresos', name: 'Registro de ingresos', icon: History, path: '/motored/ingresos', adminOnly: true },
     ],
   },
-  { id: 'mi-cuenta', name: 'Cambiar mi contraseña', icon: KeyRound, path: '/motored/mi-cuenta', roles: ['ADMIN', 'COMPRAS', 'SUCURSAL', 'CONSULTA', 'SERVICIO_CLIENTE', 'GERENCIA', COORDINADOR_REPUESTOS, LIDER_INVENTARIOS] },
+  { id: 'mi-cuenta', name: 'Cambiar mi contraseña', icon: KeyRound, path: '/motored/mi-cuenta', roles: ['ADMIN', 'COMPRAS', 'SUCURSAL', 'CONSULTA', 'SERVICIO_CLIENTE', 'GERENCIA', COORDINADOR_REPUESTOS, LIDER_INVENTARIOS, ANALISTA_ADMINISTRATIVO] },
 ];
 
 const asideStyle = {
@@ -174,7 +174,7 @@ function isPageVisible(item, user) {
   if (user?.must_change_password || rolSinAcceso(user?.role)) return item.id === 'mi-cuenta';
   if (item.excludeRoles?.includes(user?.role)) return false;
   if (item.roles) return item.roles.includes(user?.role);
-  if (['SERVICIO_CLIENTE', COORDINADOR_REPUESTOS, LIDER_INVENTARIOS].includes(user?.role)) return false;
+  if (['SERVICIO_CLIENTE', COORDINADOR_REPUESTOS, LIDER_INVENTARIOS, ANALISTA_ADMINISTRATIVO].includes(user?.role)) return false;
   return !item.adminOnly || user?.role === 'ADMIN';
 }
 

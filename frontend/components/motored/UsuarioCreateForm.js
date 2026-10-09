@@ -11,10 +11,10 @@ import InfoTooltip from './InfoTooltip';
 import { CEDULA_TOOLTIP } from './usuarios/CedulaUsuario';
 import { PASSWORD_HINT, ADMIN_FORCED_CHANGE_NOTE, newPasswordProblem } from '../../lib/motored/passwordRules';
 
-const ROLES = ['ADMIN', 'COMPRAS', 'SUCURSAL', 'CONSULTA', 'SERVICIO_CLIENTE', 'GERENCIA', 'COORDINADOR_REPUESTOS', 'LIDER_INVENTARIOS'];
+const ROLES = ['ADMIN', 'COMPRAS', 'SUCURSAL', 'CONSULTA', 'SERVICIO_CLIENTE', 'GERENCIA', 'COORDINADOR_REPUESTOS', 'LIDER_INVENTARIOS', 'ANALISTA_ADMINISTRATIVO'];
 const ROLE_LABELS = {
   SERVICIO_CLIENTE: 'Servicio al cliente', GERENCIA: 'Gerencia', COORDINADOR_REPUESTOS: 'Coordinador de repuestos',
-  LIDER_INVENTARIOS: 'Líder de inventarios',
+  LIDER_INVENTARIOS: 'Líder de inventarios', ANALISTA_ADMINISTRATIVO: 'Analista administrativo',
 };
 const EMPTY_FORM = {
   nombre: '', email: '', password: '', role: 'CONSULTA', cedula: '',

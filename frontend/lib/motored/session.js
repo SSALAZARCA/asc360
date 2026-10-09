@@ -17,7 +17,19 @@ export const KPIS_PATH = '/motored/tablero-asesores';
 
 /** "Gestión repuestos" section: pages and the roles that may open them. */
 export const GESTION_REPUESTOS_PATH = '/motored/gestion-repuestos';
-export const GESTION_REPUESTOS_ROLES = ['ADMIN', 'COMPRAS', 'GERENCIA', COORDINADOR_REPUESTOS];
+export const INGRESOS_FACTURAS_PATH = '/motored/gestion-repuestos/ingresos-facturas';
+
+/** Administrative analyst: the "Gestión repuestos" section only (no KPI's). */
+export const ANALISTA_ADMINISTRATIVO = 'ANALISTA_ADMINISTRATIVO';
+export const GESTION_REPUESTOS_ROLES = ['ADMIN', 'COMPRAS', 'GERENCIA', COORDINADOR_REPUESTOS, ANALISTA_ADMINISTRATIVO];
+
+// Pages an ANALISTA_ADMINISTRATIVO may open (UX only; the backend allow-list
+// is the real enforcement).
+const ANALISTA_ADMINISTRATIVO_PATHS = [GESTION_REPUESTOS_PATH, MI_CUENTA_PATH];
+
+export function isAnalistaAdministrativoPath(pathname) {
+  return ANALISTA_ADMINISTRATIVO_PATHS.some((p) => pathname === p || pathname?.startsWith(`${p}/`));
+}
 
 // Pages a COORDINADOR_REPUESTOS may open (UX only; the backend allow-list
 // `deps.COORDINADOR_REPUESTOS_ALLOWED_PREFIXES` is the real enforcement).
@@ -66,12 +78,14 @@ export function rolSinAcceso(role) {
 /** Home page of a role (where it lands after login, after the forced change
  * and when a page gate turns it away): the account page for a role without
  * screens, KPI's for COORDINADOR_REPUESTOS, Conteos for LIDER_INVENTARIOS,
+ * Ingresos facturas for ANALISTA_ADMINISTRATIVO,
  * Inicio for everyone else (ADMIN,
  * COMPRAS, GERENCIA and SERVICIO_CLIENTE; a missing or unknown role is then
  * sent to login by the layout). */
 export function homePathFor(role) {
   if (rolSinAcceso(role)) return MI_CUENTA_PATH;
   if (role === LIDER_INVENTARIOS) return CONTEOS_PATH;
+  if (role === ANALISTA_ADMINISTRATIVO) return INGRESOS_FACTURAS_PATH;
   return role === COORDINADOR_REPUESTOS ? KPIS_PATH : INICIO_PATH;
 }
 

@@ -2,9 +2,9 @@
 import { Fragment, useEffect, useState } from 'react';
 import { formatCOP } from '../../../lib/motored/formatCOP';
 import { fechaBogota, fechaHoraBogota } from '../../../lib/motored/fechas';
-import { getIngresosHistorial } from '../../../lib/motored/gestionRepuestosApi';
+import { descargarPlantillaIngreso, getIngresosHistorial } from '../../../lib/motored/gestionRepuestosApi';
 import {
-  tarjeta, tituloSeccion, subtitulo, tabla, th, td, botonLink, ESTADOS,
+  tarjeta, tituloSeccion, subtitulo, tabla, th, td, botonLink, ESTADOS, RESPONSABLES,
 } from './ingresosEstilos';
 import { PALETA, nivelEstado, nivelPorDias } from './semaforo';
 import { PildoraNivel } from './SemaforoUi';
@@ -49,11 +49,39 @@ function Historial({ item }) {
   );
 }
 
-function Fila({ item, abierta, onAbrir, puedeConfirmar, ocupada, onConfirmar }) {
+const AYUDA_INGRESA = 'Quién ingresa la factura al ERP: el asesor de la tienda si tiene pocas referencias, o el analista administrativo si tiene muchas. El límite se define en Configuración.';
+
+function Responsable({ responsable }) {
+  const r = RESPONSABLES[responsable];
+  if (!r) return '—';
+  return (
+    <span style={{ display: 'inline-block', fontSize: '12px', fontWeight: 700, borderRadius: 999, padding: '2px 10px', whiteSpace: 'nowrap', ...r.estilo }}>
+      {r.texto}
+    </span>
+  );
+}
+
+function Plantilla({ item, descargando, onDescargar }) {
+  if (item.puede_descargar_plantilla) {
+    return (
+      <button type="button" style={botonLink} disabled={descargando} onClick={() => onDescargar(item)}>
+        Descargar plantilla
+      </button>
+    );
+  }
+  if (item.responsable !== 'ANALISTA' || item.estado === 'LLEGO') return null;
+  return (
+    <span title="La plantilla del ERP se habilita cuando se confirma que la factura llegó." style={{ fontSize: '12px', fontStyle: 'italic', color: 'var(--motored-text-muted, #595954)' }}>
+      Disponible al confirmar llegada
+    </span>
+  );
+}
+
+function Fila({ item, abierta, onAbrir, puedeConfirmar, puedeDescargar, descargando, onDescargar, ocupada, onConfirmar }) {
   const estado = ESTADOS[item.estado] || ESTADOS.SIN_CONFIRMAR;
   const nivel = nivelEstado(item.estado, item.dias);
   const chip = nivel ? { background: PALETA[nivel].soft, color: PALETA[nivel].ink, border: `1px solid ${PALETA[nivel].color}` } : estado.estilo;
-  const columnas = puedeConfirmar ? 10 : 9;
+  const columnas = 11 + (puedeConfirmar ? 1 : 0);
   return (
     <Fragment>
       <tr>
@@ -62,6 +90,8 @@ function Fila({ item, abierta, onAbrir, puedeConfirmar, ocupada, onConfirmar }) 
         <td style={td()}>{fechaBogota(item.fecha)}</td>
         <td style={td()}><PildoraNivel nivel={nivelPorDias(item.dias)}>{item.dias}</PildoraNivel></td>
         <td style={td()}>{item.unidades}</td>
+        <td style={td()}>{item.num_referencias ?? '—'}</td>
+        <td style={td(true)}><Responsable responsable={item.responsable} /></td>
         <td style={td()}>{formatCOP(item.valor)}</td>
         <td style={td(true)}>
           <span data-nivel={nivel || undefined} style={{ display: 'inline-block', fontSize: '12px', fontWeight: 700, borderRadius: 999, padding: '2px 10px', whiteSpace: 'nowrap', ...chip }}>
@@ -78,6 +108,7 @@ function Fila({ item, abierta, onAbrir, puedeConfirmar, ocupada, onConfirmar }) 
           </td>
         )}
         <td style={td(true)}>
+          {puedeDescargar && <Plantilla item={item} descargando={descargando} onDescargar={onDescargar} />}
           <button type="button" style={botonLink} aria-expanded={abierta} onClick={onAbrir}>
             {abierta ? 'Ocultar' : 'Historial'}
           </button>
@@ -94,8 +125,27 @@ function Fila({ item, abierta, onAbrir, puedeConfirmar, ocupada, onConfirmar }) 
   );
 }
 
-export default function IngresosDetalle({ items, total, puedeConfirmar, ocupada, onConfirmar, cargando }) {
+/** The template download in flight and the backend's message when it fails. */
+function useDescargaPlantilla() {
+  const [descargando, setDescargando] = useState(false);
+  const [errorDescarga, setErrorDescarga] = useState('');
+  const descargar = async (item) => {
+    setErrorDescarga('');
+    setDescargando(true);
+    try {
+      await descargarPlantillaIngreso(item.factura, item.sucursal_id);
+    } catch (e) {
+      setErrorDescarga(e.message || 'No se pudo descargar la plantilla.');
+    } finally {
+      setDescargando(false);
+    }
+  };
+  return { descargando, errorDescarga, descargar };
+}
+
+export default function IngresosDetalle({ items, total, puedeConfirmar, puedeDescargar = false, ocupada, onConfirmar, cargando }) {
   const [abierta, setAbierta] = useState(null);
+  const { descargando, errorDescarga, descargar } = useDescargaPlantilla();
   const clave = (i) => `${i.factura}|${i.sucursal_id}`;
   return (
     <section style={{ ...tarjeta, display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -109,7 +159,7 @@ export default function IngresosDetalle({ items, total, puedeConfirmar, ocupada,
         </span>
       </div>
       <div style={{ overflow: 'auto', maxHeight: '560px', border: '1px solid #e4e4e1', borderRadius: '10px', opacity: cargando ? 0.6 : 1 }}>
-        <table aria-label="Detalle" style={{ ...tabla, minWidth: puedeConfirmar ? '1100px' : '940px' }}>
+        <table aria-label="Detalle" style={{ ...tabla, minWidth: puedeConfirmar ? '1300px' : '1140px' }}>
           <thead>
             <tr>
               <th scope="col" style={th(true)}>Factura</th>
@@ -117,6 +167,8 @@ export default function IngresosDetalle({ items, total, puedeConfirmar, ocupada,
               <th scope="col" style={th()}>Fecha</th>
               <th scope="col" style={th()}>Días</th>
               <th scope="col" style={th()}>Unidades</th>
+              <th scope="col" style={th()}>Refs.</th>
+              <th scope="col" style={th(true)} title={AYUDA_INGRESA}>Ingresa</th>
               <th scope="col" style={th()}>Valor</th>
               <th scope="col" style={th(true)}>Estado</th>
               <th scope="col" style={th(true)}>Último cambio</th>
@@ -129,12 +181,14 @@ export default function IngresosDetalle({ items, total, puedeConfirmar, ocupada,
               <Fila
                 key={clave(item)} item={item} abierta={abierta === clave(item)}
                 onAbrir={() => setAbierta(abierta === clave(item) ? null : clave(item))}
-                puedeConfirmar={puedeConfirmar} ocupada={ocupada} onConfirmar={onConfirmar}
+                puedeConfirmar={puedeConfirmar} puedeDescargar={puedeDescargar} descargando={descargando}
+                onDescargar={descargar} ocupada={ocupada} onConfirmar={onConfirmar}
               />
             ))}
           </tbody>
         </table>
       </div>
+      {errorDescarga && <p role="alert" style={{ margin: 0, fontSize: '13px', color: 'var(--motored-danger, #c0392b)' }}>{errorDescarga}</p>}
       {items.length === 0 && !cargando && (
         <p style={{ margin: 0, fontSize: '13px' }}>No hay facturas con estos filtros.</p>
       )}

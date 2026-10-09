@@ -10,6 +10,7 @@ export const ROL_NOMBRE = {
   SERVICIO_CLIENTE: 'Servicio al cliente',
   COORDINADOR_REPUESTOS: 'Coordinador de repuestos',
   LIDER_INVENTARIOS: 'Líder de inventarios',
+  ANALISTA_ADMINISTRATIVO: 'Analista administrativo',
 };
 
 /** The same line under the greeting for every role. */

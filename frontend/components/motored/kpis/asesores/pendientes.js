@@ -1,13 +1,18 @@
 /** View-models of the "Pedidos por ingresar" card (pure, no React). */
 import { decimales, miles } from '../format';
 import { fechaBogota, horaBogota } from '../../../../lib/motored/fechas';
-import { COORDINADOR_REPUESTOS } from '../../../../lib/motored/session';
+import { ANALISTA_ADMINISTRATIVO, COORDINADOR_REPUESTOS } from '../../../../lib/motored/session';
 
 export const LLEGO = 'LLEGO';
 export const NO_HA_LLEGADO = 'NO_HA_LLEGADO';
 
 /** Roles that may confirm in the app (the backend enforces it); COMPRAS and GERENCIA only read. */
-export const puedeConfirmarRol = (role) => role === 'ADMIN' || role === COORDINADOR_REPUESTOS;
+export const puedeConfirmarRol = (role) => (
+  role === 'ADMIN' || role === COORDINADOR_REPUESTOS || role === ANALISTA_ADMINISTRATIVO
+);
+
+/** Roles that download the ERP entry template (the backend enforces it too). */
+export const puedeDescargarPlantillaRol = (role) => role === 'ADMIN' || role === ANALISTA_ADMINISTRATIVO;
 const DIA_MS = 24 * 3600 * 1000;
 
 /** `1200000` -> `$1,2 M`, `642000` -> `$642 mil`. */
