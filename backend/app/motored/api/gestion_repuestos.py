@@ -41,8 +41,9 @@ from app.motored.services import sucursal_grupo
 # TODO(pedidos): COORDINADOR_REPUESTOS is created by the pedidos session; the
 # role compares as a plain string, so listing it here is harmless meanwhile.
 # Path confinement for GERENCIA / COORDINADOR_REPUESTOS lives in `deps.py`.
-ROLES_PANEL = ("ADMIN", "COMPRAS", "GERENCIA", "COORDINADOR_REPUESTOS")
-ROLES_CONFIRMA = ("ADMIN", "COORDINADOR_REPUESTOS")
+ROLES_PANEL = ("ADMIN", "COMPRAS", "GERENCIA", "COORDINADOR_REPUESTOS",
+               "ANALISTA_ADMINISTRATIVO")
+ROLES_CONFIRMA = ("ADMIN", "COORDINADOR_REPUESTOS", "ANALISTA_ADMINISTRATIVO")
 MSG_ESTADO_FILTRO = "El estado del filtro no es válido."
 MSG_RANGO_DIAS = "El mínimo de días no puede superar al máximo."
 

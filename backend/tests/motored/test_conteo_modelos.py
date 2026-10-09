@@ -176,12 +176,12 @@ def test_result_has_one_adjustment_bodega_per_line():
 # --- migrations (static) ----------------------------------------------------
 
 
-def test_revisions_chain_onto_the_role_and_are_the_single_head():
+def test_revisions_chain_onto_the_role_and_stay_in_the_single_head_line():
     guion = ScriptDirectory.from_config(
         Config(str(_RAIZ / "alembic_motored.ini")))
     base, lecturas = _cargar("conteo_base"), _cargar("conteo_lecturas")
 
-    assert guion.get_heads() == [LECTURAS_REV]
+    assert len(guion.get_heads()) == 1  # later features chain on LECTURAS_REV
     assert (base.revision, base.down_revision) == (BASE_REV, "b4f9c2e6a813")
     assert (lecturas.revision, lecturas.down_revision) == (
         LECTURAS_REV, BASE_REV)

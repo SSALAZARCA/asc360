@@ -120,7 +120,7 @@ def base_vacia(monkeypatch):
 
 
 def test_upgrade_downgrade_upgrade_of_both_revisions(base_vacia):
-    _alembic("upgrade", "head")
+    _alembic("upgrade", LECTURAS)
     assert _tablas_conteo(base_vacia) == set(TABLAS)
     assert _version(base_vacia) == LECTURAS
 

@@ -55,6 +55,7 @@ _FIRMAS_POR_TIPO: Dict[str, Tuple[str, ...]] = {
 COLUMNAS_OPCIONALES_POR_TIPO: Dict[str, Tuple[str, ...]] = {
     "VENTAS": ventas_mod.COLUMNAS_OPCIONALES,
     "BACKORDER": backorder_mod.COLUMNAS_OPCIONALES,
+    "FACTURAS_PEDIDOS": facturas_mod.COLUMNAS_OPCIONALES,
 }
 
 # Tab names exactly as the UI shows them (`frontend/components/motored/

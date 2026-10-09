@@ -368,3 +368,93 @@ async def test_aplicar_no_ejecuta_nada_sin_consolidado():
     await facturas.aplicar(session, {}, CARGA_ID)
 
     assert session.executed_statements == []
+
+
+# ---------------------------------------------------------------------------
+# Optional "Vlr. Unitario" column -> factura_proveedor_linea.valor_unitario
+# ---------------------------------------------------------------------------
+
+
+def _mapa_con_unitario():
+    mapa = dict(_MAPA_COLUMNAS)
+    mapa["Vlr. Unitario"] = len(mapa)
+    return mapa
+
+
+def _fila_con_unitario(unitario, **kwargs):
+    return _fila(**kwargs) + (unitario,)
+
+
+def test_vlr_unitario_es_una_columna_opcional_y_no_obligatoria():
+    assert facturas.COLUMNAS_OPCIONALES == ("Vlr. Unitario",)
+    assert "Vlr. Unitario" not in facturas.COLUMNAS_ESPERADAS
+
+
+def test_vlr_unitario_se_guarda_en_el_payload():
+    fila_staging, errores = _procesar(
+        _fila_con_unitario(Decimal("55026"), cantidad=5),
+        mapa_columnas=_mapa_con_unitario(),
+    )
+
+    assert errores == []
+    assert Decimal(fila_staging.payload["valor_unitario"]) == Decimal("55026")
+
+
+def test_sin_la_columna_vlr_unitario_la_fila_carga_igual_sin_precio():
+    fila_staging, errores = _procesar(_fila())
+
+    assert errores == []
+    assert "valor_unitario" not in fila_staging.payload
+
+
+@pytest.mark.parametrize("valor", [None, "", "abc", "#N/A"])
+def test_vlr_unitario_vacio_o_invalido_no_rechaza_la_fila(valor):
+    fila_staging, errores = _procesar(
+        _fila_con_unitario(valor), mapa_columnas=_mapa_con_unitario()
+    )
+
+    assert errores == []
+    assert fila_staging is not None
+    assert "valor_unitario" not in fila_staging.payload
+
+
+def test_nota_credito_mantiene_el_precio_unitario_positivo():
+    fila_staging, errores = _procesar(
+        _fila_con_unitario(Decimal("55026"), nota_credito="NC1", cantidad=2),
+        mapa_columnas=_mapa_con_unitario(),
+    )
+
+    assert errores == []
+    assert Decimal(fila_staging.payload["valor_unitario"]) == Decimal("55026")
+
+
+def test_agregar_lineas_conserva_el_ultimo_precio_unitario_informado():
+    primera = _fila_staging(SUCURSAL_ID, REFERENCIA_ID, "RH", 194067, 5, 275130, fila=1)
+    primera.payload["valor_unitario"] = "55026"
+    segunda = _fila_staging(SUCURSAL_ID, REFERENCIA_ID, "RH", 194067, 1, 1, fila=2)
+
+    consolidado = facturas.agregar_lineas([primera, segunda])
+
+    clave = (SUCURSAL_ID, REFERENCIA_ID, "RH", 194067)
+    assert consolidado[clave]["valor_unitario"] == Decimal("55026")
+
+
+def test_agregar_lineas_deja_el_precio_en_none_si_ninguna_fila_lo_trae():
+    consolidado = facturas.agregar_lineas(
+        [_fila_staging(SUCURSAL_ID, REFERENCIA_ID, "RH", 194067, 5, 275130)]
+    )
+
+    assert consolidado[(SUCURSAL_ID, REFERENCIA_ID, "RH", 194067)]["valor_unitario"] is None
+
+
+def test_el_upsert_escribe_valor_unitario_sin_borrar_el_guardado_si_llega_nulo():
+    consolidado = {
+        (SUCURSAL_ID, REFERENCIA_ID, "RH", 194067): {
+            "cantidad": Decimal("3"), "valor_total": Decimal("165078"),
+            "valor_unitario": None, "fecha_factura": date(2026, 7, 15),
+        },
+    }
+
+    valores_set = upsert_set_clause(facturas.construir_statement_upsert(consolidado, CARGA_ID))
+
+    assert "coalesce(excluded.valor_unitario" in valores_set["valor_unitario"].lower()

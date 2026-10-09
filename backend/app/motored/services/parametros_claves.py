@@ -51,7 +51,7 @@ BODEGAS_EXCLUIDAS_DEFAULT = ("99999", "PYM01", "PAF01")
 # Pestañas de la pantalla de Configuración, en orden.
 SECCIONES = (
     "pedido", "avisos", "cargas", "limpieza", "indicadores", "comisiones",
-    "conteos", "topes",
+    "conteos", "ingresos", "topes",
 )
 
 # Conteos de inventario (odd/motored-conteos-inventario, WU4): montos en
@@ -60,6 +60,18 @@ SECCIONES = (
 CLAVE_CONTEO_UMBRAL_RECONTEO = "conteo_umbral_reconteo_pesos"
 CLAVE_CONTEO_UMBRAL_CRITICO = "conteo_umbral_critico_pesos"
 CLAVE_CONTEO_VIGENCIA_HORAS = "conteo_inventario_vigencia_horas"
+
+# Ingresos de facturas (odd/motored-ingresos-responsable-plantilla, T1): el
+# umbral de referencias que separa al asesor del analista administrativo y
+# los valores fijos de la plantilla "Entradas x Compra" del ERP.
+CLAVE_INGRESO_UMBRAL_ASESOR = "ingreso_umbral_referencias_asesor"
+CLAVE_PLANTILLA_TIPO_DOC = "ingreso_plantilla_tipo_documento"
+CLAVE_PLANTILLA_DESC_GLOBAL = "ingreso_plantilla_descuento_global"
+CLAVE_PLANTILLA_PROVEEDOR = "ingreso_plantilla_proveedor_nit"
+CLAVE_PLANTILLA_SUC_PROVEEDOR = "ingreso_plantilla_sucursal_proveedor"
+CLAVE_PLANTILLA_COMPRADOR = "ingreso_plantilla_comprador"
+CLAVE_PLANTILLA_DESC_ITEM = "ingreso_plantilla_descuento_item"
+CLAVE_PLANTILLA_UNIDAD_NEGOCIO = "ingreso_plantilla_unidad_negocio"
 _SECCION_POR_GRUPO = {
     GRUPO_MOTOR: "pedido", GRUPO_INGESTA: "cargas", GRUPO_PEDIDO: "topes",
 }
@@ -164,6 +176,20 @@ def _opcion(clave: str, default: str, opciones: tuple, grupo=GRUPO_MOTOR,
         clave, default, AMBITO_GLOBAL, grupo,
         "uno de " + ", ".join(opciones), lambda v: v in opciones, _identidad,
         tipo="opcion", opciones=tuple(opciones), seccion=seccion,
+    )
+
+
+def texto_de_digitos(clave: str, default: str, maximo: int,
+                     grupo: str = GRUPO_OPERACION,
+                     seccion: str = "") -> EspecClave:
+    """Código de sólo dígitos que conserva los ceros a la izquierda."""
+    return EspecClave(
+        clave, default, AMBITO_GLOBAL, grupo,
+        f"un texto de 1 a {maximo} dígitos (se conservan los ceros a la "
+        "izquierda)",
+        lambda v: isinstance(v, str) and v.isascii() and v.isdigit()
+        and len(v) <= maximo,
+        _identidad, tipo="texto", seccion=seccion,
     )
 
 
@@ -657,6 +683,53 @@ def _claves_conteos() -> list:
     ]
 
 
+_MAXIMO_REFERENCIAS_ASESOR = 1000
+_MAXIMO_IDENTIFICADOR = 10 ** 13
+
+
+def _claves_ingresos() -> list:
+    """T1: quién ingresa cada factura y los valores fijos de la plantilla.
+    Los descuentos son porcentajes que la persona puede editar luego en
+    el Excel; los códigos "001"/"003" conservan sus ceros."""
+    def identificador(clave, default, maximo):
+        return _entera(
+            clave, default, 1, maximo, GRUPO_OPERACION, seccion="ingresos")
+
+    def descuento(clave, default):
+        espec = _decimal(clave, default, 100, grupo=GRUPO_OPERACION,
+                         seccion="ingresos")
+        return espec
+
+    return [
+        _entera(
+            CLAVE_INGRESO_UMBRAL_ASESOR, 10, 1, _MAXIMO_REFERENCIAS_ASESOR,
+            GRUPO_OPERACION, seccion="ingresos",
+            explicacion="referencias; hasta ese número la ingresa el "
+            "asesor de la tienda"),
+        identificador(CLAVE_PLANTILLA_TIPO_DOC, 16, 99),
+        descuento(CLAVE_PLANTILLA_DESC_GLOBAL, 5),
+        identificador(CLAVE_PLANTILLA_PROVEEDOR, 900723988,
+                      _MAXIMO_IDENTIFICADOR),
+        texto_de_digitos(CLAVE_PLANTILLA_SUC_PROVEEDOR, "001", 6,
+                         seccion="ingresos"),
+        identificador(CLAVE_PLANTILLA_COMPRADOR, 1151943311,
+                      _MAXIMO_IDENTIFICADOR),
+        descuento(CLAVE_PLANTILLA_DESC_ITEM, 0),
+        texto_de_digitos(CLAVE_PLANTILLA_UNIDAD_NEGOCIO, "003", 6,
+                         seccion="ingresos"),
+    ]
+
+
+CLAVES_INGRESOS = (
+    CLAVE_INGRESO_UMBRAL_ASESOR, CLAVE_PLANTILLA_TIPO_DOC,
+    CLAVE_PLANTILLA_DESC_GLOBAL, CLAVE_PLANTILLA_PROVEEDOR,
+    CLAVE_PLANTILLA_SUC_PROVEEDOR, CLAVE_PLANTILLA_COMPRADOR,
+    CLAVE_PLANTILLA_DESC_ITEM, CLAVE_PLANTILLA_UNIDAD_NEGOCIO,
+)
+RESPALDOS_INGRESOS = {
+    espec.clave: espec.default for espec in _claves_ingresos()}
+
+
 def _claves_antiguedad_y_tope() -> list:
     """Antigüedad máxima por tipo de dato (motor) y el tope de
     presupuesto (F4, B5a), fuera del motor."""
@@ -673,7 +746,7 @@ def _claves_operacion() -> list:
     """Las pestañas de Configuración que no son del motor."""
     return (
         _claves_indicadores() + _claves_comisiones() + _claves_avisos()
-        + _claves_limpieza() + _claves_conteos())
+        + _claves_limpieza() + _claves_conteos() + _claves_ingresos())
 
 
 def _construir_registro() -> Mapping[str, EspecClave]:

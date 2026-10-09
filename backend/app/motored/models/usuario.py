@@ -59,6 +59,10 @@ class MotoredRole(enum.Enum):
     # Inventory-count leader: web role confined to the inventory counts
     # (see `deps.LIDER_INVENTARIOS_ALLOWED_PREFIXES`).
     LIDER_INVENTARIOS = "LIDER_INVENTARIOS"
+    # Administrative analyst: enters the big supplier invoices into the ERP;
+    # same confinement as the parts coordinator (see
+    # `deps.ANALISTA_ADMINISTRATIVO_ALLOWED_PREFIXES`).
+    ANALISTA_ADMINISTRATIVO = "ANALISTA_ADMINISTRATIVO"
 
 
 class Usuario(MotoredBase):

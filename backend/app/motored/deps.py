@@ -92,6 +92,15 @@ COORDINADOR_REPUESTOS_ALLOWED_PREFIXES = (
     GESTION_REPUESTOS_PREFIX,
 )
 
+# Administrative analyst (`ANALISTA_ADMINISTRATIVO`): an allow-list with auth
+# and the whole "Gestión repuestos" section. What it may do inside (confirm,
+# download the ERP template) is enforced per endpoint.
+ANALISTA_ADMINISTRATIVO_ROLE = "ANALISTA_ADMINISTRATIVO"
+ANALISTA_ADMINISTRATIVO_ALLOWED_PREFIXES = (
+    "/api/motored/auth",
+    GESTION_REPUESTOS_PREFIX,
+)
+
 # Inventory counts ("Conteos de inventario"). ADMIN is not path-confined;
 # GERENCIA and LIDER_INVENTARIOS get the prefix below. GERENCIA only reads
 # and a leader only reaches its own counts: enforced per endpoint, not here.
@@ -130,6 +139,8 @@ _CONFINED_ROLE_PREFIXES = {
                     _CONFINED_DETAIL),
     COORDINADOR_REPUESTOS_ROLE: (COORDINADOR_REPUESTOS_ALLOWED_PREFIXES,
                                  _CONFINED_DETAIL),
+    ANALISTA_ADMINISTRATIVO_ROLE: (ANALISTA_ADMINISTRATIVO_ALLOWED_PREFIXES,
+                                   _CONFINED_DETAIL),
     LIDER_INVENTARIOS_ROLE: (LIDER_INVENTARIOS_ALLOWED_PREFIXES,
                              _CONFINED_DETAIL),
     **{

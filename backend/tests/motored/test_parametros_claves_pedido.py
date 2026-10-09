@@ -199,7 +199,7 @@ def test_the_switch_reads_false_by_default_and_true_when_written():
 
 TIPOS = {
     "bool", "entero", "decimal", "opcion", "k_fms", "lista",
-    "lista_digitos", "mapa_opcion", "objeto_numerico", "tramos", "hora",
+    "lista_digitos", "mapa_opcion", "objeto_numerico", "tramos", "hora", "texto",
     "lista_opciones",
 }
 

@@ -225,10 +225,10 @@ def test_an_explicit_section_wins_over_the_group_default():
     assert pc.ficha(espec)["seccion"] == "avisos"
 
 
-def test_known_sections_are_the_eight_tabs_in_order():
+def test_known_sections_are_the_nine_tabs_in_order():
     assert pc.SECCIONES == (
         "pedido", "avisos", "cargas", "limpieza", "indicadores",
-        "comisiones", "conteos", "topes")
+        "comisiones", "conteos", "ingresos", "topes")
 
 
 def test_every_registered_key_has_a_known_section():

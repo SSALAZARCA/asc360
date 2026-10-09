@@ -48,7 +48,7 @@ def test_encadena_sobre_vendedor_y_la_cabeza_es_la_del_aviso():
     guion = ScriptDirectory.from_config(
         Config(str(_RAIZ / "alembic_motored.ini")))
 
-    assert guion.get_heads() == ["d58b2c9e4a17"]
+    assert guion.get_heads() == ["f6b2d8a35c71"]
     assert _cargar().down_revision == "e8c2a5f17b93"
 
 

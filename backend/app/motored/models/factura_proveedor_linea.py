@@ -62,6 +62,9 @@ class FacturaProveedorLinea(MotoredBase):
     referencia_id = Column(UUID(as_uuid=True), ForeignKey("referencia.id"), nullable=False)
     cantidad = Column(Numeric(14, 2), nullable=False)
     valor_total = Column(Numeric(14, 2), nullable=False)
+    # Precio unitario de la fuente ("Vlr. Unitario"); NULL en cargas viejas o
+    # sin esa columna. Siempre positivo (las NC no lo invierten).
+    valor_unitario = Column(Numeric(14, 2), nullable=True)
 
     ingresada = Column(Boolean, nullable=False, default=False)
     transito_vencido = Column(Boolean, nullable=False, default=False)

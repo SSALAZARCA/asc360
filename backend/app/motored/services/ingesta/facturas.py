@@ -60,6 +60,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
+from sqlalchemy import func
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.motored.models.carga_error import CargaError
@@ -85,10 +86,19 @@ COLUMNAS_ESPERADAS: Tuple[str, ...] = (
     "SIIC", "Sucursal", "Nota crédito", "Factura", "Fecha", "Parte", "Cantidad", "Vlr. Total Neto",
 )
 
+# OPCIONAL: precio unitario de la fuente -> `factura_proveedor_linea.
+# valor_unitario`. Ausente, vacio o no interpretable -> NULL (nunca
+# `carga_error`); siempre positivo, la NC no lo invierte. Se declara en
+# `deteccion.COLUMNAS_OPCIONALES_POR_TIPO`.
+COLUMNA_VALOR_UNITARIO = "Vlr. Unitario"
+COLUMNAS_OPCIONALES: Tuple[str, ...] = (COLUMNA_VALOR_UNITARIO,)
+
 CODIGO_FECHA_INVALIDA = "FECHA_INVALIDA"
 CODIGO_CANTIDAD_INVALIDA = "CANTIDAD_INVALIDA"
 CODIGO_VALOR_TOTAL_INVALIDO = "VALOR_TOTAL_INVALIDO"
 CODIGO_DOCUMENTO_RH_INVALIDO = "DOCUMENTO_RH_INVALIDO"
+
+_VALOR_UNITARIO_MAX_ABS = Decimal("1e12")  # Numeric(14, 2)
 
 _CLAVE_UPSERT = ("sucursal_id", "referencia_id", "prefijo_rh", "numero_rh")
 
@@ -138,6 +148,24 @@ def _resolver_decimal_o_error(
         _extraer(fila_raw, mapa_columnas, nombre_columna), nombre_columna, carga_id,
         numero_fila, codigo_error, mensaje,
     )
+
+
+def _resolver_valor_unitario(
+    fila_raw: Sequence[Any], mapa_columnas: Dict[str, int]
+) -> Optional[Decimal]:
+    """`Vlr. Unitario` opcional: ausente, vacio o no interpretable -> None.
+    Mismo parser que `Cantidad`; nunca rechaza la fila."""
+    if COLUMNA_VALOR_UNITARIO not in mapa_columnas:
+        return None
+    try:
+        valor = numeros_mod.parsear_decimal(
+            _extraer(fila_raw, mapa_columnas, COLUMNA_VALOR_UNITARIO)
+        )
+    except (numeros_mod.CeldaFaltanteError, numeros_mod.CeldaInvalidaError):
+        return None
+    if abs(valor) >= _VALOR_UNITARIO_MAX_ABS:
+        return None
+    return abs(valor)
 
 
 def _es_nota_credito(fila_raw: Sequence[Any], mapa_columnas: Dict[str, int]) -> bool:
@@ -265,6 +293,9 @@ def procesar_fila(
         "cantidad": str(cantidad),
         "valor_total": str(valor_total),
     }
+    valor_unitario = _resolver_valor_unitario(fila_raw, mapa_columnas)
+    if valor_unitario is not None:
+        payload["valor_unitario"] = str(valor_unitario)
     fila_staging = CargaFilaStaging(
         carga_id=carga_id,
         fila=numero_fila,
@@ -298,10 +329,14 @@ def agregar_lineas(filas_staging: Sequence[CargaFilaStaging]) -> Dict[ClaveFactu
             fila.sucursal_id, fila.referencia_id, payload["prefijo_rh"], payload["numero_rh"],
         )
         acumulado = totales.setdefault(
-            clave, {"cantidad": Decimal("0"), "valor_total": Decimal("0"), "fecha_factura": None}
+            clave,
+            {"cantidad": Decimal("0"), "valor_total": Decimal("0"),
+             "valor_unitario": None, "fecha_factura": None},
         )
         acumulado["cantidad"] += Decimal(payload["cantidad"])
         acumulado["valor_total"] += Decimal(payload["valor_total"])
+        if payload.get("valor_unitario") is not None:
+            acumulado["valor_unitario"] = Decimal(payload["valor_unitario"])
         acumulado["fecha_factura"] = date.fromisoformat(payload["fecha_factura"])
     return totales
 
@@ -326,6 +361,7 @@ def construir_statement_upsert(consolidado: Dict[ClaveFacturaLinea, dict], carga
             "fecha_factura": datos["fecha_factura"],
             "cantidad": datos["cantidad"],
             "valor_total": datos["valor_total"],
+            "valor_unitario": datos.get("valor_unitario"),
             "carga_id": carga_id,
         }
         for (sucursal_id, referencia_id, prefijo_rh, numero_rh), datos in consolidado.items()
@@ -337,6 +373,10 @@ def construir_statement_upsert(consolidado: Dict[ClaveFacturaLinea, dict], carga
             "fecha_factura": stmt.excluded.fecha_factura,
             "cantidad": stmt.excluded.cantidad,
             "valor_total": stmt.excluded.valor_total,
+            # Una carga sin la columna no borra el precio ya guardado.
+            "valor_unitario": func.coalesce(
+                stmt.excluded.valor_unitario, FacturaProveedorLinea.valor_unitario
+            ),
             "carga_id": stmt.excluded.carga_id,
         },
     )
