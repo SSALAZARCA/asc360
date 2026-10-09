@@ -25,7 +25,7 @@ Track HMCL invoices (FACTURAS_PEDIDOS) not yet ingresadas (INGRESOS_FACTURAS):
   - This session builds the cross service, the confirmation tables, the endpoints, the asesor card and the panel content.
 
 ## Tasks
-- [ ] **P1 Backend.**
+- [x] **P1 Backend.**
   - The pending cross service, reusing the `transito_corte` logic: per invoice and principal store, with units, value, date, days.
   - Tables `factura_confirmacion_ingreso` (state) and `factura_confirmacion_ingreso_historial`; migration chained with 00.
   - Endpoints:
@@ -34,8 +34,32 @@ Track HMCL invoices (FACTURAS_PEDIDOS) not yet ingresadas (INGRESOS_FACTURAS):
     - public confirm `POST /publico/informe/{token}/pendientes/{factura}` (token+cédula, same lock rules);
     - add the pending list to the asesor detail payload.
   - Tests: pure, API, pg_real.
-- [ ] **P2 Panel frontend** (approved design) + jest.
-- [ ] **P3 Asesor card** (after the compact design is approved) in `AsesorDetalle` + public page + jest.
+- [x] **P2 Panel frontend** (approved design) + jest.
+- [x] **P3 Asesor card** (after the compact design is approved) in `AsesorDetalle` + public page + jest.
+
+## Progress
+**Done (2026-10-08).**
+
+| Task | Commit | What |
+|---|---|---|
+| P1 | 34eac70 | Migration c7e1a4b92d36: `factura_confirmacion_ingreso` + `_historial` |
+| P2 | c4a352c | Panel |
+| P3 | 8d4c924 | Asesor card: public link + staff KPI view, COORDINADOR-only buttons |
+| Fixes | 23abf76 | ON CONFLICT upsert, `/asesor` tests, panel filters/errors, pg hermeticity |
+| Container | 5a73024 | Panel rendered in 00's page; `puedeConfirmar` for COORDINADOR_REPUESTOS |
+
+- **Confirming:** asesors confirm via `POST /publico/informe/{token}/pendientes`; in the app only COORDINADOR_REPUESTOS confirms (user decision).
+- **Session 00 delivered:** the role (9b209f8, alembic head d7a3c5e91f20), the sidebar and page (b7258b7), and C.O. → `ingreso_factura.sucursal_id` (c87d050).
+- **Checks:** unit 6594, pg_real 9, jest 2377 (209 suites), all green; webpack 200 on the three routes.
+- **Native reviews:** both approved and acknowledged.
+- **Advisories:**
+  - the asesor card hides silently on a load failure;
+  - value-rounding edge in `pendientes.js`;
+  - a pg test locks real rows;
+  - `_lineas_desde` has an unused `desde` arg.
 
 ## Next step
-P1 + P2 now; P3 after design approval.
+The user checks in production:
+1. Load ingresos with the raw ERP file.
+2. Open Gestión repuestos → Ingresos facturas.
+3. Open an asesor link and confirm one invoice.
