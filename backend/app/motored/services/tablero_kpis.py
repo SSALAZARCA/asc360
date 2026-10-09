@@ -794,3 +794,12 @@ async def calcular_opciones(db: AsyncSession) -> Dict[str, Any]:
         "ultimo_mes": meses[-1] if meses else None,
         "tiendas": await qk.consultar_tiendas_activas(db),
     }
+
+
+async def calcular_kpis_inventario(db: AsyncSession, filtro: Filtro) -> Dict[str, Any]:
+    """Pestana Inventario: `{meses, hmcl, sucursales, reglas, usando_resumen, datos_actualizados_en, corte,
+    costo_desde, costo_hasta, tarjetas, cortes_color, tendencia, antiguedad, lineas, tiendas,
+    sin_movimiento_top, agotadas}`; ver `tablero_kpis_inventario`."""
+    from app.motored.services import tablero_kpis_inventario as inventario  # lazy: that module imports this one
+
+    return {**_encabezado(filtro), **await lectura.frescura(db), **await inventario.calcular(db, filtro)}
