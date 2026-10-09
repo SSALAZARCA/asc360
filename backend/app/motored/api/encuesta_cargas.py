@@ -10,7 +10,8 @@ masters upload). Invalid files answer HTTP 200 with `ok: false`.
 """
 import io
 import uuid
-from typing import Any, Dict, List, Optional
+from datetime import date, datetime, timezone
+from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile, status
 from openpyxl import Workbook
@@ -26,8 +27,10 @@ from app.motored.models.encuesta_respuesta import EncuestaRespuesta
 from app.motored.models.usuario import Usuario
 from app.motored.schemas.carga import CargaResultado
 from app.motored.services import encuesta_carga as servicio
+from app.motored.services import encuesta_excel, encuesta_resultados
 from app.motored.services.carga_excel import CargaExcelError, LimiteFilasExcedidoError
 from app.motored.services.fechas_utc import UtcDatetime
+from app.motored.services.encuesta_resultados import MAX_RANGO_DIAS, Filtro, Por
 
 router = APIRouter(
     prefix="/encuesta/cargas",
@@ -41,6 +44,18 @@ _XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 class EncuestaCargaResultado(CargaResultado):
     carga_id: Optional[uuid.UUID] = None
+
+
+class EncuestaDetalleFila(BaseModel):
+    cliente: str
+    cedula: str
+    telefono: Optional[str] = None
+    tienda: Optional[str] = None
+    estado: Literal["RESPONDIDA", "SIN_RESPONDER"]
+    nota: Optional[int] = None
+    categoria: Optional[Literal["DETRACTOR", "SATISFECHO"]] = None
+    comentario: Optional[str] = None
+    fecha_respuesta: Optional[UtcDatetime] = None
 
 
 class EncuestaCargaRead(BaseModel):
@@ -163,3 +178,53 @@ async def listar_cargas(
         )
         for row in result.all()
     ]
+
+
+def _xlsx(content: bytes, filename: str) -> Response:
+    return Response(
+        content=content,
+        media_type=encuesta_excel.XLSX,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/resultados/excel")
+async def excel_por_rango(
+    desde: date,
+    hasta: date,
+    por: Por = "envio",
+    db: AsyncSession = Depends(get_motored_db_or_503),
+    user: MotoredUser = Depends(_require_access),
+):
+    if desde > hasta:
+        raise HTTPException(status_code=422, detail="La fecha desde no puede ser posterior a la fecha hasta")
+    if (hasta - desde).days + 1 > MAX_RANGO_DIAS:
+        raise HTTPException(status_code=422, detail=f"El rango no puede superar {MAX_RANGO_DIAS} días")
+    rows = await encuesta_resultados.filas_de_rango(db, desde, hasta, por)
+    content = encuesta_excel.construir_por_rango(rows, desde, hasta, por, datetime.now(timezone.utc))
+    return _xlsx(content, encuesta_excel.nombre_por_rango(desde, hasta, por))
+
+
+@router.get("/{carga_id}/detalle", response_model=List[EncuestaDetalleFila])
+async def detalle_carga(
+    carga_id: uuid.UUID,
+    filtro: Filtro = "todas",
+    db: AsyncSession = Depends(get_motored_db_or_503),
+    user: MotoredUser = Depends(_require_access),
+):
+    rows = await encuesta_resultados.filas_de_carga(db, carga_id)
+    if not rows:
+        raise HTTPException(status_code=404, detail="Carga no encontrada")
+    return encuesta_resultados.filtrar([encuesta_resultados.fila_de(r) for r in rows], filtro)
+
+
+@router.get("/{carga_id}/excel")
+async def excel_de_carga(
+    carga_id: uuid.UUID,
+    db: AsyncSession = Depends(get_motored_db_or_503),
+    user: MotoredUser = Depends(_require_access),
+):
+    rows = await encuesta_resultados.filas_de_carga(db, carga_id)
+    if not rows:
+        raise HTTPException(status_code=404, detail="Carga no encontrada")
+    return _xlsx(encuesta_excel.construir_por_carga(rows), encuesta_excel.nombre_por_carga(rows))
