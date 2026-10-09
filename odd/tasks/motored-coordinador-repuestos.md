@@ -9,9 +9,9 @@ Supports the "Pedidos pendientes por ingresar" feature, which session `fe` owns:
 - **The ingreso's C.O. fills `ingreso_factura.sucursal_id`**, matched on `sucursal.codigo_co`. An unknown C.O. leaves it NULL with no row error.
 
 ## Tasks
-- [ ] C1: the role. It needs a migration if the role is constrained in the DB. Update the role lists in `deps.py` / path rules / landing page / user admin role select, give it KPI access, and check `test_roles_sin_acceso`.
-- [ ] C2: the sidebar group and the route guard for `/motored/gestion-repuestos/ingresos-facturas`, with a placeholder page that `fe` fills.
-- [ ] C3: the C.O. → `sucursal_id` fill in the INGRESOS_FACTURAS ingest. This runs after "Volver a validar" lands.
+- [x] C1 (9b209f8, migration d7a3c5e91f20 on c7e1a4b92d36): the role. It needs a migration if the role is constrained in the DB. Update the role lists in `deps.py` / path rules / landing page / user admin role select, give it KPI access, and check `test_roles_sin_acceso`.
+- [x] C2 (b7258b7): the sidebar group and the route guard for `/motored/gestion-repuestos/ingresos-facturas`, with a placeholder page that `fe` fills.
+- [x] C3 (c87d050; backend 6630 passed, jest 2352 passed, PG18 upgrade chain OK): the C.O. → `sucursal_id` fill in the INGRESOS_FACTURAS ingest. This runs after "Volver a validar" lands.
 
 ## Sequencing
 This starts after `motored-cargas-revalidar` lands, to keep a single writer.
