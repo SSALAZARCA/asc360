@@ -92,6 +92,19 @@ COORDINADOR_REPUESTOS_ALLOWED_PREFIXES = (
     GESTION_REPUESTOS_PREFIX,
 )
 
+# Inventory counts ("Conteos de inventario"). ADMIN is not path-confined;
+# GERENCIA and LIDER_INVENTARIOS get the prefix below. GERENCIA only reads
+# and a leader only reaches its own counts: enforced per endpoint, not here.
+CONTEOS_PREFIX = "/api/motored/conteos"
+
+# Inventory-count leader (`LIDER_INVENTARIOS`): an allow-list, so every new
+# endpoint is denied by default. It only works its inventory counts.
+LIDER_INVENTARIOS_ROLE = "LIDER_INVENTARIOS"
+LIDER_INVENTARIOS_ALLOWED_PREFIXES = (
+    "/api/motored/auth",
+    CONTEOS_PREFIX,
+)
+
 # Owner decision 2026-10-05: `SUCURSAL` and `CONSULTA` have no screens yet.
 # They may only log in and change their own password (`/auth`); every other
 # guarded endpoint answers 403 with this detail. Their scoping code
@@ -112,10 +125,13 @@ PASSWORD_CHANGE_PATH = "/api/motored/auth/password"
 _CONFINED_ROLE_PREFIXES = {
     SERVICIO_CLIENTE_ROLE: (SERVICIO_CLIENTE_ALLOWED_PREFIXES,
                             _CONFINED_DETAIL),
-    GERENCIA_ROLE: (GERENCIA_ALLOWED_PREFIXES + (GESTION_REPUESTOS_PREFIX,),
+    GERENCIA_ROLE: (GERENCIA_ALLOWED_PREFIXES
+                    + (GESTION_REPUESTOS_PREFIX, CONTEOS_PREFIX),
                     _CONFINED_DETAIL),
     COORDINADOR_REPUESTOS_ROLE: (COORDINADOR_REPUESTOS_ALLOWED_PREFIXES,
                                  _CONFINED_DETAIL),
+    LIDER_INVENTARIOS_ROLE: (LIDER_INVENTARIOS_ALLOWED_PREFIXES,
+                             _CONFINED_DETAIL),
     **{
         rol: (ROLES_SIN_ACCESO_ALLOWED_PREFIXES, ROL_SIN_PANTALLAS_DETAIL)
         for rol in ROLES_SIN_ACCESO

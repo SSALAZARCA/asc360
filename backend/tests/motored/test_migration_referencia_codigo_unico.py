@@ -43,7 +43,7 @@ def _sql(op_mock):
 def test_encadena_sobre_vendedor_y_la_cabeza_es_la_del_aviso():
     guion = ScriptDirectory.from_config(Config(str(_RAIZ / "alembic_motored.ini")))
 
-    assert guion.get_heads() == ["d7a3c5e91f20"]
+    assert guion.get_heads() == ["b4f9c2e6a813"]
     assert _cargar().down_revision == "e8c2a5f17b93"
 
 

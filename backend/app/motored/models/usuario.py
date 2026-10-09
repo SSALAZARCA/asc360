@@ -56,6 +56,9 @@ class MotoredRole(enum.Enum):
     # Parts coordinator: web role confined to the KPI's and the "Gestión
     # repuestos" section (see `deps.COORDINADOR_REPUESTOS_ALLOWED_PREFIXES`).
     COORDINADOR_REPUESTOS = "COORDINADOR_REPUESTOS"
+    # Inventory-count leader: web role confined to the inventory counts
+    # (see `deps.LIDER_INVENTARIOS_ALLOWED_PREFIXES`).
+    LIDER_INVENTARIOS = "LIDER_INVENTARIOS"
 
 
 class Usuario(MotoredBase):
