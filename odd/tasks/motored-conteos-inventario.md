@@ -170,3 +170,4 @@ Run them in the foreground and read the result line before committing; never cha
   - It is assignable as leader (the leader list shows LIDER_INVENTARIOS + COORDINADOR_REPUESTOS) and reaches Inventarios → Conteos with exactly the leader scoping (own conteos only, 404 otherwise).
   - It keeps KPI's and Gestión repuestos. Single role per user stays.
   - When the sidebar visibility widens, include COORDINADOR_REPUESTOS.
+- [x] 2026-10-09: the coordinador can lead counts (912f57d backend, a1406cb UI; backend 7280 passed, pg_real subset 55 passed, jest 2605 passed).
