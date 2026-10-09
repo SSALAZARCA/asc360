@@ -20,6 +20,7 @@ Definiciones (todas por PAR tienda principal x referencia; una tienda asociada s
 - Todos los `pct` son FRACCIONES (0.107 = 10,7 %).
 """
 import calendar
+import math
 import datetime
 from decimal import Decimal
 from typing import Any, Dict, Iterable, List, NamedTuple, Optional, Sequence, Set, Tuple
@@ -115,9 +116,10 @@ def rotacion(dias: Optional[float]) -> Optional[float]:
 
 def _numero(valor: Any) -> Optional[float]:
     try:
-        return float(valor)
+        numero = float(valor)
     except (TypeError, ValueError):
         return None
+    return numero if math.isfinite(numero) else None
 
 
 def cortes_color(valor: Any) -> Dict[str, float]:
@@ -474,9 +476,14 @@ async def _pares_y_demanda(
     return pares, _demanda(ventas, perdidas)
 
 
+async def _configuracion(db: AsyncSession, ultimo_mes: str) -> Dict[str, Any]:
+    """Los ajustes de Configuracion vigentes el primer dia del mes de referencia (con respaldo al defecto)."""
+    return await parametros.leer_valores(db, _primer_dia_de_mes(ultimo_mes), CLAVES)
+
+
 async def _entradas(db: AsyncSession, filtro: Filtro, cortes: List[datetime.date], corte: datetime.date) -> Entradas:
     ultimo_mes = filtro.meses[-1]
-    config = await parametros.leer_valores(db, _primer_dia_de_mes(ultimo_mes), CLAVES)
+    config = await _configuracion(db, ultimo_mes)
     en_tendencia = cortes_de_tendencia(cortes, ultimo_mes)
     anterior = corte_anterior(cortes, ultimo_mes, corte)
     valores, costos = await _valores_y_costos(db, filtro, corte, en_tendencia, anterior)
@@ -517,11 +524,13 @@ async def calcular_inventario(db: AsyncSession, filtro: Filtro, *, completo: boo
     corte = elegir_corte(cortes, fin_de_mes(ultimo_mes))
     if corte is None:
         pendientes = await _pendientes_de_ingreso(db, filtro)
+        config = await _configuracion(db, ultimo_mes)
         vacio = analizar(Entradas(
             corte=fin_de_mes(ultimo_mes), ultimo_mes=ultimo_mes, valores_por_corte={}, cortes_tendencia=[],
             corte_anterior=None, costos=[], pares=[], demanda={}, transito={}, historial_ym=None,
-            lineas=tuple(filtro.reglas.lineas), umbral=UMBRAL_SIN_MOVIMIENTO_POR_DEFECTO,
-            dias_meta=DIAS_META_POR_DEFECTO, cortes_color=dict(CORTES_POR_DEFECTO), pendientes=pendientes,
+            lineas=tuple(filtro.reglas.lineas), umbral=int(config["kpi_inventario_sin_movimiento_dias"]),
+            dias_meta=int(config["kpi_inventario_dias_meta"]),
+            cortes_color=cortes_color(config["kpi_inventario_dias_cortes"]), pendientes=pendientes,
             nombres_tienda={}))
         vacio.datos["corte"] = None
         return vacio

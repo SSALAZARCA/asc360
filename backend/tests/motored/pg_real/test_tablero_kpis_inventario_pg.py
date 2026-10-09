@@ -407,3 +407,35 @@ async def test_the_excel_endpoint_lists_all_idle_pairs_not_only_the_top(http, se
     assert referencias == ["R3", "R2", "R5", "R7"]
     nombres = {f[0] for f in [[c.value for c in f] for f in libro["Tiendas"].iter_rows()]}
     assert {"Tiendas", "Tienda"} <= nombres
+
+
+async def test_without_a_corte_the_configured_settings_are_still_read(sesion):
+    from app.motored.models.parametro_metodologia import ParametroMetodologia
+    from app.motored.services import tablero_inventario_excel as excel
+    w = await _mundo(sesion, con_inventario=False)
+    for clave, valor in (("kpi_inventario_sin_movimiento_dias", 100), ("kpi_inventario_dias_meta", 45),
+                         ("kpi_inventario_dias_cortes", {"verde_hasta": 30, "ambar_hasta": 50})):
+        sesion.add(ParametroMetodologia(id=uuid.uuid4(), clave=clave, valor=valor, vigente_desde=F(2096, 10, 1)))
+    await sesion.flush()
+
+    datos, sin_mov, agotadas = await k.calcular_kpis_inventario_completo(sesion, await _filtro(sesion, w))
+
+    assert datos["corte"] is None and datos["tarjetas"]["dias_meta"] == 45
+    assert datos["cortes_color"] == {"verde_hasta": 30, "ambar_hasta": 50}
+    assert datos["sin_movimiento_umbral_dias"] == 100
+    import io
+    from openpyxl import load_workbook
+    libro = load_workbook(io.BytesIO(excel.construir_libro(datos, sin_mov, agotadas, [])))
+    textos = [str(c.value) for f in libro["Sin movimiento"].iter_rows() for c in f if c.value is not None]
+    assert "más de 100 días" in textos
+
+
+async def test_unknown_or_null_reference_ids_do_not_break_the_names_lookup(sesion):
+    from app.motored.services import tablero_kpis_inventario_consultas as qi
+    w = await _mundo(sesion)
+
+    nombres = await qi.consultar_referencias(sesion, [None, "no-es-uuid", w.refs["R1"].id, str(w.refs["R2"].id)])
+
+    assert set(nombres) == {w.refs["R1"].id, w.refs["R2"].id}
+    filas = await inv._rotular(sesion, [{"referencia_id": None, "valor": 1.0}])
+    assert filas == [{"referencia": "None", "nombre": None, "valor": 1.0}]

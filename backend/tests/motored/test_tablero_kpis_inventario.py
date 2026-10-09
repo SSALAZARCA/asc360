@@ -69,6 +69,16 @@ def test_the_color_cuts_come_back_as_numbers_and_fall_back_to_the_default():
     assert inv.cortes_color({"verde_hasta": 90, "ambar_hasta": 60}) == {"verde_hasta": 60, "ambar_hasta": 90}
 
 
+@pytest.mark.parametrize("valor", [
+    {"verde_hasta": float("inf"), "ambar_hasta": float("inf")},
+    {"verde_hasta": 10, "ambar_hasta": float("inf")},
+    {"verde_hasta": float("nan"), "ambar_hasta": 90},
+    {"verde_hasta": "inf", "ambar_hasta": "1e999"},
+])
+def test_non_finite_color_cuts_fall_back_to_the_default(valor):
+    assert inv.cortes_color(valor) == {"verde_hasta": 60, "ambar_hasta": 90}
+
+
 # --- days without sales and age bands -----------------------------------------------------------
 
 

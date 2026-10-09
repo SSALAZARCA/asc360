@@ -189,9 +189,17 @@ async def consultar_transito_por_par(
     return salida
 
 
+def _como_uuid(valor: Any) -> Optional[uuid.UUID]:
+    """El UUID de `valor`, o None si es nulo o no es un UUID (no se busca)."""
+    try:
+        return valor if isinstance(valor, uuid.UUID) else uuid.UUID(str(valor))
+    except (ValueError, AttributeError, TypeError):
+        return None
+
+
 async def consultar_referencias(db: AsyncSession, ids: Iterable[Any]) -> Dict[Any, Tuple[str, Optional[str]]]:
     """`{referencia_id: (codigo, nombre)}`, en lotes para no pasar el tope de parametros."""
-    pendientes = sorted({uuid.UUID(str(i)) for i in ids}, key=str)
+    pendientes = sorted({i for i in map(_como_uuid, ids) if i is not None}, key=str)
     salida: Dict[Any, Tuple[str, Optional[str]]] = {}
     for inicio in range(0, len(pendientes), LOTE_REFERENCIAS):
         lote = pendientes[inicio:inicio + LOTE_REFERENCIAS]
