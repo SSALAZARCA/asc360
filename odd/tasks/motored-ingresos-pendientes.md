@@ -58,6 +58,12 @@ Track HMCL invoices (FACTURAS_PEDIDOS) not yet ingresadas (INGRESOS_FACTURAS):
   - a pg test locks real rows;
   - `_lineas_desde` has an unused `desde` arg.
 
+## Decision (user, 2026-10-09): warranty invoices are not entered
+- Supplier invoices of order type `GARANTIA25` (the HMCL warranty invoices) are not entered into the ERP, so they are left out of the whole invoice-entry process only: the Ingresos facturas panel, the `/asesor` card, the public link and the template download (404). They stay in transit (pedido sugerido, inventory).
+- **How.** Exclusion is by order type, not by client NIT. The new optional columns `Número Identificación` and `Tipo de Pedido` are stored in `factura_proveedor_linea.cliente_nit` / `tipo_pedido` (migration a8d4f1c6b923; re-uploading a file overwrites with a non-null value, a null keeps the stored one). The Configuración key `ingreso_tipos_pedido_excluidos` (default `["GARANTIA25"]`, tab "Ingresos de facturas") lists the excluded types. NULL `tipo_pedido` (loads before the migration) stays until the file is uploaded again. In a mixed invoice only the excluded lines are dropped.
+- **Evidence.** Commits b66bb97 (backend) and 29ab428 (Configuración). Unit 7283 passed; pg_real: `test_ingresos_tipo_pedido_pg.py` plus the existing pendientes/plantilla tests (16) passed on Postgres 18; jest `motored-configuracion*` 210 passed; one alembic head.
+- **Pending for the user:** re-upload the "facturas pedidos" file in production so existing lines get their order type.
+
 ## Next step
 The user checks in production:
 1. Load ingresos with the raw ERP file.
