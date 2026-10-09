@@ -19,7 +19,7 @@ Split pending supplier invoices (Gestión repuestos → Ingresos facturas) by wh
 ## Tasks
 - [x] T1 Backend (5d724fe): store invoice unit price; configurable threshold + template fixed values; ANALISTA_ADMINISTRATIVO role with Gestión repuestos access + confirm.
 - [x] T2 Backend (b38df41): reference count + responsible on pending data (panel + advisor + public link); template download endpoint.
-- [ ] T3 Frontend: Detalle "Ingresa" column + download button; advisor card / public link notice; Configuración fields; role selectable in user admin.
+- [x] T3 Frontend (a8f1590): Detalle "Refs." + "Ingresa" columns and "Descargar plantilla" (ADMIN + ANALISTA_ADMINISTRATIVO); advisor card / public link "Ingrésala al sistema" notice; Configuración tab "Ingresos de facturas" (tipo texto); role selectable and routed.
 
 ## Route
 Delegated direct (2+ non-trivial files per task, one writer per task).
@@ -29,3 +29,5 @@ Delegated direct (2+ non-trivial files per task, one writer per task).
 - T1 `5d724fe`: migrations `e3a7c1d94b52` (`factura_proveedor_linea.valor_unitario`, optional source column "Vlr. Unitario", NC keeps it positive, a load without it keeps the stored price) and `f6b2d8a35c71` (enum `ANALISTA_ADMINISTRATIVO`, head). Parameters tab `ingresos` with 8 keys (`ingreso_umbral_referencias_asesor`, `ingreso_plantilla_*`; new type `texto` for "001"/"003"). Role allow-list: auth + gestion-repuestos only (no KPI endpoints: `tablero_kpis.py` was outside the allowed surface).
 - T2 `b38df41`: pending items carry `num_referencias`, `responsable`, `puede_descargar_plantilla`; `GET /gestion-repuestos/ingresos-facturas/plantilla?factura=RH208629&sucursal=<uuid>` (ADMIN + ANALISTA_ADMINISTRATIVO). Reference count = distinct references with positive net quantity per principal store (the template lines); fully credited lines are left out.
 - Checks: motored unit 6965 passed; pg_real (role, conteo migrations, pendientes, plantilla) 6+4+ passed on a throwaway Postgres 18 migrated to head; single alembic head `f6b2d8a35c71`; compileall on Python 3.11.16 venv.
+- Backend fix (d4a2e23): `num_referencias` now nets quantity per reference across the whole principal group (same rule as the template lines), so an offsetting negative row at an associated store no longer counts. Rows carry `referencias` + parallel `cantidades`.
+- T3 `a8f1590`: jest full suite 2498 passed (218 suites); backend `tests/motored` 7116 passed; pg_real (plantilla + pendientes) 10 passed on a throwaway Postgres 18 migrated to head. The advisor card is shared with the public link, so one component covers both. ANALISTA_ADMINISTRATIVO: layout guard, sidebar (Gestión repuestos only), home = Ingresos facturas, user create form, Roles y permisos matrix.
