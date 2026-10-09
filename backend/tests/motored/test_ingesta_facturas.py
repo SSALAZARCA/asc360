@@ -386,7 +386,7 @@ def _fila_con_unitario(unitario, **kwargs):
 
 
 def test_vlr_unitario_es_una_columna_opcional_y_no_obligatoria():
-    assert facturas.COLUMNAS_OPCIONALES == ("Vlr. Unitario",)
+    assert facturas.COLUMNAS_OPCIONALES[0] == "Vlr. Unitario"
     assert "Vlr. Unitario" not in facturas.COLUMNAS_ESPERADAS
 
 
@@ -458,3 +458,119 @@ def test_el_upsert_escribe_valor_unitario_sin_borrar_el_guardado_si_llega_nulo()
     valores_set = upsert_set_clause(facturas.construir_statement_upsert(consolidado, CARGA_ID))
 
     assert "coalesce(excluded.valor_unitario" in valores_set["valor_unitario"].lower()
+
+
+# ---------------------------------------------------------------------------
+# Optional "Número Identificación" / "Tipo de Pedido" columns ->
+# factura_proveedor_linea.cliente_nit / tipo_pedido
+# ---------------------------------------------------------------------------
+
+COL_NIT = "Número Identificación"
+COL_TIPO = "Tipo de Pedido"
+
+
+def _mapa_con_cliente():
+    mapa = dict(_MAPA_COLUMNAS)
+    mapa[COL_NIT] = len(mapa)
+    mapa[COL_TIPO] = len(mapa)
+    return mapa
+
+
+def _fila_con_cliente(nit, tipo, **kwargs):
+    return _fila(**kwargs) + (nit, tipo)
+
+
+def test_nit_y_tipo_de_pedido_son_columnas_opcionales():
+    assert COL_NIT in facturas.COLUMNAS_OPCIONALES
+    assert COL_TIPO in facturas.COLUMNAS_OPCIONALES
+    assert COL_NIT not in facturas.COLUMNAS_ESPERADAS
+    assert COL_TIPO not in facturas.COLUMNAS_ESPERADAS
+
+
+def test_nit_y_tipo_se_guardan_en_el_payload():
+    fila_staging, errores = _procesar(
+        _fila_con_cliente("900723988", "GARANTIA25"),
+        mapa_columnas=_mapa_con_cliente(),
+    )
+
+    assert errores == []
+    assert fila_staging.payload["cliente_nit"] == "900723988"
+    assert fila_staging.payload["tipo_pedido"] == "GARANTIA25"
+
+
+@pytest.mark.parametrize("crudo, esperado", [
+    (900723988, "900723988"),
+    (900723988.0, "900723988"),
+    (" 900 883 086 ", "900883086"),
+    ("900.723.988", "900723988"),
+    ("900723988-1", "900723988"),
+])
+def test_el_nit_se_normaliza_a_digitos(crudo, esperado):
+    fila_staging, _ = _procesar(
+        _fila_con_cliente(crudo, "X"), mapa_columnas=_mapa_con_cliente())
+
+    assert fila_staging.payload["cliente_nit"] == esperado
+
+
+@pytest.mark.parametrize("crudo, esperado", [
+    ("garantia25", "GARANTIA25"), ("  Normal ", "NORMAL")])
+def test_el_tipo_de_pedido_va_recortado_y_en_mayusculas(crudo, esperado):
+    fila_staging, _ = _procesar(
+        _fila_con_cliente("1", crudo), mapa_columnas=_mapa_con_cliente())
+
+    assert fila_staging.payload["tipo_pedido"] == esperado
+
+
+def test_sin_las_columnas_la_fila_carga_igual():
+    fila_staging, errores = _procesar(_fila())
+
+    assert errores == []
+    assert "cliente_nit" not in fila_staging.payload
+    assert "tipo_pedido" not in fila_staging.payload
+
+
+@pytest.mark.parametrize("nit, tipo", [(None, None), ("", "  "), ("abc", None)])
+def test_nit_o_tipo_vacio_o_sin_digitos_no_rechaza_la_fila(nit, tipo):
+    fila_staging, errores = _procesar(
+        _fila_con_cliente(nit, tipo), mapa_columnas=_mapa_con_cliente())
+
+    assert errores == []
+    assert fila_staging is not None
+    assert "cliente_nit" not in fila_staging.payload
+    assert "tipo_pedido" not in fila_staging.payload
+
+
+def test_agregar_lineas_conserva_el_ultimo_nit_y_tipo_informados():
+    primera = _fila_staging(SUCURSAL_ID, REFERENCIA_ID, "RH", 194067, 5, 275130, fila=1)
+    primera.payload.update(cliente_nit="900723988", tipo_pedido="GARANTIA25")
+    segunda = _fila_staging(SUCURSAL_ID, REFERENCIA_ID, "RH", 194067, 1, 1, fila=2)
+
+    consolidado = facturas.agregar_lineas([primera, segunda])
+
+    datos = consolidado[(SUCURSAL_ID, REFERENCIA_ID, "RH", 194067)]
+    assert datos["cliente_nit"] == "900723988"
+    assert datos["tipo_pedido"] == "GARANTIA25"
+
+
+def test_agregar_lineas_deja_nit_y_tipo_en_none_si_ninguna_fila_los_trae():
+    consolidado = facturas.agregar_lineas(
+        [_fila_staging(SUCURSAL_ID, REFERENCIA_ID, "RH", 194067, 5, 275130)])
+
+    datos = consolidado[(SUCURSAL_ID, REFERENCIA_ID, "RH", 194067)]
+    assert datos["cliente_nit"] is None
+    assert datos["tipo_pedido"] is None
+
+
+def test_el_upsert_sobrescribe_con_un_valor_nuevo_y_conserva_el_guardado_si_llega_nulo():
+    consolidado = {
+        (SUCURSAL_ID, REFERENCIA_ID, "RH", 194067): {
+            "cantidad": Decimal("3"), "valor_total": Decimal("165078"),
+            "valor_unitario": None, "cliente_nit": None, "tipo_pedido": None,
+            "fecha_factura": date(2026, 7, 15),
+        },
+    }
+
+    valores_set = upsert_set_clause(facturas.construir_statement_upsert(consolidado, CARGA_ID))
+
+    assert "coalesce(excluded.cliente_nit" in valores_set["cliente_nit"].lower()
+    assert "coalesce(excluded.tipo_pedido" in valores_set["tipo_pedido"].lower()

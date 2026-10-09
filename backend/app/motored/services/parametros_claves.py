@@ -71,6 +71,7 @@ CLAVE_PLANTILLA_PROVEEDOR = "ingreso_plantilla_proveedor_nit"
 CLAVE_PLANTILLA_SUC_PROVEEDOR = "ingreso_plantilla_sucursal_proveedor"
 CLAVE_PLANTILLA_COMPRADOR = "ingreso_plantilla_comprador"
 CLAVE_PLANTILLA_DESC_ITEM = "ingreso_plantilla_descuento_item"
+CLAVE_INGRESO_TIPOS_EXCLUIDOS = "ingreso_tipos_pedido_excluidos"
 CLAVE_PLANTILLA_UNIDAD_NEGOCIO = "ingreso_plantilla_unidad_negocio"
 _SECCION_POR_GRUPO = {
     GRUPO_MOTOR: "pedido", GRUPO_INGESTA: "cargas", GRUPO_PEDIDO: "topes",
@@ -734,6 +735,9 @@ def _claves_ingresos() -> list:
         descuento(CLAVE_PLANTILLA_DESC_ITEM, 0),
         texto_de_digitos(CLAVE_PLANTILLA_UNIDAD_NEGOCIO, "003", 6,
                          seccion="ingresos"),
+        lista_de_texto(
+            CLAVE_INGRESO_TIPOS_EXCLUIDOS, ["GARANTIA25"],
+            GRUPO_OPERACION, seccion="ingresos"),
     ]
 
 
@@ -742,6 +746,7 @@ CLAVES_INGRESOS = (
     CLAVE_PLANTILLA_DESC_GLOBAL, CLAVE_PLANTILLA_PROVEEDOR,
     CLAVE_PLANTILLA_SUC_PROVEEDOR, CLAVE_PLANTILLA_COMPRADOR,
     CLAVE_PLANTILLA_DESC_ITEM, CLAVE_PLANTILLA_UNIDAD_NEGOCIO,
+    CLAVE_INGRESO_TIPOS_EXCLUIDOS,
 )
 RESPALDOS_INGRESOS = {
     espec.clave: espec.default for espec in _claves_ingresos()}

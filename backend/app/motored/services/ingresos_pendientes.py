@@ -45,7 +45,8 @@ from app.motored.models.ingreso_factura import IngresoFactura
 from app.motored.models.sucursal import Sucursal
 from app.motored.models.vendedor import Vendedor
 from app.motored.services import parametros, sucursal_grupo
-from app.motored.services.parametros_claves import CLAVE_INGRESO_UMBRAL_ASESOR
+from app.motored.services.parametros_claves import (
+    CLAVE_INGRESO_TIPOS_EXCLUIDOS, CLAVE_INGRESO_UMBRAL_ASESOR)
 from app.motored.services.reloj import hoy_bogota
 
 SIN_CONFIRMAR = "SIN_CONFIRMAR"
@@ -57,6 +58,8 @@ RESPONSABLE_ASESOR = "ASESOR"
 RESPONSABLE_ANALISTA = "ANALISTA"
 CLAVE_UMBRAL = CLAVE_INGRESO_UMBRAL_ASESOR
 UMBRAL_ASESOR_DEFECTO = 10
+CLAVE_TIPOS_EXCLUIDOS = CLAVE_INGRESO_TIPOS_EXCLUIDOS
+TIPOS_EXCLUIDOS_DEFECTO: Tuple[str, ...] = ("GARANTIA25",)
 
 MSG_FACTURA = "La factura no es válida."
 MSG_ESTADO = "El estado debe ser «Llegó» o «No ha llegado»."
@@ -190,6 +193,30 @@ def por_tienda(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 # Database
 # ---------------------------------------------------------------------------
 
+def normalizar_tipos_excluidos(valor: Any) -> Tuple[str, ...]:
+    """The Configuración list as trimmed upper-case types; the default when it
+    is not a non-empty list of non-blank texts."""
+    if (not isinstance(valor, (list, tuple)) or not valor
+            or not all(isinstance(x, str) and x.strip() for x in valor)):
+        return TIPOS_EXCLUIDOS_DEFECTO
+    return tuple(x.strip().upper() for x in valor)
+
+
+def condicion_tipo_incluido(tipos: Iterable[str]):
+    """SQL filter: keep lines whose order type is NULL (old loads) or not in
+    the excluded `tipos`."""
+    return or_(
+        FacturaProveedorLinea.tipo_pedido.is_(None),
+        FacturaProveedorLinea.tipo_pedido.not_in(list(tipos)))
+
+
+async def tipos_excluidos(db: AsyncSession, hoy: date) -> Tuple[str, ...]:
+    """Order types left out of the ingreso process (Configuración)."""
+    valores = await parametros.leer_valores(
+        db, hoy, {CLAVE_TIPOS_EXCLUIDOS: list(TIPOS_EXCLUIDOS_DEFECTO)})
+    return normalizar_tipos_excluidos(valores[CLAVE_TIPOS_EXCLUIDOS])
+
+
 def _carga_viva():
     return CargaArchivo.estado != "ANULADO"
 
@@ -210,8 +237,8 @@ async def _ingresos_vivos(db: AsyncSession) -> Set[Clave]:
     return {(p, n) for p, n in (await db.execute(stmt)).all()}
 
 
-async def _lineas_desde(db: AsyncSession, desde: date) -> List[Any]:
-    stmt = (
+def _consulta_lineas(tipos: Iterable[str]):
+    return (
         select(
             FacturaProveedorLinea.prefijo_rh, FacturaProveedorLinea.numero_rh,
             FacturaProveedorLinea.sucursal_id,
@@ -222,11 +249,16 @@ async def _lineas_desde(db: AsyncSession, desde: date) -> List[Any]:
                 "referencias"),
             func.array_agg(FacturaProveedorLinea.cantidad).label("cantidades"))
         .join(CargaArchivo, CargaArchivo.id == FacturaProveedorLinea.carga_id)
-        .where(_carga_viva())
+        .where(_carga_viva(), condicion_tipo_incluido(tipos))
         .group_by(
             FacturaProveedorLinea.prefijo_rh, FacturaProveedorLinea.numero_rh,
             FacturaProveedorLinea.sucursal_id))
-    return list((await db.execute(stmt)).all())
+
+
+async def _lineas_desde(
+    db: AsyncSession, tipos: Iterable[str],
+) -> List[Any]:
+    return list((await db.execute(_consulta_lineas(tipos))).all())
 
 
 async def _confirmaciones(db: AsyncSession) -> Dict[Tuple[str, int, uuid.UUID], Any]:
@@ -253,7 +285,8 @@ async def pendientes(
         await db.execute(select(Sucursal.id, Sucursal.nombre))).all()}
     hoy = hoy or hoy_bogota()
     items = calcular_pendientes(
-        await _lineas_desde(db, desde), await _ingresos_vivos(db), desde,
+        await _lineas_desde(db, await tipos_excluidos(db, hoy)),
+        await _ingresos_vivos(db), desde,
         hoy, principal, nombres, await _confirmaciones(db),
         await umbral_asesor(db, hoy))
     if sucursal_ids is not None:

@@ -55,6 +55,7 @@ Deliberadamente FUERA de alcance de esta fase (ver tasks.md Fase 9):
 """
 from __future__ import annotations
 
+import re
 import uuid
 from datetime import date
 from decimal import Decimal
@@ -91,7 +92,13 @@ COLUMNAS_ESPERADAS: Tuple[str, ...] = (
 # `carga_error`); siempre positivo, la NC no lo invierte. Se declara en
 # `deteccion.COLUMNAS_OPCIONALES_POR_TIPO`.
 COLUMNA_VALOR_UNITARIO = "Vlr. Unitario"
-COLUMNAS_OPCIONALES: Tuple[str, ...] = (COLUMNA_VALOR_UNITARIO,)
+# OPCIONALES: NIT del cliente y tipo de pedido de la fuente (las facturas de
+# garantia son "GARANTIA25"). Ausentes o vacios -> NULL, nunca `carga_error`.
+COLUMNA_CLIENTE_NIT = "Número Identificación"
+COLUMNA_TIPO_PEDIDO = "Tipo de Pedido"
+COLUMNAS_OPCIONALES: Tuple[str, ...] = (
+    COLUMNA_VALOR_UNITARIO, COLUMNA_CLIENTE_NIT, COLUMNA_TIPO_PEDIDO,
+)
 
 CODIGO_FECHA_INVALIDA = "FECHA_INVALIDA"
 CODIGO_CANTIDAD_INVALIDA = "CANTIDAD_INVALIDA"
@@ -166,6 +173,31 @@ def _resolver_valor_unitario(
     if abs(valor) >= _VALOR_UNITARIO_MAX_ABS:
         return None
     return abs(valor)
+
+
+def _resolver_cliente_nit(
+    fila_raw: Sequence[Any], mapa_columnas: Dict[str, int]
+) -> Optional[str]:
+    """`Número Identificación` -> solo digitos (sin puntos, espacios, `.0` de
+    un entero leido como decimal ni digito de verificacion tras `-`); None si
+    no hay digitos."""
+    crudo = _extraer(fila_raw, mapa_columnas, COLUMNA_CLIENTE_NIT)
+    if crudo is None:
+        return None
+    if isinstance(crudo, float) and crudo.is_integer():
+        crudo = int(crudo)
+    texto = str(crudo).strip().split("-")[0]
+    texto = re.sub(r"\.0+$", "", texto)
+    digitos = re.sub(r"\D", "", texto)
+    return digitos[:20] or None
+
+
+def _resolver_tipo_pedido(
+    fila_raw: Sequence[Any], mapa_columnas: Dict[str, int]
+) -> Optional[str]:
+    """`Tipo de Pedido` recortado y en mayusculas; None si esta vacio."""
+    texto = _texto(_extraer(fila_raw, mapa_columnas, COLUMNA_TIPO_PEDIDO))
+    return texto.upper()[:30] if texto else None
 
 
 def _es_nota_credito(fila_raw: Sequence[Any], mapa_columnas: Dict[str, int]) -> bool:
@@ -296,6 +328,12 @@ def procesar_fila(
     valor_unitario = _resolver_valor_unitario(fila_raw, mapa_columnas)
     if valor_unitario is not None:
         payload["valor_unitario"] = str(valor_unitario)
+    cliente_nit = _resolver_cliente_nit(fila_raw, mapa_columnas)
+    if cliente_nit is not None:
+        payload["cliente_nit"] = cliente_nit
+    tipo_pedido = _resolver_tipo_pedido(fila_raw, mapa_columnas)
+    if tipo_pedido is not None:
+        payload["tipo_pedido"] = tipo_pedido
     fila_staging = CargaFilaStaging(
         carga_id=carga_id,
         fila=numero_fila,
@@ -331,12 +369,16 @@ def agregar_lineas(filas_staging: Sequence[CargaFilaStaging]) -> Dict[ClaveFactu
         acumulado = totales.setdefault(
             clave,
             {"cantidad": Decimal("0"), "valor_total": Decimal("0"),
-             "valor_unitario": None, "fecha_factura": None},
+             "valor_unitario": None, "cliente_nit": None, "tipo_pedido": None,
+             "fecha_factura": None},
         )
         acumulado["cantidad"] += Decimal(payload["cantidad"])
         acumulado["valor_total"] += Decimal(payload["valor_total"])
         if payload.get("valor_unitario") is not None:
             acumulado["valor_unitario"] = Decimal(payload["valor_unitario"])
+        for campo in ("cliente_nit", "tipo_pedido"):
+            if payload.get(campo) is not None:
+                acumulado[campo] = payload[campo]
         acumulado["fecha_factura"] = date.fromisoformat(payload["fecha_factura"])
     return totales
 
@@ -362,6 +404,8 @@ def construir_statement_upsert(consolidado: Dict[ClaveFacturaLinea, dict], carga
             "cantidad": datos["cantidad"],
             "valor_total": datos["valor_total"],
             "valor_unitario": datos.get("valor_unitario"),
+            "cliente_nit": datos.get("cliente_nit"),
+            "tipo_pedido": datos.get("tipo_pedido"),
             "carga_id": carga_id,
         }
         for (sucursal_id, referencia_id, prefijo_rh, numero_rh), datos in consolidado.items()
@@ -376,6 +420,14 @@ def construir_statement_upsert(consolidado: Dict[ClaveFacturaLinea, dict], carga
             # Una carga sin la columna no borra el precio ya guardado.
             "valor_unitario": func.coalesce(
                 stmt.excluded.valor_unitario, FacturaProveedorLinea.valor_unitario
+            ),
+            # Un valor nuevo sobrescribe (re-subir un archivo viejo lo completa);
+            # uno nulo conserva el guardado.
+            "cliente_nit": func.coalesce(
+                stmt.excluded.cliente_nit, FacturaProveedorLinea.cliente_nit
+            ),
+            "tipo_pedido": func.coalesce(
+                stmt.excluded.tipo_pedido, FacturaProveedorLinea.tipo_pedido
             ),
             "carga_id": stmt.excluded.carga_id,
         },

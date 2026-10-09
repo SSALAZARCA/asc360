@@ -233,7 +233,9 @@ def mundo(monkeypatch):
     monkeypatch.setattr(
         pl, "_sucursal", AsyncMock(side_effect=lambda *a: estado["sucursal"]))
     monkeypatch.setattr(
-        pl, "_lineas", AsyncMock(side_effect=lambda *a: estado["lineas"]))
+        ip, "tipos_excluidos", AsyncMock(return_value=("GARANTIA25",)))
+    estado["_lineas"] = AsyncMock(side_effect=lambda *a: estado["lineas"])
+    monkeypatch.setattr(pl, "_lineas", estado["_lineas"])
     monkeypatch.setattr(
         pl, "_ajustes", AsyncMock(return_value=dict(AJUSTES)))
     return estado
@@ -250,6 +252,12 @@ async def test_prepares_the_data_of_a_downloadable_invoice(mundo):
         "F02", "BF021", 208629)
     assert datos.fecha == date(2026, 10, 9) and datos.ajustes == AJUSTES
     assert [l.referencia for l in datos.lineas] == ["A"]
+
+
+async def test_the_template_lines_leave_out_the_excluded_order_types(mundo):
+    await _preparar()
+
+    assert mundo["_lineas"].await_args.args[-1] == ("GARANTIA25",)
 
 
 async def test_unknown_or_already_entered_invoice_is_404(mundo):

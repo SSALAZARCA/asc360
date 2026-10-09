@@ -19,7 +19,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 from openpyxl import Workbook
 from openpyxl.styles import Font
@@ -186,6 +186,7 @@ async def _sucursal(db: AsyncSession, sucursal_id: uuid.UUID) -> Optional[Any]:
 
 async def _lineas(
     db: AsyncSession, factura: Tuple[str, int], tienda: uuid.UUID,
+    tipos_excluidos: Iterable[str] = ingresos.TIPOS_EXCLUIDOS_DEFECTO,
 ) -> List[LineaPlantilla]:
     """Net lines of the invoice for the principal store (associated stores
     rolled up), positive quantities only, ordered by referencia code."""
@@ -201,6 +202,7 @@ async def _lineas(
         .join(CargaArchivo, CargaArchivo.id == FacturaProveedorLinea.carga_id)
         .where(
             CargaArchivo.estado != "ANULADO",
+            ingresos.condicion_tipo_incluido(tipos_excluidos),
             FacturaProveedorLinea.prefijo_rh == factura[0],
             FacturaProveedorLinea.numero_rh == factura[1],
             FacturaProveedorLinea.sucursal_id.in_(grupo))
@@ -237,7 +239,8 @@ async def preparar(
     bodega = (getattr(sucursal, "bodega_principal", None) or "").strip()
     if not bodega:
         raise PlantillaError(409, MSG_SIN_BODEGA)
-    lineas = await _lineas(db, factura, tienda)
+    lineas = await _lineas(
+        db, factura, tienda, await ingresos.tipos_excluidos(db, hoy))
     if not lineas:
         raise PlantillaError(409, MSG_SIN_LINEAS)
     return DatosPlantilla(

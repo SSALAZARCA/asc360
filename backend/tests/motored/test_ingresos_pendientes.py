@@ -118,3 +118,34 @@ def test_por_tienda_groups_and_orders_by_pendientes_desc():
     assert [f["tienda"] for f in filas] == ["Cali", "Pasto"]
     assert filas[0]["pendientes"] == 2 and filas[0]["llegaron_sin_ingresar"] == 1
     assert filas[0]["mas_antigua"] == 9 and filas[0]["valor_pendiente"] == D(30)
+
+
+# ---------------------------------------------------------------------------
+# Excluded order types (Configuración `ingreso_tipos_pedido_excluidos`)
+# ---------------------------------------------------------------------------
+
+def test_excluded_types_are_normalized_upper_and_trimmed():
+    assert ip.normalizar_tipos_excluidos([" garantia25 ", "Otro"]) == (
+        "GARANTIA25", "OTRO")
+
+
+def test_invalid_excluded_types_fall_back_to_the_default():
+    assert ip.TIPOS_EXCLUIDOS_DEFECTO == ("GARANTIA25",)
+    for malo in (None, "GARANTIA25", [], [""], [1], ["ok", " "]):
+        assert ip.normalizar_tipos_excluidos(malo) == ip.TIPOS_EXCLUIDOS_DEFECTO
+
+
+def _sql(tipos):
+    from sqlalchemy.dialects import postgresql
+    return str(ip._consulta_lineas(tipos).compile(
+        dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
+
+
+def test_the_lines_query_drops_the_excluded_types_but_keeps_null():
+    sql = _sql(("GARANTIA25",))
+    assert "tipo_pedido IS NULL" in sql
+    assert "tipo_pedido NOT IN ('GARANTIA25')" in sql
+
+
+def test_the_lines_query_never_filters_by_client_nit():
+    assert "cliente_nit" not in _sql(("GARANTIA25",))

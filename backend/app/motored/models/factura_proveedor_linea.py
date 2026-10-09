@@ -65,6 +65,12 @@ class FacturaProveedorLinea(MotoredBase):
     # Precio unitario de la fuente ("Vlr. Unitario"); NULL en cargas viejas o
     # sin esa columna. Siempre positivo (las NC no lo invierten).
     valor_unitario = Column(Numeric(14, 2), nullable=True)
+    # Client NIT ("Número Identificación", digits only) and order type
+    # ("Tipo de Pedido", trimmed upper-case) of the source; NULL in loads
+    # without those columns. Only `tipo_pedido` is used (to leave the
+    # invoice out of the ingreso process); the NIT is stored for reference.
+    cliente_nit = Column(String(20), nullable=True)
+    tipo_pedido = Column(String(30), nullable=True)
 
     ingresada = Column(Boolean, nullable=False, default=False)
     transito_vencido = Column(Boolean, nullable=False, default=False)

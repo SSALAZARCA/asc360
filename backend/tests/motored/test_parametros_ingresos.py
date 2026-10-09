@@ -28,6 +28,7 @@ DEFAULTS = {
     "ingreso_plantilla_comprador": 1151943311,
     "ingreso_plantilla_descuento_item": 0,
     "ingreso_plantilla_unidad_negocio": "003",
+    "ingreso_tipos_pedido_excluidos": ["GARANTIA25"],
 }
 URL = "/api/motored/parametros"
 
