@@ -20,7 +20,9 @@ import { select, opcion, segmento } from './ingresosEstilos';
 const ESTADOS_FILTRO = [
   [null, 'Todas'], ['LLEGO', 'Ya llegó sin ingresar'], ['SIN_CONFIRMAR', 'Sin confirmar'], ['NO_HA_LLEGADO', 'Aún no llega'],
 ];
-const EDADES = [[null, 'Todas'], [7, '> 7 días'], [15, '> 15 días']];
+// `min_dias` is inclusive on the API, so "> 7 días" asks for at least 8.
+const EDADES = [[null, 'Todas'], [8, '> 7 días'], [16, '> 15 días']];
+const MSG_DETALLE = 'No se pudo cargar el detalle de facturas.';
 
 function Segmentos({ nombre, opciones, valor, onElegir }) {
   return (
@@ -61,9 +63,14 @@ export default function IngresosFacturasPanel({ puedeConfirmar = false }) {
     getIngresosDetalle({
       sucursal: filtros.sucursal || undefined, estado: filtros.estado || undefined, min_dias: filtros.min_dias ?? undefined,
     })
-      .then((r) => { if (n === pedido.current) { setItems(r.items || []); setCargando(false); } })
+      .then((r) => {
+        if (n !== pedido.current) return;
+        setItems(r.items || []);
+        setCargando(false);
+        setError((previo) => (previo === MSG_DETALLE ? null : previo));
+      })
       .catch(() => {
-        if (n === pedido.current) { setError('No se pudo cargar el detalle de facturas.'); setCargando(false); }
+        if (n === pedido.current) { setError(MSG_DETALLE); setCargando(false); }
       });
   }, [filtros]);
 

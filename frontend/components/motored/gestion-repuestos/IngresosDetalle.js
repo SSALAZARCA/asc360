@@ -9,16 +9,19 @@ import {
 
 const LABEL_ESTADO = { LLEGO: 'Ya llegó', NO_HA_LLEGADO: 'Aún no llega' };
 
+const ERROR = Symbol('historial-error');
+
 function Historial({ item }) {
   const [lista, setLista] = useState(null);
   useEffect(() => {
     let vigente = true;
     getIngresosHistorial(item.factura, item.sucursal_id)
       .then((r) => { if (vigente) setLista(r.historial || []); })
-      .catch(() => { if (vigente) setLista([]); });
+      .catch(() => { if (vigente) setLista(ERROR); });
     return () => { vigente = false; };
   }, [item.factura, item.sucursal_id, item.confirmado_en]);
   if (lista === null) return <p style={{ margin: 0, fontSize: '12.5px' }}>Cargando historial…</p>;
+  if (lista === ERROR) return <p role="alert" style={{ margin: 0, fontSize: '12.5px' }}>No se pudo cargar el historial.</p>;
   // The API sends the newest first; the design reads oldest to newest.
   const cronologico = [...lista].reverse();
   return (

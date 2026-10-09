@@ -24,6 +24,7 @@ from decimal import Decimal
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 from sqlalchemy import func, or_, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.motored.models.carga_archivo import CargaArchivo
@@ -254,22 +255,22 @@ async def confirmar(
 
     prefijo, numero = clave
     ahora = ahora or datetime.now().astimezone()
-    existente = (await db.execute(
-        select(FacturaConfirmacionIngreso).where(
-            FacturaConfirmacionIngreso.prefijo_rh == prefijo,
-            FacturaConfirmacionIngreso.numero_rh == numero,
-            FacturaConfirmacionIngreso.sucursal_id == tienda,
-        ).with_for_update())).scalar_one_or_none()
-    if existente is None:
-        existente = FacturaConfirmacionIngreso(
-            id=uuid.uuid4(), prefijo_rh=prefijo, numero_rh=numero,
-            sucursal_id=tienda)
-        db.add(existente)
-    existente.estado = estado
-    existente.actualizado_por_usuario_id = actor.usuario_id
-    existente.actualizado_por_nombre = actor.nombre
-    existente.actualizado_por_cedula = actor.cedula
-    existente.actualizado_en = ahora
+    # One atomic upsert: two confirmations racing on a brand-new invoice both
+    # reach the unique key, and the loser updates instead of failing.
+    valores = {
+        "estado": estado,
+        "actualizado_por_usuario_id": actor.usuario_id,
+        "actualizado_por_nombre": actor.nombre,
+        "actualizado_por_cedula": actor.cedula,
+        "actualizado_en": ahora,
+    }
+    await db.execute(
+        pg_insert(FacturaConfirmacionIngreso)
+        .values(id=uuid.uuid4(), prefijo_rh=prefijo, numero_rh=numero,
+                sucursal_id=tienda, **valores)
+        .on_conflict_do_update(
+            index_elements=["prefijo_rh", "numero_rh", "sucursal_id"],
+            set_=valores))
     db.add(FacturaConfirmacionIngresoHistorial(
         id=uuid.uuid4(), prefijo_rh=prefijo, numero_rh=numero,
         sucursal_id=tienda, estado=estado, por_usuario_id=actor.usuario_id,

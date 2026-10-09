@@ -3,9 +3,10 @@ Pending invoice ingresos against a real Postgres (opt-in, `MOTORED_TEST_PG_URL`,
 database migrated to head; odd/tasks/motored-ingresos-pendientes.md, P1).
 
 One outer transaction rolled back at the end (savepoint sessions), so the
-service's `commit()` leaves nothing behind. Dates are 2097 so the world is
-independent of whatever else is in the database ONLY in the sense that the
-rolled-back transaction starts from the migrated (empty) schema state.
+service's `commit()` leaves nothing behind. The database may hold real rows:
+the ingreso window starts in 1900 (earlier than any real ingreso, so it is
+ours), the invoices are dated 2097 with fresh numbers and stores, and every
+assertion looks only at those, never at the totals of the whole database.
 """
 import datetime
 import os
@@ -13,11 +14,12 @@ import uuid
 from decimal import Decimal
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.motored.models.carga_archivo import CargaArchivo
 from app.motored.models.factura_confirmacion_ingreso import (
+    FacturaConfirmacionIngreso,
     FacturaConfirmacionIngresoHistorial,
 )
 from app.motored.models.factura_proveedor_linea import FacturaProveedorLinea
@@ -40,7 +42,7 @@ pytestmark = [
 
 D = Decimal
 HOY = datetime.date(2097, 10, 8)
-DESDE = datetime.date(2097, 9, 1)
+DESDE = datetime.date(1900, 1, 1)
 
 
 @pytest.fixture
@@ -102,7 +104,7 @@ async def mundo(fabrica):
             ("pend", "ingresada", "antes", "anulada", "nc", "credit", "multi", "sur", "pasto"))}
         linea(n["pend"], d(2097, 10, 3), 2, 100, cali)
         linea(n["ingresada"], d(2097, 10, 3), 1, 10, cali)
-        linea(n["antes"], d(2097, 8, 15), 1, 10, cali)       # before the window
+        linea(n["antes"], d(1899, 8, 15), 1, 10, cali)       # before the window
         linea(n["anulada"], d(2097, 10, 3), 1, 10, cali, carga=anulada)
         linea(n["nc"], d(2097, 10, 1), 4, 400, cali)
         linea(n["nc"], d(2097, 10, 2), -1, -100, cali, r=ref2)
@@ -153,19 +155,23 @@ async def test_the_rule_on_real_data(mundo):
     async with mundo.fabrica() as db:
         assert await ip.verificable_desde(db) == DESDE
         items = await ip.pendientes(db, hoy=HOY)
-    por_doc = {i["numero_rh"]: i for i in items}
     n = mundo.n
+    nuestras = set(n.values())
+    por_doc = {i["numero_rh"]: i for i in items if i["numero_rh"] in nuestras}
     assert set(por_doc) == {n["pend"], n["nc"], n["multi"], n["sur"], n["pasto"]}
     assert por_doc[n["pend"]]["unidades"] == 2 and por_doc[n["pend"]]["dias"] == 5
     assert por_doc[n["nc"]]["unidades"] == 3 and por_doc[n["nc"]]["valor"] == 300
     assert por_doc[n["multi"]]["fecha"] == datetime.date(2097, 10, 2)
     assert por_doc[n["sur"]]["sucursal_id"] == mundo.cali.id
     fechas = [i["fecha"] for i in items]
-    assert fechas == sorted(fechas)
+    assert fechas == sorted(fechas)  # oldest first, whatever else is loaded
 
 
 async def test_nothing_verifiable_without_live_ingresos(fabrica):
     async with fabrica() as db:
+        # Real ingresos may exist: void them inside this rolled-back transaction.
+        await db.execute(update(CargaArchivo).where(
+            CargaArchivo.tipo == "INGRESOS_FACTURAS").values(estado="ANULADO"))
         carga = _carga("INGRESOS_FACTURAS", "ANULADO")
         db.add(carga)
         await db.flush()
@@ -230,5 +236,25 @@ async def test_public_confirm_and_payload(mundo):
         assert h[0]["canal"] == "link" and h[0]["por"].startswith("Ana")
         bloque = await ip.para_asesor(db, await ip.tiendas_de_asesor(db, None, mundo.cedula))
     assert bloque["verificable_desde"] == DESDE
-    assert n["pasto"] not in {i["numero_rh"] for i in bloque["items"]}
-    assert bloque["resumen"]["llegaron_sin_ingresar"] == 1
+    nuestras = {i["numero_rh"]: i for i in bloque["items"] if i["numero_rh"] in set(n.values())}
+    assert n["pasto"] not in nuestras and n["sur"] in nuestras
+    assert [i["numero_rh"] for i in nuestras.values() if i["estado"] == "LLEGO"] == [n["sur"]]
+
+
+async def test_confirm_over_an_existing_state_row_does_not_fail(mundo):
+    """The state row appears between the pending check and the write (a racing
+    asesor): the upsert updates it, leaves ONE row and logs both answers."""
+    n = mundo.n
+    actor = ip.Actor(nombre="Coord", usuario_id=mundo.coord.id)
+    async with mundo.fabrica() as db:
+        db.add(FacturaConfirmacionIngreso(
+            id=uuid.uuid4(), prefijo_rh="RH", numero_rh=n["pend"],
+            sucursal_id=mundo.cali.id, estado="NO_HA_LLEGADO",
+            actualizado_por_nombre="Otra", actualizado_en=datetime.datetime.now(datetime.timezone.utc)))
+        await db.flush()
+        item = await ip.confirmar(db, f"RH {n['pend']}", mundo.cali.id, "LLEGO", actor, "link")
+        assert item["estado"] == "LLEGO"
+    async with mundo.fabrica() as db:
+        filas = (await db.execute(select(FacturaConfirmacionIngreso).where(
+            FacturaConfirmacionIngreso.numero_rh == n["pend"]))).scalars().all()
+        assert [(f.estado, f.actualizado_por_nombre) for f in filas] == [("LLEGO", "Coord")]

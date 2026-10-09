@@ -291,3 +291,41 @@ def test_public_confirm_validation_error_is_422(monkeypatch):
     r, _ = _post_publico([[(_link(usuario), usuario)]], _cuerpo(estado="HOLA"))
     assert r.status_code == 422
     _cabeceras(r)
+
+
+@pytest.mark.parametrize("rol", ["ADMIN", "COMPRAS", "GERENCIA", "COORDINADOR_REPUESTOS"])
+def test_asesor_block_for_one_store(servicio, rol):
+    _como(rol)
+    r = _get("/asesor", sucursal=str(TIENDA))
+    assert r.status_code == 200
+    cuerpo = r.json()
+    assert cuerpo["verificable_desde"] == "2026-09-01"
+    assert [i["numero_rh"] for i in cuerpo["items"]] == [1, 2]
+    assert all(i["sucursal_id"] == str(TIENDA) for i in cuerpo["items"])
+    assert cuerpo["resumen"]["pendientes"] == 2
+    assert cuerpo["resumen"]["llegaron_sin_ingresar"] == 1
+
+
+@pytest.mark.parametrize("rol", ["SUCURSAL", "CONSULTA", "SERVICIO_CLIENTE"])
+def test_asesor_block_is_forbidden_to_other_roles(servicio, rol):
+    _como(rol)
+    assert _get("/asesor", sucursal=str(TIENDA)).status_code == 403
+
+
+def test_asesor_block_requires_a_valid_store(servicio):
+    _como("ADMIN")
+    assert _get("/asesor").status_code == 422
+    assert _get("/asesor", sucursal="no-es-uuid").status_code == 422
+
+
+def test_asesor_block_of_a_store_without_pending_is_empty(servicio):
+    _como("ADMIN")
+    cuerpo = _get("/asesor", sucursal=str(uuid.uuid4())).json()
+    assert cuerpo["items"] == [] and cuerpo["resumen"]["pendientes"] == 0
+
+
+def test_asesor_block_with_nothing_verifiable(servicio, monkeypatch):
+    monkeypatch.setattr(ip, "verificable_desde", AsyncMock(return_value=None))
+    _como("ADMIN")
+    cuerpo = _get("/asesor", sucursal=str(TIENDA)).json()
+    assert cuerpo["verificable_desde"] is None and cuerpo["items"] == []

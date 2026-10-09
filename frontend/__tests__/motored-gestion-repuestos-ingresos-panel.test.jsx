@@ -105,7 +105,10 @@ test('the state and age filters query the detalle', async () => {
     expect.objectContaining({ estado: 'LLEGO' })));
   await userEvent.click(screen.getByRole('button', { name: '> 15 días' }));
   await waitFor(() => expect(mockDetalle).toHaveBeenLastCalledWith(
-    expect.objectContaining({ estado: 'LLEGO', min_dias: 15 })));
+    expect.objectContaining({ estado: 'LLEGO', min_dias: 16 })));
+  await userEvent.click(screen.getByRole('button', { name: '> 7 días' }));
+  await waitFor(() => expect(mockDetalle).toHaveBeenLastCalledWith(
+    expect.objectContaining({ min_dias: 8 })));
 });
 
 test('the detalle shows the state chip, last change and the count', async () => {
@@ -188,4 +191,22 @@ test('a 409 on confirm tells the invoice is no longer pending', async () => {
   const fila = screen.getByText('RH 482915').closest('tr');
   await userEvent.click(within(fila).getByRole('button', { name: 'No ha llegado' }));
   expect(await screen.findByRole('alert')).toHaveTextContent('ya no está pendiente');
+});
+
+test('a detalle error goes away once a later filter change loads fine', async () => {
+  await abrir();
+  mockDetalle.mockRejectedValueOnce(new Error('x'));
+  await userEvent.click(screen.getByRole('button', { name: 'Sin confirmar' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('No se pudo cargar el detalle de facturas.');
+  await userEvent.click(screen.getByRole('button', { name: 'Aún no llega' }));
+  await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
+});
+
+test('a failed historial says so instead of claiming nobody answered', async () => {
+  mockHistorial.mockRejectedValue(new Error('x'));
+  await abrir();
+  const fila = screen.getByText('RH 482915').closest('tr');
+  await userEvent.click(within(fila).getByRole('button', { name: 'Historial' }));
+  expect(await screen.findByText('No se pudo cargar el historial.')).toBeInTheDocument();
+  expect(screen.queryByText('Nadie ha respondido todavía.')).not.toBeInTheDocument();
 });
