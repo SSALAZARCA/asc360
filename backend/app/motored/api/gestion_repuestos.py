@@ -16,8 +16,8 @@ Panel reads (ADMIN, COMPRAS, GERENCIA, COORDINADOR_REPUESTOS):
 verified: every list is empty).
 
 `POST /confirmar` `{factura, sucursal_id, estado}`: "LLEGO" | "NO_HA_LLEGADO".
-ONLY COORDINADOR_REPUESTOS (the other panel roles read; asesores confirm
-through the public link). 409 when the invoice is no longer pending.
+ADMIN and COORDINADOR_REPUESTOS (COMPRAS and GERENCIA only read; asesores
+confirm through the public link). 409 when the invoice is no longer pending.
 """
 import uuid
 from typing import Any, Dict, List, Optional
@@ -42,7 +42,7 @@ from app.motored.services import sucursal_grupo
 # role compares as a plain string, so listing it here is harmless meanwhile.
 # Path confinement for GERENCIA / COORDINADOR_REPUESTOS lives in `deps.py`.
 ROLES_PANEL = ("ADMIN", "COMPRAS", "GERENCIA", "COORDINADOR_REPUESTOS")
-ROL_CONFIRMA = "COORDINADOR_REPUESTOS"
+ROLES_CONFIRMA = ("ADMIN", "COORDINADOR_REPUESTOS")
 MSG_ESTADO_FILTRO = "El estado del filtro no es válido."
 
 router = APIRouter(
@@ -120,7 +120,7 @@ async def leer_de_asesor(
     return await ingresos.para_asesor(db, [sucursal])
 
 
-@router.post("/confirmar", dependencies=[Depends(require_roles(ROL_CONFIRMA))])
+@router.post("/confirmar", dependencies=[Depends(require_roles(*ROLES_CONFIRMA))])
 async def confirmar(
     cuerpo: ConfirmarIn,
     user: MotoredUser = Depends(get_current_motored_user),

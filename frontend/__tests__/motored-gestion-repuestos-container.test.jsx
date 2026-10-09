@@ -1,4 +1,4 @@
-/** The Ingresos facturas page: confirm buttons only for COORDINADOR_REPUESTOS, read-only for the other roles. */
+/** The Ingresos facturas page: confirm buttons only for ADMIN and COORDINADOR_REPUESTOS, read-only for the other roles. */
 import React from 'react';
 import { render, screen } from '@testing-library/react';
 
@@ -38,13 +38,13 @@ const entrar = async (role) => {
   await screen.findByText('RH 482915');
 };
 
-test('the coordinador gets the confirm buttons', async () => {
-  await entrar('COORDINADOR_REPUESTOS');
+test.each(['ADMIN', 'COORDINADOR_REPUESTOS'])('%s gets the confirm buttons', async (role) => {
+  await entrar(role);
   expect(screen.getByRole('button', { name: 'Llegó' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'No ha llegado' })).toBeInTheDocument();
 });
 
-test.each(['ADMIN', 'COMPRAS', 'GERENCIA'])('%s reads without buttons', async (role) => {
+test.each(['COMPRAS', 'GERENCIA'])('%s reads without buttons', async (role) => {
   await entrar(role);
   expect(screen.queryByRole('button', { name: 'Llegó' })).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'No ha llegado' })).not.toBeInTheDocument();

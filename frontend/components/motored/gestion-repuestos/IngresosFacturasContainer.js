@@ -1,14 +1,15 @@
 'use client';
 /**
  * "Gestión repuestos > Ingresos facturas": the pending invoices panel. Only
- * COORDINADOR_REPUESTOS gets the confirm buttons; the rest read.
+ * ADMIN and COORDINADOR_REPUESTOS get the confirm buttons; the rest read.
  * Gate: ADMIN, COMPRAS, GERENCIA and COORDINADOR_REPUESTOS only; any other
  * role is sent to its home (UX only; the backend answers 403).
  */
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { MOTORED_USER_KEY } from '../../../lib/motored/motoredFetch';
-import { COORDINADOR_REPUESTOS, GESTION_REPUESTOS_ROLES, homePathFor } from '../../../lib/motored/session';
+import { puedeConfirmarRol } from '../kpis/asesores/pendientes';
+import { GESTION_REPUESTOS_ROLES, homePathFor } from '../../../lib/motored/session';
 import IngresosFacturasPanel from './IngresosFacturasPanel';
 
 function readRole() {
@@ -38,5 +39,5 @@ export function useGestionRepuestosGate() {
 export default function IngresosFacturasContainer() {
   const allowed = useGestionRepuestosGate();
   if (!allowed) return null;
-  return <IngresosFacturasPanel puedeConfirmar={readRole() === COORDINADOR_REPUESTOS} />;
+  return <IngresosFacturasPanel puedeConfirmar={puedeConfirmarRol(readRole())} />;
 }

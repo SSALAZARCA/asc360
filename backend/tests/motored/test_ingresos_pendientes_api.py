@@ -151,12 +151,13 @@ def _post_confirmar(rol, usuario, cuerpo=None, filas=()):
         return client.post(f"{BASE}/confirmar", json=cuerpo), sesion
 
 
-def test_coordinador_confirms_and_the_actor_is_the_usuario(servicio, monkeypatch):
+@pytest.mark.parametrize("rol", ["ADMIN", "COORDINADOR_REPUESTOS"])
+def test_admin_and_coordinador_confirm_and_the_actor_is_the_usuario(servicio, monkeypatch, rol):
     confirmar = AsyncMock(return_value=_item(2, "LLEGO"))
     monkeypatch.setattr(ip, "confirmar", confirmar)
-    usuario = _usuario(role="COORDINADOR_REPUESTOS")
+    usuario = _usuario(role=rol)
 
-    r, _ = _post_confirmar("COORDINADOR_REPUESTOS", usuario)
+    r, _ = _post_confirmar(rol, usuario)
 
     assert r.status_code == 200 and r.json()["estado"] == "LLEGO"
     args = confirmar.await_args.args
@@ -165,8 +166,8 @@ def test_coordinador_confirms_and_the_actor_is_the_usuario(servicio, monkeypatch
     assert args[5] == "web"
 
 
-@pytest.mark.parametrize("rol", ["ADMIN", "COMPRAS", "GERENCIA", "SERVICIO_CLIENTE"])
-def test_only_the_coordinador_may_confirm(servicio, monkeypatch, rol):
+@pytest.mark.parametrize("rol", ["COMPRAS", "GERENCIA", "SERVICIO_CLIENTE"])
+def test_only_admin_and_coordinador_may_confirm(servicio, monkeypatch, rol):
     confirmar = AsyncMock()
     monkeypatch.setattr(ip, "confirmar", confirmar)
     r, _ = _post_confirmar(rol, _usuario(role=rol))

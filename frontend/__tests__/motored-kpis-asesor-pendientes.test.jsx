@@ -140,7 +140,7 @@ describe('pending invoices card in the staff asesor view', () => {
     expect(llamadas()[0].url).toMatch(/\/gestion-repuestos\/ingresos-facturas\/asesor\?sucursal=s-pop$/);
   });
 
-  it.each(['ADMIN', 'COMPRAS', 'GERENCIA'])('is read-only for %s (no buttons)', async (role) => {
+  it.each(['COMPRAS', 'GERENCIA'])('is read-only for %s (no buttons)', async (role) => {
     entrar(role);
     global.fetch.mockResolvedValue(respuesta(200, bloque([item(482915, { estado: 'LLEGO', confirmado_por: 'Ana', confirmado_en: '2026-10-01T12:00:00Z' })])));
     staff();
@@ -150,9 +150,9 @@ describe('pending invoices card in the staff asesor view', () => {
     expect(within(card).getByText(/Ana/)).toBeInTheDocument();
   });
 
-  it('COORDINADOR_REPUESTOS gets the buttons and confirms through the staff endpoint', async () => {
+  it.each(['ADMIN', 'COORDINADOR_REPUESTOS'])('%s gets the buttons and confirms through the staff endpoint', async (role) => {
     const user = userEvent.setup();
-    entrar('COORDINADOR_REPUESTOS');
+    entrar(role);
     global.fetch
       .mockResolvedValueOnce(respuesta(200, bloque([item(482915)])))
       .mockResolvedValueOnce(respuesta(200, item(482915, { estado: 'NO_HA_LLEGADO', confirmado_por: 'Coord', confirmado_en: '2026-10-08T14:00:00Z' })));
