@@ -18,11 +18,11 @@ function Kpi({ nombre, valor, pista, nivel, ayuda }) {
   );
 }
 
-export default function IngresosKpis({ resumen }) {
+export default function IngresosKpis({ resumen, filtrado = false }) {
   const r = resumen || {};
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '14px' }}>
-      <Kpi nombre="Pendientes" valor={r.pendientes ?? 0} pista="Facturas sin ingresar en la red" />
+      <Kpi nombre="Pendientes" valor={r.pendientes ?? 0} pista={filtrado ? 'Con los filtros aplicados' : 'Facturas sin ingresar en la red'} />
       <Kpi
         nombre="Llegaron sin ingresar" valor={r.llegaron_sin_ingresar ?? 0}
         pista="La tienda confirmó que llegaron · prioridad"

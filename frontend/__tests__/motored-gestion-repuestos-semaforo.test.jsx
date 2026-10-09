@@ -5,13 +5,9 @@
 import React from 'react';
 import { render, screen, within } from '@testing-library/react';
 
-const mockResumen = jest.fn();
-const mockPorTienda = jest.fn();
 const mockDetalle = jest.fn();
 
 jest.mock('../lib/motored/gestionRepuestosApi', () => ({
-  getIngresosResumen: (...a) => mockResumen(...a),
-  getIngresosPorTienda: (...a) => mockPorTienda(...a),
   getIngresosDetalle: (...a) => mockDetalle(...a),
   getIngresosHistorial: jest.fn().mockResolvedValue({ historial: [] }),
   confirmarIngreso: jest.fn(),
@@ -48,17 +44,11 @@ describe('semaforo rule', () => {
   });
 });
 
-const T = (id, tienda, llegaron, antigua) => ({
-  sucursal_id: id, tienda, pendientes: 5, llegaron_sin_ingresar: llegaron, sin_confirmar: 2, aun_no_llegan: 4,
-  mas_antigua: antigua, valor_pendiente: 1000,
-});
-const it = (n, estado, dias) => ({
-  prefijo_rh: 'RH', numero_rh: n, factura: `RH ${n}`, sucursal_id: 'a', tienda: 'Tienda', fecha: '2026-09-07',
+const it = (n, estado, dias, id = 'a', tienda = 'Tienda') => ({
+  prefijo_rh: 'RH', numero_rh: n, factura: `RH ${n}`, sucursal_id: id, tienda, fecha: '2026-09-07',
   dias, unidades: 1, valor: 1000, estado, confirmado_por: null, confirmado_en: null,
 });
-const montar = async (resumen, tiendas, items) => {
-  mockResumen.mockResolvedValue({ verificable_desde: '2026-09-07', resumen: { pendientes: 9, valor_pendiente: 0, sin_confirmar: 2, aun_no_llegan: 4, ...resumen } });
-  mockPorTienda.mockResolvedValue({ verificable_desde: '2026-09-07', tiendas });
+const montar = async (items) => {
   mockDetalle.mockResolvedValue({ verificable_desde: '2026-09-07', items });
   render(<IngresosFacturasPanel />);
   await screen.findByText(items[0].factura);
@@ -67,31 +57,31 @@ const kpi = (nombre) => screen.getByText(nombre, { selector: 'p' }).closest('div
 
 describe('panel colors', () => {
   test('"Llegaron sin ingresar" card is critical when above zero, good at zero; "Más antigua" follows the age', async () => {
-    await montar({ llegaron_sin_ingresar: 3, mas_antigua: 10 }, [T('a', 'Cali', 1, 10)], [it(1, 'LLEGO', 10)]);
+    await montar([it(1, 'LLEGO', 10)]);
     expect(kpi('Llegaron sin ingresar')).toHaveAttribute('data-nivel', CRITICO);
     expect(kpi('Más antigua')).toHaveAttribute('data-nivel', ATENCION);
     expect(kpi('Pendientes')).not.toHaveAttribute('data-nivel');
   });
 
   test('"Llegaron sin ingresar" is good at zero and an old invoice is critical', async () => {
-    await montar({ llegaron_sin_ingresar: 0, mas_antigua: 20 }, [T('a', 'Cali', 0, 20)], [it(1, 'SIN_CONFIRMAR', 20)]);
+    await montar([it(1, 'SIN_CONFIRMAR', 20)]);
     expect(kpi('Llegaron sin ingresar')).toHaveAttribute('data-nivel', NORMAL);
     expect(kpi('Más antigua')).toHaveAttribute('data-nivel', CRITICO);
   });
 
   test('each store gets a dot with its worst state and a pill on its oldest invoice', async () => {
-    await montar({ llegaron_sin_ingresar: 1, mas_antigua: 20 },
-      [T('a', 'Cali', 1, 3), T('b', 'Pasto', 0, 9), T('c', 'Tuluá', 0, 2)], [it(1, 'LLEGO', 3)]);
+    await montar([
+      it(1, 'LLEGO', 3, 'a', 'Cali'), it(2, 'SIN_CONFIRMAR', 9, 'b', 'Pasto'), it(3, 'SIN_CONFIRMAR', 2, 'c', 'Tuluá')]);
     const fila = (n) => within(screen.getByRole('table', { name: 'Por tienda' })).getByText(n).closest('tr');
     expect(fila('Cali').querySelector('[aria-hidden="true"][data-nivel]')).toHaveAttribute('data-nivel', CRITICO);
     expect(fila('Pasto').querySelector('[aria-hidden="true"][data-nivel]')).toHaveAttribute('data-nivel', ATENCION);
     expect(fila('Tuluá').querySelector('[aria-hidden="true"][data-nivel]')).toHaveAttribute('data-nivel', NORMAL);
     expect(within(fila('Pasto')).getByText('9')).toHaveAttribute('data-nivel', ATENCION);
-    expect(within(fila('Cali')).getByText('1', { selector: 'td' })).toHaveStyle({ fontWeight: 700 });
+    expect(within(fila('Cali')).getAllByRole('cell')[2]).toHaveStyle({ fontWeight: 700 });
   });
 
   test('detalle paints the days and the state chip', async () => {
-    await montar({ llegaron_sin_ingresar: 1, mas_antigua: 20 }, [T('a', 'Cali', 1, 3)],
+    await montar(
       [it(1, 'LLEGO', 2), it(2, 'NO_HA_LLEGADO', 12), it(3, 'SIN_CONFIRMAR', 20)]);
     const fila = (f) => screen.getByText(f).closest('tr');
     expect(within(fila('RH 1')).getByText('2', { selector: 'span' })).toHaveAttribute('data-nivel', NORMAL);
@@ -102,7 +92,7 @@ describe('panel colors', () => {
   });
 
   test('legend explains the three colors and the thresholds', async () => {
-    await montar({ llegaron_sin_ingresar: 0, mas_antigua: 1 }, [T('a', 'Cali', 0, 1)], [it(1, 'SIN_CONFIRMAR', 1)]);
+    await montar([it(1, 'SIN_CONFIRMAR', 1)]);
     const leyenda = screen.getByLabelText('Leyenda de colores');
     expect(leyenda).toHaveTextContent('≤7 días normal');
     expect(leyenda).toHaveTextContent('8–15 días atención');

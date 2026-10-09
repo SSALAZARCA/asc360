@@ -11,12 +11,12 @@ export function ordenarTiendas(tiendas) {
     || String(a.tienda).localeCompare(String(b.tienda), 'es')));
 }
 
-export default function IngresosPorTienda({ tiendas, onElegir }) {
+export default function IngresosPorTienda({ tiendas, onElegir, seleccionada = '' }) {
   return (
     <section style={{ ...tarjeta, display: 'flex', flexDirection: 'column', gap: '12px' }}>
       <div>
         <h2 style={tituloSeccion}>Por tienda</h2>
-        <p style={subtitulo}>Ordenado por facturas que llegaron sin ingresar · toca una tienda para ver su detalle</p>
+        <p style={subtitulo}>Ordenado por facturas que llegaron sin ingresar · toca una tienda para filtrar todo por ella</p>
       </div>
       <div style={{ overflowX: 'auto' }}>
         <table aria-label="Por tienda" style={{ ...tabla, minWidth: '760px' }}>
@@ -34,9 +34,11 @@ export default function IngresosPorTienda({ tiendas, onElegir }) {
           <tbody>
             {ordenarTiendas(tiendas).map((t) => (
               <tr
-                key={t.sucursal_id} onClick={() => onElegir(t.sucursal_id)} style={{ cursor: 'pointer' }}
-                tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter') onElegir(t.sucursal_id); }}
-                title={`Ver el detalle de ${t.tienda}`}
+                key={t.sucursal_id} onClick={() => onElegir(t.sucursal_id)}
+                style={{ cursor: 'pointer', ...(t.sucursal_id === seleccionada ? { background: 'var(--motored-surface-alt, #eef3f9)', outline: '2px solid #1d4e89', outlineOffset: '-2px' } : {}) }}
+                tabIndex={0} aria-selected={t.sucursal_id === seleccionada}
+                onKeyDown={(e) => { if (e.key === 'Enter') onElegir(t.sucursal_id); }}
+                title={t.sucursal_id === seleccionada ? `Quitar el filtro de ${t.tienda}` : `Filtrar por ${t.tienda}`}
               >
                 <td style={{ ...td(true), fontWeight: 700 }}><PuntoNivel nivel={nivelTienda(t)} />{t.tienda}</td>
                 <td style={td()}>{t.pendientes}</td>

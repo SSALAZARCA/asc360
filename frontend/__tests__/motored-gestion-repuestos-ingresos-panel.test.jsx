@@ -8,15 +8,11 @@ import React from 'react';
 import { render, screen, within, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-const mockResumen = jest.fn();
-const mockPorTienda = jest.fn();
 const mockDetalle = jest.fn();
 const mockHistorial = jest.fn();
 const mockConfirmar = jest.fn();
 
 jest.mock('../lib/motored/gestionRepuestosApi', () => ({
-  getIngresosResumen: (...a) => mockResumen(...a),
-  getIngresosPorTienda: (...a) => mockPorTienda(...a),
   getIngresosDetalle: (...a) => mockDetalle(...a),
   getIngresosHistorial: (...a) => mockHistorial(...a),
   confirmarIngreso: (...a) => mockConfirmar(...a),
@@ -27,22 +23,6 @@ import IngresosFacturasPanel from '../components/motored/gestion-repuestos/Ingre
 const CALI = 'id-cali';
 const PASTO = 'id-pasto';
 
-const RESUMEN = {
-  verificable_desde: '2026-09-07',
-  resumen: {
-    pendientes: 147, llegaron_sin_ingresar: 23, sin_confirmar: 98,
-    aun_no_llegan: 26, mas_antigua: 31, valor_pendiente: 1000000,
-  },
-};
-const TIENDAS = {
-  verificable_desde: '2026-09-07',
-  tiendas: [
-    { sucursal_id: PASTO, tienda: 'Pasto', pendientes: 12, llegaron_sin_ingresar: 1,
-      sin_confirmar: 8, aun_no_llegan: 3, mas_antigua: 31, valor_pendiente: 500000 },
-    { sucursal_id: CALI, tienda: 'Cali Norte', pendientes: 9, llegaron_sin_ingresar: 6,
-      sin_confirmar: 2, aun_no_llegan: 1, mas_antigua: 12, valor_pendiente: 300000 },
-  ],
-};
 const item = (numero, tienda, id, estado, dias, extra = {}) => ({
   prefijo_rh: 'RH', numero_rh: numero, factura: `RH ${numero}`, sucursal_id: id,
   tienda, fecha: '2026-09-07', dias, unidades: 14, valor: 1912400, estado,
@@ -54,13 +34,12 @@ const DETALLE = {
     item(471208, 'Pasto', PASTO, 'LLEGO', 31, {
       confirmado_por: 'Carlos Ruiz', confirmado_en: '2026-10-06T16:20:00+00:00' }),
     item(482915, 'Cali Norte', CALI, 'SIN_CONFIRMAR', 1),
+    item(490001, 'Cali Norte', CALI, 'NO_HA_LLEGADO', 10, { unidades: 6, valor: 1000000 }),
   ],
 };
 
 beforeEach(() => {
   jest.clearAllMocks();
-  mockResumen.mockResolvedValue(RESUMEN);
-  mockPorTienda.mockResolvedValue(TIENDAS);
   mockDetalle.mockResolvedValue(DETALLE);
   mockHistorial.mockResolvedValue({ historial: [] });
 });
@@ -70,56 +49,114 @@ const abrir = async (props = {}) => {
   await screen.findByText('RH 471208');
 };
 
-test('shows the header date and the five KPIs, "Llegaron sin ingresar" included', async () => {
+const kpi = (nombre) => screen.getByText(nombre, { selector: 'p' }).closest('div');
+const filasTienda = () => within(screen.getByRole('table', { name: /por tienda/i })).getAllByRole('row').slice(1);
+const valorKpi = (nombre, valor) => expect(within(kpi(nombre)).getByText(valor)).toBeInTheDocument();
+
+test('shows the header date and the five KPIs derived from the detalle', async () => {
   await abrir();
   expect(screen.getByText(/Verificable desde el 07\/09\/2026/)).toBeInTheDocument();
-  const kpi = (nombre) => screen.getByText(nombre, { selector: 'p' }).closest('div');
-  expect(within(kpi('Pendientes')).getByText('147')).toBeInTheDocument();
-  expect(within(kpi('Llegaron sin ingresar')).getByText('23')).toBeInTheDocument();
-  expect(within(kpi('Sin confirmar')).getByText('98')).toBeInTheDocument();
-  expect(within(kpi('Aún no llegan')).getByText('26')).toBeInTheDocument();
-  expect(within(kpi('Más antigua')).getByText('31 días')).toBeInTheDocument();
+  valorKpi('Pendientes', '3');
+  valorKpi('Llegaron sin ingresar', '1');
+  valorKpi('Sin confirmar', '1');
+  valorKpi('Aún no llegan', '1');
+  valorKpi('Más antigua', '31 días');
+});
+
+test('fetches the detalle once, without filters', async () => {
+  await abrir();
+  expect(mockDetalle).toHaveBeenCalledTimes(1);
+  expect(mockDetalle).toHaveBeenCalledWith();
 });
 
 test('orders the stores by invoices that arrived without ingreso', async () => {
   await abrir();
-  const tabla = screen.getByRole('table', { name: /por tienda/i });
-  const filas = within(tabla).getAllByRole('row').slice(1);
-  expect(within(filas[0]).getByText('Cali Norte')).toBeInTheDocument();
-  expect(within(filas[1]).getByText('Pasto')).toBeInTheDocument();
+  const filas = filasTienda();
+  expect(within(filas[0]).getByText('Pasto')).toBeInTheDocument();
+  expect(within(filas[1]).getByText('Cali Norte')).toBeInTheDocument();
 });
 
-test('picking a store row filters the detalle by that store', async () => {
+test('the Estado filter updates the KPIs and the Por tienda rows without refetching', async () => {
+  await abrir();
+  await userEvent.click(screen.getByRole('button', { name: 'Sin confirmar' }));
+  valorKpi('Pendientes', '1');
+  valorKpi('Llegaron sin ingresar', '0');
+  valorKpi('Más antigua', '1 días');
+  expect(filasTienda()).toHaveLength(1);
+  expect(within(filasTienda()[0]).getByText('Cali Norte')).toBeInTheDocument();
+  expect(screen.getByText('Con los filtros aplicados')).toBeInTheDocument();
+  expect(screen.queryByText('RH 471208')).not.toBeInTheDocument();
+  expect(mockDetalle).toHaveBeenCalledTimes(1);
+});
+
+test('the Antigüedad filter updates the KPIs and the Por tienda rows', async () => {
+  await abrir();
+  await userEvent.click(screen.getByRole('button', { name: 'Más de 15 días' }));
+  valorKpi('Pendientes', '1');
+  valorKpi('Más antigua', '31 días');
+  expect(filasTienda()).toHaveLength(1);
+  expect(within(filasTienda()[0]).getByText('Pasto')).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: '8 a 15 días' }));
+  valorKpi('Pendientes', '1');
+  valorKpi('Más antigua', '10 días');
+  expect(within(filasTienda()[0]).getByText('Cali Norte')).toBeInTheDocument();
+});
+
+test('the Tienda select updates the KPIs and keeps only that store in Por tienda', async () => {
+  await abrir();
+  await userEvent.selectOptions(screen.getByLabelText('Tienda'), CALI);
+  valorKpi('Pendientes', '2');
+  valorKpi('Llegaron sin ingresar', '0');
+  expect(filasTienda()).toHaveLength(1);
+  expect(screen.getByLabelText('Tienda')).toHaveValue(CALI);
+  expect(screen.getByLabelText('Tienda').querySelectorAll('option')).toHaveLength(3);
+});
+
+test('the Por tienda row shows the sums of its invoices', async () => {
+  await abrir();
+  const cali = filasTienda().find((f) => within(f).queryByText('Cali Norte'));
+  const celdas = within(cali).getAllByRole('cell').map((c) => c.textContent);
+  expect(celdas.slice(1, 6)).toEqual(['2', '0', '1', '1', '10']);
+});
+
+test('clicking a store row selects it, clicking again clears it', async () => {
   await abrir();
   const tabla = screen.getByRole('table', { name: /por tienda/i });
   await userEvent.click(within(tabla).getByText('Pasto'));
-  await waitFor(() => expect(mockDetalle).toHaveBeenLastCalledWith(
-    expect.objectContaining({ sucursal: PASTO })));
   expect(screen.getByLabelText('Tienda')).toHaveValue(PASTO);
+  valorKpi('Pendientes', '1');
+  expect(screen.queryByText('RH 482915')).not.toBeInTheDocument();
+  expect(within(filasTienda()[0]).getByText('Pasto').closest('tr')).toHaveAttribute('aria-selected', 'true');
+  await userEvent.click(within(tabla).getByText('Pasto'));
+  expect(screen.getByLabelText('Tienda')).toHaveValue('');
+  valorKpi('Pendientes', '3');
 });
 
-test('the state and age filters query the detalle', async () => {
+test('shows the active filters and Limpiar resets them all', async () => {
   await abrir();
-  await userEvent.click(screen.getByRole('button', { name: 'Ya llegó sin ingresar' }));
-  await waitFor(() => expect(mockDetalle).toHaveBeenLastCalledWith(
-    expect.objectContaining({ estado: 'LLEGO' })));
-  await userEvent.click(screen.getByRole('button', { name: 'Más de 15 días' }));
-  await waitFor(() => expect(mockDetalle).toHaveBeenLastCalledWith(
-    expect.objectContaining({ estado: 'LLEGO', min_dias: 16, max_dias: undefined })));
+  expect(screen.queryByText(/Filtros activos/)).not.toBeInTheDocument();
+  await userEvent.selectOptions(screen.getByLabelText('Tienda'), CALI);
+  await userEvent.click(screen.getByRole('button', { name: 'Sin confirmar' }));
+  const linea = screen.getByText(/Filtros activos/);
+  expect(linea).toHaveTextContent('Cali Norte');
+  expect(linea).toHaveTextContent('Sin confirmar');
+  await userEvent.click(screen.getByRole('button', { name: 'Limpiar' }));
+  expect(screen.queryByText(/Filtros activos/)).not.toBeInTheDocument();
+  expect(screen.getByLabelText('Tienda')).toHaveValue('');
+  valorKpi('Pendientes', '3');
+  expect(screen.getByText('Facturas sin ingresar en la red')).toBeInTheDocument();
 });
 
 test.each([
-  ['Hasta 7 días', 0, 7],
-  ['8 a 15 días', 8, 15],
-  ['Más de 15 días', 16, undefined],
-  ['Todas', undefined, undefined],
-])('the "%s" age pill asks for %s-%s days', async (nombre, min, max) => {
+  ['Hasta 7 días', 1],
+  ['8 a 15 días', 1],
+  ['Más de 15 días', 1],
+  ['Todas', 3],
+])('the "%s" age pill keeps %s invoices', async (nombre, n) => {
   await abrir();
   const grupo = screen.getByRole('group', { name: 'Antigüedad' });
-  await userEvent.click(within(grupo).getByRole('button', { name: 'Más de 15 días' }));
   await userEvent.click(within(grupo).getByRole('button', { name: nombre }));
-  await waitFor(() => expect(mockDetalle).toHaveBeenLastCalledWith(
-    expect.objectContaining({ min_dias: min, max_dias: max })));
+  valorKpi('Pendientes', String(n));
   expect(within(grupo).getByRole('button', { name: nombre })).toHaveAttribute('aria-pressed', 'true');
 });
 
@@ -141,7 +178,7 @@ test('the detalle shows the state chip, last change and the count', async () => 
   expect(within(fila).getByText('07/09/2026')).toBeInTheDocument();
   const otra = screen.getByText('RH 482915').closest('tr');
   expect(within(otra).getByText('Sin confirmar')).toBeInTheDocument();
-  expect(screen.getByText(/Mostrando 2 de 147/)).toBeInTheDocument();
+  expect(screen.getByText(/Mostrando 3 de 3/)).toBeInTheDocument();
 });
 
 test('the historial opens on demand and lists who changed it', async () => {
@@ -167,8 +204,6 @@ test('an invoice nobody answered shows the empty history text', async () => {
 });
 
 test('with no ingreso loaded it explains how to start and shows no tables', async () => {
-  mockResumen.mockResolvedValue({ verificable_desde: null, resumen: { ...RESUMEN.resumen, pendientes: 0 } });
-  mockPorTienda.mockResolvedValue({ verificable_desde: null, tiendas: [] });
   mockDetalle.mockResolvedValue({ verificable_desde: null, items: [] });
   render(<IngresosFacturasPanel />);
   expect(await screen.findByText('Carga ingresos de facturas para empezar el seguimiento')).toBeInTheDocument();
@@ -177,13 +212,13 @@ test('with no ingreso loaded it explains how to start and shows no tables', asyn
 
 test('an empty filter result says so', async () => {
   await abrir();
-  mockDetalle.mockResolvedValue({ verificable_desde: '2026-09-07', items: [] });
   await userEvent.click(screen.getByRole('button', { name: 'Sin confirmar' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Más de 15 días' }));
   expect(await screen.findByText('No hay facturas con estos filtros.')).toBeInTheDocument();
 });
 
 test('a failed load shows an error', async () => {
-  mockResumen.mockRejectedValue(new Error('x'));
+  mockDetalle.mockRejectedValue(new Error('x'));
   render(<IngresosFacturasPanel />);
   expect(await screen.findByRole('alert')).toBeInTheDocument();
 });
@@ -198,6 +233,9 @@ test('the coordinador confirms an invoice and the row updates', async () => {
   mockConfirmar.mockResolvedValue(item(482915, 'Cali Norte', CALI, 'LLEGO', 1, {
     confirmado_por: 'Coord', confirmado_en: '2026-10-08T15:00:00+00:00' }));
   await abrir({ puedeConfirmar: true });
+  mockDetalle.mockResolvedValue({ verificable_desde: '2026-09-07', items: [
+    DETALLE.items[0],
+    item(482915, 'Cali Norte', CALI, 'LLEGO', 1, { confirmado_por: 'Coord' }), DETALLE.items[2]] });
   const fila = screen.getByText('RH 482915').closest('tr');
   await userEvent.click(within(fila).getByRole('button', { name: 'Llegó' }));
   expect(mockConfirmar).toHaveBeenCalledWith({
@@ -215,13 +253,20 @@ test('a 409 on confirm tells the invoice is no longer pending', async () => {
   expect(await screen.findByRole('alert')).toHaveTextContent('ya no está pendiente');
 });
 
-test('a detalle error goes away once a later filter change loads fine', async () => {
-  await abrir();
-  mockDetalle.mockRejectedValueOnce(new Error('x'));
-  await userEvent.click(screen.getByRole('button', { name: 'Sin confirmar' }));
-  expect(await screen.findByRole('alert')).toHaveTextContent('No se pudo cargar el detalle de facturas.');
-  await userEvent.click(screen.getByRole('button', { name: 'Aún no llega' }));
-  await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
+test('a confirmation refetches the detalle and the KPIs follow', async () => {
+  mockConfirmar.mockResolvedValue(item(482915, 'Cali Norte', CALI, 'LLEGO', 1, {
+    confirmado_por: 'Coord', confirmado_en: '2026-10-08T15:00:00+00:00' }));
+  await abrir({ puedeConfirmar: true });
+  mockDetalle.mockResolvedValue({ verificable_desde: '2026-09-07', items: [
+    DETALLE.items[0],
+    item(482915, 'Cali Norte', CALI, 'LLEGO', 1, { confirmado_por: 'Coord' }),
+    DETALLE.items[2],
+  ] });
+  const fila = screen.getByText('RH 482915').closest('tr');
+  await userEvent.click(within(fila).getByRole('button', { name: 'Llegó' }));
+  await waitFor(() => expect(mockDetalle).toHaveBeenCalledTimes(2));
+  await waitFor(() => valorKpi('Llegaron sin ingresar', '2'));
+  valorKpi('Sin confirmar', '0');
 });
 
 test('a failed historial says so instead of claiming nobody answered', async () => {
