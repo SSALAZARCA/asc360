@@ -65,6 +65,26 @@ class InventarioAntiguo(ErrorConteo):
         "Cargue uno nuevo o confirme que quiere contar contra ese.")
 
 
+class PendientesPorSanear(ErrorConteo):
+    """Warning, never a block: Iniciar goes on with `confirmar_pendientes`
+    (odd/motored-conteos-inventario, WU15)."""
+
+    codigo = "PENDIENTES_POR_SANEAR"
+    MENSAJE = (
+        "La tienda tiene facturas por ingresar o traslados por recibir en "
+        "el ERP. Confirme si quiere iniciar igual.")
+
+
+class PendienteNoEncontrado(ErrorConteo):
+    codigo = "PENDIENTE_NO_ENCONTRADO"
+    MENSAJE = "Ese pendiente ya no está en la lista de la tienda."
+
+
+class PendienteInvalido(ErrorConteo):
+    codigo = "PENDIENTE_INVALIDO"
+    MENSAJE = "El pendiente debe ser una factura o un traslado."
+
+
 class UmbralesInvalidos(ErrorConteo):
     codigo = "UMBRALES_INVALIDOS"
     MENSAJE = (

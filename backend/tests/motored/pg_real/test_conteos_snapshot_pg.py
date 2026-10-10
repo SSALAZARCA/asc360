@@ -21,13 +21,16 @@ from app.motored.models.carga_archivo import CargaArchivo
 from app.motored.models.conteo import Conteo
 from app.motored.models.conteo_sesion import ConteoSesion
 from app.motored.models.conteo_snapshot_linea import ConteoSnapshotLinea
+from app.motored.models.factura_proveedor_linea import FacturaProveedorLinea
+from app.motored.models.ingreso_factura import IngresoFactura
 from app.motored.models.inventario_detalle import InventarioDetalle
 from app.motored.models.proveedor import Proveedor
 from app.motored.models.referencia import Referencia
 from app.motored.models.sucursal import Sucursal
+from app.motored.models.traslado import TrasladoLinea
 from app.motored.models.usuario import MotoredRole, Usuario
 from app.motored.services.conteos import (
-    acceso, consultas, errores, snapshot,
+    acceso, consultas, errores, pendientes, snapshot,
 )
 from tests.motored.pg_real.codigos_co import codigo_co_unico
 
@@ -174,8 +177,9 @@ async def test_schedule_creates_a_programado_total(mundo):
     assert conteo.creado_por == mundo.admin.id
 
 
+# An ADMIN is assignable too (owner decision 2026-10-09, 5d5b783).
 @pytest.mark.parametrize("rol, activo", [
-    (MotoredRole.COMPRAS, True), (MotoredRole.ADMIN, True),
+    (MotoredRole.COMPRAS, True), (MotoredRole.ADMIN, False),
     (MotoredRole.LIDER_INVENTARIOS, False),
 ])
 async def test_the_leader_must_be_an_active_lider_inventarios(
@@ -210,7 +214,7 @@ async def test_a_coordinator_led_conteo_is_scheduled_and_started(mundo):
         mundo.db)}
     assert opciones[coordinador.id] == "COORDINADOR_REPUESTOS"
     assert opciones[mundo.lider.id] == "LIDER_INVENTARIOS"
-    assert mundo.admin.id not in opciones
+    assert opciones[mundo.admin.id] == "ADMIN"
 
 
 async def test_the_store_must_exist_and_be_active(mundo):
@@ -598,3 +602,88 @@ async def test_two_concurrent_iniciar_start_the_conteo_once(fabrica):
 
     assert sorted(resultados) == ["ok", "rechazado"]
     assert lineas == 1
+
+
+# --- Iniciar: pendientes por sanear (WU15) ----------------------------------
+
+
+def _carga_de(tipo, aplicado_en=HACE_UNA_HORA):
+    return CargaArchivo(
+        id=uuid.uuid4(), tipo=tipo, estado="APLICADO",
+        aplicado_en=aplicado_en, nombre_archivo=f"{tipo}.xlsx",
+        hash_sha256=uuid.uuid4().hex * 2, ruta_objeto="x/p.xlsx", bytes=1)
+
+
+async def _sembrar_pendientes(mundo, tienda, referencia):
+    """One invoice without ingreso and one transfer still alive, both
+    received by `tienda`. Returns the invoice number."""
+    numero = int(uuid.uuid4().int % 10**9)
+    ingresos_c = _carga_de("INGRESOS_FACTURAS")
+    facturas_c = _carga_de("FACTURAS_PEDIDOS")
+    # Far in the future: the newest TRASLADOS load is the live snapshot.
+    traslados_c = _carga_de("TRASLADOS", datetime.datetime(
+        2099, 1, 1, 7, 0, tzinfo=UTC))
+    mundo.db.add_all([ingresos_c, facturas_c, traslados_c])
+    await mundo.db.flush()
+    mundo.db.add_all([
+        IngresoFactura(
+            id=uuid.uuid4(), prefijo_rh="RH", numero_rh=numero + 1,
+            fecha_ingreso=HOY - datetime.timedelta(days=30),
+            sucursal_id=tienda.id, referencia_id=referencia.id,
+            valor_neto=Decimal("10"), carga_id=ingresos_c.id),
+        FacturaProveedorLinea(
+            id=uuid.uuid4(), prefijo_rh="RH", numero_rh=numero,
+            fecha_factura=HOY - datetime.timedelta(days=5),
+            sucursal_id=tienda.id, referencia_id=referencia.id,
+            cantidad=Decimal("2"), valor_total=Decimal("150000"),
+            carga_id=facturas_c.id),
+        TrasladoLinea(
+            id=uuid.uuid4(), carga_id=traslados_c.id,
+            nro_documento=f"79-{numero}", fecha=AYER,
+            bodega_salida="B77", bodega_entrada="B01",
+            sucursal_entrada_id=tienda.id,
+            referencia_codigo=referencia.codigo, cantidad=Decimal("3")),
+    ])
+    await mundo.db.flush()
+    return numero
+
+
+async def test_pending_items_warn_and_a_confirmed_start_records_them(mundo):
+    tienda = await mundo.tienda()
+    referencia = await mundo.referencia()
+    await mundo.carga(HOY, [(tienda, referencia, "B01", 4, 10)])
+    numero = await _sembrar_pendientes(mundo, tienda, referencia)
+    conteo = await mundo.programado(tienda)
+
+    lista = await pendientes.leer(mundo.db, tienda.id, HOY)
+    assert [f["factura"] for f in lista["facturas"]] == [f"RH {numero}"]
+    assert [t["clave"] for t in lista["traslados"]] == [
+        f"79-{numero}|B77|B01"]
+    assert lista["cargas"]["traslados"]["fecha_carga"].year == 2099
+    assert lista["cargas"]["facturas_pedidos"] is not None
+
+    with pytest.raises(errores.PendientesPorSanear) as error:
+        await _iniciar(mundo, conteo)
+    assert error.value.datos == {"facturas": 1, "traslados": 1}
+    assert conteo.estado == "PROGRAMADO"
+    assert await _lineas(mundo.db, conteo) == {}
+
+    await pendientes.marcar(
+        mundo.db, conteo.id, "FACTURA", f"RH {numero}", mundo.lider.id,
+        AHORA)
+    with pytest.raises(errores.PendientesPorSanear) as error:
+        await _iniciar(mundo, conteo)
+    assert error.value.datos == {"facturas": 0, "traslados": 1}
+
+    await _iniciar(mundo, conteo, confirmar_pendientes=True)
+
+    assert conteo.estado == "EN_CONTEO"
+    registro = conteo.snapshot_advertencias
+    assert registro["pendientes"] == {
+        "facturas": 0, "traslados": 1,
+        "confirmada_por": str(mundo.lider.id)}
+    assert [m["clave"] for m in registro["verificados_erp"]] == [
+        f"RH {numero}"]
+    with pytest.raises(errores.EstadoInvalido):
+        await pendientes.desmarcar(
+            mundo.db, conteo.id, "FACTURA", f"RH {numero}")

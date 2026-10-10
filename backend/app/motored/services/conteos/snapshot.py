@@ -46,7 +46,7 @@ from app.motored.models.sucursal import Sucursal
 from app.motored.models.usuario import MotoredRole, Usuario
 from app.motored.services import parametros
 from app.motored.services import parametros_claves as pc
-from app.motored.services.conteos import acceso, errores
+from app.motored.services.conteos import acceso, errores, pendientes
 from app.motored.services.reloj import BOGOTA_OFFSET, hoy_bogota
 
 # Roles that may lead a count. Owner decision 2026-10-09: the parts
@@ -385,26 +385,43 @@ def _marcar_iniciado(
     return acceso.asignar_codigo(conteo, ahora)
 
 
+async def _revisar_pendientes(
+        db: AsyncSession, conteo: Conteo, hoy: date, confirmado: bool,
+        usuario_id: uuid.UUID) -> Optional[dict]:
+    """WU15: invoices / transfers of the store still to clear in the ERP
+    (the ones the leader marked verified do not count). Warns, never
+    blocks: PendientesPorSanear until `confirmado`."""
+    marcas = pendientes.verificados_de(conteo.snapshot_advertencias)
+    facturas, traslados = await pendientes.contar(
+        db, conteo.sucursal_id, hoy, marcas)
+    return pendientes.revisar(facturas, traslados, confirmado, usuario_id)
+
+
 async def iniciar_conteo(
         db: AsyncSession, conteo_id: uuid.UUID, iniciado_por: uuid.UUID,
         confirmar_inventario_viejo: bool = False,
-        ahora: Optional[datetime] = None) -> InicioConteo:
+        ahora: Optional[datetime] = None,
+        confirmar_pendientes: bool = False) -> InicioConteo:
     """PROGRAMADO -> EN_CONTEO: copies the snapshot, freezes the
     thresholds, creates the link slug and the code. Holds the conteo row
     lock and re-checks the estado, so a double Iniciar is refused. A
-    refused start (stale inventory, another running count) leaves no
-    snapshot line behind (SAVEPOINT)."""
+    refused start (pending items, stale inventory, another running
+    count) leaves no snapshot line behind (SAVEPOINT). Each warning has
+    its own confirmation, so they may be confirmed in any order."""
     ahora = ahora or datetime.now(timezone.utc)
     conteo = await acceso.bloquear_conteo(db, conteo_id)
     exigir_estado(conteo, "iniciar")
     await _exigir_sin_total_abierto(db, conteo)
     umbrales = await leer_umbrales(db, hoy_bogota(ahora))
+    aviso = await _revisar_pendientes(
+        db, conteo, hoy_bogota(ahora), confirmar_pendientes, iniciado_por)
+    marcas = pendientes.verificados_de(conteo.snapshot_advertencias)
     try:
         async with db.begin_nested():
             fuente = await copiar_snapshot(db, conteo.id, conteo.sucursal_id)
-            advertencia = revisar_antiguedad(
+            advertencia = pendientes.combinar(revisar_antiguedad(
                 fuente, umbrales.vigencia_horas, ahora,
-                confirmar_inventario_viejo, iniciado_por)
+                confirmar_inventario_viejo, iniciado_por), aviso, marcas)
             codigo = _marcar_iniciado(
                 conteo, fuente, umbrales, advertencia, iniciado_por, ahora)
             await db.flush()

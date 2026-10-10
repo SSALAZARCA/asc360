@@ -51,6 +51,15 @@ class AnularEntrada(BaseModel):
 
 class IniciarEntrada(BaseModel):
     confirmar_antiguedad: bool = False
+    confirmar_pendientes: bool = False
+
+
+class PendienteEntrada(BaseModel):
+    """An item of "Pendientes por sanear" (WU15): `clave` is the `clave`
+    the `/pendientes` list gave it."""
+
+    tipo: Literal["FACTURA", "TRASLADO"]
+    clave: str = Field(min_length=1, max_length=200)
 
 
 # --- leader API: responses ---------------------------------------------------

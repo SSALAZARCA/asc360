@@ -26,7 +26,7 @@ from app.motored.models.conteo import Conteo
 from app.motored.models.conteo_sesion import ConteoIntegrante, ConteoSesion
 from app.motored.services.auth import MotoredUser
 from app.motored.services.conteos import (
-    acceso, consultas, errores, panel, sesiones, snapshot,
+    acceso, consultas, errores, panel, pendientes, sesiones, snapshot,
 )
 from tests.motored.conftest import (
     FakeAsyncSession, override_motored_db, override_motored_user,
@@ -368,6 +368,37 @@ def test_a_stale_inventory_is_a_409_with_its_facts(monkeypatch):
     assert not sesion.committed
 
 
+def test_iniciar_forwards_the_pending_confirmation(monkeypatch, datos):
+    conteo = _conteo()
+    iniciar = AsyncMock(return_value=_inicio(conteo))
+    monkeypatch.setattr(snapshot, "iniciar_conteo", iniciar)
+
+    r, _ = _llamar(
+        "LIDER_INVENTARIOS", "POST", f"/{conteo.id}/iniciar", conteo,
+        json={"confirmar_pendientes": True})
+
+    assert r.status_code == 200, r.text
+    assert iniciar.await_args.kwargs["confirmar_pendientes"] is True
+    assert iniciar.await_args.kwargs["confirmar_inventario_viejo"] is False
+
+
+def test_pending_items_are_a_409_with_their_counts(monkeypatch):
+    conteo = _conteo(estado="PROGRAMADO")
+    error = errores.PendientesPorSanear(
+        "Pendientes.", facturas=2, traslados=1)
+    monkeypatch.setattr(
+        snapshot, "iniciar_conteo", AsyncMock(side_effect=error))
+
+    r, sesion = _llamar(
+        "LIDER_INVENTARIOS", "POST", f"/{conteo.id}/iniciar", conteo)
+
+    assert r.status_code == 409
+    assert r.json()["detail"] == {
+        "code": "PENDIENTES_POR_SANEAR", "mensaje": "Pendientes.",
+        "facturas": 2, "traslados": 1}
+    assert not sesion.committed
+
+
 def test_rotating_returns_the_new_code_once(monkeypatch):
     conteo = _conteo()
     rotar = AsyncMock(return_value="000417")
@@ -496,3 +527,117 @@ def test_the_router_answers_503_while_motored_is_off(monkeypatch):
     r, _ = _llamar("ADMIN", "GET", "")
 
     assert r.status_code == 503
+
+
+# --- pendientes por sanear (WU15) ------------------------------------------
+
+PENDIENTES = {
+    "facturas": [], "traslados": [], "verificable_desde": None,
+    "por_sanear": {"facturas": 0, "traslados": 0},
+    "cargas": {"facturas_pedidos": None, "ingresos_facturas": None,
+               "traslados": None}}
+
+
+@pytest.fixture
+def leer_pendientes(monkeypatch):
+    leer = AsyncMock(return_value=PENDIENTES)
+    monkeypatch.setattr(pendientes, "leer", leer)
+    return leer
+
+
+@pytest.mark.parametrize("rol", ["ADMIN", "LIDER_INVENTARIOS", "GERENCIA"])
+def test_readers_see_the_store_pending_items(leer_pendientes, rol):
+    conteo = _conteo(estado="PROGRAMADO")
+    marcas = [{"tipo": "FACTURA", "clave": "RH 1"}]
+    conteo.snapshot_advertencias = {"verificados_erp": marcas}
+
+    r, _ = _llamar(rol, "GET", f"/{conteo.id}/pendientes", conteo)
+
+    assert r.status_code == 200, r.text
+    assert r.json() == PENDIENTES
+    args = leer_pendientes.await_args.args
+    assert args[1] == conteo.sucursal_id
+    assert args[3] == marcas
+
+
+def test_another_leaders_pending_items_are_a_404(leer_pendientes):
+    conteo = _conteo(estado="PROGRAMADO", lider_id=OTRO_LIDER_ID)
+
+    for metodo, ruta in [
+            ("GET", ""), ("POST", "/verificar"),
+            ("POST", "/desverificar")]:
+        r, _ = _llamar(
+            "LIDER_INVENTARIOS", metodo, f"/{conteo.id}/pendientes{ruta}",
+            conteo, json={"tipo": "FACTURA", "clave": "RH 1"})
+        assert r.status_code == 404, (ruta, r.text)
+    leer_pendientes.assert_not_awaited()
+
+
+def test_other_roles_cannot_read_pending_items(leer_pendientes):
+    r, _ = _llamar("COMPRAS", "GET", f"/{uuid.uuid4()}/pendientes")
+
+    assert r.status_code == 403
+
+
+@pytest.mark.parametrize("ruta", ["/verificar", "/desverificar"])
+def test_gerencia_cannot_mark_pending_items(ruta):
+    r, _ = _llamar(
+        "GERENCIA", "POST", f"/{uuid.uuid4()}/pendientes{ruta}",
+        json={"tipo": "FACTURA", "clave": "RH 1"})
+
+    assert r.status_code == 403
+
+
+@pytest.mark.parametrize("rol", ["ADMIN", "LIDER_INVENTARIOS"])
+def test_the_leader_marks_and_undoes_a_pending_item(
+        monkeypatch, leer_pendientes, rol):
+    conteo = _conteo(estado="PROGRAMADO")
+    marcar = AsyncMock(return_value=conteo)
+    desmarcar = AsyncMock(return_value=conteo)
+    monkeypatch.setattr(pendientes, "marcar", marcar)
+    monkeypatch.setattr(pendientes, "desmarcar", desmarcar)
+    cuerpo = {"tipo": "TRASLADO", "clave": "D-1|B07|B01"}
+
+    r, sesion = _llamar(
+        rol, "POST", f"/{conteo.id}/pendientes/verificar", conteo,
+        json=cuerpo)
+    assert r.status_code == 200, r.text
+    assert r.json() == PENDIENTES
+    assert sesion.committed
+    args = marcar.await_args.args
+    assert args[1:4] == (conteo.id, "TRASLADO", "D-1|B07|B01")
+
+    r, sesion = _llamar(
+        rol, "POST", f"/{conteo.id}/pendientes/desverificar", conteo,
+        json=cuerpo)
+    assert r.status_code == 200, r.text
+    assert sesion.committed
+    assert desmarcar.await_args.args[1:] == (
+        conteo.id, "TRASLADO", "D-1|B07|B01")
+
+
+def test_marking_after_the_start_is_a_409(monkeypatch):
+    conteo = _conteo()
+    monkeypatch.setattr(pendientes, "marcar", AsyncMock(
+        side_effect=errores.EstadoInvalido("Ya inició.")))
+
+    r, sesion = _llamar(
+        "LIDER_INVENTARIOS", "POST", f"/{conteo.id}/pendientes/verificar",
+        conteo, json={"tipo": "FACTURA", "clave": "RH 1"})
+
+    assert r.status_code == 409
+    _detalle(r, "ESTADO_INVALIDO")
+    assert not sesion.committed
+
+
+def test_marking_an_item_no_longer_pending_is_a_404(monkeypatch):
+    conteo = _conteo(estado="PROGRAMADO")
+    monkeypatch.setattr(pendientes, "marcar", AsyncMock(
+        side_effect=errores.PendienteNoEncontrado()))
+
+    r, _ = _llamar(
+        "ADMIN", "POST", f"/{conteo.id}/pendientes/verificar", conteo,
+        json={"tipo": "FACTURA", "clave": "RH 1"})
+
+    assert r.status_code == 404
+    _detalle(r, "PENDIENTE_NO_ENCONTRADO")

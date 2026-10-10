@@ -10,7 +10,8 @@ decision 2026-10-09; `snapshot.ROLES_LIDER_CONTEO`):
 - reads: ADMIN, the leaders, GERENCIA;
 - schedule, reschedule or change the leader, annul, the leaders list:
   ADMIN only (owner decision);
-- iniciar, rotate the code, the QR, disconnect a pair, create / rename /
+- iniciar, mark / unmark a pending item "Verificado en el ERP" (WU15),
+  rotate the code, the QR, disconnect a pair, create / rename /
   deactivate the store's locations, end round 1, add / assign /
   auto-assign / cancel reconteos, close: ADMIN or the assigned leader.
   GERENCIA gets 403 on every write (it reads the differences, the
@@ -39,7 +40,7 @@ from app.motored.schemas import conteos as esquemas
 from app.motored.services.auth import MotoredUser
 from app.motored.services.conteos import (
     acceso, cierre, consultas, diferencias, errores, excel_ajustes, panel,
-    reconteos, sesiones, snapshot, ubicaciones,
+    pendientes, reconteos, sesiones, snapshot, ubicaciones,
 )
 from app.motored.services.corridas.exportacion_hmcl import (
     content_disposition,
@@ -59,6 +60,7 @@ _ESTADO_HTTP = {
     errores.UbicacionNoEncontrada: 404,
     errores.LecturaNoEncontrada: 404,
     errores.ReconteoNoEncontrado: 404,
+    errores.PendienteNoEncontrado: 404,
     errores.CodigoDesconocido: 422,
     errores.ReconteoDuplicado: 409,
     errores.SesionNoDisponible: 409,
@@ -66,6 +68,7 @@ _ESTADO_HTTP = {
     errores.HayParejaElegible: 409,
     errores.SucursalInvalida: 422,
     errores.LiderInvalido: 422,
+    errores.PendienteInvalido: 422,
     errores.MotivoRequerido: 422,
     errores.DatosIngresoInvalidos: 422,
     errores.UbicacionInvalida: 422,
@@ -74,6 +77,7 @@ _ESTADO_HTTP = {
     errores.ConteoTotalAbierto: 409,
     errores.SinInventario: 409,
     errores.InventarioAntiguo: 409,
+    errores.PendientesPorSanear: 409,
     errores.UmbralesInvalidos: 409,
     errores.EnlaceSinConfigurar: 409,
     errores.UbicacionInactiva: 409,
@@ -308,13 +312,15 @@ async def iniciar(
     db: AsyncSession = Depends(get_motored_db_or_503),
 ):
     """PROGRAMADO -> EN_CONTEO. The only answer with the plain code; a
-    stale inventory is a 409 with its facts until confirmed."""
-    confirmar = bool(cuerpo and cuerpo.confirmar_antiguedad)
+    stale inventory and the store's pending invoices / transfers are
+    409s with their facts until each is confirmed (any order)."""
+    cuerpo = cuerpo or esquemas.IniciarEntrada()
     try:
         await consultas.conteo_visible(db, conteo_id, usuario)
         inicio = await snapshot.iniciar_conteo(
             db, conteo_id, _uuid(usuario),
-            confirmar_inventario_viejo=confirmar)
+            confirmar_inventario_viejo=cuerpo.confirmar_antiguedad,
+            confirmar_pendientes=cuerpo.confirmar_pendientes)
         conteo = await _detalle(db, inicio.conteo, usuario)
     except errores.ErrorConteo as error:
         raise error_http(error) from error
@@ -322,6 +328,70 @@ async def iniciar(
     return esquemas.IniciarSalida(
         conteo=conteo, codigo=inicio.codigo,
         advertencia=inicio.advertencia)
+
+
+# --- pendientes por sanear (WU15) --------------------------------------------
+
+
+async def _pendientes(db: AsyncSession, conteo: Conteo) -> dict:
+    return await pendientes.leer(
+        db, conteo.sucursal_id, hoy_bogota(),
+        pendientes.verificados_de(conteo.snapshot_advertencias))
+
+
+@router.get("/{conteo_id}/pendientes")
+async def leer_pendientes(
+    conteo_id: uuid.UUID,
+    usuario: MotoredUser = Depends(lector),
+    db: AsyncSession = Depends(get_motored_db_or_503),
+):
+    """The store's invoices pending ingreso and transfers pending
+    reception, each with its ERP mark, plus the load dates."""
+    try:
+        conteo = await consultas.conteo_visible(db, conteo_id, usuario)
+    except errores.ErrorConteo as error:
+        raise error_http(error) from error
+    return await _pendientes(db, conteo)
+
+
+@router.post("/{conteo_id}/pendientes/verificar")
+async def verificar_pendiente(
+    conteo_id: uuid.UUID,
+    cuerpo: esquemas.PendienteEntrada,
+    usuario: MotoredUser = Depends(operador),
+    db: AsyncSession = Depends(get_motored_db_or_503),
+):
+    """Marks an item "Verificado en el ERP" on THIS conteo only
+    (PROGRAMADO). Answers the refreshed list."""
+    try:
+        await consultas.conteo_visible(db, conteo_id, usuario)
+        conteo = await pendientes.marcar(
+            db, conteo_id, cuerpo.tipo, cuerpo.clave, _uuid(usuario),
+            datetime.now(timezone.utc))
+        salida = await _pendientes(db, conteo)
+    except errores.ErrorConteo as error:
+        raise error_http(error) from error
+    await db.commit()
+    return salida
+
+
+@router.post("/{conteo_id}/pendientes/desverificar")
+async def desverificar_pendiente(
+    conteo_id: uuid.UUID,
+    cuerpo: esquemas.PendienteEntrada,
+    usuario: MotoredUser = Depends(operador),
+    db: AsyncSession = Depends(get_motored_db_or_503),
+):
+    """Undoes the ERP mark (PROGRAMADO). Answers the refreshed list."""
+    try:
+        await consultas.conteo_visible(db, conteo_id, usuario)
+        conteo = await pendientes.desmarcar(
+            db, conteo_id, cuerpo.tipo, cuerpo.clave)
+        salida = await _pendientes(db, conteo)
+    except errores.ErrorConteo as error:
+        raise error_http(error) from error
+    await db.commit()
+    return salida
 
 
 @router.post(
