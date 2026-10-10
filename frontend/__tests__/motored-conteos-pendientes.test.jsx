@@ -97,7 +97,10 @@ describe('Pendientes por sanear card', () => {
     const card = await tarjeta();
     expect(await within(card).findByText('RH 482915')).toBeInTheDocument();
     expect(within(card).getByText('79-00000067')).toBeInTheDocument();
-    expect(within(card).getByText('Popayán → Quilichao')).toBeInTheDocument();
+    // Only the origin: the destination is always this conteo's store.
+    expect(within(card).getByRole('columnheader', { name: 'Sale de' })).toBeInTheDocument();
+    expect(within(card).getByText('Popayán')).toBeInTheDocument();
+    expect(within(card).queryByText(/Quilichao/)).not.toBeInTheDocument();
     expect(within(card).getByText('Ya llegó')).toBeInTheDocument();
     expect(within(card).getByText('No ha llegado')).toBeInTheDocument();
     expect(within(card).getByRole('heading', { name: 'Facturas por ingresar · 1' })).toBeInTheDocument();

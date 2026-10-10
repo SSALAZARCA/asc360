@@ -30,7 +30,8 @@ const COLUMNAS_FACTURA = [
 ];
 const COLUMNAS_TRASLADO = [
   { titulo: 'Fecha', valor: (t) => fechaBogota(t.fecha) },
-  { titulo: 'Sale → Llega', valor: (t) => `${t.sale || t.bodega_salida} → ${t.llega || t.bodega_entrada}` },
+  // Only the origin: the destination is always this conteo's store.
+  { titulo: 'Sale de', valor: (t) => t.sale || t.bodega_salida },
   { titulo: 'Refs.', valor: (t) => formatEntero(t.refs) },
   { titulo: 'Estado', valor: (t) => ESTADO_TRASLADO[t.estado_confirmacion] ?? t.estado_confirmacion },
 ];
