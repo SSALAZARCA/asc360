@@ -29,7 +29,7 @@ The count leader can see the references as they get counted, and can look up any
   - "Contadas (N)" chip (N from the panel summary), debounced (350 ms) search box, "Ver detalle" expandable row (`DetalleReferencia.js`, `useBusquedaDiferencias.js`). The pair device is untouched.
   - Evidence 2026-10-10: `npx jest conteo` Tests: 162 passed, 162 total (RED first: missing module).
 - [x] T3 commits b0f3446 2e60f66 (gga PASSED), pushed
-- [ ] T4 after T3, ask the manuals session to update the existing counts manual. The owner's 2026-10-10 rule: a pair with a doubt about whether something was counted asks the leader, and the leader audits it at the shelf with the panel search. Also cover today's changes:
+- [x] T4 (sent to the manuals session 2026-10-10, waiting for its draft) after T3, ask the manuals session to update the existing counts manual. The owner's 2026-10-10 rule: a pair with a doubt about whether something was counted asks the leader, and the leader audits it at the shelf with the panel search. Also cover today's changes:
   - test counts;
   - Tab or Enter scanners;
   - hyphen-less codes and the "Código ambiguo" warning;
