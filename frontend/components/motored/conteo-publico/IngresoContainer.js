@@ -61,7 +61,10 @@ export default function IngresoContainer({ slug, aviso, onIngreso }) {
         dispositivo: dispositivo(),
         integrantes: integrantes.map((i) => ({ nombre: i.nombre.trim(), cedula: i.cedula })),
       });
-      onIngreso({ token: r.sesion_token, sesionId: r.sesion_id, etiqueta: r.etiqueta, sucursal: r.sucursal });
+      onIngreso({
+        token: r.sesion_token, sesionId: r.sesion_id, etiqueta: r.etiqueta, sucursal: r.sucursal,
+        esPrueba: Boolean(r.es_prueba),
+      });
     } catch (fallo) {
       setError(mensajeError(fallo));
       setEnviando(false);

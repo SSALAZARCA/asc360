@@ -13,6 +13,7 @@ import UltimaLectura from './UltimaLectura';
 import { C, MONO, botonNeutro, campo, pantalla } from './estilos';
 import { useCapturaTeclado } from './teclado';
 import { TEXTOS } from './textos';
+import PruebaBadge from './PruebaBadge';
 
 const CamaraEscaner = lazy(() => import('./CamaraEscaner'));
 
@@ -82,7 +83,10 @@ export default function ConteoMovil({ conteo, onSalir }) {
     <div style={{ ...pantalla, maxWidth: 600, margin: '0 auto', width: '100%' }}>
       <header style={{ padding: '14px 16px', background: C.tinta, color: C.blanco, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
         <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-          <span style={{ fontWeight: 800, fontSize: 16 }}>{info.sucursal}</span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span style={{ fontWeight: 800, fontSize: 16 }}>{info.sucursal}</span>
+            {info.esPrueba && <PruebaBadge />}
+          </span>
           <span style={{ fontSize: 12, color: C.borde }}>{info.etiqueta}</span>
         </div>
         <button type="button" onClick={onSalir} style={{ background: 'transparent', border: 'none', color: C.blanco, fontFamily: 'inherit', fontSize: 13, fontWeight: 700, textDecoration: 'underline', minHeight: 44 }}>

@@ -29,6 +29,8 @@ export const listarLideres = () => motoredFetchJson(`${BASE}/lideres`);
 export const programarConteo = (payload) => enviar(BASE, payload);
 export const reprogramarConteo = (id, payload) => enviar(`${BASE}/${id}`, payload, 'PATCH');
 export const anularConteo = (id, motivo) => enviar(`${BASE}/${id}/anular`, { motivo });
+// ADMIN hard-deletes a TEST conteo (odd/tasks/motored-conteo-prueba.md); a real one is a 409 NO_ES_PRUEBA.
+export const borrarConteoPrueba = (id) => motoredFetchJson(`${BASE}/${id}`, { method: 'DELETE' });
 export const obtenerConteo = (id) => motoredFetchJson(`${BASE}/${id}`);
 
 // --- start and access -------------------------------------------------------

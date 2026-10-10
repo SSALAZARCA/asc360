@@ -6,7 +6,7 @@
  * the authenticated blob path.
  */
 import {
-  asignarReconteo, cerrarConteo, descargarAjustes, desverificarPendiente, iniciarConteo, listarConteos,
+  asignarReconteo, borrarConteoPrueba, cerrarConteo, descargarAjustes, desverificarPendiente, iniciarConteo, listarConteos,
   obtenerPendientesConteo, verificarPendiente,
   obtenerDiferencias, obtenerPanel, obtenerQrObjectUrl, programarConteo,
 } from '../lib/motored/conteosApi';
@@ -44,6 +44,26 @@ describe('conteosApi', () => {
     await obtenerPanel('c1');
     expect(fetch.mock.calls[0][0]).toBe(`${BASE}/conteos/c1/panel?version=42`);
     expect(fetch.mock.calls[1][0]).toBe(`${BASE}/conteos/c1/panel`);
+  });
+
+  it('lists the test counts when asked', async () => {
+    fetch.mockResolvedValue(respuesta(200, []));
+    await listarConteos({ incluir_pruebas: true });
+    expect(fetch.mock.calls[0][0]).toBe(`${BASE}/conteos?incluir_pruebas=true`);
+  });
+
+  it('deletes a test count with DELETE, and a refused delete throws the backend mensaje', async () => {
+    fetch.mockResolvedValueOnce(respuesta(204, null, { json: () => Promise.reject(new Error('sin cuerpo')) }));
+    await borrarConteoPrueba('c9');
+    expect(fetch.mock.calls[0][0]).toBe(`${BASE}/conteos/c9`);
+    expect(fetch.mock.calls[0][1].method).toBe('DELETE');
+
+    fetch.mockResolvedValueOnce(respuesta(409, {
+      detail: { code: 'NO_ES_PRUEBA', mensaje: 'Solo se puede borrar un conteo de prueba.' },
+    }));
+    await expect(borrarConteoPrueba('c1')).rejects.toMatchObject({
+      message: 'Solo se puede borrar un conteo de prueba.', code: 'NO_ES_PRUEBA',
+    });
   });
 
   it('lists everything without a filter', async () => {

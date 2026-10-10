@@ -3,6 +3,8 @@
  * ADMIN schedules a total count (store, leader, date) or, with `conteo`,
  * reschedules a PROGRAMADO one (date and leader). The chosen store shows
  * the age of its latest inventory, so a stale one is seen before the day.
+ * A new count may be marked "Es de prueba" (odd/tasks/motored-conteo-prueba.md;
+ * the dialog is ADMIN-only); a test count cannot be converted later.
  */
 import { useEffect, useState } from 'react';
 import DialogoPedido from '../pedidos/DialogoPedido';
@@ -37,12 +39,29 @@ function Campo({ etiqueta, children }) {
   return <label style={labelStyle}>{etiqueta}{children}</label>;
 }
 
+const casillaStyle = { width: '24px', height: '24px', margin: 0, flexShrink: 0 };
+
+function CasillaPrueba({ marcada, onCambio }) {
+  return (
+    <label style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', minHeight: '44px', cursor: 'pointer' }}>
+      <input type="checkbox" aria-label="Es de prueba" checked={marcada} onChange={(e) => onCambio(e.target.checked)} style={casillaStyle} />
+      <span>
+        <strong>Es de prueba</strong>
+        <span style={{ display: 'block', fontSize: '0.8rem', color: 'var(--motored-text-muted, #5a5a5a)' }}>
+          Solo lo ve el administrador, no bloquea un conteo real y se puede borrar.
+        </span>
+      </span>
+    </label>
+  );
+}
+
 export default function ProgramarConteoDialog({ conteo, onCancel, onListo }) {
   const reprogramando = Boolean(conteo);
   const opciones = useOpciones(reprogramando);
   const [sucursalId, setSucursalId] = useState('');
   const [liderId, setLiderId] = useState(conteo?.lider?.id ?? '');
   const [fecha, setFecha] = useState(conteo?.fecha_programada ?? '');
+  const [esPrueba, setEsPrueba] = useState(false);
   const [ocupado, setOcupado] = useState(false);
   const [error, setError] = useState('');
   const sucursal = opciones.sucursales.find((s) => s.id === sucursalId);
@@ -55,7 +74,9 @@ export default function ProgramarConteoDialog({ conteo, onCancel, onListo }) {
       if (reprogramando) {
         await reprogramarConteo(conteo.id, { fecha_programada: fecha, lider_id: liderId });
       } else {
-        await programarConteo({ sucursal_id: sucursalId, lider_id: liderId, fecha_programada: fecha });
+        await programarConteo({
+          sucursal_id: sucursalId, lider_id: liderId, fecha_programada: fecha, es_prueba: esPrueba,
+        });
       }
       onListo();
     } catch (err) {
@@ -89,6 +110,7 @@ export default function ProgramarConteoDialog({ conteo, onCancel, onListo }) {
       <Campo etiqueta="Fecha">
         <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} style={selectStyle} />
       </Campo>
+      {!reprogramando && <CasillaPrueba marcada={esPrueba} onCambio={setEsPrueba} />}
     </DialogoPedido>
   );
 }

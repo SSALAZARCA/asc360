@@ -12,6 +12,7 @@ import { ListaReconteos, TareaActiva } from './Reconteos';
 import UltimaLectura from './UltimaLectura';
 import { C, pantalla } from './estilos';
 import { TEXTOS } from './textos';
+import PruebaBadge from './PruebaBadge';
 
 function estiloPestana(activa) {
   return {
@@ -35,6 +36,7 @@ function Encabezado({ info, onSalir }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
         <span style={{ fontWeight: 800, fontSize: 18 }}>Motored</span>
         <span style={{ fontSize: 15, color: C.borde }}>{`Conteo total · ${info.sucursal || ''}`}</span>
+        {info.esPrueba && <PruebaBadge />}
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
         <span style={{ fontSize: 14, color: C.borde }}>{info.etiqueta}</span>

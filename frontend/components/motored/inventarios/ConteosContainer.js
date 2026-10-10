@@ -5,7 +5,9 @@
  * leader) and annuls; the leader opens its own conteos (the backend already
  * filters them); GERENCIA reads. A leader is LIDER_INVENTARIOS or
  * COORDINADOR_REPUESTOS. Gate: `CONTEOS_ROLES` only; any other role is sent
- * to its home (UX only).
+ * to its home (UX only). Test counts (odd/tasks/motored-conteo-prueba.md)
+ * are ADMIN-only: hidden until "Mostrar pruebas", each with a PRUEBA badge
+ * and a "Borrar conteo de prueba" action.
  */
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -17,6 +19,7 @@ import { errorStyle, paginaStyle, rotuloStyle, tituloStyle } from './estilos';
 import ConteosLista from './ConteosLista';
 import ProgramarConteoDialog from './ProgramarConteoDialog';
 import AnularConteoDialog from './AnularConteoDialog';
+import BorrarPruebaDialog from './BorrarPruebaDialog';
 
 function readRole() {
   try {
@@ -42,8 +45,16 @@ export function useConteosGate() {
   return allowed;
 }
 
+function filtrosDeLista(estado, incluirPruebas) {
+  const filtros = {};
+  if (estado) filtros.estado = estado;
+  if (incluirPruebas) filtros.incluir_pruebas = true;
+  return filtros;
+}
+
 function useConteos(allowed) {
   const [estado, setEstado] = useState('');
+  const [incluirPruebas, setIncluirPruebas] = useState(false);
   const [conteos, setConteos] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
@@ -52,26 +63,26 @@ function useConteos(allowed) {
     setCargando(true);
     setError('');
     try {
-      setConteos(await listarConteos(estado ? { estado } : {}));
+      setConteos(await listarConteos(filtrosDeLista(estado, incluirPruebas)));
     } catch (err) {
       setError(err.message || 'No se pudieron cargar los conteos.');
     } finally {
       setCargando(false);
     }
-  }, [estado]);
+  }, [estado, incluirPruebas]);
 
   useEffect(() => {
     if (allowed) cargar();
   }, [allowed, cargar]);
 
-  return { estado, setEstado, conteos, cargando, error, cargar };
+  return { estado, setEstado, incluirPruebas, setIncluirPruebas, conteos, cargando, error, cargar };
 }
 
 export default function ConteosContainer() {
   const allowed = useConteosGate();
   const router = useRouter();
   const lista = useConteos(allowed);
-  // { modo: 'programar' | 'reprogramar' | 'anular', conteo? }
+  // { modo: 'programar' | 'reprogramar' | 'anular' | 'borrar', conteo? }
   const [dialogo, setDialogo] = useState(null);
   if (!allowed) return null;
   const permisos = permisosConteo();
@@ -101,15 +112,20 @@ export default function ConteosContainer() {
       <ConteosLista
         conteos={lista.conteos} cargando={lista.cargando} estado={lista.estado} onEstado={lista.setEstado}
         administra={permisos.administra}
+        incluirPruebas={lista.incluirPruebas} onIncluirPruebas={lista.setIncluirPruebas}
         onAbrir={(conteo) => router.push(`${CONTEOS_PATH}/${conteo.id}`)}
         onReprogramar={(conteo) => setDialogo({ modo: 'reprogramar', conteo })}
         onAnular={(conteo) => setDialogo({ modo: 'anular', conteo })}
+        onBorrar={(conteo) => setDialogo({ modo: 'borrar', conteo })}
       />
-      {dialogo && dialogo.modo !== 'anular' && (
+      {(dialogo?.modo === 'programar' || dialogo?.modo === 'reprogramar') && (
         <ProgramarConteoDialog conteo={dialogo.conteo} onCancel={() => setDialogo(null)} onListo={alTerminar} />
       )}
       {dialogo?.modo === 'anular' && (
         <AnularConteoDialog conteo={dialogo.conteo} onCancel={() => setDialogo(null)} onListo={alTerminar} />
+      )}
+      {dialogo?.modo === 'borrar' && (
+        <BorrarPruebaDialog conteo={dialogo.conteo} onCancel={() => setDialogo(null)} onListo={alTerminar} />
       )}
     </section>
   );

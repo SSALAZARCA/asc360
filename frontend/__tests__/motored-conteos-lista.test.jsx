@@ -124,7 +124,7 @@ describe('Programar conteo', () => {
     fireEvent.click(within(dialogo).getByRole('button', { name: 'Programar' }));
 
     await waitFor(() => expect(api.programarConteo).toHaveBeenCalledWith({
-      sucursal_id: 's1', lider_id: 'l1', fecha_programada: '2026-10-12',
+      sucursal_id: 's1', lider_id: 'l1', fecha_programada: '2026-10-12', es_prueba: false,
     }));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(api.listarConteos).toHaveBeenCalledTimes(2);

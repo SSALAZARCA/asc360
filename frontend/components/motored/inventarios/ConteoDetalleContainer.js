@@ -5,6 +5,8 @@
  * EN_RECONTEO -> live panel ("Main"), or the access screen when asked;
  * CERRADO -> result. The plain 6-digit code exists only in the answers of
  * iniciar and rotar, so it lives in memory here and is gone after a reload.
+ * A test conteo (odd/tasks/motored-conteo-prueba.md) gets the PRUEBA band on
+ * top of whichever screen it shows.
  */
 import { useCallback, useEffect, useState } from 'react';
 import { obtenerConteo, rotarCodigo } from '../../../lib/motored/conteosApi';
@@ -15,6 +17,7 @@ import IniciarVista from './IniciarVista';
 import PanelVivo from './PanelVivo';
 import ResultadoConteo from './ResultadoConteo';
 import VolverConteos from './VolverConteos';
+import AvisoPrueba from './AvisoPrueba';
 
 function useConteo(conteoId, allowed) {
   const [conteo, setConteo] = useState(null);
@@ -69,11 +72,27 @@ export default function ConteoDetalleContainer({ conteoId }) {
     setVista('acceso');
   };
 
+  const pantalla = (
+    <PantallaConteo
+      conteo={conteo} permisos={permisos} acceso={acceso} vista={vista} setVista={setVista}
+      onIniciado={alIniciar} onCambioEstado={cargar}
+    />
+  );
+  if (!conteo.es_prueba) return pantalla;
+  return (
+    <div style={paginaStyle}>
+      <AvisoPrueba conteo={conteo} administra={permisos.administra} />
+      {pantalla}
+    </div>
+  );
+}
+
+function PantallaConteo({ conteo, permisos, acceso, vista, setVista, onIniciado, onCambioEstado }) {
   if (conteo.estado === 'PROGRAMADO' || (ESTADOS_ABIERTOS.includes(conteo.estado) && vista === 'acceso')) {
     return (
       <IniciarVista
         conteo={conteo} permisos={permisos} acceso={acceso}
-        onIniciado={alIniciar} onVolverPanel={() => setVista('panel')}
+        onIniciado={onIniciado} onVolverPanel={() => setVista('panel')}
       />
     );
   }
@@ -81,7 +100,7 @@ export default function ConteoDetalleContainer({ conteoId }) {
     return (
       <PanelVivo
         conteo={conteo} permisos={permisos} acceso={acceso}
-        onVerAcceso={() => setVista('acceso')} onCambioEstado={cargar}
+        onVerAcceso={() => setVista('acceso')} onCambioEstado={onCambioEstado}
       />
     );
   }

@@ -25,7 +25,9 @@ const REFRESCO_MS = 30000;
 
 export default function useConteo({ slug, sesion, intervaloEnvioMs, onSesionPerdida, onUbicacion }) {
   const api = useMemo(() => crearConteoApi(slug, sesion.token), [slug, sesion.token]);
-  const [info, setInfo] = useState({ etiqueta: sesion.etiqueta, sucursal: sesion.sucursal, estado: null });
+  const [info, setInfo] = useState({
+    etiqueta: sesion.etiqueta, sucursal: sesion.sucursal, estado: null, esPrueba: Boolean(sesion.esPrueba),
+  });
   const [ubicacion, setUbicacion] = useState(sesion.ubicacion || null);
   const ubicacionRef = useRef(ubicacion);
   const sincronizando = useRef(false);
@@ -76,7 +78,7 @@ export default function useConteo({ slug, sesion, intervaloEnvioMs, onSesionPerd
   const refrescar = useCallback(async () => {
     try {
       const [s, t] = await Promise.all([api.sesion(), api.reconteos()]);
-      setInfo({ etiqueta: s.etiqueta, sucursal: s.sucursal, estado: s.estado_conteo });
+      setInfo({ etiqueta: s.etiqueta, sucursal: s.sucursal, estado: s.estado_conteo, esPrueba: Boolean(s.es_prueba) });
       setTareas(t || []);
     } catch (error) {
       manejarError(error);
