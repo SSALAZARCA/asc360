@@ -65,7 +65,7 @@ describe('traslados card on the public link', () => {
     const card = await tarjeta();
     await user.click(await within(card).findByRole('button', { name: 'Recibido' }));
     const post = delTraslado().find((c) => c.url.endsWith('/traslados/confirmar'));
-    expect(post.body).toEqual({ cedula: '123', documento: '79-00000082', bodega_salida: 'B-1', estado: 'RECIBIDO' });
+    expect(post.body).toEqual({ cedula: '123', documento: '79-00000082', bodega_salida: 'B-1', bodega_entrada: 'E-1', estado: 'RECIBIDO' });
     expect(await within(card).findByText('Recíbelo en el ERP')).toBeInTheDocument();
     expect(within(card).getByText(/Paula Gómez/)).toBeInTheDocument();
     expect(within(card).getByRole('button', { name: 'Recibido' })).toHaveAttribute('aria-pressed', 'true');
@@ -96,6 +96,19 @@ describe('traslados card on the public link', () => {
     rutas['/traslados'] = respuesta(200, bloque([traslado('79-00000099')]));
     await user.click(screen.getByRole('button', { name: 'Reintentar' }));
     expect(await screen.findByText(/1 traslados pendientes/)).toBeInTheDocument();
+  });
+
+  it('does not ask again when the link object is re-created with the same token and cédula', async () => {
+    rutas['/traslados'] = respuesta(200, bloque([SIN_CONFIRMAR]));
+    const { rerender } = render(<AsesorDetalle data={ASESOR_DETALLE} enlace={{ token: 'tok123', cedula: '123' }} />);
+    await tarjeta();
+    const pedidos = () => delTraslado().filter((c) => c.url.endsWith('/traslados')).length;
+    expect(pedidos()).toBe(1);
+    rerender(<AsesorDetalle data={ASESOR_DETALLE} enlace={{ token: 'tok123', cedula: '123' }} />);
+    await tarjeta();
+    expect(pedidos()).toBe(1);
+    rerender(<AsesorDetalle data={ASESOR_DETALLE} enlace={{ token: 'tok123', cedula: '456' }} />);
+    await waitFor(() => expect(pedidos()).toBe(2));
   });
 
   it('places both cards in one two-column container', async () => {
@@ -144,7 +157,7 @@ describe('traslados card in the staff asesor view', () => {
     await user.click(await within(card).findByRole('button', { name: 'No ha llegado' }));
     const post = delTraslado().find((c) => c.url.endsWith('/gestion-repuestos/traslados/confirmar'));
     expect(post.opts.method).toBe('POST');
-    expect(post.body).toEqual({ documento: '79-00000082', bodega_salida: 'B-1', estado: 'NO_HA_LLEGADO' });
+    expect(post.body).toEqual({ documento: '79-00000082', bodega_salida: 'B-1', bodega_entrada: 'E-1', estado: 'NO_HA_LLEGADO' });
     await waitFor(() => expect(within(card).getByText(/Coord/)).toBeInTheDocument());
   });
 

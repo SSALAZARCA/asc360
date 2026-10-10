@@ -1,6 +1,6 @@
 /** "Gestión repuestos > Traslados": cards, per-store table, filters, detail with history and confirm buttons. */
 import React from 'react';
-import { render, screen, within, waitFor } from '@testing-library/react';
+import { render, screen, within, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ITEMS, ULTIMA_CARGA, RECIBIDO, SIN_CONFIRMAR } from './helpers/trasladosFixture';
 
@@ -14,6 +14,8 @@ jest.mock('../lib/motored/gestionRepuestosApi', () => ({
 }));
 
 import TrasladosContainer from '../components/motored/gestion-repuestos/TrasladosContainer';
+import { PALETA } from '../components/motored/gestion-repuestos/semaforo';
+import TrasladoHistorial from '../components/motored/gestion-repuestos/TrasladoHistorial';
 
 beforeEach(() => {
   sessionStorage.clear();
@@ -142,7 +144,7 @@ describe('Traslados history and confirmation', () => {
     ] });
     await entrar();
     await user.click(within(filasDetalle()[1]).getByRole('button', { name: 'Historial' }));
-    expect(mockApi.getTrasladosHistorial).toHaveBeenCalledWith('79-00000082', 'B-1');
+    expect(mockApi.getTrasladosHistorial).toHaveBeenCalledWith('79-00000082', 'B-1', 'E-1');
     expect(await screen.findByText('Referencias de 79-00000082')).toBeInTheDocument();
     expect(screen.getByText('3360B-ABW-201S')).toBeInTheDocument();
     expect(screen.getByText(/Direccional der\. del\. · 1 und/)).toBeInTheDocument();
@@ -169,17 +171,20 @@ describe('Traslados history and confirmation', () => {
       .mockResolvedValue({ ultima_carga: ULTIMA_CARGA, items: [RECIBIDO, nuevo, ITEMS[2]] }); // the reload after saving
     await entrar(role);
     await user.click(within(filasDetalle()[1]).getByRole('button', { name: 'Recibido' }));
-    expect(mockApi.confirmarTraslado).toHaveBeenCalledWith({ documento: '79-00000082', bodega_salida: 'B-1', estado: 'RECIBIDO' });
+    expect(mockApi.confirmarTraslado).toHaveBeenCalledWith({ documento: '79-00000082', bodega_salida: 'B-1', bodega_entrada: 'E-1', estado: 'RECIBIDO' });
     await waitFor(() => expect(within(filasDetalle()[1]).getByText(/Coord/)).toBeInTheDocument());
     await user.click(within(filasDetalle()[2]).getByRole('button', { name: 'No ha llegado' }));
-    expect(mockApi.confirmarTraslado).toHaveBeenLastCalledWith({ documento: '79-00000170', bodega_salida: 'B-2', estado: 'NO_HA_LLEGADO' });
+    expect(mockApi.confirmarTraslado).toHaveBeenLastCalledWith({ documento: '79-00000170', bodega_salida: 'B-2', bodega_entrada: 'E-2', estado: 'NO_HA_LLEGADO' });
   });
 
   it.each(['COMPRAS', 'GERENCIA'])('%s reads without confirm buttons', async (role) => {
     await entrar(role);
     expect(screen.queryByRole('button', { name: 'Recibido' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'No ha llegado' })).not.toBeInTheDocument();
-    expect(RECIBIDO.documento).toBe('79-00000067');
+    expect(documentos()).toEqual(['79-00000067', '79-00000082', '79-00000170']);
+    filasDetalle().forEach((fila) => {
+      expect(within(fila).getAllByRole('button').map((b) => b.textContent)).toEqual(['Historial']);
+    });
   });
 
   it('shows the backend message when saving fails', async () => {
@@ -188,5 +193,122 @@ describe('Traslados history and confirmation', () => {
     await entrar();
     await user.click(within(filasDetalle()[1]).getByRole('button', { name: 'Recibido' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('El traslado ya no está pendiente.');
+  });
+});
+
+const pendiente = () => {
+  let resolver; let rechazar;
+  const promesa = new Promise((res, rej) => { resolver = res; rechazar = rej; });
+  return { promesa, resolver, rechazar };
+};
+const esperarFiltros = () => screen.queryByLabelText('Tienda que recibe');
+
+describe('Traslados load states', () => {
+  const montar = (role = 'ADMIN') => {
+    sessionStorage.setItem('motored_user', JSON.stringify({ role }));
+    return render(<TrasladosContainer />);
+  };
+
+  it('warns above the cards when the last load had rows with errors', async () => {
+    mockApi.getTrasladosDetalle.mockResolvedValue({ ultima_carga: ULTIMA_CARGA, carga_id: 'c1', filas_con_error: 3, items: ITEMS });
+    montar();
+    const aviso = await screen.findByText('La última carga de traslados tuvo 3 filas con error; esos traslados no aparecen aquí. Revísala en Maestros → Cargas.');
+    expect(aviso).toHaveAttribute('role', 'status');
+    expect(aviso).toHaveStyle({ background: PALETA.atencion.soft });
+    expect(aviso.compareDocumentPosition(tarjeta('Pendientes')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it.each([0, undefined])('shows no warning when filas_con_error is %s', async (cuantas) => {
+    mockApi.getTrasladosDetalle.mockResolvedValue({ ultima_carga: ULTIMA_CARGA, filas_con_error: cuantas, items: ITEMS });
+    montar();
+    await screen.findByRole('table', { name: 'Detalle' });
+    expect(screen.queryByText(/filas con error/)).not.toBeInTheDocument();
+  });
+
+  it('does not render the filter bar while the first load is running', async () => {
+    const carga = pendiente();
+    mockApi.getTrasladosDetalle.mockReturnValue(carga.promesa);
+    montar();
+    expect(esperarFiltros()).not.toBeInTheDocument();
+    carga.resolver({ ultima_carga: ULTIMA_CARGA, items: ITEMS });
+    expect(await screen.findByLabelText('Tienda que recibe')).toBeInTheDocument();
+  });
+
+  it('shows the error with a retry and no filter bar when the first load fails', async () => {
+    const user = userEvent.setup();
+    mockApi.getTrasladosDetalle.mockRejectedValueOnce(new Error('boom'));
+    montar();
+    expect(await screen.findByRole('alert')).toHaveTextContent('No se pudo cargar el seguimiento de traslados.');
+    expect(esperarFiltros()).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Reintentar' }));
+    expect(await screen.findByRole('table', { name: 'Detalle' })).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(esperarFiltros()).toBeInTheDocument();
+    expect(mockApi.getTrasladosDetalle).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('Traslados background reload', () => {
+  const entrarConfirmando = async () => {
+    mockApi.confirmarTraslado.mockImplementation(async (c) => ({ ...ITEMS.find((i) => i.documento === c.documento), estado: c.estado }));
+    sessionStorage.setItem('motored_user', JSON.stringify({ role: 'ADMIN' }));
+    const vista = render(<TrasladosContainer />);
+    await screen.findByRole('table', { name: 'Detalle' });
+    return vista;
+  };
+  const conRefs = (documento, refs) => ITEMS.map((i) => (i.documento === documento ? { ...i, refs } : i));
+
+  it('keeps the newest reload when an older one answers last', async () => {
+    const user = userEvent.setup();
+    await entrarConfirmando();
+    const vieja = pendiente();
+    const nueva = pendiente();
+    mockApi.getTrasladosDetalle.mockReturnValueOnce(vieja.promesa).mockReturnValueOnce(nueva.promesa);
+    await user.click(within(filasDetalle()[1]).getByRole('button', { name: 'Recibido' }));
+    await waitFor(() => expect(mockApi.getTrasladosDetalle).toHaveBeenCalledTimes(2));
+    await user.click(within(filasDetalle()[2]).getByRole('button', { name: 'Recibido' }));
+    await waitFor(() => expect(mockApi.getTrasladosDetalle).toHaveBeenCalledTimes(3));
+    nueva.resolver({ ultima_carga: ULTIMA_CARGA, items: conRefs('79-00000170', 7) });
+    await waitFor(() => expect(within(filasDetalle()[2]).getAllByRole('cell')[5]).toHaveTextContent('7'));
+    await act(async () => { vieja.resolver({ ultima_carga: ULTIMA_CARGA, items: conRefs('79-00000170', 5) }); });
+    await waitFor(() => expect(within(filasDetalle()[2]).getAllByRole('cell')[5]).toHaveTextContent('7'));
+  });
+
+  it('ignores a reload that answers after the panel was closed', async () => {
+    const user = userEvent.setup();
+    const error = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const vista = await entrarConfirmando();
+    const tardia = pendiente();
+    mockApi.getTrasladosDetalle.mockReturnValueOnce(tardia.promesa);
+    await user.click(within(filasDetalle()[1]).getByRole('button', { name: 'Recibido' }));
+    await waitFor(() => expect(mockApi.getTrasladosDetalle).toHaveBeenCalledTimes(2));
+    vista.unmount();
+    tardia.resolver({ ultima_carga: ULTIMA_CARGA, items: ITEMS });
+    await tardia.promesa;
+    expect(error).not.toHaveBeenCalled();
+    error.mockRestore();
+  });
+});
+
+describe('Traslado history states', () => {
+  const salida = { ...SIN_CONFIRMAR };
+
+  it('shows the error branch when the history cannot be loaded', async () => {
+    mockApi.getTrasladosHistorial.mockRejectedValue(new Error('boom'));
+    render(<TrasladoHistorial item={salida} />);
+    expect(await screen.findByRole('alert')).toHaveTextContent('No se pudo cargar el historial.');
+  });
+
+  it('goes back to loading when the transfer changes', async () => {
+    const siguiente = pendiente();
+    mockApi.getTrasladosHistorial
+      .mockResolvedValueOnce({ historial: [{ estado: 'RECIBIDO', por: 'Ana', canal: 'APP', en: '2026-09-04T14:15:00Z' }] })
+      .mockReturnValueOnce(siguiente.promesa);
+    const { rerender } = render(<TrasladoHistorial item={salida} />);
+    expect(await screen.findByText(/Ana:/)).toBeInTheDocument();
+    rerender(<TrasladoHistorial item={{ ...salida, documento: '79-00000099', bodega_entrada: 'E-9' }} />);
+    expect(screen.getByText('Cargando historial…')).toBeInTheDocument();
+    expect(screen.queryByText(/Ana:/)).not.toBeInTheDocument();
+    expect(mockApi.getTrasladosHistorial).toHaveBeenLastCalledWith('79-00000099', 'B-1', 'E-9');
   });
 });

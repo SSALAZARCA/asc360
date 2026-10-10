@@ -70,7 +70,7 @@ function Cabecera({ puedeConfirmar }) {
   );
 }
 
-const clave = (i) => `${i.documento}|${i.bodega_salida}`;
+const clave = (i) => `${i.documento}|${i.bodega_salida}|${i.bodega_entrada}`;
 
 export default function TrasladosDetalle({ items, total, puedeConfirmar, ocupada, onConfirmar }) {
   const [abierta, setAbierta] = useState(null);

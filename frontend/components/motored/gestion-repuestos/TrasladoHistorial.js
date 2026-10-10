@@ -41,11 +41,12 @@ function useHistorial(item) {
   const [lista, setLista] = useState(null);
   useEffect(() => {
     let vigente = true;
-    getTrasladosHistorial(item.documento, item.bodega_salida)
+    setLista(null);
+    getTrasladosHistorial(item.documento, item.bodega_salida, item.bodega_entrada)
       .then((r) => { if (vigente) setLista(r.historial || []); })
       .catch(() => { if (vigente) setLista(ERROR); });
     return () => { vigente = false; };
-  }, [item.documento, item.bodega_salida, item.confirmado_en]);
+  }, [item.documento, item.bodega_salida, item.bodega_entrada, item.confirmado_en]);
   return lista;
 }
 

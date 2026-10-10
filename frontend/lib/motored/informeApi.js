@@ -92,5 +92,5 @@ export const verTraslados = (token, cedula) => postTraslados(token, 'traslados',
 
 /** The asesor answers "RECIBIDO" / "NO_HA_LLEGADO" for a transfer of her store; resolves the updated transfer. */
 export const confirmarTrasladoPublico = (token, cedula, item, estado) => postTraslados(
-  token, 'traslados/confirmar', { cedula, documento: item.documento, bodega_salida: item.bodega_salida, estado }, PENDIENTE_ERROR,
+  token, 'traslados/confirmar', { cedula, documento: item.documento, bodega_salida: item.bodega_salida, bodega_entrada: item.bodega_entrada, estado }, PENDIENTE_ERROR,
 );

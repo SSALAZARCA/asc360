@@ -15,7 +15,7 @@ import { NO_HA_LLEGADO, RECIBIDO, partesTraslado, puedeConfirmarRol, quienDe, re
 import { PALETA, nivelPorDias } from '../../gestion-repuestos/semaforo';
 import { BotonInfo, Pildora } from './PendientesUi';
 
-const clave = (i) => `${i.documento}|${i.bodega_salida}`;
+const clave = (i) => `${i.documento}|${i.bodega_salida}|${i.bodega_entrada}`;
 const AYUDA = 'Son los traslados hacia tu tienda que siguen vivos en el ERP según el último archivo cargado. Cuando se reciben en el ERP, desaparecen de la lista.';
 const CARGANDO = 'cargando';
 const FALLO = 'fallo';
@@ -23,18 +23,21 @@ const FALLO = 'fallo';
 /** The block of the card: `null` while loading or hidden, `FALLO` after a failed load. */
 function useBloqueTraslados(data, enlace) {
   const sucursal = data?.asesor?.sucursal_id;
+  // Primitives, not the `enlace` object: a parent that rebuilds the same link must not refetch.
+  const token = enlace?.token;
+  const cedula = enlace?.cedula;
   const [bloque, setBloque] = useState(CARGANDO);
   const [intento, setIntento] = useState(0);
   useEffect(() => {
-    if (!enlace && !sucursal) { setBloque(null); return undefined; }
+    if (!token && !sucursal) { setBloque(null); return undefined; }
     let vigente = true;
     setBloque(CARGANDO);
-    const pedir = enlace ? verTraslados(enlace.token, enlace.cedula) : getTrasladosAsesor(sucursal);
+    const pedir = token ? verTraslados(token, cedula) : getTrasladosAsesor(sucursal);
     pedir
       .then((b) => { if (vigente) setBloque(b); })
       .catch((e) => { if (vigente) setBloque(e.status === 403 ? null : FALLO); });
     return () => { vigente = false; };
-  }, [enlace, sucursal, intento]);
+  }, [token, cedula, sucursal, intento]);
   const reintentar = useCallback(() => setIntento((n) => n + 1), []);
   return { bloque, setBloque, reintentar };
 }
@@ -103,7 +106,9 @@ function useRespuesta(enlace, setBloque) {
     try {
       const nuevo = enlace
         ? await confirmarTrasladoPublico(enlace.token, enlace.cedula, item, estado)
-        : await confirmarTraslado({ documento: item.documento, bodega_salida: item.bodega_salida, estado });
+        : await confirmarTraslado({
+          documento: item.documento, bodega_salida: item.bodega_salida, bodega_entrada: item.bodega_entrada, estado,
+        });
       poner(item, { ...nuevo, guardando: false });
     } catch (e) {
       poner(item, antes);
