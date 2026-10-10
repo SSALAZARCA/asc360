@@ -3,7 +3,7 @@ KPI's de Motored, pestana Inventario: las consultas (PostgreSQL; solo las cubre 
 
 Una peticion corre un numero fijo de consultas agrupadas (nada por tienda ni por referencia):
 cortes, valor por corte y tienda, pares (tienda principal x referencia) con existencia, venta mensual
-por par, ventas perdidas por par, costo de venta por mes x tienda x linea, transito al corte y nombres.
+por par, ventas perdidas por par, costo de venta por mes x tienda x linea x referencia, pares con existencia de la tendencia, transito al corte y nombres.
 Comparten las reglas de `tablero_asesores_consultas`: cargas no ANULADAS, tiendas del filtro (una
 principal incluye a sus asociadas y todo se agrupa en la principal), la valoracion del inventario
 (`_valoracion_inventario`), la linea por referencia y el costo de venta por linea (`_expr_costo_fila`).
@@ -153,9 +153,10 @@ async def consultar_perdidas_por_par(
 
 async def consultar_costos_por_mes(
     db: AsyncSession, filtro: Filtro, corte: Optional[datetime.date], desde_mes: str, hasta_mes: str,
-) -> List[Tuple[str, str, Optional[str], Decimal]]:
-    """`(mes, tienda, linea, costo de venta)` de los meses `desde_mes..hasta_mes`, con la regla de costo
-    de `consultar_costo_venta` (HMCL incluido: es el costo de TODA la salida de mercancia)."""
+) -> List[Tuple[str, str, Optional[str], Any, Decimal]]:
+    """`(mes, tienda, linea, referencia_id, costo de venta)` de los meses `desde_mes..hasta_mes`, con la regla
+    de costo de `consultar_costo_venta` (HMCL incluido: es el costo de TODA la salida de mercancia). Una sola
+    consulta sirve al costo por linea y tienda y al costo por par de las bandas de la tendencia."""
     inicio, fin = t.limites_de_fecha(desde_mes, hasta_mes)
     ventana = filtro._replace(rangos=((inicio, fin),), modo_hmcl=t.HMCL_INCLUIR)
     costos = q._subconsulta_costos(corte)
@@ -163,10 +164,37 @@ async def consultar_costos_por_mes(
     tienda = cast(q.principal_expr(VentaDetalle.sucursal_id), String)
     mes = q._expr_mes()
     consulta = q._desde_ventas(
-        select(mes, tienda, lineas.c.linea, func.coalesce(func.sum(q._costo_de_venta(costos)), 0))
-        .group_by(mes, tienda, lineas.c.linea),
+        select(mes, tienda, lineas.c.linea, VentaDetalle.referencia_id,
+               func.coalesce(func.sum(q._costo_de_venta(costos)), 0))
+        .group_by(mes, tienda, lineas.c.linea, VentaDetalle.referencia_id),
         ventana, lineas, solo_lineas_reconocidas=False, costos=costos, con_vendedor=False, por_sucursal=True)
-    return [(m, s, ln, Decimal(c)) for m, s, ln, c in (await db.execute(consulta)).all()]
+    return [(m, s, ln, r, Decimal(c)) for m, s, ln, r, c in (await db.execute(consulta)).all()]
+
+
+async def consultar_pares_por_corte(
+    db: AsyncSession, filtro: Filtro, cortes: Iterable[datetime.date],
+) -> Dict[datetime.date, List[Tuple[str, Any, Decimal]]]:
+    """`{corte: [(tienda, referencia_id, valor)]}` de cada par con existencia total > 0 en cada corte, con la
+    valoracion de `consultar_pares_con_existencia`. Una sola consulta para todos los cortes."""
+    cortes = sorted(set(cortes))
+    salida: Dict[datetime.date, List[Tuple[str, Any, Decimal]]] = {c: [] for c in cortes}
+    if not cortes:
+        return salida
+    valor, _, _ = q._valoracion_inventario()
+    existencia = func.sum(InventarioDetalle.existencia)
+    tienda = cast(q.principal_expr(InventarioDetalle.sucursal_id), String)
+    consulta = (
+        select(InventarioDetalle.fecha_corte, tienda, InventarioDetalle.referencia_id, valor)
+        .select_from(InventarioDetalle)
+        .join(CargaArchivo, CargaArchivo.id == InventarioDetalle.carga_id)
+        .outerjoin(Referencia, Referencia.id == InventarioDetalle.referencia_id)
+        .where(InventarioDetalle.fecha_corte.in_(cortes), CargaArchivo.estado != ESTADO_ANULADO)
+        .group_by(InventarioDetalle.fecha_corte, tienda, InventarioDetalle.referencia_id)
+        .having(existencia > 0))
+    consulta = _por_tienda(consulta, InventarioDetalle.sucursal_id, filtro)
+    for corte, id_tienda, referencia, v in (await db.execute(consulta)).all():
+        salida[corte].append((id_tienda, referencia, Decimal(v)))
+    return salida
 
 
 async def consultar_transito_por_par(

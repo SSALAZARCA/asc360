@@ -288,3 +288,69 @@ def test_an_empty_world_gives_an_empty_but_complete_payload():
     assert datos["tarjetas"]["valor"] == 0 and datos["tarjetas"]["dias"] is None
     assert datos["tarjetas"]["disponibilidad"] == {"pct": None, "agotadas": 0}
     assert datos["tendencia"] == [] and datos["tiendas"] == [] and resultado.agotadas == []
+
+
+# --- the bands of the trend ----------------------------------------------------------------------
+
+CORTES_60_90 = {"verde_hasta": 60, "ambar_hasta": 90}
+
+
+@pytest.mark.parametrize("dias, banda", [
+    (0, "verde"), (60, "verde"), (60.4, "ambar"), (61, "ambar"), (90, "ambar"), (90.01, "violeta"),
+    (91, "violeta"), (None, "violeta")])
+def test_the_band_of_a_pair_follows_its_days_and_the_configured_cuts(dias, banda):
+    assert inv.banda_de_dias(dias, CORTES_60_90) == banda
+
+
+def test_the_band_cuts_are_the_configured_ones():
+    cortes = {"verde_hasta": 30, "ambar_hasta": 45}
+    assert [inv.banda_de_dias(d, cortes) for d in (30, 31, 45, 46)] == ["verde", "ambar", "ambar", "violeta"]
+
+
+def _pares_de_bandas():
+    """Aug..Oct has 92 days, so a pair of value V and cost 92 lasts exactly V days."""
+    return {
+        CORTE: [(S1, R1, D("60")), (S1, R2, D("61")), (S1, R3, D("90")), (S2, R1, D("91")), (S2, R2, D("50"))],
+        F(2026, 9, 30): [(S1, R1, D("30"))]}
+
+
+def _costos_de_bandas():
+    return [("2026-10", S1, R1, D("92")), ("2026-09", S1, R2, D("40")), ("2026-08", S1, R2, D("52")),
+            ("2026-08", S1, R3, D("92")), ("2026-10", S2, R1, D("92")), ("2026-07", S2, R2, D("999")),
+            ("2026-10", S2, R2, D("-5"))]
+
+
+def test_each_trend_point_splits_its_value_by_the_days_of_each_pair_at_the_boundaries():
+    e = _entradas(pares_por_corte=_pares_de_bandas(), costos_por_par=_costos_de_bandas())
+
+    bandas = {b["banda"]: b for b in inv.analizar(e).datos["tendencia"][1]["bandas"]}
+
+    assert list(bandas) == ["verde", "ambar", "violeta"]
+    assert bandas["verde"]["valor"] == 60.0                     # exactly 60 days
+    assert bandas["ambar"]["valor"] == 151.0                    # 61 days (cost 40+52 over two months) and 90 days
+    assert bandas["violeta"]["valor"] == 141.0                  # 91 days, and a pair whose only cost is outside / negative
+    assert [b["pct"] for b in bandas.values()] == pytest.approx([60 / 352, 151 / 352, 141 / 352])
+    assert sum(b["pct"] for b in bandas.values()) == pytest.approx(1.0)
+
+
+def test_a_pair_without_cost_of_sales_in_the_window_is_not_moving_so_it_falls_in_violet():
+    e = _entradas(pares_por_corte={CORTE: [(S1, R1, D("10"))]}, costos_por_par=[("2026-05", S1, R1, D("500"))])
+
+    bandas = inv.analizar(e).datos["tendencia"][1]["bandas"]
+
+    assert [(b["banda"], b["valor"]) for b in bandas] == [("verde", 0.0), ("ambar", 0.0), ("violeta", 10.0)]
+
+
+def test_each_point_uses_the_window_that_ends_in_its_own_month():
+    e = _entradas(pares_por_corte=_pares_de_bandas(), costos_por_par=[("2026-07", S1, R1, D("92"))])
+
+    septiembre, octubre = inv.analizar(e).datos["tendencia"]
+
+    assert [b["valor"] for b in septiembre["bandas"]] == [30.0, 0.0, 0.0]   # Jul..Sep sees the July cost
+    assert [b["valor"] for b in octubre["bandas"]][2] == 352.0            # Aug..Oct does not: all violet
+
+
+def test_a_point_without_pairs_has_zero_values_and_no_share():
+    bandas = inv.analizar(_entradas()).datos["tendencia"][0]["bandas"]
+
+    assert [(b["valor"], b["pct"]) for b in bandas] == [(0.0, None)] * 3

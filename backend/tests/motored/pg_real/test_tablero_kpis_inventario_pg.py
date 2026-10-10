@@ -184,6 +184,37 @@ async def test_the_trend_has_one_point_per_corte_month_with_the_days_of_its_own_
     assert r["tendencia"][2]["dias"] == pytest.approx(r["tarjetas"]["dias"])
 
 
+def _valores_de_bandas(punto):
+    return [b["valor"] for b in punto["bandas"]]
+
+
+async def test_each_month_bar_is_split_into_green_amber_violet_by_the_days_of_each_pair(sesion):
+    w = await _mundo(sesion)
+
+    r = await k.calcular_kpis_inventario(sesion, await _filtro(sesion, w))
+
+    # Aug (Jun..Aug): S1 R1 800 / (5600 cost) = 13 days green; S2 R1 2000 / 400 = 460 days violet.
+    # Sep (Jul..Sep): S1 R1 900 / 5900 cost green; S2 R1 3000 / 400 violet.
+    # Oct (Aug..Oct): only S1 R4 10 (cost 100: 9 days) is green; S1 R1 3000 / 900 and S2 R1 4000 / 800 are slow,
+    # R3 lasts 92 days (> 90), and the pairs without cost of sales (R2, R5, R7, R8) are not moving: violet.
+    assert [_valores_de_bandas(p) for p in r["tendencia"]] == [
+        [800.0, 0.0, 2000.0], [900.0, 0.0, 3000.0], [10.0, 0.0, 7770.0]]
+    assert [b["banda"] for b in r["tendencia"][0]["bandas"]] == ["verde", "ambar", "violeta"]
+    assert r["tendencia"][2]["bandas"][0]["pct"] == pytest.approx(10 / 7780)
+    for punto in r["tendencia"]:
+        assert sum(_valores_de_bandas(punto)) == pytest.approx(punto["valor"])
+        assert sum(b["pct"] for b in punto["bandas"]) == pytest.approx(1.0)
+
+
+async def test_the_bands_respect_the_store_filter(sesion):
+    w = await _mundo(sesion)
+
+    solo_s2 = await k.calcular_kpis_inventario(sesion, await _filtro(sesion, w, tiendas=("S2",)))
+
+    assert [_valores_de_bandas(p) for p in solo_s2["tendencia"]] == [
+        [0.0, 0.0, 2000.0], [0.0, 0.0, 3000.0], [0.0, 0.0, 4250.0]]
+
+
 async def test_the_age_bands_and_the_idle_value_follow_the_last_month_with_sales(sesion):
     w = await _mundo(sesion)
 

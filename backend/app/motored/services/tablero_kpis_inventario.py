@@ -18,6 +18,12 @@ Definiciones (todas por PAR tienda principal x referencia; una tienda asociada s
   Disponibilidad = pares con demanda que tienen existencia > 0 / pares con demanda. Agotada con demanda =
   par con demanda y sin existencia en el corte.
 - Todos los `pct` son FRACCIONES (0.107 = 10,7 %).
+- Bandas de la tendencia (`tendencia[].bandas`, verde / ambar / violeta): el valor de cada mes repartido segun
+  los dias de inventario de cada PAR con existencia > 0 en ese corte: valor del par / (costo de venta del par en
+  los 3 meses que terminan en ese mes / dias de la ventana). Verde hasta `verde_hasta`, ambar hasta `ambar_hasta`,
+  violeta lo demas; un par sin costo de venta (cero, negativo o ausente) no rota y va en violeta. Las bandas suman
+  el valor de los PARES con existencia > 0 (sin las lineas de existencia negativa que si descuenta `valor`), y
+  cada valor se redondea a centavos, asi que la suma puede diferir de `valor` por centavos o por esas lineas.
 """
 import calendar
 import math
@@ -44,6 +50,7 @@ UMBRAL_SIN_MOVIMIENTO_POR_DEFECTO = 180
 DIAS_META_POR_DEFECTO = 60
 CORTES_POR_DEFECTO = {"verde_hasta": 60, "ambar_hasta": 90}
 BANDAS = ((0, 90), (91, 180), (181, 365), (366, None))
+BANDAS_DIAS = ("verde", "ambar", "violeta")
 _TODAS = object()
 
 
@@ -262,6 +269,8 @@ class Entradas(NamedTuple):
     cortes_color: Dict[str, float]
     pendientes: Tuple[float, int]  # (valor, facturas) pendientes de ingreso
     nombres_tienda: Dict[str, str]
+    pares_por_corte: Optional[Dict[datetime.date, List[Tuple[str, Any, Decimal]]]] = None  # (tienda, ref, valor)
+    costos_por_par: Optional[List[Tuple[str, str, Any, Decimal]]] = None  # (mes, tienda, referencia, costo)
 
 
 class Resultado(NamedTuple):
@@ -318,15 +327,61 @@ def _tarjetas(
     }
 
 
+def banda_de_dias(dias: Optional[float], cortes: Dict[str, float]) -> str:
+    """verde / ambar / violeta de unos dias de inventario segun los cortes (sin dias: violeta, no rota)."""
+    if dias is None:
+        return BANDAS_DIAS[2]
+    if dias <= cortes["verde_hasta"]:
+        return BANDAS_DIAS[0]
+    return BANDAS_DIAS[1] if dias <= cortes["ambar_hasta"] else BANDAS_DIAS[2]
+
+
+def _costo_por_mes_y_par(costos: Iterable[Tuple[str, str, Any, Decimal]]) -> Dict[str, Dict[Tuple[str, Any], Decimal]]:
+    salida: Dict[str, Dict[Tuple[str, Any], Decimal]] = {}
+    for mes, tienda, referencia, costo in costos:
+        por_par = salida.setdefault(mes, {})
+        por_par[(tienda, referencia)] = por_par.get((tienda, referencia), Decimal(0)) + Decimal(costo)
+    return salida
+
+
+def _costo_de_pares(por_mes: Dict[str, Dict[Tuple[str, Any], Decimal]], mes_fin: str) -> Dict[Tuple[str, Any], Decimal]:
+    """Costo de venta de cada par en los 3 meses de calendario que terminan en `mes_fin`."""
+    total: Dict[Tuple[str, Any], Decimal] = {}
+    for i in range(qk.MESES_COSTO_VENTA):
+        for par, costo in por_mes.get(t.mes_desplazado(mes_fin, -i), {}).items():
+            total[par] = total.get(par, Decimal(0)) + costo
+    return total
+
+
+def armar_bandas(
+    pares: Iterable[Tuple[str, Any, Decimal]], costo_pares: Dict[Tuple[str, Any], Decimal], mes: str,
+    cortes: Dict[str, float],
+) -> List[Dict[str, Any]]:
+    """`[{banda, valor, pct}]` (verde, ambar, violeta) del valor de los `(tienda, referencia, valor)` repartido
+    por los dias de inventario de cada par en la ventana de `mes`."""
+    suma = {banda: Decimal(0) for banda in BANDAS_DIAS}
+    ventana = dias_de_ventana(mes)
+    for tienda, referencia, valor in pares:
+        dias = dias_de_inventario(Decimal(valor), costo_pares.get((tienda, referencia)), ventana)
+        suma[banda_de_dias(dias, cortes)] += Decimal(valor)
+    total = _suma(suma.values())
+    return [{"banda": banda, "valor": _dinero(suma[banda]), "pct": t.ratio(suma[banda], total)}
+            for banda in BANDAS_DIAS]
+
+
 def _tendencia(e: Entradas) -> List[Dict[str, Any]]:
-    """Un punto por mes con corte: su valor y los dias de SU ventana de costo (tiendas con inventario ese corte)."""
+    """Un punto por mes con corte: su valor, los dias de SU ventana de costo (tiendas con inventario ese corte)
+    y su reparto en bandas de dias (por par)."""
+    por_mes = _costo_por_mes_y_par(e.costos_por_par or [])
     puntos = []
     for mes, corte in e.cortes_tendencia:
         por_tienda = e.valores_por_corte.get(corte, {})
         valor = _suma(por_tienda.values())
+        bandas = armar_bandas(
+            (e.pares_por_corte or {}).get(corte, []), _costo_de_pares(por_mes, mes), mes, e.cortes_color)
         puntos.append({
             "mes": mes, "corte": corte.isoformat(), "valor": _dinero(valor),
-            "dias": _dias(valor, costo_ventana(e.costos, mes, set(por_tienda)), mes)})
+            "dias": _dias(valor, costo_ventana(e.costos, mes, set(por_tienda)), mes), "bandas": bandas})
     return puntos
 
 
@@ -445,11 +500,24 @@ def _primer_dia_de_mes(mes: str) -> datetime.date:
     return datetime.date(int(mes[:4]), int(mes[5:7]), 1)
 
 
+def _costos_de_tienda_y_linea(
+    filas: Iterable[Tuple[str, str, Optional[str], Any, Decimal]],
+) -> List[Tuple[str, str, Optional[str], Decimal]]:
+    """El costo de venta por mes x tienda x linea: suma las referencias de cada una."""
+    suma: Dict[Tuple[str, str, Optional[str]], Decimal] = {}
+    for mes, tienda, linea, _, costo in filas:
+        clave = (mes, tienda, linea)
+        suma[clave] = suma.get(clave, Decimal(0)) + Decimal(costo)
+    return [(*clave, costo) for clave, costo in suma.items()]
+
+
 async def _valores_y_costos(
     db: AsyncSession, filtro: Filtro, corte: datetime.date, en_tendencia: List[Tuple[str, datetime.date]],
     anterior: Optional[datetime.date],
-) -> Tuple[Dict[datetime.date, Dict[str, Decimal]], List[Tuple[str, str, Optional[str], Decimal]]]:
-    """Valor por corte y tienda, y costo de venta por mes x tienda x linea de todas las ventanas que se muestran."""
+) -> Tuple[Dict[datetime.date, Dict[str, Decimal]], List[Tuple[str, str, Optional[str], Decimal]],
+           List[Tuple[str, str, Any, Decimal]]]:
+    """Valor por corte y tienda, y el costo de venta de todas las ventanas que se muestran: por mes x tienda x
+    linea y por mes x tienda x referencia (la misma consulta)."""
     # The chosen corte comes from the summary-aware reader (the Tiendas tab's number).
     valores = {corte: {f.sucursal_id: f.valor for f in await lectura.inventario(db, filtro, corte)}}
     otros = {c for _, c in en_tendencia} | ({anterior} if anterior else set())
@@ -457,7 +525,18 @@ async def _valores_y_costos(
     ultimo = filtro.meses[-1]
     primero = min([m for m, _ in en_tendencia] + [ultimo])
     desde = t.mes_desplazado(primero, -(qk.MESES_COSTO_VENTA - 1))
-    return valores, await qi.consultar_costos_por_mes(db, filtro, corte, desde, ultimo)
+    filas = await qi.consultar_costos_por_mes(db, filtro, corte, desde, ultimo)
+    por_par = [(mes, tienda, referencia, costo) for mes, tienda, _, referencia, costo in filas]
+    return valores, _costos_de_tienda_y_linea(filas), por_par
+
+
+async def _pares_de_tendencia(
+    db: AsyncSession, filtro: Filtro, en_tendencia: List[Tuple[str, datetime.date]],
+) -> Dict[datetime.date, List[Tuple[str, Any, Decimal]]]:
+    """Los pares con existencia de cada corte de la tendencia (una consulta)."""
+    if not en_tendencia:
+        return {}
+    return await qi.consultar_pares_por_corte(db, filtro, {c for _, c in en_tendencia})
 
 
 async def _pares_y_demanda(
@@ -486,8 +565,9 @@ async def _entradas(db: AsyncSession, filtro: Filtro, cortes: List[datetime.date
     config = await _configuracion(db, ultimo_mes)
     en_tendencia = cortes_de_tendencia(cortes, ultimo_mes)
     anterior = corte_anterior(cortes, ultimo_mes, corte)
-    valores, costos = await _valores_y_costos(db, filtro, corte, en_tendencia, anterior)
+    valores, costos, costos_por_par = await _valores_y_costos(db, filtro, corte, en_tendencia, anterior)
     pares, demanda = await _pares_y_demanda(db, filtro, corte)
+    pares_por_corte = await _pares_de_tendencia(db, filtro, en_tendencia)
     transito = await qi.consultar_transito_por_par(
         db, filtro, corte, await lectura.principales(db),
         excluir_vencido=bool(config["excluir_transito_vencido"]),
@@ -502,7 +582,8 @@ async def _entradas(db: AsyncSession, filtro: Filtro, cortes: List[datetime.date
         historial_ym=await qi.consultar_primer_mes_con_venta(db), lineas=tuple(filtro.reglas.lineas),
         umbral=int(config["kpi_inventario_sin_movimiento_dias"]), dias_meta=int(config["kpi_inventario_dias_meta"]),
         cortes_color=cortes_color(config["kpi_inventario_dias_cortes"]),
-        pendientes=await _pendientes_de_ingreso(db, filtro), nombres_tienda=nombres)
+        pendientes=await _pendientes_de_ingreso(db, filtro), nombres_tienda=nombres,
+        pares_por_corte=pares_por_corte, costos_por_par=costos_por_par)
 
 
 async def _rotular(db: AsyncSession, filas: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
