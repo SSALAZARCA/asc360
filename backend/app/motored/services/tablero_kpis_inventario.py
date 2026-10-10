@@ -6,8 +6,10 @@ la base de datos (reciben filas ya leidas); `calcular_inventario` las orquesta y
 expone `calcular_kpis_inventario`.
 
 Definiciones (todas por PAR tienda principal x referencia; una tienda asociada suma en su principal):
-- Corte: el ultimo corte valorizado (no ANULADO) en o antes del fin del ULTIMO mes elegido; si no hay
-  uno, el ultimo que exista.
+- La pestana IGNORA el filtro de Periodo: el corte es el ultimo valorizado (no ANULADO) y la ventana de costo
+  son los 3 meses que terminan en el ultimo mes con ventas (el `ultimo_mes` de los KPI's; sin ventas, el mes
+  del corte). El mes anterior es el ultimo corte en o antes del fin del mes previo al del corte, y la
+  tendencia son los ultimos 12 meses que terminan en el mes del corte. Los filtros de tienda si aplican.
 - Dias de inventario: valor / (costo de venta de 3 meses de calendario / dias de la ventana), con las
   mismas tiendas que tienen inventario en el corte (la regla de la pestana Tiendas). Rotacion = 365 / dias.
 - Antiguedad: dias desde el ULTIMO mes con venta (`venta_mensual.unidades > 0`, hasta el mes del corte) de
@@ -80,13 +82,6 @@ def _indice_de_texto(mes: str) -> int:
 
 def fin_de_mes(mes: str) -> datetime.date:
     return _ultimo_dia(_indice_de_texto(mes))
-
-
-def elegir_corte(cortes: Iterable[datetime.date], limite: datetime.date) -> Optional[datetime.date]:
-    """El ultimo corte en o antes de `limite`; sin ninguno, el ultimo que exista (None si no hay cortes)."""
-    cortes = sorted(cortes)
-    antes = [c for c in cortes if c <= limite]
-    return antes[-1] if antes else (cortes[-1] if cortes else None)
 
 
 def cortes_de_tendencia(
@@ -523,9 +518,9 @@ async def _valores_y_costos(
     otros = {c for _, c in en_tendencia} | ({anterior} if anterior else set())
     valores.update(await qi.consultar_valor_por_corte(db, filtro, otros - {corte}))
     ultimo = filtro.meses[-1]
-    primero = min([m for m, _ in en_tendencia] + [ultimo])
-    desde = t.mes_desplazado(primero, -(qk.MESES_COSTO_VENTA - 1))
-    filas = await qi.consultar_costos_por_mes(db, filtro, corte, desde, ultimo)
+    meses = [m for m, _ in en_tendencia] + [ultimo]
+    desde = t.mes_desplazado(min(meses), -(qk.MESES_COSTO_VENTA - 1))
+    filas = await qi.consultar_costos_por_mes(db, filtro, corte, desde, max(meses))
     por_par = [(mes, tienda, referencia, costo) for mes, tienda, _, referencia, costo in filas]
     return valores, _costos_de_tienda_y_linea(filas), por_par
 
@@ -563,8 +558,9 @@ async def _configuracion(db: AsyncSession, ultimo_mes: str) -> Dict[str, Any]:
 async def _entradas(db: AsyncSession, filtro: Filtro, cortes: List[datetime.date], corte: datetime.date) -> Entradas:
     ultimo_mes = filtro.meses[-1]
     config = await _configuracion(db, ultimo_mes)
-    en_tendencia = cortes_de_tendencia(cortes, ultimo_mes)
-    anterior = corte_anterior(cortes, ultimo_mes, corte)
+    mes_del_corte = _mes_texto(indice_mes(corte))
+    en_tendencia = cortes_de_tendencia(cortes, mes_del_corte)
+    anterior = corte_anterior(cortes, mes_del_corte, corte)
     valores, costos, costos_por_par = await _valores_y_costos(db, filtro, corte, en_tendencia, anterior)
     pares, demanda = await _pares_y_demanda(db, filtro, corte)
     pares_por_corte = await _pares_de_tendencia(db, filtro, en_tendencia)
@@ -597,12 +593,24 @@ async def _rotular(db: AsyncSession, filas: List[Dict[str, Any]]) -> List[Dict[s
     return salida
 
 
+async def _sin_periodo(db: AsyncSession, filtro: Filtro, corte: Optional[datetime.date]) -> Filtro:
+    """El filtro con el Periodo reemplazado por el ultimo mes con ventas (o el mes del corte sin ventas)."""
+    meses = await lectura.meses(db)
+    if meses:
+        ultimo = meses[-1]
+    else:
+        ultimo = _mes_texto(indice_mes(corte)) if corte else filtro.meses[-1]
+    inicio, fin = t.limites_de_fecha(ultimo, ultimo)
+    return filtro._replace(meses=(ultimo,), rangos=((inicio, fin),))
+
+
 async def calcular_inventario(db: AsyncSession, filtro: Filtro, *, completo: bool = False) -> Resultado:
     """La respuesta de la pestana y las listas largas. Con `completo`, `sin_movimiento` y `agotadas` traen TODOS
     los pares (con codigo y nombre) para el Excel; si no, el top de la respuesta (8 y 20) en `datos`."""
     cortes = await qi.consultar_cortes(db)
+    corte = max(cortes) if cortes else None
+    filtro = await _sin_periodo(db, filtro, corte)
     ultimo_mes = filtro.meses[-1]
-    corte = elegir_corte(cortes, fin_de_mes(ultimo_mes))
     if corte is None:
         pendientes = await _pendientes_de_ingreso(db, filtro)
         config = await _configuracion(db, ultimo_mes)

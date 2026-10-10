@@ -23,18 +23,6 @@ def _ym(anio, mes):
 # --- cuts ---------------------------------------------------------------------------------------
 
 
-def test_the_corte_is_the_latest_one_on_or_before_the_end_of_the_month():
-    cortes = [F(2026, 8, 31), F(2026, 9, 30), F(2026, 10, 7)]
-    assert inv.elegir_corte(cortes, F(2026, 9, 30)) == F(2026, 9, 30)
-    assert inv.elegir_corte(cortes, F(2026, 9, 29)) == F(2026, 8, 31)
-    assert inv.elegir_corte(cortes, F(2026, 10, 31)) == F(2026, 10, 7)
-
-
-def test_without_a_corte_before_the_month_the_latest_one_is_used():
-    assert inv.elegir_corte([F(2026, 10, 1), F(2026, 10, 7)], F(2026, 8, 31)) == F(2026, 10, 7)
-    assert inv.elegir_corte([], F(2026, 8, 31)) is None
-
-
 def test_the_trend_keeps_only_months_with_a_corte_and_uses_the_latest_of_each():
     cortes = [F(2026, 7, 31), F(2026, 9, 15), F(2026, 9, 30), F(2026, 10, 1)]
     assert inv.cortes_de_tendencia(cortes, "2026-10") == [

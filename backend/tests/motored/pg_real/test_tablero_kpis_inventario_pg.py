@@ -298,24 +298,34 @@ async def test_selecting_a_principal_includes_its_associated_stores(sesion):
     assert r["agotadas"]["items"][0]["transito"] == 70
 
 
-async def test_an_earlier_reference_month_uses_the_corte_of_that_month(sesion):
+async def test_the_tab_ignores_the_selected_months(sesion):
     w = await _mundo(sesion)
 
-    r = await k.calcular_kpis_inventario(sesion, await _filtro(sesion, w, meses=("2096-09",)))
+    base = await inv.calcular(sesion, await _filtro(sesion, w))
+    for meses in (("2096-09",), ("2096-01",), ("2096-08", "2096-10")):
+        assert await inv.calcular(sesion, await _filtro(sesion, w, meses=meses)) == base
 
-    assert r["corte"] == "2096-09-30" and r["tarjetas"]["valor"] == 3900.0
-    assert r["tarjetas"]["valor_mes_anterior"] == 2800.0
-    assert [p["mes"] for p in r["tendencia"]] == ["2096-08", "2096-09"]
-    assert (r["costo_desde"], r["costo_hasta"]) == ("2096-07-01", "2096-09-30")
+    assert base["corte"] == "2096-10-07" and base["tarjetas"]["valor"] == 7780.0
+    assert base["tarjetas"]["valor_mes_anterior"] == 3900.0     # latest corte of the month before the corte's
+    assert (base["costo_desde"], base["costo_hasta"]) == ("2096-08-01", "2096-10-31")  # ends at the last month with sales
+    assert [p["mes"] for p in base["tendencia"]] == ["2096-08", "2096-09", "2096-10"]
 
 
-async def test_a_month_before_every_corte_falls_back_to_the_latest_one(sesion):
+async def test_the_cost_window_ends_at_the_last_month_with_sales_even_if_the_corte_is_later(sesion):
     w = await _mundo(sesion)
+    carga = _carga("INVENTARIO", "APLICADO")
+    sesion.add(carga)
+    await sesion.flush()
+    sesion.add(InventarioDetalle(
+        id=uuid.uuid4(), carga_id=carga.id, fecha_corte=F(2096, 12, 15), sucursal_id=w.s["S1"].id,
+        referencia_id=w.refs["R1"].id, bodega="B1", existencia=D(1), costo_unitario=D(100)))
+    await sesion.flush()
 
-    r = await k.calcular_kpis_inventario(sesion, await _filtro(sesion, w, meses=("2096-01",)))
+    r = await inv.calcular(sesion, await _filtro(sesion, w, meses=("2096-03",)))
 
-    assert r["corte"] == "2096-10-07" and r["tarjetas"]["valor"] == 7780.0
-    assert r["tendencia"] == [] and r["tarjetas"]["valor_mes_anterior"] is None
+    assert r["corte"] == "2096-12-15" and r["tarjetas"]["valor_mes_anterior"] == 7780.0
+    assert (r["costo_desde"], r["costo_hasta"]) == ("2096-08-01", "2096-10-31")
+    assert [p["mes"] for p in r["tendencia"]] == ["2096-08", "2096-09", "2096-10", "2096-12"]
 
 
 async def test_the_hmcl_mode_changes_neither_the_inventory_nor_the_cost_of_sales(sesion):
@@ -376,7 +386,7 @@ async def test_one_request_runs_a_bounded_number_of_queries_whatever_the_number_
     finally:
         event.remove(motor, "before_cursor_execute", escuchar)
 
-    assert len(conteo) <= 24, f"{len(conteo)} queries"
+    assert len(conteo) <= 25, f"{len(conteo)} queries"  # 24 + the last month with sales (the tab ignores the Periodo)
 
 
 # --- end to end through the app -------------------------------------------------------------------
