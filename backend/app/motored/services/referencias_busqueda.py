@@ -19,6 +19,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
+from app.motored.models.proveedor import Proveedor
 from app.motored.models.referencia import Referencia
 
 SUSTITUTAS_LIMITE = 20
@@ -34,8 +35,10 @@ class FiltrosReferencia:
 
 
 def _patron_like(texto: str) -> str:
-    """`%texto%` con `\\`, `%` y `_` escapados para que se busquen literales."""
-    escapado = texto.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    """`%texto%` con `\\`, `%` y `_` escapados para que se busquen
+    literales."""
+    escapado = (
+        texto.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_"))
     return f"%{escapado}%"
 
 
@@ -48,7 +51,8 @@ def _condicion_texto(q: Optional[str], *columnas) -> list:
 
 
 def condiciones(filtros: FiltrosReferencia) -> list:
-    resultado = _condicion_texto(filtros.q, Referencia.codigo, Referencia.nombre)
+    resultado = _condicion_texto(
+        filtros.q, Referencia.codigo, Referencia.nombre)
     if filtros.linea_comercial:
         resultado.append(Referencia.linea_comercial == filtros.linea_comercial)
     if filtros.activa is not None:
@@ -58,8 +62,14 @@ def condiciones(filtros: FiltrosReferencia) -> list:
     return resultado
 
 
-async def contar_referencias(db: AsyncSession, filtros: FiltrosReferencia) -> int:
-    stmt = select(func.count()).select_from(Referencia).where(*condiciones(filtros))
+async def contar_referencias(
+    db: AsyncSession, filtros: FiltrosReferencia
+) -> int:
+    stmt = (
+        select(func.count())
+        .select_from(Referencia)
+        .where(*condiciones(filtros))
+    )
     total = (await db.execute(stmt)).scalars().first()
     return int(total or 0)
 
@@ -82,14 +92,45 @@ async def pagina_referencias(
     return [tuple(fila) for fila in (await db.execute(stmt)).all()]
 
 
+async def filas_exportacion(
+    db: AsyncSession, filtros: FiltrosReferencia
+) -> List[tuple]:
+    """Every row matching `filtros` (no paging) for the Excel download,
+    with the SAME `WHERE` as `/buscar`. One query: the proveedor and the
+    sustituta codes come from joins, never one lookup per row. Column
+    order is `referencias_excel.COLUMNAS` minus the header text."""
+    sustituta = aliased(Referencia)
+    stmt = (
+        select(
+            Referencia.codigo, Proveedor.codigo, Referencia.nombre,
+            Referencia.linea_comercial, Referencia.unidad_empaque,
+            Referencia.precio_normal, Referencia.precio_publico,
+            sustituta.codigo, Referencia.homologados, Referencia.activa,
+        )
+        .join(Proveedor, Referencia.proveedor_id == Proveedor.id)
+        .outerjoin(sustituta, Referencia.sustituida_por == sustituta.id)
+        .where(*condiciones(filtros))
+        .order_by(*_ORDEN_ESTABLE)
+    )
+    return [tuple(fila) for fila in (await db.execute(stmt)).all()]
+
+
 async def lineas_comerciales(db: AsyncSession) -> List[str]:
     columna = Referencia.linea_comercial
-    stmt = select(columna).distinct().where(columna.is_not(None), columna != "").order_by(columna)
+    stmt = (
+        select(columna)
+        .distinct()
+        .where(columna.is_not(None), columna != "")
+        .order_by(columna)
+    )
     return list((await db.execute(stmt)).scalars().all())
 
 
 async def buscar_sustitutas(
-    db: AsyncSession, proveedor_id: uuid.UUID, q: Optional[str], exclude_id: Optional[uuid.UUID]
+    db: AsyncSession,
+    proveedor_id: uuid.UUID,
+    q: Optional[str],
+    exclude_id: Optional[uuid.UUID],
 ) -> List[Referencia]:
     """Candidatas a sustituta: MISMO proveedor (regla de negocio, también
     validada al guardar), SOLO activas (decisión de negocio) y nunca la
@@ -97,9 +138,17 @@ async def buscar_sustitutas(
     asignada que después quedó inactiva (cadena A->B->C) se sigue mostrando
     por su código, porque `pagina_referencias` la resuelve sin mirar
     `activa`."""
-    filtros = [Referencia.proveedor_id == proveedor_id, Referencia.activa == True]  # noqa: E712 (SQL, not Python)
+    filtros = [
+        Referencia.proveedor_id == proveedor_id,
+        Referencia.activa == True,  # noqa: E712 (SQL, not Python)
+    ]
     filtros += _condicion_texto(q, Referencia.codigo, Referencia.nombre)
     if exclude_id is not None:
         filtros.append(Referencia.id != exclude_id)
-    stmt = select(Referencia).where(*filtros).order_by(*_ORDEN_ESTABLE).limit(SUSTITUTAS_LIMITE)
+    stmt = (
+        select(Referencia)
+        .where(*filtros)
+        .order_by(*_ORDEN_ESTABLE)
+        .limit(SUSTITUTAS_LIMITE)
+    )
     return list((await db.execute(stmt)).scalars().all())
