@@ -4,13 +4,14 @@ against a real Postgres (opt-in, database migrated to head).
 
 Every input a full rebuild depends on and that has no incremental refresh flags the state row
 in the writer's own transaction, only once the summaries were built at least once: a
-referencia's `linea_comercial` (single edit and Excel replace), the cliente_tecnired list, the
+referencia's `linea_comercial` or `precio_normal` (single edit and Excel replace), the retention purge of inventory, the cliente_tecnired list, the
 `hmcl_nits` / `lineas_comerciales` parameters and the INVENTARIO carga apply / annul. A write
 that does not change the input flags nothing. Every test rolls back.
 """
 import datetime
 import os
 import uuid
+from decimal import Decimal
 
 import pytest
 from sqlalchemy import select
@@ -22,10 +23,10 @@ from app.motored.models.cliente_tecnired import ClienteTecnired
 from app.motored.models.kpi_resumen import KpiResumenEstado
 from app.motored.schemas.referencia import ReferenciaUpdate
 from app.motored.services import kpi_resumen as k
-from app.motored.services import maestros, parametros, reemplazo_referencias
+from app.motored.services import maestros, parametros, reemplazo_referencias, retencion
 from app.motored.services.ingesta import inventario as inventario_mod
 from tests.motored.pg_real.test_inventario_detalle_pg import (  # noqa: F401
-    CORTE, URL, _carga, _mundo, _staging, pytestmark, sesion,
+    CORTE, CORTE_VIEJO, URL, _aplicar, _carga, _mundo, _staging, pytestmark, sesion,
 )
 
 
@@ -81,6 +82,54 @@ async def test_the_excel_replace_marks_dirty_only_when_a_linea_changes(sesion):
     assert await _sucio(sesion) is False
 
     plan = await reemplazo_referencias.planificar(sesion, fila("REPUESTOS"))
+    await reemplazo_referencias._escribir_fila(sesion, plan, plan.objetivos[0], None)
+    assert await _sucio(sesion) is True
+
+
+# --- referencia.precio_normal (the fallback cost and valuation) -------------------------------
+
+
+async def _con_precio(db, referencia, precio):
+    referencia.precio_normal = precio
+    await db.flush()
+
+
+async def test_editing_the_precio_normal_of_a_referencia_marks_dirty(sesion):
+    _, (ref, _) = await _construido(sesion)
+    await _con_precio(sesion, ref, Decimal("20.00"))
+    await k.reconstruir_todo(sesion)
+
+    await maestros.update_referencia(sesion, ref, ReferenciaUpdate(precio_normal=Decimal("20")))
+    assert await _sucio(sesion) is False
+
+    await maestros.update_referencia(sesion, ref, ReferenciaUpdate(precio_normal=Decimal("25.50")))
+    assert await _sucio(sesion) is True
+
+
+async def test_giving_a_price_to_a_referencia_without_one_marks_dirty(sesion):
+    _, (ref, _) = await _construido(sesion)
+    await _con_precio(sesion, ref, None)
+    await k.reconstruir_todo(sesion)
+
+    await maestros.update_referencia(sesion, ref, ReferenciaUpdate(precio_normal=Decimal("10")))
+
+    assert await _sucio(sesion) is True
+
+
+async def test_the_excel_replace_marks_dirty_when_only_the_precio_normal_changes(sesion):
+    (_, _), (ref, _) = await _construido(sesion)
+    await _con_precio(sesion, ref, Decimal("20.00"))
+    await k.reconstruir_todo(sesion)
+
+    def fila(precio):
+        return [{"codigo": ref.codigo, "proveedor_id": ref.proveedor_id, "nombre": ref.nombre or "N",
+                 "linea_comercial": ref.linea_comercial, "unidad_empaque": 1, "precio_normal": precio}]
+
+    plan = await reemplazo_referencias.planificar(sesion, fila(Decimal("20.00")))
+    await reemplazo_referencias._escribir_fila(sesion, plan, plan.objetivos[0], None)
+    assert await _sucio(sesion) is False
+
+    plan = await reemplazo_referencias.planificar(sesion, fila(Decimal("33.00")))
     await reemplazo_referencias._escribir_fila(sesion, plan, plan.objetivos[0], None)
     assert await _sucio(sesion) is True
 
@@ -144,6 +193,33 @@ async def test_annulling_an_inventario_carga_marks_dirty(sesion):
     await cargas_api.anular_carga(carga.id, db=sesion, user=None)
 
     assert carga.estado == "ANULADO" and await _sucio(sesion) is True
+
+
+# --- retention purge ---------------------------------------------------------------------------
+
+
+async def test_the_retention_purge_of_old_cortes_marks_dirty(sesion):
+    (a, _), (ref, _) = await _mundo(sesion)
+    for corte in (CORTE_VIEJO, CORTE):
+        carga = _carga(corte)
+        await _aplicar(sesion, carga, [_staging(carga, a, ref, "B1", "5", "10")])
+    await k.reconstruir_todo(sesion)
+    assert await _sucio(sesion) is False
+
+    await retencion.ejecutar_purga_inventario(sesion, chunk_size=1)
+
+    assert await _sucio(sesion) is True
+
+
+async def test_a_purge_with_nothing_to_delete_leaves_the_summaries_clean(sesion):
+    (a, _), (ref, _) = await _mundo(sesion)
+    carga = _carga(CORTE)
+    await _aplicar(sesion, carga, [_staging(carga, a, ref, "B1", "5", "10")])
+    await k.reconstruir_todo(sesion)
+
+    await retencion.ejecutar_purga_inventario(sesion, chunk_size=1)
+
+    assert await _sucio(sesion) is False
 
 
 # --- never built ------------------------------------------------------------------------------

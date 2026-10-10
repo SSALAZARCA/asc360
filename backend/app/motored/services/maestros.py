@@ -661,6 +661,9 @@ async def create_referencia(
     return referencia, warning
 
 
+_CAMPOS_QUE_ALIMENTAN_LOS_KPI = ("linea_comercial", "precio_normal")
+
+
 async def update_referencia(
     db, referencia: Referencia, data: ReferenciaUpdate, usuario_id: Optional[uuid.UUID] = None,
     verificar_sustituta: bool = True,
@@ -679,8 +682,9 @@ async def update_referencia(
 
     before, after = _apply_and_diff(referencia, update_dict)
     auditoria.diff_and_audit(db, "referencia", referencia.id, usuario_id, before, after)
-    if before.get("linea_comercial") != after.get("linea_comercial"):
-        # The KPI summaries bake the referencia's line in: they need a full rebuild.
+    if any(before.get(campo) != after.get(campo) for campo in _CAMPOS_QUE_ALIMENTAN_LOS_KPI):
+        # The KPI summaries bake the referencia's line and its `precio_normal` (the cost and
+        # valuation fallback) in: they need a full rebuild.
         await kpi_resumen.marcar_sucio_si_construido(db)
     return referencia
 

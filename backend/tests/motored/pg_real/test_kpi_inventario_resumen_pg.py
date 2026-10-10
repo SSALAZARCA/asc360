@@ -4,12 +4,15 @@ Inventario KPI summary tables against a real Postgres (opt-in): what the builder
 World of `test_tablero_kpis_inventario_pg` (year 2096; cortes Aug 31, Sep 30, Oct 7 and an annulled Oct 20)
 plus a second Oct corte (Oct 2) that must NOT be kept: only the latest corte of each month is a closing cut.
 """
+import uuid
 from decimal import Decimal as D
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from app.motored.models.carga_archivo import CargaArchivo
+from app.motored.models.inventario_detalle import InventarioDetalle
 from app.motored.models.kpi_resumen import KpiCostoMesReferencia, KpiInventarioCorte, KpiInventarioPar
+from app.motored.models.venta_detalle import VentaDetalle
 from app.motored.services import kpi_resumen as k
 from tests.motored.pg_real.test_kpi_inventario_resumen_world import mundo_con_resumen
 from tests.motored.pg_real.test_tablero_asesores_pg import pytestmark, sesion  # noqa: F401
@@ -69,7 +72,7 @@ async def test_the_cost_of_sales_is_stored_per_month_store_and_referencia(sesion
 
 async def test_an_applied_ventas_carga_refreshes_the_cost_rows_of_its_months(sesion):
     w = await mundo_con_resumen(sesion)
-    carga = (await sesion.execute(select(CargaArchivo).where(CargaArchivo.tipo == "VENTAS"))).scalars().first()
+    carga = await _carga_de_ventas(sesion)
     r1 = w.refs["R1"].id
 
     _linea_costo(sesion, w, carga, "S1", "R1", 2096, 8, 50)
@@ -82,11 +85,51 @@ async def test_an_applied_ventas_carga_refreshes_the_cost_rows_of_its_months(ses
     assert fila.costo == D(650)
 
 
-async def test_reconstruir_costos_reprices_the_cost_rows(sesion):
-    await mundo_con_resumen(sesion)
-    antes = (await sesion.execute(select(KpiCostoMesReferencia))).scalars().all()
+def _linea_sin_costo_real(db, w, carga, tienda, ref, anio, mes):
+    """A sale line with no ERP cost: it is priced with the unit cost of the referencia (qty 1)."""
+    db.add(VentaDetalle(
+        id=uuid.uuid4(), carga_id=carga.id, fecha=F(anio, mes, 12), anio=anio, mes=mes, sucursal_id=w.s[tienda].id,
+        referencia_id=w.refs[ref].id, origen="MOSTRADOR", cantidad=D(1), vendedor="V", vendedor_norm="V",
+        valor_bruto=D(1000), valor_descuentos=D(0), cliente_factura="Taller X",
+        nro_documento=uuid.uuid4().hex[:10], costo=None))
 
+
+async def _costo_del_mes(db, w, tienda, ref, mes):
+    return (await db.execute(select(KpiCostoMesReferencia.costo).where(
+        KpiCostoMesReferencia.anio_mes == mes, KpiCostoMesReferencia.sucursal_id == w.s[tienda].id,
+        KpiCostoMesReferencia.referencia_id == w.refs[ref].id))).scalar_one()
+
+
+async def _carga_de_ventas(db):
+    return (await db.execute(select(CargaArchivo).where(
+        CargaArchivo.tipo == "VENTAS", CargaArchivo.estado == "APLICADO"))).scalars().first()
+
+
+async def test_reconstruir_costos_reprices_with_a_new_precio_normal(sesion):
+    w = await mundo_con_resumen(sesion)
+    _linea_sin_costo_real(sesion, w, await _carga_de_ventas(sesion), "S1", "R5", 2096, 9)
+    await sesion.flush()
     await k.reconstruir_costos(sesion)
-    despues = (await sesion.execute(select(KpiCostoMesReferencia))).scalars().all()
+    assert await _costo_del_mes(sesion, w, "S1", "R5", F(2096, 9, 1)) == D(20)  # no inventory cost: precio_normal
 
-    assert len(despues) == len(antes) > 0
+    w.refs["R5"].precio_normal = D(30)
+    await sesion.flush()
+    await k.reconstruir_costos(sesion)
+
+    assert await _costo_del_mes(sesion, w, "S1", "R5", F(2096, 9, 1)) == D(30)
+
+
+async def test_reconstruir_costos_reprices_with_a_new_inventory_unit_cost(sesion):
+    w = await mundo_con_resumen(sesion)
+    _linea_sin_costo_real(sesion, w, await _carga_de_ventas(sesion), "S1", "R1", 2096, 9)
+    await sesion.flush()
+    await k.reconstruir_costos(sesion)
+    antes = await _costo_del_mes(sesion, w, "S1", "R1", F(2096, 9, 1))
+    assert antes == D(150)  # the median unit cost of the closing cut (100, 100, 200, 300)
+
+    await sesion.execute(update(InventarioDetalle).where(
+        InventarioDetalle.fecha_corte == C_OCT, InventarioDetalle.referencia_id == w.refs["R1"].id,
+    ).values(costo_unitario=D(400)))
+    await k.reconstruir_costos(sesion)
+
+    assert await _costo_del_mes(sesion, w, "S1", "R1", F(2096, 9, 1)) == D(400)

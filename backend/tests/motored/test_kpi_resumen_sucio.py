@@ -1,6 +1,7 @@
 """R7a: the summaries are marked dirty when one of their inputs changes (unit; SQL in `pg_real/test_kpi_resumen_sucio_pg.py`)."""
 import datetime
 import uuid
+from decimal import Decimal
 
 import pytest
 
@@ -78,7 +79,7 @@ def marcas(monkeypatch):
 
 async def _actualizar_referencia(**cambios):
     referencia = Referencia(id=uuid.uuid4(), codigo="R1", proveedor_id=uuid.uuid4(), nombre="N",
-                            linea_comercial="MOTOS", unidad_empaque=1)
+                            linea_comercial="MOTOS", unidad_empaque=1, precio_normal=Decimal("20.00"))
     db = FakeAsyncSession()
     await maestros.update_referencia(db, referencia, ReferenciaUpdate(**cambios), verificar_sustituta=False)
     return db
@@ -94,6 +95,19 @@ async def test_changing_the_linea_comercial_of_a_referencia_marks_dirty(marcas):
                          ids=["same-linea", "other-field"])
 async def test_an_unchanged_linea_comercial_does_not_mark_dirty(marcas, cambios):
     await _actualizar_referencia(**cambios)
+
+    assert marcas == []
+
+
+async def test_changing_the_precio_normal_of_a_referencia_marks_dirty(marcas):
+    db = await _actualizar_referencia(precio_normal=Decimal("25.00"))
+
+    assert marcas == [db]
+
+
+@pytest.mark.parametrize("precio", [Decimal("20.00"), Decimal("20")], ids=["same", "same-scale-free"])
+async def test_an_unchanged_precio_normal_does_not_mark_dirty(marcas, precio):
+    await _actualizar_referencia(precio_normal=precio)
 
     assert marcas == []
 

@@ -51,7 +51,7 @@ from app.motored.models.carga_archivo import CargaArchivo
 from app.motored.models.inventario_detalle import InventarioDetalle
 from app.motored.models.inventario_snapshot import InventarioSnapshot
 from app.motored.models.retencion_ejecucion import RetencionEjecucion
-from app.motored.services import parametros
+from app.motored.services import kpi_resumen, parametros
 
 TABLA_INVENTARIO_SNAPSHOT = "inventario_snapshot"
 TABLA_INVENTARIO_DETALLE = "inventario_detalle"
@@ -212,6 +212,9 @@ async def _purgar_tabla(
             break
 
         await session.execute(delete(modelo).where(modelo.id.in_(ids_del_chunk)))
+        if modelo is InventarioDetalle:
+            # The KPI inventory summaries keep the purged cortes: flag them in this same transaction.
+            await kpi_resumen.marcar_sucio_si_construido(session)
         await session.commit()
         total_eliminadas += len(ids_del_chunk)
 

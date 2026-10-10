@@ -24,9 +24,24 @@ without instantiating tens of thousands of fake rows.
 import uuid
 from datetime import date, datetime, timedelta, timezone
 
+import pytest
+
 from app.config import settings
-from app.motored.services import retencion
+from app.motored.services import kpi_resumen, retencion
 from tests.motored.conftest import FakeAsyncSession
+
+
+@pytest.fixture(autouse=True)
+def marcas_de_sucio(monkeypatch):
+    """The purge flags the KPI summaries dirty (real session: `pg_real/test_kpi_resumen_sucio_pg.py`)."""
+    llamadas = []
+
+    async def marcar(db):
+        llamadas.append(db)
+        return True
+
+    monkeypatch.setattr(kpi_resumen, "marcar_sucio_si_construido", marcar)
+    return llamadas
 
 # ---------------------------------------------------------------------------
 # MOTORED_RETENCION_ENABLED — actual default, and hard off-switch
@@ -342,3 +357,30 @@ async def test_ejecutar_si_corresponde_no_hace_nada_si_no_esta_vencida(monkeypat
 
     assert resultado is None
     assert len(session.executed_statements) == 3
+
+
+async def test_la_purga_marca_sucios_los_resumenes_de_kpi_una_vez_por_chunk_de_detalle(marcas_de_sucio):
+    max_fecha_corte = date(2026, 9, 15)
+    session = FakeAsyncSession(
+        execute_queue=[
+            [max_fecha_corte],
+            [uuid.uuid4(), uuid.uuid4()],  # inventario_detalle, chunk 1 (lleno)
+            [],                            # delete
+            [uuid.uuid4()],                # inventario_detalle, chunk 2 (corta)
+            [],                            # delete
+            [uuid.uuid4()],                # inventario_snapshot (no es insumo de los KPI)
+            [],
+        ]
+    )
+
+    await retencion.ejecutar_purga_inventario(session, chunk_size=2)
+
+    assert marcas_de_sucio == [session, session]
+
+
+async def test_una_purga_sin_nada_que_borrar_no_marca_sucios_los_resumenes(marcas_de_sucio):
+    session = FakeAsyncSession(execute_queue=[[date(2026, 9, 15)], [], []])
+
+    await retencion.ejecutar_purga_inventario(session, chunk_size=2)
+
+    assert marcas_de_sucio == []
