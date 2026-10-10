@@ -160,7 +160,7 @@ def _entrada(codigo, cantidad="1", forzar=False, ident=None):
 
 
 def test_classify_splits_known_unknown_forced_and_invalid():
-    resueltas = {"ABC-1": (REF_A, "Pastilla")}
+    resueltas = {"ABC-1": (REF_A, "Pastilla", "ABC-1")}
     repetida = uuid.uuid4()
     items = [
         _entrada(" abc-1 ", "2", ident=repetida), _entrada("ABC-1"),

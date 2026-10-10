@@ -22,6 +22,12 @@ Rules (design §7):
   referencias (inactive included) by `upper(btrim(codigo))`. The exact
   stored code is tried first (unique index); only the misses pay the
   case-insensitive scan, and a code two referencias share is unknown;
+- a miss is then matched by its key (`clave_codigo`: upper case, only
+  `A-Z0-9`), so `9410912000S` finds `94109-12000S`. A key two master
+  codes share is unknown; a `UBI-` label is never matched by key. A
+  resolved reading is stored under its master code, so it lines up with
+  the snapshot, the differences, the reconteos and the Excel
+  (odd/tasks/motored-conteo-codigo-sin-guiones.md);
 - an unknown code is NOT stored: it comes back under `desconocidos` so
   the device beeps differently and asks "¿Registrar igual?". Sent again
   with `forzar_desconocido`, it is stored with `referencia_id` NULL;
@@ -31,7 +37,8 @@ Rules (design §7):
 - round 1 (no `reconteo_id`) only while the conteo is EN_CONTEO;
 - round 2 (WU9, with `reconteo_id`) only while it is EN_RECONTEO, for a
   reconteo ASIGNADO to THIS session, and only for that reconteo's code
-  (RECONTEO_NO_ASIGNADO / RECONTEO_OTRO_CODIGO otherwise). A reconteo of
+  (RECONTEO_NO_ASIGNADO / RECONTEO_OTRO_CODIGO otherwise); a master
+  reconteo also takes a code that resolves to it by key. A reconteo of
   a code that is not in the master takes it without `forzar_desconocido`.
 
 The conteo row is read `FOR SHARE` first, so a batch in flight and the
@@ -41,6 +48,7 @@ lands before the differences are computed or sees the round closed.
 Nothing here commits: the API owns the transaction. Nothing returned
 carries an expected quantity, a cost or a difference (blind count).
 """
+import re
 import uuid
 from datetime import datetime
 from decimal import Decimal
@@ -48,7 +56,7 @@ from typing import (
     Dict, Iterable, List, NamedTuple, Optional, Sequence, Set, Tuple,
 )
 
-from sqlalchemy import func, select
+from sqlalchemy import func, literal_column, or_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -67,7 +75,8 @@ ESTADO_RONDA_RECONTEO = "EN_RECONTEO"
 LARGO_CODIGO = 100
 CENTAVO = Decimal("0.01")
 
-Resueltas = Dict[str, Tuple[uuid.UUID, Optional[str]]]
+# normalized code -> (referencia id, name, normalized master code)
+Resueltas = Dict[str, Tuple[uuid.UUID, Optional[str], str]]
 # reconteo id -> (its normalized code, whether it has a referencia)
 Propios = Dict[uuid.UUID, Tuple[str, bool]]
 Rechazo = Tuple[uuid.UUID, str]
@@ -120,6 +129,16 @@ def normalizar_codigo(texto: str) -> str:
     return (texto or "").strip().upper()
 
 
+_FUERA_DE_CLAVE = re.compile(r"[^A-Z0-9]")
+
+
+def clave_codigo(texto: Optional[str]) -> str:
+    """The match key of a code: upper case, only `A-Z0-9` kept, so
+    `94109-12000S`, `9410912000S` and `94109 12000s` share one key.
+    Mirrors `claveCodigo` on the device and `_CLAVE_SQL` below."""
+    return _FUERA_DE_CLAVE.sub("", (texto or "").upper())
+
+
 def _motivo(entrada: Entrada, codigo: str) -> Optional[str]:
     """Why a reading is refused before looking its code up, if it is."""
     if not codigo or len(codigo) > LARGO_CODIGO:
@@ -156,7 +175,10 @@ def _ronda_dos(entrada: Entrada, estado: str,
     if estado != ESTADO_RONDA_RECONTEO or propio is None:
         return None, "RECONTEO_NO_ASIGNADO"
     codigo, con_referencia = propio
-    if normalizar_codigo(entrada.codigo_leido) != codigo:
+    leido = normalizar_codigo(entrada.codigo_leido)
+    por_clave = (con_referencia
+                 and clave_codigo(leido) == clave_codigo(codigo))
+    if leido != codigo and not por_clave:
         return None, "RECONTEO_OTRO_CODIGO"
     if not con_referencia:
         entrada = entrada._replace(forzar_desconocido=True)
@@ -185,6 +207,25 @@ def por_ronda(
     return aptas, rechazadas
 
 
+def confirmar_ronda_dos(
+        aptas: Sequence[Entrada], propios: Propios,
+        resueltas: Resueltas) -> Tuple[List[Entrada], List[Rechazo]]:
+    """A round-2 reading let through by key (`_ronda_dos`) stays only
+    when it resolves to the reconteo's own master code; an ambiguous key
+    or another master code is RECONTEO_OTRO_CODIGO."""
+    buenas, malas = [], []
+    for entrada in aptas:
+        propio = propios.get(entrada.reconteo_id)
+        leido = normalizar_codigo(entrada.codigo_leido)
+        hallada = resueltas.get(leido)
+        if (propio is None or leido == propio[0]
+                or (hallada is not None and hallada[2] == propio[0])):
+            buenas.append(entrada)
+        else:
+            malas.append((entrada.id, "RECONTEO_OTRO_CODIGO"))
+    return buenas, malas
+
+
 def clasificar(items: Sequence[Entrada], resueltas: Resueltas) -> Lote:
     """Sorts a batch in its order; the first of a repeated id wins."""
     lote = Lote([], [], [], [])
@@ -206,6 +247,8 @@ def clasificar(items: Sequence[Entrada], resueltas: Resueltas) -> Lote:
         if motivo is not None:
             lote.rechazadas.append((entrada.id, motivo))
             continue
+        if hallada is not None:
+            codigo = hallada[2]
         referencia_id = None if hallada is None else hallada[0]
         lote.filas.append(_fila(entrada, codigo, referencia_id))
     return lote
@@ -271,9 +314,60 @@ def mas_reciente(
 # --- code lookup ------------------------------------------------------------
 
 
+# The key of a stored code, written exactly like the functional index
+# `ix_referencia_codigo_clave` (alembic_motored) so the planner uses it:
+# literal constants, never bound parameters.
+_CLAVE_SQL = func.regexp_replace(
+    func.upper(Referencia.codigo), literal_column("'[^A-Z0-9]'"),
+    literal_column("''"), literal_column("'g'"))
+
+
+def elegir_referencias(
+        codigos: Iterable[str],
+        filas: Iterable[Tuple[uuid.UUID, str, Optional[str]]]
+) -> Resueltas:
+    """normalized code -> its one referencia among `filas` (id, stored
+    code, name): by `upper(btrim)` first, else by key (never for a `UBI-`
+    label). Two or more hits are no hit."""
+    por_normal: Dict[str, list] = {}
+    por_clave: Dict[str, list] = {}
+    for ident, codigo, nombre in filas:
+        maestro = normalizar_codigo(codigo)
+        hallada = (ident, nombre, maestro)
+        por_normal.setdefault(maestro, []).append(hallada)
+        por_clave.setdefault(clave_codigo(maestro), []).append(hallada)
+    resueltas: Resueltas = {}
+    for codigo in codigos:
+        lista = por_normal.get(codigo)
+        if lista is None and not ubicaciones.es_etiqueta(codigo):
+            lista = por_clave.get(clave_codigo(codigo))
+        if lista is not None and len(lista) == 1:
+            resueltas[codigo] = lista[0]
+    return resueltas
+
+
+def _condicion_faltantes(faltan: Set[str]):
+    """The WHERE of the misses. Every row equal under `upper(btrim)`
+    shares the key, so the key alone finds them through the functional
+    index; only `UBI-` labels and key-less codes (never matched by key)
+    still need the `upper(btrim)` scan."""
+    claves = {clave_codigo(c) for c in faltan
+              if not ubicaciones.es_etiqueta(c)} - {""}
+    sin_clave = sorted(c for c in faltan
+                       if ubicaciones.es_etiqueta(c) or not clave_codigo(c))
+    condiciones = []
+    if claves:
+        condiciones.append(_CLAVE_SQL.in_(sorted(claves)))
+    if sin_clave:
+        condiciones.append(
+            func.upper(func.btrim(Referencia.codigo)).in_(sin_clave))
+    return or_(*condiciones)
+
+
 async def resolver(db: AsyncSession, codigos: Set[str]) -> Resueltas:
-    """normalized code -> (referencia id, name). Exact stored code first;
-    the misses by `upper(btrim(codigo))`, where two hits are no hit."""
+    """normalized code -> (referencia id, name, master code). Exact
+    stored code first (unique index); the misses in one query
+    (`_condicion_faltantes`) sorted out by `elegir_referencias`."""
     if not codigos:
         return {}
     resueltas: Resueltas = {}
@@ -281,21 +375,14 @@ async def resolver(db: AsyncSession, codigos: Set[str]) -> Resueltas:
         select(Referencia.id, Referencia.codigo, Referencia.nombre)
         .where(Referencia.codigo.in_(sorted(codigos))))).all()
     for ident, codigo, nombre in exactas:
-        resueltas[codigo] = (ident, nombre)
+        resueltas[codigo] = (ident, nombre, codigo)
     faltan = codigos - set(resueltas)
     if not faltan:
         return resueltas
-    normal = func.upper(func.btrim(Referencia.codigo))
     filas = (await db.execute(
         select(Referencia.id, Referencia.codigo, Referencia.nombre)
-        .where(normal.in_(sorted(faltan))))).all()
-    hallazgos: Dict[str, list] = {}
-    for ident, codigo, nombre in filas:
-        hallazgos.setdefault(normalizar_codigo(codigo), []).append(
-            (ident, nombre))
-    for codigo, lista in hallazgos.items():
-        if len(lista) == 1:
-            resueltas[codigo] = lista[0]
+        .where(_condicion_faltantes(faltan)))).all()
+    resueltas.update(elegir_referencias(faltan, filas))
     return resueltas
 
 
@@ -374,6 +461,8 @@ async def registrar(
     if not aptas:
         return Resultado([], [], [], fuera, {})
     resueltas = await resolver(db, codigos_a_resolver(aptas))
+    aptas, otro_codigo = confirmar_ronda_dos(aptas, propios, resueltas)
+    fuera += otro_codigo
     lote = clasificar(aptas, resueltas)
     filas, sin_lugar = await _ubicar(db, sesion, conteo, aptas, lote.filas)
     nuevas = await _insertar(db, sesion, filas)

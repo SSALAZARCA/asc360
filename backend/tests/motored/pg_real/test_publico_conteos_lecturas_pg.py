@@ -14,7 +14,7 @@ import uuid
 from decimal import Decimal
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 
 from app.motored.models.conteo_lectura import ConteoLectura
 from app.motored.models.referencia import Referencia
@@ -287,3 +287,55 @@ async def test_the_catalogue_has_every_referencia_and_a_304(
                       headers={"If-None-Match": r.headers["etag"]})
     assert r2.status_code == 304
     assert r2.content == b""
+
+
+async def _referencias(fabrica, mundo, *codigos):
+    async with fabrica() as db:
+        refs = [Referencia(
+            id=uuid.uuid4(), codigo=c, nombre=f"Ref {c}",
+            proveedor_id=mundo.proveedor.id, unidad_empaque=1)
+            for c in codigos]
+        db.add_all(refs)
+        await db.commit()
+    return refs
+
+
+async def test_a_hyphen_less_scan_counts_under_the_master_code(
+        pareja, fabrica):
+    raiz = uuid.uuid4().hex[:8].upper()
+    (maestra,) = await _referencias(fabrica, pareja, f"{raiz}-12000S")
+
+    resultado = await _enviar(pareja, [
+        _item(f"{raiz}12000s"), _item(f" {raiz} 12000S ")])
+
+    assert len(resultado["aceptadas"]) == 2
+    assert resultado["desconocidos"] == []
+    filas = await _filas(fabrica, pareja)
+    assert {(f.referencia_id, f.codigo_leido) for f in filas} == {
+        (maestra.id, f"{raiz}-12000S")}
+    assert await _resumen(pareja) == {f"{raiz}-12000S": Decimal("2")}
+
+
+async def test_an_ambiguous_key_is_unknown_but_an_exact_code_counts(
+        pareja, fabrica):
+    raiz = uuid.uuid4().hex[:8].upper()
+    _, punto = await _referencias(
+        fabrica, pareja, f"{raiz}-7", f"{raiz}.7")
+    ambigua = _item(f"{raiz}7")
+
+    resultado = await _enviar(pareja, [ambigua, _item(f"{raiz}.7")])
+
+    assert resultado["desconocidos"] == [
+        {"id": ambigua["id"], "codigo": f"{raiz}7"}]
+    filas = await _filas(fabrica, pareja)
+    assert [(f.referencia_id, f.codigo_leido) for f in filas] == [
+        (punto.id, f"{raiz}.7")]
+
+
+async def test_the_key_lookup_uses_the_functional_index(fabrica):
+    async with fabrica() as db:
+        indices = (await db.execute(text(
+            "SELECT indexdef FROM pg_indexes "
+            "WHERE indexname = 'ix_referencia_codigo_clave'"))).scalars()
+        (definicion,) = list(indices)
+    assert "regexp_replace(upper((codigo)::text)" in definicion
