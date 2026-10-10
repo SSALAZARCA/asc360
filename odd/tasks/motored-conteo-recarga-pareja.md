@@ -21,9 +21,12 @@ Risk: the pair sees 0, scans everything again, and the count doubles.
 
 ## Checklist
 
-- [ ] T1 retry + notice + esPrueba persistence + jest tests (route: delegated writer, because there are 3+ non-trivial files)
-- [ ] T2 commits through gga, push
+- [x] T1 retry + notice + esPrueba persistence + jest tests (route: delegated writer, because there are 3+ non-trivial files)
+- [x] T2 commit 1ad1950 (gga PASSED), pushed
 
 ## Progress
 
 - 2026-10-10: decisions recorded. The writer starts once the panel-search writer is done (one writer at a time).
+- 2026-10-10 T1 done (delegated writer, not committed). `useConteo` keeps a `faltaSembrar` ref, set when the mount seed fails with any non-401 error (it still seeds the queue, then warns). The 30 s refresh and `online` call `reintentarSiembra`: when a location is known and confirmed, it runs `resembrarLista`, which now returns true on success and clears the flag and the notice. `BannerListaSinCargar` (Avisos.js) shows `TEXTOS.listaSinCargar` on desktop and phone. `guardarSesion` stores `esPrueba`.
+  - No double count: `useCola.pausar` now also waits for a send already in flight, and the queue's own `online` handler no longer sends while paused, so a reading is either in the server's list or still queued at reseed time.
+  - Evidence: new `frontend/__tests__/motored-conteo-publico-recarga.test.jsx` (5 tests: 503 then `online`, 409 then the 30 s refresh, readings scanned during the notice end at 3+2=5 with 2 POSTed, phone notice, PRUEBA from the saved session with `/sesion` hanging). RED 5 failed / 5; GREEN `npx jest conteo`: Tests: 167 passed, 167 total.
