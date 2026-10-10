@@ -8,6 +8,10 @@ COORDINADOR_REPUESTOS; `snapshot.ROLES_LIDER_CONTEO`) sees ONLY the
 conteos assigned to it (`lider_id`).
 Another leader's conteo is "not found" (404 at the API, never 403), so
 ids never leak; the list filters them out in SQL.
+
+A test count (`es_prueba`, odd/tasks/motored-conteo-prueba.md) is ADMIN
+only: every other role gets the same "not found", and the list leaves it
+out unless ADMIN asks for it (`incluir_pruebas`).
 """
 import uuid
 from datetime import datetime, timezone
@@ -28,6 +32,7 @@ from app.motored.services.conteos import errores, snapshot
 from app.motored.services.reloj import hoy_bogota
 
 LIMITE_LISTA = 200
+ROL_ADMIN = "ADMIN"
 
 _SQL_ULTIMO_INVENTARIO = text("""
 SELECT s.id, s.nombre, u.carga_id, u.fecha_corte, u.aplicado_en
@@ -85,8 +90,18 @@ def ve_lider(
     return str(lider_id) == str(usuario.user_id)
 
 
+def es_admin(usuario: MotoredUser) -> bool:
+    return getattr(usuario.role, "value", usuario.role) == ROL_ADMIN
+
+
+def ve_prueba(usuario: MotoredUser, es_prueba: Optional[bool]) -> bool:
+    """A test count is ADMIN only; an unsaved flag reads as real."""
+    return not es_prueba or es_admin(usuario)
+
+
 def ve_conteo(usuario: MotoredUser, conteo: Conteo) -> bool:
-    return ve_lider(usuario, conteo.lider_id)
+    return (ve_prueba(usuario, conteo.es_prueba)
+            and ve_lider(usuario, conteo.lider_id))
 
 
 async def conteo_visible(
@@ -103,9 +118,10 @@ async def conteo_visible(
 async def listar(
         db: AsyncSession, *, estado: Optional[str],
         sucursal_id: Optional[uuid.UUID], tipo: Optional[str],
-        lider_id: Optional[uuid.UUID],
+        lider_id: Optional[uuid.UUID], incluir_pruebas: bool = False,
 ) -> List[Tuple[Conteo, str, Optional[str]]]:
-    """(conteo, store name, leader name), newest date first."""
+    """(conteo, store name, leader name), newest date first. Test counts
+    only with `incluir_pruebas` (the API sets it for ADMIN only)."""
     lider = aliased(Usuario)
     consulta = (
         select(Conteo, Sucursal.nombre, lider.nombre)
@@ -113,6 +129,8 @@ async def listar(
         .outerjoin(lider, lider.id == Conteo.lider_id)
         .order_by(Conteo.fecha_programada.desc(), Conteo.created_at.desc())
         .limit(LIMITE_LISTA))
+    if not incluir_pruebas:
+        consulta = consulta.where(Conteo.es_prueba.is_(False))
     if estado is not None:
         consulta = consulta.where(Conteo.estado == estado)
     if sucursal_id is not None:

@@ -155,7 +155,7 @@ async def unirse(
         sesion_token=ingreso.token, sesion_id=fila.sesion.id,
         etiqueta=sesiones.etiqueta(fila.numero, nombres),
         integrantes=nombres, sucursal=ingreso.sucursal,
-        estado_conteo=ingreso.estado_conteo)
+        estado_conteo=ingreso.estado_conteo, es_prueba=ingreso.es_prueba)
 
 
 @router.get("/{slug}/sesion", response_model=esquemas.SesionPareja)
@@ -172,6 +172,7 @@ async def quien_soy(
         etiqueta=sesiones.etiqueta(fila.numero, nombres),
         integrantes=nombres, sucursal=pareja.sucursal,
         estado_conteo=pareja.conteo.estado,
+        es_prueba=bool(pareja.conteo.es_prueba),
         ubicacion_actual=(None if ubicacion is None else
                           esquemas.UbicacionSalida(
                               id=ubicacion.id, nombre=ubicacion.nombre)))

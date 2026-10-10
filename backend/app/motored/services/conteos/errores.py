@@ -44,6 +44,11 @@ class EstadoInvalido(ErrorConteo):
     MENSAJE = "El conteo no está en un estado que permita esta acción."
 
 
+class NoEsPrueba(ErrorConteo):
+    codigo = "NO_ES_PRUEBA"
+    MENSAJE = "Solo se puede borrar un conteo de prueba."
+
+
 class ConteoTotalAbierto(ErrorConteo):
     codigo = "CONTEO_TOTAL_ABIERTO"
     MENSAJE = (

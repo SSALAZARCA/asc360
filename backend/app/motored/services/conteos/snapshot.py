@@ -25,6 +25,10 @@ Unit cost (`costo_fuente`), first hit wins:
 4. PRECIO: `referencia.precio_normal` > 0;
 5. SIN_COSTO: no cost (NULL), flagged.
 
+A test count (`es_prueba`, odd/tasks/motored-conteo-prueba.md) runs the
+same way, never blocks a real count (nor a real one it) and is the only
+kind `borrar_conteo_prueba` hard-deletes.
+
 Nothing here commits: the caller (the API) owns the transaction. Role
 rules (ADMIN schedules, the assigned leader starts) live in the API.
 """
@@ -34,14 +38,19 @@ from datetime import date, datetime, time, timezone
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any, Mapping, NamedTuple, Optional
 
-from sqlalchemy import select, text, update
+from sqlalchemy import delete, or_, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.motored.models.conteo import (
     ESTADOS_ABIERTOS, INDICE_TOTAL_ABIERTO, Conteo,
 )
-from app.motored.models.conteo_sesion import ConteoSesion
+from app.motored.models.conteo_acceso_intento import ConteoAccesoIntento
+from app.motored.models.conteo_lectura import ConteoLectura
+from app.motored.models.conteo_reconteo import ConteoReconteo
+from app.motored.models.conteo_resultado import ConteoResultado
+from app.motored.models.conteo_sesion import ConteoIntegrante, ConteoSesion
+from app.motored.models.conteo_snapshot_linea import ConteoSnapshotLinea
 from app.motored.models.sucursal import Sucursal
 from app.motored.models.usuario import MotoredRole, Usuario
 from app.motored.services import parametros
@@ -280,17 +289,19 @@ async def _validar_lider(db: AsyncSession, lider_id) -> None:
 
 async def programar_conteo(
         db: AsyncSession, sucursal_id: uuid.UUID, lider_id: uuid.UUID,
-        fecha_programada: date, creado_por: uuid.UUID) -> Conteo:
+        fecha_programada: date, creado_por: uuid.UUID,
+        es_prueba: bool = False) -> Conteo:
     """A new TOTAL conteo in PROGRAMADO for an active store, assigned to
     an active leader (`ROLES_ASIGNABLES_LIDER`). Several may be
-    scheduled for one store; only one can be running (checked at
-    Iniciar)."""
+    scheduled for one store; only one real one can be running (checked
+    at Iniciar). `es_prueba` marks an ADMIN-only test count."""
     await _validar_sucursal(db, sucursal_id)
     await _validar_lider(db, lider_id)
     conteo = Conteo(
         id=uuid.uuid4(), tipo="TOTAL", estado="PROGRAMADO",
         origen="MANUAL", sucursal_id=sucursal_id, lider_id=lider_id,
-        fecha_programada=fecha_programada, creado_por=creado_por)
+        fecha_programada=fecha_programada, creado_por=creado_por,
+        es_prueba=bool(es_prueba))
     db.add(conteo)
     await db.flush()
     return conteo
@@ -344,10 +355,15 @@ async def leer_umbrales(db: AsyncSession, hoy: date) -> Umbrales:
 
 
 async def _exigir_sin_total_abierto(db: AsyncSession, conteo) -> None:
+    """One running real TOTAL count per store. Test counts are outside
+    the rule both ways (same as `INDICE_TOTAL_ABIERTO`)."""
+    if conteo.es_prueba:
+        return
     otro = await db.scalar(
         select(Conteo.id).where(
             Conteo.sucursal_id == conteo.sucursal_id,
             Conteo.tipo == "TOTAL", Conteo.estado.in_(ESTADOS_ABIERTOS),
+            Conteo.es_prueba.is_(False),
             Conteo.id != conteo.id).limit(1))
     if otro is not None:
         raise errores.ConteoTotalAbierto(conteo_abierto_id=str(otro))
@@ -430,3 +446,50 @@ async def iniciar_conteo(
             raise errores.ConteoTotalAbierto() from error
         raise
     return InicioConteo(conteo, codigo, fuente, advertencia)
+
+
+# --- delete a test count -----------------------------------------------------
+
+# Every row keyed to a conteo, children before parents. The FKs also
+# cascade, but the order is explicit so no row depends on that (and
+# `conteo_reconteo.sesion_id` has no ON DELETE). Store locations
+# (`ubicacion_inventario`) belong to the store, not the count: kept.
+# Readings point at sessions and reconteos, and reconteos at sessions,
+# so these go before the sessions; the rest only point at the conteo.
+_ANTES_DE_SESIONES = (ConteoLectura, ConteoReconteo)
+_DESPUES_DE_SESIONES = (
+    ConteoSnapshotLinea, ConteoAccesoIntento, ConteoResultado)
+
+
+async def _borrar_de(db: AsyncSession, modelos, conteo_id) -> None:
+    for modelo in modelos:
+        await db.execute(delete(modelo).where(modelo.conteo_id == conteo_id))
+
+
+async def _borrar_filas(db: AsyncSession, conteo_id: uuid.UUID) -> None:
+    await _borrar_de(db, _ANTES_DE_SESIONES, conteo_id)
+    sesiones_del_conteo = select(ConteoSesion.id).where(
+        ConteoSesion.conteo_id == conteo_id)
+    await db.execute(delete(ConteoIntegrante).where(
+        ConteoIntegrante.sesion_id.in_(sesiones_del_conteo)))
+    await _borrar_de(db, (ConteoSesion,), conteo_id)
+    await _borrar_de(db, _DESPUES_DE_SESIONES, conteo_id)
+    await db.execute(delete(Conteo).where(Conteo.id == conteo_id))
+
+
+async def borrar_conteo_prueba(
+        db: AsyncSession, conteo_id: uuid.UUID) -> None:
+    """Hard-deletes a TEST conteo and every row keyed to it, in any
+    estado. NoEsPrueba for a real one (real counts are never deleted);
+    EstadoInvalido while another conteo points at it."""
+    conteo = await acceso.bloquear_conteo(db, conteo_id)
+    if not conteo.es_prueba:
+        raise errores.NoEsPrueba()
+    otro = await db.scalar(select(Conteo.id).where(or_(
+        Conteo.verifica_conteo_id == conteo_id,
+        Conteo.arrastra_conteo_id == conteo_id)).limit(1))
+    if otro is not None:
+        raise errores.EstadoInvalido(
+            "Otro conteo depende de este; no se puede borrar.",
+            conteo_relacionado_id=str(otro))
+    await _borrar_filas(db, conteo_id)

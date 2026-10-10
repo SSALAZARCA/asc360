@@ -79,6 +79,7 @@ class Ingreso:
     token: str
     sucursal: str
     estado_conteo: str
+    es_prueba: bool = False
 
 
 # --- pure rules -------------------------------------------------------------
@@ -239,7 +240,8 @@ async def unirse(
         db, conteo, integrantes, dispositivo, ahora)
     await db.flush()
     fila = FilaSesion(sesion, numero, personas, None)
-    return Ingreso(fila, token, sucursal, conteo.estado)
+    return Ingreso(
+        fila, token, sucursal, conteo.estado, bool(conteo.es_prueba))
 
 
 # --- the device session -----------------------------------------------------

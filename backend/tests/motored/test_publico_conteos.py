@@ -302,7 +302,8 @@ def test_who_am_i_returns_names_and_location_only(describir):
     assert r.json() == {
         "sesion_id": str(sesion.id), "etiqueta": "Pareja 2 · Ana R. y Luis G.",
         "integrantes": ["Ana Ruiz", "Luis Gil"], "sucursal": "Quilichao",
-        "estado_conteo": "EN_CONTEO", "ubicacion_actual": None}
+        "estado_conteo": "EN_CONTEO", "ubicacion_actual": None,
+        "es_prueba": False}
     _sin_cedulas(r)
     _cabeceras(r)
 

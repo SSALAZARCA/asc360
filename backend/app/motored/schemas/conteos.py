@@ -38,6 +38,8 @@ class ProgramarEntrada(BaseModel):
     sucursal_id: uuid.UUID
     lider_id: uuid.UUID
     fecha_programada: date
+    # A test count (odd/tasks/motored-conteo-prueba.md): ADMIN only.
+    es_prueba: bool = False
 
 
 class ReprogramarEntrada(BaseModel):
@@ -116,6 +118,7 @@ class ConteoResumen(BaseModel):
     motivo_anulacion: Optional[str] = None
     created_at: Optional[datetime] = None
     progreso: Optional[ProgresoConteo] = None
+    es_prueba: bool = False
 
 
 class ConteoDetalle(ConteoResumen):
@@ -223,6 +226,7 @@ class UnirseSalida(BaseModel):
     integrantes: List[str]
     sucursal: str
     estado_conteo: str
+    es_prueba: bool = False
 
 
 class SesionPareja(BaseModel):
@@ -232,6 +236,7 @@ class SesionPareja(BaseModel):
     sucursal: str
     estado_conteo: str
     ubicacion_actual: Optional[UbicacionSalida] = None
+    es_prueba: bool = False
 
 
 # --- locations (leader and pair) ---------------------------------------------

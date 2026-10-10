@@ -20,6 +20,10 @@ decision 2026-10-09; `snapshot.ROLES_LIDER_CONTEO`):
 Scoping: a leader only sees its own conteos (`lider_id`); another's
 answers 404, never 403, so ids do not leak (`consultas.conteo_visible`).
 
+Test counts (`es_prueba`, odd/tasks/motored-conteo-prueba.md): only ADMIN
+schedules, sees and deletes them; every other role gets 404, and the list
+shows them to ADMIN only with `incluir_pruebas=true`.
+
 Domain errors (`ErrorConteo`) become `{"detail": {"code", "mensaje",
 ...datos}}` with the status from `_ESTADO_HTTP`. No response carries
 `codigo_hash` or a cédula; the plain code is returned only by iniciar and
@@ -74,6 +78,7 @@ _ESTADO_HTTP = {
     errores.UbicacionInvalida: 422,
     errores.UbicacionChocaReferencia: 422,
     errores.EstadoInvalido: 409,
+    errores.NoEsPrueba: 409,
     errores.ConteoTotalAbierto: 409,
     errores.SinInventario: 409,
     errores.InventarioAntiguo: 409,
@@ -139,7 +144,7 @@ def _resumen(conteo: Conteo, sucursal: str, lider: Optional[str]) -> dict:
         iniciado_en=conteo.iniciado_en, cerrado_en=conteo.cerrado_en,
         anulado_en=conteo.anulado_en,
         motivo_anulacion=conteo.motivo_anulacion,
-        created_at=conteo.created_at)
+        created_at=conteo.created_at, es_prueba=bool(conteo.es_prueba))
 
 
 def _snapshot(conteo: Conteo, resumen) -> Optional[esquemas.SnapshotSalida]:
@@ -194,13 +199,16 @@ async def listar_conteos(
     estado: Optional[esquemas.EstadoConteo] = Query(default=None),
     sucursal_id: Optional[uuid.UUID] = Query(default=None),
     tipo: Optional[esquemas.TipoConteo] = Query(default=None),
+    incluir_pruebas: bool = Query(default=False),
     usuario: MotoredUser = Depends(lector),
     db: AsyncSession = Depends(get_motored_db_or_503),
 ):
+    """Test counts only for ADMIN, and only when asked."""
     lider_id = _uuid(usuario) if consultas.es_lider(usuario) else None
     filas = await consultas.listar(
         db, estado=estado, sucursal_id=sucursal_id, tipo=tipo,
-        lider_id=lider_id)
+        lider_id=lider_id,
+        incluir_pruebas=incluir_pruebas and consultas.es_admin(usuario))
     avances = await panel.progreso(
         db, [c.id for c, _, _ in filas if c.estado in ESTADOS_ABIERTOS])
     return [esquemas.ConteoResumen(
@@ -246,7 +254,8 @@ async def programar(
     try:
         conteo = await snapshot.programar_conteo(
             db, cuerpo.sucursal_id, cuerpo.lider_id,
-            cuerpo.fecha_programada, _uuid(usuario))
+            cuerpo.fecha_programada, _uuid(usuario),
+            es_prueba=cuerpo.es_prueba)
         salida = await _detalle(db, conteo, usuario)
     except errores.ErrorConteo as error:
         raise error_http(error) from error
@@ -286,6 +295,23 @@ async def anular(
         raise error_http(error) from error
     await db.commit()
     return salida
+
+
+@router.delete(
+    "/{conteo_id}", status_code=204, response_class=Response)
+async def borrar_prueba(
+    conteo_id: uuid.UUID,
+    usuario: MotoredUser = Depends(solo_admin),
+    db: AsyncSession = Depends(get_motored_db_or_503),
+):
+    """Hard-deletes a TEST conteo with every row keyed to it, in any
+    estado. A real conteo is a 409 NO_ES_PRUEBA: it is never deleted."""
+    try:
+        await snapshot.borrar_conteo_prueba(db, conteo_id)
+    except errores.ErrorConteo as error:
+        raise error_http(error) from error
+    await db.commit()
+    return Response(status_code=204)
 
 
 # --- one conteo --------------------------------------------------------------
@@ -634,8 +660,9 @@ async def ver_panel(
     differences summary."""
     try:
         huella = await panel.huella(db, conteo_id)
-        if huella is None or not consultas.ve_lider(
-                usuario, huella.lider_id):
+        if huella is None or not (
+                consultas.ve_prueba(usuario, huella.es_prueba)
+                and consultas.ve_lider(usuario, huella.lider_id)):
             raise errores.ConteoNoEncontrado()
         if version == huella.version:
             return esquemas.PanelSinCambios(version=version)
@@ -828,6 +855,15 @@ def _excel(contenido: bytes, nombre: str) -> Response:
             **SIN_CACHE})
 
 
+def _libro(conteo: Conteo, datos, lineas, prefijo: str,
+           momento: datetime) -> Response:
+    """The workbook download; a test count's is marked as such."""
+    prueba = bool(conteo.es_prueba)
+    nombre = excel_ajustes.nombre_archivo(
+        prefijo, datos.codigo_co, hoy_bogota(momento), prueba=prueba)
+    return _excel(excel_ajustes.libro(datos, lineas, prueba=prueba), nombre)
+
+
 @router.get("/{conteo_id}/ajustes.xlsx", response_class=Response)
 async def descargar_ajustes(
     conteo_id: uuid.UUID,
@@ -841,9 +877,7 @@ async def descargar_ajustes(
         raise error_http(error) from error
     lineas = await cierre.resultado(db, conteo)
     datos = await cierre.encabezado(db, conteo, lineas)
-    nombre = excel_ajustes.nombre_archivo(
-        "ajustes", datos.codigo_co, hoy_bogota(datos.cerrado_en))
-    return _excel(excel_ajustes.libro(datos, lineas), nombre)
+    return _libro(conteo, datos, lineas, "ajustes", datos.cerrado_en)
 
 
 @router.get("/{conteo_id}/avance.xlsx", response_class=Response)
@@ -861,6 +895,4 @@ async def descargar_avance(
         raise error_http(error) from error
     lineas = await cierre.avance(db, conteo)
     datos = await cierre.encabezado(db, conteo, lineas)
-    nombre = excel_ajustes.nombre_archivo(
-        "avance", datos.codigo_co, hoy_bogota(_ahora()))
-    return _excel(excel_ajustes.libro(datos, lineas), nombre)
+    return _libro(conteo, datos, lineas, "avance", _ahora())

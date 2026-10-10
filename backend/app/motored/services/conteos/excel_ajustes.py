@@ -17,6 +17,10 @@ template yet).
 Codes are text cells; money is whole pesos (`#,##0`); quantities are
 numbers; instants are Bogotá wall-clock. The same layout serves the live
 "avance" download of an open conteo.
+
+A test count (odd/tasks/motored-conteo-prueba.md) gets a first row
+`AVISO_PRUEBA` on every sheet and a file name starting with `PRUEBA_`, so
+nobody loads it into the ERP by mistake.
 """
 import io
 from datetime import date, datetime, timezone
@@ -37,6 +41,8 @@ TEXTO = "@"
 FECHA_HORA = "yyyy-mm-dd hh:mm"
 FECHA = "yyyy-mm-dd"
 SI_NO = {True: "Sí", False: "No"}
+AVISO_PRUEBA = "PRUEBA – NO CARGAR AL ERP"
+PREFIJO_PRUEBA = "PRUEBA_"
 COLUMNAS_AJUSTES = (
     "Referencia", "Descripción", "Bodega", "Cantidad sistema",
     "Cantidad contada", "Diferencia", "Costo unitario", "Valor diferencia",
@@ -55,9 +61,13 @@ ESTADOS = {
     "CERRADO": "Cerrado"}
 
 
-def nombre_archivo(prefijo: str, codigo_co: str, fecha: date) -> str:
-    """`<prefijo>_conteo_<C.O.>_<AAAA-MM-DD>.xlsx`."""
-    return f"{prefijo}_conteo_{codigo_co}_{fecha.isoformat()}.xlsx"
+def nombre_archivo(
+        prefijo: str, codigo_co: str, fecha: date,
+        prueba: bool = False) -> str:
+    """`<prefijo>_conteo_<C.O.>_<AAAA-MM-DD>.xlsx`, with `PRUEBA_` in
+    front for a test count."""
+    nombre = f"{prefijo}_conteo_{codigo_co}_{fecha.isoformat()}.xlsx"
+    return PREFIJO_PRUEBA + nombre if prueba else nombre
 
 
 def _pesos(valor: Optional[Decimal]) -> Optional[int]:
@@ -168,8 +178,22 @@ def _hoja_resumen(hoja: Worksheet, encabezado: Encabezado) -> None:
             celda.number_format = formato
 
 
-def libro(encabezado: Encabezado, lineas: Sequence[Linea]) -> bytes:
-    """The workbook's bytes; `lineas` already sorted."""
+def _marcar_prueba(salida: Workbook) -> None:
+    """A warning first row on every sheet (the rest moves one down)."""
+    for hoja in salida.worksheets:
+        congelada = hoja.freeze_panes
+        hoja.insert_rows(1)
+        celda = hoja.cell(row=1, column=1, value=AVISO_PRUEBA)
+        celda.font = Font(bold=True, color="C00000", size=14)
+        if congelada:
+            hoja.freeze_panes = "A3"
+
+
+def libro(
+        encabezado: Encabezado, lineas: Sequence[Linea],
+        prueba: bool = False) -> bytes:
+    """The workbook's bytes; `lineas` already sorted. `prueba` marks a
+    test count's workbook."""
     salida = Workbook()
     _hoja_ajustes(salida.active, lineas)
     salida.active.title = "Ajustes"
@@ -178,6 +202,8 @@ def libro(encabezado: Encabezado, lineas: Sequence[Linea]) -> bytes:
         f for f in lineas if f.valor is None and f.diferencia != 0]
     if sin_costo:
         _hoja_sin_costo(salida.create_sheet("Sin costo"), sin_costo)
+    if prueba:
+        _marcar_prueba(salida)
     archivo = io.BytesIO()
     salida.save(archivo)
     return archivo.getvalue()

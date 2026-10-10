@@ -44,7 +44,7 @@ from app.motored.services.conteos import cierre, diferencias, sesiones
 BITS_VERSION = 53
 
 _SQL_HUELLA = text("""
-SELECT c.lider_id, c.estado, c.updated_at,
+SELECT c.lider_id, c.es_prueba, c.estado, c.updated_at,
   (SELECT max(l.seq) FROM conteo_lectura l
     WHERE l.conteo_id = c.id) AS max_seq,
   (SELECT count(*) FROM conteo_lectura l
@@ -89,6 +89,7 @@ class Huella(NamedTuple):
 
     lider_id: Optional[uuid.UUID]
     version: int
+    es_prueba: bool = False
 
 
 class Progreso(NamedTuple):
@@ -149,7 +150,7 @@ async def huella(
         _SQL_HUELLA, {"conteo_id": conteo_id})).first()
     if fila is None:
         return None
-    return Huella(fila[0], version_de(fila[1:]))
+    return Huella(fila[0], version_de(fila[2:]), bool(fila[1]))
 
 
 async def progreso(

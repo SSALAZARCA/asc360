@@ -10,7 +10,10 @@ One row per physical store count. Owner overrides on top of the design:
   (`ck_conteo_lider_si_total`). Only that leader (or ADMIN) acts on the
   count; the scoping itself lives in the services;
 - the money thresholds are copied from Configuración at Iniciar (ADR-9),
-  so an edit mid-count never changes which referencias need a reconteo.
+  so an edit mid-count never changes which referencias need a reconteo;
+- `es_prueba` (odd/tasks/motored-conteo-prueba.md) marks an ADMIN-only
+  test count: only ADMIN sees it, it is left out of the one-open-TOTAL
+  index and of every cross-count aggregate, and it may be hard-deleted.
 
 `tipo` keeps 'SELECTIVO' (stage 3) so that stage needs no migration for
 it. Enumerations are `String` + CHECK, never Postgres enums.
@@ -18,8 +21,8 @@ it. Enumerations are `String` + CHECK, never Postgres enums.
 import uuid
 
 from sqlalchemy import (
-    CheckConstraint, Column, Date, DateTime, ForeignKey, Index, Integer,
-    Numeric, String, Text, UniqueConstraint, func, text,
+    Boolean, CheckConstraint, Column, Date, DateTime, ForeignKey, Index,
+    Integer, Numeric, String, Text, UniqueConstraint, func, text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 
@@ -78,7 +81,8 @@ class Conteo(MotoredBase):
         Index(
             INDICE_TOTAL_ABIERTO, "sucursal_id", unique=True,
             postgresql_where=text(
-                "tipo = 'TOTAL' AND estado IN ('EN_CONTEO', 'EN_RECONTEO')"),
+                "tipo = 'TOTAL' AND estado IN ('EN_CONTEO', 'EN_RECONTEO') "
+                "AND NOT es_prueba"),
         ),
         Index(
             "uq_conteo_selectivo_semana", "sucursal_id", "semana_iso",
@@ -112,6 +116,9 @@ class Conteo(MotoredBase):
     fecha_programada = Column(Date, nullable=False)
     origen = Column(String(12), nullable=False, default="MANUAL")
     semana_iso = Column(String(8), nullable=True)
+    es_prueba = Column(
+        Boolean, nullable=False, default=False,
+        server_default=text("false"))
     verifica_conteo_id = _conteo_fk()
     arrastra_conteo_id = _conteo_fk()
 
