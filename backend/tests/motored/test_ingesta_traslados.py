@@ -6,8 +6,10 @@ origin bodegas; an unknown destination is a row error, an unknown origin or
 reference is kept.
 """
 import uuid
-from datetime import date, datetime
+from datetime import datetime
 from decimal import Decimal
+
+import pytest
 
 from app.motored.services.ingesta import (
     columnas, deteccion, orquestador, plantillas, resolucion, traslados,
@@ -33,13 +35,15 @@ ENCABEZADO = (
 
 def _mapa(encabezado=ENCABEZADO):
     return columnas.construir_mapa_columnas(
-        encabezado, traslados.COLUMNAS_ESPERADAS + traslados.COLUMNAS_OPCIONALES)
+        encabezado,
+        traslados.COLUMNAS_ESPERADAS + traslados.COLUMNAS_OPCIONALES)
 
 
 def _fila(**cambios):
     base = {
         "Nro documento": "79-00000067", "Fecha": datetime(2026, 8, 3),
-        "Bod. salida": "BB181", "Desc. bod. salida": "BODEGA 1 DE MAYO TRES   ",
+        "Bod. salida": "BB181",
+        "Desc. bod. salida": "BODEGA 1 DE MAYO TRES   ",
         "Bod. entrada": "BB011", "Desc. bod. entrada": "BOGOTA VENECIA",
         "Referencia": "BB2.5L-C-BS                    ",
         "Desc. item": "BATERIA BS SLA        ", "Item resumen": "x",
@@ -107,7 +111,8 @@ def test_destino_se_resuelve_por_descripcion_si_el_codigo_no_existe():
     cache = resolucion.CacheResolucion(
         sucursal_por_texto={"BOGOTA VENECIA": SUC_DESTINO},
         referencia_por_codigo={})
-    staging, errores = _procesar(_fila(**{"Bod. entrada": "ZZ999"}), cache=cache)
+    staging, errores = _procesar(
+        _fila(**{"Bod. entrada": "ZZ999"}), cache=cache)
 
     assert errores == []
     assert staging.sucursal_id == SUC_DESTINO
@@ -150,11 +155,15 @@ def test_fecha_invalida_es_error():
     staging, errores = _procesar(_fila(Fecha="no es fecha"))
 
     assert staging is None
-    assert [e.codigo_error for e in errores] == [traslados.CODIGO_FECHA_INVALIDA]
+    codigos = [e.codigo_error for e in errores]
+    assert codigos == [traslados.CODIGO_FECHA_INVALIDA]
 
 
-def test_fecha_texto_iso_se_acepta():
-    staging, errores = _procesar(_fila(Fecha="2026-08-03"))
+@pytest.mark.parametrize("texto", [
+    "2026-08-03", "2026-08-03 00:00:00", "2026-08-03T00:00:00", "03/08/2026",
+])
+def test_fecha_texto_se_acepta(texto):
+    staging, errores = _procesar(_fila(Fecha=texto))
 
     assert errores == []
     assert staging.payload["fecha"] == "2026-08-03"

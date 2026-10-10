@@ -29,7 +29,7 @@ previous snapshot.
 from __future__ import annotations
 
 import uuid
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
@@ -102,14 +102,21 @@ def _destino(fila_raw, mapa, cache, carga_id, numero_fila):
         codigo_bodega=codigo)]
 
 
+_FORMATOS_FECHA_TEXTO = ("%Y-%m-%d", "%d/%m/%Y")
+
+
 def _fecha(valor: Any) -> Optional[date]:
-    """A date cell, or an ISO `YYYY-MM-DD` text (a CSV/text export)."""
-    if isinstance(valor, str):
+    """A date cell, or a text date from a CSV/text export: ISO
+    `YYYY-MM-DD` (optional time part) or day-first `DD/MM/YYYY`."""
+    if not isinstance(valor, str):
+        return columnas_mod.a_fecha(valor)
+    texto = valor.strip()[:10]
+    for formato in _FORMATOS_FECHA_TEXTO:
         try:
-            return date.fromisoformat(valor.strip())
+            return datetime.strptime(texto, formato).date()
         except ValueError:
-            return None
-    return columnas_mod.a_fecha(valor)
+            continue
+    return None
 
 
 def procesar_fila(
