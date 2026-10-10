@@ -12,10 +12,16 @@ Configuracion (`vendedor_norm`, `linea_norm`, `nit_especial`); Configuracion
 - `kpi_factura_firma`: invoices counted by their "line signature" (the sorted
   distinct lines the invoice carries), so the invoice percentages stay exact.
 - `kpi_cliente_mes`: sale per client and line, to count distinct clients.
-- `kpi_costo_referencia` / `kpi_inventario_corte`: unit cost per referencia and
-  inventory at cost per store, from the latest inventory cut. A referencia with no
-  positive inventory cost falls back to `referencia.precio_normal` (> 0), tagged
-  `fuente = 'maestro'`; `costo_estimado` isolates that part of the sales cost.
+- `kpi_costo_referencia`: unit cost per referencia from the latest inventory cut.
+  A referencia with no positive inventory cost falls back to
+  `referencia.precio_normal` (> 0), tagged `fuente = 'maestro'`;
+  `costo_estimado` isolates that part of the sales cost.
+- `kpi_inventario_corte`: inventory at cost per store for each CLOSING cut (the
+  latest cut of every calendar month; the Inventario tab only ever reads those).
+- `kpi_inventario_par`: the same closing cuts per store and referencia (stock and
+  value), so the tab reads its pairs without scanning `inventario_detalle`.
+- `kpi_costo_mes_referencia`: cost of sales per month, store and referencia,
+  priced like `kpi_venta_mes` (it feeds the Inventario tab's days of inventory).
 - `kpi_resumen_estado`: the single bookkeeping row (dirty flag, timestamps).
 
 Nullable key parts (`linea_norm`, `nit_especial`) are made unique with
@@ -118,6 +124,29 @@ class KpiInventarioCorte(MotoredBase):
     valor = Column(Numeric(24, 4), nullable=False)
     lineas_sin_costo = Column(Integer, nullable=False)  # no cost from either source
     lineas_costo_maestro = Column(Integer, nullable=False)  # priced with precio_normal
+
+
+class KpiInventarioPar(MotoredBase):
+    """Stock and value of a (store, referencia) at a closing cut. The store is the RAW
+    one: the principal rollup is applied when reading. No FK on `referencia_id`: the
+    live valuation keeps inventory lines whose referencia is missing from the master."""
+    __tablename__ = "kpi_inventario_par"
+
+    fecha_corte = Column(Date, primary_key=True)
+    sucursal_id = Column(UUID(as_uuid=True), ForeignKey("sucursal.id", ondelete="CASCADE"), primary_key=True)
+    referencia_id = Column(UUID(as_uuid=True), primary_key=True)
+    existencia = Column(Numeric(20, 2), nullable=False)
+    valor = Column(Numeric(24, 4), nullable=False)
+
+
+class KpiCostoMesReferencia(MotoredBase):
+    __tablename__ = "kpi_costo_mes_referencia"
+    __table_args__ = (CheckConstraint("EXTRACT(DAY FROM anio_mes) = 1", name="ck_kpi_costo_mes_referencia_dia_1"),)
+
+    anio_mes = Column(Date, primary_key=True)
+    sucursal_id = Column(UUID(as_uuid=True), ForeignKey("sucursal.id", ondelete="CASCADE"), primary_key=True)
+    referencia_id = Column(UUID(as_uuid=True), ForeignKey("referencia.id", ondelete="CASCADE"), primary_key=True)
+    costo = Column(Numeric(24, 6), nullable=False)
 
 
 class KpiResumenEstado(MotoredBase):

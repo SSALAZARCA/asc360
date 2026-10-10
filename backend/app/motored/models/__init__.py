@@ -41,8 +41,8 @@ from app.motored.models.ingreso_factura import IngresoFactura
 from app.motored.models.inventario_detalle import InventarioDetalle
 from app.motored.models.inventario_snapshot import InventarioSnapshot
 from app.motored.models.kpi_resumen import (
-    KpiClienteMes, KpiCostoReferencia, KpiFacturaFirma, KpiInventarioCorte,
-    KpiResumenEstado, KpiVentaMes,
+    KpiClienteMes, KpiCostoMesReferencia, KpiCostoReferencia, KpiFacturaFirma,
+    KpiInventarioCorte, KpiInventarioPar, KpiResumenEstado, KpiVentaMes,
 )
 from app.motored.models.login_evento import LoginEvento
 from app.motored.models.traslado import (
@@ -109,6 +109,8 @@ __all__ = [
     "KpiCostoReferencia",
     "KpiFacturaFirma",
     "KpiInventarioCorte",
+    "KpiInventarioPar",
+    "KpiCostoMesReferencia",
     "KpiResumenEstado",
     "KpiVentaMes",
     "LoginEvento",

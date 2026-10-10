@@ -39,6 +39,7 @@ from tests.motored.pg_real.test_tablero_asesores_pg import _carga, pytestmark, s
 D = Decimal
 F = datetime.date
 C_AGO, C_SEP, C_OCT, C_ANUL = F(2096, 8, 31), F(2096, 9, 30), F(2096, 10, 7), F(2096, 10, 20)
+C_OCT_EXTRA = F(2096, 10, 2)
 
 
 class Mundo:

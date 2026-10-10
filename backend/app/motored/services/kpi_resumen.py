@@ -37,9 +37,13 @@ Costs: the unit cost of a referencia is the median of its positive costs in the
 latest non-annulled inventory cut (`fuente = 'inventario'`); a referencia with no
 positive inventory cost falls back to `precio_normal` when it is > 0 (`fuente =
 'maestro'`); otherwise it has no cost. `costo_estimado` is the part of `costo`
-priced from the master. Only the latest cut is kept (the KPI's only ever read it),
-in `kpi_costo_referencia` and, per store, in `kpi_inventario_corte`. Without any
-inventory cut the cost table is keyed by today's date.
+priced from the master. Only the latest cut prices (the KPI's only ever read it), in
+`kpi_costo_referencia`. The inventory itself is kept for every CLOSING cut (the latest
+non-annulled cut of each calendar month, which is all the Inventario tab ever reads):
+per store in `kpi_inventario_corte` and per store and referencia in
+`kpi_inventario_par`. `kpi_costo_mes_referencia` holds the cost of sales per month,
+store and referencia, priced like `kpi_venta_mes`. Without any inventory cut the cost
+table is keyed by today's date.
 
 Concurrency: ONE transaction-level advisory lock (`LOCK_KEY`) serializes the full
 rebuild, the costs rebuild and the incremental refresh. They all take it before
@@ -66,7 +70,8 @@ from app.motored.models.carga_archivo import CargaArchivo
 from app.motored.models.cliente_tecnired import ClienteTecnired
 from app.motored.models.inventario_detalle import InventarioDetalle
 from app.motored.models.kpi_resumen import (
-    KpiClienteMes, KpiCostoReferencia, KpiFacturaFirma, KpiInventarioCorte, KpiResumenEstado, KpiVentaMes,
+    KpiClienteMes, KpiCostoMesReferencia, KpiCostoReferencia, KpiFacturaFirma, KpiInventarioCorte,
+    KpiInventarioPar, KpiResumenEstado, KpiVentaMes,
 )
 from app.motored.models.parametro_metodologia import ParametroMetodologia
 from app.motored.models.referencia import Referencia
@@ -375,6 +380,30 @@ async def _insertar_ventas(db: AsyncSession, claves: Optional[Sequence[Clave]]) 
     await _insertar_factura_firma(
         db, _base(lineas, nits, None, None if claves is None else {c[0] for c in claves}))
     await _insertar_cliente_mes(db, _base(lineas, nits, claves))
+    await _insertar_costo_mes(db, claves)
+
+
+async def _insertar_costo_mes(db: AsyncSession, claves: Optional[Sequence[Clave]]) -> None:
+    """Cost of sales per month, store and referencia with the live rule (`q._expr_costo_fila` over
+    the cost cut of `kpi_costo_referencia`). Every line of a referencia in the master counts,
+    whatever its line or client (the Inventario tab applies its own Configuracion when reading)."""
+    corte = select(func.max(KpiCostoReferencia.fecha_corte)).scalar_subquery()
+    mes = cast(func.date_trunc("month", VentaDetalle.fecha), Date)
+    costo = q._expr_costo_fila(VentaDetalle.cantidad, VentaDetalle.costo, KpiCostoReferencia.costo_unitario)
+    consulta = (
+        select(mes, VentaDetalle.sucursal_id, VentaDetalle.referencia_id, func.sum(costo))
+        .select_from(VentaDetalle)
+        .join(CargaArchivo, CargaArchivo.id == VentaDetalle.carga_id)
+        .join(Referencia, Referencia.id == VentaDetalle.referencia_id)
+        .outerjoin(KpiCostoReferencia, and_(
+            KpiCostoReferencia.referencia_id == VentaDetalle.referencia_id,
+            KpiCostoReferencia.fecha_corte == corte))
+        .where(CargaArchivo.estado != "ANULADO")
+        .group_by(mes, VentaDetalle.sucursal_id, VentaDetalle.referencia_id))
+    if claves is not None:
+        consulta = consulta.where(_filtro_claves(claves))
+    await db.execute(insert(KpiCostoMesReferencia).from_select(
+        ["anio_mes", "sucursal_id", "referencia_id", "costo"], consulta))
 
 
 # --- Costs and inventory ----------------------------------------------------------------------
@@ -383,28 +412,59 @@ async def _insertar_ventas(db: AsyncSession, claves: Optional[Sequence[Clave]]) 
 async def _reconstruir_costos_e_inventario(db: AsyncSession) -> None:
     corte = await q.fecha_corte_costos(db)
     await db.execute(delete(KpiCostoReferencia))
-    await db.execute(delete(KpiInventarioCorte))
+    for modelo in (KpiInventarioCorte, KpiInventarioPar):
+        await db.execute(delete(modelo))
     fecha = corte or datetime.date.today()
     costos = q._subconsulta_costos(corte)  # the live rule itself: median, else precio_normal
     await db.execute(insert(KpiCostoReferencia).from_select(
         ["fecha_corte", "referencia_id", "costo_unitario", "fuente"],
         select(literal(fecha, Date), costos.c.referencia_id, costos.c.costo_unitario, costos.c.fuente)))
-    if corte is not None:
-        await _insertar_inventario(db, corte)
+    cortes = await _cortes_de_cierre(db)
+    if cortes:
+        await _insertar_inventario(db, cortes)
+        await _insertar_inventario_par(db, cortes)
 
 
-async def _insertar_inventario(db: AsyncSession, corte: datetime.date) -> None:
-    """Inventory at cost per store, valued by the live rule (`q._valoracion_inventario`)."""
-    valor, sin_costo, costo_maestro = q._valoracion_inventario()
-    consulta = (
-        select(literal(corte, Date), InventarioDetalle.sucursal_id, valor, sin_costo, costo_maestro)
+async def _cortes_de_cierre(db: AsyncSession) -> Sequence[datetime.date]:
+    """The latest non-annulled cut of every calendar month: the only ones the Inventario tab shows
+    (the corte itself, each month of the trend and the previous month's close)."""
+    mes = func.date_trunc("month", InventarioDetalle.fecha_corte)
+    ultimos = (
+        select(func.max(InventarioDetalle.fecha_corte))
+        .join(CargaArchivo, CargaArchivo.id == InventarioDetalle.carga_id)
+        .where(CargaArchivo.estado != "ANULADO").group_by(mes))
+    return sorted((await db.execute(ultimos)).scalars().all())
+
+
+def _lineas_de_inventario(cortes: Sequence[datetime.date], columnas):
+    """Non-annulled inventory lines of `cortes` joined with their referencia (outer: a line whose
+    referencia is missing is still valued), as the live `q._valoracion_inventario` readers do."""
+    return (
+        select(*columnas)
         .join(CargaArchivo, CargaArchivo.id == InventarioDetalle.carga_id)
         .outerjoin(Referencia, Referencia.id == InventarioDetalle.referencia_id)
-        .where(InventarioDetalle.fecha_corte == corte, CargaArchivo.estado != "ANULADO")
-        .group_by(InventarioDetalle.sucursal_id)
-    )
+        .where(InventarioDetalle.fecha_corte.in_(list(cortes)), CargaArchivo.estado != "ANULADO"))
+
+
+async def _insertar_inventario(db: AsyncSession, cortes: Sequence[datetime.date]) -> None:
+    """Inventory at cost per closing cut and store, valued by the live rule (`q._valoracion_inventario`)."""
+    valor, sin_costo, costo_maestro = q._valoracion_inventario()
+    consulta = _lineas_de_inventario(
+        cortes, [InventarioDetalle.fecha_corte, InventarioDetalle.sucursal_id, valor, sin_costo, costo_maestro],
+    ).group_by(InventarioDetalle.fecha_corte, InventarioDetalle.sucursal_id)
     await db.execute(insert(KpiInventarioCorte).from_select(
         ["fecha_corte", "sucursal_id", "valor", "lineas_sin_costo", "lineas_costo_maestro"], consulta))
+
+
+async def _insertar_inventario_par(db: AsyncSession, cortes: Sequence[datetime.date]) -> None:
+    """Stock and value per closing cut, store and referencia (the bodegas of a pair add up)."""
+    valor, _, _ = q._valoracion_inventario()
+    consulta = _lineas_de_inventario(
+        cortes, [InventarioDetalle.fecha_corte, InventarioDetalle.sucursal_id, InventarioDetalle.referencia_id,
+                 func.sum(InventarioDetalle.existencia), valor],
+    ).group_by(InventarioDetalle.fecha_corte, InventarioDetalle.sucursal_id, InventarioDetalle.referencia_id)
+    await db.execute(insert(KpiInventarioPar).from_select(
+        ["fecha_corte", "sucursal_id", "referencia_id", "existencia", "valor"], consulta))
 
 
 # --- Public API -------------------------------------------------------------------------------
@@ -419,7 +479,7 @@ async def refrescar_periodos(db: AsyncSession, claves: Set[Clave]) -> None:
     ordenadas = sorted(claves, key=lambda c: (str(c[0]), c[1], c[2]))
     await _bloquear(db)
     meses = [(s, datetime.date(a, m, 1)) for s, a, m in ordenadas]
-    for modelo in (KpiVentaMes, KpiClienteMes):
+    for modelo in (KpiVentaMes, KpiClienteMes, KpiCostoMesReferencia):
         await db.execute(delete(modelo).where(tuple_(modelo.sucursal_id, modelo.anio_mes).in_(meses)))
     await db.execute(delete(KpiFacturaFirma).where(KpiFacturaFirma.sucursal_id.in_({c[0] for c in claves})))
     await _insertar_ventas(db, ordenadas)
@@ -454,7 +514,7 @@ async def claves_de_carga(db: AsyncSession, carga_id: Any) -> Set[Clave]:
 async def reconstruir_todo(db: AsyncSession) -> None:
     """Full rebuild of every summary (costs first: the ventas rows are priced from them)."""
     await _bloquear(db)
-    for modelo in (KpiVentaMes, KpiFacturaFirma, KpiClienteMes):
+    for modelo in (KpiVentaMes, KpiFacturaFirma, KpiClienteMes, KpiCostoMesReferencia):
         await db.execute(delete(modelo))
     await _reconstruir_costos_e_inventario(db)
     await _insertar_ventas(db, None)
@@ -463,11 +523,13 @@ async def reconstruir_todo(db: AsyncSession) -> None:
 
 async def reconstruir_costos(db: AsyncSession) -> None:
     """Rebuilds the costs and the inventory summaries and re-prices the sales rows. Only
-    `kpi_venta_mes` carries costs, so only it is rebuilt (the invoice and client tables
-    do not depend on them); the 'never fully built' flag is left as it was."""
+    `kpi_venta_mes` and `kpi_costo_mes_referencia` carry costs, so only they are rebuilt (the
+    invoice and client tables do not depend on them); the 'never fully built' flag is left as it was."""
     await _bloquear(db)
     await db.execute(delete(KpiVentaMes))
+    await db.execute(delete(KpiCostoMesReferencia))
     await _reconstruir_costos_e_inventario(db)
     lineas, nits = await _uniones(db)
     await _insertar_venta_mes(db, _base(lineas, nits, None))
+    await _insertar_costo_mes(db, None)
     await _marcar_actualizado(db)
