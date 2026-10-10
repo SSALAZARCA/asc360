@@ -1,6 +1,7 @@
 /**
  * Keyboard-wedge scanner support. USB and Bluetooth scanners "type" the
- * code very fast and end with Enter. `esRafaga` tells a scanner burst from
+ * code very fast and end with Enter or Tab, depending on how each scanner is
+ * configured; both end a reading (`esFinDeLectura`). `esRafaga` tells a scanner burst from
  * a person typing; `useCapturaTeclado` catches a burst that arrives while
  * no text field has the focus (e.g. right after a button was clicked, or on
  * a phone with a Bluetooth scanner) so no scan is ever lost.
@@ -18,6 +19,11 @@ export function esRafaga(tiempos) {
   if (tiempos.length < 3) return false;
   const promedio = (tiempos[tiempos.length - 1] - tiempos[0]) / (tiempos.length - 1);
   return promedio < MS_POR_TECLA_ESCANER;
+}
+
+/** Scanners end each reading with Enter or, if so configured, with Tab. */
+export function esFinDeLectura(key) {
+  return key === 'Enter' || key === 'Tab';
 }
 
 export function registrarTecla(tiempos) {
@@ -43,7 +49,7 @@ export function useCapturaTeclado(onCodigo, activo = true) {
     let tiempos = [];
     const manejar = (e) => {
       if (esEditable(document.activeElement)) return;
-      if (e.key === 'Enter') {
+      if (esFinDeLectura(e.key)) {
         if (buffer && esRafaga(tiempos)) {
           e.preventDefault();
           callback.current(buffer);

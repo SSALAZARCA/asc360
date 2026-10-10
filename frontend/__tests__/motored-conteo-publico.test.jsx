@@ -190,6 +190,29 @@ describe('counting on a laptop', () => {
     expect(screen.getByText('1 referencia')).toBeInTheDocument();
   });
 
+  it('a scanner that ends each reading with Tab instead of Enter is counted too', async () => {
+    const s = crearServidor();
+    sesionGuardada();
+    montar();
+    const entrada = await screen.findByLabelText('Escanee con la pistola o escriba el código');
+    await user.type(entrada, '90305-KVN-900S{Tab}90305-KVN-900S{Tab}');
+    await waitFor(() => expect(s.lecturas).toHaveLength(2));
+    expect(s.lecturas[0]).toMatchObject({ codigo_leido: '90305-KVN-900S', metodo: 'ESCANER' });
+    expect(entrada).toHaveValue('');
+    expect(entrada).toHaveFocus();
+  });
+
+  it('a Tab-ended burst typed while the focus is on a button is still counted', async () => {
+    const s = crearServidor();
+    sesionGuardada();
+    montar();
+    await screen.findByText('ESTANTE A3', { selector: '[data-ubicacion-actual]' });
+    screen.getByRole('button', { name: 'Cambiar ubicación' }).focus();
+    await user.keyboard('90305-KVN-900S{Tab}');
+    await waitFor(() => expect(s.lecturas).toHaveLength(1));
+    expect(s.lecturas[0]).toMatchObject({ codigo_leido: '90305-KVN-900S', metodo: 'ESCANER' });
+  });
+
   it('without a location it asks for one and sends nothing', async () => {
     const s = crearServidor({ ubicacion: null });
     sesionGuardada();

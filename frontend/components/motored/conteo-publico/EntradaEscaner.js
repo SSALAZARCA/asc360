@@ -1,13 +1,14 @@
 /**
  * The big, always-focused field of the desktop screen. A USB scanner types
- * the code in a fast burst and presses Enter; a person can type in the same
+ * the code in a fast burst and presses Enter or Tab (scanners come
+ * configured either way); a person can type in the same
  * field. The burst speed sets the reading's metodo (ESCANER or MANUAL).
  * The focus comes back here whenever it lands on nothing or on a button,
  * and a burst typed while the focus is elsewhere is still caught.
  */
 import { useEffect, useRef, useState } from 'react';
 import { C, MONO } from './estilos';
-import { esRafaga, registrarTecla, useCapturaTeclado } from './teclado';
+import { esFinDeLectura, esRafaga, registrarTecla, useCapturaTeclado } from './teclado';
 
 const REENFOQUE_MS = 120;
 
@@ -51,7 +52,8 @@ export default function EntradaEscaner({ onCodigo }) {
   };
 
   const alTeclear = (e) => {
-    if (e.key === 'Enter') {
+    // A Tab on an empty field still moves the focus as usual.
+    if (esFinDeLectura(e.key) && (e.key === 'Enter' || valor.trim())) {
       e.preventDefault();
       emitir();
     } else if (e.key.length === 1) {
