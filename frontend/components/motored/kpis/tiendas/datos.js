@@ -137,11 +137,13 @@ export function filasMezcla(data) {
   });
 }
 
-/** Heatmap input: sales per month in millions of pesos. */
+/** Heatmap input: sales per month in millions of pesos, over the 12-month window (not the period). */
 export function matrizMensual(data) {
+  const meses = data.ventana_meses ?? data.meses;
+  const filas = (data.ventana?.tiendas ?? data.tiendas).filter((t) => t.venta.total > 0).sort((a, b) => b.venta.total - a.venta.total);
   return {
-    columns: data.meses.map(mesCorto),
-    rows: tiendasConVenta(data).map((t) => ({ id: t.sucursal_id, name: t.nombre, values: data.meses.map((m) => (t.venta.por_mes[m] ?? 0) / 1e6) })),
+    columns: meses.map(mesCorto),
+    rows: filas.map((t) => ({ id: t.sucursal_id, name: t.nombre, values: meses.map((m) => (t.venta.por_mes[m] ?? 0) / 1e6) })),
   };
 }
 

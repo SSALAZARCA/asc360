@@ -2,6 +2,7 @@ import { Chip } from '../charts';
 import { COLOR } from '../tokens';
 import { CABECERA, LEYENDA, NUM, TARJETA, TITULO } from '../ventas/estilos';
 import { periodoCorto } from '../periodo';
+import NotaVentana from '../ventas/NotaVentana';
 import { lineasDe, tendenciaDe } from './detalle';
 
 const ROJO = COLOR.gray500;
@@ -50,6 +51,7 @@ function TarjetaTendencia({ data }) {
         <h3 style={TITULO}>Tendencia de cumplimiento</h3>
         <Leyenda items={marcas} />
       </div>
+      <NotaVentana />
       <Grafico t={t} />
       <p style={{ margin: '4px 0 0', fontSize: 12.5, color: COLOR.muted }}>{t.nota}</p>
     </section>

@@ -3,6 +3,7 @@ import { millones, miles, moneda } from '../format';
 import { CATEGORIA, COLOR } from '../tokens';
 import { mesCorto, ventaPorLinea } from './datos';
 import { CABECERA, NUM, TARJETA, TITULO } from './estilos';
+import NotaVentana from './NotaVentana';
 
 const TIP_TICKET = 'Venta promedio por factura que incluye esta línea';
 
@@ -45,6 +46,7 @@ export default function VentaPorLinea({ data }) {
         <h2 style={TITULO}>Venta mensual por línea</h2>
         <Leyenda lineas={pintadas} />
       </div>
+      <NotaVentana />
       <Fichas lineas={pintadas} />
       <div style={{ overflowX: 'auto', marginTop: 12 }}>
         <div style={{ minWidth: 540 }}>

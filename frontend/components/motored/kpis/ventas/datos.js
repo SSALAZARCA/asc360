@@ -85,10 +85,18 @@ export function zonasSemaforo(data, entidad = 'tiendas') {
   };
 }
 
-/** Sales by line sorted from the heaviest, plus the months x lines matrix in millions of pesos. */
+/** The blocks of the monthly charts: the 12-month window of the payload, or the period's own for an older payload. */
+export const bloquesVentana = (data) => ({
+  total: data.ventana?.total ?? data.total,
+  tecnired: data.ventana?.tecnired ?? data.tecnired,
+  meses: data.ventana_meses ?? data.meses,
+});
+
+/** Sales by line sorted from the heaviest, plus the months x lines matrix in millions of pesos (12-month window). */
 export function ventaPorLinea(data) {
-  const { por_linea: porLinea, por_mes_linea: porMesLinea } = data.total.venta;
-  const tickets = data.total.facturas?.ticket_por_linea ?? {};
+  const { total } = bloquesVentana(data);
+  const { por_linea: porLinea, por_mes_linea: porMesLinea } = total.venta;
+  const tickets = total.facturas?.ticket_por_linea ?? {};
   const lineas = Object.keys(porLinea).sort((a, b) => porLinea[b] - porLinea[a]);
   const meses = Object.keys(porMesLinea).sort();
   return {

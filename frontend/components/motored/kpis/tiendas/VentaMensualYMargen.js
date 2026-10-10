@@ -2,6 +2,7 @@ import { Heatmap, Scatter } from '../charts';
 import { periodoCorto } from '../periodo';
 import { COLOR } from '../tokens';
 import { CABECERA, LEYENDA, TARJETA, TITULO } from '../ventas/estilos';
+import NotaVentana from '../ventas/NotaVentana';
 import { dispersionVentaMargen, matrizMensual } from './datos';
 
 const LEYENDA_PUNTOS = [['crece', COLOR.good], ['cae', COLOR.bad], ['nueva', COLOR.gray500]];
@@ -11,6 +12,7 @@ function MapaDeCalor({ data }) {
   return (
     <section aria-label="Venta mensual por tienda" style={TARJETA}>
       <div style={CABECERA}><h2 style={TITULO}>Venta mensual por tienda · vs su promedio</h2></div>
+      <NotaVentana />
       <Heatmap columns={columns} rows={rows} maxHeight={420} nameWidth={150} rowHeader="Tienda" />
     </section>
   );

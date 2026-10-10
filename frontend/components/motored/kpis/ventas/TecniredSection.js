@@ -2,8 +2,9 @@ import { Chip, Donut, RankBadge, StackedBar100 } from '../charts';
 import { millones, pct } from '../format';
 import { periodoCorto } from '../periodo';
 import { COLOR } from '../tokens';
-import { mesCorto } from './datos';
+import { bloquesVentana, mesCorto } from './datos';
 import { CABECERA, NUM, TARJETA, TITULO } from './estilos';
+import NotaVentana from './NotaVentana';
 import { barrasMensuales, chipParticipacion, mezclaLineas } from './tecniredDatos';
 
 const FICHA = { textAlign: 'center', padding: 8, borderRadius: 10, background: COLOR.infoSoft };
@@ -18,7 +19,7 @@ function Fichas({ tecnired }) {
 }
 
 function Dona({ data }) {
-  const { tecnired, total } = data;
+  const { tecnired, total } = bloquesVentana(data);
   const resto = Math.max(total.venta.total - tecnired.venta, 0);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, flex: '0 0 170px' }}>
@@ -77,9 +78,10 @@ function TarjetaTecnired({ data }) {
   return (
     <section aria-label="Clientes Tecnired" style={{ ...TARJETA, flex: '1.7 1 420px' }}>
       <div style={CABECERA}>
-        <h2 style={TITULO}>Clientes Tecnired · {periodoCorto(data.meses)}</h2>
+        <h2 style={TITULO}>Clientes Tecnired · {periodoCorto(bloquesVentana(data).meses)}</h2>
         {chip && <Chip text={chip.texto} variant={chip.variante} />}
       </div>
+      <NotaVentana />
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 22, alignItems: 'center', marginTop: 14 }}>
         <Dona data={data} />
         <div style={{ flex: '1 1 260px', minWidth: 0 }}>

@@ -1,17 +1,18 @@
 /** View-models of the Tecnired block of the Ventas tab. */
 import { millones, pct } from '../format';
 import { CATEGORIA } from '../tokens';
-import { nombreLinea } from './datos';
+import { bloquesVentana, nombreLinea } from './datos';
 
 const sumaDe = (obj, claves) => claves.reduce((t, k) => t + (obj[k] ?? 0), 0);
 
 /** Per month: Tecnired sales, bar height (% of the largest) and its share of the month's total sales. */
 export function barrasMensuales(data) {
-  const meses = Object.keys(data.tecnired.por_mes).sort();
-  const maximo = Math.max(1, ...meses.map((m) => data.tecnired.por_mes[m].venta));
-  const ventaMes = data.total.venta.por_mes;
+  const { tecnired, total } = bloquesVentana(data);
+  const meses = Object.keys(tecnired.por_mes).sort();
+  const maximo = Math.max(1, ...meses.map((m) => tecnired.por_mes[m].venta));
+  const ventaMes = total.venta.por_mes;
   return meses.map((mes) => {
-    const venta = data.tecnired.por_mes[mes].venta;
+    const venta = tecnired.por_mes[mes].venta;
     return { mes, venta, texto: millones(venta), alto: (venta / maximo) * 100, fraccion: ventaMes[mes] > 0 ? venta / ventaMes[mes] : null };
   });
 }
@@ -26,7 +27,7 @@ export function chipParticipacion(barras) {
 
 /** Repuestos / Lubricantes / Otras, as in the design. */
 export function mezclaLineas(data) {
-  const porLinea = data.tecnired.por_linea;
+  const porLinea = bloquesVentana(data).tecnired.por_linea;
   const todas = Object.keys(porLinea);
   const resto = todas.filter((l) => l !== 'REPUESTOS' && l !== 'LUBRICANTES');
   return [
