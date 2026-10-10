@@ -65,6 +65,7 @@ def _crear_confirmaciones() -> None:
         sa.Column('id', postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column('nro_documento', sa.String(40), nullable=False),
         sa.Column('bodega_salida', sa.String(20), nullable=False),
+        sa.Column('bodega_entrada', sa.String(20), nullable=False),
         sa.Column('estado', sa.String(16), nullable=False),
         sa.Column('actualizado_por_usuario_id', postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column('actualizado_por_nombre', sa.String(200), nullable=False),
@@ -73,13 +74,14 @@ def _crear_confirmaciones() -> None:
         sa.CheckConstraint(_ESTADO, name='ck_traslado_confirmacion_estado'),
         sa.ForeignKeyConstraint(['actualizado_por_usuario_id'], ['usuario.id'], ondelete='SET NULL'),
         sa.PrimaryKeyConstraint('id'),
-        sa.UniqueConstraint('nro_documento', 'bodega_salida', name='uq_traslado_confirmacion_documento_bodega'),
+        sa.UniqueConstraint('nro_documento', 'bodega_salida', 'bodega_entrada', name='uq_traslado_confirmacion_documento_bodega'),
     )
     op.create_table(
         'traslado_confirmacion_historial',
         sa.Column('id', postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column('nro_documento', sa.String(40), nullable=False),
         sa.Column('bodega_salida', sa.String(20), nullable=False),
+        sa.Column('bodega_entrada', sa.String(20), nullable=False),
         sa.Column('estado', sa.String(16), nullable=False),
         sa.Column('por_usuario_id', postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column('por_nombre', sa.String(200), nullable=False),
@@ -93,7 +95,8 @@ def _crear_confirmaciones() -> None:
     )
     op.create_index(
         'ix_traslado_confirmacion_historial_doc',
-        'traslado_confirmacion_historial', ['nro_documento', 'bodega_salida'])
+        'traslado_confirmacion_historial',
+        ['nro_documento', 'bodega_salida', 'bodega_entrada'])
 
 
 def upgrade() -> None:

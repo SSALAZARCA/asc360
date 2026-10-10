@@ -43,3 +43,29 @@ def test_downgrade_drops_what_upgrade_creates():
     assert sorted(borradas) == [
         "traslado_confirmacion", "traslado_confirmacion_historial",
         "traslado_linea"]
+
+
+def _columnas_de(op_mock, tabla):
+    llamada = next(c for c in op_mock.create_table.call_args_list
+                   if c.args[0] == tabla)
+    return llamada.args[1:]
+
+
+def test_the_confirmation_key_includes_the_destination_bodega():
+    migracion = _cargar()
+    with patch.object(migracion, "op") as op_mock:
+        migracion.upgrade()
+
+    for tabla in ("traslado_confirmacion", "traslado_confirmacion_historial"):
+        nombres = {getattr(c, "name", None)
+                   for c in _columnas_de(op_mock, tabla)}
+        assert "bodega_entrada" in nombres
+    (unica,) = [
+        c for c in _columnas_de(op_mock, "traslado_confirmacion")
+        if c.__class__.__name__ == "UniqueConstraint"]
+    assert list(unica._pending_colargs) == [
+        "nro_documento", "bodega_salida", "bodega_entrada"]
+    indice = next(c for c in op_mock.create_index.call_args_list
+                  if c.args[0] == "ix_traslado_confirmacion_historial_doc")
+    assert indice.args[2] == [
+        "nro_documento", "bodega_salida", "bodega_entrada"]

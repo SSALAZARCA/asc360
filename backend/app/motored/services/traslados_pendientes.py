@@ -6,9 +6,10 @@ A TRASLADOS load is a FULL snapshot of the transfers still alive in the ERP.
 The current snapshot is the latest non-ANULADO APLICADO TRASLADOS carga; a
 transfer is PENDING while it is in that snapshot, and it leaves the list on
 its own when a newer load no longer has it (received in the ERP). A transfer
-is the group `(nro_documento, bodega_salida)` (the document number repeats
-across origin bodegas); its receiving store is the principal store of the
-destination bodega (associated stores roll up). The receiving store certifies
+is the group `(nro_documento, bodega_salida, bodega_entrada)` (the document
+number repeats across origin bodegas, and one document may feed two
+destinations); its receiving store is the principal store of the destination
+bodega (associated stores roll up). The receiving store certifies
 "RECIBIDO" / "NO_HA_LLEGADO" (one shared state, with history); a transfer
 marked RECIBIDO that is still in the snapshot carries `aviso_erp` = true: the
 store must also receive it in the ERP.
@@ -21,11 +22,12 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.motored.models.carga_archivo import CargaArchivo
+from app.motored.models.carga_error import CargaError
 from app.motored.models.sucursal import Sucursal
 from app.motored.models.traslado import (
     TrasladoConfirmacion,
@@ -45,7 +47,7 @@ MSG_TRASLADO = "El traslado no es válido."
 MSG_ESTADO = "El estado debe ser «Recibido» o «No ha llegado»."
 MSG_NO_PENDIENTE = "Este traslado ya no está pendiente."
 
-Clave = Tuple[str, str]
+Clave = Tuple[str, str, str]
 
 
 def _texto(valor: Any) -> str:
@@ -69,7 +71,8 @@ def _grupos(lineas: Iterable[Any]) -> Dict[Clave, List[Any]]:
     grupos: Dict[Clave, List[Any]] = {}
     for linea in lineas:
         grupos.setdefault(
-            (linea.nro_documento, linea.bodega_salida), []).append(linea)
+            (linea.nro_documento, linea.bodega_salida, linea.bodega_entrada),
+            []).append(linea)
     return grupos
 
 
@@ -92,19 +95,20 @@ def calcular_traslados(
 ) -> List[Dict[str, Any]]:
     """The pending transfers of a snapshot, oldest first. `lineas` rows expose
     nro_documento, fecha, bodega_salida, descripcion_bodega_salida,
-    sucursal_salida_id, sucursal_entrada_id, referencia_codigo, descripcion
-    and cantidad. The receiving store is the one of the group's first line."""
+    sucursal_salida_id, bodega_entrada, sucursal_entrada_id, referencia_codigo,
+    descripcion and cantidad."""
     items = []
-    for (documento, bodega), grupo in _grupos(lineas).items():
+    for (documento, bodega, entrada), grupo in _grupos(lineas).items():
         grupo = sorted(grupo, key=lambda linea: linea.fecha)
         fecha = grupo[0].fecha
         tienda = principal.get(
             grupo[0].sucursal_entrada_id, grupo[0].sucursal_entrada_id)
         detalle = _detalle(grupo)
-        conf = confirmaciones.get((documento, bodega))
+        conf = confirmaciones.get((documento, bodega, entrada))
         estado = conf.estado if conf is not None else SIN_CONFIRMAR
         items.append({
             "documento": documento, "bodega_salida": bodega,
+            "bodega_entrada": entrada,
             "sale": _nombre_origen(grupo[0], principal, nombres),
             "sucursal_id": tienda, "llega": nombres.get(tienda, ""),
             "tienda": nombres.get(tienda, ""),
@@ -115,7 +119,8 @@ def calcular_traslados(
             "confirmado_por": conf.actualizado_por_nombre if conf is not None else None,
             "confirmado_en": conf.actualizado_en if conf is not None else None,
         })
-    items.sort(key=lambda i: (i["fecha"], i["documento"], i["bodega_salida"]))
+    items.sort(key=lambda i: (
+        i["fecha"], i["documento"], i["bodega_salida"], i["bodega_entrada"]))
     return items
 
 
@@ -172,16 +177,21 @@ async def _lineas_de(db: AsyncSession, carga_id: uuid.UUID) -> List[Any]:
     stmt = select(
         TrasladoLinea.nro_documento, TrasladoLinea.fecha,
         TrasladoLinea.bodega_salida, TrasladoLinea.descripcion_bodega_salida,
-        TrasladoLinea.sucursal_salida_id, TrasladoLinea.sucursal_entrada_id,
+        TrasladoLinea.sucursal_salida_id, TrasladoLinea.bodega_entrada,
+        TrasladoLinea.sucursal_entrada_id,
         TrasladoLinea.referencia_codigo, TrasladoLinea.descripcion,
         TrasladoLinea.cantidad,
-    ).where(TrasladoLinea.carga_id == carga_id)
+    ).where(TrasladoLinea.carga_id == carga_id).order_by(
+        TrasladoLinea.nro_documento, TrasladoLinea.bodega_salida,
+        TrasladoLinea.bodega_entrada, TrasladoLinea.fecha,
+        TrasladoLinea.referencia_codigo, TrasladoLinea.id)
     return list((await db.execute(stmt)).all())
 
 
 async def _confirmaciones(db: AsyncSession) -> Dict[Clave, Any]:
     filas = (await db.execute(select(TrasladoConfirmacion))).scalars().all()
-    return {(f.nro_documento, f.bodega_salida): f for f in filas}
+    return {(f.nro_documento, f.bodega_salida, f.bodega_entrada): f
+            for f in filas}
 
 
 async def pendientes(
@@ -209,14 +219,29 @@ async def ultima_carga(db: AsyncSession) -> Optional[datetime]:
     return None if vigente is None else vigente[1]
 
 
+async def info_carga(db: AsyncSession) -> Dict[str, Any]:
+    """The current snapshot's identity and its rejected rows: rows refused at
+    ingest (`carga_error`) are missing from the snapshot, so their transfers
+    would look received; the panel warns when `filas_con_error` > 0."""
+    vigente = await carga_vigente(db)
+    if vigente is None:
+        return {"ultima_carga": None, "carga_id": None, "filas_con_error": 0}
+    errores = (await db.execute(
+        select(func.count()).select_from(CargaError)
+        .where(CargaError.carga_id == vigente[0]))).scalar_one()
+    return {"ultima_carga": vigente[1], "carga_id": vigente[0],
+            "filas_con_error": errores}
+
+
 async def historial(
-    db: AsyncSession, documento: str, bodega_salida: str,
+    db: AsyncSession, documento: str, bodega_salida: str, bodega_entrada: str,
 ) -> List[Dict[str, Any]]:
     h = TrasladoConfirmacionHistorial
     stmt = (
         select(h)
         .where(h.nro_documento == documento.strip(),
-               h.bodega_salida == bodega_salida.strip())
+               h.bodega_salida == bodega_salida.strip(),
+               h.bodega_entrada == bodega_entrada.strip())
         .order_by(h.creado_en.desc(), h.id))
     return [
         {"estado": r.estado, "por": r.por_nombre, "canal": r.canal,
@@ -225,8 +250,8 @@ async def historial(
 
 
 async def confirmar(
-    db: AsyncSession, documento: Any, bodega_salida: Any, estado: Any,
-    actor: Actor, canal: str, tiendas: Optional[List[uuid.UUID]] = None,
+    db: AsyncSession, documento: Any, bodega_salida: Any, bodega_entrada: Any,
+    estado: Any, actor: Actor, canal: str, tiendas: Optional[List[uuid.UUID]] = None,
     ahora: Optional[datetime] = None,
 ) -> Dict[str, Any]:
     """Sets the shared state of a transfer of the current snapshot and logs
@@ -234,13 +259,15 @@ async def confirmar(
     the current snapshot (or, with `tiendas`, is not received by one of
     them). Commits."""
     documento, bodega_salida = _texto(documento), _texto(bodega_salida)
-    if not documento or not bodega_salida:
+    bodega_entrada = _texto(bodega_entrada)
+    if not documento or not bodega_salida or not bodega_entrada:
         raise PendienteError(422, MSG_TRASLADO)
     if estado not in ESTADOS_CONFIRMABLES:
         raise PendienteError(422, MSG_ESTADO)
     vigentes = await pendientes(db, tiendas)
     item = next((i for i in vigentes if i["documento"] == documento
-                 and i["bodega_salida"] == bodega_salida), None)
+                 and i["bodega_salida"] == bodega_salida
+                 and i["bodega_entrada"] == bodega_entrada), None)
     if item is None:
         raise PendienteError(404, MSG_NO_PENDIENTE)
 
@@ -255,12 +282,15 @@ async def confirmar(
     await db.execute(
         pg_insert(TrasladoConfirmacion)
         .values(id=uuid.uuid4(), nro_documento=documento,
-                bodega_salida=bodega_salida, **valores)
+                bodega_salida=bodega_salida, bodega_entrada=bodega_entrada,
+                **valores)
         .on_conflict_do_update(
-            index_elements=["nro_documento", "bodega_salida"], set_=valores))
+            index_elements=[
+                "nro_documento", "bodega_salida", "bodega_entrada"],
+            set_=valores))
     db.add(TrasladoConfirmacionHistorial(
         id=uuid.uuid4(), nro_documento=documento, bodega_salida=bodega_salida,
-        estado=estado, por_usuario_id=actor.usuario_id,
+        bodega_entrada=bodega_entrada, estado=estado, por_usuario_id=actor.usuario_id,
         por_nombre=actor.nombre, por_cedula=actor.cedula, canal=canal,
         creado_en=ahora))
     await db.commit()

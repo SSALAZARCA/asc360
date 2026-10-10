@@ -154,8 +154,9 @@ def test_fecha_invalida_es_error():
 
 
 def test_fecha_texto_iso_se_acepta():
-    staging, _ = _procesar(_fila(Fecha=date(2026, 8, 3)))
+    staging, errores = _procesar(_fila(Fecha="2026-08-03"))
 
+    assert errores == []
     assert staging.payload["fecha"] == "2026-08-03"
 
 

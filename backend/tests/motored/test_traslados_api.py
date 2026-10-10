@@ -27,15 +27,19 @@ BASE = "/api/motored/gestion-repuestos/traslados"
 TIENDA = uuid.uuid4()
 OTRA = uuid.uuid4()
 CARGA = datetime(2026, 10, 9, 7, 0, tzinfo=timezone.utc)
+CARGA_ID = uuid.uuid4()
+INFO = {"ultima_carga": CARGA, "carga_id": CARGA_ID, "filas_con_error": 1}
 CEDULA = "79845123"
 TOKEN = "t" * 64
 LECTORES = ["ADMIN", "COMPRAS", "GERENCIA", "COORDINADOR_REPUESTOS",
             "ANALISTA_ADMINISTRATIVO"]
 
 
-def _item(doc, estado="SIN_CONFIRMAR", dias=3, tienda=TIENDA, bodega="BA1"):
+def _item(doc, estado="SIN_CONFIRMAR", dias=3, tienda=TIENDA, bodega="BA1",
+          entrada="BE"):
     return {
-        "documento": doc, "bodega_salida": bodega, "sale": "Medellín",
+        "documento": doc, "bodega_salida": bodega, "bodega_entrada": entrada,
+        "sale": "Medellín",
         "sucursal_id": tienda, "llega": "Cali", "tienda": "Cali",
         "fecha": date(2026, 10, 5), "dias": dias, "refs": 1, "unidades": 2.0,
         "num_lineas": 1, "estado": estado, "aviso_erp": estado == "RECIBIDO",
@@ -65,6 +69,7 @@ def servicio(monkeypatch):
 
     monkeypatch.setattr(tp, "pendientes", pendientes)
     monkeypatch.setattr(tp, "ultima_carga", AsyncMock(return_value=CARGA))
+    monkeypatch.setattr(tp, "info_carga", AsyncMock(return_value=INFO))
     return items
 
 
@@ -102,6 +107,14 @@ def test_resumen_shape(servicio):
         "aun_no_llegan": 1,
         "mas_antiguo": {"documento": "79-1", "tienda": "Cali", "dias": 9},
         "lineas": 3}
+
+
+def test_resumen_y_detalle_exponen_la_carga_y_sus_filas_con_error(servicio):
+    _como("ADMIN")
+    for ruta in ("", "/detalle"):
+        cuerpo = _get(ruta).json()
+        assert cuerpo["carga_id"] == str(CARGA_ID)
+        assert cuerpo["filas_con_error"] == 1
 
 
 def test_por_tienda_shape(servicio):
@@ -153,8 +166,12 @@ def test_detalle_min_above_max_is_a_422(servicio):
 def test_sin_snapshot_las_listas_van_vacias(servicio, monkeypatch):
     monkeypatch.setattr(tp, "pendientes", AsyncMock(return_value=[]))
     monkeypatch.setattr(tp, "ultima_carga", AsyncMock(return_value=None))
+    monkeypatch.setattr(tp, "info_carga", AsyncMock(return_value={
+        "ultima_carga": None, "carga_id": None, "filas_con_error": 0}))
     _como("ADMIN")
-    assert _get("/detalle").json() == {"ultima_carga": None, "items": []}
+    assert _get("/detalle").json() == {
+        "ultima_carga": None, "carga_id": None, "filas_con_error": 0,
+        "items": []}
     assert _get("/por-tienda").json()["tiendas"] == []
     assert _get().json()["resumen"]["mas_antiguo"] is None
 
@@ -165,10 +182,16 @@ def test_historial_validates_and_answers(servicio, monkeypatch):
          "en": datetime(2026, 10, 7, tzinfo=timezone.utc)}])
     monkeypatch.setattr(tp, "historial", historial)
     _como("ADMIN")
-    ok = _get("/historial", documento="79-1", bodega_salida="BA1")
+    ok = _get("/historial", documento="79-1", bodega_salida="BA1",
+              bodega_entrada="BE")
     assert ok.status_code == 200 and ok.json()["historial"][0]["por"] == "Ana"
-    assert historial.await_args.args[1:] == ("79-1", "BA1")
-    assert _get("/historial", documento=" ", bodega_salida="BA1").status_code == 422
+    assert historial.await_args.args[1:] == ("79-1", "BA1", "BE")
+    assert _get("/historial", documento=" ", bodega_salida="BA1",
+                bodega_entrada="BE").status_code == 422
+    assert _get("/historial", documento="79-1", bodega_salida="BA1",
+                bodega_entrada=" ").status_code == 422
+    assert _get("/historial", documento="79-1",
+                bodega_salida="BA1").status_code == 422
 
 
 @pytest.mark.parametrize("rol", LECTORES)
@@ -198,7 +221,7 @@ def _post_confirmar(rol, usuario, cuerpo=None):
     override_motored_user(MotoredUser(user_id=str(usuario.id), role=rol))
     override_motored_db(FakeAsyncSession(execute_queue=[[], [usuario]]))
     cuerpo = cuerpo or {"documento": "79-2", "bodega_salida": "BA1",
-                        "estado": "RECIBIDO"}
+                        "bodega_entrada": "BE", "estado": "RECIBIDO"}
     with TestClient(app) as client:
         return client.post(f"{BASE}/confirmar", json=cuerpo)
 
@@ -214,9 +237,9 @@ def test_confirm_roles_and_actor_is_the_usuario(servicio, monkeypatch, rol):
 
     assert r.status_code == 200 and r.json()["aviso_erp"] is True
     args = confirmar.await_args.args
-    assert args[1:4] == ("79-2", "BA1", "RECIBIDO")
-    assert args[4].nombre == "Ana" and args[4].usuario_id == usuario.id
-    assert args[5] == "web"
+    assert args[1:5] == ("79-2", "BA1", "BE", "RECIBIDO")
+    assert args[5].nombre == "Ana" and args[5].usuario_id == usuario.id
+    assert args[6] == "web"
 
 
 @pytest.mark.parametrize("rol", ["COMPRAS", "GERENCIA", "SERVICIO_CLIENTE"])
@@ -237,6 +260,10 @@ def test_confirm_outside_the_snapshot_is_a_404(servicio, monkeypatch):
 def test_confirm_bad_body_is_a_422(servicio):
     r = _post_confirmar("ADMIN", _usuario(), cuerpo={"documento": "79-2"})
     assert r.status_code == 422
+    sin_entrada = {"documento": "79-2", "bodega_salida": "BA1",
+                   "estado": "RECIBIDO"}
+    assert _post_confirmar(
+        "ADMIN", _usuario(), cuerpo=sin_entrada).status_code == 422
 
 
 # ---------------------------------------------------------------------------
@@ -316,7 +343,7 @@ def test_public_unknown_token_and_non_object_body(ruta):
 
 def _cuerpo(**extra):
     base = {"cedula": CEDULA, "documento": "79-2", "bodega_salida": "BA1",
-            "estado": "RECIBIDO"}
+            "bodega_entrada": "BE", "estado": "RECIBIDO"}
     base.update(extra)
     return base
 
@@ -334,9 +361,9 @@ def test_public_confirm_uses_the_asesor_stores_and_channel(monkeypatch):
     assert r.status_code == 200 and r.json()["estado"] == "RECIBIDO"
     assert link.intentos_fallidos == 0 and sesion.committed
     args = confirmar.await_args
-    assert args.args[1:4] == ("79-2", "BA1", "RECIBIDO")
-    assert args.args[4].nombre == "Ana" and args.args[4].cedula == CEDULA
-    assert args.args[5] == "link" and args.kwargs["tiendas"] == [TIENDA]
+    assert args.args[1:5] == ("79-2", "BA1", "BE", "RECIBIDO")
+    assert args.args[5].nombre == "Ana" and args.args[5].cedula == CEDULA
+    assert args.args[6] == "link" and args.kwargs["tiendas"] == [TIENDA]
     _cabeceras(r)
 
 

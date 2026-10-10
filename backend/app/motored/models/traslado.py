@@ -11,8 +11,8 @@ optional (an unknown origin bodega keeps the bodega code and description).
 `referencia_id` is NULL for a code that is not in the catalog.
 
 `traslado_confirmacion`: ONE shared state per transfer, identified by
-`(nro_documento, bodega_salida)` (the document number repeats across origin
-bodegas): 'RECIBIDO' | 'NO_HA_LLEGADO' (no row = not confirmed yet).
+`(nro_documento, bodega_salida, bodega_entrada)` (the document number
+repeats across origin bodegas and may feed two destinations): 'RECIBIDO' | 'NO_HA_LLEGADO' (no row = not confirmed yet).
 `traslado_confirmacion_historial`: append-only log of every change (who,
 when, through which channel: the web app or the public link).
 """
@@ -71,7 +71,7 @@ class TrasladoConfirmacion(MotoredBase):
     __tablename__ = "traslado_confirmacion"
     __table_args__ = (
         UniqueConstraint(
-            "nro_documento", "bodega_salida",
+            "nro_documento", "bodega_salida", "bodega_entrada",
             name="uq_traslado_confirmacion_documento_bodega"),
         CheckConstraint(
             "estado IN ('RECIBIDO', 'NO_HA_LLEGADO')",
@@ -81,6 +81,7 @@ class TrasladoConfirmacion(MotoredBase):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     nro_documento = Column(String(40), nullable=False)
     bodega_salida = Column(String(20), nullable=False)
+    bodega_entrada = Column(String(20), nullable=False)
     estado = Column(String(16), nullable=False)
     actualizado_por_usuario_id = Column(
         UUID(as_uuid=True),
@@ -95,7 +96,7 @@ class TrasladoConfirmacionHistorial(MotoredBase):
     __tablename__ = "traslado_confirmacion_historial"
     __table_args__ = (
         Index("ix_traslado_confirmacion_historial_doc",
-              "nro_documento", "bodega_salida"),
+              "nro_documento", "bodega_salida", "bodega_entrada"),
         CheckConstraint(
             "estado IN ('RECIBIDO', 'NO_HA_LLEGADO')",
             name="ck_traslado_confirmacion_historial_estado"),
@@ -107,6 +108,7 @@ class TrasladoConfirmacionHistorial(MotoredBase):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     nro_documento = Column(String(40), nullable=False)
     bodega_salida = Column(String(20), nullable=False)
+    bodega_entrada = Column(String(20), nullable=False)
     estado = Column(String(16), nullable=False)
     por_usuario_id = Column(
         UUID(as_uuid=True),

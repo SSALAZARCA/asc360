@@ -30,19 +30,23 @@ pending, 409 asesor invoice / not arrived / store without bodega principal.
 Pending store transfers (`/gestion-repuestos/traslados`,
 odd/tasks/motored-traslados-pendientes.md, T2), same roles as the invoices
 (reads: `ROLES_PANEL`; confirm: `ROLES_CONFIRMA`). A transfer is the group
-(`documento`, `bodega_salida`) of the latest applied TRASLADOS load:
-- `GET /traslados`: `{ultima_carga, resumen}` (pendientes, recibidos_sin_erp,
-  sin_confirmar, aun_no_llegan, mas_antiguo {documento, tienda, dias}, lineas).
+(`documento`, `bodega_salida`, `bodega_entrada`) of the latest applied
+TRASLADOS load:
+- `GET /traslados`: `{ultima_carga, carga_id, filas_con_error, resumen}`
+  (`filas_con_error` = rows the current load rejected; pendientes,
+  recibidos_sin_erp, sin_confirmar, aun_no_llegan, mas_antiguo {documento,
+  tienda, dias}, lineas).
 - `GET /traslados/por-tienda`: `{ultima_carga, tiendas}`, receiving stores,
   most "recibidos" first.
 - `GET /traslados/detalle?sucursal=&estado=&min_dias=&max_dias=`:
-  `{ultima_carga, items}`, oldest first; `estado` is SIN_CONFIRMAR | RECIBIDO |
-  NO_HA_LLEGADO.
-- `GET /traslados/historial?documento=&bodega_salida=`: `{historial}`.
+  `{ultima_carga, carga_id, filas_con_error, items}`, oldest first;
+  `estado` is SIN_CONFIRMAR | RECIBIDO | NO_HA_LLEGADO.
+- `GET /traslados/historial?documento=&bodega_salida=&bodega_entrada=`:
+  `{historial}`.
 - `GET /traslados/asesor?sucursal=`: `{ultima_carga, items, resumen}` of one
   receiving store, for the asesor card.
-- `POST /traslados/confirmar` `{documento, bodega_salida, estado}`:
-  "RECIBIDO" | "NO_HA_LLEGADO"; 404 when the transfer is not in the current
+- `POST /traslados/confirmar`
+  `{documento, bodega_salida, bodega_entrada, estado}`: "RECIBIDO" | "NO_HA_LLEGADO"; 404 when the transfer is not in the current
   snapshot (any more).
 """
 import uuid
@@ -207,6 +211,7 @@ async def descargar_plantilla(
 class ConfirmarTrasladoIn(BaseModel):
     documento: str
     bodega_salida: str
+    bodega_entrada: str
     estado: str
 
 
@@ -220,7 +225,7 @@ async def _traslados(
 async def leer_resumen_traslados(
     db: AsyncSession = Depends(get_motored_db_or_503),
 ) -> Dict[str, Any]:
-    return {"ultima_carga": await traslados.ultima_carga(db),
+    return {**await traslados.info_carga(db),
             "resumen": traslados.resumen(await _traslados(db))}
 
 
@@ -252,17 +257,20 @@ async def leer_detalle_traslados(
         items = [i for i in items if i["dias"] >= min_dias]
     if max_dias is not None:
         items = [i for i in items if i["dias"] <= max_dias]
-    return {"ultima_carga": await traslados.ultima_carga(db), "items": items}
+    return {**await traslados.info_carga(db), "items": items}
 
 
 @router_traslados.get("/historial", dependencies=[_panel])
 async def leer_historial_traslado(
     documento: str = Query(...), bodega_salida: str = Query(...),
+    bodega_entrada: str = Query(...),
     db: AsyncSession = Depends(get_motored_db_or_503),
 ) -> Dict[str, Any]:
-    if not documento.strip() or not bodega_salida.strip():
+    if not (documento.strip() and bodega_salida.strip()
+            and bodega_entrada.strip()):
         raise HTTPException(status_code=422, detail=traslados.MSG_TRASLADO)
-    return {"historial": await traslados.historial(db, documento, bodega_salida)}
+    return {"historial": await traslados.historial(
+        db, documento, bodega_salida, bodega_entrada)}
 
 
 @router_traslados.get("/asesor", dependencies=[_panel])
@@ -283,8 +291,8 @@ async def confirmar_traslado(
     actor = await _actor_de(user, db)
     try:
         return await traslados.confirmar(
-            db, cuerpo.documento, cuerpo.bodega_salida, cuerpo.estado, actor,
-            "web")
+            db, cuerpo.documento, cuerpo.bodega_salida, cuerpo.bodega_entrada,
+            cuerpo.estado, actor, "web")
     except traslados.PendienteError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail)
 

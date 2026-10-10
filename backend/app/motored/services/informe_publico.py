@@ -178,7 +178,8 @@ async def traslados_del_asesor(
 
 async def confirmar_traslado(
     db: AsyncSession, token: str, cedula: Any, documento: Any,
-    bodega_salida: Any, estado: Any, ahora: Optional[datetime] = None,
+    bodega_salida: Any, bodega_entrada: Any, estado: Any,
+    ahora: Optional[datetime] = None,
 ) -> Dict[str, Any]:
     """Public confirm of one transfer ("Recibido" / "No ha llegado"): only a
     transfer received by the asesor's own store(s) (404 otherwise); the actor
@@ -189,7 +190,7 @@ async def confirmar_traslado(
         nombre=usuario.nombre, usuario_id=usuario.id, cedula=link.cedula)
     try:
         return await traslados.confirmar(
-            db, documento, bodega_salida, estado, actor, "link",
-            tiendas=tiendas)
+            db, documento, bodega_salida, bodega_entrada, estado, actor,
+            "link", tiendas=tiendas)
     except traslados.PendienteError as exc:
         raise InformeError(exc.status_code, exc.detail)

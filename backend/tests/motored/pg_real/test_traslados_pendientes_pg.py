@@ -17,6 +17,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.motored.models.carga_archivo import CargaArchivo
+from app.motored.models.carga_error import CargaError
 from app.motored.models.reporte_asesor_link import ReporteAsesorLink
 from app.motored.models.sucursal import Sucursal
 from app.motored.models.traslado import TrasladoConfirmacion, TrasladoLinea
@@ -76,13 +77,16 @@ async def mundo(fabrica):
         db.add_all([c1, c2, anulada])
         await db.flush()
         n = {k: f"79-{sfx}{i}" for i, k in enumerate(
-            ("gone", "stay", "dup", "sur", "pasto", "annulled"))}
+            ("gone", "stay", "dup", "sur", "pasto", "annulled", "split"))}
+
+        entradas = {cali.id: "BC", pasto.id: "BP", sur.id: "BS"}
 
         def linea(carga, doc, bod, destino, fecha, ref="R1", cant=1, org=origen):
             db.add(TrasladoLinea(
                 id=uuid.uuid4(), carga_id=carga.id, nro_documento=doc,
                 fecha=fecha, bodega_salida=bod, sucursal_salida_id=org.id,
-                bodega_entrada="BE", sucursal_entrada_id=destino.id,
+                bodega_entrada=entradas[destino.id],
+                sucursal_entrada_id=destino.id,
                 referencia_codigo=ref, descripcion=f"desc {ref}",
                 cantidad=D(cant)))
 
@@ -96,6 +100,11 @@ async def mundo(fabrica):
         linea(c2, n["sur"], "BA1", sur, d(2097, 10, 5))         # rolls up to Cali
         linea(c2, n["pasto"], "BA1", pasto, d(2097, 10, 6))
         linea(anulada, n["annulled"], "BA1", cali, d(2097, 10, 7))
+        linea(c2, n["split"], "BA1", cali, d(2097, 10, 2))      # one origin,
+        linea(c2, n["split"], "BA1", pasto, d(2097, 10, 2))     # two destinos
+        db.add(CargaError(
+            id=uuid.uuid4(), carga_id=c2.id, fila=7, columna="Desc. bod. entrada",
+            valor="ZZ", codigo_error="SUCURSAL_NO_ENCONTRADA", mensaje="x"))
 
         cedula = f"7{int(sfx, 16) % 10**8:08d}"
         usuario = Usuario(
@@ -129,7 +138,7 @@ async def mundo(fabrica):
 
 def _por_clave(items, n):
     mios = set(n.values())
-    return {(i["documento"], i["bodega_salida"]): i
+    return {(i["documento"], i["bodega_salida"], i["bodega_entrada"]): i
             for i in items if i["documento"] in mios}
 
 
@@ -140,11 +149,12 @@ async def test_the_snapshot_is_the_latest_applied_non_annulled_load(mundo):
         items = _por_clave(await tp.pendientes(db, hoy=HOY), n)
 
     # the transfer missing from the newest load is gone (received in the ERP)
-    assert (n["gone"], "BA1") not in items
+    assert (n["gone"], "BA1", "BC") not in items
     assert n["annulled"] not in {k[0] for k in items}
-    assert set(items) == {(n["stay"], "BA1"), (n["dup"], "BA1"),
-                          (n["dup"], "BB2"), (n["sur"], "BA1"),
-                          (n["pasto"], "BA1")}
+    assert set(items) == {(n["stay"], "BA1", "BC"), (n["dup"], "BA1", "BC"),
+                          (n["dup"], "BB2", "BP"), (n["sur"], "BA1", "BS"),
+                          (n["pasto"], "BA1", "BP"), (n["split"], "BA1", "BC"),
+                          (n["split"], "BA1", "BP")}
 
 
 async def test_grouping_totals_and_rollup(mundo):
@@ -152,16 +162,16 @@ async def test_grouping_totals_and_rollup(mundo):
     async with mundo.fabrica() as db:
         items = _por_clave(await tp.pendientes(db, hoy=HOY), n)
 
-    stay = items[(n["stay"], "BA1")]
+    stay = items[(n["stay"], "BA1", "BC")]
     assert stay["fecha"] == datetime.date(2097, 9, 2) and stay["dias"] == 37
     assert stay["refs"] == 2 and stay["unidades"] == 5.0 and stay["num_lineas"] == 2
     assert [(ln["referencia"], ln["cantidad"]) for ln in stay["lineas"]] == [
         ("R1", 2.0), ("R2", 3.0)]
     assert stay["estado"] == "SIN_CONFIRMAR" and stay["aviso_erp"] is False
-    assert items[(n["dup"], "BA1")]["sucursal_id"] == mundo.cali.id
-    assert items[(n["dup"], "BB2")]["sucursal_id"] == mundo.pasto.id
-    assert items[(n["sur"], "BA1")]["sucursal_id"] == mundo.cali.id
-    assert items[(n["sur"], "BA1")]["llega"] == mundo.cali.nombre
+    assert items[(n["dup"], "BA1", "BC")]["sucursal_id"] == mundo.cali.id
+    assert items[(n["dup"], "BB2", "BP")]["sucursal_id"] == mundo.pasto.id
+    assert items[(n["sur"], "BA1", "BS")]["sucursal_id"] == mundo.cali.id
+    assert items[(n["sur"], "BA1", "BS")]["llega"] == mundo.cali.nombre
     assert stay["sale"].startswith("Medellin")
 
 
@@ -171,8 +181,9 @@ async def test_filtering_by_store_and_no_snapshot(mundo, fabrica):
         de_pasto = _por_clave(await tp.pendientes(db, [mundo.pasto.id], hoy=HOY), n)
         # an associated store id resolves to its principal
         de_cali = _por_clave(await tp.pendientes(db, [mundo.sur.id], hoy=HOY), n)
-    assert set(de_pasto) == {(n["dup"], "BB2"), (n["pasto"], "BA1")}
-    assert (n["stay"], "BA1") in de_cali and (n["pasto"], "BA1") not in de_cali
+    assert set(de_pasto) == {(n["dup"], "BB2", "BP"), (n["pasto"], "BA1", "BP"),
+                             (n["split"], "BA1", "BP")}
+    assert (n["stay"], "BA1", "BC") in de_cali and (n["pasto"], "BA1", "BP") not in de_cali
 
 
 async def test_annulling_the_latest_load_restores_the_previous_snapshot(mundo):
@@ -183,7 +194,7 @@ async def test_annulling_the_latest_load_restores_the_previous_snapshot(mundo):
         await db.flush()
         assert (await tp.carga_vigente(db))[0] == mundo.c1.id
         items = _por_clave(await tp.pendientes(db, hoy=HOY), n)
-    assert set(items) == {(n["gone"], "BA1"), (n["stay"], "BA1")}
+    assert set(items) == {(n["gone"], "BA1", "BC"), (n["stay"], "BA1", "BC")}
 
 
 async def test_confirm_logs_history_and_can_be_corrected(mundo):
@@ -191,34 +202,37 @@ async def test_confirm_logs_history_and_can_be_corrected(mundo):
     actor = tp.Actor(nombre="Coord", usuario_id=mundo.coord.id)
     async with mundo.fabrica() as db:
         item = await tp.confirmar(
-            db, n["stay"], "BA1", "NO_HA_LLEGADO", actor, "web")
+            db, n["stay"], "BA1", "BC", "NO_HA_LLEGADO", actor, "web")
         assert item["estado"] == "NO_HA_LLEGADO" and item["aviso_erp"] is False
-        await tp.confirmar(db, n["stay"], "BA1", "RECIBIDO", actor, "web")
+        await tp.confirmar(
+            db, n["stay"], "BA1", "BC", "RECIBIDO", actor, "web")
     async with mundo.fabrica() as db:
         items = _por_clave(await tp.pendientes(db, hoy=HOY), n)
-        assert items[(n["stay"], "BA1")]["estado"] == "RECIBIDO"
-        assert items[(n["stay"], "BA1")]["aviso_erp"] is True
-        assert items[(n["stay"], "BA1")]["confirmado_por"] == "Coord"
+        assert items[(n["stay"], "BA1", "BC")]["estado"] == "RECIBIDO"
+        assert items[(n["stay"], "BA1", "BC")]["aviso_erp"] is True
+        assert items[(n["stay"], "BA1", "BC")]["confirmado_por"] == "Coord"
         # the same document from another origin is a different transfer
-        assert items[(n["dup"], "BA1")]["estado"] == "SIN_CONFIRMAR"
-        h = await tp.historial(db, n["stay"], "BA1")
+        assert items[(n["dup"], "BA1", "BC")]["estado"] == "SIN_CONFIRMAR"
+        h = await tp.historial(db, n["stay"], "BA1", "BC")
         assert [x["estado"] for x in h] == ["RECIBIDO", "NO_HA_LLEGADO"]
-        assert await tp.historial(db, n["stay"], "BB2") == []
+        assert await tp.historial(db, n["stay"], "BB2", "BC") == []
+        assert await tp.historial(db, n["stay"], "BA1", "BP") == []
 
 
 async def test_confirm_validations(mundo):
     n = mundo.n
     actor = tp.Actor(nombre="Coord")
     async with mundo.fabrica() as db:
-        for doc, bod, estado, codigo in [
-            (n["gone"], "BA1", "RECIBIDO", 404),      # left the snapshot
-            (n["annulled"], "BA1", "RECIBIDO", 404),  # only in an annulled load
-            (n["dup"], "ZZ", "RECIBIDO", 404),        # no such origin
-            (n["stay"], "BA1", "LLEGO", 422),
-            ("", "BA1", "RECIBIDO", 422),
+        for doc, bod, ent, estado, codigo in [
+            (n["gone"], "BA1", "BC", "RECIBIDO", 404),  # left the snapshot
+            (n["annulled"], "BA1", "BC", "RECIBIDO", 404),  # annulled load only
+            (n["dup"], "ZZ", "BC", "RECIBIDO", 404),  # no such origin
+            (n["dup"], "BA1", "BP", "RECIBIDO", 404),  # not that destination
+            (n["stay"], "BA1", "BC", "LLEGO", 422),
+            ("", "BA1", "BC", "RECIBIDO", 422),
         ]:
             with pytest.raises(tp.PendienteError) as exc:
-                await tp.confirmar(db, doc, bod, estado, actor, "web")
+                await tp.confirmar(db, doc, bod, ent, estado, actor, "web")
             assert exc.value.status_code == codigo
 
 
@@ -228,10 +242,11 @@ async def test_confirm_over_an_existing_state_row_does_not_fail(mundo):
     async with mundo.fabrica() as db:
         db.add(TrasladoConfirmacion(
             id=uuid.uuid4(), nro_documento=n["stay"], bodega_salida="BA1",
-            estado="NO_HA_LLEGADO", actualizado_por_nombre="Otra",
+            bodega_entrada="BC", estado="NO_HA_LLEGADO", actualizado_por_nombre="Otra",
             actualizado_en=datetime.datetime.now(UTC)))
         await db.flush()
-        item = await tp.confirmar(db, n["stay"], "BA1", "RECIBIDO", actor, "link")
+        item = await tp.confirmar(
+            db, n["stay"], "BA1", "BC", "RECIBIDO", actor, "link")
         assert item["estado"] == "RECIBIDO"
     async with mundo.fabrica() as db:
         filas = (await db.execute(select(TrasladoConfirmacion).where(
@@ -246,23 +261,53 @@ async def test_public_list_confirm_and_cedula_check(mundo):
         bloque = await publico.traslados_del_asesor(db, mundo.token, mundo.cedula)
         mios = _por_clave(bloque["items"], n)
         # her store is Cali (via Cali Sur): Pasto's transfers are not hers
-        assert (n["sur"], "BA1") in mios and (n["pasto"], "BA1") not in mios
-        assert (n["dup"], "BB2") not in mios
+        assert (n["sur"], "BA1", "BS") in mios and (n["pasto"], "BA1", "BP") not in mios
+        assert (n["dup"], "BB2", "BP") not in mios
         item = await publico.confirmar_traslado(
-            db, mundo.token, mundo.cedula, n["sur"], "BA1", "RECIBIDO")
+            db, mundo.token, mundo.cedula, n["sur"], "BA1", "BS", "RECIBIDO")
         assert item["estado"] == "RECIBIDO" and item["sucursal_id"] == mundo.cali.id
         with pytest.raises(publico.InformeError) as exc:
             await publico.confirmar_traslado(
-                db, mundo.token, mundo.cedula, n["pasto"], "BA1", "RECIBIDO")
+                db, mundo.token, mundo.cedula, n["pasto"], "BA1", "BP",
+                "RECIBIDO")
         assert exc.value.status_code == 404
         for llamada in (
             publico.traslados_del_asesor(db, mundo.token, "00000"),
             publico.confirmar_traslado(
-                db, mundo.token, "00000", n["sur"], "BA1", "RECIBIDO"),
+                db, mundo.token, "00000", n["sur"], "BA1", "BS", "RECIBIDO"),
         ):
             with pytest.raises(publico.InformeError) as exc:
                 await llamada
             assert exc.value.status_code == 401
     async with mundo.fabrica() as db:
-        h = await tp.historial(db, n["sur"], "BA1")
+        h = await tp.historial(db, n["sur"], "BA1", "BS")
         assert h[0]["canal"] == "link" and h[0]["por"].startswith("Ana")
+
+
+async def test_one_document_and_origin_with_two_destinations_are_two_transfers(mundo):
+    n = mundo.n
+    actor = tp.Actor(nombre="Coord", usuario_id=mundo.coord.id)
+    async with mundo.fabrica() as db:
+        await tp.confirmar(
+            db, n["split"], "BA1", "BP", "RECIBIDO", actor, "web")
+    async with mundo.fabrica() as db:
+        items = _por_clave(await tp.pendientes(db, hoy=HOY), n)
+    en_cali = items[(n["split"], "BA1", "BC")]
+    en_pasto = items[(n["split"], "BA1", "BP")]
+    assert en_cali["sucursal_id"] == mundo.cali.id
+    assert en_pasto["sucursal_id"] == mundo.pasto.id
+    assert en_cali["estado"] == "SIN_CONFIRMAR"
+    assert en_pasto["estado"] == "RECIBIDO"
+
+
+async def test_info_carga_counts_the_rejected_rows_of_the_current_load(mundo):
+    async with mundo.fabrica() as db:
+        info = await tp.info_carga(db)
+        assert info["carga_id"] == mundo.c2.id and info["filas_con_error"] == 1
+        carga = await db.get(CargaArchivo, mundo.c2.id)
+        carga.estado = "ANULADO"
+        await db.flush()
+        # falling back to the previous load: it has no rejected rows
+        anterior = await tp.info_carga(db)
+        assert anterior["carga_id"] == mundo.c1.id
+        assert anterior["filas_con_error"] == 0

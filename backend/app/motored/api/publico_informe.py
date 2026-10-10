@@ -123,12 +123,14 @@ async def confirmar_traslado(
     db: AsyncSession = Depends(get_motored_db_or_503),
 ) -> Any:
     """The asesor confirms "Recibido" / "No ha llegado" for a transfer her
-    store receives: `{cedula, documento, bodega_salida, estado}`. Answers the
+    store receives: `{cedula, documento, bodega_salida, bodega_entrada,
+    estado}`. Answers the
     updated item."""
     cuerpo = await _cuerpo(request)
     try:
         return await servicio.confirmar_traslado(
             db, token, cuerpo.get("cedula"), cuerpo.get("documento"),
-            cuerpo.get("bodega_salida"), cuerpo.get("estado"))
+            cuerpo.get("bodega_salida"), cuerpo.get("bodega_entrada"),
+            cuerpo.get("estado"))
     except servicio.InformeError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail)

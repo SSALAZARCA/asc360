@@ -19,11 +19,13 @@ PRINCIPAL = {SUR: CALI}
 
 
 def _l(doc="79-1", bod="BA1", fecha=date(2026, 10, 1), destino=CALI,
-       origen=ORIGEN, ref="R1", cant=1, desc="Pieza", desc_bod=None):
+       origen=ORIGEN, ref="R1", cant=1, desc="Pieza", desc_bod=None,
+       bod_ent="BE"):
     return NS(
         nro_documento=doc, bodega_salida=bod, fecha=fecha,
         descripcion_bodega_salida=desc_bod, sucursal_salida_id=origen,
-        sucursal_entrada_id=destino, referencia_codigo=ref,
+        bodega_entrada=bod_ent, sucursal_entrada_id=destino,
+        referencia_codigo=ref,
         descripcion=desc, cantidad=cant)
 
 
@@ -73,9 +75,9 @@ def test_origen_sin_tienda_usa_la_descripcion_o_el_codigo_de_la_bodega():
 def test_estados_y_aviso_erp_vienen_de_la_confirmacion():
     ahora = datetime(2026, 10, 8, 9, 0)
     confs = {
-        ("79-1", "BA1"): NS(estado="RECIBIDO", actualizado_por_nombre="Ana",
+        ("79-1", "BA1", "BE"): NS(estado="RECIBIDO", actualizado_por_nombre="Ana",
                             actualizado_en=ahora),
-        ("79-2", "BA1"): NS(estado="NO_HA_LLEGADO", actualizado_por_nombre="Luis",
+        ("79-2", "BA1", "BE"): NS(estado="NO_HA_LLEGADO", actualizado_por_nombre="Luis",
                             actualizado_en=ahora),
     }
     items = {i["documento"]: i for i in _calc(
@@ -91,7 +93,7 @@ def test_estados_y_aviso_erp_vienen_de_la_confirmacion():
 
 
 def test_la_confirmacion_de_otra_bodega_del_mismo_documento_no_aplica():
-    confs = {("79-1", "BA1"): NS(
+    confs = {("79-1", "BA1", "BE"): NS(
         estado="RECIBIDO", actualizado_por_nombre="Ana", actualizado_en=None)}
     items = {i["bodega_salida"]: i for i in _calc(
         [_l("79-1", "BA1"), _l("79-1", "BB2")], confs)}
@@ -100,11 +102,26 @@ def test_la_confirmacion_de_otra_bodega_del_mismo_documento_no_aplica():
     assert items["BB2"]["estado"] == "SIN_CONFIRMAR"
 
 
+def test_dos_destinos_del_mismo_documento_y_salida_son_dos_traslados():
+    confs = {("79-1", "BA1", "BE"): NS(
+        estado="RECIBIDO", actualizado_por_nombre="Ana", actualizado_en=None)}
+    items = _calc([
+        _l("79-1", "BA1", destino=CALI, bod_ent="BE"),
+        _l("79-1", "BA1", destino=BOGOTA, bod_ent="BF")], confs)
+
+    por_destino = {i["bodega_entrada"]: i for i in items}
+    assert set(por_destino) == {"BE", "BF"}
+    assert por_destino["BE"]["tienda"] == "Cali"
+    assert por_destino["BE"]["estado"] == "RECIBIDO"
+    assert por_destino["BF"]["tienda"] == "Bogotá"
+    assert por_destino["BF"]["estado"] == "SIN_CONFIRMAR"
+
+
 def test_resumen_cuenta_estados_masantiguo_y_lineas():
     confs = {
-        ("79-1", "BA1"): NS(estado="RECIBIDO", actualizado_por_nombre="A",
+        ("79-1", "BA1", "BE"): NS(estado="RECIBIDO", actualizado_por_nombre="A",
                             actualizado_en=None),
-        ("79-2", "BA1"): NS(estado="NO_HA_LLEGADO", actualizado_por_nombre="A",
+        ("79-2", "BA1", "BE"): NS(estado="NO_HA_LLEGADO", actualizado_por_nombre="A",
                             actualizado_en=None),
     }
     items = _calc([
@@ -127,7 +144,7 @@ def test_resumen_vacio():
 
 
 def test_por_tienda_ordena_por_recibidos_y_resume_cada_tienda():
-    confs = {("79-3", "BA1"): NS(
+    confs = {("79-3", "BA1", "BE"): NS(
         estado="RECIBIDO", actualizado_por_nombre="A", actualizado_en=None)}
     items = _calc([
         _l("79-1", destino=BOGOTA, cant=2, fecha=date(2026, 9, 29)),
@@ -161,20 +178,21 @@ def _pendientes(monkeypatch, items):
 
 
 async def test_confirmar_hace_upsert_atomico_e_historial(monkeypatch):
-    item = {"documento": "79-1", "bodega_salida": "BA1", "estado": "SIN_CONFIRMAR",
+    item = {"documento": "79-1", "bodega_salida": "BA1",
+            "bodega_entrada": "BE", "estado": "SIN_CONFIRMAR",
             "sucursal_id": CALI}
     _pendientes(monkeypatch, [item])
     db = _db()
 
     out = await tp.confirmar(
-        db, " 79-1 ", "BA1", "RECIBIDO", tp.Actor(nombre="Ana"), "link")
+        db, " 79-1 ", "BA1", "BE", "RECIBIDO", tp.Actor(nombre="Ana"), "link")
 
     assert out["estado"] == "RECIBIDO" and out["aviso_erp"] is True
     assert out["confirmado_por"] == "Ana"
     [(stmt,), _] = db.execute.await_args
     sql = str(stmt.compile(dialect=postgresql.dialect()))
     assert sql.startswith("INSERT INTO traslado_confirmacion")
-    assert "ON CONFLICT (nro_documento, bodega_salida) DO UPDATE" in sql
+    assert "ON CONFLICT (nro_documento, bodega_salida, bodega_entrada) DO UPDATE" in sql
     agregados = [type(c.args[0]) for c in db.add.call_args_list]
     assert agregados == [TrasladoConfirmacionHistorial]
     assert TrasladoConfirmacion not in agregados
@@ -187,23 +205,27 @@ async def test_confirmar_fuera_del_snapshot_es_404(monkeypatch):
     db = _db()
 
     with pytest.raises(tp.PendienteError) as exc:
-        await tp.confirmar(db, "79-9", "BA1", "RECIBIDO", tp.Actor(nombre="A"), "web")
+        await tp.confirmar(
+            db, "79-9", "BA1", "BE", "RECIBIDO", tp.Actor(nombre="A"), "web")
 
     assert (exc.value.status_code, exc.value.detail) == (404, tp.MSG_NO_PENDIENTE)
     db.commit.assert_not_awaited()
 
 
-@pytest.mark.parametrize("doc,bod,estado,detalle", [
-    ("", "BA1", "RECIBIDO", tp.MSG_TRASLADO),
-    ("79-1", None, "RECIBIDO", tp.MSG_TRASLADO),
-    ("79-1", "BA1", "LLEGO", tp.MSG_ESTADO),
-    ("79-1", "BA1", None, tp.MSG_ESTADO),
+@pytest.mark.parametrize("doc,bod,ent,estado,detalle", [
+    ("", "BA1", "BE", "RECIBIDO", tp.MSG_TRASLADO),
+    ("79-1", None, "BE", "RECIBIDO", tp.MSG_TRASLADO),
+    ("79-1", "BA1", " ", "RECIBIDO", tp.MSG_TRASLADO),
+    ("79-1", "BA1", "BE", "LLEGO", tp.MSG_ESTADO),
+    ("79-1", "BA1", "BE", None, tp.MSG_ESTADO),
 ])
-async def test_confirmar_valida_el_cuerpo_con_422(monkeypatch, doc, bod, estado, detalle):
+async def test_confirmar_valida_el_cuerpo_con_422(
+        monkeypatch, doc, bod, ent, estado, detalle):
     _pendientes(monkeypatch, [])
 
     with pytest.raises(tp.PendienteError) as exc:
-        await tp.confirmar(_db(), doc, bod, estado, tp.Actor(nombre="A"), "web")
+        await tp.confirmar(
+            _db(), doc, bod, ent, estado, tp.Actor(nombre="A"), "web")
 
     assert (exc.value.status_code, exc.value.detail) == (422, detalle)
 
@@ -213,7 +235,34 @@ async def test_confirmar_con_tiendas_solo_busca_en_ellas(monkeypatch):
 
     with pytest.raises(tp.PendienteError):
         await tp.confirmar(
-            _db(), "79-1", "BA1", "RECIBIDO", tp.Actor(nombre="A"), "link",
+            _db(), "79-1", "BA1", "BE", "RECIBIDO", tp.Actor(nombre="A"), "link",
             tiendas=[CALI])
 
     assert mock.await_args.args[1] == [CALI]
+
+
+# ---------------------------------------------------------------------------
+# info_carga
+# ---------------------------------------------------------------------------
+
+async def test_info_carga_cuenta_los_errores_de_la_carga_vigente(monkeypatch):
+    carga_id, aplicado = uuid.uuid4(), datetime(2026, 10, 9, 7, 0)
+    monkeypatch.setattr(
+        tp, "carga_vigente", AsyncMock(return_value=(carga_id, aplicado)))
+    db = _db()
+    db.execute.return_value = MagicMock(
+        scalar_one=MagicMock(return_value=2))
+
+    assert await tp.info_carga(db) == {
+        "ultima_carga": aplicado, "carga_id": carga_id, "filas_con_error": 2}
+    [(stmt,), _] = db.execute.await_args
+    assert carga_id in stmt.compile().params.values()
+
+
+async def test_info_carga_sin_snapshot(monkeypatch):
+    monkeypatch.setattr(tp, "carga_vigente", AsyncMock(return_value=None))
+    db = _db()
+
+    assert await tp.info_carga(db) == {
+        "ultima_carga": None, "carga_id": None, "filas_con_error": 0}
+    db.execute.assert_not_awaited()

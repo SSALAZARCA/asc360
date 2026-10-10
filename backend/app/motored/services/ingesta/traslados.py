@@ -102,6 +102,16 @@ def _destino(fila_raw, mapa, cache, carga_id, numero_fila):
         codigo_bodega=codigo)]
 
 
+def _fecha(valor: Any) -> Optional[date]:
+    """A date cell, or an ISO `YYYY-MM-DD` text (a CSV/text export)."""
+    if isinstance(valor, str):
+        try:
+            return date.fromisoformat(valor.strip())
+        except ValueError:
+            return None
+    return columnas_mod.a_fecha(valor)
+
+
 def procesar_fila(
     fila_raw: Sequence[Any], *, numero_fila: int, lote: int,
     mapa_columnas: Dict[str, int], cache: CacheResolucion,
@@ -119,7 +129,7 @@ def procesar_fila(
         return None, _error(
             carga_id, numero_fila, "Bod. salida", None,
             CODIGO_BODEGA_SALIDA_VACIA, "La bodega de salida está vacía.")
-    fecha = columnas_mod.a_fecha(_crudo(fila_raw, mapa_columnas, "Fecha"))
+    fecha = _fecha(_crudo(fila_raw, mapa_columnas, "Fecha"))
     if fecha is None:
         return None, _error(
             carga_id, numero_fila, "Fecha", None, CODIGO_FECHA_INVALIDA,
