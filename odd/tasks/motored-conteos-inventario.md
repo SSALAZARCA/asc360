@@ -173,3 +173,4 @@ Run them in the foreground and read the result line before committing; never cha
 - [x] 2026-10-09: the coordinador can lead counts (912f57d backend, a1406cb UI; backend 7280 passed, pg_real subset 55 passed, jest 2605 passed).
 - [x] 2026-10-09 owner: ADMIN users are assignable as count leaders (ROLES_ASIGNABLES_LIDER), while ADMIN stays unscoped.
 - [x] 2026-10-09 owner: the leader's locations panel is "Ubicaciones (opcional)", collapsed by default; pairs create locations while counting.
+- 2026-10-10 owner: the pre-start screen shows "Pendientes por sanear" for the store: invoices pending ingreso and transfers pending reception, with the latest load dates. Iniciar ONLY WARNS: a 409 with counts unless confirmed; the confirmation is recorded on the conteo. It never blocks. Task WU15.
