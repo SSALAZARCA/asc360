@@ -14,6 +14,7 @@
 import { motoredFetch, motoredFetchJson, getMotoredApiUrl } from './motoredFetch';
 import { httpErrorMessage, NETWORK_MESSAGE } from './httpErrors';
 import { avisarMaestrosCambiaron } from './maestrosEventos';
+import { descargarArchivo } from './descargas';
 
 export { getMotoredApiUrl };
 
@@ -119,6 +120,17 @@ export async function buscarReferencias({ page, pageSize, q, lineaComercial, act
     page, page_size: pageSize, q, linea_comercial: lineaComercial, activa, proveedor_id: proveedorId,
   });
   return motoredFetchJson(`/maestros/referencias/buscar${qs}`);
+}
+
+/**
+ * GET /maestros/referencias/exportar.xlsx -- the whole master, or what
+ * matches the same filters as `buscarReferencias` (no paging), in the
+ * upload template layout. Saves the file under the server's name
+ * (`referencias_YYYY-MM-DD.xlsx`); rejects with a coded error.
+ */
+export async function descargarReferenciasExcel({ q, lineaComercial, activa, proveedorId }) {
+  const qs = _queryString({ q, linea_comercial: lineaComercial, activa, proveedor_id: proveedorId });
+  return descargarArchivo(`/maestros/referencias/exportar.xlsx${qs}`, 'referencias.xlsx');
 }
 
 /** GET /maestros/referencias/lineas-comerciales -> valores distintos. */

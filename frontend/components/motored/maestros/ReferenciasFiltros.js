@@ -6,6 +6,8 @@
  * (`odd/tasks/motored-referencias-paginacion.md`). Purely presentational:
  * the parent owns the values, debounces the search and resets the page.
  * `estado` is '' (todas), 'true' (activas) or 'false' (inactivas).
+ * `children` (e.g. the "Descargar Excel" button) renders in the same row,
+ * next to the search box.
  */
 const optionStyle = { color: '#1a1a18' };
 const labelStyle = { display: 'flex', flexDirection: 'column', fontSize: '0.7rem', color: 'var(--motored-text-muted, #5a5a5a)' };
@@ -43,7 +45,7 @@ function EstadoSelect({ value, onChange }) {
   );
 }
 
-export default function ReferenciasFiltros({ filtros, lineas, onChange }) {
+export default function ReferenciasFiltros({ filtros, lineas, onChange, children }) {
   const set = (key) => (value) => onChange({ ...filtros, [key]: value });
   return (
     <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
@@ -58,6 +60,7 @@ export default function ReferenciasFiltros({ filtros, lineas, onChange }) {
       </label>
       <LineaSelect value={filtros.linea} lineas={lineas} onChange={set('linea')} />
       <EstadoSelect value={filtros.estado} onChange={set('estado')} />
+      {children}
     </div>
   );
 }

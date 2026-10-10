@@ -41,6 +41,7 @@ import { useEffect, useState } from 'react';
 import { listMaestros } from '../../../lib/motored/api';
 import BulkUploadModal from './BulkUploadModal';
 import FormField from './FormField';
+import DescargarReferenciasExcel from './DescargarReferenciasExcel';
 import ReferenciasFiltros from './ReferenciasFiltros';
 import ReferenciasPaginador from './ReferenciasPaginador';
 import SustitutaTypeahead from './SustitutaTypeahead';
@@ -355,7 +356,9 @@ export default function ReferenciasTab() {
         onSubmit={handleSubmit} onCancel={cancelEdit}
       />
 
-      <ReferenciasFiltros filtros={pagina.filtros} lineas={lineas} onChange={pagina.setFiltros} />
+      <ReferenciasFiltros filtros={pagina.filtros} lineas={lineas} onChange={pagina.setFiltros}>
+        <DescargarReferenciasExcel consulta={pagina.consulta} />
+      </ReferenciasFiltros>
       <ReferenciasListado pagina={pagina} proveedorCodigoPorId={proveedorCodigoPorId} onEdit={startEdit} />
 
       {showBulkModal && (
