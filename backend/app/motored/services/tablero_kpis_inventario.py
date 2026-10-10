@@ -512,31 +512,21 @@ async def _valores_y_costos(
 ) -> Tuple[Dict[datetime.date, Dict[str, Decimal]], List[Tuple[str, str, Optional[str], Decimal]],
            List[Tuple[str, str, Any, Decimal]]]:
     """Valor por corte y tienda, y el costo de venta de todas las ventanas que se muestran: por mes x tienda x
-    linea y por mes x tienda x referencia (la misma consulta)."""
-    # The chosen corte comes from the summary-aware reader (the Tiendas tab's number).
-    valores = {corte: {f.sucursal_id: f.valor for f in await lectura.inventario(db, filtro, corte)}}
-    otros = {c for _, c in en_tendencia} | ({anterior} if anterior else set())
-    valores.update(await qi.consultar_valor_por_corte(db, filtro, otros - {corte}))
+    linea y por mes x tienda x referencia (la misma consulta). Ambos salen del resumen cuando responde."""
+    cortes = {corte, *(c for _, c in en_tendencia)} | ({anterior} if anterior else set())
+    valores = await lectura.valor_por_corte(db, filtro, cortes)
     ultimo = filtro.meses[-1]
     meses = [m for m, _ in en_tendencia] + [ultimo]
     desde = t.mes_desplazado(min(meses), -(qk.MESES_COSTO_VENTA - 1))
-    filas = await qi.consultar_costos_por_mes(db, filtro, corte, desde, max(meses))
+    filas = await lectura.costos_por_mes(db, filtro, corte, desde, max(meses))
     por_par = [(mes, tienda, referencia, costo) for mes, tienda, _, referencia, costo in filas]
     return valores, _costos_de_tienda_y_linea(filas), por_par
 
 
-async def _pares_de_tendencia(
-    db: AsyncSession, filtro: Filtro, en_tendencia: List[Tuple[str, datetime.date]],
-) -> Dict[datetime.date, List[Tuple[str, Any, Decimal]]]:
-    """Los pares con existencia de cada corte de la tendencia (una consulta)."""
-    if not en_tendencia:
-        return {}
-    return await qi.consultar_pares_por_corte(db, filtro, {c for _, c in en_tendencia})
-
-
 async def _pares_y_demanda(
-    db: AsyncSession, filtro: Filtro, corte: datetime.date,
-) -> Tuple[List[Par], Dict[Tuple[str, Any], Demanda]]:
+    db: AsyncSession, filtro: Filtro, corte: datetime.date, en_tendencia: List[Tuple[str, datetime.date]],
+) -> Tuple[List[Par], Dict[Tuple[str, Any], Demanda], Dict[datetime.date, List[Tuple[str, Any, Decimal]]]]:
+    """Los pares con existencia al corte, la demanda de la ventana y los pares de cada corte de la tendencia."""
     ultimo = filtro.meses[-1]
     fin_ym = indice_mes(fin_de_mes(ultimo))
     ventana = (fin_ym - (qk.MESES_COSTO_VENTA - 1), fin_ym)
@@ -544,10 +534,9 @@ async def _pares_y_demanda(
     inicio, fin = t.limites_de_fecha(t.mes_desplazado(ultimo, -(qk.MESES_COSTO_VENTA - 1)), ultimo)
     perdidas = await qi.consultar_perdidas_por_par(db, filtro, inicio, fin)
     ultimo_por_par = {(s, r): u for s, r, _, _, u in ventas}
-    pares = [
-        Par(s, r, ln, e, v, ultimo_por_par.get((s, r)))
-        for s, r, ln, e, v in await qi.consultar_pares_con_existencia(db, filtro, corte)]
-    return pares, _demanda(ventas, perdidas)
+    con_existencia, por_corte = await lectura.pares_de_inventario(db, filtro, corte, [c for _, c in en_tendencia])
+    pares = [Par(s, r, ln, e, v, ultimo_por_par.get((s, r))) for s, r, ln, e, v in con_existencia]
+    return pares, _demanda(ventas, perdidas), por_corte
 
 
 async def _configuracion(db: AsyncSession, ultimo_mes: str) -> Dict[str, Any]:
@@ -562,8 +551,7 @@ async def _entradas(db: AsyncSession, filtro: Filtro, cortes: List[datetime.date
     en_tendencia = cortes_de_tendencia(cortes, mes_del_corte)
     anterior = corte_anterior(cortes, mes_del_corte, corte)
     valores, costos, costos_por_par = await _valores_y_costos(db, filtro, corte, en_tendencia, anterior)
-    pares, demanda = await _pares_y_demanda(db, filtro, corte)
-    pares_por_corte = await _pares_de_tendencia(db, filtro, en_tendencia)
+    pares, demanda, pares_por_corte = await _pares_y_demanda(db, filtro, corte, en_tendencia)
     transito = await qi.consultar_transito_por_par(
         db, filtro, corte, await lectura.principales(db),
         excluir_vencido=bool(config["excluir_transito_vencido"]),
@@ -582,9 +570,10 @@ async def _entradas(db: AsyncSession, filtro: Filtro, cortes: List[datetime.date
         pares_por_corte=pares_por_corte, costos_por_par=costos_por_par)
 
 
-async def _rotular(db: AsyncSession, filas: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def _rotular(
+    nombres: Dict[Any, Tuple[str, Optional[str]]], filas: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
     """Cambia `referencia_id` por `referencia` (codigo) y `nombre`."""
-    nombres = await qi.consultar_referencias(db, (f["referencia_id"] for f in filas))
     salida = []
     for fila in filas:
         codigo, nombre = nombres.get(fila["referencia_id"], (str(fila["referencia_id"]), None))
@@ -607,7 +596,7 @@ async def _sin_periodo(db: AsyncSession, filtro: Filtro, corte: Optional[datetim
 async def calcular_inventario(db: AsyncSession, filtro: Filtro, *, completo: bool = False) -> Resultado:
     """La respuesta de la pestana y las listas largas. Con `completo`, `sin_movimiento` y `agotadas` traen TODOS
     los pares (con codigo y nombre) para el Excel; si no, el top de la respuesta (8 y 20) en `datos`."""
-    cortes = await qi.consultar_cortes(db)
+    cortes = await lectura.cortes(db)
     corte = max(cortes) if cortes else None
     filtro = await _sin_periodo(db, filtro, corte)
     ultimo_mes = filtro.meses[-1]
@@ -626,7 +615,8 @@ async def calcular_inventario(db: AsyncSession, filtro: Filtro, *, completo: boo
     resultado = analizar(await _entradas(db, filtro, cortes, corte))
     sin_mov = resultado.sin_movimiento if completo else resultado.sin_movimiento[:TOP_SIN_MOVIMIENTO]
     agotadas = resultado.agotadas if completo else resultado.agotadas[:TOP_AGOTADAS]
-    sin_mov, agotadas = await _rotular(db, sin_mov), await _rotular(db, agotadas)
+    nombres = await qi.consultar_referencias(db, (f["referencia_id"] for f in sin_mov + agotadas))
+    sin_mov, agotadas = _rotular(nombres, sin_mov), _rotular(nombres, agotadas)
     resultado.datos["sin_movimiento_top"] = sin_mov[:TOP_SIN_MOVIMIENTO]
     resultado.datos["agotadas"]["items"] = agotadas[:TOP_AGOTADAS]
     return Resultado(resultado.datos, sin_mov, agotadas)

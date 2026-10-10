@@ -479,5 +479,5 @@ async def test_unknown_or_null_reference_ids_do_not_break_the_names_lookup(sesio
     nombres = await qi.consultar_referencias(sesion, [None, "no-es-uuid", w.refs["R1"].id, str(w.refs["R2"].id)])
 
     assert set(nombres) == {w.refs["R1"].id, w.refs["R2"].id}
-    filas = await inv._rotular(sesion, [{"referencia_id": None, "valor": 1.0}])
+    filas = inv._rotular(nombres, [{"referencia_id": None, "valor": 1.0}])
     assert filas == [{"referencia": "None", "nombre": None, "valor": 1.0}]

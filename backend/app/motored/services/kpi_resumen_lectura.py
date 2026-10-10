@@ -27,11 +27,17 @@ the callers use; the `_resumen` ones read the summary unconditionally.
 
 Costs come baked into the summary at the latest inventory cut, so the cost reads
 ignore the `fecha_corte` argument the live queries take (callers pass the latest cut).
+
+The Inventario tab reads from `kpi_inventario_corte` (value per closing cut and store),
+`kpi_inventario_par` (stock and value per closing cut, store and referencia) and
+`kpi_costo_mes_referencia` (cost of sales per month, store and referencia). Only the CLOSING
+cuts (the latest of each calendar month) are summarized: they are the only ones the tab shows,
+so `cortes` answers that subset when the summary answers (the tab's figures are the same).
 """
 import contextlib
 import datetime
 from decimal import Decimal
-from typing import Any, Awaitable, Callable, Dict, Iterator, List, Optional, Tuple, TypeVar
+from typing import Any, Awaitable, Callable, Dict, Iterable, Iterator, List, Optional, Tuple, TypeVar
 
 from sqlalchemy import Date, String, and_, case, cast, false, func, or_, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -39,14 +45,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.motored.models.cliente_tecnired import ClienteTecnired
 from app.motored.models.kpi_resumen import KpiClienteMes as C
+from app.motored.models.kpi_resumen import KpiCostoMesReferencia as M
 from app.motored.models.kpi_resumen import KpiFacturaFirma as F
 from app.motored.models.kpi_resumen import KpiInventarioCorte as Corte
+from app.motored.models.kpi_resumen import KpiInventarioPar as Par
 from app.motored.models.kpi_resumen import KpiVentaMes as V
 from app.motored.models.vendedor import Vendedor
 from app.motored.services import kpi_resumen
 from app.motored.services import tablero_asesores as t
 from app.motored.services import tablero_asesores_consultas as q
 from app.motored.services import tablero_kpis_consultas as qk
+from app.motored.services import tablero_kpis_inventario_consultas as qi
 from app.motored.services.sucursal_grupo import principal_de
 from app.motored.services.tablero_asesores import (
     CLAVE_TOTAL, DIM_ASESOR, DIM_SUCURSAL, DIM_TOTAL, FilaClientes, FilaCubo, FilaFacturas, FilaPersona, Filtro,
@@ -422,6 +431,77 @@ async def fecha_corte_costos_resumen(db: AsyncSession) -> Optional[datetime.date
     return (await db.execute(select(func.max(Corte.fecha_corte)))).scalar()
 
 
+# --- Inventario tab ---------------------------------------------------------------------------
+
+
+async def cortes_resumen(db: AsyncSession) -> List[datetime.date]:
+    """The closing cuts held by `kpi_inventario_corte`, oldest first."""
+    filas = await db.execute(select(Corte.fecha_corte).distinct().order_by(Corte.fecha_corte))
+    return [fecha for (fecha,) in filas.all()]
+
+
+async def valor_por_corte_resumen(
+    db: AsyncSession, filtro: Filtro, cortes: Iterable[datetime.date],
+) -> Dict[datetime.date, Dict[str, Decimal]]:
+    """`qi.consultar_valor_por_corte` from `kpi_inventario_corte`: `{corte: {principal store: value}}`."""
+    cortes = sorted(set(cortes))
+    salida: Dict[datetime.date, Dict[str, Decimal]] = {c: {} for c in cortes}
+    if not cortes:
+        return salida
+    tienda = cast(q.principal_expr(Corte.sucursal_id), String)
+    consulta = qi._por_tienda(
+        select(Corte.fecha_corte, tienda, func.sum(Corte.valor)).select_from(Corte)
+        .where(Corte.fecha_corte.in_(cortes)).group_by(Corte.fecha_corte, tienda),
+        Corte.sucursal_id, filtro)
+    for corte, id_tienda, valor in (await db.execute(consulta)).all():
+        salida[corte][id_tienda] = Decimal(valor)
+    return salida
+
+
+async def costos_por_mes_resumen(
+    db: AsyncSession, filtro: Filtro, corte: Optional[datetime.date], desde_mes: str, hasta_mes: str,
+) -> List[Tuple[str, str, Optional[str], Any, Decimal]]:
+    """`qi.consultar_costos_por_mes` from `kpi_costo_mes_referencia` (HMCL included, priced at the latest cut)."""
+    inicio, fin = t.limites_de_fecha(desde_mes, hasta_mes)
+    ventana = filtro._replace(rangos=((inicio, fin),), modo_hmcl=t.HMCL_INCLUIR)
+    lineas = q._lineas_por_referencia(ventana.reglas)
+    tienda = cast(q.principal_expr(M.sucursal_id), String)
+    columnas = [_mes(M), tienda, lineas.c.linea, M.referencia_id]
+    consulta = _desde(
+        select(*columnas, func.coalesce(func.sum(M.costo), 0)).group_by(*columnas), ventana, tabla=M,
+        por_sucursal=True).join(lineas, lineas.c.id == M.referencia_id)
+    return [(m, s, ln, r, Decimal(c)) for m, s, ln, r, c in (await db.execute(consulta)).all()]
+
+
+async def pares_resumen(
+    db: AsyncSession, filtro: Filtro, cortes: Iterable[datetime.date],
+) -> List[Tuple[datetime.date, str, Any, Optional[str], Decimal, Decimal]]:
+    """`(corte, principal store, referencia_id, line, stock, value)` of every pair with total stock > 0 at
+    each of `cortes`, from `kpi_inventario_par` (one query for all the cuts)."""
+    lineas = q._lineas_por_referencia(filtro.reglas)
+    tienda = cast(q.principal_expr(Par.sucursal_id), String)
+    existencia = func.sum(Par.existencia)
+    consulta = qi._por_tienda(
+        select(Par.fecha_corte, tienda, Par.referencia_id, lineas.c.linea, existencia, func.sum(Par.valor))
+        .select_from(Par).outerjoin(lineas, lineas.c.id == Par.referencia_id)
+        .where(Par.fecha_corte.in_(sorted(set(cortes))))
+        .group_by(Par.fecha_corte, tienda, Par.referencia_id, lineas.c.linea).having(existencia > 0),
+        Par.sucursal_id, filtro)
+    return [(c, s, r, ln, Decimal(e), Decimal(v)) for c, s, r, ln, e, v in (await db.execute(consulta)).all()]
+
+
+def separar_pares(filas, corte: datetime.date, cortes_tendencia: Iterable[datetime.date]):
+    """Splits `pares_resumen` into what the two live queries return: `(pairs of `corte` with their line and stock,
+    `{trend corte: [(store, referencia, value)]}`)`. No trend cuts, no per-cut pairs (like the live reader)."""
+    pares = [(s, r, ln, e, v) for c, s, r, ln, e, v in filas if c == corte]
+    cortes = sorted(set(cortes_tendencia))
+    por_corte: Dict[datetime.date, List[Tuple[str, Any, Decimal]]] = {c: [] for c in cortes}
+    for c, s, r, _, _, v in filas:
+        if c in por_corte:
+            por_corte[c].append((s, r, v))
+    return pares, por_corte
+
+
 # --- Dispatch: the summary when usable, the live query otherwise -----------------------------
 
 
@@ -513,3 +593,37 @@ async def fecha_corte_costos(db: AsyncSession) -> Optional[datetime.date]:
     if await usar_resumen(db):
         return await fecha_corte_costos_resumen(db)
     return await q.fecha_corte_costos(db)
+
+
+async def cortes(db: AsyncSession) -> List[datetime.date]:
+    """The cuts the Inventario tab chooses from: the closing ones when the summary answers, all live."""
+    if await usar_resumen(db):
+        return await cortes_resumen(db)
+    return await qi.consultar_cortes(db)
+
+
+async def valor_por_corte(
+    db: AsyncSession, filtro: Filtro, cortes_pedidos: Iterable[datetime.date],
+) -> Dict[datetime.date, Dict[str, Decimal]]:
+    if await usar_resumen(db):
+        return await valor_por_corte_resumen(db, filtro, cortes_pedidos)
+    return await qi.consultar_valor_por_corte(db, filtro, cortes_pedidos)
+
+
+async def costos_por_mes(
+    db: AsyncSession, filtro: Filtro, corte: Optional[datetime.date], desde_mes: str, hasta_mes: str,
+) -> List[Tuple[str, str, Optional[str], Any, Decimal]]:
+    if await usar_resumen(db):
+        return await costos_por_mes_resumen(db, filtro, corte, desde_mes, hasta_mes)
+    return await qi.consultar_costos_por_mes(db, filtro, corte, desde_mes, hasta_mes)
+
+
+async def pares_de_inventario(
+    db: AsyncSession, filtro: Filtro, corte: datetime.date, cortes_tendencia: Iterable[datetime.date],
+):
+    """`(pairs with stock at corte, {trend corte: pairs})`: one query from the summary, two live."""
+    tendencia = sorted(set(cortes_tendencia))
+    if await usar_resumen(db):
+        return separar_pares(await pares_resumen(db, filtro, {corte, *tendencia}), corte, tendencia)
+    pares = await qi.consultar_pares_con_existencia(db, filtro, corte)
+    return pares, (await qi.consultar_pares_por_corte(db, filtro, tendencia) if tendencia else {})
