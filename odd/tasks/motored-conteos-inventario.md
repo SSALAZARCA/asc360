@@ -174,3 +174,8 @@ Run them in the foreground and read the result line before committing; never cha
 - [x] 2026-10-09 owner: ADMIN users are assignable as count leaders (ROLES_ASIGNABLES_LIDER), while ADMIN stays unscoped.
 - [x] 2026-10-09 owner: the leader's locations panel is "Ubicaciones (opcional)", collapsed by default; pairs create locations while counting.
 - 2026-10-10 owner: the pre-start screen shows "Pendientes por sanear" for the store: invoices pending ingreso and transfers pending reception, with the latest load dates. Iniciar ONLY WARNS: a 409 with counts unless confirmed; the confirmation is recorded on the conteo. It never blocks. Task WU15.
+- 2026-10-10 owner: in "Pendientes por sanear" the conteo leader can mark each invoice or transfer "Verificado en el ERP".
+  - The mark is scoped to the conteo, stored in snapshot_advertencias, and undoable before start.
+  - It removes the item from the Iniciar warning.
+  - It does NOT replace the files or the Gestión repuestos state; the official source stays the next ingresos/traslados load.
+- [x] WU15 (b5ffc3c backend + this UI commit; backend 7569 passed, pg_real conteos 56 passed, jest 2691 passed). Also fixed 2 pg tests broken by 5d5b783 (ADMIN as leader).
