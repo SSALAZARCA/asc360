@@ -74,15 +74,41 @@ export function tarjetas(data) {
 
 const nombreMes = (mes) => MESES_CORTOS[Number(mes.slice(5, 7)) - 1];
 
-/** Bars of the trend: height proportional to the largest month (180 px max), the last one in the accent blue. */
+const COLOR_BANDA = { verde: COLOR.good, ambar: COLOR.mid, violeta: COLOR.bad };
+
+/** Range text of a days band by the configured cuts: `≤60 días`, `61 a 90 días`, `>90 días`. */
+export function textoBanda(banda, cortes) {
+  if (banda === 'verde') return `≤${cortes.verde_hasta} días`;
+  if (banda === 'ambar') return `${cortes.verde_hasta + 1} a ${cortes.ambar_hasta} días`;
+  return `>${cortes.ambar_hasta} días`;
+}
+
+const pctEntero = (fraccion) => `${Math.round((fraccion ?? 0) * 100)}%`;
+
+/** Stacked segments of one month (bottom to top: green, amber, violet), each as tall as its share of the bar.
+ *  Null when the point has no `bandas` (older payload) or nothing to split. */
+export function segmentosMes(punto, alto, cortes) {
+  const bandas = punto.bandas;
+  if (!Array.isArray(bandas) || !bandas.some((b) => b.valor > 0)) return null;
+  return bandas.map((b) => ({
+    banda: b.banda, color: COLOR_BANDA[b.banda] ?? COLOR.bad, alto: alto * (b.pct ?? 0), pct: pctEntero(b.pct),
+    tip: `${textoBanda(b.banda, cortes)}: ${pesosM(b.valor)} · ${pctEntero(b.pct)}`,
+  }));
+}
+
+/** Bars of the trend: height proportional to the largest month (180 px max), the last one in the accent blue
+ *  when it cannot be split by days; with `bandas` each bar is stacked by days of inventory. */
 export function barrasTendencia(data) {
   const lista = data.tendencia;
   const tope = Math.max(...lista.map((m) => m.valor), 1);
-  return lista.map((m, i) => ({
-    mes: nombreMes(m.mes), valor: pesosMm(m.valor), alto: Math.max(2, Math.round((m.valor / tope) * 180)),
-    color: i === lista.length - 1 ? COLOR.info : '#A9BFD9', dias: diasTexto(m.dias), luz: luzDias(m.dias, data.cortes_color),
-    tip: `${nombreMes(m.mes)}: ${pesosM(m.valor)} · ${m.dias === null || m.dias === undefined ? 'sin días' : `${decimales(m.dias, 0)} días`}`,
-  }));
+  return lista.map((m, i) => {
+    const alto = Math.max(2, Math.round((m.valor / tope) * 180));
+    return {
+      mes: nombreMes(m.mes), valor: pesosMm(m.valor), alto, segmentos: segmentosMes(m, alto, data.cortes_color),
+      color: i === lista.length - 1 ? COLOR.info : '#A9BFD9', dias: diasTexto(m.dias), luz: luzDias(m.dias, data.cortes_color),
+      tip: `${nombreMes(m.mes)}: ${pesosM(m.valor)} · ${m.dias === null || m.dias === undefined ? 'sin días' : `${decimales(m.dias, 0)} días`}`,
+    };
+  });
 }
 
 export const COLORES_EDAD = [COLOR.good, COLOR.mid, '#9B6BC9', COLOR.bad];

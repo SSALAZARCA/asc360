@@ -102,6 +102,66 @@ describe('Inventario tab: trend, age, lines', () => {
     expect(within(seccion('Valor del inventario por mes')).getAllByTestId('barra-mes')).toHaveLength(12);
   });
 
+  describe('month bars split by days of inventory', () => {
+    const BANDAS = [
+      { banda: 'verde', valor: 2400 * 1e6, pct: 0.6 }, { banda: 'ambar', valor: 1000 * 1e6, pct: 0.25 },
+      { banda: 'violeta', valor: 600 * 1e6, pct: 0.15 },
+    ];
+    const conBandas = () => ({ ...INVENTARIO, tendencia: [{ ...INVENTARIO.tendencia[0], valor: 4000 * 1e6, bandas: BANDAS }] });
+
+    it('stacks green, amber and violet segments as tall as their share of the bar', () => {
+      montar(conBandas());
+      const tarjetaMes = seccion('Valor del inventario por mes');
+      const segmentos = within(tarjetaMes).getAllByTestId('segmento-banda');
+      expect(segmentos.map((x) => x.dataset.banda)).toEqual(['verde', 'ambar', 'violeta']);
+      expect(segmentos.map((x) => parseFloat(x.style.height))).toEqual([108, 45, 27]);   // 180 px * 60 / 25 / 15 %
+      expect(within(tarjetaMes).getByTestId('barra-apilada').style.height).toBe('180px');
+      expect(within(tarjetaMes).getByTestId('barra-apilada').style.flexDirection).toBe('column-reverse');
+    });
+
+    it('explains each segment with the configured cuts, its value and its share', () => {
+      montar(conBandas());
+      const segmentos = within(seccion('Valor del inventario por mes')).getAllByTestId('segmento-banda');
+      expect(segmentos[0]).toHaveAttribute('title', '≤60 días: $ 2.400 M · 60%');
+      expect(segmentos[1]).toHaveAttribute('title', '61 a 90 días: $ 1.000 M · 25%');
+      expect(segmentos[2]).toHaveAttribute('title', '>90 días: $ 600 M · 15%');
+    });
+
+    it('follows the cuts configured in Configuración', () => {
+      montar({ ...conBandas(), cortes_color: { verde_hasta: 30, ambar_hasta: 45 } });
+      const segmentos = within(seccion('Valor del inventario por mes')).getAllByTestId('segmento-banda');
+      expect(segmentos.map((x) => x.title.split(':')[0])).toEqual(['≤30 días', '31 a 45 días', '>45 días']);
+    });
+
+    it('shows the three shares under the month, above the days chip, and keeps the total on top', () => {
+      montar(conBandas());
+      const tarjetaMes = seccion('Valor del inventario por mes');
+      expect(within(tarjetaMes).getByTestId('pct-bandas')).toHaveTextContent('60%·25%·15%');
+      expect(within(tarjetaMes).getByText('$4,0mm')).toBeInTheDocument();
+      const pie = within(tarjetaMes).getByTestId('dias-mes').parentElement;
+      expect(Array.from(pie.children).map((x) => x.dataset.testid)).toEqual([undefined, 'pct-bandas', 'dias-mes']);
+    });
+
+    it('explains in the legend that the colors are the share of inventory by days', () => {
+      montar(conBandas());
+      expect(within(seccion('Valor del inventario por mes')).getByText(/parte del inventario según sus días/)).toBeInTheDocument();
+    });
+
+    it('draws a month without bandas (older payload) as the single bar and no shares', () => {
+      montar();
+      const tarjetaMes = seccion('Valor del inventario por mes');
+      expect(within(tarjetaMes).getAllByTestId('barra-mes')).toHaveLength(1);
+      expect(within(tarjetaMes).queryByTestId('segmento-banda')).not.toBeInTheDocument();
+      expect(within(tarjetaMes).queryByTestId('pct-bandas')).not.toBeInTheDocument();
+    });
+
+    it('draws the single bar when the bands hold no value', () => {
+      const vacias = BANDAS.map((b) => ({ ...b, valor: 0, pct: null }));
+      montar({ ...INVENTARIO, tendencia: [{ ...INVENTARIO.tendencia[0], bandas: vacias }] });
+      expect(within(seccion('Valor del inventario por mes')).queryByTestId('segmento-banda')).not.toBeInTheDocument();
+    });
+  });
+
   it('lists the age bands with value and share, and explains the oldest one', () => {
     montar();
     const filas = within(seccion('Antigüedad del inventario')).getAllByTestId('banda-edad');

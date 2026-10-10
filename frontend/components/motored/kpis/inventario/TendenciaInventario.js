@@ -1,5 +1,6 @@
 'use client';
-/** "Valor del inventario por mes": bars at cost per month-end valued corte, with the days chip below each. */
+/** "Valor del inventario por mes": bars at cost per month-end valued corte, each stacked by days of inventory
+ *  (green / amber / violet), with the share of each color and the days chip below. */
 import { COLOR } from '../tokens';
 import { NUM, TARJETA, TITULO } from '../ventas/estilos';
 import { barrasTendencia } from './datos';
@@ -8,14 +9,41 @@ import { PUNTO, SUBTITULO, TARJETA_COLUMNA } from './estilos';
 const MESES_MAX = 12;
 const ANCHO_COLUMNA = 80;
 
+function Segmentos({ m }) {
+  if (!m.segmentos) return <div style={{ width: '100%', maxWidth: 38, height: m.alto, background: m.color, borderRadius: '6px 6px 0 0' }} />;
+  // column-reverse puts the first band (green) at the bottom; the top segment carries the rounded corners.
+  return (
+    <div data-testid="barra-apilada" style={{ width: '100%', maxWidth: 38, height: m.alto, display: 'flex', flexDirection: 'column-reverse', borderRadius: '6px 6px 0 0', overflow: 'hidden' }}>
+      {m.segmentos.map((s) => (
+        <div key={s.banda} data-testid="segmento-banda" data-banda={s.banda} title={s.tip} style={{ height: s.alto, background: s.color, flexShrink: 0 }} />
+      ))}
+    </div>
+  );
+}
+
+function PorcentajesBandas({ m }) {
+  if (!m.segmentos) return null;
+  return (
+    <span data-testid="pct-bandas" style={{ ...NUM, display: 'flex', flexWrap: 'wrap', justifyContent: 'center', columnGap: 3, fontSize: 10, fontWeight: 700 }}>
+      {m.segmentos.map((s, i) => (
+        <span key={s.banda} style={{ display: 'inline-flex', gap: 3 }}>
+          {i > 0 && <span style={{ color: COLOR.muted }}>·</span>}
+          <span style={{ color: s.color }}>{s.pct}</span>
+        </span>
+      ))}
+    </span>
+  );
+}
+
 function Leyenda({ cortes }) {
   const items = [
-    { texto: `Días ≤ ${cortes.verde_hasta}`, fondo: COLOR.goodSoft, borde: COLOR.good },
-    { texto: `${cortes.verde_hasta + 1} a ${cortes.ambar_hasta}`, fondo: COLOR.midSoft, borde: COLOR.mid },
-    { texto: `Más de ${cortes.ambar_hasta}`, fondo: COLOR.badSoft, borde: COLOR.bad },
+    { texto: `Días ≤ ${cortes.verde_hasta}`, fondo: COLOR.good, borde: COLOR.good },
+    { texto: `${cortes.verde_hasta + 1} a ${cortes.ambar_hasta}`, fondo: COLOR.mid, borde: COLOR.mid },
+    { texto: `Más de ${cortes.ambar_hasta}`, fondo: COLOR.bad, borde: COLOR.bad },
   ];
   return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, fontSize: 12, color: COLOR.muted }}>
+    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 14, fontSize: 12, color: COLOR.muted }}>
+      <span>Cada color es la parte del inventario según sus días:</span>
       {items.map((i) => (
         <span key={i.texto} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
           <span style={{ ...PUNTO(i.fondo, 999), border: `1px solid ${i.borde}` }} />{i.texto}
@@ -33,7 +61,7 @@ export default function TendenciaInventario({ data }) {
   const encabezado = (
     <div>
       <h2 style={TITULO}>Valor del inventario por mes</h2>
-      <p style={SUBTITULO}>A costo, al cierre de cada mes · debajo, los días de inventario de ese mes</p>
+      <p style={SUBTITULO}>A costo, al cierre de cada mes · cada barra se reparte por días de inventario · debajo, el % de cada color y los días de ese mes</p>
     </div>
   );
   // The selected corte can fall outside every month that has a point, so an empty trend is possible.
@@ -55,7 +83,7 @@ export default function TendenciaInventario({ data }) {
         {barras.map((m) => (
           <div key={m.mes + m.valor} data-testid="barra-mes" title={m.tip} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', gap: 4, height: '100%' }}>
             <span style={{ ...NUM, fontSize: 10.5, fontWeight: 700, color: COLOR.ink2 }}>{m.valor}</span>
-            <div style={{ width: '100%', maxWidth: 38, height: m.alto, background: m.color, borderRadius: '6px 6px 0 0' }} />
+            <Segmentos m={m} />
           </div>
         ))}
       </div>
@@ -63,6 +91,7 @@ export default function TendenciaInventario({ data }) {
         {barras.map((m) => (
           <div key={m.mes + m.valor} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
             <span style={{ fontSize: 11, color: COLOR.muted }}>{m.mes}</span>
+            <PorcentajesBandas m={m} />
             <span data-testid="dias-mes" style={{ ...NUM, fontSize: 11, fontWeight: 700, color: m.luz.fg, background: m.luz.bg, borderRadius: 999, padding: '1px 7px' }}>{m.dias}</span>
           </div>
         ))}
