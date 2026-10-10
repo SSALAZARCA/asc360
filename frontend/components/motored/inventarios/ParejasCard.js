@@ -1,13 +1,15 @@
 /**
- * "Parejas" (WU12/WU12b): each pair with its current location, its live
- * readings (from `/panel`), its reconteo tasks (from the differences) and
- * its last sign of life (reading or request), and "Desconectar". For the
- * leader, a connected pair silent for more than MINUTOS_SIN_ACTIVIDAD
- * shows in yellow ("Sin actividad hace N min"): it may hold readings it
- * has not sent.
+ * "Parejas" (WU12/WU12b; owner decision 2026-10-10): each pair with the
+ * units it counted (its non-voided readings, from `/panel`), sorted by
+ * units with a bar relative to the leading pair, its reconteo tasks (from
+ * the differences) and "Desconectar". For the leader, a connected pair
+ * silent for more than MINUTOS_SIN_ACTIVIDAD shows in yellow ("Sin
+ * actividad hace N min"): it may hold readings it has not sent.
  */
-import { formatEntero, haceCuanto, minutosSinActividad, ultimaSenal } from './conteosFormato';
+import { formatUnidades, minutosSinActividad, parejaCorta } from './conteosFormato';
 import { cardStyle, h2Style, mutedStyle } from './estilos';
+
+const unidadesDe = (sesion) => Number(sesion.unidades) || 0;
 
 function tareas(sesionId, items) {
   const propias = items.filter((f) => f.reconteo?.sesion?.id === sesionId);
@@ -16,15 +18,23 @@ function tareas(sesionId, items) {
   return `Reconteos: ${hechas} de ${propias.length}`;
 }
 
-function Pareja({ sesion, items, opera, ahora, onDesconectar }) {
+function BarraUnidades({ sesion, maximo }) {
+  const pct = maximo > 0 ? Math.round((100 * unidadesDe(sesion)) / maximo) : 0;
+  return (
+    <div
+      role="progressbar" aria-label={`Unidades de ${parejaCorta(sesion.etiqueta)}`}
+      aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct}
+      style={{ flex: 1, minWidth: '40px', height: '6px', borderRadius: '999px', background: 'var(--motored-surface-alt, #f4f4f5)', overflow: 'hidden' }}
+    >
+      <div style={{ width: `${pct}%`, height: '100%', background: 'var(--motored-brand, #e20714)' }} />
+    </div>
+  );
+}
+
+function Pareja({ sesion, items, opera, ahora, maximo, onDesconectar }) {
   const conectada = sesion.estado === 'CONECTADA';
   const inactiva = opera ? minutosSinActividad(sesion, ahora) : null;
   const reconteos = tareas(sesion.id, items);
-  const detalle = [
-    sesion.ubicacion_actual?.nombre ?? 'Sin ubicación',
-    sesion.lecturas == null ? null : `${formatEntero(sesion.lecturas)} lecturas`,
-    conectada ? haceCuanto(ultimaSenal(sesion), ahora) : 'Desconectada',
-  ].filter(Boolean).join(' · ');
   return (
     <div
       data-inactiva={inactiva != null ? 'si' : undefined}
@@ -37,7 +47,11 @@ function Pareja({ sesion, items, opera, ahora, onDesconectar }) {
     >
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontWeight: 700, fontSize: '0.875rem' }}>{sesion.etiqueta}</div>
-        <div style={{ ...mutedStyle, fontSize: '0.75rem' }}>{detalle}</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.25rem' }}>
+          <BarraUnidades sesion={sesion} maximo={maximo} />
+          <span style={{ fontSize: '0.8rem', fontWeight: 700, whiteSpace: 'nowrap' }}>{formatUnidades(sesion.unidades)}</span>
+        </div>
+        {!conectada && <div style={{ ...mutedStyle, fontSize: '0.75rem' }}>Desconectada</div>}
         {inactiva != null && (
           <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--motored-data-mid-ink, #8a4104)' }}>
             Sin actividad hace {inactiva} min
@@ -59,7 +73,8 @@ function Pareja({ sesion, items, opera, ahora, onDesconectar }) {
 
 export default function ParejasCard({ sesiones, items, opera, onDesconectar, ahora = Date.now() }) {
   const conectadas = sesiones.filter((s) => s.estado === 'CONECTADA').length;
-  const orden = [...sesiones].sort((a, b) => (a.estado === 'CONECTADA' ? 0 : 1) - (b.estado === 'CONECTADA' ? 0 : 1) || a.numero - b.numero);
+  const orden = [...sesiones].sort((a, b) => unidadesDe(b) - unidadesDe(a) || a.numero - b.numero);
+  const maximo = orden.length ? unidadesDe(orden[0]) : 0;
   return (
     <div style={cardStyle}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -69,7 +84,7 @@ export default function ParejasCard({ sesiones, items, opera, onDesconectar, aho
       {orden.length === 0 && <p style={{ ...mutedStyle, margin: 0 }}>Todavía no entra ninguna pareja.</p>}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
         {orden.map((s) => (
-          <Pareja key={s.id} sesion={s} items={items} opera={opera} ahora={ahora} onDesconectar={onDesconectar} />
+          <Pareja key={s.id} sesion={s} items={items} opera={opera} ahora={ahora} maximo={maximo} onDesconectar={onDesconectar} />
         ))}
       </div>
     </div>

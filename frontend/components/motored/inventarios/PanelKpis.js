@@ -1,16 +1,20 @@
 /**
- * The five KPI cards of the live panel (prototype "Main", WU12/WU12b): the
- * real progress (counted / universe referencias, with its bar), the
+ * The KPI cards of the live panel (prototype "Main", WU12/WU12b): the
+ * real progress (counted / universe referencias, with its bar), the units
+ * counted (inside the system's units and surplus, with the units bar), the
  * critical and reconteo counts, the partial accuracy over what is counted
  * so far with its net difference, and the active pairs with the last
  * reading. `vivo` is the `/panel` answer; `diferencias` the full table.
  */
 import InfoTooltip from '../InfoTooltip';
 import {
-  formatEntero, formatPesos, formatPesosConSigno, formatPorcentaje, haceCuanto, porcentajeAvance,
+  formatCantidad, formatEntero, formatPesos, formatPesosConSigno, formatPorcentaje, haceCuanto, porcentajeAvance,
+  porcentajeUnidades,
 } from './conteosFormato';
 import { kpiValorStyle, mutedStyle } from './estilos';
-import { AYUDA_AVANCE, AYUDA_CRITICA, AYUDA_EXACTITUD, AYUDA_RECONTEO } from './ayudas';
+import {
+  AYUDA_AVANCE, AYUDA_CRITICA, AYUDA_DENTRO, AYUDA_EXACTITUD, AYUDA_RECONTEO, AYUDA_SOBRANTES, AYUDA_UNIDADES,
+} from './ayudas';
 
 const tarjeta = (alerta) => ({
   background: alerta ? 'var(--motored-danger-bg, #fdecea)' : 'var(--motored-surface, #ffffff)',
@@ -32,14 +36,43 @@ function Kpi({ titulo, ayuda, valor, detalle, alerta = false, children }) {
   );
 }
 
-function Barra({ pct }) {
+function Barra({ pct, etiqueta = 'Avance del conteo' }) {
   return (
     <div
-      role="progressbar" aria-label="Avance del conteo" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct ?? 0}
+      role="progressbar" aria-label={etiqueta} aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct ?? 0}
       style={{ height: '8px', borderRadius: '999px', background: 'var(--motored-surface-alt, #f4f4f5)', overflow: 'hidden' }}
     >
       <div style={{ width: `${pct ?? 0}%`, height: '100%', background: 'var(--motored-brand, #e20714)' }} />
     </div>
+  );
+}
+
+function LineaUnidades({ titulo, ayuda, valor }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap', fontSize: '0.8rem' }}>
+      <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>{titulo}<InfoTooltip text={ayuda} /></span>
+      <strong>{formatCantidad(valor)}</strong>
+    </div>
+  );
+}
+
+function detalleUnidades(unidades, pct) {
+  if (!unidades) return 'Sin unidades contadas todavía';
+  return `${pct ?? 0} % de ${formatCantidad(unidades.sistema_total)} unidades del sistema`;
+}
+
+/** "Unidades contadas": total = inside the system's units + surplus; the bar is inside / system units. */
+function UnidadesKpi({ unidades }) {
+  const pct = porcentajeUnidades(unidades);
+  return (
+    <Kpi
+      titulo="Unidades contadas" ayuda={AYUDA_UNIDADES} valor={formatCantidad(unidades?.total_contado)}
+      detalle={detalleUnidades(unidades, pct)}
+    >
+      <LineaUnidades titulo="Dentro de lo esperado" ayuda={AYUDA_DENTRO} valor={unidades?.dentro_esperado} />
+      <LineaUnidades titulo="Sobrantes" ayuda={AYUDA_SOBRANTES} valor={unidades?.sobrantes} />
+      <Barra pct={pct} etiqueta="Avance en unidades" />
+    </Kpi>
   );
 }
 
@@ -70,6 +103,7 @@ export default function PanelKpis({ conteo, vivo, diferencias, sesiones }) {
       <Kpi titulo="Avance" ayuda={AYUDA_AVANCE} valor={avanceTexto(vivo?.progreso)} detalle="referencias contadas">
         <Barra pct={porcentajeAvance(vivo?.progreso)} />
       </Kpi>
+      <UnidadesKpi unidades={vivo?.unidades} />
       <Kpi
         titulo="Diferencias críticas" ayuda={AYUDA_CRITICA} alerta={(resumen?.criticas ?? 0) > 0}
         valor={formatEntero(resumen?.criticas)} detalle={`desde ${formatPesos(conteo.umbrales?.critico)} cada una`}

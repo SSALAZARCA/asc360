@@ -129,11 +129,26 @@ export function porcentajeAvance(progreso) {
   return pct === 100 && progreso.refs_contadas < progreso.refs_universo ? 99 : pct;
 }
 
-/** The pairs of `/sesiones` with the panel's readings count and last reading (matched by `sesion_id`). */
+/** Units inside the system as a rounded whole percentage of the system's units; 100 only when all are in (null without system units). */
+export function porcentajeUnidades(unidades) {
+  const sistema = Number(unidades?.sistema_total);
+  if (!unidades || !Number.isFinite(sistema) || sistema <= 0) return null;
+  const dentro = Number(unidades.dentro_esperado) || 0;
+  const pct = Math.round((100 * dentro) / sistema);
+  return pct === 100 && dentro < sistema ? 99 : pct;
+}
+
+/** "39 unidades" / "1 unidad" (quantities may carry decimals). */
+export function formatUnidades(valor) {
+  const n = Number(valor) || 0;
+  return `${formatCantidad(n)} ${n === 1 ? 'unidad' : 'unidades'}`;
+}
+
+/** The pairs of `/sesiones` with the panel's readings count, units and last reading (matched by `sesion_id`). */
 export function unirParejas(sesiones, parejas) {
   const porId = new Map((parejas || []).map((p) => [p.sesion_id, p]));
   return sesiones.map((s) => {
     const p = porId.get(s.id);
-    return p ? { ...s, lecturas: p.lecturas, ultima_lectura_en: p.ultima_lectura_en } : s;
+    return p ? { ...s, lecturas: p.lecturas, unidades: p.unidades, ultima_lectura_en: p.ultima_lectura_en } : s;
   });
 }

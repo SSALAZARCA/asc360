@@ -12,6 +12,7 @@ import * as api from '../lib/motored/conteosApi';
 import ConteoDetalleContainer from '../components/motored/inventarios/ConteoDetalleContainer';
 import { INTERVALO_OCULTO_MS, INTERVALO_VISIBLE_MS } from '../components/motored/inventarios/usePollingConteo';
 import { MINUTOS_SIN_ACTIVIDAD } from '../components/motored/inventarios/conteosFormato';
+import { AYUDA_DENTRO, AYUDA_SOBRANTES, AYUDA_UNIDADES } from '../components/motored/inventarios/ayudas';
 
 jest.mock('next/navigation', () => ({
   useRouter: () => ({ push: jest.fn() }),
@@ -49,7 +50,7 @@ const SESIONES = [
 ];
 
 const pareja = (id, numero, lecturas, extra = {}) => ({
-  sesion_id: id, numero, etiqueta: `Pareja ${numero}`, ubicacion_actual: null, lecturas,
+  sesion_id: id, numero, etiqueta: `Pareja ${numero}`, ubicacion_actual: null, lecturas, unidades: String(lecturas),
   ultima_lectura_en: null, ultima_actividad_en: null, estado: 'CONECTADA', ...extra,
 });
 const vivo = (estado, version = 7, extra = {}) => ({
@@ -58,7 +59,8 @@ const vivo = (estado, version = 7, extra = {}) => ({
   exactitud_parcial: {
     refs_evaluadas: 800, refs_exactas: 749, exactitud_pct: '93.63', valor_diferencia_neta: '-2140000', valor_diferencia_abs: '3100000',
   },
-  parejas: [pareja('s1', 1, 241), pareja('s3', 3, 198)],
+  parejas: [pareja('s1', 1, 241, { unidades: '120' }), pareja('s3', 3, 198, { unidades: '480.5' })],
+  unidades: { total_contado: '5230', dentro_esperado: '4980', sobrantes: '250', sistema_total: '8300' },
   diferencias_resumen: { criticas: 2, en_reconteo: 2, total: 4 },
   ...extra,
 });
@@ -211,13 +213,65 @@ describe('KPIs and differences', () => {
     expect(screen.getByText('sin lecturas todavía')).toBeInTheDocument();
   });
 
-  it('shows the readings of each pair', async () => {
+  it('shows the units counted, inside the system and surplus, with their help', async () => {
     login('LIDER_INVENTARIOS');
     render(<ConteoDetalleContainer conteoId="c1" />);
     await screen.findByText('42601-ACL');
 
-    expect(screen.getByText(/^Estante A3 · 241 lecturas · hace/)).toBeInTheDocument();
-    expect(screen.getByText(/^Sin ubicación · 198 lecturas · hace/)).toBeInTheDocument();
+    const tarjeta = screen.getByText('Unidades contadas').parentElement;
+    expect(within(tarjeta).getByText('5.230')).toBeInTheDocument();
+    expect(within(tarjeta).getByText('4.980')).toBeInTheDocument();
+    expect(within(tarjeta).getByText('250')).toBeInTheDocument();
+    expect(within(tarjeta).getByText(/Dentro de lo esperado/)).toBeInTheDocument();
+    expect(within(tarjeta).getByText(/Sobrantes/)).toBeInTheDocument();
+    // 4.980 of 8.300 system units: 60 %.
+    expect(screen.getByRole('progressbar', { name: 'Avance en unidades' })).toHaveAttribute('aria-valuenow', '60');
+    expect(within(tarjeta).getByText('60 % de 8.300 unidades del sistema')).toBeInTheDocument();
+    // The card title, "Dentro de lo esperado" and "Sobrantes" each carry a help tooltip.
+    expect(within(tarjeta).getByRole('note', { name: AYUDA_UNIDADES })).toBeInTheDocument();
+    expect(within(tarjeta).getByRole('note', { name: AYUDA_DENTRO })).toBeInTheDocument();
+    expect(within(tarjeta).getByRole('note', { name: AYUDA_SOBRANTES })).toBeInTheDocument();
+  });
+
+  it('shows dashes in the units card before the first panel answer has units', async () => {
+    login('LIDER_INVENTARIOS');
+    api.obtenerPanel.mockImplementation(panelConVersion(vivo('EN_CONTEO', 7, { unidades: undefined })));
+    render(<ConteoDetalleContainer conteoId="c1" />);
+    await screen.findByText('42601-ACL');
+
+    expect(screen.getByRole('progressbar', { name: 'Avance en unidades' })).toHaveAttribute('aria-valuenow', '0');
+  });
+
+  it('shows each pair with its units, the leader first, without location or readings', async () => {
+    login('LIDER_INVENTARIOS');
+    render(<ConteoDetalleContainer conteoId="c1" />);
+    await screen.findByText('42601-ACL');
+
+    const tarjeta = screen.getByRole('heading', { name: 'Parejas' }).parentElement.parentElement;
+    const nombres = within(tarjeta).getAllByText(/^Pareja \d · /).map((n) => n.textContent);
+    expect(nombres).toEqual(['Pareja 3 · Sofía L. y Diego M.', 'Pareja 1 · Ana G. y Luis P.']);
+    expect(within(tarjeta).getByText('480,5 unidades')).toBeInTheDocument();
+    expect(within(tarjeta).getByText('120 unidades')).toBeInTheDocument();
+    expect(within(tarjeta).getByRole('progressbar', { name: 'Unidades de Pareja 3' })).toHaveAttribute('aria-valuenow', '100');
+    expect(within(tarjeta).getByRole('progressbar', { name: 'Unidades de Pareja 1' })).toHaveAttribute('aria-valuenow', '25');
+    expect(within(tarjeta).queryByText(/Estante A3/)).not.toBeInTheDocument();
+    expect(within(tarjeta).queryByText(/Sin ubicación/)).not.toBeInTheDocument();
+    expect(within(tarjeta).queryByText(/lecturas/)).not.toBeInTheDocument();
+    expect(within(tarjeta).getByText('Reconteos: 0 de 1')).toBeInTheDocument();
+    expect(within(tarjeta).getAllByRole('button', { name: /^Desconectar/ })).toHaveLength(2);
+  });
+
+  it('shows a pair with no readings yet at zero units', async () => {
+    login('LIDER_INVENTARIOS');
+    api.obtenerPanel.mockImplementation(panelConVersion(vivo('EN_RECONTEO', 7, {
+      parejas: [pareja('s1', 1, 1, { unidades: '1' })],
+    })));
+    render(<ConteoDetalleContainer conteoId="c1" />);
+    await screen.findByText('42601-ACL');
+
+    expect(screen.getByText('1 unidad')).toBeInTheDocument();
+    expect(screen.getByText('0 unidades')).toBeInTheDocument();
+    expect(screen.getByRole('progressbar', { name: 'Unidades de Pareja 3' })).toHaveAttribute('aria-valuenow', '0');
   });
 
   it('filters critical rows and rows in reconteo', async () => {
