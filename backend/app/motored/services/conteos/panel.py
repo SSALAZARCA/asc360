@@ -17,9 +17,9 @@ The panel polls every 15 s, so the common answer must be cheap:
   the panel still sees a pair go quiet well inside the 2-minute rule;
 - `armar` builds the full payload only when the version moved: the
   progress of every open conteo in one grouped query (shared with the
-  list), the readings per pair in one grouped query, the session list,
-  and the differences aggregate run ONCE for both the summary and the
-  partial accuracy.
+  list), the readings and units per pair in one grouped query, the
+  session list, and the differences aggregate run ONCE for the summary,
+  the partial accuracy and the units card.
 
 Progress (owner rule): the universe is the snapshot referencias whose
 existencia is not 0, the same rule as the close KPI; a referencia is
@@ -77,11 +77,16 @@ GROUP BY s.conteo_id
 """).bindparams(bindparam("ids", expanding=True))
 
 _SQL_POR_SESION = text("""
-SELECT l.sesion_id, count(*) AS lecturas, max(l.recibida_en) AS ultima
+SELECT l.sesion_id, count(*) AS lecturas, max(l.recibida_en) AS ultima,
+       coalesce(sum(l.cantidad), 0) AS unidades
 FROM conteo_lectura l
 WHERE l.conteo_id = :conteo_id AND l.anulada_en IS NULL
 GROUP BY l.sesion_id
 """)
+
+
+# (lecturas, ultima_lectura_en, unidades) of a pair with no live reading.
+_SIN_LECTURAS = (0, None, Decimal("0"))
 
 
 class Huella(NamedTuple):
@@ -139,6 +144,27 @@ def contadas(
             or c.reconteo_estado == diferencias.TERMINADO]
 
 
+def unidades(crudas: Sequence[diferencias.FilaCruda]) -> Dict[str, Decimal]:
+    """The "Unidades contadas" card over the differences aggregate.
+
+    `contado` is `diferencias.contado_de`, the table's own column. Per
+    code, the expected units are the system's (a negative system counts
+    as 0): `dentro` is the part of the count within them, `sobrantes`
+    the rest (codes the system lacks and unknown codes are all surplus).
+    Total = dentro + sobrantes; `sistema_total` is the expected units of
+    the whole snapshot."""
+    dentro = sobrantes = sistema_total = diferencias.CERO
+    for cruda in crudas:
+        esperado = max(cruda.sistema or diferencias.CERO, diferencias.CERO)
+        contado = diferencias.contado_de(cruda)
+        dentro += min(contado, esperado)
+        sobrantes += max(diferencias.CERO, contado - esperado)
+        sistema_total += esperado
+    return {
+        "total_contado": dentro + sobrantes, "dentro_esperado": dentro,
+        "sobrantes": sobrantes, "sistema_total": sistema_total}
+
+
 # --- queries ----------------------------------------------------------------
 
 
@@ -168,7 +194,7 @@ async def _por_sesion(
         db: AsyncSession, conteo_id: uuid.UUID) -> Dict[uuid.UUID, tuple]:
     filas = (await db.execute(
         _SQL_POR_SESION, {"conteo_id": conteo_id})).all()
-    return {f[0]: (int(f[1]), f[2]) for f in filas}
+    return {f[0]: (int(f[1]), f[2], Decimal(f[3])) for f in filas}
 
 
 async def _exactitud(
@@ -196,6 +222,7 @@ def _pareja(fila: sesiones.FilaSesion, lecturas: Tuple) -> dict:
         "ubicacion_actual": (None if ubicacion is None else {
             "id": ubicacion.id, "nombre": ubicacion.nombre}),
         "lecturas": lecturas[0], "ultima_lectura_en": lecturas[1],
+        "unidades": lecturas[2],
         "ultima_actividad_en": sesion.ultima_actividad_en,
         "estado": sesion.estado}
 
@@ -223,7 +250,8 @@ async def armar(db: AsyncSession, conteo: Conteo, version: int) -> dict:
         "estado": conteo.estado,
         "progreso": _progreso_total(avance, por_sesion),
         "exactitud_parcial": await _exactitud(db, conteo, crudas),
-        "parejas": [_pareja(f, por_sesion.get(f.sesion.id, (0, None)))
+        "parejas": [_pareja(f, por_sesion.get(f.sesion.id, _SIN_LECTURAS))
                     for f in filas],
+        "unidades": unidades(crudas),
         "diferencias_resumen": resumen_diferencias(
             crudas, conteo.umbral_critico_pesos)}

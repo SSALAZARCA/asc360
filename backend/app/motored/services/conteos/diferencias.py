@@ -160,6 +160,13 @@ def cantidad_final(
     return ronda1
 
 
+def contado_de(fila: FilaCruda) -> Decimal:
+    """The table's `Contado` of a raw row (its final quantity). The
+    panel's units card adds up this same value, so they never disagree."""
+    ronda1 = CERO if fila.ronda1 is None else fila.ronda1
+    return cantidad_final(ronda1, fila.reconteo_estado, fila.ronda2)
+
+
 def valorar(
         diferencia: Decimal, costo: Optional[Decimal]) -> Optional[Decimal]:
     """difference x unit cost, to the cent; None without a cost."""
@@ -194,7 +201,7 @@ def calcular(fila: FilaCruda, umbral_critico: Decimal) -> Diferencia:
     """A raw row turned into quantities, value and flags."""
     sistema = CERO if fila.sistema is None else fila.sistema
     ronda1 = CERO if fila.ronda1 is None else fila.ronda1
-    contado = cantidad_final(ronda1, fila.reconteo_estado, fila.ronda2)
+    contado = contado_de(fila)
     diferencia = contado - sistema
     sin_costo = fila.costo_unitario is None or fila.costo_fuente in (
         None, SIN_COSTO)

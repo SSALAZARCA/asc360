@@ -46,6 +46,7 @@ async def con_cero(escena, fabrica):
             referencia_id=referencia.id, existencia=D("0"),
             costo_unitario=D("1000"), costo_fuente="BODEGA"))
         await db.commit()
+    escena.codigos["F"] = referencia.codigo
     return escena
 
 
@@ -131,6 +132,105 @@ async def test_round_two_readings_are_not_progress(con_cero, fabrica):
     assert cuerpo["progreso"]["lecturas_total"] == 7
     assert _pareja(cuerpo, tres.id)["lecturas"] == 1
     assert cuerpo["diferencias_resumen"]["en_reconteo"] == 4
+
+
+# --- units counted (owner decision 2026-10-10) -------------------------------
+
+
+@pytest.fixture
+async def con_negativo(con_cero, fabrica):
+    """The scene plus G: a snapshot line with existencia -2."""
+    async with fabrica() as db:
+        referencia = Referencia(
+            id=uuid.uuid4(), codigo=f"G-{uuid.uuid4().hex[:8].upper()}",
+            nombre="Repuesto G", proveedor_id=con_cero.proveedor.id,
+            unidad_empaque=1)
+        db.add(referencia)
+        await db.flush()
+        db.add(ConteoSnapshotLinea(
+            id=uuid.uuid4(), conteo_id=con_cero.conteo.id,
+            referencia_id=referencia.id, existencia=D("-2"),
+            costo_unitario=D("1000"), costo_fuente="BODEGA"))
+        await db.commit()
+    con_cero.codigos["G"] = referencia.codigo
+    return con_cero
+
+
+def _numeros(unidades):
+    return {k: D(v) for k, v in unidades.items()}
+
+
+def _desde_la_tabla(lista, sistema_por_codigo):
+    """The units card rebuilt from the differences table's own Contado
+    column; a snapshot code the table leaves out matched its system."""
+    contado = {i["codigo"]: D(i["contado"]) for i in lista["items"]}
+    sistema = {i["codigo"]: D(i["sistema"]) for i in lista["items"]}
+    for codigo, existencia in sistema_por_codigo.items():
+        contado.setdefault(codigo, existencia)
+        sistema.setdefault(codigo, existencia)
+    dentro = sobrantes = D("0")
+    for codigo, cantidad in contado.items():
+        esperado = max(sistema[codigo], D("0"))
+        dentro += min(cantidad, esperado)
+        sobrantes += max(D("0"), cantidad - esperado)
+    return dentro, sobrantes
+
+
+async def test_units_split_inside_and_surplus(con_negativo):
+    cod = con_negativo.codigos
+    uno = await base._ronda_uno(con_negativo)
+    await base._leer(con_negativo, uno, base._item(cod["G"], "1"))
+
+    cuerpo = await _panel(con_negativo)
+
+    u = _numeros(cuerpo["unidades"])
+    # Inside: A 8, B 1, D 3. Surplus: C 2 (no system), the unknown 1
+    # and G 1 (system -2 expects 0). System: 10 + 10 + 3 + 5 + 0 + 0.
+    assert u == {"total_contado": D("16"), "dentro_esperado": D("12"),
+                 "sobrantes": D("4"), "sistema_total": D("28")}
+    # A 5 + 3 (the voided 4 is out), B 1, C 2, D 3, unknown 1, G 1.
+    assert D(_pareja(cuerpo, uno.id)["unidades"]) == D("16")
+
+
+async def test_units_match_the_differences_table(con_negativo):
+    cod = con_negativo.codigos
+    uno = await base._ronda_uno(con_negativo)
+    await base._leer(con_negativo, uno, base._item(cod["G"], "1"))
+
+    cuerpo = await _panel(con_negativo)
+    lista = await base._diferencias(con_negativo)
+
+    snapshot = {cod[k]: v[0] for k, v in base.SNAPSHOT.items() if v}
+    snapshot.update({cod["F"]: D("0"), cod["G"]: D("-2")})
+    dentro, sobrantes = _desde_la_tabla(lista, snapshot)
+    u = _numeros(cuerpo["unidades"])
+    assert (u["dentro_esperado"], u["sobrantes"]) == (dentro, sobrantes)
+
+
+async def test_round_two_moves_pair_units_not_the_table(con_cero, fabrica):
+    await base._ronda_uno(con_cero)
+    await base._terminar_ronda(con_cero)
+    e = (await base._reconteos(fabrica, con_cero))[con_cero.codigos["E"]]
+    tres = await base._unirse(con_cero, base.TRES)
+    r = await base._asignar(con_cero, e, tres)
+    assert r.status_code == 200, r.text
+    await base._ubicar(con_cero, tres, "UBI-A3")
+    await base._leer(con_cero, tres, base._item(
+        con_cero.codigos["E"], "5", reconteo_id=e.id))
+
+    cuerpo = await _panel(con_cero)
+
+    assert D(_pareja(cuerpo, tres.id)["unidades"]) == D("5")
+    # E's reconteo is not TERMINADO: the table still shows round 1 (0).
+    assert D(cuerpo["unidades"]["total_contado"]) == D("15")
+
+
+async def test_no_readings_means_zero_units(con_cero):
+    cuerpo = await _panel(con_cero)
+
+    assert _numeros(cuerpo["unidades"]) == {
+        "total_contado": D("0"), "dentro_esperado": D("0"),
+        "sobrantes": D("0"), "sistema_total": D("28")}
 
 
 # --- the version (ADR-8) -----------------------------------------------------

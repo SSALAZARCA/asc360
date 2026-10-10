@@ -601,9 +601,20 @@ class ParejaPanel(BaseModel):
     etiqueta: str
     ubicacion_actual: Optional[UbicacionSalida] = None
     lecturas: int
+    unidades: Decimal
     ultima_lectura_en: Optional[datetime] = None
     ultima_actividad_en: Optional[datetime] = None
     estado: str
+
+
+class UnidadesPanel(BaseModel):
+    """Units counted, split against the system (total = dentro +
+    sobrantes); `sistema_total` is the snapshot's expected units."""
+
+    total_contado: Decimal
+    dentro_esperado: Decimal
+    sobrantes: Decimal
+    sistema_total: Decimal
 
 
 class ResumenDiferencias(BaseModel):
@@ -621,4 +632,5 @@ class PanelSalida(BaseModel):
     progreso: ProgresoPanel
     exactitud_parcial: Optional[ExactitudParcial] = None
     parejas: List[ParejaPanel]
+    unidades: UnidadesPanel
     diferencias_resumen: ResumenDiferencias

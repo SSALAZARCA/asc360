@@ -52,6 +52,8 @@ def stubs(monkeypatch):
         "progreso": {"refs_universo": 4, "refs_contadas": 3,
                      "lecturas_total": 6, "ultima_lectura_en": AHORA},
         "exactitud_parcial": None, "parejas": [],
+        "unidades": {"total_contado": D("0"), "dentro_esperado": D("0"),
+                     "sobrantes": D("0"), "sistema_total": D("9")},
         "diferencias_resumen": {"criticas": 0, "en_reconteo": 0,
                                 "total": 5}})
     monkeypatch.setattr(panel, "huella", huella)
@@ -197,6 +199,79 @@ def test_counted_lines_are_round_one_reads_or_finished_reconteos():
     ]
 
     assert [c.codigo for c in panel.contadas(crudas)] == ["A", "G"]
+
+
+# --- units counted (owner decision 2026-10-10) -------------------------------
+
+
+def _unidades(*crudas):
+    return panel.unidades(list(crudas))
+
+
+def test_units_inside_and_surplus_by_case():
+    crudas = [
+        _cruda("EXACTO", "4", "4"),
+        _cruda("FALTA", "10", "7"),
+        _cruda("SOBRA", "3", "5"),
+        _cruda("CERO", "0", "2"),
+        _cruda("NEGATIVO", "-3", "2"),
+        _cruda("SIN_LEER", "6", None),
+        _cruda("FUERA", None, "1", costo=None),
+        _cruda("DESCONOCIDO", None, "2", costo=None, referencia=False),
+    ]
+
+    u = panel.unidades(crudas)
+
+    # dentro: 4 + 7 + 3 + 0 + 0 + 0; sobrantes: 2 + 2 + 2 + 1 + 2.
+    assert u == {"total_contado": D("23"), "dentro_esperado": D("14"),
+                 "sobrantes": D("9"), "sistema_total": D("23")}
+
+
+def test_negative_system_counts_as_zero_expected():
+    u = _unidades(_cruda("N", "-5", None))
+
+    assert u == {"total_contado": D("0"), "dentro_esperado": D("0"),
+                 "sobrantes": D("0"), "sistema_total": D("0")}
+
+
+def test_a_finished_reconteo_replaces_round_one_in_the_units():
+    u = _unidades(
+        _cruda("R", "5", "2", reconteo="TERMINADO", ronda2="6"),
+        _cruda("P", "5", "2", reconteo="ASIGNADO", ronda2="9"))
+
+    assert u["total_contado"] == D("8")
+    assert (u["dentro_esperado"], u["sobrantes"]) == (D("7"), D("1"))
+
+
+@pytest.mark.parametrize("sistema,ronda1", [
+    ("0", "3"), ("-2", "1.5"), ("4", "4"), ("4", "9"), ("8", "2"),
+    (None, "2"), ("5", None)])
+def test_total_is_inside_plus_surplus(sistema, ronda1):
+    u = _unidades(_cruda("X", sistema, ronda1), _cruda("Y", "1", "1"))
+
+    assert u["total_contado"] == u["dentro_esperado"] + u["sobrantes"]
+
+
+def test_units_use_the_differences_table_contado():
+    """Parity: the card adds up exactly the `contado` that
+    `diferencias.calcular` puts in the table's Contado column."""
+    crudas = [
+        _cruda("A", "10", "8"), _cruda("B", "0", "2"),
+        _cruda("G", "4", None, reconteo="TERMINADO", ronda2="3"),
+        _cruda("H", "4", "1", reconteo="ASIGNADO", ronda2="7"),
+        _cruda("Z", None, "1", costo=None, referencia=False),
+    ]
+
+    tabla = [diferencias.calcular(c, D("500000")).contado for c in crudas]
+
+    assert [diferencias.contado_de(c) for c in crudas] == tabla
+    assert panel.unidades(crudas)["total_contado"] == sum(tabla)
+
+
+def test_no_rows_means_zero_units():
+    assert panel.unidades([]) == {
+        "total_contado": D("0"), "dentro_esperado": D("0"),
+        "sobrantes": D("0"), "sistema_total": D("0")}
 
 
 def test_the_version_is_a_stable_js_safe_integer():
