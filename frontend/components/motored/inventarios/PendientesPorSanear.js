@@ -49,16 +49,25 @@ function LineaCargas({ cargas, desde }) {
 
 function Listas({ datos, puedeMarcar, pendientes }) {
   const comun = { puedeMarcar, ocupado: pendientes.ocupado, onCambiar: pendientes.cambiar };
+  // Side by side (owner, 2026-10-10); they wrap one under the other when
+  // the screen is too narrow for both.
+  const lado = { flex: '1 1 460px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: '0.5rem' };
   return (
     <>
-      <PendientesTabla
-        {...comun} titulo="Facturas por ingresar" tipo="FACTURA" primera="Factura"
-        filas={datos.facturas.map((f) => ({ ...f, id: f.factura }))} columnas={COLUMNAS_FACTURA}
-      />
-      <PendientesTabla
-        {...comun} titulo="Traslados por recibir" tipo="TRASLADO" primera="Documento"
-        filas={datos.traslados.map((t) => ({ ...t, id: t.documento }))} columnas={COLUMNAS_TRASLADO}
-      />
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'flex-start' }}>
+        <div style={lado}>
+          <PendientesTabla
+            {...comun} titulo="Facturas por ingresar" tipo="FACTURA" primera="Factura"
+            filas={datos.facturas.map((f) => ({ ...f, id: f.factura }))} columnas={COLUMNAS_FACTURA}
+          />
+        </div>
+        <div style={lado}>
+          <PendientesTabla
+            {...comun} titulo="Traslados por recibir" tipo="TRASLADO" primera="Documento"
+            filas={datos.traslados.map((t) => ({ ...t, id: t.documento }))} columnas={COLUMNAS_TRASLADO}
+          />
+        </div>
+      </div>
       <div style={mutedStyle}>
         Conviene ingresar en el ERP estas facturas y recibir estos traslados antes de iniciar; si no, el conteo
         mostrará diferencias que no son reales.

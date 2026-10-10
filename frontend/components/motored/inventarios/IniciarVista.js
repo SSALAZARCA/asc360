@@ -37,12 +37,12 @@ export default function IniciarVista({ conteo, permisos, acceso, onIniciado, onV
             </div>
           </div>
           <FotoInventario conteo={conteo} permisos={permisos} onIniciado={onIniciado} />
-          {conteo.estado === 'PROGRAMADO' && <PendientesPorSanear conteo={conteo} permisos={permisos} />}
         </div>
         <AccesoParejas
           conteo={conteo} permisos={permisos} acceso={acceso} ubicaciones={ubicaciones.lista}
         />
       </div>
+      {conteo.estado === 'PROGRAMADO' && <PendientesPorSanear conteo={conteo} permisos={permisos} />}
       <UbicacionesPanel conteo={conteo} permisos={permisos} ubicaciones={ubicaciones} />
     </section>
   );
