@@ -13,9 +13,9 @@ const API = {
   asesor: (filtros) => kpisApi.getAsesorDetalle(filtros, filtros.asesor),
 };
 
-/** Cache key of a tab; the single-asesor view (`asesor`) also depends on the chosen cédula. */
+/** Cache key of a tab; the single-asesor view (`asesor`) also depends on the chosen cédula, and Inventario ignores the months. */
 export const claveKpis = (tab, { meses, sucursales = [], hmcl, asesor }) =>
-  [tab, [...meses].sort().join(','), [...sucursales].sort().join(','), hmcl, ...(tab === 'asesor' ? [asesor] : [])].join('|');
+  [tab, tab === 'inventario' ? '' : [...meses].sort().join(','), [...sucursales].sort().join(','), hmcl, ...(tab === 'asesor' ? [asesor] : [])].join('|');
 
 export default function useKpis(tab, filtros, api = API) {
   const cache = useRef(new Map());

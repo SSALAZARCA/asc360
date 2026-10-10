@@ -32,6 +32,14 @@ describe('claveKpis', () => {
   });
 });
 
+describe('claveKpis of the inventory tab', () => {
+  it('ignores the months (the tab does not depend on the Período) but not stores or HMCL', () => {
+    expect(claveKpis('inventario', FILTROS)).toBe(claveKpis('inventario', { ...FILTROS, meses: ['2026-01'] }));
+    expect(claveKpis('inventario', FILTROS)).not.toBe(claveKpis('inventario', { ...FILTROS, sucursales: ['a'] }));
+    expect(claveKpis('inventario', FILTROS)).not.toBe(claveKpis('inventario', { ...FILTROS, hmcl: 'solo' }));
+  });
+});
+
 describe('useKpis', () => {
   it('fetches only the active tab and reuses the cache when coming back', async () => {
     const api = { ventas: jest.fn().mockResolvedValue({ v: 1 }), tiendas: jest.fn().mockResolvedValue({ t: 1 }), asesores: jest.fn() };

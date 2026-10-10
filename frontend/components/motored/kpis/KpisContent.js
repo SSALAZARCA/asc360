@@ -2,6 +2,7 @@
 /** "KPI's": header filters + tabs. ADMIN, COMPRAS and GERENCIA only (`useTableroGate`). */
 import { useCallback, useMemo, useState } from 'react';
 import useTableroGate from '../tablero-asesores/useTableroGate';
+import { fechaBogota } from '../../../lib/motored/fechas';
 import { getAsesorDetalle, getComisiones, getInventario, getTiendas, getVentas } from '../../../lib/motored/kpisApi';
 import KpiFrescura from './KpiFrescura';
 import KpiHeader from './KpiHeader';
@@ -67,13 +68,16 @@ export default function KpisContent() {
   const filtrosVista = useMemo(() => ({ ...filtros, asesor }), [filtros, asesor]);
   // Without an asesor yet (options loading, or nobody sold) there is nothing to fetch.
   const kpis = useKpis(enAsesores && !asesor ? 'asesores' : vista, filtrosVista, FETCHERS);
+  // Inventario is always "as of the last corte": it ignores the Período filter and says so in its place.
+  const enInventario = tab === 'inventario';
+  const etiquetaPeriodo = enInventario ? `Inventario al ${kpis.data?.corte ? fechaBogota(kpis.data.corte) : 'último corte'}` : null;
   const seleccionar = useCallback((cedula) => cambiar({ asesor: cedula }), [cambiar]);
   if (!allowed) return null;
   const sinVentas = opciones && !opciones.ultimo_mes;
   const sinAsesores = enAsesores && asesores?.length === 0;
   return (
     <div style={{ fontFamily: 'var(--motored-font-kpi)', color: COLOR.ink, display: 'flex', flexDirection: 'column', gap: 22, maxWidth: 1240, minWidth: 0, overflowX: 'clip' }}>
-      <KpiHeader opciones={opciones} filtros={filtros} onChange={cambiar} tab={tab} asesores={asesores} asesor={asesor} onAsesor={seleccionar} />
+      <KpiHeader opciones={opciones} filtros={filtros} onChange={cambiar} tab={tab} asesores={asesores} asesor={asesor} onAsesor={seleccionar} ocultarPeriodo={enInventario} etiquetaPeriodo={etiquetaPeriodo} />
       <KpiTabs value={tab} onChange={setTab} />
       {error && <Mensaje error>{error}</Mensaje>}
       {opciones && !sinVentas && !sinAsesores && !(enAsesores && falloAsesores) && <KpiFrescura data={kpis.data} alRecalcular={kpis.recargar} />}

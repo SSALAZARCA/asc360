@@ -66,6 +66,14 @@ describe('KpiHeader', () => {
     expect(screen.getByRole('button', { name: /Incluir HMCL/ })).toBeInTheDocument();
   });
 
+  it('hides the Período filter and shows the label in its place when asked to', () => {
+    render(<KpiHeader opciones={OPCIONES} filtros={{ meses: ytd, sucursales: [], hmcl: 'incluir' }} onChange={jest.fn()} ocultarPeriodo etiquetaPeriodo="Inventario al 30/09/2026" />);
+    expect(screen.queryByRole('button', { name: /Año corrido/ })).not.toBeInTheDocument();
+    expect(screen.getByText('Inventario al 30/09/2026')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Toda la red/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Incluir HMCL/ })).toBeInTheDocument();
+  });
+
   it('opens the period popover with presets and month chips; months without data are disabled', () => {
     const { onChange } = montar();
     fireEvent.click(screen.getByRole('button', { name: /Año corrido/ }));
