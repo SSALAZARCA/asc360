@@ -136,9 +136,10 @@ function almacen() {
 }
 
 /**
- * `{token, sesionId, etiqueta, sucursal, ubicacion}` or null. `ubicacion`
- * (`{codigo, nombre}`) is the last known location, used when the device
- * reopens offline.
+ * `{token, sesionId, etiqueta, sucursal, ubicacion, esPrueba}` or null.
+ * `ubicacion` (`{codigo, nombre}`) is the last known location, used when the
+ * device reopens offline; `esPrueba` lets the PRUEBA badge show at once
+ * after a reload, before `/sesion` answers.
  */
 export function leerSesionGuardada(slug) {
   const ls = almacen();
@@ -151,11 +152,13 @@ export function leerSesionGuardada(slug) {
   }
 }
 
-export function guardarSesion(slug, { token, sesionId, etiqueta, sucursal, ubicacion = null }) {
+export function guardarSesion(slug, {
+  token, sesionId, etiqueta, sucursal, ubicacion = null, esPrueba = false,
+}) {
   const ls = almacen();
   if (!ls) return;
   try {
-    const datos = { token, sesionId, etiqueta, sucursal, ubicacion };
+    const datos = { token, sesionId, etiqueta, sucursal, ubicacion, esPrueba: Boolean(esPrueba) };
     ls.setItem(PREFIJO_SESION + slug, JSON.stringify(datos));
   } catch {
     // Storage full or blocked: the session still works until a reload.

@@ -4,7 +4,7 @@
  * scanner field, the last reading, and the list of what was counted here.
  */
 import { useState } from 'react';
-import { AvisoLectura, BannerPendientes, NotaRonda, Rechazos } from './Avisos';
+import { AvisoLectura, BannerListaSinCargar, BannerPendientes, NotaRonda, Rechazos } from './Avisos';
 import BarraUbicacion from './BarraUbicacion';
 import EntradaEscaner from './EntradaEscaner';
 import ListaContado from './ListaContado';
@@ -60,6 +60,7 @@ export default function ConteoEscritorio({ conteo, onSalir }) {
     <div style={pantalla}>
       <Encabezado info={info} onSalir={onSalir} />
       <BannerPendientes sinConexion={conteo.sinConexion} pendientes={conteo.pendientes} />
+      <BannerListaSinCargar visible={conteo.listaSinCargar} />
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 20, padding: 'clamp(16px, 3vw, 24px) clamp(16px, 3vw, 32px) 40px', alignItems: 'flex-start' }}>
         <div style={{ flex: '999 1 520px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div role="tablist" aria-label="Modo" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>

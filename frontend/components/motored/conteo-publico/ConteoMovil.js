@@ -5,7 +5,7 @@
  * keyboard and is caught with no field focused.
  */
 import { Suspense, lazy, useRef, useState } from 'react';
-import { AvisoLectura, BannerPendientes, NotaRonda, Rechazos } from './Avisos';
+import { AvisoLectura, BannerListaSinCargar, BannerPendientes, NotaRonda, Rechazos } from './Avisos';
 import BarraUbicacion from './BarraUbicacion';
 import ListaContado from './ListaContado';
 import { ListaReconteos, TareaActiva } from './Reconteos';
@@ -94,6 +94,7 @@ export default function ConteoMovil({ conteo, onSalir }) {
         </button>
       </header>
       <BannerPendientes sinConexion={conteo.sinConexion} pendientes={conteo.pendientes} />
+      <BannerListaSinCargar visible={conteo.listaSinCargar} />
       <main style={{ flex: 1, padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
         <BarraUbicacion compacta ubicacion={ubicacion} ubicaciones={conteo.ubicaciones} ocupado={conteo.ocupado} onCambiar={conteo.cambiarUbicacion} />
         <TareaActiva tarea={tarea} onTerminar={conteo.terminarTarea} onSoltar={() => conteo.elegirTarea(null)} />

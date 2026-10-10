@@ -1,7 +1,8 @@
 /**
  * Feedback under the scanner: the unknown-code message from the prototype
  * (with "Registrar de todas formas"), the location-first prompt, errors,
- * and readings the server refused. Plus the offline / pending banner.
+ * and readings the server refused. Plus the offline / pending banner and
+ * the banner of a counted list that could not be loaded yet.
  */
 import { C } from './estilos';
 import { TEXTOS, textoPendientes } from './textos';
@@ -71,6 +72,23 @@ export function BannerPendientes({ sinConexion, pendientes }) {
       style={{ padding: '10px 16px', background: sinConexion ? C.alertaFondo : C.fondo, color: sinConexion ? C.alerta : C.medio, fontSize: 14, fontWeight: 700, borderBottom: `1px solid ${C.borde}` }}
     >
       {texto}
+    </div>
+  );
+}
+
+/**
+ * The counted list failed to load (e.g. a reload while the backend was
+ * restarting): warn instead of showing a silent 0, so the pair does not
+ * scan everything again while the screen retries.
+ */
+export function BannerListaSinCargar({ visible }) {
+  if (!visible) return null;
+  return (
+    <div
+      role="alert"
+      style={{ padding: '10px 16px', background: C.criticoFondo, color: C.critico, fontSize: 14, fontWeight: 700, borderBottom: `1px solid ${C.criticoBorde}` }}
+    >
+      {TEXTOS.listaSinCargar}
     </div>
   );
 }

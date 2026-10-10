@@ -11,6 +11,11 @@
  * offline it waits for the `online` event or the 30 s refresh. Sending the
  * queue before the PUT keeps older readings from moving the server's
  * current location back.
+ *
+ * When the counted list cannot be loaded on mount (offline, or the backend
+ * restarting after a deploy), the screen says so (`listaSinCargar`) instead
+ * of showing a silent 0, and retries the seed on the 30 s refresh and on
+ * `online` until it succeeds.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { crearConteoApi, esErrorDeRed } from '../../../lib/motored/conteoPublicoApi';
@@ -32,6 +37,11 @@ export default function useConteo({ slug, sesion, intervaloEnvioMs, onSesionPerd
   const ubicacionRef = useRef(ubicacion);
   const sincronizando = useRef(false);
   const sincronizarRef = useRef(() => {});
+  // The mount seed failed: the list still has to be loaded from the server.
+  const faltaSembrar = useRef(false);
+  const [listaSinCargar, setListaSinCargar] = useState(false);
+  const resembrando = useRef(false);
+  const reintentarRef = useRef(() => {});
   const [ubicaciones, setUbicaciones] = useState([]);
   const [tareas, setTareas] = useState([]);
   const [tareaId, setTareaId] = useState(null);
@@ -101,7 +111,12 @@ export default function useConteo({ slug, sesion, intervaloEnvioMs, onSesionPerd
       } catch (error) {
         manejarError(error);
         const local = ubicacionRef.current;
-        if (vivo && esErrorDeRed(error)) sembrar(null, cola.itemsActuales(), local && local.codigo);
+        if (vivo && error.status !== 401) {
+          // Show at least what is still queued, and warn until a retry seeds.
+          sembrar(null, cola.itemsActuales(), local && local.codigo);
+          faltaSembrar.current = true;
+          setListaSinCargar(true);
+        }
       }
       cola.reanudar();
       if (vivo) sincronizarRef.current();
@@ -110,8 +125,12 @@ export default function useConteo({ slug, sesion, intervaloEnvioMs, onSesionPerd
     const id = setInterval(() => {
       refrescar();
       sincronizarRef.current();
+      reintentarRef.current();
     }, REFRESCO_MS);
-    const enLinea = () => sincronizarRef.current();
+    const enLinea = () => {
+      sincronizarRef.current();
+      reintentarRef.current();
+    };
     window.addEventListener('online', enLinea);
     return () => {
       vivo = false;
@@ -122,22 +141,45 @@ export default function useConteo({ slug, sesion, intervaloEnvioMs, onSesionPerd
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [api]);
 
-  /** The server's current list of this location (after it was told). */
+  /**
+   * The server's current list of this location (after it was told, or to
+   * retry a failed mount seed). True when the list was seeded.
+   */
   const resembrarLista = useCallback(async (codigo) => {
-    cola.pausar();
+    await cola.pausar();
     try {
       const rec = await api.recientes();
       const actual = ubicacionRef.current;
       const delServidor = rec.ubicacion_actual && rec.ubicacion_actual.codigo;
-      if (actual && actual.codigo === codigo && delServidor === codigo) {
-        sembrar(rec, cola.itemsActuales(), codigo);
-      }
+      if (!actual || actual.codigo !== codigo || delServidor !== codigo) return false;
+      sembrar(rec, cola.itemsActuales(), codigo);
+      faltaSembrar.current = false;
+      setListaSinCargar(false);
+      return true;
     } catch (error) {
       manejarError(error);
+      return false;
     } finally {
       cola.reanudar();
     }
   }, [api, cola, manejarError, sembrar]);
+
+  /**
+   * Retries a failed mount seed. A location not told yet is left to
+   * `sincronizar`, which reseeds once the server knows it.
+   */
+  const reintentarSiembra = useCallback(async () => {
+    const actual = ubicacionRef.current;
+    if (!faltaSembrar.current || !actual || actual.sinConfirmar) return;
+    if (resembrando.current || sincronizando.current) return;
+    resembrando.current = true;
+    try {
+      await resembrarLista(actual.codigo);
+    } finally {
+      resembrando.current = false;
+    }
+  }, [resembrarLista]);
+  reintentarRef.current = reintentarSiembra;
 
   /** Tells the server one location; false when it must be retried. */
   const confirmar = useCallback(async (objetivo) => {
@@ -234,7 +276,7 @@ export default function useConteo({ slug, sesion, intervaloEnvioMs, onSesionPerd
 
   return {
     // Changing location never waits for the network, so it is never busy.
-    info, ubicacion, ubicaciones, tareas, tarea, ocupado: false, lecturas,
+    info, ubicacion, ubicaciones, tareas, tarea, ocupado: false, lecturas, listaSinCargar,
     pendientes: cola.pendientes, sinConexion: cola.sinConexion,
     cambiarUbicacion, elegirTarea: setTareaId, terminarTarea, salir,
   };

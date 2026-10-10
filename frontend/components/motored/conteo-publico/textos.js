@@ -16,6 +16,7 @@ export const TEXTOS = {
   ubicacionInvalida: 'Escriba o escanee un código de ubicación de 1 a 30 caracteres.',
   pendientesSalir: 'Hay lecturas sin enviar. Espere a tener conexión antes de salir.',
   pendientesTerminar: 'Hay lecturas sin enviar. Espere a tener conexión para terminar el reconteo.',
+  listaSinCargar: 'No se pudo cargar lo contado. Reintentando… No vuelva a escanear lo que ya contó.',
   sinCamara:
     'Este celular no permite escanear con la cámara. Escriba el código o conecte un lector Bluetooth: funciona como un teclado.',
 };

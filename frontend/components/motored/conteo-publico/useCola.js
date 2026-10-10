@@ -123,7 +123,9 @@ export default function useCola({ slug, sesionId, api, intervaloMs, eventos }) {
   useEffect(() => {
     const enLinea = () => {
       proximo.current = 0;
-      paso();
+      // Paused while the screen seeds its list: sending now could count a
+      // reading both in the server summary and as a local pending one.
+      if (!pausada.current) paso();
     };
     const fuera = () => setSinConexion(true);
     window.addEventListener('online', enLinea);
@@ -167,8 +169,16 @@ export default function useCola({ slug, sesionId, api, intervaloMs, eventos }) {
     pausada.current = false;
   }, []);
 
-  const pausar = useCallback(() => {
+  /**
+   * Stops sending and waits for a request already in flight, so a reseed
+   * reads the queue and the server at the same point: a reading is then
+   * either in the server's list or still queued, never lost between both.
+   */
+  const pausar = useCallback(async () => {
     pausada.current = true;
+    for (let intento = 0; intento < 200 && enviando.current; intento += 1) {
+      await esperar(30);
+    }
   }, []);
 
   const itemsActuales = useCallback(() => itemsRef.current, []);
