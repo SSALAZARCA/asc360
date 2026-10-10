@@ -2,8 +2,11 @@
  * One row of the differences table (WU12): the state pill derived from the
  * reconteo and the thresholds, and the leader's action. Reconteos exist
  * only in EN_RECONTEO (the backend rejects them during the first round).
+ * "Ver detalle" opens a second row with the counted quantity per location
+ * and pair (odd/tasks/motored-conteo-panel-busqueda.md).
  */
-import { formatCantidad, formatPesosConSigno, parejaCorta } from './conteosFormato';
+import DetalleReferencia from './DetalleReferencia';
+import { formatCantidad, formatHora, formatPesosConSigno, parejaCorta } from './conteosFormato';
 import { monoStyle, mutedStyle, pildoraStyle } from './estilos';
 
 const td = { padding: '12px 8px', verticalAlign: 'middle' };
@@ -61,17 +64,40 @@ function Accion({ fila, onPedir, onAsignar, onCancelar, ocupado }) {
   );
 }
 
-export default function DiferenciaFila({ fila, umbrales, opera, enReconteo, ...acciones }) {
+const detalleBtnStyle = {
+  marginTop: '4px', minHeight: '32px', padding: '0 8px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer',
+  border: '1px solid var(--motored-border, #e4e4e7)', borderRadius: '6px',
+  background: 'var(--motored-surface, #ffffff)', color: 'var(--motored-text, #1a1a18)',
+};
+
+export default function DiferenciaFila({
+  fila, umbrales, opera, enReconteo, conteoId, base, abierta = false, onAlternar, ...acciones
+}) {
   const [texto, tono] = estadoDiferencia(fila, umbrales);
   const negativo = Number(fila.valor) < 0;
   const accion = opera && enReconteo ? <Accion fila={fila} {...acciones} /> : <span style={mutedStyle}>—</span>;
+  const fondo = fila.critico ? 'var(--motored-danger-bg, #fdecea)' : undefined;
   return (
-    <tr style={{ borderTop: '1px solid var(--motored-border, #e4e4e7)', background: fila.critico ? 'var(--motored-danger-bg, #fdecea)' : undefined }}>
+    <>
+    <tr style={{ borderTop: '1px solid var(--motored-border, #e4e4e7)', background: fondo }}>
       <td style={{ ...td, paddingLeft: '1.25rem' }}>
         <div style={{ ...monoStyle, fontWeight: 600 }}>{fila.codigo}</div>
         <div style={{ ...mutedStyle, fontSize: '0.75rem' }}>{fila.descripcion || 'Código fuera del catálogo'}</div>
+        {onAlternar && (
+          <button
+            type="button" style={detalleBtnStyle} aria-expanded={abierta}
+            aria-label={`${abierta ? 'Ocultar' : 'Ver'} detalle de ${fila.codigo}`} onClick={() => onAlternar(fila.codigo)}
+          >
+            {abierta ? 'Ocultar detalle' : 'Ver detalle'}
+          </button>
+        )}
       </td>
-      <td style={{ ...td, fontSize: '0.8rem' }}>{fila.ubicaciones.join(' · ') || '—'}</td>
+      <td style={{ ...td, fontSize: '0.8rem' }}>
+        <div>{fila.ubicaciones.join(' · ') || '—'}</div>
+        {fila.ultima_lectura_en && (
+          <div style={{ ...mutedStyle, fontSize: '0.75rem' }}>{`Leída ${formatHora(fila.ultima_lectura_en)}`}</div>
+        )}
+      </td>
       <td style={tdNum}>{formatCantidad(fila.sistema)}</td>
       <td style={tdNum}>{formatCantidad(fila.contado)}</td>
       <td style={{ ...tdNum, fontWeight: 600, color: negativo ? 'var(--motored-danger, #c0392b)' : 'var(--motored-success, #15803d)' }}>
@@ -80,5 +106,13 @@ export default function DiferenciaFila({ fila, umbrales, opera, enReconteo, ...a
       <td style={td}><span style={pildoraStyle(...PILDORAS[tono])}>{texto}</span></td>
       <td style={{ ...td, textAlign: 'right', paddingRight: '1.25rem' }}>{accion}</td>
     </tr>
+    {abierta && (
+      <tr style={{ background: fondo }}>
+        <td colSpan={7} style={{ padding: '0 1.25rem 12px' }}>
+          <DetalleReferencia conteoId={conteoId} codigo={fila.codigo} base={base} />
+        </td>
+      </tr>
+    )}
+    </>
   );
 }

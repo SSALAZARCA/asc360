@@ -61,7 +61,8 @@ export default function PanelVivo({ conteo, permisos, acceso, onVerAcceso, onCam
       <Aviso aviso={panel.aviso} />
       <div style={filaFlexStyle}>
         <DiferenciasTabla
-          conteo={conteo} diferencias={panel.diferencias} opera={opera} ocupado={panel.ocupado}
+          conteo={conteo} diferencias={panel.diferencias} contadas={panel.vivo?.diferencias_resumen?.contadas}
+          opera={opera} ocupado={panel.ocupado}
           onPedir={panel.acciones.pedirReconteo} onCancelar={panel.acciones.cancelarReconteo}
           onAsignar={setAsignando} onRepartir={panel.acciones.repartir}
         />

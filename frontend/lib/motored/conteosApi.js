@@ -75,8 +75,12 @@ export const editarUbicacion = (id, ubicacionId, payload) =>
 export const terminarRonda = (id) => enviar(`${BASE}/${id}/terminar-ronda`);
 /** The live panel (WU12b). With the last `version` still current the answer is `{ version, sin_cambios: true }`. */
 export const obtenerPanel = (id, version) => motoredFetchJson(`${BASE}/${id}/panel${consulta({ version })}`);
-export const obtenerDiferencias = (id, filtro = 'todas') =>
-  motoredFetchJson(`${BASE}/${id}/diferencias${consulta({ filtro })}`);
+/** `filtro`: todas | criticas | reconteo | contadas. `q` searches every reference of the conteo (code key or name). */
+export const obtenerDiferencias = (id, filtro = 'todas', q) =>
+  motoredFetchJson(`${BASE}/${id}/diferencias${consulta({ filtro, q })}`);
+/** One reference's live readings per location and pair, with the last reading time. */
+export const obtenerDetalleDiferencia = (id, codigo) =>
+  motoredFetchJson(`${BASE}/${id}/diferencias/detalle${consulta({ codigo })}`);
 export const pedirReconteo = (id, codigo) => enviar(`${BASE}/${id}/reconteos`, { codigo });
 export const asignarReconteo = (id, reconteoId, body) =>
   enviar(`${BASE}/${id}/reconteos/${reconteoId}/asignar`, body);

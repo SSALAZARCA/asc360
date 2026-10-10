@@ -117,6 +117,12 @@ export function parejasSinActividad(sesiones, ahora = Date.now()) {
     .filter((p) => p.minutos != null);
 }
 
+/** "13:05" (local time) of an ISO instant; a dash without one. */
+export function formatHora(instante) {
+  if (!instante) return '—';
+  return new Date(instante).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
+}
+
 /** The pair label without its members: "Pareja 3 · Sofía L. y Diego M." -> "Pareja 3". */
 export function parejaCorta(etiqueta) {
   return (etiqueta || '').split(' · ')[0];
