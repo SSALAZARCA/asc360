@@ -6,7 +6,8 @@
  * the authenticated blob path.
  */
 import {
-  asignarReconteo, cerrarConteo, descargarAjustes, iniciarConteo, listarConteos,
+  asignarReconteo, cerrarConteo, descargarAjustes, desverificarPendiente, iniciarConteo, listarConteos,
+  obtenerPendientesConteo, verificarPendiente,
   obtenerDiferencias, obtenerPanel, obtenerQrObjectUrl, programarConteo,
 } from '../lib/motored/conteosApi';
 
@@ -67,7 +68,26 @@ describe('conteosApi', () => {
     await iniciarConteo('c1', { confirmarAntiguedad: true });
     const [url, opciones] = fetch.mock.calls[0];
     expect(url).toBe(`${BASE}/conteos/c1/iniciar`);
-    expect(JSON.parse(opciones.body)).toEqual({ confirmar_antiguedad: true });
+    expect(JSON.parse(opciones.body)).toEqual({ confirmar_antiguedad: true, confirmar_pendientes: false });
+  });
+
+  it('starts with the pending-items confirmation flag', async () => {
+    fetch.mockResolvedValue(respuesta(200, { codigo: '482913' }));
+    await iniciarConteo('c1', { confirmarPendientes: true });
+    expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ confirmar_antiguedad: false, confirmar_pendientes: true });
+  });
+
+  it('reads, marks and unmarks the pending items of a conteo', async () => {
+    fetch.mockResolvedValue(respuesta(200, { facturas: [] }));
+    await obtenerPendientesConteo('c1');
+    await verificarPendiente('c1', 'FACTURA', 'RH 1');
+    await desverificarPendiente('c1', 'TRASLADO', 'D|B07|B01');
+    const [[leer], [marcar, opcionesMarcar], [quitar, opcionesQuitar]] = fetch.mock.calls;
+    expect(leer).toBe(`${BASE}/conteos/c1/pendientes`);
+    expect(marcar).toBe(`${BASE}/conteos/c1/pendientes/verificar`);
+    expect(JSON.parse(opcionesMarcar.body)).toEqual({ tipo: 'FACTURA', clave: 'RH 1' });
+    expect(quitar).toBe(`${BASE}/conteos/c1/pendientes/desverificar`);
+    expect(JSON.parse(opcionesQuitar.body)).toEqual({ tipo: 'TRASLADO', clave: 'D|B07|B01' });
   });
 
   it('turns a 409 into an Error with mensaje, code and datos', async () => {

@@ -33,8 +33,20 @@ export const obtenerConteo = (id) => motoredFetchJson(`${BASE}/${id}`);
 
 // --- start and access -------------------------------------------------------
 
-export const iniciarConteo = (id, { confirmarAntiguedad = false } = {}) =>
-  enviar(`${BASE}/${id}/iniciar`, { confirmar_antiguedad: confirmarAntiguedad });
+/** Each 409 warning (INVENTARIO_ANTIGUO, PENDIENTES_POR_SANEAR) has its own confirmation flag. */
+export const iniciarConteo = (id, { confirmarAntiguedad = false, confirmarPendientes = false } = {}) =>
+  enviar(`${BASE}/${id}/iniciar`, {
+    confirmar_antiguedad: confirmarAntiguedad, confirmar_pendientes: confirmarPendientes,
+  });
+
+// --- pendientes por sanear (WU15) -------------------------------------------
+
+/** The store's invoices pending ingreso and transfers pending reception, with the load dates. */
+export const obtenerPendientesConteo = (id) => motoredFetchJson(`${BASE}/${id}/pendientes`);
+/** "Verificado en el ERP" on this conteo only; both answer the refreshed list. */
+export const verificarPendiente = (id, tipo, clave) => enviar(`${BASE}/${id}/pendientes/verificar`, { tipo, clave });
+export const desverificarPendiente = (id, tipo, clave) =>
+  enviar(`${BASE}/${id}/pendientes/desverificar`, { tipo, clave });
 export const rotarCodigo = (id) => enviar(`${BASE}/${id}/codigo/rotar`);
 
 /** The QR PNG fetched with the token, as an object URL for an `<img>`. */

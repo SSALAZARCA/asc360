@@ -61,6 +61,10 @@ beforeEach(() => {
   api.obtenerConteo.mockResolvedValue(PROGRAMADO);
   api.listarSucursalesConteo.mockResolvedValue(SUCURSALES);
   api.listarUbicaciones.mockResolvedValue(UBICACIONES);
+  api.obtenerPendientesConteo.mockResolvedValue({
+    facturas: [], traslados: [], por_sanear: { facturas: 0, traslados: 0 },
+    cargas: { facturas_pedidos: null, ingresos_facturas: null, traslados: null }, verificable_desde: null,
+  });
   api.listarConteos.mockResolvedValue([]);
   api.obtenerDiferencias.mockResolvedValue(DIFERENCIAS);
   api.listarSesiones.mockResolvedValue([]);
@@ -87,11 +91,11 @@ describe('Start screen', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Iniciar conteo de Quilichao' }));
     const dialogo = await screen.findByRole('dialog');
     expect(within(dialogo).getByText(/se cargó hace 30.0 horas/)).toBeInTheDocument();
-    expect(api.iniciarConteo).toHaveBeenCalledWith('c1', { confirmarAntiguedad: false });
+    expect(api.iniciarConteo).toHaveBeenCalledWith('c1', { confirmarAntiguedad: false, confirmarPendientes: false });
 
     fireEvent.click(within(dialogo).getByRole('button', { name: 'Iniciar de todos modos' }));
 
-    await waitFor(() => expect(api.iniciarConteo).toHaveBeenLastCalledWith('c1', { confirmarAntiguedad: true }));
+    await waitFor(() => expect(api.iniciarConteo).toHaveBeenLastCalledWith('c1', { confirmarAntiguedad: true, confirmarPendientes: false }));
     expect(await screen.findByText('482 913')).toBeInTheDocument();
     expect(screen.getByText('https://asc360.online/motored/c/K7Q2')).toBeInTheDocument();
     expect(await screen.findByAltText('Código QR del conteo')).toHaveAttribute('src', 'blob:qr');

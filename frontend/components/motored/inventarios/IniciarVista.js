@@ -2,13 +2,14 @@
 /**
  * Start and access screen (prototype "Iniciar", WU11): 1. Tienda,
  * 2. Foto del inventario (age, staleness warning, "Iniciar conteo"),
- * 3. Acceso para las parejas (QR, code, link, print, rotate), and the
- * store's locations below. The store is fixed when the count is scheduled.
+ * 3. Acceso para las parejas (QR, code, link, print, rotate), 4. Pendientes
+ * por sanear (before the start only, WU15), and the store's locations below. The store is fixed when the count is scheduled.
  */
 import { fechaBogota } from '../../../lib/motored/fechas';
 import { ESTADOS_ABIERTOS } from './conteosFormato';
 import { cardStyle, filaFlexStyle, h2Style, mutedStyle, paginaStyle, tituloStyle } from './estilos';
 import FotoInventario from './FotoInventario';
+import PendientesPorSanear from './PendientesPorSanear';
 import AccesoParejas from './AccesoParejas';
 import UbicacionesPanel from './UbicacionesPanel';
 import useUbicaciones from './useUbicaciones';
@@ -36,6 +37,7 @@ export default function IniciarVista({ conteo, permisos, acceso, onIniciado, onV
             </div>
           </div>
           <FotoInventario conteo={conteo} permisos={permisos} onIniciado={onIniciado} />
+          {conteo.estado === 'PROGRAMADO' && <PendientesPorSanear conteo={conteo} permisos={permisos} />}
         </div>
         <AccesoParejas
           conteo={conteo} permisos={permisos} acceso={acceso} ubicaciones={ubicaciones.lista}

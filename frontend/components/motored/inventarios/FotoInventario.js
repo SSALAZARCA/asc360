@@ -1,18 +1,20 @@
 'use client';
 /**
  * "2. Foto del inventario" (WU11). Before the start: the store's latest
- * inventory and its age, and "Iniciar conteo". A stale inventory answers
- * 409 INVENTARIO_ANTIGUO: a dialog shows the backend message and lets the
- * leader start anyway (`confirmar_antiguedad`). After the start: the frozen
- * snapshot the count runs against.
+ * inventory and its age, and "Iniciar conteo". The start may warn twice
+ * (`useIniciarConteo`): a stale inventory (409 INVENTARIO_ANTIGUO) and the
+ * store's pending invoices / transfers (409 PENDIENTES_POR_SANEAR, WU15); a
+ * dialog lets the leader start anyway. After the start: the frozen snapshot
+ * the count runs against.
  */
 import { useEffect, useState } from 'react';
 import DialogoPedido from '../pedidos/DialogoPedido';
 import InfoTooltip from '../InfoTooltip';
-import { iniciarConteo, listarSucursalesConteo } from '../../../lib/motored/conteosApi';
+import { listarSucursalesConteo } from '../../../lib/motored/conteosApi';
 import { fechaHoraBogota } from '../../../lib/motored/fechas';
 import { formatEntero, formatPesos } from './conteosFormato';
 import InventarioTienda from './InventarioTienda';
+import useIniciarConteo from './useIniciarConteo';
 import { avisoStyle, cardStyle, errorStyle, h2Style, mutedStyle } from './estilos';
 
 const AYUDA_FOTO = 'Copia del inventario del sistema que se toma al iniciar. Contra ella se comparan las lecturas; las cargas posteriores en Maestros no la cambian.';
@@ -29,26 +31,6 @@ function useSucursal(conteo) {
     return () => { vivo = false; };
   }, [conteo.estado, conteo.sucursal.id]);
   return { sucursal, error };
-}
-
-function useIniciar(conteoId, onIniciado) {
-  const [ocupado, setOcupado] = useState(false);
-  const [error, setError] = useState('');
-  const [antiguo, setAntiguo] = useState('');
-  const iniciar = async (confirmarAntiguedad) => {
-    setOcupado(true);
-    setError('');
-    try {
-      const salida = await iniciarConteo(conteoId, { confirmarAntiguedad });
-      setAntiguo('');
-      onIniciado(salida);
-    } catch (err) {
-      if (err.code === 'INVENTARIO_ANTIGUO' && !confirmarAntiguedad) setAntiguo(err.message);
-      else setError(err.message || 'No se pudo iniciar el conteo.');
-      setOcupado(false);
-    }
-  };
-  return { ocupado, error, antiguo, iniciar, cancelar: () => setAntiguo('') };
 }
 
 function Snapshot({ snapshot }) {
@@ -68,7 +50,7 @@ function Snapshot({ snapshot }) {
 
 export default function FotoInventario({ conteo, permisos, onIniciado }) {
   const { sucursal, error: errorSucursal } = useSucursal(conteo);
-  const inicio = useIniciar(conteo.id, onIniciado);
+  const inicio = useIniciarConteo(conteo.id, onIniciado);
   const programado = conteo.estado === 'PROGRAMADO';
 
   return (
@@ -87,18 +69,18 @@ export default function FotoInventario({ conteo, permisos, onIniciado }) {
       {programado && permisos.opera && (
         <button
           type="button" className="motored-btn motored-btn-primary" style={{ minHeight: '48px', fontSize: '1rem' }}
-          disabled={inicio.ocupado} onClick={() => inicio.iniciar(false)}
+          disabled={inicio.ocupado} onClick={inicio.empezar}
         >
           Iniciar conteo de {conteo.sucursal.nombre}
         </button>
       )}
       {inicio.error && <p role="alert" style={errorStyle}>{inicio.error}</p>}
-      {inicio.antiguo && (
+      {inicio.aviso && (
         <DialogoPedido
-          titulo="El inventario no está al día"
-          descripcion={<span>{inicio.antiguo}</span>}
+          titulo={inicio.aviso.titulo}
+          descripcion={<span>{inicio.aviso.mensaje}</span>}
           ocupado={inicio.ocupado} textoConfirmar="Iniciar de todos modos"
-          onConfirm={() => inicio.iniciar(true)} onCancel={inicio.cancelar}
+          onConfirm={inicio.confirmar} onCancel={inicio.cancelar}
         />
       )}
     </div>
