@@ -19,6 +19,15 @@ export function normalizar(texto) {
   return (texto || '').trim().toUpperCase();
 }
 
+/**
+ * The match key of a code: upper case, only A-Z and digits kept, so
+ * `94109-12000S`, `9410912000S` and `94109 12000s` share one key. Mirrors
+ * `clave_codigo` in backend/app/motored/services/conteos/lecturas.py.
+ */
+export function claveCodigo(texto) {
+  return (texto || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
 export const PREFIJO_UBICACION = 'UBI-';
 
 export function esEtiquetaUbicacion(codigo) {

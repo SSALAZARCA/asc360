@@ -4,21 +4,43 @@
  * checked instantly and offline. The master is global (not per store), so
  * it reveals nothing about what the store should hold.
  *
- * `buscar(codigo)`: `{codigo, nombre}`, `null` when the code is not in the
- * master, or `undefined` while no master is available (the server decides).
+ * `buscar(codigo)`: `{codigo, nombre}` with the MASTER code, `{ambiguo:
+ * [codigos]}` when only the key matches and two or more master codes share
+ * it, `null` when the code is not in the master, or `undefined` while no
+ * master is available (the server decides). The key index is built here
+ * from the codes the catalogue already carries (no payload change), with
+ * the server's rule (odd/tasks/motored-conteo-codigo-sin-guiones.md).
  */
 import { useCallback, useEffect, useState } from 'react';
-import { normalizar } from './registro';
+import { claveCodigo, esEtiquetaUbicacion, normalizar } from './registro';
 
 const CLAVE = 'motored_conteo_catalogo';
 
-function mapaDesde(referencias) {
-  const mapa = new Map();
-  for (const [codigo, nombre] of referencias || []) {
-    const clave = normalizar(codigo);
-    if (!mapa.has(clave)) mapa.set(clave, { codigo, nombre: nombre || '' });
+/** `{exactos: Map(normalized code -> ref), claves: Map(key -> [ref])}`. */
+export function indiceDesde(referencias) {
+  const exactos = new Map();
+  const claves = new Map();
+  for (const [crudo, nombre] of referencias || []) {
+    const codigo = normalizar(crudo);
+    if (!codigo || exactos.has(codigo)) continue;
+    const referencia = { codigo, nombre: nombre || '' };
+    exactos.set(codigo, referencia);
+    const clave = claveCodigo(codigo);
+    if (clave) claves.set(clave, [...(claves.get(clave) || []), referencia]);
   }
-  return mapa;
+  return { exactos, claves };
+}
+
+/** Exact code first; then the key, never for a `UBI-` label. */
+export function buscarEn(indice, texto) {
+  const codigo = normalizar(texto);
+  const exacto = indice.exactos.get(codigo);
+  if (exacto) return exacto;
+  if (esEtiquetaUbicacion(codigo)) return null;
+  const hallados = indice.claves.get(claveCodigo(codigo)) || [];
+  if (hallados.length === 1) return hallados[0];
+  if (hallados.length > 1) return { ambiguo: hallados.map((r) => r.codigo) };
+  return null;
 }
 
 function leerCache() {
@@ -39,16 +61,16 @@ function guardarCache(etag, referencias) {
 }
 
 export default function useCatalogo(api) {
-  const [mapa, setMapa] = useState(null);
+  const [indice, setIndice] = useState(null);
 
   useEffect(() => {
     let vivo = true;
     const cache = leerCache();
-    if (cache) setMapa(mapaDesde(cache.referencias));
+    if (cache) setIndice(indiceDesde(cache.referencias));
     api.catalogo(cache && cache.etag)
       .then((r) => {
         if (!vivo || r.noCambio) return;
-        setMapa(mapaDesde(r.referencias));
+        setIndice(indiceDesde(r.referencias));
         guardarCache(r.etag, r.referencias);
       })
       .catch(() => {});
@@ -58,9 +80,9 @@ export default function useCatalogo(api) {
   }, [api]);
 
   const buscar = useCallback((codigo) => {
-    if (!mapa) return undefined;
-    return mapa.get(normalizar(codigo)) || null;
-  }, [mapa]);
+    if (!indice) return undefined;
+    return buscarEn(indice, codigo);
+  }, [indice]);
 
   return buscar;
 }

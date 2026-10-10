@@ -266,6 +266,56 @@ describe('counting on a laptop', () => {
   });
 });
 
+describe('codes without the master hyphens', () => {
+  async function listo(s) {
+    await screen.findByText('ESTANTE A3', { selector: '[data-ubicacion-actual]' });
+    await waitFor(() => expect(s.llamadas.some((l) => l.ruta === '/catalogo')).toBe(true));
+  }
+
+  it('a hyphen-less scan counts under the master code', async () => {
+    const s = crearServidor({ catalogo: [['94109-12000S', 'TORNILLO']] });
+    sesionGuardada();
+    montar();
+    await listo(s);
+    await escanear(user, '9410912000S');
+    await waitFor(() => expect(s.lecturas).toHaveLength(1));
+    expect(s.lecturas[0]).toMatchObject({ codigo_leido: '94109-12000S', cantidad: 1 });
+    expect(screen.queryByText(/Código no encontrado/)).not.toBeInTheDocument();
+  });
+
+  it('an ambiguous scan adds nothing and asks for the exact code', async () => {
+    const s = crearServidor({ catalogo: [['AB-12', 'BUJE'], ['AB.12', 'BUJE LARGO']] });
+    sesionGuardada();
+    montar();
+    await listo(s);
+    await escanear(user, 'AB12');
+    expect(await screen.findByText(
+      'Código ambiguo: coincide con AB-12 y AB.12. Escríbalo exactamente como en el maestro.',
+    )).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Registrar de todas formas' })).not.toBeInTheDocument();
+    await act(() => new Promise((r) => setTimeout(r, INTERVALO * 4)));
+    expect(s.envios()).toHaveLength(0);
+    await escanear(user, 'AB.12');
+    await waitFor(() => expect(s.lecturas).toHaveLength(1));
+    expect(s.lecturas[0]).toMatchObject({ codigo_leido: 'AB.12' });
+  });
+
+  it('a hyphen-less scan counts for its reconteo task under the master code', async () => {
+    const tarea = {
+      id: 'rec-1', codigo: '17210-K0R-V00', descripcion: 'ELEMENTO FILTRO AIRE', ubicaciones: [], estado: 'ASIGNADO',
+    };
+    const s = crearServidor({ estado: 'EN_RECONTEO', reconteos: [tarea] });
+    sesionGuardada();
+    montar();
+    await listo(s);
+    await user.click(await screen.findByRole('tab', { name: 'Reconteos asignados (1)' }));
+    await user.click(within(screen.getByRole('tabpanel')).getByRole('button', { name: 'Contar este reconteo' }));
+    await escanear(user, '17210K0RV00');
+    await waitFor(() => expect(s.lecturas).toHaveLength(1));
+    expect(s.lecturas[0]).toMatchObject({ codigo_leido: '17210-K0R-V00', reconteo_id: 'rec-1' });
+  });
+});
+
 describe('offline queue', () => {
   it('keeps readings on a network error, shows the banner, retries and handles duplicadas', async () => {
     let falla = true;

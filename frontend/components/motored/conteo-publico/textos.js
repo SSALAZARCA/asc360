@@ -37,6 +37,13 @@ export function textoMotivo(motivo) {
   return MOTIVOS[motivo] || 'No se pudo registrar';
 }
 
+/** Two or more master codes share the scanned code's key. */
+export function textoAmbiguo(codigos) {
+  const lista = codigos.length > 1
+    ? `${codigos.slice(0, -1).join(', ')} y ${codigos[codigos.length - 1]}` : codigos.join('');
+  return `Código ambiguo: coincide con ${lista}. Escríbalo exactamente como en el maestro.`;
+}
+
 export function textoPendientes(n) {
   return n === 1 ? '1 lectura pendiente de enviar' : `${n} lecturas pendientes de enviar`;
 }

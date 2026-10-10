@@ -13,7 +13,7 @@ import {
   resumenUbicacion, totalDe,
 } from './registro';
 import { pitar, vibrar } from './sonidos';
-import { TEXTOS, textoMotivo } from './textos';
+import { TEXTOS, textoAmbiguo, textoMotivo } from './textos';
 
 export default function useLecturas({ cola, buscar, ubicacion, estado, tarea, onEtiquetaUbicacion }) {
   const [bases, setBases] = useState({});
@@ -69,24 +69,31 @@ export default function useLecturas({ cola, buscar, ubicacion, estado, tarea, on
       error({ tipo: 'sinUbicacion', texto: TEXTOS.sinUbicacion });
       return;
     }
-    if (tarea) {
-      if (codigo !== normalizar(tarea.codigo)) {
-        error({ tipo: 'error', texto: `Este código no es el del reconteo activo (${tarea.codigo}). No se sumó nada.` });
-        return;
-      }
-      agregar(codigo, 1, metodo, { reconteoId: tarea.id, descripcion: tarea.descripcion || '' });
-      return;
-    }
-    if (estado === 'EN_RECONTEO') {
+    if (!tarea && estado === 'EN_RECONTEO') {
       error({ tipo: 'error', texto: TEXTOS.rondaTerminada });
       return;
     }
+    // The catalogue answers with the MASTER code, so a label without the
+    // master's hyphens is counted under the master code.
     const referencia = buscar(codigo);
+    if (referencia && referencia.ambiguo) {
+      error({ tipo: 'ambiguo', texto: textoAmbiguo(referencia.ambiguo) });
+      return;
+    }
+    const enMaestro = referencia ? referencia.codigo : codigo;
+    if (tarea) {
+      if (enMaestro !== normalizar(tarea.codigo)) {
+        error({ tipo: 'error', texto: `Este código no es el del reconteo activo (${tarea.codigo}). No se sumó nada.` });
+        return;
+      }
+      agregar(enMaestro, 1, metodo, { reconteoId: tarea.id, descripcion: tarea.descripcion || '' });
+      return;
+    }
     if (referencia === null) {
       error({ tipo: 'desconocido', codigo, metodo });
       return;
     }
-    agregar(codigo, 1, metodo, { descripcion: referencia ? referencia.nombre : '' });
+    agregar(enMaestro, 1, metodo, { descripcion: referencia ? referencia.nombre : '' });
   }, [agregar, buscar, error, estado, onEtiquetaUbicacion, tarea, ubic]);
 
   const forzarDesconocido = useCallback(() => {
