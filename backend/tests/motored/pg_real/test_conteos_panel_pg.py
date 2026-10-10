@@ -101,7 +101,9 @@ async def test_partial_accuracy_and_the_summary(con_cero):
     assert exactitud["valor_diferencia_abs"] == "490000.00"
     assert cuerpo["diferencias_resumen"] == {
         "criticas": lista["criticas"], "en_reconteo": lista["en_reconteo"],
-        "total": lista["total"]}
+        "total": lista["total"],
+        # Counted: A, B, C, D and the unknown code (E was never read).
+        "contadas": 5}
 
 
 async def test_nothing_counted_yet_has_no_partial_accuracy(con_cero):

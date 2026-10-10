@@ -43,8 +43,9 @@ from app.motored.models.conteo import ESTADOS_ABIERTOS, Conteo
 from app.motored.schemas import conteos as esquemas
 from app.motored.services.auth import MotoredUser
 from app.motored.services.conteos import (
-    acceso, cierre, consultas, diferencias, errores, excel_ajustes, panel,
-    pendientes, reconteos, sesiones, snapshot, ubicaciones,
+    acceso, busqueda, cierre, consultas, diferencias, errores,
+    excel_ajustes, panel, pendientes, reconteos, sesiones, snapshot,
+    ubicaciones,
 )
 from app.motored.services.corridas.exportacion_hmcl import (
     content_disposition,
@@ -618,31 +619,75 @@ def _diferencia(fila, etiquetas) -> esquemas.DiferenciaSalida:
     return esquemas.DiferenciaSalida(**datos)
 
 
+def _umbrales(conteo: Conteo) -> esquemas.UmbralesSalida:
+    return esquemas.UmbralesSalida(
+        reconteo=conteo.umbral_reconteo_pesos,
+        critico=conteo.umbral_critico_pesos)
+
+
+async def _buscar(
+        db: AsyncSession, conteo: Conteo, filtro: str,
+        q: Optional[str]) -> esquemas.DiferenciasSalida:
+    """The on-demand read over every code: "Contadas" or a search."""
+    lista = await busqueda.todas(db, conteo)
+    etiquetas = await _etiquetas(db, conteo.id)
+    return esquemas.DiferenciasSalida(
+        estado=conteo.estado, parcial=conteo.estado == "EN_CONTEO",
+        umbrales=_umbrales(conteo), **busqueda.cuentas(lista),
+        items=[_diferencia(f, etiquetas)
+               for f in busqueda.elegir(lista, filtro, q)])
+
+
 @router.get(
     "/{conteo_id}/diferencias", response_model=esquemas.DiferenciasSalida)
 async def ver_diferencias(
     conteo_id: uuid.UUID,
     filtro: esquemas.FiltroDiferencias = Query(default="todas"),
+    q: Optional[str] = Query(default=None, max_length=100),
     usuario: MotoredUser = Depends(lector),
     db: AsyncSession = Depends(get_motored_db_or_503),
 ):
     """Leader-only: system vs counted per code, valued at the frozen
-    cost, largest |value| first. `parcial` while round 1 is open."""
+    cost, largest |value| first. `parcial` while round 1 is open.
+    "contadas" (counted codes, latest reading first) and a search `q`
+    (code key or part of the name, over every code of the conteo) are
+    on-demand reads (odd/tasks/motored-conteo-panel-busqueda.md)."""
     try:
         conteo = await consultas.conteo_visible(db, conteo_id, usuario)
     except errores.ErrorConteo as error:
         raise error_http(error) from error
+    if filtro == "contadas" or (q and q.strip()):
+        return await _buscar(db, conteo, filtro, q)
     lista = await diferencias.listar(db, conteo)
     etiquetas = await _etiquetas(db, conteo.id)
     return esquemas.DiferenciasSalida(
         estado=conteo.estado, parcial=conteo.estado == "EN_CONTEO",
-        umbrales=esquemas.UmbralesSalida(
-            reconteo=conteo.umbral_reconteo_pesos,
-            critico=conteo.umbral_critico_pesos),
+        umbrales=_umbrales(conteo),
         total=len(lista), criticas=sum(1 for f in lista if f.critico),
         en_reconteo=sum(1 for f in lista if f.reconteo is not None),
         items=[_diferencia(f, etiquetas)
                for f in diferencias.filtrar(lista, filtro)])
+
+
+@router.get(
+    "/{conteo_id}/diferencias/detalle",
+    response_model=esquemas.DetalleDiferenciaSalida)
+async def ver_detalle_diferencia(
+    conteo_id: uuid.UUID,
+    codigo: str = Query(min_length=1, max_length=100),
+    usuario: MotoredUser = Depends(lector),
+    db: AsyncSession = Depends(get_motored_db_or_503),
+):
+    """Leader-only: one code's live readings per location and pair,
+    with the last reading time (round 2: the current assignee's)."""
+    try:
+        conteo = await consultas.conteo_visible(db, conteo_id, usuario)
+    except errores.ErrorConteo as error:
+        raise error_http(error) from error
+    crudas = await busqueda.lineas_de(db, conteo.id, codigo)
+    etiquetas = await _etiquetas(db, conteo.id)
+    return esquemas.DetalleDiferenciaSalida(
+        codigo=codigo, **busqueda.armar_detalle(crudas, etiquetas))
 
 
 @router.get(

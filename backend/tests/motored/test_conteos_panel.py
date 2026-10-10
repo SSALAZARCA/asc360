@@ -183,12 +183,14 @@ def test_the_summary_counts_like_the_differences_list():
 
     resumen = panel.resumen_diferencias(crudas, D("500000"))
 
-    assert resumen == {"criticas": 1, "en_reconteo": 1, "total": 5}
+    # Counted: A, B, D, F and the unknown Z (E was never read).
+    assert resumen == {"criticas": 1, "en_reconteo": 1, "total": 5,
+                       "contadas": 5}
 
 
 def test_the_summary_is_empty_without_thresholds():
     assert panel.resumen_diferencias([_cruda("A", "1", "2")], None) == {
-        "criticas": 0, "en_reconteo": 0, "total": 0}
+        "criticas": 0, "en_reconteo": 0, "total": 0, "contadas": 0}
 
 
 def test_counted_lines_are_round_one_reads_or_finished_reconteos():

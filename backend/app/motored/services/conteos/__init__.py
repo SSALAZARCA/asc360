@@ -8,7 +8,8 @@ Motored physical inventory counts (odd/motored-conteos-inventario).
 - `ubicaciones`, `lecturas`, `catalogo`: the store's locations, the
   pairs' readings and the referencia master they download;
 - `diferencias`, `reconteos`: the leader-only differences (one aggregate,
-  the final-quantity rule) and the reconteo round;
+  the final-quantity rule) and the reconteo round; `busqueda`: the
+  panel's "Contadas" chip, reference search and per-code detail;
 - `cierre`, `excel_ajustes`: the close (result lines, accuracy KPI) and
   the ERP adjustment Excel;
 - `panel`: the leader's live panel (version short-circuit, progress,

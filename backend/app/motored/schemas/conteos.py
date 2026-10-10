@@ -25,7 +25,7 @@ from app.motored.schemas.vendedor import limpiar_cedula
 
 EstadoConteo = Literal[ESTADOS]
 TipoConteo = Literal[TIPOS]
-FiltroDiferencias = Literal["todas", "criticas", "reconteo"]
+FiltroDiferencias = Literal["todas", "criticas", "reconteo", "contadas"]
 LARGO_CEDULA = (4, 20)
 MAX_LECTURAS_LOTE = 100
 LARGO_NOMBRE_UBICACION = 60
@@ -448,11 +448,15 @@ class DiferenciaSalida(BaseModel):
     valor: Optional[Decimal] = None
     critico: bool
     reconteo: Optional[ReconteoEnDiferencia] = None
+    # The latest live reading of the code (None: never read).
+    ultima_lectura_en: Optional[datetime] = None
 
 
 class DiferenciasSalida(BaseModel):
     """`parcial` while round 1 is open; the counts cover every
-    difference, `items` only the filtered ones."""
+    difference, `items` only the filtered ones. `contadas` (codes with
+    something counted) comes only with the "Contadas" chip or a search,
+    the reads that scan every code of the conteo."""
 
     estado: str
     parcial: bool
@@ -460,7 +464,26 @@ class DiferenciasSalida(BaseModel):
     total: int
     criticas: int
     en_reconteo: int
+    contadas: Optional[int] = None
     items: List[DiferenciaSalida]
+
+
+class LineaDetalleDiferencia(BaseModel):
+    """The live readings of a code at one location, round and pair."""
+
+    ubicacion: str
+    ronda: int
+    sesion: SesionCorta
+    cantidad: Decimal
+    ultima_lectura_en: datetime
+
+
+class DetalleDiferenciaSalida(BaseModel):
+    """Leader-only detail of one code: where, how much and by whom."""
+
+    codigo: str
+    lineas: List[LineaDetalleDiferencia]
+    ultima_lectura_en: Optional[datetime] = None
 
 
 class ReconteoLider(BaseModel):
@@ -621,6 +644,8 @@ class ResumenDiferencias(BaseModel):
     criticas: int
     en_reconteo: int
     total: int
+    # Codes with something counted: the "Contadas (N)" chip.
+    contadas: int = 0
 
 
 class PanelSalida(BaseModel):

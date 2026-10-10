@@ -27,6 +27,7 @@ The rules on top are pure functions:
 These are leader-only numbers: nothing here is ever sent to a pair.
 """
 import uuid
+from datetime import datetime
 from decimal import Decimal
 from typing import List, NamedTuple, Optional, Sequence
 
@@ -39,7 +40,7 @@ CENTAVO = Decimal("0.01")
 CERO = Decimal("0")
 SIN_COSTO = "SIN_COSTO"
 TERMINADO = "TERMINADO"
-FILTROS = ("todas", "criticas", "reconteo")
+FILTROS = ("todas", "criticas", "reconteo", "contadas")
 
 _SQL_DIFERENCIAS = """
 WITH sis AS (
@@ -53,7 +54,8 @@ lec AS (
     SELECT lec1.referencia_id,
            COALESCE(r.codigo, lec1.codigo_leido) AS codigo,
            r.nombre, SUM(lec1.cantidad) AS ronda1,
-           array_agg(DISTINCT u.nombre ORDER BY u.nombre) AS ubicaciones
+           array_agg(DISTINCT u.nombre ORDER BY u.nombre) AS ubicaciones,
+           max(lec1.recibida_en) AS ultima1
     FROM conteo_lectura lec1
     JOIN ubicacion_inventario u ON u.id = lec1.ubicacion_id
     LEFT JOIN referencia r ON r.id = lec1.referencia_id
@@ -67,13 +69,15 @@ base AS (
            COALESCE(sis.codigo, lec.codigo) AS codigo,
            COALESCE(sis.nombre, lec.nombre) AS nombre,
            sis.existencia AS sistema, lec.ronda1,
-           sis.costo_unitario, sis.costo_fuente, lec.ubicaciones
+           sis.costo_unitario, sis.costo_fuente, lec.ubicaciones,
+           lec.ultima1
     FROM sis FULL JOIN lec ON lec.referencia_id = sis.referencia_id
 ),
 rec AS (
     SELECT rc.id, rc.referencia_id, rc.codigo, rc.estado, rc.origen,
            rc.sesion_id, rc.misma_pareja_autorizada,
-           SUM(lec2.cantidad) AS ronda2
+           SUM(lec2.cantidad) AS ronda2,
+           max(lec2.recibida_en) AS ultima2
     FROM conteo_reconteo rc
     LEFT JOIN conteo_lectura lec2
       ON lec2.reconteo_id = rc.id AND lec2.sesion_id = rc.sesion_id
@@ -88,7 +92,7 @@ SELECT COALESCE(base.referencia_id, rec.referencia_id) AS referencia_id,
        base.ubicaciones, rec.id AS reconteo_id,
        rec.estado AS reconteo_estado, rec.origen AS reconteo_origen,
        rec.sesion_id AS reconteo_sesion_id, rec.misma_pareja_autorizada,
-       rec.ronda2
+       rec.ronda2, GREATEST(base.ultima1, rec.ultima2) AS ultima_lectura_en
 FROM base
 FULL JOIN rec ON rec.codigo = base.codigo
 LEFT JOIN referencia rr ON rr.id = rec.referencia_id
@@ -118,6 +122,9 @@ class FilaCruda(NamedTuple):
     reconteo_sesion_id: Optional[uuid.UUID]
     misma_pareja_autorizada: Optional[bool]
     ronda2: Optional[Decimal]
+    # The latest live reading of the code (round 1, or round 2 by the
+    # current assignee); the "Contadas" chip orders by it.
+    ultima_lectura_en: Optional[datetime] = None
 
 
 class ReconteoVista(NamedTuple):
@@ -144,6 +151,7 @@ class Diferencia(NamedTuple):
     valor: Optional[Decimal]
     critico: bool
     reconteo: Optional[ReconteoVista]
+    ultima_lectura_en: Optional[datetime] = None
 
 
 # --- pure rules -------------------------------------------------------------
@@ -212,7 +220,8 @@ def calcular(fila: FilaCruda, umbral_critico: Decimal) -> Diferencia:
         sistema=sistema, contado_ronda1=ronda1, contado=contado,
         diferencia=diferencia, costo_unitario=fila.costo_unitario,
         sin_costo=sin_costo, valor=valor,
-        critico=es_critica(valor, umbral_critico), reconteo=_vista(fila))
+        critico=es_critica(valor, umbral_critico), reconteo=_vista(fila),
+        ultima_lectura_en=fila.ultima_lectura_en)
 
 
 def _orden(fila: Diferencia):

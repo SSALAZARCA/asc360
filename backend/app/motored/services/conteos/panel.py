@@ -124,15 +124,19 @@ def _es_diferencia(cruda: diferencias.FilaCruda) -> bool:
 def resumen_diferencias(
         crudas: Sequence[diferencias.FilaCruda],
         umbral_critico: Optional[Decimal]) -> Dict[str, int]:
-    """The same three counts as `GET /diferencias`."""
+    """The same three counts as `GET /diferencias`, plus `contadas`:
+    the codes whose `Contado` is above 0 (the "Contadas (N)" chip)."""
     if umbral_critico is None:
-        return {"criticas": 0, "en_reconteo": 0, "total": 0}
+        return {"criticas": 0, "en_reconteo": 0, "total": 0,
+                "contadas": 0}
     filas = [diferencias.calcular(c, umbral_critico)
              for c in crudas if _es_diferencia(c)]
     return {
         "criticas": sum(1 for f in filas if f.critico),
         "en_reconteo": sum(1 for f in filas if f.reconteo is not None),
-        "total": len(filas)}
+        "total": len(filas),
+        "contadas": sum(
+            1 for c in crudas if diferencias.contado_de(c) > 0)}
 
 
 def contadas(
