@@ -542,6 +542,33 @@ async def _filas_de_tiendas(db: AsyncSession, filtro: Filtro, cubo, *, completas
     return filas, sin_linea, sucursales
 
 
+async def _filtro_de_ventana_12m(db: AsyncSession, filtro: Filtro) -> Filtro:
+    """The filter of the monthly charts: the same stores, HMCL mode and rules over the last 12 months
+    ending at the last month with sales (see `tablero_asesores.meses_de_ventana`), whatever the period."""
+    meses = t.meses_de_ventana(await lectura.meses(db))
+    return t.filtro_con_meses(filtro, meses) if meses else filtro
+
+
+def _venta_de_tienda_por_mes(filas: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    return [
+        {"sucursal_id": f["sucursal_id"], "nombre": f["nombre"],
+         "venta": {"total": f["venta"]["total"], "por_mes": f["venta"]["por_mes"]}}
+        for f in filas
+    ]
+
+
+async def _tiendas_de_ventana(
+    db: AsyncSession, filtro: Filtro, ventana: Filtro, tiendas: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """Per store, the sales of each month of the window (the heatmap of the Tiendas tab). The period's rows
+    already are it when the period covers the window."""
+    if ventana.meses == filtro.meses:
+        return _venta_de_tienda_por_mes(tiendas)
+    cubo = await lectura.cubo(db, ventana, None, DIM_SUCURSAL)
+    filas, _, _ = await _filas_de_tiendas(db, ventana, cubo, completas=False)
+    return _venta_de_tienda_por_mes(filas)
+
+
 async def calcular_kpis_tiendas(db: AsyncSession, filtro: Filtro) -> Dict[str, Any]:
     """Pestana Tiendas: `{meses, hmcl, sucursales, reglas, tiendas, cumplimiento,
     resumen_crecimiento, venta_sin_linea}`. Cada tienda con ventas trae todos sus
@@ -558,8 +585,11 @@ async def calcular_kpis_tiendas(db: AsyncSession, filtro: Filtro) -> Dict[str, A
     for fila in tiendas:
         fila["cumplimiento"] = por_tienda.get(fila["sucursal_id"])
         fila["dias_inventario"] = inventario["tiendas"].get(fila["sucursal_id"])
+    ventana = await _filtro_de_ventana_12m(db, filtro)
     return {
         **_encabezado(filtro),
+        "ventana_meses": list(ventana.meses),
+        "ventana": {"tiendas": await _tiendas_de_ventana(db, filtro, ventana, tiendas)},
         **await lectura.frescura(db),
         "tiendas": tiendas,
         "inventario": inventario,
@@ -567,6 +597,40 @@ async def calcular_kpis_tiendas(db: AsyncSession, filtro: Filtro) -> Dict[str, A
         "resumen_crecimiento": resumen_crecimiento(tiendas),
         "venta_sin_linea": float(round(sin_linea, 2)),
     }
+
+
+async def _total_de_red(db: AsyncSession, filtro: Filtro, cubo: List[t.FilaCubo]) -> Dict[str, Any]:
+    """`total` of the Ventas tab: the indicators of the whole network over the filter's months, from the
+    store cube already read."""
+    acumulados, _ = t.acumular_cubo(t.filtrar_cubo_por_hmcl(cubo, filtro.modo_hmcl), filtro.reglas)
+    facturas = await lectura.facturas(db, filtro, dimension=DIM_TOTAL)
+    clientes = await lectura.clientes(db, filtro, dimension=DIM_TOTAL)
+    total = t.indicadores(
+        acumulados[t.CLAVE_TOTAL], facturas[0] if facturas else None, clientes[0] if clientes else None,
+        list(filtro.meses), filtro.reglas.lineas)
+    del total["ranking"], total["tendencia"]
+    return total
+
+
+def _sin_costo(total: Dict[str, Any]) -> Dict[str, Any]:
+    """The window's charts show no cost, and its cube is read without the inventory cut-off (the live query
+    then has no cost while the summary always has it), so `costo` is left out to keep both paths identical."""
+    return {k: v for k, v in total.items() if k != "costo"}
+
+
+async def _ventana_de_ventas(
+    db: AsyncSession, filtro: Filtro, ventana: Filtro, total: Dict[str, Any], tecnired: Dict[str, Any],
+) -> Dict[str, Any]:
+    """`{total, tecnired}` over the 12-month window: the line chart and the Tecnired card. The period's own
+    blocks are the answer when the period covers the window; otherwise it costs the store cube, the invoices,
+    the clients and the Tecnired counts of the window (the top 5 stays the period's)."""
+    if ventana.meses == filtro.meses:
+        return {"total": _sin_costo(total), "tecnired": tecnired}
+    del_cubo = await lectura.cubo(db, ventana, None, DIM_SUCURSAL)
+    total_v = _sin_costo(await _total_de_red(db, ventana, del_cubo))
+    distintos, por_mes = await lectura.clientes_tecnired(db, ventana)
+    tecnired_v = construir_tecnired(total_v["clientes"], distintos, por_mes, [], ventana.meses)
+    return {"total": total_v, "tecnired": tecnired_v}
 
 
 async def calcular_kpis_ventas(db: AsyncSession, filtro: Filtro) -> Dict[str, Any]:
@@ -577,23 +641,21 @@ async def calcular_kpis_ventas(db: AsyncSession, filtro: Filtro) -> Dict[str, An
     una fila liviana por tienda (venta, margen, por mes) para el grafico de cumplimiento."""
     cubo = await lectura.cubo(db, filtro, await lectura.fecha_corte_costos(db), DIM_SUCURSAL)
     tiendas, sin_linea, sucursales = await _filas_de_tiendas(db, filtro, cubo, completas=False)
-    acumulados, _ = t.acumular_cubo(t.filtrar_cubo_por_hmcl(cubo, filtro.modo_hmcl), filtro.reglas)
-    facturas = await lectura.facturas(db, filtro, dimension=DIM_TOTAL)
-    clientes = await lectura.clientes(db, filtro, dimension=DIM_TOTAL)
-    total = t.indicadores(
-        acumulados[t.CLAVE_TOTAL], facturas[0] if facturas else None, clientes[0] if clientes else None,
-        list(filtro.meses), filtro.reglas.lineas)
-    del total["ranking"], total["tendencia"]
+    total = await _total_de_red(db, filtro, cubo)
     cubo_compania = await lectura.cubo(db, filtro, None, DIM_ASESOR)
     # Without a store filter the asesores cube of the whole network is the company's: it is read once.
     cumplimiento = await cargar_cumplimiento(
         db, filtro, cubo_compania=cubo_compania, cubo_sucursal=cubo, cubo_asesores=cubo_compania,
         sucursales_conocidas=sucursales, con_nombres=False)
+    tecnired = await cargar_tecnired(db, filtro, total["clientes"])
+    ventana = await _filtro_de_ventana_12m(db, filtro)
     return {
         **_encabezado(filtro),
         **await lectura.frescura(db),
         "total": total,
-        "tecnired": await cargar_tecnired(db, filtro, total["clientes"]),
+        "tecnired": tecnired,
+        "ventana_meses": list(ventana.meses),
+        "ventana": await _ventana_de_ventas(db, filtro, ventana, total, tecnired),
         "cumplimiento": _recortar(cumplimiento, ("compania", "red", "tiendas", "conteos")),
         "tiendas": [
             {k: f[k] for k in ("sucursal_id", "nombre", "venta", "costo")} for f in tiendas
@@ -613,6 +675,23 @@ async def calcular_kpis_asesores(db: AsyncSession, filtro: Filtro) -> Dict[str, 
     tablero["cumplimiento"] = _recortar(cumplimiento, ("asesores", "conteos", "advertencias"))
     tablero.update(await lectura.frescura(db))
     return tablero
+
+
+async def _tendencia_de_ventana(
+    db: AsyncSession, filtro: Filtro, cedula: str, por_mes: Dict[str, Dict[str, Any]],
+) -> Dict[str, Any]:
+    """`{ventana_meses, tendencia}`: the asesor's cumplimiento month by month (and the network's) over the
+    12-month window, whatever the period. `por_mes` is the period's, which is the answer when it covers the
+    window; otherwise it costs the asesores cube and the budgets of the window."""
+    ventana = await _filtro_de_ventana_12m(db, filtro)
+    if ventana.meses != filtro.meses:
+        cubo = await _cubo_de_cumplimiento(db, ventana)
+        por_mes = cumplimiento_por_mes(
+            cubo, await _presupuestos_del_filtro(db, ventana), ventana.reglas, ventana.meses)
+    return {
+        "ventana_meses": list(ventana.meses),
+        "tendencia": detalle.tendencia_de(por_mes, list(ventana.meses), cedula),
+    }
 
 
 async def calcular_kpis_asesor_detalle(db: AsyncSession, filtro: Filtro, cedula: str) -> Optional[Dict[str, Any]]:
@@ -651,7 +730,10 @@ async def calcular_kpis_asesor_detalle(db: AsyncSession, filtro: Filtro, cedula:
         {i: nombre for i, (nombre, _) in extra["sucursales"].items()}, fecha_datos)
     if resultado is None:
         return None
-    return {**_encabezado(filtro), **await lectura.frescura(db), **resultado}
+    return {
+        **_encabezado(filtro), **await lectura.frescura(db), **resultado,
+        **await _tendencia_de_ventana(db, filtro, cedula, por_mes),
+    }
 
 
 async def calcular_opciones_asesores(db: AsyncSession, filtro: Filtro) -> Dict[str, Any]:

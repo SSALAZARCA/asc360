@@ -14,14 +14,18 @@ Respuestas (los importes son numeros, nunca texto; cada una repite `meses`,
 `hmcl`, `sucursales` y `reglas` del filtro aplicado):
 - `GET /kpis/ventas`: `total`, `tecnired` {venta, pct, clientes, venta_por_cliente,
   por_mes, por_linea, top5}, `cumplimiento` {red, tiendas, conteos}, `tiendas`
-  (venta y costo por tienda), `venta_sin_linea`.
+  (venta y costo por tienda), `venta_sin_linea`. `ventana_meses` y `ventana` {total, tecnired}: lo mismo
+  de la grafica por linea y la tarjeta Tecnired sobre los ULTIMOS 12 MESES (hasta el ultimo mes con venta),
+  sin importar `meses`; las tiendas y el modo HMCL si se aplican.
 - `GET /kpis/tiendas`: `tiendas` (cada una con sus indicadores, `crecimiento`,
   `cumplimiento` y `dias_inventario`), `inventario` {fecha_corte, dias_ventana,
-  tiendas, red}, `cumplimiento`, `resumen_crecimiento`, `venta_sin_linea`.
+  tiendas, red}, `cumplimiento`, `resumen_crecimiento`, `venta_sin_linea`; `ventana_meses` y
+  `ventana` {tiendas: [{sucursal_id, nombre, venta {total, por_mes}}]} para el mapa de calor (12 meses).
 - `GET /kpis/asesores`: el tablero de asesores mas `cumplimiento` {asesores,
   conteos, advertencias}.
 - `GET /kpis/asesores/detalle?cedula=`: la vista de UN asesor (mismos parametros del filtro; 404
   "Asesor no encontrado" sin ventas, presupuesto ni maestro en el filtro; 422 con una cedula invalida).
+  `tendencia` y `ventana_meses`: el cumplimiento mes a mes sobre los ultimos 12 meses, sin importar `meses`.
 - `GET /kpis/asesores/opciones`: (mismos parametros del filtro) `asesores` [{cedula, nombre, tienda,
   sucursal_id, venta}], quienes vendieron en el periodo y las tiendas elegidas, la de mayor venta
   primero (la seleccion por defecto del filtro "Asesor", que no tiene "Todos").

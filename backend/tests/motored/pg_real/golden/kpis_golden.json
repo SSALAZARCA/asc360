@@ -2706,7 +2706,8 @@
     "comision_bono_umbral_pct": 95.0,
     "comision_cargos_asesor": [
      "ASESOR DE REPUESTOS",
-     "ASESOR DE REPUESTOS SUPERNUMERARIO"
+     "ASESOR DE REPUESTOS SUPERNUMERARIO",
+     "CAJERO POSVENTA"
     ],
     "comision_lineas": [
      {
@@ -3096,7 +3097,8 @@
     "comision_bono_umbral_pct": 95.0,
     "comision_cargos_asesor": [
      "ASESOR DE REPUESTOS",
-     "ASESOR DE REPUESTOS SUPERNUMERARIO"
+     "ASESOR DE REPUESTOS SUPERNUMERARIO",
+     "CAJERO POSVENTA"
     ],
     "comision_lineas": [
      {
@@ -3483,7 +3485,8 @@
     "comision_bono_umbral_pct": 95.0,
     "comision_cargos_asesor": [
      "ASESOR DE REPUESTOS",
-     "ASESOR DE REPUESTOS SUPERNUMERARIO"
+     "ASESOR DE REPUESTOS SUPERNUMERARIO",
+     "CAJERO POSVENTA"
     ],
     "comision_lineas": [
      {
@@ -3872,7 +3875,8 @@
     "comision_bono_umbral_pct": 95.0,
     "comision_cargos_asesor": [
      "ASESOR DE REPUESTOS",
-     "ASESOR DE REPUESTOS SUPERNUMERARIO"
+     "ASESOR DE REPUESTOS SUPERNUMERARIO",
+     "CAJERO POSVENTA"
     ],
     "comision_lineas": [
      {
@@ -4353,7 +4357,12 @@
      "valor": 0.0
     }
    ],
-   "usando_resumen": false
+   "usando_resumen": false,
+   "ventana_meses": [
+    "2097-01",
+    "2097-02",
+    "2097-03"
+   ]
   },
   "detalle/anio-s1-excluir/EVA": {
    "asesor": {
@@ -4677,7 +4686,12 @@
      "valor": 0.0
     }
    ],
-   "usando_resumen": false
+   "usando_resumen": false,
+   "ventana_meses": [
+    "2097-01",
+    "2097-02",
+    "2097-03"
+   ]
   },
   "detalle/anio-s1-excluir/FELIPE": null,
   "detalle/anio-todas/ANA": {
@@ -5011,7 +5025,12 @@
      "valor": 0.0
     }
    ],
-   "usando_resumen": false
+   "usando_resumen": false,
+   "ventana_meses": [
+    "2097-01",
+    "2097-02",
+    "2097-03"
+   ]
   },
   "detalle/anio-todas/DESCONOCIDO": null,
   "detalle/anio-todas/EVA": {
@@ -5340,7 +5359,12 @@
      "valor": 0.1724137931034483
     }
    ],
-   "usando_resumen": false
+   "usando_resumen": false,
+   "ventana_meses": [
+    "2097-01",
+    "2097-02",
+    "2097-03"
+   ]
   },
   "detalle/anio-todas/FELIPE": {
    "asesor": {
@@ -5548,7 +5572,12 @@
      "valor": 0.21008403361344538
     }
    ],
-   "usando_resumen": false
+   "usando_resumen": false,
+   "ventana_meses": [
+    "2097-01",
+    "2097-02",
+    "2097-03"
+   ]
   },
   "detalle/anio-todas/LUIS": {
    "asesor": {
@@ -5750,7 +5779,12 @@
      "valor": null
     }
    ],
-   "usando_resumen": false
+   "usando_resumen": false,
+   "ventana_meses": [
+    "2097-01",
+    "2097-02",
+    "2097-03"
+   ]
   },
   "detalle/ultimo-todas/ANA": {
    "asesor": {
@@ -6016,6 +6050,16 @@
    },
    "tendencia": [
     {
+     "mes": "2097-01",
+     "pct": 1.9444444444444444,
+     "red_pct": 1.5444444444444445
+    },
+    {
+     "mes": "2097-02",
+     "pct": 0.0,
+     "red_pct": 0.4666666666666667
+    },
+    {
      "mes": "2097-03",
      "pct": 0.125,
      "red_pct": 0.65
@@ -6071,7 +6115,12 @@
      "valor": 0.0
     }
    ],
-   "usando_resumen": false
+   "usando_resumen": false,
+   "ventana_meses": [
+    "2097-01",
+    "2097-02",
+    "2097-03"
+   ]
   },
   "detalle/ultimo-todas/EVA": {
    "asesor": {
@@ -6326,6 +6375,16 @@
    },
    "tendencia": [
     {
+     "mes": "2097-01",
+     "pct": 1.26,
+     "red_pct": 1.5444444444444445
+    },
+    {
+     "mes": "2097-02",
+     "pct": 0.375,
+     "red_pct": 0.4666666666666667
+    },
+    {
      "mes": "2097-03",
      "pct": 1.35,
      "red_pct": 0.65
@@ -6381,7 +6440,12 @@
      "valor": 0.0
     }
    ],
-   "usando_resumen": false
+   "usando_resumen": false,
+   "ventana_meses": [
+    "2097-01",
+    "2097-02",
+    "2097-03"
+   ]
   },
   "detalle/ultimo-todas/FELIPE": {
    "asesor": {
@@ -6522,6 +6586,16 @@
    },
    "tendencia": [
     {
+     "mes": "2097-01",
+     "pct": 1.0,
+     "red_pct": 1.5444444444444445
+    },
+    {
+     "mes": "2097-02",
+     "pct": 1.8,
+     "red_pct": 0.4666666666666667
+    },
+    {
      "mes": "2097-03",
      "pct": null,
      "red_pct": 0.65
@@ -6577,7 +6651,12 @@
      "valor": 1.0
     }
    ],
-   "usando_resumen": false
+   "usando_resumen": false,
+   "ventana_meses": [
+    "2097-01",
+    "2097-02",
+    "2097-03"
+   ]
   },
   "inicio": {
    "asesores": {
@@ -8753,7 +8832,28 @@
     }
    ],
    "usando_resumen": false,
-   "venta_sin_linea": 1160.0
+   "venta_sin_linea": 1160.0,
+   "ventana": {
+    "tiendas": [
+     {
+      "nombre": "Uno C4CA4238",
+      "sucursal_id": "a87ff679-a2f3-e71d-9181-a67b7542122c",
+      "venta": {
+       "por_mes": {
+        "2097-01": 2080.0,
+        "2097-02": 360.0,
+        "2097-03": 1090.0
+       },
+       "total": 3530.0
+      }
+     }
+    ]
+   },
+   "ventana_meses": [
+    "2097-01",
+    "2097-02",
+    "2097-03"
+   ]
   },
   "tiendas/anio-todas": {
    "cumplimiento": {
@@ -9119,7 +9219,40 @@
     }
    ],
    "usando_resumen": false,
-   "venta_sin_linea": 7670.0
+   "venta_sin_linea": 7670.0,
+   "ventana": {
+    "tiendas": [
+     {
+      "nombre": "Uno C4CA4238",
+      "sucursal_id": "a87ff679-a2f3-e71d-9181-a67b7542122c",
+      "venta": {
+       "por_mes": {
+        "2097-01": 2080.0,
+        "2097-02": 660.0,
+        "2097-03": 1090.0
+       },
+       "total": 3830.0
+      }
+     },
+     {
+      "nombre": "Dos C4CA4238",
+      "sucursal_id": "e4da3b7f-bbce-2345-d777-2b0674a318d5",
+      "venta": {
+       "por_mes": {
+        "2097-01": 700.0,
+        "2097-02": 1080.0,
+        "2097-03": 340.0
+       },
+       "total": 2120.0
+      }
+     }
+    ]
+   },
+   "ventana_meses": [
+    "2097-01",
+    "2097-02",
+    "2097-03"
+   ]
   },
   "tiendas/salteado-ambas-solo": {
    "cumplimiento": {
@@ -9348,7 +9481,40 @@
     }
    ],
    "usando_resumen": false,
-   "venta_sin_linea": 700.0
+   "venta_sin_linea": 700.0,
+   "ventana": {
+    "tiendas": [
+     {
+      "nombre": "Dos C4CA4238",
+      "sucursal_id": "e4da3b7f-bbce-2345-d777-2b0674a318d5",
+      "venta": {
+       "por_mes": {
+        "2097-01": 0.0,
+        "2097-02": 1080.0,
+        "2097-03": 250.0
+       },
+       "total": 1330.0
+      }
+     },
+     {
+      "nombre": "Uno C4CA4238",
+      "sucursal_id": "a87ff679-a2f3-e71d-9181-a67b7542122c",
+      "venta": {
+       "por_mes": {
+        "2097-01": 0.0,
+        "2097-02": 300.0,
+        "2097-03": 0.0
+       },
+       "total": 300.0
+      }
+     }
+    ]
+   },
+   "ventana_meses": [
+    "2097-01",
+    "2097-02",
+    "2097-03"
+   ]
   },
   "tiendas/ultimo-todas": {
    "cumplimiento": {
@@ -9659,7 +9825,40 @@
     }
    ],
    "usando_resumen": false,
-   "venta_sin_linea": 700.0
+   "venta_sin_linea": 700.0,
+   "ventana": {
+    "tiendas": [
+     {
+      "nombre": "Uno C4CA4238",
+      "sucursal_id": "a87ff679-a2f3-e71d-9181-a67b7542122c",
+      "venta": {
+       "por_mes": {
+        "2097-01": 2080.0,
+        "2097-02": 660.0,
+        "2097-03": 1090.0
+       },
+       "total": 3830.0
+      }
+     },
+     {
+      "nombre": "Dos C4CA4238",
+      "sucursal_id": "e4da3b7f-bbce-2345-d777-2b0674a318d5",
+      "venta": {
+       "por_mes": {
+        "2097-01": 700.0,
+        "2097-02": 1080.0,
+        "2097-03": 340.0
+       },
+       "total": 2120.0
+      }
+     }
+    ]
+   },
+   "ventana_meses": [
+    "2097-01",
+    "2097-02",
+    "2097-03"
+   ]
   },
   "ventas/anio-s1-excluir": {
    "cumplimiento": {
@@ -9940,7 +10139,135 @@
     }
    },
    "usando_resumen": false,
-   "venta_sin_linea": 1160.0
+   "venta_sin_linea": 1160.0,
+   "ventana": {
+    "tecnired": {
+     "clientes": 0,
+     "pct": 0.0,
+     "por_linea": {
+      "ACCESORIOS": 0.0,
+      "BATERIAS": 0.0,
+      "MOTOS": 0.0,
+      "REPUESTOS": 0.0
+     },
+     "por_mes": {
+      "2097-01": {
+       "clientes": 0,
+       "venta": 0.0
+      },
+      "2097-02": {
+       "clientes": 0,
+       "venta": 0.0
+      },
+      "2097-03": {
+       "clientes": 0,
+       "venta": 0.0
+      }
+     },
+     "top5": [],
+     "venta": 0.0,
+     "venta_por_cliente": null
+    },
+    "total": {
+     "clientes": {
+      "clientes_unicos": 4,
+      "pct_mostrador": 0.9065155807365439,
+      "pct_tecnired": 0.0,
+      "pct_top5": 1.0,
+      "tecnired_por_linea": {
+       "ACCESORIOS": 0.0,
+       "BATERIAS": 0.0,
+       "MOTOS": 0.0,
+       "REPUESTOS": 0.0
+      },
+      "tecnired_por_mes": {
+       "2097-01": 0.0,
+       "2097-02": 0.0,
+       "2097-03": 0.0
+      },
+      "venta_tecnired": 0.0
+     },
+     "descuentos": {
+      "mes_mayor": "2097-01",
+      "pct_descuento": 0.08549222797927461,
+      "pct_en_mes_mayor": 0.5151515151515151,
+      "total": 330.0
+     },
+     "facturas": {
+      "facturas": 7,
+      "facturas_con_linea": {
+       "ACCESORIOS": 2,
+       "BATERIAS": 0,
+       "MOTOS": 2,
+       "REPUESTOS": 4
+      },
+      "items_por_factura": 1.1428571428571428,
+      "pct_con_linea": {
+       "ACCESORIOS": 0.2857142857142857,
+       "BATERIAS": 0.0,
+       "MOTOS": 0.2857142857142857,
+       "REPUESTOS": 0.5714285714285714
+      },
+      "pct_multilinea": 0.14285714285714285,
+      "ticket_por_linea": {
+       "ACCESORIOS": 430.0,
+       "BATERIAS": null,
+       "MOTOS": 160.0,
+       "REPUESTOS": 587.5
+      },
+      "ticket_promedio": 504.2857142857143,
+      "unidades": 14.0
+     },
+     "venta": {
+      "hmcl": 0.0,
+      "mix": {
+       "ACCESORIOS": 0.24362606232294617,
+       "BATERIAS": 0.0,
+       "MOTOS": 0.0906515580736544,
+       "REPUESTOS": 0.6657223796033994
+      },
+      "pct_hmcl": 0.0,
+      "por_linea": {
+       "ACCESORIOS": 860.0,
+       "BATERIAS": 0.0,
+       "MOTOS": 320.0,
+       "REPUESTOS": 2350.0
+      },
+      "por_mes": {
+       "2097-01": 2080.0,
+       "2097-02": 360.0,
+       "2097-03": 1090.0
+      },
+      "por_mes_linea": {
+       "2097-01": {
+        "ACCESORIOS": 500.0,
+        "BATERIAS": 0.0,
+        "MOTOS": 50.0,
+        "REPUESTOS": 1530.0
+       },
+       "2097-02": {
+        "ACCESORIOS": 360.0,
+        "BATERIAS": 0.0,
+        "MOTOS": 0.0,
+        "REPUESTOS": 0.0
+       },
+       "2097-03": {
+        "ACCESORIOS": 0.0,
+        "BATERIAS": 0.0,
+        "MOTOS": 270.0,
+        "REPUESTOS": 820.0
+       }
+      },
+      "sin_hmcl": 3530.0,
+      "total": 3530.0
+     }
+    }
+   },
+   "ventana_meses": [
+    "2097-01",
+    "2097-02",
+    "2097-03"
+   ]
   },
   "ventas/anio-todas": {
    "cumplimiento": {
@@ -10293,7 +10620,142 @@
     }
    },
    "usando_resumen": false,
-   "venta_sin_linea": 7670.0
+   "venta_sin_linea": 7670.0,
+   "ventana": {
+    "tecnired": {
+     "clientes": 1,
+     "pct": 0.09243697478991597,
+     "por_linea": {
+      "ACCESORIOS": 300.0,
+      "BATERIAS": 250.0,
+      "MOTOS": 0.0,
+      "REPUESTOS": 0.0
+     },
+     "por_mes": {
+      "2097-01": {
+       "clientes": 0,
+       "venta": 0.0
+      },
+      "2097-02": {
+       "clientes": 1,
+       "venta": 300.0
+      },
+      "2097-03": {
+       "clientes": 1,
+       "venta": 250.0
+      }
+     },
+     "top5": [
+      {
+       "nit": "726600369",
+       "pct": 1.0,
+       "razon_social": "726600369",
+       "venta": 550.0
+      }
+     ],
+     "venta": 550.0,
+     "venta_por_cliente": 550.0
+    },
+    "total": {
+     "clientes": {
+      "clientes_unicos": 8,
+      "pct_mostrador": 0.5798319327731093,
+      "pct_tecnired": 0.09243697478991597,
+      "pct_top5": 0.9310924369747899,
+      "tecnired_por_linea": {
+       "ACCESORIOS": 300.0,
+       "BATERIAS": 250.0,
+       "MOTOS": 0.0,
+       "REPUESTOS": 0.0
+      },
+      "tecnired_por_mes": {
+       "2097-01": 0.0,
+       "2097-02": 300.0,
+       "2097-03": 250.0
+      },
+      "venta_tecnired": 550.0
+     },
+     "descuentos": {
+      "mes_mayor": "2097-01",
+      "pct_descuento": 0.0703125,
+      "pct_en_mes_mayor": 0.37777777777777777,
+      "total": 450.0
+     },
+     "facturas": {
+      "facturas": 14,
+      "facturas_con_linea": {
+       "ACCESORIOS": 4,
+       "BATERIAS": 2,
+       "MOTOS": 2,
+       "REPUESTOS": 7
+      },
+      "items_por_factura": 1.0714285714285714,
+      "pct_con_linea": {
+       "ACCESORIOS": 0.2857142857142857,
+       "BATERIAS": 0.14285714285714285,
+       "MOTOS": 0.14285714285714285,
+       "REPUESTOS": 0.5
+      },
+      "pct_multilinea": 0.07142857142857142,
+      "ticket_por_linea": {
+       "ACCESORIOS": 390.0,
+       "BATERIAS": 395.0,
+       "MOTOS": 160.0,
+       "REPUESTOS": 468.57142857142856
+      },
+      "ticket_promedio": 425.0,
+      "unidades": 23.0
+     },
+     "venta": {
+      "hmcl": 1630.0,
+      "mix": {
+       "ACCESORIOS": 0.26218487394957984,
+       "BATERIAS": 0.13277310924369748,
+       "MOTOS": 0.05378151260504202,
+       "REPUESTOS": 0.5512605042016807
+      },
+      "pct_hmcl": 0.2739495798319328,
+      "por_linea": {
+       "ACCESORIOS": 1560.0,
+       "BATERIAS": 790.0,
+       "MOTOS": 320.0,
+       "REPUESTOS": 3280.0
+      },
+      "por_mes": {
+       "2097-01": 2780.0,
+       "2097-02": 1740.0,
+       "2097-03": 1430.0
+      },
+      "por_mes_linea": {
+       "2097-01": {
+        "ACCESORIOS": 900.0,
+        "BATERIAS": 0.0,
+        "MOTOS": 50.0,
+        "REPUESTOS": 1830.0
+       },
+       "2097-02": {
+        "ACCESORIOS": 660.0,
+        "BATERIAS": 540.0,
+        "MOTOS": 0.0,
+        "REPUESTOS": 540.0
+       },
+       "2097-03": {
+        "ACCESORIOS": 0.0,
+        "BATERIAS": 250.0,
+        "MOTOS": 270.0,
+        "REPUESTOS": 910.0
+       }
+      },
+      "sin_hmcl": 4320.0,
+      "total": 5950.0
+     }
+    }
+   },
+   "ventana_meses": [
+    "2097-01",
+    "2097-02",
+    "2097-03"
+   ]
   },
   "ventas/salteado-ambas-solo": {
    "cumplimiento": {
@@ -10573,7 +11035,135 @@
     }
    },
    "usando_resumen": false,
-   "venta_sin_linea": 700.0
+   "venta_sin_linea": 700.0,
+   "ventana": {
+    "tecnired": {
+     "clientes": 1,
+     "pct": 0.3374233128834356,
+     "por_linea": {
+      "ACCESORIOS": 300.0,
+      "BATERIAS": 250.0,
+      "MOTOS": 0.0,
+      "REPUESTOS": 0.0
+     },
+     "por_mes": {
+      "2097-01": {
+       "clientes": 0,
+       "venta": 0.0
+      },
+      "2097-02": {
+       "clientes": 1,
+       "venta": 300.0
+      },
+      "2097-03": {
+       "clientes": 1,
+       "venta": 250.0
+      }
+     },
+     "top5": [],
+     "venta": 550.0,
+     "venta_por_cliente": 550.0
+    },
+    "total": {
+     "clientes": {
+      "clientes_unicos": 2,
+      "pct_mostrador": 0.15337423312883436,
+      "pct_tecnired": 0.3374233128834356,
+      "pct_top5": 1.0,
+      "tecnired_por_linea": {
+       "ACCESORIOS": 300.0,
+       "BATERIAS": 250.0,
+       "MOTOS": 0.0,
+       "REPUESTOS": 0.0
+      },
+      "tecnired_por_mes": {
+       "2097-01": 0.0,
+       "2097-02": 300.0,
+       "2097-03": 250.0
+      },
+      "venta_tecnired": 550.0
+     },
+     "descuentos": {
+      "mes_mayor": "2097-02",
+      "pct_descuento": 0.06857142857142857,
+      "pct_en_mes_mayor": 1.0,
+      "total": 120.0
+     },
+     "facturas": {
+      "facturas": 4,
+      "facturas_con_linea": {
+       "ACCESORIOS": 1,
+       "BATERIAS": 2,
+       "MOTOS": 0,
+       "REPUESTOS": 1
+      },
+      "items_por_factura": 1.0,
+      "pct_con_linea": {
+       "ACCESORIOS": 0.25,
+       "BATERIAS": 0.5,
+       "MOTOS": 0.0,
+       "REPUESTOS": 0.25
+      },
+      "pct_multilinea": 0.0,
+      "ticket_por_linea": {
+       "ACCESORIOS": 300.0,
+       "BATERIAS": 395.0,
+       "MOTOS": null,
+       "REPUESTOS": 540.0
+      },
+      "ticket_promedio": 407.5,
+      "unidades": 6.0
+     },
+     "venta": {
+      "hmcl": 1630.0,
+      "mix": {
+       "ACCESORIOS": 0.18404907975460122,
+       "BATERIAS": 0.48466257668711654,
+       "MOTOS": 0.0,
+       "REPUESTOS": 0.3312883435582822
+      },
+      "pct_hmcl": 1.0,
+      "por_linea": {
+       "ACCESORIOS": 300.0,
+       "BATERIAS": 790.0,
+       "MOTOS": 0.0,
+       "REPUESTOS": 540.0
+      },
+      "por_mes": {
+       "2097-01": 0.0,
+       "2097-02": 1380.0,
+       "2097-03": 250.0
+      },
+      "por_mes_linea": {
+       "2097-01": {
+        "ACCESORIOS": 0.0,
+        "BATERIAS": 0.0,
+        "MOTOS": 0.0,
+        "REPUESTOS": 0.0
+       },
+       "2097-02": {
+        "ACCESORIOS": 300.0,
+        "BATERIAS": 540.0,
+        "MOTOS": 0.0,
+        "REPUESTOS": 540.0
+       },
+       "2097-03": {
+        "ACCESORIOS": 0.0,
+        "BATERIAS": 250.0,
+        "MOTOS": 0.0,
+        "REPUESTOS": 0.0
+       }
+      },
+      "sin_hmcl": 0.0,
+      "total": 1630.0
+     }
+    }
+   },
+   "ventana_meses": [
+    "2097-01",
+    "2097-02",
+    "2097-03"
+   ]
   },
   "ventas/ultimo-todas": {
    "cumplimiento": {
@@ -10861,7 +11451,135 @@
     }
    },
    "usando_resumen": false,
-   "venta_sin_linea": 700.0
+   "venta_sin_linea": 700.0,
+   "ventana": {
+    "tecnired": {
+     "clientes": 1,
+     "pct": 0.09243697478991597,
+     "por_linea": {
+      "ACCESORIOS": 300.0,
+      "BATERIAS": 250.0,
+      "MOTOS": 0.0,
+      "REPUESTOS": 0.0
+     },
+     "por_mes": {
+      "2097-01": {
+       "clientes": 0,
+       "venta": 0.0
+      },
+      "2097-02": {
+       "clientes": 1,
+       "venta": 300.0
+      },
+      "2097-03": {
+       "clientes": 1,
+       "venta": 250.0
+      }
+     },
+     "top5": [],
+     "venta": 550.0,
+     "venta_por_cliente": 550.0
+    },
+    "total": {
+     "clientes": {
+      "clientes_unicos": 8,
+      "pct_mostrador": 0.5798319327731093,
+      "pct_tecnired": 0.09243697478991597,
+      "pct_top5": 0.9310924369747899,
+      "tecnired_por_linea": {
+       "ACCESORIOS": 300.0,
+       "BATERIAS": 250.0,
+       "MOTOS": 0.0,
+       "REPUESTOS": 0.0
+      },
+      "tecnired_por_mes": {
+       "2097-01": 0.0,
+       "2097-02": 300.0,
+       "2097-03": 250.0
+      },
+      "venta_tecnired": 550.0
+     },
+     "descuentos": {
+      "mes_mayor": "2097-01",
+      "pct_descuento": 0.0703125,
+      "pct_en_mes_mayor": 0.37777777777777777,
+      "total": 450.0
+     },
+     "facturas": {
+      "facturas": 14,
+      "facturas_con_linea": {
+       "ACCESORIOS": 4,
+       "BATERIAS": 2,
+       "MOTOS": 2,
+       "REPUESTOS": 7
+      },
+      "items_por_factura": 1.0714285714285714,
+      "pct_con_linea": {
+       "ACCESORIOS": 0.2857142857142857,
+       "BATERIAS": 0.14285714285714285,
+       "MOTOS": 0.14285714285714285,
+       "REPUESTOS": 0.5
+      },
+      "pct_multilinea": 0.07142857142857142,
+      "ticket_por_linea": {
+       "ACCESORIOS": 390.0,
+       "BATERIAS": 395.0,
+       "MOTOS": 160.0,
+       "REPUESTOS": 468.57142857142856
+      },
+      "ticket_promedio": 425.0,
+      "unidades": 23.0
+     },
+     "venta": {
+      "hmcl": 1630.0,
+      "mix": {
+       "ACCESORIOS": 0.26218487394957984,
+       "BATERIAS": 0.13277310924369748,
+       "MOTOS": 0.05378151260504202,
+       "REPUESTOS": 0.5512605042016807
+      },
+      "pct_hmcl": 0.2739495798319328,
+      "por_linea": {
+       "ACCESORIOS": 1560.0,
+       "BATERIAS": 790.0,
+       "MOTOS": 320.0,
+       "REPUESTOS": 3280.0
+      },
+      "por_mes": {
+       "2097-01": 2780.0,
+       "2097-02": 1740.0,
+       "2097-03": 1430.0
+      },
+      "por_mes_linea": {
+       "2097-01": {
+        "ACCESORIOS": 900.0,
+        "BATERIAS": 0.0,
+        "MOTOS": 50.0,
+        "REPUESTOS": 1830.0
+       },
+       "2097-02": {
+        "ACCESORIOS": 660.0,
+        "BATERIAS": 540.0,
+        "MOTOS": 0.0,
+        "REPUESTOS": 540.0
+       },
+       "2097-03": {
+        "ACCESORIOS": 0.0,
+        "BATERIAS": 250.0,
+        "MOTOS": 270.0,
+        "REPUESTOS": 910.0
+       }
+      },
+      "sin_hmcl": 4320.0,
+      "total": 5950.0
+     }
+    }
+   },
+   "ventana_meses": [
+    "2097-01",
+    "2097-02",
+    "2097-03"
+   ]
   }
  },
  "off/defecto": {
@@ -13878,7 +14596,8 @@
     "comision_bono_umbral_pct": 95.0,
     "comision_cargos_asesor": [
      "ASESOR DE REPUESTOS",
-     "ASESOR DE REPUESTOS SUPERNUMERARIO"
+     "ASESOR DE REPUESTOS SUPERNUMERARIO",
+     "CAJERO POSVENTA"
     ],
     "comision_lineas": [
      {
@@ -14268,7 +14987,8 @@
     "comision_bono_umbral_pct": 95.0,
     "comision_cargos_asesor": [
      "ASESOR DE REPUESTOS",
-     "ASESOR DE REPUESTOS SUPERNUMERARIO"
+     "ASESOR DE REPUESTOS SUPERNUMERARIO",
+     "CAJERO POSVENTA"
     ],
     "comision_lineas": [
      {
@@ -14655,7 +15375,8 @@
     "comision_bono_umbral_pct": 95.0,
     "comision_cargos_asesor": [
      "ASESOR DE REPUESTOS",
-     "ASESOR DE REPUESTOS SUPERNUMERARIO"
+     "ASESOR DE REPUESTOS SUPERNUMERARIO",
+     "CAJERO POSVENTA"
     ],
     "comision_lineas": [
      {
@@ -15044,7 +15765,8 @@
     "comision_bono_umbral_pct": 95.0,
     "comision_cargos_asesor": [
      "ASESOR DE REPUESTOS",
-     "ASESOR DE REPUESTOS SUPERNUMERARIO"
+     "ASESOR DE REPUESTOS SUPERNUMERARIO",
+     "CAJERO POSVENTA"
     ],
     "comision_lineas": [
      {
@@ -15546,7 +16268,12 @@
      "valor": 0.36486486486486486
     }
    ],
-   "usando_resumen": false
+   "usando_resumen": false,
+   "ventana_meses": [
+    "2097-01",
+    "2097-02",
+    "2097-03"
+   ]
   },
   "detalle/anio-s1-excluir/EVA": {
    "asesor": {
@@ -15891,7 +16618,12 @@
      "valor": 0.1724137931034483
     }
    ],
-   "usando_resumen": false
+   "usando_resumen": false,
+   "ventana_meses": [
+    "2097-01",
+    "2097-02",
+    "2097-03"
+   ]
   },
   "detalle/anio-s1-excluir/FELIPE": null,
   "detalle/anio-todas/ANA": {
@@ -16246,7 +16978,12 @@
      "valor": 0.2727272727272727
     }
    ],
-   "usando_resumen": false
+   "usando_resumen": false,
+   "ventana_meses": [
+    "2097-01",
+    "2097-02",
+    "2097-03"
+   ]
   },
   "detalle/anio-todas/DESCONOCIDO": null,
   "detalle/anio-todas/EVA": {
@@ -16590,7 +17327,12 @@
      "valor": 0.1724137931034483
     }
    ],
-   "usando_resumen": false
+   "usando_resumen": false,
+   "ventana_meses": [
+    "2097-01",
+    "2097-02",
+    "2097-03"
+   ]
   },
   "detalle/anio-todas/FELIPE": {
    "asesor": {
@@ -16813,7 +17555,12 @@
      "valor": 0.21008403361344538
     }
    ],
-   "usando_resumen": false
+   "usando_resumen": false,
+   "ventana_meses": [
+    "2097-01",
+    "2097-02",
+    "2097-03"
+   ]
   },
   "detalle/anio-todas/LUIS": {
    "asesor": {
@@ -17030,7 +17777,12 @@
      "valor": null
     }
    ],
-   "usando_resumen": false
+   "usando_resumen": false,
+   "ventana_meses": [
+    "2097-01",
+    "2097-02",
+    "2097-03"
+   ]
   },
   "detalle/ultimo-todas/ANA": {
    "asesor": {
@@ -17311,6 +18063,16 @@
    },
    "tendencia": [
     {
+     "mes": "2097-01",
+     "pct": 1.8888888888888888,
+     "red_pct": 1.5166666666666666
+    },
+    {
+     "mes": "2097-02",
+     "pct": 1.6714285714285715,
+     "red_pct": 1.1166666666666667
+    },
+    {
      "mes": "2097-03",
      "pct": 0.125,
      "red_pct": 0.65
@@ -17366,7 +18128,12 @@
      "valor": 0.0
     }
    ],
-   "usando_resumen": false
+   "usando_resumen": false,
+   "ventana_meses": [
+    "2097-01",
+    "2097-02",
+    "2097-03"
+   ]
   },
   "detalle/ultimo-todas/EVA": {
    "asesor": {
@@ -17636,6 +18403,16 @@
    },
    "tendencia": [
     {
+     "mes": "2097-01",
+     "pct": 1.26,
+     "red_pct": 1.5166666666666666
+    },
+    {
+     "mes": "2097-02",
+     "pct": 0.375,
+     "red_pct": 1.1166666666666667
+    },
+    {
      "mes": "2097-03",
      "pct": 1.35,
      "red_pct": 0.65
@@ -17691,7 +18468,12 @@
      "valor": 0.0
     }
    ],
-   "usando_resumen": false
+   "usando_resumen": false,
+   "ventana_meses": [
+    "2097-01",
+    "2097-02",
+    "2097-03"
+   ]
   },
   "detalle/ultimo-todas/FELIPE": {
    "asesor": {
@@ -17847,6 +18629,16 @@
    },
    "tendencia": [
     {
+     "mes": "2097-01",
+     "pct": 1.0,
+     "red_pct": 1.5166666666666666
+    },
+    {
+     "mes": "2097-02",
+     "pct": 1.8,
+     "red_pct": 1.1166666666666667
+    },
+    {
      "mes": "2097-03",
      "pct": null,
      "red_pct": 0.65
@@ -17902,7 +18694,12 @@
      "valor": 1.0
     }
    ],
-   "usando_resumen": false
+   "usando_resumen": false,
+   "ventana_meses": [
+    "2097-01",
+    "2097-02",
+    "2097-03"
+   ]
   },
   "inicio": {
    "asesores": {
@@ -20205,7 +21002,28 @@
     }
    ],
    "usando_resumen": false,
-   "venta_sin_linea": 850.0
+   "venta_sin_linea": 850.0,
+   "ventana": {
+    "tiendas": [
+     {
+      "nombre": "Uno C4CA4238",
+      "sucursal_id": "a87ff679-a2f3-e71d-9181-a67b7542122c",
+      "venta": {
+       "por_mes": {
+        "2097-01": 2030.0,
+        "2097-02": 1470.0,
+        "2097-03": 820.0
+       },
+       "total": 4320.0
+      }
+     }
+    ]
+   },
+   "ventana_meses": [
+    "2097-01",
+    "2097-02",
+    "2097-03"
+   ]
   },
   "tiendas/anio-todas": {
    "cumplimiento": {
@@ -20625,7 +21443,40 @@
     }
    ],
    "usando_resumen": false,
-   "venta_sin_linea": 6120.0
+   "venta_sin_linea": 6120.0,
+   "ventana": {
+    "tiendas": [
+     {
+      "nombre": "Uno C4CA4238",
+      "sucursal_id": "a87ff679-a2f3-e71d-9181-a67b7542122c",
+      "venta": {
+       "por_mes": {
+        "2097-01": 2030.0,
+        "2097-02": 1830.0,
+        "2097-03": 820.0
+       },
+       "total": 4680.0
+      }
+     },
+     {
+      "nombre": "Dos C4CA4238",
+      "sucursal_id": "e4da3b7f-bbce-2345-d777-2b0674a318d5",
+      "venta": {
+       "por_mes": {
+        "2097-01": 700.0,
+        "2097-02": 1080.0,
+        "2097-03": 1040.0
+       },
+       "total": 2820.0
+      }
+     }
+    ]
+   },
+   "ventana_meses": [
+    "2097-01",
+    "2097-02",
+    "2097-03"
+   ]
   },
   "tiendas/salteado-ambas-solo": {
    "cumplimiento": {
@@ -20730,7 +21581,40 @@
    ],
    "tiendas": [],
    "usando_resumen": false,
-   "venta_sin_linea": 270.0
+   "venta_sin_linea": 270.0,
+   "ventana": {
+    "tiendas": [
+     {
+      "nombre": "Dos C4CA4238",
+      "sucursal_id": "e4da3b7f-bbce-2345-d777-2b0674a318d5",
+      "venta": {
+       "por_mes": {
+        "2097-01": 0.0,
+        "2097-02": 1080.0,
+        "2097-03": 0.0
+       },
+       "total": 1080.0
+      }
+     },
+     {
+      "nombre": "Uno C4CA4238",
+      "sucursal_id": "a87ff679-a2f3-e71d-9181-a67b7542122c",
+      "venta": {
+       "por_mes": {
+        "2097-01": 0.0,
+        "2097-02": 360.0,
+        "2097-03": 0.0
+       },
+       "total": 360.0
+      }
+     }
+    ]
+   },
+   "ventana_meses": [
+    "2097-01",
+    "2097-02",
+    "2097-03"
+   ]
   },
   "tiendas/ultimo-todas": {
    "cumplimiento": {
@@ -21083,7 +21967,40 @@
     }
    ],
    "usando_resumen": false,
-   "venta_sin_linea": 270.0
+   "venta_sin_linea": 270.0,
+   "ventana": {
+    "tiendas": [
+     {
+      "nombre": "Uno C4CA4238",
+      "sucursal_id": "a87ff679-a2f3-e71d-9181-a67b7542122c",
+      "venta": {
+       "por_mes": {
+        "2097-01": 2030.0,
+        "2097-02": 1830.0,
+        "2097-03": 820.0
+       },
+       "total": 4680.0
+      }
+     },
+     {
+      "nombre": "Dos C4CA4238",
+      "sucursal_id": "e4da3b7f-bbce-2345-d777-2b0674a318d5",
+      "venta": {
+       "por_mes": {
+        "2097-01": 700.0,
+        "2097-02": 1080.0,
+        "2097-03": 1040.0
+       },
+       "total": 2820.0
+      }
+     }
+    ]
+   },
+   "ventana_meses": [
+    "2097-01",
+    "2097-02",
+    "2097-03"
+   ]
   },
   "ventas/anio-s1-excluir": {
    "cumplimiento": {
@@ -21416,7 +22333,172 @@
     }
    },
    "usando_resumen": false,
-   "venta_sin_linea": 850.0
+   "venta_sin_linea": 850.0,
+   "ventana": {
+    "tecnired": {
+     "clientes": 1,
+     "pct": 0.2569444444444444,
+     "por_linea": {
+      "ACCESORIOS": 300.0,
+      "BATERIAS": 0.0,
+      "CASCOS": 0.0,
+      "GPS": 0.0,
+      "LLANTAS": 810.0,
+      "LUBRICANTES": 0.0,
+      "REPUESTOS": 0.0
+     },
+     "por_mes": {
+      "2097-01": {
+       "clientes": 0,
+       "venta": 0.0
+      },
+      "2097-02": {
+       "clientes": 1,
+       "venta": 1110.0
+      },
+      "2097-03": {
+       "clientes": 0,
+       "venta": 0.0
+      }
+     },
+     "top5": [
+      {
+       "nit": "726600369",
+       "pct": 1.0,
+       "razon_social": "726600369",
+       "venta": 1110.0
+      }
+     ],
+     "venta": 1110.0,
+     "venta_por_cliente": 1110.0
+    },
+    "total": {
+     "clientes": {
+      "clientes_unicos": 3,
+      "pct_mostrador": 0.9282407407407407,
+      "pct_tecnired": 0.2569444444444444,
+      "pct_top5": 1.0,
+      "tecnired_por_linea": {
+       "ACCESORIOS": 300.0,
+       "BATERIAS": 0.0,
+       "CASCOS": 0.0,
+       "GPS": 0.0,
+       "LLANTAS": 810.0,
+       "LUBRICANTES": 0.0,
+       "REPUESTOS": 0.0
+      },
+      "tecnired_por_mes": {
+       "2097-01": 0.0,
+       "2097-02": 1110.0,
+       "2097-03": 0.0
+      },
+      "venta_tecnired": 1110.0
+     },
+     "descuentos": {
+      "mes_mayor": "2097-01",
+      "pct_descuento": 0.08280254777070063,
+      "pct_en_mes_mayor": 0.4358974358974359,
+      "total": 390.0
+     },
+     "facturas": {
+      "facturas": 7,
+      "facturas_con_linea": {
+       "ACCESORIOS": 3,
+       "BATERIAS": 0,
+       "CASCOS": 0,
+       "GPS": 0,
+       "LLANTAS": 1,
+       "LUBRICANTES": 0,
+       "REPUESTOS": 4
+      },
+      "items_por_factura": 1.1428571428571428,
+      "pct_con_linea": {
+       "ACCESORIOS": 0.42857142857142855,
+       "BATERIAS": 0.0,
+       "CASCOS": 0.0,
+       "GPS": 0.0,
+       "LLANTAS": 0.14285714285714285,
+       "LUBRICANTES": 0.0,
+       "REPUESTOS": 0.5714285714285714
+      },
+      "pct_multilinea": 0.14285714285714285,
+      "ticket_por_linea": {
+       "ACCESORIOS": 386.6666666666667,
+       "BATERIAS": null,
+       "CASCOS": null,
+       "GPS": null,
+       "LLANTAS": 810.0,
+       "LUBRICANTES": null,
+       "REPUESTOS": 587.5
+      },
+      "ticket_promedio": 617.1428571428571,
+      "unidades": 15.0
+     },
+     "venta": {
+      "hmcl": 0.0,
+      "mix": {
+       "ACCESORIOS": 0.26851851851851855,
+       "BATERIAS": 0.0,
+       "CASCOS": 0.0,
+       "GPS": 0.0,
+       "LLANTAS": 0.1875,
+       "LUBRICANTES": 0.0,
+       "REPUESTOS": 0.5439814814814815
+      },
+      "pct_hmcl": 0.0,
+      "por_linea": {
+       "ACCESORIOS": 1160.0,
+       "BATERIAS": 0.0,
+       "CASCOS": 0.0,
+       "GPS": 0.0,
+       "LLANTAS": 810.0,
+       "LUBRICANTES": 0.0,
+       "REPUESTOS": 2350.0
+      },
+      "por_mes": {
+       "2097-01": 2030.0,
+       "2097-02": 1470.0,
+       "2097-03": 820.0
+      },
+      "por_mes_linea": {
+       "2097-01": {
+        "ACCESORIOS": 500.0,
+        "BATERIAS": 0.0,
+        "CASCOS": 0.0,
+        "GPS": 0.0,
+        "LLANTAS": 0.0,
+        "LUBRICANTES": 0.0,
+        "REPUESTOS": 1530.0
+       },
+       "2097-02": {
+        "ACCESORIOS": 660.0,
+        "BATERIAS": 0.0,
+        "CASCOS": 0.0,
+        "GPS": 0.0,
+        "LLANTAS": 810.0,
+        "LUBRICANTES": 0.0,
+        "REPUESTOS": 0.0
+       },
+       "2097-03": {
+        "ACCESORIOS": 0.0,
+        "BATERIAS": 0.0,
+        "CASCOS": 0.0,
+        "GPS": 0.0,
+        "LLANTAS": 0.0,
+        "LUBRICANTES": 0.0,
+        "REPUESTOS": 820.0
+       }
+      },
+      "sin_hmcl": 4320.0,
+      "total": 4320.0
+     }
+    }
+   },
+   "ventana_meses": [
+    "2097-01",
+    "2097-02",
+    "2097-03"
+   ]
   },
   "ventas/anio-todas": {
    "cumplimiento": {
@@ -21829,7 +22911,172 @@
     }
    },
    "usando_resumen": false,
-   "venta_sin_linea": 6120.0
+   "venta_sin_linea": 6120.0,
+   "ventana": {
+    "tecnired": {
+     "clientes": 1,
+     "pct": 0.27466666666666667,
+     "por_linea": {
+      "ACCESORIOS": 300.0,
+      "BATERIAS": 250.0,
+      "CASCOS": 0.0,
+      "GPS": 0.0,
+      "LLANTAS": 1510.0,
+      "LUBRICANTES": 0.0,
+      "REPUESTOS": 0.0
+     },
+     "por_mes": {
+      "2097-01": {
+       "clientes": 0,
+       "venta": 0.0
+      },
+      "2097-02": {
+       "clientes": 1,
+       "venta": 1110.0
+      },
+      "2097-03": {
+       "clientes": 1,
+       "venta": 950.0
+      }
+     },
+     "top5": [
+      {
+       "nit": "726600369",
+       "pct": 1.0,
+       "razon_social": "726600369",
+       "venta": 2060.0
+      }
+     ],
+     "venta": 2060.0,
+     "venta_por_cliente": 2060.0
+    },
+    "total": {
+     "clientes": {
+      "clientes_unicos": 7,
+      "pct_mostrador": 0.568,
+      "pct_tecnired": 0.27466666666666667,
+      "pct_top5": 0.94,
+      "tecnired_por_linea": {
+       "ACCESORIOS": 300.0,
+       "BATERIAS": 250.0,
+       "CASCOS": 0.0,
+       "GPS": 0.0,
+       "LLANTAS": 1510.0,
+       "LUBRICANTES": 0.0,
+       "REPUESTOS": 0.0
+      },
+      "tecnired_por_mes": {
+       "2097-01": 0.0,
+       "2097-02": 1110.0,
+       "2097-03": 950.0
+      },
+      "venta_tecnired": 2060.0
+     },
+     "descuentos": {
+      "mes_mayor": "2097-02",
+      "pct_descuento": 0.06832298136645963,
+      "pct_en_mes_mayor": 0.5272727272727272,
+      "total": 550.0
+     },
+     "facturas": {
+      "facturas": 15,
+      "facturas_con_linea": {
+       "ACCESORIOS": 4,
+       "BATERIAS": 2,
+       "CASCOS": 0,
+       "GPS": 0,
+       "LLANTAS": 3,
+       "LUBRICANTES": 0,
+       "REPUESTOS": 7
+      },
+      "items_por_factura": 1.0666666666666667,
+      "pct_con_linea": {
+       "ACCESORIOS": 0.26666666666666666,
+       "BATERIAS": 0.13333333333333333,
+       "CASCOS": 0.0,
+       "GPS": 0.0,
+       "LLANTAS": 0.2,
+       "LUBRICANTES": 0.0,
+       "REPUESTOS": 0.4666666666666667
+      },
+      "pct_multilinea": 0.06666666666666667,
+      "ticket_por_linea": {
+       "ACCESORIOS": 390.0,
+       "BATERIAS": 395.0,
+       "CASCOS": null,
+       "GPS": null,
+       "LLANTAS": 623.3333333333334,
+       "LUBRICANTES": null,
+       "REPUESTOS": 468.57142857142856
+      },
+      "ticket_promedio": 500.0,
+      "unidades": 25.0
+     },
+     "venta": {
+      "hmcl": 1440.0,
+      "mix": {
+       "ACCESORIOS": 0.208,
+       "BATERIAS": 0.10533333333333333,
+       "CASCOS": 0.0,
+       "GPS": 0.0,
+       "LLANTAS": 0.24933333333333332,
+       "LUBRICANTES": 0.0,
+       "REPUESTOS": 0.43733333333333335
+      },
+      "pct_hmcl": 0.192,
+      "por_linea": {
+       "ACCESORIOS": 1560.0,
+       "BATERIAS": 790.0,
+       "CASCOS": 0.0,
+       "GPS": 0.0,
+       "LLANTAS": 1870.0,
+       "LUBRICANTES": 0.0,
+       "REPUESTOS": 3280.0
+      },
+      "por_mes": {
+       "2097-01": 2730.0,
+       "2097-02": 2910.0,
+       "2097-03": 1860.0
+      },
+      "por_mes_linea": {
+       "2097-01": {
+        "ACCESORIOS": 900.0,
+        "BATERIAS": 0.0,
+        "CASCOS": 0.0,
+        "GPS": 0.0,
+        "LLANTAS": 0.0,
+        "LUBRICANTES": 0.0,
+        "REPUESTOS": 1830.0
+       },
+       "2097-02": {
+        "ACCESORIOS": 660.0,
+        "BATERIAS": 540.0,
+        "CASCOS": 0.0,
+        "GPS": 0.0,
+        "LLANTAS": 1170.0,
+        "LUBRICANTES": 0.0,
+        "REPUESTOS": 540.0
+       },
+       "2097-03": {
+        "ACCESORIOS": 0.0,
+        "BATERIAS": 250.0,
+        "CASCOS": 0.0,
+        "GPS": 0.0,
+        "LLANTAS": 700.0,
+        "LUBRICANTES": 0.0,
+        "REPUESTOS": 910.0
+       }
+      },
+      "sin_hmcl": 6060.0,
+      "total": 7500.0
+     }
+    }
+   },
+   "ventana_meses": [
+    "2097-01",
+    "2097-02",
+    "2097-03"
+   ]
   },
   "ventas/salteado-ambas-solo": {
    "cumplimiento": {
@@ -22079,7 +23326,165 @@
     }
    },
    "usando_resumen": false,
-   "venta_sin_linea": 270.0
+   "venta_sin_linea": 270.0,
+   "ventana": {
+    "tecnired": {
+     "clientes": 0,
+     "pct": 0.0,
+     "por_linea": {
+      "ACCESORIOS": 0.0,
+      "BATERIAS": 0.0,
+      "CASCOS": 0.0,
+      "GPS": 0.0,
+      "LLANTAS": 0.0,
+      "LUBRICANTES": 0.0,
+      "REPUESTOS": 0.0
+     },
+     "por_mes": {
+      "2097-01": {
+       "clientes": 0,
+       "venta": 0.0
+      },
+      "2097-02": {
+       "clientes": 0,
+       "venta": 0.0
+      },
+      "2097-03": {
+       "clientes": 0,
+       "venta": 0.0
+      }
+     },
+     "top5": [],
+     "venta": 0.0,
+     "venta_por_cliente": null
+    },
+    "total": {
+     "clientes": {
+      "clientes_unicos": 2,
+      "pct_mostrador": 0.0,
+      "pct_tecnired": 0.0,
+      "pct_top5": 1.0,
+      "tecnired_por_linea": {
+       "ACCESORIOS": 0.0,
+       "BATERIAS": 0.0,
+       "CASCOS": 0.0,
+       "GPS": 0.0,
+       "LLANTAS": 0.0,
+       "LUBRICANTES": 0.0,
+       "REPUESTOS": 0.0
+      },
+      "tecnired_por_mes": {
+       "2097-01": 0.0,
+       "2097-02": 0.0,
+       "2097-03": 0.0
+      },
+      "venta_tecnired": 0.0
+     },
+     "descuentos": {
+      "mes_mayor": "2097-02",
+      "pct_descuento": 0.1,
+      "pct_en_mes_mayor": 1.0,
+      "total": 160.0
+     },
+     "facturas": {
+      "facturas": 3,
+      "facturas_con_linea": {
+       "ACCESORIOS": 0,
+       "BATERIAS": 1,
+       "CASCOS": 0,
+       "GPS": 0,
+       "LLANTAS": 1,
+       "LUBRICANTES": 0,
+       "REPUESTOS": 1
+      },
+      "items_por_factura": 1.0,
+      "pct_con_linea": {
+       "ACCESORIOS": 0.0,
+       "BATERIAS": 0.3333333333333333,
+       "CASCOS": 0.0,
+       "GPS": 0.0,
+       "LLANTAS": 0.3333333333333333,
+       "LUBRICANTES": 0.0,
+       "REPUESTOS": 0.3333333333333333
+      },
+      "pct_multilinea": 0.0,
+      "ticket_por_linea": {
+       "ACCESORIOS": null,
+       "BATERIAS": 540.0,
+       "CASCOS": null,
+       "GPS": null,
+       "LLANTAS": 360.0,
+       "LUBRICANTES": null,
+       "REPUESTOS": 540.0
+      },
+      "ticket_promedio": 480.0,
+      "unidades": 5.0
+     },
+     "venta": {
+      "hmcl": 1440.0,
+      "mix": {
+       "ACCESORIOS": 0.0,
+       "BATERIAS": 0.375,
+       "CASCOS": 0.0,
+       "GPS": 0.0,
+       "LLANTAS": 0.25,
+       "LUBRICANTES": 0.0,
+       "REPUESTOS": 0.375
+      },
+      "pct_hmcl": 1.0,
+      "por_linea": {
+       "ACCESORIOS": 0.0,
+       "BATERIAS": 540.0,
+       "CASCOS": 0.0,
+       "GPS": 0.0,
+       "LLANTAS": 360.0,
+       "LUBRICANTES": 0.0,
+       "REPUESTOS": 540.0
+      },
+      "por_mes": {
+       "2097-01": 0.0,
+       "2097-02": 1440.0,
+       "2097-03": 0.0
+      },
+      "por_mes_linea": {
+       "2097-01": {
+        "ACCESORIOS": 0.0,
+        "BATERIAS": 0.0,
+        "CASCOS": 0.0,
+        "GPS": 0.0,
+        "LLANTAS": 0.0,
+        "LUBRICANTES": 0.0,
+        "REPUESTOS": 0.0
+       },
+       "2097-02": {
+        "ACCESORIOS": 0.0,
+        "BATERIAS": 540.0,
+        "CASCOS": 0.0,
+        "GPS": 0.0,
+        "LLANTAS": 360.0,
+        "LUBRICANTES": 0.0,
+        "REPUESTOS": 540.0
+       },
+       "2097-03": {
+        "ACCESORIOS": 0.0,
+        "BATERIAS": 0.0,
+        "CASCOS": 0.0,
+        "GPS": 0.0,
+        "LLANTAS": 0.0,
+        "LUBRICANTES": 0.0,
+        "REPUESTOS": 0.0
+       }
+      },
+      "sin_hmcl": 0.0,
+      "total": 1440.0
+     }
+    }
+   },
+   "ventana_meses": [
+    "2097-01",
+    "2097-02",
+    "2097-03"
+   ]
   },
   "ventas/ultimo-todas": {
    "cumplimiento": {
@@ -22409,7 +23814,165 @@
     }
    },
    "usando_resumen": false,
-   "venta_sin_linea": 270.0
+   "venta_sin_linea": 270.0,
+   "ventana": {
+    "tecnired": {
+     "clientes": 1,
+     "pct": 0.27466666666666667,
+     "por_linea": {
+      "ACCESORIOS": 300.0,
+      "BATERIAS": 250.0,
+      "CASCOS": 0.0,
+      "GPS": 0.0,
+      "LLANTAS": 1510.0,
+      "LUBRICANTES": 0.0,
+      "REPUESTOS": 0.0
+     },
+     "por_mes": {
+      "2097-01": {
+       "clientes": 0,
+       "venta": 0.0
+      },
+      "2097-02": {
+       "clientes": 1,
+       "venta": 1110.0
+      },
+      "2097-03": {
+       "clientes": 1,
+       "venta": 950.0
+      }
+     },
+     "top5": [],
+     "venta": 2060.0,
+     "venta_por_cliente": 2060.0
+    },
+    "total": {
+     "clientes": {
+      "clientes_unicos": 7,
+      "pct_mostrador": 0.568,
+      "pct_tecnired": 0.27466666666666667,
+      "pct_top5": 0.94,
+      "tecnired_por_linea": {
+       "ACCESORIOS": 300.0,
+       "BATERIAS": 250.0,
+       "CASCOS": 0.0,
+       "GPS": 0.0,
+       "LLANTAS": 1510.0,
+       "LUBRICANTES": 0.0,
+       "REPUESTOS": 0.0
+      },
+      "tecnired_por_mes": {
+       "2097-01": 0.0,
+       "2097-02": 1110.0,
+       "2097-03": 950.0
+      },
+      "venta_tecnired": 2060.0
+     },
+     "descuentos": {
+      "mes_mayor": "2097-02",
+      "pct_descuento": 0.06832298136645963,
+      "pct_en_mes_mayor": 0.5272727272727272,
+      "total": 550.0
+     },
+     "facturas": {
+      "facturas": 15,
+      "facturas_con_linea": {
+       "ACCESORIOS": 4,
+       "BATERIAS": 2,
+       "CASCOS": 0,
+       "GPS": 0,
+       "LLANTAS": 3,
+       "LUBRICANTES": 0,
+       "REPUESTOS": 7
+      },
+      "items_por_factura": 1.0666666666666667,
+      "pct_con_linea": {
+       "ACCESORIOS": 0.26666666666666666,
+       "BATERIAS": 0.13333333333333333,
+       "CASCOS": 0.0,
+       "GPS": 0.0,
+       "LLANTAS": 0.2,
+       "LUBRICANTES": 0.0,
+       "REPUESTOS": 0.4666666666666667
+      },
+      "pct_multilinea": 0.06666666666666667,
+      "ticket_por_linea": {
+       "ACCESORIOS": 390.0,
+       "BATERIAS": 395.0,
+       "CASCOS": null,
+       "GPS": null,
+       "LLANTAS": 623.3333333333334,
+       "LUBRICANTES": null,
+       "REPUESTOS": 468.57142857142856
+      },
+      "ticket_promedio": 500.0,
+      "unidades": 25.0
+     },
+     "venta": {
+      "hmcl": 1440.0,
+      "mix": {
+       "ACCESORIOS": 0.208,
+       "BATERIAS": 0.10533333333333333,
+       "CASCOS": 0.0,
+       "GPS": 0.0,
+       "LLANTAS": 0.24933333333333332,
+       "LUBRICANTES": 0.0,
+       "REPUESTOS": 0.43733333333333335
+      },
+      "pct_hmcl": 0.192,
+      "por_linea": {
+       "ACCESORIOS": 1560.0,
+       "BATERIAS": 790.0,
+       "CASCOS": 0.0,
+       "GPS": 0.0,
+       "LLANTAS": 1870.0,
+       "LUBRICANTES": 0.0,
+       "REPUESTOS": 3280.0
+      },
+      "por_mes": {
+       "2097-01": 2730.0,
+       "2097-02": 2910.0,
+       "2097-03": 1860.0
+      },
+      "por_mes_linea": {
+       "2097-01": {
+        "ACCESORIOS": 900.0,
+        "BATERIAS": 0.0,
+        "CASCOS": 0.0,
+        "GPS": 0.0,
+        "LLANTAS": 0.0,
+        "LUBRICANTES": 0.0,
+        "REPUESTOS": 1830.0
+       },
+       "2097-02": {
+        "ACCESORIOS": 660.0,
+        "BATERIAS": 540.0,
+        "CASCOS": 0.0,
+        "GPS": 0.0,
+        "LLANTAS": 1170.0,
+        "LUBRICANTES": 0.0,
+        "REPUESTOS": 540.0
+       },
+       "2097-03": {
+        "ACCESORIOS": 0.0,
+        "BATERIAS": 250.0,
+        "CASCOS": 0.0,
+        "GPS": 0.0,
+        "LLANTAS": 700.0,
+        "LUBRICANTES": 0.0,
+        "REPUESTOS": 910.0
+       }
+      },
+      "sin_hmcl": 6060.0,
+      "total": 7500.0
+     }
+    }
+   },
+   "ventana_meses": [
+    "2097-01",
+    "2097-02",
+    "2097-03"
+   ]
   }
  },
  "on/cambiada": {
@@ -25119,7 +26682,8 @@
     "comision_bono_umbral_pct": 95.0,
     "comision_cargos_asesor": [
      "ASESOR DE REPUESTOS",
-     "ASESOR DE REPUESTOS SUPERNUMERARIO"
+     "ASESOR DE REPUESTOS SUPERNUMERARIO",
+     "CAJERO POSVENTA"
     ],
     "comision_lineas": [
      {
@@ -25509,7 +27073,8 @@
     "comision_bono_umbral_pct": 95.0,
     "comision_cargos_asesor": [
      "ASESOR DE REPUESTOS",
-     "ASESOR DE REPUESTOS SUPERNUMERARIO"
+     "ASESOR DE REPUESTOS SUPERNUMERARIO",
+     "CAJERO POSVENTA"
     ],
     "comision_lineas": [
      {
@@ -25896,7 +27461,8 @@
     "comision_bono_umbral_pct": 95.0,
     "comision_cargos_asesor": [
      "ASESOR DE REPUESTOS",
-     "ASESOR DE REPUESTOS SUPERNUMERARIO"
+     "ASESOR DE REPUESTOS SUPERNUMERARIO",
+     "CAJERO POSVENTA"
     ],
     "comision_lineas": [
      {
@@ -26285,7 +27851,8 @@
     "comision_bono_umbral_pct": 95.0,
     "comision_cargos_asesor": [
      "ASESOR DE REPUESTOS",
-     "ASESOR DE REPUESTOS SUPERNUMERARIO"
+     "ASESOR DE REPUESTOS SUPERNUMERARIO",
+     "CAJERO POSVENTA"
     ],
     "comision_lineas": [
      {
@@ -26766,7 +28333,12 @@
      "valor": 0.0
     }
    ],
-   "usando_resumen": true
+   "usando_resumen": true,
+   "ventana_meses": [
+    "2097-01",
+    "2097-02",
+    "2097-03"
+   ]
   },
   "detalle/anio-s1-excluir/EVA": {
    "asesor": {
@@ -27090,7 +28662,12 @@
      "valor": 0.0
     }
    ],
-   "usando_resumen": true
+   "usando_resumen": true,
+   "ventana_meses": [
+    "2097-01",
+    "2097-02",
+    "2097-03"
+   ]
   },
   "detalle/anio-s1-excluir/FELIPE": null,
   "detalle/anio-todas/ANA": {
@@ -27424,7 +29001,12 @@
      "valor": 0.0
     }
    ],
-   "usando_resumen": true
+   "usando_resumen": true,
+   "ventana_meses": [
+    "2097-01",
+    "2097-02",
+    "2097-03"
+   ]
   },
   "detalle/anio-todas/DESCONOCIDO": null,
   "detalle/anio-todas/EVA": {
@@ -27753,7 +29335,12 @@
      "valor": 0.1724137931034483
     }
    ],
-   "usando_resumen": true
+   "usando_resumen": true,
+   "ventana_meses": [
+    "2097-01",
+    "2097-02",
+    "2097-03"
+   ]
   },
   "detalle/anio-todas/FELIPE": {
    "asesor": {
@@ -27961,7 +29548,12 @@
      "valor": 0.21008403361344538
     }
    ],
-   "usando_resumen": true
+   "usando_resumen": true,
+   "ventana_meses": [
+    "2097-01",
+    "2097-02",
+    "2097-03"
+   ]
   },
   "detalle/anio-todas/LUIS": {
    "asesor": {
@@ -28163,7 +29755,12 @@
      "valor": null
     }
    ],
-   "usando_resumen": true
+   "usando_resumen": true,
+   "ventana_meses": [
+    "2097-01",
+    "2097-02",
+    "2097-03"
+   ]
   },
   "detalle/ultimo-todas/ANA": {
    "asesor": {
@@ -28429,6 +30026,16 @@
    },
    "tendencia": [
     {
+     "mes": "2097-01",
+     "pct": 1.9444444444444444,
+     "red_pct": 1.5444444444444445
+    },
+    {
+     "mes": "2097-02",
+     "pct": 0.0,
+     "red_pct": 0.4666666666666667
+    },
+    {
      "mes": "2097-03",
      "pct": 0.125,
      "red_pct": 0.65
@@ -28484,7 +30091,12 @@
      "valor": 0.0
     }
    ],
-   "usando_resumen": true
+   "usando_resumen": true,
+   "ventana_meses": [
+    "2097-01",
+    "2097-02",
+    "2097-03"
+   ]
   },
   "detalle/ultimo-todas/EVA": {
    "asesor": {
@@ -28739,6 +30351,16 @@
    },
    "tendencia": [
     {
+     "mes": "2097-01",
+     "pct": 1.26,
+     "red_pct": 1.5444444444444445
+    },
+    {
+     "mes": "2097-02",
+     "pct": 0.375,
+     "red_pct": 0.4666666666666667
+    },
+    {
      "mes": "2097-03",
      "pct": 1.35,
      "red_pct": 0.65
@@ -28794,7 +30416,12 @@
      "valor": 0.0
     }
    ],
-   "usando_resumen": true
+   "usando_resumen": true,
+   "ventana_meses": [
+    "2097-01",
+    "2097-02",
+    "2097-03"
+   ]
   },
   "detalle/ultimo-todas/FELIPE": {
    "asesor": {
@@ -28935,6 +30562,16 @@
    },
    "tendencia": [
     {
+     "mes": "2097-01",
+     "pct": 1.0,
+     "red_pct": 1.5444444444444445
+    },
+    {
+     "mes": "2097-02",
+     "pct": 1.8,
+     "red_pct": 0.4666666666666667
+    },
+    {
      "mes": "2097-03",
      "pct": null,
      "red_pct": 0.65
@@ -28990,7 +30627,12 @@
      "valor": 1.0
     }
    ],
-   "usando_resumen": true
+   "usando_resumen": true,
+   "ventana_meses": [
+    "2097-01",
+    "2097-02",
+    "2097-03"
+   ]
   },
   "inicio": {
    "asesores": {
@@ -31166,7 +32808,28 @@
     }
    ],
    "usando_resumen": true,
-   "venta_sin_linea": 1160.0
+   "venta_sin_linea": 1160.0,
+   "ventana": {
+    "tiendas": [
+     {
+      "nombre": "Uno C4CA4238",
+      "sucursal_id": "a87ff679-a2f3-e71d-9181-a67b7542122c",
+      "venta": {
+       "por_mes": {
+        "2097-01": 2080.0,
+        "2097-02": 360.0,
+        "2097-03": 1090.0
+       },
+       "total": 3530.0
+      }
+     }
+    ]
+   },
+   "ventana_meses": [
+    "2097-01",
+    "2097-02",
+    "2097-03"
+   ]
   },
   "tiendas/anio-todas": {
    "cumplimiento": {
@@ -31532,7 +33195,40 @@
     }
    ],
    "usando_resumen": true,
-   "venta_sin_linea": 7670.0
+   "venta_sin_linea": 7670.0,
+   "ventana": {
+    "tiendas": [
+     {
+      "nombre": "Uno C4CA4238",
+      "sucursal_id": "a87ff679-a2f3-e71d-9181-a67b7542122c",
+      "venta": {
+       "por_mes": {
+        "2097-01": 2080.0,
+        "2097-02": 660.0,
+        "2097-03": 1090.0
+       },
+       "total": 3830.0
+      }
+     },
+     {
+      "nombre": "Dos C4CA4238",
+      "sucursal_id": "e4da3b7f-bbce-2345-d777-2b0674a318d5",
+      "venta": {
+       "por_mes": {
+        "2097-01": 700.0,
+        "2097-02": 1080.0,
+        "2097-03": 340.0
+       },
+       "total": 2120.0
+      }
+     }
+    ]
+   },
+   "ventana_meses": [
+    "2097-01",
+    "2097-02",
+    "2097-03"
+   ]
   },
   "tiendas/salteado-ambas-solo": {
    "cumplimiento": {
@@ -31761,7 +33457,40 @@
     }
    ],
    "usando_resumen": true,
-   "venta_sin_linea": 700.0
+   "venta_sin_linea": 700.0,
+   "ventana": {
+    "tiendas": [
+     {
+      "nombre": "Dos C4CA4238",
+      "sucursal_id": "e4da3b7f-bbce-2345-d777-2b0674a318d5",
+      "venta": {
+       "por_mes": {
+        "2097-01": 0.0,
+        "2097-02": 1080.0,
+        "2097-03": 250.0
+       },
+       "total": 1330.0
+      }
+     },
+     {
+      "nombre": "Uno C4CA4238",
+      "sucursal_id": "a87ff679-a2f3-e71d-9181-a67b7542122c",
+      "venta": {
+       "por_mes": {
+        "2097-01": 0.0,
+        "2097-02": 300.0,
+        "2097-03": 0.0
+       },
+       "total": 300.0
+      }
+     }
+    ]
+   },
+   "ventana_meses": [
+    "2097-01",
+    "2097-02",
+    "2097-03"
+   ]
   },
   "tiendas/ultimo-todas": {
    "cumplimiento": {
@@ -32072,7 +33801,40 @@
     }
    ],
    "usando_resumen": true,
-   "venta_sin_linea": 700.0
+   "venta_sin_linea": 700.0,
+   "ventana": {
+    "tiendas": [
+     {
+      "nombre": "Uno C4CA4238",
+      "sucursal_id": "a87ff679-a2f3-e71d-9181-a67b7542122c",
+      "venta": {
+       "por_mes": {
+        "2097-01": 2080.0,
+        "2097-02": 660.0,
+        "2097-03": 1090.0
+       },
+       "total": 3830.0
+      }
+     },
+     {
+      "nombre": "Dos C4CA4238",
+      "sucursal_id": "e4da3b7f-bbce-2345-d777-2b0674a318d5",
+      "venta": {
+       "por_mes": {
+        "2097-01": 700.0,
+        "2097-02": 1080.0,
+        "2097-03": 340.0
+       },
+       "total": 2120.0
+      }
+     }
+    ]
+   },
+   "ventana_meses": [
+    "2097-01",
+    "2097-02",
+    "2097-03"
+   ]
   },
   "ventas/anio-s1-excluir": {
    "cumplimiento": {
@@ -32353,7 +34115,135 @@
     }
    },
    "usando_resumen": true,
-   "venta_sin_linea": 1160.0
+   "venta_sin_linea": 1160.0,
+   "ventana": {
+    "tecnired": {
+     "clientes": 0,
+     "pct": 0.0,
+     "por_linea": {
+      "ACCESORIOS": 0.0,
+      "BATERIAS": 0.0,
+      "MOTOS": 0.0,
+      "REPUESTOS": 0.0
+     },
+     "por_mes": {
+      "2097-01": {
+       "clientes": 0,
+       "venta": 0.0
+      },
+      "2097-02": {
+       "clientes": 0,
+       "venta": 0.0
+      },
+      "2097-03": {
+       "clientes": 0,
+       "venta": 0.0
+      }
+     },
+     "top5": [],
+     "venta": 0.0,
+     "venta_por_cliente": null
+    },
+    "total": {
+     "clientes": {
+      "clientes_unicos": 4,
+      "pct_mostrador": 0.9065155807365439,
+      "pct_tecnired": 0.0,
+      "pct_top5": 1.0,
+      "tecnired_por_linea": {
+       "ACCESORIOS": 0.0,
+       "BATERIAS": 0.0,
+       "MOTOS": 0.0,
+       "REPUESTOS": 0.0
+      },
+      "tecnired_por_mes": {
+       "2097-01": 0.0,
+       "2097-02": 0.0,
+       "2097-03": 0.0
+      },
+      "venta_tecnired": 0.0
+     },
+     "descuentos": {
+      "mes_mayor": "2097-01",
+      "pct_descuento": 0.08549222797927461,
+      "pct_en_mes_mayor": 0.5151515151515151,
+      "total": 330.0
+     },
+     "facturas": {
+      "facturas": 7,
+      "facturas_con_linea": {
+       "ACCESORIOS": 2,
+       "BATERIAS": 0,
+       "MOTOS": 2,
+       "REPUESTOS": 4
+      },
+      "items_por_factura": 1.1428571428571428,
+      "pct_con_linea": {
+       "ACCESORIOS": 0.2857142857142857,
+       "BATERIAS": 0.0,
+       "MOTOS": 0.2857142857142857,
+       "REPUESTOS": 0.5714285714285714
+      },
+      "pct_multilinea": 0.14285714285714285,
+      "ticket_por_linea": {
+       "ACCESORIOS": 430.0,
+       "BATERIAS": null,
+       "MOTOS": 160.0,
+       "REPUESTOS": 587.5
+      },
+      "ticket_promedio": 504.2857142857143,
+      "unidades": 14.0
+     },
+     "venta": {
+      "hmcl": 0.0,
+      "mix": {
+       "ACCESORIOS": 0.24362606232294617,
+       "BATERIAS": 0.0,
+       "MOTOS": 0.0906515580736544,
+       "REPUESTOS": 0.6657223796033994
+      },
+      "pct_hmcl": 0.0,
+      "por_linea": {
+       "ACCESORIOS": 860.0,
+       "BATERIAS": 0.0,
+       "MOTOS": 320.0,
+       "REPUESTOS": 2350.0
+      },
+      "por_mes": {
+       "2097-01": 2080.0,
+       "2097-02": 360.0,
+       "2097-03": 1090.0
+      },
+      "por_mes_linea": {
+       "2097-01": {
+        "ACCESORIOS": 500.0,
+        "BATERIAS": 0.0,
+        "MOTOS": 50.0,
+        "REPUESTOS": 1530.0
+       },
+       "2097-02": {
+        "ACCESORIOS": 360.0,
+        "BATERIAS": 0.0,
+        "MOTOS": 0.0,
+        "REPUESTOS": 0.0
+       },
+       "2097-03": {
+        "ACCESORIOS": 0.0,
+        "BATERIAS": 0.0,
+        "MOTOS": 270.0,
+        "REPUESTOS": 820.0
+       }
+      },
+      "sin_hmcl": 3530.0,
+      "total": 3530.0
+     }
+    }
+   },
+   "ventana_meses": [
+    "2097-01",
+    "2097-02",
+    "2097-03"
+   ]
   },
   "ventas/anio-todas": {
    "cumplimiento": {
@@ -32706,7 +34596,142 @@
     }
    },
    "usando_resumen": true,
-   "venta_sin_linea": 7670.0
+   "venta_sin_linea": 7670.0,
+   "ventana": {
+    "tecnired": {
+     "clientes": 1,
+     "pct": 0.09243697478991597,
+     "por_linea": {
+      "ACCESORIOS": 300.0,
+      "BATERIAS": 250.0,
+      "MOTOS": 0.0,
+      "REPUESTOS": 0.0
+     },
+     "por_mes": {
+      "2097-01": {
+       "clientes": 0,
+       "venta": 0.0
+      },
+      "2097-02": {
+       "clientes": 1,
+       "venta": 300.0
+      },
+      "2097-03": {
+       "clientes": 1,
+       "venta": 250.0
+      }
+     },
+     "top5": [
+      {
+       "nit": "726600369",
+       "pct": 1.0,
+       "razon_social": "726600369",
+       "venta": 550.0
+      }
+     ],
+     "venta": 550.0,
+     "venta_por_cliente": 550.0
+    },
+    "total": {
+     "clientes": {
+      "clientes_unicos": 8,
+      "pct_mostrador": 0.5798319327731093,
+      "pct_tecnired": 0.09243697478991597,
+      "pct_top5": 0.9310924369747899,
+      "tecnired_por_linea": {
+       "ACCESORIOS": 300.0,
+       "BATERIAS": 250.0,
+       "MOTOS": 0.0,
+       "REPUESTOS": 0.0
+      },
+      "tecnired_por_mes": {
+       "2097-01": 0.0,
+       "2097-02": 300.0,
+       "2097-03": 250.0
+      },
+      "venta_tecnired": 550.0
+     },
+     "descuentos": {
+      "mes_mayor": "2097-01",
+      "pct_descuento": 0.0703125,
+      "pct_en_mes_mayor": 0.37777777777777777,
+      "total": 450.0
+     },
+     "facturas": {
+      "facturas": 14,
+      "facturas_con_linea": {
+       "ACCESORIOS": 4,
+       "BATERIAS": 2,
+       "MOTOS": 2,
+       "REPUESTOS": 7
+      },
+      "items_por_factura": 1.0714285714285714,
+      "pct_con_linea": {
+       "ACCESORIOS": 0.2857142857142857,
+       "BATERIAS": 0.14285714285714285,
+       "MOTOS": 0.14285714285714285,
+       "REPUESTOS": 0.5
+      },
+      "pct_multilinea": 0.07142857142857142,
+      "ticket_por_linea": {
+       "ACCESORIOS": 390.0,
+       "BATERIAS": 395.0,
+       "MOTOS": 160.0,
+       "REPUESTOS": 468.57142857142856
+      },
+      "ticket_promedio": 425.0,
+      "unidades": 23.0
+     },
+     "venta": {
+      "hmcl": 1630.0,
+      "mix": {
+       "ACCESORIOS": 0.26218487394957984,
+       "BATERIAS": 0.13277310924369748,
+       "MOTOS": 0.05378151260504202,
+       "REPUESTOS": 0.5512605042016807
+      },
+      "pct_hmcl": 0.2739495798319328,
+      "por_linea": {
+       "ACCESORIOS": 1560.0,
+       "BATERIAS": 790.0,
+       "MOTOS": 320.0,
+       "REPUESTOS": 3280.0
+      },
+      "por_mes": {
+       "2097-01": 2780.0,
+       "2097-02": 1740.0,
+       "2097-03": 1430.0
+      },
+      "por_mes_linea": {
+       "2097-01": {
+        "ACCESORIOS": 900.0,
+        "BATERIAS": 0.0,
+        "MOTOS": 50.0,
+        "REPUESTOS": 1830.0
+       },
+       "2097-02": {
+        "ACCESORIOS": 660.0,
+        "BATERIAS": 540.0,
+        "MOTOS": 0.0,
+        "REPUESTOS": 540.0
+       },
+       "2097-03": {
+        "ACCESORIOS": 0.0,
+        "BATERIAS": 250.0,
+        "MOTOS": 270.0,
+        "REPUESTOS": 910.0
+       }
+      },
+      "sin_hmcl": 4320.0,
+      "total": 5950.0
+     }
+    }
+   },
+   "ventana_meses": [
+    "2097-01",
+    "2097-02",
+    "2097-03"
+   ]
   },
   "ventas/salteado-ambas-solo": {
    "cumplimiento": {
@@ -32986,7 +35011,135 @@
     }
    },
    "usando_resumen": true,
-   "venta_sin_linea": 700.0
+   "venta_sin_linea": 700.0,
+   "ventana": {
+    "tecnired": {
+     "clientes": 1,
+     "pct": 0.3374233128834356,
+     "por_linea": {
+      "ACCESORIOS": 300.0,
+      "BATERIAS": 250.0,
+      "MOTOS": 0.0,
+      "REPUESTOS": 0.0
+     },
+     "por_mes": {
+      "2097-01": {
+       "clientes": 0,
+       "venta": 0.0
+      },
+      "2097-02": {
+       "clientes": 1,
+       "venta": 300.0
+      },
+      "2097-03": {
+       "clientes": 1,
+       "venta": 250.0
+      }
+     },
+     "top5": [],
+     "venta": 550.0,
+     "venta_por_cliente": 550.0
+    },
+    "total": {
+     "clientes": {
+      "clientes_unicos": 2,
+      "pct_mostrador": 0.15337423312883436,
+      "pct_tecnired": 0.3374233128834356,
+      "pct_top5": 1.0,
+      "tecnired_por_linea": {
+       "ACCESORIOS": 300.0,
+       "BATERIAS": 250.0,
+       "MOTOS": 0.0,
+       "REPUESTOS": 0.0
+      },
+      "tecnired_por_mes": {
+       "2097-01": 0.0,
+       "2097-02": 300.0,
+       "2097-03": 250.0
+      },
+      "venta_tecnired": 550.0
+     },
+     "descuentos": {
+      "mes_mayor": "2097-02",
+      "pct_descuento": 0.06857142857142857,
+      "pct_en_mes_mayor": 1.0,
+      "total": 120.0
+     },
+     "facturas": {
+      "facturas": 4,
+      "facturas_con_linea": {
+       "ACCESORIOS": 1,
+       "BATERIAS": 2,
+       "MOTOS": 0,
+       "REPUESTOS": 1
+      },
+      "items_por_factura": 1.0,
+      "pct_con_linea": {
+       "ACCESORIOS": 0.25,
+       "BATERIAS": 0.5,
+       "MOTOS": 0.0,
+       "REPUESTOS": 0.25
+      },
+      "pct_multilinea": 0.0,
+      "ticket_por_linea": {
+       "ACCESORIOS": 300.0,
+       "BATERIAS": 395.0,
+       "MOTOS": null,
+       "REPUESTOS": 540.0
+      },
+      "ticket_promedio": 407.5,
+      "unidades": 6.0
+     },
+     "venta": {
+      "hmcl": 1630.0,
+      "mix": {
+       "ACCESORIOS": 0.18404907975460122,
+       "BATERIAS": 0.48466257668711654,
+       "MOTOS": 0.0,
+       "REPUESTOS": 0.3312883435582822
+      },
+      "pct_hmcl": 1.0,
+      "por_linea": {
+       "ACCESORIOS": 300.0,
+       "BATERIAS": 790.0,
+       "MOTOS": 0.0,
+       "REPUESTOS": 540.0
+      },
+      "por_mes": {
+       "2097-01": 0.0,
+       "2097-02": 1380.0,
+       "2097-03": 250.0
+      },
+      "por_mes_linea": {
+       "2097-01": {
+        "ACCESORIOS": 0.0,
+        "BATERIAS": 0.0,
+        "MOTOS": 0.0,
+        "REPUESTOS": 0.0
+       },
+       "2097-02": {
+        "ACCESORIOS": 300.0,
+        "BATERIAS": 540.0,
+        "MOTOS": 0.0,
+        "REPUESTOS": 540.0
+       },
+       "2097-03": {
+        "ACCESORIOS": 0.0,
+        "BATERIAS": 250.0,
+        "MOTOS": 0.0,
+        "REPUESTOS": 0.0
+       }
+      },
+      "sin_hmcl": 0.0,
+      "total": 1630.0
+     }
+    }
+   },
+   "ventana_meses": [
+    "2097-01",
+    "2097-02",
+    "2097-03"
+   ]
   },
   "ventas/ultimo-todas": {
    "cumplimiento": {
@@ -33274,7 +35427,135 @@
     }
    },
    "usando_resumen": true,
-   "venta_sin_linea": 700.0
+   "venta_sin_linea": 700.0,
+   "ventana": {
+    "tecnired": {
+     "clientes": 1,
+     "pct": 0.09243697478991597,
+     "por_linea": {
+      "ACCESORIOS": 300.0,
+      "BATERIAS": 250.0,
+      "MOTOS": 0.0,
+      "REPUESTOS": 0.0
+     },
+     "por_mes": {
+      "2097-01": {
+       "clientes": 0,
+       "venta": 0.0
+      },
+      "2097-02": {
+       "clientes": 1,
+       "venta": 300.0
+      },
+      "2097-03": {
+       "clientes": 1,
+       "venta": 250.0
+      }
+     },
+     "top5": [],
+     "venta": 550.0,
+     "venta_por_cliente": 550.0
+    },
+    "total": {
+     "clientes": {
+      "clientes_unicos": 8,
+      "pct_mostrador": 0.5798319327731093,
+      "pct_tecnired": 0.09243697478991597,
+      "pct_top5": 0.9310924369747899,
+      "tecnired_por_linea": {
+       "ACCESORIOS": 300.0,
+       "BATERIAS": 250.0,
+       "MOTOS": 0.0,
+       "REPUESTOS": 0.0
+      },
+      "tecnired_por_mes": {
+       "2097-01": 0.0,
+       "2097-02": 300.0,
+       "2097-03": 250.0
+      },
+      "venta_tecnired": 550.0
+     },
+     "descuentos": {
+      "mes_mayor": "2097-01",
+      "pct_descuento": 0.0703125,
+      "pct_en_mes_mayor": 0.37777777777777777,
+      "total": 450.0
+     },
+     "facturas": {
+      "facturas": 14,
+      "facturas_con_linea": {
+       "ACCESORIOS": 4,
+       "BATERIAS": 2,
+       "MOTOS": 2,
+       "REPUESTOS": 7
+      },
+      "items_por_factura": 1.0714285714285714,
+      "pct_con_linea": {
+       "ACCESORIOS": 0.2857142857142857,
+       "BATERIAS": 0.14285714285714285,
+       "MOTOS": 0.14285714285714285,
+       "REPUESTOS": 0.5
+      },
+      "pct_multilinea": 0.07142857142857142,
+      "ticket_por_linea": {
+       "ACCESORIOS": 390.0,
+       "BATERIAS": 395.0,
+       "MOTOS": 160.0,
+       "REPUESTOS": 468.57142857142856
+      },
+      "ticket_promedio": 425.0,
+      "unidades": 23.0
+     },
+     "venta": {
+      "hmcl": 1630.0,
+      "mix": {
+       "ACCESORIOS": 0.26218487394957984,
+       "BATERIAS": 0.13277310924369748,
+       "MOTOS": 0.05378151260504202,
+       "REPUESTOS": 0.5512605042016807
+      },
+      "pct_hmcl": 0.2739495798319328,
+      "por_linea": {
+       "ACCESORIOS": 1560.0,
+       "BATERIAS": 790.0,
+       "MOTOS": 320.0,
+       "REPUESTOS": 3280.0
+      },
+      "por_mes": {
+       "2097-01": 2780.0,
+       "2097-02": 1740.0,
+       "2097-03": 1430.0
+      },
+      "por_mes_linea": {
+       "2097-01": {
+        "ACCESORIOS": 900.0,
+        "BATERIAS": 0.0,
+        "MOTOS": 50.0,
+        "REPUESTOS": 1830.0
+       },
+       "2097-02": {
+        "ACCESORIOS": 660.0,
+        "BATERIAS": 540.0,
+        "MOTOS": 0.0,
+        "REPUESTOS": 540.0
+       },
+       "2097-03": {
+        "ACCESORIOS": 0.0,
+        "BATERIAS": 250.0,
+        "MOTOS": 270.0,
+        "REPUESTOS": 910.0
+       }
+      },
+      "sin_hmcl": 4320.0,
+      "total": 5950.0
+     }
+    }
+   },
+   "ventana_meses": [
+    "2097-01",
+    "2097-02",
+    "2097-03"
+   ]
   }
  },
  "on/defecto": {
@@ -36291,7 +38572,8 @@
     "comision_bono_umbral_pct": 95.0,
     "comision_cargos_asesor": [
      "ASESOR DE REPUESTOS",
-     "ASESOR DE REPUESTOS SUPERNUMERARIO"
+     "ASESOR DE REPUESTOS SUPERNUMERARIO",
+     "CAJERO POSVENTA"
     ],
     "comision_lineas": [
      {
@@ -36681,7 +38963,8 @@
     "comision_bono_umbral_pct": 95.0,
     "comision_cargos_asesor": [
      "ASESOR DE REPUESTOS",
-     "ASESOR DE REPUESTOS SUPERNUMERARIO"
+     "ASESOR DE REPUESTOS SUPERNUMERARIO",
+     "CAJERO POSVENTA"
     ],
     "comision_lineas": [
      {
@@ -37068,7 +39351,8 @@
     "comision_bono_umbral_pct": 95.0,
     "comision_cargos_asesor": [
      "ASESOR DE REPUESTOS",
-     "ASESOR DE REPUESTOS SUPERNUMERARIO"
+     "ASESOR DE REPUESTOS SUPERNUMERARIO",
+     "CAJERO POSVENTA"
     ],
     "comision_lineas": [
      {
@@ -37457,7 +39741,8 @@
     "comision_bono_umbral_pct": 95.0,
     "comision_cargos_asesor": [
      "ASESOR DE REPUESTOS",
-     "ASESOR DE REPUESTOS SUPERNUMERARIO"
+     "ASESOR DE REPUESTOS SUPERNUMERARIO",
+     "CAJERO POSVENTA"
     ],
     "comision_lineas": [
      {
@@ -37959,7 +40244,12 @@
      "valor": 0.36486486486486486
     }
    ],
-   "usando_resumen": true
+   "usando_resumen": true,
+   "ventana_meses": [
+    "2097-01",
+    "2097-02",
+    "2097-03"
+   ]
   },
   "detalle/anio-s1-excluir/EVA": {
    "asesor": {
@@ -38304,7 +40594,12 @@
      "valor": 0.1724137931034483
     }
    ],
-   "usando_resumen": true
+   "usando_resumen": true,
+   "ventana_meses": [
+    "2097-01",
+    "2097-02",
+    "2097-03"
+   ]
   },
   "detalle/anio-s1-excluir/FELIPE": null,
   "detalle/anio-todas/ANA": {
@@ -38659,7 +40954,12 @@
      "valor": 0.2727272727272727
     }
    ],
-   "usando_resumen": true
+   "usando_resumen": true,
+   "ventana_meses": [
+    "2097-01",
+    "2097-02",
+    "2097-03"
+   ]
   },
   "detalle/anio-todas/DESCONOCIDO": null,
   "detalle/anio-todas/EVA": {
@@ -39003,7 +41303,12 @@
      "valor": 0.1724137931034483
     }
    ],
-   "usando_resumen": true
+   "usando_resumen": true,
+   "ventana_meses": [
+    "2097-01",
+    "2097-02",
+    "2097-03"
+   ]
   },
   "detalle/anio-todas/FELIPE": {
    "asesor": {
@@ -39226,7 +41531,12 @@
      "valor": 0.21008403361344538
     }
    ],
-   "usando_resumen": true
+   "usando_resumen": true,
+   "ventana_meses": [
+    "2097-01",
+    "2097-02",
+    "2097-03"
+   ]
   },
   "detalle/anio-todas/LUIS": {
    "asesor": {
@@ -39443,7 +41753,12 @@
      "valor": null
     }
    ],
-   "usando_resumen": true
+   "usando_resumen": true,
+   "ventana_meses": [
+    "2097-01",
+    "2097-02",
+    "2097-03"
+   ]
   },
   "detalle/ultimo-todas/ANA": {
    "asesor": {
@@ -39724,6 +42039,16 @@
    },
    "tendencia": [
     {
+     "mes": "2097-01",
+     "pct": 1.8888888888888888,
+     "red_pct": 1.5166666666666666
+    },
+    {
+     "mes": "2097-02",
+     "pct": 1.6714285714285715,
+     "red_pct": 1.1166666666666667
+    },
+    {
      "mes": "2097-03",
      "pct": 0.125,
      "red_pct": 0.65
@@ -39779,7 +42104,12 @@
      "valor": 0.0
     }
    ],
-   "usando_resumen": true
+   "usando_resumen": true,
+   "ventana_meses": [
+    "2097-01",
+    "2097-02",
+    "2097-03"
+   ]
   },
   "detalle/ultimo-todas/EVA": {
    "asesor": {
@@ -40049,6 +42379,16 @@
    },
    "tendencia": [
     {
+     "mes": "2097-01",
+     "pct": 1.26,
+     "red_pct": 1.5166666666666666
+    },
+    {
+     "mes": "2097-02",
+     "pct": 0.375,
+     "red_pct": 1.1166666666666667
+    },
+    {
      "mes": "2097-03",
      "pct": 1.35,
      "red_pct": 0.65
@@ -40104,7 +42444,12 @@
      "valor": 0.0
     }
    ],
-   "usando_resumen": true
+   "usando_resumen": true,
+   "ventana_meses": [
+    "2097-01",
+    "2097-02",
+    "2097-03"
+   ]
   },
   "detalle/ultimo-todas/FELIPE": {
    "asesor": {
@@ -40260,6 +42605,16 @@
    },
    "tendencia": [
     {
+     "mes": "2097-01",
+     "pct": 1.0,
+     "red_pct": 1.5166666666666666
+    },
+    {
+     "mes": "2097-02",
+     "pct": 1.8,
+     "red_pct": 1.1166666666666667
+    },
+    {
      "mes": "2097-03",
      "pct": null,
      "red_pct": 0.65
@@ -40315,7 +42670,12 @@
      "valor": 1.0
     }
    ],
-   "usando_resumen": true
+   "usando_resumen": true,
+   "ventana_meses": [
+    "2097-01",
+    "2097-02",
+    "2097-03"
+   ]
   },
   "inicio": {
    "asesores": {
@@ -42618,7 +44978,28 @@
     }
    ],
    "usando_resumen": true,
-   "venta_sin_linea": 850.0
+   "venta_sin_linea": 850.0,
+   "ventana": {
+    "tiendas": [
+     {
+      "nombre": "Uno C4CA4238",
+      "sucursal_id": "a87ff679-a2f3-e71d-9181-a67b7542122c",
+      "venta": {
+       "por_mes": {
+        "2097-01": 2030.0,
+        "2097-02": 1470.0,
+        "2097-03": 820.0
+       },
+       "total": 4320.0
+      }
+     }
+    ]
+   },
+   "ventana_meses": [
+    "2097-01",
+    "2097-02",
+    "2097-03"
+   ]
   },
   "tiendas/anio-todas": {
    "cumplimiento": {
@@ -43038,7 +45419,40 @@
     }
    ],
    "usando_resumen": true,
-   "venta_sin_linea": 6120.0
+   "venta_sin_linea": 6120.0,
+   "ventana": {
+    "tiendas": [
+     {
+      "nombre": "Uno C4CA4238",
+      "sucursal_id": "a87ff679-a2f3-e71d-9181-a67b7542122c",
+      "venta": {
+       "por_mes": {
+        "2097-01": 2030.0,
+        "2097-02": 1830.0,
+        "2097-03": 820.0
+       },
+       "total": 4680.0
+      }
+     },
+     {
+      "nombre": "Dos C4CA4238",
+      "sucursal_id": "e4da3b7f-bbce-2345-d777-2b0674a318d5",
+      "venta": {
+       "por_mes": {
+        "2097-01": 700.0,
+        "2097-02": 1080.0,
+        "2097-03": 1040.0
+       },
+       "total": 2820.0
+      }
+     }
+    ]
+   },
+   "ventana_meses": [
+    "2097-01",
+    "2097-02",
+    "2097-03"
+   ]
   },
   "tiendas/salteado-ambas-solo": {
    "cumplimiento": {
@@ -43143,7 +45557,40 @@
    ],
    "tiendas": [],
    "usando_resumen": true,
-   "venta_sin_linea": 270.0
+   "venta_sin_linea": 270.0,
+   "ventana": {
+    "tiendas": [
+     {
+      "nombre": "Dos C4CA4238",
+      "sucursal_id": "e4da3b7f-bbce-2345-d777-2b0674a318d5",
+      "venta": {
+       "por_mes": {
+        "2097-01": 0.0,
+        "2097-02": 1080.0,
+        "2097-03": 0.0
+       },
+       "total": 1080.0
+      }
+     },
+     {
+      "nombre": "Uno C4CA4238",
+      "sucursal_id": "a87ff679-a2f3-e71d-9181-a67b7542122c",
+      "venta": {
+       "por_mes": {
+        "2097-01": 0.0,
+        "2097-02": 360.0,
+        "2097-03": 0.0
+       },
+       "total": 360.0
+      }
+     }
+    ]
+   },
+   "ventana_meses": [
+    "2097-01",
+    "2097-02",
+    "2097-03"
+   ]
   },
   "tiendas/ultimo-todas": {
    "cumplimiento": {
@@ -43496,7 +45943,40 @@
     }
    ],
    "usando_resumen": true,
-   "venta_sin_linea": 270.0
+   "venta_sin_linea": 270.0,
+   "ventana": {
+    "tiendas": [
+     {
+      "nombre": "Uno C4CA4238",
+      "sucursal_id": "a87ff679-a2f3-e71d-9181-a67b7542122c",
+      "venta": {
+       "por_mes": {
+        "2097-01": 2030.0,
+        "2097-02": 1830.0,
+        "2097-03": 820.0
+       },
+       "total": 4680.0
+      }
+     },
+     {
+      "nombre": "Dos C4CA4238",
+      "sucursal_id": "e4da3b7f-bbce-2345-d777-2b0674a318d5",
+      "venta": {
+       "por_mes": {
+        "2097-01": 700.0,
+        "2097-02": 1080.0,
+        "2097-03": 1040.0
+       },
+       "total": 2820.0
+      }
+     }
+    ]
+   },
+   "ventana_meses": [
+    "2097-01",
+    "2097-02",
+    "2097-03"
+   ]
   },
   "ventas/anio-s1-excluir": {
    "cumplimiento": {
@@ -43829,7 +46309,172 @@
     }
    },
    "usando_resumen": true,
-   "venta_sin_linea": 850.0
+   "venta_sin_linea": 850.0,
+   "ventana": {
+    "tecnired": {
+     "clientes": 1,
+     "pct": 0.2569444444444444,
+     "por_linea": {
+      "ACCESORIOS": 300.0,
+      "BATERIAS": 0.0,
+      "CASCOS": 0.0,
+      "GPS": 0.0,
+      "LLANTAS": 810.0,
+      "LUBRICANTES": 0.0,
+      "REPUESTOS": 0.0
+     },
+     "por_mes": {
+      "2097-01": {
+       "clientes": 0,
+       "venta": 0.0
+      },
+      "2097-02": {
+       "clientes": 1,
+       "venta": 1110.0
+      },
+      "2097-03": {
+       "clientes": 0,
+       "venta": 0.0
+      }
+     },
+     "top5": [
+      {
+       "nit": "726600369",
+       "pct": 1.0,
+       "razon_social": "726600369",
+       "venta": 1110.0
+      }
+     ],
+     "venta": 1110.0,
+     "venta_por_cliente": 1110.0
+    },
+    "total": {
+     "clientes": {
+      "clientes_unicos": 3,
+      "pct_mostrador": 0.9282407407407407,
+      "pct_tecnired": 0.2569444444444444,
+      "pct_top5": 1.0,
+      "tecnired_por_linea": {
+       "ACCESORIOS": 300.0,
+       "BATERIAS": 0.0,
+       "CASCOS": 0.0,
+       "GPS": 0.0,
+       "LLANTAS": 810.0,
+       "LUBRICANTES": 0.0,
+       "REPUESTOS": 0.0
+      },
+      "tecnired_por_mes": {
+       "2097-01": 0.0,
+       "2097-02": 1110.0,
+       "2097-03": 0.0
+      },
+      "venta_tecnired": 1110.0
+     },
+     "descuentos": {
+      "mes_mayor": "2097-01",
+      "pct_descuento": 0.08280254777070063,
+      "pct_en_mes_mayor": 0.4358974358974359,
+      "total": 390.0
+     },
+     "facturas": {
+      "facturas": 7,
+      "facturas_con_linea": {
+       "ACCESORIOS": 3,
+       "BATERIAS": 0,
+       "CASCOS": 0,
+       "GPS": 0,
+       "LLANTAS": 1,
+       "LUBRICANTES": 0,
+       "REPUESTOS": 4
+      },
+      "items_por_factura": 1.1428571428571428,
+      "pct_con_linea": {
+       "ACCESORIOS": 0.42857142857142855,
+       "BATERIAS": 0.0,
+       "CASCOS": 0.0,
+       "GPS": 0.0,
+       "LLANTAS": 0.14285714285714285,
+       "LUBRICANTES": 0.0,
+       "REPUESTOS": 0.5714285714285714
+      },
+      "pct_multilinea": 0.14285714285714285,
+      "ticket_por_linea": {
+       "ACCESORIOS": 386.6666666666667,
+       "BATERIAS": null,
+       "CASCOS": null,
+       "GPS": null,
+       "LLANTAS": 810.0,
+       "LUBRICANTES": null,
+       "REPUESTOS": 587.5
+      },
+      "ticket_promedio": 617.1428571428571,
+      "unidades": 15.0
+     },
+     "venta": {
+      "hmcl": 0.0,
+      "mix": {
+       "ACCESORIOS": 0.26851851851851855,
+       "BATERIAS": 0.0,
+       "CASCOS": 0.0,
+       "GPS": 0.0,
+       "LLANTAS": 0.1875,
+       "LUBRICANTES": 0.0,
+       "REPUESTOS": 0.5439814814814815
+      },
+      "pct_hmcl": 0.0,
+      "por_linea": {
+       "ACCESORIOS": 1160.0,
+       "BATERIAS": 0.0,
+       "CASCOS": 0.0,
+       "GPS": 0.0,
+       "LLANTAS": 810.0,
+       "LUBRICANTES": 0.0,
+       "REPUESTOS": 2350.0
+      },
+      "por_mes": {
+       "2097-01": 2030.0,
+       "2097-02": 1470.0,
+       "2097-03": 820.0
+      },
+      "por_mes_linea": {
+       "2097-01": {
+        "ACCESORIOS": 500.0,
+        "BATERIAS": 0.0,
+        "CASCOS": 0.0,
+        "GPS": 0.0,
+        "LLANTAS": 0.0,
+        "LUBRICANTES": 0.0,
+        "REPUESTOS": 1530.0
+       },
+       "2097-02": {
+        "ACCESORIOS": 660.0,
+        "BATERIAS": 0.0,
+        "CASCOS": 0.0,
+        "GPS": 0.0,
+        "LLANTAS": 810.0,
+        "LUBRICANTES": 0.0,
+        "REPUESTOS": 0.0
+       },
+       "2097-03": {
+        "ACCESORIOS": 0.0,
+        "BATERIAS": 0.0,
+        "CASCOS": 0.0,
+        "GPS": 0.0,
+        "LLANTAS": 0.0,
+        "LUBRICANTES": 0.0,
+        "REPUESTOS": 820.0
+       }
+      },
+      "sin_hmcl": 4320.0,
+      "total": 4320.0
+     }
+    }
+   },
+   "ventana_meses": [
+    "2097-01",
+    "2097-02",
+    "2097-03"
+   ]
   },
   "ventas/anio-todas": {
    "cumplimiento": {
@@ -44242,7 +46887,172 @@
     }
    },
    "usando_resumen": true,
-   "venta_sin_linea": 6120.0
+   "venta_sin_linea": 6120.0,
+   "ventana": {
+    "tecnired": {
+     "clientes": 1,
+     "pct": 0.27466666666666667,
+     "por_linea": {
+      "ACCESORIOS": 300.0,
+      "BATERIAS": 250.0,
+      "CASCOS": 0.0,
+      "GPS": 0.0,
+      "LLANTAS": 1510.0,
+      "LUBRICANTES": 0.0,
+      "REPUESTOS": 0.0
+     },
+     "por_mes": {
+      "2097-01": {
+       "clientes": 0,
+       "venta": 0.0
+      },
+      "2097-02": {
+       "clientes": 1,
+       "venta": 1110.0
+      },
+      "2097-03": {
+       "clientes": 1,
+       "venta": 950.0
+      }
+     },
+     "top5": [
+      {
+       "nit": "726600369",
+       "pct": 1.0,
+       "razon_social": "726600369",
+       "venta": 2060.0
+      }
+     ],
+     "venta": 2060.0,
+     "venta_por_cliente": 2060.0
+    },
+    "total": {
+     "clientes": {
+      "clientes_unicos": 7,
+      "pct_mostrador": 0.568,
+      "pct_tecnired": 0.27466666666666667,
+      "pct_top5": 0.94,
+      "tecnired_por_linea": {
+       "ACCESORIOS": 300.0,
+       "BATERIAS": 250.0,
+       "CASCOS": 0.0,
+       "GPS": 0.0,
+       "LLANTAS": 1510.0,
+       "LUBRICANTES": 0.0,
+       "REPUESTOS": 0.0
+      },
+      "tecnired_por_mes": {
+       "2097-01": 0.0,
+       "2097-02": 1110.0,
+       "2097-03": 950.0
+      },
+      "venta_tecnired": 2060.0
+     },
+     "descuentos": {
+      "mes_mayor": "2097-02",
+      "pct_descuento": 0.06832298136645963,
+      "pct_en_mes_mayor": 0.5272727272727272,
+      "total": 550.0
+     },
+     "facturas": {
+      "facturas": 15,
+      "facturas_con_linea": {
+       "ACCESORIOS": 4,
+       "BATERIAS": 2,
+       "CASCOS": 0,
+       "GPS": 0,
+       "LLANTAS": 3,
+       "LUBRICANTES": 0,
+       "REPUESTOS": 7
+      },
+      "items_por_factura": 1.0666666666666667,
+      "pct_con_linea": {
+       "ACCESORIOS": 0.26666666666666666,
+       "BATERIAS": 0.13333333333333333,
+       "CASCOS": 0.0,
+       "GPS": 0.0,
+       "LLANTAS": 0.2,
+       "LUBRICANTES": 0.0,
+       "REPUESTOS": 0.4666666666666667
+      },
+      "pct_multilinea": 0.06666666666666667,
+      "ticket_por_linea": {
+       "ACCESORIOS": 390.0,
+       "BATERIAS": 395.0,
+       "CASCOS": null,
+       "GPS": null,
+       "LLANTAS": 623.3333333333334,
+       "LUBRICANTES": null,
+       "REPUESTOS": 468.57142857142856
+      },
+      "ticket_promedio": 500.0,
+      "unidades": 25.0
+     },
+     "venta": {
+      "hmcl": 1440.0,
+      "mix": {
+       "ACCESORIOS": 0.208,
+       "BATERIAS": 0.10533333333333333,
+       "CASCOS": 0.0,
+       "GPS": 0.0,
+       "LLANTAS": 0.24933333333333332,
+       "LUBRICANTES": 0.0,
+       "REPUESTOS": 0.43733333333333335
+      },
+      "pct_hmcl": 0.192,
+      "por_linea": {
+       "ACCESORIOS": 1560.0,
+       "BATERIAS": 790.0,
+       "CASCOS": 0.0,
+       "GPS": 0.0,
+       "LLANTAS": 1870.0,
+       "LUBRICANTES": 0.0,
+       "REPUESTOS": 3280.0
+      },
+      "por_mes": {
+       "2097-01": 2730.0,
+       "2097-02": 2910.0,
+       "2097-03": 1860.0
+      },
+      "por_mes_linea": {
+       "2097-01": {
+        "ACCESORIOS": 900.0,
+        "BATERIAS": 0.0,
+        "CASCOS": 0.0,
+        "GPS": 0.0,
+        "LLANTAS": 0.0,
+        "LUBRICANTES": 0.0,
+        "REPUESTOS": 1830.0
+       },
+       "2097-02": {
+        "ACCESORIOS": 660.0,
+        "BATERIAS": 540.0,
+        "CASCOS": 0.0,
+        "GPS": 0.0,
+        "LLANTAS": 1170.0,
+        "LUBRICANTES": 0.0,
+        "REPUESTOS": 540.0
+       },
+       "2097-03": {
+        "ACCESORIOS": 0.0,
+        "BATERIAS": 250.0,
+        "CASCOS": 0.0,
+        "GPS": 0.0,
+        "LLANTAS": 700.0,
+        "LUBRICANTES": 0.0,
+        "REPUESTOS": 910.0
+       }
+      },
+      "sin_hmcl": 6060.0,
+      "total": 7500.0
+     }
+    }
+   },
+   "ventana_meses": [
+    "2097-01",
+    "2097-02",
+    "2097-03"
+   ]
   },
   "ventas/salteado-ambas-solo": {
    "cumplimiento": {
@@ -44492,7 +47302,165 @@
     }
    },
    "usando_resumen": true,
-   "venta_sin_linea": 270.0
+   "venta_sin_linea": 270.0,
+   "ventana": {
+    "tecnired": {
+     "clientes": 0,
+     "pct": 0.0,
+     "por_linea": {
+      "ACCESORIOS": 0.0,
+      "BATERIAS": 0.0,
+      "CASCOS": 0.0,
+      "GPS": 0.0,
+      "LLANTAS": 0.0,
+      "LUBRICANTES": 0.0,
+      "REPUESTOS": 0.0
+     },
+     "por_mes": {
+      "2097-01": {
+       "clientes": 0,
+       "venta": 0.0
+      },
+      "2097-02": {
+       "clientes": 0,
+       "venta": 0.0
+      },
+      "2097-03": {
+       "clientes": 0,
+       "venta": 0.0
+      }
+     },
+     "top5": [],
+     "venta": 0.0,
+     "venta_por_cliente": null
+    },
+    "total": {
+     "clientes": {
+      "clientes_unicos": 2,
+      "pct_mostrador": 0.0,
+      "pct_tecnired": 0.0,
+      "pct_top5": 1.0,
+      "tecnired_por_linea": {
+       "ACCESORIOS": 0.0,
+       "BATERIAS": 0.0,
+       "CASCOS": 0.0,
+       "GPS": 0.0,
+       "LLANTAS": 0.0,
+       "LUBRICANTES": 0.0,
+       "REPUESTOS": 0.0
+      },
+      "tecnired_por_mes": {
+       "2097-01": 0.0,
+       "2097-02": 0.0,
+       "2097-03": 0.0
+      },
+      "venta_tecnired": 0.0
+     },
+     "descuentos": {
+      "mes_mayor": "2097-02",
+      "pct_descuento": 0.1,
+      "pct_en_mes_mayor": 1.0,
+      "total": 160.0
+     },
+     "facturas": {
+      "facturas": 3,
+      "facturas_con_linea": {
+       "ACCESORIOS": 0,
+       "BATERIAS": 1,
+       "CASCOS": 0,
+       "GPS": 0,
+       "LLANTAS": 1,
+       "LUBRICANTES": 0,
+       "REPUESTOS": 1
+      },
+      "items_por_factura": 1.0,
+      "pct_con_linea": {
+       "ACCESORIOS": 0.0,
+       "BATERIAS": 0.3333333333333333,
+       "CASCOS": 0.0,
+       "GPS": 0.0,
+       "LLANTAS": 0.3333333333333333,
+       "LUBRICANTES": 0.0,
+       "REPUESTOS": 0.3333333333333333
+      },
+      "pct_multilinea": 0.0,
+      "ticket_por_linea": {
+       "ACCESORIOS": null,
+       "BATERIAS": 540.0,
+       "CASCOS": null,
+       "GPS": null,
+       "LLANTAS": 360.0,
+       "LUBRICANTES": null,
+       "REPUESTOS": 540.0
+      },
+      "ticket_promedio": 480.0,
+      "unidades": 5.0
+     },
+     "venta": {
+      "hmcl": 1440.0,
+      "mix": {
+       "ACCESORIOS": 0.0,
+       "BATERIAS": 0.375,
+       "CASCOS": 0.0,
+       "GPS": 0.0,
+       "LLANTAS": 0.25,
+       "LUBRICANTES": 0.0,
+       "REPUESTOS": 0.375
+      },
+      "pct_hmcl": 1.0,
+      "por_linea": {
+       "ACCESORIOS": 0.0,
+       "BATERIAS": 540.0,
+       "CASCOS": 0.0,
+       "GPS": 0.0,
+       "LLANTAS": 360.0,
+       "LUBRICANTES": 0.0,
+       "REPUESTOS": 540.0
+      },
+      "por_mes": {
+       "2097-01": 0.0,
+       "2097-02": 1440.0,
+       "2097-03": 0.0
+      },
+      "por_mes_linea": {
+       "2097-01": {
+        "ACCESORIOS": 0.0,
+        "BATERIAS": 0.0,
+        "CASCOS": 0.0,
+        "GPS": 0.0,
+        "LLANTAS": 0.0,
+        "LUBRICANTES": 0.0,
+        "REPUESTOS": 0.0
+       },
+       "2097-02": {
+        "ACCESORIOS": 0.0,
+        "BATERIAS": 540.0,
+        "CASCOS": 0.0,
+        "GPS": 0.0,
+        "LLANTAS": 360.0,
+        "LUBRICANTES": 0.0,
+        "REPUESTOS": 540.0
+       },
+       "2097-03": {
+        "ACCESORIOS": 0.0,
+        "BATERIAS": 0.0,
+        "CASCOS": 0.0,
+        "GPS": 0.0,
+        "LLANTAS": 0.0,
+        "LUBRICANTES": 0.0,
+        "REPUESTOS": 0.0
+       }
+      },
+      "sin_hmcl": 0.0,
+      "total": 1440.0
+     }
+    }
+   },
+   "ventana_meses": [
+    "2097-01",
+    "2097-02",
+    "2097-03"
+   ]
   },
   "ventas/ultimo-todas": {
    "cumplimiento": {
@@ -44822,7 +47790,165 @@
     }
    },
    "usando_resumen": true,
-   "venta_sin_linea": 270.0
+   "venta_sin_linea": 270.0,
+   "ventana": {
+    "tecnired": {
+     "clientes": 1,
+     "pct": 0.27466666666666667,
+     "por_linea": {
+      "ACCESORIOS": 300.0,
+      "BATERIAS": 250.0,
+      "CASCOS": 0.0,
+      "GPS": 0.0,
+      "LLANTAS": 1510.0,
+      "LUBRICANTES": 0.0,
+      "REPUESTOS": 0.0
+     },
+     "por_mes": {
+      "2097-01": {
+       "clientes": 0,
+       "venta": 0.0
+      },
+      "2097-02": {
+       "clientes": 1,
+       "venta": 1110.0
+      },
+      "2097-03": {
+       "clientes": 1,
+       "venta": 950.0
+      }
+     },
+     "top5": [],
+     "venta": 2060.0,
+     "venta_por_cliente": 2060.0
+    },
+    "total": {
+     "clientes": {
+      "clientes_unicos": 7,
+      "pct_mostrador": 0.568,
+      "pct_tecnired": 0.27466666666666667,
+      "pct_top5": 0.94,
+      "tecnired_por_linea": {
+       "ACCESORIOS": 300.0,
+       "BATERIAS": 250.0,
+       "CASCOS": 0.0,
+       "GPS": 0.0,
+       "LLANTAS": 1510.0,
+       "LUBRICANTES": 0.0,
+       "REPUESTOS": 0.0
+      },
+      "tecnired_por_mes": {
+       "2097-01": 0.0,
+       "2097-02": 1110.0,
+       "2097-03": 950.0
+      },
+      "venta_tecnired": 2060.0
+     },
+     "descuentos": {
+      "mes_mayor": "2097-02",
+      "pct_descuento": 0.06832298136645963,
+      "pct_en_mes_mayor": 0.5272727272727272,
+      "total": 550.0
+     },
+     "facturas": {
+      "facturas": 15,
+      "facturas_con_linea": {
+       "ACCESORIOS": 4,
+       "BATERIAS": 2,
+       "CASCOS": 0,
+       "GPS": 0,
+       "LLANTAS": 3,
+       "LUBRICANTES": 0,
+       "REPUESTOS": 7
+      },
+      "items_por_factura": 1.0666666666666667,
+      "pct_con_linea": {
+       "ACCESORIOS": 0.26666666666666666,
+       "BATERIAS": 0.13333333333333333,
+       "CASCOS": 0.0,
+       "GPS": 0.0,
+       "LLANTAS": 0.2,
+       "LUBRICANTES": 0.0,
+       "REPUESTOS": 0.4666666666666667
+      },
+      "pct_multilinea": 0.06666666666666667,
+      "ticket_por_linea": {
+       "ACCESORIOS": 390.0,
+       "BATERIAS": 395.0,
+       "CASCOS": null,
+       "GPS": null,
+       "LLANTAS": 623.3333333333334,
+       "LUBRICANTES": null,
+       "REPUESTOS": 468.57142857142856
+      },
+      "ticket_promedio": 500.0,
+      "unidades": 25.0
+     },
+     "venta": {
+      "hmcl": 1440.0,
+      "mix": {
+       "ACCESORIOS": 0.208,
+       "BATERIAS": 0.10533333333333333,
+       "CASCOS": 0.0,
+       "GPS": 0.0,
+       "LLANTAS": 0.24933333333333332,
+       "LUBRICANTES": 0.0,
+       "REPUESTOS": 0.43733333333333335
+      },
+      "pct_hmcl": 0.192,
+      "por_linea": {
+       "ACCESORIOS": 1560.0,
+       "BATERIAS": 790.0,
+       "CASCOS": 0.0,
+       "GPS": 0.0,
+       "LLANTAS": 1870.0,
+       "LUBRICANTES": 0.0,
+       "REPUESTOS": 3280.0
+      },
+      "por_mes": {
+       "2097-01": 2730.0,
+       "2097-02": 2910.0,
+       "2097-03": 1860.0
+      },
+      "por_mes_linea": {
+       "2097-01": {
+        "ACCESORIOS": 900.0,
+        "BATERIAS": 0.0,
+        "CASCOS": 0.0,
+        "GPS": 0.0,
+        "LLANTAS": 0.0,
+        "LUBRICANTES": 0.0,
+        "REPUESTOS": 1830.0
+       },
+       "2097-02": {
+        "ACCESORIOS": 660.0,
+        "BATERIAS": 540.0,
+        "CASCOS": 0.0,
+        "GPS": 0.0,
+        "LLANTAS": 1170.0,
+        "LUBRICANTES": 0.0,
+        "REPUESTOS": 540.0
+       },
+       "2097-03": {
+        "ACCESORIOS": 0.0,
+        "BATERIAS": 250.0,
+        "CASCOS": 0.0,
+        "GPS": 0.0,
+        "LLANTAS": 700.0,
+        "LUBRICANTES": 0.0,
+        "REPUESTOS": 910.0
+       }
+      },
+      "sin_hmcl": 6060.0,
+      "total": 7500.0
+     }
+    }
+   },
+   "ventana_meses": [
+    "2097-01",
+    "2097-02",
+    "2097-03"
+   ]
   }
  }
 }

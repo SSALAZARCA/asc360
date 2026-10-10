@@ -427,6 +427,28 @@ def mes_desplazado(mes: str, cantidad: int) -> str:
     return f"{indice // 12:04d}-{indice % 12 + 1:02d}"
 
 
+MESES_VENTANA_GRAFICOS = 12
+
+
+def meses_de_ventana(disponibles: Iterable[str], largo: int = MESES_VENTANA_GRAFICOS) -> List[str]:
+    """The window of the monthly charts: the last `largo` calendar months ending at the last month with sales,
+    and never before the first month with data. Empty without sales."""
+    disponibles = list(disponibles)
+    if not disponibles:
+        return []
+    ultimo = max(disponibles)
+    inicio = max(min(disponibles), mes_desplazado(ultimo, -(largo - 1)))
+    meses = [inicio]
+    while meses[-1] < ultimo:
+        meses.append(mes_desplazado(meses[-1], 1))
+    return meses
+
+
+def filtro_con_meses(filtro: Filtro, meses: List[str]) -> Filtro:
+    """The same filter (stores, HMCL mode, rules) over other months."""
+    return filtro_de_meses(meses, filtro.modo_hmcl, filtro.sucursal_ids, filtro.reglas)
+
+
 CRECE, CAE, NUEVA = "crece", "cae", "nueva"
 MESES_VENTANA_CRECIMIENTO = 6
 
